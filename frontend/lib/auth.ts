@@ -12,7 +12,7 @@ export async function getUser() {
         getAll() {
           return cookieStore.getAll()
         },
-        setAll(cookiesToSet: any) {
+        setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
           cookiesToSet.forEach(({ name, value, options }) =>
             cookieStore.set(name, value, options)
           )
@@ -20,7 +20,6 @@ export async function getUser() {
       },
     }
   )
-
   const { data: { user } } = await supabase.auth.getUser()
   return { user, supabase }
 }

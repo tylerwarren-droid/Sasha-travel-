@@ -1,7 +1,3 @@
 import type { NextConfig } from 'next'
-
-const nextConfig: NextConfig = {
-  turbopack: false,
-}
-
+const nextConfig: NextConfig = {}
 export default nextConfig

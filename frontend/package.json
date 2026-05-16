@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.26.0",
+    "@heygen/liveavatar-web-sdk": "^0.0.18",
     "@supabase/ssr": "^0.5.0",
     "@supabase/supabase-js": "^2.43.0",
     "@tailwindcss/postcss": "^4.3.0",

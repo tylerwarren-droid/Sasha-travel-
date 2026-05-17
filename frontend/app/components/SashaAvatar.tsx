@@ -8,6 +8,7 @@ interface SashaAvatarProps {
 
 export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
   const avatarRef = useRef<any>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
@@ -24,30 +25,33 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
     try {
       const tokenRes = await fetch('/api/heygen/token')
       const { token } = await tokenRes.json()
+      if (!token) throw new Error('No token received')
 
       const sdk = await import('@heygen/liveavatar-web-sdk')
       const { LiveAvatarSession, SessionEvent } = sdk as any
 
-      const avatar = new LiveAvatarSession(token, {
-        avatarId: process.env.NEXT_PUBLIC_HEYGEN_AVATAR_ID,
-      })
+      const avatar = new LiveAvatarSession(token, { voiceChat: false })
 
-      avatar.on(SessionEvent.SESSION_STREAM_READY, (stream: MediaStream) => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-        }
+      avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
         setStatus('ready')
+        
+        // Attach video track
+        if (videoRef.current && avatar._remoteVideoTrack) {
+          avatar._remoteVideoTrack.attach(videoRef.current)
+        }
+        
+        // Attach audio track
+        if (audioRef.current && avatar._remoteAudioTrack) {
+          avatar._remoteAudioTrack.attach(audioRef.current)
+        }
+
         onAvatarReady((text: string) => {
-          avatar.speak?.(text)
+          avatar.speak?.({ text })
         })
       })
 
       avatar.on(SessionEvent.SESSION_DISCONNECTED, () => {
         setStatus('idle')
-      })
-
-      avatar.on(SessionEvent.SESSION_STATE_CHANGED, (state: any) => {
-        console.log('Avatar state:', state)
       })
 
       await avatar.start()
@@ -66,6 +70,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
         playsInline
         className={`w-full h-full object-cover transition-opacity duration-500 ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
       />
+      <audio ref={audioRef} autoPlay />
 
       {status === 'loading' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
@@ -93,9 +98,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
             <span className="text-red-400 text-2xl">!</span>
           </div>
           <div className="text-xs text-red-400/60 text-center px-4">{error}</div>
-          <button onClick={initAvatar} className="text-xs text-white/30 hover:text-white/60 underline">
-            Try again
-          </button>
+          <button onClick={initAvatar} className="text-xs text-white/30 hover:text-white/60 underline">Try again</button>
         </div>
       )}
 

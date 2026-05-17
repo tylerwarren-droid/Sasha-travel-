@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 export async function GET() {
   try {
-    const response = await fetch('https://api.heygen.com/v1/streaming.create_token', {
+    const response = await fetch('https://api.heygen.com/v1/live_avatar.create_session_token', {
       method: 'POST',
       headers: {
         'x-api-key': process.env.HEYGEN_API_KEY!,

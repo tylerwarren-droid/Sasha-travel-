@@ -27,9 +27,9 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
       const tokenRes = await fetch('/api/heygen/token')
       const { token } = await tokenRes.json()
 
-      const { LiveAvatarClient } = await import('@heygen/liveavatar-web-sdk')
+      const { LiveAvatarSession } = await import('@heygen/liveavatar-web-sdk')
 
-      const avatar = new LiveAvatarClient({
+      const avatar = new LiveAvatarSession({
         token,
         avatarId: process.env.NEXT_PUBLIC_HEYGEN_AVATAR_ID!,
         onConnected: () => {

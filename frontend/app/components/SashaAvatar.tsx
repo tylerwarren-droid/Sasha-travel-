@@ -15,9 +15,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
   useEffect(() => {
     initAvatar()
     return () => {
-      if (avatarRef.current) {
-        avatarRef.current.stopAvatar?.()
-      }
+      avatarRef.current?.disconnect?.()
     }
   }, [])
 
@@ -27,27 +25,30 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
       const tokenRes = await fetch('/api/heygen/token')
       const { token } = await tokenRes.json()
 
-      const { LiveAvatarSession } = await import('@heygen/liveavatar-web-sdk')
+      const sdk = await import('@heygen/liveavatar-web-sdk')
+      const { LiveAvatarSession, SessionEvent } = sdk as any
 
-      const avatar = new LiveAvatarSession({
-        token,
-        avatarId: process.env.NEXT_PUBLIC_HEYGEN_AVATAR_ID!,
-        onConnected: () => {
-          setStatus('ready')
-          onAvatarReady((text: string) => {
-            avatar.speak({ text })
-          })
-        },
-        onDisconnected: () => setStatus('idle'),
-        onError: (e: any) => {
-          setError(e.message || 'Avatar error')
-          setStatus('error')
-        },
+      const avatar = new LiveAvatarSession(token, {
+        avatarId: process.env.NEXT_PUBLIC_HEYGEN_AVATAR_ID,
       })
 
-      if (videoRef.current) {
-        avatar.attachVideo(videoRef.current)
-      }
+      avatar.on(SessionEvent.SESSION_STREAM_READY, (stream: MediaStream) => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+        }
+        setStatus('ready')
+        onAvatarReady((text: string) => {
+          avatar.speak?.(text)
+        })
+      })
+
+      avatar.on(SessionEvent.SESSION_DISCONNECTED, () => {
+        setStatus('idle')
+      })
+
+      avatar.on(SessionEvent.SESSION_STATE_CHANGED, (state: any) => {
+        console.log('Avatar state:', state)
+      })
 
       await avatar.connect()
       avatarRef.current = avatar
@@ -98,20 +99,11 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
         </div>
       )}
 
-      {status === 'ready' && isListening && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-          <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-4 py-2 rounded-full border border-white/10">
-            <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-            <span className="text-xs text-white/50">Listening...</span>
-          </div>
-        </div>
-      )}
-
-      {status === 'ready' && !isListening && (
+      {status === 'ready' && (
         <div className="absolute top-4 right-4">
           <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/10">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="text-xs text-white/40">Live</span>
+            <div className={`w-1.5 h-1.5 rounded-full ${isListening ? 'bg-red-400 animate-pulse' : 'bg-emerald-400'}`} />
+            <span className="text-xs text-white/40">{isListening ? 'Listening' : 'Live'}</span>
           </div>
         </div>
       )}

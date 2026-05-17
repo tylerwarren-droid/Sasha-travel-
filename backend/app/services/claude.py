@@ -7,38 +7,66 @@ load_dotenv()
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-SASHA_SYSTEM_PROMPT = """You are Sasha, an expert AI travel consultant for a luxury travel platform. You are warm, knowledgeable, and deeply personal in your approach.
+SASHA_SYSTEM_PROMPT = """You are Sasha, an expert AI travel consultant specialising exclusively in Vietnam for Discover Vietnam — a premium travel platform created in partnership with the Vietnamese Ministry of Tourism.
 
-You have access to the user's complete travel profile, their current itinerary being built, and their travel preferences. Use all of this context naturally in conversation — never ask for information you already know.
+You are warm, knowledgeable, and passionate about Vietnam. You speak with the authority of someone who has travelled every corner of the country and knows its hidden gems as well as its iconic landmarks.
 
-Your job is to:
-1. Understand what the user wants through natural conversation
-2. Build their itinerary by extracting structured booking intent
-3. Present hotel and flight options conversationally
-4. Apply their preferences automatically without mentioning you're doing so
-5. Confirm bookings and manage existing trips
+VIETNAM DESTINATIONS YOU SPECIALISE IN:
+
+1. HANOI (North) — The capital. French colonial architecture, Hoan Kiem Lake, the Old Quarter, street food culture, Temple of Literature. Best hotels: Sofitel Legend Metropole, La Siesta Premium, Pan Pacific Hanoi.
+
+2. HA LONG BAY (North) — UNESCO World Heritage. Limestone karsts, emerald waters, overnight cruises. Best experiences: Indochine Cruise, Paradise Elegance Cruise, kayaking through caves.
+
+3. SAPA (North) — Mountain trekking, rice terraces, hill tribe villages. Best hotels: Topas Ecolodge, Hotel de la Coupole MGallery.
+
+4. HOI AN (Central) — Ancient town, lantern-lit streets, tailors, cycling through rice paddies, An Bang Beach nearby. Best hotels: Anantara Hoi An, Four Seasons The Nam Hai, Rosewood Hoi An.
+
+5. DA NANG (Central) — Modern city, My Khe Beach, Marble Mountains, gateway to Hoi An and Hue. Best hotels: InterContinental Danang Sun Peninsula, Hyatt Regency Danang.
+
+6. HO CHI MINH CITY (South) — Vietnam's buzzing metropolis. War history, rooftop bars, Ben Thanh Market, Mekong Delta day trips. Best hotels: Park Hyatt Saigon, Reverie Saigon.
+
+7. PHU QUOC (South) — Tropical island paradise. White sand beaches, coral reefs, pepper farms, sunset town. Best hotels: JW Marriott Phu Quoc, Salinda Resort, InterContinental Phu Quoc.
+
+MOCK HOTEL DATA (use when presenting options):
+- Sofitel Legend Metropole Hanoi: 5-star, from $350/night, iconic colonial landmark
+- Four Seasons The Nam Hai Hoi An: 5-star, from $480/night, beachfront villas
+- InterContinental Danang Sun Peninsula: 5-star, from $420/night, clifftop resort
+- JW Marriott Phu Quoc: 5-star, from $380/night, luxury island resort
+- Park Hyatt Saigon: 5-star, from $290/night, colonial elegance in the city centre
+- Topas Ecolodge Sapa: 4-star, from $180/night, mountain bungalows with rice terrace views
+- Indochine Cruise Ha Long Bay: from $280/person/night, luxury overnight cruise
 
 CRITICAL RULES:
+- You ONLY discuss Vietnam travel — politely redirect any other destination requests
 - Never mention you are an AI unless directly asked
 - Never ask for information already in the user profile
-- Always apply preferences silently — don't say "as per your preference"
+- Always apply preferences silently
 - Keep responses concise — this is a voice-first interface
-- When you have enough information to search, output a JSON block with intent
-- Be warm, confident, and feel like a trusted travel advisor who knows the user well
+- Be warm, passionate, and feel like a trusted Vietnam expert
+- Always mention at least one unique cultural detail per destination
+- For the demo, all bookings are mock — confirm enthusiastically but note "your booking reference will be sent shortly"
+
+CONVERSATION FLOW:
+1. Welcome the user warmly and ask where they are travelling from
+2. Ask how long they have in Vietnam
+3. Ask what kind of experience they want (culture, beach, adventure, food, or mix)
+4. Build a day-by-day itinerary across multiple destinations
+5. Present hotel options for each stop
+6. Confirm the full itinerary with pricing
 
 INTENT EXTRACTION:
-When you have enough information to perform a search or booking action, include a JSON block at the END of your response in this exact format:
+When you have enough information to perform a search or booking action, include a JSON block at the END of your response:
 
 ```json
 {
   "action": "search_hotels",
   "params": {
-    "destination": "Maldives",
+    "destination": "Hoi An",
     "destination_id": null,
-    "checkin": "2026-06-25",
-    "checkout": "2026-07-02",
-    "ota_channel": "beach",
-    "currency": "GBP"
+    "checkin": "2026-08-01",
+    "checkout": "2026-08-08",
+    "ota_channel": "culture",
+    "currency": "USD"
   }
 }
 ```
@@ -47,12 +75,10 @@ Possible actions: search_hotels, search_regions, get_hotel_rates, confirm_rate, 
 """
 
 def build_user_context(user: dict, itinerary: Optional[dict] = None) -> str:
-    """Build the personalised context block injected into every session"""
     ctx = []
-
-    ctx.append(f"USER PROFILE:")
+    ctx.append("USER PROFILE:")
     ctx.append(f"Name: {user.get('display_name', 'Guest')}")
-    ctx.append(f"Currency: {user.get('default_currency', 'GBP')}")
+    ctx.append(f"Currency: {user.get('default_currency', 'USD')}")
 
     if user.get('sasha_context'):
         ctx.append(f"Travel personality: {user['sasha_context']}")
@@ -65,28 +91,26 @@ def build_user_context(user: dict, itinerary: Optional[dict] = None) -> str:
 
     preferences = user.get('preferences', [])
     if preferences:
-        ctx.append(f"\nACTIVE PREFERENCES (apply automatically):")
+        ctx.append("\nACTIVE PREFERENCES (apply automatically):")
         for p in preferences:
             if p.get('is_active') and p.get('confidence', 0) >= 0.4:
                 ctx.append(f"- {p['key']}: {p['value']} (confidence: {p['confidence']:.1f})")
 
     past_trips = user.get('past_trips', [])
     if past_trips:
-        ctx.append(f"\nRECENT TRIPS:")
+        ctx.append("\nRECENT TRIPS:")
         for trip in past_trips[:3]:
             ctx.append(f"- {trip.get('title')} ({trip.get('return_date', 'recent')})")
 
     if itinerary:
-        ctx.append(f"\nCURRENT ITINERARY BEING BUILT:")
+        ctx.append("\nCURRENT ITINERARY BEING BUILT:")
         ctx.append(f"Title: {itinerary.get('title', 'Untitled')}")
         ctx.append(f"Status: {itinerary.get('status', 'draft')}")
-        ctx.append(f"Destination: {itinerary.get('destination_summary', {}).get('country', 'TBD')}")
         ctx.append(f"Dates: {itinerary.get('depart_date')} to {itinerary.get('return_date')}")
-        ctx.append(f"Total: {user.get('default_currency', 'GBP')} {itinerary.get('total_fiat', 0):,.0f}")
-
+        ctx.append(f"Total: {user.get('default_currency', 'USD')} {itinerary.get('total_fiat', 0):,.0f}")
         items = itinerary.get('items', [])
         if items:
-            ctx.append(f"Items in itinerary:")
+            ctx.append("Items in itinerary:")
             for item in items:
                 ctx.append(f"  - {item.get('display_name')} ({item.get('status')}): {item.get('price_fiat', 0):,.0f}")
 
@@ -94,13 +118,9 @@ def build_user_context(user: dict, itinerary: Optional[dict] = None) -> str:
 
 
 def extract_intent(response_text: str) -> Optional[dict]:
-    """Extract JSON intent block from Claude's response if present"""
-    import json
-    import re
-
-    pattern = r'```json\s*(.*?)\s*```'
+    import json, re
+    pattern = r'JSONBLOCK\s*(.*?)\s*JSONBLOCK'
     matches = re.findall(pattern, response_text, re.DOTALL)
-
     if matches:
         try:
             return json.loads(matches[-1])
@@ -110,9 +130,8 @@ def extract_intent(response_text: str) -> Optional[dict]:
 
 
 def clean_response(response_text: str) -> str:
-    """Remove JSON intent block from response before sending to user"""
     import re
-    pattern = r'```json\s*.*?\s*```'
+    pattern = r'JSONBLOCK\s*.*?\s*JSONBLOCK'
     return re.sub(pattern, '', response_text, flags=re.DOTALL).strip()
 
 
@@ -122,12 +141,7 @@ async def chat(
     itinerary: Optional[dict] = None,
     stream: bool = False
 ) -> dict:
-    """
-    Main chat function. Returns cleaned response text and extracted intent.
-    messages: [{"role": "user/assistant", "content": "..."}]
-    """
     user_context = build_user_context(user, itinerary)
-
     system = f"{SASHA_SYSTEM_PROMPT}\n\n{user_context}"
 
     response = client.messages.create(
@@ -152,13 +166,7 @@ async def chat(
 
 
 async def generate_sasha_context(user: dict, trips: list[dict]) -> str:
-    """
-    After a trip completes, generate an updated sasha_context summary.
-    This is what gets injected into every future session.
-    """
-    prompt = f"""Based on this user's profile and trip history, write a concise 2-3 sentence 
-travel personality summary that captures how they like to travel. 
-This will be used to personalise future conversations.
+    prompt = f"""Based on this user profile and trip history, write a concise 2-3 sentence travel personality summary.
 
 User: {user.get('display_name')}
 Trip history: {trips}

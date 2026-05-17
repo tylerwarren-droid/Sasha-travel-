@@ -1,118 +1,75 @@
-'use client'
+"use client"
 
-import { useState } from 'react'
-import SashaChat from './components/SashaChat'
-import ItineraryPanel from './components/ItineraryPanel'
-import { User, Itinerary } from '@/types'
+import { useState } from "react"
+import SashaChat from "./components/SashaChat"
+import ItineraryPanel from "./components/ItineraryPanel"
+import { User, Itinerary } from "@/types"
 
-// Demo user — this will come from auth in production
 const DEMO_USER: User = {
-  display_name: 'Jon',
-  email: 'jon@example.com',
-  default_currency: 'GBP',
-  sasha_context: 'Jon travels with his wife and 2 kids aged 8 and 11. Prefers 5-star beach resorts. No red-eye flights. Loves overwater villas.',
+  display_name: "Alex",
+  email: "alex@example.com",
+  default_currency: "USD",
+  sasha_context: "Alex loves cultural immersion, authentic food experiences, and a mix of adventure and luxury.",
   travellers: [
-    { relation: 'self', first_name: 'Jon' },
-    { relation: 'partner', first_name: 'Sarah' },
-    { relation: 'child', first_name: 'Emma', date_of_birth: '2016-03-15' },
-    { relation: 'child', first_name: 'Tom', date_of_birth: '2013-07-22' },
+    { relation: "self", first_name: "Alex" },
+    { relation: "partner", first_name: "Maya" },
   ],
   preferences: [
-    { key: 'flight.timing', value: 'daytime_only', source: 'explicit', confidence: 1.0, is_active: true },
-    { key: 'accommodation.stars', value: 5, source: 'explicit', confidence: 1.0, is_active: true },
-    { key: 'accommodation.type', value: 'overwater_villa', source: 'inferred', confidence: 0.85, is_active: true },
-    { key: 'activity.kids', value: true, source: 'inferred', confidence: 0.9, is_active: true },
-    { key: 'payment.method', value: 'card', source: 'inferred', confidence: 0.7, is_active: true },
+    { key: "accommodation.type", value: "boutique_heritage", source: "explicit", confidence: 1.0, is_active: true },
+    { key: "experience.type", value: "culture_and_food", source: "explicit", confidence: 1.0, is_active: true },
   ],
   past_trips: [
-    { title: 'Seychelles — Fregate Island', return_date: 'May 2025' },
-    { title: 'Amalfi Coast — Positano', return_date: 'Aug 2024' },
-    { title: 'Kenya — Laikipia Safari', return_date: 'Dec 2023' },
+    { title: "Thailand — Chiang Mai and Bangkok", return_date: "Mar 2025" },
+    { title: "Japan — Kyoto and Tokyo", return_date: "Oct 2024" },
   ],
-  ota_affinity: ['beach', 'adventure']
+  ota_affinity: ["culture", "adventure"]
 }
 
 const INITIAL_ITINERARY: Itinerary = {
-  title: 'New trip',
-  ota_channel: 'beach',
-  status: 'draft',
+  title: "Vietnam Discovery",
+  ota_channel: "culture",
+  status: "draft",
   total_fiat: 0,
   items: []
 }
 
 export default function Home() {
   const [itinerary, setItinerary] = useState<Itinerary>(INITIAL_ITINERARY)
-  const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
-
-  const handlePay = (method: 'card' | 'crypto') => {
-    setPaymentModal(method)
-  }
+  const [paymentModal, setPaymentModal] = useState<"card" | "crypto" | null>(null)
 
   return (
-    <main className="h-screen bg-gray-50 flex flex-col">
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-100">
+    <main className="h-screen flex flex-col" style={{ background: "linear-gradient(135deg, #0f1923 0%, #1a0a0a 50%, #0f1923 100%)" }}>
+      <div className="flex items-center justify-between px-6 py-3 border-b" style={{ background: "rgba(0,0,0,0.4)", borderColor: "rgba(218,165,32,0.2)" }}>
         <div className="flex items-center gap-3">
-          <div className="text-lg font-semibold text-indigo-600 tracking-tight">Sasha</div>
-          <div className="text-xs text-gray-300">|</div>
-          <div className="text-xs text-gray-400">AI Travel</div>
+          <span className="text-xl">🇻🇳</span>
+          <div className="text-lg font-bold" style={{ color: "#DAA520" }}>Discover Vietnam</div>
+          <div className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>|</div>
+          <div className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>AI Travel Concierge</div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="text-xs text-gray-500">{DEMO_USER.display_name}</div>
-          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-medium text-indigo-600">
+          <div className="text-xs px-3 py-1 rounded-full border" style={{ color: "#DAA520", borderColor: "rgba(218,165,32,0.3)", background: "rgba(218,165,32,0.1)" }}>
+            Ministry of Tourism Partner
+          </div>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium" style={{ background: "rgba(218,165,32,0.2)", color: "#DAA520" }}>
             {DEMO_USER.display_name[0]}
           </div>
         </div>
       </div>
 
-      {/* Main content */}
       <div className="flex-1 grid grid-cols-[1fr_360px] gap-4 p-4 overflow-hidden">
-        <SashaChat
-          user={DEMO_USER}
-          itinerary={itinerary}
-          onItineraryUpdate={setItinerary}
-        />
-        <ItineraryPanel
-          itinerary={itinerary}
-          user={DEMO_USER}
-          onPay={handlePay}
-        />
+        <SashaChat user={DEMO_USER} itinerary={itinerary} onItineraryUpdate={setItinerary} />
+        <ItineraryPanel itinerary={itinerary} user={DEMO_USER} onPay={(method) => setPaymentModal(method)} />
       </div>
 
-      {/* Payment Modal */}
       {paymentModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-96 shadow-xl">
-            <div className="text-lg font-semibold text-gray-900 mb-1">
-              {paymentModal === 'card' ? 'Pay by card' : 'Pay with crypto'}
-            </div>
-            <div className="text-sm text-gray-400 mb-6">
-              Total: £{itinerary.total_fiat.toLocaleString()}
-            </div>
-            {paymentModal === 'card' ? (
-              <div className="space-y-3">
-                <input placeholder="Card number" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-300" />
-                <div className="grid grid-cols-2 gap-3">
-                  <input placeholder="MM/YY" className="border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-300" />
-                  <input placeholder="CVC" className="border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-300" />
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-4">
-                <div className="text-4xl mb-3">₿</div>
-                <div className="text-sm text-gray-500">Crypto payment coming soon</div>
-              </div>
-            )}
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setPaymentModal(null)}
-                className="flex-1 py-3 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button className="flex-1 py-3 bg-indigo-600 rounded-xl text-sm text-white font-medium hover:bg-indigo-700">
-                Confirm payment
-              </button>
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.7)" }}>
+          <div className="rounded-2xl p-6 w-96 shadow-xl" style={{ background: "#1a1a2e", border: "1px solid rgba(218,165,32,0.3)" }}>
+            <div className="text-lg font-semibold mb-1" style={{ color: "#DAA520" }}>Complete Booking</div>
+            <div className="text-sm mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>Total: ${itinerary.total_fiat.toLocaleString()}</div>
+            <input placeholder="Card number" className="w-full rounded-xl px-4 py-3 text-sm outline-none mb-3" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(218,165,32,0.2)", color: "white" }} />
+            <div className="flex gap-3 mt-3">
+              <button onClick={() => setPaymentModal(null)} className="flex-1 py-3 rounded-xl text-sm" style={{ border: "1px solid rgba(218,165,32,0.2)", color: "rgba(255,255,255,0.6)" }}>Cancel</button>
+              <button className="flex-1 py-3 rounded-xl text-sm font-medium" style={{ background: "linear-gradient(135deg, #DAA520, #B8860B)", color: "white" }}>Confirm Booking</button>
             </div>
           </div>
         </div>

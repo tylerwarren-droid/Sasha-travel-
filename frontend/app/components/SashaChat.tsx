@@ -62,7 +62,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate }: SashaC
       {/* Header */}
       <div className="flex items-center gap-4 px-6 py-4 border-b border-white/5">
         <div className="relative">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-900/40">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-red-700 to-yellow-600 flex items-center justify-center shadow-lg shadow-indigo-900/40">
             <span className="text-white font-semibold text-sm">S</span>
           </div>
           <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0e0e16]" />
@@ -73,7 +73,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate }: SashaC
         </div>
         <div className="ml-auto">
           <span className="text-xs bg-white/5 text-white/40 border border-white/10 px-3 py-1.5 rounded-full tracking-wide">
-            Beach escapes
+            Vietnam Specialist
           </span>
         </div>
       </div>
@@ -84,7 +84,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate }: SashaC
           <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
             <div className={`w-8 h-8 rounded-2xl flex items-center justify-center flex-shrink-0 text-xs font-medium ${
               msg.role === 'assistant'
-                ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-900/30'
+                ? 'bg-gradient-to-br from-red-700 to-yellow-600 text-white shadow-lg shadow-indigo-900/30'
                 : 'bg-white/10 text-white/60'
             }`}>
               {msg.role === 'assistant' ? 'S' : user.display_name[0]}
@@ -105,7 +105,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate }: SashaC
         ))}
         {isLoading && (
           <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-red-700 to-yellow-600 flex items-center justify-center flex-shrink-0">
               <span className="text-white text-xs font-medium">S</span>
             </div>
             <div className="bg-white/5 border border-white/5 px-4 py-3 rounded-2xl rounded-tl-sm">

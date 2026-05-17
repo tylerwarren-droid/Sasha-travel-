@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
+import SashaAvatar from './components/SashaAvatar'
 import SashaChat from './components/SashaChat'
 import ItineraryPanel from './components/ItineraryPanel'
 import { User, Itinerary } from '@/types'
 
-// Demo user — this will come from auth in production
 const DEMO_USER: User = {
   display_name: 'Jon',
   email: 'jon@example.com',
@@ -22,7 +22,6 @@ const DEMO_USER: User = {
     { key: 'accommodation.stars', value: 5, source: 'explicit', confidence: 1.0, is_active: true },
     { key: 'accommodation.type', value: 'overwater_villa', source: 'inferred', confidence: 0.85, is_active: true },
     { key: 'activity.kids', value: true, source: 'inferred', confidence: 0.9, is_active: true },
-    { key: 'payment.method', value: 'card', source: 'inferred', confidence: 0.7, is_active: true },
   ],
   past_trips: [
     { title: 'Seychelles — Fregate Island', return_date: 'May 2025' },
@@ -42,77 +41,57 @@ const INITIAL_ITINERARY: Itinerary = {
 
 export default function Home() {
   const [itinerary, setItinerary] = useState<Itinerary>(INITIAL_ITINERARY)
+  const [speakFn, setSpeakFn] = useState<((text: string) => void) | null>(null)
+  const [isListening, setIsListening] = useState(false)
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
 
-  const handlePay = (method: 'card' | 'crypto') => {
-    setPaymentModal(method)
-  }
+  const handleAvatarReady = useCallback((speak: (text: string) => void) => {
+    setSpeakFn(() => speak)
+  }, [])
+
+  const handleSashaResponse = useCallback((text: string) => {
+    if (speakFn) speakFn(text)
+  }, [speakFn])
 
   return (
-    <main className="h-screen bg-gray-50 flex flex-col">
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-100">
-        <div className="flex items-center gap-3">
-          <div className="text-lg font-semibold text-indigo-600 tracking-tight">Sasha</div>
-          <div className="text-xs text-gray-300">|</div>
-          <div className="text-xs text-gray-400">AI Travel</div>
+    <main className="h-screen bg-[#0a0a0f] flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+              <span className="text-white font-bold text-xs">S</span>
+            </div>
+            <span className="text-white font-light tracking-[0.15em] text-sm">SASHA</span>
+          </div>
+          <div className="w-px h-4 bg-white/10" />
+          <span className="text-xs text-white/20 tracking-widest uppercase">AI Travel</span>
         </div>
         <div className="flex items-center gap-3">
-          <div className="text-xs text-gray-500">{DEMO_USER.display_name}</div>
-          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-medium text-indigo-600">
+          <span className="text-xs text-white/30">{DEMO_USER.display_name}</span>
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-600/20 border border-white/10 flex items-center justify-center text-xs font-medium text-white/60">
             {DEMO_USER.display_name[0]}
           </div>
         </div>
       </div>
-
-      {/* Main content */}
-      <div className="flex-1 grid grid-cols-[1fr_360px] gap-4 p-4 overflow-hidden">
+      <div className="flex-1 grid grid-cols-[1fr_380px_380px] gap-4 p-4 overflow-hidden">
+        <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />
         <SashaChat
           user={DEMO_USER}
           itinerary={itinerary}
           onItineraryUpdate={setItinerary}
+          onSashaResponse={handleSashaResponse}
+          onListeningChange={setIsListening}
         />
-        <ItineraryPanel
-          itinerary={itinerary}
-          user={DEMO_USER}
-          onPay={handlePay}
-        />
+        <ItineraryPanel itinerary={itinerary} user={DEMO_USER} onPay={(method) => setPaymentModal(method)} />
       </div>
-
-      {/* Payment Modal */}
       {paymentModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-96 shadow-xl">
-            <div className="text-lg font-semibold text-gray-900 mb-1">
-              {paymentModal === 'card' ? 'Pay by card' : 'Pay with crypto'}
-            </div>
-            <div className="text-sm text-gray-400 mb-6">
-              Total: £{itinerary.total_fiat.toLocaleString()}
-            </div>
-            {paymentModal === 'card' ? (
-              <div className="space-y-3">
-                <input placeholder="Card number" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-300" />
-                <div className="grid grid-cols-2 gap-3">
-                  <input placeholder="MM/YY" className="border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-300" />
-                  <input placeholder="CVC" className="border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-300" />
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-4">
-                <div className="text-4xl mb-3">₿</div>
-                <div className="text-sm text-gray-500">Crypto payment coming soon</div>
-              </div>
-            )}
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setPaymentModal(null)}
-                className="flex-1 py-3 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button className="flex-1 py-3 bg-indigo-600 rounded-xl text-sm text-white font-medium hover:bg-indigo-700">
-                Confirm payment
-              </button>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[#12121a] border border-white/10 rounded-3xl p-8 w-96 shadow-2xl">
+            <div className="text-base font-light text-white mb-1">{paymentModal === 'card' ? 'Pay by card' : 'Pay with crypto'}</div>
+            <div className="text-xs text-white/30 mb-8">Total: £{itinerary.total_fiat.toLocaleString()}</div>
+            <div className="flex gap-3 mt-8">
+              <button onClick={() => setPaymentModal(null)} className="flex-1 py-3 border border-white/10 rounded-2xl text-sm text-white/40">Cancel</button>
+              <button className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl text-sm text-white font-medium">Confirm</button>
             </div>
           </div>
         </div>

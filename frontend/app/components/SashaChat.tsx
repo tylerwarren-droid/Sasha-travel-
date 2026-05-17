@@ -10,9 +10,11 @@ interface SashaChatProps {
   user: User
   itinerary: Itinerary
   onItineraryUpdate: (itinerary: Itinerary) => void
+  onSashaResponse?: (text: string) => void
+  onListeningChange?: (listening: boolean) => void
 }
 
-export default function SashaChat({ user, itinerary, onItineraryUpdate }: SashaChatProps) {
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange }: SashaChatProps) {
   const [messages, setMessages] = useState<any[]>([{
     role: 'assistant',
     content: `Welcome back, ${user.display_name}! ${user.past_trips && user.past_trips.length > 0 ? `How was your ${user.past_trips[0].title}? ` : ''}Ready to plan your next escape? 🌴`
@@ -47,6 +49,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate }: SashaC
         }))
       }
       setMessages(prev => [...prev, assistantMessage])
+      if (onSashaResponse) onSashaResponse(sashaResponse)
       if (intent?.action === 'search_hotels' && api_data) {
         onItineraryUpdate({ ...itinerary, destination_summary: intent.params, depart_date: intent.params?.checkin, return_date: intent.params?.checkout })
       }
@@ -59,7 +62,6 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate }: SashaC
 
   return (
     <div className="flex flex-col h-full bg-[#0e0e16] rounded-3xl border border-white/5 overflow-hidden">
-      {/* Header */}
       <div className="flex items-center gap-4 px-6 py-4 border-b border-white/5">
         <div className="relative">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-900/40">
@@ -72,19 +74,16 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate }: SashaC
           <div className="text-xs text-emerald-400/70">Online</div>
         </div>
         <div className="ml-auto">
-          <span className="text-xs bg-white/5 text-white/40 border border-white/10 px-3 py-1.5 rounded-full tracking-wide">
-            Beach escapes
-          </span>
+          <span className="text-xs bg-white/5 text-white/40 border border-white/10 px-3 py-1.5 rounded-full tracking-wide">Beach escapes</span>
         </div>
       </div>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
             <div className={`w-8 h-8 rounded-2xl flex items-center justify-center flex-shrink-0 text-xs font-medium ${
               msg.role === 'assistant'
-                ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-900/30'
+                ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'
                 : 'bg-white/10 text-white/60'
             }`}>
               {msg.role === 'assistant' ? 'S' : user.display_name[0]}
@@ -93,7 +92,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate }: SashaC
               <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
                 msg.role === 'assistant'
                   ? 'bg-white/5 text-white/80 rounded-tl-sm border border-white/5'
-                  : 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-tr-sm shadow-lg shadow-indigo-900/30'
+                  : 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-tr-sm'
               }`}>
                 {msg.content}
               </div>
@@ -116,7 +115,6 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate }: SashaC
         <div ref={chatEndRef} />
       </div>
 
-      {/* Input */}
       <div className="px-4 py-4 border-t border-white/5 flex items-center gap-3">
         <VoiceButton onTranscript={(t) => sendMessage(t)} disabled={isLoading} />
         <input
@@ -130,7 +128,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate }: SashaC
         <button
           onClick={() => sendMessage(input)}
           disabled={!input.trim() || isLoading}
-          className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 flex items-center justify-center flex-shrink-0 disabled:opacity-30 transition-all shadow-lg shadow-indigo-900/30"
+          className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 flex items-center justify-center flex-shrink-0 disabled:opacity-30 transition-all"
         >
           <Send className="w-4 h-4 text-white" />
         </button>

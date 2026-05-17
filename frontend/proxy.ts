@@ -3,7 +3,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
-
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -24,18 +23,15 @@ export async function proxy(request: NextRequest) {
       },
     }
   )
-
   const { data: { user } } = await supabase.auth.getUser()
-
   if (!user && request.nextUrl.pathname !== '/login') {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
-
   return supabaseResponse
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/).*)'],
 }

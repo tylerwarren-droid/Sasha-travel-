@@ -15,7 +15,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
   useEffect(() => {
     initAvatar()
     return () => {
-      avatarRef.current?.disconnect?.()
+      avatarRef.current?.stop?.()
     }
   }, [])
 
@@ -50,7 +50,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
         console.log('Avatar state:', state)
       })
 
-      await avatar.connect()
+      await avatar.start()
       avatarRef.current = avatar
     } catch (err: any) {
       setError(err.message || 'Failed to connect')

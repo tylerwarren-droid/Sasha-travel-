@@ -2,23 +2,24 @@ import { NextResponse } from 'next/server'
 
 export async function GET() {
   try {
-    const response = await fetch('https://api.heygen.com/v1/live_avatar/session_token', {
+    const response = await fetch('https://api.liveavatar.com/v1/sessions/token', {
       method: 'POST',
       headers: {
-        'x-api-key': process.env.HEYGEN_API_KEY!,
+        'X-API-KEY': process.env.HEYGEN_API_KEY!,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        mode: 'LITE',
+        avatar_id: process.env.NEXT_PUBLIC_HEYGEN_AVATAR_ID,
+      }),
     })
-    const text = await response.text()
-    try {
-      const data = JSON.parse(text)
-      if (!data.data?.token) {
-        return NextResponse.json({ error: 'No token', details: data }, { status: 500 })
-      }
-      return NextResponse.json({ token: data.data.token })
-    } catch {
-      return NextResponse.json({ error: 'Non-JSON response', raw: text.slice(0, 300) }, { status: 500 })
+    const data = await response.json()
+    console.log('LiveAvatar response:', JSON.stringify(data))
+    const token = data.data?.session_token
+    if (!token) {
+      return NextResponse.json({ error: 'No token', details: data }, { status: 500 })
     }
+    return NextResponse.json({ token })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

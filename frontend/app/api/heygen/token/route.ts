@@ -10,8 +10,12 @@ export async function GET() {
       },
     })
     const data = await response.json()
-    return NextResponse.json({ token: data.data?.token })
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to get token' }, { status: 500 })
+    console.log('HeyGen response:', JSON.stringify(data))
+    if (!data.data?.token) {
+      return NextResponse.json({ error: 'No token returned', details: data }, { status: 500 })
+    }
+    return NextResponse.json({ token: data.data.token })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

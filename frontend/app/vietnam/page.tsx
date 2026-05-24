@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import SashaAvatar from '../components/SashaAvatar'
 import SashaChat from '../components/SashaChat'
 import ItineraryPanel from '../components/ItineraryPanel'

@@ -44,7 +44,9 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
           avatar._remoteAudioTrack.attach(audioRef.current)
         }
 
-        const speakFn = (text: string) => avatar.speak?.({ text })
+        const speakFn = (text: string) => {
+          try { avatar.repeat(text) } catch(e) { console.error('Avatar speak error:', e) }
+        }
         onAvatarReady(speakFn)
         speakFn('Hello')
       })

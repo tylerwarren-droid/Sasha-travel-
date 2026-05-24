@@ -29,7 +29,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
       const sdk = await import('@heygen/liveavatar-web-sdk')
       const { LiveAvatarSession, SessionEvent } = sdk as any
 
-      const avatar = new LiveAvatarSession(token, { voiceChat: false })
+      const avatar = new LiveAvatarSession(token, { voiceChat: true })
 
       avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
         setStatus('ready')

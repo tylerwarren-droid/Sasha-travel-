@@ -51,7 +51,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
       avatarRef.current = avatar
       setTimeout(() => {
         try { avatar.repeat('Hello') } catch(e) { console.error('Intro speak error:', e) }
-      }, 1000)
+      }, 3000)
     } catch (err: any) {
       setError(err.message || 'Failed to connect')
       setStatus('error')

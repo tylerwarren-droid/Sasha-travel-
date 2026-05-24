@@ -29,7 +29,7 @@ export default function VoiceButton({ onTranscript, disabled }: VoiceButtonProps
         throw Object.assign(new Error('Microphone access requires HTTPS.'), { name: 'InsecureError' })
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, sampleRate: 44100 } })
       setIsRequestingMic(false)
 
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''

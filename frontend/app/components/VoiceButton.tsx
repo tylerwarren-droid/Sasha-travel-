@@ -1,5 +1,4 @@
 'use client'
-
 import { useState, useRef } from 'react'
 import { Mic, MicOff, Loader2 } from 'lucide-react'
 import axios from 'axios'
@@ -11,19 +10,36 @@ interface VoiceButtonProps {
 
 export default function VoiceButton({ onTranscript, disabled }: VoiceButtonProps) {
   const [isListening, setIsListening] = useState(false)
+  const [isRequestingMic, setIsRequestingMic] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [micError, setMicError] = useState<string | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
 
   const startListening = async () => {
+    setMicError(null)
+    setIsRequestingMic(true)
+    setIsListening(true)
+
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw Object.assign(new Error('Microphone access is not supported in this browser.'), { name: 'NotSupportedError' })
+      }
+      if (!window.isSecureContext) {
+        throw Object.assign(new Error('Microphone access requires HTTPS.'), { name: 'InsecureError' })
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      setIsRequestingMic(false)
+
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
       mediaRecorderRef.current = mediaRecorder
       chunksRef.current = []
+
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data)
       }
+
       mediaRecorder.onstop = async () => {
         setIsListening(false)
         setIsProcessing(true)
@@ -47,13 +63,25 @@ export default function VoiceButton({ onTranscript, disabled }: VoiceButtonProps
           stream.getTracks().forEach(track => track.stop())
         }
       }
+
       mediaRecorder.start()
-      setIsListening(true)
       setTimeout(() => {
         if (mediaRecorder.state === 'recording') mediaRecorder.stop()
       }, 15000)
-    } catch (error) {
-      console.error('Microphone access denied')
+
+    } catch (err: any) {
+      console.error('Microphone error:', err)
+      setIsRequestingMic(false)
+      setIsListening(false)
+      if (err.name === 'NotAllowedError') {
+        setMicError('Mic permission denied. Please allow microphone access in your browser settings.')
+      } else if (err.name === 'NotFoundError') {
+        setMicError('No microphone found on this device.')
+      } else if (err.name === 'NotReadableError') {
+        setMicError('Microphone is in use by another app.')
+      } else {
+        setMicError(err.message || 'Could not access the microphone.')
+      }
     }
   }
 
@@ -64,14 +92,19 @@ export default function VoiceButton({ onTranscript, disabled }: VoiceButtonProps
   }
 
   return (
-    <button
-      onClick={isListening ? stopListening : startListening}
-      disabled={disabled || isProcessing}
-      className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-        isListening ? 'bg-red-500 animate-pulse' : isProcessing ? 'bg-amber-500' : 'bg-indigo-600 hover:bg-indigo-700'
-      } disabled:opacity-40`}
-    >
-      {isProcessing ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : isListening ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-white" />}
-    </button>
+    <div className="flex flex-col items-center gap-1">
+      <button
+        onClick={isListening ? stopListening : startListening}
+        disabled={disabled || isProcessing}
+        className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+          isListening ? 'bg-red-500 animate-pulse' : isRequestingMic ? 'bg-yellow-500' : isProcessing ? 'bg-amber-500' : 'bg-indigo-600 hover:bg-indigo-700'
+        } disabled:opacity-40`}
+      >
+        {isProcessing ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : isListening ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-white" />}
+      </button>
+      {micError && (
+        <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>
+      )}
+    </div>
   )
 }

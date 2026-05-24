@@ -14,7 +14,6 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
   const [error, setError] = useState('')
 
   useEffect(() => {
-    initAvatar()
     return () => {
       avatarRef.current?.stop?.()
     }

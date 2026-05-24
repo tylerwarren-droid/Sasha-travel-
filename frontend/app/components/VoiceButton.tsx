@@ -32,7 +32,8 @@ export default function VoiceButton({ onTranscript, disabled }: VoiceButtonProps
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       setIsRequestingMic(false)
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''
+      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
       mediaRecorderRef.current = mediaRecorder
       chunksRef.current = []
 

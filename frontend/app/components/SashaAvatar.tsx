@@ -33,22 +33,15 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
 
       avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
         setStatus('ready')
-        
-        // Attach video track
-        if (videoRef.current && avatar._remoteVideoTrack) {
-          avatar._remoteVideoTrack.attach(videoRef.current)
-        }
-        
-        // Attach audio track
-        if (audioRef.current && avatar._remoteAudioTrack) {
-          avatar._remoteAudioTrack.attach(audioRef.current)
-        }
+
+        if (videoRef.current) avatar.attach(videoRef.current)
+        if (audioRef.current) avatar.attach(audioRef.current)
 
         const speakFn = (text: string) => {
           try { avatar.repeat(text) } catch(e) { console.error('Avatar speak error:', e) }
         }
         onAvatarReady(speakFn)
-        speakFn('Hello')
+        setTimeout(() => speakFn('Hello'), 1000)
       })
 
       avatar.on(SessionEvent.SESSION_DISCONNECTED, () => {

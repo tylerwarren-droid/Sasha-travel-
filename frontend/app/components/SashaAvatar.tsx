@@ -53,7 +53,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
         setStatus('idle')
       })
 
-      await avatar.start()
+      try { await avatar.start() } catch(e: any) { if (!String(e?.message).toLowerCase().includes("micro")) throw e }
       avatarRef.current = avatar
     } catch (err: any) {
       setError(err.message || 'Failed to connect')

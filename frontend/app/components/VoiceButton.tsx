@@ -53,7 +53,7 @@ export default function VoiceButton({ onTranscript, disabled }: VoiceButtonProps
         if (mediaRecorder.state === 'recording') mediaRecorder.stop()
       }, 15000)
     } catch (error) {
-      alert('Could not access microphone. Please check permissions.')
+      console.error('Microphone access denied')
     }
   }
 

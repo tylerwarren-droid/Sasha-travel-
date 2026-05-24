@@ -44,9 +44,9 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
           avatar._remoteAudioTrack.attach(audioRef.current)
         }
 
-        onAvatarReady((text: string) => {
-          avatar.speak?.({ text })
-        })
+        const speakFn = (text: string) => avatar.speak?.({ text })
+        onAvatarReady(speakFn)
+        speakFn('Hello')
       })
 
       avatar.on(SessionEvent.SESSION_DISCONNECTED, () => {

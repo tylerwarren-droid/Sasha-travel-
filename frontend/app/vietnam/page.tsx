@@ -10,16 +10,18 @@ const DEMO_USER: User = {
   display_name: 'Alex',
   email: 'alex@example.com',
   default_currency: 'USD',
-  sasha_context: 'Alex loves cultural immersion and authentic food experiences.',
+  sasha_context: 'Alex loves cultural immersion, authentic food experiences, and luxury travel across Asia.',
   travellers: [
     { relation: 'self', first_name: 'Alex' },
     { relation: 'partner', first_name: 'Maya' },
   ],
   preferences: [
     { key: 'accommodation.type', value: 'boutique_heritage', source: 'explicit', confidence: 1.0, is_active: true },
+    { key: 'experience.type', value: 'culture_and_food', source: 'explicit', confidence: 1.0, is_active: true },
   ],
   past_trips: [
-    { title: 'Thailand — Chiang Mai and Bangkok', return_date: 'Mar 2025' },
+    { title: 'Vietnam — Hanoi and Ha Long Bay', return_date: 'Summer 2024' },
+    { title: 'Vietnam — Hoi An and Da Nang', return_date: 'Spring 2023' },
   ],
   ota_affinity: ['culture', 'adventure']
 }
@@ -61,15 +63,7 @@ export default function VietnamPage() {
       </div>
 
       <div className="flex-1 grid grid-cols-[1fr_380px_380px] gap-4 p-4 overflow-hidden">
-        <div className="relative rounded-3xl overflow-hidden border border-white/5">
-          <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.4 }}>
-            <source src="https://videos.pexels.com/video-files/2169880/2169880-hd_1920_1080_30fps.mp4" type="video/mp4" />
-          </video>
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0.6))' }} />
-          <div className="relative z-10 w-full h-full">
-            <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />
-          </div>
-        </div>
+        <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />
         <SashaChat
           user={DEMO_USER}
           itinerary={itinerary}

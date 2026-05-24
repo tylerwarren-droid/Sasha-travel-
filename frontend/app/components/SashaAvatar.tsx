@@ -10,6 +10,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const avatarRef = useRef<any>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
 
@@ -68,6 +69,10 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
         ref={videoRef}
         autoPlay
         playsInline
+        className="hidden"
+      />
+      <canvas
+        ref={canvasRef}
         className={`w-full h-full object-cover transition-opacity duration-500 ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
       />
       <audio ref={audioRef} autoPlay />

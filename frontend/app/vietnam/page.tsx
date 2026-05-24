@@ -34,6 +34,44 @@ const INITIAL_ITINERARY: Itinerary = {
   items: []
 }
 
+
+const VIETNAM_VIDEOS = [
+  'https://videos.pexels.com/video-files/2169880/2169880-hd_1920_1080_30fps.mp4',
+  'https://videos.pexels.com/video-files/3752847/3752847-hd_1920_1080_25fps.mp4',
+  'https://videos.pexels.com/video-files/4763824/4763824-hd_1920_1080_25fps.mp4',
+  'https://videos.pexels.com/video-files/2098870/2098870-hd_1920_1080_30fps.mp4',
+]
+
+function CyclingBackground() {
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [fade, setFade] = useState(true)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFade(false)
+      setTimeout(() => {
+        setCurrentIndex(prev => (prev + 1) % VIETNAM_VIDEOS.length)
+        setFade(true)
+      }, 1000)
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <video
+      key={currentIndex}
+      autoPlay
+      loop
+      muted
+      playsInline
+      className="absolute inset-0 w-full h-full object-cover"
+      style={{ opacity: fade ? 0.5 : 0, transition: 'opacity 1s ease' }}
+    >
+      <source src={VIETNAM_VIDEOS[currentIndex]} type="video/mp4" />
+    </video>
+  )
+}
+
 export default function VietnamPage() {
   const [itinerary, setItinerary] = useState<Itinerary>(INITIAL_ITINERARY)
   const [speakFn, setSpeakFn] = useState<((text: string) => void) | null>(null)
@@ -63,7 +101,14 @@ export default function VietnamPage() {
       </div>
 
       <div className="flex-1 grid grid-cols-[1fr_380px_380px] gap-4 p-4 overflow-hidden">
-        <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />
+        <div className="relative rounded-3xl overflow-hidden border border-white/5 bg-black">
+          {/* Cycling Vietnam background videos */}
+          <CyclingBackground />
+          {/* Avatar with transparent green screen on top */}
+          <div className="absolute inset-0 z-10">
+            <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />
+          </div>
+        </div>
         <SashaChat
           user={DEMO_USER}
           itinerary={itinerary}

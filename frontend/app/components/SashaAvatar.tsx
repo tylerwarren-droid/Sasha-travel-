@@ -49,9 +49,15 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
 
       try { await avatar.start() } catch(e: any) { if (!String(e?.message).toLowerCase().includes("micro")) throw e }
       avatarRef.current = avatar
-      setTimeout(() => {
-        try { avatar.repeat('Hello') } catch(e) { console.error('Intro speak error:', e) }
-      }, 3000)
+      const waitAndSpeak = (attempts = 0) => {
+        if (attempts > 20) return
+        if (avatar.state === 'connected') {
+          try { avatar.repeat('Hello') } catch(e) { console.error('Intro speak error:', e) }
+        } else {
+          setTimeout(() => waitAndSpeak(attempts + 1), 500)
+        }
+      }
+      waitAndSpeak()
     } catch (err: any) {
       setError(err.message || 'Failed to connect')
       setStatus('error')

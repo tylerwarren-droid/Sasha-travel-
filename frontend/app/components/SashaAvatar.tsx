@@ -51,7 +51,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
       avatarRef.current = avatar
       const waitAndSpeak = (attempts = 0) => {
         if (attempts > 20) return
-        if (avatar.state === 'connected') {
+        if (avatar.state === 'CONNECTED') {
           try { avatar.repeat('Hello') } catch(e) { console.error('Intro speak error:', e) }
         } else {
           setTimeout(() => waitAndSpeak(attempts + 1), 500)

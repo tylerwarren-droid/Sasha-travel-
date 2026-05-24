@@ -29,7 +29,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
       const sdk = await import('@heygen/liveavatar-web-sdk')
       const { LiveAvatarSession, SessionEvent } = sdk as any
 
-      const avatar = new LiveAvatarSession(token, { voiceChat: true })
+      const avatar = new LiveAvatarSession(token, { voiceChat: false })
 
       avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
         setStatus('ready')
@@ -41,7 +41,6 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
           try { avatar.repeat(text) } catch(e) { console.error('Avatar speak error:', e) }
         }
         onAvatarReady(speakFn)
-        setTimeout(() => speakFn('Hello'), 1000)
       })
 
       avatar.on(SessionEvent.SESSION_DISCONNECTED, () => {
@@ -50,6 +49,9 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
 
       try { await avatar.start() } catch(e: any) { if (!String(e?.message).toLowerCase().includes("micro")) throw e }
       avatarRef.current = avatar
+      setTimeout(() => {
+        try { avatar.repeat('Hello') } catch(e) { console.error('Intro speak error:', e) }
+      }, 1000)
     } catch (err: any) {
       setError(err.message || 'Failed to connect')
       setStatus('error')

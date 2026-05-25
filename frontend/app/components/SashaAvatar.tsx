@@ -49,7 +49,6 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
         try { avatar.repeat(text) } catch(e) { console.error('Avatar speak error:', e) }
       }
       onAvatarReady(speakFn)
-      speakFn('Hello')
 
     } catch (err: any) {
       setError(err.message || 'Failed to connect')

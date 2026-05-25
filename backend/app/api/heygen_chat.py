@@ -69,7 +69,7 @@ async def heygen_chat_completions(request: Request):
                 # Timeout after 8 seconds to avoid dead air
                 result = await asyncio.wait_for(
                     run_golf_agent(user_message, []),
-                    timeout=8.0
+                    timeout=5.0
                 )
                 reply = result["response"]
             except asyncio.TimeoutError:

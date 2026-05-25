@@ -116,7 +116,6 @@ export default function VietnamPage() {
           itinerary={itinerary}
           onItineraryUpdate={setItinerary}
           onSashaResponse={handleSashaResponse}
-          onFotoQuery={setFotoQuery}
           onListeningChange={setIsListening}
         />
         <div className="hidden md:block flex flex-col gap-3"><FotoStrip query={fotoQuery?.query || 'Vietnam'} type={fotoQuery?.type || 'destination'} visible={true} /><ItineraryPanel itinerary={itinerary} user={DEMO_USER} onPay={(method) => setPaymentModal(method)} /></div>

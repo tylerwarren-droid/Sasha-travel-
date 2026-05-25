@@ -62,7 +62,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
         ref={videoRef}
         autoPlay
         playsInline
-        className={`w-full h-full object-cover transition-opacity duration-500 ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
+        className={`w-full h-full object-cover transition-opacity duration-500 absolute inset-0 ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
       />
 
       {status === 'loading' && (

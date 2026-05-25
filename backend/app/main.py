@@ -6,6 +6,7 @@ from app.api.conversation import router as conversation_router
 from app.api.voice import router as voice_router
 from app.api.golf import router as golf_router
 from app.api.heygen_chat import router as heygen_chat_router
+from app.api.foto import router as foto_router
 
 app = FastAPI(
     title="Sasha Travel API",
@@ -27,6 +28,7 @@ app.include_router(conversation_router)
 app.include_router(voice_router)
 app.include_router(golf_router, prefix="/api/agents", tags=["golf"])
 app.include_router(heygen_chat_router, prefix="/api/heygen", tags=["heygen"])
+app.include_router(foto_router, prefix="/api", tags=["foto"])
 
 @app.get("/")
 async def root():

@@ -10,7 +10,7 @@ export async function GET() {
       },
       body: JSON.stringify({
         context_id: "10b5933f-d54a-4305-9f88-333b628a1d09",
-        mode: 'LITE',
+        mode: 'FULL',
         avatar_id: process.env.NEXT_PUBLIC_HEYGEN_AVATAR_ID,
       }),
     })

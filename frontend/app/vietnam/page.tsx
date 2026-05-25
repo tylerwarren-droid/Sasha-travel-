@@ -100,8 +100,8 @@ export default function VietnamPage() {
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-[1fr_380px_380px] gap-4 p-4 overflow-hidden">
-        <div className="relative rounded-3xl overflow-hidden border border-white/5 bg-black">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-[1fr_380px_380px] gap-4 p-4 overflow-hidden">
+        <div className="hidden md:block relative rounded-3xl overflow-hidden border border-white/5 bg-black">
           {/* Cycling Vietnam background videos */}
           <CyclingBackground />
           {/* Avatar with transparent green screen on top */}

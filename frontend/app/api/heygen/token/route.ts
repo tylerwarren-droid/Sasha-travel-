@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-
 export async function GET() {
   try {
     const response = await fetch('https://api.liveavatar.com/v1/sessions/token', {
@@ -9,9 +8,14 @@ export async function GET() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        context_id: "10b5933f-d54a-4305-9f88-333b628a1d09",
         mode: 'FULL',
-        avatar_id: process.env.NEXT_PUBLIC_HEYGEN_AVATAR_ID,
+        avatar_id: 'dd73ea75-1218-4ef3-92ce-606d5f7fbc0a',
+        avatar_persona: {
+          context_id: '5b9dba8a-aa31-11f0-a6ee-066a7fa2e369',
+          voice_id: 'c2527536-6d1f-4412-a643-53a3497dada9',
+          language: 'en'
+        },
+        is_sandbox: true
       }),
     })
     const data = await response.json()

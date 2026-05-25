@@ -8,7 +8,6 @@ interface SashaAvatarProps {
 
 export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const audioRef = useRef<HTMLAudioElement>(null)
   const avatarRef = useRef<any>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
@@ -27,25 +26,15 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
       if (!token) throw new Error('No token received')
 
       const sdk = await import('@heygen/liveavatar-web-sdk')
-      const { LiveAvatarSession, SessionEvent, SessionState } = sdk as any
+      const { LiveAvatarSession, SessionEvent } = sdk as any
 
       const avatar = new LiveAvatarSession(token, { voiceChat: false })
 
       avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
         setStatus('ready')
-
-        if (videoRef.current) avatar.attach(videoRef.current)
-        if (audioRef.current) avatar.attach(audioRef.current)
-
-        const speakFn = (text: string) => {
-          try { avatar.repeat(text) } catch(e) { console.error('Avatar speak error:', e) }
-        }
-        onAvatarReady(speakFn)
-      })
-
-      avatar.on(SessionEvent.SESSION_STATE_CHANGED, (state: any) => {
-        if (state === 'CONNECTED') {
-          setTimeout(() => { try { avatar.repeat('Hello') } catch(e) { console.error('Intro speak error:', e) } }, 500)
+        if (videoRef.current) {
+          avatar.attach(videoRef.current)
+          videoRef.current.play().catch((e: any) => console.warn('Autoplay blocked:', e))
         }
       })
 
@@ -53,8 +42,15 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
         setStatus('idle')
       })
 
-      try { await avatar.start() } catch(e: any) { if (!String(e?.message).toLowerCase().includes("micro")) throw e }
+      await avatar.start()
       avatarRef.current = avatar
+
+      const speakFn = (text: string) => {
+        try { avatar.repeat(text) } catch(e) { console.error('Avatar speak error:', e) }
+      }
+      onAvatarReady(speakFn)
+      speakFn('Hello')
+
     } catch (err: any) {
       setError(err.message || 'Failed to connect')
       setStatus('error')
@@ -69,7 +65,6 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
         playsInline
         className={`w-full h-full object-cover transition-opacity duration-500 ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
       />
-      <audio ref={audioRef} autoPlay />
 
       {status === 'loading' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">

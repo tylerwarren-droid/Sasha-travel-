@@ -16,6 +16,7 @@ export async function GET() {
           language: 'en',
           speed: 0.8
         },
+        llm_configuration_id: '4267be4c-8959-443d-b682-36e7fff89b4d',
         is_sandbox: false
       }),
     })

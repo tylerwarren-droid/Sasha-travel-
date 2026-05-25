@@ -21,14 +21,13 @@ You help travelers plan trips, book hotels, discover experiences, and explore Vi
 You are warm, knowledgeable, and efficient. Keep responses concise — under 3 sentences when possible.
 You also have a golf specialist capability covering {get_total_course_count()} Vietnam courses."""
 
-async def stream_text(text: str, model_name: str = "sasha"):
-    """Stream a text response in OpenAI SSE format."""
+async def stream_text(text: str):
     words = text.split(' ')
     for i, word in enumerate(words):
         chunk = {
             "id": "chatcmpl-sasha",
             "object": "chat.completion.chunk",
-            "model": model_name,
+            "model": "gpt-4o-mini",
             "choices": [{
                 "index": 0,
                 "delta": {"content": word + (' ' if i < len(words)-1 else '')},
@@ -36,13 +35,11 @@ async def stream_text(text: str, model_name: str = "sasha"):
             }]
         }
         yield f"data: {json.dumps(chunk)}\n\n"
-        await asyncio.sleep(0.02)
-    
-    # Send final chunk
+        await asyncio.sleep(0.01)
     final = {
         "id": "chatcmpl-sasha",
-        "object": "chat.completion.chunk", 
-        "model": model_name,
+        "object": "chat.completion.chunk",
+        "model": "gpt-4o-mini",
         "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
     }
     yield f"data: {json.dumps(final)}\n\n"
@@ -51,60 +48,63 @@ async def stream_text(text: str, model_name: str = "sasha"):
 
 @router.post("/chat/completions")
 async def heygen_chat_completions(request: Request):
-    """
-    OpenAI-compatible endpoint for HeyGen custom LLM.
-    HeyGen calls this on every user voice turn.
-    We route golf questions to our golf agent, everything else to Claude.
-    """
-    body = await request.json()
-    messages = body.get("messages", [])
-    
-    # Get the latest user message
-    user_message = ""
-    conversation_history = []
-    for msg in messages:
-        if msg["role"] == "user":
-            user_message = msg["content"] if isinstance(msg["content"], str) else ""
-        elif msg["role"] == "assistant":
-            conversation_history.append(msg)
+    try:
+        body = await request.json()
+        messages = body.get("messages", [])
 
-    if not user_message:
-        async def empty():
-            yield "data: [DONE]\n\n"
-        return StreamingResponse(empty(), media_type="text/event-stream")
+        # Get latest user message
+        user_message = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                content = msg.get("content", "")
+                user_message = content if isinstance(content, str) else ""
+                break
 
-    # Route to golf agent if golf-related
-    if is_golf_message(user_message):
-        # Send acknowledgment first to avoid dead air
-        ack = "Let me check golf availability for you... "
-        
-        # Run golf agent
-        golf_history = []
-        result = await run_golf_agent(user_message, golf_history)
-        full_response = result["response"]
-        
+        if not user_message:
+            return StreamingResponse(stream_text("How can I help you with your Vietnam trip?"), media_type="text/event-stream")
+
+        # Route to golf agent if golf-related
+        if is_golf_message(user_message):
+            try:
+                # Timeout after 8 seconds to avoid dead air
+                result = await asyncio.wait_for(
+                    run_golf_agent(user_message, []),
+                    timeout=8.0
+                )
+                reply = result["response"]
+            except asyncio.TimeoutError:
+                reply = "I'm checking golf availability for you. Give me just a moment and ask again."
+            except Exception:
+                reply = "I had trouble reaching the golf system. Please try again."
+            
+            return StreamingResponse(stream_text(reply), media_type="text/event-stream")
+
+        # General conversation — use Claude
+        try:
+            claude_messages = []
+            for msg in messages:
+                role = msg.get("role")
+                content = msg.get("content", "")
+                if role in ["user", "assistant"] and isinstance(content, str) and content.strip():
+                    claude_messages.append({"role": role, "content": content})
+
+            if not claude_messages:
+                claude_messages = [{"role": "user", "content": user_message}]
+
+            response = client.messages.create(
+                model="claude-sonnet-4-5",
+                max_tokens=150,
+                system=SASHA_SYSTEM,
+                messages=claude_messages[-10:]  # last 10 messages max
+            )
+            reply = response.content[0].text
+        except Exception:
+            reply = "I'm here to help with your Vietnam trip. What would you like to know?"
+
+        return StreamingResponse(stream_text(reply), media_type="text/event-stream")
+
+    except Exception:
         return StreamingResponse(
-            stream_text(full_response),
+            stream_text("I'm here to help with your Vietnam adventure. What would you like to know?"),
             media_type="text/event-stream"
         )
-    
-    # Regular conversation — use Claude
-    claude_messages = [
-        {"role": msg["role"], "content": msg["content"]} 
-        for msg in messages 
-        if msg["role"] in ["user", "assistant"] and isinstance(msg.get("content"), str)
-    ]
-    
-    response = client.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=256,
-        system=SASHA_SYSTEM,
-        messages=claude_messages
-    )
-    
-    reply = response.content[0].text
-    
-    return StreamingResponse(
-        stream_text(reply),
-        media_type="text/event-stream"
-    )

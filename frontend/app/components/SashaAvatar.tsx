@@ -13,9 +13,8 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
   const [error, setError] = useState('')
 
   useEffect(() => {
-    return () => {
-      avatarRef.current?.stop?.()
-    }
+    initAvatar()
+    return () => { avatarRef.current?.stop?.() }
   }, [])
 
   const initAvatar = async () => {
@@ -62,7 +61,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
         ref={videoRef}
         autoPlay
         playsInline
-        className={`w-full h-full object-cover transition-opacity duration-500 absolute inset-0 ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: status === 'ready' ? 1 : 0, transition: 'opacity 0.5s ease' }}
       />
 
       {status === 'loading' && (
@@ -71,17 +70,6 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
             <span className="text-white text-2xl font-light">S</span>
           </div>
           <div className="text-xs text-white/30 tracking-widest uppercase">Connecting to Sasha...</div>
-        </div>
-      )}
-
-      {status === 'idle' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-            <span className="text-white text-2xl font-light">S</span>
-          </div>
-          <button onClick={initAvatar} className="text-xs text-white/30 hover:text-white/60 border border-white/10 px-4 py-2 rounded-full transition-all">
-            Connect Avatar
-          </button>
         </div>
       )}
 

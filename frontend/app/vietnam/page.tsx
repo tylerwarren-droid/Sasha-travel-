@@ -49,8 +49,7 @@ export default function VietnamPage() {
   const [photos, setPhotos] = useState<Photo[]>([])
   const [activePhoto, setActivePhoto] = useState(0)
   const [photoQuery, setPhotoQuery] = useState('Vietnam landscape travel')
-  const [engaged, setEngaged] = useState(false) // true once user starts talking
-  const [chatExpanded, setChatExpanded] = useState(false)
+  const [engaged, setEngaged] = useState(false)
   const photoInterval = useRef<any>(null)
 
   useEffect(() => {
@@ -73,6 +72,7 @@ export default function VietnamPage() {
 
   useEffect(() => {
     if (photos.length <= 1) return
+    clearInterval(photoInterval.current)
     photoInterval.current = setInterval(() => {
       setActivePhoto(prev => (prev + 1) % photos.length)
     }, 5000)
@@ -114,112 +114,83 @@ export default function VietnamPage() {
       </div>
 
       {/* MAIN CONTENT */}
-      <div className="flex-1 flex overflow-hidden p-3 gap-3">
+      <div className="flex-1 flex overflow-hidden p-3 gap-3" style={{ minHeight: 0 }}>
 
         {/* LEFT COLUMN */}
         <div className="flex flex-col gap-3 overflow-hidden" style={{ width: '55%' }}>
 
-          {/* STATE 1 — Welcome: Sasha big, photos small teaser */}
-          {!engaged && (
-            <>
-              {/* Sasha — big and prominent */}
-              <div className="flex-1 rounded-3xl overflow-hidden border border-white/5 relative" style={{ minHeight: 0 }}>
-                <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />
-              </div>
+          {/* AVATAR — always present, resizes based on state */}
+          <div
+            className="rounded-3xl overflow-hidden border border-white/5 flex-shrink-0 transition-all duration-700"
+            style={{ height: engaged ? '160px' : '55%' }}
+          >
+            <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />
+          </div>
 
-              {/* Photo teaser strip — small at bottom */}
-              {photos.length > 0 && (
-                <div className="rounded-2xl overflow-hidden border border-white/5 relative flex-shrink-0" style={{ height: '120px' }}>
-                  <img src={photos[0]?.url} alt="" className="w-full h-full object-cover opacity-70" />
-                  <div className="absolute inset-0" style={{ background: 'linear-gradient(to right, rgba(8,8,16,0.8) 0%, transparent 40%, rgba(8,8,16,0.8) 100%)' }} />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-white/50 text-xs tracking-widest uppercase">Start talking to explore Vietnam</div>
+          {/* PHOTOS — hidden before engaged, hero after */}
+          {engaged && (
+            <div className="relative rounded-3xl overflow-hidden border border-white/5 flex-1" style={{ minHeight: 0 }}>
+              {photos.length > 0 ? (
+                <>
+                  <img
+                    key={activePhoto}
+                    src={photos[activePhoto]?.url}
+                    alt={photos[activePhoto]?.description}
+                    className="w-full h-full object-cover"
+                    style={{ animation: 'fadeIn 0.8s ease' }}
+                  />
+                  <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, transparent 60%, rgba(0,0,0,0.7) 100%)' }} />
+                  <div className="absolute bottom-3 left-4 right-16">
+                    <div className="text-white/60 text-xs">📷 {photos[activePhoto]?.photographer}</div>
                   </div>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1.5">
-                    {photos.slice(1).map((p, i) => (
-                      <div key={i} className="w-14 h-10 rounded-lg overflow-hidden border border-white/10">
-                        <img src={p.thumb} alt="" className="w-full h-full object-cover opacity-60" />
-                      </div>
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                    {photos.map((_, i) => (
+                      <button key={i} onClick={() => setActivePhoto(i)}
+                        className="rounded-full transition-all"
+                        style={{ width: i === activePhoto ? '18px' : '6px', height: '6px', background: i === activePhoto ? '#DAA520' : 'rgba(255,255,255,0.3)' }}
+                      />
                     ))}
                   </div>
+                  <div className="absolute top-3 right-3 flex gap-1.5">
+                    {photos.map((p, i) => (
+                      <button key={i} onClick={() => setActivePhoto(i)}
+                        className="rounded-lg overflow-hidden border-2 transition-all"
+                        style={{ width: '44px', height: '32px', borderColor: i === activePhoto ? '#DAA520' : 'rgba(255,255,255,0.2)' }}
+                      >
+                        <img src={p.thumb} alt="" className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0a0a1a, #1a1a3a)' }}>
+                  <div className="text-white/20 text-sm">Loading photos...</div>
                 </div>
               )}
-            </>
+            </div>
           )}
 
-          {/* STATE 2 — Engaged: Photos hero, Sasha small above chat */}
-          {engaged && (
-            <>
-              {/* Photos — hero */}
-              <div className="relative rounded-3xl overflow-hidden border border-white/5 flex-shrink-0" style={{ height: '55%' }}>
-                {photos.length > 0 && (
-                  <>
-                    <img
-                      key={activePhoto}
-                      src={photos[activePhoto]?.url}
-                      alt={photos[activePhoto]?.description}
-                      className="w-full h-full object-cover"
-                      style={{ animation: 'fadeIn 0.8s ease' }}
-                    />
-                    <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, transparent 60%, rgba(0,0,0,0.7) 100%)' }} />
-                    <div className="absolute bottom-3 left-4">
-                      <div className="text-white/60 text-xs">📷 {photos[activePhoto]?.photographer}</div>
-                    </div>
-                    {/* Dots */}
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-                      {photos.map((_, i) => (
-                        <button key={i} onClick={() => setActivePhoto(i)}
-                          className="rounded-full transition-all"
-                          style={{ width: i === activePhoto ? '18px' : '6px', height: '6px', background: i === activePhoto ? '#DAA520' : 'rgba(255,255,255,0.3)' }}
-                        />
-                      ))}
-                    </div>
-                    {/* Thumbnails */}
-                    <div className="absolute top-3 right-3 flex gap-1.5">
-                      {photos.map((p, i) => (
-                        <button key={i} onClick={() => setActivePhoto(i)}
-                          className="rounded-lg overflow-hidden border-2 transition-all"
-                          style={{ width: '44px', height: '32px', borderColor: i === activePhoto ? '#DAA520' : 'rgba(255,255,255,0.2)' }}
-                        >
-                          <img src={p.thumb} alt="" className="w-full h-full object-cover" />
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
+          {/* PHOTO TEASER — only in welcome state */}
+          {!engaged && photos.length > 0 && (
+            <div className="relative rounded-2xl overflow-hidden border border-white/5 flex-shrink-0" style={{ height: '100px' }}>
+              <img src={photos[0]?.url} alt="" className="w-full h-full object-cover opacity-50" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-white/40 text-xs tracking-widest uppercase">Start talking to explore Vietnam</div>
               </div>
-
-              {/* Sasha small + Chat co-located */}
-              <div className="flex-1 flex gap-3 overflow-hidden" style={{ minHeight: 0 }}>
-                {/* Sasha avatar — small, left */}
-                <div className="rounded-2xl overflow-hidden border border-white/5 flex-shrink-0" style={{ width: '100px' }}>
-                  <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />
-                </div>
-
-                {/* Chat — right of Sasha */}
-                <div className="flex-1 rounded-2xl border border-white/5 overflow-hidden flex flex-col" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 flex-shrink-0">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      <span className="text-xs text-white/40">Sasha</span>
-                    </div>
-                    <button onClick={() => setChatExpanded(!chatExpanded)} className="text-xs text-white/20 hover:text-white/50">
-                      {chatExpanded ? '↓' : '↑'}
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    <SashaChat
-                      user={DEMO_USER}
-                      itinerary={itinerary}
-                      onItineraryUpdate={setItinerary}
-                      onSashaResponse={handleSashaResponse}
-                      onListeningChange={setIsListening}
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
+            </div>
           )}
+
+          {/* CHAT — always visible, below avatar */}
+          <div className="rounded-2xl border border-white/5 overflow-hidden flex-shrink-0" 
+            style={{ height: engaged ? '160px' : '35%', background: 'rgba(255,255,255,0.02)', transition: 'height 0.7s ease' }}>
+            <SashaChat
+              user={DEMO_USER}
+              itinerary={itinerary}
+              onItineraryUpdate={setItinerary}
+              onSashaResponse={handleSashaResponse}
+              onListeningChange={setIsListening}
+            />
+          </div>
         </div>
 
         {/* RIGHT COLUMN — Itinerary */}

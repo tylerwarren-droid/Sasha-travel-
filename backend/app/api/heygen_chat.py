@@ -9,7 +9,7 @@ import asyncio
 router = APIRouter()
 client = anthropic.Anthropic()
 
-GOLF_KEYWORDS = ['golf', 'tee time', 'tee-time', 'fairway', 'caddy', 'green fee',
+GOLF_KEYWORDS = ['golf', 'tee time', 'tee-time', 'fairway', 'caddy', 'green fee', 'reservation', 'book', 'tee', 'play golf', 'golf course',
                  'montgomerie', 'hoiana', 'bluffs', 'vinpearl golf', 'ba na hills', 'course']
 
 def is_golf_message(text: str) -> bool:

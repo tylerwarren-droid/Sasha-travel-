@@ -16,7 +16,7 @@ class GolfResponse(BaseModel):
 @router.post("/golf", response_model=GolfResponse)
 async def golf_agent_endpoint(request: GolfRequest):
     try:
-        result = run_golf_agent(
+        result = await run_golf_agent(
             user_message=request.message,
             conversation_history=request.conversation_history
         )

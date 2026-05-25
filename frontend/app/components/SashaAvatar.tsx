@@ -27,7 +27,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
       if (!token) throw new Error('No token received')
 
       const sdk = await import('@heygen/liveavatar-web-sdk')
-      const { LiveAvatarSession, SessionEvent } = sdk as any
+      const { LiveAvatarSession, SessionEvent, SessionState } = sdk as any
 
       const avatar = new LiveAvatarSession(token, { voiceChat: false })
 
@@ -43,21 +43,18 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
         onAvatarReady(speakFn)
       })
 
+      avatar.on(SessionEvent.SESSION_STATE_CHANGED, (state: any) => {
+        if (state === 'CONNECTED') {
+          setTimeout(() => { try { avatar.repeat('Hello') } catch(e) { console.error('Intro speak error:', e) } }, 500)
+        }
+      })
+
       avatar.on(SessionEvent.SESSION_DISCONNECTED, () => {
         setStatus('idle')
       })
 
       try { await avatar.start() } catch(e: any) { if (!String(e?.message).toLowerCase().includes("micro")) throw e }
       avatarRef.current = avatar
-      const waitAndSpeak = (attempts = 0) => {
-        if (attempts > 20) return
-        if (avatar.state === 'CONNECTED') {
-          try { avatar.repeat('Hello') } catch(e) { console.error('Intro speak error:', e) }
-        } else {
-          setTimeout(() => waitAndSpeak(attempts + 1), 500)
-        }
-      }
-      waitAndSpeak()
     } catch (err: any) {
       setError(err.message || 'Failed to connect')
       setStatus('error')

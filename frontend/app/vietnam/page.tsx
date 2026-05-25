@@ -116,7 +116,7 @@ export default function VietnamPage() {
           onSashaResponse={handleSashaResponse}
           onListeningChange={setIsListening}
         />
-        <ItineraryPanel itinerary={itinerary} user={DEMO_USER} onPay={(method) => setPaymentModal(method)} />
+        <div className="hidden md:block"><ItineraryPanel itinerary={itinerary} user={DEMO_USER} onPay={(method) => setPaymentModal(method)} /></div>
       </div>
 
       {paymentModal && (

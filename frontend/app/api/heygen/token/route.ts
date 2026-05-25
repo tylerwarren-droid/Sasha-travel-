@@ -13,7 +13,8 @@ export async function GET() {
         avatar_persona: {
           context_id: '10b5933f-d54a-4305-9f88-333b628a1d09',
           voice_id: '62bbb4b2-bb26-4727-bc87-cfb2bd4e0cc8',
-          language: 'en'
+          language: 'en',
+          speed: 0.8
         },
         is_sandbox: false
       }),

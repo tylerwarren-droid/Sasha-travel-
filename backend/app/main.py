@@ -4,6 +4,7 @@ from app.api.search import router as search_router
 from app.api.bookings import router as bookings_router
 from app.api.conversation import router as conversation_router
 from app.api.voice import router as voice_router
+from app.api.golf import router as golf_router
 
 app = FastAPI(
     title="Sasha Travel API",
@@ -23,6 +24,7 @@ app.include_router(search_router)
 app.include_router(bookings_router)
 app.include_router(conversation_router)
 app.include_router(voice_router)
+app.include_router(golf_router, prefix="/api/agents", tags=["golf"])
 
 @app.get("/")
 async def root():

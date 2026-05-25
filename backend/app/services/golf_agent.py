@@ -11,7 +11,7 @@ from app.services.vietnam_golf_database import (
 
 client = anthropic.Anthropic()
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-SASHA_FROM_EMAIL = "golf@sasha-travel.com"
+SASHA_FROM_EMAIL = "onboarding@resend.dev"
 SASHA_NOTIFY_EMAIL = "tylerwarren@gmail.com"  # your email — gets a copy of every booking
 
 GOLF_TOOLS = [

@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import SashaAvatar from '../components/SashaAvatar'
 import SashaChat from '../components/SashaChat'
+import FotoStrip from '../components/FotoStrip'
 import ItineraryPanel from '../components/ItineraryPanel'
 import { User, Itinerary } from '@/types'
 
@@ -76,6 +77,7 @@ export default function VietnamPage() {
   const [itinerary, setItinerary] = useState<Itinerary>(INITIAL_ITINERARY)
   const [speakFn, setSpeakFn] = useState<((text: string) => void) | null>(null)
   const [isListening, setIsListening] = useState(false)
+  const [fotoQuery, setFotoQuery] = useState<{query: string, type: string} | null>(null)
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
 
   const handleAvatarReady = useCallback((speak: (text: string) => void) => {
@@ -114,9 +116,10 @@ export default function VietnamPage() {
           itinerary={itinerary}
           onItineraryUpdate={setItinerary}
           onSashaResponse={handleSashaResponse}
+          onFotoQuery={setFotoQuery}
           onListeningChange={setIsListening}
         />
-        <div className="hidden md:block"><ItineraryPanel itinerary={itinerary} user={DEMO_USER} onPay={(method) => setPaymentModal(method)} /></div>
+        <div className="hidden md:block flex flex-col gap-3"><FotoStrip query={fotoQuery?.query || 'Vietnam'} type={fotoQuery?.type || 'destination'} visible={true} /><ItineraryPanel itinerary={itinerary} user={DEMO_USER} onPay={(method) => setPaymentModal(method)} /></div>
       </div>
 
       {paymentModal && (

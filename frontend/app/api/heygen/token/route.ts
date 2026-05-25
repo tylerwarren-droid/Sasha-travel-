@@ -9,13 +9,13 @@ export async function GET() {
       },
       body: JSON.stringify({
         mode: 'FULL',
-        avatar_id: 'dd73ea75-1218-4ef3-92ce-606d5f7fbc0a',
+        avatar_id: 'ab0765ad-69de-41fb-9f8a-bd01c3c52d6f',
         avatar_persona: {
-          context_id: '5b9dba8a-aa31-11f0-a6ee-066a7fa2e369',
-          voice_id: 'c2527536-6d1f-4412-a643-53a3497dada9',
+          context_id: '10b5933f-d54a-4305-9f88-333b628a1d09',
+          voice_id: '62bbb4b2-bb26-4727-bc87-cfb2bd4e0cc8',
           language: 'en'
         },
-        is_sandbox: true
+        is_sandbox: false
       }),
     })
     const data = await response.json()

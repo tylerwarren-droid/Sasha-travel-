@@ -75,6 +75,10 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
         intents.append("dog_walking")
     if any(w in lower for w in RESTAURANT_WORDS):
         intents.append("restaurant")
+    # Keep restaurant context if conversation already has restaurant intent
+    history_text = " ".join([m.get("content", "") for m in conversation_history]).lower()
+    if "restaurant" not in intents and any(w in history_text for w in RESTAURANT_WORDS):
+        intents.append("restaurant")
     if any(w in lower for w in BOOKING_WORDS):
         intents.append("booking_confirmation")
     if any(w in lower for w in FOTO_WORDS) and "foto" not in intents:

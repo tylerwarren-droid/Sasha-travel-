@@ -45,7 +45,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
       avatarRef.current = avatar
 
       const speakFn = (text: string) => {
-        try { avatar.repeat(text) } catch(e) { console.error('Avatar speak error:', e) }
+        try { avatar.repeat(text, { rate: 0.85 }) } catch(e) { console.error('Avatar speak error:', e) }
       }
       onAvatarReady(speakFn)
 

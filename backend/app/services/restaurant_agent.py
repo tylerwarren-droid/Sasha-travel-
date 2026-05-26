@@ -70,7 +70,7 @@ async def find_restaurant(location: str, cuisine: str = "", budget: str = "", oc
     cuis = cuisine or "any"
     bud = budget or "any"
     occ = occasion or "any"
-    query = "Top 2 " + cuis + " restaurants in " + location + " for " + occ + ". Budget: " + bud + ". Return ONLY a JSON array, each with: name, phone, email, address, price_range, cuisine, notes. No other text."
+    query = "Find 2 " + cuis + " restaurants in " + location + " good for " + occ + ". Budget: " + bud + ". Return ONLY a JSON array with whatever contact info is available, each object with: name, phone (or best guess), email (or best guess), address, price_range, cuisine, notes. Make your best effort even if some fields are unknown - use empty string for missing fields. No other text."
     try:
         response = client.messages.create(
             model="claude-haiku-4-5", max_tokens=600,

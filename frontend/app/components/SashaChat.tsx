@@ -12,6 +12,7 @@ interface SashaChatProps {
   onItineraryUpdate: (itinerary: Itinerary) => void
   onSashaResponse?: (text: string) => void
   onListeningChange?: (listening: boolean) => void
+  inputOnly?: boolean
 }
 
 const GOLF_KEYWORDS = ['golf', 'tee time', 'tee-time', 'fairway', 'caddy', 'green fee', 'driving range', 'montgomerie', 'hoiana', 'bluffs', 'vinpearl golf', 'ba na hills']
@@ -25,7 +26,7 @@ function isGolfConversation(messages: any[]): boolean {
   return messages.some(m => isGolfMessage(m.content || ''))
 }
 
-export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange }: SashaChatProps) {
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, inputOnly }: SashaChatProps) {
   const [messages, setMessages] = useState<any[]>([{
     role: 'assistant',
     content: `Welcome back, ${user.display_name}! ${user.past_trips && user.past_trips.length > 0 ? `How was your ${user.past_trips[0].title}? ` : ''}Ready to plan your next escape? 🌴`
@@ -101,7 +102,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
 
   return (
     <div className="flex flex-col h-full bg-[#0e0e16] rounded-3xl border border-white/5 overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5">
+      {!inputOnly && <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5">
         <div className="relative">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-900/40">
             <span className="text-white font-semibold text-sm">S</span>
@@ -120,7 +121,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
+      {!inputOnly && <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
             <div className={`w-8 h-8 rounded-2xl flex items-center justify-center flex-shrink-0 text-xs font-medium ${
@@ -158,7 +159,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
           </div>
         )}
         <div ref={chatEndRef} />
-      </div>
+      </div>}
 
       <div className="px-3 pb-3 pt-2 border-t border-white/5">
         <div className="flex items-center gap-2 bg-white/5 rounded-2xl px-4 py-2 border border-white/5">

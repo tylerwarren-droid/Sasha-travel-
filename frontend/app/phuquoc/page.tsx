@@ -20,8 +20,8 @@ const DEMO_USER: User = {
     { key: 'experience.type', value: 'culture_and_food', source: 'explicit', confidence: 1.0, is_active: true },
   ],
   past_trips: [
-    { title: 'Vietnam — Hanoi and Ha Long Bay', return_date: 'Summer 2024' },
-    { title: 'Vietnam — Hoi An and Da Nang', return_date: 'Spring 2023' },
+    { title: 'Phu Quoc — Pearl Island', return_date: 'Upcoming 2025' },
+    { title: 'Bali — Seminyak and Ubud', return_date: 'Winter 2023' },
   ],
   ota_affinity: ['culture', 'adventure']
 }

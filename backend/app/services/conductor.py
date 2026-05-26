@@ -157,58 +157,35 @@ async def run_booking_confirmation_intent(message: str, history: list) -> dict:
 
 
 async def run_health_intent(message: str, history: list) -> dict:
-    """Health agent — finds doctors, clinics, telemedicine near user."""
-    response = client.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=300,
-        system="""You are Sasha's health specialist. Help travelers find medical assistance.
-For Vietnam: recommend FV Hospital (HCMC), Vinmec (Hanoi/Danang), Family Medical Practice (all cities).
-For urgent: always recommend calling the hotel front desk first — they have doctor-on-call services.
-International SOS: +84 28 3829 8520.
-Keep it calm, practical and reassuring.""",
-        messages=history + [{"role": "user", "content": message}]
-    )
+    """Route to health agent."""
+    from app.services.health_agent import run_health_agent
+    result = await run_health_agent(message, history)
     return {
         "agent": "health",
-        "response": response.content[0].text,
-        "data": {}
+        "response": result["response"],
+        "data": {"tools_used": result.get("tools_used", [])}
     }
 
 
 async def run_beauty_intent(message: str, history: list) -> dict:
-    """Beauty agent — spa, massage, nails, treatments."""
-    response = client.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=300,
-        system="""You are Sasha's beauty and wellness specialist. Help travelers find spas, massages, nail services and beauty treatments.
-For Vietnam: top options include Mia Spa, La Maison de L'Apothiquaire, Palmarosa Spa. 
-Most luxury hotels have in-room treatment services — always check with concierge first.
-Traditional Vietnamese massage typically $15-30/hour. Hot stone, aromatherapy $30-60.
-You can arrange mobile beauticians to come to the hotel room.""",
-        messages=history + [{"role": "user", "content": message}]
-    )
+    """Route to beauty agent."""
+    from app.services.beauty_agent import run_beauty_agent
+    result = await run_beauty_agent(message, history)
     return {
         "agent": "beauty",
-        "response": response.content[0].text,
-        "data": {}
+        "response": result["response"],
+        "data": {"tools_used": result.get("tools_used", [])}
     }
 
 
 async def run_dog_walking_intent(message: str, history: list) -> dict:
-    """Dog walking agent — pet care while traveling."""
-    response = client.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=300,
-        system="""You are Sasha's pet care specialist. Help travelers find dog walking and pet sitting services.
-For Vietnam: recommend checking Rover.com, local Facebook expat groups, or asking the hotel concierge.
-Many boutique hotels in Vietnam are pet-friendly and can arrange dog walkers.
-Always confirm the walker's experience with the specific breed if relevant.""",
-        messages=history + [{"role": "user", "content": message}]
-    )
+    """Route to dog walking agent."""
+    from app.services.dog_walking_agent import run_dog_walking_agent
+    result = await run_dog_walking_agent(message, history)
     return {
         "agent": "dog_walking",
-        "response": response.content[0].text,
-        "data": {}
+        "response": result["response"],
+        "data": {"tools_used": result.get("tools_used", [])}
     }
 
 

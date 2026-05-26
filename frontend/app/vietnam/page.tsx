@@ -122,10 +122,10 @@ export default function VietnamPage() {
       </div>
 
       {/* MAIN CONTENT */}
-      <div className="flex-1 flex overflow-hidden p-3 gap-3" style={{ minHeight: 0 }}>
+      <div className="flex-1 flex overflow-hidden p-2 gap-2" style={{ minHeight: 0 }}>
 
         {/* LEFT COLUMN — Avatar + Photos */}
-        <div className="flex flex-col gap-3 overflow-hidden" style={{ width: '55%' }}>
+        <div className="flex flex-col gap-3 overflow-hidden" style={{ width: '42%' }}>
 
           {/* AVATAR — big on landing, small when engaged */}
           <div
@@ -194,20 +194,20 @@ export default function VietnamPage() {
         </div>
 
         {/* RIGHT COLUMN — Tabs: Chat / Itinerary / Preferences / Past Trips */}
-        <div className="flex-1 flex flex-col rounded-3xl border border-white/5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
+        <div className="flex-1 flex flex-col rounded-3xl border border-white/5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', minWidth: '280px' }}>
 
           {/* Tab bar */}
           <div className="flex border-b border-white/5 flex-shrink-0">
             {[
               { key: 'chat', label: 'Sasha' },
               { key: 'itinerary', label: 'Itinerary', badge: itinerary.items?.length || 0 },
-              { key: 'preferences', label: 'Preferences' },
-              { key: 'trips', label: 'Past trips' },
+              { key: 'preferences', label: 'Prefs' },
+              { key: 'trips', label: 'Trips' },
             ].map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setRightTab(tab.key as any)}
-                className="flex-1 py-3 text-xs transition-all relative"
+                className="flex-1 py-2.5 text-xs transition-all relative"
                 style={{
                   color: rightTab === tab.key ? '#DAA520' : 'rgba(255,255,255,0.3)',
                   borderBottom: rightTab === tab.key ? '2px solid #DAA520' : '2px solid transparent'

@@ -101,7 +101,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
 
   return (
     <div className="flex flex-col h-full bg-[#0e0e16] rounded-3xl border border-white/5 overflow-hidden">
-      <div className="flex items-center gap-4 px-6 py-4 border-b border-white/5">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5">
         <div className="relative">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-900/40">
             <span className="text-white font-semibold text-sm">S</span>
@@ -120,7 +120,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
             <div className={`w-8 h-8 rounded-2xl flex items-center justify-center flex-shrink-0 text-xs font-medium ${
@@ -130,7 +130,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
             }`}>
               {msg.role === 'assistant' ? 'S' : user.display_name[0]}
             </div>
-            <div className="max-w-[80%]">
+            <div className="max-w-[90%]">
               <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
                 msg.role === 'assistant'
                   ? 'bg-white/5 text-white/80 rounded-tl-sm border border-white/5'
@@ -160,7 +160,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
         <div ref={chatEndRef} />
       </div>
 
-      <div className="px-4 pb-4 pt-2 border-t border-white/5">
+      <div className="px-3 pb-3 pt-2 border-t border-white/5">
         <div className="flex items-center gap-2 bg-white/5 rounded-2xl px-4 py-2 border border-white/5">
           <VoiceButton
             onTranscript={(text) => sendMessage(text)}
@@ -180,18 +180,18 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
             <Send className="w-3.5 h-3.5 text-white" />
           </button>
         </div>
-        <div className="mt-2 flex gap-2 flex-wrap">
+        <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           {!golfMode ? (
             <>
-              <button onClick={() => sendMessage("What are the best places to visit in Vietnam?")} className="text-xs text-white/30 hover:text-white/60 transition-colors">Best places →</button>
-              <button onClick={() => sendMessage("I want to play golf in Danang")} className="text-xs text-white/30 hover:text-white/60 transition-colors">⛳ Golf in Danang →</button>
-              <button onClick={() => sendMessage("Help me plan a 7 day Vietnam trip")} className="text-xs text-white/30 hover:text-white/60 transition-colors">Plan my trip →</button>
+              <button onClick={() => sendMessage("What are the best places to visit in Vietnam?")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Best places →</button>
+              <button onClick={() => sendMessage("I want to play golf in Danang")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">⛳ Golf →</button>
+              <button onClick={() => sendMessage("Help me plan a 7 day Vietnam trip")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Plan trip →</button>
             </>
           ) : (
             <>
-              <button onClick={() => sendMessage("What's the best course in Danang?")} className="text-xs text-white/30 hover:text-white/60 transition-colors">Best Danang course →</button>
-              <button onClick={() => sendMessage("Show me courses under $100")} className="text-xs text-white/30 hover:text-white/60 transition-colors">Under $100 →</button>
-              <button onClick={() => sendMessage("Tell me about The Bluffs Ho Tram")} className="text-xs text-white/30 hover:text-white/60 transition-colors">The Bluffs →</button>
+              <button onClick={() => sendMessage("What's the best course in Danang?")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Best course →</button>
+              <button onClick={() => sendMessage("Show me courses under $100")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Under $100 →</button>
+              <button onClick={() => sendMessage("Tell me about The Bluffs Ho Tram")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">The Bluffs →</button>
             </>
           )}
         </div>

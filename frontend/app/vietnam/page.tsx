@@ -50,7 +50,7 @@ export default function VietnamPage() {
   const [activePhoto, setActivePhoto] = useState(0)
   const [photoQuery, setPhotoQuery] = useState('Vietnam landscape travel')
   const [engaged, setEngaged] = useState(false)
-  const [rightTab, setRightTab] = useState<'chat' | 'itinerary'>('chat')
+  const [rightTab, setRightTab] = useState<'chat' | 'itinerary' | 'preferences' | 'trips'>('chat')
   const photoInterval = useRef<any>(null)
 
   useEffect(() => {
@@ -59,7 +59,7 @@ export default function VietnamPage() {
         const res = await fetch('https://sasha-travel-production.up.railway.app/api/photos/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: photoQuery, count: 5 })
+          body: JSON.stringify({ query: photoQuery, count: 4 })
         })
         const data = await res.json()
         if (data.photos?.length > 0) {
@@ -109,61 +109,125 @@ export default function VietnamPage() {
     <main className="h-screen flex flex-col overflow-hidden" style={{ background: '#080810' }}>
 
       {/* HEADER */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)' }}>
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🇻🇳</span>
-          <span className="font-bold tracking-wide text-sm" style={{ color: '#DAA520' }}>Discover Vietnam</span>
-          <div className="w-px h-3 bg-white/10" />
-          <span className="text-xs text-white/30 tracking-widest uppercase hidden sm:block">AI Travel Concierge</span>
+      <div className="flex items-center justify-between px-6 py-3 border-b border-white/5 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)' }}>
+        <div className="flex items-center gap-3">
+          <span className="text-xl">🇻🇳</span>
+          <span className="font-bold tracking-wide" style={{ color: '#DAA520' }}>Discover Vietnam</span>
+          <div className="w-px h-4 bg-white/10" />
+          <span className="text-xs text-white/30 tracking-widest uppercase">AI Travel Concierge</span>
         </div>
-        <div className="text-xs px-2 py-1 rounded-full border" style={{ color: '#DAA520', borderColor: 'rgba(218,165,32,0.3)', background: 'rgba(218,165,32,0.1)' }}>
-          MoT Partner
+        <div className="text-xs px-3 py-1 rounded-full border" style={{ color: '#DAA520', borderColor: 'rgba(218,165,32,0.3)', background: 'rgba(218,165,32,0.1)' }}>
+          Ministry of Tourism Partner
         </div>
       </div>
 
-      {/* MIDDLE — Avatar + Chat/Itinerary side by side */}
-      <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+      {/* MAIN CONTENT */}
+      <div className="flex-1 flex overflow-hidden p-2 gap-2" style={{ minHeight: 0 }}>
 
-        {/* LEFT — Avatar */}
-        <div className="flex-shrink-0 overflow-hidden border-r border-white/5" style={{ width: '38%' }}>
-          <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />
-        </div>
+        {/* LEFT COLUMN — Avatar + Photos */}
+        <div className="flex flex-col gap-3 overflow-hidden" style={{ width: '42%' }}>
 
-        {/* RIGHT — Chat OR Itinerary, same input bar always visible */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-
-          {/* Two tabs: Chat / Itinerary */}
-          <div className="flex border-b border-white/5 flex-shrink-0">
-            <button
-              onClick={() => setRightTab('chat')}
-              className="flex-1 py-2.5 text-xs font-medium transition-all"
-              style={{
-                color: rightTab === 'chat' ? '#DAA520' : 'rgba(255,255,255,0.3)',
-                borderBottom: rightTab === 'chat' ? '2px solid #DAA520' : '2px solid transparent'
-              }}
-            >
-              💬 Sasha
-            </button>
-            <button
-              onClick={() => setRightTab('itinerary')}
-              className="flex-1 py-2.5 text-xs font-medium transition-all relative"
-              style={{
-                color: rightTab === 'itinerary' ? '#DAA520' : 'rgba(255,255,255,0.3)',
-                borderBottom: rightTab === 'itinerary' ? '2px solid #DAA520' : '2px solid transparent'
-              }}
-            >
-              🗺️ Itinerary
-              {itinerary.items?.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full" style={{ background: '#DAA520', color: '#000', fontSize: '9px' }}>
-                  {itinerary.items.length}
-                </span>
-              )}
-            </button>
+          {/* AVATAR — big on landing, small when engaged */}
+          <div
+            className="rounded-3xl overflow-hidden border border-white/5 flex-shrink-0 transition-all duration-700"
+            style={{ height: engaged ? '160px' : '60%' }}
+          >
+            <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />
           </div>
 
-          {/* Content area — chat messages OR itinerary cards */}
+          {/* PHOTOS — hero when engaged, teaser when not */}
+          <div
+            className="relative rounded-3xl overflow-hidden border border-white/5 transition-all duration-700"
+            style={{ flex: 1, minHeight: 0 }}
+          >
+            {photos.length > 0 ? (
+              <>
+                <img
+                  key={activePhoto}
+                  src={photos[activePhoto]?.url}
+                  alt={photos[activePhoto]?.description}
+                  className="w-full h-full object-cover transition-opacity duration-500"
+                  style={{ opacity: engaged ? 1 : 0.4, animation: 'fadeIn 0.8s ease' }}
+                />
+                <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.8) 100%)' }} />
+
+                {/* Welcome overlay */}
+                {!engaged && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-white/40 text-xs tracking-widest uppercase">Start talking to explore Vietnam</div>
+                  </div>
+                )}
+
+                {/* Engaged: caption + controls */}
+                {engaged && (
+                  <>
+                    <div className="absolute bottom-3 left-4">
+                      <div className="text-white/50 text-xs">📷 {photos[activePhoto]?.photographer}</div>
+                    </div>
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                      {photos.map((_, i) => (
+                        <button key={i} onClick={() => setActivePhoto(i)}
+                          className="rounded-full transition-all"
+                          style={{ width: i === activePhoto ? '18px' : '6px', height: '6px', background: i === activePhoto ? '#DAA520' : 'rgba(255,255,255,0.3)' }}
+                        />
+                      ))}
+                    </div>
+                    <div className="absolute top-3 right-3 flex gap-1.5">
+                      {photos.map((p, i) => (
+                        <button key={i} onClick={() => setActivePhoto(i)}
+                          className="rounded-lg overflow-hidden border-2 transition-all"
+                          style={{ width: '44px', height: '32px', borderColor: i === activePhoto ? '#DAA520' : 'rgba(255,255,255,0.2)' }}
+                        >
+                          <img src={p.thumb} alt="" className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0a0a1a, #1a1a3a)' }}>
+                <div className="text-white/20 text-sm">🇻🇳</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN — Tabs: Chat / Itinerary / Preferences / Past Trips */}
+        <div className="flex-1 flex flex-col rounded-3xl border border-white/5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', minWidth: '280px' }}>
+
+          {/* Tab bar */}
+          <div className="flex border-b border-white/5 flex-shrink-0">
+            {[
+              { key: 'chat', label: 'Sasha' },
+              { key: 'itinerary', label: 'Itinerary', badge: itinerary.items?.length || 0 },
+              { key: 'preferences', label: 'Prefs' },
+              { key: 'trips', label: 'Trips' },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setRightTab(tab.key as any)}
+                className="flex-1 py-2.5 text-xs transition-all relative"
+                style={{
+                  color: rightTab === tab.key ? '#DAA520' : 'rgba(255,255,255,0.3)',
+                  borderBottom: rightTab === tab.key ? '2px solid #DAA520' : '2px solid transparent'
+                }}
+              >
+                {tab.label}
+                {tab.badge ? (
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs" style={{ background: '#DAA520', color: '#000', fontSize: '10px' }}>
+                    {tab.badge}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
           <div className="flex-1 overflow-hidden">
-            {rightTab === 'chat' ? (
+
+            {/* CHAT TAB */}
+            {rightTab === 'chat' && (
               <SashaChat
                 user={DEMO_USER}
                 itinerary={itinerary}
@@ -171,71 +235,53 @@ export default function VietnamPage() {
                 onSashaResponse={handleSashaResponse}
                 onListeningChange={setIsListening}
               />
-            ) : (
-              <div className="flex flex-col h-full">
-                {/* Itinerary cards — scrollable */}
-                <div className="flex-1 overflow-y-auto">
-                  <ItineraryPanel
-                    itinerary={itinerary}
-                    user={DEMO_USER}
-                    onPay={(method) => setPaymentModal(method)}
-                  />
+            )}
+
+            {/* ITINERARY TAB */}
+            {rightTab === 'itinerary' && (
+              <ItineraryPanel
+                itinerary={itinerary}
+                user={DEMO_USER}
+                onPay={(method) => setPaymentModal(method)}
+              />
+            )}
+
+            {/* PREFERENCES TAB */}
+            {rightTab === 'preferences' && (
+              <div className="p-6 space-y-4 overflow-y-auto h-full">
+                <div className="text-sm font-medium text-white/60 mb-4">Travel Preferences</div>
+                {DEMO_USER.preferences?.map((pref, i) => (
+                  <div key={i} className="rounded-xl p-4 border border-white/5" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                    <div className="text-xs text-white/30 mb-1">{pref.key.replace('.', ' › ')}</div>
+                    <div className="text-sm text-white/70 capitalize">{pref.value.replace(/_/g, ' ')}</div>
+                  </div>
+                ))}
+                <div className="rounded-xl p-4 border border-white/5" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                  <div className="text-xs text-white/30 mb-1">Travellers</div>
+                  <div className="text-sm text-white/70">{DEMO_USER.travellers?.map(t => `${t.first_name} (${t.relation})`).join(', ')}</div>
                 </div>
-                {/* Same input bar so you can still talk to Sasha */}
-                <div className="px-3 pb-3 pt-2 border-t border-white/5 flex-shrink-0">
-                  <SashaChat
-                    user={DEMO_USER}
-                    itinerary={itinerary}
-                    onItineraryUpdate={handleItineraryUpdate}
-                    onSashaResponse={handleSashaResponse}
-                    onListeningChange={setIsListening}
-                  />
-                </div>
+              </div>
+            )}
+
+            {/* PAST TRIPS TAB */}
+            {rightTab === 'trips' && (
+              <div className="p-6 space-y-4 overflow-y-auto h-full">
+                <div className="text-sm font-medium text-white/60 mb-4">Past Trips</div>
+                {DEMO_USER.past_trips?.map((trip, i) => (
+                  <div key={i} className="rounded-xl p-4 border border-white/5" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                    <div className="text-sm text-white/70">{trip.title}</div>
+                    <div className="text-xs text-white/30 mt-1">{trip.return_date}</div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* BOTTOM — Full width photo strip */}
-      <div className="flex-shrink-0 border-t border-white/5 overflow-hidden" style={{ height: '110px', background: 'rgba(0,0,0,0.4)' }}>
-        {photos.length > 0 ? (
-          <div className="flex h-full gap-1 p-1">
-            {photos.map((photo, i) => (
-              <button
-                key={i}
-                onClick={() => setActivePhoto(i)}
-                className="relative flex-1 rounded-xl overflow-hidden transition-all duration-300"
-                style={{
-                  border: i === activePhoto ? '2px solid #DAA520' : '2px solid transparent',
-                  flex: i === activePhoto ? '2' : '1'
-                }}
-              >
-                <img
-                  src={photo.thumb}
-                  alt={photo.description}
-                  className="w-full h-full object-cover"
-                  style={{ opacity: i === activePhoto ? 1 : 0.5 }}
-                />
-                {i === activePhoto && (
-                  <div className="absolute bottom-1 left-1 right-1">
-                    <div className="text-white/60 text-xs truncate px-1">📷 {photo.photographer}</div>
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <div className="text-white/20 text-xs">Loading photos...</div>
-          </div>
-        )}
-      </div>
-
-      {/* Payment modal */}
       {paymentModal && (
         <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.7)' }}>
-          <div className="rounded-2xl p-6 w-80 shadow-xl" style={{ background: '#1a1a2e', border: '1px solid rgba(218,165,32,0.3)' }}>
+          <div className="rounded-2xl p-6 w-96 shadow-xl" style={{ background: '#1a1a2e', border: '1px solid rgba(218,165,32,0.3)' }}>
             <div className="text-lg font-semibold mb-1" style={{ color: '#DAA520' }}>Complete Booking</div>
             <div className="text-sm mb-6" style={{ color: 'rgba(255,255,255,0.4)' }}>Total: ${itinerary.total_fiat.toLocaleString()}</div>
             <div className="flex gap-3 mt-6">

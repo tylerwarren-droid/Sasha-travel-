@@ -12,6 +12,7 @@ interface SashaChatProps {
   onItineraryUpdate: (itinerary: Itinerary) => void
   onSashaResponse?: (text: string) => void
   onListeningChange?: (listening: boolean) => void
+  initialMessage?: string
 }
 
 const GOLF_KEYWORDS = ['golf', 'tee time', 'tee-time', 'fairway', 'caddy', 'green fee', 'driving range', 'montgomerie', 'hoiana', 'bluffs', 'vinpearl golf', 'ba na hills']
@@ -25,10 +26,10 @@ function isGolfConversation(messages: any[]): boolean {
   return messages.some(m => isGolfMessage(m.content || ''))
 }
 
-export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange }: SashaChatProps) {
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage }: SashaChatProps) {
   const [messages, setMessages] = useState<any[]>([{
     role: 'assistant',
-    content: `Welcome back, ${user.display_name}! ${user.past_trips && user.past_trips.length > 0 ? `How was your ${user.past_trips[0].title}? ` : ''}Ready to plan your next escape? 🌴`
+    content: initialMessage || `Welcome back, ${user.display_name}! ${user.past_trips && user.past_trips.length > 0 ? `How was your ${user.past_trips[0].title}? ` : ''}Ready to plan your next escape? 🌴`
   }])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)

@@ -89,7 +89,7 @@ export default function PhuQuocPage() {
     setEngaged(true)
     const lower = text.toLowerCase()
     const golfCourses = ['vinpearl golf', 'phu quoc golf']
-    const destinations = ['long beach', 'sao beach', 'bai dai', 'grand world', 'sun world', 'vinpearl', 'duong dong', 'phu quoc', 'pearl island', 'apec']
+    const destinations = ['long beach', 'sao beach', 'bai dai', 'grand world', 'sun world', 'vinpearl', 'duong dong', 'phu quoc', 'pearl island', 'apec', 'yes', 'show me', 'tell me more']
     for (const course of golfCourses) {
       if (lower.includes(course)) { setPhotoQuery(`${course} golf Vietnam`); return }
     }
@@ -234,6 +234,7 @@ export default function PhuQuocPage() {
                 onItineraryUpdate={handleItineraryUpdate}
                 onSashaResponse={handleSashaResponse}
                 onListeningChange={setIsListening}
+                initialMessage={`Welcome back, ${DEMO_USER.display_name}! Vietnam has so much to offer — and right now, one destination stands out. 🏝️ Phu Quoc has just been named the APEC 2027 host. Vietnam's first LRT, a new airport terminal, and Sun Group's luxury hotel city are all under construction. Prices are still pre-APEC. Shall I show you what Phu Quoc looks like before the world catches on? 🌏`}
               />
             )}
 

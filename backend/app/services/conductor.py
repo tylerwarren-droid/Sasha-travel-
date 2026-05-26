@@ -60,6 +60,7 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
     BEAUTY_WORDS = ["massage", "spa", "nails", "facial", "manicure", "pedicure", "beauty", "salon", "treatment", "relaxation", "wellness"]
     HEALTH_WORDS = ["doctor", "medical", "sick", "pharmacy", "clinic", "hospital", "hurt", "ill", "prescription", "nurse", "health", "medicine"]
     DOG_WORDS = ["dog", "pet", "dog walk", "dog sit", "kennel", "grooming", "puppy"]
+    RESTAURANT_WORDS = ["restaurant", "dinner", "lunch", "breakfast", "eat", "food", "table", "reservation", "book a table", "dining", "cuisine", "cafe", "bar", "rooftop", "where to eat", "hungry"]
     BOOKING_WORDS = ["confirm booking", "hotel reference", "pms", "booking.com ref", "expedia ref", "booking number", "confirm my booking", "reservation number"]
     FOTO_WORDS = ["show me", "photo", "picture", "image", "what does", "what do", "look like"]
 
@@ -72,6 +73,8 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
         intents.append("health")
     if any(w in lower for w in DOG_WORDS):
         intents.append("dog_walking")
+    if any(w in lower for w in RESTAURANT_WORDS):
+        intents.append("restaurant")
     if any(w in lower for w in BOOKING_WORDS):
         intents.append("booking_confirmation")
     if any(w in lower for w in FOTO_WORDS) and "foto" not in intents:
@@ -189,6 +192,16 @@ async def run_dog_walking_intent(message: str, history: list) -> dict:
     }
 
 
+async def run_restaurant_intent(message: str, history: list) -> dict:
+    """Route to restaurant agent."""
+    from app.services.restaurant_agent import run_restaurant_agent
+    result = await run_restaurant_agent(message, history)
+    return {
+        "agent": "restaurant",
+        "response": result["response"],
+        "data": {"tools_used": result.get("tools_used", [])}
+    }
+
 # Agent registry — maps intent names to runner functions
 AGENT_REGISTRY = {
     "golf": run_golf_intent,
@@ -197,6 +210,7 @@ AGENT_REGISTRY = {
     "health": run_health_intent,
     "beauty": run_beauty_intent,
     "dog_walking": run_dog_walking_intent,
+    "restaurant": run_restaurant_intent,
     "general": run_general,
 }
 

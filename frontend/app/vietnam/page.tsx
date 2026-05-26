@@ -189,7 +189,6 @@ export default function VietnamPage() {
                     onItineraryUpdate={handleItineraryUpdate}
                     onSashaResponse={handleSashaResponse}
                     onListeningChange={setIsListening}
-                    inputOnly={true}
                   />
                 </div>
               </div>

@@ -10,7 +10,7 @@ const DEMO_USER: User = {
   display_name: 'Alex',
   email: 'alex@example.com',
   default_currency: 'USD',
-  sasha_context: 'Alex loves cultural immersion, authentic food experiences, and luxury travel across Asia.',
+  sasha_context: 'Alex is exploring Phu Quoc ahead of APEC 2027. Interested in luxury beach resorts, spa, golf at Vinpearl, and getting ahead of the crowd before prices spike.',
   travellers: [
     { relation: 'self', first_name: 'Alex' },
     { relation: 'partner', first_name: 'Maya' },
@@ -27,7 +27,7 @@ const DEMO_USER: User = {
 }
 
 const INITIAL_ITINERARY: Itinerary = {
-  title: 'Vietnam Discovery',
+  title: 'Phu Quoc Discovery',
   ota_channel: 'culture',
   status: 'draft',
   total_fiat: 0,
@@ -41,14 +41,14 @@ interface Photo {
   photographer: string
 }
 
-export default function VietnamPage() {
+export default function PhuQuocPage() {
   const [itinerary, setItinerary] = useState<Itinerary>(INITIAL_ITINERARY)
   const [speakFn, setSpeakFn] = useState<((text: string) => void) | null>(null)
   const [isListening, setIsListening] = useState(false)
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
   const [activePhoto, setActivePhoto] = useState(0)
-  const [photoQuery, setPhotoQuery] = useState('Vietnam landscape travel')
+  const [photoQuery, setPhotoQuery] = useState('Phu Quoc island beach luxury Vietnam')
   const [engaged, setEngaged] = useState(false)
   const [rightTab, setRightTab] = useState<'chat' | 'itinerary' | 'preferences' | 'trips'>('chat')
   const photoInterval = useRef<any>(null)
@@ -88,8 +88,8 @@ export default function VietnamPage() {
     if (speakFn) speakFn(text)
     setEngaged(true)
     const lower = text.toLowerCase()
-    const golfCourses = ['montgomerie', 'hoiana', 'bluffs', 'ba na hills', 'vinpearl golf', 'laguna golf', 'legend danang']
-    const destinations = ['danang', 'da nang', 'hanoi', 'hoi an', 'ho chi minh', 'saigon', 'ha long', 'phu quoc', 'nha trang', 'da lat', 'hue', 'sapa', 'ha giang']
+    const golfCourses = ['vinpearl golf', 'phu quoc golf']
+    const destinations = ['long beach', 'sao beach', 'bai dai', 'grand world', 'sun world', 'vinpearl', 'duong dong', 'phu quoc', 'pearl island', 'apec']
     for (const course of golfCourses) {
       if (lower.includes(course)) { setPhotoQuery(`${course} golf Vietnam`); return }
     }
@@ -111,13 +111,13 @@ export default function VietnamPage() {
       {/* HEADER */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-white/5 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)' }}>
         <div className="flex items-center gap-3">
-          <span className="text-xl">🇻🇳</span>
-          <span className="font-bold tracking-wide" style={{ color: '#DAA520' }}>Discover Vietnam</span>
+          <span className="text-xl">🏝️</span>
+          <span className="font-bold tracking-wide" style={{ color: '#00B4D8' }}>Discover Phu Quoc</span>
           <div className="w-px h-4 bg-white/10" />
           <span className="text-xs text-white/30 tracking-widest uppercase">AI Travel Concierge</span>
         </div>
-        <div className="text-xs px-3 py-1 rounded-full border" style={{ color: '#DAA520', borderColor: 'rgba(218,165,32,0.3)', background: 'rgba(218,165,32,0.1)' }}>
-          Ministry of Tourism Partner
+        <div className="text-xs px-3 py-1 rounded-full border" style={{ color: '#00B4D8', borderColor: 'rgba(0,180,216,0.3)', background: 'rgba(0,180,216,0.1)' }}>
+          🌏 APEC 2027 Host
         </div>
       </div>
 
@@ -168,7 +168,7 @@ export default function VietnamPage() {
                       {photos.map((_, i) => (
                         <button key={i} onClick={() => setActivePhoto(i)}
                           className="rounded-full transition-all"
-                          style={{ width: i === activePhoto ? '18px' : '6px', height: '6px', background: i === activePhoto ? '#DAA520' : 'rgba(255,255,255,0.3)' }}
+                          style={{ width: i === activePhoto ? '18px' : '6px', height: '6px', background: i === activePhoto ? '#00B4D8' : 'rgba(255,255,255,0.3)' }}
                         />
                       ))}
                     </div>
@@ -176,7 +176,7 @@ export default function VietnamPage() {
                       {photos.map((p, i) => (
                         <button key={i} onClick={() => setActivePhoto(i)}
                           className="rounded-lg overflow-hidden border-2 transition-all"
-                          style={{ width: '44px', height: '32px', borderColor: i === activePhoto ? '#DAA520' : 'rgba(255,255,255,0.2)' }}
+                          style={{ width: '44px', height: '32px', borderColor: i === activePhoto ? '#00B4D8' : 'rgba(255,255,255,0.2)' }}
                         >
                           <img src={p.thumb} alt="" className="w-full h-full object-cover" />
                         </button>
@@ -187,7 +187,7 @@ export default function VietnamPage() {
               </>
             ) : (
               <div className="w-full h-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0a0a1a, #1a1a3a)' }}>
-                <div className="text-white/20 text-sm">🇻🇳</div>
+                <div className="text-white/20 text-sm">🏝️</div>
               </div>
             )}
           </div>
@@ -209,13 +209,13 @@ export default function VietnamPage() {
                 onClick={() => setRightTab(tab.key as any)}
                 className="flex-1 py-2.5 text-xs transition-all relative"
                 style={{
-                  color: rightTab === tab.key ? '#DAA520' : 'rgba(255,255,255,0.3)',
+                  color: rightTab === tab.key ? '#00B4D8' : 'rgba(255,255,255,0.3)',
                   borderBottom: rightTab === tab.key ? '2px solid #DAA520' : '2px solid transparent'
                 }}
               >
                 {tab.label}
                 {tab.badge ? (
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs" style={{ background: '#DAA520', color: '#000', fontSize: '10px' }}>
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs" style={{ background: '#00B4D8', color: '#000', fontSize: '10px' }}>
                     {tab.badge}
                   </span>
                 ) : null}
@@ -281,12 +281,12 @@ export default function VietnamPage() {
 
       {paymentModal && (
         <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.7)' }}>
-          <div className="rounded-2xl p-6 w-96 shadow-xl" style={{ background: '#1a1a2e', border: '1px solid rgba(218,165,32,0.3)' }}>
-            <div className="text-lg font-semibold mb-1" style={{ color: '#DAA520' }}>Complete Booking</div>
+          <div className="rounded-2xl p-6 w-96 shadow-xl" style={{ background: '#1a1a2e', border: '1px solid rgba(0,180,216,0.3)' }}>
+            <div className="text-lg font-semibold mb-1" style={{ color: '#00B4D8' }}>Complete Booking</div>
             <div className="text-sm mb-6" style={{ color: 'rgba(255,255,255,0.4)' }}>Total: ${itinerary.total_fiat.toLocaleString()}</div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setPaymentModal(null)} className="flex-1 py-3 rounded-xl text-sm" style={{ border: '1px solid rgba(218,165,32,0.2)', color: 'rgba(255,255,255,0.6)' }}>Cancel</button>
-              <button className="flex-1 py-3 rounded-xl text-sm font-medium" style={{ background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: 'white' }}>Confirm</button>
+              <button onClick={() => setPaymentModal(null)} className="flex-1 py-3 rounded-xl text-sm" style={{ border: '1px solid rgba(0,180,216,0.2)', color: 'rgba(255,255,255,0.6)' }}>Cancel</button>
+              <button className="flex-1 py-3 rounded-xl text-sm font-medium" style={{ background: 'linear-gradient(135deg, #DAA520, #0077B6)', color: 'white' }}>Confirm</button>
             </div>
           </div>
         </div>

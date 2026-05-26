@@ -22,7 +22,12 @@ Available agents:
 - "health": doctors, medical, pharmacy, clinic, telemedicine, illness, injury, prescription
 - "beauty": spa, massage, nails, facial, hair, beauty treatments, salon
 - "dog_walking": dog walker, pet care, dog sitting
-- "general": anything else — travel advice, destinations, restaurants, culture, planning
+- "golf": any mention of golf, playing, tee time, course, round, caddy, green fee, fairway
+- "beauty": massage, spa, nails, facial, treatment, relaxation, beauty, salon, manicure, pedicure
+- "health": doctor, medical, sick, pharmacy, clinic, hospital, hurt, ill, prescription, nurse
+- "dog_walking": dog, pet, walk, sitting, kennel, grooming
+- "booking_confirmation": confirm booking, hotel reference, PMS, booking.com ref, expedia ref
+- "general": ONLY if absolutely nothing else fits
 
 Return ONLY a JSON object like this:
 {

@@ -36,6 +36,13 @@ Return ONLY a JSON object like this:
   "context": "User wants golf courses in Danang with photos"
 }
 
+Examples:
+- "I want to play golf in Danang" -> {"intents": ["golf", "foto"], "primary": "golf", "context": "golf in Danang"}
+- "I need a massage after golf" -> {"intents": ["golf", "beauty"], "primary": "golf", "context": "golf and massage"}
+- "Can you confirm my hotel booking" -> {"intents": ["booking_confirmation"], "primary": "booking_confirmation", "context": "confirm booking"}
+- "I feel sick need a doctor" -> {"intents": ["health"], "primary": "health", "context": "medical help"}
+- "Find me a dog walker in Hanoi" -> {"intents": ["dog_walking"], "primary": "dog_walking", "context": "dog walker Hanoi"}
+
 Rules:
 - Always include at least one intent
 - "foto" should be added whenever a visual would help (destinations, courses, hotels)

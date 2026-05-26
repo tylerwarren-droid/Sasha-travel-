@@ -12,20 +12,20 @@ interface SashaChatProps {
   onItineraryUpdate: (itinerary: Itinerary) => void
   onSashaResponse?: (text: string) => void
   onListeningChange?: (listening: boolean) => void
-  inputOnly?: boolean
 }
 
 const GOLF_KEYWORDS = ['golf', 'tee time', 'tee-time', 'fairway', 'caddy', 'green fee', 'driving range', 'montgomerie', 'hoiana', 'bluffs', 'vinpearl golf', 'ba na hills']
 
 function isGolfMessage(text: string): boolean {
-  return GOLF_KEYWORDS.some(k => text.toLowerCase().includes(k))
+  const lower = text.toLowerCase()
+  return GOLF_KEYWORDS.some(k => lower.includes(k))
 }
 
 function isGolfConversation(messages: any[]): boolean {
   return messages.some(m => isGolfMessage(m.content || ''))
 }
 
-export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, inputOnly }: SashaChatProps) {
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange }: SashaChatProps) {
   const [messages, setMessages] = useState<any[]>([{
     role: 'assistant',
     content: `Welcome back, ${user.display_name}! ${user.past_trips && user.past_trips.length > 0 ? `How was your ${user.past_trips[0].title}? ` : ''}Ready to plan your next escape? 🌴`
@@ -99,72 +99,43 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
 
   const golfMode = isGolfConversation(messages)
 
-  const inputBar = (
-    <div className="px-3 pb-3 pt-2 border-t border-white/5 flex-shrink-0">
-      <div className="flex items-center gap-2 bg-white/5 rounded-2xl px-3 py-2 border border-white/5">
-        <VoiceButton onTranscript={(text) => sendMessage(text)} />
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage(input))}
-          placeholder={golfMode ? "Ask about courses, tee times..." : "Ask Sasha anything..."}
-          className="flex-1 bg-transparent text-sm text-white/80 placeholder-white/20 outline-none"
-        />
-        <button
-          onClick={() => sendMessage(input)}
-          disabled={!input.trim() || isLoading}
-          className="p-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 transition-colors"
-        >
-          <Send className="w-3.5 h-3.5 text-white" />
-        </button>
-      </div>
-      <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
-        {!golfMode ? (
-          <>
-            <button onClick={() => sendMessage("What are the best places to visit in Vietnam?")} className="text-xs text-white/30 hover:text-white/60 whitespace-nowrap flex-shrink-0">Best places →</button>
-            <button onClick={() => sendMessage("I want to play golf in Danang")} className="text-xs text-white/30 hover:text-white/60 whitespace-nowrap flex-shrink-0">⛳ Golf →</button>
-            <button onClick={() => sendMessage("Help me plan a 7 day Vietnam trip")} className="text-xs text-white/30 hover:text-white/60 whitespace-nowrap flex-shrink-0">Plan trip →</button>
-          </>
-        ) : (
-          <>
-            <button onClick={() => sendMessage("What's the best course in Danang?")} className="text-xs text-white/30 hover:text-white/60 whitespace-nowrap flex-shrink-0">Best course →</button>
-            <button onClick={() => sendMessage("Show me courses under $100")} className="text-xs text-white/30 hover:text-white/60 whitespace-nowrap flex-shrink-0">Under $100 →</button>
-            <button onClick={() => sendMessage("Tell me about The Bluffs Ho Tram")} className="text-xs text-white/30 hover:text-white/60 whitespace-nowrap flex-shrink-0">The Bluffs →</button>
-          </>
-        )}
-      </div>
-    </div>
-  )
-
-  if (inputOnly) return inputBar
-
   return (
-    <div className="flex flex-col h-full bg-[#0e0e16] overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 flex-shrink-0">
+    <div className="flex flex-col h-full bg-[#0e0e16] rounded-3xl border border-white/5 overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5">
         <div className="relative">
-          <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-            <span className="text-white font-semibold text-xs">S</span>
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-900/40">
+            <span className="text-white font-semibold text-sm">S</span>
           </div>
-          <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#0e0e16]" />
+          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0e0e16]" />
         </div>
         <div>
           <div className="text-sm font-medium text-white">Sasha</div>
           <div className="text-xs text-emerald-400/70">Online</div>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {golfMode && <span className="text-xs bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-1 rounded-full">⛳ Golf</span>}
-          <span className="text-xs bg-white/5 text-white/40 border border-white/10 px-2 py-1 rounded-full">Vietnam</span>
+          {golfMode && (
+            <span className="text-xs bg-green-500/10 text-green-400 border border-green-500/20 px-3 py-1.5 rounded-full">⛳ Golf mode</span>
+          )}
+          <span className="text-xs bg-white/5 text-white/40 border border-white/10 px-3 py-1.5 rounded-full tracking-wide">Vietnam</span>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
         {messages.map((msg, i) => (
-          <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-            <div className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-medium ${msg.role === 'assistant' ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white' : 'bg-white/10 text-white/60'}`}>
+          <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+            <div className={`w-8 h-8 rounded-2xl flex items-center justify-center flex-shrink-0 text-xs font-medium ${
+              msg.role === 'assistant'
+                ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'
+                : 'bg-white/10 text-white/60'
+            }`}>
               {msg.role === 'assistant' ? 'S' : user.display_name[0]}
             </div>
             <div className="max-w-[90%]">
-              <div className={`px-3 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${msg.role === 'assistant' ? 'bg-white/5 text-white/80 rounded-tl-sm border border-white/5' : 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-tr-sm'}`}>
+              <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                msg.role === 'assistant'
+                  ? 'bg-white/5 text-white/80 rounded-tl-sm border border-white/5'
+                  : 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-tr-sm'
+              }`}>
                 {msg.content}
               </div>
               {msg.isGolf && (
@@ -179,9 +150,9 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
           </div>
         ))}
         {isLoading && (
-          <div className="flex gap-2">
-            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs">S</div>
-            <div className="px-3 py-2.5 rounded-2xl bg-white/5 border border-white/5">
+          <div className="flex gap-3">
+            <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs">S</div>
+            <div className="px-4 py-3 rounded-2xl bg-white/5 border border-white/5">
               <Loader2 className="w-4 h-4 animate-spin text-white/40" />
             </div>
           </div>
@@ -189,7 +160,42 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
         <div ref={chatEndRef} />
       </div>
 
-      {inputBar}
+      <div className="px-3 pb-3 pt-2 border-t border-white/5">
+        <div className="flex items-center gap-2 bg-white/5 rounded-2xl px-4 py-2 border border-white/5">
+          <VoiceButton
+            onTranscript={(text) => sendMessage(text)}
+          />
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage(input))}
+            placeholder={golfMode ? "Ask about courses, tee times, bookings..." : "Ask Sasha anything about Vietnam..."}
+            className="flex-1 bg-transparent text-sm text-white/80 placeholder-white/20 outline-none"
+          />
+          <button
+            onClick={() => sendMessage(input)}
+            disabled={!input.trim() || isLoading}
+            className="p-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 transition-colors"
+          >
+            <Send className="w-3.5 h-3.5 text-white" />
+          </button>
+        </div>
+        <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          {!golfMode ? (
+            <>
+              <button onClick={() => sendMessage("What are the best places to visit in Vietnam?")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Best places →</button>
+              <button onClick={() => sendMessage("I want to play golf in Danang")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">⛳ Golf →</button>
+              <button onClick={() => sendMessage("Help me plan a 7 day Vietnam trip")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Plan trip →</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => sendMessage("What's the best course in Danang?")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Best course →</button>
+              <button onClick={() => sendMessage("Show me courses under $100")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Under $100 →</button>
+              <button onClick={() => sendMessage("Tell me about The Bluffs Ho Tram")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">The Bluffs →</button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

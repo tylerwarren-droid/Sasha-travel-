@@ -1,25 +1,10 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
-from app.services.golf_agent import run_golf_agent
-from app.services.vietnam_golf_database import get_total_course_count
-import anthropic
+from app.services.conductor import conduct
 import json
 import asyncio
 
 router = APIRouter()
-client = anthropic.Anthropic()
-
-GOLF_KEYWORDS = ['golf', 'tee time', 'tee-time', 'fairway', 'caddy', 'green fee', 'reservation', 'book', 'tee', 'play golf', 'golf course',
-                 'montgomerie', 'hoiana', 'bluffs', 'vinpearl golf', 'ba na hills', 'course']
-
-def is_golf_message(text: str) -> bool:
-    lower = text.lower()
-    return any(k in lower for k in GOLF_KEYWORDS)
-
-SASHA_SYSTEM = f"""You are Sasha, an AI travel concierge specializing in Vietnam. 
-You help travelers plan trips, book hotels, discover experiences, and explore Vietnam's culture and cuisine.
-You are warm, knowledgeable, and efficient. Keep responses concise — under 3 sentences when possible.
-You also have a golf specialist capability covering {get_total_course_count()} Vietnam courses."""
 
 async def stream_text(text: str):
     words = text.split(' ')
@@ -48,63 +33,48 @@ async def stream_text(text: str):
 
 @router.post("/chat/completions")
 async def heygen_chat_completions(request: Request):
+    """
+    OpenAI-compatible endpoint for HeyGen custom LLM.
+    All messages now route through The Conductor.
+    """
     try:
         body = await request.json()
         messages = body.get("messages", [])
 
-        # Get latest user message
         user_message = ""
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                content = msg.get("content", "")
-                user_message = content if isinstance(content, str) else ""
-                break
+        conversation_history = []
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content", "")
+            if isinstance(content, str) and content.strip():
+                if role == "user":
+                    user_message = content
+                elif role == "assistant":
+                    conversation_history.append({"role": role, "content": content})
 
         if not user_message:
-            return StreamingResponse(stream_text("How can I help you with your Vietnam trip?"), media_type="text/event-stream")
-
-        # Route to golf agent if golf-related
-        if is_golf_message(user_message):
-            try:
-                # Timeout after 8 seconds to avoid dead air
-                result = await asyncio.wait_for(
-                    run_golf_agent(user_message, []),
-                    timeout=5.0
-                )
-                reply = result["response"]
-            except asyncio.TimeoutError:
-                reply = "I'm checking golf availability for you. Give me just a moment and ask again."
-            except Exception:
-                reply = "I had trouble reaching the golf system. Please try again."
-            
-            return StreamingResponse(stream_text(reply), media_type="text/event-stream")
-
-        # General conversation — use Claude
-        try:
-            claude_messages = []
-            for msg in messages:
-                role = msg.get("role")
-                content = msg.get("content", "")
-                if role in ["user", "assistant"] and isinstance(content, str) and content.strip():
-                    claude_messages.append({"role": role, "content": content})
-
-            if not claude_messages:
-                claude_messages = [{"role": "user", "content": user_message}]
-
-            response = client.messages.create(
-                model="claude-sonnet-4-5",
-                max_tokens=150,
-                system=SASHA_SYSTEM,
-                messages=claude_messages[-10:]  # last 10 messages max
+            return StreamingResponse(
+                stream_text("How can I help you with your trip?"),
+                media_type="text/event-stream"
             )
-            reply = response.content[0].text
-        except Exception:
-            reply = "I'm here to help with your Vietnam trip. What would you like to know?"
+
+        # Route through The Conductor
+        try:
+            result = await asyncio.wait_for(
+                conduct(user_message, conversation_history),
+                timeout=10.0
+            )
+            reply = result["response"]
+        except asyncio.TimeoutError:
+            reply = "I\'m working on that for you — could you give me just a moment and ask again?"
+        except Exception as e:
+            print(f"[HeyGen Chat] Conductor error: {e}")
+            reply = "I\'m here to help with your Vietnam trip. What would you like to know?"
 
         return StreamingResponse(stream_text(reply), media_type="text/event-stream")
 
     except Exception:
         return StreamingResponse(
-            stream_text("I'm here to help with your Vietnam adventure. What would you like to know?"),
+            stream_text("I\'m here to help with your Vietnam adventure!"),
             media_type="text/event-stream"
         )

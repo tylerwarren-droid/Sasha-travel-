@@ -52,25 +52,37 @@ Rules:
 
 
 async def classify_intents(user_message: str, conversation_history: list) -> dict:
-    """Classify what agents to activate for this message."""
-    recent = conversation_history[-4:] if conversation_history else []
-    context = "\n".join([f"{m['role']}: {m['content']}" for m in recent if isinstance(m.get('content'), str)])
-    
-    response = client.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=200,
-        system=INTENT_CLASSIFIER_PROMPT,
-        messages=[{
-            "role": "user",
-            "content": f"Conversation so far:\n{context}\n\nNew message: {user_message}"
-        }]
-    )
-    
-    text = response.content[0].text.strip()
-    try:
-        return json.loads(text)
-    except:
-        return {"intents": ["general"], "primary": "general", "context": user_message}
+    """Classify intents using fast keyword matching."""
+    lower = user_message.lower()
+    intents = []
+
+    GOLF_WORDS = ["golf", "tee time", "tee-time", "fairway", "caddy", "green fee", "golf course", "play golf", "montgomerie", "hoiana", "bluffs", "ba na hills", "vinpearl golf"]
+    BEAUTY_WORDS = ["massage", "spa", "nails", "facial", "manicure", "pedicure", "beauty", "salon", "treatment", "relaxation", "wellness"]
+    HEALTH_WORDS = ["doctor", "medical", "sick", "pharmacy", "clinic", "hospital", "hurt", "ill", "prescription", "nurse", "health", "medicine"]
+    DOG_WORDS = ["dog", "pet", "dog walk", "dog sit", "kennel", "grooming", "puppy"]
+    BOOKING_WORDS = ["confirm booking", "hotel reference", "pms", "booking.com ref", "expedia ref", "booking number", "confirm my booking", "reservation number"]
+    FOTO_WORDS = ["show me", "photo", "picture", "image", "what does", "what do", "look like"]
+
+    if any(w in lower for w in GOLF_WORDS):
+        intents.append("golf")
+        intents.append("foto")
+    if any(w in lower for w in BEAUTY_WORDS):
+        intents.append("beauty")
+    if any(w in lower for w in HEALTH_WORDS):
+        intents.append("health")
+    if any(w in lower for w in DOG_WORDS):
+        intents.append("dog_walking")
+    if any(w in lower for w in BOOKING_WORDS):
+        intents.append("booking_confirmation")
+    if any(w in lower for w in FOTO_WORDS) and "foto" not in intents:
+        intents.append("foto")
+
+    if not intents:
+        intents = ["general"]
+
+    primary = intents[0]
+    print(f"[Conductor] Keywords matched: {intents}")
+    return {"intents": list(dict.fromkeys(intents)), "primary": primary, "context": user_message}
 
 
 # ─────────────────────────────────────────────

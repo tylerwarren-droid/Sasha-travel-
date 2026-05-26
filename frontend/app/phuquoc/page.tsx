@@ -193,7 +193,6 @@ export default function PhuQuocPage() {
                     onItineraryUpdate={handleItineraryUpdate}
                     onSashaResponse={handleSashaResponse}
                     onListeningChange={setIsListening}
-                    inputOnly={true}
                   />
                 </div>
               </div>

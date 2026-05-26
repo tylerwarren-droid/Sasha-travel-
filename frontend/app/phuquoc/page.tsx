@@ -80,8 +80,13 @@ export default function PhuQuocPage() {
     return () => clearInterval(photoInterval.current)
   }, [photos])
 
+  const hasSpoken = useRef(false)
   const handleAvatarReady = useCallback((speak: (text: string) => void) => {
     setSpeakFn(() => speak)
+    if (!hasSpoken.current) {
+      hasSpoken.current = true
+      setTimeout(() => speak(`Welcome back, Alex! Vietnam has so much to offer — and right now, one destination stands out. Phu Quoc has just been named the APEC 2027 host. Vietnam's first LRT, a new airport terminal, and Sun Group's luxury hotel city are all under construction. Prices are still pre-APEC. Shall I show you what Phu Quoc looks like before the world catches on?`), 1500)
+    }
   }, [])
 
   const handleSashaResponse = useCallback((text: string) => {

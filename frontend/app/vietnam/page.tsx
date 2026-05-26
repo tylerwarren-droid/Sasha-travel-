@@ -122,7 +122,7 @@ export default function VietnamPage() {
       </div>
 
       {/* MAIN CONTENT */}
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
+      <div className="flex-1 flex flex-col-reverse overflow-hidden" style={{ minHeight: 0 }}>
 
         {/* LEFT COLUMN — Avatar + Photos */}
         <div className="flex-shrink-0 flex gap-2 px-2 pb-2 overflow-x-auto" style={{ height: '140px' }}>

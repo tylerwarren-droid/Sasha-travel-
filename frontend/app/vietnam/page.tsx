@@ -122,24 +122,18 @@ export default function VietnamPage() {
       </div>
 
       {/* MAIN CONTENT */}
-      <div className="flex-1 flex overflow-hidden p-2 gap-2" style={{ minHeight: 0 }}>
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
 
         {/* LEFT COLUMN — Avatar + Photos */}
-        <div className="flex flex-col gap-3 overflow-hidden" style={{ width: '42%' }}>
+        <div className="flex-shrink-0 flex gap-2 px-2 pb-2 overflow-x-auto" style={{ height: '140px' }}>
 
           {/* AVATAR — big on landing, small when engaged */}
-          <div
-            className="rounded-3xl overflow-hidden border border-white/5 flex-shrink-0 transition-all duration-700"
-            style={{ height: engaged ? '160px' : '60%' }}
-          >
+          <div className="hidden">
             <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />
           </div>
 
           {/* PHOTOS — hero when engaged, teaser when not */}
-          <div
-            className="relative rounded-3xl overflow-hidden border border-white/5 transition-all duration-700"
-            style={{ flex: 1, minHeight: 0 }}
-          >
+          <div className="relative rounded-2xl overflow-hidden border border-white/5 flex-shrink-0" style={{ width: '120px', height: '120px' }}>
             {photos.length > 0 ? (
               <>
                 <img
@@ -194,7 +188,7 @@ export default function VietnamPage() {
         </div>
 
         {/* RIGHT COLUMN — Tabs: Chat / Itinerary / Preferences / Past Trips */}
-        <div className="flex-1 flex flex-col rounded-3xl border border-white/5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', minWidth: '280px' }}>
+        <div className="flex-1 flex flex-col overflow-hidden px-2 pt-2" style={{ minHeight: 0 }}>
 
           {/* Tab bar */}
           <div className="flex border-b border-white/5 flex-shrink-0">

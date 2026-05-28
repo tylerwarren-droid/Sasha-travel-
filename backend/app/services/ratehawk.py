@@ -38,7 +38,6 @@ async def search_hotels(
     checkout: str,
     destination_id: str,
     guests: list[dict],
-    currency: str = "GBP",
     filters: Optional[dict] = None
 ) -> dict:
     """
@@ -49,11 +48,11 @@ async def search_hotels(
     payload = {
         "checkin": checkin,
         "checkout": checkout,
-        "residency": "gb",
+        "residency": "us",
         "language": "en",
         "guests": guests,
         "region_id": destination_id,
-        "currency": currency,
+        "currency": "USD",
     }
 
     if filters:
@@ -67,17 +66,16 @@ async def search_hotels_by_ids(
     checkout: str,
     hotel_ids: list[str],
     guests: list[dict],
-    currency: str = "GBP"
 ) -> dict:
     """Search specific hotels by property ID"""
     payload = {
         "checkin": checkin,
         "checkout": checkout,
-        "residency": "gb",
+        "residency": "us",
         "language": "en",
         "guests": guests,
         "ids": hotel_ids,
-        "currency": currency,
+        "currency": "USD",
     }
     return await ratehawk_post("/api/b2b/v3/search/serp/hotels/", payload)
 
@@ -87,17 +85,16 @@ async def get_hotel_rates(
     checkout: str,
     hotel_id: str,
     guests: list[dict],
-    currency: str = "GBP"
 ) -> dict:
     """Get all available rates for a specific hotel"""
     payload = {
         "checkin": checkin,
         "checkout": checkout,
-        "residency": "gb",
+        "residency": "us",
         "language": "en",
         "guests": guests,
         "id": hotel_id,
-        "currency": currency,
+        "currency": "USD",
     }
     return await ratehawk_post("/api/b2b/v3/search/hp/", payload)
 

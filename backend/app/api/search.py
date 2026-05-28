@@ -17,7 +17,6 @@ class SearchRequest(BaseModel):
     checkout: str
     destination_id: str
     ota_channel: str = "beach"
-    currency: str = "GBP"
     travellers: List[dict] = []
     preferences: List[dict] = []
 

@@ -22,6 +22,12 @@ CREATE INDEX IF NOT EXISTS idx_clients_domains
 CREATE INDEX IF NOT EXISTS idx_clients_slug
     ON clients(slug) WHERE is_active;
 
+-- Ensure set_updated_at exists (defined in 001; repeated here for safety)
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN NEW.updated_at = now(); RETURN NEW; END;
+$$;
+
 DROP TRIGGER IF EXISTS trg_clients_updated_at ON clients;
 CREATE TRIGGER trg_clients_updated_at
     BEFORE UPDATE ON clients

@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.middleware.tenant import TenantMiddleware
 from app.api.search import router as search_router
 from app.api.bookings import router as bookings_router
 from app.api.conversation import router as conversation_router
@@ -24,6 +25,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Runs after CORS, before route handlers — resolves request.state.client
+app.add_middleware(TenantMiddleware)
 
 app.include_router(search_router)
 app.include_router(bookings_router)

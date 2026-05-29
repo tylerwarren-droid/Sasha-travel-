@@ -1,7 +1,10 @@
 import anthropic
 import asyncio
 import json
-from typing import Any
+from typing import Any, Optional
+
+from app.services.prompts import get_prompt_async
+from app.services.tenant import ClientConfig
 
 client = anthropic.Anthropic()
 
@@ -98,15 +101,12 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
 # Adding a new agent = adding one entry here
 # ─────────────────────────────────────────────
 
-async def run_general(message: str, history: list) -> dict:
+async def run_general(message: str, history: list, general_prompt: str) -> dict:
     """General Sasha conversation — travel advice, destinations, planning."""
     response = client.messages.create(
         model="claude-sonnet-4-5",
         max_tokens=300,
-        system="""You are Sasha, a warm and knowledgeable AI travel concierge. 
-You specialise in Vietnam but can help with travel anywhere.
-Keep responses concise and conversational — you are speaking, not writing an essay.
-Maximum 3 sentences unless asked for more detail.""",
+        system=general_prompt,
         messages=history + [{"role": "user", "content": message}]
     )
     return {
@@ -224,14 +224,11 @@ AGENT_REGISTRY = {
 # Classifies, fires agents in parallel, merges
 # ─────────────────────────────────────────────
 
-MERGE_PROMPT = """You are Sasha, a warm AI travel concierge. 
-You have received responses from multiple specialist agents.
-Synthesize them into ONE natural, conversational response.
-Do not mention "agents" or "specialists" — just be Sasha.
-Keep it concise and warm. Max 4 sentences unless detail is needed."""
-
-
-async def conduct(user_message: str, conversation_history: list = None) -> dict:
+async def conduct(
+    user_message: str,
+    conversation_history: list = None,
+    client_config: Optional[ClientConfig] = None,
+) -> dict:
     """
     The Conductor — main entry point.
     Classifies intents, fires agents in parallel, merges results.
@@ -239,25 +236,37 @@ async def conduct(user_message: str, conversation_history: list = None) -> dict:
     if conversation_history is None:
         conversation_history = []
 
-    # Step 1 — Classify intents
+    # Step 1 — Load system prompts from DB (TTL-cached; falls back to static)
+    general_prompt = await get_prompt_async("conductor.general")
+    merge_prompt = await get_prompt_async("conductor.merge")
+
+    # Apply client-specific persona name if different from default
+    persona = (client_config.persona_name if client_config else None) or "Sasha"
+    if persona != "Sasha":
+        general_prompt = general_prompt.replace("Sasha", persona)
+        merge_prompt = merge_prompt.replace("Sasha", persona)
+
+    # Step 2 — Classify intents
     classification = await classify_intents(user_message, conversation_history)
     intents = classification.get("intents", ["general"])
     context = classification.get("context", user_message)
     
     print(f"[Conductor] Intents: {intents}")
 
-    # Step 2 — Fire all relevant agents in parallel
+    # Step 3 — Fire all relevant agents in parallel
     tasks = []
     for intent in intents:
         runner = AGENT_REGISTRY.get(intent, run_general)
         if intent == "foto":
             tasks.append(runner(user_message, conversation_history, context))
+        elif intent == "general":
+            tasks.append(runner(user_message, conversation_history, general_prompt))
         else:
             tasks.append(runner(user_message, conversation_history))
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # Step 3 — Collect valid results
+    # Step 4 — Collect valid results
     agent_responses = []
     photos = []
     tools_used = []
@@ -277,7 +286,7 @@ async def conduct(user_message: str, conversation_history: list = None) -> dict:
             if result["data"].get("tools_used"):
                 tools_used.extend(result["data"]["tools_used"])
 
-    # Step 4 — Merge responses
+    # Step 5 — Merge responses
     if len(agent_responses) == 0:
         final_response = "I'm here to help — could you tell me a bit more about what you need?"
     elif len(agent_responses) == 1:
@@ -288,12 +297,12 @@ async def conduct(user_message: str, conversation_history: list = None) -> dict:
         merge_response = client.messages.create(
             model="claude-sonnet-4-5",
             max_tokens=400,
-            system=MERGE_PROMPT,
+            system=merge_prompt,
             messages=[{"role": "user", "content": f"User asked: {user_message}\n\nAgent responses:\n{combined}"}]
         )
         final_response = merge_response.content[0].text
 
-    # Step 5 — Update conversation history
+    # Step 6 — Update conversation history
     updated_history = conversation_history + [
         {"role": "user", "content": user_message},
         {"role": "assistant", "content": final_response}

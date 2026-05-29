@@ -2,6 +2,16 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  // Pass through onboarding portal — no auth required
+  if (request.nextUrl.pathname.startsWith('/onboarding')) {
+    return NextResponse.next({ request })
+  }
+
+  // Short-circuit if Supabase is not configured (e.g. local dev without keys)
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return NextResponse.next({ request })
+  }
+
   let supabaseResponse = NextResponse.next({ request })
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,7 +34,7 @@ export async function middleware(request: NextRequest) {
     }
   )
   const { data: { user } } = await supabase.auth.getUser()
-  const publicPaths = ['/login', '/vietnam', '/phuquoc', '/voice', '/kanoe.html']
+  const publicPaths = ['/login', '/vietnam', '/phuquoc', '/voice', '/kanoe.html', '/onboarding']
   const isPublic = publicPaths.some(p => request.nextUrl.pathname === p || request.nextUrl.pathname.startsWith(p))
   if (!user && !isPublic) {
     const url = request.nextUrl.clone()

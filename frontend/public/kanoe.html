@@ -630,7 +630,8 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
 <!-- DEMO -->
 <div class="panel" id="panel-demo">
   <div style="min-height:60vh;display:flex;align-items:center;justify-content:center">
-    <a href="https://demo.kanoe.ai/chat" target="_blank" rel="noopener" class="launch">Launch Demo →</a>
+    <a href="https://demo.kanoe.ai/chat" target="_blank" rel="noopener" class="launch"
+       onclick="var c=new(window.AudioContext||window.webkitAudioContext)();var b=c.createBuffer(1,1,22050);var s=c.createBufferSource();s.buffer=b;s.connect(c.destination);s.start(0);c.resume()">Launch Demo →</a>
   </div>
 </div>
 

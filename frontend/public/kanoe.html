@@ -629,8 +629,12 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
 
 <!-- DEMO -->
 <div class="panel" id="panel-demo">
-  <div style="min-height:70vh;display:flex;align-items:center;justify-content:center">
-    <button onclick="(function(){var c=new(window.AudioContext||window.webkitAudioContext)();var b=c.createBuffer(1,1,22050);var s=c.createBufferSource();s.buffer=b;s.connect(c.destination);s.start(0);c.resume().then(function(){window.location.href='https://demo.kanoe.ai/chat'});})()" class="launch">&#9654; Speak to Sasha</button>
+  <div style="position:relative;height:calc(100vh - 66px);">
+    <iframe src="https://demo.kanoe.ai" style="width:100%;height:100%;border:none;" allow="microphone;camera;autoplay;"></iframe>
+    <div id="demo-overlay" onclick="document.getElementById('demo-overlay').style.display='none'" style="position:absolute;inset:0;background:rgba(10,10,15,0.88);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;">
+      <div style="font-size:22px;color:#fff;font-weight:600;margin-bottom:12px;">Ready to meet Sasha?</div>
+      <div style="padding:14px 36px;border-radius:50px;background:linear-gradient(135deg,#00E5C0,#00BFA5);color:#040D1A;font-weight:700;font-size:15px;">▶ Start Demo</div>
+    </div>
   </div>
 </div>
 

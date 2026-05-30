@@ -51,6 +51,7 @@ export default function PhuQuocPage() {
   const [photoQuery, setPhotoQuery] = useState('Phu Quoc island beach luxury Vietnam')
   const [engaged, setEngaged] = useState(false)
   const [rightTab, setRightTab] = useState<'chat' | 'itinerary' | 'preferences' | 'trips'>('chat')
+  const [started, setStarted] = useState(false)
   const photoInterval = useRef<any>(null)
 
   useEffect(() => {
@@ -137,7 +138,7 @@ export default function PhuQuocPage() {
             className="rounded-3xl overflow-hidden border border-white/5 flex-shrink-0 transition-all duration-700"
             style={{ height: engaged ? '160px' : '60%' }}
           >
-            <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />
+            {started && <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />}
           </div>
 
           {/* PHOTOS — hero when engaged, teaser when not */}
@@ -298,8 +299,43 @@ export default function PhuQuocPage() {
         </div>
       )}
 
+      {/* Tap-to-start overlay — gates audio init until user gesture */}
+      {!started && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center cursor-pointer select-none"
+          style={{ background: 'rgba(8,8,16,0.96)', backdropFilter: 'blur(10px)' }}
+          onClick={() => setStarted(true)}
+        >
+          <div style={{ fontSize: '52px', marginBottom: '20px' }}>🏝️</div>
+          <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: '26px', fontWeight: 700, color: '#00B4D8', marginBottom: '8px', letterSpacing: '-0.3px' }}>
+            Discover Phu Quoc
+          </div>
+          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.35)', marginBottom: '44px', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            AI Travel Concierge · APEC 2027 Host
+          </div>
+          <div
+            style={{
+              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '16px 36px', borderRadius: '16px', fontSize: '16px', fontWeight: 700,
+              background: 'linear-gradient(135deg, #00B4D8, #0077B6)', color: '#fff',
+              boxShadow: '0 8px 32px rgba(0,180,216,0.35)',
+              animation: 'pulse 2s ease-in-out infinite',
+            }}
+          >
+            <span style={{ fontSize: '18px' }}>▶</span> Tap to start
+          </div>
+          <div style={{ marginTop: '16px', fontSize: '12px', color: 'rgba(255,255,255,0.2)' }}>
+            Audio plays automatically once you start
+          </div>
+        </div>
+      )}
+
       <style jsx global>{`
         @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes pulse {
+          0%, 100% { box-shadow: 0 8px 32px rgba(0,180,216,0.35); }
+          50% { box-shadow: 0 8px 48px rgba(0,180,216,0.6); }
+        }
       `}</style>
     </main>
   )

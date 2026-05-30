@@ -628,44 +628,151 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
 </div>
 
 <!-- DEMO -->
-<div class="panel" id="panel-demo">
-  <div class="demo-wrap">
-    <div class="demo-hdr">
-      <h1>Try the <em>Live Demo</em></h1>
-      <p>Explore the full Kanoe.ai platform with pre-loaded demo data. Create itineraries, manage bookings, and experience the AI co-pilot in action.</p>
+<div class="panel" id="panel-demo" style="position:relative;min-height:80vh;display:flex;flex-direction:column;align-items:center;justify-content:center">
+
+  <!-- Tap-to-start overlay -->
+  <div id="demo-overlay" onclick="window.demoStart()"
+    style="position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;background:var(--navy2)">
+    <div style="font-family:var(--head);font-size:42px;color:var(--teal);letter-spacing:-0.5px;margin-bottom:10px">Sasha</div>
+    <div style="font-size:13px;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:48px">AI Travel Concierge</div>
+    <div onclick="window.demoStart()" style="display:inline-flex;align-items:center;gap:10px;padding:16px 36px;background:var(--teal);color:#fff;border:none;border-radius:12px;font-family:var(--body);font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px rgba(15,110,86,0.25);animation:demoPulse 2s ease-in-out infinite">
+      <span style="font-size:18px">▶</span> Tap to start
     </div>
-    <div class="demo-card">
-      <div class="demo-ch">
-        <div style="width:32px;height:32px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">🔐</div>
-        <div><h3>Demo Access Credentials</h3><p>Two accounts available — admin and standard user</p></div>
-      </div>
-      <div class="demo-cb">
-        <div class="cg">
-          <div class="cb"><div class="cr">Admin Account</div>
-            <div class="crow"><span class="ck">Email</span><span class="cv">admin@luxurioustraveler.com</span></div>
-            <div class="crow"><span class="ck">Password</span><span class="cv">admin123</span></div>
-            <div class="cb-note">Full platform access including admin console, user management, and all configuration settings</div>
-          </div>
-          <div class="cb"><div class="cr">Demo User Account</div>
-            <div class="crow"><span class="ck">Email</span><span class="cv">demo@luxurioustraveler.com</span></div>
-            <div class="crow"><span class="ck">Password</span><span class="cv">demo123</span></div>
-            <div class="cb-note">Standard user experience — booking, itinerary creation, AI co-pilot, and analytics dashboard</div>
-          </div>
-        </div>
-        <a class="launch" href="https://demo.kanoe.ai/chat" target="_blank" rel="noopener">Launch Demo Platform → demo.kanoe.ai/chat</a>
-      </div>
-    </div>
-    <div class="dnote"><strong>Note:</strong> Demo environment is pre-loaded with sample OTA data. All bookings are non-live and will not incur charges. For voice features, allow microphone access when prompted by your browser.</div>
-    <div class="df">
-      <div class="dfi"><div class="dfi-i">🤖</div><div class="dfi-l">AI Co-pilot</div><div class="dfi-s">Natural language itinerary creation</div></div>
-      <div class="dfi"><div class="dfi-i">📊</div><div class="dfi-l">Live Dashboard</div><div class="dfi-s">Real-time bookings and analytics</div></div>
-      <div class="dfi"><div class="dfi-i">🔗</div><div class="dfi-l">API Integrations</div><div class="dfi-s">Hotel, flight, and activity inventory</div></div>
-      <div class="dfi"><div class="dfi-i">🎭</div><div class="dfi-l">Avatar Interface</div><div class="dfi-s">Sasha AI concierge live</div></div>
-      <div class="dfi"><div class="dfi-i">💳</div><div class="dfi-l">Payment Rails</div><div class="dfi-s">Multi-currency + crypto ready</div></div>
-      <div class="dfi"><div class="dfi-i">⚙️</div><div class="dfi-l">Admin Console</div><div class="dfi-s">Full platform configuration</div></div>
-    </div>
+    <div style="margin-top:16px;font-size:12px;color:var(--muted)">Audio plays automatically after you tap</div>
   </div>
+
+  <!-- Avatar panel (hidden until tap) -->
+  <div id="demo-av-wrap" style="display:none;width:100%;max-width:680px;padding:32px 24px;flex-direction:column;align-items:center;gap:16px">
+    <div style="position:relative;width:100%;aspect-ratio:16/9;border-radius:20px;overflow:hidden;background:#0a0a0f;border:1px solid var(--border)">
+      <video id="demo-video" autoplay playsinline style="width:100%;height:100%;object-fit:cover"></video>
+      <!-- loading state -->
+      <div id="demo-loading" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px">
+        <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#0F6E56,#1D9E75);display:flex;align-items:center;justify-content:center;animation:demoPulse 1.5s ease-in-out infinite">
+          <span style="color:#fff;font-family:var(--head);font-size:22px">S</span>
+        </div>
+        <div style="font-size:12px;color:#ffffff80;letter-spacing:0.1em;text-transform:uppercase" id="demo-status-txt">Connecting to Sasha…</div>
+      </div>
+      <!-- live badge -->
+      <div id="demo-live-badge" style="display:none;position:absolute;top:14px;right:14px;display:none;align-items:center;gap:6px;background:rgba(0,0,0,0.45);backdrop-filter:blur(8px);padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.12)">
+        <div style="width:7px;height:7px;border-radius:50%;background:#34d399;animation:demoPulse 1.5s ease-in-out infinite"></div>
+        <span style="font-size:11px;color:rgba(255,255,255,0.6)">Live</span>
+      </div>
+      <!-- error state -->
+      <div id="demo-error" style="display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:12px">
+        <div style="width:44px;height:44px;border-radius:50%;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;color:#f87171;font-size:20px">!</div>
+        <div id="demo-error-msg" style="font-size:13px;color:#f8717180;text-align:center;max-width:280px"></div>
+        <button onclick="window.demoRetry()" style="font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline">Try again</button>
+      </div>
+    </div>
+    <button onclick="window.demoStop()"
+      style="padding:10px 28px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:var(--body);font-size:13px;cursor:pointer;transition:all 0.2s"
+      onmouseover="this.style.borderColor='#ef4444';this.style.color='#ef4444'"
+      onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+      &#9632; Stop
+    </button>
+  </div>
+
 </div>
+
+<style>
+@keyframes demoPulse{0%,100%{opacity:1}50%{opacity:0.6}}
+</style>
+
+<script type="module">
+let _avatar = null;
+
+async function demoStart() {
+  // Dismiss overlay, show avatar panel
+  document.getElementById('demo-overlay').style.display = 'none';
+  const wrap = document.getElementById('demo-av-wrap');
+  wrap.style.display = 'flex';
+
+  // Unlock audio with a silent buffer
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+    await ctx.resume();
+  } catch(e) {}
+
+  await demoInit();
+}
+
+async function demoInit() {
+  const loading = document.getElementById('demo-loading');
+  const errorEl = document.getElementById('demo-error');
+  const statusTxt = document.getElementById('demo-status-txt');
+  const liveBadge = document.getElementById('demo-live-badge');
+  const video = document.getElementById('demo-video');
+
+  loading.style.display = 'flex';
+  loading.style.flexDirection = 'column';
+  errorEl.style.display = 'none';
+  liveBadge.style.display = 'none';
+  statusTxt.textContent = 'Connecting to Sasha…';
+
+  try {
+    // Fetch session token from the existing Next.js API route
+    statusTxt.textContent = 'Getting session token…';
+    const res = await fetch('/api/heygen/token');
+    const { token, error: tokenErr } = await res.json();
+    if (!token) throw new Error(tokenErr || 'No token received');
+
+    // Load the HeyGen LiveAvatar SDK — esm.sh bundles all deps for browser
+    statusTxt.textContent = 'Loading avatar SDK…';
+    const { LiveAvatarSession, SessionEvent } = await import(
+      'https://esm.sh/@heygen/liveavatar-web-sdk@0.0.18'
+    );
+
+    const session = new LiveAvatarSession(token, { voiceChat: true });
+    _avatar = session;
+
+    session.on(SessionEvent.SESSION_STREAM_READY, () => {
+      session.attach(video);
+      video.play().catch(() => {});
+      loading.style.display = 'none';
+      liveBadge.style.display = 'flex';
+    });
+
+    session.on(SessionEvent.SESSION_DISCONNECTED, () => {
+      loading.style.display = 'none';
+      liveBadge.style.display = 'none';
+    });
+
+    statusTxt.textContent = 'Starting avatar…';
+    await session.start();
+
+  } catch(err) {
+    loading.style.display = 'none';
+    errorEl.style.display = 'flex';
+    errorEl.style.flexDirection = 'column';
+    document.getElementById('demo-error-msg').textContent = err.message || 'Connection failed';
+  }
+}
+
+function demoStop() {
+  try { _avatar?.stop?.(); } catch(e) {}
+  _avatar = null;
+  // Reset video
+  const video = document.getElementById('demo-video');
+  video.srcObject = null;
+  // Hide avatar panel, show overlay
+  document.getElementById('demo-av-wrap').style.display = 'none';
+  document.getElementById('demo-overlay').style.display = 'flex';
+}
+
+function demoRetry() {
+  demoInit();
+}
+
+// Expose to inline onclick handlers
+window.demoStart  = demoStart;
+window.demoStop   = demoStop;
+window.demoRetry  = demoRetry;
+</script>
 
 <script>
 function showPanel(id,btn){

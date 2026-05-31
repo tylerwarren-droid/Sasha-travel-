@@ -10,6 +10,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
   const videoRef = useRef<HTMLVideoElement>(null)
   const avatarRef = useRef<any>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [audioUnlocked, setAudioUnlocked] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -61,6 +62,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
         ref={videoRef}
         autoPlay
         playsInline
+        muted
         className={`w-full h-full object-cover transition-opacity duration-500 ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
       />
 
@@ -88,6 +90,20 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
           <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/10">
             <div className={`w-1.5 h-1.5 rounded-full ${isListening ? 'bg-red-400 animate-pulse' : 'bg-emerald-400'}`} />
             <span className="text-xs text-white/40">{isListening ? 'Listening' : 'Live'}</span>
+          </div>
+        </div>
+      )}
+
+      {status === 'ready' && !audioUnlocked && (
+        <div
+          className="absolute inset-0 flex items-center justify-center cursor-pointer"
+          onClick={() => {
+            if (videoRef.current) videoRef.current.muted = false
+            setAudioUnlocked(true)
+          }}
+        >
+          <div className="flex items-center gap-2 bg-black/50 backdrop-blur-sm px-4 py-2.5 rounded-full border border-white/20 text-white/70 text-sm hover:bg-black/70 transition-colors">
+            <span>🔊</span> Tap to hear Sasha
           </div>
         </div>
       )}

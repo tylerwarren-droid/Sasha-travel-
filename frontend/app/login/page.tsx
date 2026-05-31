@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
@@ -8,6 +8,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState('demo@luxurioustraveler.com')
   const [password, setPassword] = useState('demo123')
   const [isSignUp, setIsSignUp] = useState(false)
+
+  // Auto-login with demo credentials
+  useEffect(() => { handleAuth() }, [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()

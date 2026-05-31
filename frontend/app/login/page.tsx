@@ -10,7 +10,9 @@ export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false)
 
   // Auto-login with demo credentials
-  useEffect(() => { handleAuth() }, [])
+  useEffect(() => {
+    setTimeout(() => { handleAuth() }, 500)
+  }, [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()

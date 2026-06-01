@@ -86,7 +86,7 @@ export default function PhuQuocPage() {
     setSpeakFn(() => speak)
     if (!hasSpoken.current) {
       hasSpoken.current = true
-      setTimeout(() => speak(`Welcome back, Alex! Vietnam has so much to offer — and right now, one destination stands out. Phu Quoc has just been named the APEC 2027 host. Vietnam's first LRT, a new airport terminal, and Sun Group's luxury hotel city are all under construction. Prices are still pre-APEC. Shall I show you what Phu Quoc looks like before the world catches on?`), 1500)
+      setTimeout(() => speak(`Phu Quoc has just been named the APEC 2027 host. Vietnam's first LRT, a new airport terminal, and Sun Group's luxury hotel city are all under construction. Prices are still pre-APEC. Shall I show you what Phu Quoc looks like before the world catches on?`), 200)
     }
   }, [])
 
@@ -160,7 +160,7 @@ export default function PhuQuocPage() {
                 {/* Welcome overlay */}
                 {!engaged && (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-white/40 text-xs tracking-widest uppercase">Start talking to explore Vietnam</div>
+                    <div className="text-white/40 text-xs tracking-widest uppercase">Start talking to explore Phu Quoc</div>
                   </div>
                 )}
 
@@ -240,7 +240,7 @@ export default function PhuQuocPage() {
                 onItineraryUpdate={handleItineraryUpdate}
                 onSashaResponse={handleSashaResponse}
                 onListeningChange={setIsListening}
-                initialMessage={`Welcome back, ${DEMO_USER.display_name}! Vietnam has so much to offer — and right now, one destination stands out. 🏝️ Phu Quoc has just been named the APEC 2027 host. Vietnam's first LRT, a new airport terminal, and Sun Group's luxury hotel city are all under construction. Prices are still pre-APEC. Shall I show you what Phu Quoc looks like before the world catches on? 🌏`}
+                initialMessage={`🏝️ Phu Quoc has just been named the APEC 2027 host. Vietnam's first LRT, a new airport terminal, and Sun Group's luxury hotel city are all under construction. Prices are still pre-APEC. Shall I show you what Phu Quoc looks like before the world catches on? 🌏`}
               />
             )}
 

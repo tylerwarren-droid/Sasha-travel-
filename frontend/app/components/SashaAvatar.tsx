@@ -30,6 +30,8 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
       const avatar = new LiveAvatarSession(token, { voiceChat: true })
 
       avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
+        // Interrupt any auto-greeting from the HeyGen LLM config before handing control to the page
+        try { avatar.interrupt?.() } catch(e) {}
         setStatus('ready')
         if (videoRef.current) {
           avatar.attach(videoRef.current)

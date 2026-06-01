@@ -290,6 +290,10 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
         style="padding:5px 15px;border-radius:50px;border:none;background:transparent;color:var(--muted);font-family:var(--body);font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s;animation:none">
         Vietnam
       </button>
+      <button id="pill-pq" onclick="switchDemo('pq')"
+        style="padding:5px 15px;border-radius:50px;border:none;background:transparent;color:var(--muted);font-family:var(--body);font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s;animation:none">
+        Phu Quoc
+      </button>
     </div>
   </div>
 </nav>
@@ -663,23 +667,24 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
     <iframe id="demo-vn-iframe" src="https://sasha-heygen.vercel.app/vietnam" style="width:100%;height:100%;border:none;display:block;" allow="autoplay;microphone;camera;fullscreen"></iframe>
   </div>
 
+  <!-- Phu Quoc demo -->
+  <div id="demo-pq" style="flex:1;position:relative;overflow:hidden;display:none">
+    <iframe id="demo-pq-iframe" src="https://sasha-heygen.vercel.app/phuquoc" style="width:100%;height:100%;border:none;display:block;" allow="autoplay;microphone;camera;fullscreen"></iframe>
+  </div>
+
 </div>
 
 <script>
 function switchDemo(which){
-  var isLT = which==='lt';
-  document.getElementById('demo-lt').style.display = isLT ? 'block' : 'none';
-  document.getElementById('demo-vn').style.display = isLT ? 'none' : 'block';
-  var pillLT = document.getElementById('pill-lt');
-  var pillVN = document.getElementById('pill-vn');
-  pillLT.style.background  = isLT ? 'var(--teal)' : 'transparent';
-  pillLT.style.color       = isLT ? 'var(--navy)' : 'var(--muted)';
-  pillLT.style.fontWeight  = isLT ? '600' : '500';
-  pillLT.style.animation   = isLT ? 'pillGlow 2s ease-in-out infinite' : 'none';
-  pillVN.style.background  = isLT ? 'transparent' : 'var(--teal)';
-  pillVN.style.color       = isLT ? 'var(--muted)' : 'var(--navy)';
-  pillVN.style.fontWeight  = isLT ? '500' : '600';
-  pillVN.style.animation   = isLT ? 'none' : 'pillGlow 2s ease-in-out infinite';
+  var panels = ['lt','vn','pq'];
+  panels.forEach(function(p){
+    document.getElementById('demo-'+p).style.display = (which===p) ? 'block' : 'none';
+    var pill = document.getElementById('pill-'+p);
+    pill.style.background = (which===p) ? 'var(--teal)' : 'transparent';
+    pill.style.color      = (which===p) ? 'var(--navy)' : 'var(--muted)';
+    pill.style.fontWeight = (which===p) ? '600' : '500';
+    pill.style.animation  = (which===p) ? 'pillGlow 2s ease-in-out infinite' : 'none';
+  });
 }
 function showPanel(id,btn){
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));

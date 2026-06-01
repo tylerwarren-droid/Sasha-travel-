@@ -12,6 +12,7 @@ interface SashaChatProps {
   onItineraryUpdate: (itinerary: Itinerary) => void
   onSashaResponse?: (text: string) => void
   onListeningChange?: (listening: boolean) => void
+  emptyState?: React.ReactNode
   initialMessage?: string
 }
 
@@ -26,7 +27,7 @@ function isGolfConversation(messages: any[]): boolean {
   return messages.some(m => isGolfMessage(m.content || ''))
 }
 
-export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage }: SashaChatProps) {
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage, emptyState }: SashaChatProps) {
   const [messages, setMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
   )
@@ -121,6 +122,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
+        {messages.length === 0 && emptyState}
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
             <div className={`w-8 h-8 rounded-2xl flex items-center justify-center flex-shrink-0 text-xs font-medium ${

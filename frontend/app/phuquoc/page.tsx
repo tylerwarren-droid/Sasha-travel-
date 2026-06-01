@@ -234,6 +234,12 @@ export default function PhuQuocPage() {
                 onItineraryUpdate={handleItineraryUpdate}
                 onSashaResponse={handleSashaResponse}
                 onListeningChange={setIsListening}
+                emptyState={
+                  <div className="flex flex-col items-center justify-center h-full gap-2 py-16">
+                    <div className="text-white/70 text-lg font-medium">Hello</div>
+                    <div className="text-white/30 text-sm tracking-wide">Xin chào 🇻🇳</div>
+                  </div>
+                }
               />
             )}
 

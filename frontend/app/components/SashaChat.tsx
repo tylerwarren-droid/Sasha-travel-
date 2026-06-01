@@ -27,10 +27,9 @@ function isGolfConversation(messages: any[]): boolean {
 }
 
 export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage }: SashaChatProps) {
-  const [messages, setMessages] = useState<any[]>([{
-    role: 'assistant',
-    content: initialMessage || `Welcome back, ${user.display_name}! ${user.past_trips && user.past_trips.length > 0 ? `How was your ${user.past_trips[0].title}? ` : ''}Ready to plan your next escape? 🌴`
-  }])
+  const [messages, setMessages] = useState<any[]>(
+    initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
+  )
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [golfHistory, setGolfHistory] = useState<any[]>([])

@@ -628,7 +628,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
 </div>
 
 <!-- Pill switcher — fixed below nav, shown only when Demo tab is active -->
-<div id="demo-pill-bar" style="display:none;position:fixed;top:66px;left:0;right:0;z-index:199;justify-content:center;align-items:center;gap:8px;padding:12px 0;background:rgba(4,13,26,0.97);border-bottom:1px solid var(--border)">
+<div id="demo-pill-bar" style="display:none;position:fixed;top:66px;left:0;right:0;z-index:9999;justify-content:center;align-items:center;gap:8px;padding:12px 0;background:rgba(4,13,26,0.97);border-bottom:1px solid var(--border)">
   <button id="pill-lt" onclick="switchDemo('lt')"
     style="padding:7px 22px;border-radius:50px;border:1px solid var(--teal);background:var(--teal);color:var(--navy);font-family:var(--body);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s">
     Luxurious Traveler
@@ -644,7 +644,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
 
   <!-- Luxurious Traveler demo -->
   <div id="demo-lt" style="flex:1;position:relative;overflow:hidden">
-    <iframe src="https://demo.kanoe.ai" style="width:100%;height:100%;border:none;display:block;pointer-events:none;filter:blur(2px) brightness(0.45)" allow="autoplay;microphone;camera"></iframe>
+    <iframe src="https://demo.kanoe.ai" style="width:100%;height:100%;border:none;display:block;pointer-events:none;opacity:0.4" allow="autoplay;microphone;camera"></iframe>
     <div id="demo-lt-overlay" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
       <div style="font-family:var(--head);font-size:clamp(22px,3vw,34px);color:#fff;letter-spacing:-0.3px;text-align:center">Meet Sasha</div>
       <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-bottom:8px;text-align:center">Sasha is ready</div>
@@ -659,7 +659,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
 
   <!-- Vietnam demo -->
   <div id="demo-vn" style="flex:1;position:relative;overflow:hidden;display:none">
-    <iframe src="https://sasha-heygen.vercel.app/vietnam" style="width:100%;height:100%;border:none;display:block;pointer-events:none;filter:blur(2px) brightness(0.45)" allow="autoplay;microphone;camera"></iframe>
+    <iframe src="https://sasha-heygen.vercel.app/vietnam" style="width:100%;height:100%;border:none;display:block;pointer-events:none;opacity:0.4" allow="autoplay;microphone;camera"></iframe>
     <div id="demo-vn-overlay" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
       <div style="font-family:var(--head);font-size:clamp(22px,3vw,34px);color:#fff;letter-spacing:-0.3px;text-align:center">Discover Vietnam</div>
       <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-bottom:8px;text-align:center">AI-powered Vietnam travel concierge</div>

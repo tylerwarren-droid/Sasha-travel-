@@ -628,7 +628,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
 </div>
 
 <!-- DEMO -->
-<div class="panel" id="panel-demo" style="padding:0;height:calc(100vh - 66px);display:flex;flex-direction:column;overflow:hidden">
+<div id="panel-demo" style="padding:0;height:calc(100vh - 66px);display:none;flex-direction:column;overflow:hidden">
 
   <!-- Pill switcher -->
   <div style="display:flex;justify-content:center;align-items:center;gap:8px;padding:14px 0;background:rgba(15,30,55,0.97);border-bottom:2px solid var(--teal);flex-shrink:0;position:relative;z-index:100">
@@ -694,10 +694,14 @@ function switchDemo(which){
 function showPanel(id,btn){
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".nav-tab").forEach(t=>t.classList.remove("active"));
-  var el=document.getElementById("panel-"+id);
-  el.classList.add("active");
-  // Demo panel needs flex, not block, for the pill switcher column layout
-  el.style.display = (id==='demo') ? 'flex' : 'block';
+  // Demo panel is not in the .panel CSS system — handle it directly
+  var demo=document.getElementById("panel-demo");
+  if(id==='demo'){
+    demo.style.display='flex';
+  } else {
+    demo.style.display='none';
+    document.getElementById("panel-"+id).classList.add("active");
+  }
   if(btn)btn.classList.add("active");
   window.scrollTo(0,0);
 }

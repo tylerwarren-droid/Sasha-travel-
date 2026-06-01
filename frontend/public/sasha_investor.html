@@ -649,11 +649,14 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
 
   <!-- Luxurious Traveler demo -->
   <div id="demo-lt" style="flex:1;position:relative;overflow:hidden">
-    <iframe id="demo-lt-iframe" src="https://demo.kanoe.ai/chat" width="100%" height="800px" frameborder="0" allow="autoplay;microphone;camera;fullscreen"></iframe>
-    <div id="demo-lt-overlay" onclick="(function(el){el.style.display='none';var f=document.getElementById('demo-lt-iframe');f.src='https://demo.kanoe.ai/chat?t='+Date.now();})(this)"
-      style="position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(4,13,26,0.6);backdrop-filter:blur(2px)">
-      <div style="font-family:var(--body);font-size:18px;font-weight:600;color:#fff;letter-spacing:0.02em">&#9654; Click to hear Sasha</div>
-    </div>
+    <iframe
+      src="https://demo.kanoe.ai/chat"
+      allow="autoplay"
+      width="100%"
+      height="800px"
+      frameborder="0"
+      style="border:none;"
+    ></iframe>
   </div>
 
   <!-- Vietnam demo — no kanoe overlay, Vietnam page's own tap-to-start shows directly -->

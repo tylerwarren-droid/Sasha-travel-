@@ -627,20 +627,20 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
   </div>
 </div>
 
-<!-- DEMO -->
-<div id="panel-demo" style="padding:0;padding-top:66px;height:100vh;display:none;flex-direction:column;overflow:hidden">
+<!-- Pill switcher — fixed below nav, shown only when Demo tab is active -->
+<div id="demo-pill-bar" style="display:none;position:fixed;top:66px;left:0;right:0;z-index:199;justify-content:center;align-items:center;gap:8px;padding:12px 0;background:rgba(4,13,26,0.97);border-bottom:1px solid var(--border)">
+  <button id="pill-lt" onclick="switchDemo('lt')"
+    style="padding:7px 22px;border-radius:50px;border:1px solid var(--teal);background:var(--teal);color:var(--navy);font-family:var(--body);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s">
+    Luxurious Traveler
+  </button>
+  <button id="pill-vn" onclick="switchDemo('vn')"
+    style="padding:7px 22px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--body);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s">
+    Vietnam
+  </button>
+</div>
 
-  <!-- Pill switcher -->
-  <div style="display:flex;justify-content:center;align-items:center;gap:8px;padding:14px 0;background:rgba(15,30,55,0.97);border-bottom:2px solid var(--teal);flex-shrink:0;position:relative;z-index:100">
-    <button id="pill-lt" onclick="switchDemo('lt')"
-      style="padding:7px 20px;border-radius:50px;border:1px solid var(--teal);background:var(--teal);color:var(--navy);font-family:var(--body);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s">
-      Luxurious Traveler
-    </button>
-    <button id="pill-vn" onclick="switchDemo('vn')"
-      style="padding:7px 20px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--body);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s">
-      Vietnam
-    </button>
-  </div>
+<!-- DEMO -->
+<div id="panel-demo" style="padding:0;padding-top:116px;height:100vh;display:none;flex-direction:column;overflow:hidden">
 
   <!-- Luxurious Traveler demo -->
   <div id="demo-lt" style="flex:1;position:relative;overflow:hidden">
@@ -648,7 +648,6 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
     <div id="demo-lt-overlay" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
       <div style="font-family:var(--head);font-size:clamp(22px,3vw,34px);color:#fff;letter-spacing:-0.3px;text-align:center">Meet Sasha</div>
       <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-bottom:8px;text-align:center">Sasha is ready</div>
-      <div style="font-size:12px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-align:center;font-family:monospace">demo@luxurioustraveler.com &nbsp;/&nbsp; demo123</div>
       <a href="https://demo.kanoe.ai/login?email=demo@luxurioustraveler.com&password=demo123" target="_blank" rel="noopener"
         style="display:inline-flex;align-items:center;gap:10px;padding:16px 36px;background:#C9A84C;color:#fff;border:none;border-radius:50px;font-family:var(--body);font-size:16px;font-weight:600;text-decoration:none;cursor:pointer;box-shadow:0 8px 32px rgba(201,168,76,0.4);transition:opacity 0.2s"
         onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'"
@@ -696,10 +695,13 @@ function showPanel(id,btn){
   document.querySelectorAll(".nav-tab").forEach(t=>t.classList.remove("active"));
   // Demo panel is not in the .panel CSS system — handle it directly
   var demo=document.getElementById("panel-demo");
+  var pillBar=document.getElementById("demo-pill-bar");
   if(id==='demo'){
     demo.style.display='flex';
+    pillBar.style.display='flex';
   } else {
     demo.style.display='none';
+    pillBar.style.display='none';
     document.getElementById("panel-"+id).classList.add("active");
   }
   if(btn)btn.classList.add("active");

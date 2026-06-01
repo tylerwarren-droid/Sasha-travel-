@@ -43,7 +43,7 @@ interface Photo {
 
 export default function PhuQuocPage() {
   const [itinerary, setItinerary] = useState<Itinerary>(INITIAL_ITINERARY)
-  const [speakFn, setSpeakFn] = useState<((text: string) => void) | null>(null)
+  const [speakFn, setSpeakFn] = useState<((text: string) => void) | null>(null) // used for chat responses only
   const [isListening, setIsListening] = useState(false)
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
@@ -81,17 +81,11 @@ export default function PhuQuocPage() {
     return () => clearInterval(photoInterval.current)
   }, [photos])
 
-  const hasSpoken = useRef(false)
   const handleAvatarReady = useCallback((speak: (text: string) => void) => {
     setSpeakFn(() => speak)
-    if (!hasSpoken.current) {
-      hasSpoken.current = true
-      setTimeout(() => speak(`Phu Quoc has just been named the APEC 2027 host. Vietnam's first LRT, a new airport terminal, and Sun Group's luxury hotel city are all under construction. Prices are still pre-APEC. Shall I show you what Phu Quoc looks like before the world catches on?`), 200)
-    }
   }, [])
 
   const handleSashaResponse = useCallback((text: string) => {
-    if (speakFn) speakFn(text)
     setEngaged(true)
     const lower = text.toLowerCase()
     const golfCourses = ['vinpearl golf', 'phu quoc golf']
@@ -240,7 +234,6 @@ export default function PhuQuocPage() {
                 onItineraryUpdate={handleItineraryUpdate}
                 onSashaResponse={handleSashaResponse}
                 onListeningChange={setIsListening}
-                initialMessage={`🏝️ Phu Quoc has just been named the APEC 2027 host. Vietnam's first LRT, a new airport terminal, and Sun Group's luxury hotel city are all under construction. Prices are still pre-APEC. Shall I show you what Phu Quoc looks like before the world catches on? 🌏`}
               />
             )}
 

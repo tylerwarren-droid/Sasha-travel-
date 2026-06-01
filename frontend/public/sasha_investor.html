@@ -649,7 +649,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
 
   <!-- Luxurious Traveler demo -->
   <div id="demo-lt" style="flex:1;position:relative;overflow:hidden">
-    <iframe src="https://demo.kanoe.ai/chat" allow="autoplay;microphone;camera;fullscreen" width="100%" height="100%" frameborder="0" style="border:none;"></iframe>
+    <iframe id="demo-lt-iframe" src="https://demo.kanoe.ai/chat" allow="autoplay;microphone;camera;fullscreen" width="100%" height="100%" frameborder="0" style="border:none;"></iframe>
   </div>
 
   <!-- Vietnam demo — no kanoe overlay, Vietnam page's own tap-to-start shows directly -->
@@ -665,15 +665,28 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
 </div>
 
 <script>
+var _demoSrcs = {
+  lt: 'https://demo.kanoe.ai/chat',
+  vn: 'https://sasha-heygen.vercel.app/vietnam',
+  pq: 'https://sasha-heygen.vercel.app/phuquoc'
+};
 function switchDemo(which){
   var panels = ['lt','vn','pq'];
   panels.forEach(function(p){
-    document.getElementById('demo-'+p).style.display = (which===p) ? 'block' : 'none';
+    var panel = document.getElementById('demo-'+p);
+    var iframe = document.getElementById('demo-'+p+'-iframe');
+    var active = (which===p);
+    panel.style.display = active ? 'block' : 'none';
+    // Stop inactive iframe audio by blanking src; restore when active
+    if(iframe){
+      if(active && iframe.src !== _demoSrcs[p]){ iframe.src = _demoSrcs[p]; }
+      if(!active && iframe.src !== 'about:blank'){ iframe.src = 'about:blank'; }
+    }
     var pill = document.getElementById('pill-'+p);
-    pill.style.background = (which===p) ? 'var(--teal)' : 'transparent';
-    pill.style.color      = (which===p) ? 'var(--navy)' : 'var(--muted)';
-    pill.style.fontWeight = (which===p) ? '600' : '500';
-    pill.style.animation  = (which===p) ? 'pillGlow 2s ease-in-out infinite' : 'none';
+    pill.style.background = active ? 'var(--teal)' : 'transparent';
+    pill.style.color      = active ? 'var(--navy)' : 'var(--muted)';
+    pill.style.fontWeight = active ? '600' : '500';
+    pill.style.animation  = active ? 'pillGlow 2s ease-in-out infinite' : 'none';
   });
 }
 function showPanel(id,btn){

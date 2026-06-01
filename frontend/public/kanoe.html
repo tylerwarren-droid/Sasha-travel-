@@ -694,7 +694,10 @@ function switchDemo(which){
 function showPanel(id,btn){
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".nav-tab").forEach(t=>t.classList.remove("active"));
-  document.getElementById("panel-"+id).classList.add("active");
+  var el=document.getElementById("panel-"+id);
+  el.classList.add("active");
+  // Demo panel needs flex, not block, for the pill switcher column layout
+  el.style.display = (id==='demo') ? 'flex' : 'block';
   if(btn)btn.classList.add("active");
   window.scrollTo(0,0);
 }

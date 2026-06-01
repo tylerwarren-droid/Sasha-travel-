@@ -138,7 +138,7 @@ export default function PhuQuocPage() {
             className="rounded-3xl overflow-hidden border border-white/5 flex-shrink-0 transition-all duration-700"
             style={{ height: engaged ? '160px' : '60%' }}
           >
-            {started && <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />}
+            {started && <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} tokenUrl="/api/heygen/token/phuquoc" />}
           </div>
 
           {/* PHOTOS — hero when engaged, teaser when not */}

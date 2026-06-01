@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 interface SashaAvatarProps {
   onAvatarReady: (speak: (text: string) => void) => void
   isListening?: boolean
+  tokenUrl?: string
 }
 
-export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarProps) {
+export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token' }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const avatarRef = useRef<any>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
@@ -20,7 +21,7 @@ export default function SashaAvatar({ onAvatarReady, isListening }: SashaAvatarP
   const initAvatar = async () => {
     setStatus('loading')
     try {
-      const tokenRes = await fetch('/api/heygen/token')
+      const tokenRes = await fetch(tokenUrl)
       const { token } = await tokenRes.json()
       if (!token) throw new Error('No token received')
 

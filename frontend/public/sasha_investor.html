@@ -670,17 +670,25 @@ var _demoSrcs = {
   vn: 'https://sasha-heygen.vercel.app/vietnam',
   pq: 'https://sasha-heygen.vercel.app/phuquoc'
 };
+var _demoAttrs = {
+  lt: 'allow="autoplay;microphone;camera;fullscreen" width="100%" height="100%" frameborder="0" style="border:none;"',
+  vn: 'id="demo-vn-iframe" style="width:100%;height:100%;border:none;display:block;" allow="autoplay;microphone;camera;fullscreen"',
+  pq: 'id="demo-pq-iframe" style="width:100%;height:100%;border:none;display:block;" allow="autoplay;microphone;camera;fullscreen"'
+};
 function switchDemo(which){
   var panels = ['lt','vn','pq'];
   panels.forEach(function(p){
     var panel = document.getElementById('demo-'+p);
-    var iframe = document.getElementById('demo-'+p+'-iframe');
     var active = (which===p);
     panel.style.display = active ? 'block' : 'none';
-    // Stop inactive iframe audio by blanking src; restore when active
-    if(iframe){
-      if(active && iframe.src !== _demoSrcs[p]){ iframe.src = _demoSrcs[p]; }
-      if(!active && iframe.src !== 'about:blank'){ iframe.src = 'about:blank'; }
+    if(active){
+      // Recreate iframe from scratch so it loads fresh with no lingering audio
+      if(!panel.querySelector('iframe')){
+        panel.innerHTML = '<iframe src="'+_demoSrcs[p]+'" '+_demoAttrs[p]+'></iframe>';
+      }
+    } else {
+      // Destroy iframe entirely — kills WebRTC session and all audio
+      panel.innerHTML = '';
     }
     var pill = document.getElementById('pill-'+p);
     pill.style.background = active ? 'var(--teal)' : 'transparent';

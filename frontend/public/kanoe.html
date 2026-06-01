@@ -278,6 +278,17 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
     <button class="nav-tab" onclick="showPanel('tdm',this)">TDM</button>
     <button class="nav-tab" onclick="showPanel('demo',this)">Demo</button>
   </div>
+  <!-- Pill switcher — lives in nav, hidden unless Demo tab is active -->
+  <div id="demo-pill-bar" style="display:none;align-items:center;gap:6px">
+    <button id="pill-lt" onclick="switchDemo('lt')"
+      style="padding:5px 16px;border-radius:50px;border:1px solid var(--teal);background:var(--teal);color:var(--navy);font-family:var(--body);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s">
+      Luxurious Traveler
+    </button>
+    <button id="pill-vn" onclick="switchDemo('vn')"
+      style="padding:5px 16px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--body);font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s">
+      Vietnam
+    </button>
+  </div>
   <button class="nav-cta" onclick="showPanel('demo',document.querySelectorAll('.nav-tab')[4])">Try Demo</button>
 </nav>
 
@@ -627,20 +638,8 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
   </div>
 </div>
 
-<!-- Pill switcher — fixed below nav, shown only when Demo tab is active -->
-<div id="demo-pill-bar" style="display:none;position:fixed;top:66px;left:0;right:0;z-index:9999;justify-content:center;align-items:center;gap:8px;padding:12px 0;background:rgba(4,13,26,0.97);border-bottom:1px solid var(--border)">
-  <button id="pill-lt" onclick="switchDemo('lt')"
-    style="padding:7px 22px;border-radius:50px;border:1px solid var(--teal);background:var(--teal);color:var(--navy);font-family:var(--body);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s">
-    Luxurious Traveler
-  </button>
-  <button id="pill-vn" onclick="switchDemo('vn')"
-    style="padding:7px 22px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--body);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s">
-    Vietnam
-  </button>
-</div>
-
 <!-- DEMO -->
-<div id="panel-demo" style="padding:0;padding-top:116px;height:100vh;display:none;flex-direction:column;overflow:hidden">
+<div id="panel-demo" style="padding:0;padding-top:66px;height:100vh;display:none;flex-direction:column;overflow:hidden">
 
   <!-- Luxurious Traveler demo -->
   <div id="demo-lt" style="flex:1;position:relative;overflow:hidden">
@@ -695,13 +694,13 @@ function showPanel(id,btn){
   document.querySelectorAll(".nav-tab").forEach(t=>t.classList.remove("active"));
   // Demo panel is not in the .panel CSS system — handle it directly
   var demo=document.getElementById("panel-demo");
-  var pillBar=document.getElementById("demo-pill-bar");
+  var pills=document.getElementById("demo-pill-bar");
   if(id==='demo'){
     demo.style.display='flex';
-    pillBar.style.display='flex';
+    pills.style.display='flex';
   } else {
     demo.style.display='none';
-    pillBar.style.display='none';
+    pills.style.display='none';
     document.getElementById("panel-"+id).classList.add("active");
   }
   if(btn)btn.classList.add("active");

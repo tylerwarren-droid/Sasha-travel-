@@ -384,6 +384,79 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
       <tr class="hl"><td>Kanoe.ai</td><td class="yes">Yes</td><td class="yes">Full Stack</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr></tbody></table>
       <div style="margin-top:14px;padding:10px 14px;background:rgba(0,229,192,0.05);border:1px solid var(--teal3);border-radius:8px;font-size:12px;color:var(--teal);font-style:italic">Kanoe.ai is the only platform combining B2B focus, full-stack AI, dynamic itineraries, post-booking optimization, and crypto-native payments.</div>
     </div></div>
+
+    <div class="slide"><div class="si"><div class="sn">07 / 15</div><div class="st">Agent Architecture</div><div class="ss">One Conductor. Hundreds of Specialist Agents. Zero inter-agent confusion.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:16px">
+        <div>
+          <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--teal);font-weight:500;margin-bottom:10px">How It Works</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="padding:10px 14px;border-radius:8px;background:var(--teal);color:var(--navy);font-size:12px;font-weight:600;text-align:center">Sasha — AI Concierge Interface</div>
+            <div style="text-align:center;font-size:16px;color:var(--muted)">↓</div>
+            <div style="padding:10px 14px;border-radius:8px;background:rgba(0,229,192,0.12);border:1px solid var(--teal);color:var(--teal);font-size:12px;font-weight:600;text-align:center">The Conductor — Intent Router</div>
+            <div style="text-align:center;font-size:16px;color:var(--muted)">↓ routes in parallel ↓</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+              <div style="padding:8px;border-radius:7px;background:var(--navy4);border:1px solid var(--border);font-size:10px;color:var(--muted);text-align:center">⛳ Golf<br>Agent</div>
+              <div style="padding:8px;border-radius:7px;background:var(--navy4);border:1px solid var(--border);font-size:10px;color:var(--muted);text-align:center">💆 Beauty<br>Agent</div>
+              <div style="padding:8px;border-radius:7px;background:var(--navy4);border:1px solid var(--border);font-size:10px;color:var(--muted);text-align:center">📸 Foto<br>Agent</div>
+              <div style="padding:8px;border-radius:7px;background:var(--navy4);border:1px solid var(--border);font-size:10px;color:var(--muted);text-align:center">🍽️ Restaurant<br>Agent</div>
+              <div style="padding:8px;border-radius:7px;background:var(--navy4);border:1px solid var(--border);font-size:10px;color:var(--muted);text-align:center">🏥 Health<br>Agent</div>
+              <div style="padding:8px;border-radius:7px;background:var(--navy4);border:1px solid var(--border);font-size:10px;color:var(--muted);text-align:center">+ 100s<br>more…</div>
+            </div>
+            <div style="text-align:center;font-size:16px;color:var(--muted)">↓ merged response ↓</div>
+            <div style="padding:10px 14px;border-radius:8px;background:rgba(0,229,192,0.06);border:1px solid var(--border);font-size:12px;color:var(--text);text-align:center">One seamless Sasha reply</div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--teal);font-weight:500;margin-bottom:10px">Design Principles</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="card" style="text-align:left;padding:12px 14px"><div class="card-t">🎯 Specialists, Not Generalists</div><div class="card-d">Each agent has one job. It knows its domain, its data sources, and nothing else — no confusion, no hallucination drift.</div></div>
+            <div class="card" style="text-align:left;padding:12px 14px"><div class="card-t">🔇 Agents Never Talk to Each Other</div><div class="card-d">All communication flows through The Conductor. This keeps context clean and prevents compounding errors across agents.</div></div>
+            <div class="card" style="text-align:left;padding:12px 14px"><div class="card-t">⚡ Parallel Execution</div><div class="card-d">Multiple agents fire simultaneously via asyncio. A user asking about golf and a spa gets both answers in one response, not two turns.</div></div>
+            <div class="card" style="text-align:left;padding:12px 14px"><div class="card-t">🔌 No APIs Required</div><div class="card-d">Agents use web scraping, email agents, and WhatsApp bots — plugging into the real world without requiring vendor API access.</div></div>
+          </div>
+        </div>
+      </div>
+      <div style="background:rgba(0,229,192,0.05);border:1px solid var(--teal3);border-radius:10px;padding:12px 16px;font-size:12px;color:var(--teal);font-style:italic">Adding a new capability = one new agent file + one line in the registry. No changes to The Conductor, no changes to Sasha.</div>
+    </div></div>
+
+    <div class="slide"><div class="si"><div class="sn">08 / 15</div><div class="st">Token Cost Optimisation</div><div class="ss">Three-level architecture targets $0.02–$0.05 per full conversation end-to-end</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:16px">
+        <div>
+          <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--teal);font-weight:500;margin-bottom:10px">LLM Routing by Task</div>
+          <table class="ctbl">
+            <thead><tr><th>Task</th><th>Model</th><th>Est. Cost</th></tr></thead>
+            <tbody>
+              <tr><td>Intent classification</td><td style="color:var(--teal)">Haiku</td><td>$0.0001</td></tr>
+              <tr><td>Web search / contact lookup</td><td style="color:var(--teal)">Haiku</td><td>$0.0008</td></tr>
+              <tr><td>RAG retrieval</td><td style="color:var(--teal)">Haiku</td><td>$0.0002</td></tr>
+              <tr><td>Agent tool use loop</td><td style="color:#E0A535">Sonnet</td><td>$0.008</td></tr>
+              <tr><td>Response synthesis</td><td style="color:#E0A535">Sonnet</td><td>$0.004</td></tr>
+              <tr class="hl"><td>Full conversation (blended)</td><td>Mixed</td><td>$0.02–$0.05</td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top:10px;font-size:11px;color:var(--muted);font-style:italic">Move to AWS Bedrock when first enterprise B2B client lands — enabling compliance docs + volume pricing.</div>
+        </div>
+        <div>
+          <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--teal);font-weight:500;margin-bottom:10px">Three Levels of Intelligence</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="padding:14px;border-radius:8px;background:var(--teal);color:var(--navy)">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">Level 1 — Prompt Engineering</div>
+              <div style="font-size:11px">System prompts scope each agent to client inventory. Fast, flexible, already live. No retraining.</div>
+            </div>
+            <div style="padding:14px;border-radius:8px;background:rgba(0,229,192,0.12);border:1px solid var(--teal);color:var(--teal)">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">Level 2 — RAG / pgvector (Next)</div>
+              <div style="font-size:11px;color:var(--text)">Client inventory in Supabase vector DB. Retrieval injects only relevant context — scales to thousands of locations without bloating prompts.</div>
+            </div>
+            <div style="padding:14px;border-radius:8px;background:var(--navy4);border:1px solid var(--border)">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Level 3 — Fine-Tuning (Future)</div>
+              <div style="font-size:11px;color:var(--muted)">Model trained on client-specific data. Reserved for enterprise tier. Levels 1+2 deliver 90% of value for most OTA deployments.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="background:rgba(0,229,192,0.05);border:1px solid var(--teal3);border-radius:10px;padding:12px 16px;font-size:12px;color:var(--teal);font-style:italic">Cheap tasks run on Haiku. Complex synthesis runs on Sonnet. Prompt caching further reduces cost on repeat queries. The architecture scales cost linearly — not exponentially — with usage.</div>
+    </div></div>
+
     <div class="slide"><div class="si"><div class="sn">13 / 15</div><div class="st">Financial Projections</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
         <div class="bars"><div style="font-size:12px;color:var(--muted);margin-bottom:10px">Annual Recurring Revenue ($M)</div>

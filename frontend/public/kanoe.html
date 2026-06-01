@@ -628,24 +628,69 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
 </div>
 
 <!-- DEMO -->
-<div class="panel" id="panel-demo" style="padding:0;height:calc(100vh - 66px);position:relative;overflow:hidden">
-  <!-- Live preview — pointer-events:none so it can't be interacted with -->
-  <iframe src="https://demo.kanoe.ai" style="width:100%;height:100%;border:none;display:block;pointer-events:none;filter:blur(2px) brightness(0.45)" allow="autoplay;microphone;camera"></iframe>
-  <!-- Clickable overlay -->
-  <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
-    <div style="font-family:var(--head);font-size:clamp(22px,3vw,34px);color:#fff;letter-spacing:-0.3px;text-align:center">Meet Sasha</div>
-    <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-bottom:8px;text-align:center">Sasha is ready</div>
-    <div style="font-size:12px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-align:center;font-family:monospace">demo@luxurioustraveler.com &nbsp;/&nbsp; demo123</div>
-    <a href="https://demo.kanoe.ai/login?email=demo@luxurioustraveler.com&password=demo123" target="_blank" rel="noopener"
-      style="display:inline-flex;align-items:center;gap:10px;padding:16px 36px;background:#C9A84C;color:#fff;border:none;border-radius:50px;font-family:var(--body);font-size:16px;font-weight:600;text-decoration:none;cursor:pointer;box-shadow:0 8px 32px rgba(15,110,86,0.4);transition:opacity 0.2s"
-      onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'"
-      onclick="document.getElementById('panel-demo').querySelector('div[style*=inset]').style.display='none'">
-      &#9654; Start Planning with Sasha
-    </a>
+<div class="panel" id="panel-demo" style="padding:0;height:calc(100vh - 66px);display:flex;flex-direction:column;overflow:hidden">
+
+  <!-- Pill switcher -->
+  <div style="display:flex;justify-content:center;align-items:center;gap:8px;padding:12px 0;background:rgba(4,13,26,0.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);flex-shrink:0;position:relative;z-index:20">
+    <button id="pill-lt" onclick="switchDemo('lt')"
+      style="padding:7px 20px;border-radius:50px;border:1px solid var(--teal);background:var(--teal);color:var(--navy);font-family:var(--body);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s">
+      Luxurious Traveler
+    </button>
+    <button id="pill-vn" onclick="switchDemo('vn')"
+      style="padding:7px 20px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--body);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s">
+      Vietnam
+    </button>
   </div>
+
+  <!-- Luxurious Traveler demo -->
+  <div id="demo-lt" style="flex:1;position:relative;overflow:hidden">
+    <iframe src="https://demo.kanoe.ai" style="width:100%;height:100%;border:none;display:block;pointer-events:none;filter:blur(2px) brightness(0.45)" allow="autoplay;microphone;camera"></iframe>
+    <div id="demo-lt-overlay" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+      <div style="font-family:var(--head);font-size:clamp(22px,3vw,34px);color:#fff;letter-spacing:-0.3px;text-align:center">Meet Sasha</div>
+      <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-bottom:8px;text-align:center">Sasha is ready</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-align:center;font-family:monospace">demo@luxurioustraveler.com &nbsp;/&nbsp; demo123</div>
+      <a href="https://demo.kanoe.ai/login?email=demo@luxurioustraveler.com&password=demo123" target="_blank" rel="noopener"
+        style="display:inline-flex;align-items:center;gap:10px;padding:16px 36px;background:#C9A84C;color:#fff;border:none;border-radius:50px;font-family:var(--body);font-size:16px;font-weight:600;text-decoration:none;cursor:pointer;box-shadow:0 8px 32px rgba(201,168,76,0.4);transition:opacity 0.2s"
+        onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'"
+        onclick="document.getElementById('demo-lt-overlay').style.display='none'">
+        &#9654; Start Planning with Sasha
+      </a>
+    </div>
+  </div>
+
+  <!-- Vietnam demo -->
+  <div id="demo-vn" style="flex:1;position:relative;overflow:hidden;display:none">
+    <iframe src="https://sasha-heygen.vercel.app/vietnam" style="width:100%;height:100%;border:none;display:block;pointer-events:none;filter:blur(2px) brightness(0.45)" allow="autoplay;microphone;camera"></iframe>
+    <div id="demo-vn-overlay" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+      <div style="font-family:var(--head);font-size:clamp(22px,3vw,34px);color:#fff;letter-spacing:-0.3px;text-align:center">Discover Vietnam</div>
+      <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-bottom:8px;text-align:center">AI-powered Vietnam travel concierge</div>
+      <a href="https://sasha-heygen.vercel.app/vietnam" target="_blank" rel="noopener"
+        style="display:inline-flex;align-items:center;gap:10px;padding:16px 36px;background:var(--teal);color:#fff;border:none;border-radius:50px;font-family:var(--body);font-size:16px;font-weight:600;text-decoration:none;cursor:pointer;box-shadow:0 8px 32px rgba(15,110,86,0.4);transition:opacity 0.2s"
+        onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'"
+        onclick="document.getElementById('demo-vn-overlay').style.display='none'">
+        &#9654; Start Exploring Vietnam
+      </a>
+    </div>
+  </div>
+
 </div>
 
 <script>
+function switchDemo(which){
+  var isLT = which==='lt';
+  document.getElementById('demo-lt').style.display = isLT ? 'block' : 'none';
+  document.getElementById('demo-vn').style.display = isLT ? 'none' : 'block';
+  var pillLT = document.getElementById('pill-lt');
+  var pillVN = document.getElementById('pill-vn');
+  pillLT.style.background   = isLT ? 'var(--teal)' : 'transparent';
+  pillLT.style.color        = isLT ? 'var(--navy)' : 'var(--muted)';
+  pillLT.style.borderColor  = isLT ? 'var(--teal)' : 'var(--border)';
+  pillLT.style.fontWeight   = isLT ? '600' : '500';
+  pillVN.style.background   = isLT ? 'transparent' : 'var(--teal)';
+  pillVN.style.color        = isLT ? 'var(--muted)' : 'var(--navy)';
+  pillVN.style.borderColor  = isLT ? 'var(--border)' : 'var(--teal)';
+  pillVN.style.fontWeight   = isLT ? '500' : '600';
+}
 function showPanel(id,btn){
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".nav-tab").forEach(t=>t.classList.remove("active"));

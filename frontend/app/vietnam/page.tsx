@@ -325,6 +325,8 @@ export default function VietnamPage() {
       )}
 
       <style jsx global>{`
+        /* Prevent this page from covering a parent iframe's nav when embedded */
+        :fullscreen, ::backdrop { display: none !important; }
         @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
         @keyframes pulse {
           0%, 100% { box-shadow: 0 8px 32px rgba(218,165,32,0.35); }

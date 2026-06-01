@@ -263,6 +263,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
   .deck-hdr{padding:28px 20px 16px}
   .tdm-wrap,.demo-wrap,.ob-wrap{padding:40px 20px}
 }
+@keyframes pillGlow{0%,100%{box-shadow:0 0 0 0 rgba(0,229,192,0.5)}50%{box-shadow:0 0 0 5px rgba(0,229,192,0)}}
 </style>
 </head>
 <body>
@@ -279,15 +280,17 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
     <button class="nav-tab" onclick="showPanel('demo',this)">Demo</button>
   </div>
   <!-- Pill switcher — lives in nav, hidden unless Demo tab is active -->
-  <div id="demo-pill-bar" style="display:none;align-items:center;gap:6px">
-    <button id="pill-lt" onclick="switchDemo('lt')"
-      style="padding:5px 16px;border-radius:50px;border:1px solid var(--teal);background:var(--teal);color:var(--navy);font-family:var(--body);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s">
-      Luxurious Traveler
-    </button>
-    <button id="pill-vn" onclick="switchDemo('vn')"
-      style="padding:5px 16px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--body);font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s">
-      Vietnam
-    </button>
+  <div id="demo-pill-bar" style="display:none;align-items:center">
+    <div style="display:flex;align-items:center;gap:3px;background:var(--navy3);border:1px solid var(--border);border-radius:50px;padding:3px">
+      <button id="pill-lt" onclick="switchDemo('lt')"
+        style="padding:5px 15px;border-radius:50px;border:none;background:var(--teal);color:var(--navy);font-family:var(--body);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s;animation:pillGlow 2s ease-in-out infinite">
+        Luxurious Traveler
+      </button>
+      <button id="pill-vn" onclick="switchDemo('vn')"
+        style="padding:5px 15px;border-radius:50px;border:none;background:transparent;color:var(--muted);font-family:var(--body);font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s;animation:none">
+        Vietnam
+      </button>
+    </div>
   </div>
   <button class="nav-cta" onclick="showPanel('demo',document.querySelectorAll('.nav-tab')[4])">Try Demo</button>
 </nav>
@@ -658,7 +661,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:66px;padding:0 48px;d
 
   <!-- Vietnam demo -->
   <div id="demo-vn" style="flex:1;position:relative;overflow:hidden;display:none">
-    <iframe src="https://sasha-heygen.vercel.app/vietnam" style="width:100%;height:100%;border:none;display:block;pointer-events:none;opacity:0.4" allow="autoplay;microphone;camera"></iframe>
+    <iframe src="https://sasha-heygen.vercel.app/vietnam" style="width:100%;height:100%;border:none;display:block;pointer-events:none;opacity:0.4" allow="autoplay;microphone;camera" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
     <div id="demo-vn-overlay" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
       <div style="font-family:var(--head);font-size:clamp(22px,3vw,34px);color:#fff;letter-spacing:-0.3px;text-align:center">Discover Vietnam</div>
       <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-bottom:8px;text-align:center">AI-powered Vietnam travel concierge</div>
@@ -680,14 +683,14 @@ function switchDemo(which){
   document.getElementById('demo-vn').style.display = isLT ? 'none' : 'block';
   var pillLT = document.getElementById('pill-lt');
   var pillVN = document.getElementById('pill-vn');
-  pillLT.style.background   = isLT ? 'var(--teal)' : 'transparent';
-  pillLT.style.color        = isLT ? 'var(--navy)' : 'var(--muted)';
-  pillLT.style.borderColor  = isLT ? 'var(--teal)' : 'var(--border)';
-  pillLT.style.fontWeight   = isLT ? '600' : '500';
-  pillVN.style.background   = isLT ? 'transparent' : 'var(--teal)';
-  pillVN.style.color        = isLT ? 'var(--muted)' : 'var(--navy)';
-  pillVN.style.borderColor  = isLT ? 'var(--border)' : 'var(--teal)';
-  pillVN.style.fontWeight   = isLT ? '500' : '600';
+  pillLT.style.background  = isLT ? 'var(--teal)' : 'transparent';
+  pillLT.style.color       = isLT ? 'var(--navy)' : 'var(--muted)';
+  pillLT.style.fontWeight  = isLT ? '600' : '500';
+  pillLT.style.animation   = isLT ? 'pillGlow 2s ease-in-out infinite' : 'none';
+  pillVN.style.background  = isLT ? 'transparent' : 'var(--teal)';
+  pillVN.style.color       = isLT ? 'var(--muted)' : 'var(--navy)';
+  pillVN.style.fontWeight  = isLT ? '500' : '600';
+  pillVN.style.animation   = isLT ? 'none' : 'pillGlow 2s ease-in-out infinite';
 }
 function showPanel(id,btn){
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));

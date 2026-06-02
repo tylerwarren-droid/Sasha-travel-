@@ -264,7 +264,17 @@ async def conduct(
         else:
             tasks.append(runner(user_message, conversation_history))
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    async def run_with_timeout(task, timeout=5.0):
+        try:
+            return await asyncio.wait_for(task, timeout=timeout)
+        except asyncio.TimeoutError:
+            print(f"[Conductor] Agent timed out after {timeout}s")
+            return {"agent": "timeout", "response": "", "data": {}}
+        except Exception as e:
+            print(f"[Conductor] Agent error: {e}")
+            return {"agent": "error", "response": "", "data": {}}
+
+    results = await asyncio.gather(*[run_with_timeout(t) for t in tasks], return_exceptions=True)
 
     # Step 4 — Collect valid results
     agent_responses = []

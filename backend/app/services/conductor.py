@@ -78,11 +78,15 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
         intents.append("health")
     if any(w in lower for w in DOG_WORDS):
         intents.append("dog_walking")
-    if any(w in lower for w in RESTAURANT_WORDS):
+    # Restaurant only fires when actively seeking a restaurant — not just mentioning food/dining
+    RESTAURANT_ACTION_WORDS = ["find", "book", "reserve", "recommend", "suggestion", "where to", "looking for", "need a", "want a", "good restaurant", "best restaurant", "book a table", "make a reservation", "dinner tonight", "lunch today", "place to eat"]
+    restaurant_action = any(w in lower for w in RESTAURANT_ACTION_WORDS)
+    restaurant_topic = any(w in lower for w in RESTAURANT_WORDS)
+    if restaurant_topic and restaurant_action:
         intents.append("restaurant")
-    # Keep restaurant context if conversation already has restaurant intent
+    # Keep restaurant context if conversation already has restaurant intent (follow-up messages)
     history_text = " ".join([m.get("content", "") for m in conversation_history]).lower()
-    if "restaurant" not in intents and any(w in history_text for w in RESTAURANT_WORDS):
+    if "restaurant" not in intents and any(w in history_text for w in RESTAURANT_WORDS) and any(w in history_text for w in RESTAURANT_ACTION_WORDS):
         intents.append("restaurant")
     if any(w in lower for w in BOOKING_WORDS):
         intents.append("booking_confirmation")

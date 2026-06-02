@@ -312,7 +312,12 @@ Always include:
 - Any relevant unused credits they should apply
 - What to do at checkout (pay with X card, decline Y insurance, apply Z credit)
 
-If the guest does not know their card IDs, show them the list and ask them to identify their cards."""
+If the guest does not know their card IDs, show them the list and ask them to identify their cards.
+
+If the guest mentions a card not in the database, tell them:
+"I don't have [card name] in my database yet. You can submit it at /api/cards/submit and our team will verify and add it within 24-48 hours. In the meantime, I can help with your other cards or give general advice based on the card's known benefits."
+
+Never make up earn rates or benefits for cards not in the database. Always be honest about the limits of your knowledge and direct guests to verify benefits directly with their card issuer."""
 
 
 async def run_credit_card_agent(user_message: str, conversation_history: list = None) -> dict:

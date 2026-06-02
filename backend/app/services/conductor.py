@@ -66,6 +66,8 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
     RESTAURANT_WORDS = ["restaurant", "dinner", "lunch", "breakfast", "eat", "food", "table", "reservation", "book a table", "dining", "cuisine", "cafe", "bar", "rooftop", "where to eat", "hungry"]
     BOOKING_WORDS = ["confirm booking", "hotel reference", "pms", "booking.com ref", "expedia ref", "booking number", "confirm my booking", "reservation number"]
     FOTO_WORDS = ["show me", "photo", "picture", "image", "what does", "what do", "look like"]
+    CREDIT_CARD_WORDS = ["credit card", "which card", "points", "miles", "rewards", "amex", "chase sapphire", "capital one", "bilt", "card to use", "earn points", "transfer points", "annual credit", "card benefits", "maximize points", "best card"]
+    CAR_RENTAL_WORDS = ["rental car", "car rental", "rent a car", "hire a car", "rental insurance", "cdw", "collision waiver", "rental coverage", "hertz", "avis", "enterprise rental", "europcar", "should i take insurance"]
 
     if any(w in lower for w in GOLF_WORDS):
         intents.append("golf")
@@ -86,6 +88,10 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
         intents.append("booking_confirmation")
     if any(w in lower for w in FOTO_WORDS) and "foto" not in intents:
         intents.append("foto")
+    if any(w in lower for w in CREDIT_CARD_WORDS):
+        intents.append("credit_card")
+    if any(w in lower for w in CAR_RENTAL_WORDS):
+        intents.append("car_rental")
 
     if not intents:
         intents = ["general"]
@@ -206,6 +212,29 @@ async def run_restaurant_intent(message: str, history: list) -> dict:
         "data": {"tools_used": result.get("tools_used", [])}
     }
 
+
+
+async def run_credit_card_intent(message: str, history: list) -> dict:
+    """Route to credit card intelligence agent."""
+    from app.services.credit_card_agent import run_credit_card_agent
+    result = await run_credit_card_agent(message, history)
+    return {
+        "agent": "credit_card",
+        "response": result["response"],
+        "data": {"tools_used": result.get("tools_used", [])}
+    }
+
+
+async def run_car_rental_intent(message: str, history: list) -> dict:
+    """Route to car rental insurance agent."""
+    from app.services.car_rental_agent import run_car_rental_agent
+    result = await run_car_rental_agent(message, history)
+    return {
+        "agent": "car_rental",
+        "response": result["response"],
+        "data": {"tools_used": result.get("tools_used", [])}
+    }
+
 # Agent registry — maps intent names to runner functions
 AGENT_REGISTRY = {
     "golf": run_golf_intent,
@@ -215,6 +244,8 @@ AGENT_REGISTRY = {
     "beauty": run_beauty_intent,
     "dog_walking": run_dog_walking_intent,
     "restaurant": run_restaurant_intent,
+    "credit_card": run_credit_card_intent,
+    "car_rental": run_car_rental_intent,
     "general": run_general,
 }
 

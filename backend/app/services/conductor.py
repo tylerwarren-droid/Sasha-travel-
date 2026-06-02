@@ -92,6 +92,9 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
         intents.append("booking_confirmation")
     if any(w in lower for w in FOTO_WORDS) and "foto" not in intents:
         intents.append("foto")
+    SMART_SASHA_WORDS = ["cheapest", "best deal", "find me a flight", "search for flights", "plan a trip", "want to travel", "want to go to", "looking to travel", "trip to", "fly to", "flying to", "vacation to", "holiday to", "book a trip", "travel to", "where should i go", "best time to visit", "how do i get to"]
+    if any(w in lower for w in SMART_SASHA_WORDS) and any(w in lower for w in ["flight", "fly", "travel", "trip", "vacation", "holiday", "visit", "go to", "europe", "asia", "caribbean", "mexico", "africa", "australia"]):
+        intents.append("smart_sasha")
     if any(w in lower for w in CREDIT_CARD_WORDS):
         intents.append("credit_card")
     if any(w in lower for w in CAR_RENTAL_WORDS):
@@ -239,6 +242,18 @@ async def run_car_rental_intent(message: str, history: list) -> dict:
         "data": {"tools_used": result.get("tools_used", [])}
     }
 
+
+
+async def run_smart_sasha_intent(message: str, history: list) -> dict:
+    """Route to Smart Sasha search agent."""
+    from app.services.smart_sasha_agent import run_smart_sasha_agent
+    result = await run_smart_sasha_agent(message, history)
+    return {
+        "agent": "smart_sasha",
+        "response": result["response"],
+        "data": {"tools_used": result.get("tools_used", [])}
+    }
+
 # Agent registry — maps intent names to runner functions
 AGENT_REGISTRY = {
     "golf": run_golf_intent,
@@ -248,6 +263,7 @@ AGENT_REGISTRY = {
     "beauty": run_beauty_intent,
     "dog_walking": run_dog_walking_intent,
     "restaurant": run_restaurant_intent,
+    "smart_sasha": run_smart_sasha_intent,
     "credit_card": run_credit_card_intent,
     "car_rental": run_car_rental_intent,
     "general": run_general,

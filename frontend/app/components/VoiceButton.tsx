@@ -46,6 +46,7 @@ export default function VoiceButton({ onTranscript, disabled }: VoiceButtonProps
         setIsProcessing(true)
         try {
           const audioBlob = new Blob(chunksRef.current, { type: mimeType || 'audio/mp4' })
+          alert('Blob size: ' + audioBlob.size + ' bytes, chunks: ' + chunksRef.current.length)
           const formData = new FormData()
           formData.append('audio', audioBlob, 'recording.webm')
           const response = await axios.post(

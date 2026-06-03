@@ -29,7 +29,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       const sdk = await import('@heygen/liveavatar-web-sdk')
       const { LiveAvatarSession, SessionEvent } = sdk as any
       const avatar = new LiveAvatarSession(token, {
-        voiceChat: true,
+        voiceChat: false,
         video_settings: { quality: 'medium', encoding: 'H264' }
       })
       avatar.on(SessionEvent.SESSION_STREAM_READY, () => {

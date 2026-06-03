@@ -44,6 +44,7 @@ interface Photo {
 export default function VietnamPage() {
   const [itinerary, setItinerary] = useState<Itinerary>(INITIAL_ITINERARY)
   const [speakFn, setSpeakFn] = useState<((text: string) => void) | null>(null)
+  const speakFnRef = useRef<((text: string) => void) | null>(null)
   const [isListening, setIsListening] = useState(false)
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
@@ -83,10 +84,11 @@ export default function VietnamPage() {
 
   const handleAvatarReady = useCallback((speak: (text: string) => void) => {
     setSpeakFn(() => speak)
+    speakFnRef.current = speak
   }, [])
 
   const handleSashaResponse = useCallback((text: string) => {
-    if (speakFn) speakFn(text)
+    if (speakFnRef.current) speakFnRef.current(text)
     setEngaged(true)
     const lower = text.toLowerCase()
     const golfCourses = ['montgomerie', 'hoiana', 'bluffs', 'ba na hills', 'vinpearl golf', 'laguna golf', 'legend danang']

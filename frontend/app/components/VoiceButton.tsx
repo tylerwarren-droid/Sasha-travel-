@@ -11,34 +11,27 @@ interface VoiceButtonProps {
 
 const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY
 
-export default function VoiceButton({ 
-  onTranscript, 
-  disabled,
-  autoStart = false,
-  onSpeakingChange
-}: VoiceButtonProps) {
+export default function VoiceButton({ onTranscript, disabled, autoStart = false, onSpeakingChange }: VoiceButtonProps) {
   const [isListening, setIsListening] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [micError, setMicError] = useState<string | null>(null)
-  
+
   const wsRef = useRef<WebSocket | null>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const processorRef = useRef<ScriptProcessorNode | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
   const isListeningRef = useRef(false)
-  const currentTranscriptRef = useRef<string>('')
+  const transcriptRef = useRef('')
 
   const stopAll = useCallback(() => {
-    if (processorRef.current) { processorRef.current.disconnect(); processorRef.current = null }
-    if (audioContextRef.current) { audioContextRef.current.close().catch(() => {}); audioContextRef.current = null }
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
     setIsListening(false)
     setIsSpeaking(false)
     setIsConnecting(false)
     isListeningRef.current = false
-    currentTranscriptRef.current = ''
+    transcriptRef.current = ''
   }, [])
 
   const startListening = useCallback(async () => {
@@ -46,72 +39,61 @@ export default function VoiceButton({
     setMicError(null)
     setIsConnecting(true)
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 16000 } })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      })
       streamRef.current = stream
+      const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+        : MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+        : 'audio/webm'
+      console.log('[DG] Using mimeType:', mimeType)
+      console.log('[DG] API key present:', !!DEEPGRAM_API_KEY)
       const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
+        `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=400&utterance_end_ms=1200&vad_events=true`,
         ['token', DEEPGRAM_API_KEY || '']
       )
       wsRef.current = ws
       ws.onopen = () => {
+        console.log('[DG] WebSocket open!')
         setIsConnecting(false)
         setIsListening(true)
         isListeningRef.current = true
-        const audioContext = new AudioContext({ sampleRate: 16000, latencyHint: "interactive" })
-        audioContextRef.current = audioContext
-        const source = audioContext.createMediaStreamSource(stream)
-        const processor = audioContext.createScriptProcessor(4096, 1, 1)
-        processorRef.current = processor
-        processor.onaudioprocess = (e) => {
-          if (ws.readyState !== WebSocket.OPEN) return
-          const input = e.inputBuffer.getChannelData(0)
-          const int16 = new Int16Array(input.length)
-          for (let i = 0; i < input.length; i++) {
-            int16[i] = Math.max(-32768, Math.min(32767, input[i] * 32768))
-          }
-          ws.send(int16.buffer)
+        const recorder = new MediaRecorder(stream, { mimeType })
+        recorderRef.current = recorder
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) ws.send(e.data)
         }
-        source.connect(processor)
-        processor.connect(audioContext.destination)
+        recorder.start(250)
       }
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
-          if (data.type === 'SpeechStarted') {
-            setIsSpeaking(true)
-            onSpeakingChange?.(true)
-            return
-          }
+          console.log('[DG]', data.type, data.is_final, data.speech_final, data.channel?.alternatives?.[0]?.transcript?.substring(0,50))
+          if (data.type === 'SpeechStarted') { setIsSpeaking(true); onSpeakingChange?.(true) }
           if (data.type === 'Results') {
             const transcript = data.channel?.alternatives?.[0]?.transcript || ''
-            const isFinal = data.is_final
-            const speechFinal = data.speech_final
-            if (transcript) currentTranscriptRef.current = transcript
-            if ((speechFinal || isFinal) && currentTranscriptRef.current) {
-              const final = currentTranscriptRef.current
-              currentTranscriptRef.current = ''
+            if (transcript) transcriptRef.current = transcript
+            if (data.speech_final && transcriptRef.current) {
+              const final = transcriptRef.current
+              transcriptRef.current = ''
               setIsSpeaking(false)
               onSpeakingChange?.(false)
               onTranscript(final)
             }
           }
-          // UtteranceEnd fallback — fires when Deepgram detects end of utterance
-          if (data.type === 'UtteranceEnd') {
-            if (currentTranscriptRef.current) {
-              const final = currentTranscriptRef.current
-              currentTranscriptRef.current = ''
-              setIsSpeaking(false)
-              onSpeakingChange?.(false)
-              onTranscript(final)
-            }
+          if (data.type === 'UtteranceEnd' && transcriptRef.current) {
+            const final = transcriptRef.current
+            transcriptRef.current = ''
+            setIsSpeaking(false)
+            onSpeakingChange?.(false)
+            onTranscript(final)
           }
         } catch(e) {}
       }
-      ws.onerror = () => { setMicError('Connection error'); stopAll() }
-      ws.onclose = () => {
-        if (isListeningRef.current) {
-          setTimeout(() => { if (isListeningRef.current) startListening() }, 2000)
-        }
+      ws.onerror = (e) => { console.error('[DG] error:', e); setMicError('Connection error'); stopAll() }
+      ws.onclose = (e) => {
+        console.log('[DG] closed:', e.code, e.reason)
+        if (isListeningRef.current) setTimeout(() => { if (isListeningRef.current) startListening() }, 2000)
       }
     } catch (err: any) {
       setIsConnecting(false)
@@ -128,23 +110,18 @@ export default function VoiceButton({
 
   useEffect(() => {
     if (autoStart && !disabled) startListening()
-    return () => stopAll()
+    return () => { isListeningRef.current = false; stopAll() }
   }, [autoStart])
-
-  useEffect(() => { return () => stopAll() }, [stopAll])
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <button
-        onClick={toggleListening}
-        disabled={disabled || isConnecting}
+      <button onClick={toggleListening} disabled={disabled || isConnecting}
         className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-          isSpeaking ? 'bg-green-500 animate-pulse scale-110' 
-          : isListening ? 'bg-red-500 animate-pulse' 
-          : isConnecting ? 'bg-yellow-500' 
+          isSpeaking ? 'bg-green-500 animate-pulse scale-110'
+          : isListening ? 'bg-red-500 animate-pulse'
+          : isConnecting ? 'bg-yellow-500'
           : 'bg-indigo-600 hover:bg-indigo-700'
-        } disabled:opacity-40`}
-      >
+        } disabled:opacity-40`}>
         {isConnecting ? <Loader2 className="w-4 h-4 text-white animate-spin" />
           : isListening ? <MicOff className="w-4 h-4 text-white" />
           : <Mic className="w-4 h-4 text-white" />}

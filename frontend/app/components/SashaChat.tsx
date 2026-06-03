@@ -166,6 +166,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
         <div className="flex items-center gap-2 bg-white/5 rounded-2xl px-4 py-2 border border-white/5">
           <VoiceButton
             onTranscript={(text) => sendMessage(text)}
+            autoStart={true}
           />
           <input
             value={input}

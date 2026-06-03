@@ -5,13 +5,11 @@ import { Mic, MicOff, Loader2 } from 'lucide-react'
 interface VoiceButtonProps {
   onTranscript: (text: string) => void
   disabled?: boolean
-  autoStart?: boolean  // if true, starts listening automatically
-  onSpeakingChange?: (isSpeaking: boolean) => void  // fires when user starts/stops speaking
+  autoStart?: boolean
+  onSpeakingChange?: (isSpeaking: boolean) => void
 }
 
 const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY
-const SILENCE_THRESHOLD = 1500  // ms of silence before sending transcript
-const MIN_SPEECH_MS = 300       // ignore very short sounds (< 300ms)
 
 export default function VoiceButton({ 
   onTranscript, 
@@ -28,29 +26,14 @@ export default function VoiceButton({
   const streamRef = useRef<MediaStream | null>(null)
   const processorRef = useRef<ScriptProcessorNode | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
-  const silenceTimerRef = useRef<any>(null)
-  const speechStartRef = useRef<number | null>(null)
-  const currentTranscriptRef = useRef<string>('')
   const isListeningRef = useRef(false)
+  const currentTranscriptRef = useRef<string>('')
 
   const stopAll = useCallback(() => {
-    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
-    if (processorRef.current) {
-      processorRef.current.disconnect()
-      processorRef.current = null
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(() => {})
-      audioContextRef.current = null
-    }
-    if (wsRef.current) {
-      wsRef.current.close()
-      wsRef.current = null
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop())
-      streamRef.current = null
-    }
+    if (processorRef.current) { processorRef.current.disconnect(); processorRef.current = null }
+    if (audioContextRef.current) { audioContextRef.current.close().catch(() => {}); audioContextRef.current = null }
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
     setIsListening(false)
     setIsSpeaking(false)
     setIsConnecting(false)
@@ -62,177 +45,102 @@ export default function VoiceButton({
     if (isListeningRef.current) return
     setMicError(null)
     setIsConnecting(true)
-
     try {
-      // 1. Get microphone
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
-          echoCancellation: true, 
-          noiseSuppression: true, 
-          sampleRate: 16000 
-        } 
-      })
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 } })
       streamRef.current = stream
-
-      // 2. Open Deepgram streaming WebSocket
       const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=500&vad_events=true`,
+        `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=800&vad_events=true`,
         ['token', DEEPGRAM_API_KEY || '']
       )
       wsRef.current = ws
-
       ws.onopen = () => {
         setIsConnecting(false)
         setIsListening(true)
         isListeningRef.current = true
-
-        // 3. Connect audio to WebSocket via AudioContext
         const audioContext = new AudioContext({ sampleRate: 16000 })
         audioContextRef.current = audioContext
         const source = audioContext.createMediaStreamSource(stream)
         const processor = audioContext.createScriptProcessor(4096, 1, 1)
         processorRef.current = processor
-
         processor.onaudioprocess = (e) => {
           if (ws.readyState !== WebSocket.OPEN) return
           const input = e.inputBuffer.getChannelData(0)
-          // Convert Float32 to Int16
           const int16 = new Int16Array(input.length)
           for (let i = 0; i < input.length; i++) {
             int16[i] = Math.max(-32768, Math.min(32767, input[i] * 32768))
           }
           ws.send(int16.buffer)
         }
-
         source.connect(processor)
         processor.connect(audioContext.destination)
       }
-
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
-          
-          // VAD speech started
           if (data.type === 'SpeechStarted') {
-            speechStartRef.current = Date.now()
             setIsSpeaking(true)
             onSpeakingChange?.(true)
-            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
             return
           }
-
-          // Transcript results
           if (data.type === 'Results') {
             const transcript = data.channel?.alternatives?.[0]?.transcript || ''
-            const isFinal = data.is_final
             const speechFinal = data.speech_final
-
-            if (transcript) {
-              currentTranscriptRef.current = transcript
-            }
-
+            if (transcript) currentTranscriptRef.current = transcript
             if (speechFinal && currentTranscriptRef.current) {
-              // Speech ended — check minimum duration
-              const speechDuration = speechStartRef.current 
-                ? Date.now() - speechStartRef.current 
-                : MIN_SPEECH_MS + 1
-
-              if (speechDuration >= MIN_SPEECH_MS) {
-                const finalTranscript = currentTranscriptRef.current
-                currentTranscriptRef.current = ''
-                speechStartRef.current = null
-                setIsSpeaking(false)
-                onSpeakingChange?.(false)
-                onTranscript(finalTranscript)
-              }
+              const final = currentTranscriptRef.current
+              currentTranscriptRef.current = ''
+              setIsSpeaking(false)
+              onSpeakingChange?.(false)
+              onTranscript(final)
             }
           }
-        } catch (e) {
-          // ignore parse errors
-        }
+        } catch(e) {}
       }
-
-      ws.onerror = (e) => {
-        console.error('[Voice] WebSocket error:', e)
-        setMicError('Connection error — please try again')
-        stopAll()
-      }
-
+      ws.onerror = () => { setMicError('Connection error'); stopAll() }
       ws.onclose = () => {
         if (isListeningRef.current) {
-          // Unexpected close — try to reconnect
-          setTimeout(() => {
-            if (isListeningRef.current) startListening()
-          }, 1000)
+          setTimeout(() => { if (isListeningRef.current) startListening() }, 2000)
         }
       }
-
     } catch (err: any) {
       setIsConnecting(false)
-      if (err.name === 'NotAllowedError') {
-        setMicError('Mic permission denied')
-      } else if (err.name === 'NotFoundError') {
-        setMicError('No microphone found')
-      } else {
-        setMicError(err.message || 'Could not access microphone')
-      }
+      if (err.name === 'NotAllowedError') setMicError('Mic permission denied')
+      else if (err.name === 'NotFoundError') setMicError('No microphone found')
+      else setMicError(err.message || 'Could not access microphone')
     }
   }, [onTranscript, onSpeakingChange, stopAll])
 
   const toggleListening = () => {
-    if (isListeningRef.current) {
-      isListeningRef.current = false
-      stopAll()
-    } else {
-      startListening()
-    }
+    if (isListeningRef.current) { isListeningRef.current = false; stopAll() }
+    else startListening()
   }
 
-  // Auto-start if requested
   useEffect(() => {
-    if (autoStart && !disabled) {
-      startListening()
-    }
+    if (autoStart && !disabled) startListening()
     return () => stopAll()
   }, [autoStart])
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => stopAll()
-  }, [stopAll])
+  useEffect(() => { return () => stopAll() }, [stopAll])
 
   return (
     <div className="flex flex-col items-center gap-1">
       <button
         onClick={toggleListening}
         disabled={disabled || isConnecting}
-        title={isListening ? 'Stop listening' : 'Start listening'}
         className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-          isSpeaking 
-            ? 'bg-green-500 animate-pulse scale-110' 
-            : isListening 
-              ? 'bg-red-500 animate-pulse' 
-              : isConnecting 
-                ? 'bg-yellow-500' 
-                : 'bg-indigo-600 hover:bg-indigo-700'
+          isSpeaking ? 'bg-green-500 animate-pulse scale-110' 
+          : isListening ? 'bg-red-500 animate-pulse' 
+          : isConnecting ? 'bg-yellow-500' 
+          : 'bg-indigo-600 hover:bg-indigo-700'
         } disabled:opacity-40`}
       >
-        {isConnecting 
-          ? <Loader2 className="w-4 h-4 text-white animate-spin" />
-          : isListening 
-            ? <MicOff className="w-4 h-4 text-white" />
-            : <Mic className="w-4 h-4 text-white" />
-        }
+        {isConnecting ? <Loader2 className="w-4 h-4 text-white animate-spin" />
+          : isListening ? <MicOff className="w-4 h-4 text-white" />
+          : <Mic className="w-4 h-4 text-white" />}
       </button>
-      {micError && (
-        <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>
-      )}
-      {isListening && !isSpeaking && (
-        <p className="text-xs text-white/30 text-center">Listening...</p>
-      )}
-      {isSpeaking && (
-        <p className="text-xs text-green-400 text-center">Speaking...</p>
-      )}
+      {micError && <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>}
+      {isListening && !isSpeaking && <p className="text-xs text-white/30 text-center">Listening...</p>}
+      {isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
     </div>
   )
 }

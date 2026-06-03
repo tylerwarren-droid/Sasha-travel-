@@ -14,11 +14,9 @@ async def transcribe_audio(audio_data: bytes, mime_type: str = "audio/webm") -> 
     """
     params = {
         "model": "nova-3",
-        "language": "en-GB",
+        "language": "en-US",
         "smart_format": "true",
         "punctuate": "true",
-        "utterances": "true",
-        "endpointing": "300",
     }
 
     clean_mime = mime_type.split(";")[0].strip() if mime_type else "audio/mp4"

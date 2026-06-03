@@ -49,7 +49,7 @@ export default function VoiceButton({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 } })
       streamRef.current = stream
       const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=800&vad_events=true`,
+        `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
         ['token', DEEPGRAM_API_KEY || '']
       )
       wsRef.current = ws
@@ -84,9 +84,20 @@ export default function VoiceButton({
           }
           if (data.type === 'Results') {
             const transcript = data.channel?.alternatives?.[0]?.transcript || ''
+            const isFinal = data.is_final
             const speechFinal = data.speech_final
             if (transcript) currentTranscriptRef.current = transcript
-            if (speechFinal && currentTranscriptRef.current) {
+            if ((speechFinal || isFinal) && currentTranscriptRef.current) {
+              const final = currentTranscriptRef.current
+              currentTranscriptRef.current = ''
+              setIsSpeaking(false)
+              onSpeakingChange?.(false)
+              onTranscript(final)
+            }
+          }
+          // UtteranceEnd fallback — fires when Deepgram detects end of utterance
+          if (data.type === 'UtteranceEnd') {
+            if (currentTranscriptRef.current) {
               const final = currentTranscriptRef.current
               currentTranscriptRef.current = ''
               setIsSpeaking(false)

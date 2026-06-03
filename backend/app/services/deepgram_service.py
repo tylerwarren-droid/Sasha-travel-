@@ -21,9 +21,11 @@ async def transcribe_audio(audio_data: bytes, mime_type: str = "audio/webm") -> 
         "endpointing": "300",
     }
 
+    # Let Deepgram auto-detect format — avoids 400 errors from mime type mismatch
+    detected_type = "audio/webm" if "webm" in mime_type else "audio/mp4" if "mp4" in mime_type else "audio/wav"
     headers = {
         "Authorization": f"Token {DEEPGRAM_API_KEY}",
-        "Content-Type": mime_type,
+        "Content-Type": detected_type,
     }
 
     async with httpx.AsyncClient(timeout=30.0) as client:

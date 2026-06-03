@@ -18,9 +18,11 @@ async def transcribe_endpoint(audio: UploadFile = File(...)):
         if not audio_data:
             raise HTTPException(status_code=400, detail="No audio data received")
 
+        # Safari sends audio/mp4, Chrome sends audio/webm
+        mime_type = audio.content_type or "audio/mp4"
         result = await transcribe_audio(
             audio_data=audio_data,
-            mime_type=audio.content_type or "audio/webm"
+            mime_type=mime_type
         )
 
         if not result["transcript"]:

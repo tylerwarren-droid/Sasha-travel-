@@ -20,6 +20,7 @@ async def transcribe_endpoint(audio: UploadFile = File(...)):
 
         # Safari sends audio/mp4, Chrome sends audio/webm
         mime_type = audio.content_type or "audio/mp4"
+        print(f"[Voice] Received audio: size={len(audio_data)}, mime={mime_type}, content_type={audio.content_type}")
         result = await transcribe_audio(
             audio_data=audio_data,
             mime_type=mime_type

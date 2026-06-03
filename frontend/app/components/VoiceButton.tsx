@@ -46,7 +46,7 @@ export default function VoiceButton({
     setMicError(null)
     setIsConnecting(true)
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 } })
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 16000 } })
       streamRef.current = stream
       const ws = new WebSocket(
         `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
@@ -57,7 +57,7 @@ export default function VoiceButton({
         setIsConnecting(false)
         setIsListening(true)
         isListeningRef.current = true
-        const audioContext = new AudioContext({ sampleRate: 16000 })
+        const audioContext = new AudioContext({ sampleRate: 16000, latencyHint: "interactive" })
         audioContextRef.current = audioContext
         const source = audioContext.createMediaStreamSource(stream)
         const processor = audioContext.createScriptProcessor(4096, 1, 1)

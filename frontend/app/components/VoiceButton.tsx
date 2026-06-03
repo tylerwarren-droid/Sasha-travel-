@@ -17,6 +17,8 @@ export default function VoiceButton({ onTranscript, disabled }: VoiceButtonProps
   const chunksRef = useRef<Blob[]>([])
 
   const startListening = async () => {
+    console.log("VOICE BUTTON CLICKED")
+    console.log("API URL:", process.env.NEXT_PUBLIC_API_URL)
     setMicError(null)
     setIsRequestingMic(true)
     setIsListening(true)
@@ -32,7 +34,8 @@ export default function VoiceButton({ onTranscript, disabled }: VoiceButtonProps
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, sampleRate: 44100 } })
       setIsRequestingMic(false)
 
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''
+      const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : ''
+      console.log('MIME type selected:', mimeType || 'default')
       const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
       mediaRecorderRef.current = mediaRecorder
       chunksRef.current = []
@@ -42,10 +45,13 @@ export default function VoiceButton({ onTranscript, disabled }: VoiceButtonProps
       }
 
       mediaRecorder.onstop = async () => {
+        console.log("RECORDING STOPPED. Chunks:", chunksRef.current.length)
         setIsListening(false)
         setIsProcessing(true)
         try {
-          const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' })
+          const audioBlob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' })
+          console.log("Blob size:", audioBlob.size, "type:", audioBlob.type)
+          console.log("Posting to:", process.env.NEXT_PUBLIC_API_URL + '/voice/transcribe')
           const formData = new FormData()
           formData.append('audio', audioBlob, 'recording.webm')
           const response = await axios.post(
@@ -58,7 +64,8 @@ export default function VoiceButton({ onTranscript, disabled }: VoiceButtonProps
             onTranscript(transcript)
           }
         } catch (error) {
-          console.error('Transcription error:', error)
+          console.error('TRANSCRIPTION ERROR:', error)
+          alert('Voice upload failed: ' + (error as any)?.message)
         } finally {
           setIsProcessing(false)
           stream.getTracks().forEach(track => track.stop())

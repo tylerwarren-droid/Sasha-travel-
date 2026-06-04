@@ -116,7 +116,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             // While avatar is speaking, measure RMS — loud user voice means interrupt
             const rms = Math.sqrt(float32.reduce((s, x) => s + x * x, 0) / float32.length)
             console.log('[RMS]', rms.toFixed(4), 'gated:', micGatedRef.current)
-            if (rms > 0.02) {
+            if (rms > 0.0005) {
               onInterruptRef.current?.()
               micGatedRef.current = false  // open mic immediately; gate setter fires async
             } else {

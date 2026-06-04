@@ -33,6 +33,11 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
     avatarSpeakingRef.current = !!avatarSpeaking
   }, [avatarSpeaking])
 
+  // Expose gate to parent immediately on mount so gateRef is set before first speakFn fires
+  useEffect(() => {
+    onSetGate?.((value) => { micGatedRef.current = value })
+  }, [])
+
   const stopAll = useCallback(() => {
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null }

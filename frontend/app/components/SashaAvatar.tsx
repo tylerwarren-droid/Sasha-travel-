@@ -14,7 +14,6 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
   const reconnectTimerRef = useRef<any>(null)
   const keepAliveTimerRef = useRef<any>(null)
   const isReconnecting = useRef(false)
-  const isSpeakingRef = useRef(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'bad' | null>(null)
@@ -47,6 +46,13 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         keepAliveTimerRef.current = setInterval(() => {
           try { avatar.keepAlive?.() } catch(e) {}
         }, 150000)
+
+        avatar.on('avatar.speak_started', () => {
+          onAvatarSpeakingChange?.(true)
+        })
+        avatar.on('avatar.speak_ended', () => {
+          onAvatarSpeakingChange?.(false)
+        })
       })
 
       avatar.on(SessionEvent.SESSION_CONNECTION_QUALITY_CHANGED, (quality: any) => {
@@ -81,15 +87,12 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       const speakFn = (text: string) => {
         try {
           avatar.repeat(text)
-          isSpeakingRef.current = true
-          onAvatarSpeakingChange?.(true)
         } catch(e) { console.error('Avatar speak error:', e) }
       }
       const interruptFn = () => {
         try {
           avatar.interrupt?.()
-          isSpeakingRef.current = false
-          onAvatarSpeakingChange?.(false)
+          onAvatarSpeakingChange?.(false) // immediate UI fallback before speak_ended fires
         } catch(e) {}
       }
       onAvatarReady(speakFn, interruptFn)

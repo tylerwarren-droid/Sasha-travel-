@@ -68,6 +68,12 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           }, 400)
         })
 
+        avatar.on(AgentEventsEnum.SESSION_STOPPED, (e: any) => {
+          console.log('[LA] session stopped:', e?.stop_reason)
+          onGate?.(false)
+          onAvatarSpeakingChange?.(false)
+        })
+
         Object.values(AgentEventsEnum).forEach((evt) => {
           avatar.on(evt as any, (e: any) => console.log('[LA event]', evt, e))
         })
@@ -107,7 +113,10 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         try {
           onGate?.(true)
           avatar.repeat(text)
-        } catch(e) { console.error('Avatar speak error:', e) }
+        } catch(e) {
+          console.error('Avatar speak error:', e)
+          onGate?.(false)
+        }
       }
       const interruptFn = () => {
         try {

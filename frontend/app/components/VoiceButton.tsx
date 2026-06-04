@@ -33,17 +33,26 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
     avatarSpeakingRef.current = !!avatarSpeaking
   }, [avatarSpeaking])
 
-  // Expose gate to parent immediately on mount so gateRef is set before first speakFn fires
+  // Expose gate function to parent on mount — single registration, stable ref
   useEffect(() => {
     onSetGate?.((value) => {
       console.log('[GATE] micGatedRef set to', value)
       micGatedRef.current = value
+      const recorder = recorderRef.current
+      if (!recorder) return
+      if (value && recorder.state === 'recording') {
+        recorder.pause()
+      } else if (!value && recorder.state === 'paused') {
+        // Clear stale transcript so buffered bleed audio is discarded
+        transcriptRef.current = ''
+        recorder.resume()
+      }
     })
-    console.log('[GATE] onSetGate registered on mount, onSetGate present:', !!onSetGate)
+    console.log('[GATE] onSetGate registered on mount, present:', !!onSetGate)
   }, [])
 
   const stopAll = useCallback(() => {
-    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop()
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
     setIsListening(false)
@@ -62,24 +71,24 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       })
       streamRef.current = stream
-      const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
-        : MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
         : 'audio/webm'
-      console.log('[DG] Using mimeType:', mimeType)
-      console.log('[DG] API key present:', !!DEEPGRAM_API_KEY)
+      console.log('[DG] mimeType:', mimeType, '| key present:', !!DEEPGRAM_API_KEY)
       const ws = new WebSocket(
         `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
         ['token', DEEPGRAM_API_KEY || '']
       )
       wsRef.current = ws
       ws.onopen = () => {
-        console.log('[DG] WebSocket open!')
+        console.log('[DG] WebSocket open')
         setIsConnecting(false)
         setIsListening(true)
         isListeningRef.current = true
         const recorder = new MediaRecorder(stream, { mimeType })
         recorderRef.current = recorder
         recorder.ondataavailable = (e) => {
+          // Gate checked here as a backup; primary gating is recorder.pause()
           if (micGatedRef.current) return
           if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) ws.send(e.data)
         }
@@ -89,13 +98,10 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         if (micGatedRef.current) return
         try {
           const data = JSON.parse(event.data)
-          console.log('[DG]', data.type, data.is_final, data.speech_final, data.channel?.alternatives?.[0]?.transcript?.substring(0,50))
-
           if (data.type === 'SpeechStarted') {
             setIsSpeaking(true)
             onSpeakingChange?.(true)
           }
-
           if (data.type === 'Results') {
             const transcript = data.channel?.alternatives?.[0]?.transcript || ''
             if (transcript) transcriptRef.current = transcript
@@ -107,7 +113,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
               onTranscript(final)
             }
           }
-
           if (data.type === 'UtteranceEnd' && transcriptRef.current && transcriptRef.current.length >= 3) {
             const final = transcriptRef.current
             transcriptRef.current = ''
@@ -117,18 +122,16 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
           }
         } catch(e) {}
       }
-      ws.onerror = (e) => { console.error('[DG] error:', e); setMicError('Connection error'); stopAll() }
-      ws.onclose = (e) => {
-        console.log('[DG] closed:', e.code, e.reason)
-        if (isListeningRef.current) setTimeout(() => { if (isListeningRef.current) startListening() }, 2000)
-      }
+      ws.onerror = (e) => { console.error('[DG] error:', e); setMicError('Connection error') }
+      // No auto-reconnect — reconnecting while HeyGen is active causes audio glitches
+      ws.onclose = (e) => { console.log('[DG] closed:', e.code, e.reason) }
     } catch (err: any) {
       setIsConnecting(false)
       if (err.name === 'NotAllowedError') setMicError('Mic permission denied')
       else if (err.name === 'NotFoundError') setMicError('No microphone found')
       else setMicError(err.message || 'Could not access microphone')
     }
-  }, [onTranscript, onSpeakingChange, onInterrupt, stopAll])
+  }, [onTranscript, onSpeakingChange, stopAll])
 
   const toggleListening = () => {
     if (isListeningRef.current) { isListeningRef.current = false; stopAll() }

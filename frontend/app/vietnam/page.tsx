@@ -91,7 +91,11 @@ export default function VietnamPage() {
     setSpeakFn(() => speak)
     speakFnRef.current = speak
     interruptFnRef.current = interrupt
-    setTimeout(() => setVoiceReady(true), 2000)
+  }, [])
+
+  const handleReadyToListen = useCallback(() => {
+    console.log('[MIC] avatar first speech ended → activating Deepgram')
+    setVoiceReady(true)
   }, [])
 
   const handleInterrupt = useCallback(() => {
@@ -152,6 +156,7 @@ export default function VietnamPage() {
                 onAvatarReady={handleAvatarReady}
                 isListening={isListening}
                 onGate={handleGate}
+                onReadyToListen={handleReadyToListen}
               />
             )}
           </div>

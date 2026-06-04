@@ -7,14 +7,16 @@ interface SashaAvatarProps {
   tokenUrl?: string
   onAvatarSpeakingChange?: (speaking: boolean) => void
   onGate?: (value: boolean) => void
+  onReadyToListen?: () => void  // fires once after the avatar's first utterance ends
 }
 
-export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate }: SashaAvatarProps) {
+export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate, onReadyToListen }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const avatarRef = useRef<any>(null)
   const reconnectTimerRef = useRef<any>(null)
   const keepAliveTimerRef = useRef<any>(null)
   const isReconnecting = useRef(false)
+  const hasListenedOnce = useRef(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'bad' | null>(null)
@@ -58,6 +60,11 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
             console.log('[GATE] avatar speak ended → ungating mic')
             onAvatarSpeakingChange?.(false)
             onGate?.(false)
+            // Activate mic after first utterance ends — only fires once
+            if (!hasListenedOnce.current) {
+              hasListenedOnce.current = true
+              onReadyToListen?.()
+            }
           }, 400)
         })
 
@@ -115,7 +122,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       setError(err.message || 'Failed to connect')
       setStatus('error')
     }
-  }, [tokenUrl, onAvatarReady, onAvatarSpeakingChange, onGate])
+  }, [tokenUrl, onAvatarReady, onAvatarSpeakingChange, onGate, onReadyToListen])
 
   useEffect(() => {
     const handleVisibilityChange = () => {

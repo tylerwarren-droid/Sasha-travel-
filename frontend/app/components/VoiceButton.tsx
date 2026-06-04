@@ -79,18 +79,22 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
           console.log('[DG]', data.type, data.is_final, data.speech_final, data.channel?.alternatives?.[0]?.transcript?.substring(0,50))
 
           if (data.type === 'SpeechStarted') {
-            setIsSpeaking(true)
-            onSpeakingChange?.(true)
-            // If avatar is currently speaking, interrupt it
             if (avatarSpeakingRef.current) {
               onInterrupt?.()
+              return
             }
+            setIsSpeaking(true)
+            onSpeakingChange?.(true)
           }
 
           if (data.type === 'Results') {
             const transcript = data.channel?.alternatives?.[0]?.transcript || ''
             if (transcript) transcriptRef.current = transcript
             if (data.speech_final && transcriptRef.current && transcriptRef.current.length >= 3) {
+              if (avatarSpeakingRef.current) {
+                onInterrupt?.()
+                return
+              }
               const final = transcriptRef.current
               transcriptRef.current = ''
               setIsSpeaking(false)

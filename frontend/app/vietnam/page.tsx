@@ -48,6 +48,7 @@ export default function VietnamPage() {
   const interruptFnRef = useRef<(() => void) | null>(null)
   const [isListening, setIsListening] = useState(false)
   const [avatarSpeaking, setAvatarSpeaking] = useState(false)
+  const [voiceReady, setVoiceReady] = useState(false)
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
   const [activePhoto, setActivePhoto] = useState(0)
@@ -88,6 +89,7 @@ export default function VietnamPage() {
     setSpeakFn(() => speak)
     speakFnRef.current = speak
     interruptFnRef.current = interrupt
+    setTimeout(() => setVoiceReady(true), 6000)
   }, [])
 
   const handleInterrupt = useCallback(() => {
@@ -253,6 +255,7 @@ export default function VietnamPage() {
                 onListeningChange={setIsListening}
                 avatarSpeaking={avatarSpeaking}
                 onInterrupt={handleInterrupt}
+                autoStart={voiceReady}
               />
             )}
 

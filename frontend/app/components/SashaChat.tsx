@@ -16,6 +16,7 @@ interface SashaChatProps {
   initialMessage?: string
   avatarSpeaking?: boolean
   onInterrupt?: () => void
+  autoStart?: boolean
 }
 
 const GOLF_KEYWORDS = ['golf', 'tee time', 'tee-time', 'fairway', 'caddy', 'green fee', 'driving range', 'montgomerie', 'hoiana', 'bluffs', 'vinpearl golf', 'ba na hills']
@@ -29,7 +30,7 @@ function isGolfConversation(messages: any[]): boolean {
   return messages.some(m => isGolfMessage(m.content || ''))
 }
 
-export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage, emptyState, avatarSpeaking, onInterrupt }: SashaChatProps) {
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage, emptyState, avatarSpeaking, onInterrupt, autoStart = false }: SashaChatProps) {
   const [messages, setMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
   )
@@ -168,7 +169,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
         <div className="flex items-center gap-2 bg-white/5 rounded-2xl px-4 py-2 border border-white/5">
           <VoiceButton
             onTranscript={(text) => sendMessage(text)}
-            autoStart={true}
+            autoStart={autoStart}
             avatarSpeaking={avatarSpeaking}
             onInterrupt={onInterrupt}
           />

@@ -18,6 +18,11 @@ interface SashaChatProps {
   onInterrupt?: () => void
   presetPrompts?: string[]
   onSetGate?: (gate: (value: boolean) => void) => void
+  // Lifted state — pass from parent to preserve history across remounts
+  messages?: any[]
+  setMessages?: React.Dispatch<React.SetStateAction<any[]>>
+  golfHistory?: any[]
+  setGolfHistory?: React.Dispatch<React.SetStateAction<any[]>>
 }
 
 const GOLF_KEYWORDS = ['golf', 'tee time', 'tee-time', 'fairway', 'caddy', 'green fee', 'driving range', 'montgomerie', 'hoiana', 'bluffs', 'vinpearl golf', 'ba na hills']
@@ -31,13 +36,19 @@ function isGolfConversation(messages: any[]): boolean {
   return messages.some(m => isGolfMessage(m.content || ''))
 }
 
-export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate }: SashaChatProps) {
-  const [messages, setMessages] = useState<any[]>(
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, messages: propMessages, setMessages: propSetMessages, golfHistory: propGolfHistory, setGolfHistory: propSetGolfHistory }: SashaChatProps) {
+  const [localMessages, setLocalMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
   )
+  const [localGolfHistory, setLocalGolfHistory] = useState<any[]>([])
+  // Use lifted state when provided (persists across tab remounts), else fall back to local state
+  const messages = propMessages !== undefined ? propMessages : localMessages
+  const setMessages = propSetMessages ?? setLocalMessages
+  const golfHistory = propGolfHistory !== undefined ? propGolfHistory : localGolfHistory
+  const setGolfHistory = propSetGolfHistory ?? setLocalGolfHistory
+
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [golfHistory, setGolfHistory] = useState<any[]>([])
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

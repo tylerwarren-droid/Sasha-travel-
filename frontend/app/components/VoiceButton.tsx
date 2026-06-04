@@ -29,6 +29,9 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   // Start gated — worklet runs immediately but audio is suppressed until first AVATAR_SPEAK_ENDED
   const micGatedRef = useRef(true)
   const keepAliveIntervalRef = useRef<any>(null)
+  // Ref so the worklet closure always sees the latest onInterrupt prop
+  const onInterruptRef = useRef(onInterrupt)
+  useEffect(() => { onInterruptRef.current = onInterrupt }, [onInterrupt])
 
   // Expose gate to parent on mount — gate is a pure ref flag, no audio pipeline changes
   useEffect(() => {
@@ -108,10 +111,19 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         workletNodeRef.current = node
 
         node.port.onmessage = (e) => {
-          if (micGatedRef.current) return
+          const float32 = e.data as Float32Array
+          if (micGatedRef.current) {
+            // While avatar is speaking, measure RMS — loud user voice means interrupt
+            const rms = Math.sqrt(float32.reduce((s, x) => s + x * x, 0) / float32.length)
+            if (rms > 0.02) {
+              onInterruptRef.current?.()
+              micGatedRef.current = false  // open mic immediately; gate setter fires async
+            } else {
+              return  // speaker bleed, drop frame
+            }
+          }
           if (ws.readyState !== WebSocket.OPEN) return
           // Convert float32 to int16 PCM before sending
-          const float32 = e.data as Float32Array
           const int16 = new Int16Array(float32.length)
           for (let i = 0; i < float32.length; i++) {
             const s = Math.max(-1, Math.min(1, float32[i]))

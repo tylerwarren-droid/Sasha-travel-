@@ -50,6 +50,8 @@ export default function VietnamPage() {
   const handleSetGate = useCallback((fn: (value: boolean) => void) => { gateRef.current = fn }, [])
   const handleGate = useCallback((value: boolean) => { gateRef.current?.(value) }, [])
   const [isListening, setIsListening] = useState(false)
+  const [chatMessages, setChatMessages] = useState<any[]>([])
+  const [golfHistory, setGolfHistory] = useState<any[]>([])
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
   const [activePhoto, setActivePhoto] = useState(0)
@@ -255,6 +257,10 @@ export default function VietnamPage() {
                 onListeningChange={setIsListening}
                 onSetGate={handleSetGate}
                 presetPrompts={['Tell me about Hoi An', 'Best golf courses', 'Plan a 7 day trip', 'Phu Quoc beaches']}
+                messages={chatMessages}
+                setMessages={setChatMessages}
+                golfHistory={golfHistory}
+                setGolfHistory={setGolfHistory}
               />
             )}
 

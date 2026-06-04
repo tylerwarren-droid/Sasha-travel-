@@ -3,7 +3,6 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, Loader2 } from 'lucide-react'
 import { User, Itinerary } from '@/types'
 import VoiceButton from './VoiceButton'
-import HotelResults from './HotelResults'
 import axios from 'axios'
 
 interface SashaChatProps {
@@ -12,6 +11,7 @@ interface SashaChatProps {
   onItineraryUpdate: (itinerary: Itinerary) => void
   onSashaResponse?: (text: string) => void
   onListeningChange?: (listening: boolean) => void
+  onPhotos?: (photos: any[]) => void
   emptyState?: React.ReactNode
   initialMessage?: string
   avatarSpeaking?: boolean
@@ -21,31 +21,17 @@ interface SashaChatProps {
   // Lifted state — pass from parent to preserve history across remounts
   messages?: any[]
   setMessages?: React.Dispatch<React.SetStateAction<any[]>>
-  golfHistory?: any[]
-  setGolfHistory?: React.Dispatch<React.SetStateAction<any[]>>
 }
 
-const GOLF_KEYWORDS = ['golf', 'tee time', 'tee-time', 'fairway', 'caddy', 'green fee', 'driving range', 'montgomerie', 'hoiana', 'bluffs', 'vinpearl golf', 'ba na hills']
+const API_URL = process.env.NEXT_PUBLIC_API_URL
 
-function isGolfMessage(text: string): boolean {
-  const lower = text.toLowerCase()
-  return GOLF_KEYWORDS.some(k => lower.includes(k))
-}
-
-function isGolfConversation(messages: any[]): boolean {
-  return messages.some(m => isGolfMessage(m.content || ''))
-}
-
-export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, messages: propMessages, setMessages: propSetMessages, golfHistory: propGolfHistory, setGolfHistory: propSetGolfHistory }: SashaChatProps) {
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, messages: propMessages, setMessages: propSetMessages }: SashaChatProps) {
   const [localMessages, setLocalMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
   )
-  const [localGolfHistory, setLocalGolfHistory] = useState<any[]>([])
   // Use lifted state when provided (persists across tab remounts), else fall back to local state
   const messages = propMessages !== undefined ? propMessages : localMessages
   const setMessages = propSetMessages ?? setLocalMessages
-  const golfHistory = propGolfHistory !== undefined ? propGolfHistory : localGolfHistory
-  const setGolfHistory = propSetGolfHistory ?? setLocalGolfHistory
 
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -55,65 +41,32 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const sendGolfMessage = async (content: string) => {
-    setIsLoading(true)
-    try {
-      const apiUrl = 'https://sasha-travel-production.up.railway.app'
-      const response = await axios.post(apiUrl + '/api/agents/golf', {
-        message: content,
-        conversation_history: golfHistory
-      })
-      const { response: golfResponse, messages: updatedHistory } = response.data
-      setGolfHistory(updatedHistory)
-      setMessages(prev => [...prev, { role: 'assistant', content: golfResponse, isGolf: true }])
-      if (onSashaResponse) onSashaResponse(golfResponse)
-    } catch (error) {
-      setMessages(prev => [...prev, { role: 'assistant', content: "I had trouble reaching the golf booking system. Please try again." }])
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   const sendMessage = async (content: string) => {
     if (!content.trim()) return
-    const userMessage = { role: 'user', content }
-    const newMessages = [...messages, userMessage]
-    setMessages(newMessages)
+    const historyBeforeMessage = messages  // snapshot before appending
+    setMessages(prev => [...prev, { role: 'user', content }])
     setInput('')
-
-    if (isGolfMessage(content) || isGolfConversation(messages)) {
-      await sendGolfMessage(content)
-      return
-    }
-
     setIsLoading(true)
     try {
-      const response = await axios.post(process.env.NEXT_PUBLIC_API_URL + '/conversation/chat', {
-        messages: newMessages, user, itinerary
+      const response = await axios.post(API_URL + '/conductor', {
+        message: content,
+        conversation_history: historyBeforeMessage
       })
-      const { response: sashaResponse, intent, api_data } = response.data
-      const assistantMessage: any = { role: 'assistant', content: sashaResponse }
-      if (api_data?.data?.hotels) {
-        assistantMessage.hotels = api_data.data.hotels.slice(0, 3).map((h: any) => ({
-          id: h.id, name: h.name, stars: h.star_rating || 5,
-          location: h.region?.name || 'Vietnam',
-          price: h.rates?.[0]?.daily_prices?.[0] || 0,
-          currency: 'USD', rationale: 'Matches your preferences'
-        }))
+      const { response: sashaResponse, conversation_history, photos } = response.data
+      // Replace local messages with server-authoritative history
+      if (conversation_history?.length > 0) {
+        setMessages(conversation_history)
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: sashaResponse }])
       }
-      setMessages(prev => [...prev, assistantMessage])
       if (onSashaResponse) onSashaResponse(sashaResponse)
-      if (intent?.action === 'search_hotels' && api_data) {
-        onItineraryUpdate({ ...itinerary, destination_summary: intent.params, depart_date: intent.params?.checkin, return_date: intent.params?.checkout })
-      }
+      if (photos?.length > 0) onPhotos?.(photos)
     } catch (error) {
       setMessages(prev => [...prev, { role: 'assistant', content: "I ran into a small issue. Could you try again?" }])
     } finally {
       setIsLoading(false)
     }
   }
-
-  const golfMode = isGolfConversation(messages)
 
   return (
     <div className="flex flex-col h-full bg-[#0e0e16] rounded-3xl border border-white/5 overflow-hidden">
@@ -128,10 +81,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
           <div className="text-sm font-medium text-white">Sasha</div>
           <div className="text-xs text-emerald-400/70">Online</div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          {golfMode && (
-            <span className="text-xs bg-green-500/10 text-green-400 border border-green-500/20 px-3 py-1.5 rounded-full">⛳ Golf mode</span>
-          )}
+        <div className="ml-auto">
           <span className="text-xs bg-white/5 text-white/40 border border-white/10 px-3 py-1.5 rounded-full tracking-wide">Vietnam</span>
         </div>
       </div>
@@ -150,6 +100,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
           ))}
         </div>
       )}
+
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
         {messages.length === 0 && emptyState}
         {messages.map((msg, i) => (
@@ -169,14 +120,6 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
               }`}>
                 {msg.content}
               </div>
-              {msg.isGolf && (
-                <div className="mt-1 text-xs text-green-400/50 flex items-center gap-1">
-                  <span>⛳</span><span>Golf concierge</span>
-                </div>
-              )}
-              {msg.role === 'assistant' && msg.hotels && (
-                <HotelResults hotels={msg.hotels} onSelect={(hotel) => setInput(`I'd like to go with ${hotel.name}`)} />
-              )}
             </div>
           </div>
         ))}
@@ -204,7 +147,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage(input))}
-            placeholder={golfMode ? "Ask about courses, tee times, bookings..." : "Ask Sasha anything about Vietnam..."}
+            placeholder="Ask Sasha anything..."
             className="flex-1 bg-transparent text-sm text-white/80 placeholder-white/20 outline-none"
           />
           <button
@@ -216,19 +159,10 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
           </button>
         </div>
         <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          {!golfMode ? (
-            <>
-              <button onClick={() => sendMessage("What are the best places to visit in Vietnam?")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Best places →</button>
-              <button onClick={() => sendMessage("I want to play golf in Danang")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">⛳ Golf →</button>
-              <button onClick={() => sendMessage("Help me plan a 7 day Vietnam trip")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Plan trip →</button>
-            </>
-          ) : (
-            <>
-              <button onClick={() => sendMessage("What's the best course in Danang?")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Best course →</button>
-              <button onClick={() => sendMessage("Show me courses under $100")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Under $100 →</button>
-              <button onClick={() => sendMessage("Tell me about The Bluffs Ho Tram")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">The Bluffs →</button>
-            </>
-          )}
+          <button onClick={() => sendMessage("What are the best places to visit in Vietnam?")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Best places →</button>
+          <button onClick={() => sendMessage("I want to play golf in Danang")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">⛳ Golf →</button>
+          <button onClick={() => sendMessage("Help me plan a 7 day Vietnam trip")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Plan trip →</button>
+          <button onClick={() => sendMessage("Find me flights to Hanoi")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Flights →</button>
         </div>
       </div>
     </div>

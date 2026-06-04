@@ -51,34 +51,26 @@ export default function VietnamPage() {
   const handleGate = useCallback((value: boolean) => { gateRef.current?.(value) }, [])
   const [isListening, setIsListening] = useState(false)
   const [chatMessages, setChatMessages] = useState<any[]>([])
-  const [golfHistory, setGolfHistory] = useState<any[]>([])
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
   const [activePhoto, setActivePhoto] = useState(0)
-  const [photoQuery, setPhotoQuery] = useState('Vietnam landscape travel')
   const [engaged, setEngaged] = useState(false)
   const [rightTab, setRightTab] = useState<'chat' | 'itinerary' | 'preferences' | 'trips'>('chat')
   const [started, setStarted] = useState(false)
   const photoInterval = useRef<any>(null)
   const sentenceQueueRef = useRef<string[]>([])
 
+  // Initial background photos — updated per-turn by conductor via onPhotos
   useEffect(() => {
-    const fetchPhotos = async () => {
-      try {
-        const res = await fetch('https://sasha-travel-production.up.railway.app/api/photos/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: photoQuery, count: 4 })
-        })
-        const data = await res.json()
-        if (data.photos?.length > 0) {
-          setPhotos(data.photos)
-          setActivePhoto(0)
-        }
-      } catch (e) {}
-    }
-    fetchPhotos()
-  }, [photoQuery])
+    fetch('https://sasha-travel-production.up.railway.app/api/photos/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'Vietnam landscape travel', count: 4 })
+    })
+      .then(r => r.json())
+      .then(data => { if (data.photos?.length > 0) { setPhotos(data.photos); setActivePhoto(0) } })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (photos.length <= 1) return
@@ -100,6 +92,13 @@ export default function VietnamPage() {
     interruptFnRef.current?.()
   }, [])
 
+  const handlePhotos = useCallback((newPhotos: any[]) => {
+    if (newPhotos?.length > 0) {
+      setPhotos(newPhotos)
+      setActivePhoto(0)
+    }
+  }, [])
+
   const handleSashaResponse = useCallback((text: string) => {
     if (!text) return
     // Split into sentences so each boundary is a natural interrupt point
@@ -112,15 +111,6 @@ export default function VietnamPage() {
     sentenceQueueRef.current = rest
     if (speakFnRef.current && first) speakFnRef.current(first)
     setEngaged(true)
-    const lower = text.toLowerCase()
-    const golfCourses = ['montgomerie', 'hoiana', 'bluffs', 'ba na hills', 'vinpearl golf', 'laguna golf', 'legend danang']
-    const destinations = ['danang', 'da nang', 'hanoi', 'hoi an', 'ho chi minh', 'saigon', 'ha long', 'phu quoc', 'nha trang', 'da lat', 'hue', 'sapa', 'ha giang']
-    for (const course of golfCourses) {
-      if (lower.includes(course)) { setPhotoQuery(`${course} golf Vietnam`); return }
-    }
-    for (const dest of destinations) {
-      if (lower.includes(dest)) { setPhotoQuery(`${dest} Vietnam travel`); return }
-    }
   }, [speakFn])
 
   const handleItineraryUpdate = useCallback((newItinerary: Itinerary) => {
@@ -268,11 +258,10 @@ export default function VietnamPage() {
                 onListeningChange={setIsListening}
                 onSetGate={handleSetGate}
                 onInterrupt={handleInterrupt}
+                onPhotos={handlePhotos}
                 presetPrompts={['Tell me about Hoi An', 'Best golf courses', 'Plan a 7 day trip', 'Phu Quoc beaches']}
                 messages={chatMessages}
                 setMessages={setChatMessages}
-                golfHistory={golfHistory}
-                setGolfHistory={setGolfHistory}
               />
             )}
 

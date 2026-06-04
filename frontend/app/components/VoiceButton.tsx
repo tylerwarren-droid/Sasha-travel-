@@ -14,25 +14,34 @@ interface VoiceButtonProps {
 
 const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY
 
-export default function VoiceButton({ onTranscript, disabled, autoStart = false, onSpeakingChange, avatarSpeaking, onInterrupt, onSetGate }: VoiceButtonProps) {
-  const [isListening, setIsListening] = useState(false)
+export default function VoiceButton({ onTranscript, disabled, autoStart = false, onSpeakingChange, onInterrupt, onSetGate }: VoiceButtonProps) {
   const [isConnecting, setIsConnecting] = useState(false)
+  const [isConnected, setIsConnected] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [micError, setMicError] = useState<string | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const isListeningRef = useRef(false)
+  const connectedRef = useRef(false)
   const transcriptRef = useRef('')
-  const avatarSpeakingRef = useRef(false)
-  const micGatedRef = useRef(false)
+  // Start gated — mic is live but audio is suppressed until first AVATAR_SPEAK_ENDED
+  const micGatedRef = useRef(true)
   const keepAliveIntervalRef = useRef<any>(null)
 
-  // Keep avatarSpeakingRef in sync with prop
+  // Expose gate to parent on mount — gate is purely a ref flag, no recorder state changes
   useEffect(() => {
-    avatarSpeakingRef.current = !!avatarSpeaking
-  }, [avatarSpeaking])
+    onSetGate?.((value) => {
+      console.log('[GATE] set to', value)
+      micGatedRef.current = value
+      if (!value) {
+        // Discard any partial transcript that accumulated while gated
+        transcriptRef.current = ''
+        setIsSpeaking(false)
+      }
+    })
+    console.log('[GATE] registered, present:', !!onSetGate)
+  }, [])
 
   const stopAll = useCallback(() => {
     clearInterval(keepAliveIntervalRef.current)
@@ -40,53 +49,59 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
     recorderRef.current = null
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
-    setIsListening(false)
+    setIsConnected(false)
     setIsSpeaking(false)
     setIsConnecting(false)
-    isListeningRef.current = false
+    connectedRef.current = false
     transcriptRef.current = ''
   }, [])
 
-  const startListening = useCallback(async () => {
-    if (isListeningRef.current) return
+  const connect = useCallback(async () => {
+    if (connectedRef.current) return
     setMicError(null)
     setIsConnecting(true)
     try {
-      // Reuse existing stream if still alive — avoids repeated getUserMedia round-trips on reconnect
-      const streamAlive = streamRef.current &&
-        streamRef.current.getTracks().every(t => t.readyState === 'live')
-      if (!streamAlive) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-        })
-        streamRef.current = stream
-      }
-      const stream = streamRef.current!
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      })
+      streamRef.current = stream
 
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
         : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
         : 'audio/webm'
       console.log('[DG] connecting | mimeType:', mimeType, '| key present:', !!DEEPGRAM_API_KEY)
+
       const ws = new WebSocket(
         `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
         ['token', DEEPGRAM_API_KEY || '']
       )
       wsRef.current = ws
+
       ws.onopen = () => {
-        console.log('[DG] WebSocket open')
+        console.log('[DG] connected')
         setIsConnecting(false)
-        setIsListening(true)
-        isListeningRef.current = true
+        setIsConnected(true)
+        connectedRef.current = true
+
+        // KeepAlive runs for the lifetime of the session — not gated, always on
+        keepAliveIntervalRef.current = setInterval(() => {
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'KeepAlive' }))
+          }
+        }, 8000)
+
+        // Recorder runs continuously — gating is done purely in ondataavailable
         const recorder = new MediaRecorder(stream, { mimeType })
         recorderRef.current = recorder
         recorder.ondataavailable = (e) => {
-          // Gate checked here as a backup; primary gating is recorder.pause()
           if (micGatedRef.current) return
           if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) ws.send(e.data)
         }
         recorder.start(250)
       }
+
       ws.onmessage = (event) => {
+        // Gate blocks all message processing — no partial transcripts bleed through
         if (micGatedRef.current) return
         try {
           const data = JSON.parse(event.data)
@@ -114,86 +129,46 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
           }
         } catch(e) {}
       }
+
       ws.onerror = (e) => { console.error('[DG] error:', e); setMicError('Connection error') }
-      ws.onclose = (e) => {
-        console.log('[DG] closed:', e.code, e.reason)
-        // Reset so the reconnect guard in the gate setter allows re-entry.
-        // Stream stays alive for reuse — only stopAll() tears it down.
-        isListeningRef.current = false
-        setIsListening(false)
-        if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-          recorderRef.current.stop()
-        }
-        recorderRef.current = null
-      }
+      ws.onclose = (e) => { console.log('[DG] closed:', e.code, e.reason) }
+
     } catch (err: any) {
       setIsConnecting(false)
       if (err.name === 'NotAllowedError') setMicError('Mic permission denied')
       else if (err.name === 'NotFoundError') setMicError('No microphone found')
       else setMicError(err.message || 'Could not access microphone')
     }
-  }, [onTranscript, onSpeakingChange, stopAll])
-
-  // Stable ref so the gate setter (registered once on mount) always calls the latest startListening
-  const startListeningRef = useRef(startListening)
-  useEffect(() => { startListeningRef.current = startListening }, [startListening])
-
-  // Expose gate function to parent on mount — single registration, stable ref
-  useEffect(() => {
-    onSetGate?.((value) => {
-      console.log('[GATE] micGatedRef set to', value)
-      micGatedRef.current = value
-      if (value) {
-        // Gate on: pause recorder, start Deepgram KeepAlive to survive long avatar utterances
-        const recorder = recorderRef.current
-        if (recorder && recorder.state === 'recording') recorder.pause()
-        keepAliveIntervalRef.current = setInterval(() => {
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'KeepAlive' }))
-            console.log('[DG] KeepAlive sent')
-          }
-        }, 8000)
-      } else {
-        // Gate off: stop keepalive, resume recorder or reconnect if WS died
-        clearInterval(keepAliveIntervalRef.current)
-        transcriptRef.current = ''
-        const recorder = recorderRef.current
-        if (recorder && recorder.state === 'paused') {
-          recorder.resume()
-        }
-        if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
-          setTimeout(() => startListeningRef.current(), 100)
-        }
-      }
-    })
-    console.log('[GATE] onSetGate registered on mount, present:', !!onSetGate)
-  }, [])
+  }, [onTranscript, onSpeakingChange])
 
   const toggleListening = () => {
-    if (isListeningRef.current) { isListeningRef.current = false; stopAll() }
-    else startListening()
+    if (connectedRef.current) stopAll()
+    else connect()
   }
 
   useEffect(() => {
-    if (autoStart && !disabled) startListening()
-    return () => { isListeningRef.current = false; stopAll() }
+    if (autoStart && !disabled) connect()
+    return () => stopAll()
   }, [autoStart])
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <button onClick={toggleListening} disabled={disabled || isConnecting}
+      <button
+        onClick={toggleListening}
+        disabled={disabled || isConnecting}
         className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-          isSpeaking ? 'bg-green-500 animate-pulse scale-110'
-          : isListening ? 'bg-red-500 animate-pulse'
+          isSpeaking    ? 'bg-green-500 animate-pulse scale-110'
+          : isConnected ? 'bg-red-500 animate-pulse'
           : isConnecting ? 'bg-yellow-500'
           : 'bg-indigo-600 hover:bg-indigo-700'
-        } disabled:opacity-40`}>
+        } disabled:opacity-40`}
+      >
         {isConnecting ? <Loader2 className="w-4 h-4 text-white animate-spin" />
-          : isListening ? <MicOff className="w-4 h-4 text-white" />
+          : isConnected ? <MicOff className="w-4 h-4 text-white" />
           : <Mic className="w-4 h-4 text-white" />}
       </button>
       {micError && <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>}
-      {isListening && !isSpeaking && <p className="text-xs text-white/30 text-center">Listening...</p>}
+      {isConnected && !isSpeaking && <p className="text-xs text-white/30 text-center">Ready</p>}
       {isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
     </div>
   )

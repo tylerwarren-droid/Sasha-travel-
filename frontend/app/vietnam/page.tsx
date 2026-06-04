@@ -50,7 +50,6 @@ export default function VietnamPage() {
   const handleSetGate = useCallback((fn: (value: boolean) => void) => { gateRef.current = fn }, [])
   const handleGate = useCallback((value: boolean) => { gateRef.current?.(value) }, [])
   const [isListening, setIsListening] = useState(false)
-  const [voiceReady, setVoiceReady] = useState(false)
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
   const [activePhoto, setActivePhoto] = useState(0)
@@ -91,11 +90,6 @@ export default function VietnamPage() {
     setSpeakFn(() => speak)
     speakFnRef.current = speak
     interruptFnRef.current = interrupt
-  }, [])
-
-  const handleReadyToListen = useCallback(() => {
-    console.log('[MIC] avatar first speech ended → activating Deepgram')
-    setVoiceReady(true)
   }, [])
 
   const handleInterrupt = useCallback(() => {
@@ -156,7 +150,6 @@ export default function VietnamPage() {
                 onAvatarReady={handleAvatarReady}
                 isListening={isListening}
                 onGate={handleGate}
-                onReadyToListen={handleReadyToListen}
               />
             )}
           </div>
@@ -253,14 +246,13 @@ export default function VietnamPage() {
           <div className="flex-1 overflow-hidden">
 
             {/* CHAT TAB */}
-            {rightTab === 'chat' && (
+            {rightTab === 'chat' && started && (
               <SashaChat
                 user={DEMO_USER}
                 itinerary={itinerary}
                 onItineraryUpdate={handleItineraryUpdate}
                 onSashaResponse={handleSashaResponse}
                 onListeningChange={setIsListening}
-                autoStart={voiceReady}
                 onSetGate={handleSetGate}
                 presetPrompts={['Tell me about Hoi An', 'Best golf courses', 'Plan a 7 day trip', 'Phu Quoc beaches']}
               />

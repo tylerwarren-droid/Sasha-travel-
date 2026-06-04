@@ -110,7 +110,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
       await avatar.start()
       avatarRef.current = avatar
-      console.log('[HG] maxSessionDuration:', avatar.maxSessionDuration)
+      console.log('[HG] sessionId:', avatar.sessionId, 'maxDuration:', avatar.maxSessionDuration)
 
       const speakFn = (text: string) => {
         try {

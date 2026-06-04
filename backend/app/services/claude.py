@@ -74,7 +74,7 @@ When you have enough information to perform a search or booking action, include 
 Possible actions: search_hotels, search_regions, get_hotel_rates, confirm_rate, create_booking, cancel_booking, update_preference, none
 """
 
-def build_user_context(user: dict, itinerary: Optional[dict] = None) -> str:
+def build_user_context(user: dict, itinerary: Optional[dict] = None, message_count: int = 0) -> str:
     ctx = []
     ctx.append("USER PROFILE:")
     ctx.append(f"Name: {user.get('display_name', 'Guest')}")
@@ -89,18 +89,19 @@ def build_user_context(user: dict, itinerary: Optional[dict] = None) -> str:
         children = [t for t in travellers if t.get('relation') == 'child']
         ctx.append(f"Travelling party: {len(adults)} adult(s), {len(children)} child(ren)")
 
-    preferences = user.get('preferences', [])
-    if preferences:
-        ctx.append("\nACTIVE PREFERENCES (apply automatically):")
-        for p in preferences:
-            if p.get('is_active') and p.get('confidence', 0) >= 0.4:
-                ctx.append(f"- {p['key']}: {p['value']} (confidence: {p['confidence']:.1f})")
+    if message_count > 2:
+        preferences = user.get('preferences', [])
+        if preferences:
+            ctx.append("\nACTIVE PREFERENCES (apply automatically):")
+            for p in preferences:
+                if p.get('is_active') and p.get('confidence', 0) >= 0.4:
+                    ctx.append(f"- {p['key']}: {p['value']} (confidence: {p['confidence']:.1f})")
 
-    past_trips = user.get('past_trips', [])
-    if past_trips:
-        ctx.append("\nRECENT TRIPS:")
-        for trip in past_trips[:3]:
-            ctx.append(f"- {trip.get('title')} ({trip.get('return_date', 'recent')})")
+        past_trips = user.get('past_trips', [])
+        if past_trips:
+            ctx.append("\nRECENT TRIPS:")
+            for trip in past_trips[:3]:
+                ctx.append(f"- {trip.get('title')} ({trip.get('return_date', 'recent')})")
 
     if itinerary:
         ctx.append("\nCURRENT ITINERARY BEING BUILT:")
@@ -119,7 +120,7 @@ def build_user_context(user: dict, itinerary: Optional[dict] = None) -> str:
 
 def extract_intent(response_text: str) -> Optional[dict]:
     import json, re
-    pattern = r'JSONBLOCK\s*(.*?)\s*JSONBLOCK'
+    pattern = r'```json\s*(.*?)\s*```'
     matches = re.findall(pattern, response_text, re.DOTALL)
     if matches:
         try:
@@ -131,7 +132,7 @@ def extract_intent(response_text: str) -> Optional[dict]:
 
 def clean_response(response_text: str) -> str:
     import re
-    pattern = r'JSONBLOCK\s*.*?\s*JSONBLOCK'
+    pattern = r'```json\s*.*?\s*```'
     return re.sub(pattern, '', response_text, flags=re.DOTALL).strip()
 
 
@@ -141,7 +142,7 @@ async def chat(
     itinerary: Optional[dict] = None,
     stream: bool = False
 ) -> dict:
-    user_context = build_user_context(user, itinerary)
+    user_context = build_user_context(user, itinerary, message_count=len(messages))
     system = f"{SASHA_SYSTEM_PROMPT}\n\n{user_context}"
 
     response = client.messages.create(

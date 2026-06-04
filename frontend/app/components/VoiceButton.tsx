@@ -94,6 +94,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         const recorder = new MediaRecorder(stream, { mimeType })
         recorderRef.current = recorder
         recorder.ondataavailable = (e) => {
+          console.log('[CHUNK]', e.data.size, 'gated:', micGatedRef.current, 'ws:', wsRef.current?.readyState)
           if (micGatedRef.current) return
           if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) ws.send(e.data)
         }

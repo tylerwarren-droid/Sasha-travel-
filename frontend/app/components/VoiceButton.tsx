@@ -47,6 +47,9 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         transcriptRef.current = ''
         recorder.resume()
       }
+      if (!value && (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED)) {
+        setTimeout(() => startListening(), 100)
+      }
     })
     console.log('[GATE] onSetGate registered on mount, present:', !!onSetGate)
   }, [])

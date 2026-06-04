@@ -9,11 +9,12 @@ interface VoiceButtonProps {
   onSpeakingChange?: (isSpeaking: boolean) => void
   avatarSpeaking?: boolean
   onInterrupt?: () => void
+  onSetGate?: (gate: (value: boolean) => void) => void
 }
 
 const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY
 
-export default function VoiceButton({ onTranscript, disabled, autoStart = false, onSpeakingChange, avatarSpeaking, onInterrupt }: VoiceButtonProps) {
+export default function VoiceButton({ onTranscript, disabled, autoStart = false, onSpeakingChange, avatarSpeaking, onInterrupt, onSetGate }: VoiceButtonProps) {
   const [isListening, setIsListening] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -25,12 +26,11 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   const isListeningRef = useRef(false)
   const transcriptRef = useRef('')
   const avatarSpeakingRef = useRef(false)
+  const micGatedRef = useRef(false)
 
-  // Keep avatarSpeakingRef in sync with prop; mute the mic track at source while avatar speaks
+  // Keep avatarSpeakingRef in sync with prop
   useEffect(() => {
     avatarSpeakingRef.current = !!avatarSpeaking
-    const track = streamRef.current?.getAudioTracks()[0]
-    if (track) track.enabled = !avatarSpeaking
   }, [avatarSpeaking])
 
   const stopAll = useCallback(() => {
@@ -68,14 +68,18 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         setIsConnecting(false)
         setIsListening(true)
         isListeningRef.current = true
+        // Expose gate control to parent
+        onSetGate?.((value: boolean) => { micGatedRef.current = value })
         const recorder = new MediaRecorder(stream, { mimeType })
         recorderRef.current = recorder
         recorder.ondataavailable = (e) => {
+          if (micGatedRef.current) return
           if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) ws.send(e.data)
         }
         recorder.start(250)
       }
       ws.onmessage = (event) => {
+        if (micGatedRef.current) return
         try {
           const data = JSON.parse(event.data)
           console.log('[DG]', data.type, data.is_final, data.speech_final, data.channel?.alternatives?.[0]?.transcript?.substring(0,50))
@@ -117,7 +121,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       else if (err.name === 'NotFoundError') setMicError('No microphone found')
       else setMicError(err.message || 'Could not access microphone')
     }
-  }, [onTranscript, onSpeakingChange, onInterrupt, stopAll])
+  }, [onTranscript, onSpeakingChange, onInterrupt, onSetGate, stopAll])
 
   const toggleListening = () => {
     if (isListeningRef.current) { isListeningRef.current = false; stopAll() }

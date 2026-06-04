@@ -18,6 +18,7 @@ interface SashaChatProps {
   onInterrupt?: () => void
   autoStart?: boolean
   presetPrompts?: string[]
+  onSetGate?: (gate: (value: boolean) => void) => void
 }
 
 const GOLF_KEYWORDS = ['golf', 'tee time', 'tee-time', 'fairway', 'caddy', 'green fee', 'driving range', 'montgomerie', 'hoiana', 'bluffs', 'vinpearl golf', 'ba na hills']
@@ -31,7 +32,7 @@ function isGolfConversation(messages: any[]): boolean {
   return messages.some(m => isGolfMessage(m.content || ''))
 }
 
-export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage, emptyState, avatarSpeaking, onInterrupt, autoStart = false, presetPrompts }: SashaChatProps) {
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage, emptyState, avatarSpeaking, onInterrupt, autoStart = false, presetPrompts, onSetGate }: SashaChatProps) {
   const [messages, setMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
   )
@@ -187,6 +188,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
             autoStart={autoStart}
             avatarSpeaking={avatarSpeaking}
             onInterrupt={onInterrupt}
+            onSetGate={onSetGate}
           />
           <input
             value={input}

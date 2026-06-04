@@ -6,9 +6,10 @@ interface SashaAvatarProps {
   isListening?: boolean
   tokenUrl?: string
   onAvatarSpeakingChange?: (speaking: boolean) => void
+  onGate?: (value: boolean) => void
 }
 
-export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange }: SashaAvatarProps) {
+export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const avatarRef = useRef<any>(null)
   const reconnectTimerRef = useRef<any>(null)
@@ -51,7 +52,10 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           onAvatarSpeakingChange?.(true)
         })
         avatar.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
-          setTimeout(() => onAvatarSpeakingChange?.(false), 400)
+          setTimeout(() => {
+            onAvatarSpeakingChange?.(false)
+            onGate?.(false)
+          }, 400)
         })
       })
 
@@ -64,6 +68,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       avatar.on(SessionEvent.SESSION_DISCONNECTED, (reason: any) => {
         clearInterval(keepAliveTimerRef.current)
         onAvatarSpeakingChange?.(false)
+        onGate?.(false)
         setStatus('idle')
         const shouldReconnect = !isReconnecting.current && (reason === 'UNKNOWN_REASON' || reason === undefined || reason === null)
         if (shouldReconnect) {
@@ -86,17 +91,15 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
       const speakFn = (text: string) => {
         try {
-          onAvatarSpeakingChange?.(true)
+          onGate?.(true)
           avatar.repeat(text)
-          // Estimate duration: ~65ms per char + 400ms tail for reverb decay
-          const estimatedDuration = text.length * 65 + 400
-          setTimeout(() => onAvatarSpeakingChange?.(false), estimatedDuration)
         } catch(e) { console.error('Avatar speak error:', e) }
       }
       const interruptFn = () => {
         try {
           avatar.interrupt?.()
-          onAvatarSpeakingChange?.(false) // unmute immediately on interrupt
+          onGate?.(false)
+          onAvatarSpeakingChange?.(false)
         } catch(e) {}
       }
       onAvatarReady(speakFn, interruptFn)
@@ -105,7 +108,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       setError(err.message || 'Failed to connect')
       setStatus('error')
     }
-  }, [tokenUrl, onAvatarReady, onAvatarSpeakingChange])
+  }, [tokenUrl, onAvatarReady, onAvatarSpeakingChange, onGate])
 
   useEffect(() => {
     const handleVisibilityChange = () => {

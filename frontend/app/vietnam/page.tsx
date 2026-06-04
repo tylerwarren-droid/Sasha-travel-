@@ -46,8 +46,8 @@ export default function VietnamPage() {
   const [speakFn, setSpeakFn] = useState<((text: string) => void) | null>(null)
   const speakFnRef = useRef<((text: string) => void) | null>(null)
   const interruptFnRef = useRef<(() => void) | null>(null)
+  const gateRef = useRef<((value: boolean) => void) | null>(null)
   const [isListening, setIsListening] = useState(false)
-  const [avatarSpeaking, setAvatarSpeaking] = useState(false)
   const [voiceReady, setVoiceReady] = useState(false)
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
@@ -149,7 +149,7 @@ export default function VietnamPage() {
               <SashaAvatar
                 onAvatarReady={handleAvatarReady}
                 isListening={isListening}
-                onAvatarSpeakingChange={setAvatarSpeaking}
+                onGate={(value) => gateRef.current?.(value)}
               />
             )}
           </div>
@@ -253,9 +253,8 @@ export default function VietnamPage() {
                 onItineraryUpdate={handleItineraryUpdate}
                 onSashaResponse={handleSashaResponse}
                 onListeningChange={setIsListening}
-                avatarSpeaking={avatarSpeaking}
-                onInterrupt={handleInterrupt}
                 autoStart={voiceReady}
+                onSetGate={(fn) => { gateRef.current = fn }}
                 presetPrompts={['Tell me about Hoi An', 'Best golf courses', 'Plan a 7 day trip', 'Phu Quoc beaches']}
               />
             )}

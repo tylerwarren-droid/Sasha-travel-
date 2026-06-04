@@ -85,6 +85,10 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       )
       wsRef.current = ws
 
+      // Dedup state for BUG 4 — scoped to this connection's lifetime
+      let lastFinal = ''
+      let lastFinalAt = 0
+
       ws.onopen = async () => {
         // Guard against StrictMode race: cleanup may have nulled wsRef while WS was connecting
         if (wsRef.current !== ws) {
@@ -146,14 +150,18 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             setIsSpeaking(true)
             onSpeakingChange?.(true)
           }
-          if (data.type === 'Results') {
+          // Only process is_final results — ignore interim results entirely (BUG 4)
+          if (data.type === 'Results' && data.is_final === true) {
             const transcript = data.channel?.alternatives?.[0]?.transcript || ''
             if (transcript) transcriptRef.current = transcript
-            if (data.speech_final && transcriptRef.current && transcriptRef.current.length >= 3) {
+            if (transcriptRef.current && transcriptRef.current.length >= 3) {
               const final = transcriptRef.current
               transcriptRef.current = ''
               setIsSpeaking(false)
               onSpeakingChange?.(false)
+              if (final === lastFinal && Date.now() - lastFinalAt < 5000) return
+              lastFinal = final
+              lastFinalAt = Date.now()
               onTranscript(final)
             }
           }
@@ -162,6 +170,9 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             transcriptRef.current = ''
             setIsSpeaking(false)
             onSpeakingChange?.(false)
+            if (final === lastFinal && Date.now() - lastFinalAt < 5000) return
+            lastFinal = final
+            lastFinalAt = Date.now()
             onTranscript(final)
           }
         } catch(e) {}

@@ -28,7 +28,11 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
     setStatus('loading')
     setError('')
 
-    // Wrapper: sets a 15s safety timeout on gate-on, clears it on gate-off
+    // State machine for concurrent speak events (BUG 1+2)
+    let active = 0
+    let ungateTimer: ReturnType<typeof setTimeout> | undefined
+
+    // Safety timeout wrapper — if gate stays on >15s, force-ungate
     const gate = (value: boolean) => {
       if (value) {
         clearTimeout(gateTimeoutRef.current)
@@ -43,6 +47,22 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       onGate?.(value)
     }
 
+    const gateOn = () => {
+      clearTimeout(ungateTimer)
+      gate(true)
+    }
+
+    const gateOffSoon = () => {
+      clearTimeout(ungateTimer)
+      ungateTimer = setTimeout(() => {
+        if (active === 0) {
+          console.log('[GATE] ungating — queue empty, active 0')
+          onAvatarSpeakingChange?.(false)
+          gate(false)
+        }
+      }, 400)
+    }
+
     try {
       const tokenRes = await fetch(tokenUrl)
       const { token } = await tokenRes.json()
@@ -54,6 +74,9 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         voiceChat: false,
         video_settings: { quality: 'medium', encoding: 'H264' }
       })
+
+      // BUG 3 — guard so speak handlers are registered exactly once per avatar instance
+      let speakHandlersRegistered = false
 
       avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
         isReconnecting.current = false
@@ -67,36 +90,41 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           try { avatar.keepAlive?.() } catch(e) {}
         }, 150000)
 
-        avatar.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, () => {
-          console.log('[GATE] avatar speak started → gating mic')
-          onAvatarSpeakingChange?.(true)
-          gate(true)
-        })
-        avatar.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
-          console.log('[SENTENCE] queue length:', sentenceQueueRef?.current?.length ?? 0)
-          const next = sentenceQueueRef?.current?.shift()
-          if (next) {
-            // More sentences queued — speak immediately, keep gate on
-            speakFn(next)
-          } else {
-            // Queue exhausted — ungate mic after brief pause
-            setTimeout(() => {
-              console.log('[GATE] ungating — queue empty')
-              onAvatarSpeakingChange?.(false)
-              gate(false)
-            }, 400)
-          }
-        })
+        if (!speakHandlersRegistered) {
+          speakHandlersRegistered = true
+          console.log('[HG] registering speak handlers')
 
-        avatar.on(AgentEventsEnum.SESSION_STOPPED, (e: any) => {
-          console.log('[LA] session stopped:', e?.stop_reason)
-          gate(false)
-          onAvatarSpeakingChange?.(false)
-        })
+          avatar.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, () => {
+            active++
+            console.log('[GATE] speak started, active:', active)
+            onAvatarSpeakingChange?.(true)
+            gateOn()
+          })
 
-        Object.values(AgentEventsEnum).forEach((evt) => {
-          avatar.on(evt as any, (e: any) => console.log('[LA event]', evt, e))
-        })
+          avatar.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
+            active = Math.max(0, active - 1)
+            console.log('[SENTENCE] queue length:', sentenceQueueRef?.current?.length ?? 0, 'active:', active)
+            const next = sentenceQueueRef?.current?.shift()
+            if (next) {
+              // More sentences queued — speak immediately; gateOn() inside speakFn keeps gate on
+              speakFn(next)
+            } else if (active === 0) {
+              gateOffSoon()
+            }
+          })
+
+          avatar.on(AgentEventsEnum.SESSION_STOPPED, (e: any) => {
+            console.log('[LA] session stopped:', e?.stop_reason)
+            active = 0
+            clearTimeout(ungateTimer)
+            gate(false)
+            onAvatarSpeakingChange?.(false)
+          })
+
+          Object.values(AgentEventsEnum).forEach((evt) => {
+            avatar.on(evt as any, (e: any) => console.log('[LA event]', evt, e))
+          })
+        }
       })
 
       avatar.on(SessionEvent.SESSION_CONNECTION_QUALITY_CHANGED, (quality: any) => {
@@ -107,8 +135,10 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
       avatar.on(SessionEvent.SESSION_DISCONNECTED, (reason: any) => {
         clearInterval(keepAliveTimerRef.current)
-        onAvatarSpeakingChange?.(false)
+        active = 0
+        clearTimeout(ungateTimer)
         gate(false)
+        onAvatarSpeakingChange?.(false)
         setStatus('idle')
         console.log('[HG] session disconnected, reason:', reason, '— restarting')
         if (!isReconnecting.current && isMountedRef.current) {
@@ -132,7 +162,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
       const speakFn = (text: string) => {
         try {
-          gate(true)
+          gateOn()
           avatar.repeat(text)
         } catch(e) {
           console.error('Avatar speak error:', e)
@@ -142,6 +172,8 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       const interruptFn = () => {
         try {
           avatar.interrupt?.()
+          active = 0
+          clearTimeout(ungateTimer)
           gate(false)
           onAvatarSpeakingChange?.(false)
         } catch(e) {}

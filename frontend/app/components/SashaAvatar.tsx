@@ -45,7 +45,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           videoRef.current.play().catch((e: any) => console.warn('Autoplay blocked:', e))
         }
         keepAliveTimerRef.current = setInterval(() => {
-          try { avatar.ping?.() } catch(e) {}
+          try { avatar.keepAlive?.() } catch(e) {}
         }, 150000)
       })
 
@@ -80,7 +80,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
       const speakFn = (text: string) => {
         try {
-          avatar.repeat(text, { rate: 0.85 })
+          avatar.repeat(text)
           isSpeakingRef.current = true
           onAvatarSpeakingChange?.(true)
         } catch(e) { console.error('Avatar speak error:', e) }

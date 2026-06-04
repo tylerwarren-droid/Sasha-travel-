@@ -49,10 +49,13 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         }, 150000)
 
         avatar.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, () => {
+          console.log('[GATE] avatar speak started → gating mic')
           onAvatarSpeakingChange?.(true)
+          onGate?.(true)
         })
         avatar.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
           setTimeout(() => {
+            console.log('[GATE] avatar speak ended → ungating mic')
             onAvatarSpeakingChange?.(false)
             onGate?.(false)
           }, 400)

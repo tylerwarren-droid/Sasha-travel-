@@ -35,7 +35,11 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
 
   // Expose gate to parent immediately on mount so gateRef is set before first speakFn fires
   useEffect(() => {
-    onSetGate?.((value) => { micGatedRef.current = value })
+    onSetGate?.((value) => {
+      console.log('[GATE] micGatedRef set to', value)
+      micGatedRef.current = value
+    })
+    console.log('[GATE] onSetGate registered on mount, onSetGate present:', !!onSetGate)
   }, [])
 
   const stopAll = useCallback(() => {

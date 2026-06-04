@@ -14,6 +14,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
   const reconnectTimerRef = useRef<any>(null)
   const keepAliveTimerRef = useRef<any>(null)
   const isReconnecting = useRef(false)
+  const isSpeakingRef = useRef(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'bad' | null>(null)
@@ -46,20 +47,6 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         keepAliveTimerRef.current = setInterval(() => {
           try { avatar.ping?.() } catch(e) {}
         }, 150000)
-
-        // Wire up speaking detection via LiveKit ParticipantEvent
-        try {
-          const room = (avatar as any)._session?.room ?? (avatar as any).room
-          if (room) {
-            const wireSpeaking = (participant: any) => {
-              participant.on('isSpeakingChanged', (isSpeaking: boolean) => {
-                onAvatarSpeakingChange?.(isSpeaking)
-              })
-            }
-            room.remoteParticipants?.forEach(wireSpeaking)
-            room.on?.('participantConnected', wireSpeaking)
-          }
-        } catch(e) {}
       })
 
       avatar.on(SessionEvent.SESSION_CONNECTION_QUALITY_CHANGED, (quality: any) => {
@@ -92,10 +79,18 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       avatarRef.current = avatar
 
       const speakFn = (text: string) => {
-        try { avatar.repeat(text, { rate: 0.85 }) } catch(e) { console.error('Avatar speak error:', e) }
+        try {
+          avatar.repeat(text, { rate: 0.85 })
+          isSpeakingRef.current = true
+          onAvatarSpeakingChange?.(true)
+        } catch(e) { console.error('Avatar speak error:', e) }
       }
       const interruptFn = () => {
-        try { avatar.interrupt?.() } catch(e) {}
+        try {
+          avatar.interrupt?.()
+          isSpeakingRef.current = false
+          onAvatarSpeakingChange?.(false)
+        } catch(e) {}
       }
       onAvatarReady(speakFn, interruptFn)
 

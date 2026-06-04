@@ -21,21 +21,21 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   const [micError, setMicError] = useState<string | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
-  const recorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null)
   const connectedRef = useRef(false)
   const transcriptRef = useRef('')
-  // Start gated — mic is live but audio is suppressed until first AVATAR_SPEAK_ENDED
+  // Start gated — worklet runs immediately but audio is suppressed until first AVATAR_SPEAK_ENDED
   const micGatedRef = useRef(true)
   const keepAliveIntervalRef = useRef<any>(null)
 
-  // Expose gate to parent on mount — gate is purely a ref flag, no recorder state changes
+  // Expose gate to parent on mount — gate is a pure ref flag, no audio pipeline changes
   useEffect(() => {
     onSetGate?.((value) => {
       console.log('[GATE] set to', value)
       micGatedRef.current = value
       if (!value) {
-        // Discard any partial transcript that accumulated while gated
         transcriptRef.current = ''
         setIsSpeaking(false)
       }
@@ -45,8 +45,10 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
 
   const stopAll = useCallback(() => {
     clearInterval(keepAliveIntervalRef.current)
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop()
-    recorderRef.current = null
+    workletNodeRef.current?.disconnect()
+    workletNodeRef.current = null
+    audioCtxRef.current?.close()
+    audioCtxRef.current = null
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
     setIsConnected(false)
@@ -68,19 +70,20 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       })
       streamRef.current = stream
 
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
-        : 'audio/webm'
-      console.log('[DG] mimeType:', mimeType)
+      // AudioContext — resume() immediately for Safari (requires in-gesture call stack)
+      const ctx = new AudioContext()
+      audioCtxRef.current = ctx
+      await ctx.resume()
+      console.log('[DG] AudioContext sampleRate:', ctx.sampleRate)
 
       const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
+        `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${ctx.sampleRate}&channels=1&model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
         ['token', DEEPGRAM_API_KEY || '']
       )
       wsRef.current = ws
 
-      ws.onopen = () => {
-        // Guard against StrictMode race: cleanup may have nulled wsRef while this WS was connecting
+      ws.onopen = async () => {
+        // Guard against StrictMode race: cleanup may have nulled wsRef while WS was connecting
         if (wsRef.current !== ws) {
           console.log('[DG] onopen: WS superseded by cleanup, discarding')
           ws.close()
@@ -98,19 +101,31 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
           }
         }, 8000)
 
-        // Recorder runs continuously — gating is done purely in ondataavailable
-        const recorder = new MediaRecorder(stream, { mimeType })
-        recorderRef.current = recorder
-        recorder.ondataavailable = (e) => {
-          console.log('[CHUNK]', e.data.size, 'gated:', micGatedRef.current, 'ws:', wsRef.current?.readyState)
+        // Load worklet and wire up the audio pipeline
+        await ctx.audioWorklet.addModule('/pcm-capture.js')
+        const source = ctx.createMediaStreamSource(stream)
+        const node = new AudioWorkletNode(ctx, 'pcm-capture')
+        workletNodeRef.current = node
+
+        node.port.onmessage = (e) => {
           if (micGatedRef.current) return
-          if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) ws.send(e.data)
+          if (ws.readyState !== WebSocket.OPEN) return
+          // Convert float32 to int16 PCM before sending
+          const float32 = e.data as Float32Array
+          const int16 = new Int16Array(float32.length)
+          for (let i = 0; i < float32.length; i++) {
+            const s = Math.max(-1, Math.min(1, float32[i]))
+            int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
+          }
+          ws.send(int16.buffer)
         }
-        recorder.start(250)
+
+        source.connect(node)
+        // Connect to destination to keep the audio graph alive in some browsers
+        node.connect(ctx.destination)
       }
 
       ws.onmessage = (event) => {
-        // Gate blocks all message processing — no partial transcripts bleed through
         if (micGatedRef.current) return
         try {
           const data = JSON.parse(event.data)
@@ -142,7 +157,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       ws.onerror = (e) => { console.error('[DG] error:', e); setMicError('Connection error') }
       ws.onclose = (e) => {
         console.log('[DG] closed:', e.code, e.reason)
-        // Ensure wsRef never points to a dead socket
         if (wsRef.current === ws) wsRef.current = null
       }
 

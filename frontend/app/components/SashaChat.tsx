@@ -14,6 +14,8 @@ interface SashaChatProps {
   onListeningChange?: (listening: boolean) => void
   emptyState?: React.ReactNode
   initialMessage?: string
+  avatarSpeaking?: boolean
+  onInterrupt?: () => void
 }
 
 const GOLF_KEYWORDS = ['golf', 'tee time', 'tee-time', 'fairway', 'caddy', 'green fee', 'driving range', 'montgomerie', 'hoiana', 'bluffs', 'vinpearl golf', 'ba na hills']
@@ -27,7 +29,7 @@ function isGolfConversation(messages: any[]): boolean {
   return messages.some(m => isGolfMessage(m.content || ''))
 }
 
-export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage, emptyState }: SashaChatProps) {
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage, emptyState, avatarSpeaking, onInterrupt }: SashaChatProps) {
   const [messages, setMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
   )
@@ -167,6 +169,8 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
           <VoiceButton
             onTranscript={(text) => sendMessage(text)}
             autoStart={true}
+            avatarSpeaking={avatarSpeaking}
+            onInterrupt={onInterrupt}
           />
           <input
             value={input}

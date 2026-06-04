@@ -2,12 +2,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 
 interface SashaAvatarProps {
-  onAvatarReady: (speak: (text: string) => void) => void
+  onAvatarReady: (speakFn: (text: string) => void, interruptFn: () => void) => void
   isListening?: boolean
   tokenUrl?: string
+  onAvatarSpeakingChange?: (speaking: boolean) => void
 }
 
-export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token' }: SashaAvatarProps) {
+export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const avatarRef = useRef<any>(null)
   const reconnectTimerRef = useRef<any>(null)
@@ -28,12 +29,13 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       if (!token) throw new Error('No token received')
       const sdk = await import('@heygen/liveavatar-web-sdk')
       const { LiveAvatarSession, SessionEvent } = sdk as any
+
       const avatar = new LiveAvatarSession(token, {
         voiceChat: false,
         video_settings: { quality: 'medium', encoding: 'H264' }
       })
+
       avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
-        try { avatar.interrupt?.() } catch(e) {}
         isReconnecting.current = false
         setStatus('ready')
         setConnectionQuality('good')
@@ -44,14 +46,31 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         keepAliveTimerRef.current = setInterval(() => {
           try { avatar.ping?.() } catch(e) {}
         }, 150000)
+
+        // Wire up speaking detection via LiveKit ParticipantEvent
+        try {
+          const room = (avatar as any)._session?.room ?? (avatar as any).room
+          if (room) {
+            const wireSpeaking = (participant: any) => {
+              participant.on('isSpeakingChanged', (isSpeaking: boolean) => {
+                onAvatarSpeakingChange?.(isSpeaking)
+              })
+            }
+            room.remoteParticipants?.forEach(wireSpeaking)
+            room.on?.('participantConnected', wireSpeaking)
+          }
+        } catch(e) {}
       })
+
       avatar.on(SessionEvent.SESSION_CONNECTION_QUALITY_CHANGED, (quality: any) => {
         const q = quality?.quality || quality
         setConnectionQuality(q === 'BAD' ? 'bad' : 'good')
         if (q === 'BAD') { try { avatar.updateVideoSettings?.({ quality: 'low' }) } catch(e) {} }
       })
+
       avatar.on(SessionEvent.SESSION_DISCONNECTED, (reason: any) => {
         clearInterval(keepAliveTimerRef.current)
+        onAvatarSpeakingChange?.(false)
         setStatus('idle')
         const shouldReconnect = !isReconnecting.current && (reason === 'UNKNOWN_REASON' || reason === undefined || reason === null)
         if (shouldReconnect) {
@@ -59,6 +78,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           reconnectTimerRef.current = setTimeout(() => { avatarRef.current?.stop?.(); initAvatar() }, 2000)
         }
       })
+
       avatar.on(SessionEvent.SESSION_START_FAILED, () => {
         clearInterval(keepAliveTimerRef.current)
         setStatus('idle')
@@ -67,17 +87,23 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           reconnectTimerRef.current = setTimeout(() => { avatarRef.current?.stop?.(); initAvatar() }, 3000)
         }
       })
+
       await avatar.start()
       avatarRef.current = avatar
+
       const speakFn = (text: string) => {
         try { avatar.repeat(text, { rate: 0.85 }) } catch(e) { console.error('Avatar speak error:', e) }
       }
-      onAvatarReady(speakFn)
+      const interruptFn = () => {
+        try { avatar.interrupt?.() } catch(e) {}
+      }
+      onAvatarReady(speakFn, interruptFn)
+
     } catch (err: any) {
       setError(err.message || 'Failed to connect')
       setStatus('error')
     }
-  }, [tokenUrl, onAvatarReady])
+  }, [tokenUrl, onAvatarReady, onAvatarSpeakingChange])
 
   useEffect(() => {
     const handleVisibilityChange = () => {

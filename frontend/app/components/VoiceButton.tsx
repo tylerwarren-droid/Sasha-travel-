@@ -7,11 +7,13 @@ interface VoiceButtonProps {
   disabled?: boolean
   autoStart?: boolean
   onSpeakingChange?: (isSpeaking: boolean) => void
+  avatarSpeaking?: boolean
+  onInterrupt?: () => void
 }
 
 const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY
 
-export default function VoiceButton({ onTranscript, disabled, autoStart = false, onSpeakingChange }: VoiceButtonProps) {
+export default function VoiceButton({ onTranscript, disabled, autoStart = false, onSpeakingChange, avatarSpeaking, onInterrupt }: VoiceButtonProps) {
   const [isListening, setIsListening] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -22,6 +24,12 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   const streamRef = useRef<MediaStream | null>(null)
   const isListeningRef = useRef(false)
   const transcriptRef = useRef('')
+  const avatarSpeakingRef = useRef(false)
+
+  // Keep avatarSpeakingRef in sync with prop
+  useEffect(() => {
+    avatarSpeakingRef.current = !!avatarSpeaking
+  }, [avatarSpeaking])
 
   const stopAll = useCallback(() => {
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
@@ -69,11 +77,20 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         try {
           const data = JSON.parse(event.data)
           console.log('[DG]', data.type, data.is_final, data.speech_final, data.channel?.alternatives?.[0]?.transcript?.substring(0,50))
-          if (data.type === 'SpeechStarted') { setIsSpeaking(true); onSpeakingChange?.(true) }
+
+          if (data.type === 'SpeechStarted') {
+            setIsSpeaking(true)
+            onSpeakingChange?.(true)
+            // If avatar is currently speaking, interrupt it
+            if (avatarSpeakingRef.current) {
+              onInterrupt?.()
+            }
+          }
+
           if (data.type === 'Results') {
             const transcript = data.channel?.alternatives?.[0]?.transcript || ''
             if (transcript) transcriptRef.current = transcript
-            if (data.speech_final && transcriptRef.current) {
+            if (data.speech_final && transcriptRef.current && transcriptRef.current.length >= 3) {
               const final = transcriptRef.current
               transcriptRef.current = ''
               setIsSpeaking(false)
@@ -81,7 +98,8 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
               onTranscript(final)
             }
           }
-          if (data.type === 'UtteranceEnd' && transcriptRef.current) {
+
+          if (data.type === 'UtteranceEnd' && transcriptRef.current && transcriptRef.current.length >= 3) {
             const final = transcriptRef.current
             transcriptRef.current = ''
             setIsSpeaking(false)
@@ -101,7 +119,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       else if (err.name === 'NotFoundError') setMicError('No microphone found')
       else setMicError(err.message || 'Could not access microphone')
     }
-  }, [onTranscript, onSpeakingChange, stopAll])
+  }, [onTranscript, onSpeakingChange, onInterrupt, stopAll])
 
   const toggleListening = () => {
     if (isListeningRef.current) { isListeningRef.current = false; stopAll() }

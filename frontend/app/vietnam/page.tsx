@@ -45,7 +45,9 @@ export default function VietnamPage() {
   const [itinerary, setItinerary] = useState<Itinerary>(INITIAL_ITINERARY)
   const [speakFn, setSpeakFn] = useState<((text: string) => void) | null>(null)
   const speakFnRef = useRef<((text: string) => void) | null>(null)
+  const interruptFnRef = useRef<(() => void) | null>(null)
   const [isListening, setIsListening] = useState(false)
+  const [avatarSpeaking, setAvatarSpeaking] = useState(false)
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
   const [activePhoto, setActivePhoto] = useState(0)
@@ -82,12 +84,18 @@ export default function VietnamPage() {
     return () => clearInterval(photoInterval.current)
   }, [photos])
 
-  const handleAvatarReady = useCallback((speak: (text: string) => void) => {
+  const handleAvatarReady = useCallback((speak: (text: string) => void, interrupt: () => void) => {
     setSpeakFn(() => speak)
     speakFnRef.current = speak
+    interruptFnRef.current = interrupt
+  }, [])
+
+  const handleInterrupt = useCallback(() => {
+    interruptFnRef.current?.()
   }, [])
 
   const handleSashaResponse = useCallback((text: string) => {
+    if (!text) return
     if (speakFnRef.current) speakFnRef.current(text)
     setEngaged(true)
     const lower = text.toLowerCase()
@@ -135,7 +143,13 @@ export default function VietnamPage() {
             className="rounded-3xl overflow-hidden border border-white/5 flex-shrink-0 transition-all duration-700"
             style={{ height: engaged ? '160px' : '60%' }}
           >
-            {started && <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} />}
+            {started && (
+              <SashaAvatar
+                onAvatarReady={handleAvatarReady}
+                isListening={isListening}
+                onAvatarSpeakingChange={setAvatarSpeaking}
+              />
+            )}
           </div>
 
           {/* PHOTOS — hero when engaged, teaser when not */}
@@ -237,6 +251,8 @@ export default function VietnamPage() {
                 onItineraryUpdate={handleItineraryUpdate}
                 onSashaResponse={handleSashaResponse}
                 onListeningChange={setIsListening}
+                avatarSpeaking={avatarSpeaking}
+                onInterrupt={handleInterrupt}
               />
             )}
 

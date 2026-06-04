@@ -77,8 +77,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         setIsConnecting(false)
         setIsListening(true)
         isListeningRef.current = true
-        // Expose gate control to parent
-        onSetGate?.((value: boolean) => { micGatedRef.current = value })
         const recorder = new MediaRecorder(stream, { mimeType })
         recorderRef.current = recorder
         recorder.ondataavailable = (e) => {
@@ -130,7 +128,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       else if (err.name === 'NotFoundError') setMicError('No microphone found')
       else setMicError(err.message || 'Could not access microphone')
     }
-  }, [onTranscript, onSpeakingChange, onInterrupt, onSetGate, stopAll])
+  }, [onTranscript, onSpeakingChange, onInterrupt, stopAll])
 
   const toggleListening = () => {
     if (isListeningRef.current) { isListeningRef.current = false; stopAll() }

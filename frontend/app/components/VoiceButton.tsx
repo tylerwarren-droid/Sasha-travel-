@@ -58,6 +58,8 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
 
   const connect = useCallback(async () => {
     if (connectedRef.current) return
+    console.log('[DG] connecting...')
+    console.log('[DG] API key present:', !!DEEPGRAM_API_KEY)
     setMicError(null)
     setIsConnecting(true)
     try {
@@ -69,7 +71,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
         : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
         : 'audio/webm'
-      console.log('[DG] connecting | mimeType:', mimeType, '| key present:', !!DEEPGRAM_API_KEY)
+      console.log('[DG] mimeType:', mimeType)
 
       const ws = new WebSocket(
         `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
@@ -78,6 +80,12 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       wsRef.current = ws
 
       ws.onopen = () => {
+        // Guard against StrictMode race: cleanup may have nulled wsRef while this WS was connecting
+        if (wsRef.current !== ws) {
+          console.log('[DG] onopen: WS superseded by cleanup, discarding')
+          ws.close()
+          return
+        }
         console.log('[DG] connected')
         setIsConnecting(false)
         setIsConnected(true)
@@ -132,7 +140,11 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       }
 
       ws.onerror = (e) => { console.error('[DG] error:', e); setMicError('Connection error') }
-      ws.onclose = (e) => { console.log('[DG] closed:', e.code, e.reason) }
+      ws.onclose = (e) => {
+        console.log('[DG] closed:', e.code, e.reason)
+        // Ensure wsRef never points to a dead socket
+        if (wsRef.current === ws) wsRef.current = null
+      }
 
     } catch (err: any) {
       setIsConnecting(false)
@@ -148,6 +160,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   }
 
   useEffect(() => {
+    console.log('[DG] connect called, autoStart:', autoStart, 'disabled:', disabled)
     if (autoStart && !disabled) connect()
     return () => stopAll()
   }, [autoStart])

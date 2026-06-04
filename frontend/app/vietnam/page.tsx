@@ -247,21 +247,7 @@ export default function VietnamPage() {
 
             {/* CHAT TAB */}
             {rightTab === 'chat' && (
-              <div className="flex flex-col h-full overflow-hidden">
-                <div className="flex gap-1.5 px-3 pt-2.5 pb-1 flex-wrap flex-shrink-0">
-                  {['Tell me about Hoi An', 'Best golf courses', 'Plan a 7 day trip', 'Phu Quoc beaches'].map(prompt => (
-                    <button
-                      key={prompt}
-                      onClick={() => handleSashaResponse(prompt)}
-                      className="text-xs rounded-full px-3 py-1 transition-opacity hover:opacity-75"
-                      style={{ background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', color: '#DAA520' }}
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  <SashaChat
+              <SashaChat
                 user={DEMO_USER}
                 itinerary={itinerary}
                 onItineraryUpdate={handleItineraryUpdate}
@@ -270,9 +256,8 @@ export default function VietnamPage() {
                 avatarSpeaking={avatarSpeaking}
                 onInterrupt={handleInterrupt}
                 autoStart={voiceReady}
-                  />
-                </div>
-              </div>
+                presetPrompts={['Tell me about Hoi An', 'Best golf courses', 'Plan a 7 day trip', 'Phu Quoc beaches']}
+              />
             )}
 
             {/* ITINERARY TAB */}

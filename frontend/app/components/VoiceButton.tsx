@@ -57,7 +57,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       console.log('[DG] Using mimeType:', mimeType)
       console.log('[DG] API key present:', !!DEEPGRAM_API_KEY)
       const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=400&utterance_end_ms=1200&vad_events=true`,
+        `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
         ['token', DEEPGRAM_API_KEY || '']
       )
       wsRef.current = ws

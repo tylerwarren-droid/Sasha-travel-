@@ -17,6 +17,7 @@ interface SashaChatProps {
   avatarSpeaking?: boolean
   onInterrupt?: () => void
   autoStart?: boolean
+  presetPrompts?: string[]
 }
 
 const GOLF_KEYWORDS = ['golf', 'tee time', 'tee-time', 'fairway', 'caddy', 'green fee', 'driving range', 'montgomerie', 'hoiana', 'bluffs', 'vinpearl golf', 'ba na hills']
@@ -30,7 +31,7 @@ function isGolfConversation(messages: any[]): boolean {
   return messages.some(m => isGolfMessage(m.content || ''))
 }
 
-export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage, emptyState, avatarSpeaking, onInterrupt, autoStart = false }: SashaChatProps) {
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, initialMessage, emptyState, avatarSpeaking, onInterrupt, autoStart = false, presetPrompts }: SashaChatProps) {
   const [messages, setMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
   )
@@ -124,6 +125,20 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
         </div>
       </div>
 
+      {presetPrompts && presetPrompts.length > 0 && (
+        <div className="flex gap-1.5 px-3 pt-2.5 pb-1 flex-wrap flex-shrink-0">
+          {presetPrompts.map(prompt => (
+            <button
+              key={prompt}
+              onClick={() => sendMessage(prompt)}
+              className="text-xs rounded-full px-3 py-1 transition-opacity hover:opacity-75"
+              style={{ background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', color: '#DAA520' }}
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
         {messages.length === 0 && emptyState}
         {messages.map((msg, i) => (

@@ -28,7 +28,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       const { token } = await tokenRes.json()
       if (!token) throw new Error('No token received')
       const sdk = await import('@heygen/liveavatar-web-sdk')
-      const { LiveAvatarSession, SessionEvent } = sdk as any
+      const { LiveAvatarSession, SessionEvent, AgentEventsEnum } = sdk as any
 
       const avatar = new LiveAvatarSession(token, {
         voiceChat: false,
@@ -47,11 +47,11 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           try { avatar.keepAlive?.() } catch(e) {}
         }, 150000)
 
-        avatar.on('avatar.speak_started', () => {
+        avatar.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, () => {
           onAvatarSpeakingChange?.(true)
         })
-        avatar.on('avatar.speak_ended', () => {
-          onAvatarSpeakingChange?.(false)
+        avatar.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
+          setTimeout(() => onAvatarSpeakingChange?.(false), 400)
         })
       })
 

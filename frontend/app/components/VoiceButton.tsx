@@ -26,14 +26,11 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   const transcriptRef = useRef('')
   const avatarSpeakingRef = useRef(false)
 
-  // Keep avatarSpeakingRef in sync with prop; pause/resume recorder to block Sasha's voice from Deepgram
+  // Keep avatarSpeakingRef in sync with prop; mute the mic track at source while avatar speaks
   useEffect(() => {
     avatarSpeakingRef.current = !!avatarSpeaking
-    if (avatarSpeaking) {
-      if (recorderRef.current?.state === 'recording') recorderRef.current.pause()
-    } else {
-      if (recorderRef.current?.state === 'paused') recorderRef.current.resume()
-    }
+    const track = streamRef.current?.getAudioTracks()[0]
+    if (track) track.enabled = !avatarSpeaking
   }, [avatarSpeaking])
 
   const stopAll = useCallback(() => {
@@ -84,9 +81,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
           console.log('[DG]', data.type, data.is_final, data.speech_final, data.channel?.alternatives?.[0]?.transcript?.substring(0,50))
 
           if (data.type === 'SpeechStarted') {
-            if (avatarSpeakingRef.current) {
-              onInterrupt?.()
-            }
             setIsSpeaking(true)
             onSpeakingChange?.(true)
           }
@@ -95,10 +89,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             const transcript = data.channel?.alternatives?.[0]?.transcript || ''
             if (transcript) transcriptRef.current = transcript
             if (data.speech_final && transcriptRef.current && transcriptRef.current.length >= 3) {
-              if (avatarSpeakingRef.current) {
-                onInterrupt?.()
-                return
-              }
               const final = transcriptRef.current
               transcriptRef.current = ''
               setIsSpeaking(false)

@@ -57,6 +57,10 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
             onGate?.(false)
           }, 400)
         })
+
+        Object.values(AgentEventsEnum).forEach((evt) => {
+          avatar.on(evt as any, (e: any) => console.log('[LA event]', evt, e))
+        })
       })
 
       avatar.on(SessionEvent.SESSION_CONNECTION_QUALITY_CHANGED, (quality: any) => {

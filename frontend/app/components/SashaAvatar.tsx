@@ -17,6 +17,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
   const keepAliveTimerRef = useRef<any>(null)
   const isReconnecting = useRef(false)
   const isMountedRef = useRef(true)
+  const gateTimeoutRef = useRef<any>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'bad' | null>(null)
@@ -26,6 +27,22 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
     if (keepAliveTimerRef.current) clearInterval(keepAliveTimerRef.current)
     setStatus('loading')
     setError('')
+
+    // Wrapper: sets a 15s safety timeout on gate-on, clears it on gate-off
+    const gate = (value: boolean) => {
+      if (value) {
+        clearTimeout(gateTimeoutRef.current)
+        gateTimeoutRef.current = setTimeout(() => {
+          console.log('[GATE] safety timeout — force ungating after 15s')
+          onGate?.(false)
+          onAvatarSpeakingChange?.(false)
+        }, 15000)
+      } else {
+        clearTimeout(gateTimeoutRef.current)
+      }
+      onGate?.(value)
+    }
+
     try {
       const tokenRes = await fetch(tokenUrl)
       const { token } = await tokenRes.json()
@@ -53,9 +70,10 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         avatar.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, () => {
           console.log('[GATE] avatar speak started → gating mic')
           onAvatarSpeakingChange?.(true)
-          onGate?.(true)
+          gate(true)
         })
         avatar.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
+          console.log('[SENTENCE] queue length:', sentenceQueueRef?.current?.length ?? 0)
           const next = sentenceQueueRef?.current?.shift()
           if (next) {
             // More sentences queued — speak immediately, keep gate on
@@ -63,16 +81,16 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           } else {
             // Queue exhausted — ungate mic after brief pause
             setTimeout(() => {
-              console.log('[GATE] avatar speak ended → ungating mic')
+              console.log('[GATE] ungating — queue empty')
               onAvatarSpeakingChange?.(false)
-              onGate?.(false)
+              gate(false)
             }, 400)
           }
         })
 
         avatar.on(AgentEventsEnum.SESSION_STOPPED, (e: any) => {
           console.log('[LA] session stopped:', e?.stop_reason)
-          onGate?.(false)
+          gate(false)
           onAvatarSpeakingChange?.(false)
         })
 
@@ -90,7 +108,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       avatar.on(SessionEvent.SESSION_DISCONNECTED, (reason: any) => {
         clearInterval(keepAliveTimerRef.current)
         onAvatarSpeakingChange?.(false)
-        onGate?.(false)
+        gate(false)
         setStatus('idle')
         console.log('[HG] session disconnected, reason:', reason, '— restarting')
         if (!isReconnecting.current && isMountedRef.current) {
@@ -114,17 +132,17 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
       const speakFn = (text: string) => {
         try {
-          onGate?.(true)
+          gate(true)
           avatar.repeat(text)
         } catch(e) {
           console.error('Avatar speak error:', e)
-          onGate?.(false)
+          gate(false)
         }
       }
       const interruptFn = () => {
         try {
           avatar.interrupt?.()
-          onGate?.(false)
+          gate(false)
           onAvatarSpeakingChange?.(false)
         } catch(e) {}
       }
@@ -151,6 +169,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
     return () => {
       isMountedRef.current = false
       clearTimeout(reconnectTimerRef.current)
+      clearTimeout(gateTimeoutRef.current)
       clearInterval(keepAliveTimerRef.current)
       avatarRef.current?.stop?.()
     }

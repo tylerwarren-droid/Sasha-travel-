@@ -107,7 +107,7 @@ export default function VietnamPage() {
       .replace(/([.!?])\s+/g, '$1\n')
       .split('\n')
       .map(s => s.trim())
-      .filter(Boolean)
+      .filter(s => s.length > 0)
     const [first, ...rest] = sentences.length > 0 ? sentences : [text]
     sentenceQueueRef.current = rest
     if (speakFnRef.current && first) speakFnRef.current(first)

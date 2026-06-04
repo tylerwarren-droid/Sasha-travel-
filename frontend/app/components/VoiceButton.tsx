@@ -26,9 +26,14 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   const transcriptRef = useRef('')
   const avatarSpeakingRef = useRef(false)
 
-  // Keep avatarSpeakingRef in sync with prop
+  // Keep avatarSpeakingRef in sync with prop; pause/resume recorder to block Sasha's voice from Deepgram
   useEffect(() => {
     avatarSpeakingRef.current = !!avatarSpeaking
+    if (avatarSpeaking) {
+      if (recorderRef.current?.state === 'recording') recorderRef.current.pause()
+    } else {
+      if (recorderRef.current?.state === 'paused') recorderRef.current.resume()
+    }
   }, [avatarSpeaking])
 
   const stopAll = useCallback(() => {

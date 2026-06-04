@@ -48,7 +48,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
     setInput('')
     setIsLoading(true)
     try {
-      const response = await axios.post(API_URL + '/conductor', {
+      const response = await axios.post(API_URL + '/api/agents/conductor', {
         message: content,
         conversation_history: historyBeforeMessage
       })

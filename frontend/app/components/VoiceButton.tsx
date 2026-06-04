@@ -81,7 +81,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
           if (data.type === 'SpeechStarted') {
             if (avatarSpeakingRef.current) {
               onInterrupt?.()
-              return
             }
             setIsSpeaking(true)
             onSpeakingChange?.(true)

@@ -89,7 +89,7 @@ export default function VietnamPage() {
     setSpeakFn(() => speak)
     speakFnRef.current = speak
     interruptFnRef.current = interrupt
-    setTimeout(() => setVoiceReady(true), 6000)
+    setTimeout(() => setVoiceReady(true), 2000)
   }, [])
 
   const handleInterrupt = useCallback(() => {

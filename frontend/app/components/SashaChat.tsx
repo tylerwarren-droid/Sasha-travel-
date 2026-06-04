@@ -43,6 +43,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
 
   const sendMessage = async (content: string) => {
     if (!content.trim()) return
+    console.log('[Conductor] API_URL:', API_URL)
     const historyBeforeMessage = messages  // snapshot before appending
     setMessages(prev => [...prev, { role: 'user', content }])
     setInput('')
@@ -61,7 +62,8 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
       }
       if (onSashaResponse) onSashaResponse(sashaResponse)
       if (photos?.length > 0) onPhotos?.(photos)
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[Conductor] error:', error?.response?.status, error?.response?.data, error?.message)
       setMessages(prev => [...prev, { role: 'assistant', content: "I ran into a small issue. Could you try again?" }])
     } finally {
       setIsLoading(false)

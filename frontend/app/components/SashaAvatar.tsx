@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, RefObject } from 'react'
 
 interface SashaAvatarProps {
   onAvatarReady: (speakFn: (text: string) => void, interruptFn: () => void) => void
@@ -7,14 +7,16 @@ interface SashaAvatarProps {
   tokenUrl?: string
   onAvatarSpeakingChange?: (speaking: boolean) => void
   onGate?: (value: boolean) => void
+  sentenceQueueRef?: RefObject<string[]>
 }
 
-export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate }: SashaAvatarProps) {
+export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate, sentenceQueueRef }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const avatarRef = useRef<any>(null)
   const reconnectTimerRef = useRef<any>(null)
   const keepAliveTimerRef = useRef<any>(null)
   const isReconnecting = useRef(false)
+  const isMountedRef = useRef(true)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'bad' | null>(null)
@@ -54,11 +56,18 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           onGate?.(true)
         })
         avatar.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
-          setTimeout(() => {
-            console.log('[GATE] avatar speak ended → ungating mic')
-            onAvatarSpeakingChange?.(false)
-            onGate?.(false)
-          }, 400)
+          const next = sentenceQueueRef?.current?.shift()
+          if (next) {
+            // More sentences queued — speak immediately, keep gate on
+            speakFn(next)
+          } else {
+            // Queue exhausted — ungate mic after brief pause
+            setTimeout(() => {
+              console.log('[GATE] avatar speak ended → ungating mic')
+              onAvatarSpeakingChange?.(false)
+              onGate?.(false)
+            }, 400)
+          }
         })
 
         avatar.on(AgentEventsEnum.SESSION_STOPPED, (e: any) => {
@@ -83,8 +92,8 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         onAvatarSpeakingChange?.(false)
         onGate?.(false)
         setStatus('idle')
-        const shouldReconnect = !isReconnecting.current && (reason === 'UNKNOWN_REASON' || reason === undefined || reason === null)
-        if (shouldReconnect) {
+        console.log('[HG] session disconnected, reason:', reason, '— restarting')
+        if (!isReconnecting.current && isMountedRef.current) {
           isReconnecting.current = true
           reconnectTimerRef.current = setTimeout(() => { avatarRef.current?.stop?.(); initAvatar() }, 2000)
         }
@@ -101,6 +110,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
       await avatar.start()
       avatarRef.current = avatar
+      console.log('[HG] maxSessionDuration:', avatar.maxSessionDuration)
 
       const speakFn = (text: string) => {
         try {
@@ -136,8 +146,10 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
   }, [status, initAvatar])
 
   useEffect(() => {
+    isMountedRef.current = true
     initAvatar()
     return () => {
+      isMountedRef.current = false
       clearTimeout(reconnectTimerRef.current)
       clearInterval(keepAliveTimerRef.current)
       avatarRef.current?.stop?.()

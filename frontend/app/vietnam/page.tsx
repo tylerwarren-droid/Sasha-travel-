@@ -60,6 +60,7 @@ export default function VietnamPage() {
   const [rightTab, setRightTab] = useState<'chat' | 'itinerary' | 'preferences' | 'trips'>('chat')
   const [started, setStarted] = useState(false)
   const photoInterval = useRef<any>(null)
+  const sentenceQueueRef = useRef<string[]>([])
 
   useEffect(() => {
     const fetchPhotos = async () => {
@@ -95,12 +96,21 @@ export default function VietnamPage() {
   }, [])
 
   const handleInterrupt = useCallback(() => {
+    sentenceQueueRef.current = []  // discard queued sentences on interrupt
     interruptFnRef.current?.()
   }, [])
 
   const handleSashaResponse = useCallback((text: string) => {
     if (!text) return
-    if (speakFnRef.current) speakFnRef.current(text)
+    // Split into sentences so each boundary is a natural interrupt point
+    const sentences = text.trim()
+      .replace(/([.!?])\s+/g, '$1\n')
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
+    const [first, ...rest] = sentences.length > 0 ? sentences : [text]
+    sentenceQueueRef.current = rest
+    if (speakFnRef.current && first) speakFnRef.current(first)
     setEngaged(true)
     const lower = text.toLowerCase()
     const golfCourses = ['montgomerie', 'hoiana', 'bluffs', 'ba na hills', 'vinpearl golf', 'laguna golf', 'legend danang']
@@ -152,6 +162,7 @@ export default function VietnamPage() {
                 onAvatarReady={handleAvatarReady}
                 isListening={isListening}
                 onGate={handleGate}
+                sentenceQueueRef={sentenceQueueRef}
               />
             )}
           </div>
@@ -256,6 +267,7 @@ export default function VietnamPage() {
                 onSashaResponse={handleSashaResponse}
                 onListeningChange={setIsListening}
                 onSetGate={handleSetGate}
+                onInterrupt={handleInterrupt}
                 presetPrompts={['Tell me about Hoi An', 'Best golf courses', 'Plan a 7 day trip', 'Phu Quoc beaches']}
                 messages={chatMessages}
                 setMessages={setChatMessages}

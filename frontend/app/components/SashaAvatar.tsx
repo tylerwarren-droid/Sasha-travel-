@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState, useCallback, RefObject } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 
 interface SashaAvatarProps {
   onAvatarReady: (speakFn: (text: string) => void, interruptFn: () => void) => void
@@ -7,11 +7,9 @@ interface SashaAvatarProps {
   tokenUrl?: string
   onAvatarSpeakingChange?: (speaking: boolean) => void
   onGate?: (value: boolean) => void
-  sentenceQueueRef?: RefObject<string[]>
-  getSentenceQueueLength?: () => number
 }
 
-export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate, sentenceQueueRef, getSentenceQueueLength }: SashaAvatarProps) {
+export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const avatarRef = useRef<any>(null)
   const reconnectTimerRef = useRef<any>(null)
@@ -56,8 +54,8 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
     const gateOffSoon = () => {
       clearTimeout(ungateTimer)
       ungateTimer = setTimeout(() => {
-        if (active === 0 && (getSentenceQueueLength?.() ?? 0) === 0) {
-          console.log('[GATE] ungating — queue empty, active 0')
+        if (active === 0) {
+          console.log('[GATE] ungating — active 0')
           onAvatarSpeakingChange?.(false)
           gate(false)
         }
@@ -104,12 +102,8 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
           avatar.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
             active = Math.max(0, active - 1)
-            console.log('[SENTENCE] queue length:', sentenceQueueRef?.current?.length ?? 0, 'active:', active)
-            const next = sentenceQueueRef?.current?.shift()
-            if (next) {
-              // More sentences queued — speak immediately; gateOn() inside speakFn keeps gate on
-              speakFn(next)
-            } else if (active === 0) {
+            console.log('[GATE] speak ended, active:', active)
+            if (active === 0) {
               gateOffSoon()
             }
           })

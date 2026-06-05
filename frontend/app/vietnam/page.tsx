@@ -58,7 +58,6 @@ export default function VietnamPage() {
   const [rightTab, setRightTab] = useState<'chat' | 'itinerary' | 'preferences' | 'trips'>('chat')
   const [started, setStarted] = useState(false)
   const photoInterval = useRef<any>(null)
-  const sentenceQueueRef = useRef<string[]>([])
 
   // Initial background photos — updated per-turn by conductor via onPhotos
   useEffect(() => {
@@ -88,7 +87,6 @@ export default function VietnamPage() {
   }, [])
 
   const handleInterrupt = useCallback(() => {
-    sentenceQueueRef.current = []  // discard queued sentences on interrupt
     interruptFnRef.current?.()
   }, [])
 
@@ -101,17 +99,9 @@ export default function VietnamPage() {
 
   const handleSashaResponse = useCallback((text: string) => {
     if (!text) return
-    // Split into sentences so each boundary is a natural interrupt point
-    const sentences = text.trim()
-      .replace(/([.!?])\s+/g, '$1\n')
-      .split('\n')
-      .map(s => s.trim())
-      .filter(s => s.length > 0)
-    const [first, ...rest] = sentences.length > 0 ? sentences : [text]
-    sentenceQueueRef.current = rest
-    if (speakFnRef.current && first) speakFnRef.current(first)
+    speakFnRef.current?.(text)
     setEngaged(true)
-  }, [speakFn])
+  }, [])
 
   const handleItineraryUpdate = useCallback((newItinerary: Itinerary) => {
     setItinerary(newItinerary)
@@ -152,8 +142,6 @@ export default function VietnamPage() {
                 onAvatarReady={handleAvatarReady}
                 isListening={isListening}
                 onGate={handleGate}
-                sentenceQueueRef={sentenceQueueRef}
-                getSentenceQueueLength={() => sentenceQueueRef.current.length}
               />
             )}
           </div>

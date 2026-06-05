@@ -153,6 +153,7 @@ export default function VietnamPage() {
                 isListening={isListening}
                 onGate={handleGate}
                 sentenceQueueRef={sentenceQueueRef}
+                getSentenceQueueLength={() => sentenceQueueRef.current.length}
               />
             )}
           </div>

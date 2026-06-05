@@ -8,9 +8,10 @@ interface SashaAvatarProps {
   onAvatarSpeakingChange?: (speaking: boolean) => void
   onGate?: (value: boolean) => void
   sentenceQueueRef?: RefObject<string[]>
+  getSentenceQueueLength?: () => number
 }
 
-export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate, sentenceQueueRef }: SashaAvatarProps) {
+export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate, sentenceQueueRef, getSentenceQueueLength }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const avatarRef = useRef<any>(null)
   const reconnectTimerRef = useRef<any>(null)
@@ -55,12 +56,12 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
     const gateOffSoon = () => {
       clearTimeout(ungateTimer)
       ungateTimer = setTimeout(() => {
-        if (active === 0) {
+        if (active === 0 && (getSentenceQueueLength?.() ?? 0) === 0) {
           console.log('[GATE] ungating — queue empty, active 0')
           onAvatarSpeakingChange?.(false)
           gate(false)
         }
-      }, 400)
+      }, 500)
     }
 
     try {
@@ -139,8 +140,14 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         clearTimeout(ungateTimer)
         gate(false)
         onAvatarSpeakingChange?.(false)
+        console.log('[HG] session disconnected, reason:', reason)
+        if (reason === 'MAX_DURATION_REACHED') {
+          setError('Session ended — tap to start a new conversation')
+          setStatus('error')
+          return
+        }
         setStatus('idle')
-        console.log('[HG] session disconnected, reason:', reason, '— restarting')
+        console.log('[HG] restarting...')
         if (!isReconnecting.current && isMountedRef.current) {
           isReconnecting.current = true
           reconnectTimerRef.current = setTimeout(() => { avatarRef.current?.stop?.(); initAvatar() }, 2000)
@@ -162,6 +169,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
       const speakFn = (text: string) => {
         try {
+          if (active > 0) avatar.interrupt?.()
           gateOn()
           avatar.repeat(text)
         } catch(e) {

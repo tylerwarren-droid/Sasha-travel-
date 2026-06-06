@@ -7,9 +7,10 @@ interface SashaAvatarProps {
   tokenUrl?: string
   onAvatarSpeakingChange?: (speaking: boolean) => void
   onGate?: (value: boolean) => void
+  onAvatarSpeechBuffer?: (getText: () => string) => void
 }
 
-export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate }: SashaAvatarProps) {
+export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate, onAvatarSpeechBuffer }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const avatarRef = useRef<any>(null)
   const reconnectTimerRef = useRef<any>(null)
@@ -17,6 +18,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
   const isReconnecting = useRef(false)
   const isMountedRef = useRef(true)
   const gateTimeoutRef = useRef<any>(null)
+  const avatarSpeechBufferRef = useRef<{ text: string; ts: number }[]>([])
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'bad' | null>(null)
@@ -59,7 +61,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           onAvatarSpeakingChange?.(false)
           gate(false)
         }
-      }, 500)
+      }, 1500)
     }
 
     try {
@@ -116,6 +118,13 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
             onAvatarSpeakingChange?.(false)
           })
 
+          const addToSpeechBuffer = (e: any) => {
+            const text = typeof e === 'string' ? e : (e?.text || e?.transcript || '')
+            if (text) avatarSpeechBufferRef.current.push({ text, ts: Date.now() })
+          }
+          avatar.on(AgentEventsEnum.AVATAR_TRANSCRIPTION_CHUNK, addToSpeechBuffer)
+          avatar.on(AgentEventsEnum.AVATAR_TRANSCRIPTION, addToSpeechBuffer)
+
           Object.values(AgentEventsEnum).forEach((evt) => {
             avatar.on(evt as any, (e: any) => console.log('[LA event]', evt, e))
           })
@@ -161,6 +170,12 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       avatarRef.current = avatar
       console.log('[HG] sessionId:', avatar.sessionId, 'maxDuration:', avatar.maxSessionDuration)
 
+      onAvatarSpeechBuffer?.(() => {
+        const cutoff = Date.now() - 15000
+        avatarSpeechBufferRef.current = avatarSpeechBufferRef.current.filter(e => e.ts > cutoff)
+        return avatarSpeechBufferRef.current.map(e => e.text).join(' ')
+      })
+
       const speakFn = (text: string) => {
         try {
           if (active > 0) avatar.interrupt?.()
@@ -186,7 +201,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       setError(err.message || 'Failed to connect')
       setStatus('error')
     }
-  }, [tokenUrl, onAvatarReady, onAvatarSpeakingChange, onGate])
+  }, [tokenUrl, onAvatarReady, onAvatarSpeakingChange, onGate, onAvatarSpeechBuffer])
 
   useEffect(() => {
     const handleVisibilityChange = () => {

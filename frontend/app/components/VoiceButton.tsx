@@ -10,11 +10,14 @@ interface VoiceButtonProps {
   avatarSpeaking?: boolean
   onInterrupt?: () => void
   onSetGate?: (gate: (value: boolean) => void) => void
+  avatarSpeechGetter?: () => string
 }
 
 const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY
 
-export default function VoiceButton({ onTranscript, disabled, autoStart = false, onSpeakingChange, onInterrupt, onSetGate }: VoiceButtonProps) {
+const normalizeText = (t: string) => t.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean)
+
+export default function VoiceButton({ onTranscript, disabled, autoStart = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter }: VoiceButtonProps) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -32,6 +35,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   // Ref so the worklet closure always sees the latest onInterrupt prop
   const onInterruptRef = useRef(onInterrupt)
   useEffect(() => { onInterruptRef.current = onInterrupt }, [onInterrupt])
+  const ungatedAtRef = useRef<number>(0)
 
   // Expose gate to parent on mount — gate is a pure ref flag, no audio pipeline changes
   useEffect(() => {
@@ -39,6 +43,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       console.log('[GATE] set to', value)
       micGatedRef.current = value
       if (!value) {
+        ungatedAtRef.current = Date.now()
         transcriptRef.current = ''
         setIsSpeaking(false)
       }
@@ -123,6 +128,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             if (rms > 0.0005) {
               onInterruptRef.current?.()
               micGatedRef.current = false  // open mic immediately; gate setter fires async
+              ungatedAtRef.current = Date.now()
             } else {
               return  // speaker bleed, drop frame
             }
@@ -150,6 +156,24 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             setIsSpeaking(true)
             onSpeakingChange?.(true)
           }
+
+          const isEcho = (text: string): boolean => {
+            if (Date.now() - ungatedAtRef.current < 1500) {
+              console.log('[ECHO] discarded (too soon after ungate):', text)
+              return true
+            }
+            const tWords = normalizeText(text)
+            const bWords = new Set(normalizeText(avatarSpeechGetter?.() ?? ''))
+            if (tWords.length > 0 && bWords.size > 0) {
+              const overlap = tWords.filter(w => bWords.has(w)).length / tWords.length
+              if (overlap >= 0.7) {
+                console.log('[ECHO] discarded:', text)
+                return true
+              }
+            }
+            return false
+          }
+
           // Only process is_final results — ignore interim results entirely (BUG 4)
           if (data.type === 'Results' && data.is_final === true) {
             const transcript = data.channel?.alternatives?.[0]?.transcript || ''
@@ -162,6 +186,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
               if (final === lastFinal && Date.now() - lastFinalAt < 5000) return
               lastFinal = final
               lastFinalAt = Date.now()
+              if (isEcho(final)) return
               onTranscript(final)
             }
           }
@@ -173,6 +198,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             if (final === lastFinal && Date.now() - lastFinalAt < 5000) return
             lastFinal = final
             lastFinalAt = Date.now()
+            if (isEcho(final)) return
             onTranscript(final)
           }
         } catch(e) {}

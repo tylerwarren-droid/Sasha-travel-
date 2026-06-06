@@ -58,6 +58,10 @@ export default function VietnamPage() {
   const [rightTab, setRightTab] = useState<'chat' | 'itinerary' | 'preferences' | 'trips'>('chat')
   const [started, setStarted] = useState(false)
   const photoInterval = useRef<any>(null)
+  const avatarSpeechGetterRef = useRef<(() => string) | null>(null)
+  const handleAvatarSpeechBuffer = useCallback((getter: () => string) => {
+    avatarSpeechGetterRef.current = getter
+  }, [])
 
   // Initial background photos — updated per-turn by conductor via onPhotos
   useEffect(() => {
@@ -142,6 +146,7 @@ export default function VietnamPage() {
                 onAvatarReady={handleAvatarReady}
                 isListening={isListening}
                 onGate={handleGate}
+                onAvatarSpeechBuffer={handleAvatarSpeechBuffer}
               />
             )}
           </div>
@@ -251,6 +256,7 @@ export default function VietnamPage() {
                 presetPrompts={['Tell me about Hoi An', 'Best golf courses', 'Plan a 7 day trip', 'Phu Quoc beaches']}
                 messages={chatMessages}
                 setMessages={setChatMessages}
+                avatarSpeechGetter={() => avatarSpeechGetterRef.current?.() ?? ''}
               />
             )}
 

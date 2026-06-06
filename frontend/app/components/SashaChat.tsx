@@ -18,6 +18,7 @@ interface SashaChatProps {
   onInterrupt?: () => void
   presetPrompts?: string[]
   onSetGate?: (gate: (value: boolean) => void) => void
+  avatarSpeechGetter?: () => string
   // Lifted state — pass from parent to preserve history across remounts
   messages?: any[]
   setMessages?: React.Dispatch<React.SetStateAction<any[]>>
@@ -25,7 +26,7 @@ interface SashaChatProps {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
-export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, messages: propMessages, setMessages: propSetMessages }: SashaChatProps) {
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, messages: propMessages, setMessages: propSetMessages }: SashaChatProps) {
   const [localMessages, setLocalMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
   )
@@ -144,6 +145,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
             avatarSpeaking={avatarSpeaking}
             onInterrupt={onInterrupt}
             onSetGate={onSetGate}
+            avatarSpeechGetter={avatarSpeechGetter}
           />
           <input
             value={input}

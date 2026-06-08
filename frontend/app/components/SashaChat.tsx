@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, MutableRefObject } from 'react'
 import { Send, Loader2 } from 'lucide-react'
 import { User, Itinerary } from '@/types'
 import VoiceButton from './VoiceButton'
@@ -19,6 +19,8 @@ interface SashaChatProps {
   presetPrompts?: string[]
   onSetGate?: (gate: (value: boolean) => void) => void
   avatarSpeechGetter?: () => string
+  isRespondingRef?: MutableRefObject<boolean>
+  readyToListen?: boolean
   // Lifted state — pass from parent to preserve history across remounts
   messages?: any[]
   setMessages?: React.Dispatch<React.SetStateAction<any[]>>
@@ -26,7 +28,7 @@ interface SashaChatProps {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
-export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, messages: propMessages, setMessages: propSetMessages }: SashaChatProps) {
+export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, messages: propMessages, setMessages: propSetMessages }: SashaChatProps) {
   const [localMessages, setLocalMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
   )
@@ -37,17 +39,6 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
-  const isRespondingRef = useRef(false)
-
-  // Clear single-flight lock when avatar finishes speaking (avatarSpeaking: true → false)
-  const prevAvatarSpeakingRef = useRef(false)
-  useEffect(() => {
-    if (prevAvatarSpeakingRef.current === true && !avatarSpeaking) {
-      isRespondingRef.current = false
-      console.log('[LOCK] released — avatar done speaking')
-    }
-    prevAvatarSpeakingRef.current = !!avatarSpeaking
-  }, [avatarSpeaking])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -55,11 +46,10 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
 
   const sendMessage = async (content: string) => {
     if (!content.trim()) return
-    if (isRespondingRef.current) {
-      console.log('[LOCK] ignoring transcript — already responding')
+    if (isRespondingRef?.current) {
+      console.log('[LOCK] ignoring transcript — Sasha is responding')
       return
     }
-    isRespondingRef.current = true
     console.log('[Conductor] API_URL:', API_URL)
     const historyBeforeMessage = messages  // snapshot before appending
     setMessages(prev => [...prev, { role: 'user', content }])
@@ -77,16 +67,10 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
       } else {
         setMessages(prev => [...prev, { role: 'assistant', content: sashaResponse }])
       }
-      if (onSashaResponse && sashaResponse) {
-        onSashaResponse(sashaResponse)
-        // Lock held — released by avatarSpeaking → false transition
-      } else {
-        isRespondingRef.current = false  // no speech expected, release immediately
-      }
+      if (onSashaResponse) onSashaResponse(sashaResponse)
       if (photos?.length > 0) onPhotos?.(photos)
     } catch (error: any) {
       console.error('[Conductor] error:', error?.response?.status, error?.response?.data, error?.message)
-      isRespondingRef.current = false  // release on error
       setMessages(prev => [...prev, { role: 'assistant', content: "I ran into a small issue. Could you try again?" }])
     } finally {
       setIsLoading(false)
@@ -164,6 +148,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
           <VoiceButton
             onTranscript={(text) => sendMessage(text)}
             autoStart={true}
+            readyToListen={readyToListen}
             avatarSpeaking={avatarSpeaking}
             onInterrupt={onInterrupt}
             onSetGate={onSetGate}

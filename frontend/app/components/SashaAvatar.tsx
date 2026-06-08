@@ -8,9 +8,11 @@ interface SashaAvatarProps {
   onAvatarSpeakingChange?: (speaking: boolean) => void
   onGate?: (value: boolean) => void
   onAvatarSpeechBuffer?: (getText: () => string) => void
+  onReadyToListen?: () => void
+  onSashaFinished?: () => void
 }
 
-export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate, onAvatarSpeechBuffer }: SashaAvatarProps) {
+export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate, onAvatarSpeechBuffer, onReadyToListen, onSashaFinished }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const avatarRef = useRef<any>(null)
   const reconnectTimerRef = useRef<any>(null)
@@ -19,6 +21,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
   const isMountedRef = useRef(true)
   const gateTimeoutRef = useRef<any>(null)
   const avatarSpeechBufferRef = useRef<{ text: string; ts: number }[]>([])
+  const hasOpenedMicRef = useRef(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'bad' | null>(null)
@@ -41,6 +44,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           console.log('[GATE] safety timeout — force ungating after 15s')
           onGate?.(false)
           onAvatarSpeakingChange?.(false)
+          onSashaFinished?.()
         }, 15000)
       } else {
         clearTimeout(gateTimeoutRef.current)
@@ -60,6 +64,12 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           console.log('[GATE] ungating — active 0')
           onAvatarSpeakingChange?.(false)
           gate(false)
+          onSashaFinished?.()
+          if (!hasOpenedMicRef.current) {
+            hasOpenedMicRef.current = true
+            console.log('[MIC] opening mic after first speak ended')
+            onReadyToListen?.()
+          }
         }
       }, 1500)
     }
@@ -116,6 +126,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
             clearTimeout(ungateTimer)
             gate(false)
             onAvatarSpeakingChange?.(false)
+            onSashaFinished?.()
           })
 
           const addToSpeechBuffer = (e: any) => {
@@ -143,6 +154,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         clearTimeout(ungateTimer)
         gate(false)
         onAvatarSpeakingChange?.(false)
+        onSashaFinished?.()
         console.log('[HG] session disconnected, reason:', reason)
         if (reason === 'MAX_DURATION_REACHED') {
           setError('Session ended — tap to start a new conversation')
@@ -201,7 +213,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       setError(err.message || 'Failed to connect')
       setStatus('error')
     }
-  }, [tokenUrl, onAvatarReady, onAvatarSpeakingChange, onGate, onAvatarSpeechBuffer])
+  }, [tokenUrl, onAvatarReady, onAvatarSpeakingChange, onGate, onAvatarSpeechBuffer, onReadyToListen, onSashaFinished])
 
   useEffect(() => {
     const handleVisibilityChange = () => {

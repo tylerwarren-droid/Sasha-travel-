@@ -59,6 +59,8 @@ export default function VietnamPage() {
   const [started, setStarted] = useState(false)
   const photoInterval = useRef<any>(null)
   const lastRepeatTextRef = useRef<string>('')
+  const isRespondingRef = useRef(false)
+  const [voiceReady, setVoiceReady] = useState(false)
   const [isAvatarSpeaking, setIsAvatarSpeaking] = useState(false)
 
   // Initial background photos — updated per-turn by conductor via onPhotos
@@ -99,9 +101,16 @@ export default function VietnamPage() {
     }
   }, [])
 
+  const handleSashaFinished = useCallback(() => {
+    isRespondingRef.current = false
+    console.log('[LOCK] released — Sasha finished speaking')
+  }, [])
+
   const handleSashaResponse = useCallback((text: string) => {
     if (!text) return
     lastRepeatTextRef.current = text
+    isRespondingRef.current = true
+    console.log('[LOCK] acquired — Sasha speaking')
     speakFnRef.current?.(text)
     setEngaged(true)
   }, [])
@@ -146,6 +155,8 @@ export default function VietnamPage() {
                 isListening={isListening}
                 onGate={handleGate}
                 onAvatarSpeakingChange={setIsAvatarSpeaking}
+                onReadyToListen={() => setVoiceReady(true)}
+                onSashaFinished={handleSashaFinished}
               />
             )}
           </div>
@@ -257,6 +268,8 @@ export default function VietnamPage() {
                 setMessages={setChatMessages}
                 avatarSpeaking={isAvatarSpeaking}
                 avatarSpeechGetter={() => lastRepeatTextRef.current}
+                isRespondingRef={isRespondingRef}
+                readyToListen={voiceReady}
               />
             )}
 

@@ -6,6 +6,7 @@ interface VoiceButtonProps {
   onTranscript: (text: string) => void
   disabled?: boolean
   autoStart?: boolean
+  readyToListen?: boolean
   onSpeakingChange?: (isSpeaking: boolean) => void
   avatarSpeaking?: boolean
   onInterrupt?: () => void
@@ -17,7 +18,7 @@ const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY
 
 const normalizeText = (t: string) => t.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean)
 
-export default function VoiceButton({ onTranscript, disabled, autoStart = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter }: VoiceButtonProps) {
+export default function VoiceButton({ onTranscript, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter }: VoiceButtonProps) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -220,10 +221,13 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   }
 
   useEffect(() => {
-    console.log('[DG] connect called, autoStart:', autoStart, 'disabled:', disabled)
-    if (autoStart && !disabled) connect()
+    console.log('[DG] readyToListen:', readyToListen, 'autoStart:', autoStart, 'disabled:', disabled)
+    if (autoStart && readyToListen && !disabled) connect()
+  }, [readyToListen])
+
+  useEffect(() => {
     return () => stopAll()
-  }, [autoStart])
+  }, [])
 
   return (
     <div className="flex flex-col items-center gap-1">

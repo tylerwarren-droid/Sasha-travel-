@@ -35,7 +35,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   // Ref so the worklet closure always sees the latest onInterrupt prop
   const onInterruptRef = useRef(onInterrupt)
   useEffect(() => { onInterruptRef.current = onInterrupt }, [onInterrupt])
-  const ungatedAtRef = useRef<number>(0)
 
   // Expose gate to parent on mount — gate is a pure ref flag, no audio pipeline changes
   useEffect(() => {
@@ -43,7 +42,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       console.log('[GATE] set to', value)
       micGatedRef.current = value
       if (!value) {
-        ungatedAtRef.current = Date.now()
         transcriptRef.current = ''
         setIsSpeaking(false)
       }
@@ -128,7 +126,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             if (rms > 0.0005) {
               onInterruptRef.current?.()
               micGatedRef.current = false  // open mic immediately; gate setter fires async
-              ungatedAtRef.current = Date.now()
             } else {
               return  // speaker bleed, drop frame
             }
@@ -158,10 +155,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
           }
 
           const isEcho = (text: string): boolean => {
-            if (Date.now() - ungatedAtRef.current < 1500) {
-              console.log('[ECHO] discarded (too soon after ungate):', text)
-              return true
-            }
             const tWords = normalizeText(text)
             const bWords = new Set(normalizeText(avatarSpeechGetter?.() ?? ''))
             if (tWords.length > 0 && bWords.size > 0) {
@@ -174,25 +167,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             return false
           }
 
-          // Only process is_final results — ignore interim results entirely (BUG 4)
-          if (data.type === 'Results' && data.is_final === true) {
-            const transcript = data.channel?.alternatives?.[0]?.transcript || ''
-            if (transcript) transcriptRef.current = transcript
-            if (transcriptRef.current && transcriptRef.current.length >= 3) {
-              const final = transcriptRef.current
-              transcriptRef.current = ''
-              setIsSpeaking(false)
-              onSpeakingChange?.(false)
-              if (final === lastFinal && Date.now() - lastFinalAt < 5000) return
-              lastFinal = final
-              lastFinalAt = Date.now()
-              if (isEcho(final)) return
-              onTranscript(final)
-            }
-          }
-          if (data.type === 'UtteranceEnd' && transcriptRef.current && transcriptRef.current.length >= 3) {
-            const final = transcriptRef.current
-            transcriptRef.current = ''
+          const fireTranscript = (final: string) => {
             setIsSpeaking(false)
             onSpeakingChange?.(false)
             if (final === lastFinal && Date.now() - lastFinalAt < 5000) return
@@ -200,6 +175,27 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             lastFinalAt = Date.now()
             if (isEcho(final)) return
             onTranscript(final)
+          }
+
+          // Accumulate is_final fragments; fire only when speech_final === true
+          if (data.type === 'Results' && data.is_final === true) {
+            const fragment = data.channel?.alternatives?.[0]?.transcript || ''
+            if (fragment) {
+              transcriptRef.current = transcriptRef.current
+                ? `${transcriptRef.current} ${fragment}`
+                : fragment
+            }
+            if (data.speech_final === true && transcriptRef.current.length >= 3) {
+              const final = transcriptRef.current
+              transcriptRef.current = ''
+              fireTranscript(final)
+            }
+          }
+          // UtteranceEnd fallback — fires if speech_final never came
+          if (data.type === 'UtteranceEnd' && transcriptRef.current.length >= 3) {
+            const final = transcriptRef.current
+            transcriptRef.current = ''
+            fireTranscript(final)
           }
         } catch(e) {}
       }

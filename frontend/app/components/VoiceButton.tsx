@@ -45,6 +45,10 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       if (!value) {
         transcriptRef.current = ''
         setIsSpeaking(false)
+        // Flush Deepgram's buffer so avatar speech captured during gate-on is discarded
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'Finalize' }))
+        }
       }
     })
     console.log('[GATE] registered, present:', !!onSetGate)

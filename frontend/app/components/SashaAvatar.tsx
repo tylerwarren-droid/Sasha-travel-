@@ -19,7 +19,8 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
   const keepAliveTimerRef = useRef<any>(null)
   const isReconnecting = useRef(false)
   const isMountedRef = useRef(true)
-  const gateTimeoutRef = useRef<any>(null)
+  const safetyTimerRef = useRef<any>(null)
+  const trailingTimerRef = useRef<any>(null)
   const avatarSpeechBufferRef = useRef<{ text: string; ts: number }[]>([])
   const hasOpenedMicRef = useRef(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
@@ -32,46 +33,20 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
     setStatus('loading')
     setError('')
 
-    // State machine for concurrent speak events (BUG 1+2)
-    let active = 0
-    let ungateTimer: ReturnType<typeof setTimeout> | undefined
+    const clearAllTimers = () => {
+      clearTimeout(safetyTimerRef.current)
+      clearTimeout(trailingTimerRef.current)
+    }
 
-    // Safety timeout wrapper — if gate stays on >15s, force-ungate
-    const gate = (value: boolean) => {
-      if (value) {
-        clearTimeout(gateTimeoutRef.current)
-        gateTimeoutRef.current = setTimeout(() => {
-          console.log('[GATE] safety timeout — force ungating after 15s')
-          onGate?.(false)
-          onAvatarSpeakingChange?.(false)
-          onSashaFinished?.()
-        }, 15000)
-      } else {
-        clearTimeout(gateTimeoutRef.current)
+    const openGate = () => {
+      onGate?.(false)
+      onAvatarSpeakingChange?.(false)
+      onSashaFinished?.()
+      if (!hasOpenedMicRef.current) {
+        hasOpenedMicRef.current = true
+        console.log('[MIC] opening mic after first speak ended')
+        onReadyToListen?.()
       }
-      onGate?.(value)
-    }
-
-    const gateOn = () => {
-      clearTimeout(ungateTimer)
-      gate(true)
-    }
-
-    const gateOffSoon = () => {
-      clearTimeout(ungateTimer)
-      ungateTimer = setTimeout(() => {
-        if (active === 0) {
-          console.log('[GATE] ungating — active 0')
-          onAvatarSpeakingChange?.(false)
-          gate(false)
-          onSashaFinished?.()
-          if (!hasOpenedMicRef.current) {
-            hasOpenedMicRef.current = true
-            console.log('[MIC] opening mic after first speak ended')
-            onReadyToListen?.()
-          }
-        }
-      }, 1500)
     }
 
     try {
@@ -106,25 +81,22 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           console.log('[HG] registering speak handlers')
 
           avatar.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, () => {
-            active++
-            console.log('[GATE] speak started, active:', active)
-            onAvatarSpeakingChange?.(true)
-            gateOn()
+            console.log('[HG] speak started')
           })
 
           avatar.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
-            active = Math.max(0, active - 1)
-            console.log('[GATE] speak ended, active:', active)
-            if (active === 0) {
-              gateOffSoon()
-            }
+            console.log('[GATE] speak ended — 900ms trailing timer')
+            clearTimeout(safetyTimerRef.current)
+            trailingTimerRef.current = setTimeout(() => {
+              console.log('[GATE] trailing timer fired')
+              openGate()
+            }, 900)
           })
 
           avatar.on(AgentEventsEnum.SESSION_STOPPED, (e: any) => {
             console.log('[LA] session stopped:', e?.stop_reason)
-            active = 0
-            clearTimeout(ungateTimer)
-            gate(false)
+            clearAllTimers()
+            onGate?.(false)
             onAvatarSpeakingChange?.(false)
             onSashaFinished?.()
           })
@@ -150,9 +122,8 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
       avatar.on(SessionEvent.SESSION_DISCONNECTED, (reason: any) => {
         clearInterval(keepAliveTimerRef.current)
-        active = 0
-        clearTimeout(ungateTimer)
-        gate(false)
+        clearAllTimers()
+        onGate?.(false)
         onAvatarSpeakingChange?.(false)
         onSashaFinished?.()
         console.log('[HG] session disconnected, reason:', reason)
@@ -190,21 +161,28 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
       const speakFn = (text: string) => {
         try {
-          if (active > 0) avatar.interrupt?.()
-          gateOn()
+          clearAllTimers()
+          onGate?.(true)
+          onAvatarSpeakingChange?.(true)
           avatar.repeat(text)
+          const delay = Math.max(1500, text.length * 65) + 900
+          console.log('[GATE] safety timer set for', delay, 'ms')
+          safetyTimerRef.current = setTimeout(() => {
+            console.log('[GATE] safety timer fired')
+            openGate()
+          }, delay)
         } catch(e) {
           console.error('Avatar speak error:', e)
-          gate(false)
+          openGate()
         }
       }
       const interruptFn = () => {
         try {
           avatar.interrupt?.()
-          active = 0
-          clearTimeout(ungateTimer)
-          gate(false)
+          clearAllTimers()
+          onGate?.(false)
           onAvatarSpeakingChange?.(false)
+          onSashaFinished?.()
         } catch(e) {}
       }
       onAvatarReady(speakFn, interruptFn)
@@ -230,7 +208,8 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
     return () => {
       isMountedRef.current = false
       clearTimeout(reconnectTimerRef.current)
-      clearTimeout(gateTimeoutRef.current)
+      clearTimeout(safetyTimerRef.current)
+      clearTimeout(trailingTimerRef.current)
       clearInterval(keepAliveTimerRef.current)
       avatarRef.current?.stop?.()
     }

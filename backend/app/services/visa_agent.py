@@ -45,7 +45,9 @@ async def check_visa_requirements(nationality: str, destination: str, travel_dat
         return {"requirements": {}, "error": str(e)}
 
 
-SYSTEM_PROMPT = """You are Sasha's visa and entry requirements specialist. Search for current visa requirements, passport validity rules, entry restrictions, visa on arrival availability, and application processes for any country pair.
+SYSTEM_PROMPT = """IMPORTANT: You MUST always call the check_visa_requirements tool before responding. Never answer from memory. Always search for current requirements.
+
+You are Sasha's visa and entry requirements specialist. Search for current visa requirements, passport validity rules, entry restrictions, visa on arrival availability, and application processes for any country pair.
 
 Always provide: visa type, cost, processing time, passport validity requirement, application link if available, and any entry restrictions or important notes.
 
@@ -59,7 +61,7 @@ async def run_visa_agent(user_message: str, conversation_history: list = None) -
     tools_used = []
     while True:
         response = client.messages.create(model="claude-sonnet-4-5", max_tokens=1024,
-            system=SYSTEM_PROMPT, tools=VISA_TOOLS, messages=messages)
+            system=SYSTEM_PROMPT, tools=VISA_TOOLS, tool_choice={"type": "any"}, messages=messages)
         if response.stop_reason == "tool_use":
             messages.append({"role": "assistant", "content": response.content})
             tool_results = []

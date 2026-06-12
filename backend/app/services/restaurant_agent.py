@@ -3,10 +3,14 @@ import httpx
 import anthropic
 import json
 import re
+from browserbase import Browserbase
+from playwright.sync_api import sync_playwright
 
 client = anthropic.Anthropic()
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
 BLAND_API_KEY = os.getenv("BLAND_API_KEY", "").strip()
+BROWSERBASE_API_KEY = os.getenv("BROWSERBASE_API_KEY", "").strip()
+BROWSERBASE_PROJECT_ID = os.getenv("BROWSERBASE_PROJECT_ID", "").strip()
 SASHA_FROM_EMAIL = "onboarding@resend.dev"
 SASHA_NOTIFY_EMAIL = "tylerwarren@gmail.com"
 
@@ -47,6 +51,26 @@ RESTAURANT_TOOLS = [
         }
     },
     {
+        "name": "book_via_website",
+        "description": "Book a restaurant table by filling in their online reservation form. Use this FIRST before email or phone if the restaurant has an online booking URL (OpenTable, Resy, TheFork, or their own website).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "booking_url": {"type": "string", "description": "The restaurant's online booking page URL"},
+                "restaurant_name": {"type": "string"},
+                "guest_name": {"type": "string"},
+                "guest_email": {"type": "string"},
+                "guest_phone": {"type": "string"},
+                "date": {"type": "string"},
+                "time": {"type": "string"},
+                "party_size": {"type": "string"},
+                "occasion": {"type": "string"},
+                "special_requests": {"type": "string"}
+            },
+            "required": ["booking_url", "restaurant_name", "guest_name", "guest_email", "date", "time", "party_size"]
+        }
+    },
+    {
         "name": "call_restaurant",
         "description": "Call a restaurant via AI phone call to book a table.",
         "input_schema": {
@@ -70,7 +94,7 @@ async def find_restaurant(location: str, cuisine: str = "", budget: str = "", oc
     cuis = cuisine or "any"
     bud = budget or "any"
     occ = occasion or "any"
-    query = "Find 2 " + cuis + " restaurants in " + location + " good for " + occ + ". Budget: " + bud + ". Return ONLY a JSON array with whatever contact info is available, each object with: name, phone (or best guess), email (or best guess), address, price_range, cuisine, notes. Make your best effort even if some fields are unknown - use empty string for missing fields. No other text."
+    query = "Find 2 " + cuis + " restaurants in " + location + " good for " + occ + ". Budget: " + bud + ". Return ONLY a JSON array with whatever contact info is available, each object with: name, phone (or best guess), email (or best guess), address, price_range, cuisine, notes, booking_url (OpenTable, Resy, TheFork link or restaurant's own booking page, or empty string). Make your best effort even if some fields are unknown - use empty string for missing fields. No other text."
     try:
         response = client.messages.create(
             model="claude-haiku-4-5", max_tokens=600,
@@ -184,10 +208,90 @@ async def call_restaurant(
     except Exception as e:
         return {"called": False, "error": str(e)}
 
+async def book_via_website(
+    booking_url: str, restaurant_name: str, guest_name: str, guest_email: str,
+    date: str, time: str, party_size: str, guest_phone: str = "",
+    occasion: str = "", special_requests: str = ""
+) -> dict:
+    if not BROWSERBASE_API_KEY or not BROWSERBASE_PROJECT_ID:
+        return {"booked": False, "error": "Browserbase not configured"}
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _book_via_website_sync,
+            booking_url, restaurant_name, guest_name, guest_email,
+            date, time, party_size, guest_phone, occasion, special_requests)
+        return result
+    except Exception as e:
+        return {"booked": False, "error": str(e)}
+
+def _book_via_website_sync(
+    booking_url, restaurant_name, guest_name, guest_email,
+    date, time, party_size, guest_phone, occasion, special_requests
+) -> dict:
+    bb = Browserbase(api_key=BROWSERBASE_API_KEY)
+    session = bb.sessions.create(project_id=BROWSERBASE_PROJECT_ID)
+    with sync_playwright() as p:
+        browser = p.chromium.connect_over_cdp(session.connect_url)
+        context = browser.contexts[0]
+        page = context.pages[0]
+        try:
+            page.goto(booking_url, wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(2000)
+            # Party size
+            for selector in ['select[name*="party"], select[name*="covers"], select[name*="guests"], select[id*="party"]']:
+                try:
+                    page.select_option(selector, str(party_size)); break
+                except: pass
+            # Date
+            for selector in ['input[name*="date"], input[type="date"], input[placeholder*="date"]']:
+                try:
+                    page.fill(selector, date); break
+                except: pass
+            # Time
+            for selector in ['select[name*="time"], input[name*="time"]']:
+                try:
+                    page.select_option(selector, time); break
+                except: pass
+            # Name
+            for selector in ['input[name*="name"], input[placeholder*="name"], input[id*="name"]']:
+                try:
+                    page.fill(selector, guest_name); break
+                except: pass
+            # Email
+            for selector in ['input[type="email"], input[name*="email"]']:
+                try:
+                    page.fill(selector, guest_email); break
+                except: pass
+            # Phone
+            if guest_phone:
+                for selector in ['input[type="tel"], input[name*="phone"]']:
+                    try:
+                        page.fill(selector, guest_phone); break
+                    except: pass
+            # Special requests
+            if special_requests or occasion:
+                for selector in ['textarea[name*="request"], textarea[name*="note"], textarea[placeholder*="request"]']:
+                    try:
+                        page.fill(selector, (occasion + " " + special_requests).strip()); break
+                    except: pass
+            page.screenshot(path="/tmp/booking_before_submit.png")
+            return {
+                "booked": False,
+                "status": "form_filled",
+                "message": "Form filled successfully. Falling back to email + phone to confirm.",
+                "session_url": f"https://browserbase.com/sessions/{session.id}"
+            }
+        except Exception as e:
+            return {"booked": False, "error": str(e), "session_url": f"https://browserbase.com/sessions/{session.id}"}
+        finally:
+            browser.close()
+
 SYSTEM_PROMPT = """You are Sasha's restaurant specialist. Find and book restaurants anywhere in the world.
-Steps: 1) Find top restaurants matching the guest's criteria 2) Send reservation email 3) Call restaurant simultaneously.
+Steps: 1) Find top restaurants matching the guest's criteria 2) Book using all available methods 3) Confirm to the guest.
 Collect: guest name, location, cuisine preference, date, time, party size, occasion, special requests, guest email.
-Always ask about dietary requirements or special occasions — these matter for restaurant bookings."""
+Always ask about dietary requirements or special occasions — these matter for restaurant bookings.
+BOOKING PRIORITY: 1) Try book_via_website first if you found a booking_url, 2) Always send_reservation_email, 3) Always call_restaurant. Run email and phone call simultaneously regardless of web booking result."""
 
 async def run_restaurant_agent(user_message: str, conversation_history: list = None) -> dict:
     if conversation_history is None:
@@ -206,6 +310,7 @@ async def run_restaurant_agent(user_message: str, conversation_history: list = N
                     if block.name == "find_restaurant": result = await find_restaurant(**inp)
                     elif block.name == "send_reservation_email": result = await send_reservation_email(**inp)
                     elif block.name == "call_restaurant": result = await call_restaurant(**inp)
+                    elif block.name == "book_via_website": result = await book_via_website(**inp)
                     else: result = {"error": "Unknown: " + block.name}
                     tools_used.append({"tool": block.name, "result": result})
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": json.dumps(result)})

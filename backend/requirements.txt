@@ -13,3 +13,5 @@ anthropic==0.104.1
 deepgram-sdk==3.2.7
 stripe==9.9.0
 python-dotenv==1.0.1
+browserbase
+playwright

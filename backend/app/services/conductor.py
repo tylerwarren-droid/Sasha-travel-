@@ -399,7 +399,9 @@ async def conduct(
             print(f"[Conductor] Agent timed out after {timeout}s")
             return {"agent": "timeout", "response": "", "data": {}}
         except Exception as e:
+            import traceback
             print(f"[Conductor] Agent error: {e}")
+            print(traceback.format_exc())
             return {"agent": "error", "response": "", "data": {}}
 
     results = await asyncio.gather(*[run_with_timeout(t) for t in tasks], return_exceptions=True)

@@ -65,17 +65,6 @@ create table if not exists organizations (
 
 alter table organizations enable row level security;
 
--- Org members (via trips or a future org_members table) can read their org
-create policy "organizations_select_member"
-  on organizations for select
-  using (
-    exists (
-      select 1 from trips
-      where trips.organization_id = organizations.id
-        and trips.owner_id = auth.uid()
-    )
-  );
-
 -- ============================================================
 -- TABLE: traveler_profiles
 -- ============================================================
@@ -172,6 +161,17 @@ create policy "trips_update_owner"
 create policy "trips_delete_owner"
   on trips for delete
   using (owner_id = auth.uid());
+
+-- Organizations RLS policy — defined here because it references trips
+create policy "organizations_select_member"
+  on organizations for select
+  using (
+    exists (
+      select 1 from trips
+      where trips.organization_id = organizations.id
+        and trips.owner_id = auth.uid()
+    )
+  );
 
 -- ============================================================
 -- TABLE: trip_items

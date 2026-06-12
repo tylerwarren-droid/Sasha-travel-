@@ -75,6 +75,11 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
     LANGUAGE_WORDS = ["language", "phrases", "how do i say", "translation", "etiquette", "customs", "culture", "local words", "speak", "greetings", "thank you in", "hello in", "dress code", "cultural"]
     PACKING_WORDS = ["packing", "what to bring", "luggage", "what should i pack", "suitcase", "carry on", "what do i need to bring", "what to pack", "packing list", "bag", "baggage"]
     FAMILY_WORDS = ["kids", "children", "family", "baby", "toddler", "kid-friendly", "family travel", "stroller", "car seat", "with children", "my kids", "travelling with kids", "child friendly", "infant"]
+    AIRPORT_TRANSFER_WORDS = ["airport transfer", "taxi", "pickup", "airport shuttle", "private car", "transfer to hotel", "how to get from airport", "get from airport", "from the airport", "airport taxi", "airport pickup"]
+    EXPERIENCES_WORDS = ["cooking class", "tour", "experience", "activity", "things to do", "local guide", "cultural tour", "excursion", "day trip", "guided tour", "food tour", "walking tour", "boat tour"]
+    COWORKING_WORDS = ["coworking", "co-working", "work remotely", "wifi", "coffee shop to work", "laptop friendly", "remote work", "digital nomad", "fast wifi", "place to work", "work from"]
+    INSURANCE_WORDS = ["travel insurance", "insurance", "coverage", "medical coverage", "trip cancellation", "safetywing", "world nomads", "insure my trip", "insure", "travel cover", "covered if"]
+    LOYALTY_WORDS = ["loyalty program", "frequent flyer", "hotel points", "airline miles", "status", "which program", "marriott", "hilton", "ihg", "united miles", "delta miles", "british airways", "oneworld", "star alliance", "skyteam", "frequent traveler", "elite status"]
 
     if any(w in lower for w in GOLF_WORDS):
         intents.append("golf")
@@ -120,6 +125,16 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
         intents.append("packing")
     if any(w in lower for w in FAMILY_WORDS):
         intents.append("family")
+    if any(w in lower for w in AIRPORT_TRANSFER_WORDS):
+        intents.append("airport_transfer")
+    if any(w in lower for w in EXPERIENCES_WORDS):
+        intents.append("experiences")
+    if any(w in lower for w in COWORKING_WORDS):
+        intents.append("coworking")
+    if any(w in lower for w in INSURANCE_WORDS):
+        intents.append("insurance")
+    if any(w in lower for w in LOYALTY_WORDS):
+        intents.append("loyalty")
 
     if not intents:
         intents = ["general"]
@@ -329,6 +344,36 @@ async def run_family_intent(message: str, history: list) -> dict:
     return {"agent": "family", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
 
 
+async def run_airport_transfer_intent(message: str, history: list) -> dict:
+    from app.services.airport_transfer_agent import run_airport_transfer_agent
+    result = await run_airport_transfer_agent(message, history)
+    return {"agent": "airport_transfer", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
+async def run_experiences_intent(message: str, history: list) -> dict:
+    from app.services.experiences_agent import run_experiences_agent
+    result = await run_experiences_agent(message, history)
+    return {"agent": "experiences", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
+async def run_coworking_intent(message: str, history: list) -> dict:
+    from app.services.coworking_agent import run_coworking_agent
+    result = await run_coworking_agent(message, history)
+    return {"agent": "coworking", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
+async def run_insurance_intent(message: str, history: list) -> dict:
+    from app.services.insurance_agent import run_insurance_agent
+    result = await run_insurance_agent(message, history)
+    return {"agent": "insurance", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
+async def run_loyalty_intent(message: str, history: list) -> dict:
+    from app.services.loyalty_agent import run_loyalty_agent
+    result = await run_loyalty_agent(message, history)
+    return {"agent": "loyalty", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
 # Agent registry — maps intent names to runner functions
 AGENT_REGISTRY = {
     "golf": run_golf_intent,
@@ -348,6 +393,11 @@ AGENT_REGISTRY = {
     "language": run_language_intent,
     "packing": run_packing_intent,
     "family": run_family_intent,
+    "airport_transfer": run_airport_transfer_intent,
+    "experiences": run_experiences_intent,
+    "coworking": run_coworking_intent,
+    "insurance": run_insurance_intent,
+    "loyalty": run_loyalty_intent,
     "general": run_general,
 }
 

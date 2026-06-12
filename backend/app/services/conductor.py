@@ -80,6 +80,7 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
     COWORKING_WORDS = ["coworking", "co-working", "work remotely", "wifi", "coffee shop to work", "laptop friendly", "remote work", "digital nomad", "fast wifi", "place to work", "work from"]
     INSURANCE_WORDS = ["travel insurance", "insurance", "coverage", "medical coverage", "trip cancellation", "safetywing", "world nomads", "insure my trip", "insure", "travel cover", "covered if"]
     LOYALTY_WORDS = ["loyalty program", "frequent flyer", "hotel points", "airline miles", "status", "which program", "marriott", "hilton", "ihg", "united miles", "delta miles", "british airways", "oneworld", "star alliance", "skyteam", "frequent traveler", "elite status"]
+    API_ASSIMILATION_WORDS = ["api", "integrate", "need an api", "which api", "travel api", "booking api", "flight api", "hotel api", "how do i connect", "third party", "third-party", "api key", "api documentation", "connect to"]
 
     if any(w in lower for w in GOLF_WORDS):
         intents.append("golf")
@@ -135,6 +136,8 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
         intents.append("insurance")
     if any(w in lower for w in LOYALTY_WORDS):
         intents.append("loyalty")
+    if any(w in lower for w in API_ASSIMILATION_WORDS):
+        intents.append("api_assimilation")
 
     if not intents:
         intents = ["general"]
@@ -374,6 +377,12 @@ async def run_loyalty_intent(message: str, history: list) -> dict:
     return {"agent": "loyalty", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
 
 
+async def run_api_assimilation_intent(message: str, history: list) -> dict:
+    from app.services.api_assimilation_agent import run_api_assimilation_agent
+    result = await run_api_assimilation_agent(message, history)
+    return {"agent": "api_assimilation", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
 # Agent registry — maps intent names to runner functions
 AGENT_REGISTRY = {
     "golf": run_golf_intent,
@@ -398,6 +407,7 @@ AGENT_REGISTRY = {
     "coworking": run_coworking_intent,
     "insurance": run_insurance_intent,
     "loyalty": run_loyalty_intent,
+    "api_assimilation": run_api_assimilation_intent,
     "general": run_general,
 }
 

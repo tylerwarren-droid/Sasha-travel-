@@ -68,6 +68,13 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
     FOTO_WORDS = ["show me", "photo", "picture", "image", "what does", "what do", "look like"]
     CREDIT_CARD_WORDS = ["credit card", "which card", "points", "miles", "rewards", "amex", "chase sapphire", "capital one", "bilt", "card to use", "earn points", "transfer points", "annual credit", "card benefits", "maximize points", "best card"]
     CAR_RENTAL_WORDS = ["rental car", "car rental", "rent a car", "hire a car", "rental insurance", "cdw", "collision waiver", "rental coverage", "hertz", "avis", "enterprise rental", "europcar", "should i take insurance"]
+    VISA_WORDS = ["visa", "entry requirements", "passport", "do i need a visa", "travel documents", "entry restriction", "visa on arrival", "evisa", "e-visa", "tourist visa", "transit visa"]
+    CURRENCY_WORDS = ["currency", "exchange rate", "money", "atm", "cash", "should i use my card", "tipping", "tip", "local money", "how much is", "convert", "dong", "baht", "peso", "rupiah", "ringgit", "won"]
+    WEATHER_WORDS = ["weather", "what to pack", "climate", "best time to visit", "rainy season", "temperature", "hot or cold", "forecast", "will it rain", "typhoon", "monsoon", "dry season"]
+    EMERGENCY_WORDS = ["emergency", "lost passport", "stolen", "hospital", "police", "help me", "robbery", "accident", "embassy", "arrested", "lost my", "stolen my", "hurt badly", "need help urgently", "crisis"]
+    LANGUAGE_WORDS = ["language", "phrases", "how do i say", "translation", "etiquette", "customs", "culture", "local words", "speak", "greetings", "thank you in", "hello in", "dress code", "cultural"]
+    PACKING_WORDS = ["packing", "what to bring", "luggage", "what should i pack", "suitcase", "carry on", "what do i need to bring", "what to pack", "packing list", "bag", "baggage"]
+    FAMILY_WORDS = ["kids", "children", "family", "baby", "toddler", "kid-friendly", "family travel", "stroller", "car seat", "with children", "my kids", "travelling with kids", "child friendly", "infant"]
 
     if any(w in lower for w in GOLF_WORDS):
         intents.append("golf")
@@ -99,6 +106,20 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
         intents.append("credit_card")
     if any(w in lower for w in CAR_RENTAL_WORDS):
         intents.append("car_rental")
+    if any(w in lower for w in VISA_WORDS):
+        intents.append("visa")
+    if any(w in lower for w in CURRENCY_WORDS):
+        intents.append("currency")
+    if any(w in lower for w in WEATHER_WORDS):
+        intents.append("weather")
+    if any(w in lower for w in EMERGENCY_WORDS):
+        intents.append("emergency")
+    if any(w in lower for w in LANGUAGE_WORDS):
+        intents.append("language")
+    if any(w in lower for w in PACKING_WORDS):
+        intents.append("packing")
+    if any(w in lower for w in FAMILY_WORDS):
+        intents.append("family")
 
     if not intents:
         intents = ["general"]
@@ -254,6 +275,55 @@ async def run_smart_sasha_intent(message: str, history: list) -> dict:
         "data": {"tools_used": result.get("tools_used", [])}
     }
 
+async def run_visa_intent(message: str, history: list) -> dict:
+    """Route to visa requirements agent."""
+    from app.services.visa_agent import run_visa_agent
+    result = await run_visa_agent(message, history)
+    return {"agent": "visa", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
+async def run_currency_intent(message: str, history: list) -> dict:
+    """Route to currency and money agent."""
+    from app.services.currency_agent import run_currency_agent
+    result = await run_currency_agent(message, history)
+    return {"agent": "currency", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
+async def run_weather_intent(message: str, history: list) -> dict:
+    """Route to weather and climate agent."""
+    from app.services.weather_agent import run_weather_agent
+    result = await run_weather_agent(message, history)
+    return {"agent": "weather", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
+async def run_emergency_intent(message: str, history: list) -> dict:
+    """Route to emergency response agent."""
+    from app.services.emergency_agent import run_emergency_agent
+    result = await run_emergency_agent(message, history)
+    return {"agent": "emergency", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
+async def run_language_intent(message: str, history: list) -> dict:
+    """Route to language and cultural etiquette agent."""
+    from app.services.language_agent import run_language_agent
+    result = await run_language_agent(message, history)
+    return {"agent": "language", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
+async def run_packing_intent(message: str, history: list) -> dict:
+    """Route to packing list agent."""
+    from app.services.packing_agent import run_packing_agent
+    result = await run_packing_agent(message, history)
+    return {"agent": "packing", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
+async def run_family_intent(message: str, history: list) -> dict:
+    """Route to family travel agent."""
+    from app.services.family_agent import run_family_agent
+    result = await run_family_agent(message, history)
+    return {"agent": "family", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+
+
 # Agent registry — maps intent names to runner functions
 AGENT_REGISTRY = {
     "golf": run_golf_intent,
@@ -266,6 +336,13 @@ AGENT_REGISTRY = {
     "smart_sasha": run_smart_sasha_intent,
     "credit_card": run_credit_card_intent,
     "car_rental": run_car_rental_intent,
+    "visa": run_visa_intent,
+    "currency": run_currency_intent,
+    "weather": run_weather_intent,
+    "emergency": run_emergency_intent,
+    "language": run_language_intent,
+    "packing": run_packing_intent,
+    "family": run_family_intent,
     "general": run_general,
 }
 

@@ -276,10 +276,15 @@ async def run_smart_sasha_intent(message: str, history: list) -> dict:
     }
 
 async def run_visa_intent(message: str, history: list) -> dict:
-    """Route to visa requirements agent."""
-    from app.services.visa_agent import run_visa_agent
-    result = await run_visa_agent(message, history)
-    return {"agent": "visa", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+    try:
+        from app.services.visa_agent import run_visa_agent
+        result = await run_visa_agent(message, history)
+        return {"agent": "visa", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
+    except Exception as e:
+        import traceback
+        print(f"[VISA] Error: {e}")
+        print(traceback.format_exc())
+        return {"agent": "visa", "response": "", "data": {}}
 
 
 async def run_currency_intent(message: str, history: list) -> dict:

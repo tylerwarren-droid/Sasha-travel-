@@ -392,7 +392,7 @@ async def conduct(
         else:
             tasks.append(runner(user_message, conversation_history))
 
-    async def run_with_timeout(task, timeout=5.0):
+    async def run_with_timeout(task, timeout=30.0):
         try:
             return await asyncio.wait_for(task, timeout=timeout)
         except asyncio.TimeoutError:

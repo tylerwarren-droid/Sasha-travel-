@@ -60,8 +60,8 @@ async def run_visa_agent(user_message: str, conversation_history: list = None) -
     messages = conversation_history + [{"role": "user", "content": user_message}]
     tools_used = []
     while True:
-        response = client.messages.create(model="claude-sonnet-4-5", max_tokens=1024,
-            system=SYSTEM_PROMPT, tools=VISA_TOOLS, tool_choice={"type": "any"}, messages=messages)
+        response = client.messages.create(model="claude-haiku-4-5", max_tokens=1024,
+            system=SYSTEM_PROMPT, tools=VISA_TOOLS, messages=messages)
         if response.stop_reason == "tool_use":
             messages.append({"role": "assistant", "content": response.content})
             tool_results = []

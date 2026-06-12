@@ -1,6 +1,7 @@
 -- ============================================================
 -- Sasha Travel — Initial Schema
 -- Migration: 001_initial_schema.sql
+-- Note: uses Supabase built-in auth.users — no custom users table
 -- ============================================================
 
 -- Extensions
@@ -20,29 +21,33 @@ end;
 $$ language plpgsql;
 
 -- ============================================================
--- TABLE: users
+-- TABLE: user_profiles
+-- Extends auth.users with app-level role and display name.
+-- id mirrors auth.users(id) — no separate UUID generated.
 -- ============================================================
 
-create table if not exists users (
-  id          uuid primary key default gen_random_uuid(),
-  email       text not null unique,
+create table if not exists user_profiles (
+  id          uuid primary key references auth.users (id) on delete cascade,
   name        text,
   role        text not null default 'traveler'
                 check (role in ('traveler', 'agent', 'operator', 'admin')),
   created_at  timestamptz not null default now()
 );
 
-create index idx_users_email on users (email);
-create index idx_users_role  on users (role);
+create index idx_user_profiles_role on user_profiles (role);
 
-alter table users enable row level security;
+alter table user_profiles enable row level security;
 
-create policy "users_select_own"
-  on users for select
+create policy "user_profiles_select_own"
+  on user_profiles for select
   using (id = auth.uid());
 
-create policy "users_update_own"
-  on users for update
+create policy "user_profiles_insert_own"
+  on user_profiles for insert
+  with check (id = auth.uid());
+
+create policy "user_profiles_update_own"
+  on user_profiles for update
   using (id = auth.uid());
 
 -- ============================================================
@@ -77,7 +82,7 @@ create policy "organizations_select_member"
 
 create table if not exists traveler_profiles (
   id                    uuid primary key default gen_random_uuid(),
-  user_id               uuid not null unique references users (id) on delete cascade,
+  user_id               uuid not null unique references auth.users (id) on delete cascade,
   -- Encrypted fields: store pgcrypto ciphertext, decrypt at app layer
   passport_number       text,
   passport_expiry       text,
@@ -117,7 +122,7 @@ create policy "traveler_profiles_update_own"
 
 create table if not exists trips (
   id               uuid primary key default gen_random_uuid(),
-  owner_id         uuid not null references users (id) on delete cascade,
+  owner_id         uuid not null references auth.users (id) on delete cascade,
   organization_id  uuid references organizations (id) on delete set null,
   title            text not null,
   status           text not null default 'draft'
@@ -254,19 +259,19 @@ create policy "trip_items_update_trip_owner"
 -- ============================================================
 
 create table if not exists booking_attempts (
-  id                    uuid primary key default gen_random_uuid(),
-  trip_item_id          uuid not null references trip_items (id) on delete cascade,
-  method                text not null
-                          check (method in ('email', 'phone', 'web_form')),
-  attempted_at          timestamptz not null default now(),
-  status                text not null default 'sent'
-                          check (status in (
-                            'sent', 'delivered', 'confirmed', 'failed', 'no_response'
-                          )),
-  response_received     text,
-  response_at           timestamptz,
-  bland_call_id         text,
-  resend_email_id       text,
+  id                     uuid primary key default gen_random_uuid(),
+  trip_item_id           uuid not null references trip_items (id) on delete cascade,
+  method                 text not null
+                           check (method in ('email', 'phone', 'web_form')),
+  attempted_at           timestamptz not null default now(),
+  status                 text not null default 'sent'
+                           check (status in (
+                             'sent', 'delivered', 'confirmed', 'failed', 'no_response'
+                           )),
+  response_received      text,
+  response_at            timestamptz,
+  bland_call_id          text,
+  resend_email_id        text,
   browserbase_session_id text
 );
 
@@ -319,9 +324,9 @@ create table if not exists documents (
   )
 );
 
-create index idx_documents_trip_id              on documents (trip_id);
-create index idx_documents_traveler_profile_id  on documents (traveler_profile_id);
-create index idx_documents_expires_at           on documents (expires_at);
+create index idx_documents_trip_id             on documents (trip_id);
+create index idx_documents_traveler_profile_id on documents (traveler_profile_id);
+create index idx_documents_expires_at          on documents (expires_at);
 
 alter table documents enable row level security;
 
@@ -351,11 +356,14 @@ create policy "documents_insert_own"
   with check (
     (
       trip_id is not null and exists (
-        select 1 from trips where trips.id = documents.trip_id and trips.owner_id = auth.uid()
+        select 1 from trips
+        where trips.id = documents.trip_id and trips.owner_id = auth.uid()
       )
     ) or (
       traveler_profile_id is not null and exists (
-        select 1 from traveler_profiles where traveler_profiles.id = documents.traveler_profile_id and traveler_profiles.user_id = auth.uid()
+        select 1 from traveler_profiles
+        where traveler_profiles.id = documents.traveler_profile_id
+          and traveler_profiles.user_id = auth.uid()
       )
     )
   );
@@ -367,7 +375,7 @@ create policy "documents_insert_own"
 create table if not exists escalations (
   id               uuid primary key default gen_random_uuid(),
   trip_item_id     uuid not null references trip_items (id) on delete cascade,
-  assigned_to      uuid references users (id) on delete set null,
+  assigned_to      uuid references auth.users (id) on delete set null,
   status           text not null default 'open'
                      check (status in ('open', 'in_progress', 'resolved', 'closed')),
   priority         text not null default 'medium'
@@ -413,16 +421,16 @@ create policy "escalations_update_assigned"
 -- ============================================================
 
 create table if not exists conversations (
-  id                   uuid primary key default gen_random_uuid(),
-  trip_id              uuid references trips (id) on delete set null,
-  user_id              uuid not null references users (id) on delete cascade,
-  messages             jsonb not null default '[]',
-  agent_intents_fired  jsonb not null default '[]',
-  created_at           timestamptz not null default now()
+  id                  uuid primary key default gen_random_uuid(),
+  trip_id             uuid references trips (id) on delete set null,
+  user_id             uuid not null references auth.users (id) on delete cascade,
+  messages            jsonb not null default '[]',
+  agent_intents_fired jsonb not null default '[]',
+  created_at          timestamptz not null default now()
 );
 
-create index idx_conversations_user_id  on conversations (user_id);
-create index idx_conversations_trip_id  on conversations (trip_id);
+create index idx_conversations_user_id    on conversations (user_id);
+create index idx_conversations_trip_id    on conversations (trip_id);
 create index idx_conversations_created_at on conversations (created_at);
 
 alter table conversations enable row level security;
@@ -446,7 +454,7 @@ create policy "conversations_update_own"
 create table if not exists calendar_events (
   id              uuid primary key default gen_random_uuid(),
   trip_item_id    uuid not null references trip_items (id) on delete cascade,
-  user_id         uuid not null references users (id) on delete cascade,
+  user_id         uuid not null references auth.users (id) on delete cascade,
   google_event_id text,
   apple_event_id  text,
   synced_at       timestamptz

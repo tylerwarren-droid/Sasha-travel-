@@ -8,6 +8,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUTPUT="$REPO_ROOT/docs/session_current.md"
 
+# Auto-load ANTHROPIC_API_KEY from backend/.env if not already in environment
+if [[ -z "${ANTHROPIC_API_KEY:-}" ]] && [[ -f "$REPO_ROOT/backend/.env" ]]; then
+  export $(grep -v '^#' "$REPO_ROOT/backend/.env" | grep ANTHROPIC_API_KEY | xargs)
+fi
+
 echo "🔍 Gathering project state..."
 
 # ── Git context ──────────────────────────────────────────────────────────────

@@ -184,13 +184,15 @@ async def call_restaurant(
     except Exception as e:
         return {"called": False, "error": str(e)}
 
+from app.services.db_writer import write_trip_item, update_trip_item, write_booking_attempt
+
 SYSTEM_PROMPT = """You are Sasha's restaurant specialist. Find and book restaurants anywhere in the world.
 Steps: 1) Find top restaurants matching the guest's criteria 2) Book using all available methods 3) Confirm to the guest.
 Collect: guest name, location, cuisine preference, date, time, party size, occasion, special requests, guest email.
 Always ask about dietary requirements or special occasions — these matter for restaurant bookings.
 BOOKING PRIORITY: 1) Always send_reservation_email, 2) Always call_restaurant. Run email and phone call simultaneously."""
 
-async def run_restaurant_agent(user_message: str, conversation_history: list = None) -> dict:
+async def run_restaurant_agent(user_message: str, conversation_history: list = None, trip_id: str = "") -> dict:
     if conversation_history is None:
         conversation_history = []
     messages = conversation_history + [{"role": "user", "content": user_message}]
@@ -204,10 +206,18 @@ async def run_restaurant_agent(user_message: str, conversation_history: list = N
             for block in response.content:
                 if block.type == "tool_use":
                     inp = block.input
-                    if block.name == "find_restaurant": result = await find_restaurant(**inp)
-                    elif block.name == "send_reservation_email": result = await send_reservation_email(**inp)
-                    elif block.name == "call_restaurant": result = await call_restaurant(**inp)
-                    else: result = {"error": "Unknown: " + block.name}
+                    if block.name == "find_restaurant":
+                        result = await find_restaurant(**inp)
+                    elif block.name == "send_reservation_email":
+                        result = await send_reservation_email(**inp)
+                        if not hasattr(messages, '_restaurant_item_id'):
+                            messages._restaurant_item_id = await write_trip_item(trip_id=trip_id,type="restaurant",status="attempting" if result.get("sent") else "failed",provider_name=inp.get("restaurant_name"),provider_email=inp.get("restaurant_email"),date_time=inp.get("date"),location_name=inp.get("restaurant_name"))
+                        await write_booking_attempt(trip_item_id=getattr(messages,"_restaurant_item_id",None),method="email",status="sent" if result.get("sent") else "failed")
+                    elif block.name == "call_restaurant":
+                        result = await call_restaurant(**inp)
+                        await write_booking_attempt(trip_item_id=getattr(messages,"_restaurant_item_id",None),method="phone",status="sent" if result.get("called") else "failed",bland_call_id=result.get("call_id"))
+                    else:
+                        result = {"error": "Unknown: " + block.name}
                     tools_used.append({"tool": block.name, "result": result})
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": json.dumps(result)})
             messages.append({"role": "user", "content": tool_results})

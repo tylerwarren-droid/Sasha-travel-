@@ -300,6 +300,8 @@ Tips:
 # AGENT LOOP
 # ─────────────────────────────────────────────
 
+from app.services.db_writer import write_trip_item, update_trip_item, write_booking_attempt
+
 SYSTEM_PROMPT = """You are Sasha's booking confirmation specialist. You help guests get their hotel's internal PMS reference number after booking through platforms like Booking.com, Expedia, Hotels.com, or Airbnb.
 
 When a user gives you their booking details:
@@ -319,7 +321,7 @@ Be efficient and professional. Collect all needed info before taking action:
 - Guest email (to receive hotel's response)"""
 
 
-async def run_booking_agent(user_message: str, conversation_history: list = None) -> dict:
+async def run_booking_agent(user_message: str, conversation_history: list = None, trip_id: str = "") -> dict:
     if conversation_history is None:
         conversation_history = []
 
@@ -348,8 +350,12 @@ async def run_booking_agent(user_message: str, conversation_history: list = None
                         result = await find_hotel_contact(inp.get("hotel_name"), inp.get("city", ""), inp.get("country", ""))
                     elif block.name == "send_confirmation_email":
                         result = await send_confirmation_email(**inp)
+                        if not hasattr(messages, '_booking_item_id'):
+                            messages._booking_item_id = await write_trip_item(trip_id=trip_id,type="hotel",status="attempting" if result.get("sent") else "failed",provider_name=inp.get("hotel_name"),provider_email=inp.get("hotel_email"),booking_reference=inp.get("booking_reference"),date_time=inp.get("check_in_date"),location_name=inp.get("hotel_name"))
+                        await write_booking_attempt(trip_item_id=getattr(messages,"_booking_item_id",None),method="email",status="sent" if result.get("sent") else "failed")
                     elif block.name == "call_hotel":
                         result = await call_hotel(**inp)
+                        await write_booking_attempt(trip_item_id=getattr(messages,"_booking_item_id",None),method="phone",status="sent" if result.get("called") else "failed",bland_call_id=result.get("call_id"))
                     elif block.name == "generate_phone_script":
                         result = generate_phone_script(**inp)
                     else:

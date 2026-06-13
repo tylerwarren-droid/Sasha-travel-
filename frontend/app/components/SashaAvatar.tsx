@@ -2,214 +2,177 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 
 interface SashaAvatarProps {
-  onAvatarReady: (speakFn: (text: string) => void, interruptFn: () => void) => void
+  onAvatarReady: (speak: (text: string) => void) => void
   isListening?: boolean
   tokenUrl?: string
-  onAvatarSpeakingChange?: (speaking: boolean) => void
-  onGate?: (value: boolean) => void
-  onAvatarSpeechBuffer?: (getText: () => string) => void
-  onReadyToListen?: () => void
-  onSashaFinished?: () => void
 }
 
-export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate, onAvatarSpeechBuffer, onReadyToListen, onSashaFinished }: SashaAvatarProps) {
+export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token' }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const avatarRef = useRef<any>(null)
   const reconnectTimerRef = useRef<any>(null)
   const keepAliveTimerRef = useRef<any>(null)
   const isReconnecting = useRef(false)
-  const isMountedRef = useRef(true)
-  const safetyTimerRef = useRef<any>(null)
-  const trailingTimerRef = useRef<any>(null)
-  const avatarSpeechBufferRef = useRef<{ text: string; ts: number }[]>([])
-  const hasOpenedMicRef = useRef(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'bad' | null>(null)
 
+  // ─────────────────────────────────────────────
+  // INIT AVATAR
+  // ─────────────────────────────────────────────
   const initAvatar = useCallback(async () => {
+    // Clear any existing timers
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
     if (keepAliveTimerRef.current) clearInterval(keepAliveTimerRef.current)
+
     setStatus('loading')
     setError('')
-
-    const clearAllTimers = () => {
-      clearTimeout(safetyTimerRef.current)
-      clearTimeout(trailingTimerRef.current)
-    }
-
-    const openGate = () => {
-      onGate?.(false)
-      onAvatarSpeakingChange?.(false)
-      onSashaFinished?.()
-      if (!hasOpenedMicRef.current) {
-        hasOpenedMicRef.current = true
-        console.log('[MIC] opening mic after first speak ended')
-        onReadyToListen?.()
-      }
-    }
 
     try {
       const tokenRes = await fetch(tokenUrl)
       const { token } = await tokenRes.json()
       if (!token) throw new Error('No token received')
-      const sdk = await import('@heygen/liveavatar-web-sdk')
-      const { LiveAvatarSession, SessionEvent, AgentEventsEnum } = sdk as any
 
+      const sdk = await import('@heygen/liveavatar-web-sdk')
+      const { LiveAvatarSession, SessionEvent } = sdk as any
+
+      // Pin to current SDK behavior — lower video quality for TCP fallback resilience
       const avatar = new LiveAvatarSession(token, {
-        voiceChat: false,
-        video_settings: { quality: 'medium', encoding: 'H264' }
+        voiceChat: true,
+        video_settings: {
+          quality: 'medium',   // HeyGen recommendation: medium survives TCP fallback far better than high
+          encoding: 'H264',    // HeyGen recommendation: H264 is most reliable on Safari
+        }
       })
 
-      // BUG 3 — guard so speak handlers are registered exactly once per avatar instance
-      let speakHandlersRegistered = false
-
+      // ── Stream ready ──
       avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
+        try { avatar.interrupt?.() } catch(e) {}
         isReconnecting.current = false
         setStatus('ready')
         setConnectionQuality('good')
+
         if (videoRef.current) {
+          // iOS Safari fix: attach stream, keep muted initially, then unmute on user gesture
           avatar.attach(videoRef.current)
-          videoRef.current.play().catch((e: any) => console.warn('Autoplay blocked:', e))
+          videoRef.current.muted = true
+          videoRef.current.play()
+            .then(() => {
+              // Unmute after successful play — works around Safari autoplay gating
+              if (videoRef.current) videoRef.current.muted = false
+            })
+            .catch((e: any) => {
+              // Safari blocked autoplay — stay muted, user gesture will unmute
+              console.warn('Autoplay blocked, staying muted until user interaction:', e)
+            })
         }
+
+        // Keep-alive ping every 2.5 minutes to avoid idle timeout
         keepAliveTimerRef.current = setInterval(() => {
-          try { avatar.keepAlive?.() } catch(e) {}
+          try { avatar.ping?.() } catch(e) {}
         }, 150000)
-
-        if (!speakHandlersRegistered) {
-          speakHandlersRegistered = true
-          console.log('[HG] registering speak handlers')
-
-          avatar.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, () => {
-            console.log('[HG] speak started')
-          })
-
-          avatar.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
-            console.log('[GATE] speak ended — 900ms trailing timer')
-            clearTimeout(safetyTimerRef.current)
-            trailingTimerRef.current = setTimeout(() => {
-              console.log('[GATE] trailing timer fired')
-              openGate()
-            }, 900)
-          })
-
-          avatar.on(AgentEventsEnum.SESSION_STOPPED, (e: any) => {
-            console.log('[LA] session stopped:', e?.stop_reason)
-            clearAllTimers()
-            onGate?.(false)
-            onAvatarSpeakingChange?.(false)
-            onSashaFinished?.()
-          })
-
-          const addToSpeechBuffer = (e: any) => {
-            const text = typeof e === 'string' ? e : (e?.text || e?.transcript || '')
-            if (text) avatarSpeechBufferRef.current.push({ text, ts: Date.now() })
-          }
-          avatar.on(AgentEventsEnum.AVATAR_TRANSCRIPTION_CHUNK, addToSpeechBuffer)
-          avatar.on(AgentEventsEnum.AVATAR_TRANSCRIPTION, addToSpeechBuffer)
-
-          Object.values(AgentEventsEnum).forEach((evt) => {
-            avatar.on(evt as any, (e: any) => console.log('[LA event]', evt, e))
-          })
-        }
       })
 
+      // ── Connection quality ──
       avatar.on(SessionEvent.SESSION_CONNECTION_QUALITY_CHANGED, (quality: any) => {
         const q = quality?.quality || quality
+        console.log('[Avatar] Connection quality:', q)
         setConnectionQuality(q === 'BAD' ? 'bad' : 'good')
-        if (q === 'BAD') { try { avatar.updateVideoSettings?.({ quality: 'low' }) } catch(e) {} }
+
+        // On bad connection, lower video quality further
+        if (q === 'BAD') {
+          try { avatar.updateVideoSettings?.({ quality: 'low' }) } catch(e) {}
+        }
       })
 
+      // ── Disconnected ──
       avatar.on(SessionEvent.SESSION_DISCONNECTED, (reason: any) => {
+        console.log('[Avatar] Disconnected, reason:', reason)
         clearInterval(keepAliveTimerRef.current)
-        clearAllTimers()
-        onGate?.(false)
-        onAvatarSpeakingChange?.(false)
-        onSashaFinished?.()
-        console.log('[HG] session disconnected, reason:', reason)
-        if (reason === 'MAX_DURATION_REACHED') {
-          setError('Session ended — tap to start a new conversation')
-          setStatus('error')
-          return
-        }
         setStatus('idle')
-        console.log('[HG] restarting...')
-        if (!isReconnecting.current && isMountedRef.current) {
+
+        // Auto-reconnect on network drops (not on intentional stops)
+        const shouldReconnect =
+          !isReconnecting.current &&
+          (reason === 'UNKNOWN_REASON' || reason === undefined || reason === null)
+
+        if (shouldReconnect) {
+          console.log('[Avatar] Network drop detected — reconnecting in 2s...')
           isReconnecting.current = true
-          reconnectTimerRef.current = setTimeout(() => { avatarRef.current?.stop?.(); initAvatar() }, 2000)
+          reconnectTimerRef.current = setTimeout(() => {
+            avatarRef.current?.stop?.()
+            initAvatar()
+          }, 2000)
         }
       })
 
+      // ── Session start failed (timeout) ──
       avatar.on(SessionEvent.SESSION_START_FAILED, () => {
+        console.log('[Avatar] Session start failed — retrying in 3s...')
         clearInterval(keepAliveTimerRef.current)
         setStatus('idle')
         if (!isReconnecting.current) {
           isReconnecting.current = true
-          reconnectTimerRef.current = setTimeout(() => { avatarRef.current?.stop?.(); initAvatar() }, 3000)
+          reconnectTimerRef.current = setTimeout(() => {
+            avatarRef.current?.stop?.()
+            initAvatar()
+          }, 3000)
         }
       })
 
       await avatar.start()
       avatarRef.current = avatar
-      console.log('[HG] sessionId:', avatar.sessionId, 'maxDuration:', avatar.maxSessionDuration)
-
-      onAvatarSpeechBuffer?.(() => {
-        const cutoff = Date.now() - 15000
-        avatarSpeechBufferRef.current = avatarSpeechBufferRef.current.filter(e => e.ts > cutoff)
-        return avatarSpeechBufferRef.current.map(e => e.text).join(' ')
-      })
 
       const speakFn = (text: string) => {
-        try {
-          clearAllTimers()
-          onGate?.(true)
-          onAvatarSpeakingChange?.(true)
-          avatar.repeat(text)
-          const delay = Math.max(1500, text.length * 65) + 900
-          console.log('[GATE] safety timer set for', delay, 'ms')
-          safetyTimerRef.current = setTimeout(() => {
-            console.log('[GATE] safety timer fired')
-            openGate()
-          }, delay)
-        } catch(e) {
-          console.error('Avatar speak error:', e)
-          openGate()
-        }
+        try { avatar.repeat(text, { rate: 0.85 }) } catch(e) { console.error('Avatar speak error:', e) }
       }
-      const interruptFn = () => {
-        try {
-          avatar.interrupt?.()
-          clearAllTimers()
-          onGate?.(false)
-          onAvatarSpeakingChange?.(false)
-          onSashaFinished?.()
-        } catch(e) {}
-      }
-      onAvatarReady(speakFn, interruptFn)
+      onAvatarReady(speakFn)
 
     } catch (err: any) {
       setError(err.message || 'Failed to connect')
       setStatus('error')
     }
-  }, [tokenUrl, onAvatarReady, onAvatarSpeakingChange, onGate, onAvatarSpeechBuffer, onReadyToListen, onSashaFinished])
+  }, [tokenUrl, onAvatarReady])
 
+  // ─────────────────────────────────────────────
+  // iOS SAFARI: handle backgrounding + screen lock
+  // Reconnect when tab becomes visible again
+  // ─────────────────────────────────────────────
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && status === 'idle') { initAvatar() }
-      if (document.visibilityState === 'visible' && videoRef.current) { videoRef.current.play().catch(() => {}) }
+      if (document.visibilityState === 'visible' && status === 'idle') {
+        console.log('[Avatar] Tab resumed — reconnecting...')
+        initAvatar()
+      }
+
+      // iOS Safari: unmute video on visibility restore (Safari re-gates audio on resume)
+      if (document.visibilityState === 'visible' && videoRef.current) {
+        videoRef.current.play().catch(() => {})
+      }
     }
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [status, initAvatar])
 
+  // ─────────────────────────────────────────────
+  // iOS SAFARI: unmute on user tap anywhere on video
+  // Handles the "video plays, no audio" case
+  // ─────────────────────────────────────────────
+  const handleVideoTap = () => {
+    if (videoRef.current && videoRef.current.muted) {
+      videoRef.current.muted = false
+      videoRef.current.play().catch(() => {})
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // INIT + CLEANUP
+  // ─────────────────────────────────────────────
   useEffect(() => {
-    isMountedRef.current = true
     initAvatar()
     return () => {
-      isMountedRef.current = false
       clearTimeout(reconnectTimerRef.current)
-      clearTimeout(safetyTimerRef.current)
-      clearTimeout(trailingTimerRef.current)
       clearInterval(keepAliveTimerRef.current)
       avatarRef.current?.stop?.()
     }
@@ -221,8 +184,12 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         ref={videoRef}
         autoPlay
         playsInline
+        muted          // Start muted — Safari requires this for autoplay, unmuted after play()
+        onClick={handleVideoTap}
+        onTouchEnd={handleVideoTap}
         className={`w-full h-full object-cover transition-opacity duration-500 ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
       />
+
       {status === 'loading' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center animate-pulse">
@@ -231,6 +198,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           <div className="text-xs text-white/30 tracking-widest uppercase">Connecting to Sasha...</div>
         </div>
       )}
+
       {status === 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
           <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
@@ -240,6 +208,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           <button onClick={initAvatar} className="text-xs text-white/30 hover:text-white/60 underline">Try again</button>
         </div>
       )}
+
       {status === 'ready' && (
         <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
           <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/10">

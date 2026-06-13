@@ -421,6 +421,8 @@ async def conduct(
     user_message: str,
     conversation_history: list = None,
     client_config: Optional[ClientConfig] = None,
+    trip_id: str = "",
+    user_id: str = "",
 ) -> dict:
     """
     The Conductor — main entry point.
@@ -447,6 +449,7 @@ async def conduct(
     print(f"[Conductor] Intents: {intents}")
 
     # Step 3 — Fire all relevant agents in parallel
+    TRIP_AWARE_AGENTS = {"restaurant","booking_confirmation","golf","beauty","health","airport_transfer","experiences","visa","insurance","dog_walking","coworking"}
     tasks = []
     for intent in intents:
         runner = AGENT_REGISTRY.get(intent, run_general)
@@ -454,6 +457,8 @@ async def conduct(
             tasks.append(runner(user_message, conversation_history, context))
         elif intent == "general":
             tasks.append(runner(user_message, conversation_history, general_prompt))
+        elif intent in TRIP_AWARE_AGENTS:
+            tasks.append(runner(user_message, conversation_history, trip_id=trip_id))
         else:
             tasks.append(runner(user_message, conversation_history))
 

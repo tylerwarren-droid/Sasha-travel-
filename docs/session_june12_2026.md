@@ -39,6 +39,12 @@ All agents use `claude-haiku-4-5` for tool calls (web search loop). Only the con
 
 ---
 
+## Database schema
+
+Database schema live — migration `001_initial_schema.sql` successfully run against Supabase SASHA project. All 10 tables created: `user_profiles`, `organizations`, `traveler_profiles`, `trips`, `trip_items`, `booking_attempts`, `documents`, `escalations`, `conversations`, `calendar_events`. RLS enabled on all tables. Full schema spec in `docs/data_model.md`. Next step: wire agents to write `trip_items` to database when bookings are made.
+
+---
+
 ## Security incident
 
 Resend API key and Supabase service role JWT were exposed when the repo was temporarily made public for HeyGen source code review. Both rotated and updated in Railway environment variables. Repo is currently still public for ongoing HeyGen debugging — **make private once HeyGen confirms they have what they need.**

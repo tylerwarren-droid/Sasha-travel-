@@ -5,7 +5,8 @@ import { Mic, MicOff, Loader2 } from 'lucide-react'
 interface VoiceButtonProps {
   onTranscript: (text: string) => void
   disabled?: boolean
-  autoStart?: boolean  // if true, starts listening automatically
+  autoStart?: boolean
+  readyToListen?: boolean  // if true, starts listening automatically
   onSpeakingChange?: (isSpeaking: boolean) => void  // fires when user starts/stops speaking
 }
 

@@ -6,7 +6,11 @@ interface VoiceButtonProps {
   onTranscript: (text: string) => void
   disabled?: boolean
   autoStart?: boolean
-  readyToListen?: boolean  // if true, starts listening automatically
+  readyToListen?: boolean
+  avatarSpeaking?: boolean
+  onInterrupt?: () => void
+  onSetGate?: (gate: (value: boolean) => void) => void
+  avatarSpeechGetter?: () => string  // if true, starts listening automatically
   onSpeakingChange?: (isSpeaking: boolean) => void  // fires when user starts/stops speaking
 }
 

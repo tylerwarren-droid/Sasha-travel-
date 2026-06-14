@@ -4,7 +4,8 @@ import anthropic
 import json
 import re
 
-client = anthropic.Anthropic()
+from app.services.prompts import VOICE_BREVITY
+client = anthropic.AsyncAnthropic()
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
 BLAND_API_KEY = os.getenv("BLAND_API_KEY", "").strip()
 SASHA_FROM_EMAIL = "onboarding@resend.dev"
@@ -78,7 +79,7 @@ async def find_medical_provider(service_type, location, urgency="routine", speci
     pref = specialty or "general"
     query = "Find top 2 " + service_type + " " + pref + " in " + location + " for foreign traveler needing " + urgency + " care. Return ONLY a JSON array, each with: name, phone, email, address, notes. No other text."
     try:
-        response = client.messages.create(
+        response = await client.messages.create(
             model="claude-haiku-4-5", max_tokens=600,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{"role": "user", "content": query}]
@@ -149,7 +150,7 @@ async def run_health_agent(user_message: str, conversation_history: list = None)
     messages = conversation_history + [{"role": "user", "content": user_message}]
     tools_used = []
     while True:
-        response = client.messages.create(model="claude-sonnet-4-5", max_tokens=1024, system=SYSTEM_PROMPT, tools=HEALTH_TOOLS, messages=messages)
+        response = await client.messages.create(model="claude-sonnet-4-5", max_tokens=1024, system=SYSTEM_PROMPT + VOICE_BREVITY, tools=HEALTH_TOOLS, messages=messages)
         if response.stop_reason == "tool_use":
             messages.append({"role": "assistant", "content": response.content})
             tool_results = []

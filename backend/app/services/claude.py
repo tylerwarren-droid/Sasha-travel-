@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 SASHA_SYSTEM_PROMPT = """You are Sasha, an expert AI travel consultant specialising exclusively in Vietnam for Discover Vietnam — a premium travel platform created in partnership with the Vietnamese Ministry of Tourism.
 
@@ -147,7 +147,7 @@ async def chat(
     user_context = build_user_context(user, itinerary, message_count=len(messages))
     system = f"{SASHA_SYSTEM_PROMPT}\n\n{user_context}"
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-sonnet-4-5",
         max_tokens=1024,
         system=system,
@@ -177,7 +177,7 @@ Current preferences: {user.get('preferences', [])}
 
 Write only the summary, no preamble."""
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-sonnet-4-5",
         max_tokens=200,
         messages=[{"role": "user", "content": prompt}]

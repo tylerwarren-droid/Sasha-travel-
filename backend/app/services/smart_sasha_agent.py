@@ -4,7 +4,8 @@ import re
 from datetime import datetime, timedelta
 from typing import Optional
 
-client = anthropic.Anthropic()
+from app.services.prompts import VOICE_BREVITY
+client = anthropic.AsyncAnthropic()
 
 # ─────────────────────────────────────────────
 # SMART SASHA — FUZZY PARAMETER EXTRACTION
@@ -161,7 +162,7 @@ Return JSON with these fields (use null for unknown):
 Current year: {datetime.now().year}. If they say "this summer" use June 15 - Aug 31 of current year.
 If they say "next year" add 1 to current year."""
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-haiku-4-5",
         max_tokens=600,
         messages=[{"role": "user", "content": extraction_prompt}]
@@ -484,10 +485,10 @@ async def run_smart_sasha_agent(user_message: str, conversation_history: list = 
     tools_used = []
 
     while True:
-        response = client.messages.create(
+        response = await client.messages.create(
             model="claude-sonnet-4-5",
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
+            system=SYSTEM_PROMPT + VOICE_BREVITY,
             tools=SMART_SASHA_TOOLS,
             messages=messages
         )

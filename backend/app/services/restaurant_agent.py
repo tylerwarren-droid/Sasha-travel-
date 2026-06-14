@@ -4,7 +4,8 @@ import anthropic
 import json
 import re
 
-client = anthropic.Anthropic()
+from app.services.prompts import VOICE_BREVITY
+client = anthropic.AsyncAnthropic()
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
 BLAND_API_KEY = os.getenv("BLAND_API_KEY", "").strip()
 SASHA_FROM_EMAIL = "onboarding@resend.dev"
@@ -70,9 +71,9 @@ async def find_restaurant(location: str, cuisine: str = "", budget: str = "", oc
     cuis = cuisine or "any"
     bud = budget or "any"
     occ = occasion or "any"
-    query = "Find 2 " + cuis + " restaurants in " + location + " good for " + occ + ". Budget: " + bud + ". Return ONLY a JSON array with whatever contact info is available, each object with: name, phone (or best guess), email (or best guess), address, price_range, cuisine, notes, booking_url (OpenTable, Resy, TheFork link or restaurant's own booking page, or empty string). Make your best effort even if some fields are unknown - use empty string for missing fields. No other text."
+    query = "Find 2 " + cuis + " restaurants in " + location + " good for " + occ + ". Budget: " + bud + ". Return ONLY a JSON array with whatever contact info is available, each object with: name, phone (or best guess), email (or best guess), address, price_range, cuisine, notes. Make your best effort even if some fields are unknown - use empty string for missing fields. No other text."
     try:
-        response = client.messages.create(
+        response = await client.messages.create(
             model="claude-haiku-4-5", max_tokens=600,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{"role": "user", "content": query}]
@@ -184,40 +185,29 @@ async def call_restaurant(
     except Exception as e:
         return {"called": False, "error": str(e)}
 
-from app.services.db_writer import write_trip_item, update_trip_item, write_booking_attempt
-
 SYSTEM_PROMPT = """You are Sasha's restaurant specialist. Find and book restaurants anywhere in the world.
-Steps: 1) Find top restaurants matching the guest's criteria 2) Book using all available methods 3) Confirm to the guest.
+Steps: 1) Find top restaurants matching the guest's criteria 2) Send reservation email 3) Call restaurant simultaneously.
 Collect: guest name, location, cuisine preference, date, time, party size, occasion, special requests, guest email.
-Always ask about dietary requirements or special occasions — these matter for restaurant bookings.
-BOOKING PRIORITY: 1) Always send_reservation_email, 2) Always call_restaurant. Run email and phone call simultaneously."""
+Always ask about dietary requirements or special occasions — these matter for restaurant bookings."""
 
-async def run_restaurant_agent(user_message: str, conversation_history: list = None, trip_id: str = "") -> dict:
+async def run_restaurant_agent(user_message: str, conversation_history: list = None) -> dict:
     if conversation_history is None:
         conversation_history = []
     messages = conversation_history + [{"role": "user", "content": user_message}]
     tools_used = []
     while True:
-        response = client.messages.create(model="claude-sonnet-4-5", max_tokens=1024,
-            system=SYSTEM_PROMPT, tools=RESTAURANT_TOOLS, messages=messages)
+        response = await client.messages.create(model="claude-sonnet-4-5", max_tokens=1024,
+            system=SYSTEM_PROMPT + VOICE_BREVITY, tools=RESTAURANT_TOOLS, messages=messages)
         if response.stop_reason == "tool_use":
             messages.append({"role": "assistant", "content": response.content})
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
                     inp = block.input
-                    if block.name == "find_restaurant":
-                        result = await find_restaurant(**inp)
-                    elif block.name == "send_reservation_email":
-                        result = await send_reservation_email(**inp)
-                        if not hasattr(messages, '_restaurant_item_id'):
-                            messages._restaurant_item_id = await write_trip_item(trip_id=trip_id,type="restaurant",status="attempting" if result.get("sent") else "failed",provider_name=inp.get("restaurant_name"),provider_email=inp.get("restaurant_email"),date_time=inp.get("date"),location_name=inp.get("restaurant_name"))
-                        await write_booking_attempt(trip_item_id=getattr(messages,"_restaurant_item_id",None),method="email",status="sent" if result.get("sent") else "failed")
-                    elif block.name == "call_restaurant":
-                        result = await call_restaurant(**inp)
-                        await write_booking_attempt(trip_item_id=getattr(messages,"_restaurant_item_id",None),method="phone",status="sent" if result.get("called") else "failed",bland_call_id=result.get("call_id"))
-                    else:
-                        result = {"error": "Unknown: " + block.name}
+                    if block.name == "find_restaurant": result = await find_restaurant(**inp)
+                    elif block.name == "send_reservation_email": result = await send_reservation_email(**inp)
+                    elif block.name == "call_restaurant": result = await call_restaurant(**inp)
+                    else: result = {"error": "Unknown: " + block.name}
                     tools_used.append({"tool": block.name, "result": result})
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": json.dumps(result)})
             messages.append({"role": "user", "content": tool_results})

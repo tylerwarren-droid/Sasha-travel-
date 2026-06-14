@@ -2,7 +2,8 @@ import anthropic
 import json
 from app.services.card_benefits_db import CARD_DB, get_card, get_earn_rate, list_cards
 
-client = anthropic.Anthropic()
+from app.services.prompts import VOICE_BREVITY
+client = anthropic.AsyncAnthropic()
 
 # ─────────────────────────────────────────────
 # CREDIT CARD INTELLIGENCE AGENT
@@ -328,10 +329,10 @@ async def run_credit_card_agent(user_message: str, conversation_history: list = 
     tools_used = []
 
     while True:
-        response = client.messages.create(
+        response = await client.messages.create(
             model="claude-sonnet-4-5",
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
+            system=SYSTEM_PROMPT + VOICE_BREVITY,
             tools=CCI_TOOLS,
             messages=messages
         )

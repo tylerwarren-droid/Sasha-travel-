@@ -6,7 +6,7 @@ from typing import Any, Optional
 from app.services.prompts import get_prompt_async
 from app.services.tenant import ClientConfig
 
-client = anthropic.Anthropic()
+client = anthropic.AsyncAnthropic()
 
 # ─────────────────────────────────────────────
 # INTENT CLASSIFICATION
@@ -68,19 +68,6 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
     FOTO_WORDS = ["show me", "photo", "picture", "image", "what does", "what do", "look like"]
     CREDIT_CARD_WORDS = ["credit card", "which card", "points", "miles", "rewards", "amex", "chase sapphire", "capital one", "bilt", "card to use", "earn points", "transfer points", "annual credit", "card benefits", "maximize points", "best card"]
     CAR_RENTAL_WORDS = ["rental car", "car rental", "rent a car", "hire a car", "rental insurance", "cdw", "collision waiver", "rental coverage", "hertz", "avis", "enterprise rental", "europcar", "should i take insurance"]
-    VISA_WORDS = ["visa", "entry requirements", "passport", "do i need a visa", "travel documents", "entry restriction", "visa on arrival", "evisa", "e-visa", "tourist visa", "transit visa"]
-    CURRENCY_WORDS = ["currency", "exchange rate", "money", "atm", "cash", "should i use my card", "tipping", "tip", "local money", "how much is", "convert", "dong", "baht", "peso", "rupiah", "ringgit", "won"]
-    WEATHER_WORDS = ["weather", "what to pack", "climate", "best time to visit", "rainy season", "temperature", "hot or cold", "forecast", "will it rain", "typhoon", "monsoon", "dry season"]
-    EMERGENCY_WORDS = ["emergency", "lost passport", "stolen", "hospital", "police", "help me", "robbery", "accident", "embassy", "arrested", "lost my", "stolen my", "hurt badly", "need help urgently", "crisis"]
-    LANGUAGE_WORDS = ["language", "phrases", "how do i say", "translation", "etiquette", "customs", "culture", "local words", "speak", "greetings", "thank you in", "hello in", "dress code", "cultural"]
-    PACKING_WORDS = ["packing", "what to bring", "luggage", "what should i pack", "suitcase", "carry on", "what do i need to bring", "what to pack", "packing list", "bag", "baggage"]
-    FAMILY_WORDS = ["kids", "children", "family", "baby", "toddler", "kid-friendly", "family travel", "stroller", "car seat", "with children", "my kids", "travelling with kids", "child friendly", "infant"]
-    AIRPORT_TRANSFER_WORDS = ["airport transfer", "taxi", "pickup", "airport shuttle", "private car", "transfer to hotel", "how to get from airport", "get from airport", "from the airport", "airport taxi", "airport pickup"]
-    EXPERIENCES_WORDS = ["cooking class", "tour", "experience", "activity", "things to do", "local guide", "cultural tour", "excursion", "day trip", "guided tour", "food tour", "walking tour", "boat tour"]
-    COWORKING_WORDS = ["coworking", "co-working", "work remotely", "wifi", "coffee shop to work", "laptop friendly", "remote work", "digital nomad", "fast wifi", "place to work", "work from"]
-    INSURANCE_WORDS = ["travel insurance", "insurance", "coverage", "medical coverage", "trip cancellation", "safetywing", "world nomads", "insure my trip", "insure", "travel cover", "covered if"]
-    LOYALTY_WORDS = ["loyalty program", "frequent flyer", "hotel points", "airline miles", "status", "which program", "marriott", "hilton", "ihg", "united miles", "delta miles", "british airways", "oneworld", "star alliance", "skyteam", "frequent traveler", "elite status"]
-    API_ASSIMILATION_WORDS = ["api", "integrate", "need an api", "which api", "travel api", "booking api", "flight api", "hotel api", "how do i connect", "third party", "third-party", "api key", "api documentation", "connect to"]
 
     if any(w in lower for w in GOLF_WORDS):
         intents.append("golf")
@@ -112,32 +99,6 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
         intents.append("credit_card")
     if any(w in lower for w in CAR_RENTAL_WORDS):
         intents.append("car_rental")
-    if any(w in lower for w in VISA_WORDS):
-        intents.append("visa")
-    if any(w in lower for w in CURRENCY_WORDS):
-        intents.append("currency")
-    if any(w in lower for w in WEATHER_WORDS):
-        intents.append("weather")
-    if any(w in lower for w in EMERGENCY_WORDS):
-        intents.append("emergency")
-    if any(w in lower for w in LANGUAGE_WORDS):
-        intents.append("language")
-    if any(w in lower for w in PACKING_WORDS):
-        intents.append("packing")
-    if any(w in lower for w in FAMILY_WORDS):
-        intents.append("family")
-    if any(w in lower for w in AIRPORT_TRANSFER_WORDS):
-        intents.append("airport_transfer")
-    if any(w in lower for w in EXPERIENCES_WORDS):
-        intents.append("experiences")
-    if any(w in lower for w in COWORKING_WORDS):
-        intents.append("coworking")
-    if any(w in lower for w in INSURANCE_WORDS):
-        intents.append("insurance")
-    if any(w in lower for w in LOYALTY_WORDS):
-        intents.append("loyalty")
-    if any(w in lower for w in API_ASSIMILATION_WORDS):
-        intents.append("api_assimilation")
 
     if not intents:
         intents = ["general"]
@@ -155,9 +116,9 @@ async def classify_intents(user_message: str, conversation_history: list) -> dic
 
 async def run_general(message: str, history: list, general_prompt: str) -> dict:
     """General Sasha conversation — travel advice, destinations, planning."""
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-sonnet-4-5",
-        max_tokens=300,
+        max_tokens=200,  # short spoken replies — voice interface
         system=general_prompt,
         messages=history + [{"role": "user", "content": message}]
     )
@@ -293,96 +254,6 @@ async def run_smart_sasha_intent(message: str, history: list) -> dict:
         "data": {"tools_used": result.get("tools_used", [])}
     }
 
-async def run_visa_intent(message: str, history: list) -> dict:
-    try:
-        from app.services.visa_agent import run_visa_agent
-        result = await run_visa_agent(message, history)
-        return {"agent": "visa", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-    except Exception as e:
-        import traceback
-        print(f"[VISA] Error: {e}")
-        print(traceback.format_exc())
-        return {"agent": "visa", "response": "", "data": {}}
-
-
-async def run_currency_intent(message: str, history: list) -> dict:
-    """Route to currency and money agent."""
-    from app.services.currency_agent import run_currency_agent
-    result = await run_currency_agent(message, history)
-    return {"agent": "currency", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-
-
-async def run_weather_intent(message: str, history: list) -> dict:
-    """Route to weather and climate agent."""
-    from app.services.weather_agent import run_weather_agent
-    result = await run_weather_agent(message, history)
-    return {"agent": "weather", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-
-
-async def run_emergency_intent(message: str, history: list) -> dict:
-    """Route to emergency response agent."""
-    from app.services.emergency_agent import run_emergency_agent
-    result = await run_emergency_agent(message, history)
-    return {"agent": "emergency", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-
-
-async def run_language_intent(message: str, history: list) -> dict:
-    """Route to language and cultural etiquette agent."""
-    from app.services.language_agent import run_language_agent
-    result = await run_language_agent(message, history)
-    return {"agent": "language", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-
-
-async def run_packing_intent(message: str, history: list) -> dict:
-    """Route to packing list agent."""
-    from app.services.packing_agent import run_packing_agent
-    result = await run_packing_agent(message, history)
-    return {"agent": "packing", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-
-
-async def run_family_intent(message: str, history: list) -> dict:
-    """Route to family travel agent."""
-    from app.services.family_agent import run_family_agent
-    result = await run_family_agent(message, history)
-    return {"agent": "family", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-
-
-async def run_airport_transfer_intent(message: str, history: list) -> dict:
-    from app.services.airport_transfer_agent import run_airport_transfer_agent
-    result = await run_airport_transfer_agent(message, history)
-    return {"agent": "airport_transfer", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-
-
-async def run_experiences_intent(message: str, history: list) -> dict:
-    from app.services.experiences_agent import run_experiences_agent
-    result = await run_experiences_agent(message, history)
-    return {"agent": "experiences", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-
-
-async def run_coworking_intent(message: str, history: list) -> dict:
-    from app.services.coworking_agent import run_coworking_agent
-    result = await run_coworking_agent(message, history)
-    return {"agent": "coworking", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-
-
-async def run_insurance_intent(message: str, history: list) -> dict:
-    from app.services.insurance_agent import run_insurance_agent
-    result = await run_insurance_agent(message, history)
-    return {"agent": "insurance", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-
-
-async def run_loyalty_intent(message: str, history: list) -> dict:
-    from app.services.loyalty_agent import run_loyalty_agent
-    result = await run_loyalty_agent(message, history)
-    return {"agent": "loyalty", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-
-
-async def run_api_assimilation_intent(message: str, history: list) -> dict:
-    from app.services.api_assimilation_agent import run_api_assimilation_agent
-    result = await run_api_assimilation_agent(message, history)
-    return {"agent": "api_assimilation", "response": result["response"], "data": {"tools_used": result.get("tools_used", [])}}
-
-
 # Agent registry — maps intent names to runner functions
 AGENT_REGISTRY = {
     "golf": run_golf_intent,
@@ -395,19 +266,6 @@ AGENT_REGISTRY = {
     "smart_sasha": run_smart_sasha_intent,
     "credit_card": run_credit_card_intent,
     "car_rental": run_car_rental_intent,
-    "visa": run_visa_intent,
-    "currency": run_currency_intent,
-    "weather": run_weather_intent,
-    "emergency": run_emergency_intent,
-    "language": run_language_intent,
-    "packing": run_packing_intent,
-    "family": run_family_intent,
-    "airport_transfer": run_airport_transfer_intent,
-    "experiences": run_experiences_intent,
-    "coworking": run_coworking_intent,
-    "insurance": run_insurance_intent,
-    "loyalty": run_loyalty_intent,
-    "api_assimilation": run_api_assimilation_intent,
     "general": run_general,
 }
 
@@ -421,8 +279,6 @@ async def conduct(
     user_message: str,
     conversation_history: list = None,
     client_config: Optional[ClientConfig] = None,
-    trip_id: str = "",
-    user_id: str = "",
 ) -> dict:
     """
     The Conductor — main entry point.
@@ -449,7 +305,6 @@ async def conduct(
     print(f"[Conductor] Intents: {intents}")
 
     # Step 3 — Fire all relevant agents in parallel
-    TRIP_AWARE_AGENTS = {"restaurant","booking_confirmation","golf","beauty","health","airport_transfer","experiences","visa","insurance","dog_walking","coworking"}
     tasks = []
     for intent in intents:
         runner = AGENT_REGISTRY.get(intent, run_general)
@@ -457,21 +312,20 @@ async def conduct(
             tasks.append(runner(user_message, conversation_history, context))
         elif intent == "general":
             tasks.append(runner(user_message, conversation_history, general_prompt))
-        elif intent in TRIP_AWARE_AGENTS:
-            tasks.append(runner(user_message, conversation_history, trip_id=trip_id))
         else:
             tasks.append(runner(user_message, conversation_history))
 
-    async def run_with_timeout(task, timeout=30.0):
+    async def run_with_timeout(task, timeout=20.0):
+        # 20s ceiling: the LLM/agent calls are now genuinely async, so wait_for can
+        # actually cancel a slow call. 5s used to silently kill normal LLM responses
+        # (which return empty -> generic fallback -> "avatar didn't really answer").
         try:
             return await asyncio.wait_for(task, timeout=timeout)
         except asyncio.TimeoutError:
             print(f"[Conductor] Agent timed out after {timeout}s")
             return {"agent": "timeout", "response": "", "data": {}}
         except Exception as e:
-            import traceback
             print(f"[Conductor] Agent error: {e}")
-            print(traceback.format_exc())
             return {"agent": "error", "response": "", "data": {}}
 
     results = await asyncio.gather(*[run_with_timeout(t) for t in tasks], return_exceptions=True)
@@ -504,13 +358,22 @@ async def conduct(
     else:
         # Multiple agents responded — merge them
         combined = "\n\n".join([f"[{r['agent'].upper()}]: {r['response']}" for r in agent_responses])
-        merge_response = client.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=400,
-            system=merge_prompt,
-            messages=[{"role": "user", "content": f"User asked: {user_message}\n\nAgent responses:\n{combined}"}]
-        )
-        final_response = merge_response.content[0].text
+        try:
+            merge_response = await asyncio.wait_for(
+                client.messages.create(
+                    model="claude-sonnet-4-5",
+                    max_tokens=250,  # short spoken replies — voice interface
+                    system=merge_prompt,
+                    messages=[{"role": "user", "content": f"User asked: {user_message}\n\nAgent responses:\n{combined}"}]
+                ),
+                timeout=20.0,
+            )
+            final_response = merge_response.content[0].text
+        except Exception as e:
+            # Never let a merge failure swallow the whole turn — fall back to the
+            # first agent's answer so the avatar always says something useful.
+            print(f"[Conductor] Merge failed ({e}) — using first agent response")
+            final_response = agent_responses[0]["response"]
 
     # Step 6 — Update conversation history
     updated_history = conversation_history + [

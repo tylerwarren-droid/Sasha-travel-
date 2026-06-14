@@ -2,7 +2,8 @@ import anthropic
 import json
 from app.services.card_benefits_db import RENTAL_COVERAGE_DB, get_card, get_rental_coverage
 
-client = anthropic.Anthropic()
+from app.services.prompts import VOICE_BREVITY
+client = anthropic.AsyncAnthropic()
 
 # ─────────────────────────────────────────────
 # CAR RENTAL INSURANCE MICROSERVICE
@@ -212,10 +213,10 @@ async def run_car_rental_agent(user_message: str, conversation_history: list = N
     tools_used = []
 
     while True:
-        response = client.messages.create(
+        response = await client.messages.create(
             model="claude-sonnet-4-5",
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
+            system=SYSTEM_PROMPT + VOICE_BREVITY,
             tools=RENTAL_TOOLS,
             messages=messages
         )

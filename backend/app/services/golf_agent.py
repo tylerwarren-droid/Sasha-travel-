@@ -9,7 +9,8 @@ from app.services.vietnam_golf_database import (
     get_total_course_count,
 )
 
-client = anthropic.Anthropic()
+from app.services.prompts import VOICE_BREVITY
+client = anthropic.AsyncAnthropic()
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 SASHA_FROM_EMAIL = "onboarding@resend.dev"
 SASHA_NOTIFY_EMAIL = "tylerwarren@gmail.com"  # your email — gets a copy of every booking
@@ -297,10 +298,10 @@ async def run_golf_agent(user_message: str, conversation_history: list = None) -
     tools_used = []
 
     while True:
-        response = client.messages.create(
+        response = await client.messages.create(
             model="claude-sonnet-4-5",
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
+            system=SYSTEM_PROMPT + VOICE_BREVITY,
             tools=GOLF_TOOLS,
             messages=messages
         )

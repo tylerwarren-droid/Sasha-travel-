@@ -8,8 +8,6 @@ router = APIRouter()
 class ConductorRequest(BaseModel):
     message: str
     conversation_history: list = []
-    trip_id: str = ""
-    user_id: str = ""
 
 
 class ConductorResponse(BaseModel):
@@ -28,8 +26,6 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             user_message=body.message,
             conversation_history=body.conversation_history,
             client_config=client_config,
-            trip_id=body.trip_id or "",
-            user_id=body.user_id or "",
         )
         return ConductorResponse(
             response=result["response"],

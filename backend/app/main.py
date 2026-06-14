@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.middleware.tenant import TenantMiddleware
@@ -19,9 +20,22 @@ app = FastAPI(
     version="0.1.0"
 )
 
+# Base allowlist + any extra origins from ALLOWED_ORIGINS env (comma-separated), so a
+# new prod domain can be whitelisted without a code change. A frontend origin missing
+# from this list is CORS-blocked → every conductor call fails → the avatar goes silent.
+_DEFAULT_ORIGINS = [
+    "http://localhost:3000",
+    "https://sasha-travel.vercel.app",
+    "https://discover-vietnam.vercel.app",
+    "https://sasha-heygen.vercel.app",
+    "https://investor.kanoe.ai",
+    "https://demo.kanoe.ai",
+]
+_EXTRA_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://sasha-travel.vercel.app", "https://discover-vietnam.vercel.app", "https://sasha-heygen.vercel.app", "https://investor.kanoe.ai", "https://demo.kanoe.ai"],
+    allow_origins=_DEFAULT_ORIGINS + _EXTRA_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

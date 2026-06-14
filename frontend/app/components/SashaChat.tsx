@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, MutableRefObject } from 'react'
 import { Send, Loader2 } from 'lucide-react'
 import { User, Itinerary } from '@/types'
 import VoiceButton from './VoiceButton'
+import { renderMarkdown } from '@/lib/markdown'
 import axios from 'axios'
 
 interface SashaChatProps {
@@ -39,6 +40,9 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  // Single-flight guard: one conductor request at a time. Prevents duplicate STT
+  // finals (or fast double-taps) from firing concurrent calls and stacking replies.
+  const inFlightRef = useRef(false)
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -50,6 +54,11 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
       console.log('[LOCK] ignoring transcript — Sasha is responding')
       return
     }
+    if (inFlightRef.current) {
+      console.log('[Conductor] ignoring — a request is already in flight')
+      return
+    }
+    inFlightRef.current = true
     console.log('[Conductor] API_URL:', API_URL)
     const historyBeforeMessage = messages  // snapshot before appending
     setMessages(prev => [...prev, { role: 'user', content }])
@@ -59,7 +68,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
       const response = await axios.post(API_URL + '/api/agents/conductor', {
         message: content,
         conversation_history: historyBeforeMessage
-      })
+      }, { timeout: 30000 })  // bound the call so a hung backend can't stall the turn
       const { response: sashaResponse, conversation_history, photos } = response.data
       // Replace local messages with server-authoritative history
       if (conversation_history?.length > 0) {
@@ -71,9 +80,14 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
       if (photos?.length > 0) onPhotos?.(photos)
     } catch (error: any) {
       console.error('[Conductor] error:', error?.response?.status, error?.response?.data, error?.message)
-      setMessages(prev => [...prev, { role: 'assistant', content: "I ran into a small issue. Could you try again?" }])
+      // Speak a graceful fallback so the avatar is never silent on a backend hiccup —
+      // this is what "the avatar doesn't respond" looked like to the user.
+      const fallback = "Sorry, I didn't quite catch that — could you say it again?"
+      setMessages(prev => [...prev, { role: 'assistant', content: fallback }])
+      onSashaResponse?.(fallback)
     } finally {
       setIsLoading(false)
+      inFlightRef.current = false
     }
   }
 
@@ -122,12 +136,12 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
               {msg.role === 'assistant' ? 'S' : user.display_name[0]}
             </div>
             <div className="max-w-[90%]">
-              <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+              <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
                 msg.role === 'assistant'
                   ? 'bg-white/5 text-white/80 rounded-tl-sm border border-white/5'
-                  : 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-tr-sm'
+                  : 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-tr-sm whitespace-pre-wrap'
               }`}>
-                {msg.content}
+                {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
               </div>
             </div>
           </div>

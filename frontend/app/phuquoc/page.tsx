@@ -53,15 +53,6 @@ export default function PhuQuocPage() {
   const [rightTab, setRightTab] = useState<'chat' | 'itinerary' | 'preferences' | 'trips'>('chat')
   const [started, setStarted] = useState(false)
   const photoInterval = useRef<any>(null)
-  const speakFnRef = useRef<((text: string) => void) | null>(null)
-  const interruptFnRef = useRef<(() => void) | null>(null)
-  const gateRef = useRef<((value: boolean) => void) | null>(null)
-  const lastRepeatTextRef = useRef<string>('')
-  const isRespondingRef = useRef(false)
-  const [voiceReady, setVoiceReady] = useState(false)
-  const [isAvatarSpeaking, setIsAvatarSpeaking] = useState(false)
-  const handleSetGate = useCallback((fn: (value: boolean) => void) => { gateRef.current = fn }, [])
-  const handleGate = useCallback((value: boolean) => { gateRef.current?.(value) }, [])
 
   useEffect(() => {
     const fetchPhotos = async () => {
@@ -90,16 +81,8 @@ export default function PhuQuocPage() {
     return () => clearInterval(photoInterval.current)
   }, [photos])
 
-  const handleAvatarReady = useCallback((speak: (text: string) => void, interrupt: () => void) => {
+  const handleAvatarReady = useCallback((speak: (text: string) => void) => {
     setSpeakFn(() => speak)
-    speakFnRef.current = speak
-    interruptFnRef.current = interrupt
-  }, [])
-
-  const handleInterrupt = useCallback(() => { interruptFnRef.current?.() }, [])
-
-  const handleSashaFinished = useCallback(() => {
-    isRespondingRef.current = false
   }, [])
 
   const handleSashaResponse = useCallback((text: string) => {
@@ -149,17 +132,7 @@ export default function PhuQuocPage() {
             className="rounded-3xl overflow-hidden border border-white/5 flex-shrink-0 transition-all duration-700"
             style={{ height: engaged ? '160px' : '60%' }}
           >
-            {started && (
-              <SashaAvatar
-                onAvatarReady={handleAvatarReady}
-                isListening={isListening}
-                tokenUrl="/api/heygen/token/phuquoc"
-                onGate={handleGate}
-                onAvatarSpeakingChange={setIsAvatarSpeaking}
-                onReadyToListen={() => setVoiceReady(true)}
-                onSashaFinished={handleSashaFinished}
-              />
-            )}
+            {started && <SashaAvatar onAvatarReady={handleAvatarReady} isListening={isListening} tokenUrl="/api/heygen/token/phuquoc" />}
           </div>
 
           {/* PHOTOS — hero when engaged, teaser when not */}

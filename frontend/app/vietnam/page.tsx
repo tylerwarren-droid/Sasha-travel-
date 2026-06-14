@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import SashaAvatar from '../components/SashaAvatar'
 import SashaChat from '../components/SashaChat'
 import ItineraryPanel from '../components/ItineraryPanel'
+import { stripMarkdown } from '@/lib/markdown'
 import { User, Itinerary } from '@/types'
 
 const DEMO_USER: User = {
@@ -60,6 +61,7 @@ export default function VietnamPage() {
   const photoInterval = useRef<any>(null)
   const lastRepeatTextRef = useRef<string>('')
   const isRespondingRef = useRef(false)
+  const lockWatchdogRef = useRef<any>(null)
   const [voiceReady, setVoiceReady] = useState(false)
   const [isAvatarSpeaking, setIsAvatarSpeaking] = useState(false)
 
@@ -94,6 +96,20 @@ export default function VietnamPage() {
     interruptFnRef.current?.()
   }, [])
 
+  const handleEndSession = useCallback(() => {
+    // Flipping `started` off unmounts SashaAvatar (-> avatar.stop() ends the LiveAvatar
+    // session, stopping billing) and SashaChat (-> VoiceButton unmounts -> Deepgram WS
+    // closes). Tap-to-start spins up a fresh session; chat history is preserved.
+    interruptFnRef.current?.()
+    isRespondingRef.current = false
+    clearTimeout(lockWatchdogRef.current)
+    setIsAvatarSpeaking(false)
+    speakFnRef.current = null
+    interruptFnRef.current = null
+    setEngaged(false)
+    setStarted(false)
+  }, [])
+
   const handlePhotos = useCallback((newPhotos: any[]) => {
     if (newPhotos?.length > 0) {
       setPhotos(newPhotos)
@@ -103,16 +119,40 @@ export default function VietnamPage() {
 
   const handleSashaFinished = useCallback(() => {
     isRespondingRef.current = false
+    clearTimeout(lockWatchdogRef.current)
     console.log('[LOCK] released — Sasha finished speaking')
   }, [])
 
   const handleSashaResponse = useCallback((text: string) => {
     if (!text) return
-    lastRepeatTextRef.current = text
+    // Never acquire the lock if there's no avatar speak fn to release it — that would
+    // deadlock the whole conversation with nothing able to clear the lock.
+    if (!speakFnRef.current) {
+      console.warn('[LOCK] no speakFn wired — skipping avatar speak, not locking')
+      return
+    }
+    // The avatar must SPEAK plain text — strip markdown so TTS never reads "asterisk".
+    // The chat still displays the original markdown (rendered as bold/lists).
+    const spoken = stripMarkdown(text)
+    lastRepeatTextRef.current = spoken
     isRespondingRef.current = true
     console.log('[LOCK] acquired — Sasha speaking')
-    speakFnRef.current?.(text)
+    speakFnRef.current(spoken)
     setEngaged(true)
+    // Independent backstop. The lock is normally released by the avatar's
+    // speak_ended -> openGate -> onSashaFinished chain; this guarantees release even if
+    // that chain is never completed (avatar error, lost session, missed events), so a
+    // single failure can never freeze the conversation after one turn.
+    clearTimeout(lockWatchdogRef.current)
+    const watchdogMs = Math.min(35000, Math.max(10000, text.length * 90)) + 4000
+    lockWatchdogRef.current = setTimeout(() => {
+      if (isRespondingRef.current) {
+        console.warn('[LOCK] watchdog force-release after', watchdogMs, 'ms')
+        isRespondingRef.current = false
+        setIsAvatarSpeaking(false)
+        gateRef.current?.(false)
+      }
+    }, watchdogMs)
   }, [])
 
   const handleItineraryUpdate = useCallback((newItinerary: Itinerary) => {
@@ -133,8 +173,20 @@ export default function VietnamPage() {
           <div className="w-px h-4 bg-white/10" />
           <span className="text-xs text-white/30 tracking-widest uppercase">AI Travel Concierge</span>
         </div>
-        <div className="text-xs px-3 py-1 rounded-full border" style={{ color: '#DAA520', borderColor: 'rgba(218,165,32,0.3)', background: 'rgba(218,165,32,0.1)' }}>
-          Ministry of Tourism Partner
+        <div className="flex items-center gap-3">
+          {started && (
+            <button
+              onClick={handleEndSession}
+              title="End the live avatar session to stop using credits"
+              className="text-xs px-3 py-1.5 rounded-full border transition-colors hover:opacity-80"
+              style={{ color: '#f87171', borderColor: 'rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.1)' }}
+            >
+              ■ End Session
+            </button>
+          )}
+          <div className="text-xs px-3 py-1 rounded-full border" style={{ color: '#DAA520', borderColor: 'rgba(218,165,32,0.3)', background: 'rgba(218,165,32,0.1)' }}>
+            Ministry of Tourism Partner
+          </div>
         </div>
       </div>
 

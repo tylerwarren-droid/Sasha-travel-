@@ -23,6 +23,9 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
   const trailingTimerRef = useRef<any>(null)
   const avatarSpeechBufferRef = useRef<{ text: string; ts: number }[]>([])
   const hasOpenedMicRef = useRef(false)
+  // Single source of truth for "the avatar is mid-response". Drives idempotent gate
+  // opening — we deliberately do NOT count speak segments (see speak-handler block).
+  const speakingRef = useRef(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'bad' | null>(null)
@@ -39,14 +42,29 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
     }
 
     const openGate = () => {
+      // Runs its release path exactly ONCE per utterance. Whichever end-detector fires
+      // first (quiet debounce, absolute watchdog, or session stop) wins; the rest no-op.
+      if (!speakingRef.current) return
+      speakingRef.current = false
+      clearAllTimers()
       onGate?.(false)
       onAvatarSpeakingChange?.(false)
       onSashaFinished?.()
       if (!hasOpenedMicRef.current) {
         hasOpenedMicRef.current = true
-        console.log('[MIC] opening mic after first speak ended')
+        console.log('[MIC] opening mic')
         onReadyToListen?.()
       }
+    }
+
+    // Absolute backstop. Force-opens the mic even if the avatar's final speak_ended is
+    // never delivered — the exact failure that used to wedge the conversation.
+    const armWatchdog = (ms: number) => {
+      clearTimeout(safetyTimerRef.current)
+      safetyTimerRef.current = setTimeout(() => {
+        console.log('[GATE] watchdog fired — force-opening mic after', ms, 'ms')
+        openGate()
+      }, ms)
     }
 
     try {
@@ -73,28 +91,57 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           videoRef.current.play().catch((e: any) => console.warn('Autoplay blocked:', e))
         }
         keepAliveTimerRef.current = setInterval(() => {
-          try { avatar.keepAlive?.() } catch(e) {}
+          void Promise.resolve(avatar.keepAlive?.()).catch(() => {})
         }, 150000)
 
         if (!speakHandlersRegistered) {
           speakHandlersRegistered = true
           console.log('[HG] registering speak handlers')
 
+          // One response arrives as one or more sentence SEGMENTS, each with its own
+          // speak_started / speak_ended. LiveAvatar does NOT guarantee these fire 1:1 —
+          // a speak_ended can be dropped or an extra speak_started can arrive — so we
+          // never count segments (a single mismatch would wedge the turn forever).
+          // Instead:
+          //   speak_started -> definitely speaking; cancel any pending mic-open
+          //   speak_ended   -> maybe done; (re)arm a quiet-debounce
+          //   debounce elapses with no new speak_started -> open the mic
+          // The absolute watchdog (armed in speakFn, or on the opening greeting) is the
+          // final backstop if the very last speak_ended is dropped. openGate() is
+          // idempotent, so whichever detector fires first opens the mic exactly once.
+          const GATE_OPEN_DEBOUNCE = 1000
+          // True backstop only — the opening greeting can run ~15-20s, so this must be
+          // well beyond it. The normal path opens the mic ~1s after speak_ended; this
+          // only fires if speak_ended is never delivered.
+          const GREETING_WATCHDOG_MS = 30000
+
+          const scheduleGateOpen = () => {
+            clearTimeout(trailingTimerRef.current)
+            trailingTimerRef.current = setTimeout(() => {
+              console.log('[GATE] avatar quiet — opening mic')
+              openGate()
+            }, GATE_OPEN_DEBOUNCE)
+          }
+
           avatar.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, () => {
             console.log('[HG] speak started')
+            // An utterance that began WITHOUT a speakFn() call (the avatar's own opening
+            // greeting) still needs an absolute backstop.
+            if (!speakingRef.current) armWatchdog(GREETING_WATCHDOG_MS)
+            speakingRef.current = true
+            clearTimeout(trailingTimerRef.current)  // still speaking — cancel pending open
           })
 
           avatar.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
-            console.log('[GATE] speak ended — 900ms trailing timer')
-            clearTimeout(safetyTimerRef.current)
-            trailingTimerRef.current = setTimeout(() => {
-              console.log('[GATE] trailing timer fired')
-              openGate()
-            }, 900)
+            console.log('[GATE] speak ended — arming quiet debounce')
+            // Deliberately do NOT clear the watchdog here — it must survive a dropped
+            // final speak_ended. openGate() clears it on the normal path.
+            scheduleGateOpen()
           })
 
           avatar.on(AgentEventsEnum.SESSION_STOPPED, (e: any) => {
             console.log('[LA] session stopped:', e?.stop_reason)
+            speakingRef.current = false
             clearAllTimers()
             onGate?.(false)
             onAvatarSpeakingChange?.(false)
@@ -123,6 +170,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       avatar.on(SessionEvent.SESSION_DISCONNECTED, (reason: any) => {
         clearInterval(keepAliveTimerRef.current)
         clearAllTimers()
+        speakingRef.current = false
         onGate?.(false)
         onAvatarSpeakingChange?.(false)
         onSashaFinished?.()
@@ -136,7 +184,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         console.log('[HG] restarting...')
         if (!isReconnecting.current && isMountedRef.current) {
           isReconnecting.current = true
-          reconnectTimerRef.current = setTimeout(() => { avatarRef.current?.stop?.(); initAvatar() }, 2000)
+          reconnectTimerRef.current = setTimeout(() => { Promise.resolve(avatarRef.current?.stop?.()).catch(() => {}); initAvatar() }, 2000)
         }
       })
 
@@ -145,7 +193,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         setStatus('idle')
         if (!isReconnecting.current) {
           isReconnecting.current = true
-          reconnectTimerRef.current = setTimeout(() => { avatarRef.current?.stop?.(); initAvatar() }, 3000)
+          reconnectTimerRef.current = setTimeout(() => { Promise.resolve(avatarRef.current?.stop?.()).catch(() => {}); initAvatar() }, 3000)
         }
       })
 
@@ -162,15 +210,16 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       const speakFn = (text: string) => {
         try {
           clearAllTimers()
+          speakingRef.current = true
           onGate?.(true)
           onAvatarSpeakingChange?.(true)
           avatar.repeat(text)
-          const delay = Math.max(1500, text.length * 65) + 900
-          console.log('[GATE] safety timer set for', delay, 'ms')
-          safetyTimerRef.current = setTimeout(() => {
-            console.log('[GATE] safety timer fired')
-            openGate()
-          }, delay)
+          // Absolute backstop, scaled to response length and hard-capped. Cleared by
+          // openGate() on the normal (event-driven) path; only fires if the avatar's
+          // speak_ended never arrives.
+          const delay = Math.min(30000, Math.max(6000, text.length * 80)) + 2000
+          console.log('[GATE] watchdog armed for', delay, 'ms')
+          armWatchdog(delay)
         } catch(e) {
           console.error('Avatar speak error:', e)
           openGate()
@@ -178,7 +227,8 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       }
       const interruptFn = () => {
         try {
-          avatar.interrupt?.()
+          void Promise.resolve(avatar.interrupt?.()).catch(() => {})
+          speakingRef.current = false
           clearAllTimers()
           onGate?.(false)
           onAvatarSpeakingChange?.(false)
@@ -211,7 +261,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       clearTimeout(safetyTimerRef.current)
       clearTimeout(trailingTimerRef.current)
       clearInterval(keepAliveTimerRef.current)
-      avatarRef.current?.stop?.()
+      void Promise.resolve(avatarRef.current?.stop?.()).catch(() => {})
     }
   }, [])
 
@@ -222,6 +272,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         autoPlay
         playsInline
         className={`w-full h-full object-cover transition-opacity duration-500 ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
+        style={{ objectPosition: 'center 18%' }}
       />
       {status === 'loading' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">

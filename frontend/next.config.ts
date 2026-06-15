@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/',
-        has: [{ type: 'host', value: 'investor.kanoe.ai' }],
+        has: [{ type: 'host', value: 'project.kanoe.ai' }],
         destination: '/sasha_investor.html',
         permanent: false,
       },

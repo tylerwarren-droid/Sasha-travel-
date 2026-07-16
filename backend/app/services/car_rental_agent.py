@@ -1,4 +1,5 @@
 import anthropic
+from app.services.llm import SPECIALIST_MODEL
 import json
 from app.services.card_benefits_db import RENTAL_COVERAGE_DB, get_card, get_rental_coverage
 
@@ -214,7 +215,7 @@ async def run_car_rental_agent(user_message: str, conversation_history: list = N
 
     while True:
         response = await client.messages.create(
-            model="claude-sonnet-4-5",
+            model=SPECIALIST_MODEL,
             max_tokens=1024,
             system=SYSTEM_PROMPT + VOICE_BREVITY,
             tools=RENTAL_TOOLS,

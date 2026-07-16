@@ -1,4 +1,5 @@
 import anthropic
+from app.services.llm import SPECIALIST_MODEL
 import json
 import re
 from datetime import datetime, timedelta
@@ -486,7 +487,7 @@ async def run_smart_sasha_agent(user_message: str, conversation_history: list = 
 
     while True:
         response = await client.messages.create(
-            model="claude-sonnet-4-5",
+            model=SPECIALIST_MODEL,
             max_tokens=1024,
             system=SYSTEM_PROMPT + VOICE_BREVITY,
             tools=SMART_SASHA_TOOLS,

@@ -1,4 +1,5 @@
 import anthropic
+from app.services.llm import SPECIALIST_MODEL
 import json
 from app.services.card_benefits_db import CARD_DB, get_card, get_earn_rate, list_cards
 
@@ -330,7 +331,7 @@ async def run_credit_card_agent(user_message: str, conversation_history: list = 
 
     while True:
         response = await client.messages.create(
-            model="claude-sonnet-4-5",
+            model=SPECIALIST_MODEL,
             max_tokens=1024,
             system=SYSTEM_PROMPT + VOICE_BREVITY,
             tools=CCI_TOOLS,

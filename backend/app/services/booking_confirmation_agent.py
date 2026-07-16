@@ -1,6 +1,7 @@
 import os
 import httpx
 import anthropic
+from app.services.llm import SPECIALIST_MODEL
 import json
 from typing import Optional
 
@@ -9,7 +10,7 @@ client = anthropic.AsyncAnthropic()
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
 BLAND_API_KEY = os.getenv("BLAND_API_KEY", "").strip()
 SASHA_FROM_EMAIL = "onboarding@resend.dev"
-SASHA_NOTIFY_EMAIL = "tylerwarren@gmail.com"
+SASHA_NOTIFY_EMAIL = os.getenv("SASHA_NOTIFY_EMAIL", "")  # no hardcoded inbox; unset = no CC
 
 # ─────────────────────────────────────────────
 # TOOLS
@@ -91,7 +92,7 @@ async def find_hotel_contact(hotel_name: str, city: str = "", country: str = "")
     try:
         search_client = anthropic.AsyncAnthropic()
         response = await search_client.messages.create(
-            model="claude-sonnet-4-5",
+            model=SPECIALIST_MODEL,
             max_tokens=500,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{
@@ -329,7 +330,7 @@ async def run_booking_agent(user_message: str, conversation_history: list = None
 
     while True:
         response = await client.messages.create(
-            model="claude-sonnet-4-5",
+            model=SPECIALIST_MODEL,
             max_tokens=1024,
             system=SYSTEM_PROMPT + VOICE_BREVITY,
             tools=BOOKING_TOOLS,

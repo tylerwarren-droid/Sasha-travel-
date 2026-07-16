@@ -1,6 +1,7 @@
 import os
 import httpx
 import anthropic
+from app.services.llm import SPECIALIST_MODEL
 import json
 import re
 
@@ -9,7 +10,7 @@ client = anthropic.AsyncAnthropic()
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
 BLAND_API_KEY = os.getenv("BLAND_API_KEY", "").strip()
 SASHA_FROM_EMAIL = "onboarding@resend.dev"
-SASHA_NOTIFY_EMAIL = "tylerwarren@gmail.com"
+SASHA_NOTIFY_EMAIL = os.getenv("SASHA_NOTIFY_EMAIL", "")  # no hardcoded inbox; unset = no CC
 
 DOG_TOOLS = [
     {
@@ -189,7 +190,7 @@ async def run_dog_walking_agent(user_message: str, conversation_history: list = 
     messages = conversation_history + [{"role": "user", "content": user_message}]
     tools_used = []
     while True:
-        response = await client.messages.create(model="claude-sonnet-4-5", max_tokens=1024, system=SYSTEM_PROMPT + VOICE_BREVITY, tools=DOG_TOOLS, messages=messages)
+        response = await client.messages.create(model=SPECIALIST_MODEL, max_tokens=1024, system=SYSTEM_PROMPT + VOICE_BREVITY, tools=DOG_TOOLS, messages=messages)
         if response.stop_reason == "tool_use":
             messages.append({"role": "assistant", "content": response.content})
             tool_results = []

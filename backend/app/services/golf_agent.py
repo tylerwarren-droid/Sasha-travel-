@@ -1,4 +1,5 @@
 import anthropic
+from app.services.llm import SPECIALIST_MODEL
 import json
 import os
 import httpx
@@ -13,7 +14,7 @@ from app.services.prompts import VOICE_BREVITY
 client = anthropic.AsyncAnthropic()
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 SASHA_FROM_EMAIL = "onboarding@resend.dev"
-SASHA_NOTIFY_EMAIL = "tylerwarren@gmail.com"  # your email — gets a copy of every booking
+SASHA_NOTIFY_EMAIL = os.getenv("SASHA_NOTIFY_EMAIL", "")  # no hardcoded inbox; unset = no CC
 
 GOLF_TOOLS = [
     {
@@ -299,7 +300,7 @@ async def run_golf_agent(user_message: str, conversation_history: list = None) -
 
     while True:
         response = await client.messages.create(
-            model="claude-sonnet-4-5",
+            model=SPECIALIST_MODEL,
             max_tokens=1024,
             system=SYSTEM_PROMPT + VOICE_BREVITY,
             tools=GOLF_TOOLS,

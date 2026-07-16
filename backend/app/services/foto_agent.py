@@ -36,10 +36,89 @@ SEARCH_MAPPINGS = {
     "vietnam": "Vietnam landscape travel",
 }
 
+# Curated Vietnam set served when no UNSPLASH_ACCESS_KEY is configured (e.g. local dev),
+# so the photo panel degrades to a sensible default instead of an empty/broken state.
+FALLBACK_PHOTOS = [
+    {
+        "url": "https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwxfHxWaWV0bmFtJTIwbGFuZHNjYXBlJTIwdHJhdmVsfGVufDF8MHx8fDE3ODIyODYzNTR8MA&ixlib=rb-4.1.0&q=80&w=1080",
+        "thumb": "https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwxfHxWaWV0bmFtJTIwbGFuZHNjYXBlJTIwdHJhdmVsfGVufDF8MHx8fDE3ODIyODYzNTR8MA&ixlib=rb-4.1.0&q=80&w=400",
+        "full": "https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=srgb&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwxfHxWaWV0bmFtJTIwbGFuZHNjYXBlJTIwdHJhdmVsfGVufDF8MHx8fDE3ODIyODYzNTR8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Ha Long Bay",
+        "photographer": "Ammie Ngo",
+        "photographer_url": "https://unsplash.com/@ammiengo",
+        "unsplash_url": "https://unsplash.com/photos/high-angle-photography-of-boats-on-water-near-hill-during-daytime-vcu-OZBxxRk",
+        "color": "#264040",
+        "width": 6000,
+        "height": 4000
+    },
+    {
+        "url": "https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwyfHxWaWV0bmFtJTIwbGFuZHNjYXBlJTIwdHJhdmVsfGVufDF8MHx8fDE3ODIyODYzNTR8MA&ixlib=rb-4.1.0&q=80&w=1080",
+        "thumb": "https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwyfHxWaWV0bmFtJTIwbGFuZHNjYXBlJTIwdHJhdmVsfGVufDF8MHx8fDE3ODIyODYzNTR8MA&ixlib=rb-4.1.0&q=80&w=400",
+        "full": "https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwyfHxWaWV0bmFtJTIwbGFuZHNjYXBlJTIwdHJhdmVsfGVufDF8MHx8fDE3ODIyODYzNTR8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Mu Cang Chai rice terraces",
+        "photographer": "Hoach Le Dinh",
+        "photographer_url": "https://unsplash.com/@hoachld",
+        "unsplash_url": "https://unsplash.com/photos/green-grass-field-near-body-of-water-during-daytime-PeRt3uMmjYM",
+        "color": "#26260c",
+        "width": 7952,
+        "height": 5304
+    },
+    {
+        "url": "https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwxfHxIb2klMjBBbiUyMFZpZXRuYW0lMjBsYW50ZXJucyUyMGFuY2llbnQlMjB0b3dufGVufDF8MHx8fDE3ODIyODYzNTV8MA&ixlib=rb-4.1.0&q=80&w=1080",
+        "thumb": "https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwxfHxIb2klMjBBbiUyMFZpZXRuYW0lMjBsYW50ZXJucyUyMGFuY2llbnQlMjB0b3dufGVufDF8MHx8fDE3ODIyODYzNTV8MA&ixlib=rb-4.1.0&q=80&w=400",
+        "full": "https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwxfHxIb2klMjBBbiUyMFZpZXRuYW0lMjBsYW50ZXJucyUyMGFuY2llbnQlMjB0b3dufGVufDF8MHx8fDE3ODIyODYzNTV8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Hoi An ancient town",
+        "photographer": "Hieu Do Quang",
+        "photographer_url": "https://unsplash.com/@magicaleye7",
+        "unsplash_url": "https://unsplash.com/photos/a-bunch-of-lanterns-that-are-hanging-from-a-tree-nj70WidlPjc",
+        "color": "#0c2626",
+        "width": 4898,
+        "height": 3265
+    },
+    {
+        "url": "https://images.unsplash.com/photo-1698744822195-e461f814a6a1?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwyfHxIb2klMjBBbiUyMFZpZXRuYW0lMjBsYW50ZXJucyUyMGFuY2llbnQlMjB0b3dufGVufDF8MHx8fDE3ODIyODYzNTV8MA&ixlib=rb-4.1.0&q=80&w=1080",
+        "thumb": "https://images.unsplash.com/photo-1698744822195-e461f814a6a1?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwyfHxIb2klMjBBbiUyMFZpZXRuYW0lMjBsYW50ZXJucyUyMGFuY2llbnQlMjB0b3dufGVufDF8MHx8fDE3ODIyODYzNTV8MA&ixlib=rb-4.1.0&q=80&w=400",
+        "full": "https://images.unsplash.com/photo-1698744822195-e461f814a6a1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwyfHxIb2klMjBBbiUyMFZpZXRuYW0lMjBsYW50ZXJucyUyMGFuY2llbnQlMjB0b3dufGVufDF8MHx8fDE3ODIyODYzNTV8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Vietnam",
+        "photographer": "RE Walsh",
+        "photographer_url": "https://unsplash.com/@lutruwita_exposure",
+        "unsplash_url": "https://unsplash.com/photos/a-couple-of-boats-that-are-sitting-in-the-water-o2yDssRqgog",
+        "color": "#c0c0d9",
+        "width": 4032,
+        "height": 3024
+    },
+    {
+        "url": "https://images.unsplash.com/photo-1573270689103-d7a4e42b609a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwxfHxIYSUyMExvbmclMjBCYXklMjBWaWV0bmFtJTIwa2Fyc3QlMjBsaW1lc3RvbmV8ZW58MXwwfHx8MTc4MjI4NjM1N3ww&ixlib=rb-4.1.0&q=80&w=1080",
+        "thumb": "https://images.unsplash.com/photo-1573270689103-d7a4e42b609a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwxfHxIYSUyMExvbmclMjBCYXklMjBWaWV0bmFtJTIwa2Fyc3QlMjBsaW1lc3RvbmV8ZW58MXwwfHx8MTc4MjI4NjM1N3ww&ixlib=rb-4.1.0&q=80&w=400",
+        "full": "https://images.unsplash.com/photo-1573270689103-d7a4e42b609a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwxfHxIYSUyMExvbmclMjBCYXklMjBWaWV0bmFtJTIwa2Fyc3QlMjBsaW1lc3RvbmV8ZW58MXwwfHx8MTc4MjI4NjM1N3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Vietnam",
+        "photographer": "Lewis J Goetz",
+        "photographer_url": "https://unsplash.com/@lgoetz",
+        "unsplash_url": "https://unsplash.com/photos/body-of-water-near-mountain-during-daytime-p3zbb3Efczw",
+        "color": "#d9f3f3",
+        "width": 4578,
+        "height": 3052
+    },
+    {
+        "url": "https://images.unsplash.com/photo-1504805526346-8d03d1ca73de?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwyfHxIYSUyMExvbmclMjBCYXklMjBWaWV0bmFtJTIwa2Fyc3QlMjBsaW1lc3RvbmV8ZW58MXwwfHx8MTc4MjI4NjM1N3ww&ixlib=rb-4.1.0&q=80&w=1080",
+        "thumb": "https://images.unsplash.com/photo-1504805526346-8d03d1ca73de?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwyfHxIYSUyMExvbmclMjBCYXklMjBWaWV0bmFtJTIwa2Fyc3QlMjBsaW1lc3RvbmV8ZW58MXwwfHx8MTc4MjI4NjM1N3ww&ixlib=rb-4.1.0&q=80&w=400",
+        "full": "https://images.unsplash.com/photo-1504805526346-8d03d1ca73de?crop=entropy&cs=srgb&fm=jpg&ixid=M3w5NjA1NTR8MHwxfHNlYXJjaHwyfHxIYSUyMExvbmclMjBCYXklMjBWaWV0bmFtJTIwa2Fyc3QlMjBsaW1lc3RvbmV8ZW58MXwwfHx8MTc4MjI4NjM1N3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Vietnam",
+        "photographer": "Ryan Waring",
+        "photographer_url": "https://unsplash.com/@ryanwaring",
+        "unsplash_url": "https://unsplash.com/photos/white-watercraft-on-body-of-water-EqQ9oQ0bLis",
+        "color": "#f3f3f3",
+        "width": 5472,
+        "height": 3648
+    }
+]
+
+
 async def search_photos(query: str, count: int = 3) -> list:
     """Search Unsplash for photos matching the query."""
     if not UNSPLASH_ACCESS_KEY:
-        return []
+        # No key — serve the curated fallback rather than an empty panel.
+        return FALLBACK_PHOTOS[:count]
     
     # Check if we have a better search term
     query_lower = query.lower()

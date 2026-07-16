@@ -1,3 +1,13 @@
 .env
 .envecho
 .claude/
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+.next/
+.DS_Store
+__MACOSX/
+*.db
+*.db-wal
+*.db-shm

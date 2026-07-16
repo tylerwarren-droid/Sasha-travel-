@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from app.services.claude import chat, generate_sasha_context
 from app.services.ratehawk import (
@@ -15,10 +15,14 @@ router = APIRouter(prefix="/conversation", tags=["conversation"])
 
 class Message(BaseModel):
     role: str
-    content: str
+    # Bounded because this array is forwarded verbatim to Sonnet and billed by input token.
+    # Unbounded, one accepted request could carry megabytes of attacker-chosen text — the
+    # cheapest way to run up a bill here. 8k chars is far more than any real chat turn.
+    content: str = Field(max_length=8000)
 
 class ChatRequest(BaseModel):
-    messages: List[Message]
+    # Same reasoning: cap the conversation length rather than trusting the caller's array.
+    messages: List[Message] = Field(max_length=50)
     user: dict
     itinerary: Optional[dict] = None
 

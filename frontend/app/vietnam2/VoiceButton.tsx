@@ -1,7 +1,6 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Mic, MicOff, Loader2 } from 'lucide-react'
-import { apiUrl, apiHeaders } from '@/lib/api'
 
 interface VoiceButtonProps {
   onTranscript: (text: string) => void
@@ -13,37 +12,9 @@ interface VoiceButtonProps {
   onInterrupt?: () => void
   onSetGate?: (gate: (value: boolean) => void) => void
   avatarSpeechGetter?: () => string
-  language?: string
-  // Fired whenever the live STT socket connects (true) or drops (false), so the parent
-  // can show an accurate "mic live" status instead of guessing.
-  onConnectedChange?: (connected: boolean) => void
-  // Surfaces mic/voice failures to the page. Without this the error only ever rendered as a
-  // small red line under the mic icon in the composer, while the call panel — the thing
-  // everyone is actually looking at — sat on "Starting microphone…" forever.
-  onMicError?: (message: string | null) => void
 }
 
-// UI language → a valid Deepgram nova-3 language code (en-US is the safe default).
-const DG_LANG: Record<string, string> = {
-  en: 'en-US', vi: 'vi', ko: 'ko', zh: 'zh', ja: 'ja', fr: 'fr', es: 'es', de: 'de', hi: 'hi',
-}
-
-// Public env key is a DEV fallback only. In production the backend mints a short-lived,
-// scoped key (see getDeepgramKey) so a long-lived key never sits in the browser.
-const PUBLIC_DEEPGRAM_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || ''
-
-// Ask the backend for an ephemeral STT key; fall back to the public env key if the proxy
-// isn't configured (501) or is unreachable, so local dev keeps working.
-async function getDeepgramKey(): Promise<string> {
-  try {
-    const res = await fetch(apiUrl('/api/voice/deepgram-key'), { method: 'POST', headers: apiHeaders() })
-    if (res.ok) {
-      const data = await res.json()
-      if (data?.key) return data.key as string
-    }
-  } catch { /* fall through to public key */ }
-  return PUBLIC_DEEPGRAM_KEY
-}
+const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY
 
 // Barge-in tuning. The mic is fully muted while the avatar speaks — that is what
 // stops the avatar hearing itself. A user may still interrupt, but ONLY with a
@@ -55,27 +26,17 @@ const BARGE_IN_ENABLED = true
 // removes most of the avatar's audio from the mic; this threshold sits above the typical
 // AEC *residual* but below normal user speech (~0.1–0.3 RMS close-talking). Tuned live.
 // If it ever self-triggers on loud speakers, raise it; if you can't interrupt, lower it.
-// Raised for a loud investor-demo room: a busy hall (applause, nearby speakers, laughter)
-// can push AEC residual past a low threshold and cut Sasha off mid-sentence. 0.12 sits above
-// room bleed but below close-talking user speech (~0.15–0.3 RMS). Lower toward 0.08 for a
-// quiet 1:1 setting where easy interruption matters more than false-trigger safety.
-const BARGE_IN_RMS = 0.12
-const BARGE_IN_FRAMES = 40           // ~100ms sustained — rejects transient residual spikes
+const BARGE_IN_RMS = 0.07
+const BARGE_IN_FRAMES = 30           // ~75ms sustained — rejects transient residual spikes
 // Echo (avatar audio bleeding into the mic) only arrives in the brief tail right after
 // the avatar goes quiet. Beyond this window, identical words are the USER genuinely
 // answering (e.g. repeating the avatar's options like "mix of everything") — never
 // discard those, or the avatar appears to "stop hearing" the user.
-const ECHO_WINDOW_MS = 1000
-// Real acoustic echo is a multi-word fragment of the avatar's sentence. A SHORT reply
-// ("Hanoi", "yes please", "the beach") that happens to echo a word the avatar just said is
-// almost always the user genuinely answering — and the mic is muted while the avatar
-// speaks, so true echo is rare on the normal path. Never echo-filter short replies; this
-// is the main cause of "she sometimes doesn't hear me".
-const ECHO_MIN_WORDS = 4
+const ECHO_WINDOW_MS = 1500
 
 const normalizeText = (t: string) => t.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean)
 
-export default function VoiceButton({ onTranscript, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError }: VoiceButtonProps) {
+export default function VoiceButton({ onTranscript, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter }: VoiceButtonProps) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -111,19 +72,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   useEffect(() => { onSpeakingChangeRef.current = onSpeakingChange }, [onSpeakingChange])
   const avatarSpeechGetterRef = useRef(avatarSpeechGetter)
   useEffect(() => { avatarSpeechGetterRef.current = avatarSpeechGetter }, [avatarSpeechGetter])
-  const onConnectedChangeRef = useRef(onConnectedChange)
-  useEffect(() => { onConnectedChangeRef.current = onConnectedChange }, [onConnectedChange])
-  const onMicErrorRef = useRef(onMicError)
-  useEffect(() => { onMicErrorRef.current = onMicError }, [onMicError])
-  // Single place that records a mic failure: keeps the local composer line and the page-level
-  // call panel in sync, so the error can never be visible in one and invisible in the other.
-  const reportMicError = useCallback((m: string | null) => {
-    setMicError(m)
-    onMicErrorRef.current?.(m)
-  }, [])
-  const languageRef = useRef(language)
-  useEffect(() => { languageRef.current = language }, [language])
-  const connectTimeoutRef = useRef<any>(null)  // fails a hung connect so it never sticks
 
   // Expose gate to parent on mount — gate is a pure ref flag, no audio pipeline changes
   useEffect(() => {
@@ -148,7 +96,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   const stopAll = useCallback(() => {
     manualStopRef.current = true   // intentional stop — suppress auto-reconnect
     clearTimeout(dgReconnectTimerRef.current)
-    clearTimeout(connectTimeoutRef.current)
     clearInterval(keepAliveIntervalRef.current)
     workletNodeRef.current?.disconnect()
     workletNodeRef.current = null
@@ -157,7 +104,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
     setIsConnected(false)
-    onConnectedChangeRef.current?.(false)
     setIsSpeaking(false)
     setIsConnecting(false)
     connectedRef.current = false
@@ -168,17 +114,14 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
     if (connectedRef.current) return
     manualStopRef.current = false  // a fresh connect attempt re-enables reconnect
     console.log('[DG] connecting...')
-    reportMicError(null)
+    console.log('[DG] API key present:', !!DEEPGRAM_API_KEY)
+    setMicError(null)
     setIsConnecting(true)
     try {
-      // Mint the ephemeral STT key in parallel with mic acquisition — no added latency.
-      const keyPromise = getDeepgramKey()
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       })
       streamRef.current = stream
-      const dgKey = await keyPromise
-      if (!dgKey) { setIsConnecting(false); reportMicError('Voice service unavailable'); return }
 
       // AudioContext — resume() immediately for Safari (requires in-gesture call stack)
       const ctx = new AudioContext()
@@ -186,22 +129,11 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       await ctx.resume()
       console.log('[DG] AudioContext sampleRate:', ctx.sampleRate)
 
-      const dgLang = DG_LANG[languageRef.current || 'en'] || 'en-US'
       const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${ctx.sampleRate}&channels=1&model=nova-3&language=${dgLang}&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
-        ['token', dgKey]
+        `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${ctx.sampleRate}&channels=1&model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
+        ['token', DEEPGRAM_API_KEY || '']
       )
       wsRef.current = ws
-
-      // Watchdog: if the socket doesn't open within 8s, close it so onclose can retry —
-      // otherwise a rejected connection leaves the mic stuck on the "connecting" spinner.
-      clearTimeout(connectTimeoutRef.current)
-      connectTimeoutRef.current = setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          console.warn('[DG] connect watchdog — socket never opened, closing to retry')
-          try { ws.close() } catch {}
-        }
-      }, 8000)
 
       // Dedup state for BUG 4 — scoped to this connection's lifetime
       let lastFinal = ''
@@ -215,10 +147,8 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
           return
         }
         console.log('[DG] connected')
-        clearTimeout(connectTimeoutRef.current)
         setIsConnecting(false)
         setIsConnected(true)
-        onConnectedChangeRef.current?.(true)
         connectedRef.current = true
         dgReconnectAttemptsRef.current = 0   // healthy connection — reset backoff
 
@@ -293,7 +223,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             // echo. After the window, identical words are the user genuinely answering.
             if (Date.now() - gateOpenedAtRef.current > ECHO_WINDOW_MS) return false
             const tWords = normalizeText(text)
-            if (tWords.length < ECHO_MIN_WORDS) return false  // never drop short genuine replies
             const bWords = new Set(normalizeText(avatarSpeechGetterRef.current?.() ?? ''))
             if (tWords.length > 0 && bWords.size > 0) {
               const overlap = tWords.filter(w => bWords.has(w)).length / tWords.length
@@ -344,8 +273,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         const wasActiveSocket = wsRef.current === ws
         if (!wasActiveSocket) return  // superseded socket — ignore
         wsRef.current = null
-        clearTimeout(connectTimeoutRef.current)
-        setIsConnecting(false)  // never leave the mic stuck on the connecting spinner
 
         // Tear down this connection's audio graph so a reconnect rebuilds cleanly.
         clearInterval(keepAliveIntervalRef.current)
@@ -356,7 +283,6 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
         connectedRef.current = false
         setIsConnected(false)
-        onConnectedChangeRef.current?.(false)
         setIsSpeaking(false)
 
         // Auto-reconnect on an UNEXPECTED drop (network blip, server reap) — but not
@@ -373,9 +299,9 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
 
     } catch (err: any) {
       setIsConnecting(false)
-      if (err.name === 'NotAllowedError') reportMicError('Mic permission denied')
-      else if (err.name === 'NotFoundError') reportMicError('No microphone found')
-      else reportMicError(err.message || 'Could not access microphone')
+      if (err.name === 'NotAllowedError') setMicError('Mic permission denied')
+      else if (err.name === 'NotFoundError') setMicError('No microphone found')
+      else setMicError(err.message || 'Could not access microphone')
     }
   }, [])  // stable — all dynamic props are read via refs above
 

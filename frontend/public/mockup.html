@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sasha · Concierge Video Call — UI Concept</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#07070d;
+    --bg2:#0b0b14;
+    --panel:rgba(255,255,255,0.025);
+    --panel2:rgba(255,255,255,0.04);
+    --border:rgba(255,255,255,0.07);
+    --gold:#DAA520;
+    --gold-br:#E8B923;
+    --gold-soft:rgba(218,165,32,0.12);
+    --txt:#fff;
+    --muted:rgba(255,255,255,0.5);
+    --faint:rgba(255,255,255,0.3);
+    --live:#34d399;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    background:radial-gradient(1200px 800px at 18% -10%, #15131f 0%, var(--bg) 55%);
+    color:var(--txt);
+    height:100vh;overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  .serif{font-family:'Playfair Display',serif}
+
+  /* ---------- App shell ---------- */
+  .app{display:flex;flex-direction:column;height:100vh}
+
+  /* Header */
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 26px;border-bottom:1px solid var(--border);
+    background:rgba(0,0,0,0.45);backdrop-filter:blur(12px);flex-shrink:0;
+  }
+  .brand{display:flex;align-items:center;gap:13px}
+  .brand .flag{font-size:22px}
+  .brand .name{font-weight:700;letter-spacing:.3px;color:var(--gold)}
+  .brand .div{width:1px;height:16px;background:rgba(255,255,255,.12)}
+  .brand .sub{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint)}
+  .hctl{display:flex;align-items:center;gap:10px}
+  .pill{font-size:12px;padding:7px 13px;border-radius:999px;border:1px solid rgba(218,165,32,.3);
+    color:var(--gold);background:var(--gold-soft);cursor:pointer;transition:.2s}
+  .pill:hover{background:rgba(218,165,32,.2)}
+  .pill.danger{color:#f87171;border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.1)}
+
+  /* Main split */
+  .main{flex:1;display:flex;gap:14px;padding:14px;min-height:0}
+
+  /* ---------- LEFT — Video call ---------- */
+  .call{
+    width:38%;min-width:360px;display:flex;flex-direction:column;
+    border-radius:26px;overflow:hidden;position:relative;
+    border:1px solid var(--border);
+    background:linear-gradient(160deg,#12101b,#0a0a12);
+    box-shadow:0 30px 80px -30px rgba(0,0,0,.8);
+  }
+  .agentVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+    background:linear-gradient(160deg,#211c33,#0d0d16)}
+  .callOverlay{position:absolute;inset:0;
+    background:linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 22%, transparent 55%, rgba(0,0,0,.85) 100%)}
+  /* top status bar */
+  .callTop{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;
+    padding:16px 18px;z-index:3}
+  .liveTag{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    font-weight:600;color:#fff;background:rgba(0,0,0,.35);padding:7px 12px;border-radius:999px;
+    border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--live);box-shadow:0 0 0 0 rgba(52,211,153,.7);
+    animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%{box-shadow:0 0 0 7px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+  .timer{font-variant-numeric:tabular-nums;color:rgba(255,255,255,.85);font-size:12px;margin-left:4px}
+  .ctlBtns{display:flex;gap:8px}
+  .icon{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;cursor:pointer;
+    background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px);
+    color:#fff;font-size:15px;transition:.2s}
+  .icon:hover{background:rgba(255,255,255,.12)}
+  .icon.hangup{background:rgba(248,113,113,.85);border-color:transparent}
+
+  /* agent identity ribbon */
+  .agentId{position:absolute;left:18px;top:62px;z-index:3;display:flex;align-items:center;gap:10px}
+  .agentAvatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#6d28d9);
+    display:grid;place-items:center;font-weight:700;font-size:13px;border:2px solid rgba(255,255,255,.25)}
+  .agentName{font-weight:600;font-size:14px;line-height:1}
+  .agentRole{font-size:11px;color:rgba(255,255,255,.6);margin-top:2px}
+
+  /* bottom: caption + mic + user PIP */
+  .callBottom{position:absolute;left:0;right:0;bottom:0;padding:18px;z-index:3;
+    display:flex;flex-direction:column;gap:12px}
+  .caption{max-width:74%;font-size:14.5px;line-height:1.5;color:rgba(255,255,255,.92);
+    text-shadow:0 2px 12px rgba(0,0,0,.7)}
+  .caption .tw{display:inline-block;border-right:2px solid var(--gold);animation:caret .9s step-end infinite}
+  @keyframes caret{50%{border-color:transparent}}
+  .micRow{display:flex;align-items:center;gap:12px}
+  .micBtn{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.12);
+    border-radius:999px;padding:9px 16px 9px 12px;backdrop-filter:blur(10px);cursor:pointer;transition:.2s}
+  .micBtn:hover{border-color:rgba(218,165,32,.5)}
+  .micDisc{width:26px;height:26px;border-radius:50%;background:var(--gold);display:grid;place-items:center;color:#000;font-size:14px}
+  .micLabel{font-size:12.5px;color:rgba(255,255,255,.8)}
+  .listening{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--live)}
+  .bars{display:flex;align-items:flex-end;gap:2px;height:14px}
+  .bars span{width:3px;background:var(--live);border-radius:2px;animation:eq 1s infinite ease-in-out}
+  .bars span:nth-child(1){animation-delay:-.4s}.bars span:nth-child(2){animation-delay:-.2s}
+  .bars span:nth-child(3){animation-delay:-.6s}.bars span:nth-child(4){animation-delay:-.1s}
+  @keyframes eq{0%,100%{height:4px}50%{height:14px}}
+
+  /* user PIP */
+  .pip{position:absolute;right:16px;bottom:84px;width:148px;height:104px;border-radius:16px;overflow:hidden;
+    border:2px solid rgba(255,255,255,.25);box-shadow:0 14px 40px -10px rgba(0,0,0,.8);z-index:4;
+    background:#15151f}
+  .pip img{width:100%;height:100%;object-fit:cover}
+  .pip .youtag{position:absolute;left:7px;bottom:6px;font-size:10px;font-weight:600;letter-spacing:.05em;
+    background:rgba(0,0,0,.55);padding:3px 7px;border-radius:6px;backdrop-filter:blur(4px)}
+  .pip.off{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    background:linear-gradient(160deg,#1c1c28,#101018)}
+  .pip.off .ph{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.08);display:grid;place-items:center;font-size:22px;color:rgba(255,255,255,.4)}
+  .pip.off .lbl{font-size:10.5px;color:rgba(255,255,255,.4)}
+
+  /* ---------- RIGHT — Action feed ---------- */
+  .feed{flex:1;display:flex;flex-direction:column;min-width:0;
+    border-radius:26px;border:1px solid var(--border);overflow:hidden;
+    background:
+      radial-gradient(700px 380px at 80% -8%, rgba(218,165,32,0.07), transparent 60%),
+      linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.22))}
+  .feedHead{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;
+    border-bottom:1px solid var(--border);flex-shrink:0;background:rgba(0,0,0,0.25)}
+  .feedHead .t{display:flex;align-items:center;gap:11px}
+  .feedHead .t .ic{width:28px;height:28px;border-radius:9px;background:var(--gold-soft);display:grid;place-items:center;color:var(--gold);font-size:15px}
+  .feedHead .t .lbl{font-size:13.5px;font-weight:600;letter-spacing:.02em}
+  .feedHead .t .sub{font-size:11px;color:var(--faint);margin-top:2px}
+  .doing{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--gold);background:var(--gold-soft);
+    padding:7px 13px;border-radius:999px;border:1px solid rgba(218,165,32,.25)}
+  .doing .ld{display:flex;gap:3px}
+  .doing .ld i{width:5px;height:5px;border-radius:50%;background:var(--gold);display:inline-block;animation:bounce 1.2s infinite}
+  .doing .ld i:nth-child(2){animation-delay:.15s}.doing .ld i:nth-child(3){animation-delay:.3s}
+  @keyframes bounce{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+
+  .stream{flex:1;overflow-y:auto;padding:22px 22px 32px;display:flex;flex-direction:column;gap:14px}
+  .stream::-webkit-scrollbar{width:8px}.stream::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:8px}
+
+  /* timeline markers */
+  .when{flex:0 0 auto;display:flex;align-items:center;gap:12px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:rgba(255,255,255,.35);margin:6px 2px 0}
+  .when:first-child{margin-top:0}
+  .when::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent)}
+
+  /* action card */
+  .card{flex:0 0 auto;border-radius:20px;border:1px solid rgba(255,255,255,.09);overflow:hidden;
+    background:linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.022));
+    box-shadow:0 16px 40px -24px rgba(0,0,0,.9);
+    transition:transform .25s ease,border-color .25s ease;
+    animation:slideIn .5s cubic-bezier(.2,.8,.2,1) both}
+  .card:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.16)}
+  @keyframes slideIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  .card.fresh{position:relative;border-color:rgba(218,165,32,.5);
+    background:linear-gradient(180deg,rgba(218,165,32,0.11),rgba(255,255,255,0.025));
+    box-shadow:0 0 0 1px rgba(218,165,32,.2),0 24px 60px -26px rgba(218,165,32,.5)}
+  .card.fresh::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;
+    background:linear-gradient(180deg,var(--gold-br),var(--gold))}
+  .cardHd{display:flex;align-items:center;gap:12px;padding:16px 18px 13px}
+  .cardHd .ci{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;font-size:16px;flex-shrink:0}
+  .ci.gold{background:var(--gold-soft);color:var(--gold);box-shadow:inset 0 0 0 1px rgba(218,165,32,.25)}
+  .ci.blue{background:rgba(96,165,250,.14);color:#93c5fd;box-shadow:inset 0 0 0 1px rgba(96,165,250,.22)}
+  .ci.green{background:rgba(52,211,153,.14);color:#6ee7b7;box-shadow:inset 0 0 0 1px rgba(52,211,153,.22)}
+  .ci.purple{background:rgba(167,139,250,.16);color:#c4b5fd;box-shadow:inset 0 0 0 1px rgba(167,139,250,.24)}
+  .cardHd .meta{flex:1;min-width:0}
+  .cardHd .k{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.4)}
+  .cardHd .h{font-size:16.5px;font-weight:600;margin-top:3px;letter-spacing:-.01em}
+  .ribbon{font-size:9.5px;font-weight:700;letter-spacing:.1em;color:#1a1205;
+    background:linear-gradient(135deg,var(--gold-br),var(--gold));flex-shrink:0;
+    padding:5px 10px;border-radius:8px;display:flex;align-items:center;gap:5px;
+    box-shadow:0 4px 14px -4px rgba(218,165,32,.6)}
+  .cardBody{padding:0 18px 18px}
+
+  /* itinerary mini */
+  .dayrow{display:flex;align-items:center;gap:13px;padding:12px 0;border-top:1px solid rgba(255,255,255,.06)}
+  .dayrow .num{width:32px;height:32px;border-radius:10px;background:var(--gold-soft);display:grid;place-items:center;
+    font-size:12px;font-weight:700;color:var(--gold);flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(218,165,32,.22)}
+  .dayrow .info .d{font-size:14px;font-weight:500}
+  .dayrow .info .s{font-size:12px;color:var(--muted);margin-top:3px}
+  .dayrow .px{margin-left:auto;font-size:11.5px;color:var(--faint);white-space:nowrap;padding-left:10px}
+  .totalRow{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.08)}
+  .totalRow .lab{font-size:12px;color:var(--muted)}
+  .totalRow .amt{font-family:'Playfair Display',serif;font-size:26px;color:var(--gold-br)}
+  .bookBtn{margin-top:16px;width:100%;padding:14px;border:none;border-radius:13px;cursor:pointer;
+    font-size:14px;font-weight:600;color:#fff;background:linear-gradient(135deg,var(--gold),#B8860B);
+    box-shadow:0 10px 30px -12px rgba(218,165,32,.6);transition:.2s}
+  .bookBtn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+
+  /* preference-updated card — inline before -> after change */
+  .change{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:15px 18px;border-radius:15px;background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2)}
+  .change .cl{font-size:13.5px;color:rgba(255,255,255,.62);line-height:1.4}
+  .change .vals{display:flex;align-items:center;gap:13px;flex-shrink:0}
+  .change .vals .old{font-size:15px;color:var(--faint);text-decoration:line-through;text-decoration-thickness:1px}
+  .change .vals .arr{color:var(--gold);font-size:16px;opacity:.8}
+  .change .vals .newv{font-family:'Playfair Display',serif;font-size:24px;color:var(--gold-br);line-height:1}
+  .prefNote{font-size:12px;color:var(--muted);margin-top:13px;line-height:1.55;display:flex;align-items:center;gap:7px}
+  .prefNote .pin{color:var(--gold);font-size:12px}
+
+  /* gallery */
+  .gal{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .gal img{width:100%;height:92px;object-fit:cover;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block}
+  .galCap{font-size:11.5px;color:var(--muted);margin-top:12px;display:flex;align-items:center;gap:6px}
+
+  /* flight options */
+  .opt{display:flex;align-items:center;gap:13px;padding:13px;border:1px solid rgba(255,255,255,.08);border-radius:14px;margin-top:9px;
+    background:rgba(255,255,255,.02)}
+  .opt:first-of-type{margin-top:0;border-color:rgba(218,165,32,.4);background:var(--gold-soft)}
+  .opt .logo{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.06);display:grid;place-items:center;font-size:16px;flex-shrink:0}
+  .opt .od{flex:1;min-width:0}
+  .opt .o1{font-size:14px;font-weight:500}
+  .opt .o2{font-size:12px;color:var(--muted);margin-top:3px}
+  .opt .price{font-weight:700;font-size:16px;color:var(--gold-br);white-space:nowrap}
+  .opt .tag{font-size:10px;color:var(--gold);border:1px solid rgba(218,165,32,.4);border-radius:6px;padding:3px 7px;margin-top:6px;display:inline-block}
+
+  /* composer */
+  .composer{flex-shrink:0;padding:14px 18px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.2)}
+  .composer .field{flex:1;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border:1px solid var(--border);
+    border-radius:14px;padding:11px 14px}
+  .composer .field input{flex:1;background:transparent;border:none;outline:none;color:#fff;font-size:13.5px;font-family:inherit}
+  .composer .field input::placeholder{color:var(--faint)}
+  .send{width:38px;height:38px;border-radius:12px;border:none;cursor:pointer;background:linear-gradient(135deg,var(--gold),#B8860B);
+    color:#fff;display:grid;place-items:center;font-size:15px}
+  .chips{display:flex;gap:7px}
+  .chip{font-size:11.5px;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:7px 12px;cursor:pointer;white-space:nowrap;transition:.2s}
+  .chip:hover{border-color:rgba(218,165,32,.4);color:var(--gold)}
+
+  /* demo toggle (mockup only) */
+  .demobar{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:50;display:flex;gap:8px;
+    background:rgba(0,0,0,.6);border:1px solid var(--border);border-radius:999px;padding:6px;backdrop-filter:blur(14px)}
+  .demobar button{font-size:11.5px;color:var(--muted);background:transparent;border:none;cursor:pointer;padding:7px 13px;border-radius:999px}
+  .demobar button.on{background:var(--gold-soft);color:var(--gold)}
+  .demobar .tagx{font-size:10px;color:var(--faint);align-self:center;padding:0 6px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="brand">
+      <span class="flag">🇻🇳</span>
+      <span class="name">Discover Vietnam</span>
+      <span class="div"></span>
+      <span class="sub">AI Travel Concierge</span>
+    </div>
+    <div class="hctl">
+      <span class="pill">🇬🇧 English ⌄</span>
+      <span class="pill danger">■ End Session</span>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- LEFT: AI VIDEO CALL -->
+    <section class="call">
+      <img class="agentVideo" src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=900&auto=format&fit=crop" alt="Sasha" onerror="this.style.display='none'"/>
+      <div class="callOverlay"></div>
+
+      <div class="callTop">
+        <div class="liveTag"><span class="dot"></span> Live <span class="timer">02:14</span></div>
+        <div class="ctlBtns">
+          <div class="icon" title="Switch camera">⟲</div>
+          <div class="icon" title="Mute">🎙</div>
+          <div class="icon hangup" title="End">✕</div>
+        </div>
+      </div>
+
+      <div class="agentId">
+        <div class="agentAvatar">S</div>
+        <div>
+          <div class="agentName">Sasha</div>
+          <div class="agentRole">Vietnam Specialist · concierge</div>
+        </div>
+      </div>
+
+      <!-- USER PIP -->
+      <div class="pip" id="pip">
+        <img src="https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=400&auto=format&fit=crop" alt="You"/>
+        <span class="youtag">You</span>
+      </div>
+
+      <div class="callBottom">
+        <div class="caption">Perfect — I’ve put together a 7-day Vietnam itinerary built around heritage stays and food. <span class="tw">Let me show you&nbsp;</span></div>
+        <div class="micRow">
+          <div class="micBtn"><span class="micDisc">🎤</span><span class="micLabel">Tap to talk</span></div>
+          <div class="listening"><span class="bars"><span></span><span></span><span></span><span></span></span> Listening</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: ACTION FEED -->
+    <section class="feed">
+      <div class="feedHead">
+        <div class="t">
+          <span class="ic">✦</span>
+          <div>
+            <div class="lbl">Live Workspace</div>
+            <div class="sub">What Sasha is doing for you</div>
+          </div>
+        </div>
+        <div class="doing"><span class="ld"><i></i><i></i><i></i></span> Building itinerary</div>
+      </div>
+
+      <div class="stream" id="stream">
+
+        <div class="when">Just now</div>
+
+        <!-- FRESH: Itinerary -->
+        <div class="card fresh">
+          <div class="cardHd">
+            <span class="ci gold">🗺</span>
+            <div class="meta">
+              <div class="k">Itinerary ready</div>
+              <div class="h">7-Day Vietnam Discovery</div>
+            </div>
+            <span class="ribbon">✦ JUST NOW</span>
+          </div>
+          <div class="cardBody">
+            <div class="dayrow"><div class="num">1</div><div class="info"><div class="d">Hanoi — Old Quarter & street food</div><div class="s">Heritage boutique stay · evening food walk</div></div><div class="px">Day 1–2</div></div>
+            <div class="dayrow"><div class="num">3</div><div class="info"><div class="d">Ha Long Bay — overnight cruise</div><div class="s">Private balcony cabin · kayaking</div></div><div class="px">Day 3–4</div></div>
+            <div class="dayrow"><div class="num">5</div><div class="info"><div class="d">Hoi An — lantern town & tailoring</div><div class="s">Riverside villa · cooking class</div></div><div class="px">Day 5–7</div></div>
+            <div class="totalRow"><span class="lab">Estimated total · 2 travellers</span><span class="amt">$6,480</span></div>
+            <button class="bookBtn">Review & book this trip →</button>
+          </div>
+        </div>
+
+        <div class="when">A moment ago</div>
+
+        <!-- Preference updated -->
+        <div class="card">
+          <div class="cardHd">
+            <span class="ci green">✓</span>
+            <div class="meta"><div class="k">Preference saved</div><div class="h">Family-trip dining time</div></div>
+          </div>
+          <div class="cardBody">
+            <div class="change">
+              <span class="cl">Dinner reservations<br/>no later than</span>
+              <div class="vals"><span class="old">9:30 PM</span><span class="arr">→</span><span class="newv">8:00 PM</span></div>
+            </div>
+            <div class="prefNote"><span class="pin">◆</span> Applied to every future booking when you travel with family.</div>
+          </div>
+        </div>
+
+        <!-- Gallery -->
+        <div class="card">
+          <div class="cardHd">
+            <span class="ci blue">📷</span>
+            <div class="meta"><div class="k">Showing you</div><div class="h">Ha Long Bay</div></div>
+          </div>
+          <div class="cardBody">
+            <div class="gal">
+              <img src="https://images.unsplash.com/photo-1528127269322-539801943592?q=80&w=300&auto=format&fit=crop"/>
+              <img src="https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?q=80&w=300&auto=format&fit=crop"/>
+              <img src="https://images.unsplash.com/photo-1583417319070-4a69db38a482?q=80&w=300&auto=format&fit=crop"/>
+              <img src="https://images.unsplash.com/photo-1504457047772-27faf1c00561?q=80&w=300&auto=format&fit=crop"/>
+            </div>
+            <div class="galCap">📍 UNESCO World Heritage · emerald limestone karsts</div>
+          </div>
+        </div>
+
+        <!-- Flights -->
+        <div class="card">
+          <div class="cardHd">
+            <span class="ci purple">✈</span>
+            <div class="meta"><div class="k">Found flights</div><div class="h">SFO → Hanoi</div></div>
+          </div>
+          <div class="cardBody">
+            <div class="opt">
+              <span class="logo">🛫</span>
+              <div class="od"><div class="o1">Singapore Airlines · 1 stop</div><div class="o2">19h 25m · Business · front cabin</div><span class="tag">Matches your seat preference</span></div>
+              <div class="price">$4,120</div>
+            </div>
+            <div class="opt">
+              <span class="logo">🛫</span>
+              <div class="od"><div class="o1">Cathay Pacific · 1 stop</div><div class="o2">21h 10m · Business</div></div>
+              <div class="price">$3,860</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Composer -->
+      <div class="composer">
+        <div class="field">
+          <input placeholder="Ask Sasha anything…  (or just talk)" />
+        </div>
+        <div class="chips">
+          <span class="chip">Add Phu Quoc</span>
+          <span class="chip">Cheaper hotels</span>
+        </div>
+        <button class="send">➤</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- mockup-only demo controls -->
+<div class="demobar">
+  <span class="tagx">DEMO</span>
+  <button class="on" id="camOn" onclick="setCam(true)">Camera on</button>
+  <button id="camOff" onclick="setCam(false)">Camera denied</button>
+  <button onclick="location.reload()">↻ Replay</button>
+</div>
+
+<script>
+  function setCam(on){
+    const pip=document.getElementById('pip');
+    document.getElementById('camOn').classList.toggle('on',on);
+    document.getElementById('camOff').classList.toggle('on',!on);
+    if(on){
+      pip.className='pip';
+      pip.innerHTML='<img src="https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=400&auto=format&fit=crop" alt="You"/><span class="youtag">You</span>';
+    }else{
+      pip.className='pip off';
+      pip.innerHTML='<div class="ph">👤</div><div class="lbl">Camera off</div>';
+    }
+  }
+  // stagger the card entrance for a "flowing in" feel
+  document.querySelectorAll('#stream .card').forEach((c,i)=>{c.style.animationDelay=(i*0.07)+'s';});
+</script>
+</body>
+</html>

@@ -1,19 +1,23 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import SashaAvatar from '../components/SashaAvatar'
-import SashaChat from '../components/SashaChat'
+import SashaAvatar, { prefetchAvatarSession } from '../components/SashaAvatar'
+import SashaChat, { WorkspaceTab } from '../components/SashaChat'
+import type { Idea } from '../components/workspace/IdeasPanel'
 import ItineraryPanel from '../components/ItineraryPanel'
+import ItineraryDays, { RichItinerary } from '../components/ItineraryDays'
 import { stripMarkdown } from '@/lib/markdown'
+import { apiUrl, apiHeaders } from '@/lib/api'
+import { buildItineraryHtml, buildItineraryText } from '@/lib/itineraryDoc'
 import { User, Itinerary } from '@/types'
 
 const DEMO_USER: User = {
-  display_name: 'Alex',
-  email: 'alex@example.com',
+  display_name: 'Jon Peters',
+  email: 'jon@kanoe.ai',
   default_currency: 'USD',
-  sasha_context: 'Alex loves cultural immersion, authentic food experiences, and luxury travel across Asia.',
+  sasha_context: 'Jon loves cultural immersion, authentic food experiences, and luxury travel across Asia.',
   travellers: [
-    { relation: 'self', first_name: 'Alex' },
+    { relation: 'self', first_name: 'Jon' },
     { relation: 'partner', first_name: 'Maya' },
   ],
   preferences: [
@@ -43,7 +47,6 @@ interface Photo {
 }
 
 export default function VietnamPage() {
-  const [itinerary, setItinerary] = useState<Itinerary>(INITIAL_ITINERARY)
   const [speakFn, setSpeakFn] = useState<((text: string) => void) | null>(null)
   const speakFnRef = useRef<((text: string) => void) | null>(null)
   const interruptFnRef = useRef<(() => void) | null>(null)
@@ -53,21 +56,103 @@ export default function VietnamPage() {
   const [isListening, setIsListening] = useState(false)
   const [chatMessages, setChatMessages] = useState<any[]>([])
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [checkoutError, setCheckoutError] = useState<string | null>(null)
+  // Typed booking details — names/emails are unreliable over voice STT, so collect them here.
+  const [payerName, setPayerName] = useState('')
+  const [payerEmail, setPayerEmail] = useState('')
+  const [payResult, setPayResult] = useState<'paid' | 'canceled' | null>(null)
+  // True while the backend is confirming a Stripe payment on the return leg.
+  const [verifying, setVerifying] = useState(false)
+  // The stored trip a payment applies to. The server prices checkout from this id — the
+  // browser no longer states the amount.
+  const [itineraryId, setItineraryId] = useState<string | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
   const [activePhoto, setActivePhoto] = useState(0)
   const [engaged, setEngaged] = useState(false)
-  const [rightTab, setRightTab] = useState<'chat' | 'itinerary' | 'preferences' | 'trips'>('chat')
+  // Which workspace tab is showing. Chat is the default: this is a voice call, so the
+  // transcript is what the guest follows. When Sasha updates a tab they aren't looking at,
+  // we mark it with a dot (see `unseenTabs`) instead of yanking them off the conversation.
+  const [rightTab, setRightTab] = useState<WorkspaceTab>('chat')
+  const [unseenTabs, setUnseenTabs] = useState<WorkspaceTab[]>([])
+  const markUnseen = useCallback((tab: WorkspaceTab) => {
+    setRightTab(cur => { if (cur !== tab) setUnseenTabs(u => (u.includes(tab) ? u : [...u, tab])); return cur })
+  }, [])
+  const handleTabChange = useCallback((tab: WorkspaceTab) => {
+    setRightTab(tab)
+    setUnseenTabs(u => u.filter(t => t !== tab))
+  }, [])
   const [started, setStarted] = useState(false)
+  const [richItinerary, setRichItinerary] = useState<RichItinerary | null>(null)
+  // Ideas held at page level so they survive IdeasPanel unmounting on every tab switch.
+  const [ideasCache, setIdeasCache] = useState<Idea[] | null>(null)
+  const [language, setLanguage] = useState('en')
+  const sendChatRef = useRef<((t: string) => void) | null>(null)
+  const registerSend = useCallback((fn: (t: string) => void) => { sendChatRef.current = fn }, [])
+  const handleRevise = useCallback((text: string) => { sendChatRef.current?.(text) }, [])
   const photoInterval = useRef<any>(null)
   const lastRepeatTextRef = useRef<string>('')
+  // A live, timestamped record of what the avatar has ACTUALLY said, supplied by SashaAvatar
+  // from its transcription events. Better than `lastRepeatTextRef` (the last text we ASKED
+  // for) because it also covers utterances we didn't request — notably the opening greeting,
+  // which the echo filter could never match before.
+  const avatarSaidRef = useRef<(() => string) | null>(null)
+  const handleAvatarSpeechBuffer = useCallback((getText: () => string) => { avatarSaidRef.current = getText }, [])
   const isRespondingRef = useRef(false)
   const lockWatchdogRef = useRef<any>(null)
   const [voiceReady, setVoiceReady] = useState(false)
+  const [voiceConnected, setVoiceConnected] = useState(false)
+  // A mic/voice failure, shown ON THE CALL PANEL. Previously the panel's only non-live state
+  // was "Starting microphone…", which it showed forever when permission was denied — so a
+  // blocked mic (common on a fresh demo machine) looked identical to a slow one, and the
+  // actual reason sat unnoticed in the composer on the far side of the screen.
+  const [micError, setMicError] = useState<string | null>(null)
   const [isAvatarSpeaking, setIsAvatarSpeaking] = useState(false)
+  // Final booking state — set when the customer confirms the trip. Locks the itinerary into
+  // a shareable / printable confirmation and ends the live session once Sasha finishes.
+  const [booked, setBooked] = useState<{ ref?: string; emailSent?: boolean } | null>(null)
+  const [shareToast, setShareToast] = useState<string | null>(null)
+  const endOnFinishRef = useRef(false)
+  const bookEndTimerRef = useRef<any>(null)
+
+  // Video-call chrome state (mockup UI): live caption, session timer, and user-camera PiP.
+  const [caption, setCaption] = useState('')
+  const [elapsed, setElapsed] = useState(0)
+  const [camOn, setCamOn] = useState(false)
+  // The guest's explicit choice, separate from `camOn` (which reports whether a stream is
+  // actually live). Turning the camera off must STOP the tracks, not just hide the video —
+  // otherwise the camera light stays on and the guest rightly assumes they're still filmed.
+  const [camEnabled, setCamEnabled] = useState(true)
+  const userVideoRef = useRef<HTMLVideoElement | null>(null)
+  const camStreamRef = useRef<MediaStream | null>(null)
+
+  // Warm the backend LLM path on page load so the FIRST spoken turn isn't cold. Fires
+  // during the splash screen, overlapping the avatar cold-start — best-effort, ignored
+  // on failure.
+  useEffect(() => {
+    fetch(apiUrl('/api/agents/warmup')).catch(() => {})
+  }, [])
+
+  // Warm the avatar session start while the guest is still reading the splash screen. The
+  // token round-trip and the SDK chunk download used to happen only AFTER the tap, in series,
+  // stacked on top of HeyGen's ~4s allocation — so the guest paid for all of it at once while
+  // watching a loading screen. Minting a token doesn't start (or bill) a session. Re-runs on a
+  // language change so the warmed token matches the token the avatar will actually ask for.
+  useEffect(() => {
+    if (started) return   // already running — nothing to warm
+    const href = `/api/heygen/token?lang=${language}`
+    prefetchAvatarSession(href)
+    // Keep it warm. A token is only trusted for 60s (see PREFETCH_TTL_MS) — beyond that we
+    // re-mint rather than risk starting with an expired one. Without this, a guest who reads
+    // the splash for a minute would fall back to paying the full mint cost on the tap, which
+    // is exactly the case we're trying to fix.
+    const id = setInterval(() => prefetchAvatarSession(href), 45000)
+    return () => clearInterval(id)
+  }, [language, started])
 
   // Initial background photos — updated per-turn by conductor via onPhotos
   useEffect(() => {
-    fetch('https://sasha-travel-production.up.railway.app/api/photos/search', {
+    fetch(apiUrl('/api/photos/search'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: 'Vietnam landscape travel', count: 4 })
@@ -86,6 +171,51 @@ export default function VietnamPage() {
     return () => clearInterval(photoInterval.current)
   }, [photos])
 
+  // Live session timer for the call status bar — ticks while a session is active.
+  useEffect(() => {
+    if (!started) { setElapsed(0); return }
+    setElapsed(0)
+    const id = setInterval(() => setElapsed(e => e + 1), 1000)
+    return () => clearInterval(id)
+  }, [started])
+
+  // User-camera picture-in-picture. Best-effort: show the live camera feed when the user
+  // grants permission, otherwise fall back to the camera-off placeholder. Tracks are
+  // always stopped on teardown so the camera light goes off when the session ends.
+  useEffect(() => {
+    if (!started || !camEnabled) return
+    let cancelled = false
+    navigator.mediaDevices?.getUserMedia({ video: { facingMode: 'user' } })
+      .then(stream => {
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
+        camStreamRef.current = stream
+        if (userVideoRef.current) userVideoRef.current.srcObject = stream
+        setCamOn(true)
+      })
+      .catch(() => { if (!cancelled) setCamOn(false) })
+    return () => {
+      cancelled = true
+      camStreamRef.current?.getTracks().forEach(t => t.stop())
+      camStreamRef.current = null
+      if (userVideoRef.current) userVideoRef.current.srcObject = null
+      setCamOn(false)
+    }
+  }, [started, camEnabled])
+
+  // Auto-start safety net: the voice loop connects once `voiceReady` is true, which is
+  // normally flipped by the avatar's onReadyToListen. If that event is missed (avatar
+  // cold-start, dropped event), the mic would never auto-connect and the user would have
+  // to click it. This backstop flips it on a few seconds after the session starts so the
+  // mic always comes up on its own. The mic stays gated until the avatar finishes greeting,
+  // so connecting early is safe.
+  useEffect(() => {
+    if (!started) { setVoiceReady(false); setVoiceConnected(false); return }
+    const t = setTimeout(() => setVoiceReady(true), 3500)
+    return () => clearTimeout(t)
+  }, [started])
+
+  const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+
   const handleAvatarReady = useCallback((speak: (text: string) => void, interrupt: () => void) => {
     setSpeakFn(() => speak)
     speakFnRef.current = speak
@@ -103,12 +233,154 @@ export default function VietnamPage() {
     interruptFnRef.current?.()
     isRespondingRef.current = false
     clearTimeout(lockWatchdogRef.current)
+    clearTimeout(bookEndTimerRef.current)
+    endOnFinishRef.current = false
     setIsAvatarSpeaking(false)
     speakFnRef.current = null
     interruptFnRef.current = null
+    // Explicitly stop the camera here too — don't rely solely on the effect cleanup, so the
+    // camera light goes off the moment the session ends (this is what "is the session over?"
+    // checks visually).
+    try { camStreamRef.current?.getTracks().forEach(t => t.stop()) } catch {}
+    camStreamRef.current = null
+    if (userVideoRef.current) userVideoRef.current.srcObject = null
+    setCamOn(false)
     setEngaged(false)
     setStarted(false)
   }, [])
+
+  // Handle Stripe Checkout's redirect back (success_url / cancel_url). On success we restore
+  // the trip stashed before redirect and show the full "Trip booked!" confirmation, so paying
+  // by card lands on the same rich confirmation as the voice "book it" path (no more bare toast).
+  // Returning from Stripe. The ONLY thing the browser is trusted with here is the session id;
+  // the backend asks Stripe whether it was actually paid, mints the reference, and hands back
+  // the stored trip. Previously this trusted a bare `?paid=1` plus whatever sat in
+  // sessionStorage — so typing the URL produced a confirmed booking, and cancelling then
+  // revisiting it did too (the cancel path never cleared the stash).
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    const sessionId = p.get('session_id')
+    const clearUrl = () => window.history.replaceState({}, '', '/vietnam')
+    try { sessionStorage.removeItem('sasha_pending_trip') } catch {}
+
+    if (p.get('canceled')) { setPayResult('canceled'); clearUrl(); return }
+    if (!p.get('paid')) return
+
+    if (!sessionId) {
+      // `?paid=1` with no Stripe session — not a real return leg.
+      setCheckoutError('We could not confirm that payment. If you were charged, contact support with your email address.')
+      clearUrl()
+      return
+    }
+
+    setVerifying(true)
+    fetch(apiUrl(`/api/payments/verify?session_id=${encodeURIComponent(sessionId)}`), { headers: apiHeaders() })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+      .then(data => {
+        if (data?.paid && data?.booking_ref) {
+          if (data.itinerary?.days?.length) setRichItinerary(data.itinerary)
+          setBooked({ ref: data.booking_ref, emailSent: Boolean(data.email_sent) })
+          setRightTab('trip')
+        } else {
+          setPayResult('canceled')  // Stripe says it isn't paid — don't claim otherwise.
+        }
+      })
+      .catch(() => setCheckoutError('We could not reach the payment service to confirm your booking. Nothing has been lost — contact support and we will confirm it for you.'))
+      .finally(() => { setVerifying(false); clearUrl() })
+  }, [])
+
+  // Stripe Checkout: create a hosted session on the backend and redirect to it. Card data
+  // never touches our servers. A 501 means the demo's Stripe keys aren't set — surface it
+  // calmly instead of crashing.
+  const startCardCheckout = useCallback(async () => {
+    setCheckoutError(null)
+    const description = richItinerary?.title || 'Sasha Travel booking'
+    // The server prices this from `itinerary_id`. Without one there is no trip to charge for,
+    // and we must not fall back to a browser-supplied amount.
+    if (!itineraryId) {
+      setCheckoutError('Build an itinerary first, then you can book it.')
+      return
+    }
+    setCheckoutLoading(true)
+    try {
+      const res = await fetch(apiUrl('/api/payments/create-checkout'), {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({
+          itinerary_id: itineraryId,
+          currency: 'usd',
+          description: payerName ? `${description} — ${payerName}` : description,
+          customer_email: payerEmail || undefined,
+        }),
+      })
+      if (res.status === 501) { setCheckoutError('Payments are not configured for this demo yet.'); return }
+      if (!res.ok) { setCheckoutError('Could not start checkout. Please try again.'); return }
+      const data = await res.json()
+      if (data?.url) {
+        // No need to stash the trip: Stripe reloads the page and the return handler fetches
+        // the confirmed booking (and its itinerary) back from the server by session id.
+        window.location.href = data.url
+        return
+      }
+      setCheckoutError('Could not start checkout. Please try again.')
+    } catch {
+      setCheckoutError('Could not reach the payment service.')
+    } finally {
+      setCheckoutLoading(false)
+    }
+  }, [richItinerary, itineraryId, payerName, payerEmail])
+
+  // Start a FRESH session. chatMessages is page-level state that survives the avatar
+  // restart, so without clearing it a new "Tap to start" shows the previous conversation
+  // (and would resend that stale history to the conductor). Reset the conversation state
+  // here so every new session begins clean.
+  const handleStart = useCallback(() => {
+    // Ask for the mic NOW — this click is a user gesture, so the permission prompt appears
+    // immediately and is granted before the avatar finishes greeting. Otherwise the prompt
+    // only pops up when the voice loop connects (mid-conversation) and voice silently fails.
+    try {
+      navigator.mediaDevices?.getUserMedia({ audio: true })
+        .then(s => s.getTracks().forEach(t => t.stop()))
+        .catch(() => {})
+    } catch {}
+    setChatMessages([])
+    setEngaged(false)
+    setVoiceReady(false)
+    setRichItinerary(null)
+    setBooked(null)
+    // A new session starts on Chat with a clean slate. Without these, "Tap to start" could
+    // open on the Trip tab from the last session — now showing an empty panel — or leave a
+    // dot pointing at content that was just wiped.
+    setRightTab('chat')
+    setUnseenTabs([])
+    setMicError(null)   // a fresh session re-asks for the mic; don't carry the old failure over
+    setItineraryId(null)
+    setIdeasCache(null)
+    setPayResult(null)
+    setCheckoutError(null)
+    endOnFinishRef.current = false
+    clearTimeout(bookEndTimerRef.current)
+    setCaption('')
+    isRespondingRef.current = false
+    clearTimeout(lockWatchdogRef.current)
+    setStarted(true)
+  }, [])
+
+  // Sasha produced a full day-by-day itinerary — SHOW it. She says out loud "your plan is
+  // live on the right", so the plan has to be on the right: a subtle dot on a background tab
+  // made her a liar and left guests staring at the chat wondering where the trip went.
+  const handleItinerary = useCallback((itin: RichItinerary) => {
+    setRichItinerary(itin)
+    handleTabChange('trip')
+  }, [handleTabChange])
+
+  // The guest asked to book. Show the complete itinerary and take payment — this is the one
+  // moment we DO switch tabs, because Sasha has just said "make the payment to finish
+  // booking" and the pay button lives on the Trip tab.
+  const handleAwaitPayment = useCallback(() => {
+    handleTabChange('trip')
+    setPaymentModal('card')
+  }, [handleTabChange])
 
   const handlePhotos = useCallback((newPhotos: any[]) => {
     if (newPhotos?.length > 0) {
@@ -121,7 +393,54 @@ export default function VietnamPage() {
     isRespondingRef.current = false
     clearTimeout(lockWatchdogRef.current)
     console.log('[LOCK] released — Sasha finished speaking')
-  }, [])
+    // After Sasha speaks the booking confirmation, end the live session (stops billing).
+    if (endOnFinishRef.current) {
+      endOnFinishRef.current = false
+      handleEndSession()
+    }
+  }, [handleEndSession])
+
+  // Customer confirmed the trip — lock the final itinerary into a shareable confirmation and
+  // end the session once the confirmation is spoken.
+  const handleBooked = useCallback((ref?: string) => {
+    setBooked({ ref })
+    // Turn the camera off immediately on booking — the call is effectively over, and this is
+    // what the user looks at to confirm "the session ended". The avatar finishes its spoken
+    // confirmation, then the live session is fully torn down (below).
+    try { camStreamRef.current?.getTracks().forEach(t => t.stop()) } catch {}
+    camStreamRef.current = null
+    if (userVideoRef.current) userVideoRef.current.srcObject = null
+    setCamOn(false)
+    setIsListening(false)
+    // End the avatar/voice session once the confirmation is spoken (handleSashaFinished), with
+    // a bounded fallback so a missed speak-finished event can never leave the session running.
+    endOnFinishRef.current = true
+    clearTimeout(bookEndTimerRef.current)
+    bookEndTimerRef.current = setTimeout(() => {
+      if (endOnFinishRef.current) { endOnFinishRef.current = false; handleEndSession() }
+    }, 14000)
+  }, [handleEndSession])
+
+  // Open the booked itinerary as a printable page → user saves as PDF via the print dialog.
+  const exportItineraryPdf = useCallback(() => {
+    if (!richItinerary) return
+    const html = buildItineraryHtml(richItinerary, booked?.ref)
+    const w = window.open('', '_blank')
+    if (!w) { setShareToast('Allow pop-ups to download the PDF.'); setTimeout(() => setShareToast(null), 2500); return }
+    w.document.open(); w.document.write(html); w.document.close(); w.focus()
+    setTimeout(() => { try { w.print() } catch {} }, 500)
+  }, [richItinerary, booked])
+
+  // Native share sheet where available, else copy the itinerary text to the clipboard.
+  const shareItinerary = useCallback(async () => {
+    if (!richItinerary) return
+    const text = buildItineraryText(richItinerary, booked?.ref)
+    const title = richItinerary.title || 'My Vietnam itinerary'
+    try { if (navigator.share) { await navigator.share({ title, text }); return } } catch {}
+    try { await navigator.clipboard.writeText(text); setShareToast('Itinerary copied to clipboard') }
+    catch { setShareToast('Could not share automatically') }
+    setTimeout(() => setShareToast(null), 2500)
+  }, [richItinerary, booked])
 
   const handleSashaResponse = useCallback((text: string) => {
     if (!text) return
@@ -135,6 +454,7 @@ export default function VietnamPage() {
     // The chat still displays the original markdown (rendered as bold/lists).
     const spoken = stripMarkdown(text)
     lastRepeatTextRef.current = spoken
+    setCaption(spoken)
     isRespondingRef.current = true
     console.log('[LOCK] acquired — Sasha speaking')
     speakFnRef.current(spoken)
@@ -155,18 +475,42 @@ export default function VietnamPage() {
     }, watchdogMs)
   }, [])
 
-  const handleItineraryUpdate = useCallback((newItinerary: Itinerary) => {
-    setItinerary(newItinerary)
-    if (newItinerary.items?.length > 0) {
-      setRightTab('itinerary')
-    }
+  // Slow-turn filler: when a specialist agent is taking a while, have the avatar say a
+  // brief acknowledgement instead of going silent. Speaks through the same speak path so
+  // the mic gate stays closed; the real answer queues right after. Guarded to one per turn.
+  const thinkingCountRef = useRef(0)
+  const handleThinking = useCallback(() => {
+    if (isRespondingRef.current || !speakFnRef.current) return
+    // Only voice a filler once every few slow turns — speaking one on each turn feels
+    // robotic ("Let me find that for you" every time). The "Sasha is responding" workspace
+    // indicator already shows she's working during the silent ones.
+    thinkingCountRef.current += 1
+    if (thinkingCountRef.current % 3 !== 1) return
+    const fillers = ['One moment, let me look into that.', 'Let me find that for you.', 'Give me just a second.']
+    const filler = fillers[thinkingCountRef.current % fillers.length]
+    isRespondingRef.current = true
+    speakFnRef.current(filler)
+    // Arm the page-level backstop, exactly as handleSashaResponse does. This path took the
+    // lock but armed nothing, leaning entirely on the avatar instance's own watchdog — so if
+    // that instance was torn down mid-filler (a language switch, any teardown racing it), no
+    // independent timer remained to release the lock and the guest's voice would keep being
+    // silently dropped.
+    clearTimeout(lockWatchdogRef.current)
+    lockWatchdogRef.current = setTimeout(() => {
+      if (isRespondingRef.current) {
+        console.warn('[LOCK] watchdog force-release after filler')
+        isRespondingRef.current = false
+        setIsAvatarSpeaking(false)
+        gateRef.current?.(false)
+      }
+    }, 12000)
   }, [])
 
   return (
-    <main className="h-screen flex flex-col overflow-hidden" style={{ background: '#080810' }}>
+    <main className="h-screen flex flex-col overflow-hidden" style={{ background: 'radial-gradient(1200px 800px at 18% -10%, #15131f 0%, #07070d 55%)' }}>
 
       {/* HEADER */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-white/5 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)' }}>
+      <div className="flex items-center justify-between px-6 py-3.5 border-b border-white/5 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(12px)' }}>
         <div className="flex items-center gap-3">
           <span className="text-xl">🇻🇳</span>
           <span className="font-bold tracking-wide" style={{ color: '#DAA520' }}>Discover Vietnam</span>
@@ -174,6 +518,21 @@ export default function VietnamPage() {
           <span className="text-xs text-white/30 tracking-widest uppercase">AI Travel Concierge</span>
         </div>
         <div className="flex items-center gap-3">
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            title="Language Sasha speaks"
+            className="text-xs rounded-full px-2 py-1.5 cursor-pointer outline-none"
+            style={{ color: '#DAA520', border: '1px solid rgba(218,165,32,0.3)', background: 'rgba(218,165,32,0.12)' }}
+          >
+            <option value="en">🇬🇧 English</option>
+            <option value="vi">🇻🇳 Tiếng Việt</option>
+            <option value="ko">🇰🇷 한국어</option>
+            <option value="zh">🇨🇳 中文</option>
+            <option value="ja">🇯🇵 日本語</option>
+            <option value="fr">🇫🇷 Français</option>
+            <option value="es">🇪🇸 Español</option>
+          </select>
           {started && (
             <button
               onClick={handleEndSession}
@@ -184,132 +543,186 @@ export default function VietnamPage() {
               ■ End Session
             </button>
           )}
-          <div className="text-xs px-3 py-1 rounded-full border" style={{ color: '#DAA520', borderColor: 'rgba(218,165,32,0.3)', background: 'rgba(218,165,32,0.1)' }}>
+          <div className="text-xs px-3 py-1 rounded-full border" style={{ color: '#DAA520', borderColor: 'rgba(218,165,32,0.3)', background: 'rgba(218,165,32,0.12)' }}>
             Ministry of Tourism Partner
           </div>
         </div>
       </div>
 
-      {/* MAIN CONTENT */}
-      <div className="flex-1 flex overflow-hidden p-2 gap-2" style={{ minHeight: 0 }}>
+      {/* MAIN — Video call (left) + Live Workspace (right) */}
+      <div className="lv-main flex-1 flex overflow-hidden p-3.5 gap-3.5" style={{ minHeight: 0 }}>
 
-        {/* LEFT COLUMN — Avatar + Photos */}
-        <div className="flex flex-col gap-3 overflow-hidden" style={{ width: '42%' }}>
-
-          {/* AVATAR — big on landing, small when engaged */}
-          <div
-            className="rounded-3xl overflow-hidden border border-white/5 flex-shrink-0 transition-all duration-700"
-            style={{ height: engaged ? '160px' : '60%' }}
-          >
+        {/* LEFT — AI VIDEO CALL */}
+        <section
+          className="lv-call relative flex flex-col overflow-hidden flex-shrink-0"
+          style={{
+            borderRadius: 26,
+            border: '1px solid rgba(255,255,255,0.07)',
+            background: 'linear-gradient(160deg,#12101b,#0a0a12)',
+            boxShadow: '0 30px 80px -30px rgba(0,0,0,.8)',
+          }}
+        >
+          {/* Avatar video fills the panel */}
+          <div className="absolute inset-0">
             {started && (
               <SashaAvatar
+                key={language}
+                tokenUrl={`/api/heygen/token?lang=${language}`}
                 onAvatarReady={handleAvatarReady}
                 isListening={isListening}
                 onGate={handleGate}
                 onAvatarSpeakingChange={setIsAvatarSpeaking}
                 onReadyToListen={() => setVoiceReady(true)}
                 onSashaFinished={handleSashaFinished}
+                onAvatarSpeechBuffer={handleAvatarSpeechBuffer}
+                hideStatusBadge
               />
             )}
           </div>
 
-          {/* PHOTOS — hero when engaged, teaser when not */}
-          <div
-            className="relative rounded-3xl overflow-hidden border border-white/5 transition-all duration-700"
-            style={{ flex: 1, minHeight: 0 }}
-          >
-            {photos.length > 0 ? (
-              <>
-                <img
-                  key={activePhoto}
-                  src={photos[activePhoto]?.url}
-                  alt={photos[activePhoto]?.description}
-                  className="w-full h-full object-cover transition-opacity duration-500"
-                  style={{ opacity: engaged ? 1 : 0.4, animation: 'fadeIn 0.8s ease' }}
-                />
-                <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.8) 100%)' }} />
+          {started && (
+            <>
+              {/* gradient overlay for legibility */}
+              <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 22%, transparent 55%, rgba(0,0,0,.85) 100%)' }} />
 
-                {/* Welcome overlay */}
-                {!engaged && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-white/40 text-xs tracking-widest uppercase">Start talking to explore Vietnam</div>
+              {/* top status bar */}
+              <div className="absolute top-0 left-0 right-0 flex items-center justify-between" style={{ padding: '16px 18px', zIndex: 3 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, letterSpacing: '.12em', textTransform: 'uppercase', fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,.35)', padding: '7px 12px', borderRadius: 999, border: '1px solid rgba(255,255,255,.1)', backdropFilter: 'blur(8px)' }}>
+                  <span className="la-dot" /> Live
+                  <span style={{ fontVariantNumeric: 'tabular-nums', color: 'rgba(255,255,255,.85)', fontSize: 12, marginLeft: 4 }}>{fmtTime(elapsed)}</span>
+                </div>
+                <button
+                  className="la-icon"
+                  title="End session"
+                  aria-label="End session"
+                  style={{ background: 'rgba(248,113,113,.9)', borderColor: 'transparent', padding: 0 }}
+                  onClick={handleEndSession}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><path d="M2 2l10 10M12 2L2 12" /></svg>
+                </button>
+              </div>
+
+              {/* agent identity ribbon */}
+              <div className="absolute flex items-center gap-2.5" style={{ left: 18, top: 62, zIndex: 3 }}>
+                <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg,#8b5cf6,#6d28d9)', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 13, border: '2px solid rgba(255,255,255,.25)' }}>S</div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1 }}>Sasha</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', marginTop: 2 }}>Vietnam Specialist · concierge</div>
+                </div>
+              </div>
+
+              {/* user camera PiP */}
+              <div className="absolute overflow-hidden" style={{ right: 16, bottom: 96, width: 148, height: 104, borderRadius: 16, border: '2px solid rgba(255,255,255,.25)', boxShadow: '0 14px 40px -10px rgba(0,0,0,.8)', zIndex: 4, background: '#15151f' }}>
+                <video
+                  ref={userVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                  style={{ display: camOn ? 'block' : 'none', transform: 'scaleX(-1)' }}
+                />
+                {!camOn && (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-2" style={{ background: 'linear-gradient(160deg,#1c1c28,#101018)' }}>
+                    <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,.08)', display: 'grid', placeItems: 'center', fontSize: 22, color: 'rgba(255,255,255,.4)' }}>👤</div>
+                    <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.4)' }}>{camEnabled ? 'No camera' : 'Camera off'}</div>
                   </div>
                 )}
-
-                {/* Engaged: caption + controls */}
-                {engaged && (
-                  <>
-                    <div className="absolute bottom-3 left-4">
-                      <div className="text-white/50 text-xs">📷 {photos[activePhoto]?.photographer}</div>
-                    </div>
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-                      {photos.map((_, i) => (
-                        <button key={i} onClick={() => setActivePhoto(i)}
-                          className="rounded-full transition-all"
-                          style={{ width: i === activePhoto ? '18px' : '6px', height: '6px', background: i === activePhoto ? '#DAA520' : 'rgba(255,255,255,0.3)' }}
-                        />
-                      ))}
-                    </div>
-                    <div className="absolute top-3 right-3 flex gap-1.5">
-                      {photos.map((p, i) => (
-                        <button key={i} onClick={() => setActivePhoto(i)}
-                          className="rounded-lg overflow-hidden border-2 transition-all"
-                          style={{ width: '44px', height: '32px', borderColor: i === activePhoto ? '#DAA520' : 'rgba(255,255,255,0.2)' }}
-                        >
-                          <img src={p.thumb} alt="" className="w-full h-full object-cover" />
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </>
-            ) : (
-              <div className="w-full h-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0a0a1a, #1a1a3a)' }}>
-                <div className="text-white/20 text-sm">🇻🇳</div>
+                <span style={{ position: 'absolute', left: 7, bottom: 6, fontSize: 10, fontWeight: 600, letterSpacing: '.05em', background: 'rgba(0,0,0,.55)', padding: '3px 7px', borderRadius: 6, backdropFilter: 'blur(4px)' }}>You</span>
               </div>
+
+              {/* bottom: live caption + mic status */}
+              <div className="absolute left-0 right-0 bottom-0 flex flex-col gap-3" style={{ padding: 18, zIndex: 3 }}>
+                {caption && (
+                  <div style={{ maxWidth: '60%', fontSize: 14, lineHeight: 1.45, color: 'rgba(255,255,255,.92)', textShadow: '0 2px 12px rgba(0,0,0,.7)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{caption}</div>
+                )}
+                <div className="flex items-center gap-3">
+                  {isAvatarSpeaking ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#DAA520', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(218,165,32,.3)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
+                      <span className="la-load"><i /><i /><i /></span> Sasha is speaking
+                    </div>
+                  ) : isListening ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#34d399', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(52,211,153,.35)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
+                      <span className="la-eq"><span /><span /><span /><span /></span> Listening…
+                    </div>
+                  ) : voiceConnected ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'rgba(255,255,255,.85)', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
+                      <span className="la-dot" /> Mic live — just talk
+                    </div>
+                  ) : micError ? (
+                    // Tell the guest what's wrong and what to do — and keep the session usable:
+                    // Sasha still speaks, and the composer still takes typed messages.
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#f87171', background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.4)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
+                      <span>🚫</span>
+                      {micError === 'Mic permission denied'
+                        ? 'Mic blocked — allow it in your browser, or type below'
+                        : `${micError} — you can type below`}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'rgba(255,255,255,.6)', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
+                      <span className="la-load"><i /><i /><i /></span> Starting microphone…
+                    </div>
+                  )}
+
+                  {/* Camera toggle — stops the tracks rather than hiding the element, so the
+                      camera light actually goes out when the guest turns it off. */}
+                  <button
+                    onClick={() => setCamEnabled(v => !v)}
+                    aria-pressed={camEnabled}
+                    title={camEnabled ? 'Turn camera off' : 'Turn camera on'}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer',
+                      background: camEnabled ? 'rgba(0,0,0,.4)' : 'rgba(248,113,113,.12)',
+                      border: `1px solid ${camEnabled ? 'rgba(255,255,255,.14)' : 'rgba(248,113,113,.4)'}`,
+                      color: camEnabled ? 'rgba(255,255,255,.85)' : '#f87171',
+                      borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)',
+                    }}
+                  >
+                    {camEnabled ? '📹 Camera on' : '🚫 Camera off'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+
+        {/* RIGHT — LIVE WORKSPACE */}
+        <section
+          className="lv-ws flex-1 flex flex-col overflow-hidden"
+          style={{
+            minWidth: 0, borderRadius: 26,
+            border: '1px solid rgba(255,255,255,0.07)',
+            background: 'radial-gradient(700px 380px at 80% -8%, rgba(218,165,32,0.07), transparent 60%), linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.22))',
+          }}
+        >
+          {/* workspace head */}
+          <div className="flex items-center justify-between flex-shrink-0" style={{ padding: '15px 22px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(0,0,0,0.25)' }}>
+            <div className="flex items-center gap-3">
+              <span style={{ width: 28, height: 28, borderRadius: 9, background: 'rgba(218,165,32,0.12)', display: 'grid', placeItems: 'center', color: '#DAA520', fontSize: 15 }}>✦</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: '.02em' }}>Live Workspace</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', marginTop: 2, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {!started ? 'What Sasha is doing for you'
+                    : isAvatarSpeaking ? 'Speaking with you…'
+                    : richItinerary ? `Planning · ${richItinerary.title}`
+                    : photos.length > 0 ? `Exploring ${photos[activePhoto]?.description || 'Vietnam'}`
+                    : 'What Sasha is doing for you'}
+                </div>
+              </div>
+            </div>
+            {isAvatarSpeaking ? (
+              <div className="flex items-center gap-2" style={{ fontSize: 12, color: '#DAA520', background: 'rgba(218,165,32,0.12)', padding: '7px 13px', borderRadius: 999, border: '1px solid rgba(218,165,32,0.25)' }}>
+                <span className="la-load"><i /><i /><i /></span> Sasha is responding
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,.4)', padding: '7px 13px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.07)' }}>Ready</div>
             )}
           </div>
-        </div>
 
-        {/* RIGHT COLUMN — Tabs: Chat / Itinerary / Preferences / Past Trips */}
-        <div className="flex-1 flex flex-col rounded-3xl border border-white/5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', minWidth: '280px' }}>
-
-          {/* Tab bar */}
-          <div className="flex border-b border-white/5 flex-shrink-0">
-            {[
-              { key: 'chat', label: 'Sasha' },
-              { key: 'itinerary', label: 'Itinerary', badge: itinerary.items?.length || 0 },
-              { key: 'preferences', label: 'Prefs' },
-              { key: 'trips', label: 'Trips' },
-            ].map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setRightTab(tab.key as any)}
-                className="flex-1 py-2.5 text-xs transition-all relative"
-                style={{
-                  color: rightTab === tab.key ? '#DAA520' : 'rgba(255,255,255,0.3)',
-                  borderBottom: rightTab === tab.key ? '2px solid #DAA520' : '2px solid transparent'
-                }}
-              >
-                {tab.label}
-                {tab.badge ? (
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs" style={{ background: '#DAA520', color: '#000', fontSize: '10px' }}>
-                    {tab.badge}
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </div>
-
-          {/* Tab content */}
-          <div className="flex-1 overflow-hidden">
-
-            {/* CHAT TAB */}
-            {rightTab === 'chat' && started && (
+          {/* Live Workspace feed — action cards, profile, conversation, composer */}
+          <div className="flex-1 min-h-0 flex flex-col">
+            {started ? (
               <SashaChat
                 user={DEMO_USER}
-                itinerary={itinerary}
-                onItineraryUpdate={handleItineraryUpdate}
                 onSashaResponse={handleSashaResponse}
                 onListeningChange={setIsListening}
                 onSetGate={handleSetGate}
@@ -319,64 +732,156 @@ export default function VietnamPage() {
                 messages={chatMessages}
                 setMessages={setChatMessages}
                 avatarSpeaking={isAvatarSpeaking}
-                avatarSpeechGetter={() => lastRepeatTextRef.current}
+                // Prefer what Sasha actually said (covers the greeting); fall back to the last
+                // text we asked her to say if the buffer isn't wired yet.
+                avatarSpeechGetter={() => {
+                  const spoken = avatarSaidRef.current?.() || ''
+                  return `${spoken} ${lastRepeatTextRef.current}`.trim()
+                }}
                 isRespondingRef={isRespondingRef}
                 readyToListen={voiceReady}
+                onThinking={handleThinking}
+                onItinerary={handleItinerary}
+                language={language}
+                registerSend={registerSend}
+                richItinerary={richItinerary}
+                photos={photos}
+                activePhoto={activePhoto}
+                onSelectPhoto={setActivePhoto}
+                onBook={() => setPaymentModal('card')}
+                onVoiceConnected={setVoiceConnected}
+                onMicError={setMicError}
+                onBooked={handleBooked}
+                onAwaitPayment={handleAwaitPayment}
+                onItineraryId={setItineraryId}
+                bookingRef={booked?.ref ?? null}
+                activeTab={rightTab}
+                onTabChange={handleTabChange}
+                unseenTabs={unseenTabs}
+                ideasCache={ideasCache}
+                onIdeasCache={setIdeasCache}
               />
+            ) : (
+              <div className="flex-1 flex items-center justify-center px-6 text-center">
+                <div className="text-white/30 text-xs tracking-widest uppercase">Tap to start your call with Sasha</div>
+              </div>
             )}
+          </div>
+        </section>
+      </div>
 
-            {/* ITINERARY TAB */}
-            {rightTab === 'itinerary' && (
-              <ItineraryPanel
-                itinerary={itinerary}
-                user={DEMO_USER}
-                onPay={(method) => setPaymentModal(method)}
-              />
-            )}
+      {payResult && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-xl text-sm shadow-xl"
+          style={{
+            background: payResult === 'paid' ? 'rgba(16,185,129,0.95)' : 'rgba(248,113,113,0.95)',
+            color: '#fff',
+          }}
+          onAnimationEnd={() => {}}
+        >
+          {payResult === 'paid' ? '✓ Payment received — your booking is confirmed.' : 'Payment canceled — your itinerary is saved.'}
+          <button onClick={() => setPayResult(null)} className="ml-3 opacity-70 hover:opacity-100">✕</button>
+        </div>
+      )}
 
-            {/* PREFERENCES TAB */}
-            {rightTab === 'preferences' && (
-              <div className="p-6 space-y-4 overflow-y-auto h-full">
-                <div className="text-sm font-medium text-white/60 mb-4">Travel Preferences</div>
-                {DEMO_USER.preferences?.map((pref, i) => (
-                  <div key={i} className="rounded-xl p-4 border border-white/5" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                    <div className="text-xs text-white/30 mb-1">{pref.key.replace('.', ' › ')}</div>
-                    <div className="text-sm text-white/70 capitalize">{pref.value.replace(/_/g, ' ')}</div>
-                  </div>
-                ))}
-                <div className="rounded-xl p-4 border border-white/5" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  <div className="text-xs text-white/30 mb-1">Travellers</div>
-                  <div className="text-sm text-white/70">{DEMO_USER.travellers?.map(t => `${t.first_name} (${t.relation})`).join(', ')}</div>
+      {paymentModal && (
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={() => setPaymentModal(null)}>
+          <div className="rounded-2xl p-6 w-96 shadow-xl" style={{ background: '#1a1a2e', border: '1px solid rgba(218,165,32,0.3)' }} onClick={e => e.stopPropagation()}>
+            <div className="text-lg font-semibold mb-1" style={{ color: '#DAA520' }}>Complete Booking</div>
+            <div className="text-sm mb-5" style={{ color: 'rgba(255,255,255,0.4)' }}>Total: ${(richItinerary?.estimated_total_usd || 0).toLocaleString()}</div>
+
+            {paymentModal === 'card' ? (
+              <>
+                <div className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  Confirm your details, then continue to our secure Stripe checkout.
                 </div>
-              </div>
-            )}
-
-            {/* PAST TRIPS TAB */}
-            {rightTab === 'trips' && (
-              <div className="p-6 space-y-4 overflow-y-auto h-full">
-                <div className="text-sm font-medium text-white/60 mb-4">Past Trips</div>
-                {DEMO_USER.past_trips?.map((trip, i) => (
-                  <div key={i} className="rounded-xl p-4 border border-white/5" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                    <div className="text-sm text-white/70">{trip.title}</div>
-                    <div className="text-xs text-white/30 mt-1">{trip.return_date}</div>
-                  </div>
-                ))}
-              </div>
+                <input
+                  value={payerName} onChange={(e) => setPayerName(e.target.value)}
+                  placeholder="Full name (for the reservation)"
+                  className="w-full mb-2 px-3 py-2 rounded-xl text-sm outline-none"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                />
+                <input
+                  value={payerEmail} onChange={(e) => setPayerEmail(e.target.value)}
+                  type="email" placeholder="Email (for confirmation)"
+                  className="w-full mb-3 px-3 py-2 rounded-xl text-sm outline-none"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                />
+                {checkoutError && (
+                  <div className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171' }}>{checkoutError}</div>
+                )}
+                <div className="flex gap-3 mt-2">
+                  <button onClick={() => { setCheckoutError(null); setPaymentModal(null) }} disabled={checkoutLoading} className="flex-1 py-3 rounded-xl text-sm disabled:opacity-40" style={{ border: '1px solid rgba(218,165,32,0.2)', color: 'rgba(255,255,255,0.6)' }}>Cancel</button>
+                  <button onClick={startCardCheckout} disabled={checkoutLoading} className="flex-1 py-3 rounded-xl text-sm font-medium disabled:opacity-60" style={{ background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: 'white' }}>
+                    {checkoutLoading ? 'Starting…' : 'Pay securely'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  Crypto payments are coming soon. Use card to complete this booking today.
+                </div>
+                <div className="flex gap-3 mt-2">
+                  <button onClick={() => setPaymentModal(null)} className="flex-1 py-3 rounded-xl text-sm" style={{ border: '1px solid rgba(218,165,32,0.2)', color: 'rgba(255,255,255,0.6)' }}>Close</button>
+                  <button onClick={() => { setCheckoutError(null); setPaymentModal('card') }} className="flex-1 py-3 rounded-xl text-sm font-medium" style={{ background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: 'white' }}>Pay by card</button>
+                </div>
+              </>
             )}
           </div>
         </div>
-      </div>
+      )}
 
-      {paymentModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.7)' }}>
-          <div className="rounded-2xl p-6 w-96 shadow-xl" style={{ background: '#1a1a2e', border: '1px solid rgba(218,165,32,0.3)' }}>
-            <div className="text-lg font-semibold mb-1" style={{ color: '#DAA520' }}>Complete Booking</div>
-            <div className="text-sm mb-6" style={{ color: 'rgba(255,255,255,0.4)' }}>Total: ${itinerary.total_fiat.toLocaleString()}</div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setPaymentModal(null)} className="flex-1 py-3 rounded-xl text-sm" style={{ border: '1px solid rgba(218,165,32,0.2)', color: 'rgba(255,255,255,0.6)' }}>Cancel</button>
-              <button className="flex-1 py-3 rounded-xl text-sm font-medium" style={{ background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: 'white' }}>Confirm</button>
+      {/* Booking confirmation — final itinerary, shareable / exportable as PDF */}
+      {booked && richItinerary && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(6,6,12,0.94)', backdropFilter: 'blur(14px)' }}>
+          <div className="relative flex flex-col overflow-hidden" style={{ width: 'min(680px, 96vw)', maxHeight: '92vh', borderRadius: 24, border: '1px solid rgba(218,165,32,0.3)', background: 'linear-gradient(180deg, rgba(218,165,32,0.06), rgba(0,0,0,0.25)), #0e0e16', boxShadow: '0 40px 100px -30px rgba(0,0,0,.9)' }}>
+            <div className="flex-shrink-0 text-center" style={{ padding: '26px 24px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 14px', display: 'grid', placeItems: 'center', background: 'rgba(52,211,153,0.14)', border: '1px solid rgba(52,211,153,0.4)', fontSize: 26, color: '#34d399' }}>✓</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>Trip booked!</div>
+              {/* Only promise an email when one actually went out — the send is best-effort
+                  and silently no-ops without RESEND_API_KEY. */}
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,.5)', marginTop: 5 }}>
+                Your booking is confirmed — your full itinerary is below.
+                {booked.emailSent ? ' A confirmation is on its way to your email.' : ''}
+              </div>
+              {booked.ref && (
+                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>Booking ref · {booked.ref}</div>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto" style={{ padding: '18px 22px' }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: '#DAA520', marginBottom: 2 }}>{richItinerary.title}</div>
+              {richItinerary.summary && <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.5)', marginBottom: 14 }}>{richItinerary.summary}</div>}
+              {richItinerary.days?.map(d => (
+                <div key={d.day} className="flex items-start gap-3" style={{ padding: '10px 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ width: 26, height: 26, borderRadius: 8, background: 'rgba(218,165,32,0.12)', color: '#DAA520', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{d.day}</div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: '#fff' }}>{d.title}</div>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', marginTop: 1 }}>📍 {d.city}{(d.hotel as any)?.name ? ` · ${(d.hotel as any).name}` : ''}</div>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.3)', whiteSpace: 'nowrap' }}>Day {d.day}</div>
+                </div>
+              ))}
+              <div className="flex items-center justify-between" style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                {/* Fall back to who's actually on the booking rather than asserting "2
+                    travellers" on a confirmation the guest is about to pay for. */}
+                {(() => {
+                  const pax = (richItinerary as any).cost_breakdown?.travellers || DEMO_USER.travellers?.length || 1
+                  return <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,.5)' }}>Total · {pax} traveller{pax > 1 ? 's' : ''}</span>
+                })()}
+                <span style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 24, color: '#E8B923' }}>${(richItinerary.estimated_total_usd || 0).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="flex-shrink-0 flex gap-3" style={{ padding: '16px 22px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <button onClick={shareItinerary} className="flex-1" style={{ padding: '12px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>↗ Share</button>
+              <button onClick={exportItineraryPdf} className="flex-1" style={{ padding: '12px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#DAA520,#B8860B)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>⬇ Download PDF</button>
+              <button onClick={() => { endOnFinishRef.current = false; clearTimeout(bookEndTimerRef.current); if (started) handleEndSession(); setBooked(null) }} style={{ padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,.55)', fontSize: 13.5, cursor: 'pointer' }}>Done</button>
             </div>
           </div>
+          {shareToast && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2" style={{ background: 'rgba(0,0,0,0.85)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 999, padding: '9px 16px', fontSize: 12.5, color: '#fff' }}>{shareToast}</div>
+          )}
         </div>
       )}
 
@@ -385,7 +890,7 @@ export default function VietnamPage() {
         <div
           className="fixed inset-0 z-50 flex flex-col items-center justify-center cursor-pointer select-none"
           style={{ background: 'rgba(8,8,16,0.96)', backdropFilter: 'blur(10px)' }}
-          onClick={() => setStarted(true)}
+          onClick={handleStart}
         >
           <div style={{ fontSize: '52px', marginBottom: '20px' }}>🇻🇳</div>
           <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: '26px', fontWeight: 700, color: '#DAA520', marginBottom: '8px', letterSpacing: '-0.3px' }}>
@@ -418,6 +923,34 @@ export default function VietnamPage() {
         @keyframes pulse {
           0%, 100% { box-shadow: 0 8px 32px rgba(218,165,32,0.35); }
           50% { box-shadow: 0 8px 48px rgba(218,165,32,0.6); }
+        }
+
+        /* Video-call chrome (mockup UI) */
+        .la-dot{width:8px;height:8px;border-radius:50%;background:#34d399;box-shadow:0 0 0 0 rgba(52,211,153,.7);animation:laPulse 2s infinite;display:inline-block}
+        @keyframes laPulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%{box-shadow:0 0 0 7px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+        .la-icon{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;cursor:pointer;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px);color:#fff;font-size:15px;transition:.2s}
+        .la-icon:hover{filter:brightness(1.15)}
+        .la-eq{display:flex;align-items:flex-end;gap:2px;height:14px}
+        .la-eq span{width:3px;background:#34d399;border-radius:2px;animation:laEq 1s infinite ease-in-out}
+        .la-eq span:nth-child(1){animation-delay:-.4s}.la-eq span:nth-child(2){animation-delay:-.2s}.la-eq span:nth-child(3){animation-delay:-.6s}.la-eq span:nth-child(4){animation-delay:-.1s}
+        @keyframes laEq{0%,100%{height:4px}50%{height:14px}}
+        .la-load{display:inline-flex;gap:3px;align-items:center}
+        .la-load i{width:5px;height:5px;border-radius:50%;background:#DAA520;display:inline-block;animation:laBounce 1.2s infinite}
+        .la-load i:nth-child(2){animation-delay:.15s}.la-load i:nth-child(3){animation-delay:.3s}
+        @keyframes laBounce{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+
+        /* Layout — left video call width (class so media queries can override the split) */
+        .lv-call{width:36%;min-width:340px}
+        /* Tablet / narrow: stack the call above the workspace */
+        @media (max-width:880px){
+          .lv-main{flex-direction:column}
+          .lv-call{width:100%;min-width:0;height:44vh;flex-shrink:0}
+          .lv-ws{min-height:0;flex:1}
+        }
+        /* Phone: tighten paddings and let it scroll the page */
+        @media (max-width:560px){
+          .lv-main{padding:10px;gap:10px}
+          .lv-call{height:38vh}
         }
       `}</style>
     </main>

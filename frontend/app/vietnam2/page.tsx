@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import SashaAvatar from '../components/SashaAvatar'
-import SashaChat from '../components/SashaChat'
+import SashaChat from './SashaChatLegacy'
 import { stripMarkdown } from '@/lib/markdown'
 import { User, Itinerary } from '@/types'
 

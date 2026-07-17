@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { apiUrl } from '@/lib/api'
 
 interface Photo {
   url: string
@@ -25,7 +26,7 @@ export default function FotoStrip({ query, type = 'general', visible }: FotoStri
     const fetchPhotos = async () => {
       setLoading(true)
       try {
-        const res = await fetch('https://sasha-travel-production.up.railway.app/api/photos/search', {
+        const res = await fetch(apiUrl('/api/photos/search'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query, type, count: 3 })

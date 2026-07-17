@@ -36,6 +36,7 @@ _DEFAULT_ORIGINS = [
     "https://sasha-heygen.vercel.app",
     "https://investor.kanoe.ai",
     "https://demo.kanoe.ai",
+    "https://project.kanoe.ai",
 ]
 _EXTRA_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 

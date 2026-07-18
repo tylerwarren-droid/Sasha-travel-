@@ -8,6 +8,12 @@ interface VoiceButtonProps {
   disabled?: boolean
   autoStart?: boolean
   readyToListen?: boolean
+  // Deliberately muted (currently: while the itinerary builds). This is a HARD mute — unlike
+  // the ordinary speak-gate it cannot be barged through, because there is nothing to barge
+  // into: the build runs server-side and can't be cancelled. Without this, speaking during a
+  // build tripped BARGE_IN, which force-opened the gate, so Sasha started listening again and
+  // the mic went green while the UI still claimed she wasn't listening.
+  muted?: boolean
   onSpeakingChange?: (isSpeaking: boolean) => void
   avatarSpeaking?: boolean
   onInterrupt?: () => void
@@ -75,7 +81,7 @@ const ECHO_MIN_WORDS = 4
 
 const normalizeText = (t: string) => t.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean)
 
-export default function VoiceButton({ onTranscript, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError }: VoiceButtonProps) {
+export default function VoiceButton({ onTranscript, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError }: VoiceButtonProps) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -99,6 +105,9 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   const dgReconnectAttemptsRef = useRef(0)
   const readyToListenRef = useRef(readyToListen)
   useEffect(() => { readyToListenRef.current = readyToListen }, [readyToListen])
+  // Mirrored for the audio worklet's long-lived onmessage closure — see note above.
+  const mutedRef = useRef(muted)
+  useEffect(() => { mutedRef.current = muted }, [muted])
   // Refs so the long-lived Deepgram/worklet closures (created once in connect()) always
   // call the LATEST props. Without this, ws.onmessage captures the first onTranscript →
   // first sendMessage → a stale `messages` snapshot, so every voice turn sends the same
@@ -109,6 +118,14 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   useEffect(() => { onTranscriptRef.current = onTranscript }, [onTranscript])
   const onSpeakingChangeRef = useRef(onSpeakingChange)
   useEffect(() => { onSpeakingChangeRef.current = onSpeakingChange }, [onSpeakingChange])
+  // Muting must also clear any in-flight "speaking" state. Otherwise the last value before the
+  // mute landed sticks, and the page keeps rendering "Listening…" over a mic that is shut.
+  useEffect(() => {
+    if (!muted) return
+    loudFramesRef.current = 0
+    setIsSpeaking(false)
+    onSpeakingChangeRef.current?.(false)
+  }, [muted])
   const avatarSpeechGetterRef = useRef(avatarSpeechGetter)
   useEffect(() => { avatarSpeechGetterRef.current = avatarSpeechGetter }, [avatarSpeechGetter])
   const onConnectedChangeRef = useRef(onConnectedChange)
@@ -241,7 +258,9 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             // Gate ON = avatar is speaking. DROP every frame so the avatar's audio
             // bleeding into the mic is never streamed to Deepgram. This is the core
             // echo fix — Deepgram simply never hears the avatar.
-            if (BARGE_IN_ENABLED) {
+            // A deliberate mute is not interruptible — barge-in only exists to cut off the
+            // avatar mid-sentence, and during a build she isn't speaking.
+            if (BARGE_IN_ENABLED && !mutedRef.current) {
               const rms = Math.sqrt(float32.reduce((s, x) => s + x * x, 0) / float32.length)
               if (rms > BARGE_IN_RMS) {
                 loudFramesRef.current += 1
@@ -338,7 +357,13 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         } catch(e) {}
       }
 
-      ws.onerror = (e) => { console.error('[DG] error:', e) }
+      ws.onerror = () => {
+        // A WebSocket error Event carries NO detail — it always serialises to {}. The real
+        // diagnostic is the close code, logged in onclose (which also handles reconnect). Keep
+        // this a warn, not console.error: a transient, already-recovered socket blip must not
+        // trip the Next.js dev error overlay in the middle of a live session.
+        console.warn('[DG] socket error (readyState', ws.readyState, ') — reconnect handled on close')
+      }
       ws.onclose = (e) => {
         console.log('[DG] closed:', e.code, e.reason)
         const wasActiveSocket = wsRef.current === ws
@@ -399,19 +424,25 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         onClick={toggleListening}
         disabled={disabled || isConnecting}
         className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-          isSpeaking    ? 'bg-green-500 animate-pulse scale-110'
+          // Muted outranks everything. `isSpeaking` can be a stale true from the moment before
+          // the mute landed, and a pulsing green mic on a closed mic is the exact thing that
+          // made the UI look like it was still listening.
+          muted         ? 'bg-white/10 opacity-60'
+          : isSpeaking  ? 'bg-green-500 animate-pulse scale-110'
           : isConnected ? 'bg-red-500 animate-pulse'
           : isConnecting ? 'bg-yellow-500'
           : 'bg-indigo-600 hover:bg-indigo-700'
         } disabled:opacity-40`}
       >
-        {isConnecting ? <Loader2 className="w-4 h-4 text-white animate-spin" />
+        {muted ? <MicOff className="w-4 h-4 text-white/50" />
+          : isConnecting ? <Loader2 className="w-4 h-4 text-white animate-spin" />
           : isConnected ? <MicOff className="w-4 h-4 text-white" />
           : <Mic className="w-4 h-4 text-white" />}
       </button>
       {micError && <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>}
-      {isConnected && !isSpeaking && <p className="text-xs text-white/30 text-center">Ready</p>}
-      {isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
+      {muted && <p className="text-xs text-red-400/80 text-center">Not listening</p>}
+      {!muted && isConnected && !isSpeaking && <p className="text-xs text-white/30 text-center">Ready</p>}
+      {!muted && isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
     </div>
   )
 }

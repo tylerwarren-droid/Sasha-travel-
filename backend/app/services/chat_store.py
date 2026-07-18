@@ -95,12 +95,49 @@ def _init() -> None:
                 created_at        TEXT,
                 paid_at           TEXT
             );
+            -- One row per bookable card (hotel / flight / cab / activity) Sasha surfaces. Same
+            -- reason the itineraries table exists: an individual item's PRICE must be pinned
+            -- server-side so checkout is priced from here, never from an amount the browser sends.
+            -- Flight/cab fares are LLM-generated per turn and would be unverifiable otherwise.
+            CREATE TABLE IF NOT EXISTS offers (
+                id         TEXT PRIMARY KEY,
+                session_id TEXT,
+                user_id    TEXT,
+                kind       TEXT,
+                name       TEXT,
+                label      TEXT,
+                amount_usd REAL,
+                currency   TEXT,
+                meta       TEXT,
+                created_at TEXT
+            );
+            -- Booking cards (restaurants / flights / cabs / hotels) surfaced in a session,
+            -- cached by (session, kind, destination) so the SAME options persist across turns.
+            -- Without this, every turn re-runs live web search and returns different places, so
+            -- "book Cha Ca La Vong" fails to match the list the guest is looking at (which has
+            -- since changed under them) — the exact confusion behind booking the wrong item.
+            CREATE TABLE IF NOT EXISTS session_cards (
+                session_id TEXT,
+                kind       TEXT,
+                dest       TEXT,
+                payload    TEXT,
+                created_at TEXT,
+                PRIMARY KEY (session_id, kind, dest)
+            );
             CREATE INDEX IF NOT EXISTS idx_msg_session  ON chat_messages(session_id);
             CREATE INDEX IF NOT EXISTS idx_sess_user    ON chat_sessions(user_id);
             CREATE INDEX IF NOT EXISTS idx_itin_session ON itineraries(session_id);
             CREATE INDEX IF NOT EXISTS idx_book_stripe  ON bookings(stripe_session_id);
+            CREATE INDEX IF NOT EXISTS idx_offer_session ON offers(session_id);
             """
         )
+        # Migration: an already-seeded DB predates the individual-item columns on `bookings`.
+        # ADD COLUMN is a no-op error if the column exists, so try each independently.
+        for col, decl in (("offer_id", "TEXT"), ("kind", "TEXT"), ("label", "TEXT")):
+            try:
+                conn.execute(f"ALTER TABLE bookings ADD COLUMN {col} {decl}")
+            except Exception:
+                pass
         conn.execute(
             "INSERT OR IGNORE INTO users (id, email, display_name, created_at) VALUES (?, ?, ?, ?)",
             (DEMO_USER_ID, DEMO_USER_EMAIL, DEMO_USER_NAME, datetime.utcnow().isoformat()),
@@ -220,15 +257,80 @@ def _latest_itinerary_for_session(session_id) -> "Optional[dict]":
         return d
 
 
-def _create_booking(booking_id, stripe_session_id, itinerary_id, user_id, amount_usd) -> None:
+def _create_booking(booking_id, stripe_session_id, itinerary_id, user_id, amount_usd,
+                    offer_id=None, kind=None, label=None) -> None:
     _ensure()
     with _connect() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO bookings (id, stripe_session_id, itinerary_id, user_id, amount_usd, "
-            "status, booking_ref, created_at, paid_at) VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?, NULL)",
+            "status, booking_ref, created_at, paid_at, offer_id, kind, label) "
+            "VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?, NULL, ?, ?, ?)",
             (booking_id, stripe_session_id, itinerary_id, user_id, float(amount_usd or 0),
-             datetime.utcnow().isoformat()),
+             datetime.utcnow().isoformat(), offer_id, kind, label),
         )
+        conn.commit()
+
+
+def _create_offer(offer_id, session_id, user_id, kind, name, label, amount_usd, currency, meta) -> None:
+    _ensure()
+    with _connect() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO offers (id, session_id, user_id, kind, name, label, amount_usd, "
+            "currency, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (offer_id, session_id, user_id, kind, name, label, float(amount_usd or 0),
+             currency, json.dumps(meta or {}), datetime.utcnow().isoformat()),
+        )
+        conn.commit()
+
+
+def _get_offer(offer_id) -> "Optional[dict]":
+    _ensure()
+    with _connect() as conn:
+        r = conn.execute("SELECT * FROM offers WHERE id = ?", (offer_id,)).fetchone()
+        if not r:
+            return None
+        d = dict(r)
+        try:
+            d["meta"] = json.loads(d.get("meta") or "{}")
+        except Exception:
+            d["meta"] = {}
+        return d
+
+
+def _save_session_card(session_id, kind, dest, payload) -> None:
+    _ensure()
+    with _connect() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO session_cards (session_id, kind, dest, payload, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (session_id, kind, (dest or "").lower(), json.dumps(payload), datetime.utcnow().isoformat()),
+        )
+        conn.commit()
+
+
+def _get_session_card(session_id, kind, dest):
+    _ensure()
+    with _connect() as conn:
+        r = conn.execute(
+            "SELECT payload FROM session_cards WHERE session_id = ? AND kind = ? AND dest = ?",
+            (session_id, kind, (dest or "").lower()),
+        ).fetchone()
+        if not r:
+            return None
+        try:
+            return json.loads(r["payload"])
+        except Exception:
+            return None
+
+
+def _clear_session_cards(session_id, kind=None) -> None:
+    _ensure()
+    with _connect() as conn:
+        if kind:
+            conn.execute("DELETE FROM session_cards WHERE session_id = ? AND kind = ?",
+                         (session_id, kind))
+        else:
+            conn.execute("DELETE FROM session_cards WHERE session_id = ?", (session_id,))
         conn.commit()
 
 
@@ -316,9 +418,45 @@ async def latest_itinerary_for_session(session_id):
         return None
 
 
-async def create_booking(booking_id, stripe_session_id, itinerary_id, user_id, amount_usd) -> None:
+async def create_booking(booking_id, stripe_session_id, itinerary_id, user_id, amount_usd,
+                         offer_id=None, kind=None, label=None) -> None:
     await asyncio.to_thread(_create_booking, booking_id, stripe_session_id,
-                            itinerary_id, user_id, amount_usd)
+                            itinerary_id, user_id, amount_usd, offer_id, kind, label)
+
+
+async def create_offer(offer_id, session_id, user_id, kind, name, label, amount_usd,
+                       currency="usd", meta=None) -> None:
+    try:
+        await asyncio.to_thread(_create_offer, offer_id, session_id, user_id, kind, name,
+                                label, amount_usd, currency, meta)
+    except Exception as e:
+        print(f"[chat_store] create_offer failed (non-fatal): {e}")
+
+
+async def get_offer(offer_id):
+    return await asyncio.to_thread(_get_offer, offer_id)
+
+
+async def save_session_card(session_id, kind, dest, payload) -> None:
+    try:
+        await asyncio.to_thread(_save_session_card, session_id, kind, dest, payload)
+    except Exception as e:
+        print(f"[chat_store] save_session_card failed (non-fatal): {e}")
+
+
+async def get_session_card(session_id, kind, dest):
+    try:
+        return await asyncio.to_thread(_get_session_card, session_id, kind, dest)
+    except Exception as e:
+        print(f"[chat_store] get_session_card failed (non-fatal): {e}")
+        return None
+
+
+async def clear_session_cards(session_id, kind=None) -> None:
+    try:
+        await asyncio.to_thread(_clear_session_cards, session_id, kind)
+    except Exception as e:
+        print(f"[chat_store] clear_session_cards failed (non-fatal): {e}")
 
 
 async def get_booking_by_stripe(stripe_session_id):

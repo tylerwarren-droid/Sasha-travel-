@@ -12,7 +12,9 @@ import TripPanel from './workspace/TripPanel'
 import YouPanel from './workspace/YouPanel'
 import axios from 'axios'
 
-interface Photo { url: string; thumb: string; description: string; photographer: string }
+// `description` is the photographer's free-text Unsplash caption ("Colors", "4:51pm") — never
+// use it as a place name. `location` is the actual destination, stamped on by the foto agent.
+interface Photo { url: string; thumb: string; description: string; photographer: string; location?: string; unsplash_url?: string }
 
 // Tab order is deliberate: Chat leads because this is a voice call and the transcript is what
 // the guest follows; Ideas comes next because it's the way in when there's no plan yet; Trip
@@ -46,7 +48,9 @@ interface SashaChatProps {
   readyToListen?: boolean
   // Fired when a turn is taking long (slow specialist agent) so the avatar can speak a
   // short "one moment" filler instead of going silent. Not fired for fast turns.
-  onThinking?: () => void
+  // Context-driven interim line for the avatar to speak while a slow turn runs (chosen from the
+  // classified intent). Empty/omitted = stay silent.
+  onThinking?: (line: string) => void
   // Fired when Sasha produces a full day-by-day itinerary.
   onItinerary?: (itinerary: any) => void
   // BCP-47-ish language code Sasha should reply in (en, vi, ko, zh, …).
@@ -71,6 +75,9 @@ interface SashaChatProps {
   // Fired when the customer asks to book (action: "await_payment") — show the complete
   // itinerary and take payment. Booking is confirmed only after Stripe succeeds.
   onAwaitPayment?: () => void
+  // Fired when the guest taps "Book & Pay" on an individual hotel/flight/cab card. The parent
+  // opens the same payment modal and checks out by offer_id (server-priced, like the trip).
+  onBookItem?: (offer: { offer_id: string; label: string; amount_usd: number; kind: string; name: string }) => void
   // The server's id for the stored trip. Checkout is priced from this, not from the browser.
   onItineraryId?: (id: string) => void
   // Set once payment is confirmed — turns the Trip tab's booking controls into "Reserved".
@@ -79,6 +86,13 @@ interface SashaChatProps {
   // survives remounts and Sasha can nudge it (e.g. to Trip when a plan lands).
   activeTab?: WorkspaceTab
   onTabChange?: (tab: WorkspaceTab) => void
+  // Flag a tab as having new content WITHOUT navigating there. The page already had this
+  // (`markUnseen`) but never handed it to the chat, so the voice path had no way to say
+  // "there's a reply waiting" other than yanking the guest to Chat mid-task.
+  onMarkUnseen?: (tab: WorkspaceTab) => void
+  // Fired when an itinerary build starts/ends. The page owns the mic gate (it sits next to the
+  // avatar's speak-driven gating), so it does the muting — this only reports the state.
+  onBuildingChange?: (building: boolean) => void
   // Tabs with something new since the user last looked — renders the gold dot.
   unseenTabs?: WorkspaceTab[]
   // Ideas live here rather than inside IdeasPanel because the panel unmounts every time the
@@ -90,8 +104,29 @@ interface SashaChatProps {
 
 export type WorkspaceTab = 'chat' | 'ideas' | 'trip' | 'you'
 
+// Context-driven interim speech. While a slow search/build runs, Sasha says what she is ACTUALLY
+// doing — chosen from the turn's classified intent — never a random filler. Only the slow,
+// card-producing intents get a line; general chat and photos are fast, so she stays silent rather
+// than padding a quick turn. Two on-topic variants each so back-to-back searches don't repeat
+// word-for-word. A build outranks the domain lines when several intents fire on one turn.
+const INTERIM_LINES: Record<string, string[]> = {
+  itinerary:  ["Let me put your day-by-day together — this'll take a moment.", "Let me build out your full trip now."],
+  flight:     ["Let me check live flights for you.", "Let me pull up the best flights."],
+  cab:        ["Let me find you a ride.", "Let me sort out your transfer."],
+  restaurant: ["Let me find you some great tables.", "Let me pull up the best places to eat."],
+  golf:       ["Let me check the tee times.", "Let me look at the courses for you."],
+  activity:   ["Let me see what's on.", "Let me find the best things to do."],
+}
+const INTERIM_ORDER = ['itinerary', 'flight', 'cab', 'restaurant', 'golf', 'activity']
+function interimLineFor(intents: string[], variant: number): string {
+  const key = INTERIM_ORDER.find(k => intents.includes(k))
+  if (!key) return ''
+  const arr = INTERIM_LINES[key]
+  return arr[variant % arr.length]
+}
 
-export default function SashaChat({ user, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onBooked, onAwaitPayment, onItineraryId, bookingRef, activeTab = 'chat', onTabChange, unseenTabs = [], ideasCache, onIdeasCache }: SashaChatProps) {
+
+export default function SashaChat({ user, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onBooked, onAwaitPayment, onBookItem, onItineraryId, bookingRef, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache }: SashaChatProps) {
   const tab = activeTab
   const [localMessages, setLocalMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
@@ -122,13 +157,63 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
   useEffect(() => { setOpenDays(new Set([1])) }, [itineraryKey])
   // Actionable booking surfaces for the latest turn.
   const [bookingLinks, setBookingLinks] = useState<{ label: string; url: string; type: string }[]>([])
-  const [hotels, setHotels] = useState<{ name: string; stars: number; price_from: number; blurb: string; city: string; book_url: string; rating?: number; reviews?: number; tag?: string }[]>([])
+  const [hotels, setHotels] = useState<{ name: string; stars: number; price_from: number; blurb: string; city: string; book_url: string; rating?: number; reviews?: number; tag?: string; offer_id?: string; amount_usd?: number; nights?: number }[]>([])
   // Typed booking cards (flights, airport transfers, activities, restaurants) surfaced this
-  // turn — real options from live web search, each deep-linking to the provider to complete.
-  const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; options: { name: string; detail?: string; price?: string; book_url: string }[] }[]>([])
+  // turn — real options from live web search. Hotel/flight/cab options carry a server-priced
+  // `offer_id` (+ amount_usd) so they can be booked & paid through Stripe like the whole trip;
+  // options without one (activities, restaurants, fallbacks) keep the external deep-link.
+  const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number }[] }[]>([])
+  // Photos Sasha surfaced, keyed by the index of the assistant message that produced them.
+  const [photosByMsg, setPhotosByMsg] = useState<Record<number, Photo[]>>({})
+  // Opening state: real Vietnam destinations, each with its own live photo. Before this the
+  // panel was literally empty until the first reply landed — the removed "Right now" block had
+  // been the only thing occupying it, and no emptyState was ever passed in.
+  const [openers, setOpeners] = useState<{ location: string; blurb: string; url: string; thumb: string; photographer: string }[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(apiUrl('/api/photos/destinations'), { headers: apiHeaders() })
+      .then(r => r.json())
+      .then(d => { if (!cancelled && d?.destinations?.length) setOpeners(d.destinations) })
+      .catch(() => {})   // silent: the opener is decoration, never block the chat on it
+    return () => { cancelled = true }
+  }, [])
   // Single-flight guard: one conductor request at a time. Prevents duplicate STT
   // finals (or fast double-taps) from firing concurrent calls and stacking replies.
   const inFlightRef = useRef(false)
+
+  // ── Itinerary build feedback ───────────────────────────────────────────────
+  // Building a day-by-day plan takes 13-45s (see ITINERARY_TIMEOUT_S). For that whole window
+  // Sasha said nothing and the UI showed nothing, so the guest sat in front of a dead screen
+  // wondering if it had broken — and anything they said meanwhile was silently swallowed by
+  // the in-flight lock. We can't learn the intent from the response (it only arrives at the
+  // END), so predict it from the outgoing message using the same vocabulary the backend
+  // classifies on, and from force_intent when the UI already knows.
+  //
+  // A wrong prediction is cheap and self-correcting: the guest lands on the Trip tab a moment
+  // early and the banner clears when the turn ends either way. It never gates a real send —
+  // it's presentation only.
+  // Guards a late classify from re-opening the banner after its turn already ended.
+  const turnSeqRef = useRef(0)
+  // Rotates the interim-line variant so repeated searches in one session don't say the same words.
+  const interimVariantRef = useRef(0)
+  const [building, setBuilding] = useState(false)
+  const [buildStep, setBuildStep] = useState(0)
+  const BUILD_STEPS = [
+    'Mapping out your route…',
+    'Picking places to stay…',
+    'Finding things worth doing…',
+    'Checking prices and links…',
+    'Putting the days in order…',
+  ]
+  useEffect(() => { onBuildingChange?.(building) }, [building])
+  useEffect(() => {
+    if (!building) { setBuildStep(0); return }
+    // Walk the steps and hold on the last one — a build can outrun the list, and a stalled
+    // ticker reads as "finishing up" rather than "frozen".
+    const id = setInterval(() => setBuildStep(s => Math.min(s + 1, BUILD_STEPS.length - 1)), 4000)
+    return () => clearInterval(id)
+  }, [building])
   // One stable id per chat (per mount = per "Tap to start" session) so the backend can group
   // this conversation's turns in the DB. Minted lazily on the first send (client-only crypto).
   const chatSessionIdRef = useRef<string>('')
@@ -168,12 +253,60 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
     setMessages(prev => [...prev, { role: 'user', content }])
     setInput('')
     setIsLoading(true)
-    // If the conductor takes a LONG time (slow specialist agent), let the avatar offer a
-    // brief acknowledgement so it isn't dead silent. Threshold kept high so normal turns
-    // (which on this backend routinely run ~2-4s) do NOT trigger it — otherwise the avatar
-    // says a filler on every single turn, which feels robotic. The page also rate-limits
-    // how often a filler is actually spoken. Cleared as soon as the real response arrives.
-    const thinkingTimer = setTimeout(() => onThinking?.(), 5000)
+    // Predicted itinerary build → take the guest to the Trip tab and show progress there, so
+    // the long silent stretch has a visible owner instead of looking like a hang.
+    stickToBottomRef.current = true   // a deliberate send always re-pins
+    const turnId = ++turnSeqRef.current
+    const showBuilding = () => { setBuilding(true); onTabChange?.('trip') }
+    // One interim line per turn. `classifiedIntents` is filled by the parallel classify below (or
+    // is the known intent for an idea-build). fireInterim voices the context line for a slow,
+    // card-producing intent — but never a second line, and never if the answer already landed.
+    let spokeInterim = false
+    let classifiedIntents: string[] = opts?.intent ? [opts.intent] : []
+    let interimTimer: any
+    const fireInterim = () => {
+      if (spokeInterim || turnSeqRef.current !== turnId || !inFlightRef.current) return
+      const line = interimLineFor(classifiedIntents, interimVariantRef.current++)
+      if (line) { spokeInterim = true; onThinking?.(line) }
+    }
+    if (opts?.intent === 'itinerary') {
+      showBuilding()   // UI already knows — no round trip needed
+      fireInterim()    // a build is always long (10-40s) — frame it immediately, don't wait
+    } else {
+      // Ask the backend what this turn will actually do, in PARALLEL with the real call so it
+      // costs the turn nothing. ~8ms: pure keyword matching, no LLM, no agents. Doubles as the
+      // source for the context-driven interim line.
+      fetch(apiUrl('/api/agents/classify'), {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({
+          message: content,
+          conversation_history: historyBeforeMessage,
+          session_id: chatSessionIdRef.current,
+        }),
+      })
+        .then(r => r.json())
+        .then(c => {
+          // Only act if THIS turn is still running. A slow classify landing after its turn
+          // finished would otherwise open a banner that nothing is left to close.
+          if (turnSeqRef.current !== turnId || !inFlightRef.current) return
+          classifiedIntents = c?.intents || []
+          if (classifiedIntents.includes('itinerary')) showBuilding()
+        })
+        .catch(() => {})   // best-effort: never break a turn over a progress banner
+      // Give a fast turn ~0.7s to simply answer; only frame a genuinely slow search with a
+      // spoken line, so a quick reply isn't padded behind "let me check…".
+      interimTimer = setTimeout(fireInterim, 700)
+    }
+    // Dead-silence safety net for a slow turn that produced no context line (general chat /
+    // photos, or a classify that never resolved): after 5s, frame the wait once so she is never
+    // silent. Skipped if a context line already fired. Both timers cleared when the answer lands.
+    const thinkingTimer = setTimeout(() => {
+      if (!spokeInterim && inFlightRef.current && turnSeqRef.current === turnId) {
+        spokeInterim = true
+        onThinking?.('One moment, let me get that for you.')
+      }
+    }, 5000)
     try {
       const response = await axios.post(apiUrl('/api/agents/conductor'), {
         message: content,
@@ -191,7 +324,15 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         setMessages(prev => [...prev, { role: 'assistant', content: sashaResponse }])
       }
       if (onSashaResponse) onSashaResponse(sashaResponse)
-      if (respPhotos?.length > 0) onPhotos?.(respPhotos)
+      if (respPhotos?.length > 0) {
+        onPhotos?.(respPhotos)
+        // Pin these shots to the assistant turn that produced them so they read as part of the
+        // conversation. Kept in a side map keyed by index rather than on the message itself,
+        // because `conversation_history` is server-authoritative and only carries role/content
+        // — anything attached to a message object is wiped on the next turn.
+        const idx = conversation_history?.length > 0 ? conversation_history.length - 1 : null
+        if (idx !== null) setPhotosByMsg(prev => ({ ...prev, [idx]: respPhotos }))
+      }
       setBookingLinks(Array.isArray(links) ? links : [])
       setHotels(Array.isArray(hotelRecs) ? hotelRecs : [])
       setBookings(Array.isArray(bookingCards) ? bookingCards : [])
@@ -215,8 +356,13 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
       onSashaResponse?.(fallback)
     } finally {
       clearTimeout(thinkingTimer)
+      clearTimeout(interimTimer)
       setIsLoading(false)
       inFlightRef.current = false
+      // Always clear the banner, on success, error, and timeout alike. A "building…" state
+      // that outlives its turn is exactly the class of stuck-forever UI this app has been
+      // bitten by before, so it is released in finally and nowhere else.
+      setBuilding(false)
     }
   }
 
@@ -225,11 +371,71 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
   sendRef.current = sendMessage
   useEffect(() => { registerSend?.((t: string) => sendRef.current(t)) }, [])
 
-  const travellerCount = user.travellers?.length || 2
-  // The caption of the photo currently on screen. Only ever use this to label the PHOTO —
-  // the carousel rotates every 5s, so anything else it labels will silently rename itself.
-  const activeDest = photos[activePhoto]?.description || 'Vietnam'
+  // ── Auto-scroll ────────────────────────────────────────────────────────────
+  // .lw-stream is overflow-y:auto but nothing ever scrolled it, so the conversation ran off
+  // the bottom of the panel and every card Sasha surfaced (flights, stays, tours, the photo
+  // hero) rendered BELOW the transcript, off-screen. That is why her replies lean on "they're
+  // on the right" — the guest had to find the content by hand. Now the panel follows the
+  // conversation and brings whatever she just surfaced into view.
+  // Scroll to the thing that actually changed — NOT to the bottom of the panel. The stream is
+  // laid out transcript → "Found for you" cards → "Right now" photos, and that photo panel is
+  // persistent furniture that re-renders every turn. Scrolling to the end therefore parked the
+  // guest on the photos every single time and pushed the live conversation off the top.
+  const streamRef = useRef<HTMLDivElement | null>(null)
+  const lastMsgRef = useRef<HTMLDivElement | null>(null)
+  // Don't yank a guest who has deliberately scrolled up to re-read something.
+  //
+  // Deliberately keyed on user INTENT (wheel / touch), not on distance-from-bottom. Because we
+  // anchor the newest message to the TOP, a turn that surfaces cards legitimately leaves plenty
+  // of content below the fold — a distance-based check would read that as "the guest scrolled
+  // away" and quietly disable auto-follow for the rest of the session after the very first
+  // turn that showed a card.
+  const stickToBottomRef = useRef(true)
 
+  const onStreamWheel = (e: React.WheelEvent) => {
+    if (e.deltaY < 0) {
+      stickToBottomRef.current = false   // scrolled up = reading something; leave them alone
+      return
+    }
+    const el = streamRef.current
+    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 140) {
+      stickToBottomRef.current = true    // scrolled back down to the end = following again
+    }
+  }
+
+  // rAF so we measure AFTER React has painted the new node, not against the old height.
+  const scrollTo = (el: HTMLElement | null, block: ScrollLogicalPosition) => {
+    if (!el) return
+    requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block }))
+  }
+
+  // ONE anchor: the newest message, pinned to the TOP of the panel.
+  //
+  // Two anchors fought here and the guest lost. Scrolling the message to 'end' parked it at
+  // the bottom of the view, which pushes any cards below it off-screen; then a second effect
+  // scrolled the CARDS to 'start', but the cards are the last thing in the stream, so there is
+  // nothing beneath them to scroll against and the browser just ran to the bottom — burying
+  // the conversation above the fold.
+  //
+  // Anchoring the newest message to the top fixes both cases at once, because everything Sasha
+  // surfaces on a turn renders directly BELOW her message: you read the reply, and the stays /
+  // flights / tours sit right under it. With no cards, there's nothing to scroll against and
+  // it simply settles at the bottom — which is the correct place to be anyway.
+  useEffect(() => {
+    if (stickToBottomRef.current) scrollTo(lastMsgRef.current, 'start')
+  }, [messages, isLoading])
+
+  // Cards re-pin (the guest asked for them) but do NOT get their own scroll target — they're
+  // already in view under the message that announced them.
+  useEffect(() => {
+    if (!bookings.length && !hotels.length) return
+    stickToBottomRef.current = true
+    scrollTo(lastMsgRef.current, 'start')
+  }, [bookings, hotels])
+  // NOTE: `photos` deliberately does NOT trigger a scroll. It refreshes on almost every turn,
+  // and it lives below the cards, so following it is exactly the bug above.
+
+  const travellerCount = user.travellers?.length || 2
   // Where the recommended stays actually are, taken from the stays themselves. The header
   // used to read `activeDest`, so "Hand-picked for Hoi An ancient town" changed every few
   // seconds as the photos cycled while the hotels underneath stayed put — naming a city the
@@ -275,7 +481,16 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         />
       )}
 
-      {tab === 'trip' && (
+      {tab === 'trip' && building && (
+        <div className="lw-building">
+          <div className="lw-building-orb"><Loader2 className="w-5 h-5 animate-spin" /></div>
+          <div className="lw-building-k">Building your itinerary</div>
+          <div className="lw-building-step">{BUILD_STEPS[buildStep]}</div>
+          <div className="lw-building-bar"><span /></div>
+          <div className="lw-building-hint">This takes up to a minute — Sasha is holding on until it's ready.</div>
+        </div>
+      )}
+      {tab === 'trip' && !building && (
         <TripPanel
           richItinerary={richItinerary}
           openDays={openDays}
@@ -292,13 +507,38 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
       )}
 
       {tab === 'chat' && (
-      <div className="lw-stream">
+      <div className="lw-stream" ref={streamRef} onWheel={onStreamWheel}>
 
         {/* ── Conversation transcript ── */}
         {messages.length > 0 && <div className="lw-when">Conversation</div>}
-        {messages.length === 0 && emptyState}
+        {messages.length === 0 && (emptyState ?? (
+          openers.length > 0 ? (
+            <>
+              <div className="lw-when">Where to?</div>
+              <div className="lw-openers">
+                {openers.map((o, i) => (
+                  <button
+                    key={i}
+                    className="lw-opener"
+                    // Tapping a place just talks to Sasha — same path as typing it, so the
+                    // normal intent routing (and her photo/card surfacing) applies.
+                    onClick={() => sendMessage(`Tell me about ${o.location}`)}
+                    style={{ animationDelay: `${i * 60}ms` }}
+                  >
+                    <img src={o.url} alt={o.location} loading="lazy" />
+                    <span className="lw-opener-grad" />
+                    <span className="lw-opener-cap">
+                      <span className="lw-opener-loc">{o.location}</span>
+                      <span className="lw-opener-blurb">{o.blurb}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null
+        ))}
         {messages.map((msg, i) => (
-          <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`} style={{ flex: '0 0 auto' }}>
+          <div key={i} ref={i === messages.length - 1 ? lastMsgRef : undefined} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`} style={{ flex: '0 0 auto' }}>
             <div className={`w-8 h-8 rounded-2xl flex items-center justify-center flex-shrink-0 text-xs font-medium ${
               msg.role === 'assistant'
                 ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'
@@ -314,6 +554,27 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
               }`}>
                 {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
               </div>
+              {/* Photos Sasha surfaced on THIS turn, captioned with the place they're of. */}
+              {photosByMsg[i]?.length > 0 && (
+                <div className="lw-msgshots">
+                  <div className="lw-msgshots-loc">{photosByMsg[i][0]?.location || 'Vietnam'}</div>
+                  <div className="lw-msgshots-row">
+                    {photosByMsg[i].slice(0, 3).map((p, pi) => (
+                      <a
+                        key={pi}
+                        className="lw-msgshot"
+                        href={p.unsplash_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={p.description || p.location}
+                      >
+                        <img src={p.thumb || p.url} alt={p.location || p.description || 'Vietnam'} loading="lazy" />
+                        <span className="lw-msgshot-by">📷 {p.photographer}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -357,7 +618,16 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
                           <div className="o1">{o.name}</div>
                           <div className="o2">{[o.detail, o.price].filter(Boolean).join(' · ')}</div>
                         </div>
-                        <a className="price" href={o.book_url} target="_blank" rel="noopener noreferrer">Book</a>
+                        {o.offer_id && (o.amount_usd ?? 0) > 0 ? (
+                          <div className="lw-actions">
+                            <button className="price" onClick={() => onBookItem?.({ offer_id: o.offer_id!, label: `${b.title} · ${o.name}`, amount_usd: o.amount_usd!, kind: b.type, name: o.name })}>
+                              Book &amp; Pay ${o.amount_usd!.toLocaleString()}
+                            </button>
+                            <a className="viewlink" href={o.book_url} target="_blank" rel="noopener noreferrer">View ↗</a>
+                          </div>
+                        ) : (
+                          <a className="price" href={o.book_url} target="_blank" rel="noopener noreferrer">Book</a>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -382,7 +652,16 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
                         <div className="o2">{'★'.repeat(h.stars)} · from ${h.price_from}/night{h.rating ? ` · ${h.rating}/10` : (h.city ? ` · ${h.city}` : '')}</div>
                         {h.tag && <span className="tag">{h.tag}</span>}
                       </div>
-                      <a className="price" href={h.book_url} target="_blank" rel="noopener noreferrer">Book</a>
+                      {h.offer_id && (h.amount_usd ?? 0) > 0 ? (
+                        <div className="lw-actions">
+                          <button className="price" onClick={() => onBookItem?.({ offer_id: h.offer_id!, label: `${h.nights ?? 1} night${(h.nights ?? 1) !== 1 ? 's' : ''} · ${h.name}`, amount_usd: h.amount_usd!, kind: 'hotel', name: h.name })}>
+                            Book &amp; Pay ${h.amount_usd!.toLocaleString()}
+                          </button>
+                          <a className="viewlink" href={h.book_url} target="_blank" rel="noopener noreferrer">View ↗</a>
+                        </div>
+                      ) : (
+                        <a className="price" href={h.book_url} target="_blank" rel="noopener noreferrer">Book</a>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -411,40 +690,13 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
           </>
         )}
 
-        {/* ── What Sasha is showing right now — destination photos update every turn ── */}
-        {photos.length > 0 && (
-          <>
-            <div className="lw-when">Right now</div>
-            <div className="lw-card">
-              <div className="lw-cardBody" style={{ padding: 14 }}>
-                <div className="lw-photohero">
-                  <img key={activePhoto} src={photos[activePhoto]?.url} alt={activeDest} />
-                  <div className="lw-photohero-grad" />
-                  <div className="lw-photohero-cap">
-                    <div className="lw-photohero-k">Exploring</div>
-                    <div className="lw-photohero-title">{activeDest}</div>
-                    {photos[activePhoto]?.photographer && (
-                      <div className="lw-photohero-by">📷 {photos[activePhoto].photographer}</div>
-                    )}
-                  </div>
-                </div>
-                {photos.length > 1 && (
-                  <div className="lw-gal" style={{ marginTop: 10 }}>
-                    {photos.slice(0, 4).map((p, i) => (
-                      <img
-                        key={i}
-                        src={p.thumb || p.url}
-                        alt={p.description}
-                        onClick={() => onSelectPhoto?.(i)}
-                        style={{ outline: i === activePhoto ? '2px solid #DAA520' : 'none', outlineOffset: -1 }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
+        {/* The "Right now" photo panel used to live here. It was persistent furniture
+            pinned BELOW the cards, captioned with the photo's Unsplash description (which
+            is a photographer's free-text caption, so it read "Exploring 4:51pm"), and it
+            re-rendered every turn. Photos now appear inline under the message that
+            surfaced them, captioned with the actual place — see lw-msgshots above. The
+            `photos`/`activePhoto`/`onSelectPhoto` props stay on the interface: the page
+            still owns that state and uses it for the call-panel backdrop. ── */}
       </div>
       )}
 
@@ -452,10 +704,28 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
       <div className="lw-composer">
         <div className="field">
           <VoiceButton
-            // Speaking pulls the guest back to Chat: they're talking to Sasha, and her reply
-            // (plus whatever she surfaces — stays, tours, prices) lands there. Leaving them
-            // parked on Ideas meant Sasha answered into a tab they couldn't see.
-            onTranscript={(text) => { onTabChange?.('chat'); sendMessage(text) }}
+            // HARD mute while the plan builds: barge-in can't defeat it, because there is
+            // nothing to barge into (the build is server-side and uncancellable).
+            muted={building}
+            // Speaking used to FORCE the guest back to Chat on every single transcript. That
+            // fought them constantly: reading the plan on Trip and saying "make day 3 lighter"
+            // threw them onto Chat, away from the very thing they were editing. Worse, during
+            // an itinerary build the utterance was dropped by the in-flight lock anyway — so
+            // they got yanked off the progress screen AND ignored.
+            //
+            // The page already had the right answer (`markUnseen`, "mark it with a dot instead
+            // of yanking them off the conversation") — it just was never wired to the chat.
+            // Now: never navigate on speech; if Chat is in the background, badge it.
+            onTranscript={(text) => {
+              if (building) {
+                // She genuinely isn't listening while the plan builds — the lock would bin
+                // this anyway, so drop it here rather than silently swallowing it downstream.
+                console.log('[LOCK] transcript ignored — itinerary building')
+                return
+              }
+              if (tab !== 'chat') onMarkUnseen?.('chat')
+              sendMessage(text)
+            }}
             autoStart={true}
             readyToListen={readyToListen}
             avatarSpeaking={avatarSpeaking}
@@ -482,6 +752,39 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
 
       <style jsx global>{`
         .lw-stream{flex:1;min-height:0;overflow-y:auto;padding:18px 18px 24px;display:flex;flex-direction:column;gap:13px}
+        /* Itinerary build progress — owns the 13-45s window the plan takes to generate. */
+        .lw-building{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:32px 24px;text-align:center}
+        .lw-building-orb{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#DAA520;background:rgba(218,165,32,.1);border:1px solid rgba(218,165,32,.3)}
+        .lw-building-k{font-size:15px;font-weight:650;color:#fff;margin-top:2px}
+        .lw-building-step{font-size:12.5px;color:rgba(255,255,255,.6);min-height:18px}
+        .lw-building-bar{width:190px;height:3px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:4px}
+        /* Indeterminate on purpose: the backend reports no percentage, and a fake one that
+           stalls at 90% is worse than an honest sweep. */
+        .lw-building-bar span{display:block;height:100%;width:38%;border-radius:3px;background:linear-gradient(90deg,transparent,#DAA520,transparent);animation:lw-sweep 1.3s ease-in-out infinite}
+        @keyframes lw-sweep{0%{transform:translateX(-100%)}100%{transform:translateX(363%)}}
+        .lw-building-hint{font-size:11px;color:rgba(255,255,255,.34);margin-top:6px;max-width:280px;line-height:1.5}
+        /* Opening destination gallery — fills the workspace before the first turn. */
+        .lw-openers{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+        .lw-opener{position:relative;display:block;padding:0;border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden;aspect-ratio:3/2;cursor:pointer;background:rgba(255,255,255,.04);text-align:left;opacity:0;animation:lw-op-in .45s ease forwards}
+        @keyframes lw-op-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+        .lw-opener img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .5s ease}
+        .lw-opener:hover img{transform:scale(1.07)}
+        .lw-opener:hover{border-color:rgba(218,165,32,.55)}
+        .lw-opener-grad{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.85) 0%,rgba(0,0,0,.25) 45%,transparent 75%)}
+        .lw-opener-cap{position:absolute;left:0;right:0;bottom:0;padding:10px 11px;display:flex;flex-direction:column;gap:2px}
+        .lw-opener-loc{font-size:14px;font-weight:650;color:#fff;letter-spacing:.01em}
+        .lw-opener-blurb{font-size:10.5px;color:rgba(255,255,255,.62);line-height:1.35}
+        @media (max-width:760px){.lw-openers{grid-template-columns:repeat(2,1fr)}}
+        /* Photos Sasha surfaces, inline under her message and captioned with the real place. */
+        .lw-msgshots{margin-top:8px}
+        .lw-msgshots-loc{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#DAA520;margin-bottom:6px}
+        .lw-msgshots-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+        .lw-msgshot{position:relative;display:block;border-radius:10px;overflow:hidden;aspect-ratio:4/3;border:1px solid rgba(255,255,255,.08);text-decoration:none;background:rgba(255,255,255,.04)}
+        .lw-msgshot img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s ease}
+        .lw-msgshot:hover img{transform:scale(1.06)}
+        /* Unsplash's API guidelines require visible photographer attribution. */
+        .lw-msgshot-by{position:absolute;left:0;right:0;bottom:0;padding:8px 6px 4px;font-size:9px;color:rgba(255,255,255,.85);background:linear-gradient(to top,rgba(0,0,0,.75),transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        @media (max-width:520px){.lw-msgshots-row{grid-template-columns:repeat(2,1fr)}}
         /* Flex children shrink by default: without this, cards collapse to hairlines as soon
            as the column overflows (which read as a "stretched" panel). */
         .lw-stream > *{flex-shrink:0}
@@ -667,6 +970,11 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         .lw-opt .o2{font-size:12px;color:rgba(255,255,255,.5);margin-top:3px}
         .lw-opt .price{font-weight:700;font-size:13px;color:#E8B923;white-space:nowrap;text-decoration:none;border:1px solid rgba(218,165,32,.4);padding:8px 13px;border-radius:10px;transition:.2s}
         .lw-opt .price:hover{background:rgba(218,165,32,.12)}
+        .lw-opt button.price{background:linear-gradient(135deg,#DAA520,#B8860B);color:#fff;border-color:transparent;cursor:pointer;font-family:inherit}
+        .lw-opt button.price:hover{filter:brightness(1.08)}
+        .lw-opt .lw-actions{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+        .lw-opt .viewlink{font-size:11px;color:rgba(255,255,255,.45);text-decoration:none;white-space:nowrap}
+        .lw-opt .viewlink:hover{color:rgba(255,255,255,.7)}
         .lw-opt .tag{font-size:10px;color:#DAA520;border:1px solid rgba(218,165,32,.4);border-radius:6px;padding:3px 7px;margin-top:6px;display:inline-block}
         .lw-prefrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 13px;border-radius:11px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05)}
         .lw-prefk{font-size:11px;letter-spacing:.04em;text-transform:capitalize;color:rgba(255,255,255,.4)}

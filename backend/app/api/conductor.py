@@ -2,7 +2,7 @@ import uuid
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from app.services.conductor import conduct
+from app.services.conductor import conduct, classify_intents
 from app.services.llm import client, FAST_MODEL
 from app.services.prompts import get_prompt_async
 from app.services import chat_store
@@ -31,6 +31,36 @@ async def warmup():
     except Exception as e:
         # Warmup is best-effort — never surface an error that would alarm the client.
         return {"warm": False, "detail": str(e)[:120]}
+
+
+class ClassifyRequest(BaseModel):
+    message: str = Field(max_length=4000)
+    conversation_history: list = Field(default=[], max_length=100)
+    session_id: Optional[str] = None
+
+
+@router.post("/classify")
+async def classify(body: ClassifyRequest):
+    """Report which agents a message will fire — WITHOUT running them.
+
+    Exists so the UI can react at the START of a turn instead of the end. An itinerary build
+    takes 13-45s, and the conductor only reveals that it happened once it's finished, so the
+    guest sat through the whole thing with no idea anything was underway.
+
+    The frontend previously guessed with its own regex. That could never work: the backend
+    reaches "itinerary" three different ways — the phrase list, a build-verb regex, and (most
+    commonly in real speech) a bare affirmation like "yes please" answering Sasha's offer to
+    build one. The last is invisible to any client-side check, so the banner never showed on
+    the most common path. This returns the REAL classification from the same function the
+    conductor uses, so the two can never drift.
+
+    Pure keyword matching, no LLM and no agents — a few ms. Meant to be fired in PARALLEL with
+    the conductor call so it costs the turn nothing.
+    """
+    stored = await chat_store.latest_itinerary_for_session(body.session_id) if body.session_id else None
+    has_itinerary = bool(stored) if body.session_id else None
+    result = await classify_intents(body.message, body.conversation_history, has_itinerary)
+    return {"intents": result.get("intents", []), "primary": result.get("primary")}
 
 
 class ConductorRequest(BaseModel):

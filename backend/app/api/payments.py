@@ -45,14 +45,16 @@ class LineItem(BaseModel):
 
 
 class CheckoutRequest(BaseModel):
-    # `itinerary_id` is the ONLY trustworthy input here: the price is read from that stored
-    # trip. `amount` is retained for the legacy/no-id path and is never trusted when an
-    # itinerary_id is supplied — a browser must not be able to name its own price.
+    # Two trustworthy inputs, both server-priced: `itinerary_id` (the whole trip) and
+    # `offer_id` (a single stored hotel/flight/cab card). For either, the price is read from
+    # the stored record and any client-sent `amount` is ignored — a browser must never be able
+    # to name its own price. `amount`/`items` remain only for the legacy no-id path.
     amount: Optional[float] = None
     currency: str = "usd"
     description: str = "Sasha Travel booking"
     items: Optional[list[LineItem]] = None   # optional itemized breakdown (hotels/activities)
     itinerary_id: Optional[str] = None
+    offer_id: Optional[str] = None           # a single bookable card (hotel / flight / cab)
     customer_email: Optional[str] = None
 
 
@@ -109,11 +111,30 @@ async def create_checkout(body: CheckoutRequest):
     if not stripe.api_key:
         raise HTTPException(status_code=501, detail="payments not configured")
 
-    itinerary = await chat_store.get_itinerary(body.itinerary_id) if body.itinerary_id else None
-    if body.itinerary_id and not itinerary:
+    # A single bookable card (hotel / flight / cab). Priced from the STORED offer, exactly like
+    # a whole trip is priced from its stored itinerary — the browser's amount is never trusted.
+    offer = await chat_store.get_offer(body.offer_id) if body.offer_id else None
+    if body.offer_id and not offer:
+        raise HTTPException(status_code=404, detail="offer not found")
+
+    itinerary = await chat_store.get_itinerary(body.itinerary_id) if (body.itinerary_id and not offer) else None
+    if body.itinerary_id and not offer and not itinerary:
         raise HTTPException(status_code=404, detail="itinerary not found")
 
-    if itinerary:
+    if offer:
+        amount = float(offer.get("amount_usd") or 0)
+        description = offer.get("label") or offer.get("name") or body.description
+        line_items = [{
+            "price_data": {
+                "currency": body.currency.lower(),
+                "product_data": {"name": description[:120]},
+                "unit_amount": int(round(amount * 100)),
+            },
+            "quantity": 1,
+        }]
+        if body.amount is not None and abs(float(body.amount) - amount) > 0.01:
+            print(f"[payments] client amount {body.amount} != stored offer {amount}; charging stored")
+    elif itinerary:
         amount = float(itinerary.get("total_usd") or 0)
         description = itinerary.get("title") or body.description
         line_items = [{
@@ -178,9 +199,12 @@ async def create_checkout(body: CheckoutRequest):
         await chat_store.create_booking(
             booking_id=str(uuid.uuid4()),
             stripe_session_id=session.id,
-            itinerary_id=body.itinerary_id or "",
+            itinerary_id=("" if offer else (body.itinerary_id or "")),
             user_id=chat_store.DEMO_USER_ID,
             amount_usd=amount,
+            offer_id=(body.offer_id if offer else None),
+            kind=(offer.get("kind") if offer else None),
+            label=(description if offer else None),
         )
     except Exception as e:
         print(f"[payments] could not record booking attempt (non-fatal): {e}")
@@ -212,11 +236,21 @@ async def verify_payment(session_id: str):
 
     booking, email_sent = await _confirm_paid_session(session)
     itinerary = await chat_store.get_itinerary(booking["itinerary_id"]) if booking and booking.get("itinerary_id") else None
+    # A single-item booking (hotel/flight/cab) carries an offer instead of an itinerary, so the
+    # return page can show an item confirmation rather than the whole-trip one.
+    item = None
+    if booking and booking.get("offer_id"):
+        item = {
+            "kind": booking.get("kind"),
+            "label": booking.get("label"),
+            "amount_usd": booking.get("amount_usd"),
+        }
     return {
         "paid": True,
         "booking_ref": (booking or {}).get("booking_ref"),
         "amount_usd": (booking or {}).get("amount_usd"),
         "itinerary": (itinerary or {}).get("payload"),
+        "item": item,
         # So the UI can say "a confirmation is on its way" only when one actually is.
         "email_sent": email_sent,
     }
@@ -240,6 +274,18 @@ async def _confirm_paid_session(session: dict):
     if not booking:
         print(f"[payments] paid session {sid} has no recorded booking row")
         return None, False
+
+    # Booking done → drop this session's cached cards for the booked kind so the next search is
+    # fresh (the just-booked place shouldn't keep re-surfacing as the stable top option). The
+    # session lives on the OFFER, not the booking row, so resolve it there.
+    if booking.get("offer_id"):
+        try:
+            offer = await chat_store.get_offer(booking["offer_id"])
+            if offer and offer.get("session_id"):
+                await chat_store.clear_session_cards(offer["session_id"], offer.get("kind"))
+                print(f"[payments] cleared {offer.get('kind')} card cache for session {offer['session_id']}")
+        except Exception as e:
+            print(f"[payments] cache clear after booking failed (non-fatal): {e}")
     email = (session.get("customer_details") or {}).get("email") or session.get("customer_email")
     email_sent = False
     if email:

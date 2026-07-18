@@ -40,7 +40,6 @@ async def search_hotels_endpoint(request: SearchRequest):
             checkout=request.checkout,
             destination_id=request.destination_id,
             guests=guests,
-            currency=request.currency,
             filters=filters
         )
         return {"status": "ok", "data": results}

@@ -9,7 +9,47 @@ import json
 router = APIRouter()
 
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
+DEEPGRAM_PROJECT_ID = os.getenv("DEEPGRAM_PROJECT_ID", "")
+DEEPGRAM_KEY_TTL = int(os.getenv("DEEPGRAM_KEY_TTL", "3600"))  # seconds; covers a session
 DEEPGRAM_TTS_URL = "https://api.deepgram.com/v1/speak"
+
+
+@router.post("/voice/deepgram-key")
+async def deepgram_ephemeral_key():
+    """Mint a short-lived, scoped Deepgram key for browser STT.
+
+    Production fix for the exposed `NEXT_PUBLIC_DEEPGRAM_API_KEY`: instead of shipping a
+    long-lived key to every browser (where it can be lifted and abused), the client asks
+    the backend for a temporary `usage:write`-only key that expires on its own. The master
+    key never leaves the server.
+
+    Returns 501 when the proxy isn't configured (no master key / project id) so the client
+    can transparently fall back to the public env key for local development.
+    """
+    if not DEEPGRAM_API_KEY or not DEEPGRAM_PROJECT_ID:
+        raise HTTPException(status_code=501, detail="deepgram key proxy not configured")
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as http:
+            r = await http.post(
+                f"https://api.deepgram.com/v1/projects/{DEEPGRAM_PROJECT_ID}/keys",
+                headers={
+                    "Authorization": f"Token {DEEPGRAM_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "comment": "sasha-ephemeral-stt",
+                    "scopes": ["usage:write"],
+                    "time_to_live_in_seconds": DEEPGRAM_KEY_TTL,
+                },
+            )
+        if r.status_code not in (200, 201):
+            raise HTTPException(status_code=502, detail="could not mint deepgram key")
+        data = r.json()
+        return {"key": data.get("key"), "expires_in": DEEPGRAM_KEY_TTL}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"deepgram key error: {e}")
 
 async def text_to_speech(text: str) -> bytes:
     """Convert text to speech using Deepgram TTS."""

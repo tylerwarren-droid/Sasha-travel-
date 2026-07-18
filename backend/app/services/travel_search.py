@@ -17,8 +17,11 @@ Card shape (consumed by the frontend `bookings` renderer):
 """
 
 import asyncio
+import copy
 import json
+import os
 import re
+import time
 from urllib.parse import quote_plus
 
 from app.services.llm import client
@@ -29,6 +32,51 @@ _WEB_SEARCH_TOOL = [{"type": "web_search_20250305", "name": "web_search"}]
 # web_search adds real latency; bound it hard so a slow search degrades to a deep-link card
 # instead of stalling the spoken turn. Sits below the conductor's 20s per-agent ceiling.
 _FINDER_TIMEOUT = 12.0
+
+
+# ── Result stability ────────────────────────────────────────────────────────
+# Every finder hits a LIVE web search, so the same question asked twice returned a different
+# list ("Tam Vi, Pho Khoi Hoi" then "Banh Mi 25, Pho Gia Truyen Bat Dan" then "Tam Vi, Banh
+# Mi 25" — measured against prod, 3 runs, 3 answers, sometimes the same place under different
+# spellings). That is not a cosmetic wobble: the guest reads a card, says "book the second
+# one", the intent re-fires, the list is rebuilt from a fresh search, and "the second one" now
+# silently means a DIFFERENT place than the one on their screen.
+#
+# So resolve each (kind, destination) ONCE and reuse it, which is what the hotels path already
+# does ("live-search-with-static-fallback resolved once"). TTL keeps a long-lived process from
+# pinning stale fares.
+#
+# Keyed on (kind, dest) only, deliberately NOT on the free-text hint: every caller passes the
+# raw user message as that hint, so including it would miss on every turn and restore the bug.
+# Consequence: a same-city refinement reuses the resolved list instead of re-searching.
+# Stability at the booking moment is worth more than re-rolling.
+#
+# Process-local. Railway runs ONE uvicorn worker today (backend/railway.json startCommand has
+# no --workers), so this is coherent. backend/Dockerfile defaults WEB_CONCURRENCY=2 — if that
+# path is ever used, two workers hold independent caches and one guest can still see two
+# different lists. Move this to chat_store/Redis before scaling out.
+_CARD_TTL_S = float(os.getenv("FINDER_CACHE_TTL_S", "1800"))  # 30 min ≈ one demo session
+_card_cache: dict = {}
+
+
+def _is_fallback(card: dict) -> bool:
+    """True when the search failed and the card is just a deep-link placeholder."""
+    return any(o.get("fallback") for o in (card.get("options") or []))
+
+
+async def _resolve_once(kind: str, dest: str, build):
+    """Return a previously-resolved card for this (kind, dest), else build and remember it."""
+    key = (kind, (dest or "").strip().lower())
+    now = time.monotonic()
+    hit = _card_cache.get(key)
+    if hit and hit[1] > now:
+        return copy.deepcopy(hit[0])  # deepcopy: callers must not mutate the cached card
+    card = await build()
+    # Never cache a fallback. It means the search timed out or came back empty; pinning it for
+    # the full TTL would lock the guest out of live options for the rest of the session.
+    if not _is_fallback(card):
+        _card_cache[key] = (copy.deepcopy(card), now + _CARD_TTL_S)
+    return card
 
 
 async def _web_search_json(query: str, max_tokens: int = 700) -> list:
@@ -70,6 +118,15 @@ def _usd(v) -> str:
         return ""
 
 
+def _amt(v) -> int:
+    """Numeric USD for server-side checkout pricing (0 = not bookable / unknown)."""
+    try:
+        n = int(round(float(v)))
+        return n if n > 0 else 0
+    except (TypeError, ValueError):
+        return 0
+
+
 # ── Flights ────────────────────────────────────────────────────────────────
 
 def _flights_link(origin: str, dest: str) -> str:
@@ -77,7 +134,7 @@ def _flights_link(origin: str, dest: str) -> str:
     return f"https://www.google.com/travel/flights?q={quote_plus(q.strip())}"
 
 
-async def find_flights(dest: str, origin: str = "", when: str = "") -> dict:
+async def _find_flights_live(dest: str, origin: str = "", when: str = "") -> dict:
     dest = dest or "Vietnam"
     # Infer a sensible origin so the model never stalls asking for one: domestic Vietnam legs
     # usually start in Hanoi or Ho Chi Minh City; leave international to the model's judgement.
@@ -104,13 +161,15 @@ async def find_flights(dest: str, origin: str = "", when: str = "") -> dict:
             [s for s in [str(r.get("route") or "").strip(), str(r.get("duration") or "").strip(),
                          str(r.get("stops") or "").strip()] if s]
         )
-        options.append({"name": name, "detail": detail, "price": _usd(r.get("price_usd")), "book_url": book})
+        options.append({"name": name, "detail": detail, "price": _usd(r.get("price_usd")),
+                        "amount_usd": _amt(r.get("price_usd")), "book_url": book})
     if not options:
         options = [{
             "name": f"Flights to {dest}",
             "detail": "Compare live fares and book on Google Flights",
             "price": "",
             "book_url": book,
+            "fallback": True,
         }]
     return {"type": "flight", "title": f"Flights to {dest}", "dest": dest, "options": options}
 
@@ -121,7 +180,7 @@ def _transfer_link(dest: str) -> str:
     return f"https://www.klook.com/en-US/search/?query={quote_plus(dest + ' Vietnam airport transfer')}"
 
 
-async def find_cabs(dest: str, detail_hint: str = "") -> dict:
+async def _find_cabs_live(dest: str, detail_hint: str = "") -> dict:
     dest = dest or "Vietnam"
     q = (
         f"Find 3 real airport-transfer, private-car or taxi options in {dest}, Vietnam"
@@ -140,13 +199,15 @@ async def find_cabs(dest: str, detail_hint: str = "") -> dict:
         detail = " · ".join(
             [s for s in [str(r.get("vehicle") or "").strip(), str(r.get("notes") or "").strip()] if s]
         )
-        options.append({"name": name, "detail": detail, "price": _usd(r.get("price_usd")), "book_url": book})
+        options.append({"name": name, "detail": detail, "price": _usd(r.get("price_usd")),
+                        "amount_usd": _amt(r.get("price_usd")), "book_url": book})
     if not options:
         options = [{
             "name": f"Airport transfer · {dest}",
             "detail": "Private cars and taxis, book on Klook",
             "price": "",
             "book_url": book,
+            "fallback": True,
         }]
     return {"type": "cab", "title": f"Airport transfers · {dest}", "dest": dest, "options": options}
 
@@ -158,7 +219,7 @@ def _activity_link(name: str, dest: str) -> str:
     return f"https://www.getyourguide.com/s/?q={quote_plus(q)}"
 
 
-async def find_activities(dest: str, interest: str = "") -> dict:
+async def _find_activities_live(dest: str, interest: str = "") -> dict:
     dest = dest or "Vietnam"
     q = (
         f"Find 3 real, bookable things to do in {dest}, Vietnam"
@@ -190,6 +251,7 @@ async def find_activities(dest: str, interest: str = "") -> dict:
             "detail": "Tours and experiences, book on GetYourGuide",
             "price": "",
             "book_url": fallback,
+            "fallback": True,
         }]
     return {"type": "activity", "title": f"Things to do · {dest}", "dest": dest, "options": options}
 
@@ -201,13 +263,29 @@ def _restaurant_link(name: str, dest: str) -> str:
     return f"https://www.google.com/maps/search/{quote_plus(q)}"
 
 
-async def find_restaurants(dest: str, request_hint: str = "") -> dict:
+# A reservation is priced as a prepaid table: estimated meal cost per person (× party size,
+# applied in the conductor where the traveller count is known). When the model omits a number
+# we fall back from the $ tier so every restaurant is still bookable.
+_PRICE_TIER_USD = {"$": 15, "$$": 35, "$$$": 70, "$$$$": 120}
+
+
+def _meal_usd(row: dict) -> int:
+    """Per-person meal estimate in USD (0 if genuinely unknown)."""
+    n = _amt(row.get("avg_meal_usd"))
+    if n:
+        return n
+    tier = str(row.get("price_range") or "").strip()
+    return _PRICE_TIER_USD.get(tier, 0)
+
+
+async def _find_restaurants_live(dest: str, request_hint: str = "") -> dict:
     dest = dest or "Vietnam"
     q = (
         f"Find 3 real, currently-open restaurants in {dest}, Vietnam"
         f"{(' ' + request_hint) if request_hint else ''}. Use real, well-regarded places. "
         'Return ONLY a JSON array, each item: {"name": str, "cuisine": str, "price_range": '
-        '"$"/"$$"/"$$$", "notes": "one short highlight"}. No other text.'
+        '"$"/"$$"/"$$$", "avg_meal_usd": number (typical cost per person for a meal), '
+        '"notes": "one short highlight"}. No other text.'
     )
     rows = await _web_search_json(q)
     options = []
@@ -221,15 +299,41 @@ async def find_restaurants(dest: str, request_hint: str = "") -> dict:
             [s for s in [str(r.get("cuisine") or "").strip(), str(r.get("price_range") or "").strip(),
                          str(r.get("notes") or "").strip()] if s]
         )
-        options.append({"name": name, "detail": detail, "price": "", "book_url": _restaurant_link(name, dest)})
+        options.append({"name": name, "detail": detail, "price": "",
+                        "per_person_usd": _meal_usd(r), "book_url": _restaurant_link(name, dest)})
     if not options:
         options = [{
             "name": f"Restaurants · {dest}",
             "detail": "Find, view menus and reserve on Google Maps",
             "price": "",
             "book_url": _restaurant_link("", dest),
+            "fallback": True,
         }]
     return {"type": "restaurant", "title": f"Restaurants · {dest}", "dest": dest, "options": options}
+
+
+# ── Cached public finders ───────────────────────────────────────────────────
+# Thin wrappers over the _live finders above. Same signatures, so no caller changes; the only
+# difference is that asking twice for the same destination now returns the SAME card.
+
+async def find_flights(dest: str, origin: str = "", when: str = "") -> dict:
+    dest = dest or "Vietnam"
+    return await _resolve_once("flight", dest, lambda: _find_flights_live(dest, origin, when))
+
+
+async def find_cabs(dest: str, detail_hint: str = "") -> dict:
+    dest = dest or "Vietnam"
+    return await _resolve_once("cab", dest, lambda: _find_cabs_live(dest, detail_hint))
+
+
+async def find_activities(dest: str, interest: str = "") -> dict:
+    dest = dest or "Vietnam"
+    return await _resolve_once("activity", dest, lambda: _find_activities_live(dest, interest))
+
+
+async def find_restaurants(dest: str, request_hint: str = "") -> dict:
+    dest = dest or "Vietnam"
+    return await _resolve_once("restaurant", dest, lambda: _find_restaurants_live(dest, request_hint))
 
 
 # ── Hotels (live search with static fallback) ───────────────────────────────

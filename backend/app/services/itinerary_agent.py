@@ -14,7 +14,7 @@ import re
 from typing import Optional
 from urllib.parse import quote_plus
 
-from app.services.llm import client, SPECIALIST_MODEL
+from app.services.llm import client, SPECIALIST_MODEL, FAST_MODEL, cached_system
 from app.services.hotels_db import VIETNAM_HOTELS, _booking_url, social_proof
 from app.services.booking_links import _find_destinations
 from app.services.foto_agent import search_photos
@@ -86,10 +86,22 @@ def _travellers_in_utterance(t: str) -> Optional[int]:
     """
     t = (t or "").lower()
 
-    # Explicit counts: "2 travellers", "for 3 people", "party of 4".
+    # Explicit counts: "2 travellers", "for 3 people", "party of 4", "total of 4".
+    # "party|group|total of N" all state a new head-count — guests say "so it'll be a
+    # total of four" as often as "party of four", and both must re-price the trip.
     m = re.search(r"\b(\d+)\s*(?:travel|people|person|adult|guest|of us|pax)", t)
     if not m:
-        m = re.search(r"\bparty of\s*(\d+)", t)
+        m = re.search(r"\b(?:party|group|total)\s+of\s*(\d+)", t)
+    if not m:
+        # A head-count stated as who the trip is FOR: "package for 4", "make it a booking for 3",
+        # "a plan for 4". The negative lookahead keeps a DURATION ("package for 4 days", "trip for
+        # 5 nights") from being misread as a party size — the exact silent failure that shipped a
+        # plan titled "for four" priced for two.
+        m = re.search(
+            r"\b(?:package|booking|reservation|trip|holiday|vacation|table|group|party|plan)"
+            r"\s+for\s+(\d+)\b(?!\s*(?:day|days|night|nights|week|weeks|month|months|hour|hours|year|years))",
+            t,
+        )
     if m:
         try:
             n = int(m.group(1))
@@ -100,7 +112,13 @@ def _travellers_in_utterance(t: str) -> Optional[int]:
     for w, n in _WORD_NUMS.items():
         if re.search(rf"\b{w}\s+(?:of us|travel|people|person|adult|guest)", t):
             return n
-        if re.search(rf"\bparty of {w}\b", t):
+        if re.search(rf"\b(?:party|group|total) of {w}\b", t):
+            return n
+        if re.search(
+            rf"\b(?:package|booking|reservation|trip|holiday|vacation|table|group|party|plan)"
+            rf"\s+for\s+{w}\b(?!\s*(?:day|days|night|nights|week|weeks|month|months|hour|hours|year|years))",
+            t,
+        ):
             return n
 
     # Party members named alongside the speaker — checked BEFORE the solo phrases so
@@ -149,15 +167,95 @@ def _travellers_from(history: list, message: str, default: int = 2) -> int:
     return default
 
 
+async def _resolve_travellers(history: list, message: str) -> int:
+    """Total party size for this trip, resolving natural-language party math.
+
+    Regex can read an explicit count ("4 travellers", "just me"), but not the additive way
+    guests actually grow a party: "my friend and his wife want to come with us" means +2, and
+    the total is me + wife + friend + wife = 4. Getting that wrong is what shipped a plan titled
+    "for Four" whose price and card still said two. So: an explicit count in the newest message
+    still wins instantly (deterministic, zero latency); otherwise the fast model totals the party
+    from the whole conversation. The build already costs a multi-second specialist call, so this
+    small fast-model call adds nothing the guest notices, and it falls back to the regex scan on
+    any failure.
+    """
+    # Explicit count stated right now — trust it, no model call.
+    if (n := _travellers_in_utterance(message)) is not None:
+        return n
+
+    convo = "\n".join(
+        f"{'Guest' if m.get('role') == 'user' else 'Sasha'}: {m.get('content', '')}"
+        for m in (history or [])
+        if isinstance(m, dict) and (m.get("content") or "").strip()
+    )
+    convo = (convo + f"\nGuest: {message}").strip()
+    try:
+        resp = await asyncio.wait_for(
+            client.messages.create(
+                model=FAST_MODEL,
+                max_tokens=4,
+                system=cached_system(
+                    "Count how many people are travelling ON THIS TRIP in total, from the whole "
+                    "conversation. Include the guest unless they clearly exclude themselves. Add "
+                    "each companion as they are mentioned — 'my wife' is +1, 'my friend and his "
+                    "wife' is +2, 'a couple of friends' is +2. If the guest restates the count, the "
+                    "MOST RECENT statement wins. If the number of travellers is NOT stated or "
+                    "implied ANYWHERE in the conversation, answer 2 — the default booking is a "
+                    "couple; do NOT default to 1. Only answer 1 when the guest clearly signals they "
+                    "travel alone ('just me', 'solo', 'travelling by myself'). Reply with ONLY one "
+                    "integer from 1 to 12 and nothing else."
+                ),
+                messages=[{"role": "user", "content": convo}],
+            ),
+            timeout=6.0,
+        )
+        out = "".join(b.text for b in resp.content if hasattr(b, "text"))
+        if (m := re.search(r"\d+", out)):
+            n = int(m.group())
+            if 1 <= n <= 12:
+                return n
+    except Exception as e:
+        print(f"[Itinerary] traveller resolver failed ({e}) — falling back to regex scan")
+
+    # Deterministic fallback: most-recent explicit count in the transcript, else the default.
+    return _travellers_from(history, message)
+
+
 async def _enrich(data: dict, travellers: int = 2) -> None:
     days = data.get("days", []) or []
 
-    # One image per day. Fetch a batch (varied even with the no-key fallback) and assign by
-    # index; with a real Unsplash key these are city-relevant Vietnam shots.
+    # One image per day, matched to THAT DAY'S CITY.
+    #
+    # This used to run a single generic "Vietnam landscape travel scenery" search and deal the
+    # results out by index, so a Hanoi day could be illustrated with a Ha Long Bay shot and a
+    # Hoi An day with Sapa. (The old comment here claimed the results were "city-relevant" —
+    # they never could be, the query never named a city.)
+    #
+    # Fetch per DISTINCT city, not per day: a 5-day trip across 3 cities costs 3 lookups, not 5,
+    # which matters against a 50/hour Unsplash demo key. search_photos caches by resolved search
+    # term, so a repeated city is free, and it falls back to the curated set rather than failing.
+    cities = []
+    for d in days:
+        c = (d.get("city") or "").strip() or "Vietnam"
+        if c not in cities:
+            cities.append(c)
+
+    async def _city_photos(city: str) -> tuple:
+        try:
+            # count=3 so days sharing a city get different shots rather than the same one twice.
+            return city, await search_photos(f"{city} Vietnam travel", count=3)
+        except Exception:
+            return city, []
+
+    by_city = dict(await asyncio.gather(*[_city_photos(c) for c in cities])) if cities else {}
+
+    # Generic backstop for any city whose lookup came back empty.
     try:
-        batch = await search_photos("Vietnam landscape travel scenery", count=max(len(days), 6))
+        generic = await search_photos("Vietnam landscape travel scenery", count=max(len(days), 6))
     except Exception:
-        batch = []
+        generic = []
+
+    seen_per_city: dict = {}
 
     carried_name = None         # last assigned hotel + its city + nightly rate, carried across
     carried_city = None         # genuine "same hotel" nights and day-trips from a base city
@@ -165,8 +263,18 @@ async def _enrich(data: dict, travellers: int = 2) -> None:
     hotel_total = 0
     activity_count = 0
     for i, d in enumerate(days):
-        d["image"] = batch[i % len(batch)]["url"] if batch else None
         city = d.get("city") or "Vietnam"
+        # Rotate within this city's own set so consecutive days in one city differ, then fall
+        # back to the generic batch, then to no image (the UI already guards on `d.image`).
+        pool = by_city.get(city) or []
+        if pool:
+            n = seen_per_city.get(city, 0)
+            seen_per_city[city] = n + 1
+            d["image"] = pool[n % len(pool)]["url"]
+        elif generic:
+            d["image"] = generic[i % len(generic)]["url"]
+        else:
+            d["image"] = None
         given = (d.get("hotel") or "").strip()
         pool = VIETNAM_HOTELS.get(city)
         if given:
@@ -228,7 +336,7 @@ async def build_itinerary(message: str, history: list) -> dict:
     # Resolve the party size ONCE and tell the model explicitly. Left to infer it from the
     # transcript, it wrote couples' activities ("a romantic dinner for two") into a solo
     # trip — the words on the page contradicting the price beside them.
-    travellers = _travellers_from(history, message)
+    travellers = await _resolve_travellers(history, message)
     system = _SYSTEM.replace("{hotels_context}", hotels_context).replace(
         "{travellers_context}",
         f"This trip is for EXACTLY {travellers} traveller{'s' if travellers != 1 else ''}. "

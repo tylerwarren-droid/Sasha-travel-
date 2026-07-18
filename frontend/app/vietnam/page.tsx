@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { MicOff } from 'lucide-react'
 import SashaAvatar, { prefetchAvatarSession } from '../components/SashaAvatar'
 import SashaChat, { WorkspaceTab } from '../components/SashaChat'
 import type { Idea } from '../components/workspace/IdeasPanel'
@@ -53,9 +54,40 @@ export default function VietnamPage() {
   const gateRef = useRef<((value: boolean) => void) | null>(null)
   const handleSetGate = useCallback((fn: (value: boolean) => void) => { gateRef.current = fn }, [])
   const handleGate = useCallback((value: boolean) => { gateRef.current?.(value) }, [])
+
+  // ── Deliberate mute while the itinerary builds ─────────────────────────────
+  // The gate lives here, next to the avatar's own speak-driven gating, so there is exactly
+  // ONE owner and the two can't fight. Closing it drops mic frames before Deepgram ever sees
+  // them, so "Not listening" is literally true rather than a label over a live mic.
+  //
+  // The existing lockWatchdog can't cover this: it only arms when Sasha SPEAKS, and she is
+  // silent for the whole build. So this carries its own backstop — a closed gate that never
+  // reopens is the freeze this app already shipped once, and it must not be reachable.
+  const [micMuted, setMicMuted] = useState(false)
+  const buildWatchdogRef = useRef<any>(null)
+  const handleBuildingChange = useCallback((isBuilding: boolean) => {
+    clearTimeout(buildWatchdogRef.current)
+    setMicMuted(isBuilding)
+    handleGate(isBuilding)
+    if (isBuilding) {
+      // Outlives the backend's 45s itinerary ceiling. If the turn dies without ever clearing
+      // `building`, the mic comes back anyway.
+      buildWatchdogRef.current = setTimeout(() => {
+        console.warn('[GATE] build watchdog force-reopened the mic')
+        setMicMuted(false)
+        handleGate(false)
+      }, 60000)
+    }
+  }, [handleGate])
+  useEffect(() => () => clearTimeout(buildWatchdogRef.current), [])
   const [isListening, setIsListening] = useState(false)
   const [chatMessages, setChatMessages] = useState<any[]>([])
   const [paymentModal, setPaymentModal] = useState<'card' | 'crypto' | null>(null)
+  // A single hotel/flight/cab the guest tapped "Book & Pay" on. When set, the payment modal
+  // and checkout run against this offer (server-priced by offer_id) instead of the whole trip.
+  const [pendingOffer, setPendingOffer] = useState<{ offer_id: string; label: string; amount_usd: number; kind: string; name: string } | null>(null)
+  // A confirmed single-item booking (from the Stripe return leg), shown as its own confirmation.
+  const [itemBooked, setItemBooked] = useState<{ ref?: string; label?: string; amount?: number; kind?: string; emailSent?: boolean } | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
   // Typed booking details — names/emails are unreliable over voice STT, so collect them here.
@@ -67,6 +99,20 @@ export default function VietnamPage() {
   // The stored trip a payment applies to. The server prices checkout from this id — the
   // browser no longer states the amount.
   const [itineraryId, setItineraryId] = useState<string | null>(null)
+
+  // ── Deliberate mute while a payment modal is open ─────────────────────────
+  // The guest is typing their name/email into the Complete Booking form; a hot mic
+  // behind the modal keeps feeding Deepgram and leaves a "Listening…" equaliser lit
+  // over a dialog nobody is talking to. Reuse the SAME single-owner gate the build-mute
+  // uses so the two can't fight — closing it drops frames before Deepgram sees them, so
+  // the pill reads "Not listening" truthfully. Payment always follows a completed build,
+  // so this never overlaps handleBuildingChange in practice.
+  useEffect(() => {
+    const modalOpen = paymentModal !== null
+    setMicMuted(modalOpen)
+    handleGate(modalOpen)
+  }, [paymentModal, handleGate])
+
   const [photos, setPhotos] = useState<Photo[]>([])
   const [activePhoto, setActivePhoto] = useState(0)
   const [engaged, setEngaged] = useState(false)
@@ -100,6 +146,10 @@ export default function VietnamPage() {
   const handleAvatarSpeechBuffer = useCallback((getText: () => string) => { avatarSaidRef.current = getText }, [])
   const isRespondingRef = useRef(false)
   const lockWatchdogRef = useRef<any>(null)
+  // A real answer that arrived while Sasha was still speaking an interim ("let me check…") line.
+  // Held here and voiced the moment her current sentence ends, so she is never cut off and the
+  // result is only spoken once her existing communication is over.
+  const pendingSpeechRef = useRef<string | null>(null)
   const [voiceReady, setVoiceReady] = useState(false)
   const [voiceConnected, setVoiceConnected] = useState(false)
   // A mic/voice failure, shown ON THE CALL PANEL. Previously the panel's only non-live state
@@ -278,9 +328,14 @@ export default function VietnamPage() {
       .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
       .then(data => {
         if (data?.paid && data?.booking_ref) {
-          if (data.itinerary?.days?.length) setRichItinerary(data.itinerary)
-          setBooked({ ref: data.booking_ref, emailSent: Boolean(data.email_sent) })
-          setRightTab('trip')
+          if (data.item) {
+            // A single hotel/flight/cab was paid for — show the item confirmation, not the trip one.
+            setItemBooked({ ref: data.booking_ref, label: data.item.label, amount: data.item.amount_usd, kind: data.item.kind, emailSent: Boolean(data.email_sent) })
+          } else {
+            if (data.itinerary?.days?.length) setRichItinerary(data.itinerary)
+            setBooked({ ref: data.booking_ref, emailSent: Boolean(data.email_sent) })
+            setRightTab('trip')
+          }
         } else {
           setPayResult('canceled')  // Stripe says it isn't paid — don't claim otherwise.
         }
@@ -292,12 +347,21 @@ export default function VietnamPage() {
   // Stripe Checkout: create a hosted session on the backend and redirect to it. Card data
   // never touches our servers. A 501 means the demo's Stripe keys aren't set — surface it
   // calmly instead of crashing.
+  // A guest tapped "Book & Pay" on an individual hotel/flight/cab card — open the same payment
+  // modal, but checkout will run against this offer (priced server-side by offer_id).
+  const handleBookItem = useCallback((offer: { offer_id: string; label: string; amount_usd: number; kind: string; name: string }) => {
+    setCheckoutError(null)
+    setPendingOffer(offer)
+    setPaymentModal('card')
+  }, [])
+
   const startCardCheckout = useCallback(async () => {
     setCheckoutError(null)
-    const description = richItinerary?.title || 'Sasha Travel booking'
-    // The server prices this from `itinerary_id`. Without one there is no trip to charge for,
-    // and we must not fall back to a browser-supplied amount.
-    if (!itineraryId) {
+    // Two server-priced paths: a single card (offer_id) or the whole trip (itinerary_id).
+    // Either way the server sets the price; the browser never supplies an amount.
+    const isItem = !!pendingOffer
+    const description = isItem ? pendingOffer!.label : (richItinerary?.title || 'Sasha Travel booking')
+    if (!isItem && !itineraryId) {
       setCheckoutError('Build an itinerary first, then you can book it.')
       return
     }
@@ -307,7 +371,7 @@ export default function VietnamPage() {
         method: 'POST',
         headers: apiHeaders(),
         body: JSON.stringify({
-          itinerary_id: itineraryId,
+          ...(isItem ? { offer_id: pendingOffer!.offer_id } : { itinerary_id: itineraryId }),
           currency: 'usd',
           description: payerName ? `${description} — ${payerName}` : description,
           customer_email: payerEmail || undefined,
@@ -328,7 +392,7 @@ export default function VietnamPage() {
     } finally {
       setCheckoutLoading(false)
     }
-  }, [richItinerary, itineraryId, payerName, payerEmail])
+  }, [richItinerary, itineraryId, payerName, payerEmail, pendingOffer])
 
   // Start a FRESH session. chatMessages is page-level state that survives the avatar
   // restart, so without clearing it a new "Tap to start" shows the previous conversation
@@ -389,7 +453,42 @@ export default function VietnamPage() {
     }
   }, [])
 
+  // The single place that actually drives the avatar to speak + arms the release watchdog.
+  // Shared by the real answer, the interim "working on it" line, and the queued-answer flush,
+  // so all three take the lock and the backstop timer identically.
+  const speakNow = useCallback((spoken: string) => {
+    if (!spoken || !speakFnRef.current) return
+    lastRepeatTextRef.current = spoken
+    setCaption(spoken)
+    isRespondingRef.current = true
+    console.log('[LOCK] acquired — Sasha speaking')
+    speakFnRef.current(spoken)
+    setEngaged(true)
+    clearTimeout(lockWatchdogRef.current)
+    const watchdogMs = Math.min(35000, Math.max(10000, spoken.length * 90)) + 4000
+    lockWatchdogRef.current = setTimeout(() => {
+      if (isRespondingRef.current) {
+        console.warn('[LOCK] watchdog force-release after', watchdogMs, 'ms')
+        isRespondingRef.current = false
+        setIsAvatarSpeaking(false)
+        gateRef.current?.(false)
+        // A stuck utterance must not strand a queued answer behind it forever — drop it (the
+        // answer text is already on screen in the transcript).
+        pendingSpeechRef.current = null
+      }
+    }, watchdogMs)
+  }, [])
+
   const handleSashaFinished = useCallback(() => {
+    // A real answer was queued behind an interim line — voice it now instead of releasing, so
+    // she flows straight from "let me check…" into the result with no gap and no cut-off.
+    if (pendingSpeechRef.current) {
+      const next = pendingSpeechRef.current
+      pendingSpeechRef.current = null
+      console.log('[LOCK] flushing queued answer after interim')
+      speakNow(next)
+      return
+    }
     isRespondingRef.current = false
     clearTimeout(lockWatchdogRef.current)
     console.log('[LOCK] released — Sasha finished speaking')
@@ -398,7 +497,7 @@ export default function VietnamPage() {
       endOnFinishRef.current = false
       handleEndSession()
     }
-  }, [handleEndSession])
+  }, [handleEndSession, speakNow])
 
   // Customer confirmed the trip — lock the final itinerary into a shareable confirmation and
   // end the session once the confirmation is spoken.
@@ -453,58 +552,27 @@ export default function VietnamPage() {
     // The avatar must SPEAK plain text — strip markdown so TTS never reads "asterisk".
     // The chat still displays the original markdown (rendered as bold/lists).
     const spoken = stripMarkdown(text)
-    lastRepeatTextRef.current = spoken
-    setCaption(spoken)
-    isRespondingRef.current = true
-    console.log('[LOCK] acquired — Sasha speaking')
-    speakFnRef.current(spoken)
-    setEngaged(true)
-    // Independent backstop. The lock is normally released by the avatar's
-    // speak_ended -> openGate -> onSashaFinished chain; this guarantees release even if
-    // that chain is never completed (avatar error, lost session, missed events), so a
-    // single failure can never freeze the conversation after one turn.
-    clearTimeout(lockWatchdogRef.current)
-    const watchdogMs = Math.min(35000, Math.max(10000, text.length * 90)) + 4000
-    lockWatchdogRef.current = setTimeout(() => {
-      if (isRespondingRef.current) {
-        console.warn('[LOCK] watchdog force-release after', watchdogMs, 'ms')
-        isRespondingRef.current = false
-        setIsAvatarSpeaking(false)
-        gateRef.current?.(false)
-      }
-    }, watchdogMs)
-  }, [])
+    // If Sasha is mid-utterance — typically an interim "let me check that" line spoken while the
+    // search ran — never cut her off. Queue the real answer; handleSashaFinished voices it the
+    // instant she finishes, so the result is only spoken once her current sentence is over.
+    if (isRespondingRef.current) {
+      console.log('[LOCK] busy — queueing answer behind current utterance')
+      pendingSpeechRef.current = spoken
+      return
+    }
+    speakNow(spoken)
+  }, [speakNow])
 
-  // Slow-turn filler: when a specialist agent is taking a while, have the avatar say a
-  // brief acknowledgement instead of going silent. Speaks through the same speak path so
-  // the mic gate stays closed; the real answer queues right after. Guarded to one per turn.
-  const thinkingCountRef = useRef(0)
-  const handleThinking = useCallback(() => {
-    if (isRespondingRef.current || !speakFnRef.current) return
-    // Only voice a filler once every few slow turns — speaking one on each turn feels
-    // robotic ("Let me find that for you" every time). The "Sasha is responding" workspace
-    // indicator already shows she's working during the silent ones.
-    thinkingCountRef.current += 1
-    if (thinkingCountRef.current % 3 !== 1) return
-    const fillers = ['One moment, let me look into that.', 'Let me find that for you.', 'Give me just a second.']
-    const filler = fillers[thinkingCountRef.current % fillers.length]
-    isRespondingRef.current = true
-    speakFnRef.current(filler)
-    // Arm the page-level backstop, exactly as handleSashaResponse does. This path took the
-    // lock but armed nothing, leaning entirely on the avatar instance's own watchdog — so if
-    // that instance was torn down mid-filler (a language switch, any teardown racing it), no
-    // independent timer remained to release the lock and the guest's voice would keep being
-    // silently dropped.
-    clearTimeout(lockWatchdogRef.current)
-    lockWatchdogRef.current = setTimeout(() => {
-      if (isRespondingRef.current) {
-        console.warn('[LOCK] watchdog force-release after filler')
-        isRespondingRef.current = false
-        setIsAvatarSpeaking(false)
-        gateRef.current?.(false)
-      }
-    }, 12000)
-  }, [])
+  // Context-driven interim speech: while a slow search/build runs, Sasha says what she's ACTUALLY
+  // doing ("Let me check live flights for you") instead of going silent or reading a random
+  // filler. SashaChat picks the line from the classified intent and passes it here; this only
+  // speaks it, through the same locked speak path so the mic gate stays closed while she talks
+  // and the real answer queues behind it (handleSashaResponse -> pendingSpeechRef). One per turn:
+  // if she is already voicing something, skip — the answer will queue naturally.
+  const handleInterim = useCallback((line: string) => {
+    if (!line || isRespondingRef.current || !speakFnRef.current) return
+    speakNow(line)
+  }, [speakNow])
 
   return (
     <main className="h-screen flex flex-col overflow-hidden" style={{ background: 'radial-gradient(1200px 800px at 18% -10%, #15131f 0%, #07070d 55%)' }}>
@@ -636,7 +704,13 @@ export default function VietnamPage() {
                   <div style={{ maxWidth: '60%', fontSize: 14, lineHeight: 1.45, color: 'rgba(255,255,255,.92)', textShadow: '0 2px 12px rgba(0,0,0,.7)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{caption}</div>
                 )}
                 <div className="flex items-center gap-3">
-                  {isAvatarSpeaking ? (
+                  {/* Muted wins over every other state: the mic is genuinely closed, so a
+                      leftover "Listening…" equaliser would be actively lying to the guest. */}
+                  {micMuted ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#f87171', background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.45)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
+                      <MicOff className="w-3.5 h-3.5" /> Not listening — building your trip
+                    </div>
+                  ) : isAvatarSpeaking ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#DAA520', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(218,165,32,.3)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
                       <span className="la-load"><i /><i /><i /></span> Sasha is speaking
                     </div>
@@ -740,7 +814,7 @@ export default function VietnamPage() {
                 }}
                 isRespondingRef={isRespondingRef}
                 readyToListen={voiceReady}
-                onThinking={handleThinking}
+                onThinking={handleInterim}
                 onItinerary={handleItinerary}
                 language={language}
                 registerSend={registerSend}
@@ -753,10 +827,13 @@ export default function VietnamPage() {
                 onMicError={setMicError}
                 onBooked={handleBooked}
                 onAwaitPayment={handleAwaitPayment}
+                onBookItem={handleBookItem}
                 onItineraryId={setItineraryId}
                 bookingRef={booked?.ref ?? null}
                 activeTab={rightTab}
                 onTabChange={handleTabChange}
+                onMarkUnseen={markUnseen}
+                onBuildingChange={handleBuildingChange}
                 unseenTabs={unseenTabs}
                 ideasCache={ideasCache}
                 onIdeasCache={setIdeasCache}
@@ -784,10 +861,14 @@ export default function VietnamPage() {
       )}
 
       {paymentModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={() => setPaymentModal(null)}>
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={() => { setPaymentModal(null); setPendingOffer(null) }}>
           <div className="rounded-2xl p-6 w-96 shadow-xl" style={{ background: '#1a1a2e', border: '1px solid rgba(218,165,32,0.3)' }} onClick={e => e.stopPropagation()}>
             <div className="text-lg font-semibold mb-1" style={{ color: '#DAA520' }}>Complete Booking</div>
-            <div className="text-sm mb-5" style={{ color: 'rgba(255,255,255,0.4)' }}>Total: ${(richItinerary?.estimated_total_usd || 0).toLocaleString()}</div>
+            {pendingOffer ? (
+              <div className="text-sm mb-5" style={{ color: 'rgba(255,255,255,0.4)' }}>{pendingOffer.label} · <span style={{ color: '#E8B923', fontWeight: 600 }}>${pendingOffer.amount_usd.toLocaleString()}</span></div>
+            ) : (
+              <div className="text-sm mb-5" style={{ color: 'rgba(255,255,255,0.4)' }}>Total: ${(richItinerary?.estimated_total_usd || 0).toLocaleString()}</div>
+            )}
 
             {paymentModal === 'card' ? (
               <>
@@ -810,7 +891,7 @@ export default function VietnamPage() {
                   <div className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171' }}>{checkoutError}</div>
                 )}
                 <div className="flex gap-3 mt-2">
-                  <button onClick={() => { setCheckoutError(null); setPaymentModal(null) }} disabled={checkoutLoading} className="flex-1 py-3 rounded-xl text-sm disabled:opacity-40" style={{ border: '1px solid rgba(218,165,32,0.2)', color: 'rgba(255,255,255,0.6)' }}>Cancel</button>
+                  <button onClick={() => { setCheckoutError(null); setPaymentModal(null); setPendingOffer(null) }} disabled={checkoutLoading} className="flex-1 py-3 rounded-xl text-sm disabled:opacity-40" style={{ border: '1px solid rgba(218,165,32,0.2)', color: 'rgba(255,255,255,0.6)' }}>Cancel</button>
                   <button onClick={startCardCheckout} disabled={checkoutLoading} className="flex-1 py-3 rounded-xl text-sm font-medium disabled:opacity-60" style={{ background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: 'white' }}>
                     {checkoutLoading ? 'Starting…' : 'Pay securely'}
                   </button>
@@ -822,11 +903,42 @@ export default function VietnamPage() {
                   Crypto payments are coming soon. Use card to complete this booking today.
                 </div>
                 <div className="flex gap-3 mt-2">
-                  <button onClick={() => setPaymentModal(null)} className="flex-1 py-3 rounded-xl text-sm" style={{ border: '1px solid rgba(218,165,32,0.2)', color: 'rgba(255,255,255,0.6)' }}>Close</button>
+                  <button onClick={() => { setPaymentModal(null); setPendingOffer(null) }} className="flex-1 py-3 rounded-xl text-sm" style={{ border: '1px solid rgba(218,165,32,0.2)', color: 'rgba(255,255,255,0.6)' }}>Close</button>
                   <button onClick={() => { setCheckoutError(null); setPaymentModal('card') }} className="flex-1 py-3 rounded-xl text-sm font-medium" style={{ background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: 'white' }}>Pay by card</button>
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Single-item booking confirmation (hotel / flight / cab) — a compact receipt, distinct
+          from the full-trip confirmation below. Reached via the Stripe return leg when verify
+          returns an `item`. */}
+      {itemBooked && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(6,6,12,0.94)', backdropFilter: 'blur(14px)' }} onClick={() => setItemBooked(null)}>
+          <div className="relative flex flex-col overflow-hidden" style={{ width: 'min(440px, 96vw)', borderRadius: 24, border: '1px solid rgba(218,165,32,0.3)', background: 'linear-gradient(180deg, rgba(218,165,32,0.06), rgba(0,0,0,0.25)), #0e0e16', boxShadow: '0 40px 100px -30px rgba(0,0,0,.9)' }} onClick={e => e.stopPropagation()}>
+            <div className="text-center" style={{ padding: '28px 24px 24px' }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 14px', display: 'grid', placeItems: 'center', background: 'rgba(52,211,153,0.14)', border: '1px solid rgba(52,211,153,0.4)', fontSize: 26, color: '#34d399' }}>✓</div>
+              <div style={{ fontSize: 21, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>
+                {itemBooked.kind === 'hotel' ? 'Stay booked!' : itemBooked.kind === 'flight' ? 'Flight booked!' : itemBooked.kind === 'cab' ? 'Transfer booked!' : itemBooked.kind === 'restaurant' ? 'Table booked!' : 'Booked!'}
+              </div>
+              <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,.6)', marginTop: 8 }}>
+                {(itemBooked.kind === 'hotel' ? '🏨 ' : itemBooked.kind === 'flight' ? '✈️ ' : itemBooked.kind === 'cab' ? '🚕 ' : itemBooked.kind === 'restaurant' ? '🍽️ ' : '')}{itemBooked.label}
+              </div>
+              {typeof itemBooked.amount === 'number' && (
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#E8B923', marginTop: 6 }}>${itemBooked.amount.toLocaleString()} paid</div>
+              )}
+              <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.45)', marginTop: 8 }}>
+                Your booking is confirmed.{itemBooked.emailSent ? ' A confirmation is on its way to your email.' : ''}
+              </div>
+              {itemBooked.ref && (
+                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>Booking ref · {itemBooked.ref}</div>
+              )}
+              <div style={{ marginTop: 20 }}>
+                <button onClick={() => setItemBooked(null)} style={{ padding: '11px 28px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done</button>
+              </div>
+            </div>
           </div>
         </div>
       )}

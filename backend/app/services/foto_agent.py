@@ -1,9 +1,23 @@
+import copy
 import os
+import time
 import httpx
 from typing import Optional
 
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY", "").strip()
 UNSPLASH_BASE = "https://api.unsplash.com"
+
+# Unsplash quota is small and exhaustible: a DEMO app key allows 50 requests/HOUR (a Production
+# key allows 5000). An itinerary now fetches one photo set per distinct city, and the foto
+# intent fetches on top of that, so an unlucky demo could burn the hourly budget and every
+# panel would silently drop to the curated fallback set mid-pitch. Cache by search term so a
+# repeated city costs nothing. Photo URLs are stable, so the TTL only exists to keep a
+# long-lived process from serving the same shots forever.
+#
+# Process-local, same caveat as the travel_search card cache: fine on Railway's single uvicorn
+# worker, would need Redis if WEB_CONCURRENCY is ever raised.
+_PHOTO_TTL_S = float(os.getenv("PHOTO_CACHE_TTL_S", "3600"))
+_photo_cache: dict = {}
 
 # Vietnam-specific search term mappings for better results
 SEARCH_MAPPINGS = {
@@ -119,7 +133,7 @@ async def search_photos(query: str, count: int = 3) -> list:
     if not UNSPLASH_ACCESS_KEY:
         # No key — serve the curated fallback rather than an empty panel.
         return FALLBACK_PHOTOS[:count]
-    
+
     # Check if we have a better search term
     query_lower = query.lower()
     search_term = query
@@ -127,7 +141,15 @@ async def search_photos(query: str, count: int = 3) -> list:
         if key in query_lower:
             search_term = value
             break
-    
+
+    # Keyed on the RESOLVED search term, so "Hoi An" and "hoian" that both map through
+    # SEARCH_MAPPINGS to the same term share one cache entry and one API call.
+    cache_key = (search_term.lower(), count)
+    now = time.monotonic()
+    hit = _photo_cache.get(cache_key)
+    if hit and hit[1] > now:
+        return copy.deepcopy(hit[0])
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -157,10 +179,19 @@ async def search_photos(query: str, count: int = 3) -> list:
                     "width": photo["width"],
                     "height": photo["height"],
                 })
+            if not photos:
+                # Empty results is the shape a quota-exhausted key returns too: Unsplash answers
+                # 403 with no `results`, which parses cleanly and yields []. Returning [] left the
+                # gallery blank with no error anywhere. Degrade to the curated set instead, and
+                # do NOT cache it — the quota resets hourly and we want live shots back after.
+                print(f"[Foto Agent] no results for {search_term!r} "
+                      f"(http {response.status_code}) — serving fallback")
+                return FALLBACK_PHOTOS[:count]
+            _photo_cache[cache_key] = (copy.deepcopy(photos), now + _PHOTO_TTL_S)
             return photos
     except Exception as e:
         print(f"[Foto Agent] Unsplash error: {e}")
-        return []
+        return FALLBACK_PHOTOS[:count]
 
 
 async def get_destination_photo(destination: str) -> Optional[dict]:

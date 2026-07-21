@@ -56,6 +56,10 @@ export interface RichItinerary {
   summary: string
   days: ItineraryDay[]
   estimated_total_usd: number
+  // Party size Sasha resolved for THIS plan (top-level canonical; cost_breakdown mirrors it).
+  // The trip view reads this so a rebuilt "make it 4" plan shows 4, not the stale profile count.
+  travellers?: number
+  cost_breakdown?: { hotels?: number; experiences?: number; meals?: number; transport?: number; travellers?: number }
 }
 
 const GOLD = '#DAA520'

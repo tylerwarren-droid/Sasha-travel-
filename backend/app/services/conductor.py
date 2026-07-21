@@ -1234,14 +1234,41 @@ async def conduct(
         # No specialist produced a usable reply (e.g. a tool agent returned nothing on a
         # simple follow-up like "No."). Fall back to the GENERAL conversational agent so
         # Sasha stays in context instead of a canned "I'm here to help" that derails the chat.
+        service_error = False
         try:
             gen = await asyncio.wait_for(
                 run_general(user_message, conversation_history, general_prompt), timeout=20.0
             )
-            final_response = gen.get("response") or "Could you tell me a little more about what you're after?"
+            final_response = (gen.get("response") or "").strip()
         except Exception as e:
+            # run_general is a raw LLM call — a timeout, a rate limit, or an EXHAUSTED API key all
+            # land here. This is the failure behind the demo's "it got worse each time and then
+            # just looped": once the key runs dry every turn throws, and the old code answered each
+            # one with the SAME "tell me more about what you're after" — a line that both blames
+            # the guest for our outage and repeats forever. Flag it so we say something honest.
             print(f"[Conductor] general fallback failed ({e})")
-            final_response = "Could you tell me a little more about what you're after?"
+            final_response = ""
+            service_error = True
+        if not final_response:
+            # Two different failures, two different things to say — and NEVER the same sentence the
+            # guest just heard (that identical repeat is what read as a broken loop).
+            last_assistant = next(
+                (m.get("content", "") for m in reversed(conversation_history or [])
+                 if isinstance(m, dict) and m.get("role") == "assistant"),
+                "",
+            ).strip()
+            if service_error:
+                pool = [
+                    "Sorry — I'm having a brief connection issue on my end, not you. Give me a moment and ask me that again.",
+                    "I hit a technical snag just now — that's on me, not you. One moment and let's try that again.",
+                ]
+            else:
+                pool = [
+                    "Could you tell me a little more about what you're after?",
+                    "Tell me a bit more about the trip you have in mind and I'll take it from there.",
+                    "Where would you like to start — a destination, some dates, or shall I begin planning?",
+                ]
+            final_response = next((p for p in pool if p.strip() != last_assistant), pool[0])
     elif len(agent_responses) == 1:
         final_response = agent_responses[0]["response"]
     else:

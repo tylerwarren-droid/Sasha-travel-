@@ -77,12 +77,12 @@ _WORD_NUMS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
               "seven": 7, "eight": 8, "nine": 9, "ten": 10}
 
 
-def _travellers_in_utterance(t: str) -> Optional[int]:
-    """Traveller count stated in ONE utterance, or None if it doesn't mention it.
-
-    Ordered most-specific first: an explicit number beats a solo phrase beats a relationship
-    hint, so "just me and my wife" resolves to 2 (the wife wins over "just me"), while
-    "only I'm travelling" resolves to 1.
+def _explicit_count_in_utterance(t: str) -> Optional[int]:
+    """A HARD, stated head-count in one utterance ("2 travellers", "party of 4", "for four"),
+    or None. Deliberately excludes relationship/solo inferences ("my wife" → 2, "family" → 4,
+    "just me" → 1): those are guesses that additive phrasing can extend ("me and my wife, plus
+    my friend and his wife" = 4), so they must NOT short-circuit the additive resolver — only a
+    number the guest actually stated is safe to trust without the model.
     """
     t = (t or "").lower()
 
@@ -120,6 +120,20 @@ def _travellers_in_utterance(t: str) -> Optional[int]:
             t,
         ):
             return n
+    return None
+
+
+def _travellers_in_utterance(t: str) -> Optional[int]:
+    """Traveller count stated in ONE utterance, or None if it doesn't mention it.
+
+    Ordered most-specific first: an explicit number beats a solo phrase beats a relationship
+    hint, so "just me and my wife" resolves to 2 (the wife wins over "just me"), while
+    "only I'm travelling" resolves to 1. Used only as the deterministic FALLBACK (regex can't
+    do additive party math — the LLM resolver handles that; see _resolve_travellers).
+    """
+    if (n := _explicit_count_in_utterance(t)) is not None:
+        return n
+    t = (t or "").lower()
 
     # Party members named alongside the speaker — checked BEFORE the solo phrases so
     # "just me and my partner" isn't read as solo.
@@ -179,8 +193,10 @@ async def _resolve_travellers(history: list, message: str) -> int:
     small fast-model call adds nothing the guest notices, and it falls back to the regex scan on
     any failure.
     """
-    # Explicit count stated right now — trust it, no model call.
-    if (n := _travellers_in_utterance(message)) is not None:
+    # A HARD count stated right now — trust it, no model call. Relationship/solo/additive
+    # phrasing deliberately does NOT short-circuit here: "me and my wife, and my friend and his
+    # wife are joining" must reach the resolver to total 4, not stop at the first "my wife" → 2.
+    if (n := _explicit_count_in_utterance(message)) is not None:
         return n
 
     convo = "\n".join(
@@ -316,6 +332,10 @@ async def _enrich(data: dict, travellers: int = 2) -> None:
     transport = 350
     total = hotel_total + experiences + meals + transport
     data["estimated_total_usd"] = int(round(total / 10.0) * 10)  # nearest $10
+    # Canonical party size on the itinerary itself, so the trip view reads the count Sasha
+    # actually resolved for THIS plan — not a stale profile field. When the guest changes the
+    # party ("make it 4"), the rebuilt plan carries the new number and the panel follows it.
+    data["travellers"] = travellers
     data["cost_breakdown"] = {
         "hotels": int(hotel_total),
         "experiences": int(experiences),

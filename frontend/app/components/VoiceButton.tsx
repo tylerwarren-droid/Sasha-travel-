@@ -81,11 +81,33 @@ const ECHO_MIN_WORDS = 4
 
 const normalizeText = (t: string) => t.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean)
 
+// Continuity / handoff devices we should NOT auto-select: a Mac hands the iPhone's or iPad's mic
+// to the browser as "default", so a guest whose phone is in another room gets a dead mic.
+const PHONE_MIC_RE = /iphone|ipad|continuity|phone/i
+const MIC_PREF_KEY = 'sasha_mic_id'
+
+// Which audioinput to open. An explicit stored choice wins (if still present); otherwise pick the
+// first REAL local mic, skipping any phone/Continuity device; '' means "let the browser decide"
+// (only reached before labels are known or when a phone is genuinely the only input).
+function preferredAudioDeviceId(list: MediaDeviceInfo[], stored: string): string {
+  const inputs = list.filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default')
+  if (stored && inputs.some(d => d.deviceId === stored)) return stored
+  const local = inputs.find(d => d.label && !PHONE_MIC_RE.test(d.label))
+  return local?.deviceId || ''
+}
+
 export default function VoiceButton({ onTranscript, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError }: VoiceButtonProps) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [micError, setMicError] = useState<string | null>(null)
+  // Mic device selection. On a Mac, Continuity silently hands the *iPhone's* mic to the browser
+  // as the default input — so a guest whose phone isn't even nearby gets no audio. We enumerate
+  // inputs, prefer a real local mic over any phone/Continuity device, and let the guest pick.
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([])
+  const [selectedMicId, setSelectedMicId] = useState<string>('')   // '' = auto (avoid-phone)
+  const selectedMicIdRef = useRef<string>('')
+  useEffect(() => { selectedMicIdRef.current = selectedMicId }, [selectedMicId])
 
   const wsRef = useRef<WebSocket | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -190,9 +212,30 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
     try {
       // Mint the ephemeral STT key in parallel with mic acquisition — no added latency.
       const keyPromise = getDeepgramKey()
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      const baseAudio: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      const wantId = selectedMicIdRef.current
+      let stream = await navigator.mediaDevices.getUserMedia({
+        audio: wantId ? { ...baseAudio, deviceId: { ideal: wantId } } : baseAudio,
       })
+      // Device labels are only readable AFTER permission is granted, so enumerate now. If the
+      // guest hasn't pinned a mic and the browser handed us a phone/Continuity input, swap to a
+      // real local mic before wiring the pipeline — this is the "it's still using my iPhone" fix,
+      // so audio doesn't die when the phone isn't nearby. Best-effort: never block voice over it.
+      try {
+        const list = await navigator.mediaDevices.enumerateDevices()
+        setAudioDevices(list.filter(d => d.kind === 'audioinput'))
+        if (!selectedMicIdRef.current) {
+          const activeLabel = stream.getAudioTracks()[0]?.label || ''
+          if (PHONE_MIC_RE.test(activeLabel)) {
+            const better = preferredAudioDeviceId(list, '')
+            if (better) {
+              stream.getTracks().forEach(t => t.stop())
+              stream = await navigator.mediaDevices.getUserMedia({ audio: { ...baseAudio, deviceId: { ideal: better } } })
+              console.log('[MIC] avoided phone/Continuity input, switched to a local mic')
+            }
+          }
+        }
+      } catch { /* enumerate/re-acquire is best-effort */ }
       streamRef.current = stream
       const dgKey = await keyPromise
       if (!dgKey) { setIsConnecting(false); reportMicError('Voice service unavailable'); return }
@@ -254,6 +297,12 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
 
         node.port.onmessage = (e) => {
           const float32 = e.data as Float32Array
+          // HARD mute (itinerary build / any in-flight turn): drop every frame at the source,
+          // before Deepgram and before barge-in. `muted` is documented as a hard mute, but the
+          // frame loop only honoured the speak-gate — so a build whose classify was slow/failed
+          // left the mic genuinely streaming under a "Not listening" label. Enforce it here so
+          // the mic is truly deaf whenever muted, independent of the speak-gate's timing.
+          if (mutedRef.current) return
           if (micGatedRef.current) {
             // Gate ON = avatar is speaking. DROP every frame so the avatar's audio
             // bleeding into the mic is never streamed to Deepgram. This is the core
@@ -418,6 +467,34 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
     return () => stopAll()
   }, [])
 
+  // Load the guest's saved mic and keep the device list fresh — plugging in a headset mid-call
+  // should show up in the picker. Before permission, labels are blank; connect() re-enumerates
+  // with real labels once the mic is granted, which is what drives the avoid-phone logic.
+  useEffect(() => {
+    try { const s = localStorage.getItem(MIC_PREF_KEY) || ''; if (s) { setSelectedMicId(s); selectedMicIdRef.current = s } } catch {}
+    const refresh = () => navigator.mediaDevices?.enumerateDevices?.()
+      .then(list => setAudioDevices(list.filter(d => d.kind === 'audioinput')))
+      .catch(() => {})
+    refresh()
+    navigator.mediaDevices?.addEventListener?.('devicechange', refresh)
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refresh)
+  }, [])
+
+  // Guest picked a mic (or cleared to Auto): remember it and re-open the pipeline on the new
+  // device. stopAll → connect is the same teardown/rebuild a reconnect already uses, so it's safe.
+  const switchMic = useCallback((id: string) => {
+    setSelectedMicId(id)
+    selectedMicIdRef.current = id
+    try { id ? localStorage.setItem(MIC_PREF_KEY, id) : localStorage.removeItem(MIC_PREF_KEY) } catch {}
+    const wasConnected = connectedRef.current
+    stopAll()
+    if (wasConnected) setTimeout(() => { connect() }, 150)
+  }, [connect, stopAll])
+
+  // Only worth showing once there's a real choice AND labels have loaded (pre-permission the
+  // labels are blank and a picker of "Microphone 1/2" helps no one).
+  const showMicPicker = audioDevices.filter(d => d.deviceId && d.label).length > 1
+
   return (
     <div className="flex flex-col items-center gap-1">
       <button
@@ -443,6 +520,24 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       {muted && <p className="text-xs text-red-400/80 text-center">Not listening</p>}
       {!muted && isConnected && !isSpeaking && <p className="text-xs text-white/30 text-center">Ready</p>}
       {!muted && isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
+      {showMicPicker && (
+        // Explicit device choice, so a guest is never stuck on a phone/Continuity mic that isn't
+        // near them. "Auto" keeps the avoid-phone default. Label the phone entries so the trap is
+        // visible rather than surprising.
+        <select
+          aria-label="Microphone"
+          value={selectedMicId}
+          onChange={(e) => switchMic(e.target.value)}
+          className="mt-0.5 max-w-[180px] text-[11px] bg-white/5 text-white/60 border border-white/10 rounded px-1.5 py-0.5 outline-none"
+        >
+          <option value="">Mic: Auto</option>
+          {audioDevices.filter(d => d.deviceId && d.label).map((d, i) => (
+            <option key={d.deviceId} value={d.deviceId}>
+              {(PHONE_MIC_RE.test(d.label) ? '📱 ' : '') + (d.label || `Microphone ${i + 1}`)}
+            </option>
+          ))}
+        </select>
+      )}
     </div>
   )
 }

@@ -292,6 +292,11 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
           if (turnSeqRef.current !== turnId || !inFlightRef.current) return
           classifiedIntents = c?.intents || []
           if (classifiedIntents.includes('itinerary')) showBuilding()
+          // Speak the context line THE MOMENT we know the intent (~8ms), instead of waiting out
+          // the 700ms fast-answer window. classify is the whole reason we know it's a slow,
+          // card-producing turn — so there's no latency to trade off, and fireInterim self-guards
+          // (no line for general chat, never a second line). This is the gap before "One moment…".
+          fireInterim()
         })
         .catch(() => {})   // best-effort: never break a turn over a progress banner
       // Give a fast turn ~0.7s to simply answer; only frame a genuinely slow search with a
@@ -392,6 +397,23 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
   // turn that showed a card.
   const stickToBottomRef = useRef(true)
 
+  // "Scroll for more" cue. Because the newest message is pinned to the TOP (see below), a turn
+  // that surfaces flights / stays / a day-by-day plan legitimately leaves those cards BELOW the
+  // fold — and a guest who doesn't realise the panel scrolls never sees them (the exact demo
+  // feedback). Show a gentle nudge whenever real content sits under the fold; hide it at the end.
+  const [showScrollCue, setShowScrollCue] = useState(false)
+  const recomputeScrollCue = () => {
+    const el = streamRef.current
+    if (!el) { setShowScrollCue(false); return }
+    setShowScrollCue(el.scrollHeight - el.scrollTop - el.clientHeight > 56)
+  }
+  const jumpToBottom = () => {
+    const el = streamRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    stickToBottomRef.current = true
+    setShowScrollCue(false)
+  }
+
   const onStreamWheel = (e: React.WheelEvent) => {
     if (e.deltaY < 0) {
       stickToBottomRef.current = false   // scrolled up = reading something; leave them alone
@@ -425,6 +447,13 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
     if (stickToBottomRef.current) scrollTo(lastMsgRef.current, 'start')
   }, [messages, isLoading])
 
+  // Re-measure the below-fold cue after a turn paints its cards. Keyed on the height-affecting
+  // state (messages + the card collections), one rAF so we measure the new layout, not the old.
+  useEffect(() => {
+    const id = requestAnimationFrame(recomputeScrollCue)
+    return () => cancelAnimationFrame(id)
+  }, [messages, isLoading, bookings, hotels, richItinerary])
+
   // Cards re-pin (the guest asked for them) but do NOT get their own scroll target — they're
   // already in view under the message that announced them.
   useEffect(() => {
@@ -435,7 +464,10 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
   // NOTE: `photos` deliberately does NOT trigger a scroll. It refreshes on almost every turn,
   // and it lives below the cards, so following it is exactly the bug above.
 
-  const travellerCount = user.travellers?.length || 2
+  // Prefer the party size the current plan was actually built for — a "make it 4" rebuild
+  // carries the new count on the itinerary, so the trip view follows it instead of the static
+  // profile field (which never changes mid-conversation and left the panel showing the old size).
+  const travellerCount = richItinerary?.travellers ?? richItinerary?.cost_breakdown?.travellers ?? (user.travellers?.length || 2)
   // Where the recommended stays actually are, taken from the stays themselves. The header
   // used to read `activeDest`, so "Hand-picked for Hoi An ancient town" changed every few
   // seconds as the photos cycled while the hotels underneath stayed put — naming a city the
@@ -507,7 +539,8 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
       )}
 
       {tab === 'chat' && (
-      <div className="lw-stream" ref={streamRef} onWheel={onStreamWheel}>
+      <div className="lw-streamwrap">
+      <div className="lw-stream" ref={streamRef} onWheel={onStreamWheel} onScroll={recomputeScrollCue}>
 
         {/* ── Conversation transcript ── */}
         {messages.length > 0 && <div className="lw-when">Conversation</div>}
@@ -698,15 +731,25 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
             `photos`/`activePhoto`/`onSelectPhoto` props stay on the interface: the page
             still owns that state and uses it for the call-panel backdrop. ── */}
       </div>
+      {showScrollCue && (
+        <button className="lw-scrollcue" onClick={jumpToBottom} aria-label="Scroll down to see the full details">
+          <span aria-hidden>↓</span> Scroll to see more
+        </button>
+      )}
+      </div>
       )}
 
       {/* ── Composer ── */}
       <div className="lw-composer">
         <div className="field">
           <VoiceButton
-            // HARD mute while the plan builds: barge-in can't defeat it, because there is
-            // nothing to barge into (the build is server-side and uncancellable).
-            muted={building}
+            // HARD mute while the plan builds AND for the whole in-flight turn: barge-in can't
+            // defeat it, because there is nothing to barge into (the turn is server-side). Gating
+            // on `isLoading` too — not just `building` — closes the window where a voice-started
+            // build's async classify hasn't flipped `building` yet: the mic is deaf for the entire
+            // turn, so a stray utterance during creation can never post or badge Chat. inFlightRef
+            // already dropped such sends; this makes "Not listening" literally true, not a label.
+            muted={building || isLoading}
             // Speaking used to FORCE the guest back to Chat on every single transcript. That
             // fought them constantly: reading the plan on Trip and saying "make day 3 lighter"
             // threw them onto Chat, away from the very thing they were editing. Worse, during
@@ -751,6 +794,11 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
       </div>
 
       <style jsx global>{`
+        .lw-streamwrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+        .lw-streamwrap>.lw-stream{flex:1}
+        .lw-scrollcue{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:flex;align-items:center;gap:5px;padding:5px 13px;font-size:12px;line-height:1;color:rgba(255,255,255,.8);background:rgba(20,20,28,.82);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.12);border-radius:999px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);z-index:5;animation:lwcuein .2s ease}
+        .lw-scrollcue:hover{background:rgba(30,30,42,.94);color:#fff}
+        @keyframes lwcuein{from{opacity:0;transform:translate(-50%,4px)}to{opacity:1;transform:translate(-50%,0)}}
         .lw-stream{flex:1;min-height:0;overflow-y:auto;padding:18px 18px 24px;display:flex;flex-direction:column;gap:13px}
         /* Itinerary build progress — owns the 13-45s window the plan takes to generate. */
         .lw-building{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:32px 24px;text-align:center}

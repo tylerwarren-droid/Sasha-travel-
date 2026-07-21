@@ -404,10 +404,9 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
     if (!ctx) return
     let running = true
-    const render = () => {
-      if (!running) return
-      // EVERYTHING that can throw is inside try/catch, and the next frame is ALWAYS
-      // scheduled in finally — a single bad frame must never freeze the avatar.
+    // Chroma-key ONE frame. EVERYTHING that can throw is inside try/catch so a single bad frame
+    // never freezes the avatar; the caller always schedules the next one.
+    const processFrame = () => {
       try {
         const w = video.videoWidth, h = video.videoHeight
         if (w && h && video.readyState >= 2) {
@@ -426,11 +425,23 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           ctx.putImageData(frame, 0, 0)
         }
       } catch { /* frame not ready / transient — keep looping */ }
-      finally {
-        if (running) chromaRafRef.current = requestAnimationFrame(render)
-      }
     }
-    chromaRafRef.current = requestAnimationFrame(render)
+    // LIP-SYNC: drive the canvas off requestVideoFrameCallback, not requestAnimationFrame.
+    // rVFC fires once per DECODED video frame, on the video's own playback clock — the exact
+    // clock its audio plays on — so the chroma-keyed visual can never drift from the voice. rAF
+    // is display-refresh driven: under CPU load (this loop does a full-frame getImageData + a
+    // per-pixel scan) it processes stale frames and the lips fall behind the real-time audio,
+    // which is the "voice doesn't match the visual" lag. Fall back to rAF only where rVFC is
+    // missing (older Safari); there the drift can return under load, but sync is preserved on
+    // every current browser.
+    const vAny = video as any
+    if (typeof vAny.requestVideoFrameCallback === 'function') {
+      const step = () => { if (!running) return; processFrame(); vAny.requestVideoFrameCallback(step) }
+      vAny.requestVideoFrameCallback(step)
+    } else {
+      const step = () => { if (!running) return; processFrame(); chromaRafRef.current = requestAnimationFrame(step) }
+      chromaRafRef.current = requestAnimationFrame(step)
+    }
     return () => { running = false; cancelAnimationFrame(chromaRafRef.current) }
   }, [removeGreen, status])
 

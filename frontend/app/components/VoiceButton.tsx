@@ -27,6 +27,18 @@ interface VoiceButtonProps {
   // small red line under the mic icon in the composer, while the call panel — the thing
   // everyone is actually looking at — sat on "Starting microphone…" forever.
   onMicError?: (message: string | null) => void
+  // Hands the mic-device list + switcher up to the page, which renders the picker as a pill
+  // next to the camera toggle in the call panel where every other call control lives. This is
+  // the ONLY place the picker is drawn — VoiceButton no longer renders one itself.
+  onMicDevices?: (info: MicDevicesInfo | null) => void
+}
+
+// What the page needs to render its own mic picker: the choosable devices, what's selected
+// now, and the switcher (which tears down and reopens the pipeline on the new device).
+export interface MicDevicesInfo {
+  devices: { deviceId: string; label: string; isPhone: boolean }[]
+  selectedId: string
+  switchMic: (id: string) => void
 }
 
 // UI language → a valid Deepgram nova-3 language code (en-US is the safe default).
@@ -83,7 +95,13 @@ const normalizeText = (t: string) => t.toLowerCase().replace(/[^\w\s]/g, '').spl
 
 // Continuity / handoff devices we should NOT auto-select: a Mac hands the iPhone's or iPad's mic
 // to the browser as "default", so a guest whose phone is in another room gets a dead mic.
-const PHONE_MIC_RE = /iphone|ipad|continuity|phone/i
+// NOTE the word boundaries. This previously included a bare `phone` alternative, which matches
+// the substring in "MacBook Pro Microphone", "Headset Microphone", "External Microphone" — i.e.
+// virtually every real mic. Any machine that also had a device WITHOUT "phone" in its label
+// (Yeti, Scarlett, Teams Audio, a virtual/loopback device) would therefore treat its genuine
+// built-in mic as a Continuity device and deliberately switch away from it to that other input,
+// which is usually silent. That is the "mic isn't picked up on some systems" report.
+const PHONE_MIC_RE = /\b(iphone|ipad)\b|continuity/i
 const MIC_PREF_KEY = 'sasha_mic_id'
 
 // Which audioinput to open. An explicit stored choice wins (if still present); otherwise pick the
@@ -96,7 +114,7 @@ function preferredAudioDeviceId(list: MediaDeviceInfo[], stored: string): string
   return local?.deviceId || ''
 }
 
-export default function VoiceButton({ onTranscript, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError }: VoiceButtonProps) {
+export default function VoiceButton({ onTranscript, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices }: VoiceButtonProps) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -214,9 +232,20 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       const keyPromise = getDeepgramKey()
       const baseAudio: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       const wantId = selectedMicIdRef.current
-      let stream = await navigator.mediaDevices.getUserMedia({
-        audio: wantId ? { ...baseAudio, deviceId: { ideal: wantId } } : baseAudio,
-      })
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: wantId ? { ...baseAudio, deviceId: { ideal: wantId } } : baseAudio,
+        })
+      } catch (e: any) {
+        // A pinned mic that is unplugged, already claimed by another app (Windows commonly
+        // reports NotReadableError / "Device Occupied"), or whose constraints can't be met would
+        // otherwise leave the guest with no voice at all. Retry once with no device constraint
+        // and no processing flags — any working mic beats a silent session.
+        if (e?.name === 'NotAllowedError') throw e   // permission is not something to retry around
+        console.warn('[MIC] preferred device failed (' + e?.name + '), retrying with defaults')
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      }
       // Device labels are only readable AFTER permission is granted, so enumerate now. If the
       // guest hasn't pinned a mic and the browser handed us a phone/Continuity input, swap to a
       // real local mic before wiring the pipeline — this is the "it's still using my iPhone" fix,
@@ -447,8 +476,12 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
 
     } catch (err: any) {
       setIsConnecting(false)
+      // Name the actual failure. "Could not access microphone" sent people hunting for a
+      // permission problem when the real cause was another app holding the device.
       if (err.name === 'NotAllowedError') reportMicError('Mic permission denied')
       else if (err.name === 'NotFoundError') reportMicError('No microphone found')
+      else if (err.name === 'NotReadableError') reportMicError('Mic is in use by another app')
+      else if (err.name === 'OverconstrainedError') reportMicError('Selected mic is unavailable')
       else reportMicError(err.message || 'Could not access microphone')
     }
   }, [])  // stable — all dynamic props are read via refs above
@@ -493,7 +526,29 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
 
   // Only worth showing once there's a real choice AND labels have loaded (pre-permission the
   // labels are blank and a picker of "Microphone 1/2" helps no one).
-  const showMicPicker = audioDevices.filter(d => d.deviceId && d.label).length > 1
+  const namedDevices = audioDevices.filter(d => d.deviceId && d.label)
+  const showMicPicker = namedDevices.length > 1
+
+  // Publish the picker upward so the page can render it as a call-panel pill. Routed through a
+  // ref (same idiom as onMicErrorRef) so a parent that re-creates the callback each render can
+  // never turn this into a render loop. Reports null when there's nothing worth choosing, which
+  // is what makes the pill appear only once a real second mic exists.
+  const onMicDevicesRef = useRef(onMicDevices)
+  useEffect(() => { onMicDevicesRef.current = onMicDevices }, [onMicDevices])
+  useEffect(() => {
+    onMicDevicesRef.current?.(
+      showMicPicker
+        ? {
+            devices: namedDevices.map(d => ({ deviceId: d.deviceId, label: d.label, isPhone: PHONE_MIC_RE.test(d.label) })),
+            selectedId: selectedMicId,
+            switchMic,
+          }
+        : null,
+    )
+    // Unmount (e.g. session end) must clear the pill, or it lingers pointing at a dead switcher.
+    return () => onMicDevicesRef.current?.(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showMicPicker, selectedMicId, switchMic, audioDevices])
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -520,24 +575,10 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       {muted && <p className="text-xs text-red-400/80 text-center">Not listening</p>}
       {!muted && isConnected && !isSpeaking && <p className="text-xs text-white/30 text-center">Ready</p>}
       {!muted && isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
-      {showMicPicker && (
-        // Explicit device choice, so a guest is never stuck on a phone/Continuity mic that isn't
-        // near them. "Auto" keeps the avoid-phone default. Label the phone entries so the trap is
-        // visible rather than surprising.
-        <select
-          aria-label="Microphone"
-          value={selectedMicId}
-          onChange={(e) => switchMic(e.target.value)}
-          className="mt-0.5 max-w-[180px] text-[11px] bg-white/5 text-white/60 border border-white/10 rounded px-1.5 py-0.5 outline-none"
-        >
-          <option value="">Mic: Auto</option>
-          {audioDevices.filter(d => d.deviceId && d.label).map((d, i) => (
-            <option key={d.deviceId} value={d.deviceId}>
-              {(PHONE_MIC_RE.test(d.label) ? '📱 ' : '') + (d.label || `Microphone ${i + 1}`)}
-            </option>
-          ))}
-        </select>
-      )}
+      {/* The mic picker is deliberately NOT rendered here. It is published upward via
+          onMicDevices and drawn by the page as a pill beside the camera toggle, where the rest
+          of the call controls live. A local fallback used to exist for standalone use; it only
+          ever caused confusion by reappearing under the composer, so it is gone. */}
     </div>
   )
 }

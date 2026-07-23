@@ -25,6 +25,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      // The portal stylesheet sets `html{scroll-behavior:smooth}`. Without this attribute Next
+      // warns, and its scroll restoration animates between routes instead of jumping — so a
+      // tab change visibly scrolls through the previous page on the way to the top.
+      data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

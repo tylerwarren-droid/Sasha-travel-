@@ -1,7 +1,16 @@
-import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
+import PortalShell from './components/portal/PortalShell'
+import Teaser from './components/portal/Teaser'
 
-// For now the root URL should open the polished "Discover Vietnam" concierge.
-// (Temporary — change or remove this redirect when a dedicated home page is ready.)
+export const metadata: Metadata = {
+  title: 'Kanoe.ai — Investor Portal',
+  description: 'Kanoe.ai is an AI-first, crypto-native infrastructure layer for the B2B and D2C travel market.',
+}
+
 export default function Home() {
-  redirect('/vietnam')
+  return (
+    <PortalShell>
+      <Teaser />
+    </PortalShell>
+  )
 }

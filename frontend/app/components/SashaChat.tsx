@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, MutableRefObject } from 'react'
 import { Loader2, ExternalLink } from 'lucide-react'
 import { User, Itinerary } from '@/types'
-import VoiceButton from './VoiceButton'
+import VoiceButton, { MicDevicesInfo } from './VoiceButton'
 import { renderMarkdown } from '@/lib/markdown'
 import { apiUrl, apiHeaders } from '@/lib/api'
 import { CURRENT_USER } from '@/lib/currentUser'
@@ -70,6 +70,9 @@ interface SashaChatProps {
   onVoiceConnected?: (connected: boolean) => void
   // Bubbles a mic/voice failure up so the call panel can show it, not just the composer.
   onMicError?: (message: string | null) => void
+  // Hands the mic-device picker up to the page, which renders it as a pill beside the camera
+  // toggle in the call panel rather than leaving a bare <select> under the composer.
+  onMicDevices?: (info: MicDevicesInfo | null) => void
   // Fired when the conductor confirms the whole-trip booking (action: "trip_booked").
   onBooked?: (ref?: string) => void
   // Fired when the customer asks to book (action: "await_payment") — show the complete
@@ -126,7 +129,7 @@ function interimLineFor(intents: string[], variant: number): string {
 }
 
 
-export default function SashaChat({ user, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onBooked, onAwaitPayment, onBookItem, onItineraryId, bookingRef, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache }: SashaChatProps) {
+export default function SashaChat({ user, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onMicDevices, onBooked, onAwaitPayment, onBookItem, onItineraryId, bookingRef, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache }: SashaChatProps) {
   const tab = activeTab
   const [localMessages, setLocalMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
@@ -779,6 +782,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
             onSpeakingChange={onListeningChange}
             onConnectedChange={onVoiceConnected}
             onMicError={onMicError}
+            onMicDevices={onMicDevices}
           />
           <input
             value={input}

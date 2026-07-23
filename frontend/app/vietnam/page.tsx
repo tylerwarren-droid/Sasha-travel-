@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { MicOff } from 'lucide-react'
 import SashaAvatar, { prefetchAvatarSession } from '../components/SashaAvatar'
 import SashaChat, { WorkspaceTab } from '../components/SashaChat'
+import type { MicDevicesInfo } from '../components/VoiceButton'
 import type { Idea } from '../components/workspace/IdeasPanel'
 import ItineraryPanel from '../components/ItineraryPanel'
 import ItineraryDays, { RichItinerary } from '../components/ItineraryDays'
@@ -30,6 +31,17 @@ const DEMO_USER: User = {
     { title: 'Vietnam — Hoi An and Da Nang', return_date: 'Spring 2023' },
   ],
   ota_affinity: ['culture', 'adventure']
+}
+
+// Browsers pad device labels with boilerplate ("Default - MacBook Air Microphone (Built-in)")
+// that eats the pill's width without telling the guest anything. Trim it to the part that
+// actually distinguishes one mic from another.
+function micLabel(label: string, i: number): string {
+  const trimmed = (label || '')
+    .replace(/^Default\s*[-–]\s*/i, '')
+    .replace(/\s*\((Built-in|Virtual)\)\s*$/i, '')
+    .trim()
+  return trimmed || `Microphone ${i + 1}`
 }
 
 const INITIAL_ITINERARY: Itinerary = {
@@ -157,6 +169,9 @@ export default function VietnamPage() {
   // blocked mic (common on a fresh demo machine) looked identical to a slow one, and the
   // actual reason sat unnoticed in the composer on the far side of the screen.
   const [micError, setMicError] = useState<string | null>(null)
+  // Mic picker, published up from VoiceButton so it can live as a pill next to the camera
+  // toggle with the other call controls. Null until a real second input exists.
+  const [micDevices, setMicDevices] = useState<MicDevicesInfo | null>(null)
   const [isAvatarSpeaking, setIsAvatarSpeaking] = useState(false)
   // Final booking state — set when the customer confirms the trip. Locks the itinerary into
   // a shareable / printable confirmation and ends the live session once Sasha finishes.
@@ -703,36 +718,39 @@ export default function VietnamPage() {
                 {caption && (
                   <div style={{ maxWidth: '60%', fontSize: 14, lineHeight: 1.45, color: 'rgba(255,255,255,.92)', textShadow: '0 2px 12px rgba(0,0,0,.7)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{caption}</div>
                 )}
-                <div className="flex items-center gap-3">
+                {/* Call controls. Wraps as whole pills rather than letting any single pill
+                    squeeze and break its label across two lines, which is what happened once the
+                    mic picker joined the row in the narrow call panel. */}
+                <div className="flex items-center" style={{ gap: 8, flexWrap: 'nowrap', overflow: 'hidden' }}>
                   {/* Muted wins over every other state: the mic is genuinely closed, so a
                       leftover "Listening…" equaliser would be actively lying to the guest. */}
                   {micMuted ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#f87171', background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.45)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#f87171', background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.45)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
                       <MicOff className="w-3.5 h-3.5" /> Not listening — building your trip
                     </div>
                   ) : isAvatarSpeaking ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#DAA520', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(218,165,32,.3)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#DAA520', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(218,165,32,.3)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
                       <span className="la-load"><i /><i /><i /></span> Sasha is speaking
                     </div>
                   ) : isListening ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#34d399', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(52,211,153,.35)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#34d399', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(52,211,153,.35)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
                       <span className="la-eq"><span /><span /><span /><span /></span> Listening…
                     </div>
                   ) : voiceConnected ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'rgba(255,255,255,.85)', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'rgba(255,255,255,.85)', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
                       <span className="la-dot" /> Mic live — just talk
                     </div>
                   ) : micError ? (
                     // Tell the guest what's wrong and what to do — and keep the session usable:
                     // Sasha still speaks, and the composer still takes typed messages.
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#f87171', background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.4)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#f87171', background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.4)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
                       <span>🚫</span>
                       {micError === 'Mic permission denied'
                         ? 'Mic blocked — allow it in your browser, or type below'
                         : `${micError} — you can type below`}
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'rgba(255,255,255,.6)', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'rgba(255,255,255,.6)', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
                       <span className="la-load"><i /><i /><i /></span> Starting microphone…
                     </div>
                   )}
@@ -748,11 +766,47 @@ export default function VietnamPage() {
                       background: camEnabled ? 'rgba(0,0,0,.4)' : 'rgba(248,113,113,.12)',
                       border: `1px solid ${camEnabled ? 'rgba(255,255,255,.14)' : 'rgba(248,113,113,.4)'}`,
                       color: camEnabled ? 'rgba(255,255,255,.85)' : '#f87171',
-                      borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)',
+                      // Never shrinks: it is a control, not a label. Only the status pill gives
+                      // way when the row is tight.
+                      borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 0,
                     }}
                   >
                     {camEnabled ? '📹 Camera on' : '🚫 Camera off'}
                   </button>
+
+                  {/* Mic picker — same pill as the camera toggle so the call controls read as one
+                      row. Only appears once there are two or more named inputs (see VoiceButton),
+                      which is exactly when a guest can be stuck on a Continuity/phone mic. */}
+                  {micDevices && (
+                    <select
+                      aria-label="Microphone"
+                      title="Choose which microphone Sasha listens to"
+                      value={micDevices.selectedId}
+                      onChange={(e) => micDevices.switchMic(e.target.value)}
+                      // The one control allowed to shrink: device names are long and unbounded,
+                      // so it truncates rather than pushing the fixed-width pills out of the row.
+                      style={{
+                        // alignSelf:stretch + zero vertical padding is what makes a <select>
+                        // match the pills exactly: its intrinsic line metrics otherwise render
+                        // it ~2px shorter and 1px lower than the buttons beside it.
+                        alignSelf: 'stretch', lineHeight: 1,
+                        flexShrink: 0, maxWidth: 168,
+                        fontSize: 12.5, cursor: 'pointer', outline: 'none',
+                        background: 'rgba(0,0,0,.4)',
+                        border: '1px solid rgba(255,255,255,.14)',
+                        color: 'rgba(255,255,255,.85)',
+                        borderRadius: 999, padding: '0 12px', backdropFilter: 'blur(10px)',
+                        textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <option value="">🎤 Mic: Auto</option>
+                      {micDevices.devices.map((d, i) => (
+                        <option key={d.deviceId} value={d.deviceId}>
+                          {(d.isPhone ? '📱 ' : '🎤 ') + micLabel(d.label, i)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
             </>
@@ -825,6 +879,7 @@ export default function VietnamPage() {
                 onBook={() => setPaymentModal('card')}
                 onVoiceConnected={setVoiceConnected}
                 onMicError={setMicError}
+                onMicDevices={setMicDevices}
                 onBooked={handleBooked}
                 onAwaitPayment={handleAwaitPayment}
                 onBookItem={handleBookItem}

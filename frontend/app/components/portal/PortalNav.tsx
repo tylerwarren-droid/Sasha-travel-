@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import type { ReactNode } from 'react'
+import LogoMark from './LogoMark'
 
 // The portal's six sections are real routes now, so the nav is ordinary navigation and the
 // active tab is derived from the URL instead of the old showPanel() class juggling.
@@ -24,10 +24,7 @@ export default function PortalNav({ right }: { right?: ReactNode }) {
   return (
     <nav>
       <Link href="/" className="nav-logo" aria-label="Kanoe.ai — home">
-        {/* Intrinsic size is 1072x405; declaring the real dimensions keeps next/image's aspect
-            ratio honest. Sizing is left entirely to `.nav-logo img` (height:38px; width:auto) —
-            an inline height here modifies one axis and trips next/image's aspect-ratio warning. */}
-        <Image src="/portal/logo.jpg" alt="Kanoe.ai" width={1072} height={405} priority sizes="150px" />
+        <LogoMark height={38} />
       </Link>
 
       <div className="nav-tabs">

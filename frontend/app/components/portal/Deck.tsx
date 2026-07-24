@@ -1,5 +1,7 @@
 // Investor deck panel of the investor portal, ported from the original standalone document.
-// Static content: no client-side behaviour, so this stays a server component.
+// Static content apart from the logo, which uses the resilient LogoMark (client) so a missing
+// /portal/logo.jpg asset degrades to a wordmark instead of a broken-image tile.
+import LogoMark from './LogoMark'
 
 export default function Deck() {
   return (
@@ -7,7 +9,7 @@ export default function Deck() {
         <div className="deck-hdr"><h2>Investor Presentation · 2026</h2><p>Confidential — for partner and investor review only · 15 slides</p></div>
         <div className="slides">
           <div className="slide"><div className="si" style={{ background: "linear-gradient(135deg,var(--navy2),var(--navy4))", textAlign: "center", padding: "60px 40px" }}>
-            <img src="/portal/logo.jpg" alt="Kanoe.ai" style={{ height: "56px", marginBottom: "20px" }} />
+            <div style={{ marginBottom: "20px", display: "inline-block" }}><LogoMark height={56} /></div>
             <div style={{ fontSize: "12px", letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--teal)", marginBottom: "14px" }}>The Operating System for Travel</div>
             <div style={{ fontSize: "14px", color: "var(--muted)" }}>Powering OTAs · Travel Agents · DMCs with AI and Crypto-native infrastructure</div>
             <div style={{ marginTop: "18px", fontSize: "11px", color: "rgba(123,173,160,0.35)", letterSpacing: "0.1em" }}>INVESTOR PRESENTATION · 2026</div>
@@ -70,7 +72,7 @@ export default function Deck() {
             </div>
           </div></div>
           <div className="slide"><div className="si final" style={{ background: "linear-gradient(135deg,var(--navy2),var(--navy4))" }}>
-            <img src="/portal/logo.jpg" alt="Kanoe.ai" style={{ height: "48px", marginBottom: "20px" }} />
+            <div style={{ marginBottom: "20px", display: "inline-block" }}><LogoMark height={48} /></div>
             <div style={{ fontSize: "15px", color: "var(--muted)", marginBottom: "28px" }}>Let's Build the Future of TravelTech</div>
             <div style={{ fontSize: "18px", fontWeight: "500", marginBottom: "6px" }}>kanoe.ai</div>
             <div style={{ fontSize: "14px", color: "var(--muted)", marginBottom: "24px" }}>info@kanoe.ai</div>

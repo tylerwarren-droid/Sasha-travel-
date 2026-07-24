@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Mic, MicOff, Loader2 } from 'lucide-react'
+import VnFlag from '../components/VnFlag'
 import { API_URL } from '@/lib/api'
 
 const DEMO_USER = {

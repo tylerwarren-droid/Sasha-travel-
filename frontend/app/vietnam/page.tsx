@@ -8,6 +8,7 @@ import type { MicDevicesInfo } from '../components/VoiceButton'
 import type { Idea } from '../components/workspace/IdeasPanel'
 import ItineraryPanel from '../components/ItineraryPanel'
 import ItineraryDays, { RichItinerary } from '../components/ItineraryDays'
+import VnFlag from '../components/VnFlag'
 import { stripMarkdown } from '@/lib/markdown'
 import { apiUrl, apiHeaders } from '@/lib/api'
 import { buildItineraryHtml, buildItineraryText } from '@/lib/itineraryDoc'
@@ -595,7 +596,7 @@ export default function VietnamPage() {
       {/* HEADER */}
       <div className="flex items-center justify-between px-6 py-3.5 border-b border-white/5 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(12px)' }}>
         <div className="flex items-center gap-3">
-          <span className="text-xl">🇻🇳</span>
+          <VnFlag size={20} />
           <span className="font-bold tracking-wide" style={{ color: '#DAA520' }}>Discover Vietnam</span>
           <div className="w-px h-4 bg-white/10" />
           <span className="text-xs text-white/30 tracking-widest uppercase">AI Travel Concierge</span>
@@ -1059,7 +1060,7 @@ export default function VietnamPage() {
           style={{ background: 'rgba(8,8,16,0.96)', backdropFilter: 'blur(10px)' }}
           onClick={handleStart}
         >
-          <div style={{ fontSize: '52px', marginBottom: '20px' }}>🇻🇳</div>
+          <div style={{ marginBottom: '20px' }}><VnFlag size={52} /></div>
           <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: '26px', fontWeight: 700, color: '#DAA520', marginBottom: '8px', letterSpacing: '-0.3px' }}>
             Discover Vietnam
           </div>

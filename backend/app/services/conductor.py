@@ -154,7 +154,12 @@ async def classify_intents(user_message: str, conversation_history: list,
     # hungry", "best rooftop bar in Hanoi", "any good places to eat" all mean "find me somewhere"
     # but carry no RESTAURANT_ACTION_WORDS verb, so topic+action alone dropped them to general.
     RESTAURANT_STRONG_WORDS = ["restaurant", "restaurants", "cafe", "cafes", "bistro", "bistros", "eatery", "eateries", "steakhouse", "steakhouses", "hungry", "starving", "rooftop bar", "cocktail bar", "wine bar", "sky bar", "grab a bite", "bite to eat", "places to eat", "place to eat"]
-    BOOKING_WORDS = ["confirm booking", "hotel reference", "pms", "booking.com ref", "expedia ref", "booking number", "confirm my booking", "reservation number"]
+    # "confirm booking"/"confirm my booking"/"reservation number" REMOVED for the demo: the
+    # booking_confirmation agent asks for a Booking.com/Expedia reference — after paying via
+    # Stripe, a guest saying "can you confirm my booking?" was hijacked into a third-party
+    # reference-collection flow instead of hearing their KNO-… ref. The remaining phrases only
+    # fire on genuinely third-party references.
+    BOOKING_WORDS = ["hotel reference", "pms", "booking.com ref", "expedia ref", "booking number"]
     # "what do"/"what does" removed: they are whole-word matches inside "what do you think
     # about Hue", which a boundary cannot help with, and they fired a photo search on ordinary
     # conversation. "look like" still catches the real ask ("what does Hoi An look like").
@@ -176,7 +181,10 @@ async def classify_intents(user_message: str, conversation_history: list,
     # chat and the guest got hotel cards (or nothing) instead of a ride. The phrases are kept for
     # the multi-word intents ("airport transfer", "private transfer") the bare nouns don't cover.
     CAB_WORDS = ["taxi", "taxis", "cab", "cabs", "car", "cars", "rideshare", "book a cab", "grab a cab", "call a cab", "need a cab", "get a cab", "cab to", "cab from", "airport transfer", "airport pickup", "airport pick up", "airport pick-up", "pick up from the airport", "pickup from airport", "car to the airport", "ride to the airport", "ride from the airport", "private car", "private transfer", "airport car", "chauffeur", "shuttle", "transfer to my hotel", "transfer from the airport"]
-    ACTIVITY_WORDS = ["things to do", "thing to do", "activities", "activity", "tour", "tours", "excursion", "experience", "experiences", "what to do", "cooking class", "snorkel", "snorkeling", "diving", "scuba", "boat trip", "boat tour", "day trip", "sightseeing", "attractions", "kayak", "kayaking", "trekking", "hiking", "cyclo", "street food tour", "food tour", "lantern making", "market tour", "workshop", "sunrise tour", "sunset cruise"]
+    # "what can/should/could we|I do", "what is there to do", "anything to do" — the most
+    # natural spoken phrasings of the activity ask; live-tested "what can we do in Hoi An?"
+    # fell through to general chat (no card) because only "what to do" was listed.
+    ACTIVITY_WORDS = ["things to do", "thing to do", "activities", "activity", "tour", "tours", "excursion", "experience", "experiences", "what to do", "what can we do", "what can i do", "what should we do", "what should i do", "what could we do", "what is there to do", "what's there to do", "anything to do", "anything fun", "something to do", "something fun", "cooking class", "snorkel", "snorkeling", "diving", "scuba", "boat trip", "boat tour", "day trip", "sightseeing", "attractions", "kayak", "kayaking", "trekking", "hiking", "cyclo", "street food tour", "food tour", "lantern making", "market tour", "workshop", "sunrise tour", "sunset cruise"]
 
     if _mentions(lower, GOLF_WORDS):
         intents.append("golf")
@@ -267,7 +275,7 @@ async def classify_intents(user_message: str, conversation_history: list,
     # itinerary request however it's worded.
     ITINERARY_RE = re.compile(
         r"\b(build|plan|create|put together|map out|design|organi[sz]e|sort out)\b"
-        r"[^.?!]{0,40}?\b(\d+\s*[-–]?\s*day\b|itinerary|trip|holiday|vacation|week\b)",
+        r"[^.?!]{0,40}?\b(\d+\s*[-–]?\s*days?\b|itinerary|trip|holiday|vacation|week\b)",
     )
     AFFIRMATIONS = {
         "yes", "yes please", "sure", "go ahead", "please do", "do it", "build it",
@@ -296,13 +304,54 @@ async def classify_intents(user_message: str, conversation_history: list,
         if any(k in text for k in ("transfer", "airport", "cab", "taxi", "car service",
                                    "pickup", "pick-up", "pick up")):
             return "cab"
+        # Checked LAST: "cab to my hotel" is a ride, but "book grand hotel" is a stay. A
+        # hotel ask was previously invisible here, so it inherited the LAST card's kind —
+        # "can you book grand hotel for me?" was answered with the restaurant confirmation.
+        if any(k in text for k in ("hotel", "resort", "room", "accommodation", "a stay",
+                                   "place to stay", "night at")) or _names_hotel(text):
+            return "hotel"
         return None
 
-    if any(w in lower for w in BOOK_COMPLETE_WORDS):
-        _last_kind = _booking_kind(last_assistant)   # what Sasha just offered
-        if _last_kind:
-            # The kind the guest names now wins (they can switch); else the kind just offered.
-            _bk = _booking_kind(lower) or _last_kind
+    # "book the whole trip / everything / the package" targets the TRIP, never the card Sasha
+    # happened to show last turn. Without this escape, a guest who browsed restaurants and then
+    # said "book the whole trip" was bounced back to "tap Book & Pay on whichever of these…" and
+    # the payment flow never opened — on the finale of the pitch.
+    _WHOLE_TRIP_WORDS = ("whole trip", "the trip", "this trip", "my trip", "entire trip",
+                         "everything", "all of it", "the plan", "whole plan", "the package",
+                         "whole package", "full itinerary", "the itinerary", "whole itinerary")
+    # Only meaningful when a REAL plan exists: without one, an itinerary-word in Sasha's
+    # free prose ("shall I add it to your plan?") is just chat and must not suppress the
+    # card-booking branch ("perfect, reserve it" fell to the LLM instead of the popup).
+    _last_was_itinerary = bool(has_itinerary) and any(w in last_assistant for w in
+                              ("itinerary", "day-by-day", "your plan", "full plan", "updated your",
+                               "-day plan", "day plan", "is live on the right"))
+    if any(w in lower for w in BOOK_COMPLETE_WORDS) and not any(w in lower for w in _WHOLE_TRIP_WORDS) \
+            and not _last_was_itinerary:
+        # The kind named in the MESSAGE stands alone — "book the Sofitel" declares itself a
+        # hotel booking even when Sasha's previous reply carried no kind words at all
+        # (an LLM stay reply like "Hanoi has some wonderful options…" matched nothing, so
+        # the whole branch used to be skipped and the ask fell to plain chat).
+        _msg_kind = _booking_kind(lower)
+        _last_kind = None
+        if not _msg_kind:
+            _last_kind = _booking_kind(last_assistant)   # what Sasha just offered
+            # Sasha's card offer may be more than one turn back ("thanks" in between must not
+            # reroute "book Tam Vi" to hotels) — scan the last few assistant lines, newest first.
+            if not _last_kind:
+                _assistant_lines = [m.get("content", "").lower() for m in (conversation_history or [])
+                                    if isinstance(m, dict) and m.get("role") == "assistant"]
+                for _line in reversed(_assistant_lines[-4:]):
+                    _last_kind = _booking_kind(_line)
+                    if _last_kind:
+                        break
+        if _msg_kind or _last_kind:
+            _bk = _msg_kind or _last_kind
+            if _bk == "hotel":
+                # No dedicated hotel runner — the general path surfaces hotel cards (FORCED,
+                # since "book the Sofitel" carries no stay word), and the guarded LLM points
+                # at their Book & Pay buttons; a matched name auto-opens the payment popup.
+                return {"intents": ["general"], "primary": "general", "context": user_message,
+                        "force_hotels": True}
             return {"intents": [_bk], "primary": _bk, "context": user_message}
     # Loose affirmation: a short reply that IS or STARTS WITH an affirmation token
     # ("yeah lets do that", "yes please build it", "sure go ahead"), not just an exact
@@ -542,12 +591,41 @@ async def wants_trip_change(message: str, history: list) -> bool:
         return False
 
 
+# Turns where the guest is talking about WHO is travelling. On these, the chat model must not
+# do its own arithmetic — it demonstrably gets it wrong mid-conversation ("I have two
+# daughters" after "three of you total" became "five of you altogether": it ADDED the two
+# instead of replacing the one). The additive party resolver is the single source of truth.
+_PARTY_TALK = ("wife", "husband", "partner", "spouse", "daughter", "son", " kid", "child",
+               "family", "friend", "people", "of us", "together", "alone", "solo", "myself",
+               "travel with", "travelling with", "traveling with", "join", "group", "party of",
+               "how many", "the two of", "the three of", "the four of", "the five of")
+
+
 async def run_general(message: str, history: list, general_prompt: str) -> dict:
     """General Sasha conversation — travel advice, destinations, planning."""
+    system = general_prompt + NEVER_FAKE_BOOKING + NEVER_FAKE_ITINERARY_CHANGE
+    # CURRENT message only: the miscount risk is the turn where the GUEST restates the party.
+    # Triggering off history too made every turn near party talk pay the ~1s resolver call
+    # ("wife" in Sasha's own previous reply added a visible delay to an unrelated answer).
+    if any(w in message.lower() for w in _PARTY_TALK):
+        try:
+            from app.services.itinerary_agent import _resolve_travellers
+            _n = await _resolve_travellers(history, message)
+            system += (
+                f"\n\nPARTY COUNT — AUTHORITATIVE: the travelling party is exactly {_n} "
+                f"{'person' if _n == 1 else 'people'} in total, including the guest, recomputed "
+                "from the entire conversation just now. When you state or imply how many people "
+                "are travelling, use EXACTLY this number. NEVER add up the party yourself — "
+                "recounting mid-conversation is how you previously told a family of four they "
+                "were five. If the guest's latest message seems to change the party, this number "
+                "already reflects it."
+            )
+        except Exception:
+            pass  # never let a resolver hiccup break an ordinary chat turn
     response = await client.messages.create(
         model=CONDUCTOR_MODEL,
         max_tokens=200,  # short spoken replies — voice interface
-        system=cached_system(general_prompt + NEVER_FAKE_BOOKING + NEVER_FAKE_ITINERARY_CHANGE),
+        system=cached_system(system),
         messages=_trim_history(history) + [{"role": "user", "content": message}]
     )
     return {
@@ -667,13 +745,14 @@ async def run_restaurant_intent(message: str, history: list, session_id: "Option
     _h = _req_hint("restaurant", message)
     card = await _stable_card(session_id, "restaurant", dest, lambda: find_restaurants(dest, request_hint=message),
                               hint=_h, always_cache=(_is_book_complete(message) and not _h))
+    card["options"] = _tier_sort(card.get("options", []), message)
     opts = card.get("options", [])
     # Skip deep-link fallback options when naming places aloud. Restaurants carry no price, so
     # unlike the flight/cab/activity handlers there is no has_prices check to fall back on, and
     # a failed search made Sasha say the placeholder as if it were a restaurant:
     # "A few great places to eat in Hanoi — Restaurants · Hanoi."
-    names_list = [o["name"] for o in opts[:3] if o.get("name") and not o.get("fallback")]
-    names = ", ".join(names_list)
+    names_list = [o["name"] for o in opts if o.get("name") and not o.get("fallback")]
+    names = ", ".join(names_list[:3]) + (" and more on the card" if len(names_list) > 3 else "")
 
     # Browsing vs booking are different asks. "book/reserve a table at X" must NOT get the same
     # "here are a few places" list read back — that reads as a repeated non-answer (the guest
@@ -683,23 +762,32 @@ async def run_restaurant_intent(message: str, history: list, session_id: "Option
     lower = message.lower()
     wants_book = any(w in lower for w in
                      ("book", "reserve", "reservation", "table", "make a booking", "get us in"))
-    matched = _match_named(message, names_list)
+    matched = _match_named_ctx(message, names_list, history)
 
     if wants_book and names_list:
         if matched:
             spoken = (f"Great choice — {matched} is pulled up on the right. Tap Book & Pay on its "
                       "card to reserve your table.")
+            card["matched_option"] = matched
+        elif _foreign_referent(message, names_list):
+            spoken = (f"Hmm, I don't see that one on my current list — what I have in {dest} is "
+                      f"{', '.join(names_list[:3])} and more on the card. Tap Book & Pay on any of them, or ask me to look for something else.")
         else:
             spoken = (f"Of course — tap Book & Pay on whichever of these you'd like ({names}) and "
                       "I'll get your table reserved.")
     elif names:
-        spoken = f"A few great places to eat in {dest} — {names}. I've pulled them up for you — tap any one to see the menu and reserve."
+        if _h:
+            # A qualified ask ("seafood", "fine dining") gets the same stable list by design —
+            # acknowledge the request so the repeat doesn't read as Sasha ignoring the guest.
+            spoken = f"For that, my favourite spots in {dest} are {names} — I've pulled them up. Tap any one to see the menu and reserve."
+        else:
+            spoken = f"A few great places to eat in {dest} — {names}. I've pulled them up for you — tap any one to see the menu and reserve."
     else:
         spoken = f"Here's where to find and reserve a table in {dest} — I've pulled it up for you."
     return {"agent": "restaurant", "response": spoken, "data": {"booking": card}}
 
 
-def _match_named(message: str, names: list) -> "Optional[str]":
+def _match_named(message: str, names: list, fuzzy: bool = True) -> "Optional[str]":
     """Best-effort: which listed option (if any) the guest named — tolerant of STT garbling.
 
     Matches a significant word of an option name appearing in the message (either direction),
@@ -708,16 +796,167 @@ def _match_named(message: str, names: list) -> "Optional[str]":
     """
     def norm(s: str) -> str:
         return re.sub(r"[^a-z0-9]", "", (s or "").lower())
-    msg = norm(message)
+    msg_norm = norm(message)
+    all_tokens = re.findall(r"[a-z0-9]+", (message or "").lower())
+    tokset = set(all_tokens)
+    tok4 = [t for t in all_tokens if len(t) >= 4]
     _skip = {"restaurant", "the", "and", "cafe", "bar", "vietnam", "hanoi", "saigon"}
     for name in names:
+        mn = norm(name)
+        # Whole-name run in the normalized stream: catches "TamVi"-style STT junctions for
+        # short-word names that have no 4+ letter token.
+        if mn and len(mn) >= 5 and mn in msg_norm:
+            return name
+        # STT garbles name tails ("Tamv" → Tam Vi): mutual >=4-char prefix on TOKENS. Never
+        # raw substring across word boundaries — "some(thing)"/"every(thing)" used to match
+        # "Pho THIN" and opened the payment popup for the wrong restaurant.
+        if fuzzy and mn and len(mn) >= 4 and any(mn.startswith(t) or t.startswith(mn) for t in tok4):
+            return name
         for w in re.findall(r"[A-Za-z]{4,}", name):
             wl = w.lower()
             if wl in _skip:
                 continue
-            if wl in msg or norm(name) in msg:
+            if wl in tokset:
+                return name
+            if fuzzy and any((t.startswith(wl) or wl.startswith(t)) and min(len(t), len(wl)) >= 4
+                             for t in tok4):
                 return name
     return None
+
+
+_ORDINALS = {"first": 0, "1st": 0, "second": 1, "2nd": 1, "third": 2, "3rd": 2, "last": -1}
+
+# Words that carry no referent in a booking ask — booking verbs, function words, kind nouns,
+# time words, and every Vietnam destination. Whatever remains after stripping these is the
+# guest naming a SPECIFIC thing.
+_BOOKING_STOP = {
+    "book", "books", "booking", "reserve", "reservation", "pay",
+    "can", "could", "would", "will", "you", "please", "for", "me", "us", "the", "a", "an",
+    "it", "that", "this", "one", "get", "make", "made", "my", "our", "your", "in", "at",
+    "to", "and", "of", "on", "now", "again", "also", "yes", "yeah", "okay", "ok", "sure",
+    "go", "ahead", "with", "there", "then", "table", "restaurant", "flight", "flights",
+    "hotel", "hotels", "room", "cab", "taxi", "ride", "car", "transfer", "seat", "seats",
+    "spot", "place", "tonight", "today", "tomorrow", "dinner", "lunch", "breakfast",
+    "perfect", "great", "awesome", "lovely", "nice", "cool", "alright", "right", "well",
+    "then", "lets", "let's", "her", "him", "them", "really", "definitely", "just",
+    "night", "nights", "first", "second", "third", "last", "whole", "trip", "everything",
+    "people", "person", "two", "three", "four", "five", "actually", "want", "like", "need",
+}
+try:
+    from app.services.booking_links import DESTINATIONS as _DESTS
+    for _k, _v in _DESTS.items():
+        _BOOKING_STOP.update(_k.split())
+        _BOOKING_STOP.update(w.lower() for w in _v.split())
+except Exception:
+    pass
+
+
+def _foreign_referent(message: str, names: list) -> bool:
+    """True when the guest explicitly named something that matches NONE of the options —
+    "book grand hotel" over a restaurant card. History fallback must not run then: the
+    July failure shape was answering that with "Tam Vi is pulled up"."""
+    def _n(s):
+        return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+    name_norms = [_n(n) for n in names if n]
+    name_words = {w.lower() for n in names for w in re.findall(r"[A-Za-z]{3,}", n or "")}
+    for tok in re.findall(r"[a-z']+", (message or "").lower()):
+        if len(tok) < 3 or tok in _BOOKING_STOP:
+            continue
+        tn = _n(tok)
+        if tok in name_words or any(len(tn) >= 4 and len(nn) >= 4 and
+                                    (nn.startswith(tn) or tn.startswith(nn)) for nn in name_norms):
+            continue
+        if any(len(tn) >= 4 and len(w) >= 4 and (w.startswith(tn) or tn.startswith(w))
+               for w in name_words):
+            continue
+        return True
+    return False
+
+
+def _match_named_ctx(message: str, names: list, history: list) -> "Optional[str]":
+    """Which listed option the guest means — named in this message, by ordinal ("the second
+    one"), or referenced from recent turns ("Can you book it?" right after Sasha described
+    Tam Vi). The screenshot failure this fixes: an anaphoric booking ask got the generic
+    "tap Book & Pay on whichever of these" instead of the place the guest was clearly
+    talking about."""
+    if not names:
+        return None
+    m = _match_named(message, names)
+    if m:
+        return m
+    low = (message or "").lower()
+    for w, i in _ORDINALS.items():
+        if re.search(rf"\bthe {w}( one)?\b", low) or re.search(rf"\b{w} one\b", low):
+            try:
+                return names[i]
+            except IndexError:
+                return None
+    # The guest named something specific that matches NO option — do not guess from
+    # history; the runner answers honestly instead.
+    if _foreign_referent(message, names):
+        return None
+    # Anaphora / bare booking ask: the referent is whatever single option was discussed most
+    # recently. USER messages are checked first (they name what they mean; keep garble
+    # tolerance), then Sasha's replies with STRICT matching (her free prose misspells names
+    # and once fuzzy-matched a different venue). Messages mentioning 2+ options (her own
+    # list line) are ambiguous and skipped, so "book it" straight after the list stays a
+    # generic prompt — correct.
+    recent = [m for m in (history or [])[-6:] if isinstance(m, dict)]
+    for role, use_fuzzy in (("user", True), ("assistant", False)):
+        for msg in reversed(recent):
+            if msg.get("role") != role:
+                continue
+            content = msg.get("content") or ""
+            hits = [n for n in names if _match_named(content, [n], fuzzy=use_fuzzy)]
+            if len(hits) == 1:
+                return hits[0]
+    return None
+
+
+from app.services.hotels_db import VIETNAM_HOTELS as _VH_POOL
+_HOTEL_GENERIC = {"hotel", "hotels", "resort", "beach", "island", "garden", "village", "house",
+                  "grand", "legend", "luxury", "boutique", "premium", "paradise", "riverside",
+                  "suites", "centre", "center", "residence", "residences", "premier", "hanoi",
+                  "saigon", "trang", "vietnam", "quang", "binh", "giang", "dalat", "danang"}
+_HOTEL_NAME_TOKENS = {w.lower() for _hs in _VH_POOL.values() for _h in _hs
+                      for w in __import__("re").findall(r"[A-Za-z]{5,}", _h.get("name", ""))
+                      } - _HOTEL_GENERIC
+
+
+def _names_hotel(text: str) -> bool:
+    """True when the text mentions a specific property from the hotel pool ("the Sofitel")."""
+    toks = set(re.findall(r"[a-z]{5,}", (text or "").lower()))
+    return bool(toks & _HOTEL_NAME_TOKENS)
+
+
+_LUX_WORDS = ("luxur", "upscale", "high end", "high-end", "fine dining", "five star",
+              "5 star", "5-star", "premium", "fanciest", "finest", "splurge")
+_BUDGET_WORDS = ("cheap", "budget", "affordable", "inexpensive", "low cost", "low-cost",
+                 "street food", "economical", "value")
+
+
+def _price_of(o: dict) -> float:
+    """Numeric price for tier sorting, whatever this option kind carries."""
+    v = o.get("amount_usd") or o.get("per_person_usd")
+    if v:
+        return float(v)
+    m = re.search(r"\d+", str(o.get("price") or ""))
+    return float(m.group()) if m else 0.0
+
+
+def _tier_sort(options: list, message: str) -> list:
+    """Reorder card options to honour a tier-worded ask ('luxury', 'cheapest', 'street
+    food', 'michelin') — the data carries prices and tiers, so use them. Reorders only,
+    never drops: the card still shows everything, and the spoken top-3 matches the ask."""
+    low = (message or "").lower()
+    opts = list(options)
+    if "michelin" in low:
+        opts.sort(key=lambda o: 0 if "michelin" in str(o.get("detail", "")).lower() else 1)
+    elif any(w in low for w in _LUX_WORDS):
+        opts.sort(key=lambda o: -_price_of(o))
+    elif any(w in low for w in _BUDGET_WORDS):
+        opts.sort(key=lambda o: _price_of(o) or 10 ** 9)
+    return opts
 
 
 def _dest_in_play(message: str, history: list) -> str:
@@ -725,6 +964,22 @@ def _dest_in_play(message: str, history: list) -> str:
     htext = " ".join(m.get("content", "") for m in (history or []) if isinstance(m, dict))
     found = _find_destinations(message) or _find_destinations(htext)
     return found[0] if found else "Vietnam"
+
+
+def _route_dest(message: str, history: list) -> str:
+    """Destination for a ROUTE phrase — the city after the last " to ".
+
+    _find_destinations returns matches in DESTINATIONS-dict order, so "flight from Hanoi to
+    Phu Quoc" used to resolve to HANOI (the origin) and Sasha searched flights to the city
+    the guest was leaving. Flights and cabs use this; everything else keeps _dest_in_play.
+    """
+    m = (message or "").lower()
+    idx = m.rfind(" to ")
+    if idx != -1:
+        found = _find_destinations(m[idx + 4:])
+        if found:
+            return found[0]
+    return _dest_in_play(message, history)
 
 
 def _named_options(options: list, limit: int = 3) -> str:
@@ -804,13 +1059,30 @@ async def _stable_card(session_id, kind: str, dest: str, fetch,
 
 async def run_flight_intent(message: str, history: list, session_id: "Optional[str]" = None) -> dict:
     """Real flight options via live web search — surfaced as a booking card."""
-    dest = _dest_in_play(message, history)
+    dest = _route_dest(message, history)
     _h = _req_hint("flight", message)
     card = await _stable_card(session_id, "flight", dest, lambda: find_flights(dest, when=message),
                               hint=_h, always_cache=(_is_book_complete(message) and not _h))
+    if "cheapest" in (message or "").lower():
+        card["options"] = sorted(card.get("options", []), key=_price_of)
+    else:
+        card["options"] = _tier_sort(card.get("options", []), message)
     opts = card.get("options", [])
     has_prices = any(o.get("price") for o in opts)
-    if has_prices:
+    names_list = [o["name"] for o in opts if o.get("name") and not o.get("fallback")]
+    matched = _match_named_ctx(message, names_list, history) if (_is_book_complete(message) and names_list) else None
+    if _is_book_complete(message) and names_list:
+        if matched:
+            spoken = (f"Great — the {matched} flight is pulled up on the right. Tap Book & Pay "
+                      "on its card and I'll get your seats held.")
+            card["matched_option"] = matched
+        elif _foreign_referent(message, names_list):
+            spoken = (f"I don't see that airline on the current list — what I have is "
+                      f"{', '.join(names_list[:3])} and more on the card. Tap Book & Pay on any of them, or ask me to search again.")
+        else:
+            spoken = (f"Of course — tap Book & Pay on whichever flight suits you best "
+                      f"({', '.join(names_list[:3])}) and I'll take care of it.")
+    elif has_prices:
         spoken = f"I found a few flights to {dest} — {_named_options(opts)}. I've pulled them up — just tap one to book."
     else:
         spoken = f"Here's where to compare and book your flights to {dest} — I've pulled it up for you."
@@ -843,13 +1115,27 @@ async def run_cab_intent(message: str, history: list, session_id: "Optional[str]
         spoken = ("Happy to sort a ride for you! Where are you being picked up, and where are you "
                   "heading to? Once I know the route I'll pull up the best cars and taxis with fares.")
         return {"agent": "cab", "response": spoken, "data": {}}
-    dest = _dest_in_play(message, history)
+    dest = _route_dest(message, history)
     _h = _req_hint("cab", message)
     card = await _stable_card(session_id, "cab", dest, lambda: find_cabs(dest, detail_hint=message),
                               hint=_h, always_cache=(_is_book_complete(message) and not _h))
+    card["options"] = _tier_sort(card.get("options", []), message)
     opts = card.get("options", [])
     has_prices = any(o.get("price") for o in opts)
-    if has_prices:
+    names_list = [o["name"] for o in opts if o.get("name") and not o.get("fallback")]
+    matched = _match_named_ctx(message, names_list, history) if (_is_book_complete(message) and names_list) else None
+    if _is_book_complete(message) and names_list:
+        if matched:
+            spoken = (f"Done — {matched} is pulled up on the right. Tap Book & Pay on its card "
+                      "and your ride is set.")
+            card["matched_option"] = matched
+        elif _foreign_referent(message, names_list):
+            spoken = (f"I don't see that provider on the current list — what I have is "
+                      f"{', '.join(names_list[:3])}. Tap Book & Pay on any of them, or ask me to look again.")
+        else:
+            spoken = (f"Of course — tap Book & Pay on whichever ride you'd like "
+                      f"({', '.join(names_list[:3])}) and I'll sort it out.")
+    elif has_prices:
         spoken = f"For getting around {dest}, here are a few transfer options — {_named_options(opts)}. Tap any one to book."
     else:
         spoken = f"Here's where to book a private car or taxi for {dest} — I've pulled it up for you."
@@ -860,9 +1146,22 @@ async def run_activity_intent(message: str, history: list) -> dict:
     """Real bookable activities via live web search — surfaced as a booking card."""
     dest = _dest_in_play(message, history)
     card = await find_activities(dest, interest=message)
+    card["options"] = _tier_sort(card.get("options", []), message)
     opts = card.get("options", [])
     has_prices = any(o.get("price") for o in opts)
-    if has_prices:
+    names_list = [o["name"] for o in opts if o.get("name") and not o.get("fallback")]
+    matched = _match_named_ctx(message, names_list, history) if (_is_book_complete(message) and names_list) else None
+    if _is_book_complete(message) and names_list:
+        if matched:
+            spoken = (f"Lovely choice — {matched} is pulled up on the right. Tap Book on its "
+                      "card to reserve your spot.")
+        elif _foreign_referent(message, names_list):
+            spoken = (f"I don't see that one on the current list — what I have is "
+                      f"{', '.join(names_list[:3])} and more on the card. Tap Book on any of them, or ask me for other ideas.")
+        else:
+            spoken = (f"Of course — tap Book on whichever one you'd like "
+                      f"({', '.join(names_list[:3])}) and you're all set.")
+    elif has_prices:
         spoken = f"A few things you can book in {dest} — {_named_options(opts)}. I've pulled them up with prices and links."
     else:
         spoken = f"Here are some experiences you can book in {dest} — I've pulled it up for you."
@@ -903,16 +1202,19 @@ async def run_smart_sasha_intent(message: str, history: list) -> dict:
         "data": {"tools_used": result.get("tools_used", [])}
     }
 
-async def run_itinerary_intent(message: str, history: list) -> dict:
-    """Build the full day-by-day itinerary and surface it to the UI."""
-    from app.services.itinerary_agent import build_itinerary
-    itin = await build_itinerary(message, history)
-    if not itin:
+async def run_itinerary_intent(message: str, history: list,
+                               current_itinerary: "Optional[dict]" = None) -> dict:
+    """Build (or locally revise) the full day-by-day itinerary and surface it to the UI."""
+    from app.services.itinerary_agent import build_itinerary, _is_revision
+    itin = await build_itinerary(message, history, current_itinerary=current_itinerary)
+    if not itin and not _is_revision(message):
         # The builder occasionally returns nothing (LLM returned malformed JSON, etc.).
         # Retry once — a bare empty response leaves the avatar silent AND the panel stale,
         # which is exactly the "it said ready but nothing changed" failure. One more try
-        # usually succeeds.
-        itin = await build_itinerary(message, history)
+        # usually succeeds. Revisions do NOT retry: they run the slow LLM path, and two
+        # attempts blew through the 45s agent ceiling into the generic failure line —
+        # better to ask the guest to try once more than to time the whole turn out.
+            itin = await build_itinerary(message, history, current_itinerary=current_itinerary)
     if not itin:
         # Still failed — speak a graceful line instead of going silent, and do NOT claim
         # the plan is on the right (it isn't).
@@ -925,10 +1227,16 @@ async def run_itinerary_intent(message: str, history: list) -> dict:
             "data": {},
         }
     n = len(itin.get("days", []))
-    spoken = (
-        f"Here's your full {n}-day itinerary — take a look on the right! Have a browse, and "
-        "just tell me if you'd like to swap any of the hotels or activities."
-    )
+    if _is_revision(message):
+        spoken = (
+            f"Done — I've updated your {n}-day plan, it's on the right. "
+            "Anything else you'd like to change?"
+        )
+    else:
+        spoken = (
+            f"Here's your full {n}-day itinerary — take a look on the right! Have a browse, and "
+            "just tell me if you'd like to swap any of the hotels or activities."
+        )
     return {"agent": "itinerary", "response": spoken, "data": {"itinerary": itin}}
 
 
@@ -1021,6 +1329,16 @@ async def conduct(
     if conversation_history is None:
         conversation_history = []
 
+    # An empty/whitespace transcript (a mic blip) must never reach the LLM — Anthropic 400s
+    # on empty content, both run_general calls fail, and the guest heard "I'm having a brief
+    # connection issue" for saying nothing.
+    if not (user_message or "").strip():
+        return {"response": "Sorry, I didn't catch that — could you say it again?",
+                "intents": ["general"], "photos": [], "tools_used": [], "links": [],
+                "hotels": [], "bookings": [], "itinerary": None, "action": None,
+                "booking_ref": None, "itinerary_id": None,
+                "messages": list(conversation_history)}
+
     # Recent conversation text — used so booking links/hotels keep the destination in mind
     # across turns (e.g. the city was named two turns ago, not in this message).
     history_text = " ".join(
@@ -1064,6 +1382,7 @@ async def conduct(
     has_itinerary = bool(stored_itinerary) if session_id else None
 
     # Step 2 — Classify intents (unless the caller already told us the intent)
+    classification = {}
     if force_intent and force_intent in AGENT_REGISTRY:
         intents = [force_intent]
         context = user_message
@@ -1076,7 +1395,15 @@ async def conduct(
         # Semantic backstop: a change to an EXISTING plan that the keyword layer missed must
         # still rebuild, not fall through to chat where Sasha would only TALK about the change.
         # Scoped to the pure-chat fallthrough so it never hijacks a specific booking intent.
-        if has_itinerary and intents == ["general"] and await wants_trip_change(user_message, conversation_history):
+        _REV_VERB = re.compile(
+            r"\b(swap|replace|switch|remove|drop|skip|instead|cheaper|upgrade|luxur\w*|add|include|change)\b"
+            r"|take out|get rid|don'?t want|no longer", re.I)
+        if has_itinerary and not ({"itinerary", "book_trip", "flight", "cab", "restaurant"} & set(intents)) \
+                and _REV_VERB.search(user_message) \
+                and not re.search(r"photo|picture|image|\bfoto\b", user_message.lower()):
+            print("[Conductor] plan-change wording over a stored plan — routing to itinerary")
+            intents = ["itinerary"]
+        elif has_itinerary and intents == ["general"] and await wants_trip_change(user_message, conversation_history):
             print("[Conductor] general fell through but guest wants a plan change — routing to itinerary")
             intents = ["itinerary"]
 
@@ -1103,7 +1430,14 @@ async def conduct(
         "book a hotel", "find a hotel", "find me a hotel", "recommend a hotel", "need a hotel",
         "want a hotel", "hotel recommendation", "hotels in", "stay in ",
     ))
-    _want_hotels = (not _specific_booking) or _strong_stay
+    _stay_hint = _strong_stay or any(w in _lower_msg for w in ("hotel", "stay", "resort", "accommodation"))
+    # Hotels surface ONLY on a stay cue. The old rule ((not specific) or strong_stay) pushed
+    # hotel cards on chit-chat/general/itinerary/book_trip turns: "thanks" wiped the restaurant
+    # card the guest was about to book and replaced it with hotel Book & Pay buttons (the July
+    # "paid for a Sofitel instead of a table" shape), and the itinerary turn offered a hotels-
+    # only checkout price that disagreed with the trip total beside it.
+    _want_hotels = (_stay_hint and not (_specific_booking and not _strong_stay)) \
+        or bool(classification.get("force_hotels"))
     early_hotels = recommend_hotels(user_message, "", intents, history_text) if _want_hotels else []
     if early_hotels:
         _hcity = early_hotels[0].get("city", "") or _dest_in_play(user_message, conversation_history)
@@ -1152,6 +1486,11 @@ async def conduct(
         elif intent in ("flight", "cab", "restaurant"):
             # These cache their cards per session, so pass the session for stable results.
             tasks.append((intent, runner(user_message, conversation_history, session_id=session_id)))
+        elif intent == "itinerary":
+            # Pass the STORED plan so revisions edit what the guest is looking at (and
+            # rebuilds keep its route) instead of re-deriving from a history window.
+            _cur = (stored_itinerary or {}).get("payload") if isinstance(stored_itinerary, dict) else None
+            tasks.append((intent, runner(user_message, conversation_history, current_itinerary=_cur)))
         else:
             tasks.append((intent, runner(user_message, conversation_history)))
 
@@ -1338,6 +1677,16 @@ async def conduct(
     else:
         hotels = []
 
+    # Tier-worded stay asks ("luxury hotels", "budget hotels") must be honoured by the FINAL
+    # list — the static-cache rows arrive in curated flagship-first order and previously
+    # overrode any earlier sorting. Reorder here, whatever the source.
+    if hotels:
+        _hl = user_message.lower()
+        if any(w in _hl for w in _LUX_WORDS):
+            hotels = sorted(hotels, key=lambda h: (-(h.get("stars", 0)), -(h.get("price_from", 0))))
+        elif any(w in _hl for w in _BUDGET_WORDS):
+            hotels = sorted(hotels, key=lambda h: h.get("price_from", 10 ** 9))
+
     # ── Persist bookable offers so each card checks out at a SERVER-SET price ──────────
     # Same trust model as the whole trip: a hotel/flight/cab is priced from its stored offer at
     # checkout, never from an amount the browser sends (flight/cab fares are LLM-generated per
@@ -1348,11 +1697,19 @@ async def conduct(
         # stored one), falling back to a single night when no trip exists yet.
         _nsrc = itinerary if (itinerary and itinerary.get("days")) else (
             (stored_itinerary or {}).get("payload") if isinstance(stored_itinerary, dict) else None)
-        _nights = len((_nsrc or {}).get("days", [])) or 1
+        # Nights = days - 1 (the last day is departure) — the SAME model the itinerary's own
+        # cost breakdown uses (_enrich skips the final day's night). Billing len(days) nights
+        # made the hotel card price disagree with the trip total on screen.
+        _days = len((_nsrc or {}).get("days", []))
+        _nights = max(1, _days - 1) if _days else 1
         # Party size (for per-head pricing, e.g. a restaurant table) — from the trip if one
-        # exists, else assume a couple.
+        # exists, else from what the GUEST has said (a solo guest who just told Sasha
+        # "I'm travelling alone" must not be quoted "Table for 2"), else assume a couple.
         _party = ((_nsrc or {}).get("cost_breakdown") or {}).get("travellers") \
-            or (_nsrc or {}).get("travellers") or 2
+            or (_nsrc or {}).get("travellers")
+        if not _party:
+            from app.services.itinerary_agent import _travellers_from
+            _party = _travellers_from(conversation_history, user_message)
         try:
             _party = int(_party)
         except (TypeError, ValueError):
@@ -1390,6 +1747,11 @@ async def conduct(
                     else:
                         amt = int(o.get("amount_usd") or 0)
                         label = f"{card.get('title') or kind.title()} · {o.get('name', '')}"
+                        # A flight fare is per SEAT (cabs are per vehicle) — say so on the
+                        # label the guest sees at checkout, so a 4-traveller party isn't led
+                        # to think one tap covers everyone.
+                        if kind == "flight":
+                            label += " · per person"
                     if amt <= 0:
                         continue   # fallback/no-price options remain a plain external link
                     oid = str(uuid.uuid4())
@@ -1404,8 +1766,52 @@ async def conduct(
                 except Exception as e:
                     print(f"[Conductor] {kind} offer persist failed: {e}")
 
+    # Voice-driven single-item booking: the guest named (or contextually meant) ONE option
+    # on a card ("book Tam Vi", "reserve it"). Now that its server-priced offer exists,
+    # hand the frontend everything it needs to open the payment popup directly — the guest
+    # asked Sasha to book, not to be told which button to press. Never stomps a whole-trip
+    # await_payment.
+    payment_item = None
+    if not action:
+        for _card in (bookings or []):
+            _m = _card.pop("matched_option", None)
+            if not _m or payment_item:
+                continue
+            for _o in _card.get("options", []):
+                if _o.get("name") == _m and _o.get("offer_id") and (_o.get("amount_usd") or 0) > 0:
+                    payment_item = {
+                        "offer_id": _o["offer_id"],
+                        "label": f"{_card.get('title') or _card.get('type', '').title()} · {_o['name']}",
+                        "amount_usd": _o["amount_usd"],
+                        "kind": _card.get("type", ""),
+                        "name": _o["name"],
+                    }
+                    break
+        # A named HOTEL booking ("book the Sofitel") routes through the general/stay path —
+        # its offers live on the hotels list, not a card.
+        if not payment_item and hotels and any(w in _lower_msg for w in BOOK_COMPLETE_WORDS):
+            _hm = _match_named(user_message, [h.get("name", "") for h in hotels])
+            if _hm:
+                for _h in hotels:
+                    if _h.get("name") == _hm and _h.get("offer_id") and (_h.get("amount_usd") or 0) > 0:
+                        payment_item = {
+                            "offer_id": _h["offer_id"],
+                            "label": f"{_h.get('nights', 1)} night{'s' if _h.get('nights', 1) != 1 else ''} · {_h['name']}",
+                            "amount_usd": _h["amount_usd"],
+                            "kind": "hotel",
+                            "name": _h["name"],
+                        }
+                        break
+    if payment_item:
+        action = "await_payment_item"
+        final_response = (
+            f"Great choice — {payment_item['name']}. I've opened the booking for you — "
+            "just pop in your name and email, and tap Pay to confirm."
+        )
+
     return {
         "response": final_response,
+        "payment_item": payment_item,
         "intents": intents,
         "photos": photos,
         "tools_used": tools_used,

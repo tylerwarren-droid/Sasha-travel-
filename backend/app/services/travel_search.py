@@ -59,6 +59,51 @@ _CARD_TTL_S = float(os.getenv("FINDER_CACHE_TTL_S", "1800"))  # 30 min ≈ one d
 _card_cache: dict = {}
 
 
+# ── Static demo cache ───────────────────────────────────────────────────────
+# Pre-scraped Vietnam data (all card kinds + hotels, per destination), generated offline by
+# scripts/build_vietnam_cache.py. When an entry exists here, the finder returns it with ZERO
+# network calls — no web search, no LLM — so a card turn answers in milliseconds instead of
+# 3-12s. The file is committed/deployed with the app; regenerate it before a demo to refresh
+# prices. Keys: "flight|hanoi", "restaurant|ho chi minh city", "hotel|da nang", ...
+#
+# DEMO_CACHE_ONLY (default ON) additionally disables live web search on a cache MISS:
+# _web_search_json returns [] immediately, so the existing fallback paths render a deep-link
+# card instantly (and resolve_hotels falls back to the curated hotels_db list). The demo is
+# Vietnam-only and every Vietnam destination is pre-cached, so nothing should ever need the
+# live web; a miss stalling the room for 12s is strictly worse than an instant deep-link.
+# Set DEMO_CACHE_ONLY=0 to re-enable live search for uncached destinations later.
+_STATIC_CACHE_FILE = os.getenv(
+    "DEMO_CACHE_FILE",
+    os.path.join(os.path.dirname(__file__), "..", "data", "vietnam_demo_cache.json"),
+)
+_DEMO_CACHE_ONLY = os.getenv("DEMO_CACHE_ONLY", "1").strip() in ("1", "true", "yes")
+
+
+def _load_static_cache() -> dict:
+    try:
+        with open(_STATIC_CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        entries = data.get("entries") or {}
+        if entries:
+            print(f"[travel_search] static demo cache loaded: {len(entries)} entries "
+                  f"(built {data.get('generated_at', '?')})")
+        return entries
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        print(f"[travel_search] static demo cache unreadable, ignoring: {e}")
+        return {}
+
+
+_static_cache: dict = _load_static_cache()
+
+
+def _static_get(kind: str, dest: str):
+    """Pre-scraped entry for (kind, dest), else None. Always returns a private copy."""
+    hit = _static_cache.get(f"{kind}|{(dest or '').strip().lower()}")
+    return copy.deepcopy(hit) if hit is not None else None
+
+
 def _is_fallback(card: dict) -> bool:
     """True when the search failed and the card is just a deep-link placeholder."""
     return any(o.get("fallback") for o in (card.get("options") or []))
@@ -66,6 +111,11 @@ def _is_fallback(card: dict) -> bool:
 
 async def _resolve_once(kind: str, dest: str, build):
     """Return a previously-resolved card for this (kind, dest), else build and remember it."""
+    # Pre-scraped demo data wins outright: deterministic, instant, and identical on every
+    # turn — exactly the stability property this cache exists for, minus the first-hit search.
+    static = _static_get(kind, dest)
+    if static is not None:
+        return static
     key = (kind, (dest or "").strip().lower())
     now = time.monotonic()
     hit = _card_cache.get(key)
@@ -84,6 +134,10 @@ async def _web_search_json(query: str, max_tokens: int = 700) -> list:
 
     Returns [] on timeout, error, or unparseable output — callers supply a deep-link fallback.
     """
+    if _DEMO_CACHE_ONLY:
+        # Demo mode: never touch the live web. A static-cache miss degrades to the instant
+        # deep-link fallback instead of a 3-12s search the audience would sit through.
+        return []
     try:
         resp = await asyncio.wait_for(
             client.messages.create(
@@ -345,6 +399,9 @@ async def find_hotels_live(dest: str, prefs: str = "") -> list:
     """
     if not dest:
         return []
+    static = _static_get("hotel", dest)
+    if static is not None:
+        return static
     q = (
         f"Find 3 real hotels to stay at in {dest}, Vietnam"
         f"{(' — ' + prefs) if prefs else ''}. Use real, currently-operating properties and realistic "

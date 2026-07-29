@@ -47,7 +47,7 @@ function Pills({ active, onSelect }: { active: DemoKey; onSelect: (k: DemoKey) =
 }
 
 export default function DemoPortal() {
-  const [active, setActive] = useState<DemoKey>('lt')
+  const [active, setActive] = useState<DemoKey>('vn')  // the demo IS Vietnam — open on it
   const current = DEMOS.find(d => d.key === active)!
 
   return (

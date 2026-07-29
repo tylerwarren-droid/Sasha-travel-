@@ -84,6 +84,78 @@ const BARGE_IN_FRAMES = 40           // ~100ms sustained — rejects transient r
 // answering (e.g. repeating the avatar's options like "mix of everything") — never
 // discard those, or the avatar appears to "stop hearing" the user.
 const ECHO_WINDOW_MS = 1000
+// Turn-hold after Deepgram declares end-of-speech, before the transcript is submitted.
+// Deepgram's endpointing fires speech_final after just 300ms of silence — a natural
+// mid-sentence pause — which made Sasha answer half-finished thoughts. The hold gives the
+// guest time to resume (which cancels it and merges the fragments into one turn):
+//  - transcript already ends in . ! ? → almost certainly finished → short hold, snappy reply
+//  - trailing off unpunctuated ("I want to go to…") → likely thinking → wait longer
+const TURN_HOLD_DONE_MS = 350       // asked a question / gave a directive / short answer
+const TURN_HOLD_DECLARATIVE_MS = 1300  // complete sentence but only setting context — guests
+                                       // routinely breathe ~1s and continue ("I'm traveling
+                                       // from India with my wife. [pause] For seven days.")
+const TURN_HOLD_PAUSE_MS = 1000
+// A false start ("But…", "That…", "so we want to…") is grammatically incomplete — a lone
+// connector word, or a turn ending in a conjunction/preposition/article. Guests follow these
+// with LONG thinking pauses (2-4s), far beyond the normal hold, and submitting them made
+// Sasha reply to one word ("Sorry, go ahead — what were you thinking?") three times in a
+// session. Give these a much longer runway; if nothing more ever comes, they still submit
+// and Sasha handles the fragment gracefully.
+const TURN_HOLD_FRAGMENT_MS = 2500
+// A single connector/filler word alone is a false start ("But…", "That…", "Well…").
+// Trailing words are judged separately: "that"/"it" at the END of a phrase usually
+// COMPLETE it ("let's do that", "book it") and must stay snappy, while a trailing
+// conjunction/preposition/article ("we want to go to…") means the guest is mid-thought.
+const ALONE_FRAGMENT_WORDS = new Set([
+  'but', 'and', 'so', 'that', 'or', 'because', 'then', 'also', 'if', 'the', 'a', 'an',
+  'to', 'with', 'my', 'our', 'i', 'we', 'it', 'is', 'um', 'uh', 'well', 'hmm', 'like',
+  'actually', 'maybe', 'plus', 'what',
+])
+const TRAILING_FRAGMENT_WORDS = new Set([
+  'but', 'and', 'so', 'or', 'because', 'then', 'if', 'to', 'with', 'for', 'of', 'in',
+  'on', 'at', 'the', 'a', 'an', 'my', 'our', 'i', 'we', 'is', 'are', 'was', 'um', 'uh',
+  'well', 'hmm', 'plus', 'than', 'about', 'around', 'near', 'from', 'into',
+])
+// A turn ending in a place name is complete however it parses ("what can we do in Hoi An"
+// must not be read as trailing off at the article 'an').
+const ENDS_WITH_PLACE = new RegExp(
+  '\\b(hoi an|ha ?long( bay)?|da ?nang|phu ?quoc|da ?lat|mui ne|con dao|nha trang|' +
+  'ninh binh|sa ?pa|hanoi|saigon|ho chi minh( city)?|hue|vietnam|mekong( delta)?)$')
+// A pure greeting ("Hey, Sasha.") is an opener, never a whole turn — the ask is coming.
+const GREETING_WORDS = new Set(['hey', 'hi', 'hello', 'sasha', 'shasha', 'sacha', 'there',
+                                'good', 'morning', 'afternoon', 'evening', 'again'])
+const isFragmentTurn = (t: string): boolean => {
+  const clean = t.toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim()
+  const words = clean.split(' ').filter(Boolean)
+  if (!words.length) return true
+  if (words.every(w => GREETING_WORDS.has(w))) return true
+  if (ENDS_WITH_PLACE.test(clean)) return false
+  if (words.length === 1) return ALONE_FRAGMENT_WORDS.has(words[0])
+  return TRAILING_FRAGMENT_WORDS.has(words[words.length - 1])
+}
+
+// Words that make a sentence an ASK — something Sasha should act on now. A punctuated
+// sentence WITHOUT any of these is narrative context, and guests often keep narrating.
+const DIRECTIVE_WORDS = new Set([
+  'show', 'find', 'book', 'reserve', 'build', 'plan', 'create', 'make', 'tell', 'give',
+  'recommend', 'suggest', 'help', 'need', 'want', 'search', 'look', 'get', 'add', 'remove',
+  'swap', 'change', 'cheaper', 'upgrade', 'please', 'can', 'could', 'would', 'what',
+  'where', 'when', 'which', 'how', 'why', 'who', 'yes', 'no', 'okay', 'ok', 'sure',
+])
+
+// The turn-end hold, graded by how finished the utterance actually is.
+const holdFor = (text: string): number => {
+  if (isFragmentTurn(text)) return TURN_HOLD_FRAGMENT_MS
+  const t = text.trim()
+  if (/\?$/.test(t)) return TURN_HOLD_DONE_MS          // asked Sasha something — done
+  const words = t.toLowerCase().replace(/[^a-z' ]/g, ' ').split(/\s+/).filter(Boolean)
+  if (/[.!]$/.test(t)) {
+    if (words.length <= 4) return TURN_HOLD_DONE_MS     // short answer ("Seven days.")
+    if (words.some(w => DIRECTIVE_WORDS.has(w))) return TURN_HOLD_DONE_MS
+    return TURN_HOLD_DECLARATIVE_MS                     // context-setting — may continue
+  }
+  return TURN_HOLD_PAUSE_MS                             // unpunctuated trailing pause
+}
 // Real acoustic echo is a multi-word fragment of the avatar's sentence. A SHORT reply
 // ("Hanoi", "yes please", "the beach") that happens to echo a word the avatar just said is
 // almost always the user genuinely answering — and the mic is muted while the avatar
@@ -277,7 +349,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
 
       const dgLang = DG_LANG[languageRef.current || 'en'] || 'en-US'
       const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${ctx.sampleRate}&channels=1&model=nova-3&language=${dgLang}&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
+        `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${ctx.sampleRate}&channels=1&model=nova-3&language=${dgLang}&smart_format=true&interim_results=true&endpointing=150&utterance_end_ms=1000&vad_events=true`,
         ['token', dgKey]
       )
       wsRef.current = ws
@@ -295,6 +367,14 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       // Dedup state for BUG 4 — scoped to this connection's lifetime
       let lastFinal = ''
       let lastFinalAt = 0
+      // Turn-hold: Deepgram's endpointing (300ms) fires speech_final on any natural
+      // mid-sentence pause, and firing immediately made Sasha answer half a sentence
+      // ("I want to go to…" → she replies before "…Hanoi with my wife" arrives). Instead
+      // of firing on speech_final, HOLD briefly; if the guest resumes (SpeechStarted or a
+      // fresh interim), cancel the hold and keep accumulating — the fragments merge into
+      // one turn. A transcript that already ends in terminal punctuation is very likely a
+      // finished sentence, so it gets a short hold; a trailing/unpunctuated one waits longer.
+      let pendingFire: any = null
 
       ws.onopen = async () => {
         // Guard against StrictMode race: cleanup may have nulled wsRef while WS was connecting
@@ -381,6 +461,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         try {
           const data = JSON.parse(event.data)
           if (data.type === 'SpeechStarted') {
+            clearTimeout(pendingFire)   // guest resumed — this turn isn't over
             setIsSpeaking(true)
             onSpeakingChangeRef.current?.(true)
           }
@@ -412,25 +493,40 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
             onTranscriptRef.current?.(final)
           }
 
-          // Accumulate is_final fragments; fire only when speech_final === true
-          if (data.type === 'Results' && data.is_final === true) {
+          const scheduleFire = () => {
+            clearTimeout(pendingFire)
+            // Hold graded by how finished the utterance is: question/directive/short
+            // answer → fast; declarative narration → breathing room; fragment → longest.
+            const hold = holdFor(transcriptRef.current)
+            pendingFire = setTimeout(() => {
+              if (transcriptRef.current.length >= 3) {
+                const final = transcriptRef.current
+                transcriptRef.current = ''
+                fireTranscript(final)
+              }
+            }, hold)
+          }
+
+          if (data.type === 'Results') {
             const fragment = data.channel?.alternatives?.[0]?.transcript || ''
-            if (fragment) {
-              transcriptRef.current = transcriptRef.current
-                ? `${transcriptRef.current} ${fragment}`
-                : fragment
-            }
-            if (data.speech_final === true && transcriptRef.current.length >= 3) {
-              const final = transcriptRef.current
-              transcriptRef.current = ''
-              fireTranscript(final)
+            if (data.is_final === true) {
+              // Accumulate is_final fragments; the hold below decides when the turn is over.
+              if (fragment) {
+                transcriptRef.current = transcriptRef.current
+                  ? `${transcriptRef.current} ${fragment}`
+                  : fragment
+              }
+              if (data.speech_final === true && transcriptRef.current.length >= 3) {
+                scheduleFire()
+              }
+            } else if (fragment) {
+              // A non-empty interim means the guest is mid-word again — not done.
+              clearTimeout(pendingFire)
             }
           }
           // UtteranceEnd fallback — fires if speech_final never came
           if (data.type === 'UtteranceEnd' && transcriptRef.current.length >= 3) {
-            const final = transcriptRef.current
-            transcriptRef.current = ''
-            fireTranscript(final)
+            scheduleFire()
           }
         } catch(e) {}
       }
@@ -443,6 +539,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         console.warn('[DG] socket error (readyState', ws.readyState, ') — reconnect handled on close')
       }
       ws.onclose = (e) => {
+        clearTimeout(pendingFire)
         console.log('[DG] closed:', e.code, e.reason)
         const wasActiveSocket = wsRef.current === ws
         if (!wasActiveSocket) return  // superseded socket — ignore

@@ -242,7 +242,7 @@ def execute_tool_sync(tool_name: str, tool_input: dict) -> Any:
 
     elif tool_name == "arrange_transfer":
         return {
-            "confirmed": True,
+            "status": "request_noted",  # a plan, not a booking — nothing is reserved yet
             "pickup": f"{tool_input['hotel_name']} at {tool_input['pickup_time']}",
             "destination": tool_input["course_name"],
             "return_transfer": "Arranged approx 4.5 hours after tee time",
@@ -257,7 +257,7 @@ def execute_tool_sync(tool_name: str, tool_input: dict) -> Any:
         course = get_course_by_name(tool_input.get("course_name", ""))
         cost = course.get("club_hire_usd", 40) if course else 40
         return {
-            "confirmed": True,
+            "status": "request_noted",  # quoted from the course sheet — reserved onsite, not by us
             "brand": brand,
             "sets": sets,
             "total_usd": cost * sets,
@@ -267,7 +267,14 @@ def execute_tool_sync(tool_name: str, tool_input: dict) -> Any:
     return {"error": f"Unknown tool: {tool_name}"}
 
 
-SYSTEM_PROMPT = f"""You are Sasha's golf specialist for Vietnam. You help travelers plan and book golf at any of Vietnam's {get_total_course_count()} courses in our database.
+SYSTEM_PROMPT = f"""You are Sasha's golf specialist for Vietnam.
+
+ABSOLUTE HONESTY RULE: NEVER tell the guest a booking, transfer, or equipment hire is
+CONFIRMED or SENT unless a tool returned sent=true. Tool results with status "request_noted"
+are plans you have prepared, not reservations — describe them as "I can arrange", never
+"it's confirmed". If the email tool returns an error, say the request could not be sent and
+give the course's own contact/booking link instead. A fabricated confirmation is the single
+worst thing you can do. You help travelers plan and book golf at any of Vietnam's {get_total_course_count()} courses in our database.
 
 Regions covered: Danang/Hoi An, Ho Chi Minh City/Saigon, Hanoi, Ho Tram, Phu Quoc, Nha Trang, Da Lat, Hai Phong.
 

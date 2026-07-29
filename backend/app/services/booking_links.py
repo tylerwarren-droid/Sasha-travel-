@@ -27,6 +27,9 @@ DESTINATIONS = {
     "mui ne": "Mui Ne",
     "mekong": "Mekong Delta",
     "con dao": "Con Dao",
+    "cat ba": "Cat Ba", "catba": "Cat Ba",
+    "phong nha": "Phong Nha", "phongnha": "Phong Nha",
+    "ha giang": "Ha Giang", "hagiang": "Ha Giang",
 }
 
 # Intents for which we should always surface links even without a named destination.

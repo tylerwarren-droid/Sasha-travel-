@@ -76,6 +76,14 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
   // Single source of truth for "the avatar is mid-response". Drives idempotent gate
   // opening — we deliberately do NOT count speak segments (see speak-handler block).
   const speakingRef = useRef(false)
+  // Remote-audio silence release (the definitive fix for dropped speak_ended events): an
+  // AnalyserNode on the avatar's own audio track. When she has actually been silent for
+  // ~1.1s while speakingRef still says "speaking", the utterance is over regardless of
+  // whether LiveAvatar ever delivered the final speak_ended — previously a single dropped
+  // event left the mic gated until the 30s greeting watchdog (a ~17s deaf mic after a 13s
+  // greeting, which read as "she is not hearing me").
+  const audioWatchRef = useRef<any>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'bad' | null>(null)
@@ -180,6 +188,39 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         if (videoRef.current) {
           avatar.attach(videoRef.current)
           videoRef.current.play().catch((e: any) => console.warn('Autoplay blocked:', e))
+          // Watch the avatar's OWN audio output. Event-independent end-of-speech: if we've
+          // heard her audio during this utterance and it's now been quiet for ~1.1s, the
+          // utterance is over — release the mic even when the final speak_ended never
+          // arrives. `heard` guards the startup latency between speak_started and the
+          // first audio frame, so we never release before she has begun talking.
+          try {
+            const srcObj = videoRef.current.srcObject
+            if (srcObj instanceof MediaStream && srcObj.getAudioTracks().length) {
+              clearInterval(audioWatchRef.current)
+              audioCtxRef.current?.close().catch(() => {})
+              const actx = new (window.AudioContext || (window as any).webkitAudioContext)()
+              audioCtxRef.current = actx
+              const srcNode = actx.createMediaStreamSource(new MediaStream([srcObj.getAudioTracks()[0]]))
+              const an = actx.createAnalyser()
+              an.fftSize = 512
+              srcNode.connect(an)   // analysis only — never routed to the speakers
+              const buf = new Float32Array(an.fftSize)
+              let heard = false
+              let lastLoud = Date.now()
+              audioWatchRef.current = setInterval(() => {
+                if (!speakingRef.current) { heard = false; lastLoud = Date.now(); return }
+                an.getFloatTimeDomainData(buf)
+                let s = 0
+                for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i]
+                const rms = Math.sqrt(s / buf.length)
+                if (rms > 0.01) { heard = true; lastLoud = Date.now() }
+                else if (heard && Date.now() - lastLoud > 1100) {
+                  console.log('[GATE] remote-audio silence — releasing mic (event-independent)')
+                  openGate()
+                }
+              }, 150)
+            }
+          } catch (e) { console.warn('[GATE] audio watch unavailable:', e) }
         }
         // Clear before reassigning: if the SDK re-fires SESSION_STREAM_READY on the same
         // instance (an internal stream/ICE recovery, no remount), the previous interval would
@@ -454,6 +495,8 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       clearTimeout(safetyTimerRef.current)
       clearTimeout(trailingTimerRef.current)
       clearInterval(keepAliveTimerRef.current)
+      clearInterval(audioWatchRef.current)
+      audioCtxRef.current?.close().catch(() => {})
       void Promise.resolve(avatarRef.current?.stop?.()).catch(() => {})
     }
   }, [])

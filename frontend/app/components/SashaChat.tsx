@@ -198,6 +198,10 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
   // it's presentation only.
   // Guards a late classify from re-opening the banner after its turn already ended.
   const turnSeqRef = useRef(0)
+  // Tab the guest was on before a predicted build switched to Trip — restored if the turn
+  // produced no itinerary (classify false positive), so they're never stranded on an empty
+  // Trip panel while the real answer sits in Chat.
+  const tabBeforeBuildRef = useRef<WorkspaceTab | null>(null)
   // Rotates the interim-line variant so repeated searches in one session don't say the same words.
   const interimVariantRef = useRef(0)
   const [building, setBuilding] = useState(false)
@@ -209,12 +213,18 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
     'Checking prices and links…',
     'Putting the days in order…',
   ]
-  useEffect(() => { onBuildingChange?.(building) }, [building])
+  const firstBuildingRunRef = useRef(true)
+  useEffect(() => {
+    // Skip the mount run: firing (false) here defeated VoiceButton's "start gated until the
+    // greeting ends" default and let Sasha transcribe her own opening line.
+    if (firstBuildingRunRef.current) { firstBuildingRunRef.current = false; return }
+    onBuildingChange?.(building)
+  }, [building])
   useEffect(() => {
     if (!building) { setBuildStep(0); return }
     // Walk the steps and hold on the last one — a build can outrun the list, and a stalled
     // ticker reads as "finishing up" rather than "frozen".
-    const id = setInterval(() => setBuildStep(s => Math.min(s + 1, BUILD_STEPS.length - 1)), 4000)
+    const id = setInterval(() => setBuildStep(s => Math.min(s + 1, BUILD_STEPS.length - 1)), 700)
     return () => clearInterval(id)
   }, [building])
   // One stable id per chat (per mount = per "Tap to start" session) so the backend can group
@@ -260,7 +270,10 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
     // the long silent stretch has a visible owner instead of looking like a hang.
     stickToBottomRef.current = true   // a deliberate send always re-pins
     const turnId = ++turnSeqRef.current
-    const showBuilding = () => { setBuilding(true); onTabChange?.('trip') }
+    const showBuilding = () => {
+      if (tabBeforeBuildRef.current === null) tabBeforeBuildRef.current = tab
+      setBuilding(true); onTabChange?.('trip')
+    }
     // One interim line per turn. `classifiedIntents` is filled by the parallel classify below (or
     // is the known intent for an idea-build). fireInterim voices the context line for a slow,
     // card-producing intent — but never a second line, and never if the answer already landed.
@@ -294,12 +307,11 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
           // finished would otherwise open a banner that nothing is left to close.
           if (turnSeqRef.current !== turnId || !inFlightRef.current) return
           classifiedIntents = c?.intents || []
-          if (classifiedIntents.includes('itinerary')) showBuilding()
-          // Speak the context line THE MOMENT we know the intent (~8ms), instead of waiting out
-          // the 700ms fast-answer window. classify is the whole reason we know it's a slow,
-          // card-producing turn — so there's no latency to trade off, and fireInterim self-guards
-          // (no line for general chat, never a second line). This is the gap before "One moment…".
-          fireInterim()
+          // Immediate framing ONLY for a build: card turns answer from the local cache in
+          // ~30ms now, and an instant "let me pull up the best flights…" line padded every
+          // one of them behind 2-3s of TTS. The 700ms timer below still frames any turn
+          // that is genuinely slow.
+          if (classifiedIntents.includes('itinerary')) { showBuilding(); fireInterim() }
         })
         .catch(() => {})   // best-effort: never break a turn over a progress banner
       // Give a fast turn ~0.7s to simply answer; only frame a genuinely slow search with a
@@ -324,7 +336,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         user_name: CURRENT_USER.firstName,       // so Sasha addresses the guest by name
         force_intent: opts?.intent,              // set when the UI knows the intent (idea build)
       }, { timeout: 60000, headers: apiHeaders() })  // bound the call so a hung backend can't stall the turn
-      const { response: sashaResponse, conversation_history, photos: respPhotos, links, hotels: hotelRecs, bookings: bookingCards, itinerary, action, booking_ref, itinerary_id } = response.data
+      const { response: sashaResponse, conversation_history, photos: respPhotos, links, hotels: hotelRecs, bookings: bookingCards, itinerary, action, booking_ref, itinerary_id, payment_item } = response.data
       // Replace local messages with server-authoritative history
       if (conversation_history?.length > 0) {
         setMessages(conversation_history)
@@ -342,9 +354,18 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         if (idx !== null) setPhotosByMsg(prev => ({ ...prev, [idx]: respPhotos }))
       }
       setBookingLinks(Array.isArray(links) ? links : [])
-      setHotels(Array.isArray(hotelRecs) ? hotelRecs : [])
-      setBookings(Array.isArray(bookingCards) ? bookingCards : [])
+      // Keep the cards the guest is looking at when a turn brings none — "thanks" or an
+      // off-topic aside used to wipe the restaurant card (and its Book & Pay button) they
+      // were about to tap. A turn WITH new cards still replaces wholesale.
+      if (Array.isArray(hotelRecs) && hotelRecs.length) setHotels(hotelRecs)
+      if (Array.isArray(bookingCards) && bookingCards.length) setBookings(bookingCards)
       if (itinerary?.days?.length) onItinerary?.(itinerary)
+      // False-positive build (classify said itinerary, none arrived): put the guest back on
+      // the tab they were on instead of stranding them on an empty Trip panel.
+      if (tabBeforeBuildRef.current !== null && !itinerary?.days?.length) {
+        onTabChange?.(tabBeforeBuildRef.current)
+      }
+      tabBeforeBuildRef.current = null
       if (itinerary_id) onItineraryId?.(itinerary_id)
       // The customer asked to book: show the full itinerary and take payment. A booking is
       // confirmed ONLY by /api/payments/verify against a real Stripe session.
@@ -354,6 +375,9 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
       // share sheet and PDF, without any payment. Any backend that still emits it is wrong,
       // and the safe response is to ignore it rather than to invent a sale.
       if (action === 'await_payment') onAwaitPayment?.()
+      // Voice-driven single-item booking: "book it" / "reserve Tam Vi" resolved to one
+      // offer server-side — open the SAME name/email payment popup as tapping Book & Pay.
+      else if (action === 'await_payment_item' && payment_item?.offer_id) onBookItem?.(payment_item)
       else if (action === 'trip_booked') console.warn('[Conductor] ignoring legacy trip_booked: bookings require verified payment')
     } catch (error: any) {
       console.error('[Conductor] error:', error?.response?.status, error?.response?.data, error?.message)
@@ -362,6 +386,11 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
       const fallback = "Sorry, I didn't quite catch that — could you say it again?"
       setMessages(prev => [...prev, { role: 'assistant', content: fallback }])
       onSashaResponse?.(fallback)
+      // A failed turn that had switched to the Trip build view: put the guest back.
+      if (tabBeforeBuildRef.current !== null) {
+        onTabChange?.(tabBeforeBuildRef.current)
+        tabBeforeBuildRef.current = null
+      }
     } finally {
       clearTimeout(thinkingTimer)
       clearTimeout(interimTimer)
@@ -522,7 +551,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
           <div className="lw-building-k">Building your itinerary</div>
           <div className="lw-building-step">{BUILD_STEPS[buildStep]}</div>
           <div className="lw-building-bar"><span /></div>
-          <div className="lw-building-hint">This takes up to a minute — Sasha is holding on until it's ready.</div>
+          <div className="lw-building-hint">Just a few seconds — Sasha is holding on until it's ready.</div>
         </div>
       )}
       {tab === 'trip' && !building && (

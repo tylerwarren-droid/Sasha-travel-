@@ -1,0 +1,4697 @@
+{
+ "generated_at": "2026-07-28T16:47:19+00:00",
+ "mode": "curated",
+ "entries": {
+  "flight|vietnam": {
+   "type": "flight",
+   "title": "Flights to Vietnam",
+   "dest": "Vietnam",
+   "options": [
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-HAN (from India) · 5h 15m · nonstop",
+     "price": "$180",
+     "amount_usd": 180,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "DEL-HAN (from India) · 5h 20m · nonstop",
+     "price": "$220",
+     "amount_usd": 220,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "IndiGo",
+     "detail": "KOL-HAN (from India) · 3h 05m · nonstop",
+     "price": "$160",
+     "amount_usd": 160,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SFO-SGN (from USA) · 16h 40m · nonstop",
+     "price": "$750",
+     "amount_usd": 750,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "EVA Air",
+     "detail": "LAX-SGN via Taipei (from USA) · 19h 30m · 1 stop",
+     "price": "$790",
+     "amount_usd": 790,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "CDG-HAN (from Europe) · 11h 30m · nonstop",
+     "price": "$650",
+     "amount_usd": 650,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "Qatar Airways",
+     "detail": "LHR-HAN via Doha (from Europe) · 15h 20m · 1 stop",
+     "price": "$560",
+     "amount_usd": 560,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "Singapore Airlines",
+     "detail": "SIN-SGN · 2h 05m · nonstop",
+     "price": "$130",
+     "amount_usd": 130,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    }
+   ]
+  },
+  "cab|vietnam": {
+   "type": "cab",
+   "title": "Airport transfers · Vietnam",
+   "dest": "Vietnam",
+   "options": [
+    {
+     "name": "Grab",
+     "detail": "sedan · app-booked, fixed fare",
+     "price": "$12",
+     "amount_usd": 12,
+     "book_url": "https://www.klook.com/en-US/search/?query=Vietnam+Vietnam+airport+transfer"
+    },
+    {
+     "name": "XanhSM",
+     "detail": "electric sedan · quiet EVs, app-booked nationwide",
+     "price": "$12",
+     "amount_usd": 12,
+     "book_url": "https://www.klook.com/en-US/search/?query=Vietnam+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Be",
+     "detail": "sedan · Vietnamese ride-hailing app, often cheapest",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.klook.com/en-US/search/?query=Vietnam+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Klook private transfer",
+     "detail": "SUV · meet & greet at arrivals",
+     "price": "$18",
+     "amount_usd": 18,
+     "book_url": "https://www.klook.com/en-US/search/?query=Vietnam+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Mai Linh Taxi",
+     "detail": "sedan · metered, reputable national firm",
+     "price": "$14",
+     "amount_usd": 14,
+     "book_url": "https://www.klook.com/en-US/search/?query=Vietnam+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab Bike",
+     "detail": "motorbike · solo hops through traffic, helmet included",
+     "price": "$3",
+     "amount_usd": 3,
+     "book_url": "https://www.klook.com/en-US/search/?query=Vietnam+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|vietnam": {
+   "type": "activity",
+   "title": "Things to do · Vietnam",
+   "dest": "Vietnam",
+   "options": [
+    {
+     "name": "Ha Long Bay day cruise",
+     "detail": "8 hours · limestone karsts, kayaking, seafood lunch",
+     "price": "$45",
+     "book_url": "https://www.getyourguide.com/s/?q=Ha+Long+Bay+day+cruise+Vietnam"
+    },
+    {
+     "name": "Hanoi street food tour",
+     "detail": "3 hours · Old Quarter tastings with a local guide",
+     "price": "$25",
+     "book_url": "https://www.getyourguide.com/s/?q=Hanoi+street+food+tour+Vietnam"
+    },
+    {
+     "name": "Cu Chi Tunnels half-day tour",
+     "detail": "5 hours · historic tunnel network from Saigon",
+     "price": "$30",
+     "book_url": "https://www.getyourguide.com/s/?q=Cu+Chi+Tunnels+half-day+tour+Vietnam"
+    },
+    {
+     "name": "Hoi An lantern night walk",
+     "detail": "2 hours · old town at its most magical",
+     "price": "$10",
+     "book_url": "https://www.getyourguide.com/s/?q=Hoi+An+lantern+night+walk+Vietnam"
+    },
+    {
+     "name": "Mekong Delta sampan day",
+     "detail": "9 hours · floating markets and orchard islands",
+     "price": "$35",
+     "book_url": "https://www.getyourguide.com/s/?q=Mekong+Delta+sampan+day+Vietnam"
+    },
+    {
+     "name": "Fansipan cable car, Sapa",
+     "detail": "3 hours · summit of Indochina at 3,143m",
+     "price": "$28",
+     "book_url": "https://www.getyourguide.com/s/?q=Fansipan+cable+car%2C+Sapa+Vietnam"
+    },
+    {
+     "name": "Golden Bridge day trip",
+     "detail": "9 hours · Ba Na Hills from Da Nang or Hoi An",
+     "price": "$55",
+     "book_url": "https://www.getyourguide.com/s/?q=Golden+Bridge+day+trip+Vietnam"
+    },
+    {
+     "name": "Phong Nha cave by boat",
+     "detail": "4 hours · glide into the river cave",
+     "price": "$15",
+     "book_url": "https://www.getyourguide.com/s/?q=Phong+Nha+cave+by+boat+Vietnam"
+    }
+   ]
+  },
+  "restaurant|vietnam": {
+   "type": "restaurant",
+   "title": "Restaurants · Vietnam",
+   "dest": "Vietnam",
+   "options": [
+    {
+     "name": "Tam Vi",
+     "detail": "Vietnamese · $$ · Michelin-listed Hanoi home cooking",
+     "price": "",
+     "per_person_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Tam+Vi+Vietnam+Vietnam"
+    },
+    {
+     "name": "Anan Saigon",
+     "detail": "Modern Vietnamese · $$$$ · Michelin-starred rooftop in Saigon",
+     "price": "",
+     "per_person_usd": 90,
+     "book_url": "https://www.google.com/maps/search/Anan+Saigon+Vietnam+Vietnam"
+    },
+    {
+     "name": "Morning Glory",
+     "detail": "Central Vietnamese · $$ · Hoi An institution by Ms Vy",
+     "price": "",
+     "per_person_usd": 20,
+     "book_url": "https://www.google.com/maps/search/Morning+Glory+Vietnam+Vietnam"
+    },
+    {
+     "name": "Nen Restaurant",
+     "detail": "Tasting menu · $$$ · Michelin star in Da Nang",
+     "price": "",
+     "per_person_usd": 70,
+     "book_url": "https://www.google.com/maps/search/Nen+Restaurant+Vietnam+Vietnam"
+    },
+    {
+     "name": "Bun Cha Huong Lien",
+     "detail": "Street food · $ · the famous 'Obama bun cha', Hanoi",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Bun+Cha+Huong+Lien+Vietnam+Vietnam"
+    },
+    {
+     "name": "Pizza 4P's",
+     "detail": "Japanese-Italian · $$ · the beloved nationwide burrata institution",
+     "price": "",
+     "per_person_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Pizza+4P%27s+Vietnam+Vietnam"
+    },
+    {
+     "name": "Quan An Ngon",
+     "detail": "Vietnamese · $$ · street-food canon under one roof",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Quan+An+Ngon+Vietnam+Vietnam"
+    },
+    {
+     "name": "Banh Mi Phuong",
+     "detail": "Street food · $ · Hoi An's world-famous banh mi",
+     "price": "",
+     "per_person_usd": 5,
+     "book_url": "https://www.google.com/maps/search/Banh+Mi+Phuong+Vietnam+Vietnam"
+    }
+   ]
+  },
+  "hotel|vietnam": [
+   {
+    "name": "Sofitel Legend Metropole Hanoi",
+    "stars": 5,
+    "price_from": 350,
+    "blurb": "Iconic French-colonial landmark by the Old Quarter.",
+    "city": "Vietnam",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Sofitel+Legend+Metropole+Hanoi%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.9,
+    "reviews": 1510,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Capella Hanoi",
+    "stars": 5,
+    "price_from": 320,
+    "blurb": "Opera-inspired luxury steps from Hoan Kiem Lake.",
+    "city": "Vietnam",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Capella+Hanoi%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.0,
+    "reviews": 881,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "La Siesta Premium Hang Be",
+    "stars": 4,
+    "price_from": 110,
+    "blurb": "Boutique favourite in the heart of the Old Quarter.",
+    "city": "Vietnam",
+    "book_url": "https://www.booking.com/searchresults.html?ss=La+Siesta+Premium+Hang+Be%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.5,
+    "reviews": 1325,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Apricot Hotel",
+    "stars": 4,
+    "price_from": 95,
+    "blurb": "Gallery-style hotel overlooking Hoan Kiem Lake.",
+    "city": "Vietnam",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Apricot+Hotel%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.5,
+    "reviews": 881,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "The Oriental Jade Hotel",
+    "stars": 4,
+    "price_from": 85,
+    "blurb": "Rooftop infinity pool above the Old Quarter.",
+    "city": "Vietnam",
+    "book_url": "https://www.booking.com/searchresults.html?ss=The+Oriental+Jade+Hotel%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.8,
+    "reviews": 1251,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Lotte Hotel Hanoi",
+    "stars": 5,
+    "price_from": 180,
+    "blurb": "Sky-high rooms and the 65th-floor observation deck.",
+    "city": "Vietnam",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Lotte+Hotel+Hanoi%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 1029,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Melia Hanoi",
+    "stars": 5,
+    "price_from": 130,
+    "blurb": "Business classic between the Opera House and the lake.",
+    "city": "Vietnam",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Melia+Hanoi%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 807,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Hanoi La Siesta Classic Ma May",
+    "stars": 4,
+    "price_from": 75,
+    "blurb": "Old Quarter hospitality legend.",
+    "city": "Vietnam",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hanoi+La+Siesta+Classic+Ma+May%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.4,
+    "reviews": 1510,
+    "tag": "Highly rated"
+   }
+  ],
+  "flight|hanoi": {
+   "type": "flight",
+   "title": "Flights to Hanoi",
+   "dest": "Hanoi",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SGN-HAN · 2h 10m · nonstop",
+     "price": "$95",
+     "amount_usd": 95,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "SGN-HAN · 2h 10m · nonstop",
+     "price": "$55",
+     "amount_usd": 55,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Bamboo Airways",
+     "detail": "DAD-HAN · 1h 20m · nonstop",
+     "price": "$70",
+     "amount_usd": 70,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Pacific Airlines",
+     "detail": "SGN-HAN · 2h 10m · nonstop",
+     "price": "$50",
+     "amount_usd": 50,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-HAN (from India) · 5h 15m · nonstop",
+     "price": "$180",
+     "amount_usd": 180,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "DEL-HAN (from India) · 5h 20m · nonstop",
+     "price": "$220",
+     "amount_usd": 220,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "IndiGo",
+     "detail": "KOL-HAN (from India) · 3h 05m · nonstop",
+     "price": "$160",
+     "amount_usd": 160,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "JFK-HAN via Seoul (from USA) · 21h 05m · 1 stop",
+     "price": "$950",
+     "amount_usd": 950,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "EVA Air",
+     "detail": "SFO-HAN via Taipei (from USA) · 18h 50m · 1 stop",
+     "price": "$810",
+     "amount_usd": 810,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "LHR-HAN (from Europe) · 12h 10m · nonstop",
+     "price": "$640",
+     "amount_usd": 640,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Turkish Airlines",
+     "detail": "FRA-HAN via Istanbul (from Europe) · 15h 40m · 1 stop",
+     "price": "$540",
+     "amount_usd": 540,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Singapore Airlines",
+     "detail": "SIN-HAN · 3h 20m · nonstop",
+     "price": "$210",
+     "amount_usd": 210,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Thai Airways",
+     "detail": "BKK-HAN · 1h 50m · nonstop",
+     "price": "$130",
+     "amount_usd": 130,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    }
+   ]
+  },
+  "cab|hanoi": {
+   "type": "cab",
+   "title": "Airport transfers · Hanoi",
+   "dest": "Hanoi",
+   "options": [
+    {
+     "name": "Grab",
+     "detail": "sedan · Noi Bai airport to Old Quarter, 45 min",
+     "price": "$12",
+     "amount_usd": 12,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hanoi+Vietnam+airport+transfer"
+    },
+    {
+     "name": "XanhSM",
+     "detail": "electric sedan · quiet EV, app-booked, fixed fare",
+     "price": "$12",
+     "amount_usd": 12,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hanoi+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Be",
+     "detail": "sedan · local ride-hailing, often undercuts",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hanoi+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Klook private transfer",
+     "detail": "SUV · meet & greet, flight tracking",
+     "price": "$16",
+     "amount_usd": 16,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hanoi+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Mai Linh Taxi",
+     "detail": "sedan · metered, 40-50 min to centre",
+     "price": "$15",
+     "amount_usd": 15,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hanoi+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Hanoi limousine van",
+     "detail": "9-seat van · shared luxury van, hotel drop-off",
+     "price": "$8",
+     "amount_usd": 8,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hanoi+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Airport Bus 86",
+     "detail": "express bus · Noi Bai to Old Quarter, every 30 min",
+     "price": "$2",
+     "amount_usd": 2,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hanoi+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab Bike",
+     "detail": "motorbike · solo hop through traffic, helmet included",
+     "price": "$3",
+     "amount_usd": 3,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hanoi+Vietnam+airport+transfer"
+    },
+    {
+     "name": "XanhSM Bike",
+     "detail": "electric bike · the quiet green scooters, app-booked",
+     "price": "$3",
+     "amount_usd": 3,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hanoi+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|hanoi": {
+   "type": "activity",
+   "title": "Things to do · Hanoi",
+   "dest": "Hanoi",
+   "options": [
+    {
+     "name": "Old Quarter street food tour",
+     "detail": "3 hours · pho, bun cha and egg coffee with a local",
+     "price": "$25",
+     "book_url": "https://www.getyourguide.com/s/?q=Old+Quarter+street+food+tour+Hanoi"
+    },
+    {
+     "name": "Thang Long water puppet show",
+     "detail": "1 hour · classic riverside theatre, evening shows",
+     "price": "$8",
+     "book_url": "https://www.getyourguide.com/s/?q=Thang+Long+water+puppet+show+Hanoi"
+    },
+    {
+     "name": "Ninh Binh day trip",
+     "detail": "10 hours · Trang An boat ride + Hang Mua viewpoint",
+     "price": "$42",
+     "book_url": "https://www.getyourguide.com/s/?q=Ninh+Binh+day+trip+Hanoi"
+    },
+    {
+     "name": "Train Street cafe hour",
+     "detail": "1 hour · espresso as the train squeezes past",
+     "price": "$5",
+     "book_url": "https://www.getyourguide.com/s/?q=Train+Street+cafe+hour+Hanoi"
+    },
+    {
+     "name": "Bat Trang ceramics workshop",
+     "detail": "4 hours · throw your own pot in the pottery village",
+     "price": "$20",
+     "book_url": "https://www.getyourguide.com/s/?q=Bat+Trang+ceramics+workshop+Hanoi"
+    },
+    {
+     "name": "Ho Chi Minh complex & Temple of Literature",
+     "detail": "3 hours · the capital's history walk",
+     "price": "$15",
+     "book_url": "https://www.getyourguide.com/s/?q=Ho+Chi+Minh+complex+%26+Temple+of+Literature+Hanoi"
+    },
+    {
+     "name": "Hoa Lo Prison museum",
+     "detail": "2 hours · the 'Hanoi Hilton', powerful and close to town",
+     "price": "$2",
+     "book_url": "https://www.getyourguide.com/s/?q=Hoa+Lo+Prison+museum+Hanoi"
+    },
+    {
+     "name": "Old Quarter by cyclo",
+     "detail": "1 hour · pedal-rickshaw loop of the 36 streets",
+     "price": "$8",
+     "book_url": "https://www.getyourguide.com/s/?q=Old+Quarter+by+cyclo+Hanoi"
+    },
+    {
+     "name": "Vietnamese coffee workshop",
+     "detail": "2 hours · brew phin, egg and coconut coffee yourself",
+     "price": "$18",
+     "book_url": "https://www.getyourguide.com/s/?q=Vietnamese+coffee+workshop+Hanoi"
+    },
+    {
+     "name": "West Lake sunset bike loop",
+     "detail": "3 hours · pagodas and lakeside living",
+     "price": "$10",
+     "book_url": "https://www.getyourguide.com/s/?q=West+Lake+sunset+bike+loop+Hanoi"
+    },
+    {
+     "name": "Quang Ba flower market at dawn",
+     "detail": "2 hours · wholesale blooms before sunrise",
+     "price": "$12",
+     "book_url": "https://www.getyourguide.com/s/?q=Quang+Ba+flower+market+at+dawn+Hanoi"
+    },
+    {
+     "name": "Perfume Pagoda day trip",
+     "detail": "9 hours · river boat + mountain shrine complex",
+     "price": "$45",
+     "book_url": "https://www.getyourguide.com/s/?q=Perfume+Pagoda+day+trip+Hanoi"
+    }
+   ]
+  },
+  "restaurant|hanoi": {
+   "type": "restaurant",
+   "title": "Restaurants · Hanoi",
+   "dest": "Hanoi",
+   "options": [
+    {
+     "name": "Tam Vi",
+     "detail": "Vietnamese · $$ · Michelin-listed, seasonal northern dishes",
+     "price": "",
+     "per_person_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Tam+Vi+Hanoi+Vietnam"
+    },
+    {
+     "name": "Bun Cha Huong Lien",
+     "detail": "Street food · $ · the famous 'Obama bun cha'",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Bun+Cha+Huong+Lien+Hanoi+Vietnam"
+    },
+    {
+     "name": "La Badiane",
+     "detail": "French-Vietnamese · $$$ · elegant colonial villa dining",
+     "price": "",
+     "per_person_usd": 55,
+     "book_url": "https://www.google.com/maps/search/La+Badiane+Hanoi+Vietnam"
+    },
+    {
+     "name": "Cha Ca Thang Long",
+     "detail": "Vietnamese · $$ · turmeric fish sizzled at your table",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Cha+Ca+Thang+Long+Hanoi+Vietnam"
+    },
+    {
+     "name": "Pho Gia Truyen Bat Dan",
+     "detail": "Street food · $ · the queue-worthy beef pho",
+     "price": "",
+     "per_person_usd": 5,
+     "book_url": "https://www.google.com/maps/search/Pho+Gia+Truyen+Bat+Dan+Hanoi+Vietnam"
+    },
+    {
+     "name": "The Gourmet Corner",
+     "detail": "Vietnamese fine dining · $$$ · rooftop views over the Old Quarter",
+     "price": "",
+     "per_person_usd": 45,
+     "book_url": "https://www.google.com/maps/search/The+Gourmet+Corner+Hanoi+Vietnam"
+    },
+    {
+     "name": "Duong's Restaurant",
+     "detail": "Vietnamese · $$ · MasterChef Duong's tasting plates",
+     "price": "",
+     "per_person_usd": 22,
+     "book_url": "https://www.google.com/maps/search/Duong%27s+Restaurant+Hanoi+Vietnam"
+    },
+    {
+     "name": "Quan An Ngon",
+     "detail": "Vietnamese · $$ · all of Vietnam's street food, one garden",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Quan+An+Ngon+Hanoi+Vietnam"
+    },
+    {
+     "name": "Banh Mi 25",
+     "detail": "Street food · $ · the traveller-famous banh mi window",
+     "price": "",
+     "per_person_usd": 4,
+     "book_url": "https://www.google.com/maps/search/Banh+Mi+25+Hanoi+Vietnam"
+    },
+    {
+     "name": "Giang Cafe",
+     "detail": "Cafe · $ · birthplace of Hanoi egg coffee, since 1946",
+     "price": "",
+     "per_person_usd": 3,
+     "book_url": "https://www.google.com/maps/search/Giang+Cafe+Hanoi+Vietnam"
+    },
+    {
+     "name": "Gia Ngu Restaurant",
+     "detail": "Vietnamese · $$ · Michelin-listed Old Quarter fish and greens",
+     "price": "",
+     "per_person_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Gia+Ngu+Restaurant+Hanoi+Vietnam"
+    },
+    {
+     "name": "Chim Sao",
+     "detail": "Northern Vietnamese · $$ · floor-cushion dining, minority-inspired dishes",
+     "price": "",
+     "per_person_usd": 16,
+     "book_url": "https://www.google.com/maps/search/Chim+Sao+Hanoi+Vietnam"
+    },
+    {
+     "name": "Pho Thin 13 Lo Duc",
+     "detail": "Street food · $ · the wok-fried-beef pho original",
+     "price": "",
+     "per_person_usd": 5,
+     "book_url": "https://www.google.com/maps/search/Pho+Thin+13+Lo+Duc+Hanoi+Vietnam"
+    },
+    {
+     "name": "Maison Marou Hanoi",
+     "detail": "Cafe-chocolatier · $ · single-origin Vietnamese chocolate",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Maison+Marou+Hanoi+Hanoi+Vietnam"
+    }
+   ]
+  },
+  "hotel|hanoi": [
+   {
+    "name": "Sofitel Legend Metropole Hanoi",
+    "stars": 5,
+    "price_from": 350,
+    "blurb": "Iconic French-colonial landmark by the Old Quarter.",
+    "city": "Hanoi",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Sofitel+Legend+Metropole+Hanoi%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.9,
+    "reviews": 1510,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Capella Hanoi",
+    "stars": 5,
+    "price_from": 320,
+    "blurb": "Opera-inspired luxury steps from Hoan Kiem Lake.",
+    "city": "Hanoi",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Capella+Hanoi%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.0,
+    "reviews": 881,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "La Siesta Premium Hang Be",
+    "stars": 4,
+    "price_from": 110,
+    "blurb": "Boutique favourite in the heart of the Old Quarter.",
+    "city": "Hanoi",
+    "book_url": "https://www.booking.com/searchresults.html?ss=La+Siesta+Premium+Hang+Be%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.5,
+    "reviews": 1325,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Apricot Hotel",
+    "stars": 4,
+    "price_from": 95,
+    "blurb": "Gallery-style hotel overlooking Hoan Kiem Lake.",
+    "city": "Hanoi",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Apricot+Hotel%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.5,
+    "reviews": 881,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "The Oriental Jade Hotel",
+    "stars": 4,
+    "price_from": 85,
+    "blurb": "Rooftop infinity pool above the Old Quarter.",
+    "city": "Hanoi",
+    "book_url": "https://www.booking.com/searchresults.html?ss=The+Oriental+Jade+Hotel%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.8,
+    "reviews": 1251,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Lotte Hotel Hanoi",
+    "stars": 5,
+    "price_from": 180,
+    "blurb": "Sky-high rooms and the 65th-floor observation deck.",
+    "city": "Hanoi",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Lotte+Hotel+Hanoi%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 1029,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Melia Hanoi",
+    "stars": 5,
+    "price_from": 130,
+    "blurb": "Business classic between the Opera House and the lake.",
+    "city": "Hanoi",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Melia+Hanoi%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 807,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Hanoi La Siesta Classic Ma May",
+    "stars": 4,
+    "price_from": 75,
+    "blurb": "Old Quarter hospitality legend.",
+    "city": "Hanoi",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hanoi+La+Siesta+Classic+Ma+May%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.4,
+    "reviews": 1510,
+    "tag": "Highly rated"
+   }
+  ],
+  "flight|ho chi minh city": {
+   "type": "flight",
+   "title": "Flights to Ho Chi Minh City",
+   "dest": "Ho Chi Minh City",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "HAN-SGN · 2h 10m · nonstop",
+     "price": "$95",
+     "amount_usd": 95,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "HAN-SGN · 2h 10m · nonstop",
+     "price": "$55",
+     "amount_usd": 55,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Bamboo Airways",
+     "detail": "DAD-SGN · 1h 25m · nonstop",
+     "price": "$68",
+     "amount_usd": 68,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Vietravel Airlines",
+     "detail": "HAN-SGN · 2h 10m · nonstop",
+     "price": "$48",
+     "amount_usd": 48,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "BOM-SGN (from India) · 5h 30m · nonstop",
+     "price": "$200",
+     "amount_usd": 200,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-SGN (from India) · 5h 45m · nonstop",
+     "price": "$195",
+     "amount_usd": 195,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SFO-SGN (from USA) · 16h 40m · nonstop",
+     "price": "$750",
+     "amount_usd": 750,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "EVA Air",
+     "detail": "LAX-SGN via Taipei (from USA) · 19h 30m · 1 stop",
+     "price": "$790",
+     "amount_usd": 790,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "FRA-SGN (from Europe) · 12h 05m · nonstop",
+     "price": "$680",
+     "amount_usd": 680,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Emirates",
+     "detail": "LHR-SGN via Dubai (from Europe) · 16h 30m · 1 stop",
+     "price": "$610",
+     "amount_usd": 610,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Singapore Airlines",
+     "detail": "SIN-SGN · 2h 05m · nonstop",
+     "price": "$130",
+     "amount_usd": 130,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Thai Airways",
+     "detail": "BKK-SGN · 1h 30m · nonstop",
+     "price": "$120",
+     "amount_usd": 120,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Cathay Pacific",
+     "detail": "HKG-SGN · 2h 45m · nonstop",
+     "price": "$170",
+     "amount_usd": 170,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    }
+   ]
+  },
+  "cab|ho chi minh city": {
+   "type": "cab",
+   "title": "Airport transfers · Ho Chi Minh City",
+   "dest": "Ho Chi Minh City",
+   "options": [
+    {
+     "name": "Grab",
+     "detail": "sedan · Tan Son Nhat to District 1, 30 min",
+     "price": "$8",
+     "amount_usd": 8,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ho+Chi+Minh+City+Vietnam+airport+transfer"
+    },
+    {
+     "name": "XanhSM",
+     "detail": "electric sedan · quiet EV, fixed fare to D1",
+     "price": "$8",
+     "amount_usd": 8,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ho+Chi+Minh+City+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Be",
+     "detail": "sedan · local ride-hailing favourite",
+     "price": "$7",
+     "amount_usd": 7,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ho+Chi+Minh+City+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Klook private transfer",
+     "detail": "SUV · meet & greet, fixed price",
+     "price": "$14",
+     "amount_usd": 14,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ho+Chi+Minh+City+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Vinasun Taxi",
+     "detail": "sedan · metered, reputable local firm",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ho+Chi+Minh+City+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Airport Bus 109",
+     "detail": "express bus · Tan Son Nhat to Ben Thanh, frequent",
+     "price": "$1",
+     "amount_usd": 1,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ho+Chi+Minh+City+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab Bike",
+     "detail": "motorbike · fastest way across District 1",
+     "price": "$2",
+     "amount_usd": 2,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ho+Chi+Minh+City+Vietnam+airport+transfer"
+    },
+    {
+     "name": "XanhSM Bike",
+     "detail": "electric bike · green scooters, app-booked",
+     "price": "$2",
+     "amount_usd": 2,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ho+Chi+Minh+City+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|ho chi minh city": {
+   "type": "activity",
+   "title": "Things to do · Ho Chi Minh City",
+   "dest": "Ho Chi Minh City",
+   "options": [
+    {
+     "name": "Cu Chi Tunnels half-day tour",
+     "detail": "5 hours · underground tunnel network, hotel pickup",
+     "price": "$30",
+     "book_url": "https://www.getyourguide.com/s/?q=Cu+Chi+Tunnels+half-day+tour+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Saigon food tour by scooter",
+     "detail": "4 hours · evening eats riding pillion with local students",
+     "price": "$45",
+     "book_url": "https://www.getyourguide.com/s/?q=Saigon+food+tour+by+scooter+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Mekong Delta day tour",
+     "detail": "9 hours · My Tho and Ben Tre, sampan ride + lunch",
+     "price": "$35",
+     "book_url": "https://www.getyourguide.com/s/?q=Mekong+Delta+day+tour+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "War Remnants Museum & Independence Palace",
+     "detail": "3 hours · the essential history morning",
+     "price": "$12",
+     "book_url": "https://www.getyourguide.com/s/?q=War+Remnants+Museum+%26+Independence+Palace+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Saigon River sunset cruise",
+     "detail": "2 hours · skyline views with dinner options",
+     "price": "$25",
+     "book_url": "https://www.getyourguide.com/s/?q=Saigon+River+sunset+cruise+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Bitexco Skydeck",
+     "detail": "1 hour · the city from the 49th floor",
+     "price": "$9",
+     "book_url": "https://www.getyourguide.com/s/?q=Bitexco+Skydeck+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "A O Show at the Opera House",
+     "detail": "1.5 hours · bamboo cirque — Vietnam's Cirque du Soleil",
+     "price": "$35",
+     "book_url": "https://www.getyourguide.com/s/?q=A+O+Show+at+the+Opera+House+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Cholon & Jade Emperor Pagoda",
+     "detail": "4 hours · Chinatown temples and wholesale lanes",
+     "price": "$18",
+     "book_url": "https://www.getyourguide.com/s/?q=Cholon+%26+Jade+Emperor+Pagoda+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Craft beer tasting tour",
+     "detail": "3 hours · Saigon's famous microbrewery scene",
+     "price": "$30",
+     "book_url": "https://www.getyourguide.com/s/?q=Craft+beer+tasting+tour+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Banh mi crawl",
+     "detail": "2 hours · three legendary bakeries, one afternoon",
+     "price": "$15",
+     "book_url": "https://www.getyourguide.com/s/?q=Banh+mi+crawl+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Vespa night food tour",
+     "detail": "4 hours · the city after dark on vintage scooters",
+     "price": "$55",
+     "book_url": "https://www.getyourguide.com/s/?q=Vespa+night+food+tour+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Can Gio mangrove day",
+     "detail": "8 hours · monkey island and the biosphere reserve",
+     "price": "$40",
+     "book_url": "https://www.getyourguide.com/s/?q=Can+Gio+mangrove+day+Ho+Chi+Minh+City"
+    }
+   ]
+  },
+  "restaurant|ho chi minh city": {
+   "type": "restaurant",
+   "title": "Restaurants · Ho Chi Minh City",
+   "dest": "Ho Chi Minh City",
+   "options": [
+    {
+     "name": "Anan Saigon",
+     "detail": "Modern Vietnamese · $$$$ · Michelin star, legendary banh mi",
+     "price": "",
+     "per_person_usd": 90,
+     "book_url": "https://www.google.com/maps/search/Anan+Saigon+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Cuc Gach Quan",
+     "detail": "Vietnamese · $$ · rustic family recipes in an old villa",
+     "price": "",
+     "per_person_usd": 25,
+     "book_url": "https://www.google.com/maps/search/Cuc+Gach+Quan+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Pho Le",
+     "detail": "Street food · $ · southern-style pho since 1970",
+     "price": "",
+     "per_person_usd": 6,
+     "book_url": "https://www.google.com/maps/search/Pho+Le+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Secret Garden",
+     "detail": "Vietnamese · $$ · rooftop home-cooking above District 1",
+     "price": "",
+     "per_person_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Secret+Garden+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Noir. Dining in the Dark",
+     "detail": "Experience dining · $$$ · a meal served in complete darkness",
+     "price": "",
+     "per_person_usd": 55,
+     "book_url": "https://www.google.com/maps/search/Noir.+Dining+in+the+Dark+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Ben Thanh street food market",
+     "detail": "Mixed local · $ · everything in one buzzing hall",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Ben+Thanh+street+food+market+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Nha Hang Ngon 138",
+     "detail": "Vietnamese · $$ · street-food classics in a colonial villa",
+     "price": "",
+     "per_person_usd": 14,
+     "book_url": "https://www.google.com/maps/search/Nha+Hang+Ngon+138+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Hum Vegetarian",
+     "detail": "Vegetarian · $$ · elegant plant-based Vietnamese",
+     "price": "",
+     "per_person_usd": 16,
+     "book_url": "https://www.google.com/maps/search/Hum+Vegetarian+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Quan Bui",
+     "detail": "Vietnamese · $$ · garden dining, District 1",
+     "price": "",
+     "per_person_usd": 17,
+     "book_url": "https://www.google.com/maps/search/Quan+Bui+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "The Deck Saigon",
+     "detail": "Riverside fine dining · $$$ · sunset tables on the Saigon river",
+     "price": "",
+     "per_person_usd": 45,
+     "book_url": "https://www.google.com/maps/search/The+Deck+Saigon+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Banh Mi Huynh Hoa",
+     "detail": "Street food · $ · the city's most famous banh mi, stacked high",
+     "price": "",
+     "per_person_usd": 5,
+     "book_url": "https://www.google.com/maps/search/Banh+Mi+Huynh+Hoa+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Pizza 4P's Ben Thanh",
+     "detail": "Japanese-Italian · $$ · the cult burrata pizza institution",
+     "price": "",
+     "per_person_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Pizza+4P%27s+Ben+Thanh+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Com Nieu Sai Gon",
+     "detail": "Vietnamese · $$ · claypot rice with the plate-smash show",
+     "price": "",
+     "per_person_usd": 14,
+     "book_url": "https://www.google.com/maps/search/Com+Nieu+Sai+Gon+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "L'Usine Le Loi",
+     "detail": "Cafe-bistro · $$ · industrial-chic brunch above Le Loi",
+     "price": "",
+     "per_person_usd": 12,
+     "book_url": "https://www.google.com/maps/search/L%27Usine+Le+Loi+Ho+Chi+Minh+City+Vietnam"
+    }
+   ]
+  },
+  "hotel|ho chi minh city": [
+   {
+    "name": "Park Hyatt Saigon",
+    "stars": 5,
+    "price_from": 290,
+    "blurb": "Colonial elegance in the city centre.",
+    "city": "Ho Chi Minh City",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Park+Hyatt+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 1029,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "The Reverie Saigon",
+    "stars": 5,
+    "price_from": 300,
+    "blurb": "Opulent riverside tower with skyline views.",
+    "city": "Ho Chi Minh City",
+    "book_url": "https://www.booking.com/searchresults.html?ss=The+Reverie+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.9,
+    "reviews": 1066,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Hotel des Arts Saigon MGallery",
+    "stars": 5,
+    "price_from": 150,
+    "blurb": "Art-deco style with a rooftop pool.",
+    "city": "Ho Chi Minh City",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hotel+des+Arts+Saigon+MGallery%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.9,
+    "reviews": 1510,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Hotel Majestic Saigon",
+    "stars": 4,
+    "price_from": 120,
+    "blurb": "Riverside grande dame from 1925.",
+    "city": "Ho Chi Minh City",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hotel+Majestic+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.6,
+    "reviews": 1177,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Liberty Central Saigon Citypoint",
+    "stars": 4,
+    "price_from": 80,
+    "blurb": "Modern rooms steps from Ben Thanh Market.",
+    "city": "Ho Chi Minh City",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Liberty+Central+Saigon+Citypoint%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.6,
+    "reviews": 1584,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Caravelle Saigon",
+    "stars": 5,
+    "price_from": 160,
+    "blurb": "Historic address on Lam Son Square.",
+    "city": "Ho Chi Minh City",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Caravelle+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.2,
+    "reviews": 992,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Rex Hotel Saigon",
+    "stars": 5,
+    "price_from": 140,
+    "blurb": "The rooftop bar of wartime correspondents.",
+    "city": "Ho Chi Minh City",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Rex+Hotel+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.2,
+    "reviews": 992,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Le Meridien Saigon",
+    "stars": 5,
+    "price_from": 170,
+    "blurb": "Riverside glass tower, District 1 edge.",
+    "city": "Ho Chi Minh City",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Le+Meridien+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.9,
+    "reviews": 1066,
+    "tag": "Highly rated"
+   }
+  ],
+  "flight|da nang": {
+   "type": "flight",
+   "title": "Flights to Da Nang",
+   "dest": "Da Nang",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "HAN-DAD · 1h 20m · nonstop",
+     "price": "$85",
+     "amount_usd": 85,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "SGN-DAD · 1h 25m · nonstop",
+     "price": "$45",
+     "amount_usd": 45,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "Bamboo Airways",
+     "detail": "HAN-DAD · 1h 20m · nonstop",
+     "price": "$65",
+     "amount_usd": 65,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SGN-DAD · 1h 25m · nonstop",
+     "price": "$75",
+     "amount_usd": 75,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-HAN + HAN-DAD (from India) · 8h 30m · 1 stop",
+     "price": "$265",
+     "amount_usd": 265,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "EVA Air",
+     "detail": "LAX-DAD via Taipei (from USA) · 20h 10m · 1 stop",
+     "price": "$830",
+     "amount_usd": 830,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "Qatar Airways",
+     "detail": "CDG-DAD via Doha (from Europe) · 16h 40m · 1 stop",
+     "price": "$620",
+     "amount_usd": 620,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "Singapore Airlines",
+     "detail": "SIN-DAD · 2h 40m · nonstop",
+     "price": "$180",
+     "amount_usd": 180,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "AirAsia",
+     "detail": "KUL-DAD · 2h 55m · nonstop",
+     "price": "$90",
+     "amount_usd": 90,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    }
+   ]
+  },
+  "cab|da nang": {
+   "type": "cab",
+   "title": "Airport transfers · Da Nang",
+   "dest": "Da Nang",
+   "options": [
+    {
+     "name": "Grab",
+     "detail": "sedan · airport to beachfront, 15 min",
+     "price": "$6",
+     "amount_usd": 6,
+     "book_url": "https://www.klook.com/en-US/search/?query=Da+Nang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "XanhSM",
+     "detail": "electric sedan · EV hop to My Khe, fixed fare",
+     "price": "$6",
+     "amount_usd": 6,
+     "book_url": "https://www.klook.com/en-US/search/?query=Da+Nang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Be",
+     "detail": "sedan · local ride-hailing option",
+     "price": "$5",
+     "amount_usd": 5,
+     "book_url": "https://www.klook.com/en-US/search/?query=Da+Nang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Klook private transfer",
+     "detail": "SUV · meet & greet, 15-20 min",
+     "price": "$12",
+     "amount_usd": 12,
+     "book_url": "https://www.klook.com/en-US/search/?query=Da+Nang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Mai Linh Taxi",
+     "detail": "sedan · metered, short hop to centre",
+     "price": "$7",
+     "amount_usd": 7,
+     "book_url": "https://www.klook.com/en-US/search/?query=Da+Nang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab Bike",
+     "detail": "motorbike · beach hops and bridge crossings",
+     "price": "$2",
+     "amount_usd": 2,
+     "book_url": "https://www.klook.com/en-US/search/?query=Da+Nang+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|da nang": {
+   "type": "activity",
+   "title": "Things to do · Da Nang",
+   "dest": "Da Nang",
+   "options": [
+    {
+     "name": "Ba Na Hills & Golden Bridge",
+     "detail": "9 hours · cable car, French village, the famous hands bridge",
+     "price": "$55",
+     "book_url": "https://www.getyourguide.com/s/?q=Ba+Na+Hills+%26+Golden+Bridge+Da+Nang"
+    },
+    {
+     "name": "My Khe beach surf lesson",
+     "detail": "2 hours · board + instructor, all levels",
+     "price": "$30",
+     "book_url": "https://www.getyourguide.com/s/?q=My+Khe+beach+surf+lesson+Da+Nang"
+    },
+    {
+     "name": "Marble Mountains & Lady Buddha",
+     "detail": "4 hours · caves, pagodas and coastal views",
+     "price": "$15",
+     "book_url": "https://www.getyourguide.com/s/?q=Marble+Mountains+%26+Lady+Buddha+Da+Nang"
+    },
+    {
+     "name": "Han River night cruise",
+     "detail": "1.5 hours · dragon bridge fire show on weekends",
+     "price": "$12",
+     "book_url": "https://www.getyourguide.com/s/?q=Han+River+night+cruise+Da+Nang"
+    },
+    {
+     "name": "Son Tra peninsula by scooter",
+     "detail": "4 hours · monkeys, viewpoints and hidden beaches",
+     "price": "$25",
+     "book_url": "https://www.getyourguide.com/s/?q=Son+Tra+peninsula+by+scooter+Da+Nang"
+    },
+    {
+     "name": "Hai Van Pass by jeep",
+     "detail": "5 hours · the Top Gear coast road, open-top",
+     "price": "$45",
+     "book_url": "https://www.getyourguide.com/s/?q=Hai+Van+Pass+by+jeep+Da+Nang"
+    },
+    {
+     "name": "Cham Museum & riverside walk",
+     "detail": "2 hours · the world's best Cham sculpture",
+     "price": "$5",
+     "book_url": "https://www.getyourguide.com/s/?q=Cham+Museum+%26+riverside+walk+Da+Nang"
+    },
+    {
+     "name": "Da Nang food tour by motorbike",
+     "detail": "3 hours · mi quang to seafood grills, local-led",
+     "price": "$30",
+     "book_url": "https://www.getyourguide.com/s/?q=Da+Nang+food+tour+by+motorbike+Da+Nang"
+    },
+    {
+     "name": "Golden hour at My Khe",
+     "detail": "flexible · sunrise swims with the whole city",
+     "price": "",
+     "book_url": "https://www.getyourguide.com/s/?q=Golden+hour+at+My+Khe+Da+Nang"
+    }
+   ]
+  },
+  "restaurant|da nang": {
+   "type": "restaurant",
+   "title": "Restaurants · Da Nang",
+   "dest": "Da Nang",
+   "options": [
+    {
+     "name": "Nen Restaurant",
+     "detail": "Tasting menu · $$$ · Michelin star, story-driven local produce",
+     "price": "",
+     "per_person_usd": 70,
+     "book_url": "https://www.google.com/maps/search/Nen+Restaurant+Da+Nang+Vietnam"
+    },
+    {
+     "name": "Madame Lan",
+     "detail": "Central Vietnamese · $$ · riverside classics, huge menu",
+     "price": "",
+     "per_person_usd": 20,
+     "book_url": "https://www.google.com/maps/search/Madame+Lan+Da+Nang+Vietnam"
+    },
+    {
+     "name": "Bep Hen",
+     "detail": "Vietnamese · $ · retro house, clam rice speciality",
+     "price": "",
+     "per_person_usd": 12,
+     "book_url": "https://www.google.com/maps/search/Bep+Hen+Da+Nang+Vietnam"
+    },
+    {
+     "name": "Mi Quang Ba Mua",
+     "detail": "Street food · $ · the definitive mi quang noodles",
+     "price": "",
+     "per_person_usd": 6,
+     "book_url": "https://www.google.com/maps/search/Mi+Quang+Ba+Mua+Da+Nang+Vietnam"
+    },
+    {
+     "name": "Hai San Be Man",
+     "detail": "Seafood · $$ · pick-your-tank seafood, local favourite",
+     "price": "",
+     "per_person_usd": 20,
+     "book_url": "https://www.google.com/maps/search/Hai+San+Be+Man+Da+Nang+Vietnam"
+    },
+    {
+     "name": "La Maison 1888",
+     "detail": "French fine dining · $$$$ · grand colonial dining at the InterContinental",
+     "price": "",
+     "per_person_usd": 120,
+     "book_url": "https://www.google.com/maps/search/La+Maison+1888+Da+Nang+Vietnam"
+    },
+    {
+     "name": "Banh Xeo Ba Duong",
+     "detail": "Street food · $ · sizzling crepes down a famous alley",
+     "price": "",
+     "per_person_usd": 5,
+     "book_url": "https://www.google.com/maps/search/Banh+Xeo+Ba+Duong+Da+Nang+Vietnam"
+    },
+    {
+     "name": "Thia Go",
+     "detail": "Vietnamese · $$ · wooden-spoon family cooking, local pick",
+     "price": "",
+     "per_person_usd": 14,
+     "book_url": "https://www.google.com/maps/search/Thia+Go+Da+Nang+Vietnam"
+    },
+    {
+     "name": "Olivia's Prime Steakhouse",
+     "detail": "Steakhouse · $$$ · the expat celebration room",
+     "price": "",
+     "per_person_usd": 50,
+     "book_url": "https://www.google.com/maps/search/Olivia%27s+Prime+Steakhouse+Da+Nang+Vietnam"
+    },
+    {
+     "name": "Com Ga A Hai",
+     "detail": "Street food · $ · Da Nang's beloved chicken rice",
+     "price": "",
+     "per_person_usd": 5,
+     "book_url": "https://www.google.com/maps/search/Com+Ga+A+Hai+Da+Nang+Vietnam"
+    }
+   ]
+  },
+  "hotel|da nang": [
+   {
+    "name": "InterContinental Danang Sun Peninsula",
+    "stars": 5,
+    "price_from": 420,
+    "blurb": "Award-winning clifftop resort on Son Tra peninsula.",
+    "city": "Da Nang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=InterContinental+Danang+Sun+Peninsula%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.0,
+    "reviews": 1769,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Hyatt Regency Danang Resort & Spa",
+    "stars": 5,
+    "price_from": 200,
+    "blurb": "Beachfront resort on My Khe Beach.",
+    "city": "Da Nang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hyatt+Regency+Danang+Resort+%26+Spa%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.1,
+    "reviews": 1621,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Furama Resort Danang",
+    "stars": 5,
+    "price_from": 180,
+    "blurb": "Classic beach resort with lagoon pools.",
+    "city": "Da Nang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Furama+Resort+Danang%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.1,
+    "reviews": 1140,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Fusion Maia Da Nang",
+    "stars": 5,
+    "price_from": 310,
+    "blurb": "Pool villas with daily spa treatments included.",
+    "city": "Da Nang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Fusion+Maia+Da+Nang%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.0,
+    "reviews": 1103,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Melia Vinpearl Danang Riverfront",
+    "stars": 4,
+    "price_from": 90,
+    "blurb": "Han River views, minutes from My Khe beach.",
+    "city": "Da Nang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Melia+Vinpearl+Danang+Riverfront%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.6,
+    "reviews": 1584,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Premier Village Danang Resort",
+    "stars": 5,
+    "price_from": 350,
+    "blurb": "Beachfront pool villas for families.",
+    "city": "Da Nang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Premier+Village+Danang+Resort%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 1473,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Pullman Danang Beach Resort",
+    "stars": 5,
+    "price_from": 180,
+    "blurb": "Lush grounds right on Bac My An beach.",
+    "city": "Da Nang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Pullman+Danang+Beach+Resort%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.1,
+    "reviews": 1399,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Danang Golden Bay",
+    "stars": 5,
+    "price_from": 110,
+    "blurb": "Gold-tiled rooftop infinity pool.",
+    "city": "Da Nang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Danang+Golden+Bay%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 1029,
+    "tag": "Guest favourite"
+   }
+  ],
+  "flight|hoi an": {
+   "type": "flight",
+   "title": "Flights to Hoi An",
+   "dest": "Hoi An",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "HAN-DAD (30 min drive to Hoi An) · 1h 20m · nonstop",
+     "price": "$85",
+     "amount_usd": 85,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "SGN-DAD (30 min drive to Hoi An) · 1h 25m · nonstop",
+     "price": "$45",
+     "amount_usd": 45,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
+    },
+    {
+     "name": "Bamboo Airways",
+     "detail": "HAN-DAD (30 min drive) · 1h 20m · nonstop",
+     "price": "$65",
+     "amount_usd": 65,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-HAN + HAN-DAD (from India) · 8h 30m · 1 stop",
+     "price": "$265",
+     "amount_usd": 265,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
+    },
+    {
+     "name": "EVA Air",
+     "detail": "LAX-DAD via Taipei (from USA) · 20h 10m · 1 stop",
+     "price": "$830",
+     "amount_usd": 830,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "CDG-HAN + HAN-DAD (from Europe) · 14h 30m · 1 stop",
+     "price": "$735",
+     "amount_usd": 735,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
+    }
+   ]
+  },
+  "cab|hoi an": {
+   "type": "cab",
+   "title": "Airport transfers · Hoi An",
+   "dest": "Hoi An",
+   "options": [
+    {
+     "name": "Klook private transfer",
+     "detail": "sedan · Da Nang airport to Hoi An, 45 min",
+     "price": "$16",
+     "amount_usd": 16,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hoi+An+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab",
+     "detail": "sedan · DAD to Hoi An Ancient Town",
+     "price": "$14",
+     "amount_usd": 14,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hoi+An+Vietnam+airport+transfer"
+    },
+    {
+     "name": "XanhSM",
+     "detail": "electric sedan · EV from DAD, fixed fare",
+     "price": "$14",
+     "amount_usd": 14,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hoi+An+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Hotel car service",
+     "detail": "SUV · arranged via your hotel, meet & greet",
+     "price": "$22",
+     "amount_usd": 22,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hoi+An+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab Bike",
+     "detail": "motorbike · quick hops to An Bang beach",
+     "price": "$3",
+     "amount_usd": 3,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hoi+An+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Hoi An shuttle bus",
+     "detail": "minibus · shared DAD-Hoi An runs, hourly",
+     "price": "$6",
+     "amount_usd": 6,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hoi+An+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|hoi an": {
+   "type": "activity",
+   "title": "Things to do · Hoi An",
+   "dest": "Hoi An",
+   "options": [
+    {
+     "name": "Lantern boat ride on the Thu Bon",
+     "detail": "45 minutes · release a lantern in the old town at dusk",
+     "price": "$7",
+     "book_url": "https://www.getyourguide.com/s/?q=Lantern+boat+ride+on+the+Thu+Bon+Hoi+An"
+    },
+    {
+     "name": "Vietnamese cooking class",
+     "detail": "4 hours · market visit + basket boat + 5 dishes",
+     "price": "$35",
+     "book_url": "https://www.getyourguide.com/s/?q=Vietnamese+cooking+class+Hoi+An"
+    },
+    {
+     "name": "My Son Sanctuary sunrise tour",
+     "detail": "5 hours · ancient Cham temples before the crowds",
+     "price": "$40",
+     "book_url": "https://www.getyourguide.com/s/?q=My+Son+Sanctuary+sunrise+tour+Hoi+An"
+    },
+    {
+     "name": "Tailor-made outfit experience",
+     "detail": "2 hours · measured, fitted and finished in 24h",
+     "price": "$60",
+     "book_url": "https://www.getyourguide.com/s/?q=Tailor-made+outfit+experience+Hoi+An"
+    },
+    {
+     "name": "Basket boat ride, Cam Thanh",
+     "detail": "2 hours · coconut-palm waterways, crab fishing",
+     "price": "$12",
+     "book_url": "https://www.getyourguide.com/s/?q=Basket+boat+ride%2C+Cam+Thanh+Hoi+An"
+    },
+    {
+     "name": "An Bang beach day",
+     "detail": "flexible · loungers, seafood shacks and calm water",
+     "price": "$5",
+     "book_url": "https://www.getyourguide.com/s/?q=An+Bang+beach+day+Hoi+An"
+    },
+    {
+     "name": "Tra Que herb village",
+     "detail": "3 hours · farm-to-table lunch you help grow",
+     "price": "$10",
+     "book_url": "https://www.getyourguide.com/s/?q=Tra+Que+herb+village+Hoi+An"
+    },
+    {
+     "name": "Hoi An Memories night show",
+     "detail": "2 hours · spectacular 500-performer outdoor stage",
+     "price": "$25",
+     "book_url": "https://www.getyourguide.com/s/?q=Hoi+An+Memories+night+show+Hoi+An"
+    },
+    {
+     "name": "Kim Bong carpentry village by boat",
+     "detail": "3 hours · boatbuilders across the river",
+     "price": "$8",
+     "book_url": "https://www.getyourguide.com/s/?q=Kim+Bong+carpentry+village+by+boat+Hoi+An"
+    },
+    {
+     "name": "Cham Islands snorkel day",
+     "detail": "7 hours · speedboat, reefs and island lunch (seasonal)",
+     "price": "$45",
+     "book_url": "https://www.getyourguide.com/s/?q=Cham+Islands+snorkel+day+Hoi+An"
+    }
+   ]
+  },
+  "restaurant|hoi an": {
+   "type": "restaurant",
+   "title": "Restaurants · Hoi An",
+   "dest": "Hoi An",
+   "options": [
+    {
+     "name": "Morning Glory",
+     "detail": "Central Vietnamese · $$ · cao lau and white rose dumplings",
+     "price": "",
+     "per_person_usd": 20,
+     "book_url": "https://www.google.com/maps/search/Morning+Glory+Hoi+An+Vietnam"
+    },
+    {
+     "name": "Banh Mi Phuong",
+     "detail": "Street food · $ · the banh mi Anthony Bourdain loved",
+     "price": "",
+     "per_person_usd": 5,
+     "book_url": "https://www.google.com/maps/search/Banh+Mi+Phuong+Hoi+An+Vietnam"
+    },
+    {
+     "name": "The Field",
+     "detail": "Vietnamese · $$ · rice-paddy setting outside the old town",
+     "price": "",
+     "per_person_usd": 18,
+     "book_url": "https://www.google.com/maps/search/The+Field+Hoi+An+Vietnam"
+    },
+    {
+     "name": "Nu Eatery",
+     "detail": "Vietnamese fusion · $$ · tiny, inventive, always packed",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Nu+Eatery+Hoi+An+Vietnam"
+    },
+    {
+     "name": "Mango Mango",
+     "detail": "Fusion · $$$ · riverfront terrace opposite the bridge",
+     "price": "",
+     "per_person_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Mango+Mango+Hoi+An+Vietnam"
+    },
+    {
+     "name": "Madam Khanh — The Banh Mi Queen",
+     "detail": "Street food · $ · the other legendary banh mi",
+     "price": "",
+     "per_person_usd": 4,
+     "book_url": "https://www.google.com/maps/search/Madam+Khanh+%E2%80%94+The+Banh+Mi+Queen+Hoi+An+Vietnam"
+    },
+    {
+     "name": "Streets Restaurant Cafe",
+     "detail": "Vietnamese · $$ · training restaurant for disadvantaged youth",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Streets+Restaurant+Cafe+Hoi+An+Vietnam"
+    },
+    {
+     "name": "Bale Well",
+     "detail": "Local grill · $ · one set menu: DIY pork-satay rolls",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Bale+Well+Hoi+An+Vietnam"
+    },
+    {
+     "name": "Com Ga Ba Buoi",
+     "detail": "Street food · $ · the definitive Hoi An chicken rice",
+     "price": "",
+     "per_person_usd": 4,
+     "book_url": "https://www.google.com/maps/search/Com+Ga+Ba+Buoi+Hoi+An+Vietnam"
+    },
+    {
+     "name": "Vy's Market Restaurant",
+     "detail": "Vietnamese · $$ · live street-food stations under one roof",
+     "price": "",
+     "per_person_usd": 16,
+     "book_url": "https://www.google.com/maps/search/Vy%27s+Market+Restaurant+Hoi+An+Vietnam"
+    }
+   ]
+  },
+  "hotel|hoi an": [
+   {
+    "name": "Four Seasons The Nam Hai",
+    "stars": 5,
+    "price_from": 480,
+    "blurb": "Beachfront villas between Hoi An and Da Nang.",
+    "city": "Hoi An",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Four+Seasons+The+Nam+Hai%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.9,
+    "reviews": 1288,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Anantara Hoi An Resort",
+    "stars": 5,
+    "price_from": 220,
+    "blurb": "Riverside resort a short walk from the ancient town.",
+    "city": "Hoi An",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Anantara+Hoi+An+Resort%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.2,
+    "reviews": 1214,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "La Siesta Hoi An Resort & Spa",
+    "stars": 4,
+    "price_from": 120,
+    "blurb": "Lantern-lit boutique resort with a great spa.",
+    "city": "Hoi An",
+    "book_url": "https://www.booking.com/searchresults.html?ss=La+Siesta+Hoi+An+Resort+%26+Spa%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.8,
+    "reviews": 1473,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Allegro Hoi An",
+    "stars": 4,
+    "price_from": 90,
+    "blurb": "All-suite boutique two blocks from the old town.",
+    "city": "Hoi An",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Allegro+Hoi+An%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.6,
+    "reviews": 918,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Little Riverside Hoi An",
+    "stars": 4,
+    "price_from": 100,
+    "blurb": "Thu Bon riverfront with balcony views.",
+    "city": "Hoi An",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Little+Riverside+Hoi+An%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.8,
+    "reviews": 1251,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Victoria Hoi An Beach Resort",
+    "stars": 4,
+    "price_from": 140,
+    "blurb": "Cua Dai beachfront with old-town shuttle.",
+    "city": "Hoi An",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Victoria+Hoi+An+Beach+Resort%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.7,
+    "reviews": 1436,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Almanity Hoi An Wellness Resort",
+    "stars": 4,
+    "price_from": 110,
+    "blurb": "Daily spa treatment included.",
+    "city": "Hoi An",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Almanity+Hoi+An+Wellness+Resort%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.5,
+    "reviews": 1547,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Bel Marina Hoi An Resort",
+    "stars": 4,
+    "price_from": 95,
+    "blurb": "Island resort facing the night market.",
+    "city": "Hoi An",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Bel+Marina+Hoi+An+Resort%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.4,
+    "reviews": 1288,
+    "tag": "Highly rated"
+   }
+  ],
+  "flight|hue": {
+   "type": "flight",
+   "title": "Flights to Hue",
+   "dest": "Hue",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "HAN-HUI · 1h 10m · nonstop",
+     "price": "$80",
+     "amount_usd": 80,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hue"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "SGN-HUI · 1h 25m · nonstop",
+     "price": "$50",
+     "amount_usd": 50,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hue"
+    },
+    {
+     "name": "Bamboo Airways",
+     "detail": "HAN-HUI · 1h 10m · nonstop",
+     "price": "$62",
+     "amount_usd": 62,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hue"
+    },
+    {
+     "name": "Pacific Airlines",
+     "detail": "SGN-HUI · 1h 25m · nonstop",
+     "price": "$45",
+     "amount_usd": 45,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hue"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-HAN + HAN-HUI (from India) · 8h 15m · 1 stop",
+     "price": "$260",
+     "amount_usd": 260,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hue"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "CDG-HAN + HAN-HUI (from Europe) · 14h 20m · 1 stop",
+     "price": "$730",
+     "amount_usd": 730,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hue"
+    }
+   ]
+  },
+  "cab|hue": {
+   "type": "cab",
+   "title": "Airport transfers · Hue",
+   "dest": "Hue",
+   "options": [
+    {
+     "name": "Grab",
+     "detail": "sedan · Phu Bai airport to city, 25 min",
+     "price": "$9",
+     "amount_usd": 9,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hue+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Klook private transfer",
+     "detail": "SUV · meet & greet, fixed fare",
+     "price": "$14",
+     "amount_usd": 14,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hue+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Mai Linh Taxi",
+     "detail": "sedan · metered, 25-30 min",
+     "price": "$11",
+     "amount_usd": 11,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hue+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Hue to Hoi An private car",
+     "detail": "sedan · scenic Hai Van pass route, 3h",
+     "price": "$55",
+     "amount_usd": 55,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hue+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Cyclo tour ride",
+     "detail": "cyclo · citadel-side pedal rickshaw hour",
+     "price": "$6",
+     "amount_usd": 6,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hue+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab Bike",
+     "detail": "motorbike · river crossings and market hops",
+     "price": "$2",
+     "amount_usd": 2,
+     "book_url": "https://www.klook.com/en-US/search/?query=Hue+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|hue": {
+   "type": "activity",
+   "title": "Things to do · Hue",
+   "dest": "Hue",
+   "options": [
+    {
+     "name": "Imperial City guided tour",
+     "detail": "3 hours · citadel, Forbidden Purple City, royal tombs intro",
+     "price": "$25",
+     "book_url": "https://www.getyourguide.com/s/?q=Imperial+City+guided+tour+Hue"
+    },
+    {
+     "name": "Perfume River dragon boat cruise",
+     "detail": "2 hours · Thien Mu Pagoda stop at sunset",
+     "price": "$15",
+     "book_url": "https://www.getyourguide.com/s/?q=Perfume+River+dragon+boat+cruise+Hue"
+    },
+    {
+     "name": "DMZ day tour",
+     "detail": "10 hours · Vinh Moc tunnels and Khe Sanh with a historian guide",
+     "price": "$45",
+     "book_url": "https://www.getyourguide.com/s/?q=DMZ+day+tour+Hue"
+    },
+    {
+     "name": "Royal tombs by bicycle",
+     "detail": "5 hours · Minh Mang and Khai Dinh through the pines",
+     "price": "$22",
+     "book_url": "https://www.getyourguide.com/s/?q=Royal+tombs+by+bicycle+Hue"
+    },
+    {
+     "name": "Hue imperial cuisine dinner",
+     "detail": "2 hours · royal dishes in a garden house",
+     "price": "$30",
+     "book_url": "https://www.getyourguide.com/s/?q=Hue+imperial+cuisine+dinner+Hue"
+    },
+    {
+     "name": "Thuy Xuan incense village",
+     "detail": "2 hours · rainbow incense bundles and photo ops",
+     "price": "$3",
+     "book_url": "https://www.getyourguide.com/s/?q=Thuy+Xuan+incense+village+Hue"
+    },
+    {
+     "name": "Dong Ba market food walk",
+     "detail": "2 hours · Hue's snack canon in one market",
+     "price": "$8",
+     "book_url": "https://www.getyourguide.com/s/?q=Dong+Ba+market+food+walk+Hue"
+    },
+    {
+     "name": "Hue by cyclo at dusk",
+     "detail": "1.5 hours · citadel walls in golden light",
+     "price": "$8",
+     "book_url": "https://www.getyourguide.com/s/?q=Hue+by+cyclo+at+dusk+Hue"
+    }
+   ]
+  },
+  "restaurant|hue": {
+   "type": "restaurant",
+   "title": "Restaurants · Hue",
+   "dest": "Hue",
+   "options": [
+    {
+     "name": "Madam Thu",
+     "detail": "Hue specialities · $ · banh beo and nem lui tasting sets",
+     "price": "",
+     "per_person_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Madam+Thu+Hue+Vietnam"
+    },
+    {
+     "name": "Les Jardins de La Carambole",
+     "detail": "French-Vietnamese · $$ · colonial house near the citadel",
+     "price": "",
+     "per_person_usd": 30,
+     "book_url": "https://www.google.com/maps/search/Les+Jardins+de+La+Carambole+Hue+Vietnam"
+    },
+    {
+     "name": "Quan Hanh",
+     "detail": "Hue specialities · $ · locals' pick for royal snacks",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Quan+Hanh+Hue+Vietnam"
+    },
+    {
+     "name": "Com Hen Hoa Dong",
+     "detail": "Street food · $ · the classic clam rice, riverside",
+     "price": "",
+     "per_person_usd": 5,
+     "book_url": "https://www.google.com/maps/search/Com+Hen+Hoa+Dong+Hue+Vietnam"
+    },
+    {
+     "name": "Ancient Hue Garden Houses",
+     "detail": "Royal cuisine · $$$ · imperial degustation in a garden house",
+     "price": "",
+     "per_person_usd": 40,
+     "book_url": "https://www.google.com/maps/search/Ancient+Hue+Garden+Houses+Hue+Vietnam"
+    },
+    {
+     "name": "Bun Bo Hue Ba Tuyet",
+     "detail": "Street food · $ · the city's signature beef noodle, done right",
+     "price": "",
+     "per_person_usd": 4,
+     "book_url": "https://www.google.com/maps/search/Bun+Bo+Hue+Ba+Tuyet+Hue+Vietnam"
+    },
+    {
+     "name": "Nook Cafe & Bar",
+     "detail": "Cafe-fusion · $ · laneway brunches loved by long-stayers",
+     "price": "",
+     "per_person_usd": 9,
+     "book_url": "https://www.google.com/maps/search/Nook+Cafe+%26+Bar+Hue+Vietnam"
+    },
+    {
+     "name": "Hanh Restaurant",
+     "detail": "Hue specialities · $ · five-dish local sampler, always busy",
+     "price": "",
+     "per_person_usd": 7,
+     "book_url": "https://www.google.com/maps/search/Hanh+Restaurant+Hue+Vietnam"
+    }
+   ]
+  },
+  "hotel|hue": [
+   {
+    "name": "Azerai La Residence Hue",
+    "stars": 5,
+    "price_from": 170,
+    "blurb": "Art-deco riverside hotel by the Perfume River.",
+    "city": "Hue",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Azerai+La+Residence+Hue%2C+Hue%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 1251,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Pilgrimage Village Boutique Resort",
+    "stars": 4,
+    "price_from": 95,
+    "blurb": "Garden sanctuary just outside the citadel.",
+    "city": "Hue",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Pilgrimage+Village+Boutique+Resort%2C+Hue%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.7,
+    "reviews": 1658,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Silk Path Grand Hue",
+    "stars": 4,
+    "price_from": 70,
+    "blurb": "Palatial style near the railway station.",
+    "city": "Hue",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Silk+Path+Grand+Hue%2C+Hue%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.5,
+    "reviews": 1103,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Eldora Hotel Hue",
+    "stars": 4,
+    "price_from": 55,
+    "blurb": "Grand lobby, steps from the walking street.",
+    "city": "Hue",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Eldora+Hotel+Hue%2C+Hue%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.7,
+    "reviews": 992,
+    "tag": "Highly rated"
+   }
+  ],
+  "flight|sapa": {
+   "type": "flight",
+   "title": "Flights to Sapa",
+   "dest": "Sapa",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SGN-HAN + 5h limousine bus to Sapa · 2h 10m + transfer · via Hanoi",
+     "price": "$110",
+     "amount_usd": 110,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Sapa"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "SGN-HAN + overnight sleeper train · 2h 10m + rail · via Hanoi",
+     "price": "$82",
+     "amount_usd": 82,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Sapa"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-HAN + limousine to Sapa (from India) · 5h 15m + 5h road · via Hanoi",
+     "price": "$198",
+     "amount_usd": 198,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Sapa"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "CDG-HAN + limousine to Sapa (from Europe) · 11h 30m + 5h road · via Hanoi",
+     "price": "$668",
+     "amount_usd": 668,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Sapa"
+    }
+   ]
+  },
+  "cab|sapa": {
+   "type": "cab",
+   "title": "Airport transfers · Sapa",
+   "dest": "Sapa",
+   "options": [
+    {
+     "name": "Sapa Express limousine",
+     "detail": "9-seat van · Hanoi to Sapa, 5h, hotel pickup",
+     "price": "$18",
+     "amount_usd": 18,
+     "book_url": "https://www.klook.com/en-US/search/?query=Sapa+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Klook private transfer",
+     "detail": "SUV · Hanoi to Sapa door-to-door",
+     "price": "$95",
+     "amount_usd": 95,
+     "book_url": "https://www.klook.com/en-US/search/?query=Sapa+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Green Bus",
+     "detail": "sleeper bus · overnight, reclining berths",
+     "price": "$14",
+     "amount_usd": 14,
+     "book_url": "https://www.klook.com/en-US/search/?query=Sapa+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Local taxi",
+     "detail": "sedan · within Sapa town and trailheads",
+     "price": "$5",
+     "amount_usd": 5,
+     "book_url": "https://www.klook.com/en-US/search/?query=Sapa+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Xe om (motorbike taxi)",
+     "detail": "motorbike · trailhead drops, negotiate first",
+     "price": "$3",
+     "amount_usd": 3,
+     "book_url": "https://www.klook.com/en-US/search/?query=Sapa+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|sapa": {
+   "type": "activity",
+   "title": "Things to do · Sapa",
+   "dest": "Sapa",
+   "options": [
+    {
+     "name": "Fansipan cable car",
+     "detail": "3 hours · summit of Indochina at 3,143m",
+     "price": "$28",
+     "book_url": "https://www.getyourguide.com/s/?q=Fansipan+cable+car+Sapa"
+    },
+    {
+     "name": "Muong Hoa valley trek + homestay lunch",
+     "detail": "6 hours · rice terraces with a Hmong guide",
+     "price": "$55",
+     "book_url": "https://www.getyourguide.com/s/?q=Muong+Hoa+valley+trek+%2B+homestay+lunch+Sapa"
+    },
+    {
+     "name": "Cat Cat village walk",
+     "detail": "2 hours · waterfall, weaving workshops, easy paths",
+     "price": "$5",
+     "book_url": "https://www.getyourguide.com/s/?q=Cat+Cat+village+walk+Sapa"
+    },
+    {
+     "name": "Two-day village trek with overnight homestay",
+     "detail": "2 days · Lao Chai and Ta Van, all meals",
+     "price": "$95",
+     "book_url": "https://www.getyourguide.com/s/?q=Two-day+village+trek+with+overnight+homestay+Sapa"
+    },
+    {
+     "name": "Sapa market morning",
+     "detail": "2 hours · hill-tribe textiles and mountain produce",
+     "price": "$3",
+     "book_url": "https://www.getyourguide.com/s/?q=Sapa+market+morning+Sapa"
+    },
+    {
+     "name": "Silver Waterfall & Tram Ton pass",
+     "detail": "3 hours · the highest road pass in Vietnam",
+     "price": "$10",
+     "book_url": "https://www.getyourguide.com/s/?q=Silver+Waterfall+%26+Tram+Ton+pass+Sapa"
+    },
+    {
+     "name": "Love Waterfall trek",
+     "detail": "3 hours · forest trail below Fansipan",
+     "price": "$6",
+     "book_url": "https://www.getyourguide.com/s/?q=Love+Waterfall+trek+Sapa"
+    }
+   ]
+  },
+  "restaurant|sapa": {
+   "type": "restaurant",
+   "title": "Restaurants · Sapa",
+   "dest": "Sapa",
+   "options": [
+    {
+     "name": "The Hill Station Signature",
+     "detail": "Hmong-Vietnamese · $$ · smoked buffalo, valley views",
+     "price": "",
+     "per_person_usd": 22,
+     "book_url": "https://www.google.com/maps/search/The+Hill+Station+Signature+Sapa+Vietnam"
+    },
+    {
+     "name": "A Phu Restaurant",
+     "detail": "Vietnamese · $ · hotpots after a cold trek",
+     "price": "",
+     "per_person_usd": 9,
+     "book_url": "https://www.google.com/maps/search/A+Phu+Restaurant+Sapa+Vietnam"
+    },
+    {
+     "name": "Le Gecko",
+     "detail": "French cafe · $$ · tartines and mountain breakfasts",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Le+Gecko+Sapa+Vietnam"
+    },
+    {
+     "name": "Red Dao House",
+     "detail": "Ethnic minority cuisine · $$ · Red Dao recipes, herbal flavours",
+     "price": "",
+     "per_person_usd": 14,
+     "book_url": "https://www.google.com/maps/search/Red+Dao+House+Sapa+Vietnam"
+    },
+    {
+     "name": "Moment Romantic Restaurant",
+     "detail": "Vietnamese · $$ · fireside tables on cold evenings",
+     "price": "",
+     "per_person_usd": 12,
+     "book_url": "https://www.google.com/maps/search/Moment+Romantic+Restaurant+Sapa+Vietnam"
+    },
+    {
+     "name": "A Quynh Restaurant",
+     "detail": "Vietnamese · $$ · thang co and salmon hotpot speciality",
+     "price": "",
+     "per_person_usd": 13,
+     "book_url": "https://www.google.com/maps/search/A+Quynh+Restaurant+Sapa+Vietnam"
+    }
+   ]
+  },
+  "hotel|sapa": [
+   {
+    "name": "Hotel de la Coupole MGallery",
+    "stars": 5,
+    "price_from": 160,
+    "blurb": "Grand colonial-style hotel by the cable-car base.",
+    "city": "Sapa",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hotel+de+la+Coupole+MGallery%2C+Sapa%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.2,
+    "reviews": 1436,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Topas Ecolodge",
+    "stars": 4,
+    "price_from": 180,
+    "blurb": "Mountain bungalows with rice-terrace views.",
+    "city": "Sapa",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Topas+Ecolodge%2C+Sapa%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.6,
+    "reviews": 918,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Pao's Sapa Leisure Hotel",
+    "stars": 4,
+    "price_from": 90,
+    "blurb": "Valley-view rooms above Muong Hoa.",
+    "city": "Sapa",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Pao%27s+Sapa+Leisure+Hotel%2C+Sapa%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.4,
+    "reviews": 1288,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Silk Path Grand Sapa Resort",
+    "stars": 5,
+    "price_from": 120,
+    "blurb": "Hillside spa resort above the town.",
+    "city": "Sapa",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Silk+Path+Grand+Sapa+Resort%2C+Sapa%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.1,
+    "reviews": 1399,
+    "tag": "Guest favourite"
+   }
+  ],
+  "flight|ha long bay": {
+   "type": "flight",
+   "title": "Flights to Ha Long Bay",
+   "dest": "Ha Long Bay",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SGN-HAN + 2.5h shuttle to Ha Long · 2h 10m + transfer · via Hanoi",
+     "price": "$105",
+     "amount_usd": 105,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Long+Bay"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "SGN-HPH (Cat Bi) + 1h transfer · 2h 00m · nonstop + transfer",
+     "price": "$70",
+     "amount_usd": 70,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Long+Bay"
+    },
+    {
+     "name": "Bamboo Airways",
+     "detail": "SGN-VDO (Van Don) · 2h 05m · nonstop",
+     "price": "$88",
+     "amount_usd": 88,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Long+Bay"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-HAN + shuttle to Ha Long (from India) · 5h 15m + 2.5h road · via Hanoi",
+     "price": "$195",
+     "amount_usd": 195,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Long+Bay"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "LHR-HAN + shuttle (from Europe) · 12h 10m + 2.5h road · via Hanoi",
+     "price": "$655",
+     "amount_usd": 655,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Long+Bay"
+    }
+   ]
+  },
+  "cab|ha long bay": {
+   "type": "cab",
+   "title": "Airport transfers · Ha Long Bay",
+   "dest": "Ha Long Bay",
+   "options": [
+    {
+     "name": "Klook shuttle",
+     "detail": "16-seat van · Hanoi to Ha Long marina, 2.5h",
+     "price": "$15",
+     "amount_usd": 15,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ha+Long+Bay+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab",
+     "detail": "sedan · within Ha Long city",
+     "price": "$7",
+     "amount_usd": 7,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ha+Long+Bay+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Private car (hotel desk)",
+     "detail": "SUV · Hanoi pickup, expressway route",
+     "price": "$60",
+     "amount_usd": 60,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ha+Long+Bay+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Tuan Chau marina shuttle",
+     "detail": "minibus · hotel strip to cruise piers",
+     "price": "$3",
+     "amount_usd": 3,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ha+Long+Bay+Vietnam+airport+transfer"
+    },
+    {
+     "name": "XanhSM",
+     "detail": "electric sedan · EV rides around Bai Chay",
+     "price": "$6",
+     "amount_usd": 6,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ha+Long+Bay+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|ha long bay": {
+   "type": "activity",
+   "title": "Things to do · Ha Long Bay",
+   "dest": "Ha Long Bay",
+   "options": [
+    {
+     "name": "Overnight luxury cruise",
+     "detail": "2 days · cabin, meals, kayaking and Sung Sot cave",
+     "price": "$145",
+     "book_url": "https://www.getyourguide.com/s/?q=Overnight+luxury+cruise+Ha+Long+Bay"
+    },
+    {
+     "name": "Day cruise with kayaking",
+     "detail": "8 hours · Titop island viewpoint + lunch on board",
+     "price": "$45",
+     "book_url": "https://www.getyourguide.com/s/?q=Day+cruise+with+kayaking+Ha+Long+Bay"
+    },
+    {
+     "name": "Seaplane scenic flight",
+     "detail": "25 minutes · the karsts from 300m",
+     "price": "$99",
+     "book_url": "https://www.getyourguide.com/s/?q=Seaplane+scenic+flight+Ha+Long+Bay"
+    },
+    {
+     "name": "Two-night Lan Ha Bay cruise",
+     "detail": "3 days · the quieter route via Cat Ba waters",
+     "price": "$260",
+     "book_url": "https://www.getyourguide.com/s/?q=Two-night+Lan+Ha+Bay+cruise+Ha+Long+Bay"
+    },
+    {
+     "name": "Bai Tu Long overnight cruise",
+     "detail": "2 days · the wilder, less-visited sister bay",
+     "price": "$165",
+     "book_url": "https://www.getyourguide.com/s/?q=Bai+Tu+Long+overnight+cruise+Ha+Long+Bay"
+    },
+    {
+     "name": "Sun World Ha Long cable car",
+     "detail": "3 hours · across the bay to Ba Deo hill",
+     "price": "$14",
+     "book_url": "https://www.getyourguide.com/s/?q=Sun+World+Ha+Long+cable+car+Ha+Long+Bay"
+    }
+   ]
+  },
+  "restaurant|ha long bay": {
+   "type": "restaurant",
+   "title": "Restaurants · Ha Long Bay",
+   "dest": "Ha Long Bay",
+   "options": [
+    {
+     "name": "Cua Vang",
+     "detail": "Seafood · $$ · golden crab, harbour views",
+     "price": "",
+     "per_person_usd": 28,
+     "book_url": "https://www.google.com/maps/search/Cua+Vang+Ha+Long+Bay+Vietnam"
+    },
+    {
+     "name": "Hong Hanh 3",
+     "detail": "Seafood · $$ · locals' seafood hall, very fresh",
+     "price": "",
+     "per_person_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Hong+Hanh+3+Ha+Long+Bay+Vietnam"
+    },
+    {
+     "name": "Green Bamboo",
+     "detail": "Vietnamese · $ · reliable pre-cruise lunch",
+     "price": "",
+     "per_person_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Green+Bamboo+Ha+Long+Bay+Vietnam"
+    },
+    {
+     "name": "1958 Restaurant",
+     "detail": "Vietnamese fine dining · $$$ · bay views and refined plates",
+     "price": "",
+     "per_person_usd": 35,
+     "book_url": "https://www.google.com/maps/search/1958+Restaurant+Ha+Long+Bay+Vietnam"
+    },
+    {
+     "name": "Ha Long night market stalls",
+     "detail": "Street food · $ · grilled squid by the seafront",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Ha+Long+night+market+stalls+Ha+Long+Bay+Vietnam"
+    }
+   ]
+  },
+  "hotel|ha long bay": [
+   {
+    "name": "Paradise Elegance Cruise",
+    "stars": 5,
+    "price_from": 280,
+    "blurb": "Luxury overnight cruise through the karst islands.",
+    "city": "Ha Long Bay",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Paradise+Elegance+Cruise%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.9,
+    "reviews": 1288,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Vinpearl Resort & Spa Ha Long",
+    "stars": 5,
+    "price_from": 150,
+    "blurb": "Island resort overlooking the bay.",
+    "city": "Ha Long Bay",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Vinpearl+Resort+%26+Spa+Ha+Long%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 1473,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Wyndham Legend Halong",
+    "stars": 4,
+    "price_from": 85,
+    "blurb": "Bay views close to the cruise marina.",
+    "city": "Ha Long Bay",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Wyndham+Legend+Halong%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.6,
+    "reviews": 1177,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Paradise Suites Hotel",
+    "stars": 4,
+    "price_from": 70,
+    "blurb": "Boutique base on Tuan Chau marina.",
+    "city": "Ha Long Bay",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Paradise+Suites+Hotel%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.6,
+    "reviews": 1177,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Novotel Ha Long Bay",
+    "stars": 4,
+    "price_from": 80,
+    "blurb": "Bayfront rooms along Bai Chay beach.",
+    "city": "Ha Long Bay",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Novotel+Ha+Long+Bay%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.5,
+    "reviews": 1103,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Muong Thanh Luxury Quang Ninh",
+    "stars": 4,
+    "price_from": 60,
+    "blurb": "High-floor bay panoramas in Bai Chay.",
+    "city": "Ha Long Bay",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Muong+Thanh+Luxury+Quang+Ninh%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.8,
+    "reviews": 1473,
+    "tag": "Highly rated"
+   }
+  ],
+  "flight|phu quoc": {
+   "type": "flight",
+   "title": "Flights to Phu Quoc",
+   "dest": "Phu Quoc",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SGN-PQC · 1h 00m · nonstop",
+     "price": "$80",
+     "amount_usd": 80,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "HAN-PQC · 2h 10m · nonstop",
+     "price": "$60",
+     "amount_usd": 60,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    },
+    {
+     "name": "Bamboo Airways",
+     "detail": "SGN-PQC · 1h 00m · nonstop",
+     "price": "$65",
+     "amount_usd": 65,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "ICN-PQC (from Korea) · 5h 20m · nonstop",
+     "price": "$210",
+     "amount_usd": 210,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "BOM-SGN + SGN-PQC (from India) · 8h 00m · 1 stop",
+     "price": "$280",
+     "amount_usd": 280,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SFO-SGN + SGN-PQC (from USA) · 19h 30m · 1 stop",
+     "price": "$830",
+     "amount_usd": 830,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "FRA-SGN + SGN-PQC (from Europe) · 14h 45m · 1 stop",
+     "price": "$760",
+     "amount_usd": 760,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    },
+    {
+     "name": "Pacific Airlines",
+     "detail": "SGN-PQC · 1h 00m · nonstop",
+     "price": "$52",
+     "amount_usd": 52,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    }
+   ]
+  },
+  "cab|phu quoc": {
+   "type": "cab",
+   "title": "Airport transfers · Phu Quoc",
+   "dest": "Phu Quoc",
+   "options": [
+    {
+     "name": "Grab",
+     "detail": "sedan · airport to Duong Dong, 15 min",
+     "price": "$7",
+     "amount_usd": 7,
+     "book_url": "https://www.klook.com/en-US/search/?query=Phu+Quoc+Vietnam+airport+transfer"
+    },
+    {
+     "name": "XanhSM",
+     "detail": "electric sedan · EV to resorts, fixed fare",
+     "price": "$7",
+     "amount_usd": 7,
+     "book_url": "https://www.klook.com/en-US/search/?query=Phu+Quoc+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Klook private transfer",
+     "detail": "SUV · meet & greet, resort drop-off",
+     "price": "$13",
+     "amount_usd": 13,
+     "book_url": "https://www.klook.com/en-US/search/?query=Phu+Quoc+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Mai Linh Taxi",
+     "detail": "sedan · metered island taxi",
+     "price": "$9",
+     "amount_usd": 9,
+     "book_url": "https://www.klook.com/en-US/search/?query=Phu+Quoc+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Sun World shuttle",
+     "detail": "coach · free resort routes to the cable car",
+     "price": "",
+     "amount_usd": 0,
+     "book_url": "https://www.klook.com/en-US/search/?query=Phu+Quoc+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Scooter rental",
+     "detail": "scooter · self-drive island freedom, per day",
+     "price": "$8",
+     "amount_usd": 8,
+     "book_url": "https://www.klook.com/en-US/search/?query=Phu+Quoc+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab Bike",
+     "detail": "motorbike · quick hops along Long Beach",
+     "price": "$2",
+     "amount_usd": 2,
+     "book_url": "https://www.klook.com/en-US/search/?query=Phu+Quoc+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|phu quoc": {
+   "type": "activity",
+   "title": "Things to do · Phu Quoc",
+   "dest": "Phu Quoc",
+   "options": [
+    {
+     "name": "Hon Thom cable car & Sun World",
+     "detail": "5 hours · world's longest over-sea cable car",
+     "price": "$28",
+     "book_url": "https://www.getyourguide.com/s/?q=Hon+Thom+cable+car+%26+Sun+World+Phu+Quoc"
+    },
+    {
+     "name": "Island-hopping snorkel tour",
+     "detail": "7 hours · 3 southern islands, gear + lunch included",
+     "price": "$35",
+     "book_url": "https://www.getyourguide.com/s/?q=Island-hopping+snorkel+tour+Phu+Quoc"
+    },
+    {
+     "name": "Night squid fishing",
+     "detail": "3 hours · sunset boat trip, cook your catch",
+     "price": "$25",
+     "book_url": "https://www.getyourguide.com/s/?q=Night+squid+fishing+Phu+Quoc"
+    },
+    {
+     "name": "Starfish beach & northern loop",
+     "detail": "6 hours · Rach Vem fishing village and clear shallows",
+     "price": "$30",
+     "book_url": "https://www.getyourguide.com/s/?q=Starfish+beach+%26+northern+loop+Phu+Quoc"
+    },
+    {
+     "name": "Phu Quoc pearl farm & pepper garden",
+     "detail": "3 hours · the island's two famous crops",
+     "price": "$10",
+     "book_url": "https://www.getyourguide.com/s/?q=Phu+Quoc+pearl+farm+%26+pepper+garden+Phu+Quoc"
+    },
+    {
+     "name": "VinWonders & Safari day",
+     "detail": "8 hours · theme park + Vietnam's largest zoo",
+     "price": "$55",
+     "book_url": "https://www.getyourguide.com/s/?q=VinWonders+%26+Safari+day+Phu+Quoc"
+    },
+    {
+     "name": "Sunset sailing with snorkelling",
+     "detail": "4 hours · champagne sail off the west coast",
+     "price": "$40",
+     "book_url": "https://www.getyourguide.com/s/?q=Sunset+sailing+with+snorkelling+Phu+Quoc"
+    },
+    {
+     "name": "Ham Ninh fishing village",
+     "detail": "2 hours · stilt piers and fresh crab",
+     "price": "$8",
+     "book_url": "https://www.getyourguide.com/s/?q=Ham+Ninh+fishing+village+Phu+Quoc"
+    },
+    {
+     "name": "Grand World night quarter",
+     "detail": "3 hours · canals, shows and the teddy bear museum",
+     "price": "$12",
+     "book_url": "https://www.getyourguide.com/s/?q=Grand+World+night+quarter+Phu+Quoc"
+    }
+   ]
+  },
+  "restaurant|phu quoc": {
+   "type": "restaurant",
+   "title": "Restaurants · Phu Quoc",
+   "dest": "Phu Quoc",
+   "options": [
+    {
+     "name": "The Spice House at Cassia",
+     "detail": "Vietnamese · $$$ · cliffside sunset dining",
+     "price": "",
+     "per_person_usd": 40,
+     "book_url": "https://www.google.com/maps/search/The+Spice+House+at+Cassia+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "Crab House",
+     "detail": "Seafood · $$ · hammer-and-bib crab feasts",
+     "price": "",
+     "per_person_usd": 28,
+     "book_url": "https://www.google.com/maps/search/Crab+House+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "Xin Chao",
+     "detail": "Seafood · $$ · beachfront, strong local following",
+     "price": "",
+     "per_person_usd": 20,
+     "book_url": "https://www.google.com/maps/search/Xin+Chao+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "Saigonese Eatery",
+     "detail": "Vietnamese fusion · $$ · small plates, big flavours",
+     "price": "",
+     "per_person_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Saigonese+Eatery+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "Dinh Cau night market",
+     "detail": "Mixed local · $ · grilled seafood stalls by the harbour",
+     "price": "",
+     "per_person_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Dinh+Cau+night+market+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "Rory's Beach Bar",
+     "detail": "International · $$ · toes-in-sand sunset classics",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Rory%27s+Beach+Bar+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "On the Rocks",
+     "detail": "Seafood fine dining · $$$ · over-water deck at Mango Bay",
+     "price": "",
+     "per_person_usd": 45,
+     "book_url": "https://www.google.com/maps/search/On+the+Rocks+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "Sailing Club Phu Quoc",
+     "detail": "Beach club · $$$ · sunset beds and wood-fired plates",
+     "price": "",
+     "per_person_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Sailing+Club+Phu+Quoc+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "Chuon Chuon Bistro & Bar",
+     "detail": "Fusion · $$ · hilltop views over Duong Dong",
+     "price": "",
+     "per_person_usd": 20,
+     "book_url": "https://www.google.com/maps/search/Chuon+Chuon+Bistro+%26+Bar+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "Itaca Resto Lounge",
+     "detail": "Mediterranean-Asian · $$ · long-running tapas garden",
+     "price": "",
+     "per_person_usd": 22,
+     "book_url": "https://www.google.com/maps/search/Itaca+Resto+Lounge+Phu+Quoc+Vietnam"
+    }
+   ]
+  },
+  "hotel|phu quoc": [
+   {
+    "name": "JW Marriott Phu Quoc Emerald Bay",
+    "stars": 5,
+    "price_from": 380,
+    "blurb": "Whimsical Bensley-designed beach resort.",
+    "city": "Phu Quoc",
+    "book_url": "https://www.booking.com/searchresults.html?ss=JW+Marriott+Phu+Quoc+Emerald+Bay%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.1,
+    "reviews": 1584,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "InterContinental Phu Quoc Long Beach",
+    "stars": 5,
+    "price_from": 250,
+    "blurb": "Long Beach luxury with a rooftop bar.",
+    "city": "Phu Quoc",
+    "book_url": "https://www.booking.com/searchresults.html?ss=InterContinental+Phu+Quoc+Long+Beach%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.9,
+    "reviews": 1732,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Salinda Resort Phu Quoc",
+    "stars": 5,
+    "price_from": 200,
+    "blurb": "Boutique beachfront resort near Duong Dong.",
+    "city": "Phu Quoc",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Salinda+Resort+Phu+Quoc%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 1251,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "La Veranda Resort Phu Quoc",
+    "stars": 5,
+    "price_from": 180,
+    "blurb": "Colonial-style beachfront MGallery classic.",
+    "city": "Phu Quoc",
+    "book_url": "https://www.booking.com/searchresults.html?ss=La+Veranda+Resort+Phu+Quoc%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.1,
+    "reviews": 1362,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Mango Bay Resort",
+    "stars": 3,
+    "price_from": 90,
+    "blurb": "Eco-resort on its own quiet stretch of beach.",
+    "city": "Phu Quoc",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Mango+Bay+Resort%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.2,
+    "reviews": 992,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Premier Village Phu Quoc Resort",
+    "stars": 5,
+    "price_from": 320,
+    "blurb": "Villas straddling a private cape.",
+    "city": "Phu Quoc",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Premier+Village+Phu+Quoc+Resort%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.0,
+    "reviews": 1547,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Regent Phu Quoc",
+    "stars": 5,
+    "price_from": 380,
+    "blurb": "Lagoon suites on Long Beach.",
+    "city": "Phu Quoc",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Regent+Phu+Quoc%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.1,
+    "reviews": 955,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "New World Phu Quoc Resort",
+    "stars": 5,
+    "price_from": 250,
+    "blurb": "All-villa beachfront village.",
+    "city": "Phu Quoc",
+    "book_url": "https://www.booking.com/searchresults.html?ss=New+World+Phu+Quoc+Resort%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.0,
+    "reviews": 1325,
+    "tag": "Guest favourite"
+   }
+  ],
+  "flight|nha trang": {
+   "type": "flight",
+   "title": "Flights to Nha Trang",
+   "dest": "Nha Trang",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SGN-CXR · 1h 05m · nonstop",
+     "price": "$75",
+     "amount_usd": 75,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "HAN-CXR · 1h 55m · nonstop",
+     "price": "$55",
+     "amount_usd": 55,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
+    },
+    {
+     "name": "Bamboo Airways",
+     "detail": "SGN-CXR · 1h 05m · nonstop",
+     "price": "$58",
+     "amount_usd": 58,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "ICN-CXR (from Korea) · 5h 00m · nonstop",
+     "price": "$195",
+     "amount_usd": 195,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-HAN + HAN-CXR (from India) · 9h 00m · 1 stop",
+     "price": "$255",
+     "amount_usd": 255,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "JFK-CXR via Seoul (from USA) · 22h 00m · 1 stop",
+     "price": "$980",
+     "amount_usd": 980,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
+    }
+   ]
+  },
+  "cab|nha trang": {
+   "type": "cab",
+   "title": "Airport transfers · Nha Trang",
+   "dest": "Nha Trang",
+   "options": [
+    {
+     "name": "Grab",
+     "detail": "sedan · Cam Ranh airport to beach strip, 40 min",
+     "price": "$13",
+     "amount_usd": 13,
+     "book_url": "https://www.klook.com/en-US/search/?query=Nha+Trang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Klook private transfer",
+     "detail": "SUV · meet & greet, fixed fare",
+     "price": "$18",
+     "amount_usd": 18,
+     "book_url": "https://www.klook.com/en-US/search/?query=Nha+Trang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Mai Linh Taxi",
+     "detail": "sedan · metered, 35-45 min",
+     "price": "$16",
+     "amount_usd": 16,
+     "book_url": "https://www.klook.com/en-US/search/?query=Nha+Trang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Airport shuttle bus",
+     "detail": "coach · Cam Ranh to city centre, scheduled",
+     "price": "$3",
+     "amount_usd": 3,
+     "book_url": "https://www.klook.com/en-US/search/?query=Nha+Trang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab Bike",
+     "detail": "motorbike · promenade hops",
+     "price": "$2",
+     "amount_usd": 2,
+     "book_url": "https://www.klook.com/en-US/search/?query=Nha+Trang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "XanhSM",
+     "detail": "electric sedan · EV rides along Tran Phu",
+     "price": "$12",
+     "amount_usd": 12,
+     "book_url": "https://www.klook.com/en-US/search/?query=Nha+Trang+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|nha trang": {
+   "type": "activity",
+   "title": "Things to do · Nha Trang",
+   "dest": "Nha Trang",
+   "options": [
+    {
+     "name": "Island boat tour",
+     "detail": "7 hours · snorkelling, floating bar, seafood lunch",
+     "price": "$28",
+     "book_url": "https://www.getyourguide.com/s/?q=Island+boat+tour+Nha+Trang"
+    },
+    {
+     "name": "Thap Ba mud baths",
+     "detail": "3 hours · mineral mud + hot springs",
+     "price": "$20",
+     "book_url": "https://www.getyourguide.com/s/?q=Thap+Ba+mud+baths+Nha+Trang"
+    },
+    {
+     "name": "VinWonders theme park",
+     "detail": "6 hours · rides + aquarium on Hon Tre island",
+     "price": "$35",
+     "book_url": "https://www.getyourguide.com/s/?q=VinWonders+theme+park+Nha+Trang"
+    },
+    {
+     "name": "Po Nagar towers & city tour",
+     "detail": "3 hours · Cham heritage above the river",
+     "price": "$15",
+     "book_url": "https://www.getyourguide.com/s/?q=Po+Nagar+towers+%26+city+tour+Nha+Trang"
+    },
+    {
+     "name": "Hon Mun marine park snorkel",
+     "detail": "5 hours · the bay's clearest water",
+     "price": "$25",
+     "book_url": "https://www.getyourguide.com/s/?q=Hon+Mun+marine+park+snorkel+Nha+Trang"
+    },
+    {
+     "name": "Ba Ho waterfalls scramble",
+     "detail": "4 hours · jungle pools and cliff jumps",
+     "price": "$18",
+     "book_url": "https://www.getyourguide.com/s/?q=Ba+Ho+waterfalls+scramble+Nha+Trang"
+    }
+   ]
+  },
+  "restaurant|nha trang": {
+   "type": "restaurant",
+   "title": "Restaurants · Nha Trang",
+   "dest": "Nha Trang",
+   "options": [
+    {
+     "name": "Lanterns",
+     "detail": "Vietnamese · $$ · community-supporting kitchen, set menus",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Lanterns+Nha+Trang+Vietnam"
+    },
+    {
+     "name": "Costa Seafood",
+     "detail": "Seafood · $$$ · premium catch, smart dining room",
+     "price": "",
+     "per_person_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Costa+Seafood+Nha+Trang+Vietnam"
+    },
+    {
+     "name": "Lac Canh",
+     "detail": "BBQ · $ · table-grilled beef since 1975",
+     "price": "",
+     "per_person_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Lac+Canh+Nha+Trang+Vietnam"
+    },
+    {
+     "name": "Yen's Restaurant",
+     "detail": "Vietnamese · $$ · gracious service, tasting platters",
+     "price": "",
+     "per_person_usd": 14,
+     "book_url": "https://www.google.com/maps/search/Yen%27s+Restaurant+Nha+Trang+Vietnam"
+    },
+    {
+     "name": "Mix Restaurant",
+     "detail": "Greek · $$ · the famous Greek feast platters",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Mix+Restaurant+Nha+Trang+Vietnam"
+    },
+    {
+     "name": "Nha Trang Xua",
+     "detail": "Vietnamese · $$ · garden villa outside town, worth the ride",
+     "price": "",
+     "per_person_usd": 14,
+     "book_url": "https://www.google.com/maps/search/Nha+Trang+Xua+Nha+Trang+Vietnam"
+    },
+    {
+     "name": "Nem Nuong Dang Van Quyen",
+     "detail": "Street food · $ · the grilled-pork-roll original",
+     "price": "",
+     "per_person_usd": 5,
+     "book_url": "https://www.google.com/maps/search/Nem+Nuong+Dang+Van+Quyen+Nha+Trang+Vietnam"
+    }
+   ]
+  },
+  "hotel|nha trang": [
+   {
+    "name": "Six Senses Ninh Van Bay",
+    "stars": 5,
+    "price_from": 700,
+    "blurb": "Secluded villas reached by boat.",
+    "city": "Nha Trang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Six+Senses+Ninh+Van+Bay%2C+Nha+Trang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 1251,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "InterContinental Nha Trang",
+    "stars": 5,
+    "price_from": 160,
+    "blurb": "Beachfront tower on the main promenade.",
+    "city": "Nha Trang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=InterContinental+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.1,
+    "reviews": 1362,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Mia Resort Nha Trang",
+    "stars": 4,
+    "price_from": 160,
+    "blurb": "Clifftop villas on a private cove.",
+    "city": "Nha Trang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Mia+Resort+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.6,
+    "reviews": 1140,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Evason Ana Mandara Nha Trang",
+    "stars": 5,
+    "price_from": 220,
+    "blurb": "The only true beachfront villas in town.",
+    "city": "Nha Trang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Evason+Ana+Mandara+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.2,
+    "reviews": 1436,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Sheraton Nha Trang",
+    "stars": 5,
+    "price_from": 140,
+    "blurb": "Panoramic bay views, central promenade.",
+    "city": "Nha Trang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Sheraton+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.9,
+    "reviews": 1066,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Amiana Resort Nha Trang",
+    "stars": 5,
+    "price_from": 180,
+    "blurb": "Private-bay resort north of town.",
+    "city": "Nha Trang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Amiana+Resort+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 1251,
+    "tag": "Guest favourite"
+   }
+  ],
+  "flight|da lat": {
+   "type": "flight",
+   "title": "Flights to Da Lat",
+   "dest": "Da Lat",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SGN-DLI · 0h 55m · nonstop",
+     "price": "$70",
+     "amount_usd": 70,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Lat"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "HAN-DLI · 1h 50m · nonstop",
+     "price": "$58",
+     "amount_usd": 58,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Lat"
+    },
+    {
+     "name": "Bamboo Airways",
+     "detail": "SGN-DLI · 0h 55m · nonstop",
+     "price": "$55",
+     "amount_usd": 55,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Lat"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "BOM-SGN + SGN-DLI (from India) · 8h 10m · 1 stop",
+     "price": "$275",
+     "amount_usd": 275,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Lat"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "FRA-SGN + SGN-DLI (from Europe) · 14h 30m · 1 stop",
+     "price": "$755",
+     "amount_usd": 755,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Lat"
+    }
+   ]
+  },
+  "cab|da lat": {
+   "type": "cab",
+   "title": "Airport transfers · Da Lat",
+   "dest": "Da Lat",
+   "options": [
+    {
+     "name": "Grab",
+     "detail": "sedan · Lien Khuong airport to centre, 30 min",
+     "price": "$11",
+     "amount_usd": 11,
+     "book_url": "https://www.klook.com/en-US/search/?query=Da+Lat+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Klook private transfer",
+     "detail": "SUV · meet & greet, mountain road",
+     "price": "$15",
+     "amount_usd": 15,
+     "book_url": "https://www.klook.com/en-US/search/?query=Da+Lat+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Mai Linh Taxi",
+     "detail": "sedan · metered, 30-40 min",
+     "price": "$13",
+     "amount_usd": 13,
+     "book_url": "https://www.klook.com/en-US/search/?query=Da+Lat+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Airport shuttle van",
+     "detail": "minibus · shared runs to the lake, scheduled",
+     "price": "$4",
+     "amount_usd": 4,
+     "book_url": "https://www.klook.com/en-US/search/?query=Da+Lat+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Easy-rider day driver",
+     "detail": "motorbike · countryside loops with a local",
+     "price": "$30",
+     "amount_usd": 30,
+     "book_url": "https://www.klook.com/en-US/search/?query=Da+Lat+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|da lat": {
+   "type": "activity",
+   "title": "Things to do · Da Lat",
+   "dest": "Da Lat",
+   "options": [
+    {
+     "name": "Canyoning adventure",
+     "detail": "6 hours · abseiling waterfalls with certified guides",
+     "price": "$45",
+     "book_url": "https://www.getyourguide.com/s/?q=Canyoning+adventure+Da+Lat"
+    },
+    {
+     "name": "Countryside easy-rider tour",
+     "detail": "5 hours · coffee farms, silk village, Elephant Falls",
+     "price": "$35",
+     "book_url": "https://www.getyourguide.com/s/?q=Countryside+easy-rider+tour+Da+Lat"
+    },
+    {
+     "name": "Datanla alpine coaster",
+     "detail": "1 hour · self-drive toboggan through pine forest",
+     "price": "$12",
+     "book_url": "https://www.getyourguide.com/s/?q=Datanla+alpine+coaster+Da+Lat"
+    },
+    {
+     "name": "Sunrise at Langbiang mountain",
+     "detail": "4 hours · jeep to the summit above the clouds",
+     "price": "$20",
+     "book_url": "https://www.getyourguide.com/s/?q=Sunrise+at+Langbiang+mountain+Da+Lat"
+    },
+    {
+     "name": "Crazy House visit",
+     "detail": "1.5 hours · Hang Nga's fairytale architecture",
+     "price": "$3",
+     "book_url": "https://www.getyourguide.com/s/?q=Crazy+House+visit+Da+Lat"
+    },
+    {
+     "name": "Cau Dat tea hills",
+     "detail": "4 hours · emerald plantations and a hillside cafe",
+     "price": "$15",
+     "book_url": "https://www.getyourguide.com/s/?q=Cau+Dat+tea+hills+Da+Lat"
+    }
+   ]
+  },
+  "restaurant|da lat": {
+   "type": "restaurant",
+   "title": "Restaurants · Da Lat",
+   "dest": "Da Lat",
+   "options": [
+    {
+     "name": "Goc Ha Thanh",
+     "detail": "Vietnamese · $ · clay-pot dishes, garden veg",
+     "price": "",
+     "per_person_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Goc+Ha+Thanh+Da+Lat+Vietnam"
+    },
+    {
+     "name": "Le Rabelais",
+     "detail": "French · $$$ · grand dining at the Dalat Palace",
+     "price": "",
+     "per_person_usd": 45,
+     "book_url": "https://www.google.com/maps/search/Le+Rabelais+Da+Lat+Vietnam"
+    },
+    {
+     "name": "Trong Dong",
+     "detail": "Vietnamese · $$ · highland specialities, cosy room",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Trong+Dong+Da+Lat+Vietnam"
+    },
+    {
+     "name": "Da Quy (Wild Sunflower)",
+     "detail": "Vietnamese-European · $$ · long-running traveller favourite",
+     "price": "",
+     "per_person_usd": 12,
+     "book_url": "https://www.google.com/maps/search/Da+Quy+%28Wild+Sunflower%29+Da+Lat+Vietnam"
+    },
+    {
+     "name": "One More Cafe",
+     "detail": "Cafe brunch · $ · best breakfast in the pine hills",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/One+More+Cafe+Da+Lat+Vietnam"
+    },
+    {
+     "name": "An Cafe",
+     "detail": "Cafe · $ · garden terraces and strawberry everything",
+     "price": "",
+     "per_person_usd": 6,
+     "book_url": "https://www.google.com/maps/search/An+Cafe+Da+Lat+Vietnam"
+    },
+    {
+     "name": "Da Lat night market stalls",
+     "detail": "Street food · $ · grilled rice paper and hot soy milk",
+     "price": "",
+     "per_person_usd": 5,
+     "book_url": "https://www.google.com/maps/search/Da+Lat+night+market+stalls+Da+Lat+Vietnam"
+    }
+   ]
+  },
+  "hotel|da lat": [
+   {
+    "name": "Ana Mandara Villas Dalat",
+    "stars": 5,
+    "price_from": 150,
+    "blurb": "Restored French villas in the highlands.",
+    "city": "Da Lat",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Ana+Mandara+Villas+Dalat%2C+Da+Lat%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.9,
+    "reviews": 1288,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Dalat Palace Heritage Hotel",
+    "stars": 5,
+    "price_from": 140,
+    "blurb": "Grand colonial landmark above the lake.",
+    "city": "Da Lat",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Dalat+Palace+Heritage+Hotel%2C+Da+Lat%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.1,
+    "reviews": 1399,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Terracotta Hotel & Resort Dalat",
+    "stars": 4,
+    "price_from": 70,
+    "blurb": "Pine-forest lakeside calm at Tuyen Lam.",
+    "city": "Da Lat",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Terracotta+Hotel+%26+Resort+Dalat%2C+Da+Lat%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.5,
+    "reviews": 1547,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Swiss-Belresort Tuyen Lam",
+    "stars": 4,
+    "price_from": 75,
+    "blurb": "Golf-course views in the highlands.",
+    "city": "Da Lat",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Swiss-Belresort+Tuyen+Lam%2C+Da+Lat%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.5,
+    "reviews": 1325,
+    "tag": "Highly rated"
+   }
+  ],
+  "flight|ninh binh": {
+   "type": "flight",
+   "title": "Flights to Ninh Binh",
+   "dest": "Ninh Binh",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SGN-HAN + 1.5h drive to Ninh Binh · 2h 10m + transfer · via Hanoi",
+     "price": "$100",
+     "amount_usd": 100,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ninh+Binh"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "SGN-HAN + 1.5h drive · 2h 10m + transfer · via Hanoi",
+     "price": "$62",
+     "amount_usd": 62,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ninh+Binh"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-HAN + 1.5h drive (from India) · 5h 15m + road · via Hanoi",
+     "price": "$192",
+     "amount_usd": 192,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ninh+Binh"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "CDG-HAN + 1.5h drive (from Europe) · 11h 30m + road · via Hanoi",
+     "price": "$662",
+     "amount_usd": 662,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ninh+Binh"
+    }
+   ]
+  },
+  "cab|ninh binh": {
+   "type": "cab",
+   "title": "Airport transfers · Ninh Binh",
+   "dest": "Ninh Binh",
+   "options": [
+    {
+     "name": "Klook private transfer",
+     "detail": "sedan · Hanoi to Ninh Binh, 1.5h",
+     "price": "$40",
+     "amount_usd": 40,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ninh+Binh+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Limousine bus",
+     "detail": "9-seat van · Hanoi Old Quarter pickup",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ninh+Binh+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab",
+     "detail": "sedan · within Ninh Binh / Tam Coc",
+     "price": "$6",
+     "amount_usd": 6,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ninh+Binh+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Bicycle rental",
+     "detail": "bicycle · the classic paddy-field pedal, per day",
+     "price": "$2",
+     "amount_usd": 2,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ninh+Binh+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|ninh binh": {
+   "type": "activity",
+   "title": "Things to do · Ninh Binh",
+   "dest": "Ninh Binh",
+   "options": [
+    {
+     "name": "Trang An grotto boat ride",
+     "detail": "3 hours · UNESCO karst waterways through caves",
+     "price": "$12",
+     "book_url": "https://www.getyourguide.com/s/?q=Trang+An+grotto+boat+ride+Ninh+Binh"
+    },
+    {
+     "name": "Hang Mua viewpoint climb",
+     "detail": "2 hours · 500 steps to the dragon ridge panorama",
+     "price": "$5",
+     "book_url": "https://www.getyourguide.com/s/?q=Hang+Mua+viewpoint+climb+Ninh+Binh"
+    },
+    {
+     "name": "Bai Dinh & Trang An day tour",
+     "detail": "9 hours · largest pagoda complex + boat, from Hanoi",
+     "price": "$40",
+     "book_url": "https://www.getyourguide.com/s/?q=Bai+Dinh+%26+Trang+An+day+tour+Ninh+Binh"
+    },
+    {
+     "name": "Tam Coc countryside cycle",
+     "detail": "3 hours · paddies, goats and river caves",
+     "price": "$8",
+     "book_url": "https://www.getyourguide.com/s/?q=Tam+Coc+countryside+cycle+Ninh+Binh"
+    },
+    {
+     "name": "Cuc Phuong National Park day",
+     "detail": "8 hours · primate rescue centre and ancient forest",
+     "price": "$35",
+     "book_url": "https://www.getyourguide.com/s/?q=Cuc+Phuong+National+Park+day+Ninh+Binh"
+    }
+   ]
+  },
+  "restaurant|ninh binh": {
+   "type": "restaurant",
+   "title": "Restaurants · Ninh Binh",
+   "dest": "Ninh Binh",
+   "options": [
+    {
+     "name": "Trung Tuyet",
+     "detail": "Vietnamese · $ · family-run, backpacker favourite",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Trung+Tuyet+Ninh+Binh+Vietnam"
+    },
+    {
+     "name": "Chookie's",
+     "detail": "Vietnamese-fusion · $$ · goat speciality plates, craft beer",
+     "price": "",
+     "per_person_usd": 12,
+     "book_url": "https://www.google.com/maps/search/Chookie%27s+Ninh+Binh+Vietnam"
+    },
+    {
+     "name": "Tam Coc Garden Restaurant",
+     "detail": "Vietnamese · $$ · paddy-field terrace",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Tam+Coc+Garden+Restaurant+Ninh+Binh+Vietnam"
+    },
+    {
+     "name": "Nao Nao Riverside",
+     "detail": "Vietnamese · $ · riverside tables near the boat wharf",
+     "price": "",
+     "per_person_usd": 9,
+     "book_url": "https://www.google.com/maps/search/Nao+Nao+Riverside+Ninh+Binh+Vietnam"
+    },
+    {
+     "name": "Father Cooking Restaurant",
+     "detail": "Vietnamese · $ · Trang An goat and paddy views",
+     "price": "",
+     "per_person_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Father+Cooking+Restaurant+Ninh+Binh+Vietnam"
+    }
+   ]
+  },
+  "hotel|ninh binh": [
+   {
+    "name": "Emeralda Resort Ninh Binh",
+    "stars": 5,
+    "price_from": 120,
+    "blurb": "Village-style resort near Tam Coc.",
+    "city": "Ninh Binh",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Emeralda+Resort+Ninh+Binh%2C+Ninh+Binh%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.0,
+    "reviews": 1325,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Tam Coc Garden Resort",
+    "stars": 4,
+    "price_from": 130,
+    "blurb": "Boutique hideaway amid the rice paddies.",
+    "city": "Ninh Binh",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Tam+Coc+Garden+Resort%2C+Ninh+Binh%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.6,
+    "reviews": 1177,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Ninh Binh Hidden Charm Hotel",
+    "stars": 4,
+    "price_from": 80,
+    "blurb": "Karst views near Tam Coc wharf.",
+    "city": "Ninh Binh",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Ninh+Binh+Hidden+Charm+Hotel%2C+Ninh+Binh%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.7,
+    "reviews": 1436,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Bai Dinh Garden Resort",
+    "stars": 4,
+    "price_from": 70,
+    "blurb": "Temple-side garden bungalows.",
+    "city": "Ninh Binh",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Bai+Dinh+Garden+Resort%2C+Ninh+Binh%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.7,
+    "reviews": 1214,
+    "tag": "Highly rated"
+   }
+  ],
+  "flight|mui ne": {
+   "type": "flight",
+   "title": "Flights to Mui Ne",
+   "dest": "Mui Ne",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "HAN-SGN + 4h drive to Mui Ne · 2h 10m + transfer · via Saigon",
+     "price": "$105",
+     "amount_usd": 105,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mui+Ne"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "HAN-SGN + limousine bus · 2h 10m + transfer · via Saigon",
+     "price": "$68",
+     "amount_usd": 68,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mui+Ne"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "BOM-SGN + 4h drive (from India) · 5h 30m + road · via Saigon",
+     "price": "$215",
+     "amount_usd": 215,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mui+Ne"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SFO-SGN + 4h drive (from USA) · 16h 40m + road · via Saigon",
+     "price": "$765",
+     "amount_usd": 765,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mui+Ne"
+    }
+   ]
+  },
+  "cab|mui ne": {
+   "type": "cab",
+   "title": "Airport transfers · Mui Ne",
+   "dest": "Mui Ne",
+   "options": [
+    {
+     "name": "Klook private transfer",
+     "detail": "sedan · Saigon to Mui Ne, 4h",
+     "price": "$55",
+     "amount_usd": 55,
+     "book_url": "https://www.klook.com/en-US/search/?query=Mui+Ne+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Futa limousine bus",
+     "detail": "sleeper bus · hourly departures from Saigon",
+     "price": "$9",
+     "amount_usd": 9,
+     "book_url": "https://www.klook.com/en-US/search/?query=Mui+Ne+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab",
+     "detail": "sedan · within Mui Ne strip",
+     "price": "$5",
+     "amount_usd": 5,
+     "book_url": "https://www.klook.com/en-US/search/?query=Mui+Ne+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Jeep charter",
+     "detail": "open jeep · dunes and fishing village circuit",
+     "price": "$25",
+     "amount_usd": 25,
+     "book_url": "https://www.klook.com/en-US/search/?query=Mui+Ne+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Mai Linh Taxi",
+     "detail": "sedan · metered strip and dunes runs",
+     "price": "$7",
+     "amount_usd": 7,
+     "book_url": "https://www.klook.com/en-US/search/?query=Mui+Ne+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|mui ne": {
+   "type": "activity",
+   "title": "Things to do · Mui Ne",
+   "dest": "Mui Ne",
+   "options": [
+    {
+     "name": "Sunrise sand dunes jeep tour",
+     "detail": "4 hours · white + red dunes and the fairy stream",
+     "price": "$25",
+     "book_url": "https://www.getyourguide.com/s/?q=Sunrise+sand+dunes+jeep+tour+Mui+Ne"
+    },
+    {
+     "name": "Kitesurfing lesson",
+     "detail": "2 hours · IKO instructor, gear included",
+     "price": "$55",
+     "book_url": "https://www.getyourguide.com/s/?q=Kitesurfing+lesson+Mui+Ne"
+    },
+    {
+     "name": "Fairy Stream walk",
+     "detail": "1 hour · barefoot canyon stroll",
+     "price": "$3",
+     "book_url": "https://www.getyourguide.com/s/?q=Fairy+Stream+walk+Mui+Ne"
+    },
+    {
+     "name": "Fishing village sunset",
+     "detail": "2 hours · basket boats coming in with the catch",
+     "price": "$5",
+     "book_url": "https://www.getyourguide.com/s/?q=Fishing+village+sunset+Mui+Ne"
+    }
+   ]
+  },
+  "restaurant|mui ne": {
+   "type": "restaurant",
+   "title": "Restaurants · Mui Ne",
+   "dest": "Mui Ne",
+   "options": [
+    {
+     "name": "Bo Ke seafood street",
+     "detail": "Seafood · $ · pick-your-catch beachfront stalls",
+     "price": "",
+     "per_person_usd": 12,
+     "book_url": "https://www.google.com/maps/search/Bo+Ke+seafood+street+Mui+Ne+Vietnam"
+    },
+    {
+     "name": "Sandals at Mia Resort",
+     "detail": "International · $$$ · toes-in-sand fine dining",
+     "price": "",
+     "per_person_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Sandals+at+Mia+Resort+Mui+Ne+Vietnam"
+    },
+    {
+     "name": "Dong Vui Food Court",
+     "detail": "Mixed local · $ · open-air, something for everyone",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Dong+Vui+Food+Court+Mui+Ne+Vietnam"
+    },
+    {
+     "name": "Lam Tong",
+     "detail": "Seafood · $ · no-frills beachfront institution",
+     "price": "",
+     "per_person_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Lam+Tong+Mui+Ne+Vietnam"
+    }
+   ]
+  },
+  "hotel|mui ne": [
+   {
+    "name": "Anantara Mui Ne Resort",
+    "stars": 5,
+    "price_from": 160,
+    "blurb": "Beachfront resort near the sand dunes.",
+    "city": "Mui Ne",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Anantara+Mui+Ne+Resort%2C+Mui+Ne%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.2,
+    "reviews": 1214,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "The Cliff Resort & Residences",
+    "stars": 4,
+    "price_from": 110,
+    "blurb": "Terraced pools above the beach.",
+    "city": "Mui Ne",
+    "book_url": "https://www.booking.com/searchresults.html?ss=The+Cliff+Resort+%26+Residences%2C+Mui+Ne%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.8,
+    "reviews": 1473,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Bamboo Village Beach Resort",
+    "stars": 4,
+    "price_from": 90,
+    "blurb": "Garden bungalows on the sand.",
+    "city": "Mui Ne",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Bamboo+Village+Beach+Resort%2C+Mui+Ne%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.6,
+    "reviews": 1399,
+    "tag": "Highly rated"
+   }
+  ],
+  "flight|mekong delta": {
+   "type": "flight",
+   "title": "Flights to Mekong Delta",
+   "dest": "Mekong Delta",
+   "options": [
+    {
+     "name": "VietJet Air",
+     "detail": "HAN-VCA (Can Tho) · 2h 05m · nonstop",
+     "price": "$72",
+     "amount_usd": 72,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mekong+Delta"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "HAN-SGN + 2h drive to My Tho · 2h 10m + transfer · via Saigon",
+     "price": "$100",
+     "amount_usd": 100,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mekong+Delta"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "BOM-SGN + 2h drive (from India) · 5h 30m + road · via Saigon",
+     "price": "$212",
+     "amount_usd": 212,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mekong+Delta"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "FRA-SGN + 2h drive (from Europe) · 12h 05m + road · via Saigon",
+     "price": "$692",
+     "amount_usd": 692,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mekong+Delta"
+    }
+   ]
+  },
+  "cab|mekong delta": {
+   "type": "cab",
+   "title": "Airport transfers · Mekong Delta",
+   "dest": "Mekong Delta",
+   "options": [
+    {
+     "name": "Klook private transfer",
+     "detail": "sedan · Saigon to My Tho / Ben Tre, 2h",
+     "price": "$45",
+     "amount_usd": 45,
+     "book_url": "https://www.klook.com/en-US/search/?query=Mekong+Delta+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Futa bus",
+     "detail": "coach · Saigon to Can Tho, 3.5h",
+     "price": "$8",
+     "amount_usd": 8,
+     "book_url": "https://www.klook.com/en-US/search/?query=Mekong+Delta+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Grab",
+     "detail": "sedan · within Can Tho",
+     "price": "$6",
+     "amount_usd": 6,
+     "book_url": "https://www.klook.com/en-US/search/?query=Mekong+Delta+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Sampan charter",
+     "detail": "rowing boat · canal hops with a local rower",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.klook.com/en-US/search/?query=Mekong+Delta+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Xe om (motorbike taxi)",
+     "detail": "motorbike · market and wharf hops",
+     "price": "$2",
+     "amount_usd": 2,
+     "book_url": "https://www.klook.com/en-US/search/?query=Mekong+Delta+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|mekong delta": {
+   "type": "activity",
+   "title": "Things to do · Mekong Delta",
+   "dest": "Mekong Delta",
+   "options": [
+    {
+     "name": "Cai Rang floating market",
+     "detail": "5 hours · dawn boat trip from Can Tho + noodle breakfast",
+     "price": "$35",
+     "book_url": "https://www.getyourguide.com/s/?q=Cai+Rang+floating+market+Mekong+Delta"
+    },
+    {
+     "name": "My Tho & Ben Tre sampan day",
+     "detail": "9 hours · coconut workshops and island orchards",
+     "price": "$35",
+     "book_url": "https://www.getyourguide.com/s/?q=My+Tho+%26+Ben+Tre+sampan+day+Mekong+Delta"
+    },
+    {
+     "name": "Delta homestay overnight",
+     "detail": "2 days · cycle the islets, cook with a local family",
+     "price": "$65",
+     "book_url": "https://www.getyourguide.com/s/?q=Delta+homestay+overnight+Mekong+Delta"
+    },
+    {
+     "name": "Tra Su cajuput forest",
+     "detail": "4 hours · flooded forest by rowboat, birdlife everywhere",
+     "price": "$18",
+     "book_url": "https://www.getyourguide.com/s/?q=Tra+Su+cajuput+forest+Mekong+Delta"
+    }
+   ]
+  },
+  "restaurant|mekong delta": {
+   "type": "restaurant",
+   "title": "Restaurants · Mekong Delta",
+   "dest": "Mekong Delta",
+   "options": [
+    {
+     "name": "Sao Hom",
+     "detail": "Vietnamese · $$ · riverfront in the old Can Tho market",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Sao+Hom+Mekong+Delta+Vietnam"
+    },
+    {
+     "name": "Nem Nuong Thanh Van",
+     "detail": "Street food · $ · grilled pork-roll speciality",
+     "price": "",
+     "per_person_usd": 6,
+     "book_url": "https://www.google.com/maps/search/Nem+Nuong+Thanh+Van+Mekong+Delta+Vietnam"
+    },
+    {
+     "name": "L'Escale",
+     "detail": "Vietnamese-French · $$ · rooftop over the Ninh Kieu wharf",
+     "price": "",
+     "per_person_usd": 20,
+     "book_url": "https://www.google.com/maps/search/L%27Escale+Mekong+Delta+Vietnam"
+    },
+    {
+     "name": "Sau Hoai's rice noodle house",
+     "detail": "Workshop-eatery · $ · watch hu tieu made, then eat it",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Sau+Hoai%27s+rice+noodle+house+Mekong+Delta+Vietnam"
+    }
+   ]
+  },
+  "hotel|mekong delta": [
+   {
+    "name": "Azerai Can Tho",
+    "stars": 5,
+    "price_from": 180,
+    "blurb": "Private river island reached by boat.",
+    "city": "Mekong Delta",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Azerai+Can+Tho%2C+Mekong+Delta%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.1,
+    "reviews": 918,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Victoria Can Tho Resort",
+    "stars": 4,
+    "price_from": 110,
+    "blurb": "Colonial riverfront near Ninh Kieu wharf.",
+    "city": "Mekong Delta",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Victoria+Can+Tho+Resort%2C+Mekong+Delta%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.8,
+    "reviews": 1251,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Nam Bo Boutique Hotel Can Tho",
+    "stars": 4,
+    "price_from": 85,
+    "blurb": "Colonial corner house on the wharf.",
+    "city": "Mekong Delta",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Nam+Bo+Boutique+Hotel+Can+Tho%2C+Mekong+Delta%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.8,
+    "reviews": 1473,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Mekong Riverside Boutique Resort",
+    "stars": 4,
+    "price_from": 95,
+    "blurb": "Riverfront bungalows near Cai Be.",
+    "city": "Mekong Delta",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Mekong+Riverside+Boutique+Resort%2C+Mekong+Delta%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.6,
+    "reviews": 1584,
+    "tag": "Highly rated"
+   }
+  ],
+  "flight|con dao": {
+   "type": "flight",
+   "title": "Flights to Con Dao",
+   "dest": "Con Dao",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SGN-VCS · 0h 55m · nonstop",
+     "price": "$110",
+     "amount_usd": 110,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Con+Dao"
+    },
+    {
+     "name": "Bamboo Airways",
+     "detail": "SGN-VCS · 0h 55m · nonstop",
+     "price": "$95",
+     "amount_usd": 95,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Con+Dao"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "HAN-SGN-VCS · 3h 40m · 1 stop",
+     "price": "$165",
+     "amount_usd": 165,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Con+Dao"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SFO-SGN + SGN-VCS (from USA) · 19h 20m · 1 stop",
+     "price": "$860",
+     "amount_usd": 860,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Con+Dao"
+    }
+   ]
+  },
+  "cab|con dao": {
+   "type": "cab",
+   "title": "Airport transfers · Con Dao",
+   "dest": "Con Dao",
+   "options": [
+    {
+     "name": "Hotel shuttle",
+     "detail": "van · airport pickup arranged by resort",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.klook.com/en-US/search/?query=Con+Dao+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Island taxi",
+     "detail": "sedan · metered, short island hops",
+     "price": "$7",
+     "amount_usd": 7,
+     "book_url": "https://www.klook.com/en-US/search/?query=Con+Dao+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Scooter rental",
+     "detail": "scooter · self-drive, per day",
+     "price": "$8",
+     "amount_usd": 8,
+     "book_url": "https://www.klook.com/en-US/search/?query=Con+Dao+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Boat charter",
+     "detail": "speedboat · islet hops and snorkel points, half day",
+     "price": "$60",
+     "amount_usd": 60,
+     "book_url": "https://www.klook.com/en-US/search/?query=Con+Dao+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|con dao": {
+   "type": "activity",
+   "title": "Things to do · Con Dao",
+   "dest": "Con Dao",
+   "options": [
+    {
+     "name": "Scuba diving (2 tanks)",
+     "detail": "5 hours · best coral reefs in Vietnam",
+     "price": "$75",
+     "book_url": "https://www.getyourguide.com/s/?q=Scuba+diving+%282+tanks%29+Con+Dao"
+    },
+    {
+     "name": "Con Dao prison museum tour",
+     "detail": "3 hours · moving colonial-era history",
+     "price": "$5",
+     "book_url": "https://www.getyourguide.com/s/?q=Con+Dao+prison+museum+tour+Con+Dao"
+    },
+    {
+     "name": "Bay Canh turtle-watching night trip",
+     "detail": "6 hours · seasonal, ranger-guided",
+     "price": "$45",
+     "book_url": "https://www.getyourguide.com/s/?q=Bay+Canh+turtle-watching+night+trip+Con+Dao"
+    },
+    {
+     "name": "Island loop by scooter",
+     "detail": "4 hours · empty roads, lookout points, quiet bays",
+     "price": "$10",
+     "book_url": "https://www.getyourguide.com/s/?q=Island+loop+by+scooter+Con+Dao"
+    }
+   ]
+  },
+  "restaurant|con dao": {
+   "type": "restaurant",
+   "title": "Restaurants · Con Dao",
+   "dest": "Con Dao",
+   "options": [
+    {
+     "name": "Thu Ba",
+     "detail": "Seafood · $$ · island seafood institution",
+     "price": "",
+     "per_person_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Thu+Ba+Con+Dao+Vietnam"
+    },
+    {
+     "name": "Infiniti Cafe & Bar",
+     "detail": "International · $$ · seafront sunset spot",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Infiniti+Cafe+%26+Bar+Con+Dao+Vietnam"
+    },
+    {
+     "name": "Bar200 Con Dao",
+     "detail": "Cafe · $ · dive-crowd breakfasts and smoothies",
+     "price": "",
+     "per_person_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Bar200+Con+Dao+Con+Dao+Vietnam"
+    },
+    {
+     "name": "Con Son night market",
+     "detail": "Mixed local · $ · grilled snails and sea urchin",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Con+Son+night+market+Con+Dao+Vietnam"
+    }
+   ]
+  },
+  "hotel|con dao": [
+   {
+    "name": "Six Senses Con Dao",
+    "stars": 5,
+    "price_from": 650,
+    "blurb": "Barefoot-luxury villas on Dat Doc beach.",
+    "city": "Con Dao",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Six+Senses+Con+Dao%2C+Con+Dao%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.9,
+    "reviews": 1066,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Poulo Condor Boutique Resort",
+    "stars": 4,
+    "price_from": 120,
+    "blurb": "Quiet colonial-style resort and spa.",
+    "city": "Con Dao",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Poulo+Condor+Boutique+Resort%2C+Con+Dao%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.7,
+    "reviews": 1436,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "The Secret Con Dao",
+    "stars": 4,
+    "price_from": 140,
+    "blurb": "Design hotel on the seafront promenade.",
+    "city": "Con Dao",
+    "book_url": "https://www.booking.com/searchresults.html?ss=The+Secret+Con+Dao%2C+Con+Dao%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.4,
+    "reviews": 1066,
+    "tag": "Highly rated"
+   }
+  ],
+  "flight|cat ba": {
+   "type": "flight",
+   "title": "Flights to Cat Ba",
+   "dest": "Cat Ba",
+   "options": [
+    {
+     "name": "VietJet Air",
+     "detail": "SGN-HPH (Cat Bi) + ferry to Cat Ba · 2h 00m + 1h ferry · nonstop + ferry",
+     "price": "$78",
+     "amount_usd": 78,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Cat+Ba"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SGN-HAN + bus-ferry combo · 2h 10m + 3h · via Hanoi",
+     "price": "$108",
+     "amount_usd": 108,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Cat+Ba"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-HAN + bus-ferry combo (from India) · 5h 15m + 3h · via Hanoi",
+     "price": "$195",
+     "amount_usd": 195,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Cat+Ba"
+    }
+   ]
+  },
+  "cab|cat ba": {
+   "type": "cab",
+   "title": "Airport transfers · Cat Ba",
+   "dest": "Cat Ba",
+   "options": [
+    {
+     "name": "Cat Ba Express bus+ferry",
+     "detail": "coach + ferry · Hanoi to Cat Ba town door-to-door, 3h",
+     "price": "$16",
+     "amount_usd": 16,
+     "book_url": "https://www.klook.com/en-US/search/?query=Cat+Ba+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Local taxi",
+     "detail": "sedan · port to Cat Co beaches",
+     "price": "$5",
+     "amount_usd": 5,
+     "book_url": "https://www.klook.com/en-US/search/?query=Cat+Ba+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Scooter rental",
+     "detail": "scooter · self-drive island loop, per day",
+     "price": "$7",
+     "amount_usd": 7,
+     "book_url": "https://www.klook.com/en-US/search/?query=Cat+Ba+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Lan Ha boat taxi",
+     "detail": "wooden boat · beach and floating-village hops",
+     "price": "$12",
+     "amount_usd": 12,
+     "book_url": "https://www.klook.com/en-US/search/?query=Cat+Ba+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Electric buggy",
+     "detail": "buggy · town seafront shuttles",
+     "price": "$2",
+     "amount_usd": 2,
+     "book_url": "https://www.klook.com/en-US/search/?query=Cat+Ba+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|cat ba": {
+   "type": "activity",
+   "title": "Things to do · Cat Ba",
+   "dest": "Cat Ba",
+   "options": [
+    {
+     "name": "Lan Ha Bay kayak cruise",
+     "detail": "8 hours · quieter karsts, swim stops and floating villages",
+     "price": "$40",
+     "book_url": "https://www.getyourguide.com/s/?q=Lan+Ha+Bay+kayak+cruise+Cat+Ba"
+    },
+    {
+     "name": "Cat Ba National Park hike",
+     "detail": "4 hours · Ngu Lam peak viewpoint trail",
+     "price": "$8",
+     "book_url": "https://www.getyourguide.com/s/?q=Cat+Ba+National+Park+hike+Cat+Ba"
+    },
+    {
+     "name": "Rock climbing on Butterfly Valley",
+     "detail": "5 hours · guided limestone climbing, all levels",
+     "price": "$55",
+     "book_url": "https://www.getyourguide.com/s/?q=Rock+climbing+on+Butterfly+Valley+Cat+Ba"
+    },
+    {
+     "name": "Cannon Fort sunset",
+     "detail": "2 hours · the best panorama over the bay",
+     "price": "$3",
+     "book_url": "https://www.getyourguide.com/s/?q=Cannon+Fort+sunset+Cat+Ba"
+    }
+   ]
+  },
+  "restaurant|cat ba": {
+   "type": "restaurant",
+   "title": "Restaurants · Cat Ba",
+   "dest": "Cat Ba",
+   "options": [
+    {
+     "name": "Green Mango",
+     "detail": "Vietnamese-fusion · $$ · the island's smartest kitchen",
+     "price": "",
+     "per_person_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Green+Mango+Cat+Ba+Vietnam"
+    },
+    {
+     "name": "Buddha Belly",
+     "detail": "Vegetarian · $ · beloved veggie plates by the market",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Buddha+Belly+Cat+Ba+Vietnam"
+    },
+    {
+     "name": "Casa Bonita",
+     "detail": "Vietnamese-Italian · $$ · harbour-view terrace",
+     "price": "",
+     "per_person_usd": 12,
+     "book_url": "https://www.google.com/maps/search/Casa+Bonita+Cat+Ba+Vietnam"
+    },
+    {
+     "name": "Yummy Restaurant",
+     "detail": "Vietnamese · $ · seafood hotpots by the seafront",
+     "price": "",
+     "per_person_usd": 9,
+     "book_url": "https://www.google.com/maps/search/Yummy+Restaurant+Cat+Ba+Vietnam"
+    }
+   ]
+  },
+  "hotel|cat ba": [
+   {
+    "name": "Hotel Perle d'Orient Cat Ba MGallery",
+    "stars": 5,
+    "price_from": 130,
+    "blurb": "Indochine elegance above Cat Co cove.",
+    "city": "Cat Ba",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hotel+Perle+d%27Orient+Cat+Ba+MGallery%2C+Cat+Ba%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.9,
+    "reviews": 1732,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Cat Ba Island Resort & Spa",
+    "stars": 3,
+    "price_from": 60,
+    "blurb": "Hillside pools over Cat Co 1 beach.",
+    "city": "Cat Ba",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Cat+Ba+Island+Resort+%26+Spa%2C+Cat+Ba%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.1,
+    "reviews": 1362,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Flamingo Cat Ba Resort",
+    "stars": 5,
+    "price_from": 150,
+    "blurb": "Forest-facing towers above Cat Co 1&2.",
+    "city": "Cat Ba",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Flamingo+Cat+Ba+Resort%2C+Cat+Ba%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.2,
+    "reviews": 1214,
+    "tag": "Guest favourite"
+   },
+   {
+    "name": "Sea Pearl Cat Ba Hotel",
+    "stars": 4,
+    "price_from": 55,
+    "blurb": "Harbour-view rooms in town.",
+    "city": "Cat Ba",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Sea+Pearl+Cat+Ba+Hotel%2C+Cat+Ba%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.7,
+    "reviews": 1214,
+    "tag": "Highly rated"
+   }
+  ],
+  "flight|phong nha": {
+   "type": "flight",
+   "title": "Flights to Phong Nha",
+   "dest": "Phong Nha",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "HAN-VDH (Dong Hoi) + 45 min drive · 1h 10m · nonstop",
+     "price": "$75",
+     "amount_usd": 75,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phong+Nha"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "SGN-VDH (Dong Hoi) + 45 min drive · 1h 40m · nonstop",
+     "price": "$60",
+     "amount_usd": 60,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phong+Nha"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-HAN + HAN-VDH (from India) · 8h 20m · 1 stop",
+     "price": "$250",
+     "amount_usd": 250,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phong+Nha"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "CDG-HAN + HAN-VDH (from Europe) · 14h 10m · 1 stop",
+     "price": "$720",
+     "amount_usd": 720,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phong+Nha"
+    }
+   ]
+  },
+  "cab|phong nha": {
+   "type": "cab",
+   "title": "Airport transfers · Phong Nha",
+   "dest": "Phong Nha",
+   "options": [
+    {
+     "name": "Hotel transfer",
+     "detail": "sedan · Dong Hoi airport to Phong Nha, 45 min",
+     "price": "$18",
+     "amount_usd": 18,
+     "book_url": "https://www.klook.com/en-US/search/?query=Phong+Nha+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Local taxi",
+     "detail": "sedan · Dong Hoi station pickup",
+     "price": "$15",
+     "amount_usd": 15,
+     "book_url": "https://www.klook.com/en-US/search/?query=Phong+Nha+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Bicycle rental",
+     "detail": "bicycle · the classic Bong Lai valley ride, per day",
+     "price": "$3",
+     "amount_usd": 3,
+     "book_url": "https://www.klook.com/en-US/search/?query=Phong+Nha+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Motorbike rental",
+     "detail": "motorbike · self-drive to the cave valleys, per day",
+     "price": "$8",
+     "amount_usd": 8,
+     "book_url": "https://www.klook.com/en-US/search/?query=Phong+Nha+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|phong nha": {
+   "type": "activity",
+   "title": "Things to do · Phong Nha",
+   "dest": "Phong Nha",
+   "options": [
+    {
+     "name": "Phong Nha cave by boat",
+     "detail": "4 hours · glide straight into the river cave",
+     "price": "$15",
+     "book_url": "https://www.getyourguide.com/s/?q=Phong+Nha+cave+by+boat+Phong+Nha"
+    },
+    {
+     "name": "Paradise Cave & Dark Cave combo",
+     "detail": "8 hours · boardwalk chambers + zipline mud cave",
+     "price": "$45",
+     "book_url": "https://www.getyourguide.com/s/?q=Paradise+Cave+%26+Dark+Cave+combo+Phong+Nha"
+    },
+    {
+     "name": "Bong Lai valley by bicycle",
+     "detail": "5 hours · duck stops, swimming holes, farm lunch",
+     "price": "$12",
+     "book_url": "https://www.getyourguide.com/s/?q=Bong+Lai+valley+by+bicycle+Phong+Nha"
+    },
+    {
+     "name": "Hang Va cave trek",
+     "detail": "2 days · guided jungle expedition, camping underground",
+     "price": "$250",
+     "book_url": "https://www.getyourguide.com/s/?q=Hang+Va+cave+trek+Phong+Nha"
+    }
+   ]
+  },
+  "restaurant|phong nha": {
+   "type": "restaurant",
+   "title": "Restaurants · Phong Nha",
+   "dest": "Phong Nha",
+   "options": [
+    {
+     "name": "The Bamboo Cafe",
+     "detail": "Vietnamese · $ · riverside curries and cave-trip planning",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/The+Bamboo+Cafe+Phong+Nha+Vietnam"
+    },
+    {
+     "name": "Omar's Namaste",
+     "detail": "Indian · $$ · the caving crowd's curry house",
+     "price": "",
+     "per_person_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Omar%27s+Namaste+Phong+Nha+Vietnam"
+    },
+    {
+     "name": "Momma D's",
+     "detail": "Vietnamese · $ · home cooking, huge portions",
+     "price": "",
+     "per_person_usd": 7,
+     "book_url": "https://www.google.com/maps/search/Momma+D%27s+Phong+Nha+Vietnam"
+    },
+    {
+     "name": "East Hill Coffee",
+     "detail": "Cafe-viewpoint · $ · karst panoramas with your ca phe sua",
+     "price": "",
+     "per_person_usd": 6,
+     "book_url": "https://www.google.com/maps/search/East+Hill+Coffee+Phong+Nha+Vietnam"
+    }
+   ]
+  },
+  "hotel|phong nha": [
+   {
+    "name": "Victory Road Villas",
+    "stars": 4,
+    "price_from": 120,
+    "blurb": "Riverside villas at the gateway to the caves.",
+    "city": "Phong Nha",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Victory+Road+Villas%2C+Phong+Nha%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.5,
+    "reviews": 1103,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Phong Nha Farmstay",
+    "stars": 3,
+    "price_from": 45,
+    "blurb": "The original countryside stay, rice-field views.",
+    "city": "Phong Nha",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Phong+Nha+Farmstay%2C+Phong+Nha%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 7.9,
+    "reviews": 1066,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Chay Lap Farmstay",
+    "stars": 4,
+    "price_from": 60,
+    "blurb": "Riverside pool amid the karst farmland.",
+    "city": "Phong Nha",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Chay+Lap+Farmstay%2C+Phong+Nha%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.8,
+    "reviews": 1029,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Sun Spa Resort Dong Hoi",
+    "stars": 5,
+    "price_from": 90,
+    "blurb": "Beach resort by the airport gateway.",
+    "city": "Phong Nha",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Sun+Spa+Resort+Dong+Hoi%2C+Phong+Nha%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 9.3,
+    "reviews": 1251,
+    "tag": "Guest favourite"
+   }
+  ],
+  "flight|ha giang": {
+   "type": "flight",
+   "title": "Flights to Ha Giang",
+   "dest": "Ha Giang",
+   "options": [
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SGN-HAN + 6h limousine to Ha Giang · 2h 10m + road · via Hanoi",
+     "price": "$112",
+     "amount_usd": 112,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Giang"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "SGN-HAN + sleeper bus · 2h 10m + road · via Hanoi",
+     "price": "$75",
+     "amount_usd": 75,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Giang"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-HAN + limousine (from India) · 5h 15m + 6h road · via Hanoi",
+     "price": "$200",
+     "amount_usd": 200,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Giang"
+    }
+   ]
+  },
+  "cab|ha giang": {
+   "type": "cab",
+   "title": "Airport transfers · Ha Giang",
+   "dest": "Ha Giang",
+   "options": [
+    {
+     "name": "Sleeper limousine",
+     "detail": "cabin bus · Hanoi to Ha Giang overnight, 6h",
+     "price": "$15",
+     "amount_usd": 15,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ha+Giang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Easy-rider driver",
+     "detail": "motorbike · loop with a local driver, per day",
+     "price": "$35",
+     "amount_usd": 35,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ha+Giang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Jeep tour",
+     "detail": "open-top jeep · loop by jeep with driver, per day",
+     "price": "$90",
+     "amount_usd": 90,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ha+Giang+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Self-ride motorbike rental",
+     "detail": "motorbike · semi-auto for the loop, per day",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.klook.com/en-US/search/?query=Ha+Giang+Vietnam+airport+transfer"
+    }
+   ]
+  },
+  "activity|ha giang": {
+   "type": "activity",
+   "title": "Things to do · Ha Giang",
+   "dest": "Ha Giang",
+   "options": [
+    {
+     "name": "Ha Giang loop by easy-rider",
+     "detail": "3 days · Ma Pi Leng pass with a local driver",
+     "price": "$165",
+     "book_url": "https://www.getyourguide.com/s/?q=Ha+Giang+loop+by+easy-rider+Ha+Giang"
+    },
+    {
+     "name": "Nho Que river boat trip",
+     "detail": "3 hours · emerald gorge beneath the pass",
+     "price": "$12",
+     "book_url": "https://www.getyourguide.com/s/?q=Nho+Que+river+boat+trip+Ha+Giang"
+    },
+    {
+     "name": "Lung Cu flag tower",
+     "detail": "2 hours · Vietnam's northernmost point",
+     "price": "$5",
+     "book_url": "https://www.getyourguide.com/s/?q=Lung+Cu+flag+tower+Ha+Giang"
+    },
+    {
+     "name": "Hmong village homestay evening",
+     "detail": "1 night · family dinner and corn wine",
+     "price": "$25",
+     "book_url": "https://www.getyourguide.com/s/?q=Hmong+village+homestay+evening+Ha+Giang"
+    }
+   ]
+  },
+  "restaurant|ha giang": {
+   "type": "restaurant",
+   "title": "Restaurants · Ha Giang",
+   "dest": "Ha Giang",
+   "options": [
+    {
+     "name": "Pho Co Ha Giang",
+     "detail": "Vietnamese · $ · steaming pho before the loop",
+     "price": "",
+     "per_person_usd": 7,
+     "book_url": "https://www.google.com/maps/search/Pho+Co+Ha+Giang+Ha+Giang+Vietnam"
+    },
+    {
+     "name": "Duc Giang Restaurant",
+     "detail": "Vietnamese · $ · com binh dan — point and feast",
+     "price": "",
+     "per_person_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Duc+Giang+Restaurant+Ha+Giang+Vietnam"
+    },
+    {
+     "name": "QT Coffee & Kitchen",
+     "detail": "Cafe · $ · loop-rider breakfasts and strong coffee",
+     "price": "",
+     "per_person_usd": 6,
+     "book_url": "https://www.google.com/maps/search/QT+Coffee+%26+Kitchen+Ha+Giang+Vietnam"
+    }
+   ]
+  },
+  "hotel|ha giang": [
+   {
+    "name": "P'apiu Resort",
+    "stars": 4,
+    "price_from": 150,
+    "blurb": "Hillside hideaway on the way to the loop.",
+    "city": "Ha Giang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=P%27apiu+Resort%2C+Ha+Giang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.5,
+    "reviews": 881,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Truong Xuan Resort",
+    "stars": 3,
+    "price_from": 40,
+    "blurb": "Riverside stilt bungalows in Ha Giang town.",
+    "city": "Ha Giang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Truong+Xuan+Resort%2C+Ha+Giang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 7.9,
+    "reviews": 1066,
+    "tag": "Highly rated"
+   },
+   {
+    "name": "Yen Bien Luxury Hotel",
+    "stars": 4,
+    "price_from": 45,
+    "blurb": "The comfortable night before the loop.",
+    "city": "Ha Giang",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Yen+Bien+Luxury+Hotel%2C+Ha+Giang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "rating": 8.6,
+    "reviews": 1177,
+    "tag": "Highly rated"
+   }
+  ]
+ }
+}

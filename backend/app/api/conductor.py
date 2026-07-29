@@ -91,6 +91,9 @@ class ConductorResponse(BaseModel):
     # The stored trip a payment would apply to. Checkout is priced from this server-side
     # record, so the browser never gets to state its own amount.
     itinerary_id: Optional[str] = None
+    # A single matched option the guest asked to book by VOICE — the frontend opens the
+    # payment popup for it directly (same flow as tapping Book & Pay on its card).
+    payment_item: Optional[dict] = None
     conversation_history: list
 
 
@@ -134,6 +137,7 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             action=result.get("action"),
             booking_ref=result.get("booking_ref"),
             itinerary_id=result.get("itinerary_id"),
+            payment_item=result.get("payment_item"),
             conversation_history=result["messages"],
         )
     except Exception as e:

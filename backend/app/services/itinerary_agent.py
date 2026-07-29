@@ -10,6 +10,7 @@ a rich, bookable itinerary the user can ask Sasha to revise.
 
 import asyncio
 import json
+import os
 import re
 from typing import Optional
 from urllib.parse import quote_plus
@@ -345,9 +346,62 @@ async def _enrich(data: dict, travellers: int = 2) -> None:
     }
 
 
-async def build_itinerary(message: str, history: list) -> dict:
-    """Generate + enrich a day-by-day itinerary. Returns the itinerary dict or None."""
+# Local-first itinerary composition (default ON — demo requirement: everything local, near-
+# realtime). The deterministic composer handles first builds and structural rebuilds (trip
+# length, cities, party size) in milliseconds; only free-form REVISIONS — the guest asking to
+# change something specific inside an existing plan — need the LLM's judgement, detected by
+# the keywords below. Set DEMO_LOCAL_ITINERARY=0 to route every build through the LLM again.
+_LOCAL_ITINERARY = os.getenv("DEMO_LOCAL_ITINERARY", "1").strip() in ("1", "true", "yes")
+_REVISION_WORDS = (
+    "swap", "replace", "instead of", "different hotel", "another hotel", "other hotel",
+    "change the hotel", "change hotel", "different activit", "another activit", "remove",
+    "skip ", "drop ", "take out", "get rid", "without ", "don't want", "dont want",
+    "no longer", "cheaper", "upgrade", "more luxur", "less expensive", "switch",
+)
+
+
+def _is_revision(message: str) -> bool:
+    low = (message or "").lower()
+    return any(w in low for w in _REVISION_WORDS)
+
+
+async def build_itinerary(message: str, history: list,
+                          current_itinerary: "Optional[dict]" = None) -> dict:
+    """Generate + enrich a day-by-day itinerary. Returns the itinerary dict or None.
+
+    `current_itinerary` is the guest's STORED plan (enriched payload). Revisions edit it
+    locally in milliseconds (add/remove a city, hotel swaps, cheaper/upgrade, activity
+    changes); rebuilds keep its route. Only an unparseable revision reaches the LLM builder.
+    """
     history = history or []
+
+    if _LOCAL_ITINERARY and (current_itinerary or {}).get("days"):
+        # Reviser FIRST whenever a stored plan exists: it owns the change vocabulary
+        # (add/remove city, hotel swap/cheaper/upgrade/named, activity swap/remove) and
+        # returns None for anything that isn't a change — no gate mismatch possible.
+        from app.services.local_itinerary import revise_local_itinerary
+        data = revise_local_itinerary(current_itinerary, message)
+        if data and data.get("days"):
+            travellers = await _resolve_travellers(history, message)
+            await _enrich(data, travellers)
+            print(f"[Itinerary] revised locally: {len(data['days'])} days, {travellers} travellers")
+            return data
+        if _is_revision(message):
+            print("[Itinerary] revision not locally parseable — falling back to LLM build")
+
+    if _LOCAL_ITINERARY and not _is_revision(message):
+        from app.services.local_itinerary import build_local_itinerary
+        data = build_local_itinerary(message, history, current=current_itinerary)
+        if data and data.get("days"):
+            # Same party-resolution + enrichment the LLM path gets: real hotel rates,
+            # booking links, per-city images, deterministic cost breakdown.
+            travellers = await _resolve_travellers(history, message)
+            await _enrich(data, travellers)
+            print(f"[Itinerary] composed locally: {len(data['days'])} days, "
+                  f"{travellers} travellers")
+            return data
+        print("[Itinerary] local composer unavailable — falling back to LLM build")
+
     ctx = " ".join(m.get("content", "") for m in history if isinstance(m, dict)) + " " + message
     cities = _find_destinations(ctx) or list(VIETNAM_HOTELS.keys())[:6]
     hotels_context = "; ".join(
@@ -374,7 +428,10 @@ async def build_itinerary(message: str, history: list) -> dict:
             # card then kept the STALE plan while Sasha claimed she'd updated it. Higher cap
             # lets the full JSON come back intact.
             client.messages.create(model=SPECIALIST_MODEL, max_tokens=4000, system=system, messages=messages),
-            timeout=40.0,
+            # 25s (was 40): run_itinerary_intent retries once on a malformed result, and two
+            # 40s attempts blew through the conductor's 45s ceiling -> agent timeout -> the
+            # guest heard the generic failure line. 25 x 2 + resolver fits the budget.
+            timeout=25.0,
         )
         raw = "".join(b.text for b in resp.content if hasattr(b, "text"))
     except Exception as e:

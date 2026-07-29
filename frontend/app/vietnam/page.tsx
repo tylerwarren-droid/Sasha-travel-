@@ -81,7 +81,11 @@ export default function VietnamPage() {
   const handleBuildingChange = useCallback((isBuilding: boolean) => {
     clearTimeout(buildWatchdogRef.current)
     setMicMuted(isBuilding)
-    handleGate(isBuilding)
+    // Closing is always safe; RE-OPENING is not — if Sasha is already speaking the itinerary
+    // summary, force-opening here put the live mic under her own voice for the whole read
+    // (SashaAvatar's speak-started guard can't re-close: speakingRef is already true). Let
+    // the avatar's openGate() release the mic when the utterance actually ends.
+    if (isBuilding || !isRespondingRef.current) handleGate(isBuilding)
     if (isBuilding) {
       // Outlives the backend's 45s itinerary ceiling. If the turn dies without ever clearing
       // `building`, the mic comes back anyway.
@@ -123,7 +127,7 @@ export default function VietnamPage() {
   useEffect(() => {
     const modalOpen = paymentModal !== null
     setMicMuted(modalOpen)
-    handleGate(modalOpen)
+    if (modalOpen || !isRespondingRef.current) handleGate(modalOpen)
   }, [paymentModal, handleGate])
 
   const [photos, setPhotos] = useState<Photo[]>([])
@@ -174,6 +178,15 @@ export default function VietnamPage() {
   // toggle with the other call controls. Null until a real second input exists.
   const [micDevices, setMicDevices] = useState<MicDevicesInfo | null>(null)
   const [isAvatarSpeaking, setIsAvatarSpeaking] = useState(false)
+  // A language switch remounts SashaAvatar (key={language}); if she was mid-utterance the
+  // unmount clears her timers, so openGate/onSashaFinished never fire. Reset the page-side
+  // lock immediately or the mic stays dead ("Sasha is speaking") until the 39s watchdog.
+  useEffect(() => {
+    isRespondingRef.current = false
+    clearTimeout(lockWatchdogRef.current)
+    setIsAvatarSpeaking(false)
+    pendingSpeechRef.current = null
+  }, [language])
   // Final booking state — set when the customer confirms the trip. Locks the itinerary into
   // a shareable / printable confirmation and ends the live session once Sasha finishes.
   const [booked, setBooked] = useState<{ ref?: string; emailSent?: boolean } | null>(null)
@@ -349,6 +362,7 @@ export default function VietnamPage() {
             setItemBooked({ ref: data.booking_ref, label: data.item.label, amount: data.item.amount_usd, kind: data.item.kind, emailSent: Boolean(data.email_sent) })
           } else {
             if (data.itinerary?.days?.length) setRichItinerary(data.itinerary)
+            else setPayResult('paid')   // no stored trip payload — at least confirm via toast
             setBooked({ ref: data.booking_ref, emailSent: Boolean(data.email_sent) })
             setRightTab('trip')
           }
@@ -382,6 +396,7 @@ export default function VietnamPage() {
       return
     }
     setCheckoutLoading(true)
+    let navigated = false
     try {
       const res = await fetch(apiUrl('/api/payments/create-checkout'), {
         method: 'POST',
@@ -399,14 +414,28 @@ export default function VietnamPage() {
       if (data?.url) {
         // No need to stash the trip: Stripe reloads the page and the return handler fetches
         // the confirmed booking (and its itinerary) back from the server by session id.
-        window.location.href = data.url
+        //
+        // Navigate the TOP window, not this one: on /demo this page runs inside DemoPortal's
+        // iframe, and checkout.stripe.com refuses to render in a frame (its CSP blocks
+        // framing) — the guest saw Stripe's loading skeleton dead inside the portal. The
+        // iframe is same-origin and unsandboxed, so redirecting `window.top` is permitted;
+        // the try/catch keeps a plain non-embedded /vietnam working unchanged.
+        try {
+          (window.top ?? window).location.href = data.url
+        } catch {
+          window.location.href = data.url
+        }
+        // Deliberately KEEP checkoutLoading=true: navigation is in flight, and re-enabling
+        // the button here let a fast double-click create a second Stripe session (finally
+        // runs even on return, so this needs the flag below).
+        navigated = true
         return
       }
       setCheckoutError('Could not start checkout. Please try again.')
     } catch {
       setCheckoutError('Could not reach the payment service.')
     } finally {
-      setCheckoutLoading(false)
+      if (!navigated) setCheckoutLoading(false)
     }
   }, [richItinerary, itineraryId, payerName, payerEmail, pendingOffer])
 
@@ -458,6 +487,7 @@ export default function VietnamPage() {
   // moment we DO switch tabs, because Sasha has just said "make the payment to finish
   // booking" and the pay button lives on the Trip tab.
   const handleAwaitPayment = useCallback(() => {
+    setPendingOffer(null)   // whole-trip checkout — never inherit a previously tapped card
     handleTabChange('trip')
     setPaymentModal('card')
   }, [handleTabChange])
@@ -877,7 +907,7 @@ export default function VietnamPage() {
                 photos={photos}
                 activePhoto={activePhoto}
                 onSelectPhoto={setActivePhoto}
-                onBook={() => setPaymentModal('card')}
+                onBook={() => { setPendingOffer(null); setPaymentModal('card') }}
                 onVoiceConnected={setVoiceConnected}
                 onMicError={setMicError}
                 onMicDevices={setMicDevices}
@@ -911,7 +941,7 @@ export default function VietnamPage() {
           }}
           onAnimationEnd={() => {}}
         >
-          {payResult === 'paid' ? '✓ Payment received — your booking is confirmed.' : 'Payment canceled — your itinerary is saved.'}
+          {payResult === 'paid' ? '✓ Payment received — your booking is confirmed.' : 'Payment canceled — tap to start and Sasha will pick your trip right back up.'}
           <button onClick={() => setPayResult(null)} className="ml-3 opacity-70 hover:opacity-100">✕</button>
         </div>
       )}
@@ -1058,7 +1088,10 @@ export default function VietnamPage() {
         <div
           className="fixed inset-0 z-50 flex flex-col items-center justify-center cursor-pointer select-none"
           style={{ background: 'rgba(8,8,16,0.96)', backdropFilter: 'blur(10px)' }}
-          onClick={handleStart}
+          // While the Stripe return leg is being verified (or a confirmation is up at z-70),
+          // a tap here ran handleStart(), which wipes booked/richItinerary — erasing the
+          // guest's payment confirmation the moment it appeared.
+          onClick={() => { if (!verifying && !booked && !itemBooked) handleStart() }}
         >
           <div style={{ marginBottom: '20px' }}><VnFlag size={52} /></div>
           <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: '26px', fontWeight: 700, color: '#DAA520', marginBottom: '8px', letterSpacing: '-0.3px' }}>
@@ -1081,6 +1114,11 @@ export default function VietnamPage() {
           <div style={{ marginTop: '16px', fontSize: '12px', color: 'rgba(255,255,255,0.2)' }}>
             Audio plays automatically once you start
           </div>
+          {verifying && (
+            <div style={{ marginTop: '22px', fontSize: '14px', color: '#DAA520' }}>
+              Confirming your payment…
+            </div>
+          )}
         </div>
       )}
 

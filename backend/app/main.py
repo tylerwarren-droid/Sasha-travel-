@@ -31,12 +31,12 @@ app = FastAPI(
 # from this list is CORS-blocked → every conductor call fails → the avatar goes silent.
 _DEFAULT_ORIGINS = [
     "http://localhost:3000",
+    "http://localhost:3001",  # local dev fallback port when 3000 is taken by another app
     "https://sasha-travel.vercel.app",
     "https://discover-vietnam.vercel.app",
     "https://sasha-heygen.vercel.app",
     "https://investor.kanoe.ai",
     "https://demo.kanoe.ai",
-    "https://project.kanoe.ai",
 ]
 _EXTRA_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 

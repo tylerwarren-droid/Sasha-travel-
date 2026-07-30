@@ -273,6 +273,59 @@ def _activity_link(name: str, dest: str) -> str:
     return f"https://www.getyourguide.com/s/?q={quote_plus(q)}"
 
 
+# ── Spa & wellness (an activity flavour with its own catalogue) ─────────────
+# A spa ask answered from the generic activity cache showed street-food tours for
+# "book me a massage" — the cache key is (kind, dest), so spa gets its own kind while
+# keeping card type "activity" (same offers, same Book & Pay flow, same frontend card).
+
+_SPA_RE = re.compile(
+    r"\b(spa|spas|massage|massages|sauna|facial|wellness|jacuzzi|reflexology|"
+    r"body scrub|hot ?springs?|mud bath|herbal bath|onsen)\b", re.I)
+
+
+def _spa_link(name: str, dest: str) -> str:
+    q = f"{name} {dest} Vietnam".strip() if name else f"spas in {dest} Vietnam"
+    return f"https://www.google.com/maps/search/{quote_plus(q)}"
+
+
+async def _find_spas_live(dest: str, interest: str = "") -> dict:
+    dest = dest or "Vietnam"
+    q = (
+        f"Find 3 real, well-reviewed spas or massage studios in {dest}, Vietnam"
+        f"{(' — ' + interest) if interest else ''}. Use real, currently-operating venues and "
+        'realistic per-person prices. Return ONLY a JSON array, each item: {"name": str, '
+        '"duration": "60 min" style, "notes": "short highlight of the signature treatment", '
+        '"price_usd": number}. No other text.'
+    )
+    rows = await _web_search_json(q)
+    options = []
+    for r in rows[:3]:
+        if not isinstance(r, dict):
+            continue
+        name = (r.get("name") or "").strip()
+        if not name:
+            continue
+        detail = " · ".join(
+            [s for s in [str(r.get("duration") or "").strip(), str(r.get("notes") or "").strip()] if s]
+        )
+        options.append({
+            "name": name,
+            "detail": detail,
+            "price": _usd(r.get("price_usd")),
+            "amount_usd": _amt(r.get("price_usd")),
+            "book_url": _spa_link(name, dest),
+        })
+    if not options:
+        options = [{
+            "name": f"Spa & wellness · {dest}",
+            "detail": "Spas and massage studios near you",
+            "price": "",
+            "book_url": _spa_link("", dest),
+            "fallback": True,
+        }]
+    return {"type": "activity", "title": f"Spa & wellness · {dest}", "dest": dest, "options": options}
+
+
 async def _find_activities_live(dest: str, interest: str = "") -> dict:
     dest = dest or "Vietnam"
     q = (
@@ -297,6 +350,7 @@ async def _find_activities_live(dest: str, interest: str = "") -> dict:
             "name": name,
             "detail": detail,
             "price": _usd(r.get("price_usd")),
+            "amount_usd": _amt(r.get("price_usd")),
             "book_url": _activity_link(name, dest),
         })
     if not options:
@@ -380,8 +434,16 @@ async def find_cabs(dest: str, detail_hint: str = "") -> dict:
     return await _resolve_once("cab", dest, lambda: _find_cabs_live(dest, detail_hint))
 
 
-async def find_activities(dest: str, interest: str = "") -> dict:
+async def find_activities(dest: str, interest: str = "", spa: "Optional[bool]" = None) -> dict:
     dest = dest or "Vietnam"
+    # Spa-flavoured asks get the spa catalogue — the generic activity cache would answer
+    # "book me a massage" with street-food tours. Card type stays "activity" throughout.
+    # `spa` lets the caller carry the flavour across turns ("book it" after a spa card
+    # says nothing spa-ish itself); when None it's inferred from the interest text.
+    if spa is None:
+        spa = bool(_SPA_RE.search(interest or ""))
+    if spa:
+        return await _resolve_once("spa", dest, lambda: _find_spas_live(dest, interest))
     return await _resolve_once("activity", dest, lambda: _find_activities_live(dest, interest))
 
 

@@ -453,11 +453,25 @@ def _pick_hotel(city: str, current_name: str, mode: str, target: Optional[str] =
     return pick.get("name")
 
 
-def revise_local_itinerary(current: dict, message: str) -> Optional[dict]:
+def revise_local_itinerary(current: dict, message: str,
+                           hotel_swap: Optional[dict] = None) -> Optional[dict]:
     """Apply a revision to the STORED plan. Returns a pre-_enrich dict, or None when the ask
-    isn't one of the supported shapes (caller falls back to the LLM builder)."""
+    isn't one of the supported shapes (caller falls back to the LLM builder).
+
+    `hotel_swap` = {"name", "city"} — an ALREADY-RESOLVED hotel swap from the conductor
+    (the guest confirmed a specific property Sasha offered). Applied verbatim, no text
+    parsing: the name may be a live-searched hotel that isn't in the curated pool, which
+    the token matcher below can never find (it would rotate to the wrong property)."""
     if not (current or {}).get("days"):
         return None
+    if hotel_swap and hotel_swap.get("name"):
+        days = _preenrich_days(current["days"])
+        cities = [d["city"] for d in days]
+        city = hotel_swap.get("city")
+        scope = [city] if city in cities else list(dict.fromkeys(cities))
+        _apply_hotels(days, {c: hotel_swap["name"] for c in scope})
+        return {"title": current.get("title", ""), "summary": current.get("summary", ""),
+                "days": days}
     low = (message or "").lower()
     spans = _despans(current)
     n_days = sum(s for _, s in spans)

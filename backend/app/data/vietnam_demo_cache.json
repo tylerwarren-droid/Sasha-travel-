@@ -4692,6 +4692,475 @@
     "reviews": 1177,
     "tag": "Highly rated"
    }
-  ]
+  ],
+  "spa|hanoi": {
+   "type": "activity",
+   "title": "Spa & wellness · Hanoi",
+   "dest": "Hanoi",
+   "options": [
+    {
+     "name": "SF Spa",
+     "detail": "90 min · signature Vietnamese massage with herbal compress",
+     "price": "$38",
+     "amount_usd": 38,
+     "book_url": "https://www.google.com/maps/search/SF+Spa+Hanoi+Vietnam"
+    },
+    {
+     "name": "Omamori Spa",
+     "detail": "60 min · aromatherapy massage, therapists trained from the blind community",
+     "price": "$25",
+     "amount_usd": 25,
+     "book_url": "https://www.google.com/maps/search/Omamori+Spa+Hanoi+Vietnam"
+    },
+    {
+     "name": "Dao's Care",
+     "detail": "75 min · Red Dao herbal bath and traditional massage",
+     "price": "$30",
+     "amount_usd": 30,
+     "book_url": "https://www.google.com/maps/search/Dao%27s+Care+Hanoi+Vietnam"
+    }
+   ]
+  },
+  "spa|ho chi minh city": {
+   "type": "activity",
+   "title": "Spa & wellness · Ho Chi Minh City",
+   "dest": "Ho Chi Minh City",
+   "options": [
+    {
+     "name": "Miu Miu Spa",
+     "detail": "60 min · classic Vietnamese massage in District 1",
+     "price": "$22",
+     "amount_usd": 22,
+     "book_url": "https://www.google.com/maps/search/Miu+Miu+Spa+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Temple Leaf Spa",
+     "detail": "90 min · hot stone full-body massage",
+     "price": "$35",
+     "amount_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Temple+Leaf+Spa+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "L'Apothiquaire Spa",
+     "detail": "2 hours · French-style spa day with facial and massage",
+     "price": "$65",
+     "amount_usd": 65,
+     "book_url": "https://www.google.com/maps/search/L%27Apothiquaire+Spa+Ho+Chi+Minh+City+Vietnam"
+    }
+   ]
+  },
+  "spa|hoi an": {
+   "type": "activity",
+   "title": "Spa & wellness · Hoi An",
+   "dest": "Hoi An",
+   "options": [
+    {
+     "name": "Palmarosa Spa",
+     "detail": "90 min · signature deep-relaxation massage",
+     "price": "$32",
+     "amount_usd": 32,
+     "book_url": "https://www.google.com/maps/search/Palmarosa+Spa+Hoi+An+Vietnam"
+    },
+    {
+     "name": "My Chi Spa",
+     "detail": "60 min · bamboo massage in the old town",
+     "price": "$28",
+     "amount_usd": 28,
+     "book_url": "https://www.google.com/maps/search/My+Chi+Spa+Hoi+An+Vietnam"
+    },
+    {
+     "name": "White Rose Spa",
+     "detail": "75 min · foot massage and body scrub combo",
+     "price": "$20",
+     "amount_usd": 20,
+     "book_url": "https://www.google.com/maps/search/White+Rose+Spa+Hoi+An+Vietnam"
+    }
+   ]
+  },
+  "spa|da nang": {
+   "type": "activity",
+   "title": "Spa & wellness · Da Nang",
+   "dest": "Da Nang",
+   "options": [
+    {
+     "name": "Herbal Spa",
+     "detail": "90 min · herbal remedy massage with hot compress",
+     "price": "$30",
+     "amount_usd": 30,
+     "book_url": "https://www.google.com/maps/search/Herbal+Spa+Da+Nang+Vietnam"
+    },
+    {
+     "name": "Queen Spa",
+     "detail": "60 min · bamboo and coconut-oil massage",
+     "price": "$24",
+     "amount_usd": 24,
+     "book_url": "https://www.google.com/maps/search/Queen+Spa+Da+Nang+Vietnam"
+    },
+    {
+     "name": "Charm Spa Grand",
+     "detail": "2 hours · spa package: sauna, scrub and massage",
+     "price": "$45",
+     "amount_usd": 45,
+     "book_url": "https://www.google.com/maps/search/Charm+Spa+Grand+Da+Nang+Vietnam"
+    }
+   ]
+  },
+  "spa|hue": {
+   "type": "activity",
+   "title": "Spa & wellness · Hue",
+   "dest": "Hue",
+   "options": [
+    {
+     "name": "Alba Wellness Valley",
+     "detail": "Day pass · natural hot springs and Japanese onsen",
+     "price": "$35",
+     "amount_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Alba+Wellness+Valley+Hue+Vietnam"
+    },
+    {
+     "name": "Moc Huong Spa",
+     "detail": "60 min · royal Hue-style traditional massage",
+     "price": "$25",
+     "amount_usd": 25,
+     "book_url": "https://www.google.com/maps/search/Moc+Huong+Spa+Hue+Vietnam"
+    },
+    {
+     "name": "Serene Spa",
+     "detail": "90 min · aromatherapy massage near the Perfume River",
+     "price": "$30",
+     "amount_usd": 30,
+     "book_url": "https://www.google.com/maps/search/Serene+Spa+Hue+Vietnam"
+    }
+   ]
+  },
+  "spa|nha trang": {
+   "type": "activity",
+   "title": "Spa & wellness · Nha Trang",
+   "dest": "Nha Trang",
+   "options": [
+    {
+     "name": "Thap Ba Hot Springs",
+     "detail": "2 hours · mineral mud bath and hot-spring soak",
+     "price": "$18",
+     "amount_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Thap+Ba+Hot+Springs+Nha+Trang+Vietnam"
+    },
+    {
+     "name": "i-Resort Mud Baths",
+     "detail": "Half day · mud bath package with waterfall pools",
+     "price": "$25",
+     "amount_usd": 25,
+     "book_url": "https://www.google.com/maps/search/i-Resort+Mud+Baths+Nha+Trang+Vietnam"
+    },
+    {
+     "name": "Su Spa",
+     "detail": "90 min · signature massage on Tran Phu beach strip",
+     "price": "$35",
+     "amount_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Su+Spa+Nha+Trang+Vietnam"
+    }
+   ]
+  },
+  "spa|phu quoc": {
+   "type": "activity",
+   "title": "Spa & wellness · Phu Quoc",
+   "dest": "Phu Quoc",
+   "options": [
+    {
+     "name": "Rock Spa",
+     "detail": "60 min · island aromatherapy massage",
+     "price": "$28",
+     "amount_usd": 28,
+     "book_url": "https://www.google.com/maps/search/Rock+Spa+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "Salinda Spa",
+     "detail": "90 min · resort wellness ritual with body wrap",
+     "price": "$55",
+     "amount_usd": 55,
+     "book_url": "https://www.google.com/maps/search/Salinda+Spa+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "Chanterelle Spa",
+     "detail": "75 min · beachfront massage at sunset",
+     "price": "$30",
+     "amount_usd": 30,
+     "book_url": "https://www.google.com/maps/search/Chanterelle+Spa+Phu+Quoc+Vietnam"
+    }
+   ]
+  },
+  "spa|sapa": {
+   "type": "activity",
+   "title": "Spa & wellness · Sapa",
+   "dest": "Sapa",
+   "options": [
+    {
+     "name": "Red Dao Herbal Bath House",
+     "detail": "60 min · traditional Dao medicinal herbal bath",
+     "price": "$22",
+     "amount_usd": 22,
+     "book_url": "https://www.google.com/maps/search/Red+Dao+Herbal+Bath+House+Sapa+Vietnam"
+    },
+    {
+     "name": "Victoria Sapa Spa",
+     "detail": "60 min · mountain warming massage after trekking",
+     "price": "$35",
+     "amount_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Victoria+Sapa+Spa+Sapa+Vietnam"
+    },
+    {
+     "name": "Eden Massage Sapa",
+     "detail": "75 min · foot and back recovery massage",
+     "price": "$18",
+     "amount_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Eden+Massage+Sapa+Sapa+Vietnam"
+    }
+   ]
+  },
+  "spa|ha long bay": {
+   "type": "activity",
+   "title": "Spa & wellness · Ha Long Bay",
+   "dest": "Ha Long Bay",
+   "options": [
+    {
+     "name": "Yoko Onsen Quang Hanh",
+     "detail": "Day pass · Japanese-style onsen mineral baths",
+     "price": "$40",
+     "amount_usd": 40,
+     "book_url": "https://www.google.com/maps/search/Yoko+Onsen+Quang+Hanh+Ha+Long+Bay+Vietnam"
+    },
+    {
+     "name": "Paradise Cruise Spa",
+     "detail": "60 min · onboard massage with bay views",
+     "price": "$30",
+     "amount_usd": 30,
+     "book_url": "https://www.google.com/maps/search/Paradise+Cruise+Spa+Ha+Long+Bay+Vietnam"
+    },
+    {
+     "name": "Ha Long Pearl Spa",
+     "detail": "90 min · full-body traditional massage",
+     "price": "$26",
+     "amount_usd": 26,
+     "book_url": "https://www.google.com/maps/search/Ha+Long+Pearl+Spa+Ha+Long+Bay+Vietnam"
+    }
+   ]
+  },
+  "spa|da lat": {
+   "type": "activity",
+   "title": "Spa & wellness · Da Lat",
+   "dest": "Da Lat",
+   "options": [
+    {
+     "name": "Terracotta Spa",
+     "detail": "60 min · pine-forest aromatherapy massage",
+     "price": "$22",
+     "amount_usd": 22,
+     "book_url": "https://www.google.com/maps/search/Terracotta+Spa+Da+Lat+Vietnam"
+    },
+    {
+     "name": "Ana Mandara Spa",
+     "detail": "90 min · colonial-villa wellness ritual",
+     "price": "$40",
+     "amount_usd": 40,
+     "book_url": "https://www.google.com/maps/search/Ana+Mandara+Spa+Da+Lat+Vietnam"
+    },
+    {
+     "name": "Dalat Wonder Spa",
+     "detail": "75 min · hot-stone massage for cool highland evenings",
+     "price": "$25",
+     "amount_usd": 25,
+     "book_url": "https://www.google.com/maps/search/Dalat+Wonder+Spa+Da+Lat+Vietnam"
+    }
+   ]
+  },
+  "spa|mui ne": {
+   "type": "activity",
+   "title": "Spa & wellness · Mui Ne",
+   "dest": "Mui Ne",
+   "options": [
+    {
+     "name": "Aroma Beach Spa",
+     "detail": "60 min · seaside aromatherapy massage",
+     "price": "$20",
+     "amount_usd": 20,
+     "book_url": "https://www.google.com/maps/search/Aroma+Beach+Spa+Mui+Ne+Vietnam"
+    },
+    {
+     "name": "Lotus Day Spa",
+     "detail": "90 min · after-sun body wrap and massage",
+     "price": "$28",
+     "amount_usd": 28,
+     "book_url": "https://www.google.com/maps/search/Lotus+Day+Spa+Mui+Ne+Vietnam"
+    },
+    {
+     "name": "Sailing Club Spa",
+     "detail": "75 min · deep-tissue massage by the beach",
+     "price": "$35",
+     "amount_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Sailing+Club+Spa+Mui+Ne+Vietnam"
+    }
+   ]
+  },
+  "spa|ninh binh": {
+   "type": "activity",
+   "title": "Spa & wellness · Ninh Binh",
+   "dest": "Ninh Binh",
+   "options": [
+    {
+     "name": "Emeralda Resort Spa",
+     "detail": "60 min · countryside wellness massage",
+     "price": "$30",
+     "amount_usd": 30,
+     "book_url": "https://www.google.com/maps/search/Emeralda+Resort+Spa+Ninh+Binh+Vietnam"
+    },
+    {
+     "name": "Tam Coc Herbal Massage",
+     "detail": "60 min · herbal massage after the boat tour",
+     "price": "$18",
+     "amount_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Tam+Coc+Herbal+Massage+Ninh+Binh+Vietnam"
+    },
+    {
+     "name": "Hidden Charm Spa",
+     "detail": "90 min · limestone-view relaxation package",
+     "price": "$28",
+     "amount_usd": 28,
+     "book_url": "https://www.google.com/maps/search/Hidden+Charm+Spa+Ninh+Binh+Vietnam"
+    }
+   ]
+  },
+  "spa|cat ba": {
+   "type": "activity",
+   "title": "Spa & wellness · Cat Ba",
+   "dest": "Cat Ba",
+   "options": [
+    {
+     "name": "Cat Ba Island Spa",
+     "detail": "60 min · post-kayak recovery massage",
+     "price": "$18",
+     "amount_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Cat+Ba+Island+Spa+Cat+Ba+Vietnam"
+    },
+    {
+     "name": "Flamingo Wellness",
+     "detail": "90 min · resort spa ritual with sauna",
+     "price": "$35",
+     "amount_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Flamingo+Wellness+Cat+Ba+Vietnam"
+    }
+   ]
+  },
+  "spa|con dao": {
+   "type": "activity",
+   "title": "Spa & wellness · Con Dao",
+   "dest": "Con Dao",
+   "options": [
+    {
+     "name": "Six Senses Spa Con Dao",
+     "detail": "90 min · signature island wellness journey",
+     "price": "$85",
+     "amount_usd": 85,
+     "book_url": "https://www.google.com/maps/search/Six+Senses+Spa+Con+Dao+Con+Dao+Vietnam"
+    },
+    {
+     "name": "Poulo Condor Spa",
+     "detail": "60 min · tropical garden massage",
+     "price": "$40",
+     "amount_usd": 40,
+     "book_url": "https://www.google.com/maps/search/Poulo+Condor+Spa+Con+Dao+Vietnam"
+    }
+   ]
+  },
+  "spa|phong nha": {
+   "type": "activity",
+   "title": "Spa & wellness · Phong Nha",
+   "dest": "Phong Nha",
+   "options": [
+    {
+     "name": "Chay Lap Wellness",
+     "detail": "60 min · riverside massage after the caves",
+     "price": "$20",
+     "amount_usd": 20,
+     "book_url": "https://www.google.com/maps/search/Chay+Lap+Wellness+Phong+Nha+Vietnam"
+    },
+    {
+     "name": "Phong Nha Farmstay Massage",
+     "detail": "60 min · countryside traditional massage",
+     "price": "$15",
+     "amount_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Phong+Nha+Farmstay+Massage+Phong+Nha+Vietnam"
+    }
+   ]
+  },
+  "spa|ha giang": {
+   "type": "activity",
+   "title": "Spa & wellness · Ha Giang",
+   "dest": "Ha Giang",
+   "options": [
+    {
+     "name": "Dao Lodge Herbal Baths",
+     "detail": "45 min · Red Dao herbal bath after the loop",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Dao+Lodge+Herbal+Baths+Ha+Giang+Vietnam"
+    },
+    {
+     "name": "Ha Giang Recovery Massage",
+     "detail": "60 min · back and shoulder rider's massage",
+     "price": "$12",
+     "amount_usd": 12,
+     "book_url": "https://www.google.com/maps/search/Ha+Giang+Recovery+Massage+Ha+Giang+Vietnam"
+    }
+   ]
+  },
+  "spa|mekong delta": {
+   "type": "activity",
+   "title": "Spa & wellness · Mekong Delta",
+   "dest": "Mekong Delta",
+   "options": [
+    {
+     "name": "Victoria Can Tho Spa",
+     "detail": "75 min · riverside colonial spa massage",
+     "price": "$30",
+     "amount_usd": 30,
+     "book_url": "https://www.google.com/maps/search/Victoria+Can+Tho+Spa+Mekong+Delta+Vietnam"
+    },
+    {
+     "name": "Mekong Riverside Wellness",
+     "detail": "60 min · garden pavilion massage",
+     "price": "$20",
+     "amount_usd": 20,
+     "book_url": "https://www.google.com/maps/search/Mekong+Riverside+Wellness+Mekong+Delta+Vietnam"
+    }
+   ]
+  },
+  "spa|vietnam": {
+   "type": "activity",
+   "title": "Spa & wellness · Vietnam",
+   "dest": "Vietnam",
+   "options": [
+    {
+     "name": "SF Spa · Hanoi",
+     "detail": "90 min · signature Vietnamese massage",
+     "price": "$38",
+     "amount_usd": 38,
+     "book_url": "https://www.google.com/maps/search/SF+Spa+%C2%B7+Hanoi+Vietnam+Vietnam"
+    },
+    {
+     "name": "Miu Miu Spa · Saigon",
+     "detail": "60 min · classic Vietnamese massage",
+     "price": "$22",
+     "amount_usd": 22,
+     "book_url": "https://www.google.com/maps/search/Miu+Miu+Spa+%C2%B7+Saigon+Vietnam+Vietnam"
+    },
+    {
+     "name": "Herbal Spa · Da Nang",
+     "detail": "90 min · herbal remedy massage",
+     "price": "$30",
+     "amount_usd": 30,
+     "book_url": "https://www.google.com/maps/search/Herbal+Spa+%C2%B7+Da+Nang+Vietnam+Vietnam"
+    }
+   ]
+  }
  }
 }

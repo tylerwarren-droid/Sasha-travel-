@@ -366,12 +366,15 @@ def _is_revision(message: str) -> bool:
 
 
 async def build_itinerary(message: str, history: list,
-                          current_itinerary: "Optional[dict]" = None) -> dict:
+                          current_itinerary: "Optional[dict]" = None,
+                          hotel_swap: "Optional[dict]" = None) -> dict:
     """Generate + enrich a day-by-day itinerary. Returns the itinerary dict or None.
 
     `current_itinerary` is the guest's STORED plan (enriched payload). Revisions edit it
     locally in milliseconds (add/remove a city, hotel swaps, cheaper/upgrade, activity
     changes); rebuilds keep its route. Only an unparseable revision reaches the LLM builder.
+    `hotel_swap` = {"name","city"} — an already-resolved hotel change from the conductor,
+    applied verbatim by the reviser (the name may not be in the curated pool).
     """
     history = history or []
 
@@ -380,7 +383,7 @@ async def build_itinerary(message: str, history: list,
         # (add/remove city, hotel swap/cheaper/upgrade/named, activity swap/remove) and
         # returns None for anything that isn't a change — no gate mismatch possible.
         from app.services.local_itinerary import revise_local_itinerary
-        data = revise_local_itinerary(current_itinerary, message)
+        data = revise_local_itinerary(current_itinerary, message, hotel_swap=hotel_swap)
         if data and data.get("days"):
             travellers = await _resolve_travellers(history, message)
             await _enrich(data, travellers)

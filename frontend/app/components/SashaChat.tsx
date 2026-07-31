@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect, MutableRefObject } from 'react'
-import { Loader2, ExternalLink } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { User, Itinerary } from '@/types'
 import VoiceButton, { MicDevicesInfo } from './VoiceButton'
 import { renderMarkdown } from '@/lib/markdown'
@@ -684,14 +684,13 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
                           <div className="o2">{[o.detail, o.price].filter(Boolean).join(' · ')}</div>
                         </div>
                         {o.offer_id && (o.amount_usd ?? 0) > 0 ? (
-                          <div className="lw-actions">
-                            <button className="price" onClick={() => onBookItem?.({ offer_id: o.offer_id!, label: `${b.title} · ${o.name}`, amount_usd: o.amount_usd!, kind: b.type, name: o.name })}>
-                              Book &amp; Pay ${o.amount_usd!.toLocaleString()}
-                            </button>
-                            <a className="viewlink" href={o.book_url} target="_blank" rel="noopener noreferrer">View ↗</a>
-                          </div>
+                          <button className="price" onClick={() => onBookItem?.({ offer_id: o.offer_id!, label: `${b.title} · ${o.name}`, amount_usd: o.amount_usd!, kind: b.type, name: o.name })}>
+                            Book &amp; Pay ${o.amount_usd!.toLocaleString()}
+                          </button>
                         ) : (
-                          <a className="price" href={o.book_url} target="_blank" rel="noopener noreferrer">Book</a>
+                          /* No server-priced offer (uncached fallback) — informational only,
+                             never an external "Book": booking happens through Sasha. */
+                          <a className="viewlink" href={o.book_url} target="_blank" rel="noopener noreferrer">View ↗</a>
                         )}
                       </div>
                     ))}
@@ -718,40 +717,22 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
                         {h.tag && <span className="tag">{h.tag}</span>}
                       </div>
                       {h.offer_id && (h.amount_usd ?? 0) > 0 ? (
-                        <div className="lw-actions">
-                          <button className="price" onClick={() => onBookItem?.({ offer_id: h.offer_id!, label: `${h.nights ?? 1} night${(h.nights ?? 1) !== 1 ? 's' : ''} · ${h.name}`, amount_usd: h.amount_usd!, kind: 'hotel', name: h.name })}>
-                            Book &amp; Pay ${h.amount_usd!.toLocaleString()}
-                          </button>
-                          <a className="viewlink" href={h.book_url} target="_blank" rel="noopener noreferrer">View ↗</a>
-                        </div>
+                        <button className="price" onClick={() => onBookItem?.({ offer_id: h.offer_id!, label: `${h.nights ?? 1} night${(h.nights ?? 1) !== 1 ? 's' : ''} · ${h.name}`, amount_usd: h.amount_usd!, kind: 'hotel', name: h.name })}>
+                          Book &amp; Pay ${h.amount_usd!.toLocaleString()}
+                        </button>
                       ) : (
-                        <a className="price" href={h.book_url} target="_blank" rel="noopener noreferrer">Book</a>
+                        /* No server-priced offer — informational only, never an external
+                           "Book": hotel stays are booked through Sasha. */
+                        <a className="viewlink" href={h.book_url} target="_blank" rel="noopener noreferrer">View ↗</a>
                       )}
                     </div>
                   ))}
                 </div>
               </div>
             )}
-            {bookingLinks.length > 0 && (
-              <div className="lw-card">
-                <div className="lw-cardHd">
-                  <span className="lw-ci gold">🔗</span>
-                  <div className="lw-meta">
-                    <div className="lw-k">Quick booking</div>
-                    <div className="lw-h">Reserve in one tap</div>
-                  </div>
-                </div>
-                <div className="lw-cardBody">
-                  <div className="lw-chips">
-                    {bookingLinks.map((l, i) => (
-                      <a key={i} className="lw-chip" href={l.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <ExternalLink className="w-3 h-3" />{l.label}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* The external "Quick booking" chips (Booking.com / GetYourGuide / Klook
+                searches) are retired: every kind now books IN-APP through Sasha's
+                server-priced offers — nothing routes the guest to a third-party site. */}
           </>
         )}
 

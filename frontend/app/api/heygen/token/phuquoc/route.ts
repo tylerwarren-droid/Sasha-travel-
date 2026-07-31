@@ -24,7 +24,8 @@ export async function GET() {
           context_id: 'f5721bed-ade9-4c26-9beb-7fd17d7d8211',
           voice_id: '62bbb4b2-bb26-4727-bc87-cfb2bd4e0cc8',
           language: 'en',
-          speed: 0.8
+          // speed belongs inside voice_settings — a bare `speed` here was silently ignored
+          voice_settings: { provider: 'elevenLabs', speed: 0.8 }
         },
         llm_configuration_id: '4267be4c-8959-443d-b682-36e7fff89b4d',
         is_sandbox: false

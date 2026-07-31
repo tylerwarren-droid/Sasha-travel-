@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ExternalLink, Hotel, MapPin, Sparkles, Share2, Check, Star, Download } from 'lucide-react'
+import { Hotel, MapPin, Sparkles, Share2, Check, Star, Download } from 'lucide-react'
 import TripMap from './TripMap'
 
 const esc = (s: string) => (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string))
@@ -15,7 +15,7 @@ function buildItineraryHtml(it: RichItinerary): string {
         <h2>${esc(d.title)}</h2>
         <p class="desc">${esc(d.description)}</p>
         <ul>${(d.activities || []).map(a => `<li><b>${esc(a.time)}:</b> ${esc(a.name)}${a.blurb ? ` — <span class="muted">${esc(a.blurb)}</span>` : ''}</li>`).join('')}</ul>
-        ${d.hotel ? `<p class="hotel">🏨 <b>${esc(d.hotel.name)}</b>${d.hotel.rating ? ` · ${d.hotel.rating}/10` : ''} — <a href="${d.hotel.book_url}">Book on Booking.com</a></p>` : ''}
+        ${d.hotel ? `<p class="hotel">🏨 <b>${esc(d.hotel.name)}</b>${d.hotel.rating ? ` · ${d.hotel.rating}/10` : ''} — included in your trip</p>` : ''}
       </div>
     </section>`).join('')
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -166,11 +166,11 @@ export default function ItineraryDays({ itinerary, onBook, onRevise }: { itinera
                     <div key={i} className="flex items-start gap-2">
                       <Sparkles className="w-3 h-3 mt-0.5 flex-shrink-0" style={{ color: GOLD }} />
                       <div className="flex-1 min-w-0">
-                        <a href={a.book_url} target="_blank" rel="noopener noreferrer"
-                          className="text-xs text-white/80 hover:text-white inline-flex items-center gap-1 group">
+                        {/* Plain text — activities book through Sasha (ask her, or use the
+                            activity card's Book & Pay), never a GetYourGuide link. */}
+                        <span className="text-xs text-white/80">
                           <span className="text-white/35">{a.time}:</span> {a.name}
-                          <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60" />
-                        </a>
+                        </span>
                         {a.blurb && <div className="text-[11px] text-white/35">{a.blurb}</div>}
                       </div>
                     </div>
@@ -192,11 +192,12 @@ export default function ItineraryDays({ itinerary, onBook, onRevise }: { itinera
                       </div>
                     )}
                   </div>
-                  <a href={d.hotel.book_url} target="_blank" rel="noopener noreferrer"
-                    className="text-xs font-medium rounded-lg px-3 py-1.5 flex-shrink-0 transition-opacity hover:opacity-85"
-                    style={{ background: `linear-gradient(135deg, ${GOLD}, #B8860B)`, color: '#fff' }}>
-                    Book
-                  </a>
+                  {/* Stays are part of the trip and book through Sasha's checkout — no
+                      external Booking.com button here. */}
+                  <span className="text-[10px] font-medium rounded-lg px-2.5 py-1 flex-shrink-0"
+                    style={{ background: 'rgba(218,165,32,0.15)', color: GOLD }}>
+                    Included in trip
+                  </span>
                 </div>
               )}
             </div>

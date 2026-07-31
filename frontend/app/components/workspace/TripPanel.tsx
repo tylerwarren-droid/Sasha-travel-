@@ -88,20 +88,16 @@ export default function TripPanel({
                 back to a hardcoded 'Hanoi', so a trip beginning anywhere else (or with day 1
                 missing a city) advertised — and deep-linked to — flights to the wrong side of
                 the country. If we don't know the arrival city, we don't guess one. */}
+            {/* Flights book IN-APP through Sasha's flight cards — no Google Flights
+                deep-link. This hint keeps the guest inside the conversation. */}
             {arrivalCity && (
-              <a
-                className="lw-flights"
-                href={`https://www.google.com/travel/flights?q=${encodeURIComponent(`flights to ${arrivalCity} Vietnam`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <div className="lw-flights">
                 <span className="lw-flights-ic">✈️</span>
                 <div className="lw-flights-meta">
                   <div className="lw-flights-k">Getting there</div>
-                  <div className="lw-flights-h">Search flights to {arrivalCity}</div>
+                  <div className="lw-flights-h">Ask Sasha for flights to {arrivalCity} — book right here</div>
                 </div>
-                <span className="lw-flights-cta">Find flights ↗</span>
-              </a>
+              </div>
             )}
             <div className="lw-mapwrap"><TripMap days={richItinerary.days} /></div>
 
@@ -138,14 +134,16 @@ export default function TripPanel({
 
                         {d.activities && d.activities.length > 0 && (
                           <div className="lw-acts">
+                            {/* Plain rows — activities book through Sasha's Book & Pay
+                                cards, never a GetYourGuide link. */}
                             {d.activities.map((a: any, ai: number) => (
-                              <a className="lw-act" key={ai} href={a.book_url || '#'} target="_blank" rel="noopener noreferrer">
+                              <div className="lw-act" key={ai}>
                                 <span className="lw-act-time">{a.time}</span>
                                 <div className="lw-act-body">
-                                  <div className="lw-act-name">{a.name}{a.book_url && <span className="lw-act-ext">↗</span>}</div>
+                                  <div className="lw-act-name">{a.name}</div>
                                   {a.blurb && <div className="lw-act-blurb">{a.blurb}</div>}
                                 </div>
-                              </a>
+                              </div>
                             ))}
                           </div>
                         )}
@@ -163,11 +161,11 @@ export default function TripPanel({
                                 <div className="lw-hotel-price">${Number(showHotel.price_from).toLocaleString()}/night{continuing ? ' · same stay' : ''}</div>
                               ) : null}
                             </div>
+                            {/* Stays are paid inside the whole-trip checkout — never a
+                                Booking.com button. */}
                             {isBooked
                               ? <span className="lw-hotel-reserved">✓ Reserved</span>
-                              : showHotel.book_url && (
-                                  <a className="lw-hotel-book" href={showHotel.book_url} target="_blank" rel="noopener noreferrer">Book</a>
-                                )}
+                              : <span className="lw-hotel-reserved" style={{ opacity: 0.75 }}>Included in trip</span>}
                           </div>
                         )}
                       </div>

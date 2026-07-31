@@ -347,6 +347,17 @@ async def classify_intents(user_message: str, conversation_history: list,
         # (an LLM stay reply like "Hanoi has some wonderful options…" matched nothing, so
         # the whole branch used to be skipped and the ask fell to plain chat).
         _msg_kind = _booking_kind(lower)
+        # Hotel-name TOKEN collisions must not out-rank the card the guest is reading:
+        # "book the Ba Na Hills & Golden Bridge" (a tour, named verbatim off the activity
+        # card) tripped _names_hotel via the "golden" of "Danang Golden Bay" and opened a
+        # HOTEL payment popup. When hotel-ness rests only on name tokens (no stay word) and
+        # every such token also appears in Sasha's last reply, the guest is naming something
+        # she just listed — let the last card's kind decide instead.
+        if _msg_kind == "hotel" and not any(k in lower for k in (
+                "hotel", "resort", "room", "accommodation", "a stay", "place to stay", "night at")):
+            _hot_toks = set(re.findall(r"[a-z]{5,}", lower)) & _HOTEL_NAME_TOKENS
+            if _hot_toks and all(t in last_assistant for t in _hot_toks):
+                _msg_kind = None
         _last_kind = None
         if not _msg_kind:
             _last_kind = _booking_kind(last_assistant)   # what Sasha just offered
@@ -832,7 +843,7 @@ def _match_named(message: str, names: list, fuzzy: bool = True) -> "Optional[str
     all_tokens = re.findall(r"[a-z0-9]+", (message or "").lower())
     tokset = set(all_tokens)
     tok4 = [t for t in all_tokens if len(t) >= 4]
-    _skip = {"restaurant", "the", "and", "cafe", "bar", "vietnam", "hanoi", "saigon"}
+    _skip = _NAME_MATCH_SKIP
     for name in names:
         mn = norm(name)
         # Whole-name run in the normalized stream: catches "TamVi"-style STT junctions for
@@ -855,6 +866,21 @@ def _match_named(message: str, names: list, fuzzy: bool = True) -> "Optional[str
                 return name
     return None
 
+
+# Name-words that are never a referent on their own: kind nouns that appear INSIDE property
+# names, plus every destination word. "book the Danang Golden Bay hotel" (a property NOT on
+# the current list) used to fuzzy-match "InterContinental DANANG Sun Peninsula" on the shared
+# city word and open a $420 payment popup for the wrong hotel.
+_NAME_MATCH_SKIP = {"restaurant", "the", "and", "cafe", "bar", "vietnam", "hanoi", "saigon",
+                    "hotel", "hotels", "resort", "hostel", "villa", "lodge", "homestay",
+                    "airport", "airlines", "airways"}
+try:
+    from app.services.booking_links import DESTINATIONS as _NM_DESTS
+    for _k, _v in _NM_DESTS.items():
+        _NAME_MATCH_SKIP.update(_k.lower().split())
+        _NAME_MATCH_SKIP.update(w.lower() for w in _v.split())
+except Exception:
+    pass
 
 _ORDINALS = {"first": 0, "1st": 0, "second": 1, "2nd": 1, "third": 2, "3rd": 2, "last": -1}
 

@@ -40,7 +40,13 @@ export async function GET(request: Request) {
   const base: any = {
     mode: 'FULL',
     avatar_id: AVATAR_ID,
-    avatar_persona: { context_id: CONTEXT_ID, voice_id: VOICE_ID, language: lang, speed: 0.8 },
+    // `speed` lives INSIDE voice_settings (per-provider union) — a bare `speed` on
+    // avatar_persona is not in AvatarPersonaSchema and was silently ignored, so the
+    // avatar spoke at default speed. Verified live: this shape mints (code 1000).
+    avatar_persona: {
+      context_id: CONTEXT_ID, voice_id: VOICE_ID, language: lang,
+      voice_settings: { provider: 'elevenLabs', speed: 0.8 },
+    },
     // Personalize the avatar's opening line with the (currently hardcoded) user's name.
     // For the spoken opening to say it, the LiveAvatar context's opening_text must reference
     // ${first_name} (e.g. "Hello ${first_name}! I'm Sasha..."). If it doesn't, this is a

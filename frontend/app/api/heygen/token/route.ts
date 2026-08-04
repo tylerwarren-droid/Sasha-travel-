@@ -43,9 +43,11 @@ export async function GET(request: Request) {
     // `speed` lives INSIDE voice_settings (per-provider union) — a bare `speed` on
     // avatar_persona is not in AvatarPersonaSchema and was silently ignored, so the
     // avatar spoke at default speed. Verified live: this shape mints (code 1000).
+    // 0.8 was chosen back when the field was silently ignored; once it took effect the
+    // guest's first comment was "she's talking a bit too slow". 1.0 = natural pace.
     avatar_persona: {
       context_id: CONTEXT_ID, voice_id: VOICE_ID, language: lang,
-      voice_settings: { provider: 'elevenLabs', speed: 0.8 },
+      voice_settings: { provider: 'elevenLabs', speed: 1.0 },
     },
     // Personalize the avatar's opening line with the (currently hardcoded) user's name.
     // For the spoken opening to say it, the LiveAvatar context's opening_text must reference

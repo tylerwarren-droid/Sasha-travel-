@@ -167,7 +167,11 @@ async def classify_intents(user_message: str, conversation_history: list,
     # those CARDS, not stock photography, so "show me" must not pre-empt a card-producing intent
     # (the old single FOTO_WORDS list sent "show me restaurants" to a photo strip with no cards).
     # The strong cues (photo/picture/image/look like) always mean the guest wants a picture.
-    FOTO_STRONG_WORDS = ["photo", "picture", "image", "look like"]
+    # Plurals listed explicitly (same whole-word trap as RESTAURANT_WORDS): "do you have any
+    # PICTURES of the Capella?" matched nothing and fell to general chat, where the LLM said
+    # "I can't pull up pictures — try Google Images" while the app has a photo feature.
+    FOTO_STRONG_WORDS = ["photo", "photos", "picture", "pictures", "image", "images", "pic",
+                         "pics", "look like"]
     FOTO_SHOW_WORDS = ["show me", "show"]
     # Flights — catches "book me a flight to Hanoi", "fly to Da Nang", "cheapest flights", etc.
     # Every entry must actually imply AIR travel. "how do i get to" / "getting there" used to
@@ -409,6 +413,16 @@ async def classify_intents(user_message: str, conversation_history: list,
     if _mentions(lower, ITINERARY_WORDS) or ITINERARY_RE.search(lower) or (user_affirms and offered_itinerary):
         intents = ["itinerary"]
 
+    # Party-intake follow-up: Sasha just asked "how many of you will be travelling?" before
+    # building. The guest's answer ("six of us", "just the two of us", "6") carries no build
+    # verb, so it must be routed straight back to the itinerary builder.
+    if not intents and "how many of you will be travelling" in last_assistant:
+        if (re.search(r"\b\d+\b", lower)
+                or re.search(r"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b", lower)
+                or re.search(r"\b(solo|alone|myself|couple|family|of us|people|travell?ers?|adults|"
+                             r"wife|husband|partner|kids|children|friends?)\b", lower)):
+            intents = ["itinerary"]
+
     # Intake follow-up: Sasha just asked for the trip brief (where / how long / who). The
     # guest's answer ("Hanoi and Hoi An, 6 days, the two of us") carries no build verb, so
     # without this it fell to general chat and the brief was never acted on.
@@ -471,7 +485,13 @@ async def classify_intents(user_message: str, conversation_history: list,
     # destination and an explicit change cue, so ordinary questions ("tell me about Hoi An")
     # stay conversational and don't blow away the plan.
     DEST_CHANGE_CUES = ("rather", "instead", "prefer", "change to", "switch to", "swap to",
-                        "skip", "swap out", "replace")
+                        "skip", "swap out", "replace",
+                        # Additive phrasings: "can we visit Sapa as well?" named a destination
+                        # over a stored plan and still fell to chat — Sasha talked about Sapa
+                        # while the plan ignored it (the reviser's _ADD_WORDS were never
+                        # reached because routing missed the turn entirely).
+                        "as well", "also", "add ", "include", "on the way", "squeeze in",
+                        "can we visit", "can we go", "want to visit", "want to see")
     dest_change = bool(_find_destinations(lower)) and any(c in lower for c in DEST_CHANGE_CUES)
 
     revise_standalone = revise_standalone or party_change or dest_change
@@ -494,6 +514,33 @@ async def classify_intents(user_message: str, conversation_history: list,
     # clobbered the correct flight intent and rebuilt the whole itinerary instead.
     if not intents and itinerary_exists and (revise_combo or revise_standalone):
         intents = ["itinerary"]
+
+    # ── Walkthrough / plan questions over an EXISTING plan — read it, never rebuild it ──
+    # Two live-demo failures share one root cause: once a plan existed, "I need to go day by
+    # day" and "where do you have me staying now?" both re-entered the BUILD path ("day by
+    # day" is an ITINERARY_WORD; "staying" is a revise target), so Sasha re-composed the
+    # whole trip — losing a hotel swap in the process — when the guest only wanted it
+    # NARRATED. With a stored plan, these are read-only turns for the plan_qa runner.
+    if itinerary_exists and not revise_combo and not revise_standalone \
+            and not _mentions(lower, BOOKING_WORDS) \
+            and not re.search(r"\b\d+\s*[-–]?\s*(?:day|days|night|nights|week|weeks)\b", lower):
+        _walk = re.search(
+            r"\b(day by day|day-by-day|one day at a time|walk me through|talk me through|"
+            r"go through (it|the plan|each day)|day at a time)\b", lower)
+        _plan_q = re.search(
+            r"where (am i|are we|do you have (me|us)) staying|which hotel|what hotel|"
+            r"what('s| is) (on|planned|happening) (for )?(the )?(first|second|third|last|\w+ )?day|"
+            r"what (are we|am i|do we|do i) doing on day|tell me about (the )?(first|second|third|"
+            r"fourth|fifth|last)? ?day|what does (the )?(first |second |third |last )?day"
+            r"( \w+)? look like|so my first day|about (the )?first day", lower)
+        # "next" only means the next DAY when Sasha was just narrating a day — otherwise
+        # "go on"/"continue" in ordinary chat would be hijacked into a day readout.
+        _next_q = bool(re.fullmatch(
+            r"(and |then |ok |okay |so |now )*((what('s| is| about))? ?(the )?next( day)?|"
+            r"what('s| is) next|then what|continue|go on|keep going|next one)[.!? ]*", lower)) \
+            and bool(re.search(r"\bday \d+\b", last_assistant))
+        if _walk or _plan_q or _next_q:
+            intents = ["plan_qa"]
 
     # Book the whole trip — once a plan exists and the user says to book it, confirm the
     # booking (the UI then locks the final itinerary, ends the session, and offers PDF/share).
@@ -555,12 +602,31 @@ async def classify_intents(user_message: str, conversation_history: list,
 # failure the restaurant email agent was removed for; it came back in through general chat.
 NEVER_FAKE_BOOKING = (
     "\n\nHARD RULE — NEVER claim a booking, reservation, order or enquiry has been made, sent, "
-    "submitted, requested or confirmed. You have NO ability to book, reserve or contact any "
-    "provider. Never say you have 'sent', 'added', 'put through' or 'confirmed' anything, and "
-    "never say a confirmation is coming. The ONLY way anything gets booked is the guest tapping "
-    "a link on a card themselves. When they ask you to book an individual flight, taxi, tour or "
-    "restaurant, say plainly that they can tap that option on the card to complete it. (The one "
-    "exception is the whole-trip Stripe checkout, which is handled elsewhere, not by you.)"
+    "submitted, requested or confirmed. Never say you have 'sent', 'added', 'put through' or "
+    "'confirmed' anything, and never say a confirmation is coming. The ONLY way anything gets "
+    "booked is the guest tapping Book & Pay on a card themselves. When they ask you to book an "
+    "individual flight, taxi, tour or restaurant, point them at that option's card to complete "
+    "it. (The one exception is the whole-trip Stripe checkout, which is handled elsewhere, not "
+    "by you.)"
+)
+
+# The flip side of NEVER_FAKE_BOOKING, learned the hard way on camera: told it had "NO ability
+# to book", the general agent said "I can't actually pull up or book flights myself, but you
+# can search Chicago to Hanoi on Google Flights or Kayak" — 30 seconds after the app had shown
+# a flight card saying "tap one to book". And "do you have pictures of the Capella?" got
+# "search Google Images". Denying the app's own features and routing guests to external sites
+# is the single most trust-destroying thing Sasha can do in a pitch. Appended to BOTH the
+# general and merge prompts (in code, for the same Supabase-override reason as above).
+CAPABILITY_FACTS = (
+    "\n\nWHAT THIS APP CAN DO (never deny these, never send the guest elsewhere): it shows "
+    "real flight, hotel, restaurant, transfer and activity options as cards on the right with "
+    "Book & Pay buttons; it shows photos of places right in the conversation; it builds, "
+    "revises and prices the full day-by-day trip plan; and it takes payment in-app. NEVER tell "
+    "the guest to use Google Flights, Kayak, Skyscanner, Booking.com, Expedia, TripAdvisor, "
+    "Google Images or any other external site or app, and NEVER say you can't pull up, show, "
+    "search or book something the app handles. If the thing they asked for isn't on screen "
+    "yet, say you'll pull it up — e.g. 'ask me for flights to Hanoi and I'll bring the "
+    "options up' — instead of claiming you can't."
 )
 
 
@@ -593,7 +659,7 @@ _CHANGE_CUE = re.compile(
     r"\d|\b(add|remove|drop|change|update|swap|replace|switch|make it|bump|upgrade|downgrade|"
     r"more|less|fewer|cheaper|pricier|luxur|fancier|nicer|budget|instead|rather|extend|shorten|"
     r"longer|shorter|extra|another|also|join|joining|bring|bringing|plus|bigger|smaller|"
-    r"different|redo|rebuild|revise|remove|now that|no longer)\b",
+    r"different|redo|rebuild|revise|remove|now that|no longer|as well|too|visit|include)\b",
     re.I,
 )
 
@@ -646,7 +712,7 @@ _PARTY_TALK = ("wife", "husband", "partner", "spouse", "daughter", "son", " kid"
 
 async def run_general(message: str, history: list, general_prompt: str) -> dict:
     """General Sasha conversation — travel advice, destinations, planning."""
-    system = general_prompt + NEVER_FAKE_BOOKING + NEVER_FAKE_ITINERARY_CHANGE
+    system = general_prompt + NEVER_FAKE_BOOKING + NEVER_FAKE_ITINERARY_CHANGE + CAPABILITY_FACTS
     # CURRENT message only: the miscount risk is the turn where the GUEST restates the party.
     # Triggering off history too made every turn near party talk pay the ~1s resolver call
     # ("wife" in Sasha's own previous reply added a visible delay to an unrelated answer).
@@ -898,11 +964,22 @@ _BOOKING_STOP = {
     "perfect", "great", "awesome", "lovely", "nice", "cool", "alright", "right", "well",
     "then", "lets", "let's", "her", "him", "them", "really", "definitely", "just",
     "night", "nights", "first", "second", "third", "last", "whole", "trip", "everything",
-    "people", "person", "two", "three", "four", "five", "actually", "want", "like", "need",
+    "people", "person", "actually", "want", "like", "need",
+    # Number words: "a table for six", "dinner for two people" name a party size, never a venue.
+    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "eleven", "twelve",
     # Treatment/experience kind-nouns — "book me a spa massage" names WHAT the guest wants,
     # not WHICH venue; these must not read as a foreign referent over the spa card.
     "spa", "spas", "massage", "massages", "sauna", "facial", "wellness", "treatment",
     "tour", "tours", "activity", "experience",
+    # Generic meal/booking vocabulary. "Can you make dinner RESERVATIONS for me?" names no
+    # venue at all, but "reservations" (plural — only the singular was listed) survived the
+    # strip and read as a foreign referent, so the guest got "Hmm, I don't see that one on my
+    # current list" in reply to a request that named nothing. Same for meal/food/dining words.
+    "reservations", "bookings", "dining", "dine", "eat", "eating", "meal", "meals", "food",
+    "somewhere", "anywhere", "some", "any", "good", "best", "nice", "fancy", "cheap",
+    "places", "options", "option", "recommend", "suggest", "evening", "morning", "afternoon",
+    "week", "weekend", "time", "hungry", "menu", "cuisine", "local",
 }
 try:
     from app.services.booking_links import DESTINATIONS as _DESTS
@@ -922,7 +999,10 @@ def _foreign_referent(message: str, names: list) -> bool:
     name_norms = [_n(n) for n in names if n]
     name_words = {w.lower() for n in names for w in re.findall(r"[A-Za-z]{3,}", n or "")}
     for tok in re.findall(r"[a-z']+", (message or "").lower()):
-        if len(tok) < 3 or tok in _BOOKING_STOP:
+        # rstrip("s"): the stop list can't enumerate every plural/verb form, and a single
+        # surviving generic token ("reservations", "tables") flips the whole reply to the
+        # honest-mismatch line. Venue names are matched below before this can drop them.
+        if len(tok) < 3 or tok in _BOOKING_STOP or tok.rstrip("s") in _BOOKING_STOP:
             continue
         tn = _n(tok)
         if tok in name_words or any(len(tn) >= 4 and len(nn) >= 4 and
@@ -1121,10 +1201,21 @@ async def _stable_card(session_id, kind: str, dest: str, fetch,
 
 async def run_flight_intent(message: str, history: list, session_id: "Optional[str]" = None) -> dict:
     """Real flight options via live web search — surfaced as a booking card."""
+    from app.services.travel_search import _localize_flight_card
     dest = _route_dest(message, history)
     _h = _req_hint("flight", message)
     card = await _stable_card(session_id, "flight", dest, lambda: find_flights(dest, when=message),
                               hint=_h, always_cache=(_is_book_complete(message) and not _h))
+    # Origin awareness, per turn and AFTER every cache: "I'm flying from Chicago" must
+    # surface that region's arrivals (or an honest origin-aware deep-link) — the cached
+    # domestic-first ordering quoted a guest from Chicago "$55 with VietJet" on camera.
+    # The origin may have been stated in an earlier turn, so scan recent guest messages too.
+    _origin_ctx = message + " " + " ".join(
+        m.get("content", "") for m in (history or [])[-8:]
+        if isinstance(m, dict) and m.get("role") == "user"
+    )
+    card = _localize_flight_card(card, _origin_ctx, dest)
+    _orig = card.get("origin_spoken") or ""
     if "cheapest" in (message or "").lower():
         card["options"] = sorted(card.get("options", []), key=_price_of)
     else:
@@ -1145,9 +1236,11 @@ async def run_flight_intent(message: str, history: list, session_id: "Optional[s
             spoken = (f"Of course — tap Book & Pay on whichever flight suits you best "
                       f"({', '.join(names_list[:3])}) and I'll take care of it.")
     elif has_prices:
-        spoken = f"I found a few flights to {dest} — {_named_options(opts)}. I've pulled them up — just tap one to book."
+        _from = f" from {_orig}" if _orig else ""
+        spoken = f"I found a few flights to {dest}{_from} — {_named_options(opts)}. I've pulled them up — just tap one to book."
     else:
-        spoken = f"Here's where to compare and book your flights to {dest} — I've pulled it up for you."
+        _from = f" from {_orig}" if _orig else ""
+        spoken = f"Here's where to compare and book your flights{_from} to {dest} — I've pulled it up on the card for you."
     return {"agent": "flight", "response": spoken, "data": {"booking": card}}
 
 
@@ -1310,6 +1403,33 @@ async def run_itinerary_intent(message: str, history: list,
                 ),
                 "data": {},
             }
+        # Party size must be ASKED, never assumed. The live-demo failure: "8 days from
+        # Chattanooga, suggest an itinerary" built instantly "for two travelers, about
+        # $5,090" — and the guest's first reaction was "you didn't even ask how many people
+        # I'm traveling with. Why did you assume two?" One question fixes it; the classifier
+        # routes the answer back here (party-intake follow-up). Asked at most once — if the
+        # guest ignores the question or hands the trip over, we build with the default
+        # rather than nagging.
+        from app.services.itinerary_agent import _travellers_in_utterance
+        _knows_party = _travellers_in_utterance(message) is not None or any(
+            _travellers_in_utterance(m.get("content") or "") is not None
+            for m in (history or [])
+            if isinstance(m, dict) and m.get("role") == "user"
+        )
+        _asked_party = any(
+            "how many of you will be travelling" in (m.get("content") or "").lower()
+            for m in (history or [])[-6:]
+            if isinstance(m, dict) and m.get("role") == "assistant"
+        )
+        if not _knows_party and not _hands_off and not _asked_party:
+            return {
+                "agent": "itinerary",
+                "response": (
+                    "Happy to! One quick thing first — how many of you will be travelling? "
+                    "Then I'll put the whole plan together around your group."
+                ),
+                "data": {},
+            }
 
     itin = await build_itinerary(message, history, current_itinerary=current_itinerary,
                                  hotel_swap=hotel_swap)
@@ -1349,6 +1469,127 @@ async def run_itinerary_intent(message: str, history: list,
             "just tell me if you'd like to swap any of the hotels or activities."
         )
     return {"agent": "itinerary", "response": spoken, "data": {"itinerary": itin}}
+
+
+# ── Plan walkthrough / plan QA — read the STORED plan aloud, never rebuild it ──────────
+# The live-demo failure this exists for: "I need to go day by day, please" and "where do you
+# have me staying now?" both re-entered the BUILD path, recomposed the whole trip (reverting
+# a hotel the guest had just swapped), and re-announced the full plan over their protests.
+# These are read-only questions about a plan that already exists; answer them from it.
+
+_DAY_ORDINALS = {"first": 1, "one": 1, "1st": 1, "second": 2, "two": 2, "2nd": 2,
+                 "third": 3, "three": 3, "3rd": 3, "fourth": 4, "four": 4, "4th": 4,
+                 "fifth": 5, "five": 5, "5th": 5, "sixth": 6, "six": 6, "6th": 6,
+                 "seventh": 7, "seven": 7, "7th": 7, "eighth": 8, "eight": 8, "8th": 8,
+                 "ninth": 9, "nine": 9, "9th": 9, "tenth": 10, "ten": 10, "10th": 10}
+
+
+def _walkthrough_day_line(d: dict, n_total: int) -> str:
+    """One spoken day: title, what happens, and where the night is spent."""
+    n = d.get("day") or 1
+    city = d.get("city") or "Vietnam"
+    parts = [f"Day {n} of {n_total} — {d.get('title') or city}, in {city}."]
+    desc = (d.get("description") or "").strip()
+    if desc:
+        parts.append(desc)
+    acts = [a for a in (d.get("activities") or []) if a.get("name")]
+    if acts:
+        act_bits = [f"{(a.get('time') or '').lower()}: {a['name']}".strip(": ") for a in acts[:3]]
+        parts.append("On the cards — " + "; ".join(act_bits) + ".")
+    h = d.get("hotel")
+    hname = (h or {}).get("name") if isinstance(h, dict) else (h or "")
+    if hname:
+        if n == n_total:
+            parts.append(f"You'll be near {hname} before heading home.")
+        else:
+            parts.append(f"You'll spend the night at {hname}.")
+    if n < n_total:
+        parts.append("Say 'next day' when you're ready, or ask me to change anything.")
+    else:
+        parts.append("And that's the trip! Want me to change anything, or shall we look at booking?")
+    return " ".join(parts)
+
+
+def _plan_stays_summary(days: list) -> str:
+    """'You're at X in Hanoi, then Y in Hoi An…' — unique stays in trip order."""
+    stays = []
+    for d in days:
+        h = d.get("hotel")
+        hname = (h or {}).get("name") if isinstance(h, dict) else (h or "")
+        city = d.get("city") or ""
+        if hname and (not stays or stays[-1] != (hname, city)):
+            if not any(s[0] == hname and s[1] == city for s in stays):
+                stays.append((hname, city))
+    if not stays:
+        return "Your hotels are being finalised — they're listed day by day on the Trip tab."
+    bits = [f"{n} in {c}" if c else n for n, c in stays[:5]]
+    if len(bits) == 1:
+        return f"You're staying at {bits[0]} for the whole trip — it's on the Trip tab."
+    return ("Here's where you're staying — " + ", then ".join(bits) +
+            ". It's all laid out day by day on the Trip tab.")
+
+
+async def run_plan_walkthrough(message: str, history: list, plan: "Optional[dict]" = None) -> dict:
+    """Narrate the stored plan one day at a time, or answer a question about it. Pure read —
+    the plan is never touched, so a hotel swap can't be lost here."""
+    days = (plan or {}).get("days") or []
+    if not days:
+        return {"agent": "plan_qa", "response": (
+            "I haven't built your plan yet — tell me where you'd like to go and for how "
+            "long, and I'll put it together first."), "data": {}}
+    low = (message or "").lower()
+    n_total = len(days)
+
+    # Which day is being asked about?
+    target = None
+    m = re.search(r"\bday\s+(\d{1,2})\b", low)
+    if m:
+        target = int(m.group(1))
+    else:
+        m = re.search(r"\bday\s+(\w+)\b|\b(\w+)\s+day\b", low)
+        if m:
+            w = (m.group(1) or m.group(2) or "").lower()
+            if w == "last":
+                target = n_total
+            elif w in _DAY_ORDINALS:
+                target = _DAY_ORDINALS[w]
+
+    # Where did the narration get to last time? (Our own lines carry "Day N of M".)
+    last_told = 0
+    for msg_ in reversed(history or []):
+        if isinstance(msg_, dict) and msg_.get("role") == "assistant":
+            mm = re.search(r"\bDay (\d+) of \d+\b", msg_.get("content") or "")
+            if mm:
+                last_told = int(mm.group(1))
+                break
+
+    # A stay question with no specific day → summarize the hotels across the trip.
+    _stay_q = re.search(r"where (am i|are we|do you have (me|us)) staying|which hotel|what hotel", low)
+    if _stay_q and target is None:
+        return {"agent": "plan_qa", "response": _plan_stays_summary(days), "data": {}}
+
+    _next = re.search(r"\bnext\b|then what|continue|go on|keep going", low)
+    if target is None:
+        target = (last_told + 1) if (_next and last_told) else (last_told + 1 if last_told else 1)
+    if target > n_total:
+        return {"agent": "plan_qa", "response": (
+            f"That was the last day — day {n_total} wraps the trip up. Want me to change "
+            "anything, or shall we look at booking it?"), "data": {}}
+    target = max(1, min(target, n_total))
+    day = next((d for d in days if d.get("day") == target), days[target - 1])
+
+    # A stay question about a specific day → just the hotel, short.
+    if _stay_q:
+        h = day.get("hotel")
+        hname = (h or {}).get("name") if isinstance(h, dict) else (h or "")
+        city = day.get("city") or ""
+        if hname:
+            return {"agent": "plan_qa", "response": (
+                f"On day {target} in {city} you're staying at {hname} — it's on the day's "
+                "card on the right."), "data": {}}
+        return {"agent": "plan_qa", "response": _plan_stays_summary(days), "data": {}}
+
+    return {"agent": "plan_qa", "response": _walkthrough_day_line(day, n_total), "data": {}}
 
 
 async def run_book_trip_no_plan_intent(message: str, history: list) -> dict:
@@ -1392,6 +1633,7 @@ async def run_book_trip_intent(message: str, history: list) -> dict:
 # and intentionally left out here so they can never be routed.
 AGENT_REGISTRY = {
     "itinerary": run_itinerary_intent,
+    "plan_qa": run_plan_walkthrough,
     "book_trip": run_book_trip_intent,
     "book_trip_no_plan": run_book_trip_no_plan_intent,
     "flight": run_flight_intent,
@@ -1509,7 +1751,7 @@ async def conduct(
         _REV_VERB = re.compile(
             r"\b(swap|replace|switch|remove|drop|skip|instead|cheaper|upgrade|luxur\w*|add|include|change)\b"
             r"|take out|get rid|don'?t want|no longer", re.I)
-        if has_itinerary and not ({"itinerary", "book_trip", "flight", "cab", "restaurant"} & set(intents)) \
+        if has_itinerary and not ({"itinerary", "plan_qa", "book_trip", "flight", "cab", "restaurant"} & set(intents)) \
                 and _REV_VERB.search(user_message) \
                 and not re.search(r"photo|picture|image|\bfoto\b", user_message.lower()):
             print("[Conductor] plan-change wording over a stored plan — routing to itinerary")
@@ -1700,6 +1942,10 @@ async def conduct(
             _cur = (stored_itinerary or {}).get("payload") if isinstance(stored_itinerary, dict) else None
             tasks.append((intent, runner(_revision_msg or user_message, conversation_history,
                                          current_itinerary=_cur, hotel_swap=_hotel_swap_target)))
+        elif intent == "plan_qa":
+            # Read-only narration/QA over the stored plan — needs the payload, touches nothing.
+            _cur = (stored_itinerary or {}).get("payload") if isinstance(stored_itinerary, dict) else None
+            tasks.append((intent, runner(user_message, conversation_history, plan=_cur)))
         else:
             tasks.append((intent, runner(user_message, conversation_history)))
 
@@ -1827,7 +2073,10 @@ async def conduct(
                 client.messages.create(
                     model=CONDUCTOR_MODEL,
                     max_tokens=250,  # short spoken replies — voice interface
-                    system=cached_system(merge_prompt),
+                    # Same guards as run_general: the merge agent speaks over card turns too,
+                    # and it produced the on-camera "use Google Flights or Kayak" denial.
+                    system=cached_system(merge_prompt + NEVER_FAKE_BOOKING
+                                         + NEVER_FAKE_ITINERARY_CHANGE + CAPABILITY_FACTS),
                     messages=[{"role": "user", "content": f"User asked: {user_message}\n\nAgent responses:\n{combined}"}]
                 ),
                 timeout=20.0,
@@ -1844,29 +2093,62 @@ async def conduct(
     # contradict the real itinerary (e.g. Sasha says "Capella, ~$3,200" while the card shows
     # "Sofitel, $8,400"). Ground the speech in the actual itinerary data so they always agree.
     if itinerary:
-        _days = itinerary.get("days", []) or []
-        _n = len(_days)
-        _total = itinerary.get("estimated_total_usd")
-        _title = (itinerary.get("title") or "your itinerary").strip()
-        _first_hotel = next(
-            ((d.get("hotel") or {}).get("name")
-             for d in _days
-             if isinstance(d.get("hotel"), dict) and (d.get("hotel") or {}).get("name")),
-            None,
-        )
-        # Party size drives the price, so the spoken total must name the RIGHT count — the old
-        # hardcoded "for two" said "two" even after a rebuild for four, contradicting the card.
-        _trav = (itinerary.get("cost_breakdown") or {}).get("travellers") or itinerary.get("travellers")
-        _party_phrase = "one traveller" if _trav == 1 else f"{_TRAVELLER_WORDS.get(_trav, 'two')} travellers"
-        _total_str = (
-            f" The estimated total for {_party_phrase} — hotels, activities and meals — comes to about ${int(_total):,}."
-            if isinstance(_total, (int, float)) and _total else ""
-        )
-        _hotel_str = f" You'll start at {_first_hotel}." if _first_hotel else ""
-        final_response = (
-            f"All set — your {_n}-day plan, {_title}, is live on the right.{_hotel_str}{_total_str} "
-            "Have a browse, and just tell me if you'd like to swap any of the hotels or activities."
-        )
+        # A REVISION must get a short, targeted confirmation — not the full plan re-announced.
+        # In the live demo, every hotel swap re-read "All set — your 8-day plan … you'll start
+        # at … the estimated total for two travellers …" from the top, over the guest's
+        # "hold on, hold on". The itinerary runner already produced the right grounded line
+        # ("Done — you're now staying at Capella Hanoi …"); keep it.
+        from app.services.itinerary_agent import _is_revision as _is_rev
+        _was_revision = bool(_revision_msg or _hotel_swap_target) or _is_rev(user_message)
+        _runner_line = next((r["response"] for r in agent_responses if r.get("agent") == "itinerary"), "")
+        if _was_revision and _runner_line:
+            final_response = _runner_line
+        elif stored_itinerary:
+            # Any build over a PRE-EXISTING plan is an update in the guest's eyes ("add
+            # Sapa", "make it 10 days", "for four people") — confirm the change briefly,
+            # with the new total when it repriced, and stop. Full re-announcements belong
+            # to the first build only.
+            _n = len(itinerary.get("days", []) or [])
+            _total = itinerary.get("estimated_total_usd")
+            _trav = (itinerary.get("cost_breakdown") or {}).get("travellers") or itinerary.get("travellers")
+            _party_phrase = "one traveller" if _trav == 1 else f"{_TRAVELLER_WORDS.get(_trav, 'two')} travellers"
+            _tot = (f" — now about ${int(_total):,} for {_party_phrase}"
+                    if isinstance(_total, (int, float)) and _total else "")
+            final_response = (f"Done — I've updated your plan; the new {_n}-day version is on "
+                              f"the right{_tot}. Anything else you'd like to change?")
+        else:
+            _days = itinerary.get("days", []) or []
+            _n = len(_days)
+            _total = itinerary.get("estimated_total_usd")
+            _title = (itinerary.get("title") or "your itinerary").strip()
+            _first_hotel = next(
+                ((d.get("hotel") or {}).get("name")
+                 for d in _days
+                 if isinstance(d.get("hotel"), dict) and (d.get("hotel") or {}).get("name")),
+                None,
+            )
+            # Party size drives the price, so the spoken total must name the RIGHT count — the old
+            # hardcoded "for two" said "two" even after a rebuild for four, contradicting the card.
+            _trav = (itinerary.get("cost_breakdown") or {}).get("travellers") or itinerary.get("travellers")
+            _party_phrase = "one traveller" if _trav == 1 else f"{_TRAVELLER_WORDS.get(_trav, 'two')} travellers"
+            _total_str = (
+                f" The estimated total for {_party_phrase} — hotels, activities and meals — comes to about ${int(_total):,}."
+                if isinstance(_total, (int, float)) and _total else ""
+            )
+            _hotel_str = f" You'll start at {_first_hotel}." if _first_hotel else ""
+            final_response = (
+                f"All set — your {_n}-day plan, {_title}, is live on the right.{_hotel_str}{_total_str} "
+                "Have a browse, and just tell me if you'd like to swap any of the hotels or activities."
+            )
+            # The guest asked to take it one day at a time — honour that from the very first
+            # announcement instead of reading the whole plan out (the demo's "no, I just want
+            # to talk about the first day" moment).
+            if re.search(r"\b(day by day|day-by-day|one day at a time|walk me through|"
+                         r"talk me through)\b", _lower_msg) and _days:
+                final_response = (
+                    f"All set — I've put your {_n}-day plan on the right.{_total_str} "
+                    "Let's take it one day at a time. " + _walkthrough_day_line(_days[0], _n)
+                )
 
     # Step 6 — Update conversation history
     updated_history = conversation_history + [

@@ -73,12 +73,13 @@ const BARGE_IN_ENABLED = true
 // removes most of the avatar's audio from the mic; this threshold sits above the typical
 // AEC *residual* but below normal user speech (~0.1–0.3 RMS close-talking). Tuned live.
 // If it ever self-triggers on loud speakers, raise it; if you can't interrupt, lower it.
-// Raised for a loud investor-demo room: a busy hall (applause, nearby speakers, laughter)
-// can push AEC residual past a low threshold and cut Sasha off mid-sentence. 0.12 sits above
-// room bleed but below close-talking user speech (~0.15–0.3 RMS). Lower toward 0.08 for a
-// quiet 1:1 setting where easy interruption matters more than false-trigger safety.
-const BARGE_IN_RMS = 0.12
-const BARGE_IN_FRAMES = 40           // ~100ms sustained — rejects transient residual spikes
+// 0.12/40 (the loud-hall setting) proved DEAF in live runs: a guest saying "Sasha. Sasha.
+// Sasha." and "stop stop stop" at close range could not interrupt her once — the single
+// most-repeated failure across two recorded sessions. 0.08/30 keeps a margin over AEC
+// residual and room bleed while letting a raised voice actually barge in. Raise toward
+// 0.12 ONLY for a genuinely loud hall, and re-test interruption before the demo.
+const BARGE_IN_RMS = 0.08
+const BARGE_IN_FRAMES = 30           // ~75ms sustained — rejects transient residual spikes
 // Echo (avatar audio bleeding into the mic) only arrives in the brief tail right after
 // the avatar goes quiet. Beyond this window, identical words are the USER genuinely
 // answering (e.g. repeating the avatar's options like "mix of everything") — never
@@ -303,11 +304,22 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       // Mint the ephemeral STT key in parallel with mic acquisition — no added latency.
       const keyPromise = getDeepgramKey()
       const baseAudio: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-      const wantId = selectedMicIdRef.current
+      // Resolve the device BEFORE opening anything. Once mic permission was granted in a
+      // prior session, enumerateDevices() exposes labels without an active stream — so we
+      // can open the preferred LOCAL mic directly instead of opening the OS default first.
+      // On a Mac with Continuity that default is the guest's iPhone: the phone visibly
+      // "connects" on every session start even though we swap away afterwards, and if it
+      // sleeps or leaves the room the session goes deaf. `exact` (not `ideal`) so the
+      // browser can't silently fall back to the phone; a stale/unplugged id throws and the
+      // catch below retries with defaults.
+      let wantId = selectedMicIdRef.current
+      if (!wantId) {
+        try { wantId = preferredAudioDeviceId(await navigator.mediaDevices.enumerateDevices(), '') } catch {}
+      }
       let stream: MediaStream
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: wantId ? { ...baseAudio, deviceId: { ideal: wantId } } : baseAudio,
+          audio: wantId ? { ...baseAudio, deviceId: { exact: wantId } } : baseAudio,
         })
       } catch (e: any) {
         // A pinned mic that is unplugged, already claimed by another app (Windows commonly
@@ -338,6 +350,28 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         }
       } catch { /* enumerate/re-acquire is best-effort */ }
       streamRef.current = stream
+      // Mid-session mic death (the "froze at minute N" failure): a Continuity iPhone that
+      // sleeps, locks, or walks out of range kills its audio track SILENTLY — no WS close,
+      // no error, the guest just stops being heard and the demo looks frozen. Route track
+      // death into the existing Deepgram onclose teardown + auto-reconnect: the reconnect
+      // re-runs device selection and lands on a healthy local mic. Our own teardown calls
+      // track.stop(), which does NOT fire onended, so this cannot loop. A mute must be
+      // SUSTAINED to count — brief mutes happen on audio-route changes and self-recover.
+      {
+        const track = stream.getAudioTracks()[0]
+        if (track) {
+          let muteTimer: any = null
+          const dead = (why: string) => {
+            if (streamRef.current !== stream || manualStopRef.current) return
+            console.warn(`[MIC] input track ${why} (${track.label || 'unknown device'}) — recycling connection`)
+            reportMicError('Microphone disconnected — reconnecting')
+            try { wsRef.current?.close() } catch {}
+          }
+          track.onended = () => dead('ended')
+          track.onmute = () => { clearTimeout(muteTimer); muteTimer = setTimeout(() => dead('stayed muted'), 4000) }
+          track.onunmute = () => clearTimeout(muteTimer)
+        }
+      }
       const dgKey = await keyPromise
       if (!dgKey) { setIsConnecting(false); reportMicError('Voice service unavailable'); return }
 

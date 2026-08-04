@@ -243,6 +243,19 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
    */
   const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string }) => {
     if (!content.trim()) return
+    // Verbal stop — "Sasha, stop", "stop stop stop", "be quiet", a bare "wait"/"hold on".
+    // In the live demo the guest said "stop" FIVE times in a row while Sasha narrated on;
+    // barge-in opens the mic, but the transcript then went to the conductor as a message
+    // (earning a reply — more talking, the opposite of what was asked). A stop-only turn
+    // interrupts the avatar and ends there. Longer sentences containing these words
+    // ("hold on, where am I staying?") don't match and flow through normally.
+    const STOP_RE = /^(?:(?:hey|no|okay|ok)[,!. ]+)*(?:sasha[,!. ]+)*(?:stop(?: it| talking)?|be quiet|quiet|shut up|hold on|wait|pause|enough)(?:[,!. ]+(?:sasha|please|now|stop))*[.!?]*$/i
+    if (STOP_RE.test(content.trim())) {
+      console.log('[STOP] verbal stop — interrupting Sasha, not sending to conductor')
+      onInterrupt?.()
+      if (isRespondingRef) isRespondingRef.current = false
+      return
+    }
     if (!chatSessionIdRef.current) {
       chatSessionIdRef.current = (typeof crypto !== 'undefined' && crypto.randomUUID)
         ? crypto.randomUUID()
@@ -359,6 +372,14 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
       // were about to tap. A turn WITH new cards still replaces wholesale.
       if (Array.isArray(hotelRecs) && hotelRecs.length) setHotels(hotelRecs)
       if (Array.isArray(bookingCards) && bookingCards.length) setBookings(bookingCards)
+      // New cards must be SEEN to be tappable: in the live demo Sasha said "tap Book & Pay
+      // on the card" while the guest sat on the Trip tab — no card anywhere in view, and
+      // the booking died there. Cards render in the Chat tab, so bring the guest to them.
+      if (Array.isArray(bookingCards) && bookingCards.length && !itinerary?.days?.length
+          && tab !== 'chat') {
+        onTabChange?.('chat')
+        tabBeforeBuildRef.current = null
+      }
       if (itinerary?.days?.length) onItinerary?.(itinerary)
       // False-positive build (classify said itinerary, none arrived): put the guest back on
       // the tab they were on instead of stranding them on an empty Trip panel.

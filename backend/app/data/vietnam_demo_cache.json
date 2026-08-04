@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-07-28T16:47:19+00:00",
+ "generated_at": "2026-08-04T08:22:46+00:00",
  "mode": "curated",
  "entries": {
   "flight|vietnam": {
@@ -43,6 +43,13 @@
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
     },
     {
+     "name": "United Airlines",
+     "detail": "ORD-SGN via Tokyo (from USA) · 21h 00m · 1 stop",
+     "price": "$900",
+     "amount_usd": 900,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
      "name": "Vietnam Airlines",
      "detail": "CDG-HAN (from Europe) · 11h 30m · nonstop",
      "price": "$650",
@@ -54,6 +61,48 @@
      "detail": "LHR-HAN via Doha (from Europe) · 15h 20m · 1 stop",
      "price": "$560",
      "amount_usd": 560,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "Emirates",
+     "detail": "DXB-SGN (from Middle East) · 7h 00m · nonstop",
+     "price": "$430",
+     "amount_usd": 430,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "Qatar Airways",
+     "detail": "DOH-HAN (from Middle East) · 7h 10m · nonstop",
+     "price": "$440",
+     "amount_usd": 440,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN (from Australia) · 8h 45m · nonstop",
+     "price": "$510",
+     "amount_usd": 510,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "Jetstar Airways",
+     "detail": "MEL-SGN (from Australia) · 8h 30m · nonstop",
+     "price": "$380",
+     "amount_usd": 380,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-HAN (from Korea) · 4h 35m · nonstop",
+     "price": "$280",
+     "amount_usd": 280,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "NRT-HAN (from Japan) · 6h 00m · nonstop",
+     "price": "$330",
+     "amount_usd": 330,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Vietnam"
     },
     {
@@ -239,7 +288,7 @@
     "price_from": 350,
     "blurb": "Iconic French-colonial landmark by the Old Quarter.",
     "city": "Vietnam",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Sofitel+Legend+Metropole+Hanoi%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Sofitel+Legend+Metropole+Hanoi%2C+Vietnam%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.9,
     "reviews": 1510,
     "tag": "Highly rated"
@@ -250,7 +299,7 @@
     "price_from": 320,
     "blurb": "Opera-inspired luxury steps from Hoan Kiem Lake.",
     "city": "Vietnam",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Capella+Hanoi%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Capella+Hanoi%2C+Vietnam%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.0,
     "reviews": 881,
     "tag": "Guest favourite"
@@ -261,7 +310,7 @@
     "price_from": 110,
     "blurb": "Boutique favourite in the heart of the Old Quarter.",
     "city": "Vietnam",
-    "book_url": "https://www.booking.com/searchresults.html?ss=La+Siesta+Premium+Hang+Be%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=La+Siesta+Premium+Hang+Be%2C+Vietnam%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.5,
     "reviews": 1325,
     "tag": "Highly rated"
@@ -272,7 +321,7 @@
     "price_from": 95,
     "blurb": "Gallery-style hotel overlooking Hoan Kiem Lake.",
     "city": "Vietnam",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Apricot+Hotel%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Apricot+Hotel%2C+Vietnam%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.5,
     "reviews": 881,
     "tag": "Highly rated"
@@ -283,7 +332,7 @@
     "price_from": 85,
     "blurb": "Rooftop infinity pool above the Old Quarter.",
     "city": "Vietnam",
-    "book_url": "https://www.booking.com/searchresults.html?ss=The+Oriental+Jade+Hotel%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=The+Oriental+Jade+Hotel%2C+Vietnam%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.8,
     "reviews": 1251,
     "tag": "Highly rated"
@@ -294,7 +343,7 @@
     "price_from": 180,
     "blurb": "Sky-high rooms and the 65th-floor observation deck.",
     "city": "Vietnam",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Lotte+Hotel+Hanoi%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Lotte+Hotel+Hanoi%2C+Vietnam%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 1029,
     "tag": "Guest favourite"
@@ -305,7 +354,7 @@
     "price_from": 130,
     "blurb": "Business classic between the Opera House and the lake.",
     "city": "Vietnam",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Melia+Hanoi%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Melia+Hanoi%2C+Vietnam%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 807,
     "tag": "Guest favourite"
@@ -316,7 +365,7 @@
     "price_from": 75,
     "blurb": "Old Quarter hospitality legend.",
     "city": "Vietnam",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Hanoi+La+Siesta+Classic+Ma+May%2C+Vietnam%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hanoi+La+Siesta+Classic+Ma+May%2C+Vietnam%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.4,
     "reviews": 1510,
     "tag": "Highly rated"
@@ -370,6 +419,13 @@
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
     },
     {
+     "name": "Vietnam Airlines",
+     "detail": "BOM-HAN (from India) · 5h 40m · nonstop",
+     "price": "$230",
+     "amount_usd": 230,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
      "name": "IndiGo",
      "detail": "KOL-HAN (from India) · 3h 05m · nonstop",
      "price": "$160",
@@ -391,6 +447,20 @@
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
     },
     {
+     "name": "United Airlines",
+     "detail": "ORD-HAN via Tokyo (from USA) · 20h 30m · 1 stop",
+     "price": "$890",
+     "amount_usd": 890,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Delta Air Lines",
+     "detail": "SEA-HAN via Seoul (from USA) · 19h 40m · 1 stop",
+     "price": "$870",
+     "amount_usd": 870,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
      "name": "Vietnam Airlines",
      "detail": "LHR-HAN (from Europe) · 12h 10m · nonstop",
      "price": "$640",
@@ -402,6 +472,62 @@
      "detail": "FRA-HAN via Istanbul (from Europe) · 15h 40m · 1 stop",
      "price": "$540",
      "amount_usd": 540,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Qatar Airways",
+     "detail": "MUC-HAN via Doha (from Europe) · 15h 50m · 1 stop",
+     "price": "$570",
+     "amount_usd": 570,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Emirates",
+     "detail": "DXB-HAN (from Middle East) · 6h 45m · nonstop",
+     "price": "$420",
+     "amount_usd": 420,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Qatar Airways",
+     "detail": "DOH-HAN (from Middle East) · 7h 10m · nonstop",
+     "price": "$440",
+     "amount_usd": 440,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + SGN-HAN (from Australia) · 12h 30m · 1 stop",
+     "price": "$560",
+     "amount_usd": 560,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-HAN (from Korea) · 4h 35m · nonstop",
+     "price": "$280",
+     "amount_usd": 280,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Asiana Airlines",
+     "detail": "ICN-HAN (from Korea) · 4h 35m · nonstop",
+     "price": "$265",
+     "amount_usd": 265,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "ANA",
+     "detail": "HND-HAN (from Japan) · 5h 45m · nonstop",
+     "price": "$350",
+     "amount_usd": 350,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "NRT-HAN (from Japan) · 6h 00m · nonstop",
+     "price": "$330",
+     "amount_usd": 330,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Hanoi"
     },
     {
@@ -681,7 +807,7 @@
     "price_from": 350,
     "blurb": "Iconic French-colonial landmark by the Old Quarter.",
     "city": "Hanoi",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Sofitel+Legend+Metropole+Hanoi%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Sofitel+Legend+Metropole+Hanoi%2C+Hanoi%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.9,
     "reviews": 1510,
     "tag": "Highly rated"
@@ -692,7 +818,7 @@
     "price_from": 320,
     "blurb": "Opera-inspired luxury steps from Hoan Kiem Lake.",
     "city": "Hanoi",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Capella+Hanoi%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Capella+Hanoi%2C+Hanoi%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.0,
     "reviews": 881,
     "tag": "Guest favourite"
@@ -703,7 +829,7 @@
     "price_from": 110,
     "blurb": "Boutique favourite in the heart of the Old Quarter.",
     "city": "Hanoi",
-    "book_url": "https://www.booking.com/searchresults.html?ss=La+Siesta+Premium+Hang+Be%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=La+Siesta+Premium+Hang+Be%2C+Hanoi%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.5,
     "reviews": 1325,
     "tag": "Highly rated"
@@ -714,7 +840,7 @@
     "price_from": 95,
     "blurb": "Gallery-style hotel overlooking Hoan Kiem Lake.",
     "city": "Hanoi",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Apricot+Hotel%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Apricot+Hotel%2C+Hanoi%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.5,
     "reviews": 881,
     "tag": "Highly rated"
@@ -725,7 +851,7 @@
     "price_from": 85,
     "blurb": "Rooftop infinity pool above the Old Quarter.",
     "city": "Hanoi",
-    "book_url": "https://www.booking.com/searchresults.html?ss=The+Oriental+Jade+Hotel%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=The+Oriental+Jade+Hotel%2C+Hanoi%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.8,
     "reviews": 1251,
     "tag": "Highly rated"
@@ -736,7 +862,7 @@
     "price_from": 180,
     "blurb": "Sky-high rooms and the 65th-floor observation deck.",
     "city": "Hanoi",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Lotte+Hotel+Hanoi%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Lotte+Hotel+Hanoi%2C+Hanoi%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 1029,
     "tag": "Guest favourite"
@@ -747,7 +873,7 @@
     "price_from": 130,
     "blurb": "Business classic between the Opera House and the lake.",
     "city": "Hanoi",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Melia+Hanoi%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Melia+Hanoi%2C+Hanoi%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 807,
     "tag": "Guest favourite"
@@ -758,7 +884,7 @@
     "price_from": 75,
     "blurb": "Old Quarter hospitality legend.",
     "city": "Hanoi",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Hanoi+La+Siesta+Classic+Ma+May%2C+Hanoi%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hanoi+La+Siesta+Classic+Ma+May%2C+Hanoi%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.4,
     "reviews": 1510,
     "tag": "Highly rated"
@@ -826,6 +952,20 @@
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
     },
     {
+     "name": "United Airlines",
+     "detail": "ORD-SGN via Tokyo (from USA) · 21h 00m · 1 stop",
+     "price": "$900",
+     "amount_usd": 900,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "American Airlines",
+     "detail": "DFW-SGN via Tokyo (from USA) · 21h 15m · 1 stop",
+     "price": "$920",
+     "amount_usd": 920,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
      "name": "Vietnam Airlines",
      "detail": "FRA-SGN (from Europe) · 12h 05m · nonstop",
      "price": "$680",
@@ -837,6 +977,76 @@
      "detail": "LHR-SGN via Dubai (from Europe) · 16h 30m · 1 stop",
      "price": "$610",
      "amount_usd": 610,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Air France",
+     "detail": "CDG-SGN (from Europe) · 12h 15m · nonstop",
+     "price": "$690",
+     "amount_usd": 690,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Turkish Airlines",
+     "detail": "IST-SGN (from Europe) · 10h 45m · nonstop",
+     "price": "$520",
+     "amount_usd": 520,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Emirates",
+     "detail": "DXB-SGN (from Middle East) · 7h 00m · nonstop",
+     "price": "$430",
+     "amount_usd": 430,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Qatar Airways",
+     "detail": "DOH-SGN (from Middle East) · 7h 30m · nonstop",
+     "price": "$450",
+     "amount_usd": 450,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Etihad Airways",
+     "detail": "AUH-SGN (from Middle East) · 7h 15m · nonstop",
+     "price": "$415",
+     "amount_usd": 415,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN (from Australia) · 8h 45m · nonstop",
+     "price": "$510",
+     "amount_usd": 510,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Jetstar Airways",
+     "detail": "MEL-SGN (from Australia) · 8h 30m · nonstop",
+     "price": "$380",
+     "amount_usd": 380,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-SGN (from Korea) · 5h 25m · nonstop",
+     "price": "$290",
+     "amount_usd": 290,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "Japan Airlines",
+     "detail": "HND-SGN (from Japan) · 6h 15m · nonstop",
+     "price": "$370",
+     "amount_usd": 370,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
+    },
+    {
+     "name": "ANA",
+     "detail": "NRT-SGN (from Japan) · 6h 20m · nonstop",
+     "price": "$360",
+     "amount_usd": 360,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Ho+Chi+Minh+City"
     },
     {
@@ -1116,7 +1326,7 @@
     "price_from": 290,
     "blurb": "Colonial elegance in the city centre.",
     "city": "Ho Chi Minh City",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Park+Hyatt+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Park+Hyatt+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 1029,
     "tag": "Guest favourite"
@@ -1127,7 +1337,7 @@
     "price_from": 300,
     "blurb": "Opulent riverside tower with skyline views.",
     "city": "Ho Chi Minh City",
-    "book_url": "https://www.booking.com/searchresults.html?ss=The+Reverie+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=The+Reverie+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.9,
     "reviews": 1066,
     "tag": "Highly rated"
@@ -1138,7 +1348,7 @@
     "price_from": 150,
     "blurb": "Art-deco style with a rooftop pool.",
     "city": "Ho Chi Minh City",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Hotel+des+Arts+Saigon+MGallery%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hotel+des+Arts+Saigon+MGallery%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.9,
     "reviews": 1510,
     "tag": "Highly rated"
@@ -1149,7 +1359,7 @@
     "price_from": 120,
     "blurb": "Riverside grande dame from 1925.",
     "city": "Ho Chi Minh City",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Hotel+Majestic+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hotel+Majestic+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.6,
     "reviews": 1177,
     "tag": "Highly rated"
@@ -1160,7 +1370,7 @@
     "price_from": 80,
     "blurb": "Modern rooms steps from Ben Thanh Market.",
     "city": "Ho Chi Minh City",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Liberty+Central+Saigon+Citypoint%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Liberty+Central+Saigon+Citypoint%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.6,
     "reviews": 1584,
     "tag": "Highly rated"
@@ -1171,7 +1381,7 @@
     "price_from": 160,
     "blurb": "Historic address on Lam Son Square.",
     "city": "Ho Chi Minh City",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Caravelle+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Caravelle+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.2,
     "reviews": 992,
     "tag": "Guest favourite"
@@ -1182,7 +1392,7 @@
     "price_from": 140,
     "blurb": "The rooftop bar of wartime correspondents.",
     "city": "Ho Chi Minh City",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Rex+Hotel+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Rex+Hotel+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.2,
     "reviews": 992,
     "tag": "Guest favourite"
@@ -1193,7 +1403,7 @@
     "price_from": 170,
     "blurb": "Riverside glass tower, District 1 edge.",
     "city": "Ho Chi Minh City",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Le+Meridien+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Le+Meridien+Saigon%2C+Ho+Chi+Minh+City%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.9,
     "reviews": 1066,
     "tag": "Highly rated"
@@ -1240,6 +1450,13 @@
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
     },
     {
+     "name": "VietJet Air",
+     "detail": "DEL-DAD (from India) · 5h 50m · nonstop",
+     "price": "$210",
+     "amount_usd": 210,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
      "name": "EVA Air",
      "detail": "LAX-DAD via Taipei (from USA) · 20h 10m · 1 stop",
      "price": "$830",
@@ -1247,10 +1464,52 @@
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
     },
     {
+     "name": "United Airlines",
+     "detail": "ORD-DAD via Tokyo (from USA) · 21h 40m · 1 stop",
+     "price": "$940",
+     "amount_usd": 940,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
      "name": "Qatar Airways",
      "detail": "CDG-DAD via Doha (from Europe) · 16h 40m · 1 stop",
      "price": "$620",
      "amount_usd": 620,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "Qatar Airways",
+     "detail": "DOH-DAD (from Middle East) · 7h 40m · nonstop",
+     "price": "$470",
+     "amount_usd": 470,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + SGN-DAD (from Australia) · 11h 45m · 1 stop",
+     "price": "$565",
+     "amount_usd": 565,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-DAD (from Korea) · 4h 45m · nonstop",
+     "price": "$270",
+     "amount_usd": 270,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "Jeju Air",
+     "detail": "ICN-DAD (from Korea) · 4h 45m · nonstop",
+     "price": "$190",
+     "amount_usd": 190,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "NRT-DAD (from Japan) · 6h 05m · nonstop",
+     "price": "$340",
+     "amount_usd": 340,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Nang"
     },
     {
@@ -1370,6 +1629,12 @@
      "detail": "3 hours · mi quang to seafood grills, local-led",
      "price": "$30",
      "book_url": "https://www.getyourguide.com/s/?q=Da+Nang+food+tour+by+motorbike+Da+Nang"
+    },
+    {
+     "name": "Golden hour at My Khe",
+     "detail": "flexible · sunrise swims with the whole city",
+     "price": "",
+     "book_url": "https://www.getyourguide.com/s/?q=Golden+hour+at+My+Khe+Da+Nang"
     }
    ]
   },
@@ -1457,7 +1722,7 @@
     "price_from": 420,
     "blurb": "Award-winning clifftop resort on Son Tra peninsula.",
     "city": "Da Nang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=InterContinental+Danang+Sun+Peninsula%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=InterContinental+Danang+Sun+Peninsula%2C+Da+Nang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.0,
     "reviews": 1769,
     "tag": "Guest favourite"
@@ -1468,7 +1733,7 @@
     "price_from": 200,
     "blurb": "Beachfront resort on My Khe Beach.",
     "city": "Da Nang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Hyatt+Regency+Danang+Resort+%26+Spa%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hyatt+Regency+Danang+Resort+%26+Spa%2C+Da+Nang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.1,
     "reviews": 1621,
     "tag": "Guest favourite"
@@ -1479,7 +1744,7 @@
     "price_from": 180,
     "blurb": "Classic beach resort with lagoon pools.",
     "city": "Da Nang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Furama+Resort+Danang%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Furama+Resort+Danang%2C+Da+Nang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.1,
     "reviews": 1140,
     "tag": "Guest favourite"
@@ -1490,7 +1755,7 @@
     "price_from": 310,
     "blurb": "Pool villas with daily spa treatments included.",
     "city": "Da Nang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Fusion+Maia+Da+Nang%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Fusion+Maia+Da+Nang%2C+Da+Nang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.0,
     "reviews": 1103,
     "tag": "Guest favourite"
@@ -1501,7 +1766,7 @@
     "price_from": 90,
     "blurb": "Han River views, minutes from My Khe beach.",
     "city": "Da Nang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Melia+Vinpearl+Danang+Riverfront%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Melia+Vinpearl+Danang+Riverfront%2C+Da+Nang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.6,
     "reviews": 1584,
     "tag": "Highly rated"
@@ -1512,7 +1777,7 @@
     "price_from": 350,
     "blurb": "Beachfront pool villas for families.",
     "city": "Da Nang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Premier+Village+Danang+Resort%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Premier+Village+Danang+Resort%2C+Da+Nang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 1473,
     "tag": "Guest favourite"
@@ -1523,7 +1788,7 @@
     "price_from": 180,
     "blurb": "Lush grounds right on Bac My An beach.",
     "city": "Da Nang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Pullman+Danang+Beach+Resort%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Pullman+Danang+Beach+Resort%2C+Da+Nang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.1,
     "reviews": 1399,
     "tag": "Guest favourite"
@@ -1534,7 +1799,7 @@
     "price_from": 110,
     "blurb": "Gold-tiled rooftop infinity pool.",
     "city": "Da Nang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Danang+Golden+Bay%2C+Da+Nang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Danang+Golden+Bay%2C+Da+Nang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 1029,
     "tag": "Guest favourite"
@@ -1581,10 +1846,45 @@
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
     },
     {
+     "name": "United Airlines",
+     "detail": "ORD-DAD via Tokyo (from USA) · 21h 40m · 1 stop",
+     "price": "$940",
+     "amount_usd": 940,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
+    },
+    {
      "name": "Vietnam Airlines",
      "detail": "CDG-HAN + HAN-DAD (from Europe) · 14h 30m · 1 stop",
      "price": "$735",
      "amount_usd": 735,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
+    },
+    {
+     "name": "Qatar Airways",
+     "detail": "DOH-DAD + 30 min drive (from Middle East) · 7h 40m · nonstop",
+     "price": "$470",
+     "amount_usd": 470,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + SGN-DAD (from Australia) · 11h 45m · 1 stop",
+     "price": "$565",
+     "amount_usd": 565,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-DAD + 30 min drive (from Korea) · 4h 45m · nonstop",
+     "price": "$270",
+     "amount_usd": 270,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "NRT-DAD + 30 min drive (from Japan) · 6h 05m · nonstop",
+     "price": "$340",
+     "amount_usd": 340,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Hoi+An"
     }
    ]
@@ -1789,7 +2089,7 @@
     "price_from": 480,
     "blurb": "Beachfront villas between Hoi An and Da Nang.",
     "city": "Hoi An",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Four+Seasons+The+Nam+Hai%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Four+Seasons+The+Nam+Hai%2C+Hoi+An%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.9,
     "reviews": 1288,
     "tag": "Highly rated"
@@ -1800,7 +2100,7 @@
     "price_from": 220,
     "blurb": "Riverside resort a short walk from the ancient town.",
     "city": "Hoi An",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Anantara+Hoi+An+Resort%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Anantara+Hoi+An+Resort%2C+Hoi+An%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.2,
     "reviews": 1214,
     "tag": "Guest favourite"
@@ -1811,7 +2111,7 @@
     "price_from": 120,
     "blurb": "Lantern-lit boutique resort with a great spa.",
     "city": "Hoi An",
-    "book_url": "https://www.booking.com/searchresults.html?ss=La+Siesta+Hoi+An+Resort+%26+Spa%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=La+Siesta+Hoi+An+Resort+%26+Spa%2C+Hoi+An%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.8,
     "reviews": 1473,
     "tag": "Highly rated"
@@ -1822,7 +2122,7 @@
     "price_from": 90,
     "blurb": "All-suite boutique two blocks from the old town.",
     "city": "Hoi An",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Allegro+Hoi+An%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Allegro+Hoi+An%2C+Hoi+An%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.6,
     "reviews": 918,
     "tag": "Highly rated"
@@ -1833,7 +2133,7 @@
     "price_from": 100,
     "blurb": "Thu Bon riverfront with balcony views.",
     "city": "Hoi An",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Little+Riverside+Hoi+An%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Little+Riverside+Hoi+An%2C+Hoi+An%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.8,
     "reviews": 1251,
     "tag": "Highly rated"
@@ -1844,7 +2144,7 @@
     "price_from": 140,
     "blurb": "Cua Dai beachfront with old-town shuttle.",
     "city": "Hoi An",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Victoria+Hoi+An+Beach+Resort%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Victoria+Hoi+An+Beach+Resort%2C+Hoi+An%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.7,
     "reviews": 1436,
     "tag": "Highly rated"
@@ -1855,7 +2155,7 @@
     "price_from": 110,
     "blurb": "Daily spa treatment included.",
     "city": "Hoi An",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Almanity+Hoi+An+Wellness+Resort%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Almanity+Hoi+An+Wellness+Resort%2C+Hoi+An%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.5,
     "reviews": 1547,
     "tag": "Highly rated"
@@ -1866,7 +2166,7 @@
     "price_from": 95,
     "blurb": "Island resort facing the night market.",
     "city": "Hoi An",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Bel+Marina+Hoi+An+Resort%2C+Hoi+An%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Bel+Marina+Hoi+An+Resort%2C+Hoi+An%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.4,
     "reviews": 1288,
     "tag": "Highly rated"
@@ -1917,6 +2217,41 @@
      "detail": "CDG-HAN + HAN-HUI (from Europe) · 14h 20m · 1 stop",
      "price": "$730",
      "amount_usd": 730,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hue"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "JFK-HAN + HAN-HUI (from USA) · 23h 30m · 2 stops",
+     "price": "$1,010",
+     "amount_usd": 1010,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hue"
+    },
+    {
+     "name": "Qatar Airways",
+     "detail": "DOH-HAN + HAN-HUI (from Middle East) · 9h 30m · 1 stop",
+     "price": "$505",
+     "amount_usd": 505,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hue"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + SGN-HUI (from Australia) · 11h 30m · 1 stop",
+     "price": "$560",
+     "amount_usd": 560,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hue"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-DAD + 2h drive to Hue (from Korea) · 4h 45m + road · via Da Nang",
+     "price": "$295",
+     "amount_usd": 295,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Hue"
+    },
+    {
+     "name": "ANA",
+     "detail": "HND-HAN + HAN-HUI (from Japan) · 8h 15m · 1 stop",
+     "price": "$420",
+     "amount_usd": 420,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Hue"
     }
    ]
@@ -2095,7 +2430,7 @@
     "price_from": 170,
     "blurb": "Art-deco riverside hotel by the Perfume River.",
     "city": "Hue",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Azerai+La+Residence+Hue%2C+Hue%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Azerai+La+Residence+Hue%2C+Hue%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 1251,
     "tag": "Guest favourite"
@@ -2106,7 +2441,7 @@
     "price_from": 95,
     "blurb": "Garden sanctuary just outside the citadel.",
     "city": "Hue",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Pilgrimage+Village+Boutique+Resort%2C+Hue%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Pilgrimage+Village+Boutique+Resort%2C+Hue%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.7,
     "reviews": 1658,
     "tag": "Highly rated"
@@ -2117,7 +2452,7 @@
     "price_from": 70,
     "blurb": "Palatial style near the railway station.",
     "city": "Hue",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Silk+Path+Grand+Hue%2C+Hue%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Silk+Path+Grand+Hue%2C+Hue%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.5,
     "reviews": 1103,
     "tag": "Highly rated"
@@ -2128,7 +2463,7 @@
     "price_from": 55,
     "blurb": "Grand lobby, steps from the walking street.",
     "city": "Hue",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Eldora+Hotel+Hue%2C+Hue%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Eldora+Hotel+Hue%2C+Hue%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.7,
     "reviews": 992,
     "tag": "Highly rated"
@@ -2165,6 +2500,41 @@
      "detail": "CDG-HAN + limousine to Sapa (from Europe) · 11h 30m + 5h road · via Hanoi",
      "price": "$668",
      "amount_usd": 668,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Sapa"
+    },
+    {
+     "name": "EVA Air",
+     "detail": "SFO-HAN via Taipei + limousine (from USA) · 18h 50m + 5h road · via Hanoi",
+     "price": "$835",
+     "amount_usd": 835,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Sapa"
+    },
+    {
+     "name": "Emirates",
+     "detail": "DXB-HAN + limousine to Sapa (from Middle East) · 6h 45m + 5h road · via Hanoi",
+     "price": "$445",
+     "amount_usd": 445,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Sapa"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + SGN-HAN + limousine (from Australia) · 12h 30m + 5h road · via Hanoi",
+     "price": "$585",
+     "amount_usd": 585,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Sapa"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-HAN + limousine to Sapa (from Korea) · 4h 35m + 5h road · via Hanoi",
+     "price": "$300",
+     "amount_usd": 300,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Sapa"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "NRT-HAN + limousine to Sapa (from Japan) · 6h 00m + 5h road · via Hanoi",
+     "price": "$355",
+     "amount_usd": 355,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Sapa"
     }
    ]
@@ -2316,7 +2686,7 @@
     "price_from": 160,
     "blurb": "Grand colonial-style hotel by the cable-car base.",
     "city": "Sapa",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Hotel+de+la+Coupole+MGallery%2C+Sapa%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hotel+de+la+Coupole+MGallery%2C+Sapa%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.2,
     "reviews": 1436,
     "tag": "Guest favourite"
@@ -2327,7 +2697,7 @@
     "price_from": 180,
     "blurb": "Mountain bungalows with rice-terrace views.",
     "city": "Sapa",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Topas+Ecolodge%2C+Sapa%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Topas+Ecolodge%2C+Sapa%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.6,
     "reviews": 918,
     "tag": "Highly rated"
@@ -2338,7 +2708,7 @@
     "price_from": 90,
     "blurb": "Valley-view rooms above Muong Hoa.",
     "city": "Sapa",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Pao%27s+Sapa+Leisure+Hotel%2C+Sapa%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Pao%27s+Sapa+Leisure+Hotel%2C+Sapa%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.4,
     "reviews": 1288,
     "tag": "Highly rated"
@@ -2349,7 +2719,7 @@
     "price_from": 120,
     "blurb": "Hillside spa resort above the town.",
     "city": "Sapa",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Silk+Path+Grand+Sapa+Resort%2C+Sapa%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Silk+Path+Grand+Sapa+Resort%2C+Sapa%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.1,
     "reviews": 1399,
     "tag": "Guest favourite"
@@ -2393,6 +2763,41 @@
      "detail": "LHR-HAN + shuttle (from Europe) · 12h 10m + 2.5h road · via Hanoi",
      "price": "$655",
      "amount_usd": 655,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Long+Bay"
+    },
+    {
+     "name": "United Airlines",
+     "detail": "ORD-HAN via Tokyo + shuttle (from USA) · 20h 30m + road · via Hanoi",
+     "price": "$912",
+     "amount_usd": 912,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Long+Bay"
+    },
+    {
+     "name": "Emirates",
+     "detail": "DXB-HAN + 2.5h shuttle (from Middle East) · 6h 45m + road · via Hanoi",
+     "price": "$442",
+     "amount_usd": 442,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Long+Bay"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + SGN-HAN + shuttle (from Australia) · 12h 30m + road · via Hanoi",
+     "price": "$582",
+     "amount_usd": 582,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Long+Bay"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-HAN + 2.5h shuttle (from Korea) · 4h 35m + road · via Hanoi",
+     "price": "$298",
+     "amount_usd": 298,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Long+Bay"
+    },
+    {
+     "name": "ANA",
+     "detail": "HND-HAN + 2.5h shuttle (from Japan) · 5h 45m + road · via Hanoi",
+     "price": "$372",
+     "amount_usd": 372,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Long+Bay"
     }
    ]
@@ -2531,7 +2936,7 @@
     "price_from": 280,
     "blurb": "Luxury overnight cruise through the karst islands.",
     "city": "Ha Long Bay",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Paradise+Elegance+Cruise%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Paradise+Elegance+Cruise%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.9,
     "reviews": 1288,
     "tag": "Highly rated"
@@ -2542,7 +2947,7 @@
     "price_from": 150,
     "blurb": "Island resort overlooking the bay.",
     "city": "Ha Long Bay",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Vinpearl+Resort+%26+Spa+Ha+Long%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Vinpearl+Resort+%26+Spa+Ha+Long%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 1473,
     "tag": "Guest favourite"
@@ -2553,7 +2958,7 @@
     "price_from": 85,
     "blurb": "Bay views close to the cruise marina.",
     "city": "Ha Long Bay",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Wyndham+Legend+Halong%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Wyndham+Legend+Halong%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.6,
     "reviews": 1177,
     "tag": "Highly rated"
@@ -2564,7 +2969,7 @@
     "price_from": 70,
     "blurb": "Boutique base on Tuan Chau marina.",
     "city": "Ha Long Bay",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Paradise+Suites+Hotel%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Paradise+Suites+Hotel%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.6,
     "reviews": 1177,
     "tag": "Highly rated"
@@ -2575,7 +2980,7 @@
     "price_from": 80,
     "blurb": "Bayfront rooms along Bai Chay beach.",
     "city": "Ha Long Bay",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Novotel+Ha+Long+Bay%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Novotel+Ha+Long+Bay%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.5,
     "reviews": 1103,
     "tag": "Highly rated"
@@ -2586,7 +2991,7 @@
     "price_from": 60,
     "blurb": "High-floor bay panoramas in Bai Chay.",
     "city": "Ha Long Bay",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Muong+Thanh+Luxury+Quang+Ninh%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Muong+Thanh+Luxury+Quang+Ninh%2C+Ha+Long+Bay%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.8,
     "reviews": 1473,
     "tag": "Highly rated"
@@ -2626,6 +3031,13 @@
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
     },
     {
+     "name": "Jeju Air",
+     "detail": "ICN-PQC (from Korea) · 5h 20m · nonstop",
+     "price": "$185",
+     "amount_usd": 185,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    },
+    {
      "name": "VietJet Air",
      "detail": "BOM-SGN + SGN-PQC (from India) · 8h 00m · 1 stop",
      "price": "$280",
@@ -2640,10 +3052,38 @@
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
     },
     {
+     "name": "United Airlines",
+     "detail": "ORD-SGN via Tokyo + SGN-PQC (from USA) · 23h 00m · 2 stops",
+     "price": "$965",
+     "amount_usd": 965,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    },
+    {
      "name": "Vietnam Airlines",
      "detail": "FRA-SGN + SGN-PQC (from Europe) · 14h 45m · 1 stop",
      "price": "$760",
      "amount_usd": 760,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    },
+    {
+     "name": "Qatar Airways",
+     "detail": "DOH-SGN + SGN-PQC (from Middle East) · 9h 45m · 1 stop",
+     "price": "$520",
+     "amount_usd": 520,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    },
+    {
+     "name": "Jetstar Airways",
+     "detail": "MEL-SGN + SGN-PQC (from Australia) · 11h 00m · 1 stop",
+     "price": "$450",
+     "amount_usd": 450,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "NRT-HAN + HAN-PQC (from Japan) · 9h 20m · 1 stop",
+     "price": "$405",
+     "amount_usd": 405,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Phu+Quoc"
     },
     {
@@ -2686,6 +3126,13 @@
      "detail": "sedan · metered island taxi",
      "price": "$9",
      "amount_usd": 9,
+     "book_url": "https://www.klook.com/en-US/search/?query=Phu+Quoc+Vietnam+airport+transfer"
+    },
+    {
+     "name": "Sun World shuttle",
+     "detail": "coach · free resort routes to the cable car",
+     "price": "",
+     "amount_usd": 0,
      "book_url": "https://www.klook.com/en-US/search/?query=Phu+Quoc+Vietnam+airport+transfer"
     },
     {
@@ -2849,7 +3296,7 @@
     "price_from": 380,
     "blurb": "Whimsical Bensley-designed beach resort.",
     "city": "Phu Quoc",
-    "book_url": "https://www.booking.com/searchresults.html?ss=JW+Marriott+Phu+Quoc+Emerald+Bay%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=JW+Marriott+Phu+Quoc+Emerald+Bay%2C+Phu+Quoc%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.1,
     "reviews": 1584,
     "tag": "Guest favourite"
@@ -2860,7 +3307,7 @@
     "price_from": 250,
     "blurb": "Long Beach luxury with a rooftop bar.",
     "city": "Phu Quoc",
-    "book_url": "https://www.booking.com/searchresults.html?ss=InterContinental+Phu+Quoc+Long+Beach%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=InterContinental+Phu+Quoc+Long+Beach%2C+Phu+Quoc%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.9,
     "reviews": 1732,
     "tag": "Highly rated"
@@ -2871,7 +3318,7 @@
     "price_from": 200,
     "blurb": "Boutique beachfront resort near Duong Dong.",
     "city": "Phu Quoc",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Salinda+Resort+Phu+Quoc%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Salinda+Resort+Phu+Quoc%2C+Phu+Quoc%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 1251,
     "tag": "Guest favourite"
@@ -2882,7 +3329,7 @@
     "price_from": 180,
     "blurb": "Colonial-style beachfront MGallery classic.",
     "city": "Phu Quoc",
-    "book_url": "https://www.booking.com/searchresults.html?ss=La+Veranda+Resort+Phu+Quoc%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=La+Veranda+Resort+Phu+Quoc%2C+Phu+Quoc%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.1,
     "reviews": 1362,
     "tag": "Guest favourite"
@@ -2893,7 +3340,7 @@
     "price_from": 90,
     "blurb": "Eco-resort on its own quiet stretch of beach.",
     "city": "Phu Quoc",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Mango+Bay+Resort%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Mango+Bay+Resort%2C+Phu+Quoc%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.2,
     "reviews": 992,
     "tag": "Highly rated"
@@ -2904,7 +3351,7 @@
     "price_from": 320,
     "blurb": "Villas straddling a private cape.",
     "city": "Phu Quoc",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Premier+Village+Phu+Quoc+Resort%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Premier+Village+Phu+Quoc+Resort%2C+Phu+Quoc%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.0,
     "reviews": 1547,
     "tag": "Guest favourite"
@@ -2915,7 +3362,7 @@
     "price_from": 380,
     "blurb": "Lagoon suites on Long Beach.",
     "city": "Phu Quoc",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Regent+Phu+Quoc%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Regent+Phu+Quoc%2C+Phu+Quoc%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.1,
     "reviews": 955,
     "tag": "Guest favourite"
@@ -2926,7 +3373,7 @@
     "price_from": 250,
     "blurb": "All-villa beachfront village.",
     "city": "Phu Quoc",
-    "book_url": "https://www.booking.com/searchresults.html?ss=New+World+Phu+Quoc+Resort%2C+Phu+Quoc%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=New+World+Phu+Quoc+Resort%2C+Phu+Quoc%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.0,
     "reviews": 1325,
     "tag": "Guest favourite"
@@ -2966,6 +3413,13 @@
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
     },
     {
+     "name": "Jin Air",
+     "detail": "ICN-CXR (from Korea) · 5h 00m · nonstop",
+     "price": "$180",
+     "amount_usd": 180,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
+    },
+    {
      "name": "VietJet Air",
      "detail": "DEL-HAN + HAN-CXR (from India) · 9h 00m · 1 stop",
      "price": "$255",
@@ -2977,6 +3431,34 @@
      "detail": "JFK-CXR via Seoul (from USA) · 22h 00m · 1 stop",
      "price": "$980",
      "amount_usd": 980,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "FRA-SGN + SGN-CXR (from Europe) · 14h 20m · 1 stop",
+     "price": "$745",
+     "amount_usd": 745,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
+    },
+    {
+     "name": "Emirates",
+     "detail": "DXB-SGN + SGN-CXR (from Middle East) · 9h 30m · 1 stop",
+     "price": "$500",
+     "amount_usd": 500,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + SGN-CXR (from Australia) · 11h 15m · 1 stop",
+     "price": "$555",
+     "amount_usd": 555,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
+    },
+    {
+     "name": "ANA",
+     "detail": "NRT-SGN + SGN-CXR (from Japan) · 9h 00m · 1 stop",
+     "price": "$430",
+     "amount_usd": 430,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Nha+Trang"
     }
    ]
@@ -3136,7 +3618,7 @@
     "price_from": 700,
     "blurb": "Secluded villas reached by boat.",
     "city": "Nha Trang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Six+Senses+Ninh+Van+Bay%2C+Nha+Trang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Six+Senses+Ninh+Van+Bay%2C+Nha+Trang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 1251,
     "tag": "Guest favourite"
@@ -3147,7 +3629,7 @@
     "price_from": 160,
     "blurb": "Beachfront tower on the main promenade.",
     "city": "Nha Trang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=InterContinental+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=InterContinental+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.1,
     "reviews": 1362,
     "tag": "Guest favourite"
@@ -3158,7 +3640,7 @@
     "price_from": 160,
     "blurb": "Clifftop villas on a private cove.",
     "city": "Nha Trang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Mia+Resort+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Mia+Resort+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.6,
     "reviews": 1140,
     "tag": "Highly rated"
@@ -3169,7 +3651,7 @@
     "price_from": 220,
     "blurb": "The only true beachfront villas in town.",
     "city": "Nha Trang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Evason+Ana+Mandara+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Evason+Ana+Mandara+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.2,
     "reviews": 1436,
     "tag": "Guest favourite"
@@ -3180,7 +3662,7 @@
     "price_from": 140,
     "blurb": "Panoramic bay views, central promenade.",
     "city": "Nha Trang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Sheraton+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Sheraton+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.9,
     "reviews": 1066,
     "tag": "Highly rated"
@@ -3191,7 +3673,7 @@
     "price_from": 180,
     "blurb": "Private-bay resort north of town.",
     "city": "Nha Trang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Amiana+Resort+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Amiana+Resort+Nha+Trang%2C+Nha+Trang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 1251,
     "tag": "Guest favourite"
@@ -3235,6 +3717,41 @@
      "detail": "FRA-SGN + SGN-DLI (from Europe) · 14h 30m · 1 stop",
      "price": "$755",
      "amount_usd": 755,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Lat"
+    },
+    {
+     "name": "United Airlines",
+     "detail": "ORD-SGN via Tokyo + SGN-DLI (from USA) · 23h 10m · 2 stops",
+     "price": "$960",
+     "amount_usd": 960,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Lat"
+    },
+    {
+     "name": "Qatar Airways",
+     "detail": "DOH-SGN + SGN-DLI (from Middle East) · 9h 50m · 1 stop",
+     "price": "$515",
+     "amount_usd": 515,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Lat"
+    },
+    {
+     "name": "Jetstar Airways",
+     "detail": "MEL-SGN + SGN-DLI (from Australia) · 10h 45m · 1 stop",
+     "price": "$445",
+     "amount_usd": 445,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Lat"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-SGN + SGN-DLI (from Korea) · 7h 45m · 1 stop",
+     "price": "$350",
+     "amount_usd": 350,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Lat"
+    },
+    {
+     "name": "Japan Airlines",
+     "detail": "HND-SGN + SGN-DLI (from Japan) · 8h 40m · 1 stop",
+     "price": "$435",
+     "amount_usd": 435,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Da+Lat"
     }
    ]
@@ -3387,7 +3904,7 @@
     "price_from": 150,
     "blurb": "Restored French villas in the highlands.",
     "city": "Da Lat",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Ana+Mandara+Villas+Dalat%2C+Da+Lat%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Ana+Mandara+Villas+Dalat%2C+Da+Lat%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.9,
     "reviews": 1288,
     "tag": "Highly rated"
@@ -3398,7 +3915,7 @@
     "price_from": 140,
     "blurb": "Grand colonial landmark above the lake.",
     "city": "Da Lat",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Dalat+Palace+Heritage+Hotel%2C+Da+Lat%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Dalat+Palace+Heritage+Hotel%2C+Da+Lat%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.1,
     "reviews": 1399,
     "tag": "Guest favourite"
@@ -3409,7 +3926,7 @@
     "price_from": 70,
     "blurb": "Pine-forest lakeside calm at Tuyen Lam.",
     "city": "Da Lat",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Terracotta+Hotel+%26+Resort+Dalat%2C+Da+Lat%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Terracotta+Hotel+%26+Resort+Dalat%2C+Da+Lat%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.5,
     "reviews": 1547,
     "tag": "Highly rated"
@@ -3420,7 +3937,7 @@
     "price_from": 75,
     "blurb": "Golf-course views in the highlands.",
     "city": "Da Lat",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Swiss-Belresort+Tuyen+Lam%2C+Da+Lat%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Swiss-Belresort+Tuyen+Lam%2C+Da+Lat%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.5,
     "reviews": 1325,
     "tag": "Highly rated"
@@ -3457,6 +3974,41 @@
      "detail": "CDG-HAN + 1.5h drive (from Europe) · 11h 30m + road · via Hanoi",
      "price": "$662",
      "amount_usd": 662,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ninh+Binh"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "JFK-HAN via Seoul + drive (from USA) · 21h 05m + road · via Hanoi",
+     "price": "$968",
+     "amount_usd": 968,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ninh+Binh"
+    },
+    {
+     "name": "Emirates",
+     "detail": "DXB-HAN + 1.5h drive (from Middle East) · 6h 45m + road · via Hanoi",
+     "price": "$438",
+     "amount_usd": 438,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ninh+Binh"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + SGN-HAN + drive (from Australia) · 12h 30m + road · via Hanoi",
+     "price": "$578",
+     "amount_usd": 578,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ninh+Binh"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-HAN + 1.5h drive (from Korea) · 4h 35m + road · via Hanoi",
+     "price": "$295",
+     "amount_usd": 295,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ninh+Binh"
+    },
+    {
+     "name": "ANA",
+     "detail": "HND-HAN + 1.5h drive (from Japan) · 5h 45m + road · via Hanoi",
+     "price": "$368",
+     "amount_usd": 368,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Ninh+Binh"
     }
    ]
@@ -3582,7 +4134,7 @@
     "price_from": 120,
     "blurb": "Village-style resort near Tam Coc.",
     "city": "Ninh Binh",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Emeralda+Resort+Ninh+Binh%2C+Ninh+Binh%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Emeralda+Resort+Ninh+Binh%2C+Ninh+Binh%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.0,
     "reviews": 1325,
     "tag": "Guest favourite"
@@ -3593,7 +4145,7 @@
     "price_from": 130,
     "blurb": "Boutique hideaway amid the rice paddies.",
     "city": "Ninh Binh",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Tam+Coc+Garden+Resort%2C+Ninh+Binh%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Tam+Coc+Garden+Resort%2C+Ninh+Binh%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.6,
     "reviews": 1177,
     "tag": "Highly rated"
@@ -3604,7 +4156,7 @@
     "price_from": 80,
     "blurb": "Karst views near Tam Coc wharf.",
     "city": "Ninh Binh",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Ninh+Binh+Hidden+Charm+Hotel%2C+Ninh+Binh%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Ninh+Binh+Hidden+Charm+Hotel%2C+Ninh+Binh%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.7,
     "reviews": 1436,
     "tag": "Highly rated"
@@ -3615,7 +4167,7 @@
     "price_from": 70,
     "blurb": "Temple-side garden bungalows.",
     "city": "Ninh Binh",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Bai+Dinh+Garden+Resort%2C+Ninh+Binh%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Bai+Dinh+Garden+Resort%2C+Ninh+Binh%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.7,
     "reviews": 1214,
     "tag": "Highly rated"
@@ -3652,6 +4204,41 @@
      "detail": "SFO-SGN + 4h drive (from USA) · 16h 40m + road · via Saigon",
      "price": "$765",
      "amount_usd": 765,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mui+Ne"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "CDG-SGN + 4h drive (from Europe) · 12h 15m + road · via Saigon",
+     "price": "$708",
+     "amount_usd": 708,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mui+Ne"
+    },
+    {
+     "name": "Emirates",
+     "detail": "DXB-SGN + 4h drive (from Middle East) · 7h 00m + road · via Saigon",
+     "price": "$448",
+     "amount_usd": 448,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mui+Ne"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + 4h drive (from Australia) · 8h 45m + road · via Saigon",
+     "price": "$528",
+     "amount_usd": 528,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mui+Ne"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-SGN + 4h drive (from Korea) · 5h 25m + road · via Saigon",
+     "price": "$308",
+     "amount_usd": 308,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mui+Ne"
+    },
+    {
+     "name": "ANA",
+     "detail": "NRT-SGN + 4h drive (from Japan) · 6h 20m + road · via Saigon",
+     "price": "$378",
+     "amount_usd": 378,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Mui+Ne"
     }
    ]
@@ -3771,7 +4358,7 @@
     "price_from": 160,
     "blurb": "Beachfront resort near the sand dunes.",
     "city": "Mui Ne",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Anantara+Mui+Ne+Resort%2C+Mui+Ne%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Anantara+Mui+Ne+Resort%2C+Mui+Ne%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.2,
     "reviews": 1214,
     "tag": "Guest favourite"
@@ -3782,7 +4369,7 @@
     "price_from": 110,
     "blurb": "Terraced pools above the beach.",
     "city": "Mui Ne",
-    "book_url": "https://www.booking.com/searchresults.html?ss=The+Cliff+Resort+%26+Residences%2C+Mui+Ne%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=The+Cliff+Resort+%26+Residences%2C+Mui+Ne%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.8,
     "reviews": 1473,
     "tag": "Highly rated"
@@ -3793,7 +4380,7 @@
     "price_from": 90,
     "blurb": "Garden bungalows on the sand.",
     "city": "Mui Ne",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Bamboo+Village+Beach+Resort%2C+Mui+Ne%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Bamboo+Village+Beach+Resort%2C+Mui+Ne%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.6,
     "reviews": 1399,
     "tag": "Highly rated"
@@ -3830,6 +4417,41 @@
      "detail": "FRA-SGN + 2h drive (from Europe) · 12h 05m + road · via Saigon",
      "price": "$692",
      "amount_usd": 692,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mekong+Delta"
+    },
+    {
+     "name": "United Airlines",
+     "detail": "ORD-SGN via Tokyo + 2h drive (from USA) · 21h 00m + road · via Saigon",
+     "price": "$915",
+     "amount_usd": 915,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mekong+Delta"
+    },
+    {
+     "name": "Emirates",
+     "detail": "DXB-SGN + 2h drive (from Middle East) · 7h 00m + road · via Saigon",
+     "price": "$445",
+     "amount_usd": 445,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mekong+Delta"
+    },
+    {
+     "name": "Jetstar Airways",
+     "detail": "MEL-SGN + 2h drive (from Australia) · 8h 30m + road · via Saigon",
+     "price": "$395",
+     "amount_usd": 395,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mekong+Delta"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-SGN + 2h drive (from Korea) · 5h 25m + road · via Saigon",
+     "price": "$305",
+     "amount_usd": 305,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Mekong+Delta"
+    },
+    {
+     "name": "Japan Airlines",
+     "detail": "HND-SGN + 2h drive (from Japan) · 6h 15m + road · via Saigon",
+     "price": "$385",
+     "amount_usd": 385,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Mekong+Delta"
     }
    ]
@@ -3949,7 +4571,7 @@
     "price_from": 180,
     "blurb": "Private river island reached by boat.",
     "city": "Mekong Delta",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Azerai+Can+Tho%2C+Mekong+Delta%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Azerai+Can+Tho%2C+Mekong+Delta%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.1,
     "reviews": 918,
     "tag": "Guest favourite"
@@ -3960,7 +4582,7 @@
     "price_from": 110,
     "blurb": "Colonial riverfront near Ninh Kieu wharf.",
     "city": "Mekong Delta",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Victoria+Can+Tho+Resort%2C+Mekong+Delta%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Victoria+Can+Tho+Resort%2C+Mekong+Delta%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.8,
     "reviews": 1251,
     "tag": "Highly rated"
@@ -3971,7 +4593,7 @@
     "price_from": 85,
     "blurb": "Colonial corner house on the wharf.",
     "city": "Mekong Delta",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Nam+Bo+Boutique+Hotel+Can+Tho%2C+Mekong+Delta%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Nam+Bo+Boutique+Hotel+Can+Tho%2C+Mekong+Delta%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.8,
     "reviews": 1473,
     "tag": "Highly rated"
@@ -3982,7 +4604,7 @@
     "price_from": 95,
     "blurb": "Riverfront bungalows near Cai Be.",
     "city": "Mekong Delta",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Mekong+Riverside+Boutique+Resort%2C+Mekong+Delta%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Mekong+Riverside+Boutique+Resort%2C+Mekong+Delta%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.6,
     "reviews": 1584,
     "tag": "Highly rated"
@@ -4019,6 +4641,48 @@
      "detail": "SFO-SGN + SGN-VCS (from USA) · 19h 20m · 1 stop",
      "price": "$860",
      "amount_usd": 860,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Con+Dao"
+    },
+    {
+     "name": "VietJet Air",
+     "detail": "DEL-SGN + SGN-VCS (from India) · 7h 55m · 1 stop",
+     "price": "$290",
+     "amount_usd": 290,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Con+Dao"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "CDG-SGN + SGN-VCS (from Europe) · 13h 40m · 1 stop",
+     "price": "$775",
+     "amount_usd": 775,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Con+Dao"
+    },
+    {
+     "name": "Emirates",
+     "detail": "DXB-SGN + SGN-VCS (from Middle East) · 9h 15m · 1 stop",
+     "price": "$525",
+     "amount_usd": 525,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Con+Dao"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + SGN-VCS (from Australia) · 10h 50m · 1 stop",
+     "price": "$605",
+     "amount_usd": 605,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Con+Dao"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-SGN + SGN-VCS (from Korea) · 7h 30m · 1 stop",
+     "price": "$385",
+     "amount_usd": 385,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Con+Dao"
+    },
+    {
+     "name": "ANA",
+     "detail": "NRT-SGN + SGN-VCS (from Japan) · 8h 30m · 1 stop",
+     "price": "$455",
+     "amount_usd": 455,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Con+Dao"
     }
    ]
@@ -4131,7 +4795,7 @@
     "price_from": 650,
     "blurb": "Barefoot-luxury villas on Dat Doc beach.",
     "city": "Con Dao",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Six+Senses+Con+Dao%2C+Con+Dao%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Six+Senses+Con+Dao%2C+Con+Dao%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.9,
     "reviews": 1066,
     "tag": "Highly rated"
@@ -4142,7 +4806,7 @@
     "price_from": 120,
     "blurb": "Quiet colonial-style resort and spa.",
     "city": "Con Dao",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Poulo+Condor+Boutique+Resort%2C+Con+Dao%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Poulo+Condor+Boutique+Resort%2C+Con+Dao%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.7,
     "reviews": 1436,
     "tag": "Highly rated"
@@ -4153,7 +4817,7 @@
     "price_from": 140,
     "blurb": "Design hotel on the seafront promenade.",
     "city": "Con Dao",
-    "book_url": "https://www.booking.com/searchresults.html?ss=The+Secret+Con+Dao%2C+Con+Dao%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=The+Secret+Con+Dao%2C+Con+Dao%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.4,
     "reviews": 1066,
     "tag": "Highly rated"
@@ -4183,6 +4847,48 @@
      "detail": "DEL-HAN + bus-ferry combo (from India) · 5h 15m + 3h · via Hanoi",
      "price": "$195",
      "amount_usd": 195,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Cat+Ba"
+    },
+    {
+     "name": "EVA Air",
+     "detail": "SFO-HAN via Taipei + bus-ferry (from USA) · 18h 50m + 3h · via Hanoi",
+     "price": "$838",
+     "amount_usd": 838,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Cat+Ba"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "LHR-HAN + bus-ferry combo (from Europe) · 12h 10m + 3h · via Hanoi",
+     "price": "$668",
+     "amount_usd": 668,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Cat+Ba"
+    },
+    {
+     "name": "Emirates",
+     "detail": "DXB-HAN + bus-ferry combo (from Middle East) · 6h 45m + 3h · via Hanoi",
+     "price": "$448",
+     "amount_usd": 448,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Cat+Ba"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + SGN-HAN + ferry (from Australia) · 12h 30m + 3h · via Hanoi",
+     "price": "$588",
+     "amount_usd": 588,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Cat+Ba"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-HAN + bus-ferry combo (from Korea) · 4h 35m + 3h · via Hanoi",
+     "price": "$300",
+     "amount_usd": 300,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Cat+Ba"
+    },
+    {
+     "name": "ANA",
+     "detail": "HND-HAN + bus-ferry combo (from Japan) · 5h 45m + 3h · via Hanoi",
+     "price": "$375",
+     "amount_usd": 375,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Cat+Ba"
     }
    ]
@@ -4302,7 +5008,7 @@
     "price_from": 130,
     "blurb": "Indochine elegance above Cat Co cove.",
     "city": "Cat Ba",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Hotel+Perle+d%27Orient+Cat+Ba+MGallery%2C+Cat+Ba%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Hotel+Perle+d%27Orient+Cat+Ba+MGallery%2C+Cat+Ba%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.9,
     "reviews": 1732,
     "tag": "Highly rated"
@@ -4313,7 +5019,7 @@
     "price_from": 60,
     "blurb": "Hillside pools over Cat Co 1 beach.",
     "city": "Cat Ba",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Cat+Ba+Island+Resort+%26+Spa%2C+Cat+Ba%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Cat+Ba+Island+Resort+%26+Spa%2C+Cat+Ba%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.1,
     "reviews": 1362,
     "tag": "Highly rated"
@@ -4324,7 +5030,7 @@
     "price_from": 150,
     "blurb": "Forest-facing towers above Cat Co 1&2.",
     "city": "Cat Ba",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Flamingo+Cat+Ba+Resort%2C+Cat+Ba%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Flamingo+Cat+Ba+Resort%2C+Cat+Ba%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.2,
     "reviews": 1214,
     "tag": "Guest favourite"
@@ -4335,7 +5041,7 @@
     "price_from": 55,
     "blurb": "Harbour-view rooms in town.",
     "city": "Cat Ba",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Sea+Pearl+Cat+Ba+Hotel%2C+Cat+Ba%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Sea+Pearl+Cat+Ba+Hotel%2C+Cat+Ba%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.7,
     "reviews": 1214,
     "tag": "Highly rated"
@@ -4372,6 +5078,41 @@
      "detail": "CDG-HAN + HAN-VDH (from Europe) · 14h 10m · 1 stop",
      "price": "$720",
      "amount_usd": 720,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phong+Nha"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "JFK-HAN via Seoul + HAN-VDH (from USA) · 23h 00m · 2 stops",
+     "price": "$1,000",
+     "amount_usd": 1000,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phong+Nha"
+    },
+    {
+     "name": "Qatar Airways",
+     "detail": "DOH-HAN + HAN-VDH (from Middle East) · 9h 40m · 1 stop",
+     "price": "$510",
+     "amount_usd": 510,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phong+Nha"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + SGN-VDH (from Australia) · 11h 20m · 1 stop",
+     "price": "$570",
+     "amount_usd": 570,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phong+Nha"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-HAN + HAN-VDH (from Korea) · 7h 00m · 1 stop",
+     "price": "$340",
+     "amount_usd": 340,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Phong+Nha"
+    },
+    {
+     "name": "ANA",
+     "detail": "HND-HAN + HAN-VDH (from Japan) · 8h 10m · 1 stop",
+     "price": "$415",
+     "amount_usd": 415,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Phong+Nha"
     }
    ]
@@ -4484,7 +5225,7 @@
     "price_from": 120,
     "blurb": "Riverside villas at the gateway to the caves.",
     "city": "Phong Nha",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Victory+Road+Villas%2C+Phong+Nha%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Victory+Road+Villas%2C+Phong+Nha%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.5,
     "reviews": 1103,
     "tag": "Highly rated"
@@ -4495,7 +5236,7 @@
     "price_from": 45,
     "blurb": "The original countryside stay, rice-field views.",
     "city": "Phong Nha",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Phong+Nha+Farmstay%2C+Phong+Nha%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Phong+Nha+Farmstay%2C+Phong+Nha%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 7.9,
     "reviews": 1066,
     "tag": "Highly rated"
@@ -4506,7 +5247,7 @@
     "price_from": 60,
     "blurb": "Riverside pool amid the karst farmland.",
     "city": "Phong Nha",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Chay+Lap+Farmstay%2C+Phong+Nha%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Chay+Lap+Farmstay%2C+Phong+Nha%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.8,
     "reviews": 1029,
     "tag": "Highly rated"
@@ -4517,7 +5258,7 @@
     "price_from": 90,
     "blurb": "Beach resort by the airport gateway.",
     "city": "Phong Nha",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Sun+Spa+Resort+Dong+Hoi%2C+Phong+Nha%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Sun+Spa+Resort+Dong+Hoi%2C+Phong+Nha%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 9.3,
     "reviews": 1251,
     "tag": "Guest favourite"
@@ -4547,6 +5288,48 @@
      "detail": "DEL-HAN + limousine (from India) · 5h 15m + 6h road · via Hanoi",
      "price": "$200",
      "amount_usd": 200,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Giang"
+    },
+    {
+     "name": "EVA Air",
+     "detail": "SFO-HAN via Taipei + limousine (from USA) · 18h 50m + 6h road · via Hanoi",
+     "price": "$840",
+     "amount_usd": 840,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Giang"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "LHR-HAN + limousine (from Europe) · 12h 10m + 6h road · via Hanoi",
+     "price": "$672",
+     "amount_usd": 672,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Giang"
+    },
+    {
+     "name": "Emirates",
+     "detail": "DXB-HAN + limousine (from Middle East) · 6h 45m + 6h road · via Hanoi",
+     "price": "$450",
+     "amount_usd": 450,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Giang"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "SYD-SGN + SGN-HAN + limousine (from Australia) · 12h 30m + 6h road · via Hanoi",
+     "price": "$590",
+     "amount_usd": 590,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Giang"
+    },
+    {
+     "name": "Korean Air",
+     "detail": "ICN-HAN + limousine (from Korea) · 4h 35m + 6h road · via Hanoi",
+     "price": "$305",
+     "amount_usd": 305,
+     "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Giang"
+    },
+    {
+     "name": "Vietnam Airlines",
+     "detail": "NRT-HAN + limousine (from Japan) · 6h 00m + 6h road · via Hanoi",
+     "price": "$360",
+     "amount_usd": 360,
      "book_url": "https://www.google.com/travel/flights?q=flights+to+Ha+Giang"
     }
    ]
@@ -4652,7 +5435,7 @@
     "price_from": 150,
     "blurb": "Hillside hideaway on the way to the loop.",
     "city": "Ha Giang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=P%27apiu+Resort%2C+Ha+Giang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=P%27apiu+Resort%2C+Ha+Giang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.5,
     "reviews": 881,
     "tag": "Highly rated"
@@ -4663,7 +5446,7 @@
     "price_from": 40,
     "blurb": "Riverside stilt bungalows in Ha Giang town.",
     "city": "Ha Giang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Truong+Xuan+Resort%2C+Ha+Giang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Truong+Xuan+Resort%2C+Ha+Giang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 7.9,
     "reviews": 1066,
     "tag": "Highly rated"
@@ -4674,37 +5457,65 @@
     "price_from": 45,
     "blurb": "The comfortable night before the loop.",
     "city": "Ha Giang",
-    "book_url": "https://www.booking.com/searchresults.html?ss=Yen+Bien+Luxury+Hotel%2C+Ha+Giang%2C+Vietnam&checkin=2026-08-27&checkout=2026-08-29&group_adults=2&no_rooms=1&group_children=0",
+    "book_url": "https://www.booking.com/searchresults.html?ss=Yen+Bien+Luxury+Hotel%2C+Ha+Giang%2C+Vietnam&checkin=2026-09-03&checkout=2026-09-05&group_adults=2&no_rooms=1&group_children=0",
     "rating": 8.6,
     "reviews": 1177,
     "tag": "Highly rated"
    }
   ],
+  "spa|vietnam": {
+   "type": "activity",
+   "title": "Spa & wellness · Vietnam",
+   "dest": "Vietnam",
+   "options": [
+    {
+     "name": "Herbal Spa Da Nang",
+     "detail": "60 min · Signature herbal massage with warm herbal bags, hot stones, and traditional compress bags",
+     "price": "$26",
+     "amount_usd": 26,
+     "book_url": "https://www.google.com/maps/search/Herbal+Spa+Da+Nang+Vietnam+Vietnam"
+    },
+    {
+     "name": "Temple Leaf Spa Ho Chi Minh City",
+     "detail": "60 min · Full-body massage with Japanese-style sauna, hot pool, and steam room access included",
+     "price": "$16",
+     "amount_usd": 16,
+     "book_url": "https://www.google.com/maps/search/Temple+Leaf+Spa+Ho+Chi+Minh+City+Vietnam+Vietnam"
+    },
+    {
+     "name": "Saigon Heritage Spa Ho Chi Minh City",
+     "detail": "60 min · Hot stone massage with THANN salt scrub and aromatic treatment",
+     "price": "$18",
+     "amount_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Saigon+Heritage+Spa+Ho+Chi+Minh+City+Vietnam+Vietnam"
+    }
+   ]
+  },
   "spa|hanoi": {
    "type": "activity",
    "title": "Spa & wellness · Hanoi",
    "dest": "Hanoi",
    "options": [
     {
-     "name": "SF Spa",
-     "detail": "90 min · signature Vietnamese massage with herbal compress",
-     "price": "$38",
-     "amount_usd": 38,
-     "book_url": "https://www.google.com/maps/search/SF+Spa+Hanoi+Vietnam"
+     "name": "Serene Spa",
+     "detail": "60 min · Traditional Vietnamese massage with golden oil therapy",
+     "price": "$24",
+     "amount_usd": 24,
+     "book_url": "https://www.google.com/maps/search/Serene+Spa+Hanoi+Vietnam"
     },
     {
-     "name": "Omamori Spa",
-     "detail": "60 min · aromatherapy massage, therapists trained from the blind community",
-     "price": "$25",
-     "amount_usd": 25,
-     "book_url": "https://www.google.com/maps/search/Omamori+Spa+Hanoi+Vietnam"
+     "name": "La Belle Vie Spa",
+     "detail": "60 min · Signature bamboo stick massage",
+     "price": "$26",
+     "amount_usd": 26,
+     "book_url": "https://www.google.com/maps/search/La+Belle+Vie+Spa+Hanoi+Vietnam"
     },
     {
-     "name": "Dao's Care",
-     "detail": "75 min · Red Dao herbal bath and traditional massage",
-     "price": "$30",
-     "amount_usd": 30,
-     "book_url": "https://www.google.com/maps/search/Dao%27s+Care+Hanoi+Vietnam"
+     "name": "Orient Spa",
+     "detail": "60 min · ORI signature massage (Vietnamese, Thai, and hot stone blend)",
+     "price": "$20",
+     "amount_usd": 20,
+     "book_url": "https://www.google.com/maps/search/Orient+Spa+Hanoi+Vietnam"
     }
    ]
   },
@@ -4714,53 +5525,25 @@
    "dest": "Ho Chi Minh City",
    "options": [
     {
-     "name": "Miu Miu Spa",
-     "detail": "60 min · classic Vietnamese massage in District 1",
-     "price": "$22",
-     "amount_usd": 22,
-     "book_url": "https://www.google.com/maps/search/Miu+Miu+Spa+Ho+Chi+Minh+City+Vietnam"
-    },
-    {
-     "name": "Temple Leaf Spa",
-     "detail": "90 min · hot stone full-body massage",
-     "price": "$35",
-     "amount_usd": 35,
-     "book_url": "https://www.google.com/maps/search/Temple+Leaf+Spa+Ho+Chi+Minh+City+Vietnam"
-    },
-    {
-     "name": "L'Apothiquaire Spa",
-     "detail": "2 hours · French-style spa day with facial and massage",
-     "price": "$65",
-     "amount_usd": 65,
-     "book_url": "https://www.google.com/maps/search/L%27Apothiquaire+Spa+Ho+Chi+Minh+City+Vietnam"
-    }
-   ]
-  },
-  "spa|hoi an": {
-   "type": "activity",
-   "title": "Spa & wellness · Hoi An",
-   "dest": "Hoi An",
-   "options": [
-    {
-     "name": "Palmarosa Spa",
-     "detail": "90 min · signature deep-relaxation massage",
-     "price": "$32",
-     "amount_usd": 32,
-     "book_url": "https://www.google.com/maps/search/Palmarosa+Spa+Hoi+An+Vietnam"
-    },
-    {
-     "name": "My Chi Spa",
-     "detail": "60 min · bamboo massage in the old town",
-     "price": "$28",
-     "amount_usd": 28,
-     "book_url": "https://www.google.com/maps/search/My+Chi+Spa+Hoi+An+Vietnam"
-    },
-    {
-     "name": "White Rose Spa",
-     "detail": "75 min · foot massage and body scrub combo",
+     "name": "Moc Kim Spa & Beauty",
+     "detail": "60 min · Japanese-inspired herbal body massage with hot stones and natural oils",
      "price": "$20",
      "amount_usd": 20,
-     "book_url": "https://www.google.com/maps/search/White+Rose+Spa+Hoi+An+Vietnam"
+     "book_url": "https://www.google.com/maps/search/Moc+Kim+Spa+%26+Beauty+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Moc Huong Spa",
+     "detail": "60 min · Swedish or Shiatsu massage with traditional Vietnamese techniques",
+     "price": "$25",
+     "amount_usd": 25,
+     "book_url": "https://www.google.com/maps/search/Moc+Huong+Spa+Ho+Chi+Minh+City+Vietnam"
+    },
+    {
+     "name": "Saigon Heritage Spa & Massage",
+     "detail": "60 min · Traditional Vietnamese foot massage with hot stone and herbal treatments",
+     "price": "$15",
+     "amount_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Saigon+Heritage+Spa+%26+Massage+Ho+Chi+Minh+City+Vietnam"
     }
    ]
   },
@@ -4771,24 +5554,52 @@
    "options": [
     {
      "name": "Herbal Spa",
-     "detail": "90 min · herbal remedy massage with hot compress",
-     "price": "$30",
-     "amount_usd": 30,
+     "detail": "60 min · Signature bamboo massage with herbal compresses - central Vietnamese specialty",
+     "price": "$24",
+     "amount_usd": 24,
      "book_url": "https://www.google.com/maps/search/Herbal+Spa+Da+Nang+Vietnam"
     },
     {
-     "name": "Queen Spa",
-     "detail": "60 min · bamboo and coconut-oil massage",
-     "price": "$24",
-     "amount_usd": 24,
-     "book_url": "https://www.google.com/maps/search/Queen+Spa+Da+Nang+Vietnam"
+     "name": "Moringa Spa",
+     "detail": "60 min · Moringa Signature Massage with expert skilled therapists",
+     "price": "$32",
+     "amount_usd": 32,
+     "book_url": "https://www.google.com/maps/search/Moringa+Spa+Da+Nang+Vietnam"
     },
     {
-     "name": "Charm Spa Grand",
-     "detail": "2 hours · spa package: sauna, scrub and massage",
-     "price": "$45",
-     "amount_usd": 45,
-     "book_url": "https://www.google.com/maps/search/Charm+Spa+Grand+Da+Nang+Vietnam"
+     "name": "An Spa",
+     "detail": "90 min · Aroma & Hot Stone Full Course with professional therapists",
+     "price": "$24",
+     "amount_usd": 24,
+     "book_url": "https://www.google.com/maps/search/An+Spa+Da+Nang+Vietnam"
+    }
+   ]
+  },
+  "spa|hoi an": {
+   "type": "activity",
+   "title": "Spa & wellness · Hoi An",
+   "dest": "Hoi An",
+   "options": [
+    {
+     "name": "Herbal Spa Hoi An",
+     "detail": "60 min · Vietnamese herbal body massage with traditional herbs like lemongrass and ginger",
+     "price": "$19",
+     "amount_usd": 19,
+     "book_url": "https://www.google.com/maps/search/Herbal+Spa+Hoi+An+Hoi+An+Vietnam"
+    },
+    {
+     "name": "Five Senses Spa",
+     "detail": "60 min · Aromatherapy or combination massage with professional, relaxing service",
+     "price": "$20",
+     "amount_usd": 20,
+     "book_url": "https://www.google.com/maps/search/Five+Senses+Spa+Hoi+An+Vietnam"
+    },
+    {
+     "name": "Art Spa",
+     "detail": "60 min · Deep tissue or herbal compress massage with optional herbal bath and white wine",
+     "price": "$18",
+     "amount_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Art+Spa+Hoi+An+Vietnam"
     }
    ]
   },
@@ -4798,81 +5609,25 @@
    "dest": "Hue",
    "options": [
     {
-     "name": "Alba Wellness Valley",
-     "detail": "Day pass · natural hot springs and Japanese onsen",
-     "price": "$35",
-     "amount_usd": 35,
-     "book_url": "https://www.google.com/maps/search/Alba+Wellness+Valley+Hue+Vietnam"
+     "name": "Maia Wellness Spa",
+     "detail": "60 min · Swedish massage with aromatic oils, complimentary foot bath and desserts",
+     "price": "$16",
+     "amount_usd": 16,
+     "book_url": "https://www.google.com/maps/search/Maia+Wellness+Spa+Hue+Vietnam"
     },
     {
-     "name": "Moc Huong Spa",
-     "detail": "60 min · royal Hue-style traditional massage",
-     "price": "$25",
-     "amount_usd": 25,
-     "book_url": "https://www.google.com/maps/search/Moc+Huong+Spa+Hue+Vietnam"
+     "name": "Relax Spa",
+     "detail": "60 min · Full-body foot and leg massage with head and neck work, includes herbal water and tea",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Relax+Spa+Hue+Vietnam"
     },
     {
-     "name": "Serene Spa",
-     "detail": "90 min · aromatherapy massage near the Perfume River",
-     "price": "$30",
-     "amount_usd": 30,
-     "book_url": "https://www.google.com/maps/search/Serene+Spa+Hue+Vietnam"
-    }
-   ]
-  },
-  "spa|nha trang": {
-   "type": "activity",
-   "title": "Spa & wellness · Nha Trang",
-   "dest": "Nha Trang",
-   "options": [
-    {
-     "name": "Thap Ba Hot Springs",
-     "detail": "2 hours · mineral mud bath and hot-spring soak",
-     "price": "$18",
-     "amount_usd": 18,
-     "book_url": "https://www.google.com/maps/search/Thap+Ba+Hot+Springs+Nha+Trang+Vietnam"
-    },
-    {
-     "name": "i-Resort Mud Baths",
-     "detail": "Half day · mud bath package with waterfall pools",
-     "price": "$25",
-     "amount_usd": 25,
-     "book_url": "https://www.google.com/maps/search/i-Resort+Mud+Baths+Nha+Trang+Vietnam"
-    },
-    {
-     "name": "Su Spa",
-     "detail": "90 min · signature massage on Tran Phu beach strip",
-     "price": "$35",
-     "amount_usd": 35,
-     "book_url": "https://www.google.com/maps/search/Su+Spa+Nha+Trang+Vietnam"
-    }
-   ]
-  },
-  "spa|phu quoc": {
-   "type": "activity",
-   "title": "Spa & wellness · Phu Quoc",
-   "dest": "Phu Quoc",
-   "options": [
-    {
-     "name": "Rock Spa",
-     "detail": "60 min · island aromatherapy massage",
+     "name": "Cam On Spa",
+     "detail": "60 min · Traditional Hue therapy with candle massage, hot stones, and royal herbs",
      "price": "$28",
      "amount_usd": 28,
-     "book_url": "https://www.google.com/maps/search/Rock+Spa+Phu+Quoc+Vietnam"
-    },
-    {
-     "name": "Salinda Spa",
-     "detail": "90 min · resort wellness ritual with body wrap",
-     "price": "$55",
-     "amount_usd": 55,
-     "book_url": "https://www.google.com/maps/search/Salinda+Spa+Phu+Quoc+Vietnam"
-    },
-    {
-     "name": "Chanterelle Spa",
-     "detail": "75 min · beachfront massage at sunset",
-     "price": "$30",
-     "amount_usd": 30,
-     "book_url": "https://www.google.com/maps/search/Chanterelle+Spa+Phu+Quoc+Vietnam"
+     "book_url": "https://www.google.com/maps/search/Cam+On+Spa+Hue+Vietnam"
     }
    ]
   },
@@ -4882,25 +5637,25 @@
    "dest": "Sapa",
    "options": [
     {
-     "name": "Red Dao Herbal Bath House",
-     "detail": "60 min · traditional Dao medicinal herbal bath",
+     "name": "Eden Central Massage & Spa",
+     "detail": "60 min · Red Dao herbal bath with full-body Vietnamese massage; herbal tea included",
+     "price": "$20",
+     "amount_usd": 20,
+     "book_url": "https://www.google.com/maps/search/Eden+Central+Massage+%26+Spa+Sapa+Vietnam"
+    },
+    {
+     "name": "Halosa Massage & Spa",
+     "detail": "60 min · Full-body massage with panoramic Muong Hoa Valley mountain views",
      "price": "$22",
      "amount_usd": 22,
-     "book_url": "https://www.google.com/maps/search/Red+Dao+Herbal+Bath+House+Sapa+Vietnam"
+     "book_url": "https://www.google.com/maps/search/Halosa+Massage+%26+Spa+Sapa+Vietnam"
     },
     {
-     "name": "Victoria Sapa Spa",
-     "detail": "60 min · mountain warming massage after trekking",
-     "price": "$35",
-     "amount_usd": 35,
-     "book_url": "https://www.google.com/maps/search/Victoria+Sapa+Spa+Sapa+Vietnam"
-    },
-    {
-     "name": "Eden Massage Sapa",
-     "detail": "75 min · foot and back recovery massage",
-     "price": "$18",
-     "amount_usd": 18,
-     "book_url": "https://www.google.com/maps/search/Eden+Massage+Sapa+Sapa+Vietnam"
+     "name": "Nuages Spa",
+     "detail": "60 min · Premium Red Dao herbal bath plus body massage at luxury hotel spa (Vietnam's Best Hotel Spa 2022)",
+     "price": "$33",
+     "amount_usd": 33,
+     "book_url": "https://www.google.com/maps/search/Nuages+Spa+Sapa+Vietnam"
     }
    ]
   },
@@ -4910,25 +5665,53 @@
    "dest": "Ha Long Bay",
    "options": [
     {
-     "name": "Yoko Onsen Quang Hanh",
-     "detail": "Day pass · Japanese-style onsen mineral baths",
-     "price": "$40",
-     "amount_usd": 40,
-     "book_url": "https://www.google.com/maps/search/Yoko+Onsen+Quang+Hanh+Ha+Long+Bay+Vietnam"
+     "name": "Hai Trang Massage",
+     "detail": "60 min · Traditional Vietnamese massage with specialized foot and body treatments; skilled therapists applying precise acupressure",
+     "price": "$9",
+     "amount_usd": 9,
+     "book_url": "https://www.google.com/maps/search/Hai+Trang+Massage+Ha+Long+Bay+Vietnam"
     },
     {
-     "name": "Paradise Cruise Spa",
-     "detail": "60 min · onboard massage with bay views",
-     "price": "$30",
-     "amount_usd": 30,
-     "book_url": "https://www.google.com/maps/search/Paradise+Cruise+Spa+Ha+Long+Bay+Vietnam"
+     "name": "Thu Huong Spa",
+     "detail": "60 min · Full-body massage with hot stone treatments using organic essential oils; 15+ years experience",
+     "price": "$12",
+     "amount_usd": 12,
+     "book_url": "https://www.google.com/maps/search/Thu+Huong+Spa+Ha+Long+Bay+Vietnam"
     },
     {
-     "name": "Ha Long Pearl Spa",
-     "detail": "90 min · full-body traditional massage",
-     "price": "$26",
-     "amount_usd": 26,
-     "book_url": "https://www.google.com/maps/search/Ha+Long+Pearl+Spa+Ha+Long+Bay+Vietnam"
+     "name": "Vincharm Spa (Vinpearl Resort)",
+     "detail": "60 min · Premium spa with traditional Vietnamese therapies including herbal baths and hot stone massages overlooking Ha Long Bay",
+     "price": "$35",
+     "amount_usd": 35,
+     "book_url": "https://www.google.com/maps/search/Vincharm+Spa+%28Vinpearl+Resort%29+Ha+Long+Bay+Vietnam"
+    }
+   ]
+  },
+  "spa|phu quoc": {
+   "type": "activity",
+   "title": "Spa & wellness · Phu Quoc",
+   "dest": "Phu Quoc",
+   "options": [
+    {
+     "name": "Phu Quoc Day Spa",
+     "detail": "60 min · Full-body traditional Vietnamese massage with aromatherapy",
+     "price": "$5",
+     "amount_usd": 5,
+     "book_url": "https://www.google.com/maps/search/Phu+Quoc+Day+Spa+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "Fiona Spa",
+     "detail": "60 min · Full-body massage with hot stone therapy specialty",
+     "price": "$12",
+     "amount_usd": 12,
+     "book_url": "https://www.google.com/maps/search/Fiona+Spa+Phu+Quoc+Vietnam"
+    },
+    {
+     "name": "Lara Spa & Massage",
+     "detail": "60 min · Hot stone massage with aromatherapy oils",
+     "price": "$11",
+     "amount_usd": 11,
+     "book_url": "https://www.google.com/maps/search/Lara+Spa+%26+Massage+Phu+Quoc+Vietnam"
     }
    ]
   },
@@ -4938,53 +5721,25 @@
    "dest": "Da Lat",
    "options": [
     {
-     "name": "Terracotta Spa",
-     "detail": "60 min · pine-forest aromatherapy massage",
-     "price": "$22",
-     "amount_usd": 22,
-     "book_url": "https://www.google.com/maps/search/Terracotta+Spa+Da+Lat+Vietnam"
+     "name": "Ot Care",
+     "detail": "60 min · Full body massage with professional technique, warm tea service, and cozy wooden ambiance",
+     "price": "$15",
+     "amount_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Ot+Care+Da+Lat+Vietnam"
     },
     {
-     "name": "Ana Mandara Spa",
-     "detail": "90 min · colonial-villa wellness ritual",
-     "price": "$40",
-     "amount_usd": 40,
-     "book_url": "https://www.google.com/maps/search/Ana+Mandara+Spa+Da+Lat+Vietnam"
+     "name": "Le Quy Spa",
+     "detail": "60 min · Hot stone massage with skilled therapists, tranquil atmosphere, welcoming tea service",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Le+Quy+Spa+Da+Lat+Vietnam"
     },
     {
-     "name": "Dalat Wonder Spa",
-     "detail": "75 min · hot-stone massage for cool highland evenings",
-     "price": "$25",
-     "amount_usd": 25,
-     "book_url": "https://www.google.com/maps/search/Dalat+Wonder+Spa+Da+Lat+Vietnam"
-    }
-   ]
-  },
-  "spa|mui ne": {
-   "type": "activity",
-   "title": "Spa & wellness · Mui Ne",
-   "dest": "Mui Ne",
-   "options": [
-    {
-     "name": "Aroma Beach Spa",
-     "detail": "60 min · seaside aromatherapy massage",
-     "price": "$20",
-     "amount_usd": 20,
-     "book_url": "https://www.google.com/maps/search/Aroma+Beach+Spa+Mui+Ne+Vietnam"
-    },
-    {
-     "name": "Lotus Day Spa",
-     "detail": "90 min · after-sun body wrap and massage",
-     "price": "$28",
-     "amount_usd": 28,
-     "book_url": "https://www.google.com/maps/search/Lotus+Day+Spa+Mui+Ne+Vietnam"
-    },
-    {
-     "name": "Sailing Club Spa",
-     "detail": "75 min · deep-tissue massage by the beach",
-     "price": "$35",
-     "amount_usd": 35,
-     "book_url": "https://www.google.com/maps/search/Sailing+Club+Spa+Mui+Ne+Vietnam"
+     "name": "Feel Good Spa",
+     "detail": "90 min · Hot stone body massage with professional stretching techniques and complimentary detox tea",
+     "price": "$23",
+     "amount_usd": 23,
+     "book_url": "https://www.google.com/maps/search/Feel+Good+Spa+Da+Lat+Vietnam"
     }
    ]
   },
@@ -4994,25 +5749,109 @@
    "dest": "Ninh Binh",
    "options": [
     {
-     "name": "Emeralda Resort Spa",
-     "detail": "60 min · countryside wellness massage",
-     "price": "$30",
-     "amount_usd": 30,
-     "book_url": "https://www.google.com/maps/search/Emeralda+Resort+Spa+Ninh+Binh+Vietnam"
-    },
-    {
-     "name": "Tam Coc Herbal Massage",
-     "detail": "60 min · herbal massage after the boat tour",
+     "name": "Garden Spa Tam Coc",
+     "detail": "60 min · Full body Vietnamese massage with hot stone option, serene setting near Tam Coc boat tours",
      "price": "$18",
      "amount_usd": 18,
-     "book_url": "https://www.google.com/maps/search/Tam+Coc+Herbal+Massage+Ninh+Binh+Vietnam"
+     "book_url": "https://www.google.com/maps/search/Garden+Spa+Tam+Coc+Ninh+Binh+Vietnam"
     },
     {
-     "name": "Hidden Charm Spa",
-     "detail": "90 min · limestone-view relaxation package",
-     "price": "$28",
-     "amount_usd": 28,
-     "book_url": "https://www.google.com/maps/search/Hidden+Charm+Spa+Ninh+Binh+Vietnam"
+     "name": "Tam Spa Tam Coc",
+     "detail": "60 min · Body massage combo in quiet garden atmosphere with complimentary tea and foot wash",
+     "price": "$15",
+     "amount_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Tam+Spa+Tam+Coc+Ninh+Binh+Vietnam"
+    },
+    {
+     "name": "Huong Sen Massage & Spa",
+     "detail": "60 min · Traditional Vietnamese body massage in Ninh Binh city center with professional therapists",
+     "price": "$11",
+     "amount_usd": 11,
+     "book_url": "https://www.google.com/maps/search/Huong+Sen+Massage+%26+Spa+Ninh+Binh+Vietnam"
+    }
+   ]
+  },
+  "spa|mekong delta": {
+   "type": "activity",
+   "title": "Spa & wellness · Mekong Delta",
+   "dest": "Mekong Delta",
+   "options": [
+    {
+     "name": "Mekong Foot & Body Massage",
+     "detail": "90 min · Hot stone full body massage with foot reflexology focus",
+     "price": "$18",
+     "amount_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Mekong+Foot+%26+Body+Massage+Mekong+Delta+Vietnam"
+    },
+    {
+     "name": "May Xua Spa Can Tho",
+     "detail": "45 min · Foot massage with scented blindfold and warm neck pillow",
+     "price": "$14",
+     "amount_usd": 14,
+     "book_url": "https://www.google.com/maps/search/May+Xua+Spa+Can+Tho+Mekong+Delta+Vietnam"
+    },
+    {
+     "name": "Healing Spa Can Tho",
+     "detail": "60 min · Physical therapy and rehabilitation combined massage with Vietnamese herbs",
+     "price": "$22",
+     "amount_usd": 22,
+     "book_url": "https://www.google.com/maps/search/Healing+Spa+Can+Tho+Mekong+Delta+Vietnam"
+    }
+   ]
+  },
+  "spa|nha trang": {
+   "type": "activity",
+   "title": "Spa & wellness · Nha Trang",
+   "dest": "Nha Trang",
+   "options": [
+    {
+     "name": "Grand Spa",
+     "detail": "60 min · Traditional Vietnamese full-body massage with private rooms and shower facilities",
+     "price": "$15",
+     "amount_usd": 15,
+     "book_url": "https://www.google.com/maps/search/Grand+Spa+Nha+Trang+Vietnam"
+    },
+    {
+     "name": "Mandarin Spa",
+     "detail": "60 min · Full body massage blending Buddhist philosophy with traditional Vietnamese techniques",
+     "price": "$13",
+     "amount_usd": 13,
+     "book_url": "https://www.google.com/maps/search/Mandarin+Spa+Nha+Trang+Vietnam"
+    },
+    {
+     "name": "Su Spa & Massage",
+     "detail": "60 min · Professional traditional massage with skilled therapists, highly rated for quality and technique",
+     "price": "$18",
+     "amount_usd": 18,
+     "book_url": "https://www.google.com/maps/search/Su+Spa+%26+Massage+Nha+Trang+Vietnam"
+    }
+   ]
+  },
+  "spa|mui ne": {
+   "type": "activity",
+   "title": "Spa & wellness · Mui Ne",
+   "dest": "Mui Ne",
+   "options": [
+    {
+     "name": "Johnny Spa",
+     "detail": "60 min · Vietnamese body massage with aromatic oils, free welcome coconut and mango",
+     "price": "$11",
+     "amount_usd": 11,
+     "book_url": "https://www.google.com/maps/search/Johnny+Spa+Mui+Ne+Vietnam"
+    },
+    {
+     "name": "Nina Spa",
+     "detail": "60 min · Hot stone massage with aromatherapy oils in historic Vietnamese house setting",
+     "price": "$25",
+     "amount_usd": 25,
+     "book_url": "https://www.google.com/maps/search/Nina+Spa+Mui+Ne+Vietnam"
+    },
+    {
+     "name": "Botanica Spa",
+     "detail": "60 min · Vietnamese massage in tranquil garden setting with professional therapists",
+     "price": "$12",
+     "amount_usd": 12,
+     "book_url": "https://www.google.com/maps/search/Botanica+Spa+Mui+Ne+Vietnam"
     }
    ]
   },
@@ -5022,18 +5861,81 @@
    "dest": "Cat Ba",
    "options": [
     {
-     "name": "Cat Ba Island Spa",
-     "detail": "60 min · post-kayak recovery massage",
-     "price": "$18",
-     "amount_usd": 18,
-     "book_url": "https://www.google.com/maps/search/Cat+Ba+Island+Spa+Cat+Ba+Vietnam"
+     "name": "Massage Goi Dau",
+     "detail": "60 min · Full body massage with excellent pressure and relaxation; includes post-massage tea and foot soak",
+     "price": "$9",
+     "amount_usd": 9,
+     "book_url": "https://www.google.com/maps/search/Massage+Goi+Dau+Cat+Ba+Vietnam"
     },
     {
-     "name": "Flamingo Wellness",
-     "detail": "90 min · resort spa ritual with sauna",
-     "price": "$35",
-     "amount_usd": 35,
-     "book_url": "https://www.google.com/maps/search/Flamingo+Wellness+Cat+Ba+Vietnam"
+     "name": "Vu Nguyen Family Massage",
+     "detail": "60 min · Professional therapeutic massage with scented steaming water aromatherapy and heated neck cushion",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Vu+Nguyen+Family+Massage+Cat+Ba+Vietnam"
+    },
+    {
+     "name": "Happy Feet 189 Spa",
+     "detail": "60 min · Skilled massage techniques with professional service; well-known among international travelers",
+     "price": "$12",
+     "amount_usd": 12,
+     "book_url": "https://www.google.com/maps/search/Happy+Feet+189+Spa+Cat+Ba+Vietnam"
+    }
+   ]
+  },
+  "spa|phong nha": {
+   "type": "activity",
+   "title": "Spa & wellness · Phong Nha",
+   "dest": "Phong Nha",
+   "options": [
+    {
+     "name": "Magic Fingers Massage TT Phong Nha",
+     "detail": "60 min · Full body acupressure massage by Dr. Sy, traditional medicine specialist",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Magic+Fingers+Massage+TT+Phong+Nha+Phong+Nha+Vietnam"
+    },
+    {
+     "name": "Thu Hang Spa And Massage",
+     "detail": "60 min · Professional hot stone massage with excellent reviews",
+     "price": "$11",
+     "amount_usd": 11,
+     "book_url": "https://www.google.com/maps/search/Thu+Hang+Spa+And+Massage+Phong+Nha+Vietnam"
+    },
+    {
+     "name": "Hanny Massage Phong Nha",
+     "detail": "60 min · Foot scrub and massage specialty with excellent reviews",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.google.com/maps/search/Hanny+Massage+Phong+Nha+Phong+Nha+Vietnam"
+    }
+   ]
+  },
+  "spa|ha giang": {
+   "type": "activity",
+   "title": "Spa & wellness · Ha Giang",
+   "dest": "Ha Giang",
+   "options": [
+    {
+     "name": "Massage Tuấn Du",
+     "detail": "60 min · Traditional Thai massage, Shiatsu, and herbal foot soak with Red Dao herbs",
+     "price": "$6",
+     "amount_usd": 6,
+     "book_url": "https://www.google.com/maps/search/Massage+Tu%E1%BA%A5n+Du+Ha+Giang+Vietnam"
+    },
+    {
+     "name": "G Healing Spa",
+     "detail": "60 min · Essential oils and Eastern acupressure with deep tissue focus",
+     "price": "$10",
+     "amount_usd": 10,
+     "book_url": "https://www.google.com/maps/search/G+Healing+Spa+Ha+Giang+Vietnam"
+    },
+    {
+     "name": "Nha Spa",
+     "detail": "60 min · Full-body massage with herbal foot bath and professional techniques",
+     "price": "$8",
+     "amount_usd": 8,
+     "book_url": "https://www.google.com/maps/search/Nha+Spa+Ha+Giang+Vietnam"
     }
    ]
   },
@@ -5044,108 +5946,24 @@
    "options": [
     {
      "name": "Six Senses Spa Con Dao",
-     "detail": "90 min · signature island wellness journey",
-     "price": "$85",
-     "amount_usd": 85,
+     "detail": "90 min · signature Vietnamese massage in a hillside treatment villa overlooking the bay",
+     "price": "$120",
+     "amount_usd": 120,
      "book_url": "https://www.google.com/maps/search/Six+Senses+Spa+Con+Dao+Con+Dao+Vietnam"
     },
     {
-     "name": "Poulo Condor Spa",
-     "detail": "60 min · tropical garden massage",
-     "price": "$40",
-     "amount_usd": 40,
-     "book_url": "https://www.google.com/maps/search/Poulo+Condor+Spa+Con+Dao+Vietnam"
-    }
-   ]
-  },
-  "spa|phong nha": {
-   "type": "activity",
-   "title": "Spa & wellness · Phong Nha",
-   "dest": "Phong Nha",
-   "options": [
-    {
-     "name": "Chay Lap Wellness",
-     "detail": "60 min · riverside massage after the caves",
-     "price": "$20",
-     "amount_usd": 20,
-     "book_url": "https://www.google.com/maps/search/Chay+Lap+Wellness+Phong+Nha+Vietnam"
+     "name": "Poulo Condor Boutique Resort & Spa",
+     "detail": "60 min · traditional herbal compress massage in garden pavilions",
+     "price": "$55",
+     "amount_usd": 55,
+     "book_url": "https://www.google.com/maps/search/Poulo+Condor+Boutique+Resort+%26+Spa+Con+Dao+Vietnam"
     },
     {
-     "name": "Phong Nha Farmstay Massage",
-     "detail": "60 min · countryside traditional massage",
-     "price": "$15",
-     "amount_usd": 15,
-     "book_url": "https://www.google.com/maps/search/Phong+Nha+Farmstay+Massage+Phong+Nha+Vietnam"
-    }
-   ]
-  },
-  "spa|ha giang": {
-   "type": "activity",
-   "title": "Spa & wellness · Ha Giang",
-   "dest": "Ha Giang",
-   "options": [
-    {
-     "name": "Dao Lodge Herbal Baths",
-     "detail": "45 min · Red Dao herbal bath after the loop",
-     "price": "$10",
-     "amount_usd": 10,
-     "book_url": "https://www.google.com/maps/search/Dao+Lodge+Herbal+Baths+Ha+Giang+Vietnam"
-    },
-    {
-     "name": "Ha Giang Recovery Massage",
-     "detail": "60 min · back and shoulder rider's massage",
-     "price": "$12",
-     "amount_usd": 12,
-     "book_url": "https://www.google.com/maps/search/Ha+Giang+Recovery+Massage+Ha+Giang+Vietnam"
-    }
-   ]
-  },
-  "spa|mekong delta": {
-   "type": "activity",
-   "title": "Spa & wellness · Mekong Delta",
-   "dest": "Mekong Delta",
-   "options": [
-    {
-     "name": "Victoria Can Tho Spa",
-     "detail": "75 min · riverside colonial spa massage",
-     "price": "$30",
-     "amount_usd": 30,
-     "book_url": "https://www.google.com/maps/search/Victoria+Can+Tho+Spa+Mekong+Delta+Vietnam"
-    },
-    {
-     "name": "Mekong Riverside Wellness",
-     "detail": "60 min · garden pavilion massage",
-     "price": "$20",
-     "amount_usd": 20,
-     "book_url": "https://www.google.com/maps/search/Mekong+Riverside+Wellness+Mekong+Delta+Vietnam"
-    }
-   ]
-  },
-  "spa|vietnam": {
-   "type": "activity",
-   "title": "Spa & wellness · Vietnam",
-   "dest": "Vietnam",
-   "options": [
-    {
-     "name": "SF Spa · Hanoi",
-     "detail": "90 min · signature Vietnamese massage",
-     "price": "$38",
-     "amount_usd": 38,
-     "book_url": "https://www.google.com/maps/search/SF+Spa+%C2%B7+Hanoi+Vietnam+Vietnam"
-    },
-    {
-     "name": "Miu Miu Spa · Saigon",
-     "detail": "60 min · classic Vietnamese massage",
-     "price": "$22",
-     "amount_usd": 22,
-     "book_url": "https://www.google.com/maps/search/Miu+Miu+Spa+%C2%B7+Saigon+Vietnam+Vietnam"
-    },
-    {
-     "name": "Herbal Spa · Da Nang",
-     "detail": "90 min · herbal remedy massage",
-     "price": "$30",
-     "amount_usd": 30,
-     "book_url": "https://www.google.com/maps/search/Herbal+Spa+%C2%B7+Da+Nang+Vietnam+Vietnam"
+     "name": "The Secret Con Dao Spa",
+     "detail": "60 min · aromatherapy massage and facials at the seafront boutique hotel",
+     "price": "$45",
+     "amount_usd": 45,
+     "book_url": "https://www.google.com/maps/search/The+Secret+Con+Dao+Spa+Con+Dao+Vietnam"
     }
    ]
   }

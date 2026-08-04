@@ -188,6 +188,110 @@ def _flights_link(origin: str, dest: str) -> str:
     return f"https://www.google.com/travel/flights?q={quote_plus(q.strip())}"
 
 
+# ── Origin awareness ────────────────────────────────────────────────────────
+# The cached flight card for a Vietnamese city leads with DOMESTIC legs (SGN-HAN from $55),
+# and the international rows are tagged by region ("DEL-HAN (from India)", "SFO-HAN via
+# Taipei (from USA)"). Ignoring a stated origin produced the live-demo absurdity: a guest
+# flying from Chicago was quoted "$55 with VietJet" — a domestic hop — as their fare. When
+# the guest names where they're flying FROM, surface that region's rows first; when their
+# region has no cached rows at all, degrade to an HONEST origin-aware Google Flights
+# deep-link instead of misquoting a domestic fare.
+_ORIGIN_TOKENS = {
+    "USA": ("usa", "u.s.", "u.s.a", "united states", "america", "american", "chicago",
+            "new york", "nyc", "san francisco", "los angeles", "san diego", "seattle",
+            "boston", "dallas", "houston", "austin", "miami", "atlanta", "denver",
+            "chattanooga", "nashville", "tennessee", "illinois", "california", "texas",
+            "florida", "washington dc", "washington, dc", "philadelphia", "phoenix",
+            "jfk", "ord", "sfo", "lax", "canada", "toronto", "vancouver"),
+    "India": ("india", "delhi", "new delhi", "mumbai", "bombay", "kolkata", "calcutta",
+              "bangalore", "bengaluru", "chennai", "hyderabad", "ahmedabad", "pune"),
+    "Europe": ("europe", "uk", "england", "britain", "london", "paris", "france",
+               "germany", "frankfurt", "munich", "berlin", "amsterdam", "netherlands",
+               "spain", "madrid", "barcelona", "italy", "rome", "milan", "istanbul",
+               "zurich", "geneva", "switzerland", "dublin", "ireland", "stockholm",
+               "copenhagen", "oslo", "warsaw", "poland", "lisbon", "portugal",
+               "brussels", "vienna", "prague", "scotland", "edinburgh", "manchester"),
+    # Airline names are deliberately NOT tokens ("qatar", "emirates", "etihad" would
+    # misfire on "flying Qatar Airways from London") — cities and countries only.
+    "Middle East": ("middle east", "dubai", "uae", "abu dhabi", "doha", "riyadh",
+                    "jeddah", "saudi arabia", "bahrain", "kuwait", "muscat", "oman"),
+    "Australia": ("australia", "sydney", "melbourne", "brisbane", "perth", "adelaide",
+                  "new zealand", "nz", "auckland", "wellington"),
+    "Korea": ("korea", "south korea", "seoul", "incheon", "busan"),
+    "Japan": ("japan", "tokyo", "osaka", "kyoto", "nagoya", "fukuoka", "sapporo"),
+}
+_REGION_TAG = {"USA": "(from usa", "India": "(from india", "Europe": "(from europe",
+               "Middle East": "(from middle east", "Australia": "(from australia",
+               "Korea": "(from korea", "Japan": "(from japan"}
+_REGION_SPOKEN = {"USA": "the US", "India": "India", "Europe": "Europe",
+                  "Middle East": "the Middle East", "Australia": "Australia",
+                  "Korea": "Korea", "Japan": "Japan"}
+_ALL_CAPS_TOKENS = {"usa", "u.s.", "u.s.a", "uk", "nyc", "jfk", "ord", "sfo", "lax",
+                    "uae", "nz"}
+
+
+# Country/region words — usable as a display name only when no CITY was named. "From
+# Chicago, Illinois in the United States" should read back (and deep-link) as "Chicago",
+# not "United States".
+_GENERIC_ORIGIN = {"usa", "u.s.", "u.s.a", "united states", "america", "american",
+                   "india", "europe", "uk", "england", "britain", "canada", "france",
+                   "germany", "netherlands", "spain", "italy", "switzerland", "ireland",
+                   "poland", "portugal", "scotland", "tennessee", "illinois",
+                   "california", "texas", "florida",
+                   "middle east", "uae", "saudi arabia", "bahrain", "kuwait", "oman",
+                   "australia", "new zealand", "nz", "korea", "south korea", "japan"}
+
+
+def _origin_from_text(text: str):
+    """(region, display name) for a stated non-Vietnam origin, else (None, "")."""
+    low = (text or "").lower()
+    region_hit, generic_name = None, ""
+    for region, toks in _ORIGIN_TOKENS.items():
+        for t in toks:
+            if re.search(rf"(?<![a-z]){re.escape(t)}(?![a-z])", low):
+                pretty = (t.upper() if t in _ALL_CAPS_TOKENS
+                          else " ".join(w.capitalize() for w in t.split()))
+                if t not in _GENERIC_ORIGIN:
+                    return region, pretty          # a specific city wins outright
+                if region_hit is None:
+                    region_hit, generic_name = region, pretty
+    return region_hit, generic_name
+
+
+def _localize_flight_card(card: dict, text: str, dest: str) -> dict:
+    """Reorder/replace a resolved flight card for the guest's stated origin. Mutates and
+    returns the card (always a private copy by the time it reaches here)."""
+    region, origin = _origin_from_text(text)
+    if not region:
+        return card
+    tag = _REGION_TAG.get(region, "\x00").lower()
+    opts = card.get("options") or []
+    matched = [o for o in opts if tag in (o.get("detail") or "").lower()]
+    book = _flights_link(origin, dest)
+    card["origin"] = origin
+    if matched:
+        # That region's arrivals first (they drive the spoken top-3), then the domestic
+        # legs (useful within the trip) — other regions' rows are noise for this guest.
+        domestic = [o for o in opts
+                    if "(from" not in (o.get("detail") or "").lower() and o not in matched]
+        for o in matched:
+            o["book_url"] = book
+        card["options"] = matched + domestic
+        card["origin_spoken"] = _REGION_SPOKEN.get(region, origin)
+    else:
+        # Origin stated but nothing cached for it — an honest deep-link beats a wrong fare.
+        card["options"] = [{
+            "name": f"Flights from {origin} to {dest}",
+            "detail": "Compare live fares and book on Google Flights",
+            "price": "",
+            "book_url": book,
+            "fallback": True,
+        }]
+        card["origin_spoken"] = origin
+    card["title"] = f"Flights to {dest} · from {origin}"
+    return card
+
+
 async def _find_flights_live(dest: str, origin: str = "", when: str = "") -> dict:
     dest = dest or "Vietnam"
     # Infer a sensible origin so the model never stalls asking for one: domestic Vietnam legs
@@ -426,6 +530,9 @@ async def _find_restaurants_live(dest: str, request_hint: str = "") -> dict:
 
 async def find_flights(dest: str, origin: str = "", when: str = "") -> dict:
     dest = dest or "Vietnam"
+    # NOTE: deliberately NOT origin-localized here — the conductor's per-session card cache
+    # (_stable_card) stores what this returns, and a localized card must never be pinned for
+    # the whole session. run_flight_intent applies _localize_flight_card per turn instead.
     return await _resolve_once("flight", dest, lambda: _find_flights_live(dest, origin, when))
 
 

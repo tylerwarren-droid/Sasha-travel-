@@ -288,10 +288,30 @@ def _activities_for(city: str) -> list:
     card = _static_get("activity", city) or {}
     return [o for o in card.get("options", []) if o.get("name") and not o.get("fallback")]
 
-def _compose(plan: list) -> Optional[dict]:
-    """Turn a [(city, span)] route into the pre-_enrich itinerary dict."""
+def _hotels_by_city(current: Optional[dict]) -> dict:
+    """{city: hotel name} from an existing (enriched) plan — the guest's accepted/swapped
+    hotels. Every recompose must carry these forward: a rebuild that reset day 1 to the
+    pool default silently reverted the hotel the guest had JUST swapped away from (the
+    live-demo failure: Capella back to the Sofitel they refused over cockroaches)."""
+    out = {}
+    for d in (current or {}).get("days", []) or []:
+        h = d.get("hotel")
+        name = (h or {}).get("name", "") if isinstance(h, dict) else (h or "")
+        city = d.get("city")
+        if city and name and city not in out:
+            out[city] = name
+    return out
+
+
+def _compose(plan: list, keep_hotels: Optional[dict] = None) -> Optional[dict]:
+    """Turn a [(city, span)] route into the pre-_enrich itinerary dict.
+
+    `keep_hotels` = {city: hotel name} carried from the plan being replaced, so a rebuild
+    (new day count, added city, new party) never reverts the guest's hotel choices —
+    _enrich only pool-defaults cities that have no carried name."""
     if not plan or not _static_get("activity", "Hanoi"):
         return None  # cache absent — let the LLM path handle it
+    keep_hotels = keep_hotels or {}
     n_days = sum(s for _, s in plan)
 
     days = []
@@ -324,7 +344,9 @@ def _compose(plan: list) -> Optional[dict]:
                 "city": city,
                 "title": title_t.replace("{city}", city),
                 "description": desc_t.replace("{city}", city),
-                "hotel": "",  # _enrich picks the city's curated hotel and carries it over
+                # First day of a stay names the carried hotel (guest's choice survives the
+                # rebuild); "" lets _enrich pick the city's curated default / carry within.
+                "hotel": keep_hotels.get(city, "") if k == 0 else "",
                 "activities": [
                     {"time": _SLOTS[i % 3], "name": a["name"],
                      "blurb": (a.get("detail") or "").split(" · ")[-1]}
@@ -380,7 +402,7 @@ def build_local_itinerary(message: str, history: list, current: Optional[dict] =
         blend_single = True
     base = _rescale_spans(_despans(current), n_days) if (current or {}).get("days") else None
     plan = _route(n_days, named, blend_single=blend_single, base=base)
-    return _compose(plan)
+    return _compose(plan, keep_hotels=_hotels_by_city(current))
 
 
 # ── Local revisions ─────────────────────────────────────────────────────────
@@ -483,10 +505,10 @@ def revise_local_itinerary(current: dict, message: str,
         for city in named:
             if any(w in low for w in _REMOVE_WORDS) and city in plan_cities and len(plan_cities) > 1:
                 kept = [(c, s) for c, s in spans if c != city]
-                data = _compose(_rescale_spans(kept, n_days))
+                data = _compose(_rescale_spans(kept, n_days), keep_hotels=_hotels_by_city(current))
                 return data
             if any(w in low for w in _ADD_WORDS) and city not in plan_cities:
-                data = _compose(_blend_into(spans, n_days, city))
+                data = _compose(_blend_into(spans, n_days, city), keep_hotels=_hotels_by_city(current))
                 return data
 
     # ── Hotel changes (preserve the current days; only the hotel assignment changes)
@@ -525,6 +547,13 @@ def revise_local_itinerary(current: dict, message: str,
         for d in days:
             if d["city"] not in current_by_city and d["hotel"]:
                 current_by_city[d["city"]] = d["hotel"]
+        # Direction check: naming a property can mean EITHER "change TO it" or "get me AWAY
+        # from it". "I want to swap OUT the Sofitel — I don't want to stay there" matched the
+        # Sofitel as the target and cheerfully re-assigned the guest the very hotel they were
+        # refusing. When the named property IS the current hotel for its city, it's the thing
+        # being replaced — rotate (or price-move) away from it instead.
+        if target_name and target_city and current_by_city.get(target_city) == target_name:
+            target_name = None
         choice = {}
         for city in scope:
             pick = _pick_hotel(city, current_by_city.get(city, ""), mode,

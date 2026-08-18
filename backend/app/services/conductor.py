@@ -409,7 +409,40 @@ async def classify_intents(user_message: str, conversation_history: list,
         "whole week", "full week", "the week", "shall i", "want me to",
         "would you like me to",
     )
-    offered_itinerary = any(k in last_assistant for k in OFFER_CUES)
+    # Flights-offer follow-up (client feedback 2026-08-11). The first-build announcement ends
+    # with "Shall I also line up your flights? Just tell me which city you're flying from."
+    # The natural replies — "yes please", "Chicago", "from Chicago" — carry no flight keyword,
+    # and the offer sentence itself contains "shall i" (an OFFER_CUE), so a bare affirmation
+    # used to fall into the itinerary-OFFER branch below and REBUILD the whole plan instead of
+    # searching flights. Route those replies to the flight agent. Declines, booking words and
+    # topic changes fall through untouched.
+    if "line up your flights" in last_assistant:
+        _flt_decline = re.match(r"\s*(no\b|not now|nah\b|maybe later|later\b|skip\b)", lower)
+        _flt_booky = any(w in lower for w in ("book", "reserve", "purchase"))
+        _flt_topic = re.search(r"\b(tell me|what|whats|show me|how|why|when|recommend|about|instead|actually)\b", lower)
+        _flt_origin = bool(re.search(r"\b(from|flying|fly|leave|leaving|depart(ing)?)\b", lower))
+        # Strip affirmation filler; whatever remains in a short reply is almost certainly the
+        # city Sasha just asked for ("Chicago", "London please"). A PURE affirmation ("yes
+        # please") deliberately falls through instead: with no origin, the flight runner would
+        # surface DOMESTIC Vietnam flights — so let general chat re-ask which city, and the
+        # actual city answer lands back here next turn.
+        _AFFIRM_FILLER = {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "absolutely",
+                          "definitely", "perfect", "great", "good", "sounds", "please", "do",
+                          "it", "that", "lets", "let's", "go", "ahead", "for", "thanks",
+                          "thank", "you"}
+        _flt_leftover = [w for w in re.findall(r"[a-z']+", _clean) if w not in _AFFIRM_FILLER]
+        _flt_place = 0 < len(_flt_leftover) <= 4 and not _flt_topic
+        if not _flt_decline and not _flt_booky and (_flt_origin or _flt_place):
+            return {"intents": ["flight"], "primary": "flight", "context": user_message}
+
+    # Suppress the affirmation→rebuild trigger after two specific announcements that contain
+    # OFFER_CUE words without being build offers: the whole-trip RESERVE announcement
+    # ("…reserving everything on it…" — "yes" is the guest acknowledging the reservation) and
+    # the flights offer ("Shall I also line up your flights?" — a pure "yes" falls through to
+    # general, which re-asks for the departure city; rebuilding the plan would be nonsense).
+    offered_itinerary = any(k in last_assistant for k in OFFER_CUES) \
+        and "reserving everything" not in last_assistant \
+        and "line up your flights" not in last_assistant
     if _mentions(lower, ITINERARY_WORDS) or ITINERARY_RE.search(lower) or (user_affirms and offered_itinerary):
         intents = ["itinerary"]
 
@@ -553,9 +586,10 @@ async def classify_intents(user_message: str, conversation_history: list,
     ]
     offered_booking = any(k in last_assistant for k in (
         "book the whole trip", "shall i book", "ready to book", "save it as a pdf",
-        # Sasha's own payment request — "yes"/"go ahead" after it must re-surface the
-        # payment step rather than falling through to ordinary chat.
-        "make the payment", "finish booking",
+        # The plan walkthrough closes with "shall we look at booking?" — "yes"/"go ahead"
+        # after it must reach book_trip, not fall into an itinerary rebuild or plain chat.
+        # (The old "make the payment"/"finish booking" cues are gone with the payment flow.)
+        "look at booking",
     ))
     # Whole-word matching matters MOST here: this is the branch that takes money. As raw
     # substrings, "i'll take it" matched "i'll take itinerary advice" and "book it" matched
@@ -604,10 +638,11 @@ NEVER_FAKE_BOOKING = (
     "\n\nHARD RULE — NEVER claim a booking, reservation, order or enquiry has been made, sent, "
     "submitted, requested or confirmed. Never say you have 'sent', 'added', 'put through' or "
     "'confirmed' anything, and never say a confirmation is coming. The ONLY way anything gets "
-    "booked is the guest tapping Book & Pay on a card themselves. When they ask you to book an "
-    "individual flight, taxi, tour or restaurant, point them at that option's card to complete "
-    "it. (The one exception is the whole-trip Stripe checkout, which is handled elsewhere, not "
-    "by you.)"
+    "reserved is the guest naming an option (\"book the Sofitel\") or tapping Reserve on a "
+    "card — both are handled by the app, not by you. When they ask you to book an individual "
+    "flight, taxi, tour or restaurant and the app has not confirmed it, point them at that "
+    "option's card or ask them to name the one they want. (The whole-trip reservation is "
+    "likewise handled elsewhere, not by you.)"
 )
 
 # The flip side of NEVER_FAKE_BOOKING, learned the hard way on camera: told it had "NO ability
@@ -620,8 +655,9 @@ NEVER_FAKE_BOOKING = (
 CAPABILITY_FACTS = (
     "\n\nWHAT THIS APP CAN DO (never deny these, never send the guest elsewhere): it shows "
     "real flight, hotel, restaurant, transfer and activity options as cards on the right with "
-    "Book & Pay buttons; it shows photos of places right in the conversation; it builds, "
-    "revises and prices the full day-by-day trip plan; and it takes payment in-app. NEVER tell "
+    "Reserve buttons; it shows photos of places right in the conversation; it builds, "
+    "revises and prices the full day-by-day trip plan; and it takes reservations in-app — the "
+    "guest can simply SAY \"book it\" and the reservation is made, no payment needed. NEVER tell "
     "the guest to use Google Flights, Kayak, Skyscanner, Booking.com, Expedia, TripAdvisor, "
     "Google Images or any other external site or app, and NEVER say you can't pull up, show, "
     "search or book something the app handles. If the thing they asked for isn't on screen "
@@ -875,15 +911,15 @@ async def run_restaurant_intent(message: str, history: list, session_id: "Option
 
     if wants_book and names_list:
         if matched:
-            spoken = (f"Great choice — {matched} is pulled up on the right. Tap Book & Pay on its "
-                      "card to reserve your table.")
+            spoken = (f"Great choice — {matched} is pulled up on the right. Tap Reserve on "
+                      "its card and your table is set.")
             card["matched_option"] = matched
         elif _foreign_referent(message, names_list):
             spoken = (f"Hmm, I don't see that one on my current list — what I have in {dest} is "
-                      f"{', '.join(names_list[:3])} and more on the card. Tap Book & Pay on any of them, or ask me to look for something else.")
+                      f"{', '.join(names_list[:3])} and more on the card. Just name the one you'd like and I'll reserve it, or ask me to look for something else.")
         else:
-            spoken = (f"Of course — tap Book & Pay on whichever of these you'd like ({names}) and "
-                      "I'll get your table reserved.")
+            spoken = (f"Of course — just tell me which of these you'd like ({names}) and "
+                      "I'll get your table reserved. You can also tap Reserve on its card.")
     elif names:
         if _h:
             # A qualified ask ("seafood", "fine dining") gets the same stable list by design —
@@ -1226,18 +1262,18 @@ async def run_flight_intent(message: str, history: list, session_id: "Optional[s
     matched = _match_named_ctx(message, names_list, history) if (_is_book_complete(message) and names_list) else None
     if _is_book_complete(message) and names_list:
         if matched:
-            spoken = (f"Great — the {matched} flight is pulled up on the right. Tap Book & Pay "
-                      "on its card and I'll get your seats held.")
+            spoken = (f"Great — the {matched} flight is pulled up on the right. Tap Reserve "
+                      "on its card and your seats are held.")
             card["matched_option"] = matched
         elif _foreign_referent(message, names_list):
             spoken = (f"I don't see that airline on the current list — what I have is "
-                      f"{', '.join(names_list[:3])} and more on the card. Tap Book & Pay on any of them, or ask me to search again.")
+                      f"{', '.join(names_list[:3])} and more on the card. Just name the one you'd like and I'll reserve it, or ask me to search again.")
         else:
-            spoken = (f"Of course — tap Book & Pay on whichever flight suits you best "
-                      f"({', '.join(names_list[:3])}) and I'll take care of it.")
+            spoken = (f"Of course — just tell me which flight suits you best "
+                      f"({', '.join(names_list[:3])}) and I'll reserve it. You can also tap Reserve on its card.")
     elif has_prices:
         _from = f" from {_orig}" if _orig else ""
-        spoken = f"I found a few flights to {dest}{_from} — {_named_options(opts)}. I've pulled them up — just tap one to book."
+        spoken = f"I found a few flights to {dest}{_from} — {_named_options(opts)}. I've pulled them up — just tell me which one you'd like and I'll reserve it."
     else:
         _from = f" from {_orig}" if _orig else ""
         spoken = f"Here's where to compare and book your flights{_from} to {dest} — I've pulled it up on the card for you."
@@ -1281,17 +1317,17 @@ async def run_cab_intent(message: str, history: list, session_id: "Optional[str]
     matched = _match_named_ctx(message, names_list, history) if (_is_book_complete(message) and names_list) else None
     if _is_book_complete(message) and names_list:
         if matched:
-            spoken = (f"Done — {matched} is pulled up on the right. Tap Book & Pay on its card "
-                      "and your ride is set.")
+            spoken = (f"Done — {matched} is pulled up on the right. Tap Reserve on its "
+                      "card and your ride is set.")
             card["matched_option"] = matched
         elif _foreign_referent(message, names_list):
             spoken = (f"I don't see that provider on the current list — what I have is "
-                      f"{', '.join(names_list[:3])}. Tap Book & Pay on any of them, or ask me to look again.")
+                      f"{', '.join(names_list[:3])}. Just name the one you'd like and I'll reserve it, or ask me to look again.")
         else:
-            spoken = (f"Of course — tap Book & Pay on whichever ride you'd like "
-                      f"({', '.join(names_list[:3])}) and I'll sort it out.")
+            spoken = (f"Of course — just tell me which ride you'd like "
+                      f"({', '.join(names_list[:3])}) and I'll sort it out. You can also tap Reserve on its card.")
     elif has_prices:
-        spoken = f"For getting around {dest}, here are a few transfer options — {_named_options(opts)}. Tap any one to book."
+        spoken = f"For getting around {dest}, here are a few transfer options — {_named_options(opts)}. Just tell me which one you'd like and I'll reserve it."
     else:
         spoken = f"Here's where to book a private car or taxi for {dest} — I've pulled it up for you."
     return {"agent": "cab", "response": spoken, "data": {"booking": card}}
@@ -1314,17 +1350,17 @@ async def run_activity_intent(message: str, history: list) -> dict:
     matched = _match_named_ctx(message, names_list, history) if (_is_book_complete(message) and names_list) else None
     if _is_book_complete(message) and names_list:
         if matched:
-            spoken = (f"Lovely choice — {matched} is pulled up on the right. Tap Book & Pay "
-                      "on its card and I'll reserve your spot.")
+            spoken = (f"Lovely choice — {matched} is pulled up on the right. Tap Reserve on "
+                      "its card and your spot is saved.")
             card["matched_option"] = matched
         elif _foreign_referent(message, names_list):
             spoken = (f"I don't see that one on the current list — what I have is "
-                      f"{', '.join(names_list[:3])} and more on the card. Tap Book & Pay on any of them, or ask me for other ideas.")
+                      f"{', '.join(names_list[:3])} and more on the card. Just name the one you'd like and I'll reserve it, or ask me for other ideas.")
         else:
-            spoken = (f"Of course — tap Book & Pay on whichever one you'd like "
-                      f"({', '.join(names_list[:3])}) and you're all set.")
+            spoken = (f"Of course — just tell me which one you'd like "
+                      f"({', '.join(names_list[:3])}) and I'll reserve it. You can also tap Reserve on its card.")
     elif has_prices:
-        spoken = f"A few things you can book in {dest} — {_named_options(opts)}. I've pulled them up with prices, ready to book."
+        spoken = f"A few things you can book in {dest} — {_named_options(opts)}. I've pulled them up with prices — just name one and I'll reserve it."
     else:
         spoken = f"Here are some experiences you can book in {dest} — I've pulled it up for you."
     return {"agent": "activity", "response": spoken, "data": {"booking": card}}
@@ -1611,18 +1647,18 @@ async def run_book_trip_no_plan_intent(message: str, history: list) -> dict:
 
 
 async def run_book_trip_intent(message: str, history: list) -> dict:
-    """The customer asked to book. Take them to PAYMENT — do not confirm the booking here.
+    """The customer asked to book the whole trip — hand off to the app's reservation step.
 
-    This intent used to mint a booking ref and announce "your trip is booked!" outright, with
-    no money ever changing hands. That made Sasha lie: the customer heard a confirmation for a
-    trip nobody had paid for. Now this step only *requests* payment (action=await_payment); the
-    UI shows the complete itinerary and opens Stripe Checkout. The booking is confirmed — and
-    the ref minted — only after Stripe reports a successful payment, on the way back.
+    action=await_payment is a legacy name the frontend still keys on: with payments disabled
+    (reservation-only demo, client feedback 2026-08-11) it reserves the stored itinerary via
+    POST /api/payments/reserve and shows the confirmation; with PAYMENTS_ENABLED it opens
+    Stripe Checkout instead. Either way the ref is minted by the app, not by this agent —
+    speaking a confident "reserving now" here is safe because the reserve call is local and
+    completes before the guest finishes hearing this sentence.
     """
     spoken = (
-        "Lovely — I've put your complete itinerary up on the right so you can look it over. "
-        "Make the payment to finish booking, and I'll have everything reserved for you the "
-        "moment it goes through."
+        "Lovely — I've put your complete itinerary up on the right, and I'm reserving "
+        "everything on it for you now. Your confirmation will be on screen in just a moment."
     )
     return {"agent": "book_trip", "response": spoken, "data": {"action": "await_payment"}}
 
@@ -1727,8 +1763,19 @@ async def conduct(
             f"by name (e.g. \"Hi {name}!\"), and use their first name occasionally when it feels "
             f"natural. Do not overuse it."
         )
-        general_prompt += name_directive
-        merge_prompt += name_directive
+    else:
+        # No authenticated name (client feedback 2026-08-11: ask, don't assume). The LLM sees
+        # the whole conversation history, so once the guest answers it simply remembers —
+        # no extraction or session state needed here.
+        name_directive = (
+            "\n\nYou do not know the traveller's name yet. If they have not shared it in this "
+            "conversation, warmly ask \"May I have your name?\" as part of your FIRST reply, "
+            "before diving into planning. Once they tell you, use their first name occasionally "
+            "when it feels natural — and never ask for it again. If they decline or ignore the "
+            "question, drop it gracefully and never re-ask."
+        )
+    general_prompt += name_directive
+    merge_prompt += name_directive
 
     # Is there a REAL plan for this session? Ask the database, not Sasha's own wording.
     stored_itinerary = await chat_store.latest_itinerary_for_session(session_id) if session_id else None
@@ -2136,9 +2183,20 @@ async def conduct(
                 if isinstance(_total, (int, float)) and _total else ""
             )
             _hotel_str = f" You'll start at {_first_hotel}." if _first_hotel else ""
+            # Proactive flight offer (client feedback 2026-08-11: "I actually had to ask for
+            # flights"). The cache covers 7 origin regions, so this is purely a flow gap —
+            # offer flights the moment the FIRST plan lands, unless flights have already come
+            # up in this conversation (offering twice reads as not listening).
+            _flights_discussed = ("flight" in history_text.lower() or "flight" in _lower_msg
+                                  or "flying" in history_text.lower() or "flying" in _lower_msg)
+            _flight_offer = (
+                "" if _flights_discussed else
+                " Shall I also line up your flights? Just tell me which city you're flying from."
+            )
             final_response = (
                 f"All set — your {_n}-day plan, {_title}, is live on the right.{_hotel_str}{_total_str} "
-                "Have a browse, and just tell me if you'd like to swap any of the hotels or activities."
+                "Have a browse, and just tell me if you'd like to swap any of the hotels or "
+                f"activities.{_flight_offer}"
             )
             # The guest asked to take it one day at a time — honour that from the very first
             # announcement instead of reading the whole plan out (the demo's "no, I just want
@@ -2306,8 +2364,8 @@ async def conduct(
     if payment_item:
         action = "await_payment_item"
         final_response = (
-            f"Great choice — {payment_item['name']}. I've opened the booking for you — "
-            "just pop in your name and email, and tap Pay to confirm."
+            f"Great choice — {payment_item['name']}. Consider it reserved — your "
+            "confirmation is coming up on screen now."
         )
 
     return {

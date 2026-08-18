@@ -99,6 +99,72 @@ async def _send_confirmation_email(to: str, amount_cents: int, currency: str,
         return False
 
 
+class ReserveRequest(BaseModel):
+    # Exactly one of the two: a single stored hotel/flight/cab/restaurant card, or the whole
+    # stored trip. Server-priced from the stored record, same trust model as checkout.
+    offer_id: Optional[str] = None
+    itinerary_id: Optional[str] = None
+
+
+@router.post("/reserve")
+async def reserve(body: ReserveRequest):
+    """Reservation-only booking — no payment (client feedback 2026-08-11).
+
+    Sasha simply takes the reservation: the booking row is created and its reference minted
+    immediately, with a `resv-` pseudo session id in place of a Stripe session. Works with no
+    Stripe keys configured, which is the demo's normal state. The paid flow (create-checkout /
+    verify / webhook) remains intact for when payments are re-enabled.
+    """
+    offer = await chat_store.get_offer(body.offer_id) if body.offer_id else None
+    if body.offer_id and not offer:
+        raise HTTPException(status_code=404, detail="offer not found")
+
+    itinerary = await chat_store.get_itinerary(body.itinerary_id) if (body.itinerary_id and not offer) else None
+    if body.itinerary_id and not offer and not itinerary:
+        raise HTTPException(status_code=404, detail="itinerary not found")
+    if not offer and not itinerary:
+        raise HTTPException(status_code=400, detail="offer_id or itinerary_id required")
+
+    if offer:
+        amount = float(offer.get("amount_usd") or 0)
+        label = offer.get("label") or offer.get("name") or "Your reservation"
+    else:
+        amount = float(itinerary.get("total_usd") or 0)
+        label = itinerary.get("title") or "Your trip"
+
+    sid = f"resv-{uuid.uuid4()}"
+    await chat_store.create_booking(
+        booking_id=str(uuid.uuid4()),
+        stripe_session_id=sid,
+        itinerary_id=("" if offer else (body.itinerary_id or "")),
+        user_id=chat_store.DEMO_USER_ID,
+        amount_usd=amount,
+        offer_id=(body.offer_id if offer else None),
+        kind=(offer.get("kind") if offer else None),
+        label=(label if offer else None),
+    )
+    ref = generate_booking_ref()
+    booking = await chat_store.mark_booking_paid(sid, ref)
+    if not booking:
+        raise HTTPException(status_code=500, detail="could not record reservation")
+
+    # Same freshness rule as the paid path: the just-reserved place shouldn't keep
+    # re-surfacing as the stable top option on the next search.
+    if offer and offer.get("session_id"):
+        try:
+            await chat_store.clear_session_cards(offer["session_id"], offer.get("kind"))
+        except Exception as e:
+            print(f"[payments] cache clear after reservation failed (non-fatal): {e}")
+
+    return {
+        "reserved": True,
+        "booking_ref": ref,
+        "amount_usd": amount,
+        "item": ({"kind": offer.get("kind"), "label": label, "amount_usd": amount} if offer else None),
+        "itinerary": (itinerary or {}).get("payload"),
+    }
+
+
 @router.post("/create-checkout")
 async def create_checkout(body: CheckoutRequest):
     """Create a Stripe Checkout Session and return its hosted URL for redirect.

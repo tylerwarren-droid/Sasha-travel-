@@ -7,10 +7,10 @@ function esc(s: any): string {
 }
 
 export function buildItineraryHtml(it: any, ref?: string): string {
-  // A booking reference means this trip is PAID FOR. The stays are reserved, so offering to
-  // "Book" each hotel underneath a "Booking confirmed" banner is both contradictory and
-  // dangerous — a guest following those links would pay for the same rooms twice. Once a ref
-  // exists, every booking call-to-action becomes a statement of what's already reserved.
+  // A booking reference means this trip is RESERVED (reservation-only demo — no money has
+  // moved, so the document must never say "paid"). Offering to "Book" each hotel underneath
+  // a confirmed banner is contradictory — a guest following those links would double-book.
+  // Once a ref exists, every booking call-to-action becomes a statement of what's reserved.
   const isBooked = Boolean(ref)
   const days = (it?.days || []).map((d: any) => {
     const hotel = d.hotel && d.hotel.name ? d.hotel : null
@@ -52,20 +52,20 @@ a{color:#B8860B} .total{font-size:22px;font-weight:800;text-align:right;margin-t
   <div class="brand">🇻🇳 Discover Vietnam · AI Travel Concierge</div>
   <h1>${esc(it?.title || 'Your Vietnam Itinerary')}</h1>
   ${it?.summary ? `<p class="sum">${esc(it.summary)}</p>` : ''}
-  ${ref ? `<div class="ref">✓ Booking confirmed · Ref ${esc(ref)}</div>` : ''}
+  ${ref ? `<div class="ref">✓ Reservation confirmed · Ref ${esc(ref)}</div>` : ''}
   ${days}
-  <div class="total">${isBooked ? 'Total paid' : 'Estimated total'}: <span>$${Number(it?.estimated_total_usd || 0).toLocaleString()}</span></div>
+  <div class="total">${isBooked ? 'Trip total' : 'Estimated total'}: <span>$${Number(it?.estimated_total_usd || 0).toLocaleString()}</span></div>
   ${breakdown}
   <div class="foot">${isBooked
-    ? 'Booked with Sasha · Discover Vietnam. Keep this reference for your records.'
-    : 'Planned with Sasha · Discover Vietnam. This trip is not booked yet.'}</div>
+    ? 'Reserved with Sasha · Discover Vietnam. Keep this reference for your records.'
+    : 'Planned with Sasha · Discover Vietnam. This trip is not reserved yet.'}</div>
 </body></html>`
 }
 
 export function buildItineraryText(it: any, ref?: string): string {
   const lines: string[] = [`${it?.title || 'Vietnam Itinerary'}`]
   if (it?.summary) lines.push(it.summary)
-  if (ref) lines.push(`Booking ref: ${ref}`)
+  if (ref) lines.push(`Reservation ref: ${ref}`)
   lines.push('')
   for (const d of it?.days || []) {
     lines.push(`Day ${d.day} — ${d.city}: ${d.title}`)
@@ -73,6 +73,6 @@ export function buildItineraryText(it: any, ref?: string): string {
     if (d.hotel?.name) lines.push(`  Stay: ${d.hotel.name}`)
     lines.push('')
   }
-  lines.push(`${ref ? 'Total paid' : 'Estimated total'}: $${Number(it?.estimated_total_usd || 0).toLocaleString()}`)
+  lines.push(`${ref ? 'Trip total' : 'Estimated total'}: $${Number(it?.estimated_total_usd || 0).toLocaleString()}`)
   return lines.join('\n')
 }

@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { CURRENT_USER } from '../../../../lib/currentUser'
 
 // Never let a token request be cached — every session needs a fresh JWT.
 export const dynamic = 'force-dynamic'
@@ -49,11 +48,9 @@ export async function GET(request: Request) {
       context_id: CONTEXT_ID, voice_id: VOICE_ID, language: lang,
       voice_settings: { provider: 'elevenLabs', speed: 1.0 },
     },
-    // Personalize the avatar's opening line with the (currently hardcoded) user's name.
-    // For the spoken opening to say it, the LiveAvatar context's opening_text must reference
-    // ${first_name} (e.g. "Hello ${first_name}! I'm Sasha..."). If it doesn't, this is a
-    // harmless no-op and Sasha still greets by name on her first conductor-driven reply.
-    dynamic_variables: { first_name: CURRENT_USER.firstName, full_name: CURRENT_USER.displayName },
+    // No dynamic_variables: the opening line now ASKS for the guest's name (client feedback
+    // 2026-08-11 — never greet a stranger as the hardcoded demo profile). The conductor's
+    // prompt carries the matching "ask, then remember" directive.
     is_sandbox: false,
   }
 

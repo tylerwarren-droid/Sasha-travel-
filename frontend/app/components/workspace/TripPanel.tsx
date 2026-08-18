@@ -68,7 +68,7 @@ export default function TripPanel({
           <div className="lw-sumcell"><span className="k">Stays</span><span className="v">{stayCount}</span></div>
         )}
         <div className="lw-sumcell tot">
-          <span className="k">{isBooked ? 'Total paid' : 'Estimated total'}</span>
+          <span className="k">{isBooked ? 'Trip total' : 'Estimated total'}</span>
           <span className="amt">${(richItinerary.estimated_total_usd || 0).toLocaleString()}</span>
         </div>
       </div>
@@ -185,13 +185,13 @@ export default function TripPanel({
             )}
             {isBooked ? (
               <>
-                <div className="lw-bookedBanner">✓ Booked · Ref {bookingRef}</div>
+                <div className="lw-bookedBanner">✓ Reserved · Ref {bookingRef}</div>
                 <div className="lw-booknote">Everything above is reserved. Keep your reference for your records.</div>
               </>
             ) : (
               <>
-                <button className="lw-bookBtn" onClick={onBook}>Book the whole trip with Sasha →</button>
-                <div className="lw-booknote">Or tap “Book” on any hotel above to reserve it yourself.</div>
+                <button className="lw-bookBtn" onClick={onBook}>Reserve the whole trip with Sasha →</button>
+                <div className="lw-booknote">No payment needed — just say “book it” and Sasha takes the reservation.</div>
               </>
             )}
           </div>

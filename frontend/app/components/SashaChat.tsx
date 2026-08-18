@@ -5,7 +5,6 @@ import { User, Itinerary } from '@/types'
 import VoiceButton, { MicDevicesInfo } from './VoiceButton'
 import { renderMarkdown } from '@/lib/markdown'
 import { apiUrl, apiHeaders } from '@/lib/api'
-import { CURRENT_USER } from '@/lib/currentUser'
 import type { RichItinerary } from './ItineraryDays'
 import IdeasPanel, { Idea } from './workspace/IdeasPanel'
 import TripPanel from './workspace/TripPanel'
@@ -346,7 +345,8 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         conversation_history: historyBeforeMessage,
         language,
         session_id: chatSessionIdRef.current,   // groups this chat's turns in the DB
-        user_name: CURRENT_USER.firstName,       // so Sasha addresses the guest by name
+        // No user_name: Sasha ASKS for the guest's name in her first reply (client feedback
+        // 2026-08-11 — never assume the hardcoded demo profile is who's talking).
         force_intent: opts?.intent,              // set when the UI knows the intent (idea build)
       }, { timeout: 60000, headers: apiHeaders() })  // bound the call so a hung backend can't stall the turn
       const { response: sashaResponse, conversation_history, photos: respPhotos, links, hotels: hotelRecs, bookings: bookingCards, itinerary, action, booking_ref, itinerary_id, payment_item } = response.data
@@ -625,15 +625,17 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         ))}
         {messages.map((msg, i) => (
           <div key={i} ref={i === messages.length - 1 ? lastMsgRef : undefined} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`} style={{ flex: '0 0 auto' }}>
-            <div className={`w-8 h-8 rounded-2xl flex items-center justify-center flex-shrink-0 text-xs font-medium ${
+            {/* Compact transcript (client feedback 2026-08-11): the conversation stays
+                readable but cedes space to the photos/cards below each message. */}
+            <div className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 text-[11px] font-medium ${
               msg.role === 'assistant'
                 ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'
                 : 'bg-white/10 text-white/60'
             }`}>
               {msg.role === 'assistant' ? 'S' : (user.display_name?.[0] || 'Y')}
             </div>
-            <div className="max-w-[88%]">
-              <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+            <div className="max-w-[80%]">
+              <div className={`px-3.5 py-2.5 rounded-2xl text-[12.5px] leading-relaxed ${
                 msg.role === 'assistant'
                   ? 'bg-white/5 text-white/80 rounded-tl-sm border border-white/5'
                   : 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-tr-sm whitespace-pre-wrap'
@@ -706,7 +708,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
                         </div>
                         {o.offer_id && (o.amount_usd ?? 0) > 0 ? (
                           <button className="price" onClick={() => onBookItem?.({ offer_id: o.offer_id!, label: `${b.title} · ${o.name}`, amount_usd: o.amount_usd!, kind: b.type, name: o.name })}>
-                            Book &amp; Pay ${o.amount_usd!.toLocaleString()}
+                            Reserve · ${o.amount_usd!.toLocaleString()}
                           </button>
                         ) : (
                           /* No server-priced offer (uncached fallback) — informational only,
@@ -739,7 +741,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
                       </div>
                       {h.offer_id && (h.amount_usd ?? 0) > 0 ? (
                         <button className="price" onClick={() => onBookItem?.({ offer_id: h.offer_id!, label: `${h.nights ?? 1} night${(h.nights ?? 1) !== 1 ? 's' : ''} · ${h.name}`, amount_usd: h.amount_usd!, kind: 'hotel', name: h.name })}>
-                          Book &amp; Pay ${h.amount_usd!.toLocaleString()}
+                          Reserve · ${h.amount_usd!.toLocaleString()}
                         </button>
                       ) : (
                         /* No server-priced offer — informational only, never an external
@@ -861,7 +863,8 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         /* Photos Sasha surfaces, inline under her message and captioned with the real place. */
         .lw-msgshots{margin-top:8px}
         .lw-msgshots-loc{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#DAA520;margin-bottom:6px}
-        .lw-msgshots-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+        /* Two columns (was three): bigger photo tiles — client feedback 2026-08-11. */
+        .lw-msgshots-row{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
         .lw-msgshot{position:relative;display:block;border-radius:10px;overflow:hidden;aspect-ratio:4/3;border:1px solid rgba(255,255,255,.08);text-decoration:none;background:rgba(255,255,255,.04)}
         .lw-msgshot img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s ease}
         .lw-msgshot:hover img{transform:scale(1.06)}
@@ -975,7 +978,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         .lw-h{font-size:16px;font-weight:600;margin-top:3px;letter-spacing:-.01em;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .lw-ribbon{font-size:9.5px;font-weight:700;letter-spacing:.1em;color:#1a1205;background:linear-gradient(135deg,#E8B923,#DAA520);flex-shrink:0;padding:5px 10px;border-radius:8px;display:flex;align-items:center;gap:5px;box-shadow:0 4px 14px -4px rgba(218,165,32,.6)}
         .lw-cardBody{padding:0 18px 16px}
-        .lw-photohero{position:relative;height:184px;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+        .lw-photohero{position:relative;height:230px;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.08)}
         .lw-photohero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;animation:lwFade .6s ease}
         @keyframes lwFade{from{opacity:.25}to{opacity:1}}
         .lw-photohero-grad{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.85),transparent 62%)}
@@ -992,7 +995,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         .lw-flights-cta{font-size:12px;font-weight:600;color:#93c5fd;white-space:nowrap;flex-shrink:0}
         .lw-mapwrap{margin-bottom:13px}
         .lw-galmini{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
-        .lw-galmini img{width:100%;height:52px;object-fit:cover;border-radius:9px;border:1px solid rgba(255,255,255,.08);display:block;cursor:pointer;transition:.15s}
+        .lw-galmini img{width:100%;height:72px;object-fit:cover;border-radius:9px;border:1px solid rgba(255,255,255,.08);display:block;cursor:pointer;transition:.15s}
         .lw-galmini img:hover{transform:translateY(-2px)}
         .lw-dayrow{display:flex;align-items:center;gap:13px;padding:11px 0;border-top:1px solid rgba(255,255,255,.06)}
         .lw-dayrow .num{width:30px;height:30px;border-radius:9px;background:rgba(218,165,32,0.12);display:grid;place-items:center;font-size:12px;font-weight:700;color:#DAA520;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(218,165,32,.22)}
@@ -1014,7 +1017,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         .lw-chev.open{transform:rotate(180deg)}
         .lw-day-detail{padding:2px 0 14px 42px;animation:lwFade .35s ease}
         .lw-day-imgwrap{border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.08);margin-bottom:11px}
-        .lw-day-img{width:100%;height:150px;object-fit:cover;display:block}
+        .lw-day-img{width:100%;height:210px;object-fit:cover;display:block}
         .lw-day-desc{font-size:12.5px;color:rgba(255,255,255,.6);line-height:1.55;margin-bottom:11px}
         .lw-acts{display:flex;flex-direction:column;gap:7px}
         .lw-act{display:flex;gap:10px;text-decoration:none;align-items:flex-start;padding:9px 11px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);transition:.15s}
@@ -1043,7 +1046,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         .lw-bookBtn:disabled{opacity:.65;cursor:default}
         .lw-booknote{font-size:11px;color:rgba(255,255,255,.35);text-align:center;margin-top:8px}
         .lw-gal{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-        .lw-gal img{width:100%;height:72px;object-fit:cover;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:pointer;transition:.2s}
+        .lw-gal img{width:100%;height:96px;object-fit:cover;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:pointer;transition:.2s}
         .lw-gal img:hover{transform:translateY(-2px)}
         .lw-opt{display:flex;align-items:center;gap:13px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;margin-top:9px;background:rgba(255,255,255,.02)}
         .lw-opt:first-of-type{margin-top:0;border-color:rgba(218,165,32,.4);background:rgba(218,165,32,0.10)}

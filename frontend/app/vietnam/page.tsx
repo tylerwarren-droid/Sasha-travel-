@@ -6,11 +6,11 @@ import SashaAvatar, { prefetchAvatarSession } from '../components/SashaAvatar'
 import SashaChat, { WorkspaceTab } from '../components/SashaChat'
 import type { MicDevicesInfo } from '../components/VoiceButton'
 import type { Idea } from '../components/workspace/IdeasPanel'
-import ItineraryPanel from '../components/ItineraryPanel'
-import ItineraryDays, { RichItinerary } from '../components/ItineraryDays'
+import type { RichItinerary } from '../components/ItineraryDays'
 import VnFlag from '../components/VnFlag'
 import { stripMarkdown } from '@/lib/markdown'
 import { apiUrl, apiHeaders } from '@/lib/api'
+import { PAYMENTS_ENABLED } from '@/lib/flags'
 import { buildItineraryHtml, buildItineraryText } from '@/lib/itineraryDoc'
 import { User, Itinerary } from '@/types'
 
@@ -116,6 +116,14 @@ export default function VietnamPage() {
   // The stored trip a payment applies to. The server prices checkout from this id — the
   // browser no longer states the amount.
   const [itineraryId, setItineraryId] = useState<string | null>(null)
+  // Ref mirror: one conductor turn can deliver itinerary_id AND action=await_payment
+  // together, and SashaChat fires onItineraryId then onAwaitPayment synchronously — state
+  // hasn't flushed yet, so reserveTrip must read the ref, never the state.
+  const itineraryIdRef = useRef<string | null>(null)
+  const handleItineraryId = useCallback((id: string) => {
+    itineraryIdRef.current = id
+    setItineraryId(id)
+  }, [])
 
   // ── Deliberate mute while a payment modal is open ─────────────────────────
   // The guest is typing their name/email into the Complete Booking form; a hot mic
@@ -377,13 +385,38 @@ export default function VietnamPage() {
   // Stripe Checkout: create a hosted session on the backend and redirect to it. Card data
   // never touches our servers. A 501 means the demo's Stripe keys aren't set — surface it
   // calmly instead of crashing.
-  // A guest tapped "Book & Pay" on an individual hotel/flight/cab card — open the same payment
-  // modal, but checkout will run against this offer (priced server-side by offer_id).
+  // Reservation-only toast for a failed reserve call — rendered top-center like payResult.
+  const [reserveError, setReserveError] = useState<string | null>(null)
+
+  // Reservation-only path (payments disabled): Sasha simply takes the reservation. The
+  // backend mints the reference instantly — no Stripe, no name/email form, so a verbal
+  // "book it" completes end-to-end without a single tap.
+  const reserveItem = useCallback(async (offer: { offer_id: string; label: string; amount_usd: number; kind: string; name: string }) => {
+    setReserveError(null)
+    try {
+      const res = await fetch(apiUrl('/api/payments/reserve'), {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({ offer_id: offer.offer_id }),
+      })
+      if (!res.ok) throw new Error(String(res.status))
+      const data = await res.json()
+      setItemBooked({ ref: data.booking_ref, label: offer.label, amount: offer.amount_usd, kind: offer.kind })
+    } catch {
+      setReserveError('Could not complete that reservation — please try again.')
+      setTimeout(() => setReserveError(null), 4000)
+    }
+  }, [])
+
+  // A guest tapped "Reserve" on an individual hotel/flight/cab card (or said "book it" —
+  // the conductor resolves the named option server-side and this fires with its offer).
+  // Payments off → reserve directly; payments on → the legacy Stripe modal.
   const handleBookItem = useCallback((offer: { offer_id: string; label: string; amount_usd: number; kind: string; name: string }) => {
+    if (!PAYMENTS_ENABLED) { reserveItem(offer); return }
     setCheckoutError(null)
     setPendingOffer(offer)
     setPaymentModal('card')
-  }, [])
+  }, [reserveItem])
 
   const startCardCheckout = useCallback(async () => {
     setCheckoutError(null)
@@ -464,6 +497,7 @@ export default function VietnamPage() {
     setUnseenTabs([])
     setMicError(null)   // a fresh session re-asks for the mic; don't carry the old failure over
     setItineraryId(null)
+    itineraryIdRef.current = null
     setIdeasCache(null)
     setPayResult(null)
     setCheckoutError(null)
@@ -483,14 +517,8 @@ export default function VietnamPage() {
     handleTabChange('trip')
   }, [handleTabChange])
 
-  // The guest asked to book. Show the complete itinerary and take payment — this is the one
-  // moment we DO switch tabs, because Sasha has just said "make the payment to finish
-  // booking" and the pay button lives on the Trip tab.
-  const handleAwaitPayment = useCallback(() => {
-    setPendingOffer(null)   // whole-trip checkout — never inherit a previously tapped card
-    handleTabChange('trip')
-    setPaymentModal('card')
-  }, [handleTabChange])
+  // (handleAwaitPayment lives below, after handleBooked — the reservation-only path needs
+  // handleBooked and const declarations aren't hoisted.)
 
   const handlePhotos = useCallback((newPhotos: any[]) => {
     if (newPhotos?.length > 0) {
@@ -565,6 +593,52 @@ export default function VietnamPage() {
       if (endOnFinishRef.current) { endOnFinishRef.current = false; handleEndSession() }
     }, 14000)
   }, [handleEndSession])
+
+  // Reserve the WHOLE stored trip (payments disabled). Uses handleBooked so the confirmation
+  // modal shows and the live session winds down once Sasha finishes speaking, exactly like
+  // the old paid path did after Stripe verified.
+  const reserveTrip = useCallback(async () => {
+    setReserveError(null)
+    const tripId = itineraryIdRef.current
+    if (!tripId) {
+      setReserveError('Build an itinerary first, then Sasha can reserve it.')
+      setTimeout(() => setReserveError(null), 4000)
+      return
+    }
+    try {
+      const res = await fetch(apiUrl('/api/payments/reserve'), {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({ itinerary_id: tripId }),
+      })
+      if (!res.ok) throw new Error(String(res.status))
+      const data = await res.json()
+      const hasDays = Boolean(data.itinerary?.days?.length)
+      if (hasDays) setRichItinerary(data.itinerary)
+      if (hasDays || richItinerary) {
+        handleTabChange('trip')
+        handleBooked(data.booking_ref)
+      } else {
+        // No trip payload to render the full confirmation with — the booked modal requires
+        // richItinerary, so calling handleBooked here would end the session behind a modal
+        // that never appears (dead page until reload). Show the compact confirmation instead.
+        setItemBooked({ ref: data.booking_ref, label: 'Your Vietnam trip', amount: data.amount_usd })
+      }
+    } catch {
+      setReserveError('Could not complete the reservation — please try again.')
+      setTimeout(() => setReserveError(null), 4000)
+    }
+  }, [richItinerary, handleTabChange, handleBooked])
+
+  // The guest asked to book the whole trip. Payments off → Sasha reserves it on the spot
+  // (verbal "book the trip" completes hands-free). Payments on → legacy behavior: show the
+  // itinerary and open the Stripe payment modal on the Trip tab.
+  const handleAwaitPayment = useCallback(() => {
+    if (!PAYMENTS_ENABLED) { reserveTrip(); return }
+    setPendingOffer(null)   // whole-trip checkout — never inherit a previously tapped card
+    handleTabChange('trip')
+    setPaymentModal('card')
+  }, [handleTabChange, reserveTrip])
 
   // Open the booked itinerary as a printable page → user saves as PDF via the print dialog.
   const exportItineraryPdf = useCallback(() => {
@@ -907,14 +981,17 @@ export default function VietnamPage() {
                 photos={photos}
                 activePhoto={activePhoto}
                 onSelectPhoto={setActivePhoto}
-                onBook={() => { setPendingOffer(null); setPaymentModal('card') }}
+                onBook={() => {
+                  if (!PAYMENTS_ENABLED) { reserveTrip(); return }
+                  setPendingOffer(null); setPaymentModal('card')
+                }}
                 onVoiceConnected={setVoiceConnected}
                 onMicError={setMicError}
                 onMicDevices={setMicDevices}
                 onBooked={handleBooked}
                 onAwaitPayment={handleAwaitPayment}
                 onBookItem={handleBookItem}
-                onItineraryId={setItineraryId}
+                onItineraryId={handleItineraryId}
                 bookingRef={booked?.ref ?? null}
                 activeTab={rightTab}
                 onTabChange={handleTabChange}
@@ -932,6 +1009,13 @@ export default function VietnamPage() {
           </div>
         </section>
       </div>
+
+      {reserveError && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-xl text-sm shadow-xl"
+          style={{ background: 'rgba(248,113,113,0.95)', color: '#fff' }}>
+          {reserveError}
+        </div>
+      )}
 
       {payResult && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-xl text-sm shadow-xl"
@@ -1007,19 +1091,19 @@ export default function VietnamPage() {
             <div className="text-center" style={{ padding: '28px 24px 24px' }}>
               <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 14px', display: 'grid', placeItems: 'center', background: 'rgba(52,211,153,0.14)', border: '1px solid rgba(52,211,153,0.4)', fontSize: 26, color: '#34d399' }}>✓</div>
               <div style={{ fontSize: 21, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>
-                {itemBooked.kind === 'hotel' ? 'Stay booked!' : itemBooked.kind === 'flight' ? 'Flight booked!' : itemBooked.kind === 'cab' ? 'Transfer booked!' : itemBooked.kind === 'restaurant' ? 'Table booked!' : 'Booked!'}
+                {itemBooked.kind === 'hotel' ? 'Stay reserved!' : itemBooked.kind === 'flight' ? 'Flight reserved!' : itemBooked.kind === 'cab' ? 'Transfer reserved!' : itemBooked.kind === 'restaurant' ? 'Table reserved!' : 'Reserved!'}
               </div>
               <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,.6)', marginTop: 8 }}>
                 {(itemBooked.kind === 'hotel' ? '🏨 ' : itemBooked.kind === 'flight' ? '✈️ ' : itemBooked.kind === 'cab' ? '🚕 ' : itemBooked.kind === 'restaurant' ? '🍽️ ' : '')}{itemBooked.label}
               </div>
               {typeof itemBooked.amount === 'number' && (
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#E8B923', marginTop: 6 }}>${itemBooked.amount.toLocaleString()} paid</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#E8B923', marginTop: 6 }}>${itemBooked.amount.toLocaleString()}{PAYMENTS_ENABLED ? ' paid' : ''}</div>
               )}
               <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.45)', marginTop: 8 }}>
-                Your booking is confirmed.{itemBooked.emailSent ? ' A confirmation is on its way to your email.' : ''}
+                Your reservation is confirmed.{itemBooked.emailSent ? ' A confirmation is on its way to your email.' : ''}
               </div>
               {itemBooked.ref && (
-                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>Booking ref · {itemBooked.ref}</div>
+                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>Reservation · {itemBooked.ref}</div>
               )}
               <div style={{ marginTop: 20 }}>
                 <button onClick={() => setItemBooked(null)} style={{ padding: '11px 28px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done</button>
@@ -1035,15 +1119,15 @@ export default function VietnamPage() {
           <div className="relative flex flex-col overflow-hidden" style={{ width: 'min(680px, 96vw)', maxHeight: '92vh', borderRadius: 24, border: '1px solid rgba(218,165,32,0.3)', background: 'linear-gradient(180deg, rgba(218,165,32,0.06), rgba(0,0,0,0.25)), #0e0e16', boxShadow: '0 40px 100px -30px rgba(0,0,0,.9)' }}>
             <div className="flex-shrink-0 text-center" style={{ padding: '26px 24px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 14px', display: 'grid', placeItems: 'center', background: 'rgba(52,211,153,0.14)', border: '1px solid rgba(52,211,153,0.4)', fontSize: 26, color: '#34d399' }}>✓</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>Trip booked!</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>Trip reserved!</div>
               {/* Only promise an email when one actually went out — the send is best-effort
                   and silently no-ops without RESEND_API_KEY. */}
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,.5)', marginTop: 5 }}>
-                Your booking is confirmed — your full itinerary is below.
+                Your reservation is confirmed — your full itinerary is below.
                 {booked.emailSent ? ' A confirmation is on its way to your email.' : ''}
               </div>
               {booked.ref && (
-                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>Booking ref · {booked.ref}</div>
+                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>Reservation · {booked.ref}</div>
               )}
             </div>
 
@@ -1145,8 +1229,10 @@ export default function VietnamPage() {
         .la-load i:nth-child(2){animation-delay:.15s}.la-load i:nth-child(3){animation-delay:.3s}
         @keyframes laBounce{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
 
-        /* Layout — left video call width (class so media queries can override the split) */
-        .lv-call{width:36%;min-width:340px}
+        /* Layout — left video call width (class so media queries can override the split).
+           30% (was 36%): client feedback 2026-08-11 — give the workspace's photos, itinerary
+           and hotel cards more room; the call panel doesn't need more than the avatar. */
+        .lv-call{width:30%;min-width:320px}
         /* Tablet / narrow: stack the call above the workspace */
         @media (max-width:880px){
           .lv-main{flex-direction:column}

@@ -32,6 +32,8 @@ async def list_trips():
             "title": r.get("title") or payload.get("title") or "Vietnam trip",
             "paid_at": r.get("paid_at"),
             "amount_usd": r.get("amount_usd"),
+            # Set when the guest paid with the saved card in-conversation; None = reservation.
+            "card_last4": r.get("card_last4"),
             "days": len(days),
             "first_city": _first_city(payload),
         })

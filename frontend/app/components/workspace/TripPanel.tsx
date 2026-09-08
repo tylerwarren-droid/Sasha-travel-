@@ -14,6 +14,10 @@ interface TripPanelProps {
   // booking control into a statement of what's already reserved: continuing to offer "Book"
   // on a paid trip invites the guest to buy the same rooms twice.
   bookingRef?: string | null
+  // Set when the trip was PAID with the saved card in-conversation (Sasha asked, guest said
+  // "use 1003"). The panel then says "Booked" and names the card; without it a ref means a
+  // payment-free reservation and the wording stays "Reserved".
+  paidWith?: { last4: string } | null
 }
 
 /**
@@ -29,9 +33,11 @@ interface TripPanelProps {
  * honest empty state is better: it says nothing is planned, and points at the Ideas tab.
  */
 export default function TripPanel({
-  richItinerary, openDays, toggleDay, onBook, travellerCount, onBrowseIdeas, bookingRef,
+  richItinerary, openDays, toggleDay, onBook, travellerCount, onBrowseIdeas, bookingRef, paidWith,
 }: TripPanelProps) {
   const isBooked = Boolean(bookingRef)
+  const isPaid = isBooked && Boolean(paidWith)
+  const doneWord = isPaid ? 'Booked' : 'Reserved'
   if (!richItinerary) {
     return (
       <div className="lw-stream">
@@ -83,6 +89,8 @@ export default function TripPanel({
             </div>
           </div>
           <div className="lw-cardBody">
+          <div className="lw-trip-cols">
+          <div className="lw-trip-left">
             {richItinerary.summary && <div className="lw-day-desc" style={{ marginBottom: 4 }}>{richItinerary.summary}</div>}
             {/* Only offer flights to a city the plan actually starts in. This used to fall
                 back to a hardcoded 'Hanoi', so a trip beginning anywhere else (or with day 1
@@ -101,6 +109,29 @@ export default function TripPanel({
             )}
             <div className="lw-mapwrap"><TripMap days={richItinerary.days} /></div>
 
+
+            {cb && (
+              <div className="lw-breakdown">
+                <span>🏨 Hotels ${Number(cb.hotels || 0).toLocaleString()}</span>
+                <span>🎟️ Experiences ${Number(cb.experiences || 0).toLocaleString()}</span>
+                <span>🍜 Meals ${Number(cb.meals || 0).toLocaleString()}</span>
+                <span>🚐 Transfers ${Number(cb.transport || 0).toLocaleString()}</span>
+              </div>
+            )}
+            {isBooked ? (
+              <>
+                <div className="lw-bookedBanner">✓ {doneWord}{isPaid ? (paidWith!.last4 ? ` · Paid with card ending ${paidWith!.last4}` : ' · Paid') : ''} · Ref {bookingRef}</div>
+                <div className="lw-booknote">{isPaid ? 'Everything above is booked and paid.' : 'Everything above is reserved.'} Keep your reference for your records.</div>
+              </>
+            ) : (
+              <>
+                <button className="lw-bookBtn" onClick={onBook}>Book the whole trip with Sasha →</button>
+                <div className="lw-booknote">Tap here or just say “book it” — Sasha will confirm your saved card and complete the booking right here.</div>
+              </>
+            )}
+          </div>
+          <div className="lw-trip-right">
+            <div className="lw-when" style={{ marginTop: 0 }}>Day by day</div>
             {(() => {
               let carried: any = null
               return richItinerary.days?.map(d => {
@@ -164,7 +195,7 @@ export default function TripPanel({
                             {/* Stays are paid inside the whole-trip checkout — never a
                                 Booking.com button. */}
                             {isBooked
-                              ? <span className="lw-hotel-reserved">✓ Reserved</span>
+                              ? <span className="lw-hotel-reserved">✓ {doneWord}</span>
                               : <span className="lw-hotel-reserved" style={{ opacity: 0.75 }}>Included in trip</span>}
                           </div>
                         )}
@@ -174,26 +205,8 @@ export default function TripPanel({
                 )
               })
             })()}
-
-            {cb && (
-              <div className="lw-breakdown">
-                <span>🏨 Hotels ${Number(cb.hotels || 0).toLocaleString()}</span>
-                <span>🎟️ Experiences ${Number(cb.experiences || 0).toLocaleString()}</span>
-                <span>🍜 Meals ${Number(cb.meals || 0).toLocaleString()}</span>
-                <span>🚐 Transfers ${Number(cb.transport || 0).toLocaleString()}</span>
-              </div>
-            )}
-            {isBooked ? (
-              <>
-                <div className="lw-bookedBanner">✓ Reserved · Ref {bookingRef}</div>
-                <div className="lw-booknote">Everything above is reserved. Keep your reference for your records.</div>
-              </>
-            ) : (
-              <>
-                <button className="lw-bookBtn" onClick={onBook}>Reserve the whole trip with Sasha →</button>
-                <div className="lw-booknote">No payment needed — just say “book it” and Sasha takes the reservation.</div>
-              </>
-            )}
+          </div>
+          </div>
           </div>
         </div>
       </div>

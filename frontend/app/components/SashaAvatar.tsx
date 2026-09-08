@@ -52,9 +52,12 @@ interface SashaAvatarProps {
   // When true, the component's built-in top-right status badge (Live/Listening + weak
   // connection) is not rendered — for pages that supply their own call chrome.
   hideStatusBadge?: boolean
+  // Page-owned stage: no background, border or rounding of its own, so the glows the page
+  // paints behind the chroma-keyed video show through.
+  bare?: boolean
 }
 
-export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate, onAvatarSpeechBuffer, onReadyToListen, onSashaFinished, removeGreen = true, hideStatusBadge = false }: SashaAvatarProps) {
+export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/api/heygen/token', onAvatarSpeakingChange, onGate, onAvatarSpeechBuffer, onReadyToListen, onSashaFinished, removeGreen = true, hideStatusBadge = false, bare = false }: SashaAvatarProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const chromaRafRef = useRef<number>(0)
@@ -502,7 +505,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
   }, [])
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center bg-[#0a0a0f] rounded-3xl overflow-hidden border border-white/5">
+    <div className={`relative w-full h-full flex items-center justify-center overflow-hidden ${bare ? '' : 'bg-[#0a0a0f] rounded-3xl border border-white/5'}`}>
       <video
         ref={videoRef}
         autoPlay

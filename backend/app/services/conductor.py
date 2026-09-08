@@ -442,7 +442,8 @@ async def classify_intents(user_message: str, conversation_history: list,
     # general, which re-asks for the departure city; rebuilding the plan would be nonsense).
     offered_itinerary = any(k in last_assistant for k in OFFER_CUES) \
         and "reserving everything" not in last_assistant \
-        and "line up your flights" not in last_assistant
+        and "line up your flights" not in last_assistant \
+        and CARD_QUESTION_MARKER not in last_assistant
     if _mentions(lower, ITINERARY_WORDS) or ITINERARY_RE.search(lower) or (user_affirms and offered_itinerary):
         intents = ["itinerary"]
 
@@ -634,12 +635,76 @@ async def classify_intents(user_message: str, conversation_history: list,
 # tour to your booking — you'll see the confirmation details appear on the right in just a
 # moment." Nothing is sent and no confirmation ever appears. This is the same fake-confirmation
 # failure the restaurant email agent was removed for; it came back in through general chat.
+# ── Saved card on file (demo) ─────────────────────────────────────────────────────────
+# Client ask (2026-09-05): when the guest says "book it", Sasha must first confirm WHICH card
+# to use — the saved card on file, or a different one — and, on the saved card, complete the
+# booking in-conversation with no Stripe redirect. The card is a demo constant (env-overridable)
+# because the demo profile has a single stored payment method and no real vault exists yet.
+SAVED_CARD_LAST4 = os.getenv("SASHA_SAVED_CARD_LAST4", "1003")
+# The question always carries this phrase; the NEXT turn keys on it (in Sasha's last reply) to
+# read the guest's answer as a card choice instead of a fresh intent. No server-side pending
+# state is needed — the conversation history already carries the question.
+CARD_QUESTION_MARKER = f"ending in {SAVED_CARD_LAST4}"
+
+
+def saved_card_payload() -> dict:
+    return {"last4": SAVED_CARD_LAST4, "method": "saved_card"}
+
+
+def card_question(subject: str) -> str:
+    """Spoken line that pauses a booking on the card choice. `subject` names what is being
+    booked ("your trip", "Tam Vi")."""
+    return (
+        f"Of course — let's get {subject} booked. You have one saved card on file, "
+        f"{CARD_QUESTION_MARKER}. Shall I go ahead and complete the payment automatically "
+        "with that card, or would you like to pay with a different card?"
+    )
+
+
+_SAVED_CARD_WORDS = (
+    "saved", "same card", "that card", "this card", "the card", "card on file", "on file",
+    "auto", "automatic", "existing", "stored", "use it", "use that", "go ahead", "proceed",
+    "charge it", "charge that", "that one", "that's fine", "thats fine", "fine", "yes", "yeah",
+    "yep", "yup", "sure", "ok", "okay", "please", "do it", "confirm", "sounds good", "perfect",
+    "great", "absolutely", "of course", "correct",
+)
+_NEW_CARD_WORDS = (
+    "different", "another", "new card", "other card", "a new", "not that", "don't use",
+    "dont use", "do not use", "enter", "type", "manually", "someone else", "company card",
+    "corporate", "other one",
+)
+
+
+def classify_card_choice(message: str) -> Optional[str]:
+    """Read the guest's answer to the saved-card question.
+
+    Returns "saved" (use the card on file), "new" (pay with a different card) or None when the
+    reply is neither — e.g. a question ("what's the total?") — so the turn falls through to the
+    normal pipeline and the guest can still be answered. The saved card's last four digits
+    spoken back ("use 1003", "the one ending 1003") count as choosing it.
+    """
+    low = re.sub(r"[^a-z0-9' ]+", " ", (message or "").lower()).strip()
+    if not low:
+        return None
+    if any(w in low for w in _NEW_CARD_WORDS):
+        return "new"
+    # A bare "no" declines the saved card — the only alternative on offer is a new one.
+    if re.match(r"^(no|nope|nah)\b", low) and len(low.split()) <= 4:
+        return "new"
+    if SAVED_CARD_LAST4 in low or "".join(low.split()).endswith(SAVED_CARD_LAST4):
+        return "saved"
+    if any(w in low for w in _SAVED_CARD_WORDS):
+        return "saved"
+    return None
+
+
 NEVER_FAKE_BOOKING = (
     "\n\nHARD RULE — NEVER claim a booking, reservation, order or enquiry has been made, sent, "
     "submitted, requested or confirmed. Never say you have 'sent', 'added', 'put through' or "
     "'confirmed' anything, and never say a confirmation is coming. The ONLY way anything gets "
-    "reserved is the guest naming an option (\"book the Sofitel\") or tapping Reserve on a "
-    "card — both are handled by the app, not by you. When they ask you to book an individual "
+    "booked is the guest naming an option (\"book the Sofitel\") or tapping Reserve on a "
+    "card — the app then asks which card to use (the saved card on file or a different one) "
+    "and completes it; none of that is done by you. When they ask you to book an individual "
     "flight, taxi, tour or restaurant and the app has not confirmed it, point them at that "
     "option's card or ask them to name the one they want. (The whole-trip reservation is "
     "likewise handled elsewhere, not by you.)"
@@ -656,8 +721,10 @@ CAPABILITY_FACTS = (
     "\n\nWHAT THIS APP CAN DO (never deny these, never send the guest elsewhere): it shows "
     "real flight, hotel, restaurant, transfer and activity options as cards on the right with "
     "Reserve buttons; it shows photos of places right in the conversation; it builds, "
-    "revises and prices the full day-by-day trip plan; and it takes reservations in-app — the "
-    "guest can simply SAY \"book it\" and the reservation is made, no payment needed. NEVER tell "
+    "revises and prices the full day-by-day trip plan; and it takes bookings in-app — the "
+    "guest can simply SAY \"book it\"; Sasha then confirms which card to use (the saved card on "
+    f"file, {CARD_QUESTION_MARKER}, or a different card) and the booking completes right in the "
+    "conversation, nothing to fill in. NEVER tell "
     "the guest to use Google Flights, Kayak, Skyscanner, Booking.com, Expedia, TripAdvisor, "
     "Google Images or any other external site or app, and NEVER say you can't pull up, show, "
     "search or book something the app handles. If the thing they asked for isn't on screen "
@@ -1647,20 +1714,16 @@ async def run_book_trip_no_plan_intent(message: str, history: list) -> dict:
 
 
 async def run_book_trip_intent(message: str, history: list) -> dict:
-    """The customer asked to book the whole trip — hand off to the app's reservation step.
+    """The customer asked to book the whole trip — pause on the card choice.
 
-    action=await_payment is a legacy name the frontend still keys on: with payments disabled
-    (reservation-only demo, client feedback 2026-08-11) it reserves the stored itinerary via
-    POST /api/payments/reserve and shows the confirmation; with PAYMENTS_ENABLED it opens
-    Stripe Checkout instead. Either way the ref is minted by the app, not by this agent —
-    speaking a confident "reserving now" here is safe because the reserve call is local and
-    completes before the guest finishes hearing this sentence.
+    action=confirm_card tells the frontend to remember that a WHOLE-TRIP booking is pending
+    while Sasha asks which card to use. The next turn (see the card-choice branch at the top
+    of conduct()) resolves it: the saved card completes the booking in-app via
+    POST /api/payments/reserve with the card recorded — no Stripe redirect — and a different
+    card opens the payment form. The ref is minted by the app, never by this agent.
     """
-    spoken = (
-        "Lovely — I've put your complete itinerary up on the right, and I'm reserving "
-        "everything on it for you now. Your confirmation will be on screen in just a moment."
-    )
-    return {"agent": "book_trip", "response": spoken, "data": {"action": "await_payment"}}
+    return {"agent": "book_trip", "response": card_question("your trip"),
+            "data": {"action": "confirm_card"}}
 
 
 # Agent registry — maps intent names to runner functions. Only the travel-concierge
@@ -1727,6 +1790,43 @@ async def conduct(
                 "hotels": [], "bookings": [], "itinerary": None, "action": None,
                 "booking_ref": None, "itinerary_id": None,
                 "messages": list(conversation_history)}
+
+    # ── Card choice (second half of a booking) ─────────────────────────────────────────
+    # Sasha's previous line was the saved-card question. Read this reply as the answer and
+    # resolve the booking here — the classifier must never see "yes" / "use 1003" / "a
+    # different card" as a fresh intent. The frontend still holds WHAT is being booked (the
+    # offer or the whole trip) from the confirm_card turn; this only tells it how to pay.
+    _last_assistant_text = next(
+        ((m.get("content") or "") for m in reversed(conversation_history)
+         if isinstance(m, dict) and m.get("role") == "assistant"), "").lower()
+    if CARD_QUESTION_MARKER in _last_assistant_text:
+        _choice = classify_card_choice(user_message)
+        if _choice:
+            if _choice == "saved":
+                _spoken = (
+                    f"Perfect — I've completed the payment with your card {CARD_QUESTION_MARKER}, "
+                    "and your booking is confirmed. It's showing as booked on your trip now."
+                )
+                _action = "pay_saved_card"
+            else:
+                _spoken = (
+                    "No problem — I've opened the secure payment form for you. Pop in your "
+                    "card details and tap Pay, and I'll confirm the booking the moment it goes through."
+                )
+                _action = "pay_new_card"
+            print(f"[Conductor] card choice resolved: {_choice}")
+            return {"response": _spoken, "payment_item": None, "intents": ["book_trip"],
+                    "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                    "itinerary": None, "action": _action, "booking_ref": None,
+                    "saved_card": saved_card_payload() if _choice == "saved" else None,
+                    "itinerary_id": ((await chat_store.latest_itinerary_for_session(session_id))
+                                     or {}).get("id") if session_id else None,
+                    "messages": conversation_history + [
+                        {"role": "user", "content": user_message},
+                        {"role": "assistant", "content": _spoken}]}
+        # Not a card answer (a question, an aside) — fall through; the guest can re-confirm
+        # afterwards since the question stays in the history only as long as it is the last
+        # assistant line.
 
     # Recent conversation text — used so booking links/hotels keep the destination in mind
     # across turns (e.g. the city was named two turns ago, not in this message).
@@ -2362,15 +2462,17 @@ async def conduct(
                         }
                         break
     if payment_item:
-        action = "await_payment_item"
-        final_response = (
-            f"Great choice — {payment_item['name']}. Consider it reserved — your "
-            "confirmation is coming up on screen now."
-        )
+        # Same two-turn card step as the whole trip; the frontend keeps the offer pending
+        # until the guest answers, then reserves it (saved card) or opens the payment form.
+        action = "confirm_card"
+        final_response = card_question(payment_item["name"])
 
     return {
         "response": final_response,
         "payment_item": payment_item,
+        # Which card Sasha is offering to charge (confirm_card turns) — the UI shows it on
+        # the pending booking so the spoken question and the screen agree.
+        "saved_card": saved_card_payload() if action == "confirm_card" else None,
         "intents": intents,
         "photos": photos,
         "tools_used": tools_used,

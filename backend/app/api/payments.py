@@ -104,6 +104,12 @@ class ReserveRequest(BaseModel):
     # stored trip. Server-priced from the stored record, same trust model as checkout.
     offer_id: Optional[str] = None
     itinerary_id: Optional[str] = None
+    # How the guest chose to pay when Sasha asked (2026-09-05 flow): "saved_card" completes
+    # the booking against the card on file with no Stripe redirect. Recorded on the booking
+    # row so the Trip tab / You tab can show "Booked · card ending 1003" rather than a bare
+    # reservation. Omitted = plain reservation (the tap-Reserve path).
+    payment_method: Optional[str] = None
+    card_last4: Optional[str] = None
 
 
 @router.post("/reserve")
@@ -132,7 +138,9 @@ async def reserve(body: ReserveRequest):
         amount = float(itinerary.get("total_usd") or 0)
         label = itinerary.get("title") or "Your trip"
 
-    sid = f"resv-{uuid.uuid4()}"
+    paid_with_card = body.payment_method == "saved_card"
+    card_last4 = (body.card_last4 or "").strip()[-4:] if paid_with_card else None
+    sid = f"{'card' if paid_with_card else 'resv'}-{uuid.uuid4()}"
     await chat_store.create_booking(
         booking_id=str(uuid.uuid4()),
         stripe_session_id=sid,
@@ -142,6 +150,8 @@ async def reserve(body: ReserveRequest):
         offer_id=(body.offer_id if offer else None),
         kind=(offer.get("kind") if offer else None),
         label=(label if offer else None),
+        payment_method=(body.payment_method if paid_with_card else None),
+        card_last4=card_last4,
     )
     ref = generate_booking_ref()
     booking = await chat_store.mark_booking_paid(sid, ref)
@@ -158,6 +168,8 @@ async def reserve(body: ReserveRequest):
 
     return {
         "reserved": True,
+        "booked": paid_with_card,
+        "paid_with": ({"method": "saved_card", "last4": card_last4} if paid_with_card else None),
         "booking_ref": ref,
         "amount_usd": amount,
         "item": ({"kind": offer.get("kind"), "label": label, "amount_usd": amount} if offer else None),

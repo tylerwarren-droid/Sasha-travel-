@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useEffect, MutableRefObject } from 'react'
+import { createPortal } from 'react-dom'
 import { Loader2 } from 'lucide-react'
 import { User, Itinerary } from '@/types'
 import VoiceButton, { MicDevicesInfo } from './VoiceButton'
@@ -77,13 +78,32 @@ interface SashaChatProps {
   // Fired when the customer asks to book (action: "await_payment") — show the complete
   // itinerary and take payment. Booking is confirmed only after Stripe succeeds.
   onAwaitPayment?: () => void
-  // Fired when the guest taps "Book & Pay" on an individual hotel/flight/cab card. The parent
-  // opens the same payment modal and checks out by offer_id (server-priced, like the trip).
+  // Fired when the guest taps Reserve on an individual hotel/flight/cab card. The parent hands
+  // off to Sasha's spoken saved-card question (same flow as a verbal "book it").
   onBookItem?: (offer: { offer_id: string; label: string; amount_usd: number; kind: string; name: string }) => void
+  // Saved-card step (client ask 2026-09-05). The guest said "book it": Sasha asks whether to
+  // charge the saved card on file or a different one. `item` is the single offer being booked,
+  // or null for the whole stored trip — the parent keeps it pending until the guest answers.
+  onConfirmCard?: (item: { offer_id: string; label: string; amount_usd: number; kind: string; name: string } | null, savedCard: { last4: string } | null) => void
+  // The guest chose the saved card: complete the pending booking in-app, no Stripe.
+  onPaySavedCard?: (savedCard: { last4: string }) => void
+  // The guest wants a different card: open the payment form for the pending booking.
+  onPayNewCard?: () => void
+  // Set when the trip was paid with the saved card — the Trip tab says "Booked", not "Reserved".
+  paidWith?: { last4: string } | null
   // The server's id for the stored trip. Checkout is priced from this, not from the browser.
   onItineraryId?: (id: string) => void
   // Set once payment is confirmed — turns the Trip tab's booking controls into "Reserved".
   bookingRef?: string | null
+  // Mindtrip-style shell (2026-09-05): the page's left sidebar owns tab navigation, so the
+  // in-panel tab strip is hidden; `chatHero` is the avatar stage the page places above the
+  // transcript on the Chat tab (it stays a fixed element that shrinks to a corner on other tabs).
+  hideTabs?: boolean
+  chatHero?: React.ReactNode
+  // Where Trip / Ideas / You paint. The page hands over its centre stage (the avatar's spot on
+  // Chat) so the plan opens large while this column keeps the transcript + composer. A portal
+  // keeps ONE SashaChat instance owning all the state wherever its panels render.
+  panelPortal?: HTMLElement | null
   // Which workspace tab is showing, and how to change it. Owned by the page so the tab
   // survives remounts and Sasha can nudge it (e.g. to Trip when a plan lands).
   activeTab?: WorkspaceTab
@@ -128,7 +148,7 @@ function interimLineFor(intents: string[], variant: number): string {
 }
 
 
-export default function SashaChat({ user, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onMicDevices, onBooked, onAwaitPayment, onBookItem, onItineraryId, bookingRef, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache }: SashaChatProps) {
+export default function SashaChat({ user, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onMicDevices, onBooked, onAwaitPayment, onBookItem, onConfirmCard, onPaySavedCard, onPayNewCard, paidWith, onItineraryId, bookingRef, hideTabs = false, chatHero = null, panelPortal = null, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache }: SashaChatProps) {
   const tab = activeTab
   const [localMessages, setLocalMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
@@ -349,7 +369,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         // 2026-08-11 — never assume the hardcoded demo profile is who's talking).
         force_intent: opts?.intent,              // set when the UI knows the intent (idea build)
       }, { timeout: 60000, headers: apiHeaders() })  // bound the call so a hung backend can't stall the turn
-      const { response: sashaResponse, conversation_history, photos: respPhotos, links, hotels: hotelRecs, bookings: bookingCards, itinerary, action, booking_ref, itinerary_id, payment_item } = response.data
+      const { response: sashaResponse, conversation_history, photos: respPhotos, links, hotels: hotelRecs, bookings: bookingCards, itinerary, action, booking_ref, itinerary_id, payment_item, saved_card } = response.data
       // Replace local messages with server-authoritative history
       if (conversation_history?.length > 0) {
         setMessages(conversation_history)
@@ -399,6 +419,14 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
       // Voice-driven single-item booking: "book it" / "reserve Tam Vi" resolved to one
       // offer server-side — open the SAME name/email payment popup as tapping Book & Pay.
       else if (action === 'await_payment_item' && payment_item?.offer_id) onBookItem?.(payment_item)
+      // Saved-card step: Sasha just asked "saved card ending 1003, or a different card?".
+      // Park the booking (a single offer, or the whole trip when payment_item is absent) until
+      // the guest answers on the next turn.
+      else if (action === 'confirm_card') onConfirmCard?.(payment_item?.offer_id ? payment_item : null, saved_card ?? null)
+      // Guest chose the card on file — the booking completes here, no Stripe redirect.
+      else if (action === 'pay_saved_card') onPaySavedCard?.(saved_card ?? { last4: '' })
+      // Guest wants a different card — open the payment form for whatever was pending.
+      else if (action === 'pay_new_card') onPayNewCard?.()
       else if (action === 'trip_booked') console.warn('[Conductor] ignoring legacy trip_booked: bookings require verified payment')
     } catch (error: any) {
       console.error('[Conductor] error:', error?.response?.status, error?.response?.data, error?.message)
@@ -539,7 +567,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
       {/* ── Workspace tabs — one job per tab. Chat leads: this is a voice call, so the
            transcript is the thing the guest follows; the rest is theirs to pull, not ours
            to push. Sasha marks a tab with a dot instead of yanking them off the call. ── */}
-      <nav className="lw-tabs" role="tablist">
+      {!hideTabs && <nav className="lw-tabs" role="tablist">
         {TABS.map(t => (
           <button
             key={t.id}
@@ -552,46 +580,58 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
             {tab !== t.id && unseenTabs.includes(t.id) && <span className="lw-ping" aria-label="Updated" />}
           </button>
         ))}
-      </nav>
+      </nav>}
 
-      {tab === 'ideas' && (
-        <IdeasPanel
-          user={user}
-          building={isLoading}
-          cached={ideasCache}
-          onLoaded={onIdeasCache}
-          // Tapping an idea IS an itinerary request — say so explicitly rather than letting
-          // keyword classification guess (it mis-routed these to the activity agent).
-          onBuild={(prompt) => sendMessage(prompt, { force: true, intent: 'itinerary' })}
-        />
-      )}
+      {(() => {
+        if (tab === 'chat') return null
+        const panels = (
+          <>
+            {tab === 'ideas' && (
+              <IdeasPanel
+                user={user}
+                building={isLoading}
+                cached={ideasCache}
+                onLoaded={onIdeasCache}
+                // Tapping an idea IS an itinerary request — say so explicitly rather than letting
+                // keyword classification guess (it mis-routed these to the activity agent).
+                onBuild={(prompt) => sendMessage(prompt, { force: true, intent: 'itinerary' })}
+              />
+            )}
 
-      {tab === 'trip' && building && (
-        <div className="lw-building">
-          <div className="lw-building-orb"><Loader2 className="w-5 h-5 animate-spin" /></div>
-          <div className="lw-building-k">Building your itinerary</div>
-          <div className="lw-building-step">{BUILD_STEPS[buildStep]}</div>
-          <div className="lw-building-bar"><span /></div>
-          <div className="lw-building-hint">Just a few seconds — Sasha is holding on until it's ready.</div>
-        </div>
-      )}
-      {tab === 'trip' && !building && (
-        <TripPanel
-          richItinerary={richItinerary}
-          openDays={openDays}
-          toggleDay={toggleDay}
-          onBook={onBook}
-          travellerCount={travellerCount}
-          onBrowseIdeas={() => onTabChange?.('ideas')}
-          bookingRef={bookingRef}
-        />
-      )}
+            {tab === 'trip' && building && (
+              <div className="lw-building">
+                <div className="lw-building-orb"><Loader2 className="w-5 h-5 animate-spin" /></div>
+                <div className="lw-building-k">Building your itinerary</div>
+                <div className="lw-building-step">{BUILD_STEPS[buildStep]}</div>
+                <div className="lw-building-bar"><span /></div>
+                <div className="lw-building-hint">Just a few seconds — Sasha is holding on until it's ready.</div>
+              </div>
+            )}
+            {tab === 'trip' && !building && (
+              <TripPanel
+                richItinerary={richItinerary}
+                openDays={openDays}
+                toggleDay={toggleDay}
+                onBook={onBook}
+                travellerCount={travellerCount}
+                onBrowseIdeas={() => onTabChange?.('ideas')}
+                bookingRef={bookingRef}
+                paidWith={paidWith}
+              />
+            )}
 
-      {tab === 'you' && (
-        <YouPanel user={user} plannedThisSession={richItinerary ? 1 : 0} language={language} />
-      )}
+            {tab === 'you' && (
+              <YouPanel user={user} plannedThisSession={richItinerary ? 1 : 0} language={language} />
+            )}
+          </>
+        )
+        return panelPortal ? createPortal(panels, panelPortal) : panels
+      })()}
 
-      {tab === 'chat' && (
+      {tab === 'chat' && chatHero}
+      {/* In the portaled shell this column IS the conversation: keep the transcript (and its
+          cards) in view while the guest reads Trip / Ideas / You in the centre stage. */}
+      {(tab === 'chat' || panelPortal) && (
       <div className="lw-streamwrap">
       <div className="lw-stream" ref={streamRef} onWheel={onStreamWheel} onScroll={recomputeScrollCue}>
 
@@ -887,6 +927,11 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         .lw-ping{width:6px;height:6px;border-radius:50%;background:#DAA520;animation:lwPing 2s infinite}
         @keyframes lwPing{0%,100%{opacity:.4}50%{opacity:1}}
 
+        /* ── Trip: two columns on the wide centre stage (hero / map / costs left, days right) ── */
+        .lw-trip-cols{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:16px;align-items:start}
+        .lw-trip-left,.lw-trip-right{display:flex;flex-direction:column;gap:11px;min-width:0}
+        .lw-trip-right .lw-day:first-of-type{border-top:none}
+        @media (max-width:820px){.lw-trip-cols{grid-template-columns:1fr}}
         /* ── Trip summary bar ── */
         .lw-summary{flex-shrink:0;display:flex;align-items:center;gap:22px;padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.28)}
         .lw-sumcell{display:flex;flex-direction:column;gap:3px}
@@ -1065,8 +1110,8 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         .lw-prefrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 13px;border-radius:11px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05)}
         .lw-prefk{font-size:11px;letter-spacing:.04em;text-transform:capitalize;color:rgba(255,255,255,.4)}
         .lw-prefv{font-size:13px;color:rgba(255,255,255,.82);text-transform:capitalize;text-align:right}
-        .lw-composer{flex-shrink:0;padding:14px 16px;border-top:1px solid rgba(255,255,255,0.07);background:rgba(0,0,0,.2)}
-        .lw-composer .field{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:8px 10px 8px 12px}
+        .lw-composer{flex-shrink:0;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.07);background:rgba(0,0,0,.2)}
+        .lw-composer .field{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:6px 8px}
         .lw-composer .field input{flex:1;min-width:60px;background:transparent;border:none;outline:none;color:#fff;font-size:13.5px;font-family:inherit}
         .lw-composer .field input::placeholder{color:rgba(255,255,255,.3)}
         .lw-send{width:38px;height:38px;border-radius:12px;border:none;cursor:pointer;background:linear-gradient(135deg,#DAA520,#B8860B);color:#fff;display:grid;place-items:center;font-size:15px;flex-shrink:0;transition:.2s}

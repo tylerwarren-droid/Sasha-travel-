@@ -1,18 +1,50 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { MicOff } from 'lucide-react'
+import { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { MicOff, MessageSquare, Sparkles, Map as MapIcon, User as UserIcon, Plus, Play, Mic, Send } from 'lucide-react'
 import SashaAvatar, { prefetchAvatarSession } from '../components/SashaAvatar'
 import SashaChat, { WorkspaceTab } from '../components/SashaChat'
 import type { MicDevicesInfo } from '../components/VoiceButton'
 import type { Idea } from '../components/workspace/IdeasPanel'
 import type { RichItinerary } from '../components/ItineraryDays'
 import VnFlag from '../components/VnFlag'
+import LogoMark from '../components/portal/LogoMark'
 import { stripMarkdown } from '@/lib/markdown'
 import { apiUrl, apiHeaders } from '@/lib/api'
-import { PAYMENTS_ENABLED } from '@/lib/flags'
+import { PAYMENTS_ENABLED, SAVED_CARD_LAST4 } from '@/lib/flags'
 import { buildItineraryHtml, buildItineraryText } from '@/lib/itineraryDoc'
 import { User, Itinerary } from '@/types'
+
+const PRESET_PROMPTS = ['Plan a 7 day trip', 'Tell me about Hoi An', 'Best golf courses', 'Phu Quoc beaches']
+// Sample plan for `?ui=preview` (layout QA of the Trip board without a backend). Illustrative
+// numbers; the flag is never set in normal use.
+const PREVIEW_PLAN: RichItinerary = {
+  title: 'Hoi An & Da Nang · 7 days',
+  summary: 'Lantern season in the old town, a cooking class in Tra Que, then Da Nang beaches and the Golden Bridge.',
+  estimated_total_usd: 4860,
+  travellers: 2,
+  cost_breakdown: { hotels: 1890, experiences: 1240, meals: 860, transport: 870, travellers: 2 },
+  days: [
+    { day: 1, city: 'Hoi An', title: 'Arrive Da Nang, evening in Hoi An', description: 'Private transfer from the airport, check in by the river, first lantern walk.', image: 'https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=900', hotel: { name: 'Anantara Hoi An Resort', book_url: '', rating: 9.1, reviews: 2140, tag: 'Riverside' }, activities: [{ time: '18:00', name: 'Lantern walk along the Thu Bon', blurb: 'The old town lights up at dusk.', book_url: '' }] },
+    { day: 2, city: 'Hoi An', title: 'Old town walk, cooking class', description: '', image: null, hotel: null, activities: [{ time: '09:00', name: 'Heritage walk with a local guide', blurb: '', book_url: '' }, { time: '15:00', name: 'Tra Que village cooking class', blurb: '', book_url: '' }] },
+    { day: 3, city: 'Hoi An', title: 'My Son sanctuary at sunrise', description: '', image: null, hotel: null, activities: [] },
+    { day: 4, city: 'Da Nang', title: 'Ba Na Hills & Golden Bridge', description: '', image: null, hotel: { name: 'InterContinental Danang Sun Peninsula', book_url: '', rating: 9.4, reviews: 3280 }, activities: [] },
+    { day: 5, city: 'Da Nang', title: 'My Khe beach, seafood by the sea', description: '', image: null, hotel: null, activities: [] },
+    { day: 6, city: 'Da Nang', title: 'Son Tra peninsula & Linh Ung pagoda', description: '', image: null, hotel: null, activities: [] },
+    { day: 7, city: 'Da Nang', title: 'Slow morning, fly home', description: '', image: null, hotel: null, activities: [] },
+  ],
+}
+// Welcome-screen destination gallery (approved design, board 1). Same curated Unsplash set the
+// backend's foto_agent falls back to, so the imagery matches what Sasha later surfaces. The three
+// unnamed shots are captioned by theme rather than guessed at as places.
+const WELCOME_OPENERS: { location: string; blurb: string; ask: string; url: string }[] = [
+  { location: 'Ha Long Bay', blurb: 'Limestone karsts, overnight junks', ask: 'Tell me about Ha Long Bay', url: 'https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
+  { location: 'Hoi An', blurb: 'Lantern-lit old town', ask: 'Tell me about Hoi An', url: 'https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
+  { location: 'Mu Cang Chai', blurb: 'Rice terraces in gold', ask: 'Tell me about Mu Cang Chai', url: 'https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
+  { location: 'Island hopping', blurb: 'Boats, coves and slow days', ask: 'Where should we go island hopping in Vietnam?', url: 'https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
+  { location: 'River valleys', blurb: 'Water between the peaks', ask: 'Show me Vietnam\'s river valleys', url: 'https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
+  { location: 'Beach days', blurb: 'White sand, warm sea', ask: 'Which Vietnam beaches would you pick?', url: 'https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
+]
 
 const DEMO_USER: User = {
   display_name: 'Jon Peters',
@@ -58,6 +90,7 @@ interface Photo {
   thumb: string
   description: string
   photographer: string
+  location?: string   // the place the shot is of (backend caption), used for tile labels
 }
 
 export default function VietnamPage() {
@@ -104,7 +137,7 @@ export default function VietnamPage() {
   // and checkout run against this offer (server-priced by offer_id) instead of the whole trip.
   const [pendingOffer, setPendingOffer] = useState<{ offer_id: string; label: string; amount_usd: number; kind: string; name: string } | null>(null)
   // A confirmed single-item booking (from the Stripe return leg), shown as its own confirmation.
-  const [itemBooked, setItemBooked] = useState<{ ref?: string; label?: string; amount?: number; kind?: string; emailSent?: boolean } | null>(null)
+  const [itemBooked, setItemBooked] = useState<{ ref?: string; label?: string; amount?: number; kind?: string; emailSent?: boolean; paidWith?: { last4: string } | null } | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
   // Typed booking details — names/emails are unreliable over voice STT, so collect them here.
@@ -124,6 +157,12 @@ export default function VietnamPage() {
     itineraryIdRef.current = id
     setItineraryId(id)
   }, [])
+  // The booking parked on Sasha's "saved card ending 1003, or a different card?" question
+  // (action confirm_card). `item` is the single offer; null means the whole stored trip. The
+  // backend is stateless across turns, so the browser is what remembers WHAT is being booked;
+  // the next turn only says HOW (pay_saved_card / pay_new_card). A ref, not state: the answer
+  // can land on the very next render.
+  const pendingCardRef = useRef<{ item: { offer_id: string; label: string; amount_usd: number; kind: string; name: string } | null; savedCard: { last4: string } | null } | null>(null)
 
   // ── Deliberate mute while a payment modal is open ─────────────────────────
   // The guest is typing their name/email into the Complete Booking form; a hot mic
@@ -197,7 +236,7 @@ export default function VietnamPage() {
   }, [language])
   // Final booking state — set when the customer confirms the trip. Locks the itinerary into
   // a shareable / printable confirmation and ends the live session once Sasha finishes.
-  const [booked, setBooked] = useState<{ ref?: string; emailSent?: boolean } | null>(null)
+  const [booked, setBooked] = useState<{ ref?: string; emailSent?: boolean; paidWith?: { last4: string } | null } | null>(null)
   const [shareToast, setShareToast] = useState<string | null>(null)
   const endOnFinishRef = useRef(false)
   const bookEndTimerRef = useRef<any>(null)
@@ -367,11 +406,11 @@ export default function VietnamPage() {
         if (data?.paid && data?.booking_ref) {
           if (data.item) {
             // A single hotel/flight/cab was paid for — show the item confirmation, not the trip one.
-            setItemBooked({ ref: data.booking_ref, label: data.item.label, amount: data.item.amount_usd, kind: data.item.kind, emailSent: Boolean(data.email_sent) })
+            setItemBooked({ ref: data.booking_ref, label: data.item.label, amount: data.item.amount_usd, kind: data.item.kind, emailSent: Boolean(data.email_sent), paidWith: { last4: '' } })
           } else {
             if (data.itinerary?.days?.length) setRichItinerary(data.itinerary)
             else setPayResult('paid')   // no stored trip payload — at least confirm via toast
-            setBooked({ ref: data.booking_ref, emailSent: Boolean(data.email_sent) })
+            setBooked({ ref: data.booking_ref, emailSent: Boolean(data.email_sent), paidWith: { last4: '' } })
             setRightTab('trip')
           }
         } else {
@@ -391,32 +430,27 @@ export default function VietnamPage() {
   // Reservation-only path (payments disabled): Sasha simply takes the reservation. The
   // backend mints the reference instantly — no Stripe, no name/email form, so a verbal
   // "book it" completes end-to-end without a single tap.
-  const reserveItem = useCallback(async (offer: { offer_id: string; label: string; amount_usd: number; kind: string; name: string }) => {
+  // `paidWith` = the saved card the guest chose when Sasha asked; the backend records it and
+  // the confirmation says "booked" and names the card instead of a bare reservation.
+  const reserveItem = useCallback(async (offer: { offer_id: string; label: string; amount_usd: number; kind: string; name: string }, paidWith?: { last4: string } | null) => {
     setReserveError(null)
     try {
       const res = await fetch(apiUrl('/api/payments/reserve'), {
         method: 'POST',
         headers: apiHeaders(),
-        body: JSON.stringify({ offer_id: offer.offer_id }),
+        body: JSON.stringify({
+          offer_id: offer.offer_id,
+          ...(paidWith ? { payment_method: 'saved_card', card_last4: paidWith.last4 } : {}),
+        }),
       })
       if (!res.ok) throw new Error(String(res.status))
       const data = await res.json()
-      setItemBooked({ ref: data.booking_ref, label: offer.label, amount: offer.amount_usd, kind: offer.kind })
+      setItemBooked({ ref: data.booking_ref, label: offer.label, amount: offer.amount_usd, kind: offer.kind, paidWith: paidWith ?? null })
     } catch {
       setReserveError('Could not complete that reservation — please try again.')
       setTimeout(() => setReserveError(null), 4000)
     }
   }, [])
-
-  // A guest tapped "Reserve" on an individual hotel/flight/cab card (or said "book it" —
-  // the conductor resolves the named option server-side and this fires with its offer).
-  // Payments off → reserve directly; payments on → the legacy Stripe modal.
-  const handleBookItem = useCallback((offer: { offer_id: string; label: string; amount_usd: number; kind: string; name: string }) => {
-    if (!PAYMENTS_ENABLED) { reserveItem(offer); return }
-    setCheckoutError(null)
-    setPendingOffer(offer)
-    setPaymentModal('card')
-  }, [reserveItem])
 
   const startCardCheckout = useCallback(async () => {
     setCheckoutError(null)
@@ -575,8 +609,8 @@ export default function VietnamPage() {
 
   // Customer confirmed the trip — lock the final itinerary into a shareable confirmation and
   // end the session once the confirmation is spoken.
-  const handleBooked = useCallback((ref?: string) => {
-    setBooked({ ref })
+  const handleBooked = useCallback((ref?: string, paidWith?: { last4: string } | null) => {
+    setBooked({ ref, paidWith: paidWith ?? null })
     // Turn the camera off immediately on booking — the call is effectively over, and this is
     // what the user looks at to confirm "the session ended". The avatar finishes its spoken
     // confirmation, then the live session is fully torn down (below).
@@ -597,11 +631,11 @@ export default function VietnamPage() {
   // Reserve the WHOLE stored trip (payments disabled). Uses handleBooked so the confirmation
   // modal shows and the live session winds down once Sasha finishes speaking, exactly like
   // the old paid path did after Stripe verified.
-  const reserveTrip = useCallback(async () => {
+  const reserveTrip = useCallback(async (paidWith?: { last4: string } | null) => {
     setReserveError(null)
     const tripId = itineraryIdRef.current
     if (!tripId) {
-      setReserveError('Build an itinerary first, then Sasha can reserve it.')
+      setReserveError('Build an itinerary first, then Sasha can book it.')
       setTimeout(() => setReserveError(null), 4000)
       return
     }
@@ -609,7 +643,10 @@ export default function VietnamPage() {
       const res = await fetch(apiUrl('/api/payments/reserve'), {
         method: 'POST',
         headers: apiHeaders(),
-        body: JSON.stringify({ itinerary_id: tripId }),
+        body: JSON.stringify({
+          itinerary_id: tripId,
+          ...(paidWith ? { payment_method: 'saved_card', card_last4: paidWith.last4 } : {}),
+        }),
       })
       if (!res.ok) throw new Error(String(res.status))
       const data = await res.json()
@@ -617,12 +654,12 @@ export default function VietnamPage() {
       if (hasDays) setRichItinerary(data.itinerary)
       if (hasDays || richItinerary) {
         handleTabChange('trip')
-        handleBooked(data.booking_ref)
+        handleBooked(data.booking_ref, paidWith)
       } else {
         // No trip payload to render the full confirmation with — the booked modal requires
         // richItinerary, so calling handleBooked here would end the session behind a modal
         // that never appears (dead page until reload). Show the compact confirmation instead.
-        setItemBooked({ ref: data.booking_ref, label: 'Your Vietnam trip', amount: data.amount_usd })
+        setItemBooked({ ref: data.booking_ref, label: 'Your Vietnam trip', amount: data.amount_usd, paidWith: paidWith ?? null })
       }
     } catch {
       setReserveError('Could not complete the reservation — please try again.')
@@ -640,10 +677,65 @@ export default function VietnamPage() {
     setPaymentModal('card')
   }, [handleTabChange, reserveTrip])
 
+  // ── Saved-card step (client ask 2026-09-05) ─────────────────────────────────────────
+  // Turn 1: the guest said "book it" and Sasha asked "saved card ending 1003, or a different
+  // card?". Nothing is booked yet — park what they asked for and bring the trip into view.
+  const handleConfirmCard = useCallback((item: { offer_id: string; label: string; amount_usd: number; kind: string; name: string } | null, savedCard: { last4: string } | null) => {
+    pendingCardRef.current = { item, savedCard }
+    if (!item) handleTabChange('trip')
+  }, [handleTabChange])
+
+  // A TAP on Reserve (a card) or "Book the whole trip" (Trip tab) must feel exactly like the
+  // spoken "book it": Sasha wakes up and asks which card to use, the guest answers by voice
+  // (or types), and the same pay_saved_card / pay_new_card turn completes it. Nothing is
+  // booked on the tap itself. The question is appended to the chat as Sasha's line so the
+  // conductor sees "ending in 1003" as her last reply next turn — that is the whole handshake,
+  // no backend call needed here. If she is mid-sentence the question queues behind it.
+  const askCardChoice = useCallback((item: { offer_id: string; label: string; amount_usd: number; kind: string; name: string } | null) => {
+    const subject = item ? item.name : 'your trip'
+    const question = `Of course — let's get ${subject} booked. You have one saved card on file, ending in ${SAVED_CARD_LAST4}. Shall I go ahead and complete the payment automatically with that card, or would you like to pay with a different card?`
+    pendingCardRef.current = { item, savedCard: { last4: SAVED_CARD_LAST4 } }
+    setChatMessages(prev => [...prev, { role: 'assistant', content: question }])
+    if (!item) handleTabChange('trip')
+    if (isRespondingRef.current) pendingSpeechRef.current = question
+    else speakNow(question)
+  }, [handleTabChange, speakNow])
+
+  // A guest tapped "Reserve" on an individual hotel/flight/cab card. Previously this reserved
+  // on the spot (or opened the Stripe modal with payments on); now it hands off to Sasha's
+  // card question so taps and voice converge on one flow.
+  const handleBookItem = useCallback((offer: { offer_id: string; label: string; amount_usd: number; kind: string; name: string }) => {
+    setCheckoutError(null)
+    askCardChoice(offer)
+  }, [askCardChoice])
+
+  // Turn 2a: "use 1003" — complete the pending booking against the card on file. No Stripe,
+  // no form: /api/payments/reserve records the card and mints the ref, and the confirmation
+  // (and the Trip tab) read "Booked · Paid with card ending 1003".
+  const handlePaySavedCard = useCallback((savedCard: { last4: string }) => {
+    const pending = pendingCardRef.current
+    pendingCardRef.current = null
+    const card = savedCard?.last4 ? savedCard : (pending?.savedCard ?? savedCard)
+    if (pending?.item) reserveItem(pending.item, card)
+    else reserveTrip(card)
+  }, [reserveItem, reserveTrip])
+
+  // Turn 2b: "a different card" — open the payment form for whatever was pending. This is the
+  // Stripe Checkout path and needs the payment service configured; the form itself explains
+  // when it isn't ("Payments are not configured for this demo yet").
+  const handlePayNewCard = useCallback(() => {
+    const pending = pendingCardRef.current
+    pendingCardRef.current = null
+    setCheckoutError(null)
+    if (pending?.item) setPendingOffer(pending.item)
+    else { setPendingOffer(null); handleTabChange('trip') }
+    setPaymentModal('card')
+  }, [handleTabChange])
+
   // Open the booked itinerary as a printable page → user saves as PDF via the print dialog.
   const exportItineraryPdf = useCallback(() => {
     if (!richItinerary) return
-    const html = buildItineraryHtml(richItinerary, booked?.ref)
+    const html = buildItineraryHtml(richItinerary, booked?.ref, booked?.paidWith ?? null)
     const w = window.open('', '_blank')
     if (!w) { setShareToast('Allow pop-ups to download the PDF.'); setTimeout(() => setShareToast(null), 2500); return }
     w.document.open(); w.document.write(html); w.document.close(); w.focus()
@@ -653,7 +745,7 @@ export default function VietnamPage() {
   // Native share sheet where available, else copy the itinerary text to the clipboard.
   const shareItinerary = useCallback(async () => {
     if (!richItinerary) return
-    const text = buildItineraryText(richItinerary, booked?.ref)
+    const text = buildItineraryText(richItinerary, booked?.ref, booked?.paidWith ?? null)
     const title = richItinerary.title || 'My Vietnam itinerary'
     try { if (navigator.share) { await navigator.share({ title, text }); return } } catch {}
     try { await navigator.clipboard.writeText(text); setShareToast('Itinerary copied to clipboard') }
@@ -694,25 +786,105 @@ export default function VietnamPage() {
     speakNow(line)
   }, [speakNow])
 
-  return (
-    <main className="h-screen flex flex-col overflow-hidden" style={{ background: 'radial-gradient(1200px 800px at 18% -10%, #15131f 0%, #07070d 55%)' }}>
 
-      {/* HEADER */}
-      <div className="flex items-center justify-between px-6 py-3.5 border-b border-white/5 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(12px)' }}>
-        <div className="flex items-center gap-3">
-          <VnFlag size={20} />
-          <span className="font-bold tracking-wide" style={{ color: '#DAA520' }}>Discover Vietnam</span>
-          <div className="w-px h-4 bg-white/10" />
-          <span className="text-xs text-white/30 tracking-widest uppercase">AI Travel Concierge</span>
+  // ── Mindtrip-style shell (2026-09-05), dark ─────────────────────────────────────────
+  // Three columns: nav · centre STAGE · conversation. The avatar is ONE fixed element that
+  // never remounts (a remount would restart the LiveAvatar session). On Chat it covers the
+  // whole centre stage, full height; on Trip / Ideas / You the stage shows that panel (SashaChat
+  // portals it in) and the avatar glides to a small picture-in-picture card in the stage's
+  // bottom-right corner. Only top/left/width/height animate, so object-fit is preserved.
+  const stageRef = useRef<HTMLDivElement | null>(null)
+  const [panelHost, setPanelHost] = useState<HTMLDivElement | null>(null)
+  const [avatarBox, setAvatarBox] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
+  // `?ui=preview` renders the shell with a placeholder tile and no live session — layout QA
+  // without spending LiveAvatar credits. Read after mount so SSR and client agree.
+  const [uiPreview, setUiPreview] = useState(false)
+  useEffect(() => {
+    try {
+      const on = new URLSearchParams(window.location.search).get('ui') === 'preview'
+      setUiPreview(on)
+      if (on) setRichItinerary(PREVIEW_PLAN)   // layout QA only — never reached without the flag
+    } catch {}
+  }, [])
+  const stageLive = started || uiPreview
+  const avatarPip = stageLive && rightTab !== 'chat'
+  const measureAvatar = useCallback(() => {
+    const el = stageRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    if (r.width <= 0) return
+    if (avatarPip) {
+      const W = Math.max(200, Math.min(300, Math.round(r.width * 0.34)))
+      const H = Math.round(W * 0.66)
+      setAvatarBox({ top: r.bottom - H - 12, left: r.right - W - 12, width: W, height: H })
+    } else {
+      setAvatarBox({ top: r.top, left: r.left, width: r.width, height: r.height })
+    }
+  }, [avatarPip])
+  useLayoutEffect(() => {
+    measureAvatar()
+    const raf = requestAnimationFrame(measureAvatar)
+    const ro = stageRef.current ? new ResizeObserver(() => measureAvatar()) : null
+    if (stageRef.current && ro) ro.observe(stageRef.current)
+    window.addEventListener('resize', measureAvatar)
+    return () => { cancelAnimationFrame(raf); ro?.disconnect(); window.removeEventListener('resize', measureAvatar) }
+  }, [measureAvatar, stageLive, rightTab])
+  // A destination chip tapped BEFORE the call starts: remember it and send it once the
+  // session is up, so "Plan a 7 day trip" from the welcome screen becomes the first turn.
+  const pendingOpenerRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (started && voiceReady && pendingOpenerRef.current && sendChatRef.current) {
+      const t = pendingOpenerRef.current; pendingOpenerRef.current = null
+      sendChatRef.current(t)
+    }
+  }, [started, voiceReady])
+  const startWith = useCallback((opener?: string) => {
+    if (verifying || booked || itemBooked) return
+    if (opener) pendingOpenerRef.current = opener
+    handleStart()
+  }, [verifying, booked, itemBooked, handleStart])
+  const newChat = useCallback(() => {
+    // Mindtrip's "New chat": a clean slate. Ending the live session first releases the
+    // avatar; handleStart already resets messages/plan/tabs.
+    if (started) handleEndSession()
+    setTimeout(() => handleStart(), 60)
+  }, [started, handleEndSession, handleStart])
+  const NAV: { id: WorkspaceTab; label: string; Ic: React.ComponentType<{ size?: number; strokeWidth?: number }> }[] = [
+    { id: 'chat', label: 'Chat', Ic: MessageSquare },
+    { id: 'ideas', label: 'Ideas', Ic: Sparkles },
+    { id: 'trip', label: 'Trip', Ic: MapIcon },
+    { id: 'you', label: 'You', Ic: UserIcon },
+  ]
+  // The Live Workspace subtitle — what Sasha is doing right now (carried over from the old
+  // workspace head so the copy stays familiar).
+  const wsSubtitle = !started ? 'What Sasha is doing for you'
+    : isAvatarSpeaking ? 'Speaking with you…'
+    : richItinerary ? `Planning · ${richItinerary.title}`
+    : photos.length > 0 ? `Exploring ${photos[activePhoto]?.location || photos[activePhoto]?.description || 'Vietnam'}`
+    : 'What Sasha is doing for you'
+  const statusLabel = micMuted ? 'Not listening' : isAvatarSpeaking ? 'Sasha is speaking' : isListening ? 'Listening…' : voiceConnected ? 'Mic live' : micError ? 'Mic unavailable' : 'Connecting…'
+
+  return (
+    <main className="mt-app">
+
+      {/* ── LEFT NAV ── */}
+      <aside className="mt-side">
+        <div className="mt-brand">
+          <LogoMark height={44} className="mt-logo" />
+          <div className="mt-brand-sub"><VnFlag size={13} /><b>Discover Vietnam</b></div>
+          <div className="mt-brand-sub">Sasha · AI travel concierge</div>
         </div>
-        <div className="flex items-center gap-3">
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            title="Language Sasha speaks"
-            className="text-xs rounded-full px-2 py-1.5 cursor-pointer outline-none"
-            style={{ color: '#DAA520', border: '1px solid rgba(218,165,32,0.3)', background: 'rgba(218,165,32,0.12)' }}
-          >
+        <nav className="mt-nav" aria-label="Workspace">
+          {NAV.map(n => (
+            <button key={n.id} className={`mt-navbtn ${rightTab === n.id ? 'on' : ''}`} onClick={() => handleTabChange(n.id)} aria-current={rightTab === n.id}>
+              <span className="ic" aria-hidden><n.Ic size={16} strokeWidth={1.8} /></span><span className="lbl">{n.label}</span>
+              {rightTab !== n.id && unseenTabs.includes(n.id) && <span className="dot" aria-label="Updated" />}
+            </button>
+          ))}
+        </nav>
+        <button className="mt-newchat" onClick={newChat}><Plus size={14} strokeWidth={2.2} /> New chat</button>
+        <div className="mt-sidefoot">
+          <select value={language} onChange={(e) => setLanguage(e.target.value)} title="Language Sasha speaks" className="mt-select">
             <option value="en">🇬🇧 English</option>
             <option value="vi">🇻🇳 Tiếng Việt</option>
             <option value="ko">🇰🇷 한국어</option>
@@ -721,293 +893,335 @@ export default function VietnamPage() {
             <option value="fr">🇫🇷 Français</option>
             <option value="es">🇪🇸 Español</option>
           </select>
-          {started && (
-            <button
-              onClick={handleEndSession}
-              title="End the live avatar session to stop using credits"
-              className="text-xs px-3 py-1.5 rounded-full border transition-colors hover:opacity-80"
-              style={{ color: '#f87171', borderColor: 'rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.1)' }}
-            >
-              ■ End Session
-            </button>
-          )}
-          <div className="text-xs px-3 py-1 rounded-full border" style={{ color: '#DAA520', borderColor: 'rgba(218,165,32,0.3)', background: 'rgba(218,165,32,0.12)' }}>
-            Ministry of Tourism Partner
+          {started && <button className="mt-end" onClick={handleEndSession} title="End the live avatar session to stop using credits">■ End session</button>}
+          <div className="mt-partner">Ministry of Tourism Partner</div>
+        </div>
+      </aside>
+
+      {/* ── CENTRE STAGE — the avatar, full height, on Chat; the open panel on Trip / Ideas / You ── */}
+      <section className="mt-center">
+        <div className="mt-top">
+          <div className="mt-head">
+            <span className="mt-head-ic"><Sparkles size={15} strokeWidth={1.8} /></span>
+            <div style={{ minWidth: 0 }}>
+              <div className="mt-title">{richItinerary ? richItinerary.title : 'New chat'}</div>
+              <div className="mt-sub">{wsSubtitle}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {started ? (
+              <span className="mt-pill live"><span className="la-dot" /> Live · {fmtTime(elapsed)}</span>
+            ) : (
+              <span className="mt-pill">Ready when you are</span>
+            )}
+            {started && <span className="mt-pill">{statusLabel}</span>}
           </div>
         </div>
-      </div>
+        <div className="mt-stage" ref={stageRef}>
+          {/* SashaChat portals Trip / Ideas / You in here; on Chat the fixed avatar covers this box. */}
+          <div ref={setPanelHost} className="mt-panelhost" style={{ display: stageLive && rightTab !== 'chat' ? 'flex' : 'none' }} />
+        </div>
+      </section>
 
-      {/* MAIN — Video call (left) + Live Workspace (right) */}
-      <div className="lv-main flex-1 flex overflow-hidden p-3.5 gap-3.5" style={{ minHeight: 0 }}>
-
-        {/* LEFT — AI VIDEO CALL */}
-        <section
-          className="lv-call relative flex flex-col overflow-hidden flex-shrink-0"
-          style={{
-            borderRadius: 26,
-            border: '1px solid rgba(255,255,255,0.07)',
-            background: 'linear-gradient(160deg,#12101b,#0a0a12)',
-            boxShadow: '0 30px 80px -30px rgba(0,0,0,.8)',
-          }}
-        >
-          {/* Avatar video fills the panel */}
-          <div className="absolute inset-0">
-            {started && (
-              <SashaAvatar
-                key={language}
-                tokenUrl={`/api/heygen/token?lang=${language}`}
-                onAvatarReady={handleAvatarReady}
-                isListening={isListening}
-                onGate={handleGate}
-                onAvatarSpeakingChange={setIsAvatarSpeaking}
-                onReadyToListen={() => setVoiceReady(true)}
-                onSashaFinished={handleSashaFinished}
-                onAvatarSpeechBuffer={handleAvatarSpeechBuffer}
-                hideStatusBadge
-              />
-            )}
+      {/* ── RIGHT — the conversation (transcript, cards, composer); the welcome before the call ── */}
+      <aside className="mt-rail">
+        <div className="mt-wshead">
+          <div className="mt-head">
+            <span className="mt-head-ic"><Sparkles size={15} strokeWidth={1.8} /></span>
+            <div style={{ minWidth: 0 }}>
+              <div className="mt-title">Live Workspace</div>
+              <div className="mt-sub">{wsSubtitle}</div>
+            </div>
           </div>
-
-          {started && (
-            <>
-              {/* gradient overlay for legibility */}
-              <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 22%, transparent 55%, rgba(0,0,0,.85) 100%)' }} />
-
-              {/* top status bar */}
-              <div className="absolute top-0 left-0 right-0 flex items-center justify-between" style={{ padding: '16px 18px', zIndex: 3 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, letterSpacing: '.12em', textTransform: 'uppercase', fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,.35)', padding: '7px 12px', borderRadius: 999, border: '1px solid rgba(255,255,255,.1)', backdropFilter: 'blur(8px)' }}>
-                  <span className="la-dot" /> Live
-                  <span style={{ fontVariantNumeric: 'tabular-nums', color: 'rgba(255,255,255,.85)', fontSize: 12, marginLeft: 4 }}>{fmtTime(elapsed)}</span>
-                </div>
-                <button
-                  className="la-icon"
-                  title="End session"
-                  aria-label="End session"
-                  style={{ background: 'rgba(248,113,113,.9)', borderColor: 'transparent', padding: 0 }}
-                  onClick={handleEndSession}
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><path d="M2 2l10 10M12 2L2 12" /></svg>
-                </button>
-              </div>
-
-              {/* agent identity ribbon */}
-              <div className="absolute flex items-center gap-2.5" style={{ left: 18, top: 62, zIndex: 3 }}>
-                <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg,#8b5cf6,#6d28d9)', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 13, border: '2px solid rgba(255,255,255,.25)' }}>S</div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1 }}>Sasha</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', marginTop: 2 }}>Vietnam Specialist · concierge</div>
-                </div>
-              </div>
-
-              {/* user camera PiP */}
-              <div className="absolute overflow-hidden" style={{ right: 16, bottom: 96, width: 148, height: 104, borderRadius: 16, border: '2px solid rgba(255,255,255,.25)', boxShadow: '0 14px 40px -10px rgba(0,0,0,.8)', zIndex: 4, background: '#15151f' }}>
-                <video
-                  ref={userVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                  style={{ display: camOn ? 'block' : 'none', transform: 'scaleX(-1)' }}
-                />
-                {!camOn && (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-2" style={{ background: 'linear-gradient(160deg,#1c1c28,#101018)' }}>
-                    <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,.08)', display: 'grid', placeItems: 'center', fontSize: 22, color: 'rgba(255,255,255,.4)' }}>👤</div>
-                    <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.4)' }}>{camEnabled ? 'No camera' : 'Camera off'}</div>
-                  </div>
-                )}
-                <span style={{ position: 'absolute', left: 7, bottom: 6, fontSize: 10, fontWeight: 600, letterSpacing: '.05em', background: 'rgba(0,0,0,.55)', padding: '3px 7px', borderRadius: 6, backdropFilter: 'blur(4px)' }}>You</span>
-              </div>
-
-              {/* bottom: live caption + mic status */}
-              <div className="absolute left-0 right-0 bottom-0 flex flex-col gap-3" style={{ padding: 18, zIndex: 3 }}>
-                {caption && (
-                  <div style={{ maxWidth: '60%', fontSize: 14, lineHeight: 1.45, color: 'rgba(255,255,255,.92)', textShadow: '0 2px 12px rgba(0,0,0,.7)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{caption}</div>
-                )}
-                {/* Call controls. Wraps as whole pills rather than letting any single pill
-                    squeeze and break its label across two lines, which is what happened once the
-                    mic picker joined the row in the narrow call panel. */}
-                <div className="flex items-center" style={{ gap: 8, flexWrap: 'nowrap', overflow: 'hidden' }}>
-                  {/* Muted wins over every other state: the mic is genuinely closed, so a
-                      leftover "Listening…" equaliser would be actively lying to the guest. */}
-                  {micMuted ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#f87171', background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.45)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
-                      <MicOff className="w-3.5 h-3.5" /> Not listening — building your trip
-                    </div>
-                  ) : isAvatarSpeaking ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#DAA520', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(218,165,32,.3)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
-                      <span className="la-load"><i /><i /><i /></span> Sasha is speaking
-                    </div>
-                  ) : isListening ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#34d399', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(52,211,153,.35)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
-                      <span className="la-eq"><span /><span /><span /><span /></span> Listening…
-                    </div>
-                  ) : voiceConnected ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'rgba(255,255,255,.85)', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
-                      <span className="la-dot" /> Mic live — just talk
-                    </div>
-                  ) : micError ? (
-                    // Tell the guest what's wrong and what to do — and keep the session usable:
-                    // Sasha still speaks, and the composer still takes typed messages.
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#f87171', background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.4)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
-                      <span>🚫</span>
-                      {micError === 'Mic permission denied'
-                        ? 'Mic blocked — allow it in your browser, or type below'
-                        : `${micError} — you can type below`}
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'rgba(255,255,255,.6)', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
-                      <span className="la-load"><i /><i /><i /></span> Starting microphone…
-                    </div>
-                  )}
-
-                  {/* Camera toggle — stops the tracks rather than hiding the element, so the
-                      camera light actually goes out when the guest turns it off. */}
-                  <button
-                    onClick={() => setCamEnabled(v => !v)}
-                    aria-pressed={camEnabled}
-                    title={camEnabled ? 'Turn camera off' : 'Turn camera on'}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer',
-                      background: camEnabled ? 'rgba(0,0,0,.4)' : 'rgba(248,113,113,.12)',
-                      border: `1px solid ${camEnabled ? 'rgba(255,255,255,.14)' : 'rgba(248,113,113,.4)'}`,
-                      color: camEnabled ? 'rgba(255,255,255,.85)' : '#f87171',
-                      // Never shrinks: it is a control, not a label. Only the status pill gives
-                      // way when the row is tight.
-                      borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 0,
-                    }}
-                  >
-                    {camEnabled ? '📹 Camera on' : '🚫 Camera off'}
+          {isAvatarSpeaking
+            ? <span className="mt-pill gold"><span className="la-load"><i /><i /><i /></span> Sasha is responding</span>
+            : <span className="mt-pill">Ready</span>}
+        </div>
+        {stageLive ? (
+          <SashaChat
+            user={DEMO_USER}
+            onSashaResponse={handleSashaResponse}
+            onListeningChange={setIsListening}
+            onSetGate={handleSetGate}
+            onInterrupt={handleInterrupt}
+            onPhotos={handlePhotos}
+            presetPrompts={PRESET_PROMPTS}
+            messages={chatMessages}
+            setMessages={setChatMessages}
+            avatarSpeaking={isAvatarSpeaking}
+            // Prefer what Sasha actually said (covers the greeting); fall back to the last
+            // text we asked her to say if the buffer isn't wired yet.
+            avatarSpeechGetter={() => {
+              const spoken = avatarSaidRef.current?.() || ''
+              return `${spoken} ${lastRepeatTextRef.current}`.trim()
+            }}
+            isRespondingRef={isRespondingRef}
+            readyToListen={voiceReady}
+            onThinking={handleInterim}
+            onItinerary={handleItinerary}
+            language={language}
+            registerSend={registerSend}
+            richItinerary={richItinerary}
+            photos={photos}
+            activePhoto={activePhoto}
+            onSelectPhoto={setActivePhoto}
+            onBook={() => askCardChoice(null)}
+            onVoiceConnected={setVoiceConnected}
+            onMicError={setMicError}
+            onMicDevices={setMicDevices}
+            onBooked={handleBooked}
+            onAwaitPayment={handleAwaitPayment}
+            onBookItem={handleBookItem}
+            onConfirmCard={handleConfirmCard}
+            onPaySavedCard={handlePaySavedCard}
+            onPayNewCard={handlePayNewCard}
+            paidWith={booked?.paidWith ?? null}
+            onItineraryId={handleItineraryId}
+            bookingRef={booked?.ref ?? null}
+            activeTab={rightTab}
+            onTabChange={handleTabChange}
+            onMarkUnseen={markUnseen}
+            onBuildingChange={handleBuildingChange}
+            unseenTabs={unseenTabs}
+            ideasCache={ideasCache}
+            onIdeasCache={setIdeasCache}
+            hideTabs
+            panelPortal={panelHost}
+          />
+        ) : (
+          <div className="mt-welcome-wrap">
+            <div className="mt-welcome-scroll">
+              <div className="mt-when">Where to?</div>
+              <div className="mt-openers">
+                {WELCOME_OPENERS.map((o, i) => (
+                  <button key={o.location} className="mt-opener" onClick={() => startWith(o.ask)} style={{ animationDelay: `${i * 60}ms` }} title={o.ask}>
+                    <img src={o.url} alt={o.location} loading="lazy" />
+                    <span className="g" />
+                    <span className="c"><b>{o.location}</b><span>{o.blurb}</span></span>
                   </button>
-
-                  {/* Mic picker — same pill as the camera toggle so the call controls read as one
-                      row. Only appears once there are two or more named inputs (see VoiceButton),
-                      which is exactly when a guest can be stuck on a Continuity/phone mic. */}
-                  {micDevices && (
-                    <select
-                      aria-label="Microphone"
-                      title="Choose which microphone Sasha listens to"
-                      value={micDevices.selectedId}
-                      onChange={(e) => micDevices.switchMic(e.target.value)}
-                      // The one control allowed to shrink: device names are long and unbounded,
-                      // so it truncates rather than pushing the fixed-width pills out of the row.
-                      style={{
-                        // alignSelf:stretch + zero vertical padding is what makes a <select>
-                        // match the pills exactly: its intrinsic line metrics otherwise render
-                        // it ~2px shorter and 1px lower than the buttons beside it.
-                        alignSelf: 'stretch', lineHeight: 1,
-                        flexShrink: 0, maxWidth: 168,
-                        fontSize: 12.5, cursor: 'pointer', outline: 'none',
-                        background: 'rgba(0,0,0,.4)',
-                        border: '1px solid rgba(255,255,255,.14)',
-                        color: 'rgba(255,255,255,.85)',
-                        borderRadius: 999, padding: '0 12px', backdropFilter: 'blur(10px)',
-                        textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}
-                    >
-                      <option value="">🎤 Mic: Auto</option>
-                      {micDevices.devices.map((d, i) => (
-                        <option key={d.deviceId} value={d.deviceId}>
-                          {(d.isPhone ? '📱 ' : '🎤 ') + micLabel(d.label, i)}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+                ))}
               </div>
+              <div className="mt-when">Or just ask</div>
+              <div className="mt-chips">
+                {PRESET_PROMPTS.map(pr => (
+                  <button key={pr} className="mt-chip" onClick={() => startWith(pr)}>{pr}</button>
+                ))}
+              </div>
+              {verifying && <div className="text-center text-sm" style={{ color: '#DAA520', marginTop: 10 }}>Confirming your payment…</div>}
+            </div>
+            <div className="mt-fakecomposer" onClick={() => startWith()} role="button" aria-label="Start your call with Sasha">
+              <span className="mic"><Mic size={16} strokeWidth={2} /></span>
+              <span className="in">Tap to start, then just talk or type…</span>
+              <span className="go"><Send size={15} strokeWidth={2} /></span>
+            </div>
+          </div>
+        )}
+      </aside>
+
+      {/* ── THE AVATAR — one fixed element: hero on Chat, PiP everywhere else ── */}
+      <div
+        className="mt-avatar"
+        data-mode={avatarPip ? 'pip' : 'hero'}
+        style={avatarBox ? { top: avatarBox.top, left: avatarBox.left, width: avatarBox.width, height: avatarBox.height } : { opacity: 0 }}
+        onClick={avatarPip ? () => handleTabChange('chat') : undefined}
+        title={avatarPip ? 'Back to Sasha' : undefined}
+      >
+        <div className="mt-glow" aria-hidden />
+        <div className="mt-ring" aria-hidden />
+        <div className="mt-ring mt-ring2" aria-hidden />
+        <div className="absolute inset-0">
+          {started && (
+            <SashaAvatar
+              key={language}
+              tokenUrl={`/api/heygen/token?lang=${language}`}
+              onAvatarReady={handleAvatarReady}
+              isListening={isListening}
+              onGate={handleGate}
+              onAvatarSpeakingChange={setIsAvatarSpeaking}
+              onReadyToListen={() => setVoiceReady(true)}
+              onSashaFinished={handleSashaFinished}
+              onAvatarSpeechBuffer={handleAvatarSpeechBuffer}
+              hideStatusBadge
+              bare
+            />
+          )}
+          {!started && (
+            <>
+              {/* Standby: Sasha's own preview still, dimmed, on the same stage she will appear
+                  on — so the call starts where the eye already is. (public/sasha-preview.jpg
+                  is the LiveAvatar preview for the configured avatar; refresh it if the avatar
+                  changes.) */}
+              <img className="mt-standby" src="/sasha-preview.jpg" alt="" style={{ opacity: uiPreview ? 1 : .55, filter: uiPreview ? 'none' : 'saturate(.7)' }} />
+              <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 22%, transparent 58%, rgba(0,0,0,.85) 100%)' }} />
+              <div className="mt-ov-top absolute top-0 left-0 right-0 flex items-center" style={{ padding: '14px 16px', zIndex: 3 }}>
+                <span className="mt-standbypill"><span className="mt-standbydot" /> {uiPreview ? 'Preview' : 'Standby'}</span>
+              </div>
+              {!uiPreview && (
+                <div className="mt-startwrap">
+                  <div className="mt-eyebrow">AI Travel Concierge</div>
+                  <div className="mt-bigname">Meet Sasha</div>
+                  <button className="mt-startbtn" onClick={() => startWith()}><Play size={16} strokeWidth={2.2} fill="#fff" /> Tap to start your call</button>
+                  <div className="mt-hint">Audio plays automatically once you start</div>
+                </div>
+              )}
             </>
           )}
-        </section>
+        </div>
+    {started && (
+      <>
+        {/* gradient overlay for legibility */}
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 22%, transparent 55%, rgba(0,0,0,.85) 100%)' }} />
 
-        {/* RIGHT — LIVE WORKSPACE */}
-        <section
-          className="lv-ws flex-1 flex flex-col overflow-hidden"
-          style={{
-            minWidth: 0, borderRadius: 26,
-            border: '1px solid rgba(255,255,255,0.07)',
-            background: 'radial-gradient(700px 380px at 80% -8%, rgba(218,165,32,0.07), transparent 60%), linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.22))',
-          }}
-        >
-          {/* workspace head */}
-          <div className="flex items-center justify-between flex-shrink-0" style={{ padding: '15px 22px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(0,0,0,0.25)' }}>
-            <div className="flex items-center gap-3">
-              <span style={{ width: 28, height: 28, borderRadius: 9, background: 'rgba(218,165,32,0.12)', display: 'grid', placeItems: 'center', color: '#DAA520', fontSize: 15 }}>✦</span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: '.02em' }}>Live Workspace</div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', marginTop: 2, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {!started ? 'What Sasha is doing for you'
-                    : isAvatarSpeaking ? 'Speaking with you…'
-                    : richItinerary ? `Planning · ${richItinerary.title}`
-                    : photos.length > 0 ? `Exploring ${photos[activePhoto]?.description || 'Vietnam'}`
-                    : 'What Sasha is doing for you'}
-                </div>
-              </div>
+        {/* top status bar */}
+        <div className="mt-ov-top absolute top-0 left-0 right-0 flex items-center justify-between" style={{ padding: '16px 18px', zIndex: 3 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, letterSpacing: '.12em', textTransform: 'uppercase', fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,.35)', padding: '7px 12px', borderRadius: 999, border: '1px solid rgba(255,255,255,.1)', backdropFilter: 'blur(8px)' }}>
+            <span className="la-dot" /> Live
+            <span style={{ fontVariantNumeric: 'tabular-nums', color: 'rgba(255,255,255,.85)', fontSize: 12, marginLeft: 4 }}>{fmtTime(elapsed)}</span>
+          </div>
+          <button
+            className="la-icon"
+            title="End session"
+            aria-label="End session"
+            style={{ background: 'rgba(248,113,113,.9)', borderColor: 'transparent', padding: 0 }}
+            onClick={handleEndSession}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><path d="M2 2l10 10M12 2L2 12" /></svg>
+          </button>
+        </div>
+
+        {/* agent identity ribbon */}
+        <div className="mt-ov-hero absolute flex items-center gap-2.5" style={{ left: 18, top: 62, zIndex: 3 }}>
+          <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg,#8b5cf6,#6d28d9)', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 13, border: '2px solid rgba(255,255,255,.25)' }}>S</div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1 }}>Sasha</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', marginTop: 2 }}>Vietnam Specialist · concierge</div>
+          </div>
+        </div>
+
+        {/* user camera PiP */}
+        <div className="mt-ov-hero absolute overflow-hidden" style={{ right: 16, bottom: 96, width: 148, height: 104, borderRadius: 16, border: '2px solid rgba(255,255,255,.25)', boxShadow: '0 14px 40px -10px rgba(0,0,0,.8)', zIndex: 4, background: '#15151f' }}>
+          <video
+            ref={userVideoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+            style={{ display: camOn ? 'block' : 'none', transform: 'scaleX(-1)' }}
+          />
+          {!camOn && (
+            <div className="w-full h-full flex flex-col items-center justify-center gap-2" style={{ background: 'linear-gradient(160deg,#1c1c28,#101018)' }}>
+              <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,.08)', display: 'grid', placeItems: 'center', fontSize: 22, color: 'rgba(255,255,255,.4)' }}>👤</div>
+              <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.4)' }}>{camEnabled ? 'No camera' : 'Camera off'}</div>
             </div>
-            {isAvatarSpeaking ? (
-              <div className="flex items-center gap-2" style={{ fontSize: 12, color: '#DAA520', background: 'rgba(218,165,32,0.12)', padding: '7px 13px', borderRadius: 999, border: '1px solid rgba(218,165,32,0.25)' }}>
-                <span className="la-load"><i /><i /><i /></span> Sasha is responding
-              </div>
-            ) : (
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,.4)', padding: '7px 13px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.07)' }}>Ready</div>
-            )}
-          </div>
+          )}
+          <span style={{ position: 'absolute', left: 7, bottom: 6, fontSize: 10, fontWeight: 600, letterSpacing: '.05em', background: 'rgba(0,0,0,.55)', padding: '3px 7px', borderRadius: 6, backdropFilter: 'blur(4px)' }}>You</span>
+        </div>
 
-          {/* Live Workspace feed — action cards, profile, conversation, composer */}
-          <div className="flex-1 min-h-0 flex flex-col">
-            {started ? (
-              <SashaChat
-                user={DEMO_USER}
-                onSashaResponse={handleSashaResponse}
-                onListeningChange={setIsListening}
-                onSetGate={handleSetGate}
-                onInterrupt={handleInterrupt}
-                onPhotos={handlePhotos}
-                presetPrompts={['Tell me about Hoi An', 'Best golf courses', 'Plan a 7 day trip', 'Phu Quoc beaches']}
-                messages={chatMessages}
-                setMessages={setChatMessages}
-                avatarSpeaking={isAvatarSpeaking}
-                // Prefer what Sasha actually said (covers the greeting); fall back to the last
-                // text we asked her to say if the buffer isn't wired yet.
-                avatarSpeechGetter={() => {
-                  const spoken = avatarSaidRef.current?.() || ''
-                  return `${spoken} ${lastRepeatTextRef.current}`.trim()
-                }}
-                isRespondingRef={isRespondingRef}
-                readyToListen={voiceReady}
-                onThinking={handleInterim}
-                onItinerary={handleItinerary}
-                language={language}
-                registerSend={registerSend}
-                richItinerary={richItinerary}
-                photos={photos}
-                activePhoto={activePhoto}
-                onSelectPhoto={setActivePhoto}
-                onBook={() => {
-                  if (!PAYMENTS_ENABLED) { reserveTrip(); return }
-                  setPendingOffer(null); setPaymentModal('card')
-                }}
-                onVoiceConnected={setVoiceConnected}
-                onMicError={setMicError}
-                onMicDevices={setMicDevices}
-                onBooked={handleBooked}
-                onAwaitPayment={handleAwaitPayment}
-                onBookItem={handleBookItem}
-                onItineraryId={handleItineraryId}
-                bookingRef={booked?.ref ?? null}
-                activeTab={rightTab}
-                onTabChange={handleTabChange}
-                onMarkUnseen={markUnseen}
-                onBuildingChange={handleBuildingChange}
-                unseenTabs={unseenTabs}
-                ideasCache={ideasCache}
-                onIdeasCache={setIdeasCache}
-              />
+        {/* bottom: live caption + mic status */}
+        <div className="mt-ov-hero absolute left-0 right-0 bottom-0 flex flex-col gap-3" style={{ padding: 18, zIndex: 3 }}>
+          {caption && (
+            <div style={{ maxWidth: '60%', fontSize: 14, lineHeight: 1.45, color: 'rgba(255,255,255,.92)', textShadow: '0 2px 12px rgba(0,0,0,.7)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{caption}</div>
+          )}
+          {/* Call controls. Wraps as whole pills rather than letting any single pill
+              squeeze and break its label across two lines, which is what happened once the
+              mic picker joined the row in the narrow call panel. */}
+          <div className="flex items-center" style={{ gap: 8, flexWrap: 'nowrap', overflow: 'hidden' }}>
+            {/* Muted wins over every other state: the mic is genuinely closed, so a
+                leftover "Listening…" equaliser would be actively lying to the guest. */}
+            {micMuted ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#f87171', background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.45)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
+                <MicOff className="w-3.5 h-3.5" /> Not listening — building your trip
+              </div>
+            ) : isAvatarSpeaking ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#DAA520', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(218,165,32,.3)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
+                <span className="la-load"><i /><i /><i /></span> Sasha is speaking
+              </div>
+            ) : isListening ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#34d399', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(52,211,153,.35)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
+                <span className="la-eq"><span /><span /><span /><span /></span> Listening…
+              </div>
+            ) : voiceConnected ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'rgba(255,255,255,.85)', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
+                <span className="la-dot" /> Mic live — just talk
+              </div>
+            ) : micError ? (
+              // Tell the guest what's wrong and what to do — and keep the session usable:
+              // Sasha still speaks, and the composer still takes typed messages.
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#f87171', background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.4)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
+                <span>🚫</span>
+                {micError === 'Mic permission denied'
+                  ? 'Mic blocked — allow it in your browser, or type below'
+                  : `${micError} — you can type below`}
+              </div>
             ) : (
-              <div className="flex-1 flex items-center justify-center px-6 text-center">
-                <div className="text-white/30 text-xs tracking-widest uppercase">Tap to start your call with Sasha</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'rgba(255,255,255,.6)', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
+                <span className="la-load"><i /><i /><i /></span> Starting microphone…
               </div>
             )}
+
+            {/* Camera toggle — stops the tracks rather than hiding the element, so the
+                camera light actually goes out when the guest turns it off. */}
+            <button
+              onClick={() => setCamEnabled(v => !v)}
+              aria-pressed={camEnabled}
+              title={camEnabled ? 'Turn camera off' : 'Turn camera on'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer',
+                background: camEnabled ? 'rgba(0,0,0,.4)' : 'rgba(248,113,113,.12)',
+                border: `1px solid ${camEnabled ? 'rgba(255,255,255,.14)' : 'rgba(248,113,113,.4)'}`,
+                color: camEnabled ? 'rgba(255,255,255,.85)' : '#f87171',
+                // Never shrinks: it is a control, not a label. Only the status pill gives
+                // way when the row is tight.
+                borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 0,
+              }}
+            >
+              {camEnabled ? '📹 Camera on' : '🚫 Camera off'}
+            </button>
+
+            {/* Mic picker — same pill as the camera toggle so the call controls read as one
+                row. Only appears once there are two or more named inputs (see VoiceButton),
+                which is exactly when a guest can be stuck on a Continuity/phone mic. */}
+            {micDevices && (
+              <select
+                aria-label="Microphone"
+                title="Choose which microphone Sasha listens to"
+                value={micDevices.selectedId}
+                onChange={(e) => micDevices.switchMic(e.target.value)}
+                // The one control allowed to shrink: device names are long and unbounded,
+                // so it truncates rather than pushing the fixed-width pills out of the row.
+                style={{
+                  // alignSelf:stretch + zero vertical padding is what makes a <select>
+                  // match the pills exactly: its intrinsic line metrics otherwise render
+                  // it ~2px shorter and 1px lower than the buttons beside it.
+                  alignSelf: 'stretch', lineHeight: 1,
+                  flexShrink: 0, maxWidth: 168,
+                  fontSize: 12.5, cursor: 'pointer', outline: 'none',
+                  background: 'rgba(0,0,0,.4)',
+                  border: '1px solid rgba(255,255,255,.14)',
+                  color: 'rgba(255,255,255,.85)',
+                  borderRadius: 999, padding: '0 12px', backdropFilter: 'blur(10px)',
+                  textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}
+              >
+                <option value="">🎤 Mic: Auto</option>
+                {micDevices.devices.map((d, i) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {(d.isPhone ? '📱 ' : '🎤 ') + micLabel(d.label, i)}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
-        </section>
+        </div>
+      </>
+    )}
+
+        {started && avatarPip && (
+          <div className="mt-pipfoot">
+            <b>Sasha</b>
+            <span className="x">{statusLabel} · tap to expand</span>
+          </div>
+        )}
       </div>
 
       {reserveError && (
@@ -1091,19 +1305,22 @@ export default function VietnamPage() {
             <div className="text-center" style={{ padding: '28px 24px 24px' }}>
               <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 14px', display: 'grid', placeItems: 'center', background: 'rgba(52,211,153,0.14)', border: '1px solid rgba(52,211,153,0.4)', fontSize: 26, color: '#34d399' }}>✓</div>
               <div style={{ fontSize: 21, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>
-                {itemBooked.kind === 'hotel' ? 'Stay reserved!' : itemBooked.kind === 'flight' ? 'Flight reserved!' : itemBooked.kind === 'cab' ? 'Transfer reserved!' : itemBooked.kind === 'restaurant' ? 'Table reserved!' : 'Reserved!'}
+                {(() => {
+                  const w = itemBooked.paidWith ? 'booked' : 'reserved'
+                  return itemBooked.kind === 'hotel' ? `Stay ${w}!` : itemBooked.kind === 'flight' ? `Flight ${w}!` : itemBooked.kind === 'cab' ? `Transfer ${w}!` : itemBooked.kind === 'restaurant' ? `Table ${w}!` : itemBooked.paidWith ? 'Booked!' : 'Reserved!'
+                })()}
               </div>
               <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,.6)', marginTop: 8 }}>
                 {(itemBooked.kind === 'hotel' ? '🏨 ' : itemBooked.kind === 'flight' ? '✈️ ' : itemBooked.kind === 'cab' ? '🚕 ' : itemBooked.kind === 'restaurant' ? '🍽️ ' : '')}{itemBooked.label}
               </div>
               {typeof itemBooked.amount === 'number' && (
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#E8B923', marginTop: 6 }}>${itemBooked.amount.toLocaleString()}{PAYMENTS_ENABLED ? ' paid' : ''}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#E8B923', marginTop: 6 }}>${itemBooked.amount.toLocaleString()}{(PAYMENTS_ENABLED || itemBooked.paidWith) ? ' paid' : ''}</div>
               )}
               <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.45)', marginTop: 8 }}>
-                Your reservation is confirmed.{itemBooked.emailSent ? ' A confirmation is on its way to your email.' : ''}
+                {itemBooked.paidWith ? (itemBooked.paidWith.last4 ? `Booking confirmed · paid with your card ending ${itemBooked.paidWith.last4}.` : 'Booking confirmed and paid.') : 'Your reservation is confirmed.'}{itemBooked.emailSent ? ' A confirmation is on its way to your email.' : ''}
               </div>
               {itemBooked.ref && (
-                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>Reservation · {itemBooked.ref}</div>
+                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>{itemBooked.paidWith ? 'Booking' : 'Reservation'} · {itemBooked.ref}</div>
               )}
               <div style={{ marginTop: 20 }}>
                 <button onClick={() => setItemBooked(null)} style={{ padding: '11px 28px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done</button>
@@ -1119,15 +1336,17 @@ export default function VietnamPage() {
           <div className="relative flex flex-col overflow-hidden" style={{ width: 'min(680px, 96vw)', maxHeight: '92vh', borderRadius: 24, border: '1px solid rgba(218,165,32,0.3)', background: 'linear-gradient(180deg, rgba(218,165,32,0.06), rgba(0,0,0,0.25)), #0e0e16', boxShadow: '0 40px 100px -30px rgba(0,0,0,.9)' }}>
             <div className="flex-shrink-0 text-center" style={{ padding: '26px 24px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 14px', display: 'grid', placeItems: 'center', background: 'rgba(52,211,153,0.14)', border: '1px solid rgba(52,211,153,0.4)', fontSize: 26, color: '#34d399' }}>✓</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>Trip reserved!</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>{booked.paidWith ? 'Trip booked!' : 'Trip reserved!'}</div>
               {/* Only promise an email when one actually went out — the send is best-effort
                   and silently no-ops without RESEND_API_KEY. */}
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,.5)', marginTop: 5 }}>
-                Your reservation is confirmed — your full itinerary is below.
+                {booked.paidWith
+                  ? `Your booking is confirmed and paid${booked.paidWith.last4 ? ` with your card ending ${booked.paidWith.last4}` : ''} — your full itinerary is below.`
+                  : 'Your reservation is confirmed — your full itinerary is below.'}
                 {booked.emailSent ? ' A confirmation is on its way to your email.' : ''}
               </div>
               {booked.ref && (
-                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>Reservation · {booked.ref}</div>
+                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>{booked.paidWith ? 'Booking' : 'Reservation'} · {booked.ref}</div>
               )}
             </div>
 
@@ -1167,44 +1386,6 @@ export default function VietnamPage() {
         </div>
       )}
 
-      {/* Tap-to-start overlay — gates audio init until user gesture */}
-      {!started && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center cursor-pointer select-none"
-          style={{ background: 'rgba(8,8,16,0.96)', backdropFilter: 'blur(10px)' }}
-          // While the Stripe return leg is being verified (or a confirmation is up at z-70),
-          // a tap here ran handleStart(), which wipes booked/richItinerary — erasing the
-          // guest's payment confirmation the moment it appeared.
-          onClick={() => { if (!verifying && !booked && !itemBooked) handleStart() }}
-        >
-          <div style={{ marginBottom: '20px' }}><VnFlag size={52} /></div>
-          <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: '26px', fontWeight: 700, color: '#DAA520', marginBottom: '8px', letterSpacing: '-0.3px' }}>
-            Discover Vietnam
-          </div>
-          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.35)', marginBottom: '44px', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            AI Travel Concierge
-          </div>
-          <div
-            style={{
-              display: 'flex', alignItems: 'center', gap: '12px',
-              padding: '16px 36px', borderRadius: '16px', fontSize: '16px', fontWeight: 700,
-              background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: '#fff',
-              boxShadow: '0 8px 32px rgba(218,165,32,0.35)',
-              animation: 'pulse 2s ease-in-out infinite',
-            }}
-          >
-            <span style={{ fontSize: '18px' }}>▶</span> Tap to start
-          </div>
-          <div style={{ marginTop: '16px', fontSize: '12px', color: 'rgba(255,255,255,0.2)' }}>
-            Audio plays automatically once you start
-          </div>
-          {verifying && (
-            <div style={{ marginTop: '22px', fontSize: '14px', color: '#DAA520' }}>
-              Confirming your payment…
-            </div>
-          )}
-        </div>
-      )}
 
       <style jsx global>{`
         /* Prevent this page from covering a parent iframe's nav when embedded */
@@ -1229,22 +1410,93 @@ export default function VietnamPage() {
         .la-load i:nth-child(2){animation-delay:.15s}.la-load i:nth-child(3){animation-delay:.3s}
         @keyframes laBounce{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
 
-        /* Layout — left video call width (class so media queries can override the split).
-           30% (was 36%): client feedback 2026-08-11 — give the workspace's photos, itinerary
-           and hotel cards more room; the call panel doesn't need more than the avatar. */
-        .lv-call{width:30%;min-width:320px}
-        /* Tablet / narrow: stack the call above the workspace */
+        /* ── Mindtrip-style shell, dark & compact ── */
+        .mt-app{height:100vh;display:flex;background:radial-gradient(1200px 800px at 18% -10%, #15131f 0%, #07070d 55%);color:#fff;overflow:hidden}
+        .mt-side{width:196px;flex-shrink:0;display:flex;flex-direction:column;padding:12px 10px;border-right:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.35)}
+        .mt-brand{display:flex;flex-direction:column;gap:7px;padding:4px 6px 14px}
+        .mt-logo{mix-blend-mode:screen;margin-left:-6px}
+        .mt-brand-sub{display:flex;align-items:center;gap:7px;font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .mt-brand-sub b{color:#DAA520;font-weight:700;letter-spacing:.04em;font-size:12.5px;text-transform:none}
+        .mt-nav{display:flex;flex-direction:column;gap:2px}
+        .mt-navbtn{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;cursor:pointer;font:inherit;font-size:13.5px;font-weight:500;color:rgba(255,255,255,.6);padding:9px 10px;border-radius:10px;text-align:left;position:relative;transition:background .15s,color .15s}
+        .mt-navbtn:hover{background:rgba(255,255,255,.05);color:#fff}
+        .mt-navbtn.on{background:rgba(218,165,32,.14);color:#E8B923;box-shadow:inset 0 0 0 1px rgba(218,165,32,.3)}
+        .mt-navbtn .ic{width:20px;display:grid;place-items:center}
+        .mt-navbtn .dot{position:absolute;right:10px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:#DAA520;animation:lwPing 2s infinite}
+        .mt-newchat{margin-top:10px;width:100%;display:flex;align-items:center;justify-content:center;gap:7px;padding:9px;border-radius:999px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#fff;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+        .mt-newchat:hover{background:rgba(255,255,255,.09)}
+        .mt-sidefoot{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding:0 2px}
+        .mt-select{font:inherit;font-size:12px;padding:7px 9px;border-radius:999px;border:1px solid rgba(218,165,32,.3);background:rgba(218,165,32,.12);color:#DAA520;width:100%;cursor:pointer;outline:none}
+        .mt-end{border:1px solid rgba(248,113,113,.35);color:#f87171;background:rgba(248,113,113,.1);border-radius:999px;padding:7px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;text-align:left}
+        .mt-partner{font-size:9px;color:rgba(255,255,255,.3);letter-spacing:.05em;text-transform:uppercase;padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .mt-center{flex:1;min-width:0;display:flex;flex-direction:column}
+        .mt-top{display:flex;align-items:center;justify-content:space-between;padding:8px 12px 8px 14px;flex-shrink:0}
+        .mt-head{display:flex;align-items:center;gap:10px;min-width:0}
+        .mt-head-ic{width:28px;height:28px;border-radius:9px;background:rgba(218,165,32,.12);display:grid;place-items:center;color:#DAA520;flex-shrink:0}
+        .mt-sub{font-size:11px;color:rgba(255,255,255,.35);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px}
+        .mt-title{font-size:13.5px;font-weight:600;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff}
+        .mt-pill{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:500;padding:6px 11px;border-radius:999px;border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.7);background:rgba(0,0,0,.3);white-space:nowrap}
+        .mt-pill.live{color:#34d399;border-color:rgba(52,211,153,.35)}
+        .mt-pill.gold{color:#DAA520;border-color:rgba(218,165,32,.3);background:rgba(218,165,32,.12)}
+        /* The stage: measured for the avatar's hero box; hosts the portaled panels otherwise. */
+        .mt-stage{flex:1;min-height:0;position:relative;margin:0 8px 10px 12px}
+        .mt-panelhost{position:absolute;inset:0;flex-direction:column;border-radius:26px;border:1px solid rgba(255,255,255,.07);overflow:hidden;background:radial-gradient(700px 380px at 80% -8%, rgba(218,165,32,0.07), transparent 60%), linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.22))}
+        .mt-rail{width:min(412px,36vw);flex-shrink:0;display:flex;flex-direction:column;min-height:0;margin:0 12px 10px 4px;border-radius:26px;border:1px solid rgba(255,255,255,.07);overflow:hidden;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.22))}
+        .mt-rail>.flex.flex-col.h-full{flex:1;min-height:0}
+        .mt-rail .lw-chip{display:none}
+        .mt-wshead{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.25)}
+        .mt-welcome-wrap{flex:1;min-height:0;display:flex;flex-direction:column}
+        .mt-welcome-scroll{flex:1;min-height:0;overflow-y:auto;padding:16px 16px 12px;display:flex;flex-direction:column;gap:12px}
+        .mt-when{display:flex;align-items:center;gap:12px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.35)}
+        .mt-when::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(255,255,255,.12),transparent)}
+        .mt-openers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+        .mt-opener{position:relative;display:block;padding:0;border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden;aspect-ratio:3/2;cursor:pointer;background:rgba(255,255,255,.04);text-align:left;font:inherit;color:#fff;opacity:0;animation:mt-op-in .45s ease forwards}
+        @keyframes mt-op-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+        .mt-opener img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .5s ease}
+        .mt-opener:hover img{transform:scale(1.07)}
+        .mt-opener:hover{border-color:rgba(218,165,32,.55)}
+        .mt-opener .g{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.85) 0%,rgba(0,0,0,.25) 45%,transparent 75%)}
+        .mt-opener .c{position:absolute;left:0;right:0;bottom:0;padding:9px 10px;display:flex;flex-direction:column;gap:2px}
+        .mt-opener .c b{font-size:14px;font-weight:650;letter-spacing:.01em}
+        .mt-opener .c span{font-size:10.5px;color:rgba(255,255,255,.62);line-height:1.35}
+        .mt-chips{display:flex;flex-wrap:wrap;gap:7px}
+        .mt-chip{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.02);color:rgba(255,255,255,.6);border-radius:999px;padding:7px 12px;font:inherit;font-size:11.5px;cursor:pointer;transition:.2s}
+        .mt-chip:hover{border-color:rgba(218,165,32,.4);color:#DAA520}
+        .mt-fakecomposer{flex-shrink:0;margin:0;padding:12px 14px;border-top:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.2);display:flex;align-items:center;gap:9px;cursor:pointer}
+        .mt-fakecomposer .mic{width:40px;height:40px;border-radius:50%;background:#4f46e5;display:grid;place-items:center;color:#fff;flex-shrink:0}
+        .mt-fakecomposer .in{flex:1;font-size:13.5px;color:rgba(255,255,255,.3)}
+        .mt-fakecomposer .go{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#DAA520,#B8860B);display:grid;place-items:center;color:#fff;flex-shrink:0}
+        /* The avatar element itself. Hero ↔ PiP is a pure geometry transition. */
+        .mt-avatar{position:fixed;z-index:40;overflow:hidden;border-radius:22px;border:1px solid rgba(255,255,255,.07);background:linear-gradient(160deg,#12101b,#0a0a12);color:#fff;box-shadow:0 30px 80px -30px rgba(0,0,0,.8);transition:top .5s cubic-bezier(.2,.8,.2,1),left .5s cubic-bezier(.2,.8,.2,1),width .5s cubic-bezier(.2,.8,.2,1),height .5s cubic-bezier(.2,.8,.2,1),border-radius .5s,opacity .3s}
+        .mt-avatar[data-mode="pip"]{border-radius:16px;border-color:rgba(255,255,255,.14);box-shadow:0 24px 60px -20px rgba(0,0,0,.9);cursor:pointer}
+        .mt-avatar[data-mode="pip"] .mt-ov-hero{display:none}
+        .mt-avatar[data-mode="pip"] .mt-ov-top{padding:8px 10px!important}
+        .mt-avatar[data-mode="pip"] .mt-ov-top .la-icon{width:24px;height:24px}
+        .mt-pipfoot{position:absolute;left:0;right:0;bottom:0;padding:9px 11px;display:flex;align-items:center;justify-content:space-between;gap:8px;z-index:3;font-size:11px;color:#fff;background:linear-gradient(to top,rgba(0,0,0,.8),transparent)}
+        .mt-pipfoot b{font-weight:600}
+        .mt-pipfoot .x{opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .mt-glow{position:absolute;inset:0;pointer-events:none;background:radial-gradient(560px 420px at 50% 62%,rgba(218,165,32,.16),transparent 70%),radial-gradient(420px 360px at 22% 20%,rgba(109,40,217,.22),transparent 70%),radial-gradient(360px 300px at 82% 18%,rgba(139,92,246,.14),transparent 70%)}
+        .mt-ring{position:absolute;left:50%;top:60%;width:640px;height:640px;transform:translate(-50%,-50%);border-radius:50%;border:1px solid rgba(218,165,32,.12);box-shadow:inset 0 0 120px rgba(218,165,32,.06);pointer-events:none}
+        .mt-ring2{width:880px;height:880px;border-color:rgba(255,255,255,.04);box-shadow:none}
+        .mt-avatar[data-mode="pip"] .mt-ring{width:260px;height:260px}
+        .mt-avatar[data-mode="pip"] .mt-ring2{width:360px;height:360px}
+        .mt-standby{position:absolute;left:50%;bottom:0;transform:translateX(-50%);height:92%;width:auto;max-width:none;mix-blend-mode:screen;pointer-events:none;transition:opacity .4s}
+        .mt-standbypill{display:inline-flex;align-items:center;gap:8px;font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:rgba(255,255,255,.7);background:rgba(0,0,0,.35);padding:7px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px)}
+        .mt-standbydot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.35);display:inline-block}
+        .mt-startwrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:56px;gap:10px;text-align:center;z-index:3}
+        .mt-eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.45)}
+        .mt-bigname{font-family:'Playfair Display',Georgia,serif;font-size:34px;font-weight:600;letter-spacing:-.01em;color:#fff;text-shadow:0 2px 24px rgba(0,0,0,.6)}
+        .mt-startbtn{display:flex;align-items:center;gap:12px;margin-top:6px;padding:15px 34px;border-radius:16px;border:0;background:linear-gradient(135deg,#DAA520,#B8860B);color:#fff;font:inherit;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 8px 32px rgba(218,165,32,.35);animation:pulse 2s ease-in-out infinite}
+        .mt-hint{font-size:12px;color:rgba(255,255,255,.35)}
+        @media (max-width:1100px){.mt-rail{width:min(360px,42vw)}}
         @media (max-width:880px){
-          .lv-main{flex-direction:column}
-          .lv-call{width:100%;min-width:0;height:44vh;flex-shrink:0}
-          .lv-ws{min-height:0;flex:1}
-        }
-        /* Phone: tighten paddings and let it scroll the page */
-        @media (max-width:560px){
-          .lv-main{padding:10px;gap:10px}
-          .lv-call{height:38vh}
+          .mt-side{width:58px;padding:10px 6px}
+          .mt-side .lbl,.mt-brand-sub,.mt-sidefoot,.mt-newchat{display:none}
+          .mt-navbtn{justify-content:center;padding:9px}
+          .mt-rail{width:46vw}
         }
       `}</style>
     </main>
   )
 }
+

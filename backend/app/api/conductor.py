@@ -94,6 +94,9 @@ class ConductorResponse(BaseModel):
     # A single matched option the guest asked to book by VOICE — the frontend opens the
     # payment popup for it directly (same flow as tapping Book & Pay on its card).
     payment_item: Optional[dict] = None
+    # The saved card Sasha offers / charges on a booking turn (action confirm_card or
+    # pay_saved_card): {"last4": "1003", "method": "saved_card"}.
+    saved_card: Optional[dict] = None
     conversation_history: list
 
 
@@ -138,6 +141,7 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             booking_ref=result.get("booking_ref"),
             itinerary_id=result.get("itinerary_id"),
             payment_item=result.get("payment_item"),
+            saved_card=result.get("saved_card"),
             conversation_history=result["messages"],
         )
     except Exception as e:

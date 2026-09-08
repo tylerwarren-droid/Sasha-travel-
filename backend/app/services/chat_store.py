@@ -133,7 +133,8 @@ def _init() -> None:
         )
         # Migration: an already-seeded DB predates the individual-item columns on `bookings`.
         # ADD COLUMN is a no-op error if the column exists, so try each independently.
-        for col, decl in (("offer_id", "TEXT"), ("kind", "TEXT"), ("label", "TEXT")):
+        for col, decl in (("offer_id", "TEXT"), ("kind", "TEXT"), ("label", "TEXT"),
+                          ("payment_method", "TEXT"), ("card_last4", "TEXT")):
             try:
                 conn.execute(f"ALTER TABLE bookings ADD COLUMN {col} {decl}")
             except Exception:
@@ -258,15 +259,15 @@ def _latest_itinerary_for_session(session_id) -> "Optional[dict]":
 
 
 def _create_booking(booking_id, stripe_session_id, itinerary_id, user_id, amount_usd,
-                    offer_id=None, kind=None, label=None) -> None:
+                    offer_id=None, kind=None, label=None, payment_method=None, card_last4=None) -> None:
     _ensure()
     with _connect() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO bookings (id, stripe_session_id, itinerary_id, user_id, amount_usd, "
-            "status, booking_ref, created_at, paid_at, offer_id, kind, label) "
-            "VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?, NULL, ?, ?, ?)",
+            "status, booking_ref, created_at, paid_at, offer_id, kind, label, payment_method, card_last4) "
+            "VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?, NULL, ?, ?, ?, ?, ?)",
             (booking_id, stripe_session_id, itinerary_id, user_id, float(amount_usd or 0),
-             datetime.utcnow().isoformat(), offer_id, kind, label),
+             datetime.utcnow().isoformat(), offer_id, kind, label, payment_method, card_last4),
         )
         conn.commit()
 
@@ -376,7 +377,8 @@ def _list_booked_trips(user_id) -> list:
     _ensure()
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT b.booking_ref, b.amount_usd, b.paid_at, i.title, i.payload "
+            "SELECT b.booking_ref, b.amount_usd, b.paid_at, b.payment_method, b.card_last4, "
+            "i.title, i.payload "
             "FROM bookings b JOIN itineraries i ON i.id = b.itinerary_id "
             "WHERE b.user_id = ? AND b.status = 'paid' ORDER BY b.paid_at DESC",
             (user_id,),
@@ -419,9 +421,10 @@ async def latest_itinerary_for_session(session_id):
 
 
 async def create_booking(booking_id, stripe_session_id, itinerary_id, user_id, amount_usd,
-                         offer_id=None, kind=None, label=None) -> None:
+                         offer_id=None, kind=None, label=None, payment_method=None, card_last4=None) -> None:
     await asyncio.to_thread(_create_booking, booking_id, stripe_session_id,
-                            itinerary_id, user_id, amount_usd, offer_id, kind, label)
+                            itinerary_id, user_id, amount_usd, offer_id, kind, label,
+                            payment_method, card_last4)
 
 
 async def create_offer(offer_id, session_id, user_id, kind, name, label, amount_usd,

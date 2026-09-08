@@ -6,19 +6,22 @@ function esc(s: any): string {
   return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string))
 }
 
-export function buildItineraryHtml(it: any, ref?: string): string {
-  // A booking reference means this trip is RESERVED (reservation-only demo — no money has
-  // moved, so the document must never say "paid"). Offering to "Book" each hotel underneath
-  // a confirmed banner is contradictory — a guest following those links would double-book.
-  // Once a ref exists, every booking call-to-action becomes a statement of what's reserved.
+export function buildItineraryHtml(it: any, ref?: string, paid?: { last4?: string } | null): string {
+  // A booking reference means this trip is RESERVED; with `paidLast4` it was also PAID with
+  // the saved card in-conversation, and only then may the document say so. Offering to "Book"
+  // each hotel underneath a confirmed banner is contradictory — a guest following those links
+  // would double-book. Once a ref exists, every booking call-to-action becomes a statement.
   const isBooked = Boolean(ref)
+  const isPaid = isBooked && Boolean(paid)
+  const paidLast4 = paid?.last4 || ''
+  const done = isPaid ? 'Booked' : 'Reserved'
   const days = (it?.days || []).map((d: any) => {
     const hotel = d.hotel && d.hotel.name ? d.hotel : null
     const acts = (d.activities || []).map((a: any) =>
       `<li><b>${esc(a.time)}:</b> ${esc(a.name)}${a.blurb ? ` — <span class="muted">${esc(a.blurb)}</span>` : ''}</li>`
     ).join('')
     const hotelCta = isBooked
-      ? ' — <span class="reserved">Reserved</span>'
+      ? ` — <span class="reserved">${done}</span>`
       : (hotel?.book_url ? ` — <a href="${esc(hotel.book_url)}">Book</a>` : '')
     return `<section class="day">
       <div class="badge">Day ${esc(d.day)} · ${esc(d.city)}</div>
@@ -52,20 +55,20 @@ a{color:#B8860B} .total{font-size:22px;font-weight:800;text-align:right;margin-t
   <div class="brand">🇻🇳 Discover Vietnam · AI Travel Concierge</div>
   <h1>${esc(it?.title || 'Your Vietnam Itinerary')}</h1>
   ${it?.summary ? `<p class="sum">${esc(it.summary)}</p>` : ''}
-  ${ref ? `<div class="ref">✓ Reservation confirmed · Ref ${esc(ref)}</div>` : ''}
+  ${ref ? `<div class="ref">✓ ${isPaid ? `Booking confirmed${paidLast4 ? ` · Paid with card ending ${esc(paidLast4)}` : ' · Paid'}` : 'Reservation confirmed'} · Ref ${esc(ref)}</div>` : ''}
   ${days}
   <div class="total">${isBooked ? 'Trip total' : 'Estimated total'}: <span>$${Number(it?.estimated_total_usd || 0).toLocaleString()}</span></div>
   ${breakdown}
   <div class="foot">${isBooked
-    ? 'Reserved with Sasha · Discover Vietnam. Keep this reference for your records.'
+    ? `${done} with Sasha · Discover Vietnam. Keep this reference for your records.`
     : 'Planned with Sasha · Discover Vietnam. This trip is not reserved yet.'}</div>
 </body></html>`
 }
 
-export function buildItineraryText(it: any, ref?: string): string {
+export function buildItineraryText(it: any, ref?: string, paid?: { last4?: string } | null): string {
   const lines: string[] = [`${it?.title || 'Vietnam Itinerary'}`]
   if (it?.summary) lines.push(it.summary)
-  if (ref) lines.push(`Reservation ref: ${ref}`)
+  if (ref) lines.push(paid ? `Booking ref: ${ref}${paid.last4 ? ` · Paid with card ending ${paid.last4}` : ' · Paid'}` : `Reservation ref: ${ref}`)
   lines.push('')
   for (const d of it?.days || []) {
     lines.push(`Day ${d.day} — ${d.city}: ${d.title}`)

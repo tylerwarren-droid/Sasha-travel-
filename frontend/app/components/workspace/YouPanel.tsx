@@ -18,6 +18,8 @@ interface BookedTrip {
   amount_usd: number
   days: number
   first_city: string
+  // Present when the trip was paid with the saved card in-conversation.
+  card_last4?: string | null
 }
 
 /** "2026-07-15T09:12:00" -> "July 2026". Falls back to the raw string if it won't parse. */
@@ -67,7 +69,8 @@ export default function YouPanel({ user, plannedThisSession = 0, language = 'en'
     when: monthYear(t.paid_at),
     title: t.title,
     sub: [t.days ? `${t.days} day${t.days === 1 ? '' : 's'}` : '',
-          t.amount_usd ? `$${Math.round(t.amount_usd).toLocaleString()}` : '']
+          t.amount_usd ? `$${Math.round(t.amount_usd).toLocaleString()}` : '',
+          t.card_last4 ? `Paid · card ending ${t.card_last4}` : '']
       .filter(Boolean).join(' · ') || 'Booked with Sasha',
     ref: t.booking_ref,
   }))

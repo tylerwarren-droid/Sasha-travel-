@@ -528,8 +528,22 @@ async def _find_restaurants_live(dest: str, request_hint: str = "") -> dict:
 # Thin wrappers over the _live finders above. Same signatures, so no caller changes; the only
 # difference is that asking twice for the same destination now returns the SAME card.
 
-async def find_flights(dest: str, origin: str = "", when: str = "") -> dict:
+async def find_flights(dest: str, origin: str = "", when: str = "", context: str = "") -> dict:
     dest = dest or "Vietnam"
+
+    # Optional Duffel plug-in. It is deliberately feature-gated and returns the SAME booking-card
+    # shape as the legacy finder, so the conductor/frontend do not need a parallel flight stack.
+    # No token/flag, missing provider, or provider failure -> today's path stays intact.
+    try:
+        from app.services.duffel import duffel_enabled, search_flights_from_text
+        if duffel_enabled():
+            duffel_card = await search_flights_from_text(when or f"flight to {dest}",
+                                                         context=context, dest_hint=dest)
+            if duffel_card is not None:
+                return duffel_card
+    except Exception as e:
+        print(f"[travel_search] Duffel unavailable, using legacy flight finder: {e}")
+
     # NOTE: deliberately NOT origin-localized here — the conductor's per-session card cache
     # (_stable_card) stores what this returns, and a localized card must never be pinned for
     # the whole session. run_flight_intent applies _localize_flight_card per turn instead.

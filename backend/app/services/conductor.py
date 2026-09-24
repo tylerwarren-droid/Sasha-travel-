@@ -1293,7 +1293,17 @@ async def _stable_card(session_id, kind: str, dest: str, fetch,
     if session_id:
         cached = await chat_store.get_session_card(session_id, kind, dest)
         if cached and cached.get("options") and (always_cache or cached.get("_hint", "") == hint):
-            return cached
+            # Duffel offers are bookable only until their own expires_at. The legacy 30-minute
+            # session-card stability rule must never pin an expired airline offer.
+            if cached.get("_provider") == "duffel":
+                try:
+                    from app.services.duffel import card_has_live_offer
+                    if card_has_live_offer(cached):
+                        return cached
+                except Exception as e:
+                    print(f"[Conductor] Duffel cache check failed; refreshing: {e}")
+            else:
+                return cached
     card = await fetch()
     opts = card.get("options", []) if isinstance(card, dict) else []
     if session_id and opts and not all(o.get("fallback") for o in opts):
@@ -1307,17 +1317,42 @@ async def run_flight_intent(message: str, history: list, session_id: "Optional[s
     from app.services.travel_search import _localize_flight_card
     dest = _route_dest(message, history)
     _h = _req_hint("flight", message)
-    card = await _stable_card(session_id, "flight", dest, lambda: find_flights(dest, when=message),
-                              hint=_h, always_cache=(_is_book_complete(message) and not _h))
+    _duffel_ctx = "\n".join(
+        f"{m.get('role', 'unknown')}: {m.get('content', '')}" for m in (history or [])[-10:]
+        if isinstance(m, dict)
+    )
+    card = await _stable_card(
+        session_id, "flight", dest,
+        lambda: find_flights(dest, when=message, context=_duffel_ctx),
+        hint=_h, always_cache=(_is_book_complete(message) and not _h),
+    )
+
+    if card.get("_provider") == "duffel" and card.get("_needs_input"):
+        missing = set(card.get("_needs_input") or [])
+        asks = []
+        if "origin_query" in missing or "origin" in missing:
+            asks.append("where you're flying from")
+        if "destination_query" in missing or "destination" in missing:
+            asks.append("where you're flying to")
+        if "departure_date" in missing:
+            asks.append("your departure date")
+        if asks:
+            need = asks[0] if len(asks) == 1 else ", ".join(asks[:-1]) + " and " + asks[-1]
+            return {
+                "agent": "flight",
+                "response": f"I can check the live airline inventory — just tell me {need}.",
+                "data": {},
+            }
+
     # Origin awareness, per turn and AFTER every cache: "I'm flying from Chicago" must
     # surface that region's arrivals (or an honest origin-aware deep-link) — the cached
     # domestic-first ordering quoted a guest from Chicago "$55 with VietJet" on camera.
-    # The origin may have been stated in an earlier turn, so scan recent guest messages too.
     _origin_ctx = message + " " + " ".join(
         m.get("content", "") for m in (history or [])[-8:]
         if isinstance(m, dict) and m.get("role") == "user"
     )
-    card = _localize_flight_card(card, _origin_ctx, dest)
+    if card.get("_provider") != "duffel":
+        card = _localize_flight_card(card, _origin_ctx, dest)
     _orig = card.get("origin_spoken") or ""
     if "cheapest" in (message or "").lower():
         card["options"] = sorted(card.get("options", []), key=_price_of)
@@ -2394,7 +2429,9 @@ async def conduct(
                         amt = per * _party
                         label = f"Table for {_party} · {o.get('name', '')}"
                     else:
-                        amt = int(o.get("amount_usd") or 0)
+                        amt = (float(o.get("amount_usd") or 0)
+                               if o.get("provider") == "duffel"
+                               else int(o.get("amount_usd") or 0))
                         # Cached activity rows predate amount_usd and carry only the display
                         # price ("$45") — recover the number so tours check out in-app through
                         # Stripe like every other card, instead of a third-party link.
@@ -2405,7 +2442,11 @@ async def conduct(
                         # label the guest sees at checkout, so a 4-traveller party isn't led
                         # to think one tap covers everyone.
                         if kind == "flight":
-                            label += " · per person"
+                            if o.get("provider") == "duffel":
+                                party_n = int(o.get("party_size") or 1)
+                                label += f" · total for {party_n} traveller{'s' if party_n != 1 else ''}"
+                            else:
+                                label += " · per person"
                         # Tour prices are per head too.
                         if kind == "activity":
                             label += " · per person"
@@ -2415,8 +2456,16 @@ async def conduct(
                     await chat_store.create_offer(
                         offer_id=oid, session_id=session_id, user_id=_uid, kind=kind,
                         name=o.get("name", ""), label=label, amount_usd=amt,
+                        currency=(o.get("currency") or "usd").lower(),
                         meta={"dest": card.get("dest", ""), "detail": o.get("detail", ""),
-                              "party": _party if kind == "restaurant" else None},
+                              "party": _party if kind == "restaurant" else None,
+                              "provider": o.get("provider"),
+                              "provider_offer_id": o.get("provider_offer_id"),
+                              "provider_amount": o.get("provider_amount"),
+                              "provider_currency": o.get("currency"),
+                              "provider_party_size": o.get("party_size"),
+                              "provider_expires_at": o.get("expires_at"),
+                              "provider_live_mode": o.get("live_mode")},
                     )
                     o["offer_id"] = oid
                     o["amount_usd"] = amt   # so the card shows "Book & Pay $X" (restaurants had none)

@@ -2423,6 +2423,11 @@ async def conduct(
                 continue
             for o in card.get("options", []):
                 try:
+                    # Duffel is search-only in this integration. Do not mint Sasha's
+                    # internal offer_id, which would make the existing UI show Reserve
+                    # and could create an internal booking without a Duffel airline order.
+                    if o.get("provider") == "duffel":
+                        continue
                     if kind == "restaurant":
                         # A reservation is a prepaid table: per-person meal estimate × party.
                         per = int(o.get("per_person_usd") or 0)

@@ -469,6 +469,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
   // guest on the photos every single time and pushed the live conversation off the top.
   const streamRef = useRef<HTMLDivElement | null>(null)
   const lastMsgRef = useRef<HTMLDivElement | null>(null)
+  const resultsRef = useRef<HTMLDivElement | null>(null)
   // Don't yank a guest who has deliberately scrolled up to re-read something.
   //
   // Deliberately keyed on user INTENT (wheel / touch), not on distance-from-bottom. Because we
@@ -535,12 +536,13 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
     return () => cancelAnimationFrame(id)
   }, [messages, isLoading, bookings, hotels, richItinerary])
 
-  // Cards re-pin (the guest asked for them) but do NOT get their own scroll target — they're
-  // already in view under the message that announced them.
+  // A search result is useful only if the guest can SEE it. Pin the result block itself,
+  // rather than only Sasha's message above it; on the narrow live-call rail the old behavior
+  // left flight cards below the fold while Sasha said they were "on the card".
   useEffect(() => {
     if (!bookings.length && !hotels.length) return
     stickToBottomRef.current = true
-    scrollTo(lastMsgRef.current, 'start')
+    scrollTo(resultsRef.current, 'start')
   }, [bookings, hotels])
   // NOTE: `photos` deliberately does NOT trigger a scroll. It refreshes on almost every turn,
   // and it lives below the cards, so following it is exactly the bug above.
@@ -720,7 +722,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
              what was said, so they sit under the newest message rather than in a tab. ── */}
         {(hotels.length > 0 || bookings.length > 0 || bookingLinks.length > 0) && (
           <>
-            <div className="lw-when">Found for you</div>
+            <div ref={resultsRef} className="lw-when">Found for you</div>
             {bookings.map((b, bi) => {
               const meta: Record<string, { icon: string; label: string; ci: string }> = {
                 flight: { icon: '✈️', label: 'Flights', ci: 'blue' },

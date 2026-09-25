@@ -1340,7 +1340,7 @@ async def run_flight_intent(message: str, history: list, session_id: "Optional[s
             need = asks[0] if len(asks) == 1 else ", ".join(asks[:-1]) + " and " + asks[-1]
             return {
                 "agent": "flight",
-                "response": f"I can check the live airline inventory — just tell me {need}.",
+                "response": f"I can check flight options — just tell me {need}.",
                 "data": {},
             }
 
@@ -1362,6 +1362,24 @@ async def run_flight_intent(message: str, history: list, session_id: "Optional[s
     has_prices = any(o.get("price") for o in opts)
     names_list = [o["name"] for o in opts if o.get("name") and not o.get("fallback")]
     matched = _match_named_ctx(message, names_list, history) if (_is_book_complete(message) and names_list) else None
+
+    # Duffel is search-only in this phase: surface the flight card clearly, but never tell the
+    # guest to Reserve or imply that Sasha can ticket the offer. Native Duffel order creation
+    # comes later, after passenger details, revalidation and payment are wired end-to-end.
+    if card.get("_provider") == "duffel":
+        _from = f" from {_orig}" if _orig else ""
+        if has_prices:
+            spoken = (
+                f"I found a few flights to {dest}{_from} — {_named_options(opts)}. "
+                "I've put the options on screen for you; tap View on any flight to inspect it."
+            )
+        else:
+            spoken = (
+                f"I found flight options{_from} to {dest} and put them on screen for you. "
+                "Tap View on any option to inspect it."
+            )
+        return {"agent": "flight", "response": spoken, "data": {"booking": card}}
+
     if _is_book_complete(message) and names_list:
         if matched:
             spoken = (f"Great — the {matched} flight is pulled up on the right. Tap Reserve "

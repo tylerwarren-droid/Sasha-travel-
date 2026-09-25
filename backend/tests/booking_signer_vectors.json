@@ -1,0 +1,177 @@
+{
+ "small_canonical": "{\"Z\":0,\"a\":\"é \\\"q\\\" \\n\\u0001/\",\"b\":[3,1,{\"c\":true,\"d\":null}]}",
+ "signer_public_spki": "MCowBQYDK2VwAyEA11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+ "device_public_spki": "MCowBQYDK2VwAyEAPUAXw+hDiVqStwqnTRt+vJyYLM8uxJaMwM1V8Sr0Zgw=",
+ "device_id": "deb2ded39dc26fce0e6085b6fc34bf6b5941913bbfe2ea614113cff9e004c170",
+ "filled_values_lines": "[name=\"rtb-date\"]=October 2, 2026\n[name=\"rtb-email\"]=ana.guest@example.org\n[name=\"rtb-name\"]=Ana Guest\n[name=\"rtb-party\"]=2\n[name=\"rtb-phone\"]=+351 000 000 000\n[name=\"rtb-time\"]=8:00 PM",
+ "filled_values_sha256": "71d1874c6858ad0b33f053a9026555f29e76951007761d9ed4f9188c76ae5d8e",
+ "read_back_sha256": "ded1027b041a46a66eae74e38d9266bb366b297c9d3d46f88597c1e6a823cdb8",
+ "payload": {
+  "v": 1,
+  "kind": "sasha_booking_task",
+  "mode": "dry_run",
+  "task": {
+   "intent_id": "00000000-0000-4000-8000-000000000001",
+   "origin": "https://www.restaurante-psi.com",
+   "url": "https://www.restaurante-psi.com/reservas/",
+   "steps": [
+    "navigate",
+    "await_form",
+    "fill_fields",
+    "submit",
+    "read_page_after",
+    "report"
+   ],
+   "fields": [
+    {
+     "name": "rtb-date",
+     "value": "October 2, 2026",
+     "selector": "[name=\"rtb-date\"]"
+    },
+    {
+     "name": "rtb-time",
+     "value": "8:00 PM",
+     "selector": "[name=\"rtb-time\"]"
+    },
+    {
+     "name": "rtb-party",
+     "value": "2",
+     "selector": "[name=\"rtb-party\"]"
+    },
+    {
+     "name": "rtb-name",
+     "value": "Ana Guest",
+     "selector": "[name=\"rtb-name\"]"
+    },
+    {
+     "name": "rtb-email",
+     "value": "ana.guest@example.org",
+     "selector": "[name=\"rtb-email\"]"
+    },
+    {
+     "name": "rtb-phone",
+     "value": "+351 000 000 000",
+     "selector": "[name=\"rtb-phone\"]"
+    }
+   ],
+   "required": [
+    "rtb-date",
+    "rtb-time",
+    "rtb-party",
+    "rtb-name",
+    "rtb-email",
+    "rtb-phone"
+   ],
+   "envelope": [
+    {
+     "name": "action",
+     "value": "booking_request"
+    }
+   ],
+   "spec": {
+    "accepted": {
+     "text_pattern": "your\\s+booking\\s+request\\s+is\\s+waiting\\s+to\\s+be\\s+confirmed",
+     "example": "Thanks, your booking request is waiting to be confirmed. Updates will be sent to the email address you provided.",
+     "reference_pattern": null,
+     "selector": null
+    },
+    "refused": [
+     {
+      "text_pattern": "Please\\s+enter\\s+the\\s+date\\s+you\\s+would\\s+like\\s+to\\s+book",
+      "meaning": "no date was given (case date_missing)",
+      "selector": ".rtb-error"
+     },
+     {
+      "text_pattern": "The\\s+date\\s+you\\s+entered\\s+is\\s+not\\s+valid",
+      "meaning": "the date was not one the calendar offers (case date_invalid)",
+      "selector": ".rtb-error"
+     },
+     {
+      "text_pattern": "bookings\\s+must\\s+be\\s+made\\s+more\\s+than\\s+\\d+\\s+days?\\s+in\\s+advance",
+      "meaning": "inside the venue's booking notice, or in the past (cases inside_24h_notice, date_in_the_past)",
+      "selector": ".rtb-error"
+     },
+     {
+      "text_pattern": "no\\s+bookings\\s+are\\s+being\\s+accepted\\s+on\\s+that\\s+date",
+      "meaning": "the venue takes no bookings that day (case closed_day_sunday)",
+      "selector": ".rtb-error"
+     },
+     {
+      "text_pattern": "no\\s+bookings\\s+are\\s+being\\s+accepted\\s+at\\s+that\\s+time",
+      "meaning": "the venue takes no bookings at that time (case closed_time_5pm)",
+      "selector": ".rtb-error"
+     },
+     {
+      "text_pattern": "Please\\s+enter\\s+the\\s+time\\s+you\\s+would\\s+like\\s+to\\s+book",
+      "meaning": "no time was given (case time_missing)",
+      "selector": ".rtb-error"
+     },
+     {
+      "text_pattern": "The\\s+time\\s+you\\s+entered\\s+is\\s+not\\s+valid",
+      "meaning": "the time was not one the form offers (case time_invalid)",
+      "selector": ".rtb-error"
+     },
+     {
+      "text_pattern": "Please\\s+enter\\s+a\\s+name\\s+for\\s+this\\s+booking",
+      "meaning": "no name was given (case name_missing)",
+      "selector": ".rtb-error"
+     },
+     {
+      "text_pattern": "Please\\s+let\\s+us\\s+know\\s+how\\s+many\\s+people\\s+will\\s+be\\s+in\\s+your\\s+party",
+      "meaning": "no valid party size (cases party_missing, party_zero, party_not_a_number)",
+      "selector": ".rtb-error"
+     },
+     {
+      "text_pattern": "Please\\s+enter\\s+an\\s+email\\s+address\\s+so\\s+we\\s+can\\s+confirm\\s+your\\s+booking",
+      "meaning": "no email was given (case email_missing)",
+      "selector": ".rtb-error"
+     },
+     {
+      "text_pattern": "\\S[\\s\\S]*",
+      "meaning": "the plugin rendered a validation error in its error container (.rtb-error) — the wording may be translated, so this is matched by WHERE it renders, not by what it says",
+      "selector": ".rtb-error"
+     }
+    ]
+   },
+   "outcome_ceiling": "requested",
+   "filled_values_sha256": "71d1874c6858ad0b33f053a9026555f29e76951007761d9ed4f9188c76ae5d8e",
+   "issued_at": "2026-09-25T12:00:00.000Z",
+   "expires_at": "2026-09-25T12:10:00.000Z"
+  },
+  "device_id": "deb2ded39dc26fce0e6085b6fc34bf6b5941913bbfe2ea614113cff9e004c170",
+  "spec_standing": {
+   "established": true,
+   "basis": "reference_install",
+   "source": "our own WordPress Playground install (WP 6.6, PHP 7.4) of Five Star Restaurant Reservations 1.4.6 and 1.5.3 — the releases whose form matches Psi's served form exactly — 25 September 2026, 14 refusal cases; docs/sasha/S-08-reference-install.json. NOT observed at Psi."
+  },
+  "read_back": {
+   "lines": [
+    "Restaurante Psi, Lisbon.",
+    "October 2, 2026 at 8:00 PM, for 2.",
+    "Under the name Ana Guest.",
+    "They will have your email, ana.guest@example.org, and your telephone, +351 000 000 000.",
+    "I will open their booking page on this machine and send it from here. Shall I?"
+   ],
+   "sha256": "ded1027b041a46a66eae74e38d9266bb366b297c9d3d46f88597c1e6a823cdb8"
+  },
+  "approval": {
+   "by": "user-123",
+   "how": "voice",
+   "at": "2026-09-25T11:59:30.000Z",
+   "said": "yes, book it",
+   "read_back_sha256": "ded1027b041a46a66eae74e38d9266bb366b297c9d3d46f88597c1e6a823cdb8",
+   "filled_values_sha256": "71d1874c6858ad0b33f053a9026555f29e76951007761d9ed4f9188c76ae5d8e"
+  },
+  "issued_at": "2026-09-25T12:00:00.000Z",
+  "expires_at": "2026-09-25T12:10:00.000Z"
+ },
+ "canonical": "{\"approval\":{\"at\":\"2026-09-25T11:59:30.000Z\",\"by\":\"user-123\",\"filled_values_sha256\":\"71d1874c6858ad0b33f053a9026555f29e76951007761d9ed4f9188c76ae5d8e\",\"how\":\"voice\",\"read_back_sha256\":\"ded1027b041a46a66eae74e38d9266bb366b297c9d3d46f88597c1e6a823cdb8\",\"said\":\"yes, book it\"},\"device_id\":\"deb2ded39dc26fce0e6085b6fc34bf6b5941913bbfe2ea614113cff9e004c170\",\"expires_at\":\"2026-09-25T12:10:00.000Z\",\"issued_at\":\"2026-09-25T12:00:00.000Z\",\"kind\":\"sasha_booking_task\",\"mode\":\"dry_run\",\"read_back\":{\"lines\":[\"Restaurante Psi, Lisbon.\",\"October 2, 2026 at 8:00 PM, for 2.\",\"Under the name Ana Guest.\",\"They will have your email, ana.guest@example.org, and your telephone, +351 000 000 000.\",\"I will open their booking page on this machine and send it from here. Shall I?\"],\"sha256\":\"ded1027b041a46a66eae74e38d9266bb366b297c9d3d46f88597c1e6a823cdb8\"},\"spec_standing\":{\"basis\":\"reference_install\",\"established\":true,\"source\":\"our own WordPress Playground install (WP 6.6, PHP 7.4) of Five Star Restaurant Reservations 1.4.6 and 1.5.3 — the releases whose form matches Psi's served form exactly — 25 September 2026, 14 refusal cases; docs/sasha/S-08-reference-install.json. NOT observed at Psi.\"},\"task\":{\"envelope\":[{\"name\":\"action\",\"value\":\"booking_request\"}],\"expires_at\":\"2026-09-25T12:10:00.000Z\",\"fields\":[{\"name\":\"rtb-date\",\"selector\":\"[name=\\\"rtb-date\\\"]\",\"value\":\"October 2, 2026\"},{\"name\":\"rtb-time\",\"selector\":\"[name=\\\"rtb-time\\\"]\",\"value\":\"8:00 PM\"},{\"name\":\"rtb-party\",\"selector\":\"[name=\\\"rtb-party\\\"]\",\"value\":\"2\"},{\"name\":\"rtb-name\",\"selector\":\"[name=\\\"rtb-name\\\"]\",\"value\":\"Ana Guest\"},{\"name\":\"rtb-email\",\"selector\":\"[name=\\\"rtb-email\\\"]\",\"value\":\"ana.guest@example.org\"},{\"name\":\"rtb-phone\",\"selector\":\"[name=\\\"rtb-phone\\\"]\",\"value\":\"+351 000 000 000\"}],\"filled_values_sha256\":\"71d1874c6858ad0b33f053a9026555f29e76951007761d9ed4f9188c76ae5d8e\",\"intent_id\":\"00000000-0000-4000-8000-000000000001\",\"issued_at\":\"2026-09-25T12:00:00.000Z\",\"origin\":\"https://www.restaurante-psi.com\",\"outcome_ceiling\":\"requested\",\"required\":[\"rtb-date\",\"rtb-time\",\"rtb-party\",\"rtb-name\",\"rtb-email\",\"rtb-phone\"],\"spec\":{\"accepted\":{\"example\":\"Thanks, your booking request is waiting to be confirmed. Updates will be sent to the email address you provided.\",\"reference_pattern\":null,\"selector\":null,\"text_pattern\":\"your\\\\s+booking\\\\s+request\\\\s+is\\\\s+waiting\\\\s+to\\\\s+be\\\\s+confirmed\"},\"refused\":[{\"meaning\":\"no date was given (case date_missing)\",\"selector\":\".rtb-error\",\"text_pattern\":\"Please\\\\s+enter\\\\s+the\\\\s+date\\\\s+you\\\\s+would\\\\s+like\\\\s+to\\\\s+book\"},{\"meaning\":\"the date was not one the calendar offers (case date_invalid)\",\"selector\":\".rtb-error\",\"text_pattern\":\"The\\\\s+date\\\\s+you\\\\s+entered\\\\s+is\\\\s+not\\\\s+valid\"},{\"meaning\":\"inside the venue's booking notice, or in the past (cases inside_24h_notice, date_in_the_past)\",\"selector\":\".rtb-error\",\"text_pattern\":\"bookings\\\\s+must\\\\s+be\\\\s+made\\\\s+more\\\\s+than\\\\s+\\\\d+\\\\s+days?\\\\s+in\\\\s+advance\"},{\"meaning\":\"the venue takes no bookings that day (case closed_day_sunday)\",\"selector\":\".rtb-error\",\"text_pattern\":\"no\\\\s+bookings\\\\s+are\\\\s+being\\\\s+accepted\\\\s+on\\\\s+that\\\\s+date\"},{\"meaning\":\"the venue takes no bookings at that time (case closed_time_5pm)\",\"selector\":\".rtb-error\",\"text_pattern\":\"no\\\\s+bookings\\\\s+are\\\\s+being\\\\s+accepted\\\\s+at\\\\s+that\\\\s+time\"},{\"meaning\":\"no time was given (case time_missing)\",\"selector\":\".rtb-error\",\"text_pattern\":\"Please\\\\s+enter\\\\s+the\\\\s+time\\\\s+you\\\\s+would\\\\s+like\\\\s+to\\\\s+book\"},{\"meaning\":\"the time was not one the form offers (case time_invalid)\",\"selector\":\".rtb-error\",\"text_pattern\":\"The\\\\s+time\\\\s+you\\\\s+entered\\\\s+is\\\\s+not\\\\s+valid\"},{\"meaning\":\"no name was given (case name_missing)\",\"selector\":\".rtb-error\",\"text_pattern\":\"Please\\\\s+enter\\\\s+a\\\\s+name\\\\s+for\\\\s+this\\\\s+booking\"},{\"meaning\":\"no valid party size (cases party_missing, party_zero, party_not_a_number)\",\"selector\":\".rtb-error\",\"text_pattern\":\"Please\\\\s+let\\\\s+us\\\\s+know\\\\s+how\\\\s+many\\\\s+people\\\\s+will\\\\s+be\\\\s+in\\\\s+your\\\\s+party\"},{\"meaning\":\"no email was given (case email_missing)\",\"selector\":\".rtb-error\",\"text_pattern\":\"Please\\\\s+enter\\\\s+an\\\\s+email\\\\s+address\\\\s+so\\\\s+we\\\\s+can\\\\s+confirm\\\\s+your\\\\s+booking\"},{\"meaning\":\"the plugin rendered a validation error in its error container (.rtb-error) — the wording may be translated, so this is matched by WHERE it renders, not by what it says\",\"selector\":\".rtb-error\",\"text_pattern\":\"\\\\S[\\\\s\\\\S]*\"}]},\"steps\":[\"navigate\",\"await_form\",\"fill_fields\",\"submit\",\"read_page_after\",\"report\"],\"url\":\"https://www.restaurante-psi.com/reservas/\"},\"v\":1}",
+ "canonical_bytes": 4568,
+ "digest": "88a6bbef26b21c3f77a2e8ca10851240976a3cc05ce96d45f5dd6dda810016cd",
+ "signature": "gdIKducUz3vTenXlGgqc6mYjJvFM8IFyUV7Jsn+XLOLXYLR4Sk2XbawP1iKZA7YGB7aF0q+vRWbDeTdK/o7KBQ==",
+ "report_body_canonical": "{\"device_id\":\"deb2ded39dc26fce0e6085b6fc34bf6b5941913bbfe2ea614113cff9e004c170\",\"report\":{\"agent\":\"sasha-helper/0.1.0\",\"capture\":{\"action\":\"https://www.restaurante-psi.com/reservas/\",\"captured_at\":\"2026-09-25T12:00:05.000Z\",\"enctype\":\"application/x-www-form-urlencoded\",\"entries\":[[\"action\",\"booking_request\"],[\"rtb-date\",\"October 2, 2026\"]],\"filled_values_sha256_device\":\"71d1874c6858ad0b33f053a9026555f29e76951007761d9ed4f9188c76ae5d8e\",\"method\":\"POST\",\"submitter\":\"Faça a Reserva\"},\"intent_id\":\"00000000-0000-4000-8000-000000000001\",\"ok\":true,\"phase\":\"captured_not_sent\",\"rule\":\"captured_not_sent\",\"sent\":false,\"tab_opened\":true,\"user_words\":\"I've filled in their form on your computer and stopped just before sending, as planned. Nothing was sent.\",\"why\":\"dry run: filled, checked against the approved payload, captured, and stopped before the submit\"},\"task_digest\":\"88a6bbef26b21c3f77a2e8ca10851240976a3cc05ce96d45f5dd6dda810016cd\"}",
+ "report_signature": "asYlq0qIo7T1R9YO5TommiWjgnNKtrR8uLsLfILrU+vCWEZpsr+emmCHQ+HFMMh6lZ8aBwfheeq4F/ePT8j7Cg==",
+ "pairing_canonical": "{\"challenge\":\"cccccccccccccccccccccccccccccccccccccccc\",\"device_id\":\"deb2ded39dc26fce0e6085b6fc34bf6b5941913bbfe2ea614113cff9e004c170\",\"kind\":\"sasha_pairing\",\"origin\":\"https://project.kanoe.ai\",\"v\":1}",
+ "pairing_signature": "KNVP0quH+TmHQ818uSSUu0YKd8dsczOThdbUPsD4vwP/2rzBrzN3KW6MJz52WyBJxhSOgcSMucusbeYasUDuDg==",
+ "_about": "S-14 · test vectors from the booking helper's own code (docs/sasha-contract/README.md §12). Keys are the PUBLIC RFC 8032 §7.1 test keys: TEST 1 seed 9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60 (signer), TEST 2 seed 4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb (device). Never use them for anything real."
+}

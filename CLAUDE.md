@@ -66,6 +66,27 @@ Google Drive downloads always get renamed sequentially regardless of version lab
 ## THE DEPLOY PLAYBOOK (battle-tested: V2.4, V5, V6)
 Run in order. Stop at any gate that fails.
 
+### ⚠⚠ READ BEFORE ANY CTO DROP (added 25 Sep 2026)
+1. WHICH COPY. The up-to-date checkout is ~/Developer/Sasha-travel- (it matches GitHub main).
+   ~/Projects/sasha-travel is an older copy of the same repo and is behind. The paths below still say
+   ~/Projects/sasha-travel — until they are changed, `git pull` there first or you will sync into a stale tree.
+2. STAGE A DELETES REPO-ONLY FILES. `rsync --delete` makes backend/app/ an exact copy of the CTO's zip:
+   any file in backend/app/ that is NOT in his zip is DELETED, and any repo edit to a file he ships is
+   OVERWRITTEN. As of 25 Sep 2026 that includes the Duffel work (commits 5b0fee9, 6664cec, 7e124bf):
+     - backend/app/services/duffel.py          repo-only → DELETED unless the CTO ships it
+     - backend/app/services/conductor.py       Duffel edits → OVERWRITTEN unless he folded them in
+     - backend/app/services/travel_search.py   Duffel edits → OVERWRITTEN unless he folded them in
+   (backend/tests/ and frontend/ are not deleted; frontend files he ships are still overwritten.)
+3. Stage 0.6 — list what Stage A would delete, BEFORE running it (read-only):
+       cd ~/Projects/sasha-travel && V=~/Downloads/Sasha_V2-X && \
+       comm -23 <(cd backend/app && find . -type f ! -path '*/__pycache__/*' ! -name '*.pyc' | sort) \
+                <(cd "$V/backend/app" && find . -type f ! -path '*/__pycache__/*' ! -name '*.pyc' | sort)
+   Every line printed is a file Stage A will delete. For each: re-add it after the sync, or confirm the CTO
+   replaced it. Then check conductor.py / travel_search.py for the Duffel edits after the sync.
+4. backend/booking_signer/ (Sasha booking-task signer) lives OUTSIDE backend/app/ on purpose, so Stage A
+   never touches it. Once it is mounted in app/main.py, that mount line is re-applied in Stage B exactly
+   like the CORS line, and Stage E probes its route. (Not mounted yet.)
+
 Stage 0 — locate + git state:
     cd ~/Projects/sasha-travel && ls -lat ~/Downloads/ | head -5 && \
     git fetch -q && git log --oneline -1 && echo "uncommitted: $(git status --short | wc -l)"

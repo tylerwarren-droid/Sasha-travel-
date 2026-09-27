@@ -10,6 +10,8 @@ you cannot see; where behaviour matters, a reference implementation is given inl
 
 ## 0. ⚠ Read this first: the helper is INERT, by design, today
 
+> **Update, 27 September 2026 — switch 1 is CLEARED: the helper now pins the signing key (fingerprint `525f7027ed4f62b2`), so `no_signing_key_pinned` no longer occurs for a task signed with the Railway key; wherever this contract describes the key as unpinned, that was the earlier state.**
+
 Three switches are off. Each produces a **specific, repeatable refusal**. None of them is a bug in your code,
 and none can be fixed from Sasha's side.
 

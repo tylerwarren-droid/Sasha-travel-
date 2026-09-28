@@ -6,8 +6,11 @@
     GET  /api/booking/devices                    the account's paired devices
     POST /api/booking/intents                    RECORD the intent: particulars → task, read-back, hashes
     POST /api/booking/intents/{intent_id}/issue  the user said yes → sign the task (once per intent, ever)
-    POST /api/booking/reports                    a relayed REPORT → verify → outcome → reservation
-    GET  /api/booking/reservations               the account's reservations
+    POST /api/booking/reports                    a relayed REPORT → verify → outcome → the trip item's status
+    GET  /api/booking/reservations               the account's reservations: trip items something was sent for
+
+⚠ A RESERVATION IS A TRIP ITEM (store.py): created with the intent as `pending`, and given an outcome only when
+the device reports that something was sent to the venue.
 
 ⛔ LIVE SUBMISSION IS OFF HERE AS WELL AS IN THE HELPER. A `mode: "live"` intent is refused before anything
 is recorded (`live_submit_disabled_in_this_build`, the helper's own name for the same switch). Only dry runs
@@ -30,8 +33,8 @@ from fastapi.responses import JSONResponse
 from .account import account_for
 from .issue import IssueRefused, _iso_ms, issue_booking_task
 from .keys import InvalidSigningKey, LoadedSigningKey, SigningKeyNotConfigured, load_signing_key
-from .outcome import READ_ON_THE_DEVICE, outcome_of
-from .store import AlreadyRecorded, PostgresStore, StorageUnavailable
+from .outcome import outcome_of
+from .store import OBSERVED_BY, AlreadyRecorded, PostgresStore, StorageUnavailable, UnknownTrip
 from .venues import VENUES, ParticularsRefused, build_for_venue, parse_particulars
 from .verify import VerifyRefused, verify_device_report, verify_pairing
 
@@ -192,22 +195,26 @@ async def record_intent(request: Request):
         built = build_for_venue(venue, p)
     except ParticularsRefused as e:
         return _refuse(422, e.rule, str(e))
-    itinerary_id = body.get("itinerary_id")
+    trip_id = body.get("trip_id")  # optional: one of this account's trips; else its "Sasha bookings" trip
     row = {
         "intent_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "mode": mode,
-        "local_date": p.on, "local_time": p.at, "venue_timezone": venue.timezone, "party": p.party,
+        # → the trip item (the reservation)
+        "venue_name": venue.short_name, "local_date": p.on, "local_time": p.at, "local_timezone": venue.timezone,
+        "party_size": p.party,
+        # → the intent (what the user said yes to)
         "guest_name": p.name, "guest_email": p.email, "guest_phone": p.phone,
         "task": built["task"], "standing": built["standing"], "read_back_lines": built["read_back_lines"],
         "read_back_sha256": built["read_back_sha256"], "filled_values_sha256": built["filled_values_sha256"],
-        "itinerary_id": itinerary_id if isinstance(itinerary_id, str) and itinerary_id else None,
         "status": "awaiting_approval", "created_at": _now(),
     }
     try:
-        await STORE.put_intent(row)
+        trip_item_id = await STORE.put_intent(row, trip_id if isinstance(trip_id, str) and trip_id else None)
+    except UnknownTrip:
+        return _refuse(404, "trip_unknown", "no trip with that id belongs to this account; nothing was recorded")
     except StorageUnavailable as e:
         return _unavailable(e)
     # ⚠ The page reads these lines to the user, exactly — the yes is bound to their hash.
-    return {"intent_id": row["intent_id"], "mode": mode, "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
+    return {"intent_id": row["intent_id"], "trip_item_id": trip_item_id, "mode": mode, "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
 
 
 @router.post("/intents/{intent_id}/issue")
@@ -266,7 +273,7 @@ async def issue(intent_id: str, request: Request):
     return {"payload": signed["payload"], "signature": signed["signature"]}
 
 
-# ── the report: verify, then (only if something was sent) an outcome and a reservation ──────────
+# ── the report: verify, then (only if something was sent) an attempt and the trip item's outcome ──
 
 @router.post("/reports")
 async def report(request: Request):
@@ -311,22 +318,21 @@ async def report(request: Request):
         intent = await STORE.get_intent(account, task["intent_id"])
         venue = VENUES[intent["venue_key"]]
         out = outcome_of(body, venue.short_name)
-        reservation = None
+        attempt = None
         if out.status is not None:
-            reservation = {
-                "intent_id": task["intent_id"], "task_digest": digest, "account_id": account,
-                "itinerary_id": intent["itinerary_id"], "venue_key": venue.key, "venue_name": venue.short_name,
-                "venue_origin": venue.origin, "local_date": intent["local_date"], "local_time": intent["local_time"],
-                "venue_timezone": intent["venue_timezone"], "party": intent["party"], "status": out.status,
-                "status_basis": READ_ON_THE_DEVICE, "venue_reference": out.venue_reference,
-                "venue_words": out.venue_words, "observed_at": _parse_instant(out.observed_at), "created_at": _now(),
+            # ⚠ Only a SENT task is an attempt (models A's "audit trail for every method used to confirm a trip
+            # item"). Its status is always given — booking_attempts has no default since S-17.
+            attempt = {
+                "trip_item_id": intent["trip_item_id"], "task_digest": digest, "attempted_at": _now(),
+                "status": out.status, "venue_words": out.venue_words, "venue_reference": out.venue_reference,
+                "observed_at": _parse_instant(out.observed_at), "observed_by": OBSERVED_BY,
             }
         try:
             rid = await STORE.record_report({
                 "received_at": _now(), "account_id": account, "device_id": device.device_id, "task_digest": digest,
                 "intent_id": task["intent_id"], "task_verified": True, "report": body,
                 "device_signature": signed.get("device_signature"), "outcome": out.status,
-            }, reservation)
+            }, attempt)
         except AlreadyRecorded:  # the same report, arriving twice at once
             return await _already(await STORE.get_report_for_task(digest), task)
     except VerifyRefused as e:
@@ -341,9 +347,9 @@ async def report(request: Request):
 
 async def _already(previous: dict, task: dict) -> dict:
     """A report re-sent on PENDING (the ACK was lost): recognised, never recorded twice."""
-    res = await STORE.reservation_for_intent(task["intent_id"])
+    att = await STORE.attempt_for_task(task["task_digest"])
     return {"ok": True, "already_recorded": True, "outcome": previous["outcome"],
-            "reservation_id": res["id"] if res else None, "say": None, "status_line": None}
+            "reservation_id": att["trip_item_id"] if att else None, "say": None, "status_line": None}
 
 
 def _parse_instant(s: Any) -> Optional[datetime]:
@@ -365,9 +371,8 @@ async def reservations(request: Request):
     except StorageUnavailable as e:
         return _unavailable(e)
     return {"reservations": [{
-        "id": r["id"], "intent_id": r["intent_id"], "itinerary_id": r["itinerary_id"],
-        "venue": r["venue_name"], "venue_origin": r["venue_origin"],
-        "date": r["local_date"].isoformat(), "time": r["local_time"].strftime("%H:%M"), "timezone": r["venue_timezone"],
-        "party": r["party"], "status": r["status"], "status_basis": r["status_basis"],
-        "venue_reference": r["venue_reference"], "venue_words": r["venue_words"], "task_digest": r["task_digest"],
+        "id": r["id"], "trip_id": r["trip_id"], "intent_id": r["intent_id"], "venue": r["venue"],
+        "date": r["local_date"].isoformat(), "time": r["local_time"].strftime("%H:%M"), "timezone": r["local_timezone"],
+        "party": r["party_size"], "status": r["status"], "booking_reference": r["booking_reference"],
+        "venue_words": r["venue_words"], "observed_by": r["observed_by"], "task_digest": r["task_digest"],
     } for r in rows]}

@@ -2,9 +2,9 @@
 
     cd backend && python -m unittest tests.test_booking_routes -v
 
-The Postgres half runs when BOOKING_TEST_DATABASE_URL names a THROWAWAY database whose name contains "test":
-it drops the six booking tables there and re-creates them from booking_signer/sql/001_booking_storage.sql,
-so the drafted SQL is exercised by the same suite as the code. ⚠ Without that variable the Postgres half is
+The Postgres half runs when BOOKING_TEST_DATABASE_URL names a THROWAWAY database whose name contains "test": it
+wipes that database, loads tests/fixtures/model_a_live_2026-09-28.sql (auth.users and model A exactly as read
+live), then runs booking_signer/sql/001_booking_storage.sql — the very block that is applied to Sasha's Supabase. ⚠ Without that variable the Postgres half is
 SKIPPED, and says so — a skip is not a pass.
 
 Keys are the public RFC 8032 test keys (signer: TEST 1, device: TEST 2), never real. Nothing here reaches a
@@ -27,7 +27,7 @@ from booking_signer import routes
 from booking_signer.account import DEMO_ACCOUNT_ID
 from booking_signer.canonical import canonical_bytes
 from booking_signer.keys import ENV_VAR, load_signing_key
-from booking_signer.store import TABLES, MemoryStore, PostgresStore
+from booking_signer.store import MemoryStore, PostgresStore
 from booking_signer.venues import PSI, build_for_venue, parse_particulars
 from booking_signer.verify import pairing_statement
 
@@ -39,9 +39,10 @@ DEVICE = Ed25519PrivateKey.from_private_bytes(bytes.fromhex("4ccd089b28ff96da9db
 DEVICE_SPKI, DEVICE_ID = VEC["device_public_spki"], VEC["device_id"]
 PG_URL = os.getenv("BOOKING_TEST_DATABASE_URL", "")
 SQL = (BACKEND / "booking_signer" / "sql" / "001_booking_storage.sql").read_text(encoding="utf-8")
+FIXTURE = (HERE / "fixtures" / "model_a_live_2026-09-28.sql").read_text(encoding="utf-8")
 
 ANA = {"venue": "restaurante-psi", "date": "2026-10-02", "time": "20:00", "party": 2, "name": "Ana Guest",
-       "email": "ana.guest@example.org", "phone": "+351 000 000 000", "mode": "dry_run", "itinerary_id": "itin-1"}
+       "email": "ana.guest@example.org", "phone": "+351 000 000 000", "mode": "dry_run"}
 b64 = lambda b: base64.b64encode(b).decode("ascii")
 
 
@@ -196,6 +197,10 @@ class BookingRoutes:
         self.assertEqual([r.status_code, r.json()["rule"]], [503, "signer_not_configured"])
 
     # ── reports ──
+    def test_an_intent_outside_this_accounts_trips_records_nothing(self):
+        r = self.post("/intents", {**ANA, "trip_id": "00000000-0000-4000-8000-00000000beef"})
+        self.assertEqual([r.status_code, r.json()["rule"]], [404, "trip_unknown"])
+
     def test_a_dry_run_report_records_no_outcome_and_no_reservation(self):
         i, _, digest = self.issued()
         r = self.report(digest, self.dry_run_report(i["intent_id"])).json()
@@ -218,10 +223,10 @@ class BookingRoutes:
             self.assertEqual(r["outcome"], want, matched)
             self.assertIsNotNone(r["reservation_id"])
             res = next(x for x in self.client.get("/api/booking/reservations").json()["reservations"] if x["intent_id"] == i["intent_id"])
-            self.assertEqual([res["date"], res["time"], res["timezone"], res["party"], res["status"], res["status_basis"],
-                              res["venue_reference"], res["venue_words"], res["task_digest"], res["itinerary_id"]],
-                             ["2026-10-02", "20:00", "Europe/Lisbon", 2, want, "read on the user's device",
-                              None, words, digest, "itin-1"])
+            self.assertEqual([res["id"], res["date"], res["time"], res["timezone"], res["party"], res["status"],
+                              res["observed_by"], res["booking_reference"], res["venue_words"], res["task_digest"]],
+                             [i["trip_item_id"], "2026-10-02", "20:00", "Europe/Lisbon", 2, want,
+                              "the user's device", None, words, digest])
         self.assertNotIn("confirmed", {x["status"] for x in self.client.get("/api/booking/reservations").json()["reservations"]})
 
     def test_report_refusals_record_nothing(self):
@@ -260,14 +265,15 @@ class OnPostgres(BookingRoutes, unittest.TestCase):
     def setUpClass(cls):
         import asyncpg
         db = urlsplit(PG_URL).path.lstrip("/")
-        if "test" not in db:  # ⛔ this drops tables: never anything but a throwaway database
+        if "test" not in db:  # ⛔ this wipes the database: never anything but a throwaway one
             raise unittest.SkipTest(f"refusing to use database {db!r}: its name must contain 'test'")
 
         async def fresh():
             c = await asyncpg.connect(PG_URL)
             try:
-                await c.execute("drop table if exists " + ", ".join(f"public.{t}" for t in TABLES) + " cascade")
-                await c.execute(SQL)  # the drafted SQL, exactly as the founder will run it
+                await c.execute("drop schema if exists auth cascade; drop schema public cascade; create schema public;")
+                await c.execute(FIXTURE)  # auth.users and model A, as read live
+                await c.execute(SQL)      # the block, exactly as it is applied to Sasha's Supabase
             finally:
                 await c.close()
         asyncio.run(fresh())
@@ -275,14 +281,51 @@ class OnPostgres(BookingRoutes, unittest.TestCase):
     def make_store(self):
         import asyncpg
 
-        async def empty():
+        async def empty():  # every row but the demo auth user the block created
             c = await asyncpg.connect(PG_URL)
             try:
-                await c.execute("truncate " + ", ".join(f"public.{t}" for t in TABLES) + " restart identity cascade")
+                await c.execute("truncate public.booking_reports, public.booking_tasks, public.booking_intents, "
+                                "public.booking_devices, public.booking_pairing_challenges, public.booking_attempts, "
+                                "public.trip_items, public.trips restart identity cascade")
             finally:
                 await c.close()
         asyncio.run(empty())
         return PostgresStore(PG_URL)
+
+    def sql(self, q, *args):
+        import asyncpg
+
+        async def run():
+            c = await asyncpg.connect(PG_URL)
+            try:
+                return await c.fetch(q, *args)
+            finally:
+                await c.close()
+        return asyncio.run(run())
+
+    def test_the_reservation_is_a_trip_item_at_the_right_instant(self):
+        i = self.intent()
+        row = self.sql("select t.type, t.status, t.provider_name, t.party_size, t.local_timezone, "
+                       "to_char(t.date_time at time zone 'UTC', 'YYYY-MM-DD HH24:MI') as utc, p.title, p.owner_id::text as owner "
+                       "from trip_items t join trips p on p.id = t.trip_id where t.id = $1::uuid", i["trip_item_id"])[0]
+        # 20:00 in Lisbon on 2 October 2026 is summer time (UTC+1): 19:00 UTC
+        self.assertEqual(dict(row), {"type": "restaurant", "status": "pending", "provider_name": "Restaurante Psi",
+                                     "party_size": 2, "local_timezone": "Europe/Lisbon", "utc": "2026-10-02 19:00",
+                                     "title": "Sasha bookings", "owner": DEMO_ACCOUNT_ID})
+        self.intent()  # a second booking joins the same trip rather than opening another
+        self.assertEqual(self.sql("select count(*) as n from trips")[0]["n"], 1)
+
+    def test_a_dry_run_leaves_the_trip_item_pending_and_writes_no_attempt(self):
+        i, _, digest = self.issued()
+        self.report(digest, self.dry_run_report(i["intent_id"]))
+        self.assertEqual(self.sql("select status from trip_items where id = $1::uuid", i["trip_item_id"])[0]["status"], "pending")
+        self.assertEqual(self.sql("select count(*) as n from booking_attempts")[0]["n"], 0)
+
+    def test_an_attempt_can_no_longer_be_inserted_without_saying_what_happened(self):
+        import asyncpg
+        i = self.intent()
+        with self.assertRaises(asyncpg.exceptions.NotNullViolationError):
+            self.sql("insert into booking_attempts (trip_item_id, method) values ($1::uuid, 'web_form')", i["trip_item_id"])
 
     def test_a_database_without_the_tables_answers_503_by_name(self):
         routes.STORE = PostgresStore(urlunsplit(urlsplit(PG_URL)._replace(path="/postgres")))  # same server, no tables

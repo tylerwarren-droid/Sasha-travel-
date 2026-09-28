@@ -15,8 +15,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
-READ_ON_THE_DEVICE = "read on the user's device"
-
 
 @dataclass(frozen=True)
 class Outcome:

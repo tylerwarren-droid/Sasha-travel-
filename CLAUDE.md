@@ -51,6 +51,7 @@ Re-apply command:
 ## Repo-only files that MUST survive every sync
 - app/vietnam2/ — uses LEGACY component copies app/vietnam2/SashaChatLegacy.tsx and app/vietnam2/VoiceButton.tsx (CTO's rewritten SashaChat has an incompatible props interface). vietnam2 needs leaflet + @types/leaflet in package.json.
 - app/kanoe/
+- frontend/app/booking-helper/ — the booking page (S-25): repo-only. Stage A's frontend rsync has no --delete, so it survives unless the CTO ships a file at the same path.
 - frontend/public/sasha_investor.html — investor portal, LIVE-ONLY. Never touch via repo without Tyler downloading/verifying/confirming first.
 
 ## Investor portal notes
@@ -146,7 +147,7 @@ Import test:
 Stage C — frontend build gate:
     cd ~/Projects/sasha-travel/frontend && npm install 2>&1 | tail -3 && \
     npm run build 2>&1 | tail -25
-Must produce 17 routes with no compile errors.
+Must produce 18 routes with no compile errors (17 until S-25 added /booking-helper).
 
 Stage D — commit + push (only if both gates passed):
     cd ~/Projects/sasha-travel && git add -A && \

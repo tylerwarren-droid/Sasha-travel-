@@ -84,8 +84,9 @@ Run in order. Stop at any gate that fails.
    Every line printed is a file Stage A will delete. For each: re-add it after the sync, or confirm the CTO
    replaced it. Then check conductor.py / travel_search.py for the Duffel edits after the sync.
 4. backend/booking_signer/ (Sasha booking-task signer) lives OUTSIDE backend/app/ on purpose, so Stage A
-   never touches it. Once it is mounted in app/main.py, that mount line is re-applied in Stage B exactly
-   like the CORS line, and Stage E probes its route. (Not mounted yet.)
+   never touches it. It IS mounted (S-17) by three lines in app/main.py, which every CTO zip drops: Stage B
+   re-applies them exactly like the CORS line, and Stage E probes /api/booking/health. A forgotten mount
+   shows as a loud 404 there, never a silent loss.
 
 Stage 0 — locate + git state:
     cd ~/Projects/sasha-travel && ls -lat ~/Downloads/ | head -5 && \
@@ -121,7 +122,24 @@ Stage A — tag + sync (write to script to avoid paste mangling):
     bash /tmp/sync.sh
 If deletions > 0, investigate each deleted file before proceeding (check it's not a repo-only file or a still-imported agent). Confirm the new conductor does not IMPORT any deleted agent (grep for 'from app.services.X import'); keyword-only references are safe.
 
-Stage B — re-apply CORS (command above), then import test:
+Stage B — re-apply CORS (command above), re-apply the booking mount (below), then import test.
+
+Booking mount re-apply command (S-17):
+    cd ~/Projects/sasha-travel && python3 - <<'PY'
+    import pathlib
+    p = pathlib.Path("backend/app/main.py"); s = p.read_text()
+    if "from booking_signer.routes import router as booking_signer_router" not in s:
+        block = ("# S-17 booking signer: backend/booking_signer/ (outside app/). CTO zips drop this line; Stage B re-applies it.\n"
+                 "from booking_signer.routes import router as booking_signer_router  # noqa: E402\n"
+                 "app.include_router(booking_signer_router)  # /api/booking/*\n")
+        anchor = "app.include_router(trips_router)     # already prefixed /api/trips\n"
+        s = s.replace(anchor, anchor + block) if anchor in s else s.rstrip("\n") + "\n" + block
+        p.write_text(s); print("booking mount re-applied")
+    else: print("booking mount already present")
+    PY
+    grep -n "booking_signer" backend/app/main.py
+
+Import test:
     cd ~/Projects/sasha-travel/backend && source venv/bin/activate && \
     python3 -c "from app.main import app; print('BACKEND LOADS CLEAN')" 2>&1 | tail -6
 
@@ -141,7 +159,10 @@ Stage E — verify (wait ~3 min for Railway/Vercel):
     echo -n "conductor: " && curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Content-Type: application/json" -d '{}' https://sasha-travel-production.up.railway.app/api/agents/conductor
     echo -n "CORS: " && curl -s -i -X POST https://sasha-travel-production.up.railway.app/api/agents/conductor -H "Origin: https://project.kanoe.ai" -H "Content-Type: application/json" -d '{"message":"test"}' 2>&1 | grep -i "access-control-allow-origin"
     echo -n "vietnam2: " && curl -s -o /dev/null -w "%{http_code}\n" https://project.kanoe.ai/vietnam2
-Expected: backend 200, conductor 422, CORS header echoes project.kanoe.ai, vietnam2 200.
+    echo -n "booking: " && curl -s https://sasha-travel-production.up.railway.app/api/booking/health
+Expected: backend 200, conductor 422, CORS header echoes project.kanoe.ai, vietnam2 200, and booking prints
+JSON with "mounted":true and "matches_pinned":true ("provisioned":true once the booking SQL has been run).
+⚠ booking printing {"detail":"Not Found"} means the Stage B mount line was lost — re-apply it and redeploy.
 
 Rollback if needed: git reset --hard pre-vX-<timestamp> (tag was set in Stage A).
 

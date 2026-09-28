@@ -70,6 +70,9 @@ app.include_router(voice_conductor_router, prefix="/api", tags=["voice"])
 app.include_router(payments_router)  # already prefixed /api/payments
 app.include_router(chats_router)     # already prefixed /api/chats
 app.include_router(trips_router)     # already prefixed /api/trips
+# S-17 booking signer: backend/booking_signer/ (outside app/). CTO zips drop this line; Stage B re-applies it.
+from booking_signer.routes import router as booking_signer_router  # noqa: E402
+app.include_router(booking_signer_router)  # /api/booking/*
 
 
 @app.on_event("startup")

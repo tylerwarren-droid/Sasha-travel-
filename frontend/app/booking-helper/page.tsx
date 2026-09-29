@@ -22,6 +22,13 @@ import { GatedButton } from './GatedButton'
 const MODE = 'dry_run' as const
 const VENUE = 'restaurante-psi'
 const HELPER_ID_KEY = 'sasha.bookingHelperId'
+/**
+ * P807mv · The DEMO guest. Read-back line 4 says the email and telephone ALOUD, so a room must hear a demo
+ * profile, never the founder's own. Used when Sasha's hand-off link says `profile=demo`; always editable.
+ * The number is in Ofcom's range reserved for drama (020 7946 0xxx), so it rings no one.
+ */
+const DEMO_PROFILE = { name: 'Jon Peters', email: 'jon@kanoe.ai', phone: '+44 20 7946 0123' }
+const VENUE_DISPLAY: Record<string, string> = { 'Restaurante Psi': 'Restaurante Psi, Lisbon' }
 // Psi's served hours (contract §3.6): 12:30–15:00 and 19:30–22:00, in 30-minute steps; no Sunday.
 const SLOTS = ['12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '19:30', '20:00', '20:30', '21:00', '21:30', '22:00']
 const PHASES = ['verifying', 'awaiting_permission', 'filling', 'submitting', 'reading'] as const
@@ -42,6 +49,10 @@ type Health = {
   storage?: { configured?: boolean; provisioned?: boolean; missing?: string[] }
 }
 type Line = { at: string; text: string; tone: 'info' | 'ok' | 'stop' }
+type Reservation = {
+  id: string; venue: string; date: string; time: string; timezone: string; party: number
+  status: string; status_words: string; booking_reference: string | null; sasha_reference: string
+}
 
 const runtime = (): Runtime | undefined =>
   (typeof window === 'undefined' ? undefined : (window as unknown as { chrome?: { runtime?: Runtime } }).chrome?.runtime)
@@ -63,6 +74,12 @@ async function call(path: string, body?: unknown): Promise<{ ok: boolean; status
   return { ok: r.ok, status: r.status, json }
 }
 
+/** "Mon 5 Oct" — weekday, day, month, from the stored calendar date (no timezone arithmetic on a date). */
+const shortDate = (iso: string) => {
+  const d = new Date(`${iso}T12:00:00Z`)
+  return `${d.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })} ${d.getUTCDate()} ${d.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })}`
+}
+
 const refusal = (j: Record<string, unknown>, status: number) =>
   `${typeof j.rule === 'string' ? j.rule : `HTTP ${status}`}${typeof j.message === 'string' ? ` — ${j.message}` : ''}`
 
@@ -80,6 +97,12 @@ export default function BookingHelperPage() {
   const [log, setLog] = useState<Line[]>([])
   const [form, setForm] = useState({ date: '', time: '20:00', party: 2, name: '', email: '', phone: '' })
   const [intent, setIntent] = useState<{ id: string; lines: string[] } | null>(null)
+  // S-26: the helper ID is plumbing. Known (from storage or the link) → never shown, connected automatically.
+  const [knownHelper, setKnownHelper] = useState(false)
+  const [autoTried, setAutoTried] = useState(false)
+  const [tripItemId, setTripItemId] = useState<string | null>(null)
+  // S-26: the last beat — the reservation as the server holds it, read back after the report is stored
+  const [reservation, setReservation] = useState<Reservation | null>(null)
   const [phases, setPhases] = useState<string[]>([])
 
   const port = useRef<Port | null>(null)
@@ -96,6 +119,19 @@ export default function BookingHelperPage() {
     let stored = ''
     try { stored = localStorage.getItem(HELPER_ID_KEY) ?? '' } catch { /* storage may be blocked */ }
     setHelperId(fromQuery || stored)
+    setKnownHelper(!!(fromQuery || stored))
+    // S-26: Sasha's hand-off link pre-fills what the guest said plainly; nothing else is guessed
+    const q = new URLSearchParams(window.location.search)
+    if (!q.get('venue') || q.get('venue') === VENUE) {
+      const d = q.get('date'), t = q.get('time'), n = Number(q.get('party'))
+      setForm((f) => ({
+        ...f,
+        ...(d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? { date: d } : {}),
+        ...(t && SLOTS.includes(t) ? { time: t } : {}),
+        ...(Number.isInteger(n) && n >= 1 && n <= 20 ? { party: n } : {}),
+        ...(q.get('profile') === 'demo' ? DEMO_PROFILE : {}),
+      }))
+    }
     call('/api/booking/health').then((r) => setHealth(r.json as Health)).catch(() => setHealth({ unreachable: true }))
   }, [])
 
@@ -117,6 +153,18 @@ export default function BookingHelperPage() {
     if (r.json.already_recorded) note('This report had already been recorded; it was not recorded twice.')
     const intentId = typeof report?.intent_id === 'string' ? report.intent_id : null
     if (intentId) port.current?.postMessage({ type: 'ACK', intent_id: intentId })
+    // S-26: read the reservation back from the server — the page shows what is STORED, never what it assumes
+    if (typeof r.json.reservation_id === 'string') {
+      const id = r.json.reservation_id
+      try {
+        const list = await call('/api/booking/reservations')
+        const found = ((list.json.reservations as Reservation[] | undefined) ?? []).find((x) => x.id === id)
+        if (found) setReservation(found)
+        else note('The report was stored, but the reservation could not be read back yet.', 'stop')
+      } catch (e) {
+        note(`The report was stored, but the reservation could not be read back: ${(e as Error).message}.`, 'stop')
+      }
+    }
   }, [note])
 
   const onMessage = useCallback((m: Msg) => {
@@ -203,6 +251,8 @@ export default function BookingHelperPage() {
       if (!r.ok) throw new Error(refusal(r.json, r.status))
       const rb = r.json.read_back as { lines: string[] }
       setIntent({ id: String(r.json.intent_id), lines: rb.lines })
+      setTripItemId(typeof r.json.trip_item_id === 'string' ? r.json.trip_item_id : null)
+      setReservation(null)
     } catch (e) {
       note(`Nothing was recorded: ${(e as Error).message}.`, 'stop')
     } finally { setBusy(false) }
@@ -228,6 +278,14 @@ export default function BookingHelperPage() {
     begin('Asking the helper for any reports it is still holding…')
     port.current?.postMessage({ type: 'PENDING' })
   }
+
+  // S-26: a browser that is already set up connects on its own — the guest never sees or types the helper ID
+  useEffect(() => {
+    if (knownHelper && ready && !connected && !busy && !autoTried) {
+      setAutoTried(true)
+      connect().catch((e) => note(`Could not connect: ${(e as Error).message}.`, 'stop'))
+    }
+  })
 
   // ── the page ──────────────────────────────────────────────────────────────────────────────────
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
@@ -279,9 +337,12 @@ export default function BookingHelperPage() {
 
       <section className="space-y-2">
         <h2 className="font-semibold">2 · The helper in this browser</h2>
-        <label className="block">Helper ID (from chrome://extensions)
-          <input className="mt-1 w-full rounded border p-1 font-mono" value={helperId} onChange={(e) => setHelperId(e.target.value.trim())} />
-        </label>
+        {knownHelper ? null : (
+          // ⚠ asked ONCE per browser, only when nothing is known — then remembered and never shown again
+          <label className="block">Set up this browser — the helper’s ID (once, from chrome://extensions)
+            <input className="mt-1 w-full rounded border p-1 font-mono" value={helperId} onChange={(e) => setHelperId(e.target.value.trim())} />
+          </label>
+        )}
         <div className="flex flex-wrap gap-3">
           <GatedButton label="Connect" onClick={connect}
             done={connected && 'Connected.'}
@@ -319,6 +380,19 @@ export default function BookingHelperPage() {
               needs={[!connected && 'the helper to be connected (step 2)', stepInProgress]} />
             <GatedButton label="No" onClick={() => { setIntent(null); begin('Not approved. Nothing was signed.') }} needs={[stepInProgress]} />
           </div>
+        </section>
+      )}
+
+      {reservation && reservation.id === tripItemId && (
+        // P807mv §3 · the reservation as STORED, in two lines: what it is, and what it is not. The only number is
+        // Sasha's own, labelled as hers — a dry run creates no restaurant reservation, and Psi gives no number.
+        <section className="space-y-1 rounded border-2 border-emerald-700 p-3">
+          <h2 className="font-semibold">Your reservation</h2>
+          <p className="text-base font-semibold">
+            {VENUE_DISPLAY[reservation.venue] ?? reservation.venue} · {shortDate(reservation.date)} · {reservation.time} · {reservation.party} {reservation.party === 1 ? 'person' : 'people'}
+          </p>
+          <p className="font-semibold">{reservation.status_words} · Sasha ref {reservation.sasha_reference}</p>
+          <p className="text-xs opacity-70">No restaurant number: {reservation.booking_reference ? `the restaurant’s is ${reservation.booking_reference}` : 'Restaurante Psi gives none on its page, and a dry run creates no reservation.'}</p>
         </section>
       )}
 

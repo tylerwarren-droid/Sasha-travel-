@@ -357,6 +357,18 @@ They will have your email, {email}, and your telephone, {phone}.
 I will open their booking page on this machine and send it from here. Shall I?
 ```
 
+**Line 5 depends on the mode** (update, 29 September 2026, P807mv). The line above promises to *send*, and a
+`dry_run` sends nothing, so a dry run reads instead:
+
+```
+I will open their booking page on this machine, fill it in, and stop before sending. Shall I?
+```
+
+The helper checks only the **hash** of the lines it is given (`read_back.sha256`), never their wording, so both
+variants verify; the yes is bound to whichever was read. ⚠ The §12 vector below is a dry run that still carries
+the older line; it remains a valid **signing** vector (its hashes are internally consistent), but a Sasha server
+built to this contract reads the dry-run line above.
+
 ---
 
 ## 4. Pairing — one browser, one account

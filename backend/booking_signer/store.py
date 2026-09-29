@@ -125,12 +125,15 @@ class MemoryStore:
     async def get_report_for_task(self, task_digest) -> Optional[dict]:
         return next((dict(r) for r in self.reports if r["task_digest"] == task_digest), None)
 
-    async def record_report(self, report_row: dict, attempt_row: Optional[dict]) -> Optional[str]:
+    async def record_report(self, report_row: dict, attempt_row: Optional[dict], prepared_item_id: Optional[str] = None) -> Optional[str]:
         if report_row["task_digest"] is not None and any(r["task_digest"] == report_row["task_digest"] for r in self.reports):
             raise AlreadyRecorded("a verified report was already recorded for this task")
         self.reports.append(dict(report_row))
         if report_row["task_verified"] and report_row["intent_id"] in self.intents:
             self.intents[report_row["intent_id"]]["status"] = "reported"
+        if prepared_item_id is not None and self.trip_items[prepared_item_id]["status"] == "pending":
+            self.trip_items[prepared_item_id]["status"] = "prepared"   # ⚠ only ever from pending: never over an outcome
+            return prepared_item_id
         if attempt_row is None:
             return None
         self.attempts.append(dict(attempt_row))
@@ -148,13 +151,15 @@ class MemoryStore:
         for item in self.trip_items.values():
             if self.trips[item["trip_id"]]["owner_id"] != account_id or item["status"] == "pending":
                 continue
-            att = [a for a in self.attempts if a["trip_item_id"] == item["id"]][-1]
-            intent = next(i for i in self.intents.values() if i["trip_item_id"] == item["id"] and self.tasks.get(i["intent_id"], {}).get("task_digest") == att["task_digest"])
+            atts = [a for a in self.attempts if a["trip_item_id"] == item["id"]]
+            att = atts[-1] if atts else {}   # a PREPARED item has no attempt: nothing was sent
+            intent = [i for i in self.intents.values() if i["trip_item_id"] == item["id"]][-1]
             out.append({"id": item["id"], "trip_id": item["trip_id"], "intent_id": intent["intent_id"],
                         "venue": item["provider_name"], "local_date": item["local_date"], "local_time": item["local_time"],
                         "local_timezone": item["local_timezone"], "party_size": item["party_size"], "status": item["status"],
-                        "booking_reference": item["booking_reference"], "venue_words": att["venue_words"],
-                        "observed_by": att["observed_by"], "task_digest": att["task_digest"]})
+                        "booking_reference": item["booking_reference"], "venue_words": att.get("venue_words"),
+                        "observed_by": att.get("observed_by"),
+                        "task_digest": self.tasks.get(intent["intent_id"], {}).get("task_digest")})
         return sorted(out, key=lambda r: (r["local_date"], r["local_time"]))
 
 
@@ -219,6 +224,10 @@ class PostgresStore:
                     "((table_name = 'trip_items' and column_name in ('party_size','local_timezone')) or "
                     "(table_name = 'booking_attempts' and column_name in ('task_digest','observed_by')))") != 4:
                 missing.append("trip_items/booking_attempts S-17 columns")
+            # S-26: a dry run marks its trip item 'prepared' — without sql/002 that would be a CHECK violation mid-demo
+            if not missing and "prepared" not in (await conn.fetchval(
+                    "select pg_get_constraintdef(oid) from pg_constraint where conname = 'trip_items_status_check'") or ""):
+                missing.append("trip_items 'prepared' status (sql/002_prepared_status.sql)")
             return missing
         try:
             missing = await self._run(q)
@@ -316,8 +325,9 @@ class PostgresStore:
     async def get_report_for_task(self, task_digest):
         return _row(await self._run(lambda c: c.fetchrow("select * from booking_reports where task_digest = $1", task_digest)))
 
-    async def record_report(self, report_row, attempt_row):
-        """The report, and — only if something was sent — the attempt and the trip item's status, in ONE transaction."""
+    async def record_report(self, report_row, attempt_row, prepared_item_id=None):
+        """The report, and — only if something was sent — the attempt and the trip item's status, in ONE transaction.
+        A verified DRY RUN that captured its form marks the trip item 'prepared' instead: no attempt, nothing sent."""
         async def fn(conn):
             async with conn.transaction():
                 await conn.execute(
@@ -329,6 +339,11 @@ class PostgresStore:
                 if report_row["task_verified"]:
                     await conn.execute("update booking_intents set status = 'reported' where intent_id = $1",
                                        uuid.UUID(report_row["intent_id"]))
+                if prepared_item_id is not None:
+                    # ⚠ only ever from 'pending' — a prepared dry run never overwrites an outcome
+                    await conn.execute("update trip_items set status = 'prepared', updated_at = now() "
+                                       "where id = $1 and status = 'pending'", uuid.UUID(prepared_item_id))
+                    return prepared_item_id
                 if attempt_row is None:
                     return None
                 a = attempt_row
@@ -352,10 +367,12 @@ class PostgresStore:
             "select t.id, t.trip_id, i.intent_id, t.provider_name as venue, "
             "(t.date_time at time zone t.local_timezone)::date as local_date, "
             "(t.date_time at time zone t.local_timezone)::time as local_time, t.local_timezone, t.party_size, t.status, "
-            "t.booking_reference, a.response_received as venue_words, a.observed_by, a.task_digest "
+            "t.booking_reference, a.response_received as venue_words, a.observed_by, k.task_digest "
             "from trip_items t join trips p on p.id = t.trip_id "
-            "join lateral (select * from booking_attempts x where x.trip_item_id = t.id order by x.attempted_at desc limit 1) a on true "
-            "join booking_tasks k on k.task_digest = a.task_digest join booking_intents i on i.intent_id = k.intent_id "
+            "join lateral (select * from booking_intents y where y.trip_item_id = t.id order by y.created_at desc limit 1) i on true "
+            "left join booking_tasks k on k.intent_id = i.intent_id "
+            # a PREPARED item has no attempt — nothing was sent — so the attempt is optional
+            "left join lateral (select * from booking_attempts x where x.trip_item_id = t.id order by x.attempted_at desc limit 1) a on true "
             "where p.owner_id = $1 and t.status <> 'pending' order by 5, 6", uuid.UUID(account_id)))
         return [_row(r) for r in rows]
 

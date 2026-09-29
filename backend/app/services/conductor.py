@@ -1844,6 +1844,12 @@ async def conduct(
                 "booking_ref": None, "itinerary_id": None,
                 "messages": list(conversation_history)}
 
+    # S-26 booking hand-off: backend/booking_signer/handoff.py. CTO zips drop this; Stage B re-applies it.
+    from booking_signer.handoff import booking_handoff  # noqa: E402
+    _handoff = booking_handoff(user_message, conversation_history)
+    if _handoff is not None:
+        return _handoff
+
     # ── Card choice (second half of a booking) ─────────────────────────────────────────
     # Sasha's previous line was the saved-card question. Read this reply as the answer and
     # resolve the booking here — the classifier must never see "yes" / "use 1003" / "a

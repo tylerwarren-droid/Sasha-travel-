@@ -142,7 +142,16 @@ def _sha256hex(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
-def build_for_venue(venue: Venue, p: Particulars) -> dict:
+#: Read-back line 5, by mode. ⚠ P807mv-S1: the contract's line promises to SEND, which is false in a dry run — the
+#: room would hear her promise to send and then say she stopped "as planned". The lines are hashed and the yes is
+#: bound to them, so the mode picks the words here, on the server, before anything is approved.
+LINE_5 = {
+    "live": "I will open their booking page on this machine and send it from here. Shall I?",
+    "dry_run": "I will open their booking page on this machine, fill it in, and stop before sending. Shall I?",
+}
+
+
+def build_for_venue(venue: Venue, p: Particulars, mode: str = "live") -> dict:
     """The unsigned task (without its instants), the read-back lines, and both hashes.
 
     ⚠ The approval is bound to `read_back_sha256` and `filled_values_sha256`; the issue path recomputes
@@ -175,7 +184,7 @@ def build_for_venue(venue: Venue, p: Particulars) -> dict:
         f"{d} at {t}, for {p.party}.",
         f"Under the name {p.name}.",
         f"They will have your email, {p.email}, and your telephone, {p.phone}.",
-        "I will open their booking page on this machine and send it from here. Shall I?",
+        LINE_5[mode],
     ]
     return {
         "task": task,

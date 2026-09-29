@@ -48,6 +48,25 @@ Re-apply command:
     PY
     grep -n "kanoe.ai" backend/app/main.py
 
+Booking hand-off re-apply command (S-26) — conductor.py is the CTO's; every zip drops this hook. It REFUSES,
+loudly, if the anchor line it sits above has changed, rather than silently not applying:
+    cd ~/Projects/sasha-travel && python3 - <<'PY'
+    import pathlib
+    p = pathlib.Path("backend/app/services/conductor.py"); s = p.read_text()
+    if "from booking_signer.handoff import booking_handoff" not in s:
+        anchor = "    # ── Card choice (second half of a booking) ─────────────────────────────────────────\n"
+        block = ("    # S-26 booking hand-off: backend/booking_signer/handoff.py. CTO zips drop this; Stage B re-applies it.\n"
+                 "    from booking_signer.handoff import booking_handoff  # noqa: E402\n"
+                 "    _handoff = booking_handoff(user_message, conversation_history)\n"
+                 "    if _handoff is not None:\n"
+                 "        return _handoff\n\n")
+        if anchor not in s:
+            raise SystemExit("⛔ STOP: the conductor's anchor line changed in this CTO drop — the booking hand-off was NOT re-applied. Place it by hand at the top of conduct().")
+        s = s.replace(anchor, block + anchor); p.write_text(s); print("booking hand-off re-applied")
+    else: print("booking hand-off already present")
+    PY
+    grep -n "booking_signer.handoff" backend/app/services/conductor.py
+
 ## Repo-only files that MUST survive every sync
 - app/vietnam2/ — uses LEGACY component copies app/vietnam2/SashaChatLegacy.tsx and app/vietnam2/VoiceButton.tsx (CTO's rewritten SashaChat has an incompatible props interface). vietnam2 needs leaflet + @types/leaflet in package.json.
 - app/kanoe/
@@ -123,7 +142,7 @@ Stage A — tag + sync (write to script to avoid paste mangling):
     bash /tmp/sync.sh
 If deletions > 0, investigate each deleted file before proceeding (check it's not a repo-only file or a still-imported agent). Confirm the new conductor does not IMPORT any deleted agent (grep for 'from app.services.X import'); keyword-only references are safe.
 
-Stage B — re-apply CORS (command above), re-apply the booking mount (below), then import test.
+Stage B — re-apply CORS (command above), the booking hand-off (above), the booking mount (below), then import test.
 
 Booking mount re-apply command (S-17):
     cd ~/Projects/sasha-travel && python3 - <<'PY'
@@ -166,6 +185,9 @@ Stage E — verify (wait ~3 min for Railway/Vercel):
 Expected: backend 200, conductor 422, CORS header echoes project.kanoe.ai, vietnam2 200, and booking prints
 JSON with "mounted":true and "matches_pinned":true ("provisioned":true once the booking SQL has been run).
 ⚠ booking printing {"detail":"Not Found"} means the Stage B mount line was lost — re-apply it and redeploy.
+    echo -n "hand-off: " && curl -s -o /tmp/ho.json -w "%{http_code} " -X POST https://sasha-travel-production.up.railway.app/api/agents/conductor -H "Content-Type: application/json" -H "Origin: https://project.kanoe.ai" -d '{"message":"book a table at Psi on 5 October at 8pm for 2"}' && (grep -o '/booking-helper?[^"]*' /tmp/ho.json || echo "⛔ HAND-OFF MISSING — the Stage B conductor hook was lost; re-apply it and redeploy")
+Expected: 200 and a /booking-helper?venue=restaurante-psi&date=…&time=20:00&party=2 link. (401 means CONDUCTOR_API_SECRET is
+set: add -H "X-Client-Key: <the frontend's NEXT_PUBLIC_CLIENT_KEY>".)
 
 Rollback if needed: git reset --hard pre-vX-<timestamp> (tag was set in Stage A).
 

@@ -192,7 +192,7 @@ async def record_intent(request: Request):
         return _refuse(422, "venue_not_specified", f"no booking task is specified for {body.get('venue')!r}")
     try:
         p = parse_particulars(body)
-        built = build_for_venue(venue, p)
+        built = build_for_venue(venue, p, mode)
     except ParticularsRefused as e:
         return _refuse(422, e.rule, str(e))
     trip_id = body.get("trip_id")  # optional: one of this account's trips; else its "Sasha bookings" trip
@@ -327,12 +327,16 @@ async def report(request: Request):
                 "status": out.status, "venue_words": out.venue_words, "venue_reference": out.venue_reference,
                 "observed_at": _parse_instant(out.observed_at), "observed_by": OBSERVED_BY,
             }
+        # S-26: a DRY RUN that filled and checked the form on the device, and sent nothing, leaves the reservation
+        # PREPARED — never requested, never confirmed. No attempt row: an attempt is something sent.
+        prepared = (out.status is None and task["mode"] == "dry_run" and body.get("sent") is False
+                    and body.get("phase") == "captured_not_sent")
         try:
             rid = await STORE.record_report({
                 "received_at": _now(), "account_id": account, "device_id": device.device_id, "task_digest": digest,
                 "intent_id": task["intent_id"], "task_verified": True, "report": body,
                 "device_signature": signed.get("device_signature"), "outcome": out.status,
-            }, attempt)
+            }, attempt, intent["trip_item_id"] if prepared else None)
         except AlreadyRecorded:  # the same report, arriving twice at once
             return await _already(await STORE.get_report_for_task(digest), task)
     except VerifyRefused as e:
@@ -364,6 +368,17 @@ def _parse_instant(s: Any) -> Optional[datetime]:
 
 # ── reservations ──────────────────────────────────────────────────────────────────────────────
 
+#: What each status means, in words a guest can read. ⚠ None of them says "booked": prepared is not sent,
+#: requested is not confirmed, and confirmed is unreachable from this surface (contract §8).
+STATUS_WORDS = {
+    "prepared": "Prepared — not sent (demo)",
+    "requested": "Requested — waiting for the restaurant to confirm",
+    "declined": "Declined by the restaurant",
+    "unreachable": "Sent — their reply could not be read",
+    "failed": "Sent — the page after could not be read",
+    "confirmed": "Confirmed by the restaurant",
+}
+
 @router.get("/reservations")
 async def reservations(request: Request):
     try:
@@ -373,6 +388,10 @@ async def reservations(request: Request):
     return {"reservations": [{
         "id": r["id"], "trip_id": r["trip_id"], "intent_id": r["intent_id"], "venue": r["venue"],
         "date": r["local_date"].isoformat(), "time": r["local_time"].strftime("%H:%M"), "timezone": r["local_timezone"],
-        "party": r["party_size"], "status": r["status"], "booking_reference": r["booking_reference"],
+        "party": r["party_size"], "status": r["status"], "status_words": STATUS_WORDS.get(r["status"], r["status"]),
+        # the VENUE's own reservation number, only ever when its page or email gave one — never ours in its place
+        "booking_reference": r["booking_reference"],
+        # Sasha's OWN reference (P807mv §3): the first 8 of the intent id — labelled as hers, never as the restaurant's
+        "sasha_reference": str(r["intent_id"])[:8],
         "venue_words": r["venue_words"], "observed_by": r["observed_by"], "task_digest": r["task_digest"],
     } for r in rows]}

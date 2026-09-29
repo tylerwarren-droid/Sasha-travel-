@@ -40,6 +40,7 @@ DEVICE_SPKI, DEVICE_ID = VEC["device_public_spki"], VEC["device_id"]
 PG_URL = os.getenv("BOOKING_TEST_DATABASE_URL", "")
 SQL = (BACKEND / "booking_signer" / "sql" / "001_booking_storage.sql").read_text(encoding="utf-8")
 FIXTURE = (HERE / "fixtures" / "model_a_live_2026-09-28.sql").read_text(encoding="utf-8")
+SQL_002 = (BACKEND / "booking_signer" / "sql" / "002_prepared_status.sql").read_text(encoding="utf-8")
 
 ANA = {"venue": "restaurante-psi", "date": "2026-10-02", "time": "20:00", "party": 2, "name": "Ana Guest",
        "email": "ana.guest@example.org", "phone": "+351 000 000 000", "mode": "dry_run"}
@@ -147,9 +148,13 @@ class BookingRoutes:
 
     # ── intents ──
     def test_an_intent_is_recorded_with_the_contract_read_back(self):
+        # P807mv-S1: lines 1–4 are the contract's; line 5 of a DRY RUN never promises to send
         i = self.intent()
-        self.assertEqual(i["read_back"]["lines"], VEC["payload"]["read_back"]["lines"])
-        self.assertEqual(i["read_back"]["sha256"], VEC["read_back_sha256"])
+        lines = i["read_back"]["lines"]
+        self.assertEqual(lines[:4], VEC["payload"]["read_back"]["lines"][:4])
+        self.assertEqual(lines[4], "I will open their booking page on this machine, fill it in, and stop before sending. Shall I?")
+        self.assertNotIn("send it from here", " ".join(lines))
+        self.assertEqual(i["read_back"]["sha256"], __import__("hashlib").sha256("\n".join(lines).encode()).hexdigest())
 
     def test_live_is_refused_before_anything_is_recorded(self):
         r = self.post("/intents", {**ANA, "mode": "live"})
@@ -201,13 +206,27 @@ class BookingRoutes:
         r = self.post("/intents", {**ANA, "trip_id": "00000000-0000-4000-8000-00000000beef"})
         self.assertEqual([r.status_code, r.json()["rule"]], [404, "trip_unknown"])
 
-    def test_a_dry_run_report_records_no_outcome_and_no_reservation(self):
+    def test_a_dry_run_records_no_outcome_and_leaves_the_reservation_prepared(self):
+        # S-26: nothing was sent, so there is no OUTCOME and no attempt — but the form WAS filled and checked on
+        # the device, so the reservation reads "prepared": never requested, never confirmed.
         i, _, digest = self.issued()
         r = self.report(digest, self.dry_run_report(i["intent_id"])).json()
-        self.assertEqual([r["outcome"], r["reservation_id"]], [None, None])
+        self.assertEqual([r["outcome"], r["reservation_id"]], [None, i["trip_item_id"]])
         self.assertIn("Nothing was sent", r["say"])
         again = self.report(digest, self.dry_run_report(i["intent_id"])).json()  # re-sent on PENDING
         self.assertEqual([again["already_recorded"], again["outcome"]], [True, None])
+        res = self.client.get("/api/booking/reservations").json()["reservations"]
+        self.assertEqual([(x["id"], x["status"], x["status_words"], x["date"], x["time"], x["party"], x["booking_reference"], x["venue_words"])
+                          for x in res],
+                         [(i["trip_item_id"], "prepared", "Prepared — not sent (demo)", "2026-10-02", "20:00", 2, None, None)])
+        self.assertEqual(res[0]["sasha_reference"], i["intent_id"][:8])  # Sasha's OWN reference, from the intent
+        self.assertNotIn("confirm", res[0]["status_words"].lower().replace("to confirm", ""))
+
+    def test_a_refusal_before_anything_ran_leaves_the_reservation_pending(self):
+        # a report where the helper refused (nothing captured) is NOT a prepared dry run
+        i, _, digest = self.issued()
+        body = {**self.dry_run_report(i["intent_id"]), "ok": False, "phase": "refused", "rule": "intent_already_run", "tab_opened": False}
+        self.report(digest, body)
         self.assertEqual(self.client.get("/api/booking/reservations").json()["reservations"], [])
 
     def test_the_contract_outcome_mapping_makes_a_reservation_only_when_something_was_sent(self):
@@ -274,6 +293,7 @@ class OnPostgres(BookingRoutes, unittest.TestCase):
                 await c.execute("drop schema if exists auth cascade; drop schema public cascade; create schema public;")
                 await c.execute(FIXTURE)  # auth.users and model A, as read live
                 await c.execute(SQL)      # the block, exactly as it is applied to Sasha's Supabase
+                await c.execute(SQL_002)  # S-26: the 'prepared' status, as applied after it
             finally:
                 await c.close()
         asyncio.run(fresh())
@@ -315,10 +335,10 @@ class OnPostgres(BookingRoutes, unittest.TestCase):
         self.intent()  # a second booking joins the same trip rather than opening another
         self.assertEqual(self.sql("select count(*) as n from trips")[0]["n"], 1)
 
-    def test_a_dry_run_leaves_the_trip_item_pending_and_writes_no_attempt(self):
+    def test_a_dry_run_leaves_the_trip_item_prepared_and_writes_no_attempt(self):
         i, _, digest = self.issued()
         self.report(digest, self.dry_run_report(i["intent_id"]))
-        self.assertEqual(self.sql("select status from trip_items where id = $1::uuid", i["trip_item_id"])[0]["status"], "pending")
+        self.assertEqual(self.sql("select status from trip_items where id = $1::uuid", i["trip_item_id"])[0]["status"], "prepared")
         self.assertEqual(self.sql("select count(*) as n from booking_attempts")[0]["n"], 0)
 
     def test_an_attempt_can_no_longer_be_inserted_without_saying_what_happened(self):
@@ -362,7 +382,9 @@ class WithoutStorageOrAMount(unittest.TestCase):
         self.assertIn("app.include_router(booking_signer_router)", src)
 
     def test_the_server_builds_the_contract_task_from_particulars(self):
-        b = build_for_venue(PSI, parse_particulars(ANA))
+        b = build_for_venue(PSI, parse_particulars(ANA), "live")
+        # a LIVE read-back is the contract's, word for word — and its hash is the vector's
+        self.assertEqual([b["read_back_lines"], b["read_back_sha256"]], [VEC["payload"]["read_back"]["lines"], VEC["read_back_sha256"]])
         strip = lambda t: {k: v for k, v in t.items() if k not in ("intent_id", "issued_at", "expires_at")}
         self.assertEqual(canonical_bytes(b["task"]), canonical_bytes(strip(VEC["payload"]["task"])))
         self.assertEqual(b["filled_values_sha256"], VEC["filled_values_sha256"])

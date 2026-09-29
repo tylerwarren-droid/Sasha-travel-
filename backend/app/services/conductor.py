@@ -1754,7 +1754,11 @@ AGENT_REGISTRY = {
     "flight": run_flight_intent,
     "cab": run_cab_intent,
     "activity": run_activity_intent,
-    "golf": run_golf_intent,
+    # S-32 · "golf" is OUT of the registry: golf_agent.send_booking_request emails a course on
+    # a model's decision, with no read-back, no yes, and Resend's answer unchecked. The file is
+    # kept — the capability is right, the unattended send is not. Restoring it needs: the
+    # outgoing text shown to a person, a yes recorded outside the model, and Resend's response
+    # checked before anything says "submitted". Its /api/agents/golf route is unmounted too.
     "foto": run_foto_intent,
     "restaurant": run_restaurant_intent,
     "general": run_general,

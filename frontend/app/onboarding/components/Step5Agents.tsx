@@ -27,20 +27,6 @@ const CORE_AGENTS: AgentDef[] = [
     defaultEnabled: true,
   },
   {
-    id: 'health',
-    icon: '⚕️',
-    name: 'Health & Medical',
-    description: 'Doctor referrals, pharmacy, clinic info',
-    defaultEnabled: true,
-  },
-  {
-    id: 'beauty',
-    icon: '💆',
-    name: 'Beauty & Wellness',
-    description: 'Spa, massage, beauty bookings',
-    defaultEnabled: true,
-  },
-  {
     id: 'golf',
     icon: '⛳',
     name: 'Golf Concierge',

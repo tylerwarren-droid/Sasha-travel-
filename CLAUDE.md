@@ -24,7 +24,7 @@ Flow: Sasha -> Conductor (keyword intent routing, parallel via asyncio) -> Speci
 - Local venv: backend/venv (NO dot). Activate: cd backend && source venv/bin/activate
 
 ## Agents (27 services, live)
-golf (20 Vietnam courses, real emails, Resend booking), foto (Unsplash), booking_confirmation (web search + Resend + Bland.ai), health, beauty, dog_walking, restaurant, car_rental, credit_card, plus supporting services: llm, chat_store, ideas_agent, itinerary_agent, local_itinerary, smart_sasha_agent, travel_search, hotels_db, booking_links, booking_ref, ratehawk, deepgram_service, claude, prompts, tenant, card_benefits_db, vietnam_golf_database, conductor.
+golf (20 Vietnam courses, real emails, Resend booking), foto (Unsplash), car_rental, credit_card, plus supporting services: llm, chat_store, ideas_agent, itinerary_agent, local_itinerary, smart_sasha_agent, travel_search, hotels_db, booking_links, booking_ref, ratehawk, deepgram_service, claude, prompts, tenant, card_benefits_db, vietnam_golf_database, conductor.
 
 ## Key API routes
 - POST /api/agents/conductor — main text entry point

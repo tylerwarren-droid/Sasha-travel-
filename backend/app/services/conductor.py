@@ -159,6 +159,8 @@ async def classify_intents(user_message: str, conversation_history: list,
     # Stripe, a guest saying "can you confirm my booking?" was hijacked into a third-party
     # reference-collection flow instead of hearing their KNO-… ref. The remaining phrases only
     # fire on genuinely third-party references.
+    # S-32: the agent is deleted; the list survives only as the plan_qa guard below, so a
+    # third-party reference is not narrated as the plan. It routes to general.
     BOOKING_WORDS = ["hotel reference", "pms", "booking.com ref", "expedia ref", "booking number"]
     # "what do"/"what does" removed: they are whole-word matches inside "what do you think
     # about Hue", which a boundary cannot help with, and they fired a photo search on ordinary
@@ -260,8 +262,6 @@ async def classify_intents(user_message: str, conversation_history: list,
     # the card to book it". Restaurant now matches them. The card is already on screen and
     # already in the transcript — general can see it, and it can't fabricate a booking (see
     # NEVER_FAKE_BOOKING).
-    if _mentions(lower, BOOKING_WORDS):
-        intents.append("booking_confirmation")
     if _mentions(lower, FOTO_STRONG_WORDS) and "foto" not in intents:
         intents.append("foto")
     # "show me X" adds a photo strip ONLY when no card-producing intent already fired this turn.
@@ -902,48 +902,11 @@ async def run_foto_intent(message: str, history: list, context: str = "") -> dic
     }
 
 
-async def run_booking_confirmation_intent(message: str, history: list) -> dict:
-    """Route to booking confirmation agent."""
-    from app.services.booking_confirmation_agent import run_booking_agent
-    result = await run_booking_agent(message, history)
-    return {
-        "agent": "booking_confirmation",
-        "response": result["response"],
-        "data": {"tools_used": result.get("tools_used", [])}
-    }
-
-
-async def run_health_intent(message: str, history: list) -> dict:
-    """Route to health agent."""
-    from app.services.health_agent import run_health_agent
-    result = await run_health_agent(message, history)
-    return {
-        "agent": "health",
-        "response": result["response"],
-        "data": {"tools_used": result.get("tools_used", [])}
-    }
-
-
-async def run_beauty_intent(message: str, history: list) -> dict:
-    """Route to beauty agent."""
-    from app.services.beauty_agent import run_beauty_agent
-    result = await run_beauty_agent(message, history)
-    return {
-        "agent": "beauty",
-        "response": result["response"],
-        "data": {"tools_used": result.get("tools_used", [])}
-    }
-
-
-async def run_dog_walking_intent(message: str, history: list) -> dict:
-    """Route to dog walking agent."""
-    from app.services.dog_walking_agent import run_dog_walking_agent
-    result = await run_dog_walking_agent(message, history)
-    return {
-        "agent": "dog_walking",
-        "response": result["response"],
-        "data": {"tools_used": result.get("tools_used", [])}
-    }
+# S-32 · booking_confirmation, health, beauty and dog_walking were DELETED, not disabled. Each
+# let a model place a Bland phone call (or send email) with no read-back and no yes, and never
+# checked whether the call happened. booking_confirmation was reachable from chat ("booking
+# number", "pms", …) and from a public, unauthenticated route. A call is an act; acts go
+# through the booking signer (S-28 ladder, S-32 phone rung), never through a chat tool.
 
 
 async def run_restaurant_intent(message: str, history: list, session_id: "Optional[str]" = None) -> dict:
@@ -1793,7 +1756,6 @@ AGENT_REGISTRY = {
     "activity": run_activity_intent,
     "golf": run_golf_intent,
     "foto": run_foto_intent,
-    "booking_confirmation": run_booking_confirmation_intent,
     "restaurant": run_restaurant_intent,
     "general": run_general,
 }

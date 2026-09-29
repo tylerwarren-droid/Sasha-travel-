@@ -43,8 +43,18 @@ type Line = { at: string; text: string; tone: 'info' | 'ok' | 'stop' }
 const runtime = (): Runtime | undefined =>
   (typeof window === 'undefined' ? undefined : (window as unknown as { chrome?: { runtime?: Runtime } }).chrome?.runtime)
 
+const CALL_TIMEOUT_MS = 20000
+
 async function call(path: string, body?: unknown): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
-  const r = await fetch(apiUrl(path), body === undefined ? { headers: apiHeaders() } : { method: 'POST', headers: apiHeaders(), body: JSON.stringify(body) })
+  // ⚠ a request that never answers must SAY so — without a limit it would leave the page silent and greyed out
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(), CALL_TIMEOUT_MS)
+  let r: Response
+  try {
+    r = await fetch(apiUrl(path), body === undefined ? { headers: apiHeaders(), signal: ctl.signal } : { method: 'POST', headers: apiHeaders(), body: JSON.stringify(body), signal: ctl.signal })
+  } catch (e) {
+    throw new Error((e as Error).name === 'AbortError' ? `Sasha's server did not answer within ${CALL_TIMEOUT_MS / 1000}s` : `could not reach Sasha's server (${(e as Error).message})`)
+  } finally { clearTimeout(timer) }
   let json: Record<string, unknown> = {}
   try { json = await r.json() } catch { /* a non-JSON answer is reported by status below */ }
   return { ok: r.ok, status: r.status, json }
@@ -120,6 +130,7 @@ export default function BookingHelperPage() {
   // ── connect, identify, pair ────────────────────────────────────────────────────────────────────
   const connect = async () => {
     setBusy(true)
+    note('Connecting to the helper…')
     try {
       const rt = runtime()
       if (!rt?.connect) throw new Error('Chrome does not offer the helper to this page — it is not installed, or this is not Chrome')
@@ -147,6 +158,7 @@ export default function BookingHelperPage() {
 
   const pair = async () => {
     setBusy(true)
+    note('Pairing this browser — asking Sasha’s server for a challenge…')
     try {
       const ch = await call('/api/booking/pairing/challenge', {})
       if (!ch.ok) throw new Error(refusal(ch.json, ch.status))
@@ -168,6 +180,7 @@ export default function BookingHelperPage() {
   // ── the booking: record the intent, read back, yes, sign, run ─────────────────────────────────────
   const prepare = async () => {
     setBusy(true); setIntent(null); setPhases([])
+    note('Recording the booking and asking for the words to read back…')
     try {
       const r = await call('/api/booking/intents', { venue: VENUE, mode: MODE, ...form })
       if (!r.ok) throw new Error(refusal(r.json, r.status))
@@ -196,10 +209,20 @@ export default function BookingHelperPage() {
   // ── the page ──────────────────────────────────────────────────────────────────────────────────
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
   const sunday = form.date !== '' && new Date(`${form.date}T12:00:00Z`).getUTCDay() === 0
+  // ⚠ a disabled button must say what it is waiting for — a silent grey button is the same failure as a silent error
+  const prepareNeeds = [
+    !paired && 'a paired browser (step 2)',
+    !form.date && 'a date',
+    sunday && 'a day other than Sunday',
+    !form.name && 'a name',
+    !form.email && 'an email',
+    !form.phone && 'a telephone',
+    busy && 'the step in progress to finish',
+  ].filter(Boolean) as string[]
 
   if (framed) {
     return (
-      <main className="mx-auto max-w-xl p-6">
+      <main className="mx-auto my-6 max-w-xl rounded-lg bg-white p-6 text-neutral-900">
         <p>The booking helper only talks to Sasha in her own tab.</p>
         <a className="underline" href={typeof window === 'undefined' ? '#' : window.location.href} target="_blank" rel="noopener">Open this page in its own tab</a>
       </main>
@@ -207,7 +230,10 @@ export default function BookingHelperPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl space-y-6 p-6 text-sm">
+    // ⚠ The site's global style is DARK (globals.css: #0a0a0f, near-white text) and inputs inherit that text
+    // colour onto the browser's white field — typed values were invisible. This page carries its own light
+    // surface so every field, option and log line is legible whatever the site's theme.
+    <main className="mx-auto my-6 max-w-2xl space-y-6 rounded-lg bg-white p-6 text-sm text-neutral-900 [color-scheme:light]">
       <header className="space-y-1">
         <h1 className="text-xl font-semibold">Book a table — dry run</h1>
         <p className="rounded bg-amber-50 p-2 text-amber-900">
@@ -235,6 +261,7 @@ export default function BookingHelperPage() {
           <button className="rounded border px-3 py-1 disabled:opacity-40" disabled={busy || !ready || !!deviceId} onClick={connect}>Connect</button>
           <button className="rounded border px-3 py-1 disabled:opacity-40" disabled={busy || !deviceId || paired} onClick={pair}>Pair this browser</button>
         </div>
+        {!ready && health !== null && <p className="text-xs opacity-70">Connect waits until Sasha’s side (step 1) is ready.</p>}
         {deviceId && <p className="font-mono text-xs">Device {deviceId.slice(0, 16)}… · {paired ? 'paired' : 'not paired yet'}</p>}
       </section>
 
@@ -249,7 +276,8 @@ export default function BookingHelperPage() {
           <label>Telephone<input className="block w-full rounded border p-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
         </div>
         {sunday && <p className="text-amber-800">Psi takes no bookings on Sunday.</p>}
-        <button className="rounded border px-3 py-1 disabled:opacity-40" disabled={busy || !paired || !form.date || sunday || !form.name || !form.email || !form.phone} onClick={prepare}>Prepare</button>
+        <button className="rounded border px-3 py-1 disabled:opacity-40" disabled={prepareNeeds.length > 0} onClick={prepare}>Prepare</button>
+        {prepareNeeds.length > 0 && <p className="text-xs opacity-70">Prepare needs: {prepareNeeds.join(', ')}.</p>}
       </section>
 
       {intent && (

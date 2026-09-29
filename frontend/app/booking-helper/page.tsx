@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiUrl, apiHeaders } from '@/lib/api'
+import { GatedButton } from './GatedButton'
 
 const MODE = 'dry_run' as const
 const VENUE = 'restaurante-psi'
@@ -34,6 +35,8 @@ type Port = {
 }
 type Runtime = { connect?: (id: string) => Port; lastError?: { message?: string } }
 type Health = {
+  /** true when the page could not ask at all — never read as "the server said not ready" */
+  unreachable?: boolean
   mounted?: boolean
   signer?: { configured?: boolean; matches_pinned?: boolean; fingerprint?: string | null }
   storage?: { configured?: boolean; provisioned?: boolean; missing?: string[] }
@@ -70,6 +73,10 @@ export default function BookingHelperPage() {
   const [deviceId, setDeviceId] = useState<string | null>(null)
   const [paired, setPaired] = useState(false)
   const [busy, setBusy] = useState(false)
+  // ⚠ state, not the port ref: a ref does not re-render, so a button gated on it is only as fresh as the last render
+  const [connected, setConnected] = useState(false)
+  // ⚠ "not attempted" is a STATE (P807mt-S4), not an empty log — an empty log is also what a silent failure looks like
+  const [started, setStarted] = useState(false)
   const [log, setLog] = useState<Line[]>([])
   const [form, setForm] = useState({ date: '', time: '20:00', party: 2, name: '', email: '', phone: '' })
   const [intent, setIntent] = useState<{ id: string; lines: string[] } | null>(null)
@@ -80,6 +87,8 @@ export default function BookingHelperPage() {
 
   const note = useCallback((text: string, tone: Line['tone'] = 'info') =>
     setLog((l) => [...l, { at: new Date().toLocaleTimeString('en-GB'), text, tone }]), [])
+  /** Every action opens with this: it marks the page as having attempted something, and says what. */
+  const begin = useCallback((text: string) => { setStarted(true); note(text) }, [note])
 
   useEffect(() => {
     setFramed(window.top !== window.self)
@@ -87,7 +96,7 @@ export default function BookingHelperPage() {
     let stored = ''
     try { stored = localStorage.getItem(HELPER_ID_KEY) ?? '' } catch { /* storage may be blocked */ }
     setHelperId(fromQuery || stored)
-    call('/api/booking/health').then((r) => setHealth(r.json as Health)).catch(() => setHealth({}))
+    call('/api/booking/health').then((r) => setHealth(r.json as Health)).catch(() => setHealth({ unreachable: true }))
   }, [])
 
   const ready = !!(health?.mounted && health.signer?.matches_pinned && health.storage?.provisioned)
@@ -112,7 +121,14 @@ export default function BookingHelperPage() {
 
   const onMessage = useCallback((m: Msg) => {
     if (m.type === 'PROGRESS' && typeof m.phase === 'string') { setPhases((p) => [...p, m.phase as string]); return }
-    if (m.type === 'REPORT') { void relayReport(m) }
+    if (m.type === 'REPORT') {
+      // ⛔ P807mt-S2: never launched unobserved. A report that cannot be delivered is SAID — contract §5.5:
+      // a missing report is never "nothing happened". The helper keeps it until the server has stored it.
+      relayReport(m).catch((e) => note(
+        `The report could not be delivered to Sasha’s server: ${(e as Error).message}. The helper is keeping it — press “Resend pending reports” to offer it again. Nothing is assumed either way.`,
+        'stop',
+      ))
+    }
     if (m.type === 'REFUSED' || m.type === 'ERROR') note(`The helper ${m.type === 'REFUSED' ? 'refused this page' : 'reported its own error'}: ${String(m.why)}`, 'stop')
     const i = waiters.current.findIndex((w) => w.type === m.type)
     if (i >= 0) { const [w] = waiters.current.splice(i, 1); w.resolve(m) }
@@ -130,7 +146,7 @@ export default function BookingHelperPage() {
   // ── connect, identify, pair ────────────────────────────────────────────────────────────────────
   const connect = async () => {
     setBusy(true)
-    note('Connecting to the helper…')
+    begin('Connecting to the helper…')
     try {
       const rt = runtime()
       if (!rt?.connect) throw new Error('Chrome does not offer the helper to this page — it is not installed, or this is not Chrome')
@@ -139,12 +155,13 @@ export default function BookingHelperPage() {
       const p = rt.connect(helperId)
       port.current = p
       p.onMessage.addListener(onMessage)
-      p.onDisconnect.addListener(() => { port.current = null; setDeviceId(null); note(`The helper disconnected${rt.lastError?.message ? `: ${rt.lastError.message}` : ''}.`, 'stop') })
+      p.onDisconnect.addListener(() => { port.current = null; setConnected(false); setDeviceId(null); note(`The helper disconnected${rt.lastError?.message ? `: ${rt.lastError.message}` : ''}.`, 'stop') })
       const hello = next('HELLO')
       p.postMessage({ type: 'HELLO', protocol: 1 })
       const h = await hello
       const id = String(h.device_id)
       setDeviceId(id)
+      setConnected(true)
       note(`Connected to ${String(h.agent)} on this browser.`, 'ok')
       const devs = await call('/api/booking/devices')
       if (!devs.ok) throw new Error(refusal(devs.json, devs.status))
@@ -158,7 +175,7 @@ export default function BookingHelperPage() {
 
   const pair = async () => {
     setBusy(true)
-    note('Pairing this browser — asking Sasha’s server for a challenge…')
+    begin('Pairing this browser — asking Sasha’s server for a challenge…')
     try {
       const ch = await call('/api/booking/pairing/challenge', {})
       if (!ch.ok) throw new Error(refusal(ch.json, ch.status))
@@ -180,7 +197,7 @@ export default function BookingHelperPage() {
   // ── the booking: record the intent, read back, yes, sign, run ─────────────────────────────────────
   const prepare = async () => {
     setBusy(true); setIntent(null); setPhases([])
-    note('Recording the booking and asking for the words to read back…')
+    begin('Recording the booking and asking for the words to read back…')
     try {
       const r = await call('/api/booking/intents', { venue: VENUE, mode: MODE, ...form })
       if (!r.ok) throw new Error(refusal(r.json, r.status))
@@ -194,6 +211,7 @@ export default function BookingHelperPage() {
   const approve = async () => {
     if (!intent || !deviceId) return
     setBusy(true); setPhases([])
+    begin('Asking Sasha’s server to sign the task…')
     try {
       const r = await call(`/api/booking/intents/${intent.id}/issue`, { device_id: deviceId, approval: { how: 'button', said: null } })
       if (!r.ok) throw new Error(refusal(r.json, r.status))
@@ -206,10 +224,15 @@ export default function BookingHelperPage() {
     } finally { setBusy(false) }
   }
 
+  const resendPending = () => {
+    begin('Asking the helper for any reports it is still holding…')
+    port.current?.postMessage({ type: 'PENDING' })
+  }
+
   // ── the page ──────────────────────────────────────────────────────────────────────────────────
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
   const sunday = form.date !== '' && new Date(`${form.date}T12:00:00Z`).getUTCDay() === 0
-  // ⚠ a disabled button must say what it is waiting for — a silent grey button is the same failure as a silent error
+  // ⚠ every button is a GatedButton: it cannot be greyed out without rendering what it is waiting for
   const prepareNeeds = [
     !paired && 'a paired browser (step 2)',
     !form.date && 'a date',
@@ -218,7 +241,8 @@ export default function BookingHelperPage() {
     !form.email && 'an email',
     !form.phone && 'a telephone',
     busy && 'the step in progress to finish',
-  ].filter(Boolean) as string[]
+  ]
+  const stepInProgress = busy && 'the step in progress to finish'
 
   if (framed) {
     return (
@@ -245,6 +269,7 @@ export default function BookingHelperPage() {
         <h2 className="font-semibold">1 · Sasha’s side</h2>
         {health === null ? <p>Checking…</p> : (
           <ul>
+            {health.unreachable && <li className="text-red-800">Could not reach Sasha’s server to ask — this is not the server saying no.</li>}
             <li>Booking routes: {health.mounted ? 'mounted' : 'not reachable'}</li>
             <li>Signing key: {health.signer?.matches_pinned ? `set, fingerprint ${health.signer.fingerprint}` : 'not ready — nothing can be signed'}</li>
             <li>Storage: {health.storage?.provisioned ? 'ready' : `not ready${health.storage?.missing?.length ? ` (missing: ${health.storage.missing.join(', ')})` : ''}`}</li>
@@ -257,11 +282,16 @@ export default function BookingHelperPage() {
         <label className="block">Helper ID (from chrome://extensions)
           <input className="mt-1 w-full rounded border p-1 font-mono" value={helperId} onChange={(e) => setHelperId(e.target.value.trim())} />
         </label>
-        <div className="flex gap-2">
-          <button className="rounded border px-3 py-1 disabled:opacity-40" disabled={busy || !ready || !!deviceId} onClick={connect}>Connect</button>
-          <button className="rounded border px-3 py-1 disabled:opacity-40" disabled={busy || !deviceId || paired} onClick={pair}>Pair this browser</button>
+        <div className="flex flex-wrap gap-3">
+          <GatedButton label="Connect" onClick={connect}
+            done={connected && 'Connected.'}
+            needs={[health === null && 'the check of Sasha’s side (step 1)', health !== null && !ready && 'Sasha’s side (step 1) to be ready', stepInProgress]} />
+          <GatedButton label="Pair this browser" onClick={pair}
+            done={paired && 'This browser is paired.'}
+            needs={[!connected && 'Connect, first', stepInProgress]} />
+          <GatedButton label="Resend pending reports" onClick={resendPending}
+            needs={[!connected && 'Connect, first', stepInProgress]} />
         </div>
-        {!ready && health !== null && <p className="text-xs opacity-70">Connect waits until Sasha’s side (step 1) is ready.</p>}
         {deviceId && <p className="font-mono text-xs">Device {deviceId.slice(0, 16)}… · {paired ? 'paired' : 'not paired yet'}</p>}
       </section>
 
@@ -276,8 +306,7 @@ export default function BookingHelperPage() {
           <label>Telephone<input className="block w-full rounded border p-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
         </div>
         {sunday && <p className="text-amber-800">Psi takes no bookings on Sunday.</p>}
-        <button className="rounded border px-3 py-1 disabled:opacity-40" disabled={prepareNeeds.length > 0} onClick={prepare}>Prepare</button>
-        {prepareNeeds.length > 0 && <p className="text-xs opacity-70">Prepare needs: {prepareNeeds.join(', ')}.</p>}
+        <GatedButton label="Prepare" onClick={prepare} needs={prepareNeeds} />
       </section>
 
       {intent && (
@@ -286,8 +315,9 @@ export default function BookingHelperPage() {
           {/* ⚠ exactly the server's five lines — the yes is bound to their hash */}
           {intent.lines.map((l, i) => <p key={i}>{l}</p>)}
           <div className="flex gap-2">
-            <button className="rounded border bg-black px-3 py-1 text-white disabled:opacity-40" disabled={busy || !port.current} onClick={approve}>Yes — prepare it (dry run)</button>
-            <button className="rounded border px-3 py-1" disabled={busy} onClick={() => { setIntent(null); note('Not approved. Nothing was signed.') }}>No</button>
+            <GatedButton label="Yes — prepare it (dry run)" className="bg-black text-white" onClick={approve}
+              needs={[!connected && 'the helper to be connected (step 2)', stepInProgress]} />
+            <GatedButton label="No" onClick={() => { setIntent(null); begin('Not approved. Nothing was signed.') }} needs={[stepInProgress]} />
           </div>
         </section>
       )}
@@ -301,7 +331,7 @@ export default function BookingHelperPage() {
 
       <section>
         <h2 className="font-semibold">What happened</h2>
-        {log.length === 0 ? <p className="opacity-60">Nothing yet.</p> : (
+        {!started ? <p className="opacity-60">Nothing attempted yet.</p> : (
           <ul className="space-y-1">{log.map((l, i) => (
             <li key={i} className={l.tone === 'stop' ? 'text-red-800' : l.tone === 'ok' ? 'text-green-800' : ''}>{l.at} — {l.text}</li>
           ))}</ul>

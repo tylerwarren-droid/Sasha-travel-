@@ -148,6 +148,8 @@ Stage C — frontend build gate:
     cd ~/Projects/sasha-travel/frontend && npm install 2>&1 | tail -3 && \
     npm run build 2>&1 | tail -25
 Must produce 18 routes with no compile errors (17 until S-25 added /booking-helper).
+`npm run build` first runs `prebuild` = scripts/check-outcome-surfaces.mjs (P807mt): it fails the build if an outcome
+surface has a silent grey button, an unobserved promise, or "Nothing yet" drawn from an empty list. Do not bypass it.
 
 Stage D — commit + push (only if both gates passed):
     cd ~/Projects/sasha-travel && git add -A && \

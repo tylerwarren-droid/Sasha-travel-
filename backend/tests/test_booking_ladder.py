@@ -164,12 +164,20 @@ class Reading(unittest.TestCase):
     def test_la_contra_with_no_website_is_read_from_its_google_listing(self):
         places = {"places": [{"id": "ChIJ-la-contra", "displayName": {"text": "La Contra"}, "formattedAddress": "Calle de la Contra 1, Madrid",
                               "internationalPhoneNumber": "+34 915 00 11 22",
+                              "regularOpeningHours": {"weekdayDescriptions": ["Monday: Closed", "Tuesday: 1:00 – 4:00 PM, 8:00 – 11:30 PM"],
+                                                      "periods": [{"open": {"day": 2, "hour": 13, "minute": 0}}]},
                               "addressComponents": [{"shortText": "ES", "types": ["country", "political"]}]}]}
         web = Web(places=places)
         with mock.patch.dict(os.environ, {"GOOGLE_PLACES_API_KEY": "places-test"}):
             read = run(V.read_venue(web, name="La Contra", city="Madrid", country=None, website=None, now=NOW, resolve=PUBLIC))
         self.assertEqual(read.country, "ES")
-        self.assertEqual([(f.kind, f.value, f.source_label) for f in read.facts], [("phone", "+34915001122", "their Google listing (La Contra, Calle de la Contra 1, Madrid)")])
+        label = "their Google listing (La Contra, Calle de la Contra 1, Madrid)"
+        self.assertEqual([(f.kind, f.value, f.source_label) for f in read.facts],
+                         [("phone", "+34915001122", label), ("address", "Calle de la Contra 1, Madrid", label),
+                          ("hours", "Monday: Closed · Tuesday: 1:00 – 4:00 PM, 8:00 – 11:30 PM", label)])
+        for f in read.facts:
+            self.assertEqual((f.source_kind, f.source_url, len(f.sha256)), ("places", "https://www.google.com/maps/place/?q=place_id:ChIJ-la-contra", 64))
+        self.assertIn("regularOpeningHours", V.PLACES_FIELDS)
         self.assertEqual(read.listing, {"name": "La Contra", "address": "Calle de la Contra 1, Madrid", "place_id": "ChIJ-la-contra"})
         method, url, body = web.requests[0]
         self.assertEqual((method, url, body["textQuery"]), ("POST", V.PLACES_URL, "La Contra, Madrid"))

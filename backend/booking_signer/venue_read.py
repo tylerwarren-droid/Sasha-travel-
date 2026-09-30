@@ -35,7 +35,7 @@ MAX_BYTES = 2_000_000
 MAX_EXTRA_PAGES = 2
 PLACES_URL = "https://places.googleapis.com/v1/places:searchText"
 PLACES_FIELDS = ("places.id,places.displayName,places.formattedAddress,places.internationalPhoneNumber,"
-                 "places.nationalPhoneNumber,places.websiteUri,places.addressComponents")
+                 "places.nationalPhoneNumber,places.websiteUri,places.addressComponents,places.regularOpeningHours")
 
 #: country → (calling code, drops a leading trunk 0, language, IANA timezone)
 COUNTRIES: Dict[str, Tuple[str, bool, str, str]] = {
@@ -68,7 +68,7 @@ class ReadRefused(Exception):
 
 @dataclass
 class Fact:
-    kind: str                  #: phone | email | whatsapp | booking_form | platform
+    kind: str                  #: phone | email | whatsapp | booking_form | platform | address | website | hours
     value: str                 #: E.164 / address / wa.me digits / form action / platform name
     source_kind: str           #: site | places
     source_url: str
@@ -386,12 +386,24 @@ async def read_places(http: Http, key: str, name: str, city: str, now: datetime)
     facts = []
     phone_raw = pl.get("internationalPhoneNumber") or pl.get("nationalPhoneNumber")
     n = to_e164(phone_raw, country) if phone_raw else None
+    # ⚠ the listing is the top search result: its own name and address go into the label, so the read-back says
+    # WHICH listing — a wrong match is heard before the yes, never discovered after
+    label = f"their Google listing ({listing['name']}, {listing['address']})"
     if n:
-        # ⚠ the listing is the top search result: its own name and address go into the label, so the read-back says
-        # WHICH listing — a wrong match is heard before the yes, never discovered after
-        label = f"their Google listing ({listing['name']}, {listing['address']})"
         facts.append(Fact("phone", n, "places", link, label, f'"internationalPhoneNumber": "{phone_raw}"',
                           now.isoformat(), sha, {"listing": listing}))
+    # everything else the listing publishes, recorded the same way — the listing's own words, verbatim
+    if pl.get("formattedAddress"):
+        facts.append(Fact("address", pl["formattedAddress"], "places", link, label, f'"formattedAddress": "{pl["formattedAddress"]}"',
+                          now.isoformat(), sha, {"listing": listing}))
+    if pl.get("websiteUri"):
+        facts.append(Fact("website", pl["websiteUri"], "places", link, label, f'"websiteUri": "{pl["websiteUri"]}"',
+                          now.isoformat(), sha, {"listing": listing}))
+    hours = (pl.get("regularOpeningHours") or {}).get("weekdayDescriptions")
+    if isinstance(hours, list) and hours and all(isinstance(h, str) for h in hours):
+        facts.append(Fact("hours", " · ".join(hours), "places", link, label, '"regularOpeningHours.weekdayDescriptions"',
+                          now.isoformat(), sha, {"listing": listing, "weekday_descriptions": hours,
+                                                 "periods": (pl.get("regularOpeningHours") or {}).get("periods")}))
     return facts, [src], listing, country, pl.get("websiteUri")
 
 

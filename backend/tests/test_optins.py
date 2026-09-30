@@ -48,11 +48,15 @@ class RefusalCheck(unittest.TestCase):
     def test_a_channel_sasha_does_not_send_on_is_refused(self):
         self.assertEqual(O.check_send([], "sms").rule, "channel_unknown")
 
-    def test_the_venue_is_its_place_id_then_its_own_site_then_its_name(self):
+    def test_the_venue_is_known_by_its_place_id_its_own_site_and_its_name(self):
         site = {"source_kind": "site", "source_url": "https://www.lacontra.es/contacto"}
         self.assertEqual(O.venue_id_of({"listing": {"place_id": "ChIJ1"}, "facts": [site]}), "places:ChIJ1")
         self.assertEqual(O.venue_id_of({"listing": None, "facts": [site]}), "host:lacontra.es")
         self.assertEqual(O.venue_id_of({"name": "La  Contra", "country": "es", "facts": []}), "name:la contra|ES")
+        # S-55 · all of them, so a page opt-in (keyed by website or name) reaches a read keyed by its listing
+        self.assertEqual(O.venue_ids_of({"listing": {"place_id": "ChIJ1"}, "facts": [site], "name": "La Contra", "country": "ES"}),
+                         ["places:ChIJ1", "host:lacontra.es", "name:la contra|ES"])
+        self.assertEqual(O.host_id("WWW.LaContra.es/reservas"), "host:lacontra.es")
 
 
 class Store(unittest.IsolatedAsyncioTestCase):
@@ -62,7 +66,7 @@ class Store(unittest.IsolatedAsyncioTestCase):
             O.OPTIN_STORE = O.MemoryOptinStore()
             await O.OPTIN_STORE.add(row(0, "withdrawn") | {"venue_id": "v"})
             self.assertIsNone(await O.refusal_for(None, "phone"))       # the test line, or a call prepared before S-54
-            self.assertEqual((await O.refusal_for("v", "phone")).rule, "venue_opted_out")
+            self.assertEqual((await O.refusal_for(["places:x", "v"], "phone")).rule, "venue_opted_out")
         finally:
             O.OPTIN_STORE = saved
 

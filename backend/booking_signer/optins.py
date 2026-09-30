@@ -28,18 +28,36 @@ NEEDS_OPTIN = {"whatsapp", "web_submit"}
 SASHA_CHANNELS = {"phone", "email", "whatsapp", "web_submit"}
 
 
-def venue_id_of(read: Dict[str, Any]) -> str:
-    """The venue as the ladder knows it: its Google place id, else its own site's host, else its name and country."""
+def host_id(url: str) -> Optional[str]:
+    host = (urlsplit(url if "//" in url else f"https://{url}").hostname or "").lower().removeprefix("www.")
+    return f"host:{host}" if host else None
+
+
+def name_id(name: str, country: Optional[str]) -> str:
+    folded = re.sub(r"\s+", " ", str(name or "")).strip().casefold()
+    return f"name:{folded}|{(country or '').upper()}"
+
+
+def venue_ids_of(read: Dict[str, Any]) -> List[str]:
+    """EVERY name the venue goes by: its Google place id, each host its own site was read from, and its name and country.
+    S-55 · a venue that opts in on the page is known by its website (or its name) — never by a place id — so the check
+    must match a read on any of them, or a withdrawal made on the page would not reach a read keyed by its listing."""
+    ids: List[str] = []
     listing = read.get("listing") or {}
     if listing.get("place_id"):
-        return f"places:{listing['place_id']}"
+        ids.append(f"places:{listing['place_id']}")
     for f in read.get("facts") or []:
         if f.get("source_kind") == "site" and f.get("source_url"):
-            host = (urlsplit(f["source_url"]).hostname or "").removeprefix("www.")
-            if host:
-                return f"host:{host}"
-    name = re.sub(r"\s+", " ", str(read.get("name") or "")).strip().casefold()
-    return f"name:{name}|{(read.get('country') or '').upper()}"
+            h = host_id(f["source_url"])
+            if h and h not in ids:
+                ids.append(h)
+    ids.append(name_id(read.get("name"), read.get("country")))
+    return ids
+
+
+def venue_id_of(read: Dict[str, Any]) -> str:
+    """The venue's first name (place id, else its own site's host, else its name and country)."""
+    return venue_ids_of(read)[0]
 
 
 @dataclass(frozen=True)
@@ -49,7 +67,7 @@ class Refusal:
 
 
 def check_send(rows: List[Dict[str, Any]], channel: str, scope: Optional[str] = None) -> Optional[Refusal]:
-    """`rows` are ALL of the venue's opt-in records. None = Sasha may send; else why she may not."""
+    """`rows` are ALL of the venue's opt-in records, under every id it goes by. None = Sasha may send; else why not."""
     if channel not in SASHA_CHANNELS:
         return Refusal("channel_unknown", f"{channel!r} is not a channel Sasha sends on")
     ordered = sorted(rows, key=lambda r: (r["recorded_at"], r["id"]))
@@ -77,20 +95,20 @@ class MemoryOptinStore:
     async def add(self, row: Dict[str, Any]) -> None:   # tests only; production rows arrive through the opt-in flows
         self.rows.append({"id": len(self.rows) + 1, **row})
 
-    async def rows_for(self, venue_id: str) -> List[Dict[str, Any]]:
-        return [dict(r) for r in self.rows if r["venue_id"] == venue_id]
+    async def rows_for(self, venue_ids: List[str]) -> List[Dict[str, Any]]:
+        return [dict(r) for r in self.rows if r["venue_id"] in venue_ids]
 
 
 class PostgresOptinStore:
     def __init__(self, base) -> None:
         self._base = base
 
-    async def rows_for(self, venue_id: str) -> List[Dict[str, Any]]:
+    async def rows_for(self, venue_ids: List[str]) -> List[Dict[str, Any]]:
         from .store import StorageUnavailable, _row
         try:
             rows = await self._base._run(lambda c: c.fetch(
                 "select id, venue_id, channel, scope, status, recorded_at, withdrawn_at, withdrawn_how "
-                "from venue_optins where venue_id = $1", venue_id))
+                "from venue_optins where venue_id = any($1::text[])", list(venue_ids)))
         except StorageUnavailable as e:
             raise e.rehint("008_venue_optins.sql") from None
         return [_row(r) for r in rows]
@@ -99,9 +117,9 @@ class PostgresOptinStore:
 OPTIN_STORE: Any = None   # set by routes.py
 
 
-async def refusal_for(venue_id: Optional[str], channel: str, scope: Optional[str] = None) -> Optional[Refusal]:
-    """The check, against the store. ⚠ No venue id (a call prepared before S-54) is checked as nothing withdrawn — the
-    record it would need does not exist for it."""
-    if not venue_id or OPTIN_STORE is None:
+async def refusal_for(venue_ids: Optional[List[str]], channel: str, scope: Optional[str] = None) -> Optional[Refusal]:
+    """The check, against the store. ⚠ No venue ids (the test line) is checked as nothing withdrawn — the record it
+    would need does not exist for it."""
+    if not venue_ids or OPTIN_STORE is None:
         return None
-    return check_send(await OPTIN_STORE.rows_for(venue_id), channel, scope)
+    return check_send(await OPTIN_STORE.rows_for(list(venue_ids)), channel, scope)

@@ -5,6 +5,8 @@ The periods are CONFIG, read from the environment each run, so counsel can chang
     RETENTION_BODIES_MONTHS                     12   transcripts and message bodies: call transcripts, the venue's words,
                                                      email reply and confirmation bodies, the text of emails Sasha sent
     RETENTION_CONSENT_YEARS_AFTER_WITHDRAWAL     3   a venue's opt-in records, counted from its WITHDRAWAL
+    RETENTION_UNCONFIRMED_REQUEST_DAYS          30   a Work-with-Sasha request whose link was never confirmed (S-55),
+                                                     counted from the link's expiry — it was never consent
     RETENTION_ENABLED                            1   anything else turns the job off (it then deletes nothing)
 
 What it never does:
@@ -40,6 +42,7 @@ class Periods:
     bookings_months: int
     bodies_months: int
     consent_years_after_withdrawal: int
+    unconfirmed_request_days: int = 30
 
 
 def _int(name: str, default: int) -> int:
@@ -52,7 +55,7 @@ def _int(name: str, default: int) -> int:
 
 def periods() -> Periods:
     return Periods(_int("RETENTION_BOOKINGS_MONTHS", 24), _int("RETENTION_BODIES_MONTHS", 12),
-                   _int("RETENTION_CONSENT_YEARS_AFTER_WITHDRAWAL", 3))
+                   _int("RETENTION_CONSENT_YEARS_AFTER_WITHDRAWAL", 3), _int("RETENTION_UNCONFIRMED_REQUEST_DAYS", 30))
 
 
 def enabled() -> bool:
@@ -153,6 +156,17 @@ async def run_once(conn, now: Optional[datetime] = None) -> List[dict]:
                                        c["venue_id"], c["channel"], c["scope"])
                 n += int(r.split()[-1])
             await logged("consent", "venue_optins", n, cut, f"{len(chains)} withdrawn chain(s)" if chains else None)
+
+    # 4 · S-55 · page requests never confirmed (never consent): gone 30 days after their link expired. A CONFIRMED
+    # request is kept — its link is the venue's way to withdraw — and its fields are already in the opt-in's evidence.
+    cut = now - timedelta(days=p.unconfirmed_request_days)
+    if not await conn.fetchval("select to_regclass('public.venue_optin_requests') is not null"):
+        await logged("consent", "venue_optin_requests", 0, cut, "skipped: venue_optin_requests does not exist yet")
+    else:
+        async with conn.transaction():
+            r = await conn.execute("delete from venue_optin_requests where confirmed_at is null and expires_at < $1", cut)
+            # logged under 'consent' (007's rule check allows four rules), told apart by its table and note
+            await logged("consent", "venue_optin_requests", int(r.split()[-1]), cut, "page requests never confirmed")
     return done
 
 

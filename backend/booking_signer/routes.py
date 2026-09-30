@@ -31,7 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import call_routes, ladder_routes, optins, retention
+from . import call_routes, ladder_routes, optin_page, optins, retention
 from .account import account_for
 from .gate import require_booking_key
 from .call_store import PostgresCallStore
@@ -85,6 +85,7 @@ STORE: Any = PostgresStore()
 call_routes.CALL_STORE = PostgresCallStore(STORE)
 ladder_routes.LADDER_STORE = PostgresLadderStore(STORE)
 optins.OPTIN_STORE = PostgresOptinStore(STORE)   # S-54 · the refusal check reads venue_optins (sql/008)
+optin_page.PAGE_STORE = optin_page.PostgresPageStore(STORE)   # S-55 · the Work-with-Sasha page (sql/009)
 
 
 def _now() -> datetime:
@@ -418,6 +419,8 @@ async def reservations(request: Request):
 router.include_router(call_routes.router)
 # S-36 · the ladder: venue reads, the email rung, the inbound webhook
 router.include_router(ladder_routes.router)
+# S-55 · the Work-with-Sasha page's server half (reached through the frontend's own route, which adds the key)
+router.include_router(optin_page.router)
 
 
 # S-53 · the daily retention job (retention.py) starts with the app; off in tests and without a database

@@ -41,7 +41,7 @@ class Retention(unittest.TestCase):
                 await c.execute("drop schema if exists auth cascade; drop schema public cascade; create schema public;")
                 await c.execute((HERE / "fixtures" / "model_a_live_2026-09-28.sql").read_text(encoding="utf-8"))
                 for f in ("001_booking_storage.sql", "002_prepared_status.sql", "003_phone_calls.sql", "004_ladder.sql",
-                          "005_slot_links.sql", "007_retention_log.sql", "008_venue_optins.sql"):
+                          "005_slot_links.sql", "007_retention_log.sql", "008_venue_optins.sql", "009_venue_optin_requests.sql"):
                     await c.execute((SQL_DIR / f).read_text(encoding="utf-8"))
             finally:
                 await c.close()
@@ -60,7 +60,7 @@ class Retention(unittest.TestCase):
 
     def setUp(self):
         async def wipe(c):
-            await c.execute("set booking.retention = 'on'; delete from venue_optins; reset booking.retention;"
+            await c.execute("set booking.retention = 'on'; delete from venue_optins; reset booking.retention; delete from venue_optin_requests;"
                             "delete from retention_log; delete from booking_attempts; delete from booking_calls; delete from trip_items; delete from trips;")
         self.q(wipe)
 
@@ -147,6 +147,22 @@ class Retention(unittest.TestCase):
         self.go()
         self.assertEqual(self.count("select count(*) from trip_items"), 0)                 # back to 24: gone
         self.assertEqual(self.count("select sum(rows_affected) from retention_log where rule = 'bookings' and table_name = 'trip_items'"), 1)
+
+    def test_a_page_request_never_confirmed_goes_30_days_after_its_link_expired_and_a_confirmed_one_stays(self):
+        async def mk(c, n, expired_days_ago, confirmed):
+            exp = NOW - timedelta(days=expired_days_ago)
+            await c.execute(
+                "insert into venue_optin_requests (request_id, token_sha256, created_at, expires_at, lang, venue_id, venue_name, "
+                "contact_name, contact_role, email, channels, submitted, email_status, confirmed_at) "
+                "values ($1,$2,$3,$4,'en','host:v.test','V','N','owner','n@v.test',$5,$6,'sent',$7)",
+                uuid.uuid4(), f"{n:064x}", exp - timedelta(hours=48), exp, [], {}, (exp - timedelta(hours=1)) if confirmed else None)
+        self.q(lambda c: mk(c, 1, 40, False))    # never confirmed, expired 40 days ago: goes
+        self.q(lambda c: mk(c, 2, 10, False))    # never confirmed, expired 10 days ago: stays for now
+        self.q(lambda c: mk(c, 3, 400, True))    # confirmed: its link is how the venue withdraws — stays
+        self.go()
+        left = [r["token_sha256"][-1] for r in self.q(lambda c: c.fetch("select token_sha256 from venue_optin_requests order by 1"))]
+        self.assertEqual(left, ["2", "3"])
+        self.assertEqual(self.count("select rows_affected from retention_log where rule = 'consent' and table_name = 'venue_optin_requests'"), 1)
 
     def test_without_the_log_table_nothing_is_deleted(self):
         self.item(NOW - timedelta(days=800), sasha=True)

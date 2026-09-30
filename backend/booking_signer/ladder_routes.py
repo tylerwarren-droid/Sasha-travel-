@@ -124,10 +124,10 @@ async def get_read(read_id: str, request: Request):
     return _read_view(row)
 
 
-async def _optin_refusal(venue_id: Optional[str], channel: str, scope: Optional[str] = None):
+async def _optin_refusal(venue_ids, channel: str, scope: Optional[str] = None):
     """S-54 · the refusal check as a response, or None. ⚠ Fails CLOSED: if the opt-in record cannot be read, nothing is sent."""
     try:
-        r = await O.refusal_for(venue_id, channel, scope)
+        r = await O.refusal_for(venue_ids, channel, scope)
     except StorageUnavailable as e:
         return _refuse(503, e.rule, f"{e.detail}; the venue's opt-in record could not be checked, so nothing was sent")
     return _refuse(403, r.rule, f"{r.message} Nothing was sent.") if r else None
@@ -151,7 +151,7 @@ async def call_venue_from_read(account: str, read_id: Any, fact_index: Any = Non
         raise C.CallRefused("venue_country_unknown", "the venue's country is not known, so neither its language nor its day can be")
     _, _, lang, tz = V.COUNTRIES[country]
     return C.CallVenue(key=f"read:{row['read_id']}", name=read["name"], number_env="", language=lang, timezone=tz,
-                       number=f["value"], source=f["source_label"], venue_id=O.venue_id_of(read))
+                       number=f["value"], source=f["source_label"], venue_ids=tuple(O.venue_ids_of(read)))
 
 
 # ── the email rung ────────────────────────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ async def prepare_email(request: Request):
     chosen = L.best_email(read["facts"])
     if not chosen:
         return _refuse(422, "no_email_read", "no email address was read for this venue")
-    refused = await _optin_refusal(O.venue_id_of(read), "email")
+    refused = await _optin_refusal(O.venue_ids_of(read), "email")
     if refused:
         return refused
     try:
@@ -228,7 +228,7 @@ async def send_email(email_id: str, request: Request):
         r = await LADDER_STORE.get_read(account, str(e["read_id"])) if e.get("read_id") else None
     except StorageUnavailable as ex:
         return _refuse(503, ex.rule, ex.detail)
-    refused = await _optin_refusal(O.venue_id_of(r["read"]) if r else None, "email")
+    refused = await _optin_refusal(O.venue_ids_of(r["read"]) if r else None, "email")
     if refused:
         return refused
     now = NOW()

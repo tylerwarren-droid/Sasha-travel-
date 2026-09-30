@@ -177,8 +177,11 @@ async def send(http: Http, email: Mapping[str, Any]) -> Sent:
     """⛔ `sent` is True ONLY when Resend answered HTTP 200 with an email id. Everything else is not sent, with Resend's
     own words. "Sent" means accepted for delivery — not delivered, and not booked."""
     key = _env(KEY_VAR)
-    payload = {"from": email["from"], "to": [email["to"]], "bcc": [email["bcc"]], "reply_to": email["reply_to"],
-               "subject": email["subject"], "text": email["text"]}
+    payload = {"from": email["from"], "to": [email["to"]], "subject": email["subject"], "text": email["text"]}
+    if email.get("bcc"):
+        payload["bcc"] = [email["bcc"]]
+    if email.get("reply_to"):
+        payload["reply_to"] = email["reply_to"]   # S-55 · the opt-in confirmation has neither
     try:
         r = await http("POST", RESEND_SEND_URL, headers={"authorization": f"Bearer {key}", "content-type": "application/json"}, json=payload)
     except Exception as e:

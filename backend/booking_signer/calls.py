@@ -61,7 +61,7 @@ class CallVenue:
     timezone: str         #: IANA; "Thursday" is worked out in the venue's own day
     number: Optional[str] = None   #: S-36 · a number MAGELLAN READ (venue_read.py) — used instead of number_env
     source: Optional[str] = None   #: where that number was read: "their website, lacontra.es" / "their Google listing"
-    venue_id: Optional[str] = None  #: S-54 · the venue as its opt-in records name it (optins.venue_id_of); None = the test line
+    venue_ids: Optional[tuple] = None  #: S-54/55 · every id its opt-in records may use (optins.venue_ids_of); None = the test line
 
 
 def _env(name: str, default: str = "") -> str:
@@ -395,7 +395,7 @@ def build_call(venue: CallVenue, p: CallParticulars, now: datetime, purpose: str
         "first_sentence": opening, "task": task, "check_sentence": check,
         "party": p.party, "date": p.on.isoformat(), "time": p.at.strftime("%H:%M"), "name": p.name, "phone": p.phone,
         "from": sasha_number(), "number_source": venue.source, "venue_name": venue.name,
-        "venue_id": venue.venue_id,
+        "venue_ids": list(venue.venue_ids) if venue.venue_ids else None,
     }
     en = LANGUAGES["en"]
     if purpose == "cancel":

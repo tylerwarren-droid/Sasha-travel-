@@ -88,7 +88,8 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
     setPhase('placing'); setNote(null)
     const r = await req(`/api/booking/calls/${prepared.call_id}/place`, { read_back_sha256: prepared.sha256, approval: { how: 'button', said: null } })
     if (!r.ok) { setPhase('stopped'); setNote(`Not called: ${refusal(r.json, r.status)}. Nothing was dialled.`); return }
-    if (r.json.status !== 'placed') { setPhase('stopped'); setNote(String(r.json.say ?? 'The call was not placed.')); return }
+    // S-57 · 'uncertain': Bland didn't answer in time and may have dialled — follow it like a placed call; never "not placed"
+    if (r.json.status !== 'placed' && r.json.status !== 'uncertain') { setPhase('stopped'); setNote(String(r.json.say ?? 'The call was not placed.')); return }
     setPhase('on_call'); setNote(String(r.json.say ?? 'Calling now.'))
     for (let i = 0; i < POLL_LIMIT; i++) {
       await sleep(POLL_MS)
@@ -96,6 +97,7 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
       if (!g.ok) { setNote(`Could not check the call just now: ${refusal(g.json, g.status)}. Still trying.`); continue }
       const v = g.json as unknown as CallView
       setView(v)
+      if (v.status === 'placing') { setNote(String(v.say ?? '')); continue }   // S-57 · still checking Bland's log
       if (v.status !== 'placed') { setPhase(v.status === 'answered' || v.status === 'not_reached' ? 'finished' : 'stopped'); return }
     }
     setPhase('stopped'); setNote('The call has not finished after 7½ minutes. Its result is kept on the server — reload to check again.')
@@ -143,7 +145,7 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
 
       {note && <p className="mt-3 text-sm">{note}</p>}
 
-      {view && view.status !== 'placed' && (
+      {view && view.status !== 'placed' && view.status !== 'placing' && (
         <div className="mt-3 rounded border p-3 text-sm">
           <p className="font-medium">{view.say}</p>
           {view.outcome && <p>Outcome: <strong>{view.outcome === 'yes' ? 'they said yes' : view.outcome === 'no' ? 'they said no' : 'unclear'}</strong>{view.read_by ? <span className="opacity-70"> — {view.read_by}</span> : null}</p>}

@@ -46,7 +46,7 @@ READER: C.Reader = C.anthropic_reader
 
 async def HTTP(method: str, url: str, headers: dict, json: Optional[dict] = None):
     import httpx
-    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:   # S-57 · Bland took over 20 s on 30 Sept
         return await client.request(method, url, headers=headers, json=json)
 
 
@@ -102,12 +102,31 @@ SWEEP_EVERY_S = 60
 _sweeper: Optional[asyncio.Task] = None
 
 
+RESOLVE_AFTER = timedelta(seconds=90)    # S-57 · longer than the 60 s the request itself may take
+GIVE_UP_AFTER = timedelta(minutes=10)    # no call in Bland's log by then: it was not placed
+
+
 async def sweep_once() -> int:
     """Read every placed call once. Returns how many were recorded."""
     key = C.bland_key()
     if not key or CALL_STORE is None:
         return 0
     recorded = 0
+    # S-57 · first, every call whose placing went unanswered: Bland's own log says whether it dialled
+    now = NOW()
+    for call in await CALL_STORE.unresolved(now - RESOLVE_AFTER):
+        try:
+            found = await C.calls_in_log(HTTP, key, call["dialled_number"], call["approved_at"])
+            if found:
+                b = found[0]
+                await CALL_STORE.resolve(call["call_id"], b["call_id"], b["_created"], f"found in Bland's call log as {b['call_id']}")
+                log.warning("[booking_calls] call %s: its placing went unanswered, but Bland's log has it as %s", call["call_id"], b["call_id"])
+            elif call["approved_at"] < now - GIVE_UP_AFTER:
+                await CALL_STORE.resolve(call["call_id"], None, None,
+                                         f"Bland's call log has no call to {call['dialled_number']} in the "
+                                         f"{int(GIVE_UP_AFTER.total_seconds() // 60)} minutes after the request went unanswered")
+        except Exception as e:
+            log.warning("[booking_calls] could not check Bland's log for call %s: %s: %s", call.get("call_id"), type(e).__name__, e)
     for call in await CALL_STORE.placed_calls():
         try:
             details = await C.fetch_call(HTTP, key, call["bland_call_id"])
@@ -270,6 +289,13 @@ async def place(call_id: str, request: Request):
     refused = await ladder_routes._optin_refusal(brief.get("venue_id"), "phone")
     if refused:
         return refused
+    # S-57 · never a second call while an earlier one to this number may have been placed
+    try:
+        if await CALL_STORE.unresolved_to(call["dialled_number"]):
+            return _refuse(409, "previous_call_unresolved", "an earlier call to this number may have been placed and Bland's "
+                                                            "log has not said yet; nothing was dialled — try again in a minute")
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
     now = NOW()
     approval = {"by": account, "how": a["how"], "said": a.get("said"), "at": now.isoformat(),
                 "read_back_sha256": call["read_back_sha256"], "brief_sha256": call["brief_sha256"]}
@@ -287,6 +313,14 @@ async def place(call_id: str, request: Request):
         return _refuse(404, "call_unknown", "no call with that id was prepared for this account")
 
     placed = await C.place_call(HTTP, C.bland_key(), C.bland_payload(brief, call_id))
+    if placed.uncertain:
+        try:
+            await CALL_STORE.mark_placed(call_id, placed, NOW())
+        except StorageUnavailable as e:
+            log.error("[booking_calls] call %s: %s — and it could not be recorded: %s", call_id, placed.why, e)
+        return {"ok": True, "status": "uncertain", "why": placed.why,
+                "say": "Bland didn't answer in time, so the call may have been placed. I'm checking Bland's own call log "
+                       "and will show what happened here — don't call them again until it does."}
     try:
         await CALL_STORE.mark_placed(call_id, placed, NOW())
     except (StorageUnavailable, AlreadyRecorded) as e:
@@ -347,8 +381,8 @@ def _view(call: dict, name: str) -> dict:
         out["why"] = call.get("not_placed_why")
         out["say"] = f"I couldn't place the call: {call.get('not_placed_why')}"
     elif call["status"] == "placing":
-        out["say"] = ("I asked Bland to place the call but never recorded its answer, so I can't tell you whether the "
-                      "phone rang. I won't call again on my own.")
+        out["say"] = ("Bland hasn't told me yet whether the call was placed. I'm checking its own call log; I won't call "
+                      "them again until it says.")
     elif call["status"] == "awaiting_approval":
         out["say"] = None
     elif call["status"] in ("answered", "not_reached"):

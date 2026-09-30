@@ -53,10 +53,13 @@ class FakeBland:
     def __init__(self, place=None, details=None):
         self.place_answer = place   # None: a fresh call id per call, as Bland gives
         self.details = details
+        self.log = []               # S-57 · Bland's own call log (GET /v1/calls)
         self.requests = []
 
     async def __call__(self, method, url, headers, json=None):
         self.requests.append((method, url, headers, json))
+        if method == "GET" and "?limit=" in url:
+            return R(200, {"count": len(self.log), "calls": self.log})
         if method == "POST":
             if isinstance(self.place_answer, Exception):
                 raise self.place_answer
@@ -207,6 +210,26 @@ class Placing(unittest.TestCase):
 
 # ── 3 · reading the finished call ────────────────────────────────────────────────────────────
 
+class ReadTimeout(Exception):
+    """httpx's name for: the request went out, and no answer came back in time."""
+
+
+class Uncertain(unittest.TestCase):
+    """S-57 · 30 Sept 17:30: Bland took over 20 s to answer, our server recorded "not placed", and Bland had dialled."""
+
+    def test_a_request_sent_but_unanswered_may_have_been_placed(self):
+        for answer in (ReadTimeout("timed out"), R(504, ValueError("gateway"))):
+            p = run(C.place_call(FakeBland(place=answer), "k", {"phone_number": "+351912000000"}))
+            self.assertEqual((p.placed, p.uncertain), (False, True), answer)
+            self.assertIn("may have placed the call", p.why)
+
+    def test_a_connection_never_made_is_still_not_placed(self):
+        class ConnectError(Exception):
+            pass
+        p = run(C.place_call(FakeBland(place=ConnectError("refused")), "k", {}))
+        self.assertEqual((p.placed, p.uncertain), (False, False))
+
+
 class Reading(unittest.TestCase):
     YES = done(("assistant", "Hello, this is Sasha… Is that possible?"), ("user", "Yes, that's fine, four at eight on Thursday."),
                ("assistant", "So that's four, Thursday at eight, under Johnson?"), ("user", "Yes, see you then."))
@@ -325,6 +348,49 @@ class CallRoutes:
     def yes(self, prep):
         return self.c.post(f"/api/booking/calls/{prep['call_id']}/place",
                            json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
+
+    # ── S-57 · a placing that went unanswered ─────────────────────────────────────────────────────
+
+    def status(self, call_id):
+        return self.c.get(f"/api/booking/calls/{call_id}").json()
+
+    def test_a_timeout_is_may_have_been_placed_and_blocks_a_retry_until_blands_log_answers(self):
+        self.bland.place_answer = ReadTimeout("timed out")
+        prep = self.prepare()
+        r = self.yes(prep).json()
+        self.assertEqual(r["status"], "uncertain")
+        self.assertIn("may have been placed", r["say"])
+        v = self.status(prep["call_id"])
+        self.assertEqual(v["status"], "placing")                      # ⛔ never not_placed on a timeout
+        self.assertIn("checking its own call log", v["say"])
+        # a second call to that number is refused while it is unresolved — nothing is dialled
+        self.bland.place_answer = None
+        again = self.prepare()
+        refused = self.yes(again)
+        self.assertEqual((refused.status_code, refused.json()["rule"]), (409, "previous_call_unresolved"))
+        self.assertEqual(len([1 for m, u, h, b in self.bland.requests if m == "POST"]), 1)
+        # Bland's log has it: the sweeper records it as placed, with Bland's id, then reads it like any call
+        self.bland.log = [{"call_id": "ae18c3c8-log", "to": "+351912000000", "created_at": (self.now + timedelta(seconds=29)).isoformat().replace("+00:00", "Z")}]
+        self.now = self.now + timedelta(minutes=2)
+        self.bland.details = done(status="completed", answered_by="voicemail")
+        self.c.portal.call(call_routes.sweep_once)
+        v = self.status(prep["call_id"])
+        self.assertEqual(v["status"], "not_reached", v)
+        self.assertEqual(self.bland_id(prep["call_id"]), "ae18c3c8-log")
+        self.assertEqual(self.yes(again).json()["status"], "placed")  # resolved: the retry may go
+
+    def test_nothing_in_blands_log_after_ten_minutes_is_not_placed_and_says_so(self):
+        self.bland.place_answer = ReadTimeout("timed out")
+        prep = self.prepare()
+        self.yes(prep)
+        self.now = self.now + timedelta(minutes=5)
+        self.c.portal.call(call_routes.sweep_once)
+        self.assertEqual(self.status(prep["call_id"])["status"], "placing")   # not yet: keep looking
+        self.now = self.now + timedelta(minutes=6)
+        self.c.portal.call(call_routes.sweep_once)
+        v = self.status(prep["call_id"])
+        self.assertEqual(v["status"], "not_placed")
+        self.assertIn("Bland's call log has no call", v["why"])
 
     def test_off_means_no_read_back_and_no_call(self):
         with mock.patch.dict(os.environ, {"SASHA_CALLS_ENABLED": "0"}):
@@ -512,6 +578,9 @@ class OnMemory(CallRoutes, unittest.TestCase):
     def trip_status(self, call_id):
         return self.store.trip_items[self.store.calls[call_id]["trip_item_id"]]["status"]
 
+    def bland_id(self, call_id):
+        return self.store.calls[call_id]["bland_call_id"]
+
     def attempts(self, call_id):
         item = self.store.calls[call_id]["trip_item_id"]
         return [a for a in self.store.attempts if a["trip_item_id"] == item]
@@ -561,6 +630,9 @@ class OnPostgres(CallRoutes, unittest.TestCase):
 
     def trip_status(self, call_id):
         return self._q("select t.status from trip_items t join booking_calls c on c.trip_item_id = t.id where c.call_id = $1::uuid", call_id)[0]["status"]
+
+    def bland_id(self, call_id):
+        return self._q("select bland_call_id from booking_calls where call_id = $1::uuid", call_id)[0]["bland_call_id"]
 
     def attempts(self, call_id):
         return [dict(r) for r in self._q("select a.method, a.status from booking_attempts a join booking_calls c "

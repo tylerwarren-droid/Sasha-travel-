@@ -82,9 +82,29 @@ class MemoryCallStore:
 
     async def mark_placed(self, call_id: str, placed, now: datetime) -> None:
         r = self.calls[call_id]
+        if getattr(placed, "uncertain", False):   # S-57 · stays 'placing' until Bland's log says
+            r.update(bland_http_status=placed.http_status, bland_answer={"uncertain": placed.why, "at": now.isoformat()})
+            return
         r.update(status="placed" if placed.placed else "not_placed", bland_call_id=placed.bland_call_id,
                  bland_http_status=placed.http_status, bland_answer=placed.answer, not_placed_why=placed.why,
                  placed_at=now if placed.placed else None)
+
+    async def unresolved(self, older_than: datetime) -> list:
+        return [dict(c) for c in self.calls.values() if c["status"] == "placing" and c.get("approved_at") and c["approved_at"] < older_than]
+
+    async def unresolved_to(self, number: str) -> bool:
+        return any(c["status"] == "placing" and c["dialled_number"] == number for c in self.calls.values())
+
+    async def resolve(self, call_id: str, bland_call_id: Optional[str], placed_at: Optional[datetime], note: str) -> bool:
+        r = self.calls[call_id]
+        if r["status"] != "placing":
+            return False
+        ans = {**(r.get("bland_answer") or {}), "resolved": note}
+        if bland_call_id:
+            r.update(status="placed", bland_call_id=bland_call_id, placed_at=placed_at, bland_answer=ans)
+        else:
+            r.update(status="not_placed", not_placed_why=note, bland_answer=ans)
+        return True
 
     async def record_reading(self, call_id: str, reading, details: Any, now: datetime) -> bool:
         r = self.calls[call_id]
@@ -200,6 +220,11 @@ class PostgresCallStore:
         return await self._run(fn)
 
     async def mark_placed(self, call_id, placed, now) -> None:
+        if getattr(placed, "uncertain", False):   # S-57 · stays 'placing' until Bland's log says
+            await self._run(lambda c: c.execute(
+                "update booking_calls set bland_http_status = $2, bland_answer = $3 where call_id = $1 and status = 'placing'",
+                uuid.UUID(call_id), placed.http_status, {"uncertain": placed.why, "at": now.isoformat()}))
+            return
         await self._run(lambda c: c.execute(
             "update booking_calls set status = $2, bland_call_id = $3, bland_http_status = $4, bland_answer = $5, "
             "not_placed_why = $6, placed_at = $7 where call_id = $1 and status = 'placing'",
@@ -216,6 +241,24 @@ class PostgresCallStore:
             row["language"], row["guest_name"], row["guest_phone"], row["brief"], row["brief_sha256"], row["read_back_lines"],
             row["read_back_sha256"], row["created_at"]))
         return trip_item_id
+
+    async def unresolved(self, older_than) -> list:
+        rows = await self._run(lambda c: c.fetch(
+            "select * from booking_calls where status = 'placing' and approved_at < $1 order by approved_at limit 20", older_than))
+        return [_row(r) for r in rows]
+
+    async def unresolved_to(self, number) -> bool:
+        return bool(await self._run(lambda c: c.fetchval(
+            "select exists (select 1 from booking_calls where status = 'placing' and dialled_number = $1)", number)))
+
+    async def resolve(self, call_id, bland_call_id, placed_at, note) -> bool:
+        r = await self._run(lambda c: c.fetchval(
+            "update booking_calls set status = case when $2::text is null then 'not_placed' else 'placed' end, "
+            "bland_call_id = $2, placed_at = $3, not_placed_why = case when $2::text is null then $4 else not_placed_why end, "
+            "bland_answer = coalesce(bland_answer, '{}'::jsonb) || jsonb_build_object('resolved', $4::text) "
+            "where call_id = $1 and status = 'placing' returning call_id",
+            uuid.UUID(call_id), bland_call_id, placed_at, note))
+        return r is not None
 
     async def placed_calls(self) -> list:
         """S-41 G3 · every placed, unread call, oldest first — for the sweeper."""

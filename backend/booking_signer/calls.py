@@ -28,7 +28,7 @@ import os
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from typing import Any, Awaitable, Callable, List, Mapping, Optional
 from zoneinfo import ZoneInfo
 
@@ -450,9 +450,34 @@ class Placed:
     http_status: Optional[int]
     answer: Any                   #: Bland's own response body, kept as it came
     why: Optional[str]            #: when not placed: Bland's own message, or what went wrong reaching it
+    #: S-57 · the request was SENT but no answer came back (a read timeout, a dropped connection, a gateway 5xx): Bland
+    #: may have dialled. Never recorded as not placed — the sweeper looks the call up in Bland's own log first.
+    uncertain: bool = False
 
 
 Http = Callable[..., Awaitable[Any]]   # (method, url, headers=, json=) -> object with .status_code and .json()
+
+
+#: transport errors raised before the request was sent — only these prove nothing reached Bland
+_NEVER_SENT = {"ConnectError", "ConnectTimeout", "PoolTimeout", "UnsupportedProtocol", "InvalidURL",
+               "ConnectionError", "ConnectionRefusedError", "gaierror"}
+
+
+async def calls_in_log(http: Http, key: str, number: str, since: datetime) -> List[dict]:
+    """S-57 · Bland's OWN log: its calls to `number` created at or after `since` (a minute's slack for clocks)."""
+    r = await http("GET", f"{BLAND_CALLS_URL}?limit=100", headers={"authorization": key})
+    if r.status_code != 200:
+        raise CallRefused("bland_log_unavailable", f"Bland answered HTTP {r.status_code} for its call log")
+    body = r.json()
+    out = []
+    for c in (body.get("calls") if isinstance(body, dict) else body) or []:
+        try:
+            at = datetime.fromisoformat(str(c.get("created_at")).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if c.get("to") == number and at >= since - timedelta(minutes=1):
+            out.append({**c, "_created": at})
+    return sorted(out, key=lambda c: c["_created"])
 
 
 async def place_call(http: Http, key: str, payload: Mapping[str, Any]) -> Placed:
@@ -461,8 +486,13 @@ async def place_call(http: Http, key: str, payload: Mapping[str, Any]) -> Placed
     with Bland's own words kept. There is no path that reports a call Bland did not accept."""
     try:
         r = await http("POST", BLAND_CALLS_URL, headers={"authorization": key, "content-type": "application/json"}, json=dict(payload))
-    except Exception as e:  # the request never got an answer: nothing is known to have been queued
-        return Placed(False, None, None, None, f"Bland could not be reached: {type(e).__name__}: {e}")
+    except Exception as e:
+        if type(e).__name__ in _NEVER_SENT:   # the connection was never made: nothing reached Bland
+            return Placed(False, None, None, None, f"Bland could not be reached: {type(e).__name__}: {e}")
+        # ⚠ S-57 · sent, unanswered — 30 Sept 17:30: a ReadTimeout recorded "not placed" while Bland dialled La Contra
+        return Placed(False, None, None, None, f"Bland did not answer in time ({type(e).__name__}); it may have placed the call", uncertain=True)
+    if r.status_code in (502, 503, 504):
+        return Placed(False, None, r.status_code, None, f"Bland's gateway answered HTTP {r.status_code}; it may have placed the call", uncertain=True)
     try:
         body = r.json()
     except Exception:

@@ -8,8 +8,8 @@
      signed) posts each one; it is matched BY THE ADDRESS IT WAS SENT TO, never by guessing from content, and shown
      word for word. Mail matching no email is quarantined.
 
-Both addresses go to the venue (founder, S-32): the venue writes to Sasha's act address, and the guest is copied so
-they hold the thread themselves. The read-back says so before the yes.
+The guest is BCC'd, never CC'd (founder, S-52, superseding S-32): they receive a copy of exactly what was sent, and the
+venue sees only Sasha's address. The read-back says so before the yes.
 """
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ import os
 import re
 import time as _time
 from dataclasses import dataclass
+
+from .wordings import DISCLOSURE
 from datetime import date, time
 from typing import Any, Awaitable, Callable, Mapping, Optional
 
@@ -64,37 +66,39 @@ def act_id_of(addresses: Any) -> Optional[str]:
 
 # ── the words ───────────────────────────────────────────────────────────────────────────────────
 
+# S-52 · the disclosure is the FIRST line (wordings.DISCLOSURE); the guest is BCC'd, so the body never names their
+# address — the venue sees only Sasha's.
 _T = {
     "en": ("Table request — {n} on {d} at {t}",
-           "Hello,\n\nMy name is Sasha, an AI assistant. I'm writing on behalf of {who} to ask for a table for {n} on {d} at {t}.\n\n"
-           "Could you reply to this email to confirm, or to tell us if that isn't possible? {guest} is copied, so either of us will see your answer.\n\n"
+           "Hello, this is {disclosure}, writing on behalf of {who} to ask for a table for {n} on {d} at {t}.\n\n"
+           "Could you reply to this email to confirm, or to tell us if that isn't possible?\n\n"
            "We can't agree to a deposit or a different time by email on {guest_short}'s behalf — if either is needed, please say so and they will decide.\n\n"
-           "Thank you,\nSasha (AI assistant), for {guest}"),
+           "Thank you,\nSasha (AI concierge, Kanoe Technologies SL), for {guest_short}"),
     "es": ("Solicitud de mesa — {n} el {d} a las {t}",
-           "Hola:\n\nMe llamo Sasha y soy una asistente de IA. Le escribo de parte de {who} para pedir una mesa para {n} el {d} a las {t}.\n\n"
-           "¿Podrían responder a este correo para confirmarlo, o decirnos si no es posible? {guest} está en copia, así que cualquiera de los dos verá su respuesta.\n\n"
+           "Hola, soy {disclosure}, y le escribo de parte de {who} para pedir una mesa para {n} el {d} a las {t}.\n\n"
+           "¿Podrían responder a este correo para confirmarlo, o decirnos si no es posible?\n\n"
            "No podemos aceptar por correo una señal ni otro horario en nombre de {guest_short}; si hiciera falta, indíquenlo y lo decidirá.\n\n"
-           "Gracias,\nSasha (asistente de IA), en nombre de {guest}"),
+           "Gracias,\nSasha (concierge de IA, Kanoe Technologies SL), en nombre de {guest_short}"),
     "pt": ("Pedido de mesa — {n} a {d} às {t}",
-           "Olá,\n\nChamo-me Sasha, sou uma assistente de IA. Escrevo em nome de {who} para pedir uma mesa para {n} a {d} às {t}.\n\n"
-           "Poderiam responder a este email a confirmar, ou a dizer-nos se não for possível? {guest} está em cópia, por isso qualquer um de nós verá a resposta.\n\n"
+           "Olá, sou a {disclosure}, e escrevo em nome de {who} para pedir uma mesa para {n} a {d} às {t}.\n\n"
+           "Poderiam responder a este email a confirmar, ou a dizer-nos se não for possível?\n\n"
            "Não podemos aceitar por email um sinal nem outro horário em nome de {guest_short}; se for necessário, indiquem-no e decidirá.\n\n"
-           "Obrigada,\nSasha (assistente de IA), em nome de {guest}"),
+           "Obrigada,\nSasha (concierge de IA, Kanoe Technologies SL), em nome de {guest_short}"),
     "fr": ("Demande de table — {n} le {d} à {t}",
-           "Bonjour,\n\nJe m'appelle Sasha, une assistante IA. J'écris de la part de {who} pour demander une table pour {n} le {d} à {t}.\n\n"
-           "Pourriez-vous répondre à cet e-mail pour confirmer, ou nous dire si ce n'est pas possible ? {guest} est en copie et verra aussi votre réponse.\n\n"
+           "Bonjour, ici {disclosure}. J'écris de la part de {who} pour demander une table pour {n} le {d} à {t}.\n\n"
+           "Pourriez-vous répondre à cet e-mail pour confirmer, ou nous dire si ce n'est pas possible ?\n\n"
            "Nous ne pouvons pas accepter par e-mail un acompte ni un autre horaire au nom de {guest_short} ; si c'est nécessaire, dites-le et il ou elle décidera.\n\n"
-           "Merci,\nSasha (assistante IA), pour {guest}"),
+           "Merci,\nSasha (concierge IA, Kanoe Technologies SL), pour {guest_short}"),
     "it": ("Richiesta tavolo — {n} il {d} alle {t}",
-           "Buongiorno,\n\nMi chiamo Sasha, un'assistente IA. Scrivo per conto di {who} per chiedere un tavolo per {n} il {d} alle {t}.\n\n"
-           "Potreste rispondere a questa email per confermare, o dirci se non è possibile? {guest} è in copia e vedrà anche la vostra risposta.\n\n"
+           "Buongiorno, sono {disclosure}. Scrivo per conto di {who} per chiedere un tavolo per {n} il {d} alle {t}.\n\n"
+           "Potreste rispondere a questa email per confermare, o dirci se non è possibile?\n\n"
            "Non possiamo accettare via email una caparra né un altro orario per conto di {guest_short}; se serve, ditecelo e deciderà.\n\n"
-           "Grazie,\nSasha (assistente IA), per conto di {guest}"),
+           "Grazie,\nSasha (concierge IA, Kanoe Technologies SL), per conto di {guest_short}"),
     "de": ("Tischanfrage — {n} am {d} um {t}",
-           "Guten Tag,\n\nich heiße Sasha und bin eine KI-Assistentin. Ich schreibe im Auftrag von {who} und frage einen Tisch für {n} am {d} um {t} an.\n\n"
-           "Könnten Sie auf diese E-Mail antworten, um zu bestätigen oder uns zu sagen, falls es nicht möglich ist? {guest} ist in Kopie und sieht Ihre Antwort ebenfalls.\n\n"
+           "Guten Tag, hier ist {disclosure}. Ich schreibe im Auftrag von {who} und frage einen Tisch für {n} am {d} um {t} an.\n\n"
+           "Könnten Sie auf diese E-Mail antworten, um zu bestätigen oder uns zu sagen, falls es nicht möglich ist?\n\n"
            "Eine Anzahlung oder eine andere Uhrzeit können wir per E-Mail nicht im Namen von {guest_short} zusagen; falls nötig, sagen Sie es bitte, dann entscheidet {guest_short}.\n\n"
-           "Vielen Dank,\nSasha (KI-Assistentin), im Auftrag von {guest}"),
+           "Vielen Dank,\nSasha (KI-Concierge, Kanoe Technologies SL), im Auftrag von {guest_short}"),
 }
 _WHO = {"en": "the {s} family", "es": "la familia {s}", "pt": "a família {s}", "fr": "la famille {s}", "it": "la famiglia {s}", "de": "Familie {s}"}
 _PEOPLE = {"en": "{n}", "es": "{n} personas", "pt": "{n} pessoas", "fr": "{n} personnes", "it": "{n} persone", "de": "{n} Personen"}
@@ -113,7 +117,7 @@ def parse_email_particulars(body: Mapping[str, Any], parse_call) -> EmailParticu
     p = parse_call(body)   # the same strict date/time/party/name rules as a call
     g = body.get("email")
     if not isinstance(g, str) or not _EMAIL.fullmatch(g.strip()):
-        raise EmailRefused("guest_email_invalid", "the guest's email address is required: it is copied, so they hold the thread")
+        raise EmailRefused("guest_email_invalid", "the guest's email address is required: they are BCC'd, so they hold what was sent")
     if any(k in body for k in ("to", "venue_email", "recipient")):
         raise EmailRefused("recipient_from_request", "the venue's address is never taken from the request — it comes from what was read")
     return EmailParticulars(on=p.on, at=p.at, party=p.party, name=p.name, guest_email=g.strip().lower())
@@ -130,10 +134,12 @@ def compose(lang: str, venue_name: str, venue_email: str, p: EmailParticulars, e
     email = {
         "from": _env("SASHA_EMAIL_FROM"),
         "to": venue_email,
-        "cc": p.guest_email,
+        # S-52 (supersedes S-32): BCC, never CC — the venue never sees the guest's address
+        "bcc": p.guest_email,
         "reply_to": act_address(email_id),
         "subject": subj_t.format(n=n, d=d, t=t),
-        "text": body_t.format(who=who, n=n, d=d, t=t, guest=f"{p.name} ({p.guest_email})", guest_short=p.name),
+        # the guest's address is never in the body: it is not the venue's to see
+        "text": body_t.format(disclosure=DISCLOSURE.get(lang, DISCLOSURE["en"]), who=who, n=n, d=d, t=t, guest_short=p.name),
     }
     return email
 
@@ -145,7 +151,7 @@ def email_sha256(email: Mapping[str, Any]) -> str:
 def read_back(email: Mapping[str, Any], venue_name: str, source_label: str) -> list:
     return [
         f"I'll email {venue_name} at {email['to']} — the address on {source_label} — from {email['from']}.",
-        f"You're copied at {email['cc']}, so they'll have my address and yours, and you'll hold the thread yourself.",
+        f"You're copied privately (BCC) at {email['bcc']}: you'll get a copy of what I send, and they won't see your address — they'll only have mine.",
         f"Their reply comes to me at {email['reply_to']}; I'll show it to you word for word, and it'll be in your itinerary.",
         f"Subject: {email['subject']}",
         email["text"],
@@ -171,7 +177,7 @@ async def send(http: Http, email: Mapping[str, Any]) -> Sent:
     """⛔ `sent` is True ONLY when Resend answered HTTP 200 with an email id. Everything else is not sent, with Resend's
     own words. "Sent" means accepted for delivery — not delivered, and not booked."""
     key = _env(KEY_VAR)
-    payload = {"from": email["from"], "to": [email["to"]], "cc": [email["cc"]], "reply_to": email["reply_to"],
+    payload = {"from": email["from"], "to": [email["to"]], "bcc": [email["bcc"]], "reply_to": email["reply_to"],
                "subject": email["subject"], "text": email["text"]}
     try:
         r = await http("POST", RESEND_SEND_URL, headers={"authorization": f"Bearer {key}", "content-type": "application/json"}, json=payload)

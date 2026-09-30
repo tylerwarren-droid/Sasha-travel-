@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import { bookingUrl as apiUrl, bookingHeaders as apiHeaders } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
 import { PhoneCall } from './PhoneCall'
+import { whatsappText } from '@/lib/whatsapp-template'
 
 type Fact = { kind: string; value: string; source_label: string; source_url: string }
 type Rung = { rung: string; available: boolean; value: string | null; source: string | null; why_not: string | null }
@@ -151,7 +152,8 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
 
   const rung = (k: string) => read?.rungs.find((r) => r.rung === k)
   const wa = rung('whatsapp')
-  const waText = `Hello, I'd like to book a table for ${b.party} on ${b.date || '[date]'} at ${b.time}, under the name ${b.name}. Thank you!`
+  // S-52 · Mode A: S-48 §3's text in the venue's language, the concierge disclosure first — the guest sends it
+  const waText = whatsappText(read?.country ?? null, b.name, b.party, b.date, b.time)
 
   return (
     <section className="mt-8 rounded border p-4">
@@ -279,7 +281,13 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
 
       {read && pick === 'whatsapp' && wa?.value && (
         <div className="mt-4 rounded border p-3 text-sm">
-          <p>This opens WhatsApp on your phone with the message written. <strong>You</strong> press send, and their reply comes to you.</p>
+          <div className="mb-2 grid grid-cols-2 gap-2">
+            <label>Date <input className="w-full rounded border px-2 py-1" type="date" value={b.date} onChange={(e) => setB({ ...b, date: e.target.value })} /></label>
+            <label>Time <input className="w-full rounded border px-2 py-1" type="time" value={b.time} onChange={(e) => setB({ ...b, time: e.target.value })} /></label>
+            <label>Party <input className="w-full rounded border px-2 py-1" type="number" min={1} max={20} value={b.party} onChange={(e) => setB({ ...b, party: Number(e.target.value) })} /></label>
+            <label>Name <input className="w-full rounded border px-2 py-1" value={b.name} onChange={(e) => setB({ ...b, name: e.target.value })} /></label>
+          </div>
+          <p>This opens WhatsApp on your phone to <strong>{wa.value}</strong> (the number on {wa.source}) with the message written. <strong>You</strong> send it from your WhatsApp, and their reply comes to you.</p>
           <p className="mt-1 whitespace-pre-wrap">“{waText}”</p>
           <a className="mt-2 inline-block rounded border px-3 py-1" href={`https://wa.me/${wa.value.replace('+', '')}?text=${encodeURIComponent(waText)}`} target="_blank" rel="noreferrer">Open WhatsApp</a>
         </div>

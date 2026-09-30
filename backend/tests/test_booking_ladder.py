@@ -259,14 +259,17 @@ class Email(unittest.TestCase):
         return E.EmailParticulars(on=NOW.date() + timedelta(days=3), at=datetime(2026, 1, 1, 20, 0).time(), party=4,
                                   name="Anna Johnson", guest_email="anna@example.test")
 
-    def test_both_addresses_go_to_the_venue_and_the_read_back_says_so(self):
+    def test_the_guest_is_bccd_never_ccd_and_the_read_back_says_so(self):
+        """S-52 (supersedes S-32): the venue never sees the guest's address."""
         e = E.compose("es", "La Contra", "reservas@lacontra.test", self.p(), "11111111-2222-4333-8444-555555555555")
-        self.assertEqual((e["to"], e["cc"], e["reply_to"]),
+        self.assertNotIn("cc", e)
+        self.assertNotIn("anna@example.test", e["text"])
+        self.assertEqual((e["to"], e["bcc"], e["reply_to"]),
                          ("reservas@lacontra.test", "anna@example.test", "act-11111111-2222-4333-8444-555555555555@in.kanoe.test"))
-        self.assertIn("asistente de IA", e["text"])
+        self.assertTrue(e["text"].startswith("Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL"))
         self.assertIn("la familia Johnson", e["text"])
         lines = E.read_back(e, "La Contra", "their website, lacontra.test")
-        self.assertIn("they'll have my address and yours", lines[1])
+        self.assertIn("they won't see your address", lines[1])
         self.assertEqual(lines[4], e["text"])
 
     def test_the_hash_moves_with_any_byte(self):
@@ -286,7 +289,8 @@ class Email(unittest.TestCase):
         web = Web()
         run(E.send(web, e))
         _, _, payload = web.requests[0]
-        self.assertEqual((payload["to"], payload["cc"], payload["reply_to"]), (["r@l.test"], ["anna@example.test"], e["reply_to"]))
+        self.assertEqual((payload["to"], payload["bcc"], payload["reply_to"]), (["r@l.test"], ["anna@example.test"], e["reply_to"]))
+        self.assertNotIn("cc", payload)
 
     def test_svix_signatures(self):
         body = b'{"type":"email.received"}'
@@ -407,7 +411,7 @@ class LadderRoutes:
         self.assertEqual(prep.status_code, 200, prep.text)
         lines = prep.json()["read_back"]["lines"]
         self.assertEqual(lines[0], "I'll phone La Contra, +34915001122 — the number on their website, lacontra.test.")
-        self.assertIn("Hola, soy Sasha, una asistente de IA", lines[1])
+        self.assertIn("Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL", lines[1])
         r = self.c.post(f"/api/booking/calls/{prep.json()['call_id']}/place",
                         json={"read_back_sha256": prep.json()["read_back"]["sha256"], "approval": {"how": "button"}})
         self.assertEqual(r.json()["status"], "placed", r.text)

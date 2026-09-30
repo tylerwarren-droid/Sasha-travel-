@@ -213,9 +213,9 @@ LANGUAGES = {
         for_n=lambda n: f"for {_EN_NUM[n] if n < len(_EN_NUM) else n}",
         on_day=lambda wd: f"on {wd}", on_date=lambda wd, d, mo: f"on {wd}, {d} {mo},",
         at=_en_at,
-        opening="Hello, this is Sasha, an AI assistant, calling {party} to book a table {what} {when} {at}. Is that possible?",
+        opening="Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling {party} to book a table {what} {when} {at}. Is that possible?",
         check="I'll need to check that with {who}.",
-        cancel_opening="Hello, this is Sasha, an AI assistant, calling {party} to cancel their table {what} {when} {at}. Could you cancel it, please?",
+        cancel_opening="Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling {party} to cancel their table {what} {when} {at}. Could you cancel it, please?",
     ),
     "pt": Lang(
         code="pt-BR", label="Portuguese",
@@ -227,9 +227,9 @@ LANGUAGES = {
         on_day=lambda wd: f"na {wd}" if wd.endswith("feira") else f"no {wd}",
         on_date=lambda wd, d, mo: (f"na {wd}" if wd.endswith("feira") else f"no {wd}") + f", {d} de {mo},",
         at=lambda t: f"às {t.hour}h" + (f"{t.minute:02d}" if t.minute else ""),
-        opening="Olá, fala a Sasha, uma assistente de IA, a ligar {party} para reservar uma mesa {what} {when} {at}. É possível?",
+        opening="Olá, fala a Sasha, uma concierge de inteligência artificial operada pela Kanoe Technologies SL, a ligar {party} para reservar uma mesa {what} {when} {at}. É possível?",
         check="Vou ter de confirmar isso com {who}.",
-        cancel_opening="Olá, fala a Sasha, uma assistente de IA, a ligar {party} para cancelar a reserva de uma mesa {what} {when} {at}. Podem cancelá-la, por favor?",
+        cancel_opening="Olá, fala a Sasha, uma concierge de inteligência artificial operada pela Kanoe Technologies SL, a ligar {party} para cancelar a reserva de uma mesa {what} {when} {at}. Podem cancelá-la, por favor?",
     ),
     "es": Lang(
         code="es", label="Spanish",
@@ -240,9 +240,9 @@ LANGUAGES = {
         for_n=lambda n: "para una persona" if n == 1 else f"para {n} personas",
         on_day=lambda wd: f"el {wd}", on_date=lambda wd, d, mo: f"el {wd} {d} de {mo},",
         at=lambda t: ("a la " if t.hour in (1, 13) else "a las ") + _hm(t),
-        opening="Hola, soy Sasha, una asistente de IA, llamo {party} para reservar una mesa {what} {when} {at}. ¿Sería posible?",
+        opening="Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y llamo {party} para reservar una mesa {what} {when} {at}. ¿Sería posible?",
         check="Tendré que consultarlo con {who}.",
-        cancel_opening="Hola, soy Sasha, una asistente de IA, llamo {party} para cancelar la reserva de una mesa {what} {when} {at}. ¿Podrían cancelarla, por favor?",
+        cancel_opening="Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y llamo {party} para cancelar la reserva de una mesa {what} {when} {at}. ¿Podrían cancelarla, por favor?",
     ),
     "fr": Lang(
         code="fr", label="French",
@@ -253,9 +253,9 @@ LANGUAGES = {
         for_n=lambda n: "pour une personne" if n == 1 else f"pour {n} personnes",
         on_day=lambda wd: wd, on_date=lambda wd, d, mo: f"le {wd} {d} {mo}",
         at=lambda t: f"à {t.hour} heures" + (f" {t.minute:02d}" if t.minute else ""),
-        opening="Bonjour, ici Sasha, une assistante IA. J'appelle {party} pour réserver une table {what} {when} {at}. Est-ce possible ?",
+        opening="Bonjour, ici Sasha, une concierge d'intelligence artificielle exploitée par Kanoe Technologies SL. J'appelle {party} pour réserver une table {what} {when} {at}. Est-ce possible ?",
         check="Je dois d'abord vérifier avec {who}.",
-        cancel_opening="Bonjour, ici Sasha, une assistante IA. J'appelle {party} pour annuler la réservation d'une table {what} {when} {at}. Pourriez-vous l'annuler, s'il vous plaît ?",
+        cancel_opening="Bonjour, ici Sasha, une concierge d'intelligence artificielle exploitée par Kanoe Technologies SL. J'appelle {party} pour annuler la réservation d'une table {what} {when} {at}. Pourriez-vous l'annuler, s'il vous plaît ?",
     ),
     "de": Lang(
         code="de", label="German",
@@ -266,9 +266,9 @@ LANGUAGES = {
         for_n=lambda n: "für eine Person" if n == 1 else f"für {n} Personen",
         on_day=lambda wd: f"am {wd}", on_date=lambda wd, d, mo: f"am {wd}, den {d}. {mo},",
         at=lambda t: f"um {t.hour} Uhr" + (f" {t.minute:02d}" if t.minute else ""),
-        opening="Hallo, hier ist Sasha, eine KI-Assistentin. Ich rufe {party} an und möchte einen Tisch {what} {when} {at} reservieren. Ist das möglich?",
+        opening="Hallo, hier ist Sasha, eine KI-Concierge von Kanoe Technologies SL. Ich rufe {party} an und möchte einen Tisch {what} {when} {at} reservieren. Ist das möglich?",
         check="Das muss ich erst mit {who} abklären.",
-        cancel_opening="Hallo, hier ist Sasha, eine KI-Assistentin. Ich rufe {party} an, um die Reservierung eines Tisches {what} {when} {at} zu stornieren. Können Sie sie bitte stornieren?",
+        cancel_opening="Hallo, hier ist Sasha, eine KI-Concierge von Kanoe Technologies SL. Ich rufe {party} an, um die Reservierung eines Tisches {what} {when} {at} zu stornieren. Können Sie sie bitte stornieren?",
     ),
     "it": Lang(
         code="it", label="Italian",
@@ -279,9 +279,9 @@ LANGUAGES = {
         for_n=lambda n: "per una persona" if n == 1 else f"per {n} persone",
         on_day=lambda wd: wd, on_date=lambda wd, d, mo: f"{wd} {d} {mo}",
         at=lambda t: ("all'" if t.hour in (1, 8, 11) else "alle ") + _hm(t),
-        opening="Buongiorno, sono Sasha, un'assistente IA. Chiamo {party} per prenotare un tavolo {what} {when} {at}. Sarebbe possibile?",
+        opening="Buongiorno, sono Sasha, una concierge di intelligenza artificiale gestita da Kanoe Technologies SL. Chiamo {party} per prenotare un tavolo {what} {when} {at}. Sarebbe possibile?",
         check="Devo prima verificarlo con {who}.",
-        cancel_opening="Buongiorno, sono Sasha, un'assistente IA. Chiamo {party} per cancellare la prenotazione di un tavolo {what} {when} {at}. Potreste cancellarla, per favore?",
+        cancel_opening="Buongiorno, sono Sasha, una concierge di intelligenza artificiale gestita da Kanoe Technologies SL. Chiamo {party} per cancellare la prenotazione di un tavolo {what} {when} {at}. Potreste cancellarla, per favore?",
     ),
 }
 
@@ -325,10 +325,10 @@ def instructions(lang: Lang, p: CallParticulars, venue: CallVenue, opening: str,
     contact = (f"If — and only if — they ask for a contact number, give {' '.join(p.phone)} (the guest's own number). "
                if p.phone else "You have no contact number to give. If they ask for one, say the guest will confirm directly. ")
     return (
-        f"You are Sasha, an AI assistant, phoning a restaurant to book a table on behalf of a guest. Speak {lang.label} only. "
+        f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning a restaurant to book a table on behalf of a guest. Speak {lang.label} only. "
         f"You already said: \"{opening}\" "
         f"The booking: {p.party} people, {p.on.isoformat()} at {p.at.strftime('%H:%M')} (venue's local time), under the name {p.name}. "
-        "If they ask whether you are a person or a machine: you are an AI assistant. Never claim to be the guest or a human. "
+        "If they ask whether you are a person or a machine: you are an AI concierge. Never claim to be the guest or a human. "
         "RULES YOU MUST NEVER BREAK: "
         "Never agree to a different date, a different time or a different number of people. "
         "Never agree to a deposit, a fee, a minimum spend, a cancellation charge, or to give a card. You have no card and no payment details. "
@@ -346,10 +346,10 @@ def cancel_instructions(lang: Lang, p: CallParticulars, opening: str, check: str
     """S-47 · Bland's `task` for CANCELLING a booking Sasha made. Same rules: no fee, no card, their words brought back."""
     held = f'It is held under "{reference}". ' if reference else ""
     return (
-        f"You are Sasha, an AI assistant, phoning a restaurant to CANCEL an existing table booking on behalf of a guest. Speak {lang.label} only. "
+        f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning a restaurant to CANCEL an existing table booking on behalf of a guest. Speak {lang.label} only. "
         f"You already said: \"{opening}\" "
         f"The booking to cancel: {p.party} people, {p.on.isoformat()} at {p.at.strftime('%H:%M')} (venue's local time), under the name {p.name}. {held}"
-        "If they ask whether you are a person or a machine: you are an AI assistant. Never claim to be the guest or a human. "
+        "If they ask whether you are a person or a machine: you are an AI concierge. Never claim to be the guest or a human. "
         "RULES YOU MUST NEVER BREAK: "
         "Never agree to a cancellation fee, a charge, or to give a card. You have no card and no payment details. "
         f"If they ask for ANY payment, say exactly: \"{check}\" — then thank them and end the call. "
@@ -541,7 +541,7 @@ def transcript_for_reader(details: Mapping[str, Any], purpose: str = "book") -> 
     return "\n".join(lines)
 
 
-READER_SYSTEM = """You read the transcript of a phone call in which Sasha, an AI assistant, asked a restaurant (VENUE) for a table.
+READER_SYSTEM = """You read the transcript of a phone call in which Sasha, an AI concierge, asked a restaurant (VENUE) for a table.
 Decide what the VENUE answered to the booking AS ASKED. Answer with JSON only:
 {"reading": "yes" | "no" | "unclear", "quote": "<the VENUE's exact words the reading rests on, copied verbatim from a VENUE line>", "reference": "<ONLY the name or reference number the VENUE said the booking is held under, copied verbatim from a VENUE line; empty if they gave none>", "raised": [{"what": "deposit|fee|card|different_time|different_date|different_party|call_back|other", "quote": "<VENUE's exact words>"}]}
 Rules:

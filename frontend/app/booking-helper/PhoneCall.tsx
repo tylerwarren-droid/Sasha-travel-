@@ -112,7 +112,7 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
     <section className="mt-8 rounded border p-4">
       <h2 className="text-lg font-semibold">{cancelsCallId ? `Cancel the booking${venueLabel ? ` at ${venueLabel}` : ''}` : venueLabel ? `Phone ${venueLabel}` : 'Phone a venue'}</h2>
       <p className="rounded bg-red-50 p-2 font-medium text-red-900">⚠ This places a REAL phone call to the number shown in the read-back, once you press “Yes — call them”.</p>
-      <p className="text-sm opacity-80">Sasha calls as an AI assistant, on your behalf, and tells you exactly what they said. She never agrees to a deposit, a fee, a card or a different time.</p>
+      <p className="text-sm opacity-80">Sasha calls as an AI concierge operated by Kanoe Technologies SL, on your behalf, and tells you exactly what they said. She never agrees to a deposit, a fee, a card or a different time.</p>
       {!readId && h?.venues?.[VENUE] && <p className="text-xs opacity-70">Venue: the Sasha test line ({venue?.language ?? '—'}). At most {h.per_day} calls a day on this server.</p>}
 
       {cancelsCallId ? <p className="mt-2 text-sm">Everything — the number, the day, the time, the party and the name — comes from the booking call. Nothing to fill in.</p> : (

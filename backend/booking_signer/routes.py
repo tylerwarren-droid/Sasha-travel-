@@ -31,7 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import call_routes, ladder_routes
+from . import call_routes, ladder_routes, retention
 from .account import account_for
 from .gate import require_booking_key
 from .call_store import PostgresCallStore
@@ -416,3 +416,9 @@ async def reservations(request: Request):
 router.include_router(call_routes.router)
 # S-36 · the ladder: venue reads, the email rung, the inbound webhook
 router.include_router(ladder_routes.router)
+
+
+# S-53 · the daily retention job (retention.py) starts with the app; off in tests and without a database
+@router.on_event("startup")
+async def _start_retention() -> None:
+    retention.start()

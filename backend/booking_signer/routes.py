@@ -31,7 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import call_routes, ladder_routes, optin_page, optins, retention
+from . import call_routes, ladder_routes, optin_page, optins, retention, stop
 from .account import account_for
 from .gate import require_booking_key
 from .call_store import PostgresCallStore
@@ -86,6 +86,7 @@ call_routes.CALL_STORE = PostgresCallStore(STORE)
 ladder_routes.LADDER_STORE = PostgresLadderStore(STORE)
 optins.OPTIN_STORE = PostgresOptinStore(STORE)   # S-54 · the refusal check reads venue_optins (sql/008)
 optin_page.PAGE_STORE = optin_page.PostgresPageStore(STORE)   # S-55 · the Work-with-Sasha page (sql/009)
+stop.STOP_STORE = stop.PostgresStopStore(STORE)   # S-56 · a venue's stop, on any channel (sql/010)
 
 
 def _now() -> datetime:
@@ -395,6 +396,8 @@ STATUS_WORDS = {
     "attempting": "Sent — waiting for their reply",
     "link_sent": "Link sent — not booked yet",
     "guest_booked": "Booked by you — forward the confirmation to add the reference",
+    # S-56 · the venue said stop while this was pending: never "declined", which would put words in their mouth
+    "escalated": "Not confirmed — the venue asked Sasha to stop contacting them; you can still contact them yourself",
 }
 
 @router.get("/reservations")

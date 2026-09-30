@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse
 
 from . import calls as C
 from . import ladder_routes
+from . import stop as S
 from .account import account_for
 from .call_store import PostgresCallStore, cap_window
 from .store import AlreadyRecorded, StorageUnavailable, UnknownTrip
@@ -132,6 +133,11 @@ async def sweep_once() -> int:
             details = await C.fetch_call(HTTP, key, call["bland_call_id"])
             r = await C.read_call(details if isinstance(details, dict) else {}, READER, (call.get("brief") or {}).get("purpose", "book"),
                                   call.get("brief"))
+            if r.state != "in_progress" and isinstance(details, dict):
+                # S-56 · a venue that said stop on the call: recorded BEFORE the reading, so a failure retries both
+                await S.on_venue_words((call.get("brief") or {}).get("venue_ids"), "phone", call["dialled_number"],
+                                       "\n".join(C.venue_turns(details)),
+                                       {"call_id": str(call["call_id"]), "bland_call_id": call.get("bland_call_id")}, NOW(), spoken=True)
             if r.state != "in_progress" and await CALL_STORE.record_reading(call["call_id"], r, details, NOW()):
                 recorded += 1
         except Exception as e:  # one call's trouble never stops the others; it is retried next sweep

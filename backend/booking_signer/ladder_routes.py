@@ -28,6 +28,7 @@ from . import emailing as E
 from . import ladder as L
 from . import optins as O
 from . import slot_link as SL
+from . import stop as S
 from . import venue_read as V
 from .account import account_for
 from .call_store import cap_window
@@ -300,20 +301,59 @@ async def inbound(request: Request):
             await LADDER_STORE.quarantine({"provider_id": pid, "to_addrs": data.get("to"), "from_addr": data.get("from"),
                                            "subject": data.get("subject"), "received_at": now,
                                            "reason": "not addressed to any email Sasha sent" if act is None else "addressed to an unknown email id"})
+            # S-56 · a stop sent to the wrong address still counts, if it comes from a venue Sasha wrote to
+            sender = _address(data.get("from"))
+            known = await S.STOP_STORE.address_venue(sender) if sender and S.STOP_STORE is not None else None
+            if known:
+                text, _ = await _reply_text(pid)
+                await _stop_by_email(known, sender, text, pid, data, now)
             return {"ok": True, "matched": False}
-        text, note = None, None
-        try:
-            full = await E.fetch_received(HTTP, pid)
-            text = full.get("text") or None
-            if text is None and full.get("html"):
-                note = "the reply had no plain-text part; only HTML was sent"
-        except Exception as ex:
-            note = f"the reply's body could not be fetched: {type(ex).__name__}"
+        text, note = await _reply_text(pid)
         await LADDER_STORE.add_reply({"provider_id": pid, "email_id": act, "from_addr": data.get("from"),
                                       "subject": data.get("subject"), "body_text": text, "note": note, "received_at": now})
+        await _stop_by_email(act, _address(data.get("from")), text, pid, data, now)
     except StorageUnavailable as ex:
         return _refuse(503, ex.rule, ex.detail)   # a non-2xx makes the mail service retry — nothing is lost
     return {"ok": True, "matched": True}
+
+
+def _address(v: Any) -> Optional[str]:
+    m = E._EMAIL.search(str(v or ""))
+    return m.group(0).lower() if m else None
+
+
+async def _reply_text(pid: str):
+    try:
+        full = await E.fetch_received(HTTP, pid)
+        text = full.get("text") or None
+        return text, ("the reply had no plain-text part; only HTML was sent" if text is None and full.get("html") else None)
+    except Exception as ex:
+        return None, f"the reply's body could not be fetched: {type(ex).__name__}"
+
+
+async def _stop_by_email(email_id: str, sender: Optional[str], text: Optional[str], pid: str, data: dict, now: datetime) -> None:
+    """S-56 · a reply that says stop: recorded, every channel ended, guests told — and ONE acknowledgement, by email."""
+    if S.STOP_STORE is None or not S.detect(text):
+        return
+    v = await S.STOP_STORE.email_venue(email_id)
+    stopped = await S.on_venue_words(v["venue_ids"] if v else None, "email", sender or "unknown",
+                                     text, {"provider_id": pid, "email_id": email_id, "from": data.get("from"),
+                                            "subject": data.get("subject")}, now)
+    if not (stopped and stopped.first and sender):
+        return   # not a stop, or already stopped: then nothing more
+    if not (os.getenv("SASHA_RESEND_API_KEY", "").strip() and os.getenv("SASHA_EMAIL_FROM", "").strip()):
+        log.error("[stop] %s said stop; recorded, but no acknowledgement could be sent (the mail service is not configured)", sender)
+        return
+    country = (v or {}).get("country")
+    lang = V.COUNTRIES[country][2] if country in V.COUNTRIES else "en"
+    subject = str(data.get("subject") or "").strip()
+    sent = await E.send(HTTP, {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": sender,
+                               "subject": subject if subject.lower().startswith("re:") else f"Re: {subject or 'Sasha'}",
+                               "text": S.ack_email_text(lang)})
+    if sent.sent:
+        log.info("[stop] acknowledgement sent to %s (%s)", sender, sent.provider_id)
+    else:
+        log.error("[stop] %s said stop; recorded, but the acknowledgement was not sent: %s", sender, sent.why)
 
 
 # ── S-37 · the slot link ──────────────────────────────────────────────────────────────────────

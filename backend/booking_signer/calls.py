@@ -323,6 +323,12 @@ def check_sentence(lang: Lang, p: CallParticulars) -> str:
 
 # ── the brief: what the voice agent is told, and what the approval covers ────────────────────────
 
+def _ack(lang: Lang) -> str:
+    """S-56 · the one acknowledgement of a stop, spoken before hanging up (the transcript is then read by stop.py)."""
+    from .stop import ack_spoken
+    return ack_spoken(lang.code)
+
+
 def instructions(lang: Lang, p: CallParticulars, venue: CallVenue, opening: str, check: str) -> str:
     """Bland's `task`. ⚠ Every rule the founder set is here, and the brief is hashed into the approval."""
     contact = (f"If — and only if — they ask for a contact number, give {' '.join(p.phone)} (the guest's own number). "
@@ -341,6 +347,7 @@ def instructions(lang: Lang, p: CallParticulars, venue: CallVenue, opening: str,
         "If they say yes to the booking as asked, ask what name or reference the booking is held under, then repeat it back once "
         "to confirm (people, day, time, name or reference), thank them, and end the call. "
         "If they say no, thank them and end the call. If they say to call back later or they are unsure, thank them and end the call. "
+        f"If they ask not to be called or contacted again, say exactly: \"{_ack(lang)}\" — then end the call. "
         "Keep it short and polite. Do not leave a voicemail."
     )
 
@@ -359,6 +366,7 @@ def cancel_instructions(lang: Lang, p: CallParticulars, opening: str, check: str
         "Do not move the booking to another day or time; only cancel it. Do not give any email address or personal detail. "
         "If they confirm it is cancelled, repeat it back once (the day, the time, the name), thank them, and end the call. "
         "If they cannot find the booking, or say to call back, thank them and end the call. "
+        f"If they ask not to be called or contacted again, say exactly: \"{_ack(lang)}\" — then end the call. "
         "Keep it short and polite. Do not leave a voicemail."
     )
 

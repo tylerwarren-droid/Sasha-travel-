@@ -23,7 +23,7 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from booking_signer import call_routes, emailing as E, ladder as L, ladder_routes, optins as O, routes, slot_link as SL, venue_read as V
+from booking_signer import call_routes, emailing as E, ladder as L, ladder_routes, optins as O, routes, slot_link as SL, stop as S, venue_read as V
 from booking_signer.account import DEMO_ACCOUNT_ID
 from booking_signer.call_store import MemoryCallStore, PostgresCallStore
 from booking_signer.ladder_store import MemoryLadderStore, PostgresLadderStore
@@ -378,6 +378,8 @@ class LadderRoutes:
         ladder_routes.LADDER_STORE, ladder_routes.HTTP, ladder_routes.NOW, ladder_routes.RESOLVE = self.ladder, self.web, (lambda: self.now), PUBLIC
         self.saved_optins, self.optins = O.OPTIN_STORE, O.MemoryOptinStore()
         O.OPTIN_STORE = self.optins
+        self.saved_stop = S.STOP_STORE
+        S.STOP_STORE = S.MemoryStopStore(self.optins, self.ladder, self.calls) if isinstance(self.ladder, MemoryLadderStore) else None
         app = FastAPI()
         app.include_router(routes.router)
         self.c = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key"})
@@ -390,6 +392,7 @@ class LadderRoutes:
         (call_routes.CALL_STORE, call_routes.HTTP, call_routes.NOW, ladder_routes.LADDER_STORE,
          ladder_routes.HTTP, ladder_routes.NOW, ladder_routes.RESOLVE) = self.saved
         O.OPTIN_STORE = self.saved_optins
+        S.STOP_STORE = self.saved_stop
         self.env.stop()
 
     def read(self):
@@ -623,6 +626,64 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
 
     def trip_status_of_link(self, link_id):
         return self.ladder.trip_items[self.ladder.links[link_id]["trip_item_id"]]["status"]
+
+    # ── S-56 · a venue that replies STOP ────────────────────────────────────────────────────────────
+
+    def sent_email(self):
+        v = self.read()
+        p = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"}).json()
+        self.c.post(f"/api/booking/emails/{p['email_id']}/send", json={"read_back_sha256": p["read_back"]["sha256"], "approval": {"how": "button"}})
+        return v, p
+
+    def reply(self, p, pid, text, to=None):
+        self.web.resend_received[pid] = {"text": text}
+        body, h = signed({"type": "email.received", "data": {"email_id": pid, "from": "La Contra <Reservas@lacontra.test>",
+                                                            "to": [to or f"act-{p['email_id']}@in.kanoe.test"], "subject": "Re: Solicitud"}})
+        return self.c.post("/api/booking/email/inbound", content=body, headers=h)
+
+    def acks(self):
+        return [b for m, u, b in self.web.requests if u == E.RESEND_SEND_URL and b["to"] == ["reservas@lacontra.test"]
+                and b["subject"].startswith("Re:")]   # not Sasha's own booking email to them
+
+    def test_a_stop_reply_is_recorded_verbatim_ends_every_channel_acks_once_and_tells_the_guest(self):
+        v, p = self.sent_email()
+        r = self.reply(p, "rcv_stop", "PARA\n\nEl mar, 29 sept 2026, Sasha <sasha@kanoe.test> escribió:\n> Hola, soy Sasha…")
+        self.assertEqual(r.json(), {"ok": True, "matched": True})
+        row = self.optins.rows[-1]
+        self.assertEqual((row["status"], row["channel"], row["scope"], row["withdrawn_how"]),
+                         ("withdrawn", "email", "reservas@lacontra.test", "said stop by email"))
+        self.assertEqual(row["withdrawn_evidence"]["verbatim"], "PARA")
+        self.assertEqual(row["withdrawn_evidence"]["provider_id"], "rcv_stop")
+        # one acknowledgement, in the venue's language, as a reply
+        a = self.acks()
+        self.assertEqual(len(a), 1)
+        self.assertTrue(a[0]["text"].startswith("Hecho: Sasha no volverá a contactaros."))
+        self.assertEqual(a[0]["subject"], "Re: Solicitud")
+        # the guest's pending request says so
+        self.assertEqual(self.trip_status_of_email(p["email_id"]), "escalated")
+        # every channel ends: a call to them is refused now
+        call = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING})
+        self.assertEqual((call.status_code, call.json()["rule"]), (403, "venue_opted_out"))
+        # a second stop is recorded but gets no second reply: then nothing more
+        self.reply(p, "rcv_stop2", "Unsubscribe")
+        self.assertEqual(len(self.acks()), 1)
+
+    def test_an_ordinary_reply_is_not_a_stop(self):
+        v, p = self.sent_email()
+        self.reply(p, "rcv_ok", "Sí, perfecto: mesa para 4 el jueves a las 20:00. Para cualquier cambio, llamadnos.")
+        self.assertEqual((self.optins.rows, self.acks()), ([], []))
+        self.assertEqual(self.trip_status_of_email(p["email_id"]), "attempting")
+
+    def test_a_stop_quoted_from_below_the_reply_is_not_theirs(self):
+        v, p = self.sent_email()
+        self.reply(p, "rcv_q", "Gracias, os confirmamos mañana.\n\nOn Tue, 29 Sep 2026 Sasha wrote:\n> Reply STOP to stop.")
+        self.assertEqual(self.optins.rows, [])
+
+    def test_a_stop_sent_to_the_wrong_address_still_counts_from_a_venue_sasha_wrote_to(self):
+        v, p = self.sent_email()
+        r = self.reply(p, "rcv_x", "No nos escribáis más, gracias.", to="hello@in.kanoe.test")
+        self.assertEqual(r.json(), {"ok": True, "matched": False})
+        self.assertEqual(self.optins.rows[-1]["withdrawn_evidence"]["verbatim"], "No nos escribáis más, gracias.")
 
     def test_quarantine_is_kept(self):
         body, h = signed({"type": "email.received", "data": {"email_id": "rcv_q", "to": ["hello@in.kanoe.test"], "from": "x@y.test"}})

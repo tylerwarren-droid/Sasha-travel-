@@ -10,7 +10,7 @@
  * The number is never typed here: the server holds it (backend/booking_signer/calls.py).
  */
 import { useEffect, useState } from 'react'
-import { apiUrl, apiHeaders } from '@/lib/api'
+import { bookingUrl as apiUrl, bookingHeaders as apiHeaders } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
 
 type CallsHealth = { enabled?: boolean; bland_configured?: boolean; per_day?: number; venues?: Record<string, { number_set?: boolean; language?: string; why?: string }> }
@@ -45,7 +45,7 @@ const refusal = (j: Record<string, unknown>, status: number) =>
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** `readId` (S-36): call the venue Magellan read, on the number it read. Without it: the test line. */
-export function PhoneCall({ defaults, readId, venueLabel }: { defaults: { name: string; phone: string }; readId?: string; venueLabel?: string }) {
+export function PhoneCall({ defaults, readId, venueLabel, factIndex }: { defaults: { name: string; phone: string }; readId?: string; venueLabel?: string; factIndex?: number }) {
   const [health, setHealth] = useState<CallsHealth | 'unreachable' | null>(null)
   const [form, setForm] = useState({ date: '', time: '20:00', party: 2, name: defaults.name, phone: '' })
   const [phase, setPhase] = useState<Phase>('idle')
@@ -70,7 +70,7 @@ export function PhoneCall({ defaults, readId, venueLabel }: { defaults: { name: 
 
   async function prepare() {
     setPhase('preparing'); setNote(null); setView(null)
-    const r = await req('/api/booking/calls', { ...(readId ? { read_id: readId } : { venue: VENUE }), date: form.date, time: form.time, party: form.party, name: form.name, phone: form.phone || undefined })
+    const r = await req('/api/booking/calls', { ...(readId ? { read_id: readId, ...(factIndex !== undefined ? { fact_index: factIndex } : {}) } : { venue: VENUE }), date: form.date, time: form.time, party: form.party, name: form.name, phone: form.phone || undefined })
     if (!r.ok) { setPhase('stopped'); setNote(`Not prepared: ${refusal(r.json, r.status)}. Nothing was dialled.`); return }
     const rb = r.json.read_back as { lines: string[]; sha256: string }
     setLines(rb.lines); setPrepared({ call_id: r.json.call_id as string, sha256: rb.sha256 }); setPhase('read_back')
@@ -103,6 +103,7 @@ export function PhoneCall({ defaults, readId, venueLabel }: { defaults: { name: 
   return (
     <section className="mt-8 rounded border p-4">
       <h2 className="text-lg font-semibold">{venueLabel ? `Phone ${venueLabel}` : 'Phone a venue'}</h2>
+      <p className="rounded bg-red-50 p-2 font-medium text-red-900">⚠ This places a REAL phone call to the number shown in the read-back, once you press “Yes — call them”.</p>
       <p className="text-sm opacity-80">Sasha calls as an AI assistant, on your behalf, and tells you exactly what they said. She never agrees to a deposit, a fee, a card or a different time.</p>
       {!readId && h?.venues?.[VENUE] && <p className="text-xs opacity-70">Venue: the Sasha test line ({venue?.language ?? '—'}). At most {h.per_day} calls a day on this server.</p>}
 

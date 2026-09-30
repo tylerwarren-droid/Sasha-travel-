@@ -87,14 +87,20 @@ class MemoryCallStore:
             self.attempts.append({"trip_item_id": r["trip_item_id"], "method": "phone", "status": TRIP_STATUS[reading.outcome],
                                   "response_received": reading.venue_words, "observed_by": OBSERVED_BY_CALL})
             self.trip_items[r["trip_item_id"]]["status"] = TRIP_STATUS[reading.outcome]
+            if reading.outcome == "yes" and getattr(reading, "reference", None):
+                self.trip_items[r["trip_item_id"]]["booking_reference"] = reading.reference
         return True
+
+    async def placed_calls(self) -> list:
+        """S-41 G3 · every call Bland accepted and nobody has read yet — across accounts, for the sweeper."""
+        return [dict(c) for c in self.calls.values() if c["status"] == "placed"]
 
 
 _TRIP = ("venue_name", "local_date", "local_time", "local_timezone", "party_size")
 
 
 def reading_json(r) -> dict:
-    return {"state": r.state, "outcome": r.outcome, "quote": r.quote, "raised": r.raised, "why": r.why,
+    return {"state": r.state, "outcome": r.outcome, "quote": r.quote, "reference": getattr(r, "reference", None), "raised": r.raised, "why": r.why,
             "read_by": r.read_by, "bland_status": r.bland_status, "answered_by": r.answered_by}
 
 
@@ -182,6 +188,11 @@ class PostgresCallStore:
             uuid.UUID(call_id), "placed" if placed.placed else "not_placed", placed.bland_call_id, placed.http_status,
             placed.answer, placed.why, now if placed.placed else None))
 
+    async def placed_calls(self) -> list:
+        """S-41 G3 · every placed, unread call, oldest first — for the sweeper."""
+        rows = await self._run(lambda c: c.fetch("select * from booking_calls where status = 'placed' order by placed_at limit 50"))
+        return [_row(r) for r in rows]
+
     async def record_reading(self, call_id, reading, details, now) -> bool:
         async def fn(conn):
             async with conn.transaction():
@@ -197,11 +208,14 @@ class PostgresCallStore:
                         "insert into booking_attempts (trip_item_id, method, attempted_at, status, response_received, "
                         "response_at, observed_by) values ($1, 'phone', $2, $3, $4, $2, $5)",
                         row["trip_item_id"], now, status, reading.venue_words, OBSERVED_BY_CALL)
-                    await conn.execute("update trip_items set status = $2, updated_at = now() where id = $1",
-                                       row["trip_item_id"], status)
+                    # the venue's own name/reference, verbatim — never ours in its place (G4)
+                    await conn.execute("update trip_items set status = $2, booking_reference = coalesce($3, booking_reference), "
+                                       "updated_at = now() where id = $1", row["trip_item_id"], status,
+                                       getattr(reading, "reference", None) if reading.outcome == "yes" else None)
                 return True
         return await self._run(fn)
 
 
 def cap_window(now: datetime) -> datetime:
     return now - timedelta(hours=24)
+

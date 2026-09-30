@@ -17,6 +17,9 @@ import os
 import pathlib
 import re
 import unittest
+
+os.environ.setdefault("SASHA_BOOKING_KEY", "test-booking-key")   # S-41: the gate (gate.py)
+os.environ.setdefault("SASHA_CALL_SWEEP", "0")
 from urllib.parse import urlsplit, urlunsplit
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
@@ -66,7 +69,7 @@ class BookingRoutes:
         routes.PINNED_FINGERPRINT = routes.KEY.fingerprint  # the test key stands in for the pinned one
         app = FastAPI()
         app.include_router(routes.router)
-        self.client = TestClient(app)
+        self.client = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key"})
         self.client.__enter__()
 
     def tearDown(self):
@@ -294,6 +297,8 @@ class OnPostgres(BookingRoutes, unittest.TestCase):
                 await c.execute(FIXTURE)  # auth.users and model A, as read live
                 await c.execute(SQL)      # the block, exactly as it is applied to Sasha's Supabase
                 await c.execute(SQL_002)  # S-26: the 'prepared' status, as applied after it
+                for f in ("003_phone_calls.sql", "004_ladder.sql", "005_slot_links.sql"):   # S-41 G5: reservations read them
+                    await c.execute((BACKEND / "booking_signer" / "sql" / f).read_text(encoding="utf-8"))
             finally:
                 await c.close()
         asyncio.run(fresh())
@@ -364,7 +369,7 @@ class WithoutStorageOrAMount(unittest.TestCase):
         try:
             app = FastAPI()
             app.include_router(routes.router)
-            with TestClient(app) as c:
+            with TestClient(app, headers={"x-sasha-booking-key": "test-booking-key"}) as c:
                 r = c.post("/api/booking/pairing/challenge", json={})
                 self.assertEqual([r.status_code, r.json()["rule"]], [503, "storage_not_configured"])
                 self.assertEqual(c.get("/api/booking/health").json()["storage"]["configured"], False)

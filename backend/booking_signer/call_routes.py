@@ -16,6 +16,7 @@ page asks (GET), so there is no background task to be lost on a redeploy.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import uuid
@@ -90,6 +91,50 @@ def _off() -> Optional[JSONResponse]:
     if not C.bland_key():
         return _refuse(503, "calls_not_configured", "BLAND_API_KEY is not set, so no call can be placed")
     return None
+
+
+# ── S-41 G3 · the result is read on the SERVER — closing the tab never leaves a call unread ─────────────────
+#
+# Every minute the sweeper reads each `placed` call from Bland and, once Bland says it has finished, records the reading
+# (record_reading refuses a second time, so the page's own GET and the sweeper can never both record it). The state
+# lives in the database, so a redeploy loses nothing: the next process's sweeper picks up where this one stopped.
+SWEEP_EVERY_S = 60
+_sweeper: Optional[asyncio.Task] = None
+
+
+async def sweep_once() -> int:
+    """Read every placed call once. Returns how many were recorded."""
+    key = C.bland_key()
+    if not key or CALL_STORE is None:
+        return 0
+    recorded = 0
+    for call in await CALL_STORE.placed_calls():
+        try:
+            details = await C.fetch_call(HTTP, key, call["bland_call_id"])
+            r = await C.read_call(details if isinstance(details, dict) else {}, READER)
+            if r.state != "in_progress" and await CALL_STORE.record_reading(call["call_id"], r, details, NOW()):
+                recorded += 1
+        except Exception as e:  # one call's trouble never stops the others; it is retried next sweep
+            log.warning("[booking_calls] sweep could not read call %s: %s: %s", call.get("call_id"), type(e).__name__, e)
+    return recorded
+
+
+async def _sweep_forever() -> None:
+    while True:
+        try:
+            n = await sweep_once()
+            if n:
+                log.info("[booking_calls] sweep recorded %d finished call(s)", n)
+        except Exception as e:
+            log.error("[booking_calls] sweep failed: %s: %s", type(e).__name__, e)
+        await asyncio.sleep(SWEEP_EVERY_S)
+
+
+@router.on_event("startup")
+async def _start_sweeper() -> None:
+    global _sweeper
+    if os.getenv("SASHA_CALL_SWEEP", "1") == "1" and _sweeper is None:
+        _sweeper = asyncio.create_task(_sweep_forever())
 
 
 @router.post("")

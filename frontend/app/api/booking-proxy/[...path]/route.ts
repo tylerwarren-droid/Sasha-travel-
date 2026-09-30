@@ -1,0 +1,44 @@
+import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { API_URL } from '@/lib/api'
+import { COOKIE, valid } from '@/lib/founder-session'
+
+/**
+ * S-41 · The booking pass-through. The booking page calls THIS (same origin); it checks the founder's session and
+ * only then calls the backend's /api/booking/… with SASHA_BOOKING_KEY, which the browser never sees.
+ *
+ * ⛔ No session → 401, and nothing reaches the backend. No key configured here → 503. A path outside the booking
+ * routes is never forwarded.
+ */
+async function pass(request: Request, ctx: { params: Promise<{ path: string[] }> }): Promise<Response> {
+  const store = await cookies()
+  if (!valid(store.get(COOKIE)?.value)) {
+    return NextResponse.json({ ok: false, rule: 'founder_session_required', message: 'Sign in as the founder to use the booking page.' }, { status: 401 })
+  }
+  const key = (process.env.SASHA_BOOKING_KEY ?? '').trim()
+  if (!key) {
+    return NextResponse.json({ ok: false, rule: 'booking_key_not_configured', message: 'SASHA_BOOKING_KEY is not set on this deployment' }, { status: 503 })
+  }
+  const { path } = await ctx.params
+  if (!path.length || path.some((p) => p === '..' || p.includes('/') || p === '')) {
+    return NextResponse.json({ ok: false, rule: 'path_refused', message: 'not a booking route' }, { status: 400 })
+  }
+  const url = `${API_URL}/api/booking/${path.map(encodeURIComponent).join('/')}${new URL(request.url).search}`
+  const init: RequestInit = { method: request.method, headers: { 'content-type': 'application/json', 'x-sasha-booking-key': key }, cache: 'no-store' }
+  if (request.method !== 'GET') init.body = await request.text()
+  let r: Response
+  try {
+    r = await fetch(url, init)
+  } catch (e) {
+    return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: `Sasha's server could not be reached (${(e as Error).message})` }, { status: 502 })
+  }
+  // FastAPI puts a dependency's refusal under `detail`: lift it, so the page reads { rule, message } the same way
+  let json: unknown = null
+  try { json = await r.json() } catch { /* a non-JSON answer is reported by its status */ }
+  const flat = json && typeof json === 'object' && 'detail' in (json as object) && typeof (json as { detail: unknown }).detail === 'object'
+    ? (json as { detail: object }).detail : json
+  return NextResponse.json(flat ?? { ok: false, rule: `HTTP ${r.status}` }, { status: r.status })
+}
+
+export const GET = pass
+export const POST = pass

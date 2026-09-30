@@ -328,7 +328,8 @@ def instructions(lang: Lang, p: CallParticulars, venue: CallVenue, opening: str,
         f"If they offer or ask for ANY of those, say exactly: \"{check}\" — then ask them to repeat the offer so it is noted, thank them, and end the call. "
         f"{contact}"
         "Do not give any email address or any other personal detail. "
-        "If they say yes to the booking as asked, repeat it back once to confirm (people, day, time, name), thank them, and end the call. "
+        "If they say yes to the booking as asked, ask what name or reference the booking is held under, then repeat it back once "
+        "to confirm (people, day, time, name or reference), thank them, and end the call. "
         "If they say no, thank them and end the call. If they say to call back later or they are unsure, thank them and end the call. "
         "Keep it short and polite. Do not leave a voicemail."
     )
@@ -464,6 +465,7 @@ class CallReading:
     venue_words: str = ""               #: everything the venue said, verbatim, in order
     quote: Optional[str] = None         #: the venue's own words the outcome rests on (yes/no only)
     raised: List[dict] = field(default_factory=list)   #: deposit / fee / card / different time …, with their words
+    reference: Optional[str] = None     #: S-41 G4 · the name or reference the venue said it is held under — verbatim, or None
     why: str = ""                       #: plain words on how the outcome was reached
     read_by: Optional[str] = None       #: set whenever a model read the transcript
     bland_status: Optional[str] = None
@@ -498,7 +500,7 @@ def transcript_for_reader(details: Mapping[str, Any]) -> str:
 
 READER_SYSTEM = """You read the transcript of a phone call in which Sasha, an AI assistant, asked a restaurant (VENUE) for a table.
 Decide what the VENUE answered to the booking AS ASKED. Answer with JSON only:
-{"reading": "yes" | "no" | "unclear", "quote": "<the VENUE's exact words the reading rests on, copied verbatim from a VENUE line>", "raised": [{"what": "deposit|fee|card|different_time|different_date|different_party|call_back|other", "quote": "<VENUE's exact words>"}]}
+{"reading": "yes" | "no" | "unclear", "quote": "<the VENUE's exact words the reading rests on, copied verbatim from a VENUE line>", "reference": "<ONLY the name or reference number the VENUE said the booking is held under, copied verbatim from a VENUE line; empty if they gave none>", "raised": [{"what": "deposit|fee|card|different_time|different_date|different_party|call_back|other", "quote": "<VENUE's exact words>"}]}
 Rules:
 - "yes" ONLY if the VENUE clearly accepted the booking exactly as asked (same day, time, number of people), with nothing attached.
 - "no" ONLY if the VENUE clearly refused and offered nothing instead.
@@ -579,8 +581,10 @@ async def read_call(details: Mapping[str, Any], reader: Reader) -> CallReading:
         return CallReading(state="answered", outcome="unclear", venue_words=words, quote=quote, raised=raised, read_by=READ_BY,
                            why="they agreed, but with something attached she may not accept for you: "
                                + "; ".join(f"{r['what']}: \"{r['quote']}\"" for r in raised), **base)
+    ref = parsed.get("reference")
+    ref = ref.strip() if isinstance(ref, str) and ref.strip() and _quoted_by_venue(ref, turns) else None   # never invented
     return CallReading(state="answered", outcome=reading, venue_words=words, quote=quote if reading != "unclear" else None,
-                       raised=raised, read_by=READ_BY,
+                       raised=raised, read_by=READ_BY, reference=ref if reading == "yes" else None,
                        why={"yes": "they accepted the booking as asked", "no": "they declined",
                             "unclear": "their answer was neither a clear yes nor a clear no"}[reading], **base)
 
@@ -592,7 +596,8 @@ def say_for(venue_name: str, r: CallReading) -> str:
     if r.state == "not_reached":
         return f"I couldn't reach {venue_name}: {r.why}"
     if r.outcome == "yes":
-        return f"{venue_name} said yes. Their words: \"{r.quote}\""
+        held = f' It is held under "{r.reference}".' if r.reference else " They gave no name or reference."
+        return f"{venue_name} said yes. Their words: \"{r.quote}\".{held}"
     if r.outcome == "no":
         return f"{venue_name} said no. Their words: \"{r.quote}\""
     return f"I couldn't tell whether {venue_name} said yes — {r.why}. What they said: \"{r.venue_words}\""

@@ -12,7 +12,7 @@
  * (scripts/check-outcome-surfaces.mjs holds this file to it).
  */
 import { useState } from 'react'
-import { apiUrl, apiHeaders } from '@/lib/api'
+import { bookingUrl as apiUrl, bookingHeaders as apiHeaders } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
 import { PhoneCall } from './PhoneCall'
 
@@ -45,6 +45,8 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   const [reading, setReading] = useState<'idle' | 'reading' | 'done' | 'stopped'>('idle')
   const [read, setRead] = useState<Read | null>(null)
   const [pick, setPick] = useState<string | null>(null)
+  // S-41 G2 · which read phone number to call — the guest chooses, each shown with where it was read
+  const [phoneFact, setPhoneFact] = useState<number | null>(null)
   const [note, setNote] = useState<string | null>(null)
 
   // email rung
@@ -154,7 +156,19 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
         </div>
       )}
 
-      {read && pick === 'phone' && <PhoneCall defaults={{ name: defaults.name, phone: '' }} readId={read.read_id} venueLabel={read.venue} />}
+      {read && pick === 'phone' && (
+        <div className="mt-4 rounded border p-3 text-sm">
+          <p className="font-medium">Which number should Sasha call?</p>
+          {read.facts.map((f, i) => f.kind === 'phone' && (
+            <label key={i} className="block">
+              <input type="radio" name="phone-fact" checked={phoneFact === i} onChange={() => setPhoneFact(i)} /> {f.value} <span className="opacity-60">— on {f.source_label}</span>
+            </label>
+          ))}
+          {phoneFact === null
+            ? <p className="text-xs opacity-70">Waiting for: a number to be chosen.</p>
+            : <PhoneCall key={phoneFact} defaults={{ name: defaults.name, phone: '' }} readId={read.read_id} venueLabel={read.venue} factIndex={phoneFact} />}
+        </div>
+      )}
 
       {read && pick === 'email' && (
         <div className="mt-4 rounded border p-3 text-sm">

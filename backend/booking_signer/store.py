@@ -162,7 +162,7 @@ class MemoryStore:
             atts = [a for a in self.attempts if a["trip_item_id"] == item["id"]]
             att = atts[-1] if atts else {}   # a PREPARED item has no attempt: nothing was sent
             intent = [i for i in self.intents.values() if i["trip_item_id"] == item["id"]][-1]
-            out.append({"id": item["id"], "trip_id": item["trip_id"], "intent_id": intent["intent_id"],
+            out.append({"id": item["id"], "trip_id": item["trip_id"], "intent_id": intent["intent_id"], "channel": "form",
                         "venue": item["provider_name"], "local_date": item["local_date"], "local_time": item["local_time"],
                         "local_timezone": item["local_timezone"], "party_size": item["party_size"], "status": item["status"],
                         "booking_reference": item["booking_reference"], "venue_words": att.get("venue_words"),
@@ -372,16 +372,24 @@ class PostgresStore:
 
     async def reservations(self, account_id):
         rows = await self._run(lambda c: c.fetch(
-            "select t.id, t.trip_id, i.intent_id, t.provider_name as venue, "
+            # S-41 G5 · EVERY channel's reservation, not only the form's: a phone call, an email, a slot link. Which one it
+            # was is said (`channel`), and the venue's own words come from the attempt, or from the call when it was one.
+            "select t.id, t.trip_id, coalesce(i.intent_id, c.call_id, e.email_id, l.link_id) as intent_id, "
+            "case when i.intent_id is not null then 'form' when c.call_id is not null then 'phone' "
+            "     when e.email_id is not null then 'email' when l.link_id is not null then 'link' end as channel, "
+            "t.provider_name as venue, "
             "(t.date_time at time zone t.local_timezone)::date as local_date, "
             "(t.date_time at time zone t.local_timezone)::time as local_time, t.local_timezone, t.party_size, t.status, "
-            "t.booking_reference, a.response_received as venue_words, a.observed_by, k.task_digest "
+            "t.booking_reference, coalesce(a.response_received, c.venue_words) as venue_words, a.observed_by, k.task_digest "
             "from trip_items t join trips p on p.id = t.trip_id "
-            "join lateral (select * from booking_intents y where y.trip_item_id = t.id order by y.created_at desc limit 1) i on true "
+            "left join lateral (select * from booking_intents y where y.trip_item_id = t.id order by y.created_at desc limit 1) i on true "
             "left join booking_tasks k on k.intent_id = i.intent_id "
+            "left join lateral (select call_id, venue_words from booking_calls z where z.trip_item_id = t.id order by z.created_at desc limit 1) c on true "
+            "left join lateral (select email_id from booking_emails z where z.trip_item_id = t.id limit 1) e on true "
+            "left join lateral (select link_id from booking_links z where z.trip_item_id = t.id limit 1) l on true "
             # a PREPARED item has no attempt — nothing was sent — so the attempt is optional
             "left join lateral (select * from booking_attempts x where x.trip_item_id = t.id order by x.attempted_at desc limit 1) a on true "
-            "where p.owner_id = $1 and t.status <> 'pending' order by 5, 6", uuid.UUID(account_id)))
+            "where p.owner_id = $1 and t.status <> 'pending' order by local_date, local_time", uuid.UUID(account_id)))
         return [_row(r) for r in rows]
 
 

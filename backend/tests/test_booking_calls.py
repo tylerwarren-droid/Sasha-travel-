@@ -28,7 +28,7 @@ SQL_DIR = HERE.parent / "booking_signer" / "sql"
 PG_URL = os.getenv("BOOKING_TEST_DATABASE_URL", "")
 
 MONDAY = datetime(2026, 10, 5, 11, 0, tzinfo=timezone.utc)
-ENV = {"SASHA_CALLS_ENABLED": "1", "BLAND_API_KEY": "test-key-not-real", "SASHA_TEST_CALL_NUMBER": "+351 912 000 000",
+ENV = {"SASHA_BOOKING_KEY": "test-booking-key", "SASHA_CALL_SWEEP": "0", "SASHA_CALLS_ENABLED": "1", "BLAND_API_KEY": "test-key-not-real", "SASHA_TEST_CALL_NUMBER": "+351 912 000 000",
        "SASHA_TEST_CALL_LANGUAGE": "en", "SASHA_TEST_CALL_TIMEZONE": "Europe/Lisbon", "SASHA_CALLS_PER_DAY": "3"}
 JOHNSON = {"venue": "test-line", "date": "2026-10-08", "time": "20:00", "party": 4, "name": "Anna Johnson"}
 
@@ -290,7 +290,7 @@ class CallRoutes:
         call_routes.NOW = lambda: self.now
         app = FastAPI()
         app.include_router(routes.router)
-        self.c = TestClient(app)
+        self.c = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key"})
         self.c.__enter__()   # one event loop for the whole test, so a Postgres pool stays on it
 
     def tearDown(self):
@@ -412,6 +412,44 @@ class CallRoutes:
         self.assertNotIn("912000000", json.dumps(h))
 
 
+class Sweeper(unittest.TestCase):
+    """S-41 G3 · a placed call is read by the server even if nobody ever polls it."""
+
+    def test_the_sweeper_records_a_finished_call_and_never_twice(self):
+        env = mock.patch.dict(os.environ, ENV)
+        env.start()
+        self.addCleanup(env.stop)
+        store = MemoryCallStore()
+        saved = (call_routes.CALL_STORE, call_routes.HTTP, call_routes.READER, call_routes.NOW)
+        self.addCleanup(lambda: setattr(call_routes, "CALL_STORE", saved[0]) or setattr(call_routes, "HTTP", saved[1])
+                        or setattr(call_routes, "READER", saved[2]) or setattr(call_routes, "NOW", saved[3]))
+        bland = FakeBland(details={"completed": False, "queue_status": "started"})
+
+        async def reader(t):
+            return json.dumps({"reading": "yes", "quote": "Yes, that's fine.", "reference": "Johnson", "raised": []})
+        call_routes.CALL_STORE, call_routes.HTTP, call_routes.READER, call_routes.NOW = store, bland, reader, (lambda: MONDAY)
+        b = C.build_call(C.test_line(), C.parse_call_particulars(JOHNSON), MONDAY)
+        row = {"call_id": "11111111-1111-4111-8111-000000000001", "account_id": "a", "venue_key": "test-line",
+               "dialled_number": b["brief"]["number"], "language": "en", "guest_name": "Anna Johnson", "guest_phone": None,
+               "brief": b["brief"], "brief_sha256": b["brief_sha256"], "read_back_lines": b["read_back_lines"],
+               "read_back_sha256": b["read_back_sha256"], "created_at": MONDAY, "venue_name": "t", "local_date": MONDAY.date(),
+               "local_time": MONDAY.time(), "local_timezone": "Europe/Lisbon", "party_size": 4}
+        run(store.put_call(row, None))
+        run(store.claim("a", row["call_id"], {}, MONDAY, MONDAY - timedelta(minutes=1), 3, MONDAY - timedelta(days=1)))
+        run(store.mark_placed(row["call_id"], C.Placed(True, "bland-1", 200, {}, None), MONDAY))
+        self.assertEqual(run(call_routes.sweep_once()), 0)          # still on the phone: nothing recorded
+        bland.details = done(("user", "Yes, that's fine. It's under Johnson."))
+        self.assertEqual(run(call_routes.sweep_once()), 1)
+        self.assertEqual(run(call_routes.sweep_once()), 0)          # never recorded twice
+        item = store.trip_items[store.calls[row["call_id"]]["trip_item_id"]]
+        self.assertEqual((item["status"], item.get("booking_reference")), ("confirmed", "Johnson"))   # G4 · the venue's own words
+
+    def test_a_reference_the_venue_never_said_is_never_stored(self):
+        d = done(("user", "Yes, that's fine."))
+        r = run(C.read_call(d, reader_says({"reading": "yes", "quote": "Yes, that's fine.", "reference": "ABC123", "raised": []})))
+        self.assertIsNone(r.reference)
+
+
 class OnMemory(CallRoutes, unittest.TestCase):
     def make_store(self):
         return MemoryCallStore()
@@ -438,7 +476,7 @@ class OnPostgres(CallRoutes, unittest.TestCase):
             try:
                 await c.execute("drop schema if exists auth cascade; drop schema public cascade; create schema public;")
                 await c.execute((HERE / "fixtures" / "model_a_live_2026-09-28.sql").read_text(encoding="utf-8"))
-                for f in ("001_booking_storage.sql", "002_prepared_status.sql", "003_phone_calls.sql"):
+                for f in ("001_booking_storage.sql", "002_prepared_status.sql", "003_phone_calls.sql", "004_ladder.sql", "005_slot_links.sql"):
                     await c.execute((SQL_DIR / f).read_text(encoding="utf-8"))
             finally:
                 await c.close()
@@ -472,6 +510,27 @@ class OnPostgres(CallRoutes, unittest.TestCase):
     def attempts(self, call_id):
         return [dict(r) for r in self._q("select a.method, a.status from booking_attempts a join booking_calls c "
                                          "on c.trip_item_id = a.trip_item_id where c.call_id = $1::uuid", call_id)]
+
+    def test_a_confirmed_call_is_in_the_reservations_with_the_venues_words(self):
+        """S-41 G5 · date, time, party, venue, reference and the venue's own words, on the reservations list."""
+        saved = routes.STORE
+        routes.STORE = self.base
+        self.addCleanup(lambda: setattr(routes, "STORE", saved))
+
+        async def reader(t):
+            return json.dumps({"reading": "yes", "quote": "Yes, that's fine.", "reference": "Johnson", "raised": []})
+        call_routes.READER = reader
+        prep = self.prepare()
+        self.yes(prep)
+        self.bland.details = done(("user", "Yes, that's fine. Under Johnson."))
+        self.c.get(f"/api/booking/calls/{prep['call_id']}")
+        res = self.c.get("/api/booking/reservations")
+        self.assertEqual(res.status_code, 200, res.text)
+        rows = res.json()["reservations"]
+        r = [x for x in rows if x["intent_id"] == prep["call_id"]][0]
+        self.assertEqual((r["channel"], r["status"], r["date"], r["time"], r["party"], r["booking_reference"]),
+                         ("phone", "confirmed", "2026-10-08", "20:00", 4, "Johnson"))
+        self.assertEqual(r["venue_words"], "Yes, that's fine. Under Johnson.")
 
     def test_the_block_refuses_to_run_twice(self):
         import asyncpg

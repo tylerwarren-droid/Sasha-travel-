@@ -16,10 +16,11 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiUrl, apiHeaders } from '@/lib/api'
+import { bookingUrl as apiUrl, bookingHeaders as apiHeaders } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
 import { PhoneCall } from './PhoneCall'
 import { Ladder } from './Ladder'
+import { FounderGate } from './FounderGate'
 
 const MODE = 'dry_run' as const
 const VENUE = 'restaurante-psi'
@@ -314,14 +315,17 @@ export default function BookingHelperPage() {
   }
 
   return (
-    // ⚠ The site's global style is DARK (globals.css: #0a0a0f, near-white text) and inputs inherit that text
-    // colour onto the browser's white field — typed values were invisible. This page carries its own light
-    // surface so every field, option and log line is legible whatever the site's theme.
+    // S-41 · founder only: signed out, the page is a passphrase field and nothing else
+    <FounderGate>
+    {/* ⚠ The site's global style is DARK (globals.css: #0a0a0f, near-white text) and inputs inherit that text
+        colour onto the browser's white field — typed values were invisible. This page carries its own light
+        surface so every field, option and log line is legible whatever the site's theme. */}
     <main className="mx-auto my-6 max-w-2xl space-y-6 rounded-lg bg-white p-6 text-sm text-neutral-900 [color-scheme:light]">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold">Book a table — dry run</h1>
+        <h1 className="text-xl font-semibold">Book a table</h1>
+        {/* S-41 G1 · the dry-run promise belongs to the form helper ONLY — the phone and email sections below are real */}
         <p className="rounded bg-amber-50 p-2 text-amber-900">
-          Dry run: the helper opens the restaurant’s page on this computer, fills it in, and stops before sending. Nothing is sent to the restaurant.
+          Form helper (steps 1–3): a dry run — the helper opens the restaurant’s page on this computer, fills it in, and stops before sending. Nothing is sent to the restaurant from these steps.
         </p>
       </header>
 
@@ -416,5 +420,6 @@ export default function BookingHelperPage() {
       <Ladder defaults={DEMO_PROFILE} />
       <PhoneCall defaults={DEMO_PROFILE} />
     </main>
+    </FounderGate>
   )
 }

@@ -28,11 +28,12 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from . import call_routes, ladder_routes
 from .account import account_for
+from .gate import require_booking_key
 from .call_store import PostgresCallStore
 from .ladder_store import PostgresLadderStore
 from .issue import IssueRefused, _iso_ms, issue_booking_task
@@ -55,7 +56,9 @@ LIVE_ISSUE_ENABLED = False
 TASK_LIFETIME = timedelta(minutes=10)
 CHALLENGE_LIFETIME = timedelta(minutes=10)
 
-router = APIRouter(prefix="/api/booking", tags=["booking"])
+# S-41 · every route below, and every router included into this one, needs the booking key (gate.py) — except the
+# health report and the svix-signed email webhook
+router = APIRouter(prefix="/api/booking", tags=["booking"], dependencies=[Depends(require_booking_key)])
 
 
 # ── the key: loaded ONCE, at import — loud in the log, never fatal to the rest of Sasha ────────────
@@ -385,6 +388,10 @@ STATUS_WORDS = {
     "unreachable": "Sent — their reply could not be read",
     "failed": "Sent — the page after could not be read",
     "confirmed": "Confirmed by the restaurant",
+    "unclear": "Unclear — read what they said",
+    "attempting": "Sent — waiting for their reply",
+    "link_sent": "Link sent — not booked yet",
+    "guest_booked": "Booked by you — forward the confirmation to add the reference",
 }
 
 @router.get("/reservations")
@@ -394,7 +401,7 @@ async def reservations(request: Request):
     except StorageUnavailable as e:
         return _unavailable(e)
     return {"reservations": [{
-        "id": r["id"], "trip_id": r["trip_id"], "intent_id": r["intent_id"], "venue": r["venue"],
+        "id": r["id"], "trip_id": r["trip_id"], "intent_id": r["intent_id"], "channel": r.get("channel") or "form", "venue": r["venue"],
         "date": r["local_date"].isoformat(), "time": r["local_time"].strftime("%H:%M"), "timezone": r["local_timezone"],
         "party": r["party_size"], "status": r["status"], "status_words": STATUS_WORDS.get(r["status"], r["status"]),
         # the VENUE's own reservation number, only ever when its page or email gave one — never ours in its place

@@ -44,6 +44,7 @@ COUNTRIES: Dict[str, Tuple[str, bool, str, str]] = {
     "DE": ("49", True, "de", "Europe/Berlin"), "AT": ("43", True, "de", "Europe/Vienna"),
     "GB": ("44", True, "en", "Europe/London"), "IE": ("353", True, "en", "Europe/Dublin"),
     "VN": ("84", True, "vi", "Asia/Ho_Chi_Minh"),
+    "KE": ("254", True, "en", "Africa/Nairobi"),   # S-64 §6.2 · Nairobi: national numbers are 07…/01…, trunk 0
 }
 
 #: Booking platforms, recognised from a LINK or an embed — never fetched.

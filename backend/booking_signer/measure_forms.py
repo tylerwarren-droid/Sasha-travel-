@@ -55,11 +55,15 @@ TIMEOUT_S = 15.0
 MAX_BYTES = 2_000_000
 USER_AGENT = "SashaConcierge-Research/1.0 (+https://project.kanoe.ai; reads venues' own booking pages once, read only)"
 
-CITIES = [  # (city, ISO country, the locality's name in Overture divisions)
-    ("Madrid", "ES", "Madrid"),
-    ("Lisbon", "PT", "Lisboa"),
-    ("Berlin", "DE", "Berlin"),
+CITIES = [  # (city, ISO country, the names it may carry in Overture divisions)
+    ("Madrid", "ES", ("Madrid",)),
+    ("Lisbon", "PT", ("Lisboa", "Lisbon")),
+    ("Berlin", "DE", ("Berlin",)),
 ]
+#: ⚠ The first run found no LOCALITY named "Lisboa" in 2026-08-19.0. A city may be filed as a municipality (localadmin)
+#: or a county instead. Candidates at these levels are all read; the most specific level wins, and every candidate is
+#: recorded in the run's `seeding`, so the box's provenance is visible, never chosen silently.
+SUBTYPE_RANK = ("locality", "localadmin", "county")
 FOOD_CATEGORIES = ("restaurant", "cafe", "bar", "bakery")   # seed.ts FOOD_CATEGORIES, unchanged
 #: Activities: matched by pattern on the category string (Overture's taxonomy is not published as a list we can pin)
 ACTIVITY_PATTERN = (r"museum|gallery|tour|sightseeing|attraction|experience|excursion|cooking_school|culinary|"
@@ -111,11 +115,24 @@ def classify_host(host: str) -> Optional[str]:
     return None
 
 
-def box_sql(release: str, locality: str, country: str) -> str:
+def box_sql(release: str, names: tuple, country: str) -> str:
+    ns = ", ".join(f"'{n}'" for n in names)
+    subs = ", ".join(f"'{s}'" for s in SUBTYPE_RANK)
     return (f"INSTALL httpfs; LOAD httpfs; SET s3_region='us-west-2';\n"
-            f"SELECT id, names.primary AS name, bbox FROM read_parquet('{OVERTURE_BUCKET}/release/{release}/theme=divisions/type=division_area/*.parquet')\n"
-            f"WHERE subtype = 'locality' AND country = '{country}' AND names.primary = '{locality}'\n"
-            f"ORDER BY (bbox.xmax - bbox.xmin) * (bbox.ymax - bbox.ymin) DESC LIMIT 1;")
+            f"SELECT id, names.primary AS name, subtype, bbox FROM read_parquet('{OVERTURE_BUCKET}/release/{release}/theme=divisions/type=division_area/*.parquet')\n"
+            f"WHERE country = '{country}' AND subtype IN ({subs}) AND names.primary IN ({ns});")
+
+
+def pick_box(rows: list) -> Tuple[Optional[dict], List[dict]]:
+    """(chosen, every candidate). The most specific level wins (locality, then localadmin, then county); within a
+    level, the largest area — one city's main polygon rather than an exclave."""
+    cands = [{"id": r[0], "name": r[1], "subtype": r[2], "bbox": dict(r[3])} for r in rows]
+    area = lambda c: (c["bbox"]["xmax"] - c["bbox"]["xmin"]) * (c["bbox"]["ymax"] - c["bbox"]["ymin"])
+    for sub in SUBTYPE_RANK:
+        level = [c for c in cands if c["subtype"] == sub]
+        if level:
+            return max(level, key=area), cands
+    return None, cands
 
 
 def places_sql(release: str, b: dict) -> str:
@@ -277,15 +294,17 @@ async def run() -> None:
     rng = random.Random(SAMPLE_SEED)
     venues: List[Venue] = []
     seeding: Dict[str, Any] = {}
-    for city, country, locality in CITIES:
-        box = con.execute(box_sql(OVERTURE_RELEASE, locality, country)).fetchone()
-        if box is None:
-            raise Refused(f"no locality '{locality}' in Overture divisions {OVERTURE_RELEASE} — no box, so no seed for {city}")
-        b = dict(box[2])
+    for city, country, names in CITIES:
+        chosen, cands = pick_box(con.execute(box_sql(OVERTURE_RELEASE, names, country)).fetchall())
+        print(f"[measure] {city}: division candidates {[(c['subtype'], c['name'], c['id']) for c in cands]}", flush=True)
+        if chosen is None:
+            raise Refused(f"no {'/'.join(SUBTYPE_RANK)} named {' or '.join(names)} in {country} in Overture divisions {OVERTURE_RELEASE} — no box, so no seed for {city}")
+        b = chosen["bbox"]
         rows = [dict(zip(("id", "name", "cat", "websites"), r)) for r in con.execute(places_sql(OVERTURE_RELEASE, b)).fetchall()]
         picked, counts = draw(rows, city, country, rng)
         venues += picked
-        seeding[city] = {"box": b, "box_from": f"Overture divisions {OVERTURE_RELEASE}, division_area locality '{locality}' ({box[0]})", **counts, "drawn": len(picked)}
+        seeding[city] = {"box": b, "box_from": f"Overture divisions {OVERTURE_RELEASE}, division_area {chosen['subtype']} '{chosen['name']}' ({chosen['id']})",
+                         "candidates": cands, **counts, "drawn": len(picked)}
         print(f"[measure] {city}: {counts} → drew {len(picked)}", flush=True)
 
     db = await asyncpg.connect(os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://", 1), statement_cache_size=0)
@@ -347,8 +366,8 @@ def plan() -> str:
     lines = [f"S-40 form measurement — scorer frozen at Applied Diligence {SCORER_COMMIT}; Overture {OVERTURE_RELEASE}; seed {SAMPLE_SEED}",
              f"per city: {PER_CITY} ≈ {len(CITIES) * sum(PER_CITY.values())} hosts; ≤{MAX_PAGES_PER_HOST} pages each; {HOSTS_IN_PARALLEL} hosts at once; {PER_HOST_DELAY_S}s between a host's pages",
              f"never fetched: {len(PLATFORM_HOSTS)} booking-platform patterns + {len(NOT_A_VENUE_HOST)} social/aggregator hosts; robots first; own registrable domain only; served markup only", ""]
-    for city, country, locality in CITIES:
-        lines += [f"-- {city}", box_sql(OVERTURE_RELEASE, locality, country), "-- then, with that box:", places_sql(OVERTURE_RELEASE, {"xmin": "<xmin>", "xmax": "<xmax>", "ymin": "<ymin>", "ymax": "<ymax>"}), ""]
+    for city, country, names in CITIES:
+        lines += [f"-- {city}", box_sql(OVERTURE_RELEASE, names, country), "-- then, with that box:", places_sql(OVERTURE_RELEASE, {"xmin": "<xmin>", "xmax": "<xmax>", "ymin": "<ymin>", "ymax": "<ymax>"}), ""]
     return "\n".join(lines)
 
 

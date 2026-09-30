@@ -90,6 +90,28 @@ class Draw(unittest.TestCase):
         self.assertIn("len(websites) > 0", s)
 
 
+class Boxes(unittest.TestCase):
+    B = lambda self, w: {"xmin": 0, "xmax": w, "ymin": 0, "ymax": w}
+
+    def test_the_most_specific_level_wins_and_every_candidate_is_kept(self):
+        rows = [("c1", "Lisboa", "county", self.B(9)), ("a1", "Lisboa", "localadmin", self.B(2)), ("a2", "Lisboa", "localadmin", self.B(1))]
+        chosen, cands = M.pick_box(rows)
+        self.assertEqual((chosen["id"], chosen["subtype"]), ("a1", "localadmin"))
+        self.assertEqual([c["id"] for c in cands], ["c1", "a1", "a2"])
+
+    def test_a_locality_beats_a_larger_county(self):
+        chosen, _ = M.pick_box([("c1", "X", "county", self.B(9)), ("l1", "X", "locality", self.B(1))])
+        self.assertEqual(chosen["id"], "l1")
+
+    def test_no_candidate_is_no_box(self):
+        self.assertEqual(M.pick_box([]), (None, []))
+
+    def test_the_query_asks_every_name_and_level(self):
+        q = M.box_sql("2026-08-19.0", ("Lisboa", "Lisbon"), "PT")
+        self.assertIn("names.primary IN ('Lisboa', 'Lisbon')", q)
+        self.assertIn("subtype IN ('locality', 'localadmin', 'county')", q)
+
+
 class Reading(unittest.TestCase):
     HOME = """<html><a href="/reservas">Reservas</a><a href="https://other.test/book">x</a><a href="/about">About</a>
     <iframe src="https://widget.covermanager.com/x"></iframe><form action="/c"><label for="n">Nombre</label><input id="n" name="n"></form></html>"""

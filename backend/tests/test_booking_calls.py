@@ -74,6 +74,12 @@ def done(*turns, status="completed", answered_by="human"):
             "transcripts": [{"user": u, "text": t} for u, t in turns]}
 
 
+def booked(*turns):
+    """S-60 · a booking call that ends as the founder's rule says it must: Sasha's recap, and the venue's yes to it."""
+    recap = C.recap_sentence(C.LANGUAGES["en"], C.parse_call_particulars(JOHNSON))
+    return done(*turns, ("assistant", recap), ("user", "Yes, that's right."))
+
+
 def reader_says(obj):
     async def r(_transcript):
         if isinstance(obj, Exception):
@@ -456,7 +462,7 @@ class CallRoutes:
         self.yes(prep)
         g = self.c.get(f"/api/booking/calls/{prep['call_id']}").json()
         self.assertEqual((g["status"], g.get("outcome")), ("placed", None))   # still on the phone
-        self.bland.details = done(("user", "Yes, that's fine."))
+        self.bland.details = booked(("user", "Yes, that's fine."))
         g = self.c.get(f"/api/booking/calls/{prep['call_id']}").json()
         self.assertEqual((g["status"], g["outcome"], g["quote"]), ("answered", "yes", "Yes, that's fine."))
         self.assertEqual(g["read_by"], C.READ_BY)
@@ -492,7 +498,7 @@ class CallRoutes:
     def _confirmed_booking(self):
         prep = self.prepare()
         self.yes(prep)
-        self.bland.details = done(("user", "Yes, that's fine."))
+        self.bland.details = booked(("user", "Yes, that's fine."))
         self.c.get(f"/api/booking/calls/{prep['call_id']}")
         return prep
 
@@ -559,7 +565,7 @@ class Sweeper(unittest.TestCase):
         run(store.claim("a", row["call_id"], {}, MONDAY, MONDAY - timedelta(minutes=1), 3, MONDAY - timedelta(days=1)))
         run(store.mark_placed(row["call_id"], C.Placed(True, "bland-1", 200, {}, None), MONDAY))
         self.assertEqual(run(call_routes.sweep_once()), 0)          # still on the phone: nothing recorded
-        bland.details = done(("user", "Yes, that's fine. It's under Johnson."))
+        bland.details = booked(("user", "Yes, that's fine. It's under Johnson."))
         self.assertEqual(run(call_routes.sweep_once()), 1)
         self.assertEqual(run(call_routes.sweep_once()), 0)          # never recorded twice
         item = store.trip_items[store.calls[row["call_id"]]["trip_item_id"]]
@@ -649,7 +655,7 @@ class OnPostgres(CallRoutes, unittest.TestCase):
         call_routes.READER = reader
         prep = self.prepare()
         self.yes(prep)
-        self.bland.details = done(("user", "Yes, that's fine. Under Johnson."))
+        self.bland.details = booked(("user", "Yes, that's fine. Under Johnson."))
         self.c.get(f"/api/booking/calls/{prep['call_id']}")
         res = self.c.get("/api/booking/reservations")
         self.assertEqual(res.status_code, 200, res.text)
@@ -657,7 +663,7 @@ class OnPostgres(CallRoutes, unittest.TestCase):
         r = [x for x in rows if x["intent_id"] == prep["call_id"]][0]
         self.assertEqual((r["channel"], r["status"], r["date"], r["time"], r["party"], r["booking_reference"]),
                          ("phone", "confirmed", "2026-10-08", "20:00", 4, "Johnson"))
-        self.assertEqual(r["venue_words"], "Yes, that's fine. Under Johnson.")
+        self.assertEqual(r["venue_words"], "Yes, that's fine. Under Johnson. / Yes, that's right.")   # every word they said, the yes to the recap included
 
     def test_the_block_refuses_to_run_twice(self):
         import asyncpg

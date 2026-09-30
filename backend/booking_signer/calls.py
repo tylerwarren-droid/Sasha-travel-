@@ -33,6 +33,7 @@ from typing import Any, Awaitable, Callable, List, Mapping, Optional
 from zoneinfo import ZoneInfo
 
 from . import heard
+from . import recap as RC
 
 BLAND_CALLS_URL = "https://api.bland.ai/v1/calls"
 #: The model that reads a finished call. Its reading is labelled as an AI reading wherever it is shown.
@@ -329,6 +330,11 @@ def _ack(lang: Lang) -> str:
     return ack_spoken(lang.code)
 
 
+def recap_sentence(lang: Lang, p: CallParticulars) -> str:
+    """S-60 · the closing recap, in the venue's language: the whole booking, then "¿Correcto?"."""
+    return RC.sentence(lang.code, lang.weekdays, lang.months, p.on, p.at, p.party, surname_of(p.name))
+
+
 def instructions(lang: Lang, p: CallParticulars, venue: CallVenue, opening: str, check: str) -> str:
     """Bland's `task`. ⚠ Every rule the founder set is here, and the brief is hashed into the approval."""
     contact = (f"If — and only if — they ask for a contact number, give {' '.join(p.phone)} (the guest's own number). "
@@ -344,10 +350,12 @@ def instructions(lang: Lang, p: CallParticulars, venue: CallVenue, opening: str,
         f"If they offer or ask for ANY of those, say exactly: \"{check}\" — then ask them to repeat the offer so it is noted, thank them, and end the call. "
         f"{contact}"
         "Do not give any email address or any other personal detail. "
-        "If they say yes to the booking as asked, ask what name or reference the booking is held under, then repeat it back once "
-        "to confirm (people, day, time, name or reference), thank them, and end the call. "
-        "If they say no, thank them and end the call. If they say to call back later or they are unsure, thank them and end the call. "
-        f"If they ask not to be called or contacted again, say exactly: \"{_ack(lang)}\" — then end the call. "
+        "If they say yes, ask for any reference. Then ALWAYS end with this exact recap and wait for the answer: "
+        f"\"{recap_sentence(lang, p)}\" Only a clear yes to it confirms. "
+        "If they state a different time, day, party or name, repeat the right one once and say the recap again; "
+        f"if they still differ, say exactly \"{check}\" and end the call. "
+        "If they say no, say to call back later, or are unsure, thank them and end the call. "
+        f"If they ask not to be contacted again, say exactly \"{_ack(lang)}\" and end the call. "
         "Keep it short and polite. Do not leave a voicemail."
     )
 
@@ -400,6 +408,7 @@ def build_call(venue: CallVenue, p: CallParticulars, now: datetime, purpose: str
     brief = {
         "purpose": purpose, "timezone": venue.timezone, "reference": reference,
         "venue_key": venue.key, "number": number, "language": lang.code,
+        "recap": recap_sentence(lang, p) if purpose == "book" else None,
         "first_sentence": opening, "task": task, "check_sentence": check,
         "party": p.party, "date": p.on.isoformat(), "time": p.at.strftime("%H:%M"), "name": p.name, "phone": p.phone,
         "from": sasha_number(), "number_source": venue.source, "venue_name": venue.name,
@@ -669,7 +678,15 @@ async def read_call(details: Mapping[str, Any], reader: Reader, purpose: str = "
         return CallReading(state="answered", outcome="unclear", venue_words=words, quote=quote, raised=raised, read_by=READ_BY,
                            why="they agreed, but with something attached she may not accept for you: "
                                + "; ".join(f"{r['what']}: \"{r['quote']}\"" for r in raised), **base)
-    if reading == "yes" and asked:
+    if reading == "yes" and asked and asked.get("recap") and purpose == "book":
+        # S-60 · a booking is confirmed ONLY on an explicit yes to Sasha's closing recap; a conflict before it may have
+        # been resolved on the call, so only what the venue said from the recap on is held against it
+        ans = RC.recap_answer(list(details.get("transcripts") or []), asked["recap"], asked)
+        if not ans["confirmed"]:
+            return CallReading(state="answered", outcome="unclear", venue_words=words, quote=quote, read_by=READ_BY,
+                               raised=raised + [{"what": "not confirmed", "quote": q} for q in ans["quotes"]],
+                               why=f"not confirmed — {ans['why']}. Check with them before relying on it.", **base)
+    elif reading == "yes" and asked:
         off = heard.mismatches(turns, asked)
         if off:
             said = [{"what": f"{m['what']}: they said {m['said']}, you asked {m['asked']}", "quote": m["quote"]} for m in off]

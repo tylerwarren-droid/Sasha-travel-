@@ -103,13 +103,19 @@ class Boxes(unittest.TestCase):
         chosen, _ = M.pick_box([("c1", "X", "county", self.B(9)), ("l1", "X", "locality", self.B(1))])
         self.assertEqual(chosen["id"], "l1")
 
+    def test_a_city_state_is_found_as_a_region_but_never_over_a_locality(self):
+        chosen, _ = M.pick_box([("r1", "Berlin", "region", self.B(5))])
+        self.assertEqual((chosen["id"], chosen["subtype"]), ("r1", "region"))
+        chosen, _ = M.pick_box([("r1", "X", "region", self.B(9)), ("l1", "X", "locality", self.B(1))])
+        self.assertEqual(chosen["id"], "l1")
+
     def test_no_candidate_is_no_box(self):
         self.assertEqual(M.pick_box([]), (None, []))
 
     def test_the_query_asks_every_name_and_level(self):
         q = M.box_sql("2026-08-19.0", ("Lisboa", "Lisbon"), "PT")
         self.assertIn("names.primary IN ('Lisboa', 'Lisbon')", q)
-        self.assertIn("subtype IN ('locality', 'localadmin', 'county')", q)
+        self.assertIn("subtype IN ('locality', 'localadmin', 'county', 'region')", q)
 
 
 class Reading(unittest.TestCase):

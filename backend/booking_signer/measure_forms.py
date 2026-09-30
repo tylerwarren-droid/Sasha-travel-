@@ -60,10 +60,11 @@ CITIES = [  # (city, ISO country, the names it may carry in Overture divisions)
     ("Lisbon", "PT", ("Lisboa", "Lisbon")),
     ("Berlin", "DE", ("Berlin",)),
 ]
-#: ⚠ The first run found no LOCALITY named "Lisboa" in 2026-08-19.0. A city may be filed as a municipality (localadmin)
-#: or a county instead. Candidates at these levels are all read; the most specific level wins, and every candidate is
-#: recorded in the run's `seeding`, so the box's provenance is visible, never chosen silently.
-SUBTYPE_RANK = ("locality", "localadmin", "county")
+#: ⚠ The first run found no LOCALITY named "Lisboa" in 2026-08-19.0 (Lisbon is filed as a county — the municipality);
+#: the second found nothing at all for Berlin, a city-state, which Overture files as a REGION (the Land). Candidates at
+#: these levels are all read; the most specific level wins, and every candidate is recorded in the run's `seeding`, so
+#: the box's provenance is visible, never chosen silently.
+SUBTYPE_RANK = ("locality", "localadmin", "county", "region")
 FOOD_CATEGORIES = ("restaurant", "cafe", "bar", "bakery")   # seed.ts FOOD_CATEGORIES, unchanged
 #: Activities: matched by pattern on the category string (Overture's taxonomy is not published as a list we can pin)
 ACTIVITY_PATTERN = (r"museum|gallery|tour|sightseeing|attraction|experience|excursion|cooking_school|culinary|"

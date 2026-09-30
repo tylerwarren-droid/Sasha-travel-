@@ -161,6 +161,9 @@ async def prepare(request: Request):
         venue = C.call_venues().get(body.get("venue"))
         if venue is None:
             return _refuse(422, "venue_not_callable", f"{body.get('venue')!r} is not a venue Sasha may phone")
+    refused = await ladder_routes._optin_refusal(venue.venue_id, "phone")
+    if refused:
+        return refused
     now = NOW()
     try:
         p = C.parse_call_particulars(body)
@@ -212,7 +215,11 @@ async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
     if not b.get("timezone") or lang_key is None:
         return _refuse(422, "booking_brief_incomplete", "that booking's call does not record its language and timezone")
     venue = C.CallVenue(key=b["venue_key"], name=b.get("venue_name") or b["venue_key"], number_env="", language=lang_key,
-                        timezone=b["timezone"], number=b["number"], source=b.get("number_source"))
+                        timezone=b["timezone"], number=b["number"], source=b.get("number_source"), venue_id=b.get("venue_id"))
+    # S-54 · "any stop ends every channel" — a cancellation too; the guest can still cancel themselves
+    refused = await ladder_routes._optin_refusal(venue.venue_id, "phone")
+    if refused:
+        return refused
     now = NOW()
     try:
         p = C.parse_call_particulars({"date": b["date"], "time": b["time"], "party": b["party"], "name": b["name"], "phone": b.get("phone") or ""})
@@ -259,6 +266,10 @@ async def place(call_id: str, request: Request):
     brief = call["brief"]
     if C._sha256hex(C._canonical(brief)) != call["brief_sha256"]:
         return _refuse(409, "brief_changed", "the stored brief no longer matches what was read back; nothing was dialled")
+    # S-54 · checked again at the dial, before the claim: a venue can withdraw between the read-back and the yes
+    refused = await ladder_routes._optin_refusal(brief.get("venue_id"), "phone")
+    if refused:
+        return refused
     now = NOW()
     approval = {"by": account, "how": a["how"], "said": a.get("said"), "at": now.isoformat(),
                 "read_back_sha256": call["read_back_sha256"], "brief_sha256": call["brief_sha256"]}

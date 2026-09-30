@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from booking_signer import call_routes, calls as C, routes
+from booking_signer import call_routes, calls as C, optins as O, routes
 from booking_signer.call_store import MemoryCallStore, PostgresCallStore
 from booking_signer.store import PostgresStore
 
@@ -303,6 +303,7 @@ class CallRoutes:
         self.saved = (call_routes.CALL_STORE, call_routes.HTTP, call_routes.READER, call_routes.NOW)
         call_routes.CALL_STORE, call_routes.HTTP, call_routes.READER = self.store, self.bland, reader
         call_routes.NOW = lambda: self.now
+        self.saved_optins, O.OPTIN_STORE = O.OPTIN_STORE, O.MemoryOptinStore()
         app = FastAPI()
         app.include_router(routes.router)
         self.c = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key"})
@@ -313,6 +314,7 @@ class CallRoutes:
             self.c.portal.call(self.base.close)
         self.c.__exit__(None, None, None)
         call_routes.CALL_STORE, call_routes.HTTP, call_routes.READER, call_routes.NOW = self.saved
+        O.OPTIN_STORE = self.saved_optins
         self.env.stop()
 
     def prepare(self, **over):

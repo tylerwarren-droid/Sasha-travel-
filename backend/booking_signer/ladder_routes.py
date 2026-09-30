@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse
 from . import calls as C
 from . import emailing as E
 from . import ladder as L
+from . import optins as O
 from . import slot_link as SL
 from . import venue_read as V
 from .account import account_for
@@ -123,6 +124,15 @@ async def get_read(read_id: str, request: Request):
     return _read_view(row)
 
 
+async def _optin_refusal(venue_id: Optional[str], channel: str, scope: Optional[str] = None):
+    """S-54 · the refusal check as a response, or None. ⚠ Fails CLOSED: if the opt-in record cannot be read, nothing is sent."""
+    try:
+        r = await O.refusal_for(venue_id, channel, scope)
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, f"{e.detail}; the venue's opt-in record could not be checked, so nothing was sent")
+    return _refuse(403, r.rule, f"{r.message} Nothing was sent.") if r else None
+
+
 # ── the phone rung's venue, from a read (used by call_routes) ─────────────────────────────────
 
 async def call_venue_from_read(account: str, read_id: Any, fact_index: Any = None) -> C.CallVenue:
@@ -141,7 +151,7 @@ async def call_venue_from_read(account: str, read_id: Any, fact_index: Any = Non
         raise C.CallRefused("venue_country_unknown", "the venue's country is not known, so neither its language nor its day can be")
     _, _, lang, tz = V.COUNTRIES[country]
     return C.CallVenue(key=f"read:{row['read_id']}", name=read["name"], number_env="", language=lang, timezone=tz,
-                       number=f["value"], source=f["source_label"])
+                       number=f["value"], source=f["source_label"], venue_id=O.venue_id_of(read))
 
 
 # ── the email rung ────────────────────────────────────────────────────────────────────────────
@@ -165,6 +175,9 @@ async def prepare_email(request: Request):
     chosen = L.best_email(read["facts"])
     if not chosen:
         return _refuse(422, "no_email_read", "no email address was read for this venue")
+    refused = await _optin_refusal(O.venue_id_of(read), "email")
+    if refused:
+        return refused
     try:
         p = E.parse_email_particulars(body, C.parse_call_particulars)
     except (E.EmailRefused, C.CallRefused) as e:
@@ -210,6 +223,14 @@ async def send_email(email_id: str, request: Request):
         return _refuse(422, "approval_void", "an approval is by button, or by voice with the words said")
     if E.email_sha256(e["email"]) != e["email_sha256"]:
         return _refuse(409, "email_changed", "the stored email no longer matches what was read back; nothing was sent")
+    # S-54 · checked again at the send: a venue can withdraw between the read-back and the yes
+    try:
+        r = await LADDER_STORE.get_read(account, str(e["read_id"])) if e.get("read_id") else None
+    except StorageUnavailable as ex:
+        return _refuse(503, ex.rule, ex.detail)
+    refused = await _optin_refusal(O.venue_id_of(r["read"]) if r else None, "email")
+    if refused:
+        return refused
     now = NOW()
     approval = {"by": account, "how": a["how"], "said": a.get("said"), "at": now.isoformat(),
                 "read_back_sha256": e["read_back_sha256"], "email_sha256": e["email_sha256"]}

@@ -31,11 +31,12 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import call_routes, ladder_routes, retention
+from . import call_routes, ladder_routes, optins, retention
 from .account import account_for
 from .gate import require_booking_key
 from .call_store import PostgresCallStore
 from .ladder_store import PostgresLadderStore
+from .optins import PostgresOptinStore
 from .issue import IssueRefused, _iso_ms, issue_booking_task
 from .keys import InvalidSigningKey, LoadedSigningKey, SigningKeyNotConfigured, load_signing_key
 from .outcome import outcome_of
@@ -83,6 +84,7 @@ KEY, KEY_ERROR = _load_key()
 STORE: Any = PostgresStore()
 call_routes.CALL_STORE = PostgresCallStore(STORE)
 ladder_routes.LADDER_STORE = PostgresLadderStore(STORE)
+optins.OPTIN_STORE = PostgresOptinStore(STORE)   # S-54 · the refusal check reads venue_optins (sql/008)
 
 
 def _now() -> datetime:

@@ -23,7 +23,8 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from booking_signer import call_routes, emailing as E, ladder as L, ladder_routes, routes, slot_link as SL, venue_read as V
+from booking_signer import call_routes, emailing as E, ladder as L, ladder_routes, optins as O, routes, slot_link as SL, venue_read as V
+from booking_signer.account import DEMO_ACCOUNT_ID
 from booking_signer.call_store import MemoryCallStore, PostgresCallStore
 from booking_signer.ladder_store import MemoryLadderStore, PostgresLadderStore
 from booking_signer.store import PostgresStore, StorageUnavailable
@@ -375,6 +376,8 @@ class LadderRoutes:
                       ladder_routes.HTTP, ladder_routes.NOW, ladder_routes.RESOLVE)
         call_routes.CALL_STORE, call_routes.HTTP, call_routes.NOW = self.calls, self.web, (lambda: self.now)
         ladder_routes.LADDER_STORE, ladder_routes.HTTP, ladder_routes.NOW, ladder_routes.RESOLVE = self.ladder, self.web, (lambda: self.now), PUBLIC
+        self.saved_optins, self.optins = O.OPTIN_STORE, O.MemoryOptinStore()
+        O.OPTIN_STORE = self.optins
         app = FastAPI()
         app.include_router(routes.router)
         self.c = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key"})
@@ -386,6 +389,7 @@ class LadderRoutes:
         self.c.__exit__(None, None, None)
         (call_routes.CALL_STORE, call_routes.HTTP, call_routes.NOW, ladder_routes.LADDER_STORE,
          ladder_routes.HTTP, ladder_routes.NOW, ladder_routes.RESOLVE) = self.saved
+        O.OPTIN_STORE = self.saved_optins
         self.env.stop()
 
     def read(self):
@@ -436,6 +440,63 @@ class LadderRoutes:
             r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
         self.assertEqual((r.status_code, r.json()["rule"]), (429, "daily_call_limit"))
         self.assertEqual(len([1 for m, u, b in self.web.requests if u.startswith("https://api.bland.ai")]), 3)
+
+    # ── S-54 · the refusal check: a venue that said stop is never contacted by Sasha again ──────────────────
+
+    def venue_id(self, v):
+        return O.venue_id_of(self.c.portal.call(self.ladder.get_read, DEMO_ACCOUNT_ID, v["read_id"])["read"])
+
+    def optin(self, vid, status, channel="whatsapp", scope="+34600111222", at=None):
+        at = at or self.now
+        run(self.optins.add({"venue_id": vid, "channel": channel, "scope": scope, "status": status, "recorded_at": at,
+                             "withdrawn_at": at if status == "withdrawn" else None,
+                             "withdrawn_how": "STOP" if status == "withdrawn" else None}))
+
+    def sent(self):
+        return [u for m, u, b in self.web.requests if u.startswith("https://api.bland.ai") or u == E.RESEND_SEND_URL]
+
+    def test_a_venue_that_withdrew_on_any_channel_is_refused_a_call_and_an_email(self):
+        v = self.read()
+        self.optin(self.venue_id(v), "active", at=self.now - timedelta(days=9))
+        self.optin(self.venue_id(v), "withdrawn", at=self.now - timedelta(days=2))   # STOP on WhatsApp ends phone and email too
+        call = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING})
+        mail = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"})
+        for r in (call, mail):
+            self.assertEqual((r.status_code, r.json()["rule"]), (403, "venue_opted_out"), r.text)
+            self.assertIn("you can still contact them yourself", r.json()["message"])
+        self.assertEqual(self.sent(), [])
+
+    def test_a_withdrawal_between_the_read_back_and_the_yes_stops_the_send(self):
+        v = self.read()
+        call = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
+        mail = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"}).json()
+        self.optin(self.venue_id(v), "withdrawn", channel="email_confirm", scope="reservas@lacontra.test")
+        yes = {"approval": {"how": "button"}}
+        r1 = self.c.post(f"/api/booking/calls/{call['call_id']}/place", json={"read_back_sha256": call["read_back"]["sha256"], **yes})
+        r2 = self.c.post(f"/api/booking/emails/{mail['email_id']}/send", json={"read_back_sha256": mail["read_back"]["sha256"], **yes})
+        self.assertEqual([r1.json()["rule"], r2.json()["rule"]], ["venue_opted_out", "venue_opted_out"])
+        self.assertEqual(self.sent(), [])
+
+    def test_opting_back_in_is_a_new_row_and_lifts_the_refusal(self):
+        v = self.read()
+        self.optin(self.venue_id(v), "withdrawn", at=self.now - timedelta(days=30))
+        self.optin(self.venue_id(v), "active", at=self.now - timedelta(days=1))
+        self.assertEqual(self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).status_code, 200)
+
+    def test_another_venues_withdrawal_changes_nothing(self):
+        v = self.read()
+        self.optin("host:elsewhere.test", "withdrawn")
+        self.assertEqual(self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).status_code, 200)
+
+    def test_if_the_opt_in_record_cannot_be_read_nothing_is_sent(self):
+        v = self.read()
+
+        async def down(venue_id):
+            raise StorageUnavailable("storage_unreachable", "the database did not answer")
+        self.optins.rows_for = down
+        r = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING})
+        self.assertEqual((r.status_code, r.json()["rule"]), (503, "storage_unreachable"))
+        self.assertIn("could not be checked, so nothing was sent", r.json()["message"])
 
     def test_the_email_rung_end_to_end(self):
         v = self.read()

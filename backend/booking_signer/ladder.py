@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from . import calls as C
+from . import slot_link as SL
 from .venue_read import COUNTRIES
 
 #: Forms Sasha can fill today — the one mapped venue (S-17). An unmapped form is a fact, not a rung.
@@ -55,6 +56,7 @@ class Rung:
     value: Optional[str]
     source: Optional[str]
     why_not: Optional[str] = None
+    slot_filled: Optional[bool] = None   #: link rung only: True when a verified recipe fills the slot in the URL
 
 
 def choose(read: dict, host_of=lambda u: None) -> dict:
@@ -71,8 +73,14 @@ def choose(read: dict, host_of=lambda u: None) -> dict:
         rungs.append(Rung("form", mapped, i, form["value"], form["source_label"],
                           None if mapped else "they have a booking form on their site, but I can't fill a form I haven't mapped yet"))
     if plat:
-        rungs.append(Rung("platform", False, ip, plat["value"], plat["source_label"],
-                          f"they book through {plat['value']}, which I can't use for you yet"))
+        page = SL.platform_page(read)
+        if page:
+            # S-37 · the guest books on the platform, with their own press — Sasha hands them the venue's page
+            rec = SL.RECIPES.get(page[0])
+            rungs.append(Rung("link", True, ip, page[0], page[2], None, bool(rec and rec.verified)))
+        else:
+            rungs.append(Rung("platform", False, ip, plat["value"], plat["source_label"],
+                              f"they book through {plat['value']}, but their site doesn't link their page there, and I never guess one"))
 
     i, phone = first("phone")
     if phone:
@@ -100,11 +108,17 @@ def say(rungs: List[Rung], name: str) -> str:
         lead = "They have a booking form I can fill."
     elif "form" in by:
         lead = "They have a booking form, but I can't fill it yet."
+    elif "link" in by:
+        lead = f"They book through {by['link'].value}."
     elif "platform" in by:
         lead = f"They book through {by['platform'].value}, which I can't use yet."
     else:
         lead = "They have no booking form."
     offers = []
+    if by.get("link"):
+        offers.append(f"I'll send you their {by['link'].value} page with your table filled in — one press"
+                      if by["link"].slot_filled else
+                      f"I'll send you their {by['link'].value} page to book it yourself")
     if by.get("form") and by["form"].available:
         offers.append("I'll fill in their form")
     if by.get("phone") and by["phone"].available:

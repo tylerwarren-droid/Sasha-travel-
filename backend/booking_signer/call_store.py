@@ -109,9 +109,7 @@ class PostgresCallStore:
         try:
             return await self._base._run(fn)
         except StorageUnavailable as e:
-            if e.rule == "storage_not_provisioned":
-                raise StorageUnavailable("storage_not_provisioned", f"{e} — run backend/booking_signer/sql/003_phone_calls.sql") from None
-            raise
+            raise e.rehint("003_phone_calls.sql") from None
         except asyncpg.exceptions.CheckViolationError as e:
             raise StorageUnavailable("storage_not_provisioned", f"{e} — run backend/booking_signer/sql/003_phone_calls.sql") from None
 

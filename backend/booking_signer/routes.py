@@ -91,7 +91,7 @@ def _refuse(status: int, rule: str, message: str) -> JSONResponse:
 
 
 def _unavailable(e: StorageUnavailable) -> JSONResponse:
-    return _refuse(503, e.rule, str(e))
+    return _refuse(503, e.rule, e.detail)   # the rule is its own field: never repeated in the message
 
 
 async def _json(request: Request) -> Optional[dict]:

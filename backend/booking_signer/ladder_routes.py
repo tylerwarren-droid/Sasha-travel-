@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse
 from . import calls as C
 from . import emailing as E
 from . import ladder as L
+from . import slot_link as SL
 from . import venue_read as V
 from .account import account_for
 from .call_store import cap_window
@@ -107,7 +108,7 @@ async def read_venue(request: Request):
     try:
         await LADDER_STORE.put_read(row)
     except StorageUnavailable as e:
-        return _refuse(503, e.rule, str(e))
+        return _refuse(503, e.rule, e.detail)
     return _read_view(row)
 
 
@@ -116,7 +117,7 @@ async def get_read(read_id: str, request: Request):
     try:
         row = await LADDER_STORE.get_read(account_for(request), read_id)
     except StorageUnavailable as e:
-        return _refuse(503, e.rule, str(e))
+        return _refuse(503, e.rule, e.detail)
     if row is None:
         return _refuse(404, "read_unknown", "no venue read with that id for this account")
     return _read_view(row)
@@ -157,7 +158,7 @@ async def prepare_email(request: Request):
     try:
         row = await LADDER_STORE.get_read(account, str(body.get("read_id")))
     except StorageUnavailable as e:
-        return _refuse(503, e.rule, str(e))
+        return _refuse(503, e.rule, e.detail)
     if row is None:
         return _refuse(404, "read_unknown", "no venue read with that id for this account")
     read = row["read"]
@@ -183,7 +184,7 @@ async def prepare_email(request: Request):
     except UnknownTrip:
         return _refuse(404, "trip_unknown", "no such trip")
     except StorageUnavailable as e:
-        return _refuse(503, e.rule, str(e))
+        return _refuse(503, e.rule, e.detail)
     return {"email_id": email_id, "trip_item_id": item, "read_back": {"lines": lines, "sha256": rec["read_back_sha256"]}}
 
 
@@ -199,7 +200,7 @@ async def send_email(email_id: str, request: Request):
     try:
         e = await LADDER_STORE.get_email(account, email_id)
     except StorageUnavailable as ex:
-        return _refuse(503, ex.rule, str(ex))
+        return _refuse(503, ex.rule, ex.detail)
     if e is None:
         return _refuse(404, "email_unknown", "no email with that id was prepared for this account")
     if body.get("read_back_sha256") != e["read_back_sha256"]:
@@ -215,7 +216,7 @@ async def send_email(email_id: str, request: Request):
     try:
         claimed = await LADDER_STORE.claim_email(account, email_id, approval, now, now - APPROVAL_WINDOW, email_cap(), cap_window(now))
     except StorageUnavailable as ex:
-        return _refuse(503, ex.rule, str(ex))
+        return _refuse(503, ex.rule, ex.detail)
     if claimed == "taken":
         return _refuse(409, "email_already_sent", "this email was already approved; another is a new read-back and a new yes")
     if claimed == "stale":
@@ -242,7 +243,7 @@ async def get_email(email_id: str, request: Request):
         e = await LADDER_STORE.get_email(account_for(request), email_id)
         replies = await LADDER_STORE.replies_for(email_id) if e else []
     except StorageUnavailable as ex:
-        return _refuse(503, ex.rule, str(ex))
+        return _refuse(503, ex.rule, ex.detail)
     if e is None:
         return _refuse(404, "email_unknown", "no email with that id was prepared for this account")
     say = {"awaiting_approval": None, "sent": ("Sent — no reply yet." if not replies else "They replied — here are their words."),
@@ -272,6 +273,8 @@ async def inbound(request: Request):
     now = NOW()
     act = E.act_id_of(data.get("to"))
     try:
+        if act is not None and not await LADDER_STORE.email_exists(act) and await LADDER_STORE.link_exists(act):
+            return await _link_confirmation(act, pid, data, now)
         if act is None or not await LADDER_STORE.email_exists(act):
             await LADDER_STORE.quarantine({"provider_id": pid, "to_addrs": data.get("to"), "from_addr": data.get("from"),
                                            "subject": data.get("subject"), "received_at": now,
@@ -288,5 +291,122 @@ async def inbound(request: Request):
         await LADDER_STORE.add_reply({"provider_id": pid, "email_id": act, "from_addr": data.get("from"),
                                       "subject": data.get("subject"), "body_text": text, "note": note, "received_at": now})
     except StorageUnavailable as ex:
-        return _refuse(503, ex.rule, str(ex))   # a non-2xx makes the mail service retry — nothing is lost
+        return _refuse(503, ex.rule, ex.detail)   # a non-2xx makes the mail service retry — nothing is lost
     return {"ok": True, "matched": True}
+
+
+# ── S-37 · the slot link ──────────────────────────────────────────────────────────────────────
+
+def inbound_ready() -> bool:
+    """Can a forwarded confirmation reach Sasha? Only the inbound half is needed — nothing is sent."""
+    return bool(os.getenv("SASHA_INBOUND_DOMAIN", "").strip() and os.getenv("RESEND_WEBHOOK_SECRET", "").strip())
+
+
+@router.post("/links")
+async def prepare_link(request: Request):
+    body = await _json(request)
+    if body is None:
+        return _refuse(400, "link_malformed", "send {read_id, date, time, party, name} as a JSON object")
+    if any(k in body for k in ("url", "link", "platform_url")):
+        return _refuse(422, "url_from_request", "the venue's platform page is READ from its own site, never taken from the request")
+    account = account_for(request)
+    try:
+        row = await LADDER_STORE.get_read(account, str(body.get("read_id")))
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    if row is None:
+        return _refuse(404, "read_unknown", "no venue read with that id for this account")
+    read = row["read"]
+    try:
+        p = C.parse_call_particulars(body)
+        link = SL.build(read, p.on, p.at, p.party)
+    except (C.CallRefused, SL.LinkRefused) as e:
+        return _refuse(422, e.rule, str(e))
+    link_id = str(uuid.uuid4())
+    forward_to = E.act_address(link_id) if inbound_ready() else None
+    lines = SL.read_back(read["name"], link, p.on, p.at, p.party, forward_to)
+    country = read.get("country")
+    tz = V.COUNTRIES[country][3] if country in V.COUNTRIES else "UTC"
+    rec = {"link_id": link_id, "account_id": account, "read_id": row["read_id"], "platform": link.platform, "url": link.url,
+           "slot_filled": link.slot_filled, "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)),
+           "created_at": NOW(), "venue_name": read["name"], "local_date": p.on, "local_time": p.at, "local_timezone": tz,
+           "party_size": p.party}
+    try:
+        item = await LADDER_STORE.put_link(rec)
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    return {"link_id": link_id, "trip_item_id": item, "platform": link.platform, "slot_filled": link.slot_filled, "url": link.url,
+            "forward_to": forward_to, "read_back": {"lines": lines, "sha256": rec["read_back_sha256"]}}
+
+
+@router.post("/links/{link_id}/opened")
+async def link_opened(link_id: str, request: Request):
+    """The guest pressed "Open their page": only now does the reservation read `link_sent`. Returns the URL to open."""
+    body = await _json(request) or {}
+    account = account_for(request)
+    try:
+        l = await LADDER_STORE.get_link(account, link_id)
+        if l is None:
+            return _refuse(404, "link_unknown", "no link with that id for this account")
+        if body.get("read_back_sha256") != l["read_back_sha256"]:
+            return _refuse(422, "approval_void", "that is not the read-back this link was offered with")
+        await LADDER_STORE.open_link(account, link_id, NOW())
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    return {"ok": True, "url": l["url"], "status": "link_sent"}
+
+
+@router.post("/links/{link_id}/booked")
+async def link_booked(link_id: str, request: Request):
+    """The guest says they booked — recorded as THEIR word (`guest_booked`), never as the platform's confirmation."""
+    body = await _json(request) or {}
+    account = account_for(request)
+    said = {"how": body.get("how") if body.get("how") in ("button", "voice", "chat") else "button", "said": body.get("said")}
+    try:
+        r = await LADDER_STORE.guest_booked(account, link_id, said, NOW())
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    if r == "unknown":
+        return _refuse(404, "link_unknown", "no link with that id for this account")
+    return await get_link(link_id, request)
+
+
+@router.get("/links/{link_id}")
+async def get_link(link_id: str, request: Request):
+    account = account_for(request)
+    try:
+        l = await LADDER_STORE.get_link(account, link_id)
+        confs = await LADDER_STORE.confirmations_for(link_id) if l else []
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    if l is None:
+        return _refuse(404, "link_unknown", "no link with that id for this account")
+    say = {"offered": None,
+           "link_sent": f"{l['venue_name']} — link sent · not booked yet.",
+           "guest_booked": f"Booked by you on {l['platform']} — " + ("forward the confirmation to add the reference." if inbound_ready() else "noted, on your word."),
+           "confirmed": f"Confirmed — {l['platform']}'s confirmation is in your trip, word for word."}[l["status"]]
+    return {"link_id": link_id, "status": l["status"], "url": l["url"], "platform": l["platform"], "slot_filled": l["slot_filled"],
+            "say": say, "confirmations": [{"from": c["from_addr"], "subject": c["subject"], "text": c["body_text"],
+                                            "counted": c["counted"], "note": c["note"]} for c in confs]}
+
+
+async def _link_confirmation(link_id: str, pid: str, data: dict, now) -> dict:
+    """A forwarded platform confirmation. ⚠ It COUNTS only if it names the venue or the platform: a forward of the
+    wrong email is shown, never turned into a booking."""
+    text, note = None, None
+    try:
+        full = await E.fetch_received(HTTP, pid)
+        text = full.get("text") or None
+        if text is None and full.get("html"):
+            note = "the forwarded email had no plain-text part"
+    except Exception as ex:
+        note = f"its body could not be fetched: {type(ex).__name__}"
+    venue, platform = await LADDER_STORE.link_venue(link_id)
+    hay = f"{data.get('subject') or ''} {text or ''}".casefold()
+    counted = bool(text) and (venue.casefold() in hay or platform.casefold() in hay)
+    if not counted and note is None:
+        note = f"it does not mention {venue} or {platform}, so it was kept but not counted as the confirmation"
+    await LADDER_STORE.add_link_confirmation({"provider_id": pid, "link_id": link_id, "from_addr": data.get("from"),
+                                              "subject": data.get("subject"), "body_text": text, "counted": counted,
+                                              "note": note, "received_at": now})
+    return {"ok": True, "matched": True, "counted": counted}

@@ -109,7 +109,7 @@ async def prepare(request: Request):
         except C.CallRefused as e:
             return _refuse(422, e.rule, str(e))
         except StorageUnavailable as e:
-            return _refuse(503, e.rule, str(e))
+            return _refuse(503, e.rule, e.detail)
     else:
         venue = C.call_venues().get(body.get("venue"))
         if venue is None:
@@ -137,7 +137,7 @@ async def prepare(request: Request):
     except UnknownTrip:
         return _refuse(404, "trip_unknown", "no trip with that id belongs to this account; nothing was recorded")
     except StorageUnavailable as e:
-        return _refuse(503, e.rule, str(e))
+        return _refuse(503, e.rule, e.detail)
     return {"call_id": row["call_id"], "trip_item_id": item,
             "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
 
@@ -154,7 +154,7 @@ async def place(call_id: str, request: Request):
     try:
         call = await CALL_STORE.get_call(account, call_id)
     except StorageUnavailable as e:
-        return _refuse(503, e.rule, str(e))
+        return _refuse(503, e.rule, e.detail)
     if call is None:
         return _refuse(404, "call_unknown", "no call with that id was prepared for this account")
     # ⚠ The page must name the read-back it showed; the server holds the lines and their hash.
@@ -172,7 +172,7 @@ async def place(call_id: str, request: Request):
     try:
         claimed = await CALL_STORE.claim(account, call_id, approval, now, now - APPROVAL_WINDOW, cap(), cap_window(now))
     except StorageUnavailable as e:
-        return _refuse(503, e.rule, str(e))
+        return _refuse(503, e.rule, e.detail)
     if claimed == "taken":
         return _refuse(409, "call_already_placed", "this call was already approved; a second call is a new read-back and a new yes")
     if claimed == "stale":
@@ -202,7 +202,7 @@ async def get_call(call_id: str, request: Request):
     try:
         call = await CALL_STORE.get_call(account, call_id)
     except StorageUnavailable as e:
-        return _refuse(503, e.rule, str(e))
+        return _refuse(503, e.rule, e.detail)
     if call is None:
         return _refuse(404, "call_unknown", "no call with that id was prepared for this account")
     name = _name(call)
@@ -223,7 +223,7 @@ async def get_call(call_id: str, request: Request):
             await CALL_STORE.record_reading(call_id, r, details, NOW())
             call = await CALL_STORE.get_call(account, call_id)
         except StorageUnavailable as e:
-            return _refuse(503, e.rule, str(e))
+            return _refuse(503, e.rule, e.detail)
     return _view(call, name)
 
 

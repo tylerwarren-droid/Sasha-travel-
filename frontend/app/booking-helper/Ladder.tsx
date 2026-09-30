@@ -55,6 +55,12 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   const [emailNote, setEmailNote] = useState<string | null>(null)
   const [replies, setReplies] = useState<Reply[]>([])
 
+  // S-37 link rung
+  const [link, setLink] = useState<{ link_id: string; url: string; sha256: string; platform: string; lines: string[] } | null>(null)
+  const [linkStatus, setLinkStatus] = useState<string | null>(null)
+  const [linkNote, setLinkNote] = useState<string | null>(null)
+  const [linkConfs, setLinkConfs] = useState<Array<{ text: string | null; counted: boolean; note: string | null }>>([])
+
   async function doRead() {
     setReading('reading'); setRead(null); setPick(null); setNote(null)
     const r = await req('/api/booking/venues/read', { name: q.name, city: q.city, country: q.country || undefined, website: q.website || undefined })
@@ -91,6 +97,24 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
     f().catch((e) => onFail(`Stopped: ${(e as Error).message}. Nothing more was done.`))
   }
 
+  async function prepareLink() {
+    if (!read) return
+    setLinkNote(null)
+    const r = await req('/api/booking/links', { read_id: read.read_id, date: b.date, time: b.time, party: b.party, name: b.name })
+    if (!r.ok) { setLinkNote(`No link: ${refusal(r.json, r.status)}`); return }
+    const rb = r.json.read_back as { lines: string[]; sha256: string }
+    setLink({ link_id: r.json.link_id as string, url: r.json.url as string, sha256: rb.sha256, platform: r.json.platform as string, lines: rb.lines })
+    setLinkStatus('offered')
+  }
+
+  async function linkState(path: string, body?: unknown) {
+    if (!link) return
+    const g = await req(`/api/booking/links/${link.link_id}${path}`, body)
+    if (!g.ok) { setLinkNote(`Could not record it: ${refusal(g.json, g.status)}`); return }
+    setLinkStatus(String(g.json.status ?? '')); setLinkNote(typeof g.json.say === 'string' ? g.json.say : null)
+    if (Array.isArray(g.json.confirmations)) setLinkConfs(g.json.confirmations as Array<{ text: string | null; counted: boolean; note: string | null }>)
+  }
+
   const rung = (k: string) => read?.rungs.find((r) => r.rung === k)
   const wa = rung('whatsapp')
   const waText = `Hello, I'd like to book a table for ${b.party} on ${b.date || '[date]'} at ${b.time}, under the name ${b.name}. Thank you!`
@@ -122,6 +146,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
             {read.rungs.filter((r) => !r.available && r.why_not).map((r, i) => <li key={i} className="text-xs opacity-70">{r.rung}: {r.why_not}</li>)}
           </ul>
           <div className="mt-3 flex flex-wrap gap-2">
+            {rung('link')?.available && <GatedButton label={`Their ${rung('link')?.value} page`} onClick={() => setPick('link')} needs={[]} done={pick === 'link' && 'Chosen'} />}
             {rung('phone')?.available && <GatedButton label="Phone them" onClick={() => setPick('phone')} needs={[]} done={pick === 'phone' && 'Chosen'} />}
             {rung('email')?.available && <GatedButton label="Email them" onClick={() => setPick('email')} needs={[]} done={pick === 'email' && 'Chosen'} />}
             {wa?.available && <GatedButton label="WhatsApp (you send it)" onClick={() => setPick('whatsapp')} needs={[]} done={pick === 'whatsapp' && 'Chosen'} />}
@@ -167,6 +192,41 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {read && pick === 'link' && (
+        <div className="mt-4 rounded border p-3 text-sm">
+          <div className="grid grid-cols-2 gap-2">
+            <label>Date <input className="w-full rounded border px-2 py-1" type="date" value={b.date} onChange={(e) => setB({ ...b, date: e.target.value })} /></label>
+            <label>Time <input className="w-full rounded border px-2 py-1" type="time" value={b.time} onChange={(e) => setB({ ...b, time: e.target.value })} /></label>
+            <label>Party <input className="w-full rounded border px-2 py-1" type="number" min={1} max={20} value={b.party} onChange={(e) => setB({ ...b, party: Number(e.target.value) })} /></label>
+            <label>Name <input className="w-full rounded border px-2 py-1" value={b.name} onChange={(e) => setB({ ...b, name: e.target.value })} /></label>
+          </div>
+          <div className="mt-2">
+            <GatedButton label="Prepare the link" onClick={run(prepareLink, setLinkNote)} needs={[!b.date && 'a date', link !== null && 'nothing — the link is ready below']} />
+          </div>
+          {link && (
+            <div className="mt-3 rounded bg-black/5 p-3">
+              {link.lines.map((l, i) => <p key={i}>{l}</p>)}
+              <a className="mt-2 inline-block rounded border px-3 py-1" href={link.url} target="_blank" rel="noreferrer"
+                onClick={() => { linkState('/opened', { read_back_sha256: link.sha256 }).catch((e) => setLinkNote(`Opened, but not recorded: ${(e as Error).message}`)) }}>
+                Open their {link.platform} page
+              </a>
+              <div className="mt-2 flex gap-2">
+                <GatedButton label="I booked it" onClick={run(() => linkState('/booked', { how: 'button' }), setLinkNote)}
+                  needs={[linkStatus === 'offered' && 'their page to be opened first']} done={(linkStatus === 'guest_booked' || linkStatus === 'confirmed') && 'Noted'} />
+                <GatedButton label="Check for the confirmation" onClick={run(() => linkState(''), setLinkNote)} needs={[]} />
+              </div>
+            </div>
+          )}
+          {linkNote && <p className="mt-2">{linkNote}</p>}
+          {linkConfs.map((c, i) => (
+            <div key={i} className="mt-2 rounded border p-2">
+              {c.text ? <p className="whitespace-pre-wrap">“{c.text}”</p> : null}
+              {!c.counted && <p className="text-xs opacity-70">Not counted as the confirmation: {c.note}</p>}
+            </div>
+          ))}
         </div>
       )}
 

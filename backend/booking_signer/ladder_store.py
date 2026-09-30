@@ -18,7 +18,173 @@ from .store import BOOKINGS_TRIP_TITLE, StorageUnavailable, UnknownTrip, _row, _
 SENT_OR_TRYING = ("sending", "sent")
 
 
-class MemoryLadderStore:
+
+# ── S-37 · slot links ─────────────────────────────────────────────────────────────────────────
+#
+# offered ──guest opens──▶ link_sent ──"I booked it"──▶ guest_booked
+#                              └──────────────┴──forwarded confirmation naming the venue or platform──▶ confirmed
+# ⚠ Only a FORWARDED CONFIRMATION that names the venue or the platform reaches `confirmed`; the guest's word alone is
+# `guest_booked`, recorded as theirs. Nothing ever moves back, and silence moves nothing.
+
+LINK_TRIP = {"link_sent": "link_sent", "guest_booked": "guest_booked", "confirmed": "confirmed"}
+OBSERVED_BY_LINK = "the platform's confirmation, forwarded by the guest — shown word for word"
+
+
+class MemoryLinks:
+    """Mixed into MemoryLadderStore."""
+
+    async def put_link(self, row, trip_id=None):
+        item = str(uuid.uuid4())
+        self.trip_items[item] = {"id": item, "status": "pending", "provider_name": row["venue_name"]}
+        self.links[row["link_id"]] = {**{k: v for k, v in row.items() if k != "venue_name"}, "trip_item_id": item,
+                                      "status": "offered", "venue_name": row["venue_name"]}
+        return item
+
+    async def get_link(self, account_id, link_id):
+        l = self.links.get(link_id)
+        return dict(l) if l and l["account_id"] == account_id else None
+
+    async def link_exists(self, link_id):
+        return link_id in self.links
+
+    async def open_link(self, account_id, link_id, now):
+        l = self.links.get(link_id)
+        if not l or l["account_id"] != account_id:
+            return "unknown"
+        if l["status"] == "offered":
+            l.update(status="link_sent", opened_at=now)
+            self.trip_items[l["trip_item_id"]]["status"] = "link_sent"
+        return "ok"
+
+    async def guest_booked(self, account_id, link_id, said, now):
+        l = self.links.get(link_id)
+        if not l or l["account_id"] != account_id:
+            return "unknown"
+        if l["status"] in ("offered", "link_sent"):
+            l.update(status="guest_booked", guest_said=said, guest_said_at=now)
+            self.trip_items[l["trip_item_id"]]["status"] = "guest_booked"
+        return "ok"
+
+    async def add_link_confirmation(self, row):
+        if any(c["provider_id"] == row["provider_id"] for c in self.link_confirmations):
+            return False
+        self.link_confirmations.append(dict(row))
+        l = self.links[row["link_id"]]
+        if row["counted"] and l["status"] != "confirmed":
+            l.update(status="confirmed", confirmed_at=row["received_at"])
+            self.trip_items[l["trip_item_id"]]["status"] = "confirmed"
+            self.attempts.append({"trip_item_id": l["trip_item_id"], "method": "web_form", "status": "confirmed",
+                                  "observed_by": OBSERVED_BY_LINK})
+        return True
+
+    async def link_venue(self, link_id):
+        l = self.links.get(link_id)
+        return (l["venue_name"], l["platform"]) if l else None
+
+    async def confirmations_for(self, link_id):
+        return sorted([dict(c) for c in self.link_confirmations if c["link_id"] == link_id], key=lambda c: c["received_at"])
+
+
+class PostgresLinks:
+    """Mixed into PostgresLadderStore."""
+
+    async def _run_links(self, fn):
+        try:
+            return await self._calls._run(fn)
+        except StorageUnavailable as e:
+            raise e.rehint("005_slot_links.sql") from None
+
+    async def put_link(self, row, trip_id=None):
+        acct = uuid.UUID(row["account_id"])
+
+        async def fn(conn):
+            async with conn.transaction():
+                tid = await conn.fetchval("select id from trips where owner_id = $1 and title = $2 and status in ('draft','active') "
+                                          "order by created_at limit 1", acct, BOOKINGS_TRIP_TITLE)
+                if tid is None:
+                    tid = await conn.fetchval("insert into trips (owner_id, title) values ($1, $2) returning id", acct, BOOKINGS_TRIP_TITLE)
+                item = await conn.fetchval(
+                    "insert into trip_items (trip_id, type, status, provider_name, date_time, local_timezone, party_size) "
+                    "values ($1, 'restaurant', 'pending', $2, ($3::date + $4::time) at time zone $5, $5, $6) returning id",
+                    tid, row["venue_name"], row["local_date"], row["local_time"], row["local_timezone"], row["party_size"])
+                await conn.execute(
+                    "insert into booking_links (link_id, account_id, trip_item_id, read_id, platform, url, slot_filled, "
+                    "read_back_lines, read_back_sha256, status, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'offered',$10)",
+                    uuid.UUID(row["link_id"]), acct, item, uuid.UUID(row["read_id"]), row["platform"], row["url"],
+                    row["slot_filled"], row["read_back_lines"], row["read_back_sha256"], row["created_at"])
+                return str(item)
+        return await self._run_links(fn)
+
+    async def get_link(self, account_id, link_id):
+        lid = _uuid_or_none(link_id)
+        if lid is None:
+            return None
+        return _row(await self._run_links(lambda c: c.fetchrow(
+            "select l.*, t.provider_name as venue_name from booking_links l join trip_items t on t.id = l.trip_item_id "
+            "where l.link_id = $1 and l.account_id = $2", lid, uuid.UUID(account_id))))
+
+    async def link_exists(self, link_id):
+        lid = _uuid_or_none(link_id)
+        return lid is not None and bool(await self._run_links(lambda c: c.fetchval("select 1 from booking_links where link_id = $1", lid)))
+
+    async def _move(self, account_id, link_id, frm, to, extra_sql, *extra):
+        lid = _uuid_or_none(link_id)
+        if lid is None:
+            return "unknown"
+
+        async def fn(conn):
+            async with conn.transaction():
+                owner = await conn.fetchval("select account_id from booking_links where link_id = $1", lid)
+                if owner is None or str(owner) != account_id:
+                    return "unknown"
+                item = await conn.fetchval(f"update booking_links set status = $2{extra_sql} where link_id = $1 "
+                                           f"and status = any($3::text[]) returning trip_item_id", lid, to, list(frm), *extra)
+                if item is not None:
+                    await conn.execute("update trip_items set status = $2, updated_at = now() where id = $1", item, LINK_TRIP[to])
+                return "ok"
+        return await self._run_links(fn)
+
+    async def open_link(self, account_id, link_id, now):
+        return await self._move(account_id, link_id, ("offered",), "link_sent", ", opened_at = $4", now)
+
+    async def guest_booked(self, account_id, link_id, said, now):
+        return await self._move(account_id, link_id, ("offered", "link_sent"), "guest_booked",
+                                ", guest_said = $4, guest_said_at = $5", said, now)
+
+    async def add_link_confirmation(self, row):
+        async def fn(conn):
+            async with conn.transaction():
+                ok = await conn.fetchval(
+                    "insert into booking_link_confirmations (provider_id, link_id, from_addr, subject, body_text, counted, note, received_at) "
+                    "values ($1,$2,$3,$4,$5,$6,$7,$8) on conflict (provider_id) do nothing returning provider_id",
+                    row["provider_id"], uuid.UUID(row["link_id"]), row["from_addr"], row["subject"], row["body_text"],
+                    row["counted"], row["note"], row["received_at"])
+                if ok is None:
+                    return False
+                if row["counted"]:
+                    item = await conn.fetchval("update booking_links set status = 'confirmed', confirmed_at = $2 where link_id = $1 "
+                                               "and status <> 'confirmed' returning trip_item_id", uuid.UUID(row["link_id"]), row["received_at"])
+                    if item is not None:
+                        await conn.execute("update trip_items set status = 'confirmed', updated_at = now() where id = $1", item)
+                        await conn.execute("insert into booking_attempts (trip_item_id, method, attempted_at, status, response_received, "
+                                           "response_at, observed_by) values ($1, 'web_form', $2, 'confirmed', $3, $2, $4)",
+                                           item, row["received_at"], row["body_text"], OBSERVED_BY_LINK)
+                return True
+        return await self._run_links(fn)
+
+    async def link_venue(self, link_id):
+        lid = _uuid_or_none(link_id)
+        r = await self._run_links(lambda c: c.fetchrow(
+            "select t.provider_name, l.platform from booking_links l join trip_items t on t.id = l.trip_item_id where l.link_id = $1", lid))
+        return (r["provider_name"], r["platform"]) if r else None
+
+    async def confirmations_for(self, link_id):
+        rows = await self._run_links(lambda c: c.fetch(
+            "select * from booking_link_confirmations where link_id = $1 order by received_at", uuid.UUID(link_id)))
+        return [_row(r) for r in rows]
+
+
+class MemoryLadderStore(MemoryLinks):
     def __init__(self) -> None:
         self.reads: Dict[str, dict] = {}
         self.emails: Dict[str, dict] = {}
@@ -27,6 +193,8 @@ class MemoryLadderStore:
         self.trips: Dict[str, dict] = {}
         self.trip_items: Dict[str, dict] = {}
         self.attempts: List[dict] = []
+        self.links: Dict[str, dict] = {}
+        self.link_confirmations: List[dict] = []
 
     async def put_read(self, row: dict) -> None:
         self.reads[row["read_id"]] = dict(row)
@@ -94,7 +262,7 @@ class MemoryLadderStore:
 _TRIP = ("venue_name",)
 
 
-class PostgresLadderStore:
+class PostgresLadderStore(PostgresLinks):
     def __init__(self, base) -> None:
         self._base = base
         self._calls = PostgresCallStore(base)
@@ -103,9 +271,7 @@ class PostgresLadderStore:
         try:
             return await self._calls._run(fn)
         except StorageUnavailable as e:
-            if e.rule == "storage_not_provisioned":
-                raise StorageUnavailable("storage_not_provisioned", f"{e} — run backend/booking_signer/sql/004_ladder.sql") from None
-            raise
+            raise e.rehint("004_ladder.sql") from None
 
     async def put_read(self, row):
         await self._run(lambda c: c.execute(
@@ -213,3 +379,4 @@ class PostgresLadderStore:
         rows = await self._run(lambda c: c.fetch(
             "select * from booking_email_replies where email_id = $1 order by received_at", uuid.UUID(email_id)))
         return [_row(r) for r in rows]
+

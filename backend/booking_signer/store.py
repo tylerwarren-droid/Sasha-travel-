@@ -39,6 +39,14 @@ class StorageUnavailable(Exception):
     def __init__(self, rule: str, message: str) -> None:
         super().__init__(f"{rule}: {message}")
         self.rule = rule
+        #: the message without the rule — so a wrapper can re-hint it without stacking "rule: rule: rule: …"
+        self.detail = message
+
+    def rehint(self, sql_file: str) -> "StorageUnavailable":
+        """The same failure, pointing at the SQL block that creates the missing table (once, not nested)."""
+        if self.rule != "storage_not_provisioned":
+            return self
+        return StorageUnavailable(self.rule, f"{self.detail.split(' — run ')[0]} — run backend/booking_signer/sql/{sql_file}")
 
 
 class AlreadyRecorded(Exception):

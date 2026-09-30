@@ -23,10 +23,10 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from booking_signer import call_routes, emailing as E, ladder as L, ladder_routes, routes, venue_read as V
+from booking_signer import call_routes, emailing as E, ladder as L, ladder_routes, routes, slot_link as SL, venue_read as V
 from booking_signer.call_store import MemoryCallStore, PostgresCallStore
 from booking_signer.ladder_store import MemoryLadderStore, PostgresLadderStore
-from booking_signer.store import PostgresStore
+from booking_signer.store import PostgresStore, StorageUnavailable
 
 HERE = pathlib.Path(__file__).parent
 SQL_DIR = HERE.parent / "booking_signer" / "sql"
@@ -44,6 +44,8 @@ LA_CONTRA_SITE = """<html><head><script type="application/ld+json">{"@type":"Res
 <p>Escríbenos a info@lacontra.test o ven a vernos.</p> <img src="logo@2x.png"></body></html>"""
 PSI_LIKE = """<html><body><form action="/reservas/"><input type="date" name="rtb-date"><select name="rtb-time"></select>
 <input name="rtb-party"><input name="rtb-name"><input type="email" name="rtb-email"></form></body></html>"""
+OPENTABLE_SITE = """<html><body><a href="https://www.opentable.es/r/la-contra-madrid?corrid=abc">Reservar</a>
+<a href="tel:+34915001122">Tel</a></body></html>"""
 PLATFORM_SITE = """<html><body><iframe src="https://widget.thefork.com/abc"></iframe><a href="https://www.opentable.es/r/x">Reserva</a></body></html>"""
 
 
@@ -288,6 +290,44 @@ class Email(unittest.TestCase):
         self.assertIsNone(E.act_id_of(["info@in.kanoe.test"]))
 
 
+# ── 3b · the slot link, and the one storage error ─────────────────────────────────────────────
+
+class SlotLinkBuilder(unittest.TestCase):
+    READ = {"name": "La Contra", "facts": [{"kind": "platform", "value": "OpenTable", "source_label": "their website, lacontra.test",
+                                             "detail": {"link": "https://www.opentable.es/r/la-contra-madrid?corrid=abc"}}]}
+    ON, AT = datetime(2026, 10, 8).date(), datetime(2026, 1, 1, 20, 0).time()
+
+    def test_no_recipe_means_their_page_as_linked_and_no_slot_claim(self):
+        l = SL.build(self.READ, self.ON, self.AT, 4, recipes={})
+        self.assertEqual((l.url, l.slot_filled), ("https://www.opentable.es/r/la-contra-madrid?corrid=abc", False))
+
+    def test_an_unverified_recipe_fills_nothing(self):
+        r = SL.Recipe("OpenTable", "d", "t", "p", "%Y-%m-%d", "%H:%M", observed="test", verified=None)
+        self.assertFalse(SL.build(self.READ, self.ON, self.AT, 4, recipes={"OpenTable": r}).slot_filled)
+
+    def test_a_verified_recipe_fills_the_slot_and_keeps_the_rest(self):
+        r = SL.Recipe("OpenTable", "d", "t", "p", "%Y-%m-%d", "%H:%M", observed="test", verified="test")
+        l = SL.build(self.READ, self.ON, self.AT, 4, recipes={"OpenTable": r})
+        self.assertEqual((l.url, l.slot_filled), ("https://www.opentable.es/r/la-contra-madrid?corrid=abc&d=2026-10-08&t=20%3A00&p=4", True))
+
+    def test_a_link_off_the_platforms_own_host_is_not_its_page(self):
+        read = {"facts": [{"kind": "platform", "value": "OpenTable", "source_label": "x", "detail": {"link": "https://evil.test/opentable"}}]}
+        with self.assertRaises(SL.LinkRefused) as e:
+            SL.build(read, self.ON, self.AT, 4, recipes={})
+        self.assertEqual(e.exception.rule, "platform_page_not_linked")
+
+    def test_the_recipes_are_empty_until_the_founder_captures_and_verifies_them(self):
+        self.assertEqual(SL.RECIPES, {})
+
+
+class StorageMessage(unittest.TestCase):
+    def test_the_rule_is_said_once_and_the_hint_names_the_right_block(self):
+        e = StorageUnavailable("storage_not_provisioned", 'relation "booking_links" does not exist — run backend/booking_signer/sql/001_booking_storage.sql')
+        e = e.rehint("003_phone_calls.sql").rehint("004_ladder.sql").rehint("005_slot_links.sql")
+        self.assertEqual(e.detail, 'relation "booking_links" does not exist — run backend/booking_signer/sql/005_slot_links.sql')
+        self.assertEqual(str(e).count("storage_not_provisioned"), 1)
+
+
 # ── 4 · the routes ──────────────────────────────────────────────────────────────────────────
 
 def signed(event: dict):
@@ -432,12 +472,76 @@ class LadderRoutes:
         self.assertEqual(self.c.post("/api/booking/email/inbound", content=body, headers=h).json(), {"ok": True, "matched": False})
 
 
-class OnMemory(LadderRoutes, unittest.TestCase):
+class SlotLinkRoutes:
+    """S-37, mixed into the same two stores."""
+
+    def link_read(self):
+        self.web.pages["https://www.lacontra.test/"] = R(200, text=OPENTABLE_SITE)
+        return self.read()
+
+    def test_the_chooser_offers_the_platform_page_first(self):
+        v = self.link_read()
+        self.assertEqual(v["say"], "They book through OpenTable. I'll send you their OpenTable page to book it yourself — or I'll call them. Which?")
+
+    def test_the_link_is_the_page_read_on_their_site_and_says_who_books(self):
+        v = self.link_read()
+        r = self.c.post("/api/booking/links", json={"read_id": v["read_id"], **self.BOOKING})
+        self.assertEqual(r.status_code, 200, r.text)
+        p = r.json()
+        self.assertEqual((p["platform"], p["slot_filled"]), ("OpenTable", False))
+        lines = p["read_back"]["lines"]
+        self.assertIn("I can't book there for you", lines[0])
+        self.assertIn("Pick Thursday 8 October at 8 pm, for 4, there — it's booked in your name", lines[1])
+        self.assertIn("Nothing is reserved until you press their button.", lines[2])
+        self.assertIn(f"act-{p['link_id']}@in.kanoe.test", lines[3])
+        self.assertFalse(any("opentable" in u for m, u, b in self.web.requests))   # the platform was never contacted
+        self.assertEqual(self.c.post("/api/booking/links", json={"read_id": v["read_id"], **self.BOOKING, "url": "https://x"}).json()["rule"],
+                         "url_from_request")
+
+    def test_opened_then_booked_then_a_forwarded_confirmation(self):
+        v = self.link_read()
+        p = self.c.post("/api/booking/links", json={"read_id": v["read_id"], **self.BOOKING}).json()
+        self.assertEqual(self.c.post(f"/api/booking/links/{p['link_id']}/opened", json={"read_back_sha256": "0" * 64}).json()["rule"], "approval_void")
+        o = self.c.post(f"/api/booking/links/{p['link_id']}/opened", json={"read_back_sha256": p["read_back"]["sha256"]}).json()
+        self.assertEqual((o["status"], o["url"]), ("link_sent", "https://www.opentable.es/r/la-contra-madrid?corrid=abc"))
+        self.assertEqual(self.trip_status_of_link(p["link_id"]), "link_sent")
+        b = self.c.post(f"/api/booking/links/{p['link_id']}/booked", json={"how": "button"}).json()
+        self.assertEqual(b["status"], "guest_booked")
+        self.assertEqual(self.trip_status_of_link(p["link_id"]), "guest_booked")
+
+        # a forward of the WRONG email is kept, never counted
+        self.web.resend_received["fwd_0"] = {"text": "Your parcel has shipped."}
+        body, h = signed({"type": "email.received", "data": {"email_id": "fwd_0", "from": "anna@example.test",
+                                                            "to": [f"act-{p['link_id']}@in.kanoe.test"], "subject": "Fwd: parcel"}})
+        self.assertEqual(self.c.post("/api/booking/email/inbound", content=body, headers=h).json()["counted"], False)
+        self.assertEqual(self.trip_status_of_link(p["link_id"]), "guest_booked")
+
+        self.web.resend_received["fwd_1"] = {"text": "OpenTable: your reservation at La Contra is confirmed. Thu 8 Oct, 20:00, 4 people. Conf #1234"}
+        body, h = signed({"type": "email.received", "data": {"email_id": "fwd_1", "from": "anna@example.test",
+                                                            "to": [f"act-{p['link_id']}@in.kanoe.test"], "subject": "Fwd: Reservation confirmed"}})
+        self.assertEqual(self.c.post("/api/booking/email/inbound", content=body, headers=h).json()["counted"], True)
+        self.c.post("/api/booking/email/inbound", content=body, headers=h)   # a redelivery is recognised
+        g = self.c.get(f"/api/booking/links/{p['link_id']}").json()
+        self.assertEqual(g["status"], "confirmed")
+        self.assertEqual([c["counted"] for c in g["confirmations"]], [False, True])
+        self.assertEqual(self.trip_status_of_link(p["link_id"]), "confirmed")
+
+    def test_a_platform_not_linked_from_their_site_gets_no_link(self):
+        self.web.pages["https://www.lacontra.test/"] = R(200, text='<iframe src="https://widget.thefork.com/abc"></iframe>')
+        v = self.read()
+        r = self.c.post("/api/booking/links", json={"read_id": v["read_id"], **self.BOOKING})
+        self.assertEqual(r.json()["rule"], "platform_page_not_linked")
+
+
+class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
     def make_stores(self):
         return MemoryCallStore(), MemoryLadderStore()
 
     def trip_status_of_email(self, email_id):
         return self.ladder.trip_items[self.ladder.emails[email_id]["trip_item_id"]]["status"]
+
+    def trip_status_of_link(self, link_id):
+        return self.ladder.trip_items[self.ladder.links[link_id]["trip_item_id"]]["status"]
 
     def test_quarantine_is_kept(self):
         body, h = signed({"type": "email.received", "data": {"email_id": "rcv_q", "to": ["hello@in.kanoe.test"], "from": "x@y.test"}})
@@ -446,7 +550,7 @@ class OnMemory(LadderRoutes, unittest.TestCase):
 
 
 @unittest.skipUnless(PG_URL, "BOOKING_TEST_DATABASE_URL is not set — the Postgres half did NOT run")
-class OnPostgres(LadderRoutes, unittest.TestCase):
+class OnPostgres(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import asyncpg
@@ -458,7 +562,7 @@ class OnPostgres(LadderRoutes, unittest.TestCase):
             try:
                 await c.execute("drop schema if exists auth cascade; drop schema public cascade; create schema public;")
                 await c.execute((HERE / "fixtures" / "model_a_live_2026-09-28.sql").read_text(encoding="utf-8"))
-                for f in ("001_booking_storage.sql", "002_prepared_status.sql", "003_phone_calls.sql", "004_ladder.sql"):
+                for f in ("001_booking_storage.sql", "002_prepared_status.sql", "003_phone_calls.sql", "004_ladder.sql", "005_slot_links.sql"):
                     await c.execute((SQL_DIR / f).read_text(encoding="utf-8"))
             finally:
                 await c.close()
@@ -469,7 +573,8 @@ class OnPostgres(LadderRoutes, unittest.TestCase):
             import asyncpg
             c = await asyncpg.connect(PG_URL)
             try:
-                await c.execute("delete from booking_email_replies; delete from booking_email_quarantine; delete from booking_emails; "
+                await c.execute("delete from booking_link_confirmations; delete from booking_links; "
+                                "delete from booking_email_replies; delete from booking_email_quarantine; delete from booking_emails; "
                                 "delete from booking_attempts; delete from booking_calls; delete from venue_reads; delete from trip_items; delete from trips;")
             finally:
                 await c.close()
@@ -486,6 +591,9 @@ class OnPostgres(LadderRoutes, unittest.TestCase):
             finally:
                 await c.close()
         return run(q())
+
+    def trip_status_of_link(self, link_id):
+        return self._q("select t.status from trip_items t join booking_links l on l.trip_item_id = t.id where l.link_id = $1::uuid", link_id)[0]["status"]
 
     def trip_status_of_email(self, email_id):
         return self._q("select t.status from trip_items t join booking_emails e on e.trip_item_id = t.id where e.email_id = $1::uuid", email_id)[0]["status"]

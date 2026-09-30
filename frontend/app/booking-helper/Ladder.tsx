@@ -11,7 +11,7 @@
  * Every fact is shown with where it was read. Every step ends in something visible
  * (scripts/check-outcome-surfaces.mjs holds this file to it).
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { bookingUrl as apiUrl, bookingHeaders as apiHeaders } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
 import { PhoneCall } from './PhoneCall'
@@ -47,6 +47,10 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   const [pick, setPick] = useState<string | null>(null)
   // S-41 G2 · which read phone number to call — the guest chooses, each shown with where it was read
   const [phoneFact, setPhoneFact] = useState<number | null>(null)
+  // the booking link · a link can carry the whole booking (…/booking-helper?book=phone&lookup=…&number=…): the page reads the venue
+  // itself, and the link's number only PICKS among the numbers read there — it is never dialled from the URL
+  const [linked, setLinked] = useState<{ number: string; source: string; date: string; time: string; party: number; name: string } | null>(null)
+  const autoRead = useRef(false)
   const [note, setNote] = useState<string | null>(null)
 
   // email rung
@@ -63,12 +67,40 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   const [linkNote, setLinkNote] = useState<string | null>(null)
   const [linkConfs, setLinkConfs] = useState<Array<{ text: string | null; counted: boolean; note: string | null }>>([])
 
-  async function doRead() {
+  type Linked = { number: string; source: string; date: string; time: string; party: number; name: string }
+
+  async function doRead(query = q, link: Linked | null = linked) {
     setReading('reading'); setRead(null); setPick(null); setNote(null)
-    const r = await req('/api/booking/venues/read', { name: q.name, city: q.city, country: q.country || undefined, website: q.website || undefined })
+    const r = await req('/api/booking/venues/read', { name: query.name, city: query.city, country: query.country || undefined, website: query.website || undefined })
     if (!r.ok) { setReading('stopped'); setNote(`Could not read them: ${refusal(r.json, r.status)}`); return }
-    setRead(r.json as unknown as Read); setReading('done')
+    const got = r.json as unknown as Read
+    setRead(got); setReading('done')
+    if (link) {
+      const digits = (s: string) => s.replace(/[^\d+]/g, '')
+      const want = digits(link.number)
+      const i = got.facts.findIndex((f) => f.kind === 'phone' && digits(f.value) === want
+        && (link.source !== 'google' || /google listing/i.test(f.source_label)))
+      if (i < 0) { setNote(`The number in the link (${link.number}) is not among the numbers read for ${got.venue} — choose one below, or none.`); setPick('phone'); return }
+      setPick('phone'); setPhoneFact(i)
+    }
   }
+
+  useEffect(() => {
+    if (autoRead.current) return
+    const u = new URLSearchParams(window.location.search)
+    if (u.get('book') !== 'phone' || !u.get('lookup') || !u.get('city')) return
+    autoRead.current = true
+    const query = { name: u.get('lookup') ?? '', city: u.get('city') ?? '', country: (u.get('country') ?? '').toUpperCase(), website: '' }
+    const party = Number(u.get('party'))
+    const link: Linked = { number: u.get('number') ?? '', source: (u.get('number_source') ?? '').toLowerCase(), date: u.get('date') ?? '',
+      time: u.get('time') ?? '', party: Number.isInteger(party) && party >= 1 && party <= 20 ? party : 2, name: u.get('name') ?? defaults.name }
+    ;(async () => {
+      await Promise.resolve()
+      setQ(query); setLinked(link)
+      await doRead(query, link)
+    })().catch((e) => { setReading('stopped'); setNote(`Stopped: ${(e as Error).message}`) })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, from the page's own URL
+  }, [])
 
   async function prepareEmail() {
     if (!read) return
@@ -166,7 +198,8 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
           ))}
           {phoneFact === null
             ? <p className="text-xs opacity-70">Waiting for: a number to be chosen.</p>
-            : <PhoneCall key={phoneFact} defaults={{ name: defaults.name, phone: '' }} readId={read.read_id} venueLabel={read.venue} factIndex={phoneFact} />}
+            : <PhoneCall key={phoneFact} defaults={{ name: linked?.name || defaults.name, phone: '' }} readId={read.read_id} venueLabel={read.venue} factIndex={phoneFact}
+                initial={linked ? { date: linked.date, time: linked.time, party: linked.party } : undefined} />}
         </div>
       )}
 

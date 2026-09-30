@@ -46,9 +46,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** `readId` (S-36): call the venue Magellan read, on the number it read. Without it: the test line. */
 /** `cancelsCallId` (S-45): this panel cancels that confirmed booking — everything is read from the booking call; no fields. */
-export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCallId }: { defaults: { name: string; phone: string }; readId?: string; venueLabel?: string; factIndex?: number; cancelsCallId?: string }) {
+export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCallId, initial }: { defaults: { name: string; phone: string }; readId?: string; venueLabel?: string; factIndex?: number; cancelsCallId?: string; initial?: { date: string; time: string; party: number } }) {
   const [health, setHealth] = useState<CallsHealth | 'unreachable' | null>(null)
-  const [form, setForm] = useState({ date: '', time: '20:00', party: 2, name: defaults.name, phone: '' })
+  // the booking link · a link's booking fills the form; the guest's own phone number is always typed by the guest
+  const [form, setForm] = useState({ date: initial?.date ?? '', time: initial?.time || '20:00', party: initial?.party ?? 2, name: defaults.name, phone: '' })
   const [phase, setPhase] = useState<Phase>('idle')
   const [lines, setLines] = useState<string[]>([])
   const [prepared, setPrepared] = useState<{ call_id: string; sha256: string } | null>(null)
@@ -56,7 +57,11 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
   const [note, setNote] = useState<string | null>(null)
 
   useEffect(() => {
-    req('/api/booking/health').then((r) => setHealth(((r.json as { calls?: CallsHealth }).calls) ?? 'unreachable')).catch(() => setHealth('unreachable'))
+    const check = () => { req('/api/booking/health').then((r) => setHealth(((r.json as { calls?: CallsHealth }).calls) ?? 'unreachable')).catch(() => setHealth('unreachable')) }
+    check()
+    // the booking link · calls are switched on only when the founder is ready: the panel notices within 10 s, no reload needed
+    const every = setInterval(check, 10000)
+    return () => clearInterval(every)
   }, [])
 
   const h = health === 'unreachable' || health === null ? null : health

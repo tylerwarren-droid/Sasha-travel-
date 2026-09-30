@@ -426,7 +426,7 @@ class CallRoutes:
         return prep
 
     def test_a_cancellation_is_prepared_from_the_booking_and_cancels_that_reservation(self):
-        """S-45 · everything read from the booking call; a confirmed cancellation marks the SAME reservation cancelled."""
+        """S-47 · everything read from the booking call; a confirmed cancellation marks the SAME reservation cancelled."""
         booking = self._confirmed_booking()
         c = self.c.post("/api/booking/calls", json={"cancels_call_id": booking["call_id"]})
         self.assertEqual(c.status_code, 200, c.text)

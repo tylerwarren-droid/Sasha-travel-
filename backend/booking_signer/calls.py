@@ -181,7 +181,7 @@ class Lang:
     at: Callable[[time], str]
     opening: str                           #: {party} {what} {when} {at}
     check: str                             #: {who}
-    cancel_opening: str = ""               #: S-45 · the same slots, for cancelling a booking already made
+    cancel_opening: str = ""               #: S-47 · the same slots, for cancelling a booking already made
 
 
 _EN_NUM = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve")
@@ -343,7 +343,7 @@ def instructions(lang: Lang, p: CallParticulars, venue: CallVenue, opening: str,
 
 
 def cancel_instructions(lang: Lang, p: CallParticulars, opening: str, check: str, reference: Optional[str]) -> str:
-    """S-45 · Bland's `task` for CANCELLING a booking Sasha made. Same rules: no fee, no card, their words brought back."""
+    """S-47 · Bland's `task` for CANCELLING a booking Sasha made. Same rules: no fee, no card, their words brought back."""
     held = f'It is held under "{reference}". ' if reference else ""
     return (
         f"You are Sasha, an AI assistant, phoning a restaurant to CANCEL an existing table booking on behalf of a guest. Speak {lang.label} only. "
@@ -371,7 +371,7 @@ def _canonical(obj: Any) -> str:
 def build_call(venue: CallVenue, p: CallParticulars, now: datetime, purpose: str = "book", reference: Optional[str] = None) -> dict:
     """The brief (what Bland will be sent), the read-back lines, and both hashes. The approval binds to both.
 
-    S-45 · `purpose="cancel"` builds the call that cancels a booking Sasha made — the same venue, number and particulars,
+    S-47 · `purpose="cancel"` builds the call that cancels a booking Sasha made — the same venue, number and particulars,
     read from the booking call itself (call_routes), never re-typed."""
     if purpose not in ("book", "cancel"):
         raise CallRefused("purpose_invalid", "a call books or cancels")

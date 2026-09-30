@@ -193,7 +193,7 @@ _LANG_BY_CODE = {lang.code: key for key, lang in C.LANGUAGES.items()}
 
 
 async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
-    """S-45 · the call that cancels a booking Sasha made. EVERYTHING — venue, number, language, day, time, party, name,
+    """S-47 · the call that cancels a booking Sasha made. EVERYTHING — venue, number, language, day, time, party, name,
     the reference they gave — is read from the booking call itself; the request may name nothing else, so a
     cancellation can never drift onto another venue or another night."""
     extra = set(body) - {"cancels_call_id"}

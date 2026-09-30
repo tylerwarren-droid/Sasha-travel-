@@ -27,7 +27,7 @@ TRIP_STATUS = {"yes": "confirmed", "no": "declined", "unclear": "unclear"}
 
 
 def outcome_effect(purpose: str, outcome: str) -> Tuple[str, Optional[str]]:
-    """(the attempt's status, the trip item's NEW status or None to leave it). S-45 · a cancellation that the venue
+    """(the attempt's status, the trip item's NEW status or None to leave it). S-47 · a cancellation that the venue
     confirmed cancels the reservation; one they refused or left unclear leaves the booking as it stands — never a guess
     that it is gone."""
     if purpose == "cancel":
@@ -104,7 +104,7 @@ class MemoryCallStore:
         return True
 
     async def put_cancel_call(self, row: dict, trip_item_id: str) -> str:
-        """S-45 · a cancelling call sits on the SAME reservation as the booking it cancels — no new trip item."""
+        """S-47 · a cancelling call sits on the SAME reservation as the booking it cancels — no new trip item."""
         self.calls[row["call_id"]] = {**{k: v for k, v in row.items() if k not in _TRIP}, "trip_item_id": trip_item_id,
                                       "status": "awaiting_approval"}
         return trip_item_id
@@ -207,7 +207,7 @@ class PostgresCallStore:
             placed.answer, placed.why, now if placed.placed else None))
 
     async def put_cancel_call(self, row: dict, trip_item_id: str) -> str:
-        """S-45 · a cancelling call sits on the SAME reservation as the booking it cancels — no new trip item."""
+        """S-47 · a cancelling call sits on the SAME reservation as the booking it cancels — no new trip item."""
         await self._run(lambda c: c.execute(
             "insert into booking_calls (call_id, account_id, trip_item_id, venue_key, dialled_number, language, "
             "guest_name, guest_phone, brief, brief_sha256, read_back_lines, read_back_sha256, status, created_at) "

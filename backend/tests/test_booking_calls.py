@@ -398,6 +398,17 @@ class CallRoutes:
         self.assertEqual(v["status"], "not_placed")
         self.assertIn("Bland's call log has no call", v["why"])
 
+    def test_s64_the_prepare_writes_the_reservation_object_alongside_the_old_columns(self):
+        from booking_signer import reservation as RS
+        prep = self.prepare()
+        req, item_sha, call_sha = self.request_of(prep["call_id"])
+        self.assertEqual(req["schema"], "reservation/1")
+        self.assertEqual((req["when"], req["how_many"], req["who"]["name"]),
+                         ({"mode": "at", "at": "2026-10-08T20:00"}, {"count": 4, "unit": "people"}, "Anna Johnson"))
+        self.assertEqual(item_sha, RS.sha256(req))
+        self.assertEqual(call_sha, item_sha)                     # the call carried out exactly this request
+        self.assertEqual(self.trip_status(prep["call_id"]), "pending")   # the old columns, as before
+
     def test_off_means_no_read_back_and_no_call(self):
         with mock.patch.dict(os.environ, {"SASHA_CALLS_ENABLED": "0"}):
             r = self.c.post("/api/booking/calls", json=JOHNSON)
@@ -587,6 +598,11 @@ class OnMemory(CallRoutes, unittest.TestCase):
     def bland_id(self, call_id):
         return self.store.calls[call_id]["bland_call_id"]
 
+    def request_of(self, call_id):
+        c = self.store.calls[call_id]
+        item = self.store.trip_items[c["trip_item_id"]]
+        return item.get("request"), item.get("request_sha256"), c.get("request_sha256")
+
     def attempts(self, call_id):
         item = self.store.calls[call_id]["trip_item_id"]
         return [a for a in self.store.attempts if a["trip_item_id"] == item]
@@ -606,7 +622,7 @@ class OnPostgres(CallRoutes, unittest.TestCase):
             try:
                 await c.execute("drop schema if exists auth cascade; drop schema public cascade; create schema public;")
                 await c.execute((HERE / "fixtures" / "model_a_live_2026-09-28.sql").read_text(encoding="utf-8"))
-                for f in ("001_booking_storage.sql", "002_prepared_status.sql", "003_phone_calls.sql", "004_ladder.sql", "005_slot_links.sql"):
+                for f in ("001_booking_storage.sql", "002_prepared_status.sql", "003_phone_calls.sql", "004_ladder.sql", "005_slot_links.sql", "011_reservation_request.sql"):
                     await c.execute((SQL_DIR / f).read_text(encoding="utf-8"))
             finally:
                 await c.close()
@@ -639,6 +655,12 @@ class OnPostgres(CallRoutes, unittest.TestCase):
 
     def bland_id(self, call_id):
         return self._q("select bland_call_id from booking_calls where call_id = $1::uuid", call_id)[0]["bland_call_id"]
+
+    def request_of(self, call_id):
+        r = self._q("select t.request, t.request_sha256 as item_sha, c.request_sha256 as call_sha from booking_calls c "
+                    "join trip_items t on t.id = c.trip_item_id where c.call_id = $1::uuid", call_id)[0]
+        req = r["request"]
+        return (json.loads(req) if isinstance(req, str) else req), r["item_sha"], r["call_sha"]
 
     def attempts(self, call_id):
         return [dict(r) for r in self._q("select a.method, a.status from booking_attempts a join booking_calls c "

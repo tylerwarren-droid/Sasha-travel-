@@ -110,7 +110,8 @@ class MemoryStore:
             "provider_name": row["venue_name"], "local_date": row["local_date"], "local_time": row["local_time"],
             "local_timezone": row["local_timezone"], "party_size": row["party_size"],
         }
-        self.intents[row["intent_id"]] = {**{k: v for k, v in row.items() if k not in _TRIP_FIELDS}, "trip_item_id": item_id}
+        self.intents[row["intent_id"]] = {**{k: v for k, v in row.items() if k not in _TRIP_FIELDS and k != "request"}, "trip_item_id": item_id}
+        remember_request(self.trip_items[item_id], self.intents[row["intent_id"]], row.get("request"))
         return item_id
 
     async def get_intent(self, account_id, intent_id) -> Optional[dict]:
@@ -302,6 +303,7 @@ class PostgresStore:
                     uuid.UUID(row["intent_id"]), acct, item_id, row["venue_key"], row["mode"], row["guest_name"],
                     row["guest_email"], row["guest_phone"], row["task"], row["standing"], row["read_back_lines"],
                     row["read_back_sha256"], row["filled_values_sha256"], row["status"], row["created_at"])
+                await write_request(conn, item_id, "booking_intents", "intent_id", uuid.UUID(row["intent_id"]), row.get("request"))
                 return str(item_id)
         return await self._run(fn)
 
@@ -398,6 +400,30 @@ def _uuid_or_none(v: Any) -> Optional[uuid.UUID]:
         return uuid.UUID(str(v)) if v is not None else None
     except (ValueError, TypeError, AttributeError):
         return None
+
+
+async def write_request(conn, item_id, table: str, key_col: str, key, request) -> None:
+    """S-64 step 3 · the reservation/1 object alongside the old columns, IN the caller's transaction: the object and
+    its hash on the trip item (when this row created it), the hash on the channel row. No object, nothing written."""
+    if not request:
+        return
+    from . import reservation as RS
+    sha = RS.sha256(request)
+    if item_id is not None:
+        await conn.execute("update trip_items set request = $2, request_sha256 = $3, request_schema = $4 where id = $1",
+                           item_id, RS.validate(request), sha, RS.SCHEMA)
+    await conn.execute(f"update {table} set request_sha256 = $2 where {key_col} = $1", key, sha)
+
+
+def remember_request(item: Optional[dict], channel: dict, request) -> None:
+    """The same, for the memory stores (tests)."""
+    if not request:
+        return
+    from . import reservation as RS
+    sha = RS.sha256(request)
+    if item is not None:
+        item.update(request=RS.validate(request), request_sha256=sha, request_schema=RS.SCHEMA)
+    channel["request_sha256"] = sha
 
 
 def _row(r) -> Optional[dict]:

@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from .call_store import PostgresCallStore
-from .store import BOOKINGS_TRIP_TITLE, StorageUnavailable, UnknownTrip, _row, _uuid_or_none
+from .store import BOOKINGS_TRIP_TITLE, StorageUnavailable, UnknownTrip, _row, _uuid_or_none, remember_request, write_request
 
 SENT_OR_TRYING = ("sending", "sent")
 
@@ -36,8 +36,9 @@ class MemoryLinks:
     async def put_link(self, row, trip_id=None):
         item = str(uuid.uuid4())
         self.trip_items[item] = {"id": item, "status": "pending", "provider_name": row["venue_name"]}
-        self.links[row["link_id"]] = {**{k: v for k, v in row.items() if k != "venue_name"}, "trip_item_id": item,
+        self.links[row["link_id"]] = {**{k: v for k, v in row.items() if k not in ("venue_name", "request")}, "trip_item_id": item,
                                       "status": "offered", "venue_name": row["venue_name"]}
+        remember_request(self.trip_items[item], self.links[row["link_id"]], row.get("request"))
         return item
 
     async def get_link(self, account_id, link_id):
@@ -112,6 +113,7 @@ class PostgresLinks:
                     "read_back_lines, read_back_sha256, status, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'offered',$10)",
                     uuid.UUID(row["link_id"]), acct, item, uuid.UUID(row["read_id"]), row["platform"], row["url"],
                     row["slot_filled"], row["read_back_lines"], row["read_back_sha256"], row["created_at"])
+                await write_request(conn, item, "booking_links", "link_id", uuid.UUID(row["link_id"]), row.get("request"))
                 return str(item)
         return await self._run_links(fn)
 
@@ -210,7 +212,8 @@ class MemoryLadderStore(MemoryLinks):
         self.trips.setdefault(trip_id, {"owner_id": row["account_id"], "title": BOOKINGS_TRIP_TITLE})
         item = str(uuid.uuid4())
         self.trip_items[item] = {"id": item, "status": "pending", "provider_name": row["venue_name"]}
-        self.emails[row["email_id"]] = {**{k: v for k, v in row.items() if k not in _TRIP}, "trip_item_id": item, "status": "awaiting_approval"}
+        self.emails[row["email_id"]] = {**{k: v for k, v in row.items() if k not in _TRIP and k != "request"}, "trip_item_id": item, "status": "awaiting_approval"}
+        remember_request(self.trip_items[item], self.emails[row["email_id"]], row.get("request"))
         return item
 
     async def get_email(self, account_id: str, email_id: str) -> Optional[dict]:
@@ -308,6 +311,7 @@ class PostgresLadderStore(PostgresLinks):
                     "read_back_sha256, status, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8,'awaiting_approval',$9)",
                     uuid.UUID(row["email_id"]), acct, item, uuid.UUID(row["read_id"]), row["email"], row["email_sha256"],
                     row["read_back_lines"], row["read_back_sha256"], row["created_at"])
+                await write_request(conn, item, "booking_emails", "email_id", uuid.UUID(row["email_id"]), row.get("request"))
                 return str(item)
         return await self._run(fn)
 

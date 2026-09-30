@@ -31,7 +31,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import call_routes, ladder_routes, optin_page, optins, retention, stop
+from . import call_routes, ladder_routes, optin_page, optins, reservation as RS, retention, stop
+from . import venue_read as V
 from .account import account_for
 from .gate import require_booking_key
 from .call_store import PostgresCallStore
@@ -211,7 +212,11 @@ async def record_intent(request: Request):
     except ParticularsRefused as e:
         return _refuse(422, e.rule, str(e))
     trip_id = body.get("trip_id")  # optional: one of this account's trips; else its "Sasha bookings" trip
+    lang = next((c[2] for c in V.COUNTRIES.values() if c[3] == venue.timezone), "en")
     row = {
+        # S-64 step 3 · the reservation/1 object, alongside (a form's free-text name may not fit it: then none)
+        "request": RS.try_from_particulars(p, account_id=account, venue_name=venue.short_name, timezone=venue.timezone, lang=lang,
+                                           email=getattr(p, "email", None)),
         "intent_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "mode": mode,
         # → the trip item (the reservation)
         "venue_name": venue.short_name, "local_date": p.on, "local_time": p.at, "local_timezone": venue.timezone,

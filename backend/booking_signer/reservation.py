@@ -230,6 +230,17 @@ def from_particulars(p: Any, *, account_id: str, venue_name: str, timezone: str,
     return validate(obj)
 
 
+def try_from_particulars(p: Any, **kw) -> Optional[Dict[str, Any]]:
+    """S-64 step 3 · the write-through is ADDITIVE: a booking is never refused because its object could not be built
+    (a form's free-text name, say). It is logged, and the row simply carries no request."""
+    try:
+        return from_particulars(p, **kw)
+    except (ReservationRefused, AttributeError, TypeError) as e:
+        import logging
+        logging.getLogger("sasha.reservation").warning("[reservation] no reservation/1 object for this row: %s", e)
+        return None
+
+
 def columns(obj: Mapping[str, Any]) -> Dict[str, Any]:
     """What the object writes into trip_items' existing columns (§1.2), so readers that know only the columns work."""
     o = validate(obj)

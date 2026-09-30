@@ -27,6 +27,7 @@ from . import calls as C
 from . import emailing as E
 from . import ladder as L
 from . import optins as O
+from . import reservation as RS
 from . import slot_link as SL
 from . import stop as S
 from . import venue_read as V
@@ -202,7 +203,9 @@ async def prepare_email(request: Request):
     f = chosen[1]
     email = E.compose(lang, read["name"], f["value"], p, email_id)
     lines = E.read_back(email, read["name"], f["source_label"])
-    rec = {"email_id": email_id, "account_id": account, "read_id": row["read_id"], "email": email,
+    rec = {"request": RS.try_from_particulars(p, account_id=account, venue_name=read["name"], timezone=tz, lang=lang,
+                                              venue_ids=O.venue_ids_of(read), read_id=str(row["read_id"])),   # S-64 step 3
+           "email_id": email_id, "account_id": account, "read_id": row["read_id"], "email": email,
            "email_sha256": E.email_sha256(email), "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)),
            "created_at": NOW(), "venue_name": read["name"], "local_date": p.on, "local_time": p.at, "local_timezone": tz,
            "party_size": p.party}
@@ -401,7 +404,10 @@ async def prepare_link(request: Request):
     lines = SL.read_back(read["name"], link, p.on, p.at, p.party, forward_to)
     country = read.get("country")
     tz = V.COUNTRIES[country][3] if country in V.COUNTRIES else "UTC"
-    rec = {"link_id": link_id, "account_id": account, "read_id": row["read_id"], "platform": link.platform, "url": link.url,
+    lang = V.COUNTRIES[country][2] if country in V.COUNTRIES else "en"
+    rec = {"request": RS.try_from_particulars(p, account_id=account, venue_name=read["name"], timezone=tz, lang=lang,
+                                              venue_ids=O.venue_ids_of(read), read_id=str(row["read_id"])),   # S-64 step 3
+           "link_id": link_id, "account_id": account, "read_id": row["read_id"], "platform": link.platform, "url": link.url,
            "slot_filled": link.slot_filled, "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)),
            "created_at": NOW(), "venue_name": read["name"], "local_date": p.on, "local_time": p.at, "local_timezone": tz,
            "party_size": p.party}

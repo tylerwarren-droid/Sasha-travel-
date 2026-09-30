@@ -27,6 +27,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from . import calls as C
+from . import reservation as RS
 from . import ladder_routes
 from . import stop as S
 from .account import account_for
@@ -199,6 +200,10 @@ async def prepare(request: Request):
     if len(built["brief"]["task"]) > 2000:   # Bland's limit; a truncated brief would drop a rule
         return _refuse(422, "brief_too_long", "the call's instructions exceed Bland's 2,000 characters")
     row = {
+        # S-64 step 3 · the reservation/1 object, written alongside the old columns
+        "request": RS.try_from_particulars(p, account_id=account, venue_name=venue.name, timezone=venue.timezone,
+                                           lang=built["brief"]["language"], venue_ids=venue.venue_ids or (),
+                                           read_id=str(body["read_id"]) if body.get("read_id") else None),
         "call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key,
         "dialled_number": built["brief"]["number"], "language": built["brief"]["language"],
         "guest_name": p.name, "guest_phone": p.phone,
@@ -256,7 +261,9 @@ async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
         return _refuse(422, "brief_too_long", "the call's instructions exceed Bland's 2,000 characters")
     built["brief"]["cancels_call_id"] = booking_call_id
     built["brief_sha256"] = C._sha256hex(C._canonical(built["brief"]))
-    row = {"call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "dialled_number": b["number"],
+    row = {"request": RS.try_from_particulars(p, account_id=account, venue_name=venue.name, timezone=venue.timezone,
+                                              lang=b["language"], venue_ids=venue.venue_ids or (), flow="cancel"),
+           "call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "dialled_number": b["number"],
            "language": b["language"], "guest_name": p.name, "guest_phone": p.phone, "brief": built["brief"],
            "brief_sha256": built["brief_sha256"], "read_back_lines": built["read_back_lines"],
            "read_back_sha256": built["read_back_sha256"], "created_at": now}

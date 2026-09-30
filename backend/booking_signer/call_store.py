@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 
-from .store import BOOKINGS_TRIP_TITLE, PostgresStore, StorageUnavailable, UnknownTrip, _row, _uuid_or_none
+from .store import BOOKINGS_TRIP_TITLE, PostgresStore, StorageUnavailable, UnknownTrip, _row, _uuid_or_none, remember_request, write_request
 
 #: The venue-facing status each outcome gives the reservation.
 TRIP_STATUS = {"yes": "confirmed", "no": "declined", "unclear": "unclear"}
@@ -57,8 +57,9 @@ class MemoryCallStore:
         item_id = str(uuid.uuid4())
         self.trip_items[item_id] = {"id": item_id, "status": "pending", "provider_name": row["venue_name"],
                                     "local_date": row["local_date"], "local_time": row["local_time"], "party_size": row["party_size"]}
-        self.calls[row["call_id"]] = {**{k: v for k, v in row.items() if k not in _TRIP}, "trip_item_id": item_id,
+        self.calls[row["call_id"]] = {**{k: v for k, v in row.items() if k not in _TRIP and k != "request"}, "trip_item_id": item_id,
                                       "status": "awaiting_approval"}
+        remember_request(self.trip_items[item_id], self.calls[row["call_id"]], row.get("request"))
         return item_id
 
     async def get_call(self, account_id: str, call_id: str) -> Optional[dict]:
@@ -125,8 +126,9 @@ class MemoryCallStore:
 
     async def put_cancel_call(self, row: dict, trip_item_id: str) -> str:
         """S-47 · a cancelling call sits on the SAME reservation as the booking it cancels — no new trip item."""
-        self.calls[row["call_id"]] = {**{k: v for k, v in row.items() if k not in _TRIP}, "trip_item_id": trip_item_id,
+        self.calls[row["call_id"]] = {**{k: v for k, v in row.items() if k not in _TRIP and k != "request"}, "trip_item_id": trip_item_id,
                                       "status": "awaiting_approval"}
+        remember_request(None, self.calls[row["call_id"]], row.get("request"))
         return trip_item_id
 
     async def placed_calls(self) -> list:
@@ -183,6 +185,7 @@ class PostgresCallStore:
                     uuid.UUID(row["call_id"]), acct, item_id, row["venue_key"], row["dialled_number"], row["language"],
                     row["guest_name"], row["guest_phone"], row["brief"], row["brief_sha256"], row["read_back_lines"],
                     row["read_back_sha256"], row["created_at"])
+                await write_request(conn, item_id, "booking_calls", "call_id", uuid.UUID(row["call_id"]), row.get("request"))
                 return str(item_id)
         return await self._run(fn)
 
@@ -233,13 +236,18 @@ class PostgresCallStore:
 
     async def put_cancel_call(self, row: dict, trip_item_id: str) -> str:
         """S-47 · a cancelling call sits on the SAME reservation as the booking it cancels — no new trip item."""
-        await self._run(lambda c: c.execute(
-            "insert into booking_calls (call_id, account_id, trip_item_id, venue_key, dialled_number, language, "
-            "guest_name, guest_phone, brief, brief_sha256, read_back_lines, read_back_sha256, status, created_at) "
-            "values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'awaiting_approval',$13)",
-            uuid.UUID(row["call_id"]), uuid.UUID(row["account_id"]), uuid.UUID(trip_item_id), row["venue_key"], row["dialled_number"],
-            row["language"], row["guest_name"], row["guest_phone"], row["brief"], row["brief_sha256"], row["read_back_lines"],
-            row["read_back_sha256"], row["created_at"]))
+        async def fn(conn):
+            async with conn.transaction():
+                await conn.execute(
+                    "insert into booking_calls (call_id, account_id, trip_item_id, venue_key, dialled_number, language, "
+                    "guest_name, guest_phone, brief, brief_sha256, read_back_lines, read_back_sha256, status, created_at) "
+                    "values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'awaiting_approval',$13)",
+                    uuid.UUID(row["call_id"]), uuid.UUID(row["account_id"]), uuid.UUID(trip_item_id), row["venue_key"], row["dialled_number"],
+                    row["language"], row["guest_name"], row["guest_phone"], row["brief"], row["brief_sha256"], row["read_back_lines"],
+                    row["read_back_sha256"], row["created_at"])
+                # the reservation keeps its BOOKING request; the cancel call carries its own (flow: cancel)
+                await write_request(conn, None, "booking_calls", "call_id", uuid.UUID(row["call_id"]), row.get("request"))
+        await self._run(fn)
         return trip_item_id
 
     async def unresolved(self, older_than) -> list:

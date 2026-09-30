@@ -704,7 +704,7 @@ class OnPostgres(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
             try:
                 await c.execute("drop schema if exists auth cascade; drop schema public cascade; create schema public;")
                 await c.execute((HERE / "fixtures" / "model_a_live_2026-09-28.sql").read_text(encoding="utf-8"))
-                for f in ("001_booking_storage.sql", "002_prepared_status.sql", "003_phone_calls.sql", "004_ladder.sql", "005_slot_links.sql"):
+                for f in ("001_booking_storage.sql", "002_prepared_status.sql", "003_phone_calls.sql", "004_ladder.sql", "005_slot_links.sql", "011_reservation_request.sql"):
                     await c.execute((SQL_DIR / f).read_text(encoding="utf-8"))
             finally:
                 await c.close()

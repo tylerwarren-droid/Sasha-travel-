@@ -297,7 +297,7 @@ class OnPostgres(BookingRoutes, unittest.TestCase):
                 await c.execute(FIXTURE)  # auth.users and model A, as read live
                 await c.execute(SQL)      # the block, exactly as it is applied to Sasha's Supabase
                 await c.execute(SQL_002)  # S-26: the 'prepared' status, as applied after it
-                for f in ("003_phone_calls.sql", "004_ladder.sql", "005_slot_links.sql"):   # S-41 G5: reservations read them
+                for f in ("003_phone_calls.sql", "004_ladder.sql", "005_slot_links.sql", "011_reservation_request.sql"):   # S-41 G5: reservations read them
                     await c.execute((BACKEND / "booking_signer" / "sql" / f).read_text(encoding="utf-8"))
             finally:
                 await c.close()

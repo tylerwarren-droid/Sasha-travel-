@@ -1,8 +1,17 @@
 import { NextRequest } from 'next/server'
 
 const SUPABASE_URL = 'https://xlqtveusyfpffaejegiq.supabase.co'
-const SUPABASE_SERVICE_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhscXR2ZXVzeWZwZmZhZWplZ2lxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODc0Mzg0OCwiZXhwIjoyMDk0MzE5ODQ4fQ.Y9syb1MpOOZBjHhgXiMIMrrEeMbX_rdser57o9FseKU'
+
+/**
+ * S-58 · The service-role key is read from the environment ONLY — never written here, no fallback value. It used to
+ * be hardcoded in this file (from 57119c3, 29 May 2026, in a public repository); that key is being rotated.
+ * A legacy JWT key goes in both headers; a new `sb_secret_…` key only in `apikey` (Supabase refuses it as a Bearer).
+ */
+function serviceHeaders(): Record<string, string> | null {
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim()
+  if (!key) return null
+  return key.startsWith('eyJ') ? { apikey: key, Authorization: `Bearer ${key}` } : { apikey: key }
+}
 
 interface InventoryItem {
   name: string
@@ -139,13 +148,18 @@ export async function POST(request: NextRequest) {
     is_active: goLive === true,
   }
 
+  const auth = serviceHeaders()
+  if (!auth) {
+    console.error('Onboarding save refused: SUPABASE_SERVICE_ROLE_KEY is not set on this deployment')
+    return Response.json({ error: 'Saving is not configured on this deployment (SUPABASE_SERVICE_ROLE_KEY is not set); nothing was saved' }, { status: 503 })
+  }
+
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        apikey: SUPABASE_SERVICE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        ...auth,
         Prefer: 'resolution=merge-duplicates',
       },
       body: JSON.stringify(payload),

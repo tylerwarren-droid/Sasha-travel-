@@ -32,6 +32,8 @@ from datetime import date, datetime, time, timedelta
 from typing import Any, Awaitable, Callable, List, Mapping, Optional
 from zoneinfo import ZoneInfo
 
+from . import heard
+
 BLAND_CALLS_URL = "https://api.bland.ai/v1/calls"
 #: The model that reads a finished call. Its reading is labelled as an AI reading wherever it is shown.
 READER_MODEL = "claude-sonnet-5"
@@ -617,8 +619,10 @@ def _quoted_by_venue(quote: Any, turns: List[str]) -> bool:
     return any(q in _norm(t) for t in turns)
 
 
-async def read_call(details: Mapping[str, Any], reader: Reader, purpose: str = "book") -> CallReading:
-    """Bland's call details → a reading. ⚠ Every path that is not a quoted, unconditional yes or no is `unclear`."""
+async def read_call(details: Mapping[str, Any], reader: Reader, purpose: str = "book",
+                    asked: Optional[Mapping[str, Any]] = None) -> CallReading:
+    """Bland's call details → a reading. ⚠ Every path that is not a quoted, unconditional yes or no is `unclear`.
+    S-59 · `asked` (the brief: date, time, party, name) — a yes is only a yes if nothing the venue SAID contradicts it."""
     status = details.get("status")
     answered_by = details.get("answered_by")
     base = {"bland_status": status, "answered_by": answered_by}
@@ -657,6 +661,14 @@ async def read_call(details: Mapping[str, Any], reader: Reader, purpose: str = "
         return CallReading(state="answered", outcome="unclear", venue_words=words, quote=quote, raised=raised, read_by=READ_BY,
                            why="they agreed, but with something attached she may not accept for you: "
                                + "; ".join(f"{r['what']}: \"{r['quote']}\"" for r in raised), **base)
+    if reading == "yes" and asked:
+        off = heard.mismatches(turns, asked)
+        if off:
+            said = [{"what": f"{m['what']}: they said {m['said']}, you asked {m['asked']}", "quote": m["quote"]} for m in off]
+            return CallReading(state="answered", outcome="unclear", venue_words=words, quote=quote, raised=raised + said, read_by=READ_BY,
+                               why="they said yes, but what they said does not match what was asked — "
+                                   + "; ".join(f"{m['what']} (they said {m['said']}, asked {m['asked']}): \"{m['quote']}\"" for m in off)
+                                   + ". Check with them before relying on it.", **base)
     ref = parsed.get("reference")
     ref = ref.strip() if isinstance(ref, str) and ref.strip() and _quoted_by_venue(ref, turns) else None   # never invented
     return CallReading(state="answered", outcome=reading, venue_words=words, quote=quote if reading != "unclear" else None,

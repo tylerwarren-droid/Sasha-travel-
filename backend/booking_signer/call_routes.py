@@ -130,7 +130,8 @@ async def sweep_once() -> int:
     for call in await CALL_STORE.placed_calls():
         try:
             details = await C.fetch_call(HTTP, key, call["bland_call_id"])
-            r = await C.read_call(details if isinstance(details, dict) else {}, READER, (call.get("brief") or {}).get("purpose", "book"))
+            r = await C.read_call(details if isinstance(details, dict) else {}, READER, (call.get("brief") or {}).get("purpose", "book"),
+                                  call.get("brief"))
             if r.state != "in_progress" and await CALL_STORE.record_reading(call["call_id"], r, details, NOW()):
                 recorded += 1
         except Exception as e:  # one call's trouble never stops the others; it is retried next sweep
@@ -354,7 +355,8 @@ async def get_call(call_id: str, request: Request):
         except Exception as e:
             return {"call_id": call_id, "status": "placed", "say": f"I'm on the phone to {name} now.",
                     "note": f"Bland's details could not be fetched just now: {type(e).__name__}: {e}"}
-        r = await C.read_call(details if isinstance(details, dict) else {}, READER, (call.get("brief") or {}).get("purpose", "book"))
+        r = await C.read_call(details if isinstance(details, dict) else {}, READER, (call.get("brief") or {}).get("purpose", "book"),
+                                  call.get("brief"))
         if r.state == "in_progress":
             return {"call_id": call_id, "status": "placed", "say": C.say_for(name, r), "why": r.why}
         try:

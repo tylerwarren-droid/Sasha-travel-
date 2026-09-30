@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { User } from '@/types'
 import { CURRENT_USER } from '@/lib/currentUser'
 import { apiUrl, apiHeaders } from '@/lib/api'
+import SashaReservations from './SashaReservations'  // S-45, Stage B re-applies
 
 interface YouPanelProps {
   user: User
@@ -50,12 +51,14 @@ export default function YouPanel({ user, plannedThisSession = 0, language = 'en'
   // the bookings table — a trip lands here the moment Stripe confirms it.
   const [booked, setBooked] = useState<BookedTrip[]>([])
   const [loadingTrips, setLoadingTrips] = useState(true)
+  // S-45 · a failed read is said as a failure — never as "No trips yet"
+  const [tripsFailed, setTripsFailed] = useState(false)
   useEffect(() => {
     let cancelled = false
     fetch(apiUrl('/api/trips'), { headers: apiHeaders() })
       .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
       .then(d => { if (!cancelled) setBooked(Array.isArray(d.trips) ? d.trips : []) })
-      .catch(() => { if (!cancelled) setBooked([]) })
+      .catch(() => { if (!cancelled) { setBooked([]); setTripsFailed(true) } })
       .finally(() => { if (!cancelled) setLoadingTrips(false) })
     return () => { cancelled = true }
   }, [])
@@ -145,15 +148,21 @@ export default function YouPanel({ user, plannedThisSession = 0, language = 'en'
         </div>
       </div>
 
+      {/* S-45 Sasha reservations: repo-only component. CTO zips drop this; Stage B re-applies it. */}
+      <SashaReservations />
+
       <div className="lw-when">Where you've been</div>
       <div className="lw-card">
         <div className="lw-cardBody" style={{ paddingTop: 14 }}>
           {loadingTrips && trips.length === 0 ? (
             <div className="lw-note-s">Loading your trips…</div>
+          ) : tripsFailed && trips.length === 0 ? (
+            <div className="lw-note-s">Your trips couldn&rsquo;t be loaded just now.</div>
           ) : trips.length === 0 ? (
             <div className="lw-note-s">No trips yet. Once you book one with Sasha, it'll live here.</div>
           ) : (
             <>
+              {tripsFailed && <div className="lw-note-s">Your paid trips couldn&rsquo;t be loaded just now — only the ones from your profile are shown.</div>}
               <ol className="lw-past">
                 {trips.map(t => (
                   <li key={t.key}>

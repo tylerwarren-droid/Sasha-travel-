@@ -27,7 +27,7 @@ import { join } from "node:path";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 /** Pages where a person acts and must learn what happened. Add a page here when it becomes one. */
-export const OUTCOME_SURFACES = ["app/booking-helper/page.tsx", "app/booking-helper/PhoneCall.tsx", "app/booking-helper/Ladder.tsx", "app/booking-helper/FounderGate.tsx"];
+export const OUTCOME_SURFACES = ["app/booking-helper/page.tsx", "app/booking-helper/PhoneCall.tsx", "app/booking-helper/Ladder.tsx", "app/booking-helper/FounderGate.tsx", "app/components/workspace/SashaReservations.tsx"];
 /** The one component allowed to set `disabled=` — because it derives it from rendered needs. */
 export const GATED_BUTTON = "app/booking-helper/GatedButton.tsx";
 
@@ -100,6 +100,20 @@ function main() {
   for (const p of gatedButtonProblems(readFileSync(join(ROOT, GATED_BUTTON), "utf8"))) problems.push(`${GATED_BUTTON}  S1  ${p}`);
   if (problems.length) {
     console.error(`\ncheck-outcome-surfaces: ${problems.length} silent path(s) on an outcome surface:\n  ${problems.join("\n  ")}\n`);
+    process.exit(1);
+  }
+  // S-45 · Sasha's reservations in the guest's trip view. A CTO drop overwrites YouPanel.tsx; Stage B re-inserts the
+  // block. A skipped Stage B must FAIL the build, never ship a trip view that silently lost the reservations.
+  const you = readFileSync(join(ROOT, "app/components/workspace/YouPanel.tsx"), "utf8");
+  if (!you.includes("S-45 Sasha reservations") || !you.includes("<SashaReservations />")) {
+    console.error("check-outcome-surfaces: YouPanel.tsx lacks the S-45 Sasha reservations block — run Stage B's reservations re-apply (CLAUDE.md).");
+    process.exit(1);
+  }
+  // …and its empty sentence may be said only from a real, answered empty list — never on a failure
+  const res = readFileSync(join(ROOT, "app/components/workspace/SashaReservations.tsx"), "utf8");
+  const empties = strip(res).split("\n").filter((l) => l.includes("No reservations made through Sasha yet"));   // code, not comments
+  if (empties.length !== 1 || !/state\.phase === 'loaded' && state\.items\.length === 0/.test(empties[0])) {
+    console.error("check-outcome-surfaces: SashaReservations says \"No reservations made through Sasha yet\" somewhere other than its answered-empty branch.");
     process.exit(1);
   }
   console.log(`check-outcome-surfaces: ${FIXTURES.length} fixtures caught as expected; ${OUTCOME_SURFACES.length} outcome surface(s) clean.`);

@@ -8,6 +8,7 @@ booking the guest genuinely made never showed up.
 """
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from app.services import chat_store
 
@@ -22,7 +23,11 @@ def _first_city(payload: dict) -> str:
 @router.get("")
 async def list_trips():
     """Paid trips for the current guest, newest first."""
-    rows = await chat_store.list_booked_trips(chat_store.DEMO_USER_ID)
+    try:
+        rows = await chat_store.list_booked_trips(chat_store.DEMO_USER_ID)
+    except chat_store.TripsUnavailable as e:
+        # S-45 · a failed read says it failed — the panel shows "couldn't be loaded", never "No trips yet"
+        return JSONResponse({"trips": None, "error": "trips_unavailable", "message": str(e)}, status_code=503)
     trips = []
     for r in rows:
         payload = r.get("payload") or {}

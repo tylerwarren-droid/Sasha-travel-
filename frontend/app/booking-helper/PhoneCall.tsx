@@ -45,7 +45,7 @@ const refusal = (j: Record<string, unknown>, status: number) =>
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** `readId` (S-36): call the venue Magellan read, on the number it read. Without it: the test line. */
-/** `cancelsCallId` (S-45): this panel cancels that confirmed booking — everything is read from the booking call; no fields. */
+/** `cancelsCallId` (S-47): this panel cancels that confirmed booking — everything is read from the booking call; no fields. */
 export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCallId, initial }: { defaults: { name: string; phone: string }; readId?: string; venueLabel?: string; factIndex?: number; cancelsCallId?: string; initial?: { date: string; time: string; party: number } }) {
   const [health, setHealth] = useState<CallsHealth | 'unreachable' | null>(null)
   // the booking link · a link's booking fills the form; the guest's own phone number is always typed by the guest

@@ -42,7 +42,10 @@ Re-apply command:
     import pathlib
     p = pathlib.Path("backend/app/main.py"); s = p.read_text()
     if '"https://project.kanoe.ai"' not in s:
-        s = s.replace('    "https://demo.kanoe.ai",', '    "https://demo.kanoe.ai",\n    "https://project.kanoe.ai",')
+        demo = '    "https://demo.kanoe.ai",'
+        if demo not in s:   # S-45: this used to replace nothing and still print "CORS re-applied"
+            raise SystemExit("⛔ STOP: main.py's demo.kanoe.ai origin line changed in this CTO drop — CORS was NOT re-applied. Add project.kanoe.ai by hand.")
+        s = s.replace(demo, demo + '\n    "https://project.kanoe.ai",', 1)
         p.write_text(s); print("CORS re-applied")
     else: print("already present")
     PY
@@ -142,7 +145,7 @@ Stage A — tag + sync (write to script to avoid paste mangling):
     bash /tmp/sync.sh
 If deletions > 0, investigate each deleted file before proceeding (check it's not a repo-only file or a still-imported agent). Confirm the new conductor does not IMPORT any deleted agent (grep for 'from app.services.X import'); keyword-only references are safe.
 
-Stage B — re-apply CORS (command above), the booking hand-off (above), the booking mount (below), then import test.
+Stage B — re-apply CORS (command above), the booking hand-off (above), the booking mount (below), the reservations insertion (below), then import test.
 
 Booking mount re-apply command (S-17):
     cd ~/Projects/sasha-travel && python3 - <<'PY'
@@ -153,11 +156,32 @@ Booking mount re-apply command (S-17):
                  "from booking_signer.routes import router as booking_signer_router  # noqa: E402\n"
                  "app.include_router(booking_signer_router)  # /api/booking/*\n")
         anchor = "app.include_router(trips_router)     # already prefixed /api/trips\n"
-        s = s.replace(anchor, anchor + block) if anchor in s else s.rstrip("\n") + "\n" + block
+        if anchor in s:
+            s = s.replace(anchor, anchor + block)
+        else:   # S-45: still mounts, but say so — a moved anchor must be seen
+            s = s.rstrip("\n") + "\n" + block
+            print("⚠ the trips_router anchor moved — the booking mount was APPENDED at the end of main.py; check it")
         p.write_text(s); print("booking mount re-applied")
     else: print("booking mount already present")
     PY
     grep -n "booking_signer" backend/app/main.py
+
+Reservations re-apply command (S-45) — Sasha's reservations in the guest's trip view (YouPanel). Refuses, never guesses:
+    cd ~/Projects/sasha-travel && python3 - <<'PY'
+    import pathlib
+    p = pathlib.Path("frontend/app/components/workspace/YouPanel.tsx"); s = p.read_text()
+    if "S-45 Sasha reservations" not in s:
+        a_imp = "import { apiUrl, apiHeaders } from '@/lib/api'\n"
+        a_jsx = "      <div className=\"lw-when\">Where you've been</div>\n"
+        if a_imp not in s or a_jsx not in s:
+            raise SystemExit("⛔ STOP: YouPanel's anchors changed in this CTO drop — Sasha's reservations were NOT re-applied. Place them by hand.")
+        s = s.replace(a_imp, a_imp + "import SashaReservations from './SashaReservations'  // S-45, Stage B re-applies\n", 1)
+        s = s.replace(a_jsx, "      {/* S-45 Sasha reservations: repo-only component. CTO zips drop this; Stage B re-applies it. */}\n      <SashaReservations />\n\n" + a_jsx, 1)
+        p.write_text(s); print("reservations re-applied")
+    else: print("reservations already present")
+    PY
+    grep -n "SashaReservations" frontend/app/components/workspace/YouPanel.tsx
+The build refuses if this is skipped: prebuild (scripts/check-outcome-surfaces.mjs) fails when YouPanel lacks "S-45 Sasha reservations".
 
 Import test:
     cd ~/Projects/sasha-travel/backend && source venv/bin/activate && \

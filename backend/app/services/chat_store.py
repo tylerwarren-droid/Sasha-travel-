@@ -470,12 +470,17 @@ async def mark_booking_paid(stripe_session_id, booking_ref):
     return await asyncio.to_thread(_mark_booking_paid, stripe_session_id, booking_ref)
 
 
+class TripsUnavailable(Exception):
+    """S-45 · the bookings table could not be read. NOT "no trips": the caller must say it failed."""
+
+
 async def list_booked_trips(user_id=DEMO_USER_ID) -> list:
     try:
         return await asyncio.to_thread(_list_booked_trips, user_id)
     except Exception as e:
-        print(f"[chat_store] list_booked_trips failed (non-fatal): {e}")
-        return []
+        # ⚠ S-45: this used to return [] — a failed read and "no trips yet" were the same answer
+        print(f"[chat_store] list_booked_trips failed: {type(e).__name__}: {e}")
+        raise TripsUnavailable(f"{type(e).__name__}: {e}") from None
 
 
 async def save_turn(session_id, user_id, user_message, assistant_response,

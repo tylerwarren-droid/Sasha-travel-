@@ -181,6 +181,7 @@ class Lang:
     at: Callable[[time], str]
     opening: str                           #: {party} {what} {when} {at}
     check: str                             #: {who}
+    cancel_opening: str = ""               #: S-45 · the same slots, for cancelling a booking already made
 
 
 _EN_NUM = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve")
@@ -214,6 +215,7 @@ LANGUAGES = {
         at=_en_at,
         opening="Hello, this is Sasha, an AI assistant, calling {party} to book a table {what} {when} {at}. Is that possible?",
         check="I'll need to check that with {who}.",
+        cancel_opening="Hello, this is Sasha, an AI assistant, calling {party} to cancel their table {what} {when} {at}. Could you cancel it, please?",
     ),
     "pt": Lang(
         code="pt-BR", label="Portuguese",
@@ -227,6 +229,7 @@ LANGUAGES = {
         at=lambda t: f"às {t.hour}h" + (f"{t.minute:02d}" if t.minute else ""),
         opening="Olá, fala a Sasha, uma assistente de IA, a ligar {party} para reservar uma mesa {what} {when} {at}. É possível?",
         check="Vou ter de confirmar isso com {who}.",
+        cancel_opening="Olá, fala a Sasha, uma assistente de IA, a ligar {party} para cancelar a reserva de uma mesa {what} {when} {at}. Podem cancelá-la, por favor?",
     ),
     "es": Lang(
         code="es", label="Spanish",
@@ -239,6 +242,7 @@ LANGUAGES = {
         at=lambda t: ("a la " if t.hour in (1, 13) else "a las ") + _hm(t),
         opening="Hola, soy Sasha, una asistente de IA, llamo {party} para reservar una mesa {what} {when} {at}. ¿Sería posible?",
         check="Tendré que consultarlo con {who}.",
+        cancel_opening="Hola, soy Sasha, una asistente de IA, llamo {party} para cancelar la reserva de una mesa {what} {when} {at}. ¿Podrían cancelarla, por favor?",
     ),
     "fr": Lang(
         code="fr", label="French",
@@ -251,6 +255,7 @@ LANGUAGES = {
         at=lambda t: f"à {t.hour} heures" + (f" {t.minute:02d}" if t.minute else ""),
         opening="Bonjour, ici Sasha, une assistante IA. J'appelle {party} pour réserver une table {what} {when} {at}. Est-ce possible ?",
         check="Je dois d'abord vérifier avec {who}.",
+        cancel_opening="Bonjour, ici Sasha, une assistante IA. J'appelle {party} pour annuler la réservation d'une table {what} {when} {at}. Pourriez-vous l'annuler, s'il vous plaît ?",
     ),
     "de": Lang(
         code="de", label="German",
@@ -263,6 +268,7 @@ LANGUAGES = {
         at=lambda t: f"um {t.hour} Uhr" + (f" {t.minute:02d}" if t.minute else ""),
         opening="Hallo, hier ist Sasha, eine KI-Assistentin. Ich rufe {party} an und möchte einen Tisch {what} {when} {at} reservieren. Ist das möglich?",
         check="Das muss ich erst mit {who} abklären.",
+        cancel_opening="Hallo, hier ist Sasha, eine KI-Assistentin. Ich rufe {party} an, um die Reservierung eines Tisches {what} {when} {at} zu stornieren. Können Sie sie bitte stornieren?",
     ),
     "it": Lang(
         code="it", label="Italian",
@@ -275,6 +281,7 @@ LANGUAGES = {
         at=lambda t: ("all'" if t.hour in (1, 8, 11) else "alle ") + _hm(t),
         opening="Buongiorno, sono Sasha, un'assistente IA. Chiamo {party} per prenotare un tavolo {what} {when} {at}. Sarebbe possibile?",
         check="Devo prima verificarlo con {who}.",
+        cancel_opening="Buongiorno, sono Sasha, un'assistente IA. Chiamo {party} per cancellare la prenotazione di un tavolo {what} {when} {at}. Potreste cancellarla, per favore?",
     ),
 }
 
@@ -300,8 +307,8 @@ def when_phrase(lang: Lang, on: date, today: date) -> str:
     return lang.on_day(wd) if days <= 6 else lang.on_date(wd, on.day, lang.months[on.month - 1])
 
 
-def opening_sentence(lang: Lang, p: CallParticulars, today: date) -> str:
-    s = lang.opening.format(party=party_phrase(lang, p), what=lang.for_n(p.party), when=when_phrase(lang, p.on, today), at=lang.at(p.at))
+def opening_sentence(lang: Lang, p: CallParticulars, today: date, purpose: str = "book") -> str:
+    s = (lang.cancel_opening if purpose == "cancel" else lang.opening).format(party=party_phrase(lang, p), what=lang.for_n(p.party), when=when_phrase(lang, p.on, today), at=lang.at(p.at))
     return re.sub(r"\s+", " ", s).strip()
 
 
@@ -335,6 +342,24 @@ def instructions(lang: Lang, p: CallParticulars, venue: CallVenue, opening: str,
     )
 
 
+def cancel_instructions(lang: Lang, p: CallParticulars, opening: str, check: str, reference: Optional[str]) -> str:
+    """S-45 · Bland's `task` for CANCELLING a booking Sasha made. Same rules: no fee, no card, their words brought back."""
+    held = f'It is held under "{reference}". ' if reference else ""
+    return (
+        f"You are Sasha, an AI assistant, phoning a restaurant to CANCEL an existing table booking on behalf of a guest. Speak {lang.label} only. "
+        f"You already said: \"{opening}\" "
+        f"The booking to cancel: {p.party} people, {p.on.isoformat()} at {p.at.strftime('%H:%M')} (venue's local time), under the name {p.name}. {held}"
+        "If they ask whether you are a person or a machine: you are an AI assistant. Never claim to be the guest or a human. "
+        "RULES YOU MUST NEVER BREAK: "
+        "Never agree to a cancellation fee, a charge, or to give a card. You have no card and no payment details. "
+        f"If they ask for ANY payment, say exactly: \"{check}\" — then thank them and end the call. "
+        "Do not move the booking to another day or time; only cancel it. Do not give any email address or personal detail. "
+        "If they confirm it is cancelled, repeat it back once (the day, the time, the name), thank them, and end the call. "
+        "If they cannot find the booking, or say to call back, thank them and end the call. "
+        "Keep it short and polite. Do not leave a voicemail."
+    )
+
+
 def _sha256hex(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
@@ -343,8 +368,13 @@ def _canonical(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def build_call(venue: CallVenue, p: CallParticulars, now: datetime) -> dict:
-    """The brief (what Bland will be sent), the read-back lines, and both hashes. The approval binds to both."""
+def build_call(venue: CallVenue, p: CallParticulars, now: datetime, purpose: str = "book", reference: Optional[str] = None) -> dict:
+    """The brief (what Bland will be sent), the read-back lines, and both hashes. The approval binds to both.
+
+    S-45 · `purpose="cancel"` builds the call that cancels a booking Sasha made — the same venue, number and particulars,
+    read from the booking call itself (call_routes), never re-typed."""
+    if purpose not in ("book", "cancel"):
+        raise CallRefused("purpose_invalid", "a call books or cancels")
     lang = LANGUAGES.get(venue.language)
     if lang is None:
         raise CallRefused("language_not_supported", f"no call script exists in {venue.language!r}; supported: {', '.join(sorted(LANGUAGES))}")
@@ -353,15 +383,28 @@ def build_call(venue: CallVenue, p: CallParticulars, now: datetime) -> dict:
         today = now.astimezone(ZoneInfo(venue.timezone)).date()
     except Exception:  # no tz database on the host: "Thursday" cannot be worked out safely, so no call is built
         raise CallRefused("venue_timezone_unavailable", f"the server cannot resolve {venue.timezone}, so it cannot say which day is which there") from None
-    opening = opening_sentence(lang, p, today)
+    opening = opening_sentence(lang, p, today, purpose)
     check = check_sentence(lang, p)
+    task = instructions(lang, p, venue, opening, check) if purpose == "book" else cancel_instructions(lang, p, opening, check, reference)
     brief = {
+        "purpose": purpose, "timezone": venue.timezone, "reference": reference,
         "venue_key": venue.key, "number": number, "language": lang.code,
-        "first_sentence": opening, "task": instructions(lang, p, venue, opening, check), "check_sentence": check,
+        "first_sentence": opening, "task": task, "check_sentence": check,
         "party": p.party, "date": p.on.isoformat(), "time": p.at.strftime("%H:%M"), "name": p.name, "phone": p.phone,
         "from": sasha_number(), "number_source": venue.source, "venue_name": venue.name,
     }
     en = LANGUAGES["en"]
+    if purpose == "cancel":
+        lines = [
+            f"I'll phone {venue.name}, {number}" + (f" — the number on {venue.source}." if venue.source else "."),
+            f"I'll say: \"{opening}\"" + ("" if lang.code == "en" else f" (in {lang.label}: {opening_sentence(en, p, today, 'cancel')})"),
+            f"This cancels your table for {p.party} on {p.on.isoformat()} at {p.at.strftime('%H:%M')}, under {p.name}"
+            + (f', held under "{reference}".' if reference else "."),
+            "I won't agree to a cancellation fee or give a card. I'll tell them I need to check with you.",
+            "I'll tell you exactly what they said. Shall I call them now?",
+        ]
+        return {"brief": brief, "brief_sha256": _sha256hex(_canonical(brief)),
+                "read_back_lines": lines, "read_back_sha256": _sha256hex("\n".join(lines)), "local_timezone": venue.timezone}
     lines = [
         f"I'll phone {venue.name}, {number}" + (f" — the number on {venue.source}." if venue.source else "."),
         f"I'll say: \"{opening}\"" + ("" if lang.code == "en" else f" (in {lang.label}: {opening_sentence(en, p, today)})"),
@@ -487,8 +530,8 @@ def venue_turns(details: Mapping[str, Any]) -> List[str]:
     return out
 
 
-def transcript_for_reader(details: Mapping[str, Any]) -> str:
-    lines = []
+def transcript_for_reader(details: Mapping[str, Any], purpose: str = "book") -> str:
+    lines = [f"PURPOSE: {'CANCEL an existing booking' if purpose == 'cancel' else 'BOOK a table'}"]
     for t in details.get("transcripts") or []:
         if not isinstance(t, dict) or not isinstance(t.get("text"), str):
             continue
@@ -502,6 +545,7 @@ READER_SYSTEM = """You read the transcript of a phone call in which Sasha, an AI
 Decide what the VENUE answered to the booking AS ASKED. Answer with JSON only:
 {"reading": "yes" | "no" | "unclear", "quote": "<the VENUE's exact words the reading rests on, copied verbatim from a VENUE line>", "reference": "<ONLY the name or reference number the VENUE said the booking is held under, copied verbatim from a VENUE line; empty if they gave none>", "raised": [{"what": "deposit|fee|card|different_time|different_date|different_party|call_back|other", "quote": "<VENUE's exact words>"}]}
 Rules:
+- The first line says the PURPOSE. When it is CANCEL: "yes" ONLY if the VENUE clearly confirmed the booking is cancelled; "no" ONLY if they clearly refused to cancel or said there is no such booking; anything else is "unclear". The reference field is empty for a cancellation.
 - "yes" ONLY if the VENUE clearly accepted the booking exactly as asked (same day, time, number of people), with nothing attached.
 - "no" ONLY if the VENUE clearly refused and offered nothing instead.
 - Everything else is "unclear": call back later, maybe, checking, an alternative offered, a deposit/fee/card asked for, a misunderstanding, silence.
@@ -541,7 +585,7 @@ def _quoted_by_venue(quote: Any, turns: List[str]) -> bool:
     return any(q in _norm(t) for t in turns)
 
 
-async def read_call(details: Mapping[str, Any], reader: Reader) -> CallReading:
+async def read_call(details: Mapping[str, Any], reader: Reader, purpose: str = "book") -> CallReading:
     """Bland's call details → a reading. ⚠ Every path that is not a quoted, unconditional yes or no is `unclear`."""
     status = details.get("status")
     answered_by = details.get("answered_by")
@@ -562,7 +606,7 @@ async def read_call(details: Mapping[str, Any], reader: Reader) -> CallReading:
 
     money = [{"what": "money", "quote": t} for t in turns if _MONEY.search(t)]
     try:
-        parsed = _parse_reader(await reader(transcript_for_reader(details)))
+        parsed = _parse_reader(await reader(transcript_for_reader(details, purpose)))
     except Exception as e:
         return CallReading(state="answered", outcome="unclear", venue_words=words, raised=money,
                            why=f"the transcript could not be read ({type(e).__name__}); here are their words", **base)
@@ -589,12 +633,16 @@ async def read_call(details: Mapping[str, Any], reader: Reader) -> CallReading:
                             "unclear": "their answer was neither a clear yes nor a clear no"}[reading], **base)
 
 
-def say_for(venue_name: str, r: CallReading) -> str:
+def say_for(venue_name: str, r: CallReading, purpose: str = "book") -> str:
     """What Sasha tells the guest. ⚠ Never 'booked' on anything but a quoted yes; always their words."""
     if r.state == "in_progress":
         return f"I'm on the phone to {venue_name} now."
     if r.state == "not_reached":
         return f"I couldn't reach {venue_name}: {r.why}"
+    if purpose == "cancel" and r.outcome == "yes":
+        return f"{venue_name} confirmed the cancellation. Their words: \"{r.quote}\""
+    if purpose == "cancel" and r.outcome == "no":
+        return f"{venue_name} did not cancel it. Their words: \"{r.quote}\""
     if r.outcome == "yes":
         held = f' It is held under "{r.reference}".' if r.reference else " They gave no name or reference."
         return f"{venue_name} said yes. Their words: \"{r.quote}\".{held}"

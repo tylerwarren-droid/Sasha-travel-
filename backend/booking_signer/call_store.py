@@ -18,12 +18,21 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from .store import BOOKINGS_TRIP_TITLE, PostgresStore, StorageUnavailable, UnknownTrip, _row, _uuid_or_none
 
 #: The venue-facing status each outcome gives the reservation.
 TRIP_STATUS = {"yes": "confirmed", "no": "declined", "unclear": "unclear"}
+
+
+def outcome_effect(purpose: str, outcome: str) -> Tuple[str, Optional[str]]:
+    """(the attempt's status, the trip item's NEW status or None to leave it). S-45 · a cancellation that the venue
+    confirmed cancels the reservation; one they refused or left unclear leaves the booking as it stands — never a guess
+    that it is gone."""
+    if purpose == "cancel":
+        return {"yes": ("confirmed", "cancelled"), "no": ("declined", None), "unclear": ("unclear", None)}[outcome]
+    return TRIP_STATUS[outcome], TRIP_STATUS[outcome]
 #: Who read the outcome, as recorded on the attempt.
 OBSERVED_BY_CALL = "Sasha's phone call — an AI reading of the transcript, with the venue's own words"
 #: A call row counts against the daily ceiling from the moment it is claimed.
@@ -84,12 +93,21 @@ class MemoryCallStore:
         r.update(status=reading.state, bland_details=details, outcome=reading.outcome, venue_words=reading.venue_words,
                  reading=reading_json(reading), read_at=now)
         if reading.state == "answered":
-            self.attempts.append({"trip_item_id": r["trip_item_id"], "method": "phone", "status": TRIP_STATUS[reading.outcome],
+            purpose = (r.get("brief") or {}).get("purpose", "book")
+            attempt, trip = outcome_effect(purpose, reading.outcome)
+            self.attempts.append({"trip_item_id": r["trip_item_id"], "method": "phone", "status": attempt,
                                   "response_received": reading.venue_words, "observed_by": OBSERVED_BY_CALL})
-            self.trip_items[r["trip_item_id"]]["status"] = TRIP_STATUS[reading.outcome]
-            if reading.outcome == "yes" and getattr(reading, "reference", None):
+            if trip:
+                self.trip_items[r["trip_item_id"]]["status"] = trip
+            if purpose == "book" and reading.outcome == "yes" and getattr(reading, "reference", None):
                 self.trip_items[r["trip_item_id"]]["booking_reference"] = reading.reference
         return True
+
+    async def put_cancel_call(self, row: dict, trip_item_id: str) -> str:
+        """S-45 · a cancelling call sits on the SAME reservation as the booking it cancels — no new trip item."""
+        self.calls[row["call_id"]] = {**{k: v for k, v in row.items() if k not in _TRIP}, "trip_item_id": trip_item_id,
+                                      "status": "awaiting_approval"}
+        return trip_item_id
 
     async def placed_calls(self) -> list:
         """S-41 G3 · every call Bland accepted and nobody has read yet — across accounts, for the sweeper."""
@@ -188,6 +206,17 @@ class PostgresCallStore:
             uuid.UUID(call_id), "placed" if placed.placed else "not_placed", placed.bland_call_id, placed.http_status,
             placed.answer, placed.why, now if placed.placed else None))
 
+    async def put_cancel_call(self, row: dict, trip_item_id: str) -> str:
+        """S-45 · a cancelling call sits on the SAME reservation as the booking it cancels — no new trip item."""
+        await self._run(lambda c: c.execute(
+            "insert into booking_calls (call_id, account_id, trip_item_id, venue_key, dialled_number, language, "
+            "guest_name, guest_phone, brief, brief_sha256, read_back_lines, read_back_sha256, status, created_at) "
+            "values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'awaiting_approval',$13)",
+            uuid.UUID(row["call_id"]), uuid.UUID(row["account_id"]), uuid.UUID(trip_item_id), row["venue_key"], row["dialled_number"],
+            row["language"], row["guest_name"], row["guest_phone"], row["brief"], row["brief_sha256"], row["read_back_lines"],
+            row["read_back_sha256"], row["created_at"]))
+        return trip_item_id
+
     async def placed_calls(self) -> list:
         """S-41 G3 · every placed, unread call, oldest first — for the sweeper."""
         rows = await self._run(lambda c: c.fetch("select * from booking_calls where status = 'placed' order by placed_at limit 50"))
@@ -198,20 +227,22 @@ class PostgresCallStore:
             async with conn.transaction():
                 row = await conn.fetchrow(
                     "update booking_calls set status = $2, bland_details = $3, outcome = $4, venue_words = $5, reading = $6, "
-                    "read_at = $7 where call_id = $1 and status = 'placed' returning trip_item_id",
+                    "read_at = $7 where call_id = $1 and status = 'placed' returning trip_item_id, brief",
                     uuid.UUID(call_id), reading.state, details, reading.outcome, reading.venue_words, reading_json(reading), now)
                 if row is None:
                     return False   # already read by another poll: never recorded twice
                 if reading.state == "answered":
-                    status = TRIP_STATUS[reading.outcome]
+                    purpose = (row["brief"] or {}).get("purpose", "book")
+                    attempt, trip = outcome_effect(purpose, reading.outcome)
                     await conn.execute(
                         "insert into booking_attempts (trip_item_id, method, attempted_at, status, response_received, "
                         "response_at, observed_by) values ($1, 'phone', $2, $3, $4, $2, $5)",
-                        row["trip_item_id"], now, status, reading.venue_words, OBSERVED_BY_CALL)
-                    # the venue's own name/reference, verbatim — never ours in its place (G4)
-                    await conn.execute("update trip_items set status = $2, booking_reference = coalesce($3, booking_reference), "
-                                       "updated_at = now() where id = $1", row["trip_item_id"], status,
-                                       getattr(reading, "reference", None) if reading.outcome == "yes" else None)
+                        row["trip_item_id"], now, attempt, reading.venue_words, OBSERVED_BY_CALL)
+                    if trip:
+                        # the venue's own name/reference, verbatim — never ours in its place (G4); only a booking sets it
+                        await conn.execute("update trip_items set status = $2, booking_reference = coalesce($3, booking_reference), "
+                                           "updated_at = now() where id = $1", row["trip_item_id"], trip,
+                                           getattr(reading, "reference", None) if purpose == "book" and reading.outcome == "yes" else None)
                 return True
         return await self._run(fn)
 

@@ -45,7 +45,8 @@ const refusal = (j: Record<string, unknown>, status: number) =>
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** `readId` (S-36): call the venue Magellan read, on the number it read. Without it: the test line. */
-export function PhoneCall({ defaults, readId, venueLabel, factIndex }: { defaults: { name: string; phone: string }; readId?: string; venueLabel?: string; factIndex?: number }) {
+/** `cancelsCallId` (S-45): this panel cancels that confirmed booking — everything is read from the booking call; no fields. */
+export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCallId }: { defaults: { name: string; phone: string }; readId?: string; venueLabel?: string; factIndex?: number; cancelsCallId?: string }) {
   const [health, setHealth] = useState<CallsHealth | 'unreachable' | null>(null)
   const [form, setForm] = useState({ date: '', time: '20:00', party: 2, name: defaults.name, phone: '' })
   const [phase, setPhase] = useState<Phase>('idle')
@@ -70,7 +71,8 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex }: { default
 
   async function prepare() {
     setPhase('preparing'); setNote(null); setView(null)
-    const r = await req('/api/booking/calls', { ...(readId ? { read_id: readId, ...(factIndex !== undefined ? { fact_index: factIndex } : {}) } : { venue: VENUE }), date: form.date, time: form.time, party: form.party, name: form.name, phone: form.phone || undefined })
+    const r = await req('/api/booking/calls', cancelsCallId ? { cancels_call_id: cancelsCallId }
+      : { ...(readId ? { read_id: readId, ...(factIndex !== undefined ? { fact_index: factIndex } : {}) } : { venue: VENUE }), date: form.date, time: form.time, party: form.party, name: form.name, phone: form.phone || undefined })
     if (!r.ok) { setPhase('stopped'); setNote(`Not prepared: ${refusal(r.json, r.status)}. Nothing was dialled.`); return }
     const rb = r.json.read_back as { lines: string[]; sha256: string }
     setLines(rb.lines); setPrepared({ call_id: r.json.call_id as string, sha256: rb.sha256 }); setPhase('read_back')
@@ -98,25 +100,27 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex }: { default
     f().catch((e) => { setPhase('stopped'); setNote(`Stopped: ${(e as Error).message}. Nothing more was done.`) })
   }
 
-  const formNeeds = [!form.date && 'a date', !form.time && 'a time', !(form.party >= 1) && 'a party size', form.name.trim().length < 2 && 'a name']
+  const formNeeds = cancelsCallId ? [] : [!form.date && 'a date', !form.time && 'a time', !(form.party >= 1) && 'a party size', form.name.trim().length < 2 && 'a name']
+  const bookedCallId = !cancelsCallId && view?.status === 'answered' && view.outcome === 'yes' ? prepared?.call_id ?? null : null
 
   return (
     <section className="mt-8 rounded border p-4">
-      <h2 className="text-lg font-semibold">{venueLabel ? `Phone ${venueLabel}` : 'Phone a venue'}</h2>
+      <h2 className="text-lg font-semibold">{cancelsCallId ? `Cancel the booking${venueLabel ? ` at ${venueLabel}` : ''}` : venueLabel ? `Phone ${venueLabel}` : 'Phone a venue'}</h2>
       <p className="rounded bg-red-50 p-2 font-medium text-red-900">⚠ This places a REAL phone call to the number shown in the read-back, once you press “Yes — call them”.</p>
       <p className="text-sm opacity-80">Sasha calls as an AI assistant, on your behalf, and tells you exactly what they said. She never agrees to a deposit, a fee, a card or a different time.</p>
       {!readId && h?.venues?.[VENUE] && <p className="text-xs opacity-70">Venue: the Sasha test line ({venue?.language ?? '—'}). At most {h.per_day} calls a day on this server.</p>}
 
+      {cancelsCallId ? <p className="mt-2 text-sm">Everything — the number, the day, the time, the party and the name — comes from the booking call. Nothing to fill in.</p> : (
       <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
         <label>Date <input className="w-full rounded border px-2 py-1" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
         <label>Time <input className="w-full rounded border px-2 py-1" type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /></label>
         <label>Party <input className="w-full rounded border px-2 py-1" type="number" min={1} max={20} value={form.party} onChange={(e) => setForm({ ...form, party: Number(e.target.value) })} /></label>
         <label>Name <input className="w-full rounded border px-2 py-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
         <label className="col-span-2">Your number, given only if they ask (optional) <input className="w-full rounded border px-2 py-1" placeholder="+351…" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
-      </div>
+      </div>)}
 
       <div className="mt-3">
-        <GatedButton label="Prepare the call" onClick={run(prepare)}
+        <GatedButton label={cancelsCallId ? 'Prepare the cancellation call' : 'Prepare the call'} onClick={run(prepare)}
           needs={[...serverNeeds, ...formNeeds, phase === 'preparing' && 'the read-back', (phase === 'placing' || phase === 'on_call') && 'the call in progress to finish']} />
       </div>
 
@@ -143,6 +147,8 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex }: { default
           {view.why && <p className="text-xs opacity-70">{view.why}</p>}
         </div>
       )}
+
+      {bookedCallId && <PhoneCall defaults={defaults} venueLabel={venueLabel} cancelsCallId={bookedCallId} />}
     </section>
   )
 }

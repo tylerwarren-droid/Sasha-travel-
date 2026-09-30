@@ -51,7 +51,7 @@ class R:
 
 class FakeBland:
     def __init__(self, place=None, details=None):
-        self.place_answer = place or R(200, {"status": "success", "message": "Call successfully queued.", "call_id": "bland-1"})
+        self.place_answer = place   # None: a fresh call id per call, as Bland gives
         self.details = details
         self.requests = []
 
@@ -60,6 +60,8 @@ class FakeBland:
         if method == "POST":
             if isinstance(self.place_answer, Exception):
                 raise self.place_answer
+            if self.place_answer is None:
+                return R(200, {"status": "success", "message": "Call successfully queued.", "call_id": f"bland-{len(self.requests)}"})
             return self.place_answer
         return R(200, self.details)
 
@@ -144,6 +146,16 @@ class Script(unittest.TestCase):
         b = C.build_call(C.test_line(), C.parse_call_particulars({**JOHNSON, "phone": "+351 911 111 111"}), MONDAY)
         self.assertIn("only if — they ask for a contact number", b["brief"]["task"])
         self.assertEqual(b["read_back_lines"][3], "If they ask for a contact number, I'll give yours, +351911111111.")
+
+    def test_the_spanish_cancellation_la_contra_would_hear(self):
+        p = C.parse_call_particulars({"date": "2026-10-02", "time": "21:00", "party": 2, "name": "Tyler Warren"})
+        today = datetime(2026, 9, 30).date()
+        self.assertEqual(C.opening_sentence(C.LANGUAGES["es"], p, today, "cancel"),
+                         "Hola, soy Sasha, una asistente de IA, llamo de parte de la familia Warren para cancelar la reserva de una mesa "
+                         "para 2 personas el viernes a las 21:00. ¿Podrían cancelarla, por favor?")
+        self.assertEqual(C.opening_sentence(C.LANGUAGES["es"], p, today),
+                         "Hola, soy Sasha, una asistente de IA, llamo de parte de la familia Warren para reservar una mesa "
+                         "para 2 personas el viernes a las 21:00. ¿Sería posible?")
 
     def test_the_payload_bland_receives(self):
         b = C.build_call(C.test_line(), C.parse_call_particulars(JOHNSON), MONDAY)
@@ -405,6 +417,44 @@ class CallRoutes:
         self.assertEqual(g["outcome"], "unclear")
         self.assertEqual(g["venue_words"], "Call back tomorrow, the manager does the bookings.")
         self.assertEqual(self.trip_status(prep["call_id"]), "unclear")
+
+    def _confirmed_booking(self):
+        prep = self.prepare()
+        self.yes(prep)
+        self.bland.details = done(("user", "Yes, that's fine."))
+        self.c.get(f"/api/booking/calls/{prep['call_id']}")
+        return prep
+
+    def test_a_cancellation_is_prepared_from_the_booking_and_cancels_that_reservation(self):
+        """S-45 · everything read from the booking call; a confirmed cancellation marks the SAME reservation cancelled."""
+        booking = self._confirmed_booking()
+        c = self.c.post("/api/booking/calls", json={"cancels_call_id": booking["call_id"]})
+        self.assertEqual(c.status_code, 200, c.text)
+        lines = c.json()["read_back"]["lines"]
+        self.assertIn("to cancel their table for four on Thursday at eight in the evening", lines[1])
+        self.assertTrue(lines[2].startswith("This cancels your table for 4 on 2026-10-08 at 20:00, under Anna Johnson"))
+        self.assertEqual(c.json()["trip_item_id"], booking["trip_item_id"])
+        self.bland.details = {"completed": False, "queue_status": "started"}
+        r = self.c.post(f"/api/booking/calls/{c.json()['call_id']}/place",
+                        json={"read_back_sha256": c.json()["read_back"]["sha256"], "approval": {"how": "button"}})
+        self.assertEqual(r.json().get("status"), "placed", r.text)
+        sent = [b for m, u, h, b in self.bland.requests if m == "POST"][-1]
+        self.assertIn("CANCEL an existing table booking", sent["task"])
+        self.bland.details = done(("user", "Yes, that's fine."))
+        g = self.c.get(f"/api/booking/calls/{c.json()['call_id']}").json()
+        self.assertEqual(g["outcome"], "yes")
+        self.assertIn("confirmed the cancellation", g["say"])
+        self.assertEqual(self.trip_status(c.json()["call_id"]), "cancelled")
+
+    def test_a_cancellation_takes_nothing_but_the_booking(self):
+        booking = self._confirmed_booking()
+        r = self.c.post("/api/booking/calls", json={"cancels_call_id": booking["call_id"], "date": "2026-12-24"})
+        self.assertEqual(r.json()["rule"], "cancel_takes_nothing_else")
+
+    def test_only_a_confirmed_booking_can_be_cancelled_by_phone(self):
+        prep = self.prepare()   # never placed
+        r = self.c.post("/api/booking/calls", json={"cancels_call_id": prep["call_id"]})
+        self.assertEqual(r.json()["rule"], "nothing_to_cancel")
 
     def test_health_reports_calls_without_the_number(self):
         h = self.c.get("/api/booking/health").json()["calls"]

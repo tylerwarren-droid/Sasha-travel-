@@ -111,7 +111,7 @@ async def sweep_once() -> int:
     for call in await CALL_STORE.placed_calls():
         try:
             details = await C.fetch_call(HTTP, key, call["bland_call_id"])
-            r = await C.read_call(details if isinstance(details, dict) else {}, READER)
+            r = await C.read_call(details if isinstance(details, dict) else {}, READER, (call.get("brief") or {}).get("purpose", "book"))
             if r.state != "in_progress" and await CALL_STORE.record_reading(call["call_id"], r, details, NOW()):
                 recorded += 1
         except Exception as e:  # one call's trouble never stops the others; it is retried next sweep
@@ -147,6 +147,8 @@ async def prepare(request: Request):
     if body is None:
         return _refuse(400, "call_malformed", "send the booking as a JSON object")
     account = account_for(request)
+    if body.get("cancels_call_id"):
+        return await _prepare_cancel(account, str(body["cancels_call_id"]), body)
     if body.get("read_id"):
         # S-36 · the number Magellan READ at the venue — never one in the request
         try:
@@ -184,6 +186,52 @@ async def prepare(request: Request):
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
     return {"call_id": row["call_id"], "trip_item_id": item,
+            "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
+
+
+_LANG_BY_CODE = {lang.code: key for key, lang in C.LANGUAGES.items()}
+
+
+async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
+    """S-45 · the call that cancels a booking Sasha made. EVERYTHING — venue, number, language, day, time, party, name,
+    the reference they gave — is read from the booking call itself; the request may name nothing else, so a
+    cancellation can never drift onto another venue or another night."""
+    extra = set(body) - {"cancels_call_id"}
+    if extra:
+        return _refuse(422, "cancel_takes_nothing_else", f"a cancellation is prepared from the booking call alone; not {sorted(extra)}")
+    try:
+        booking = await CALL_STORE.get_call(account, booking_call_id)
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    if booking is None:
+        return _refuse(404, "call_unknown", "no call with that id was placed for this account")
+    b = booking["brief"] or {}
+    if b.get("purpose", "book") != "book" or booking["status"] != "answered" or booking.get("outcome") != "yes":
+        return _refuse(422, "nothing_to_cancel", "only a booking call the venue said yes to can be cancelled by phone")
+    lang_key = _LANG_BY_CODE.get(b.get("language"))
+    if not b.get("timezone") or lang_key is None:
+        return _refuse(422, "booking_brief_incomplete", "that booking's call does not record its language and timezone")
+    venue = C.CallVenue(key=b["venue_key"], name=b.get("venue_name") or b["venue_key"], number_env="", language=lang_key,
+                        timezone=b["timezone"], number=b["number"], source=b.get("number_source"))
+    now = NOW()
+    try:
+        p = C.parse_call_particulars({"date": b["date"], "time": b["time"], "party": b["party"], "name": b["name"], "phone": b.get("phone") or ""})
+        built = C.build_call(venue, p, now, purpose="cancel", reference=((booking.get("reading") or {}).get("reference")))
+    except C.CallRefused as e:
+        return _refuse(422, e.rule, str(e))
+    if len(built["brief"]["task"]) > 2000:
+        return _refuse(422, "brief_too_long", "the call's instructions exceed Bland's 2,000 characters")
+    built["brief"]["cancels_call_id"] = booking_call_id
+    built["brief_sha256"] = C._sha256hex(C._canonical(built["brief"]))
+    row = {"call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "dialled_number": b["number"],
+           "language": b["language"], "guest_name": p.name, "guest_phone": p.phone, "brief": built["brief"],
+           "brief_sha256": built["brief_sha256"], "read_back_lines": built["read_back_lines"],
+           "read_back_sha256": built["read_back_sha256"], "created_at": now}
+    try:
+        item = await CALL_STORE.put_cancel_call(row, booking["trip_item_id"])
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    return {"call_id": row["call_id"], "trip_item_id": item, "purpose": "cancel",
             "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
 
 
@@ -261,7 +309,7 @@ async def get_call(call_id: str, request: Request):
         except Exception as e:
             return {"call_id": call_id, "status": "placed", "say": f"I'm on the phone to {name} now.",
                     "note": f"Bland's details could not be fetched just now: {type(e).__name__}: {e}"}
-        r = await C.read_call(details if isinstance(details, dict) else {}, READER)
+        r = await C.read_call(details if isinstance(details, dict) else {}, READER, (call.get("brief") or {}).get("purpose", "book"))
         if r.state == "in_progress":
             return {"call_id": call_id, "status": "placed", "say": C.say_for(name, r), "why": r.why}
         try:
@@ -295,5 +343,5 @@ def _view(call: dict, name: str) -> dict:
     elif call["status"] in ("answered", "not_reached"):
         r = C.CallReading(state=call["status"], outcome=call.get("outcome"), venue_words=call.get("venue_words") or "",
                           quote=reading.get("quote"), why=reading.get("why") or "")
-        out["say"] = C.say_for(name, r)
+        out["say"] = C.say_for(name, r, (call.get("brief") or {}).get("purpose", "book"))
     return out

@@ -203,10 +203,10 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
                 {c.status && c.status !== 'OPERATIONAL' ? <span className="text-red-800"> · {c.status.toLowerCase().replace(/_/g, ' ')}</span> : null}
                 <div className="opacity-80">{c.address ?? 'no address listed'} · {c.phone ?? 'no phone listed'}{c.website ? ` · ${c.website}` : ''}</div>
                 <div className="opacity-60">as their Google listing says (<a className="underline" href={c.listing_url} target="_blank" rel="noreferrer">listing</a>)</div>
-                <button type="button" className="mt-1 rounded border px-2 py-0.5" disabled={reading === 'reading'}
-                  onClick={() => { pickCandidate(c).catch((e) => { setReading('stopped'); setNote(`Stopped: ${(e as Error).message}`) }) }}>
-                  Read this one
-                </button>
+                <div className="mt-1">
+                  <GatedButton label="Read this one" onClick={run(() => pickCandidate(c), (m) => { setReading('stopped'); setNote(m) })}
+                    needs={[reading === 'reading' && 'the read to finish']} />
+                </div>
               </li>
             ))}
           </ol>

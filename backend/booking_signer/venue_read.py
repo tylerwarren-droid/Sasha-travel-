@@ -363,31 +363,29 @@ def places_key() -> str:
     return os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
 
 
-async def read_places(http: Http, key: str, name: str, city: str, now: datetime) -> Tuple[List[Fact], List[dict], Optional[dict], Optional[str], Optional[str]]:
-    """The venue's Google business listing: its phone and website. Returns (facts, sources, listing, country, website)."""
-    body = {"textQuery": f"{name}, {city}", "maxResultCount": 1}
-    try:
-        r = await http("POST", PLACES_URL, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": PLACES_FIELDS,
-                                                    "content-type": "application/json"}, json=body)
-        data = r.json()
-    except Exception as e:
-        return [], [{"url": PLACES_URL, "result": f"not read — {type(e).__name__}"}], None, None, None
-    raw = json.dumps(data, sort_keys=True)
-    sha = hashlib.sha256(raw.encode()).hexdigest()
-    src = {"url": PLACES_URL, "query": body["textQuery"], "result": f"HTTP {r.status_code}", "sha256": sha, "fetched_at": now.isoformat()}
-    places = data.get("places") if isinstance(data, dict) and r.status_code == 200 else None
-    if not places:
-        src["result"] += " — no listing" if r.status_code == 200 else f" — {str(data)[:200]}"
-        return [], [src], None, None, None
-    pl = places[0]
-    country = next((c.get("shortText") for c in pl.get("addressComponents") or [] if "country" in (c.get("types") or [])), None)
+PLACE_URL = "https://places.googleapis.com/v1/places/{id}"
+PLACE_FIELDS = ",".join(f.removeprefix("places.") for f in PLACES_FIELDS.split(","))
+#: S-65 · what a candidate shows: its listing facts, nothing fetched from its own site yet
+FIND_FIELDS = ("places.id,places.displayName,places.formattedAddress,places.internationalPhoneNumber,places.nationalPhoneNumber,"
+               "places.websiteUri,places.addressComponents,places.primaryTypeDisplayName,places.businessStatus")
+FIND_MAX = 5
+_PLACE_ID = re.compile(r"[A-Za-z0-9_-]{10,300}")
+
+
+def _country_of(pl: dict) -> Optional[str]:
+    return next((c.get("shortText") for c in pl.get("addressComponents") or [] if "country" in (c.get("types") or [])), None)
+
+
+def _place_facts(pl: dict, sha: str, now: datetime) -> Tuple[List[Fact], dict, Optional[str], Optional[str]]:
+    """One Places listing → its facts, each with the listing's own words. (facts, listing, country, website)"""
+    country = _country_of(pl)
     listing = {"name": (pl.get("displayName") or {}).get("text"), "address": pl.get("formattedAddress"), "place_id": pl.get("id")}
     link = f"https://www.google.com/maps/place/?q=place_id:{pl.get('id')}"
     facts = []
     phone_raw = pl.get("internationalPhoneNumber") or pl.get("nationalPhoneNumber")
     n = to_e164(phone_raw, country) if phone_raw else None
-    # ⚠ the listing is the top search result: its own name and address go into the label, so the read-back says
-    # WHICH listing — a wrong match is heard before the yes, never discovered after
+    # ⚠ the listing's own name and address go into the label, so the read-back says WHICH listing — a wrong match is
+    # heard before the yes, never discovered after
     label = f"their Google listing ({listing['name']}, {listing['address']})"
     if n:
         facts.append(Fact("phone", n, "places", link, label, f'"internationalPhoneNumber": "{phone_raw}"',
@@ -404,11 +402,91 @@ async def read_places(http: Http, key: str, name: str, city: str, now: datetime)
         facts.append(Fact("hours", " · ".join(hours), "places", link, label, '"regularOpeningHours.weekdayDescriptions"',
                           now.isoformat(), sha, {"listing": listing, "weekday_descriptions": hours,
                                                  "periods": (pl.get("regularOpeningHours") or {}).get("periods")}))
-    return facts, [src], listing, country, pl.get("websiteUri")
+    return facts, listing, country, pl.get("websiteUri")
+
+
+async def read_places(http: Http, key: str, name: str, city: str, now: datetime) -> Tuple[List[Fact], List[dict], Optional[dict], Optional[str], Optional[str]]:
+    """The venue's Google business listing: its phone and website. Returns (facts, sources, listing, country, website)."""
+    body = {"textQuery": f"{name}, {city}", "maxResultCount": 1}
+    try:
+        r = await http("POST", PLACES_URL, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": PLACES_FIELDS,
+                                                    "content-type": "application/json"}, json=body)
+        data = r.json()
+    except Exception as e:
+        return [], [{"url": PLACES_URL, "result": f"not read — {type(e).__name__}"}], None, None, None
+    raw = json.dumps(data, sort_keys=True)
+    sha = hashlib.sha256(raw.encode()).hexdigest()
+    src = {"url": PLACES_URL, "query": body["textQuery"], "result": f"HTTP {r.status_code}", "sha256": sha, "fetched_at": now.isoformat()}
+    places = data.get("places") if isinstance(data, dict) and r.status_code == 200 else None
+    if not places:
+        src["result"] += " — no listing" if r.status_code == 200 else f" — {str(data)[:200]}"
+        return [], [src], None, None, None
+    facts, listing, country, website = _place_facts(places[0], sha, now)
+    return facts, [src], listing, country, website
+
+
+async def read_place_id(http: Http, key: str, place_id: str, now: datetime) -> Tuple[List[Fact], List[dict], Optional[dict], Optional[str], Optional[str]]:
+    """S-65 · the EXACT listing the guest picked from "Find venues" — never a fresh search that could land elsewhere."""
+    url = PLACE_URL.format(id=place_id)
+    try:
+        r = await http("GET", url, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": PLACE_FIELDS})
+        data = r.json()
+    except Exception as e:
+        return [], [{"url": url, "result": f"not read — {type(e).__name__}"}], None, None, None
+    sha = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+    src = {"url": url, "result": f"HTTP {r.status_code}", "sha256": sha, "fetched_at": now.isoformat()}
+    if r.status_code != 200 or not isinstance(data, dict) or data.get("id") != place_id:
+        src["result"] += f" — {str(data)[:200]}"
+        return [], [src], None, None, None
+    facts, listing, country, website = _place_facts(data, sha, now)
+    return facts, [src], listing, country, website
+
+
+class FindRefused(ReadRefused):
+    pass
+
+
+async def find_venues(http: Http, *, what: str, where: str, country: Optional[str], now: datetime) -> dict:
+    """S-65 · "Find venues": a kind of place in a place ("tattoo studio", "Nairobi, KE") → up to five candidates, each
+    with what its Google listing says. Search only: nothing is contacted, nothing is read from their sites until one is
+    picked, and then it is the existing venue read on THAT listing."""
+    if not isinstance(what, str) or not 2 <= len(what.strip()) <= 60:
+        raise FindRefused("what_invalid", "what to look for is 2–60 characters (e.g. \"tattoo studio\")")
+    if not isinstance(where, str) or not 2 <= len(where.strip()) <= 80:
+        raise FindRefused("where_invalid", "where is 2–80 characters (e.g. \"Nairobi\")")
+    country = country.strip().upper() if isinstance(country, str) and country.strip() else None
+    if country and not re.fullmatch(r"[A-Z]{2}", country):
+        raise FindRefused("country_invalid", "country is a two-letter code")
+    key = places_key()
+    if not key:
+        raise FindRefused("places_not_configured", "GOOGLE_PLACES_API_KEY is not set, so there is nothing to search with")
+    body = {"textQuery": f"{what.strip()} in {where.strip()}", "maxResultCount": FIND_MAX, **({"regionCode": country} if country else {})}
+    try:
+        r = await http("POST", PLACES_URL, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": FIND_FIELDS,
+                                                    "content-type": "application/json"}, json=body)
+        data = r.json()
+    except Exception as e:
+        raise FindRefused("places_unreachable", f"Google Places could not be reached: {type(e).__name__}") from None
+    if r.status_code != 200 or not isinstance(data, dict):
+        raise FindRefused("places_refused", f"Google Places answered HTTP {r.status_code}: {str(data)[:200]}")
+    sha = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+    out = []
+    for pl in (data.get("places") or [])[:FIND_MAX]:
+        if not isinstance(pl, dict) or not isinstance(pl.get("id"), str) or not _PLACE_ID.fullmatch(pl["id"]):
+            continue
+        c = _country_of(pl)
+        raw = pl.get("internationalPhoneNumber") or pl.get("nationalPhoneNumber")
+        out.append({"place_id": pl["id"], "name": (pl.get("displayName") or {}).get("text"), "address": pl.get("formattedAddress"),
+                    "country": c, "phone": (to_e164(raw, c) if raw else None) or raw, "website": pl.get("websiteUri"),
+                    "type": (pl.get("primaryTypeDisplayName") or {}).get("text"), "status": pl.get("businessStatus"),
+                    "listing_url": f"https://www.google.com/maps/place/?q=place_id:{pl['id']}"})
+    return {"query": body["textQuery"], "candidates": out,
+            "source": {"url": PLACES_URL, "query": body["textQuery"], "result": f"HTTP 200 — {len(out)} listing(s)",
+                       "sha256": sha, "fetched_at": now.isoformat()}}
 
 
 async def read_venue(http: Http, *, name: str, city: str, country: Optional[str], website: Optional[str],
-                     now: datetime, resolve: Resolve = _resolve) -> VenueRead:
+                     now: datetime, resolve: Resolve = _resolve, place_id: Optional[str] = None) -> VenueRead:
     if not isinstance(name, str) or not 2 <= len(name.strip()) <= 80:
         raise ReadRefused("name_invalid", "a venue name is 2–80 characters")
     if not isinstance(city, str) or not 2 <= len(city.strip()) <= 60:
@@ -419,7 +497,10 @@ async def read_venue(http: Http, *, name: str, city: str, country: Optional[str]
     listing = None
     key = places_key()
     if key:
-        f, s, listing, pc, site = await read_places(http, key, name.strip(), city.strip(), now)
+        if place_id is not None and not (isinstance(place_id, str) and _PLACE_ID.fullmatch(place_id)):
+            raise ReadRefused("place_id_invalid", "not a Google place id")
+        f, s, listing, pc, site = (await read_place_id(http, key, place_id, now) if place_id
+                                   else await read_places(http, key, name.strip(), city.strip(), now))
         facts += f
         sources += s
         country = country or pc

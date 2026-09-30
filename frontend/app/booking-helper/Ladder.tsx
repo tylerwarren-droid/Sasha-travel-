@@ -41,8 +41,16 @@ async function req(path: string, body?: unknown): Promise<{ ok: boolean; status:
 const refusal = (j: Record<string, unknown>, status: number) =>
   `${typeof j.rule === 'string' ? j.rule : `HTTP ${status}`}${typeof j.message === 'string' ? ` — ${j.message}` : ''}`
 
+type Candidate = { place_id: string; name: string | null; address: string | null; country: string | null; phone: string | null
+  website: string | null; type: string | null; status: string | null; listing_url: string }
+
 export function Ladder({ defaults }: { defaults: { name: string; email: string; phone: string } }) {
   const [q, setQ] = useState({ name: '', city: '', country: '', website: '' })
+  // S-65 · "Find venues": a kind of place in a place → up to five Google listings; picking one reads THAT listing
+  const [find, setFind] = useState({ what: '', where: '', country: '' })
+  const [finding, setFinding] = useState<'idle' | 'finding' | 'done' | 'stopped'>('idle')
+  const [found, setFound] = useState<Candidate[]>([])
+  const [findNote, setFindNote] = useState<string | null>(null)
   const [reading, setReading] = useState<'idle' | 'reading' | 'done' | 'stopped'>('idle')
   const [read, setRead] = useState<Read | null>(null)
   const [pick, setPick] = useState<string | null>(null)
@@ -70,9 +78,25 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
 
   type Linked = { number: string; source: string; date: string; time: string; party: number; name: string }
 
-  async function doRead(query = q, link: Linked | null = linked) {
+  async function doFind() {
+    setFinding('finding'); setFound([]); setFindNote(null)
+    const r = await req('/api/booking/venues/find', { what: find.what, where: find.where, country: find.country || undefined })
+    if (!r.ok) { setFinding('stopped'); setFindNote(`Could not search: ${refusal(r.json, r.status)}`); return }
+    const c = (r.json.candidates ?? []) as Candidate[]
+    setFound(c); setFinding('done')
+    if (!c.length) setFindNote(`Google has no listing for “${String(r.json.query)}”.`)
+  }
+
+  async function pickCandidate(c: Candidate) {
+    const query = { name: c.name ?? find.what, city: find.where, country: c.country ?? find.country, website: '' }
+    setQ(query)
+    await doRead(query, null, c.place_id)
+  }
+
+  async function doRead(query = q, link: Linked | null = linked, placeId?: string) {
     setReading('reading'); setRead(null); setPick(null); setNote(null)
-    const r = await req('/api/booking/venues/read', { name: query.name, city: query.city, country: query.country || undefined, website: query.website || undefined })
+    const r = await req('/api/booking/venues/read', { name: query.name, city: query.city, country: query.country || undefined,
+      website: query.website || undefined, ...(placeId ? { place_id: placeId } : {}) })
     if (!r.ok) { setReading('stopped'); setNote(`Could not read them: ${refusal(r.json, r.status)}`); return }
     const got = r.json as unknown as Read
     setRead(got); setReading('done')
@@ -158,6 +182,36 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   return (
     <section className="mt-8 rounded border p-4">
       <h2 className="text-lg font-semibold">Find how to book a venue</h2>
+      <div className="mt-3 rounded bg-black/5 p-3 text-sm">
+        <p className="font-medium">Find venues</p>
+        <p className="opacity-80">A kind of place and where — e.g. “tattoo studio” in “Nairobi”, KE. Search only: nobody is contacted.</p>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <label>What <input className="w-full rounded border px-2 py-1" value={find.what} onChange={(e) => setFind({ ...find, what: e.target.value })} /></label>
+          <label>Where <input className="w-full rounded border px-2 py-1" value={find.where} onChange={(e) => setFind({ ...find, where: e.target.value })} /></label>
+          <label>Country (optional) <input className="w-full rounded border px-2 py-1" maxLength={2} value={find.country} onChange={(e) => setFind({ ...find, country: e.target.value.toUpperCase() })} /></label>
+        </div>
+        <div className="mt-2">
+          <GatedButton label="Find venues" onClick={run(doFind, (m) => { setFinding('stopped'); setFindNote(m) })}
+            needs={[find.what.trim().length < 2 && 'what to look for', find.where.trim().length < 2 && 'where', finding === 'finding' && 'the search to finish']} />
+        </div>
+        {findNote && <p className="mt-2">{findNote}</p>}
+        {found.length > 0 && (
+          <ol className="mt-2 ml-5 list-decimal space-y-2">
+            {found.map((c) => (
+              <li key={c.place_id}>
+                <span className="font-medium">{c.name}</span>{c.type ? <span className="opacity-70"> · {c.type}</span> : null}
+                {c.status && c.status !== 'OPERATIONAL' ? <span className="text-red-800"> · {c.status.toLowerCase().replace(/_/g, ' ')}</span> : null}
+                <div className="opacity-80">{c.address ?? 'no address listed'} · {c.phone ?? 'no phone listed'}{c.website ? ` · ${c.website}` : ''}</div>
+                <div className="opacity-60">as their Google listing says (<a className="underline" href={c.listing_url} target="_blank" rel="noreferrer">listing</a>)</div>
+                <button type="button" className="mt-1 rounded border px-2 py-0.5" disabled={reading === 'reading'}
+                  onClick={() => { pickCandidate(c).catch((e) => { setReading('stopped'); setNote(`Stopped: ${(e as Error).message}`) }) }}>
+                  Read this one
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
       <p className="text-sm opacity-80">Sasha reads what the venue publishes — its site, or its Google listing — and tells you what she can do.</p>
       <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
         <label>Venue <input className="w-full rounded border px-2 py-1" value={q.name} onChange={(e) => setQ({ ...q, name: e.target.value })} /></label>

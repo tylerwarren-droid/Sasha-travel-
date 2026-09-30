@@ -101,17 +101,30 @@ async def read_venue(request: Request):
     now = NOW()
     try:
         read = await V.read_venue(HTTP, name=body.get("name"), city=body.get("city"), country=body.get("country"),
-                                  website=body.get("website") or None, now=now, resolve=RESOLVE)
+                                  website=body.get("website") or None, now=now, resolve=RESOLVE,
+                                  place_id=body.get("place_id") or None)   # S-65 · the listing picked in "Find venues"
     except V.ReadRefused as e:
         return _refuse(422, e.rule, str(e))
     row = {"read_id": str(uuid.uuid4()), "account_id": account_for(request),
-           "query": {k: body.get(k) for k in ("name", "city", "country", "website")},
+           "query": {k: body.get(k) for k in ("name", "city", "country", "website", "place_id")},
            "venue_name": read.name, "country": read.country, "read": read.to_json(), "created_at": now}
     try:
         await LADDER_STORE.put_read(row)
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
     return _read_view(row)
+
+
+@router.post("/venues/find")
+async def find_venues(request: Request):
+    """S-65 · "Find venues": {what, where, country?} → up to five Google listings. Search only — nothing is contacted."""
+    body = await _json(request)
+    if body is None:
+        return _refuse(400, "find_malformed", "send {what, where, country?} as a JSON object")
+    try:
+        return await V.find_venues(HTTP, what=body.get("what"), where=body.get("where"), country=body.get("country"), now=NOW())
+    except V.ReadRefused as e:
+        return _refuse(503 if e.rule in ("places_not_configured", "places_unreachable", "places_refused") else 422, e.rule, str(e))
 
 
 @router.get("/venues/read/{read_id}")

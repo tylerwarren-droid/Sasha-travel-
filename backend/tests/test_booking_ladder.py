@@ -1,0 +1,507 @@
+"""S-36 · the ladder — what Magellan reads, the chooser's sentence, the phone rung on a READ number, and the email rung
+with Resend's answer read and replies matched by address.
+
+    cd backend && python -m unittest tests.test_booking_ladder -v
+
+Offline: venue pages, Google Places, Resend and Bland are fakes; no host is resolved (a fake resolver says public
+or private). The route half runs in memory and, with BOOKING_TEST_DATABASE_URL, on Postgres with 001–004 applied —
+⚠ without it the Postgres half is SKIPPED, and says so.
+"""
+import asyncio
+import base64
+import hashlib
+import hmac
+import json
+import os
+import pathlib
+import time
+import unittest
+from datetime import datetime, timedelta, timezone
+from unittest import mock
+from urllib.parse import urlsplit
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from booking_signer import call_routes, emailing as E, ladder as L, ladder_routes, routes, venue_read as V
+from booking_signer.call_store import MemoryCallStore, PostgresCallStore
+from booking_signer.ladder_store import MemoryLadderStore, PostgresLadderStore
+from booking_signer.store import PostgresStore
+
+HERE = pathlib.Path(__file__).parent
+SQL_DIR = HERE.parent / "booking_signer" / "sql"
+PG_URL = os.getenv("BOOKING_TEST_DATABASE_URL", "")
+NOW = datetime(2026, 10, 5, 11, 0, tzinfo=timezone.utc)   # a Monday
+SECRET = "whsec_" + base64.b64encode(b"test-webhook-secret-not-real").decode()
+ENV = {"SASHA_CALLS_ENABLED": "1", "BLAND_API_KEY": "bland-test", "SASHA_TEST_CALL_NUMBER": "+351912000000",
+       "SASHA_EMAILS_ENABLED": "1", "RESEND_API_KEY": "re_test", "SASHA_EMAIL_FROM": "Sasha <sasha@mail.kanoe.test>",
+       "SASHA_INBOUND_DOMAIN": "in.kanoe.test", "RESEND_WEBHOOK_SECRET": SECRET, "GOOGLE_PLACES_API_KEY": "",
+       "SASHA_PHONE_NUMBER": "", "SASHA_CALLS_PER_DAY": "3", "SASHA_EMAILS_PER_DAY": "5"}
+
+LA_CONTRA_SITE = """<html><head><script type="application/ld+json">{"@type":"Restaurant","telephone":"+34 915 00 11 22","email":"reservas@lacontra.test"}</script></head>
+<body><a href="tel:915001122">Llámanos</a> <a href="mailto:hola@lacontra.test?subject=Hi">Escríbenos</a>
+<a href="https://wa.me/34600111222">WhatsApp</a> <a href="/contacto">Contacto</a>
+<p>Escríbenos a info@lacontra.test o ven a vernos.</p> <img src="logo@2x.png"></body></html>"""
+PSI_LIKE = """<html><body><form action="/reservas/"><input type="date" name="rtb-date"><select name="rtb-time"></select>
+<input name="rtb-party"><input name="rtb-name"><input type="email" name="rtb-email"></form></body></html>"""
+PLATFORM_SITE = """<html><body><iframe src="https://widget.thefork.com/abc"></iframe><a href="https://www.opentable.es/r/x">Reserva</a></body></html>"""
+
+
+def run(c):
+    return asyncio.run(c)
+
+
+class R:
+    def __init__(self, status, body=None, text="", headers=None):
+        self.status_code, self._body, self.text, self.headers = status, body, text, headers or {}
+
+    def json(self):
+        if isinstance(self._body, Exception):
+            raise self._body
+        return self._body
+
+
+class Web:
+    """Pages by URL, robots by host, Places, Resend and Bland — every request recorded."""
+
+    def __init__(self, pages=None, robots=None, places=None):
+        self.pages = pages or {}
+        self.robots = robots or {}
+        self.places = places
+        self.resend_send = R(200, {"id": "re_msg_1"})
+        self.resend_received = {}
+        self.bland = None   # None: a fresh call id per call, as Bland gives
+        self.requests = []
+
+    async def __call__(self, method, url, headers=None, json=None):
+        self.requests.append((method, url, json))
+        if url.startswith(V.PLACES_URL):
+            return self.places if isinstance(self.places, R) else R(200, self.places or {})
+        if url == E.RESEND_SEND_URL:
+            if isinstance(self.resend_send, Exception):
+                raise self.resend_send
+            return self.resend_send
+        if url.startswith("https://api.resend.com/emails/receiving/"):
+            pid = url.rsplit("/", 1)[1]
+            return R(200, self.resend_received[pid]) if pid in self.resend_received else R(404, {"message": "not found"})
+        if url.startswith("https://api.bland.ai"):
+            self.bland_n = getattr(self, "bland_n", 0) + 1
+            return R(200, {"status": "success", "call_id": f"bland-{self.bland_n}"}) if self.bland is None else self.bland
+        u = urlsplit(url)
+        if u.path == "/robots.txt":
+            return R(200, text=self.robots[u.hostname]) if u.hostname in self.robots else R(404, text="")
+        if url in self.pages:
+            return self.pages[url]
+        return R(404, text="")
+
+    def fetched(self):
+        return [u for m, u, _ in self.requests if m == "GET"]
+
+
+PUBLIC = lambda host: ["93.184.216.34"]
+
+
+# ── 1 · what a page publishes ───────────────────────────────────────────────────────────────
+
+class Reading(unittest.TestCase):
+    def test_every_published_contact_is_a_fact_with_its_source(self):
+        facts = V.facts_from_html(LA_CONTRA_SITE, "https://www.lacontra.test/", "ES", NOW.isoformat())
+        got = sorted((f.kind, f.value) for f in facts)
+        self.assertEqual(got, [("email", "hola@lacontra.test"), ("email", "info@lacontra.test"), ("email", "reservas@lacontra.test"),
+                               ("phone", "+34915001122"), ("whatsapp", "+34600111222")])
+        for f in facts:
+            self.assertEqual((f.source_kind, f.source_url, f.source_label), ("site", "https://www.lacontra.test/", "their website, lacontra.test"))
+            self.assertEqual(len(f.sha256), 64)
+            self.assertTrue(f.snippet)
+
+    def test_a_booking_form_and_a_platform_are_recognised_but_a_platform_is_never_fetched(self):
+        self.assertEqual([f.kind for f in V.facts_from_html(PSI_LIKE, "https://www.restaurante-psi.com/", "PT", "t")], ["booking_form"])
+        facts = V.facts_from_html(PLATFORM_SITE, "https://v.test/", "ES", "t")
+        self.assertEqual(sorted({f.value for f in facts if f.kind == "platform"}), ["OpenTable", "TheFork"])
+        web = Web()
+        facts, sources = run(V.read_site(web, "https://www.thefork.es/restaurante/x", "ES", NOW, PUBLIC))
+        self.assertEqual(web.requests, [])
+        self.assertEqual((facts[0].kind, facts[0].value), ("platform", "TheFork"))
+
+    def test_national_numbers_need_the_country_and_are_never_guessed(self):
+        self.assertEqual(V.to_e164("915 00 11 22", "ES"), "+34915001122")
+        self.assertEqual(V.to_e164("01 42 00 00 00", "FR"), "+33142000000")
+        self.assertEqual(V.to_e164("06 1234 5678", "IT"), "+390612345678")
+        self.assertEqual(V.to_e164("0034 915 001 122", None), "+34915001122")
+        self.assertIsNone(V.to_e164("915 00 11 22", None))
+        self.assertIsNone(V.to_e164("12", "ES"))
+
+    def test_robots_first_and_only_public_hosts(self):
+        web = Web(pages={"https://www.lacontra.test/": R(200, text=LA_CONTRA_SITE)},
+                  robots={"www.lacontra.test": "User-agent: *\nDisallow: /"})
+        facts, sources = run(V.read_site(web, "https://www.lacontra.test/", "ES", NOW, PUBLIC))
+        self.assertEqual(facts, [])
+        self.assertIn("robots.txt does not allow it", sources[0]["result"])
+        self.assertNotIn("https://www.lacontra.test/", web.fetched())
+        with self.assertRaises(V.ReadRefused) as e:
+            V.public_url("http://intranet.test/", lambda h: ["10.0.0.5"])
+        self.assertEqual(e.exception.rule, "host_not_public")
+        for bad in ("file:///etc/passwd", "https://user:pw@x.test/", "https://x.test:8443/"):
+            with self.assertRaises(V.ReadRefused):
+                V.public_url(bad, PUBLIC)
+
+    def test_a_redirect_to_a_private_host_is_refused_mid_flight(self):
+        web = Web(pages={"https://www.lacontra.test/": R(302, headers={"location": "http://internal.test/"})})
+        resolve = lambda h: ["10.1.2.3"] if h == "internal.test" else ["93.184.216.34"]
+        facts, sources = run(V.read_site(web, "https://www.lacontra.test/", "ES", NOW, resolve))
+        self.assertEqual(facts, [])
+        self.assertTrue(any("non-public" in s["result"] for s in sources))
+
+    def test_the_contact_page_is_followed_on_the_same_host_only(self):
+        web = Web(pages={"https://www.lacontra.test/": R(200, text='<a href="/contacto">Contacto</a><a href="https://other.test/contact">x</a>'),
+                         "https://www.lacontra.test/contacto": R(200, text='<a href="tel:+34915001122">Tel</a>')})
+        facts, _ = run(V.read_site(web, "https://www.lacontra.test/", "ES", NOW, PUBLIC))
+        self.assertEqual([(f.kind, f.value, f.source_url) for f in facts], [("phone", "+34915001122", "https://www.lacontra.test/contacto")])
+        self.assertNotIn("https://other.test/contact", web.fetched())
+
+    def test_la_contra_with_no_website_is_read_from_its_google_listing(self):
+        places = {"places": [{"id": "ChIJ-la-contra", "displayName": {"text": "La Contra"}, "formattedAddress": "Calle de la Contra 1, Madrid",
+                              "internationalPhoneNumber": "+34 915 00 11 22",
+                              "addressComponents": [{"shortText": "ES", "types": ["country", "political"]}]}]}
+        web = Web(places=places)
+        with mock.patch.dict(os.environ, {"GOOGLE_PLACES_API_KEY": "places-test"}):
+            read = run(V.read_venue(web, name="La Contra", city="Madrid", country=None, website=None, now=NOW, resolve=PUBLIC))
+        self.assertEqual(read.country, "ES")
+        self.assertEqual([(f.kind, f.value, f.source_label) for f in read.facts], [("phone", "+34915001122", "their Google listing (La Contra, Calle de la Contra 1, Madrid)")])
+        self.assertEqual(read.listing, {"name": "La Contra", "address": "Calle de la Contra 1, Madrid", "place_id": "ChIJ-la-contra"})
+        method, url, body = web.requests[0]
+        self.assertEqual((method, url, body["textQuery"]), ("POST", V.PLACES_URL, "La Contra, Madrid"))
+
+    def test_without_a_places_key_it_says_so(self):
+        read = run(V.read_venue(Web(), name="La Contra", city="Madrid", country="ES", website=None, now=NOW, resolve=PUBLIC))
+        self.assertEqual(read.facts, [])
+        self.assertIn("GOOGLE_PLACES_API_KEY is not set", read.sources[0]["result"])
+
+
+# ── 2 · the chooser ─────────────────────────────────────────────────────────────────────────
+
+def a_read(*kinds, country="ES", name="La Contra"):
+    vals = {"phone": "+34915001122", "email": "reservas@lacontra.test", "whatsapp": "+34600111222", "platform": "OpenTable",
+            "booking_form": "https://lacontra.test/reserva"}
+    return {"name": name, "country": country, "facts": [{"kind": k, "value": vals[k], "source_label": "their website, lacontra.test",
+                                                           "source_url": "https://lacontra.test/"} for k in kinds]}
+
+
+class Chooser(unittest.TestCase):
+    def setUp(self):
+        self.env = mock.patch.dict(os.environ, ENV)
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+
+    def test_the_founders_sentence(self):
+        self.assertEqual(L.choose(a_read("phone", "email"))["say"],
+                         "They have no booking form. I'll call them — or I can email and we wait. Which?")
+
+    def test_one_rung_asks_shall_i(self):
+        self.assertEqual(L.choose(a_read("phone"))["say"], "They have no booking form. I'll call them. Shall I?")
+
+    def test_a_rung_that_cannot_run_is_never_offered_and_says_why(self):
+        with mock.patch.dict(os.environ, {"SASHA_EMAILS_ENABLED": "0"}):
+            c = L.choose(a_read("phone", "email"))
+        self.assertEqual(c["say"], "They have no booking form. I'll call them. Shall I?")
+        email = [r for r in c["rungs"] if r["rung"] == "email"][0]
+        self.assertFalse(email["available"])
+        self.assertIn("SASHA_EMAILS_ENABLED", email["why_not"])
+
+    def test_a_platform_and_an_unmapped_form_are_facts_not_rungs(self):
+        self.assertTrue(L.choose(a_read("platform", "phone"))["say"].startswith("They book through OpenTable, which I can't use yet. I'll call them."))
+        self.assertTrue(L.choose(a_read("booking_form", "email"))["say"].startswith("They have a booking form, but I can't fill it yet."))
+
+    def test_nothing_reachable_says_what_was_found_and_why(self):
+        with mock.patch.dict(os.environ, {"SASHA_CALLS_ENABLED": "0"}):
+            s = L.choose(a_read("phone"))["say"]
+        self.assertIn("I can't reach them myself", s)
+        self.assertIn("SASHA_CALLS_ENABLED", s)
+        self.assertIn("they publish no phone, email or WhatsApp", L.choose(a_read())["say"])
+
+    def test_a_country_whose_language_she_cannot_speak_is_not_a_phone_rung(self):
+        phone = L.choose(a_read("phone", country="VN"))["rungs"][0]
+        self.assertFalse(phone["available"])
+        self.assertIn("vi", phone["why_not"])
+
+
+# ── 3 · the email: exact words, hashed, Resend's answer READ, replies by address ─────────────
+
+class Email(unittest.TestCase):
+    def setUp(self):
+        self.env = mock.patch.dict(os.environ, ENV)
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+
+    def p(self):
+        return E.EmailParticulars(on=NOW.date() + timedelta(days=3), at=datetime(2026, 1, 1, 20, 0).time(), party=4,
+                                  name="Anna Johnson", guest_email="anna@example.test")
+
+    def test_both_addresses_go_to_the_venue_and_the_read_back_says_so(self):
+        e = E.compose("es", "La Contra", "reservas@lacontra.test", self.p(), "11111111-2222-4333-8444-555555555555")
+        self.assertEqual((e["to"], e["cc"], e["reply_to"]),
+                         ("reservas@lacontra.test", "anna@example.test", "act-11111111-2222-4333-8444-555555555555@in.kanoe.test"))
+        self.assertIn("asistente de IA", e["text"])
+        self.assertIn("la familia Johnson", e["text"])
+        lines = E.read_back(e, "La Contra", "their website, lacontra.test")
+        self.assertIn("they'll have my address and yours", lines[1])
+        self.assertEqual(lines[4], e["text"])
+
+    def test_the_hash_moves_with_any_byte(self):
+        e = E.compose("en", "La Contra", "r@l.test", self.p(), "11111111-2222-4333-8444-555555555555")
+        self.assertNotEqual(E.email_sha256(e), E.email_sha256({**e, "text": e["text"] + " "}))
+
+    def test_sent_only_on_200_with_an_id(self):
+        e = E.compose("en", "La Contra", "r@l.test", self.p(), "11111111-2222-4333-8444-555555555555")
+        for answer, sent in [(R(200, {"id": "re_1"}), True), (R(200, {}), False), (R(422, {"message": "Invalid `to` field"}), False),
+                             (R(403, {"message": "domain not verified"}), False), (R(500, ValueError()), False), (ConnectionError("x"), False)]:
+            web = Web()
+            web.resend_send = answer
+            s = run(E.send(web, e))
+            self.assertEqual(s.sent, sent, answer)
+            if not sent:
+                self.assertTrue(s.why)
+        web = Web()
+        run(E.send(web, e))
+        _, _, payload = web.requests[0]
+        self.assertEqual((payload["to"], payload["cc"], payload["reply_to"]), (["r@l.test"], ["anna@example.test"], e["reply_to"]))
+
+    def test_svix_signatures(self):
+        body = b'{"type":"email.received"}'
+        ts = str(int(time.time()))
+        key = base64.b64decode(SECRET.removeprefix("whsec_"))
+        sig = base64.b64encode(hmac.new(key, f"msg_1.{ts}.".encode() + body, hashlib.sha256).digest()).decode()
+        h = {"svix-id": "msg_1", "svix-timestamp": ts, "svix-signature": f"v1,bogus v1,{sig}"}
+        self.assertTrue(E.verify_svix(SECRET, h, body))
+        self.assertFalse(E.verify_svix(SECRET, h, body + b" "))
+        self.assertFalse(E.verify_svix(SECRET, {**h, "svix-timestamp": str(int(ts) - 600)}, body))
+        self.assertFalse(E.verify_svix("", h, body))
+
+    def test_only_our_inbound_domain_matches(self):
+        i = "11111111-2222-4333-8444-555555555555"
+        self.assertEqual(E.act_id_of([f"Sasha <act-{i}@in.kanoe.test>"]), i)
+        self.assertIsNone(E.act_id_of([f"act-{i}@elsewhere.test"]))
+        self.assertIsNone(E.act_id_of(["info@in.kanoe.test"]))
+
+
+# ── 4 · the routes ──────────────────────────────────────────────────────────────────────────
+
+def signed(event: dict):
+    body = json.dumps(event).encode()
+    ts = str(int(time.time()))
+    key = base64.b64decode(SECRET.removeprefix("whsec_"))
+    sig = base64.b64encode(hmac.new(key, f"msg_x.{ts}.".encode() + body, hashlib.sha256).digest()).decode()
+    return body, {"svix-id": "msg_x", "svix-timestamp": ts, "svix-signature": f"v1,{sig}", "content-type": "application/json"}
+
+
+class LadderRoutes:
+    def make_stores(self):
+        raise NotImplementedError
+
+    def trip_status_of_email(self, email_id):
+        raise NotImplementedError
+
+    def setUp(self):
+        self.env = mock.patch.dict(os.environ, ENV)
+        self.env.start()
+        self.calls, self.ladder = self.make_stores()
+        self.web = Web(pages={"https://www.lacontra.test/": R(200, text=LA_CONTRA_SITE)})
+        self.now = NOW
+        self.saved = (call_routes.CALL_STORE, call_routes.HTTP, call_routes.NOW, ladder_routes.LADDER_STORE,
+                      ladder_routes.HTTP, ladder_routes.NOW, ladder_routes.RESOLVE)
+        call_routes.CALL_STORE, call_routes.HTTP, call_routes.NOW = self.calls, self.web, (lambda: self.now)
+        ladder_routes.LADDER_STORE, ladder_routes.HTTP, ladder_routes.NOW, ladder_routes.RESOLVE = self.ladder, self.web, (lambda: self.now), PUBLIC
+        app = FastAPI()
+        app.include_router(routes.router)
+        self.c = TestClient(app)
+        self.c.__enter__()
+
+    def tearDown(self):
+        if getattr(self, "base", None) is not None:
+            self.c.portal.call(self.base.close)
+        self.c.__exit__(None, None, None)
+        (call_routes.CALL_STORE, call_routes.HTTP, call_routes.NOW, ladder_routes.LADDER_STORE,
+         ladder_routes.HTTP, ladder_routes.NOW, ladder_routes.RESOLVE) = self.saved
+        self.env.stop()
+
+    def read(self):
+        r = self.c.post("/api/booking/venues/read", json={"name": "La Contra", "city": "Madrid", "country": "ES", "website": "https://www.lacontra.test/"})
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()
+
+    BOOKING = {"date": "2026-10-08", "time": "20:00", "party": 4, "name": "Anna Johnson"}
+
+    def test_a_read_returns_facts_rungs_and_her_sentence(self):
+        v = self.read()
+        self.assertEqual(v["say"], "They have no booking form. I'll call them — or I can email and we wait — or you can WhatsApp them — I'll write the message. Which?")
+        self.assertEqual({f["kind"] for f in v["facts"]}, {"phone", "email", "whatsapp"})
+        self.assertEqual(self.c.get(f"/api/booking/venues/read/{v['read_id']}").json()["say"], v["say"])
+
+    def test_contact_details_are_never_taken_from_the_request(self):
+        r = self.c.post("/api/booking/venues/read", json={"name": "X", "city": "Madrid", "phone": "+15550100"})
+        self.assertEqual(r.json()["rule"], "contact_from_request")
+
+    def test_the_call_dials_the_number_that_was_read_and_says_where_it_came_from(self):
+        v = self.read()
+        prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING})
+        self.assertEqual(prep.status_code, 200, prep.text)
+        lines = prep.json()["read_back"]["lines"]
+        self.assertEqual(lines[0], "I'll phone La Contra, +34915001122 — the number on their website, lacontra.test.")
+        self.assertIn("Hola, soy Sasha, una asistente de IA", lines[1])
+        r = self.c.post(f"/api/booking/calls/{prep.json()['call_id']}/place",
+                        json={"read_back_sha256": prep.json()["read_back"]["sha256"], "approval": {"how": "button"}})
+        self.assertEqual(r.json()["status"], "placed", r.text)
+        bland = [b for m, u, b in self.web.requests if u.startswith("https://api.bland.ai")]
+        self.assertEqual(bland[0]["phone_number"], "+34915001122")
+        self.assertEqual(bland[0]["language"], "es")
+        self.assertNotIn("from", bland[0])   # no Sasha number yet: Bland's own caller ID
+
+    def test_once_sashas_number_exists_it_is_the_caller_id_but_never_given_out(self):
+        with mock.patch.dict(os.environ, {"SASHA_PHONE_NUMBER": "+44 7700 900123"}):
+            v = self.read()
+            prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
+            self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
+        bland = [b for m, u, b in self.web.requests if u.startswith("https://api.bland.ai")][0]
+        self.assertEqual(bland["from"], "+447700900123")
+        self.assertNotIn("7700900123", bland["task"])
+
+    def test_the_three_a_day_limit_holds_for_read_numbers(self):
+        v = self.read()
+        for i in range(4):
+            prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
+            r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
+        self.assertEqual((r.status_code, r.json()["rule"]), (429, "daily_call_limit"))
+        self.assertEqual(len([1 for m, u, b in self.web.requests if u.startswith("https://api.bland.ai")]), 3)
+
+    def test_the_email_rung_end_to_end(self):
+        v = self.read()
+        prep = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"})
+        self.assertEqual(prep.status_code, 200, prep.text)
+        p = prep.json()
+        self.assertIn("reservas@lacontra.test", p["read_back"]["lines"][0])   # the JSON-LD address, read first
+        bad = self.c.post(f"/api/booking/emails/{p['email_id']}/send", json={"read_back_sha256": "0" * 64, "approval": {"how": "button"}})
+        self.assertEqual(bad.json()["rule"], "approval_void")
+        r = self.c.post(f"/api/booking/emails/{p['email_id']}/send", json={"read_back_sha256": p["read_back"]["sha256"], "approval": {"how": "button"}})
+        self.assertEqual(r.json()["status"], "sent", r.text)
+        self.assertIn("accepted it", r.json()["say"])
+        again = self.c.post(f"/api/booking/emails/{p['email_id']}/send", json={"read_back_sha256": p["read_back"]["sha256"], "approval": {"how": "button"}})
+        self.assertEqual(again.json()["rule"], "email_already_sent")
+        self.assertEqual(len([1 for m, u, b in self.web.requests if u == E.RESEND_SEND_URL]), 1)
+        self.assertEqual(self.trip_status_of_email(p["email_id"]), "attempting")
+
+        # the venue replies to act-{id}@in.kanoe.test
+        self.web.resend_received["rcv_1"] = {"text": "Sí, perfecto: mesa para 4 el jueves a las 20:00."}
+        body, h = signed({"type": "email.received", "data": {"email_id": "rcv_1", "from": "reservas@lacontra.test",
+                                                            "to": [f"act-{p['email_id']}@in.kanoe.test"], "subject": "Re: Solicitud"}})
+        self.assertEqual(self.c.post("/api/booking/email/inbound", content=body, headers=h).json(), {"ok": True, "matched": True})
+        self.c.post("/api/booking/email/inbound", content=body, headers=h)   # a redelivery is recognised
+        g = self.c.get(f"/api/booking/emails/{p['email_id']}").json()
+        self.assertEqual([x["text"] for x in g["replies"]], ["Sí, perfecto: mesa para 4 el jueves a las 20:00."])
+        self.assertEqual(g["say"], "They replied — here are their words.")
+        self.assertEqual(self.trip_status_of_email(p["email_id"]), "attempting")   # a reply never moves the status itself
+
+    def test_resend_refusing_is_not_sent_with_its_words(self):
+        self.web.resend_send = R(403, {"message": "The mail.kanoe.test domain is not verified"})
+        v = self.read()
+        p = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"}).json()
+        r = self.c.post(f"/api/booking/emails/{p['email_id']}/send", json={"read_back_sha256": p["read_back"]["sha256"], "approval": {"how": "button"}}).json()
+        self.assertEqual(r["status"], "not_sent")
+        self.assertIn("domain is not verified", r["say"])
+        self.assertEqual(self.c.get(f"/api/booking/emails/{p['email_id']}").json()["status"], "not_sent")
+        self.assertEqual(self.trip_status_of_email(p["email_id"]), "pending")
+
+    def test_email_off_means_no_read_back(self):
+        v = self.read()
+        with mock.patch.dict(os.environ, {"SASHA_INBOUND_DOMAIN": ""}):
+            r = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"})
+        self.assertEqual(r.json()["rule"], "emails_disabled")
+        self.assertIn("SASHA_INBOUND_DOMAIN", r.json()["message"])
+
+    def test_the_address_is_never_taken_from_the_request(self):
+        v = self.read()
+        r = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test", "to": "x@y.test"})
+        self.assertEqual(r.json()["rule"], "recipient_from_request")
+
+    def test_an_unsigned_or_unmatched_inbound_is_refused_or_quarantined(self):
+        body, h = signed({"type": "email.received", "data": {"email_id": "rcv_9", "to": ["someone@in.kanoe.test"], "from": "x@y.test"}})
+        self.assertEqual(self.c.post("/api/booking/email/inbound", content=body, headers={**h, "svix-signature": "v1,AAAA"}).status_code, 401)
+        self.assertEqual(self.c.post("/api/booking/email/inbound", content=body, headers=h).json(), {"ok": True, "matched": False})
+
+
+class OnMemory(LadderRoutes, unittest.TestCase):
+    def make_stores(self):
+        return MemoryCallStore(), MemoryLadderStore()
+
+    def trip_status_of_email(self, email_id):
+        return self.ladder.trip_items[self.ladder.emails[email_id]["trip_item_id"]]["status"]
+
+    def test_quarantine_is_kept(self):
+        body, h = signed({"type": "email.received", "data": {"email_id": "rcv_q", "to": ["hello@in.kanoe.test"], "from": "x@y.test"}})
+        self.c.post("/api/booking/email/inbound", content=body, headers=h)
+        self.assertEqual([q["provider_id"] for q in self.ladder.quarantined], ["rcv_q"])
+
+
+@unittest.skipUnless(PG_URL, "BOOKING_TEST_DATABASE_URL is not set — the Postgres half did NOT run")
+class OnPostgres(LadderRoutes, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import asyncpg
+        if "test" not in urlsplit(PG_URL).path.lstrip("/"):
+            raise unittest.SkipTest("refusing a database whose name does not contain 'test'")
+
+        async def fresh():
+            c = await asyncpg.connect(PG_URL)
+            try:
+                await c.execute("drop schema if exists auth cascade; drop schema public cascade; create schema public;")
+                await c.execute((HERE / "fixtures" / "model_a_live_2026-09-28.sql").read_text(encoding="utf-8"))
+                for f in ("001_booking_storage.sql", "002_prepared_status.sql", "003_phone_calls.sql", "004_ladder.sql"):
+                    await c.execute((SQL_DIR / f).read_text(encoding="utf-8"))
+            finally:
+                await c.close()
+        asyncio.run(fresh())
+
+    def make_stores(self):
+        async def wipe():
+            import asyncpg
+            c = await asyncpg.connect(PG_URL)
+            try:
+                await c.execute("delete from booking_email_replies; delete from booking_email_quarantine; delete from booking_emails; "
+                                "delete from booking_attempts; delete from booking_calls; delete from venue_reads; delete from trip_items; delete from trips;")
+            finally:
+                await c.close()
+        run(wipe())
+        self.base = PostgresStore(PG_URL)
+        return PostgresCallStore(self.base), PostgresLadderStore(self.base)
+
+    def _q(self, sql, *a):
+        async def q():
+            import asyncpg
+            c = await asyncpg.connect(PG_URL)
+            try:
+                return await c.fetch(sql, *a)
+            finally:
+                await c.close()
+        return run(q())
+
+    def trip_status_of_email(self, email_id):
+        return self._q("select t.status from trip_items t join booking_emails e on e.trip_item_id = t.id where e.email_id = $1::uuid", email_id)[0]["status"]
+
+    def test_the_block_refuses_to_run_twice(self):
+        import asyncpg
+
+        async def again():
+            c = await asyncpg.connect(PG_URL)
+            try:
+                await c.execute((SQL_DIR / "004_ladder.sql").read_text(encoding="utf-8"))
+            finally:
+                await c.close()
+        with self.assertRaisesRegex(Exception, "STOP: the S-36 ladder tables already exist"):
+            run(again())
+
+
+if __name__ == "__main__":
+    unittest.main()

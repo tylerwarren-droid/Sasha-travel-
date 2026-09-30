@@ -8,6 +8,7 @@
     POST /api/booking/intents/{intent_id}/issue  the user said yes → sign the task (once per intent, ever)
     POST /api/booking/reports                    a relayed REPORT → verify → outcome → the trip item's status
     GET  /api/booking/reservations               the account's reservations: trip items something was sent for
+    POST /api/booking/calls …                    S-33, the phone rung — call_routes.py
 
 ⚠ A RESERVATION IS A TRIP ITEM (store.py): created with the intent as `pending`, and given an outcome only when
 the device reports that something was sent to the venue.
@@ -30,7 +31,10 @@ from typing import Any, Optional
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from . import call_routes, ladder_routes
 from .account import account_for
+from .call_store import PostgresCallStore
+from .ladder_store import PostgresLadderStore
 from .issue import IssueRefused, _iso_ms, issue_booking_task
 from .keys import InvalidSigningKey, LoadedSigningKey, SigningKeyNotConfigured, load_signing_key
 from .outcome import outcome_of
@@ -74,6 +78,8 @@ def _load_key() -> tuple:
 
 KEY, KEY_ERROR = _load_key()
 STORE: Any = PostgresStore()
+call_routes.CALL_STORE = PostgresCallStore(STORE)
+ladder_routes.LADDER_STORE = PostgresLadderStore(STORE)
 
 
 def _now() -> datetime:
@@ -122,6 +128,8 @@ async def health():
         },
         "storage": storage,
         "live_issue_enabled": LIVE_ISSUE_ENABLED,
+        "calls": call_routes.status(),
+        "ladder": ladder_routes.status(),
     }
 
 
@@ -395,3 +403,9 @@ async def reservations(request: Request):
         "sasha_reference": str(r["intent_id"])[:8],
         "venue_words": r["venue_words"], "observed_by": r["observed_by"], "task_digest": r["task_digest"],
     } for r in rows]}
+
+
+# S-33 · the phone rung, under the same /api/booking prefix
+router.include_router(call_routes.router)
+# S-36 · the ladder: venue reads, the email rung, the inbound webhook
+router.include_router(ladder_routes.router)

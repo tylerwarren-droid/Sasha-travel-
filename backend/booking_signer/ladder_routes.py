@@ -1,0 +1,292 @@
+"""S-36 · the ladder's routes — included into /api/booking by routes.py.
+
+    POST /api/booking/venues/read              name, city (country, website) → what Magellan read + the rungs + her sentence
+    GET  /api/booking/venues/read/{read_id}    the same read, with the rungs recomputed against today's configuration
+    POST /api/booking/emails                   read_id + particulars → the exact email, read back (nothing is sent)
+    POST /api/booking/emails/{email_id}/send   the yes → claim → Resend → record EXACTLY what Resend answered
+    GET  /api/booking/emails/{email_id}        the email as it stands, and every reply, word for word
+    POST /api/booking/email/inbound            Resend's inbound webhook — svix-verified, matched by address
+
+The phone rung is call_routes.py: `POST /api/booking/calls` now also takes `read_id`, and the number is the one READ.
+
+⚠ Nobody signs in (account.py). A read makes this server fetch a public web page (robots first, public hosts only,
+never a booking platform); an email is capped at SASHA_EMAILS_PER_DAY (default 5) across everyone, as calls are at 3.
+"""
+from __future__ import annotations
+
+import logging
+import os
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+
+from . import calls as C
+from . import emailing as E
+from . import ladder as L
+from . import venue_read as V
+from .account import account_for
+from .call_store import cap_window
+from .store import AlreadyRecorded, StorageUnavailable, UnknownTrip
+
+log = logging.getLogger("sasha.booking_ladder")
+router = APIRouter(tags=["booking-ladder"])
+APPROVAL_WINDOW = timedelta(minutes=15)
+
+# ── injectable for tests ──────────────────────────────────────────────────────────────────────
+LADDER_STORE: Any = None
+
+
+async def HTTP(method: str, url: str, headers: dict, json: Optional[dict] = None):
+    import httpx
+    async with httpx.AsyncClient(timeout=httpx.Timeout(15.0), follow_redirects=False) as client:
+        return await client.request(method, url, headers=headers, json=json)
+
+
+RESOLVE = V._resolve
+
+
+def NOW() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def email_cap() -> int:
+    try:
+        return max(0, int(os.getenv("SASHA_EMAILS_PER_DAY", "5")))
+    except ValueError:
+        return 5
+
+
+def _refuse(status: int, rule: str, message: str) -> JSONResponse:
+    return JSONResponse({"ok": False, "rule": rule, "message": message}, status_code=status)
+
+
+async def _json(request: Request) -> Optional[dict]:
+    try:
+        body = await request.json()
+    except Exception:
+        return None
+    return body if isinstance(body, dict) else None
+
+
+def status() -> dict:
+    """For /api/booking/health."""
+    return {"places_configured": bool(V.places_key()), "emails": L.emails_ready() or "ready",
+            "calls": L.calls_ready() or "ready", "sasha_number_set": C.sasha_number() is not None,
+            "emails_per_day": email_cap()}
+
+
+def _read_view(row: dict) -> dict:
+    read = row["read"]
+    chosen = L.choose(read)
+    return {"read_id": row["read_id"], "venue": read["name"], "country": read.get("country"), "listing": read.get("listing"),
+            "facts": [{k: f[k] for k in ("kind", "value", "source_label", "source_url", "snippet", "fetched_at")} for f in read["facts"]],
+            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"]}
+
+
+# ── reading a venue ───────────────────────────────────────────────────────────────────────────
+
+@router.post("/venues/read")
+async def read_venue(request: Request):
+    body = await _json(request)
+    if body is None:
+        return _refuse(400, "read_malformed", "send {name, city, country?, website?} as a JSON object")
+    if any(k in body for k in ("phone", "number", "phone_number", "email", "to")):
+        return _refuse(422, "contact_from_request", "a venue's contact details are READ from what it publishes, never taken from the request")
+    now = NOW()
+    try:
+        read = await V.read_venue(HTTP, name=body.get("name"), city=body.get("city"), country=body.get("country"),
+                                  website=body.get("website") or None, now=now, resolve=RESOLVE)
+    except V.ReadRefused as e:
+        return _refuse(422, e.rule, str(e))
+    row = {"read_id": str(uuid.uuid4()), "account_id": account_for(request),
+           "query": {k: body.get(k) for k in ("name", "city", "country", "website")},
+           "venue_name": read.name, "country": read.country, "read": read.to_json(), "created_at": now}
+    try:
+        await LADDER_STORE.put_read(row)
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, str(e))
+    return _read_view(row)
+
+
+@router.get("/venues/read/{read_id}")
+async def get_read(read_id: str, request: Request):
+    try:
+        row = await LADDER_STORE.get_read(account_for(request), read_id)
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, str(e))
+    if row is None:
+        return _refuse(404, "read_unknown", "no venue read with that id for this account")
+    return _read_view(row)
+
+
+# ── the phone rung's venue, from a read (used by call_routes) ─────────────────────────────────
+
+async def call_venue_from_read(account: str, read_id: Any, fact_index: Any = None) -> C.CallVenue:
+    row = await LADDER_STORE.get_read(account, str(read_id))
+    if row is None:
+        raise C.CallRefused("read_unknown", "no venue read with that id for this account")
+    read = row["read"]
+    phones = [(i, f) for i, f in enumerate(read["facts"]) if f["kind"] == "phone"]
+    if isinstance(fact_index, int):
+        phones = [(i, f) for i, f in phones if i == fact_index]
+    if not phones:
+        raise C.CallRefused("no_phone_read", "no phone number was read for this venue")
+    _, f = phones[0]
+    country = read.get("country")
+    if country not in V.COUNTRIES:
+        raise C.CallRefused("venue_country_unknown", "the venue's country is not known, so neither its language nor its day can be")
+    _, _, lang, tz = V.COUNTRIES[country]
+    return C.CallVenue(key=f"read:{row['read_id']}", name=read["name"], number_env="", language=lang, timezone=tz,
+                       number=f["value"], source=f["source_label"])
+
+
+# ── the email rung ────────────────────────────────────────────────────────────────────────────
+
+@router.post("/emails")
+async def prepare_email(request: Request):
+    why = L.emails_ready()
+    if why:
+        return _refuse(422, "emails_disabled", f"{why}; nothing was written")
+    body = await _json(request)
+    if body is None:
+        return _refuse(400, "email_malformed", "send {read_id, date, time, party, name, email} as a JSON object")
+    account = account_for(request)
+    try:
+        row = await LADDER_STORE.get_read(account, str(body.get("read_id")))
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, str(e))
+    if row is None:
+        return _refuse(404, "read_unknown", "no venue read with that id for this account")
+    read = row["read"]
+    chosen = L.best_email(read["facts"])
+    if not chosen:
+        return _refuse(422, "no_email_read", "no email address was read for this venue")
+    try:
+        p = E.parse_email_particulars(body, C.parse_call_particulars)
+    except (E.EmailRefused, C.CallRefused) as e:
+        return _refuse(422, e.rule, str(e))
+    country = read.get("country")
+    lang, tz = (V.COUNTRIES[country][2], V.COUNTRIES[country][3]) if country in V.COUNTRIES else ("en", "UTC")
+    email_id = str(uuid.uuid4())
+    f = chosen[1]
+    email = E.compose(lang, read["name"], f["value"], p, email_id)
+    lines = E.read_back(email, read["name"], f["source_label"])
+    rec = {"email_id": email_id, "account_id": account, "read_id": row["read_id"], "email": email,
+           "email_sha256": E.email_sha256(email), "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)),
+           "created_at": NOW(), "venue_name": read["name"], "local_date": p.on, "local_time": p.at, "local_timezone": tz,
+           "party_size": p.party}
+    try:
+        item = await LADDER_STORE.put_email(rec, None)
+    except UnknownTrip:
+        return _refuse(404, "trip_unknown", "no such trip")
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, str(e))
+    return {"email_id": email_id, "trip_item_id": item, "read_back": {"lines": lines, "sha256": rec["read_back_sha256"]}}
+
+
+@router.post("/emails/{email_id}/send")
+async def send_email(email_id: str, request: Request):
+    why = L.emails_ready()
+    if why:
+        return _refuse(422, "emails_disabled", f"{why}; nothing was sent")
+    body = await _json(request)
+    if body is None:
+        return _refuse(400, "approval_void", "send {read_back_sha256, approval: {how, said}} as a JSON object")
+    account = account_for(request)
+    try:
+        e = await LADDER_STORE.get_email(account, email_id)
+    except StorageUnavailable as ex:
+        return _refuse(503, ex.rule, str(ex))
+    if e is None:
+        return _refuse(404, "email_unknown", "no email with that id was prepared for this account")
+    if body.get("read_back_sha256") != e["read_back_sha256"]:
+        return _refuse(422, "approval_void", "the approval was given to different words from this email's read-back")
+    a = body.get("approval") if isinstance(body.get("approval"), dict) else {}
+    if a.get("how") not in ("button", "voice") or (a.get("how") == "voice" and not str(a.get("said") or "").strip()):
+        return _refuse(422, "approval_void", "an approval is by button, or by voice with the words said")
+    if E.email_sha256(e["email"]) != e["email_sha256"]:
+        return _refuse(409, "email_changed", "the stored email no longer matches what was read back; nothing was sent")
+    now = NOW()
+    approval = {"by": account, "how": a["how"], "said": a.get("said"), "at": now.isoformat(),
+                "read_back_sha256": e["read_back_sha256"], "email_sha256": e["email_sha256"]}
+    try:
+        claimed = await LADDER_STORE.claim_email(account, email_id, approval, now, now - APPROVAL_WINDOW, email_cap(), cap_window(now))
+    except StorageUnavailable as ex:
+        return _refuse(503, ex.rule, str(ex))
+    if claimed == "taken":
+        return _refuse(409, "email_already_sent", "this email was already approved; another is a new read-back and a new yes")
+    if claimed == "stale":
+        return _refuse(422, "read_back_expired", "that read-back is more than 15 minutes old; prepare the email again")
+    if claimed == "cap":
+        return _refuse(429, "daily_email_limit", f"{email_cap()} emails have been sent in the last 24 hours, the most this server allows")
+    if claimed != "claimed":
+        return _refuse(404, "email_unknown", "no email with that id was prepared for this account")
+    sent = await E.send(HTTP, e["email"])
+    try:
+        await LADDER_STORE.mark_sent(email_id, sent, NOW())
+    except (StorageUnavailable, AlreadyRecorded) as ex:
+        log.error("[booking_ladder] email %s: Resend answered sent=%s (%s) but it could not be recorded: %s", email_id, sent.sent, sent.provider_id, ex)
+        return _refuse(503, getattr(ex, "rule", "not_recorded"), f"the mail service answered {'accepted' if sent.sent else 'not accepted'}, but it could not be recorded: {ex}")
+    if not sent.sent:
+        return {"ok": False, "status": "not_sent", "rule": "email_not_sent", "why": sent.why, "say": f"I couldn't send it: {sent.why}"}
+    return {"ok": True, "status": "sent",
+            "say": f"Sent to {e['email']['to']} — our mail service accepted it. I'll show you their reply the moment it arrives."}
+
+
+@router.get("/emails/{email_id}")
+async def get_email(email_id: str, request: Request):
+    try:
+        e = await LADDER_STORE.get_email(account_for(request), email_id)
+        replies = await LADDER_STORE.replies_for(email_id) if e else []
+    except StorageUnavailable as ex:
+        return _refuse(503, ex.rule, str(ex))
+    if e is None:
+        return _refuse(404, "email_unknown", "no email with that id was prepared for this account")
+    say = {"awaiting_approval": None, "sent": ("Sent — no reply yet." if not replies else "They replied — here are their words."),
+           "not_sent": f"I couldn't send it: {e.get('not_sent_why')}",
+           "sending": "I asked the mail service to send it but never recorded its answer, so I can't tell you whether it went. I won't send it again on my own."}[e["status"]]
+    return {"email_id": email_id, "status": e["status"], "email": e["email"], "why": e.get("not_sent_why"), "say": say,
+            "replies": [{"from": r["from_addr"], "subject": r["subject"], "text": r["body_text"], "note": r["note"],
+                         "received_at": r["received_at"].isoformat() if hasattr(r["received_at"], "isoformat") else r["received_at"]} for r in replies]}
+
+
+@router.post("/email/inbound")
+async def inbound(request: Request):
+    raw = await request.body()
+    if not E.verify_svix(os.getenv("RESEND_WEBHOOK_SECRET", "").strip(), {k.lower(): v for k, v in request.headers.items()}, raw):
+        return _refuse(401, "signature_invalid", "not a verified delivery from the mail service")
+    try:
+        import json as _j
+        event = _j.loads(raw)
+    except ValueError:
+        return _refuse(400, "event_malformed", "the body is not JSON")
+    if event.get("type") != "email.received":
+        return {"ok": True, "ignored": event.get("type")}
+    data = event.get("data") or {}
+    pid = data.get("email_id") or data.get("id")
+    if not isinstance(pid, str) or not pid:
+        return _refuse(400, "event_malformed", "an inbound event carries the received email's id")
+    now = NOW()
+    act = E.act_id_of(data.get("to"))
+    try:
+        if act is None or not await LADDER_STORE.email_exists(act):
+            await LADDER_STORE.quarantine({"provider_id": pid, "to_addrs": data.get("to"), "from_addr": data.get("from"),
+                                           "subject": data.get("subject"), "received_at": now,
+                                           "reason": "not addressed to any email Sasha sent" if act is None else "addressed to an unknown email id"})
+            return {"ok": True, "matched": False}
+        text, note = None, None
+        try:
+            full = await E.fetch_received(HTTP, pid)
+            text = full.get("text") or None
+            if text is None and full.get("html"):
+                note = "the reply had no plain-text part; only HTML was sent"
+        except Exception as ex:
+            note = f"the reply's body could not be fetched: {type(ex).__name__}"
+        await LADDER_STORE.add_reply({"provider_id": pid, "email_id": act, "from_addr": data.get("from"),
+                                      "subject": data.get("subject"), "body_text": text, "note": note, "received_at": now})
+    except StorageUnavailable as ex:
+        return _refuse(503, ex.rule, str(ex))   # a non-2xx makes the mail service retry — nothing is lost
+    return {"ok": True, "matched": True}

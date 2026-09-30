@@ -18,6 +18,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiUrl, apiHeaders } from '@/lib/api'
 import { GatedButton } from './GatedButton'
+import { PhoneCall } from './PhoneCall'
+import { Ladder } from './Ladder'
 
 const MODE = 'dry_run' as const
 const VENUE = 'restaurante-psi'
@@ -411,6 +413,8 @@ export default function BookingHelperPage() {
           ))}</ul>
         )}
       </section>
+      <Ladder defaults={DEMO_PROFILE} />
+      <PhoneCall defaults={DEMO_PROFILE} />
     </main>
   )
 }

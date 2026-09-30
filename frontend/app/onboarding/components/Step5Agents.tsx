@@ -27,13 +27,6 @@ const CORE_AGENTS: AgentDef[] = [
     defaultEnabled: true,
   },
   {
-    id: 'golf',
-    icon: '⛳',
-    name: 'Golf Concierge',
-    description: 'Tee times, course recommendations',
-    defaultEnabled: true,
-  },
-  {
     id: 'petcare',
     icon: '🐾',
     name: 'Pet Care',

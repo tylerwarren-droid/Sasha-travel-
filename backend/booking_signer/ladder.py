@@ -32,7 +32,7 @@ def best_email(facts: list) -> Optional[tuple]:
 
 def emails_ready() -> Optional[str]:
     """None when the email rung can send, else the reason it cannot — named by the variable that is missing."""
-    missing = [v for v in ("RESEND_API_KEY", "SASHA_EMAIL_FROM", "SASHA_INBOUND_DOMAIN") if not os.getenv(v, "").strip()]
+    missing = [v for v in ("SASHA_RESEND_API_KEY", "SASHA_EMAIL_FROM", "SASHA_INBOUND_DOMAIN") if not os.getenv(v, "").strip()]
     if os.getenv("SASHA_EMAILS_ENABLED", "").strip() != "1":
         return "emails are off on this server (SASHA_EMAILS_ENABLED is not 1)"
     if missing:

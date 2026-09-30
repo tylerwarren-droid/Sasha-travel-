@@ -40,6 +40,11 @@ def _env(n: str) -> str:
     return os.getenv(n, "").strip()
 
 
+#: ⚠ Sasha's OWN Resend key — never `RESEND_API_KEY`, which backend/app/api/payments.py reads for its own sends. Two
+#: keys, so neither sender's scope, domain or rotation can move the other's (P807nu §3).
+KEY_VAR = "SASHA_RESEND_API_KEY"
+
+
 def act_address(email_id: str) -> str:
     return f"act-{email_id}@{_env('SASHA_INBOUND_DOMAIN')}"
 
@@ -165,7 +170,7 @@ Http = Callable[..., Awaitable[Any]]
 async def send(http: Http, email: Mapping[str, Any]) -> Sent:
     """⛔ `sent` is True ONLY when Resend answered HTTP 200 with an email id. Everything else is not sent, with Resend's
     own words. "Sent" means accepted for delivery — not delivered, and not booked."""
-    key = _env("RESEND_API_KEY")
+    key = _env(KEY_VAR)
     payload = {"from": email["from"], "to": [email["to"]], "cc": [email["cc"]], "reply_to": email["reply_to"],
                "subject": email["subject"], "text": email["text"]}
     try:
@@ -202,7 +207,7 @@ def verify_svix(secret: str, headers: Mapping[str, str], body: bytes, now: Optio
 
 
 async def fetch_received(http: Http, provider_id: str) -> dict:
-    r = await http("GET", RESEND_RECEIVED_URL.format(id=provider_id), headers={"authorization": f"Bearer {_env('RESEND_API_KEY')}"})
+    r = await http("GET", RESEND_RECEIVED_URL.format(id=provider_id), headers={"authorization": f"Bearer {_env(KEY_VAR)}"})
     if r.status_code != 200:
         raise EmailRefused("received_email_unavailable", f"the mail service answered HTTP {r.status_code} for {provider_id}")
     return r.json()

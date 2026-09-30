@@ -157,5 +157,41 @@ class Reading(unittest.TestCase):
         self.assertIn("non-public", log["result"])
 
 
+class Writes(unittest.TestCase):
+    def test_parallel_hosts_never_write_at_once(self):
+        """Run 7af2692d died on 'another operation is in progress': one asyncpg connection, parallel inserts."""
+        class OneConnection:
+            def __init__(self):
+                self.busy, self.overlaps, self.rows = False, 0, 0
+
+            async def _op(self):
+                if self.busy:
+                    self.overlaps += 1
+                self.busy = True
+                await asyncio.sleep(0.001)
+                self.busy, self.rows = False, self.rows + 1
+                return self.rows
+
+            async def fetchval(self, *a):
+                return await self._op()
+
+            async def execute(self, *a):
+                return await self._op()
+
+        db, box = OneConnection(), {}
+        v = M.Venue("Madrid", "ES", "food", "o", "V", "restaurant", "https://v.test/", "v.test")
+        pages = [{"url": "https://v.test/", "status": 200, "bytes": 1, "sha256": "x" * 64, "fetched_at": "2026-09-30T00:00:00+00:00"}]
+
+        async def one():
+            async with box["lock"]:
+                await M.store_host(db, "00000000-0000-4000-8000-000000000000", v, {"robots": "HTTP 200", "result": "1 page(s) read"}, pages)
+
+        async def all_():
+            box["lock"] = asyncio.Lock()   # made inside the running loop, as run() does
+            await asyncio.gather(*(one() for _ in range(20)))
+        asyncio.run(all_())
+        self.assertEqual((db.overlaps, db.rows), (0, 40))
+
+
 if __name__ == "__main__":
     unittest.main()

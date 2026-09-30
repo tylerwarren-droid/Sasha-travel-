@@ -313,6 +313,9 @@ async def run() -> None:
                      "values ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)", uuid.UUID(run_id), started, SCORER_COMMIT, OVERTURE_RELEASE,
                      SAMPLE_SEED, json.dumps({"per_city": PER_CITY, "max_pages": MAX_PAGES_PER_HOST, "user_agent": USER_AGENT}), json.dumps(seeding))
     sem = asyncio.Semaphore(HOSTS_IN_PARALLEL)
+    # ⚠ ONE connection, many readers: asyncpg refuses a second operation while one is in flight ("another operation is
+    # in progress" ended run 7af2692d). The reads stay parallel; the writes take turns.
+    db_lock = asyncio.Lock()
     async with httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT_S), follow_redirects=False, headers={"user-agent": USER_AGENT}) as client:
         async def http(method, url):
             return await client.request(method, url)
@@ -320,18 +323,25 @@ async def run() -> None:
         async def one(v: Venue):
             async with sem:
                 log, pages = await read_host(http, v, _resolve)
-            hid = await db.fetchval(
-                "insert into measure_hosts (run_id, city, country, kind, overture_id, name, category, website, host, robots, result) "
-                "values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning host_id",
-                uuid.UUID(run_id), v.city, v.country, v.kind, v.overture_id, v.name, v.category, v.website, v.host, log["robots"], log["result"])
-            for p in pages:
-                await db.execute("insert into measure_pages (host_id, url, status, bytes, sha256, fetched_at, note, fragments_gz) "
-                                 "values ($1,$2,$3,$4,$5,$6,$7,$8)", hid, p["url"], p.get("status"), p.get("bytes"), p.get("sha256"),
-                                 datetime.fromisoformat(p["fetched_at"]) if p.get("fetched_at") else None, p.get("note"), p.get("fragments_gz"))
+            async with db_lock:
+                await store_host(db, run_id, v, log, pages)
+
         await asyncio.gather(*(one(v) for v in venues))
     await db.execute("update measure_runs set finished_at = $2, hosts = $3 where run_id = $1", uuid.UUID(run_id), datetime.now(timezone.utc), len(venues))
     await db.close()
     print(f"[measure] run {run_id}: {len(venues)} hosts read", flush=True)
+
+
+async def store_host(db, run_id: str, v: "Venue", log: dict, pages: List[dict]) -> None:
+    """One host and its pages. The caller holds the write lock."""
+    hid = await db.fetchval(
+        "insert into measure_hosts (run_id, city, country, kind, overture_id, name, category, website, host, robots, result) "
+        "values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning host_id",
+        uuid.UUID(run_id), v.city, v.country, v.kind, v.overture_id, v.name, v.category, v.website, v.host, log["robots"], log["result"])
+    for p in pages:
+        await db.execute("insert into measure_pages (host_id, url, status, bytes, sha256, fetched_at, note, fragments_gz) "
+                         "values ($1,$2,$3,$4,$5,$6,$7,$8)", hid, p["url"], p.get("status"), p.get("bytes"), p.get("sha256"),
+                         datetime.fromisoformat(p["fetched_at"]) if p.get("fetched_at") else None, p.get("note"), p.get("fragments_gz"))
 
 
 async def export(path: str, run_id: Optional[str]) -> None:

@@ -37,7 +37,7 @@ class Golden(unittest.TestCase):
             o = RS.from_particulars(p, account_id=ACCT, venue_name="La Contra", timezone="Europe/Madrid", lang=lang.code)
             self.assertTrue(R.is_table(o))
             self.assertEqual(R.opening(lang, o, today), built["brief"]["first_sentence"], (code, case))
-            self.assertEqual(R.call_read_back(lang, o, "La Contra", "+34910536740", venue(code).source, today),
+            self.assertEqual(R.call_read_back(lang, o, "La Contra", "+34910536740", venue(code).source, today, built["brief"]["own_reference"]),
                              built["read_back_lines"], (code, case))
             n += 1
         self.assertEqual(n, len(C.LANGUAGES) * len(CASES))
@@ -127,9 +127,9 @@ class Beyond(unittest.TestCase):
     def test_a_spa_brief_names_the_service_its_length_and_widens_the_rules(self):
         v = C.CallVenue(key="read:s", name="Spa", number_env="", language="es", timezone="Europe/Madrid", number="+34910000000")
         b = R.call_brief(self.obj(), v, self.TODAY, "+34910000000")
-        self.assertIn("phoning a venue to book a 60-minute relaxing massage on behalf of a guest", b["task"])
+        self.assertIn("booking a 60-minute relaxing massage at a venue for a guest", b["task"])
         self.assertIn("The booking: 2026-10-03 at 11:00 venue time, under the name Tyler Warren.", b["task"])
-        self.assertIn("Never agree to a different date, time, number, service or length.", b["task"])
+        self.assertIn("Never accept another date, time, number, service or length.", b["task"])
         self.assertEqual(b["recap"], "Para confirmar: un masaje relajante de 60 minutos, para una persona, sábado 3 de octubre, a las once de la mañana, a nombre de Warren. ¿Correcto?")
         self.assertIn(b["recap"], b["task"])
         self.assertLessEqual(len(b["task"]), 2000)

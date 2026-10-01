@@ -361,29 +361,62 @@ def recap_sentence(lang: Lang, p: CallParticulars) -> str:
     return RC.sentence(lang.code, lang.weekdays, lang.months, p.on, p.at, p.party, surname_of(p.name))
 
 
-def instructions(lang: Lang, p: CallParticulars, venue: CallVenue, opening: str, check: str) -> str:
-    """Bland's `task`. ⚠ Every rule the founder set is here, and the brief is hashed into the approval."""
-    contact = (f"If — and only if — they ask for a contact number, give {' '.join(p.phone)} (the guest's own number). "
-               if p.phone else "You have no contact number to give. If they ask for one, say the guest will confirm directly. ")
+#: the longest spelled-out name written into a task; longer ones get the rule instead (Bland's 2,000 characters)
+TASK_SPELL_MAX = 160
+
+
+def task_text(lang: Lang, *, place: str, what: str, booking: str, never: str, opening: str, check: str, recap: str,
+              name: str, phone: Optional[str], own_ref: str) -> str:
+    """Bland's `task` for a BOOKING call — one text for both builders (calls.build_call, render.call_brief), so a table
+    is still byte for byte the same brief. ⚠ Every rule the founder set is here, and the brief is hashed into the approval.
+
+    Sasha 88 (call a1c85ca6, 1 Oct): the venue heard "W A R R E N" as "David", and was given no number when it asked.
+    So: the surname, and its spelling in the venue's own telephone alphabet; the guest's number as that country says it;
+    the venue's reference asked for in their words, and Sasha's own reference said to them."""
+    from . import spoken as SP
+    c = lang.code
+    surname = surname_of(name)
+    contact = (f"Only if asked for a phone number, say: \"{SP.digits(phone, c)}\". " if phone
+               else "You have no phone number to give; if asked, the guest will confirm directly. ")
+    spelled = SP.spell(surname, c)
+    spell = f"Name: {surname}; if not caught, spell: \"{spelled}\". "
+    if len(spelled) > TASK_SPELL_MAX:   # a long name: the rule, not the letters — so the email still fits (followup.py)
+        spell = f"Name: {surname}; if not caught, spell it letter by letter, each with a {lang.label} word for it. "
     return (
-        f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning a restaurant to book a table on behalf of a guest. Speak {lang.label} only. "
+        f"You are Sasha, an AI concierge (Kanoe Technologies SL), booking {what} at {place} for a guest. "
+        f"Speak {lang.label} only, numbers and letters too. "
         f"You already said: \"{opening}\" "
-        f"The booking: {p.party} people, {p.on.isoformat()} at {p.at.strftime('%H:%M')} (venue's local time), under the name {p.name}. "
-        "If they ask whether you are a person or a machine: you are an AI concierge. Never claim to be the guest or a human. "
-        "RULES YOU MUST NEVER BREAK: "
-        "Never agree to a different date, a different time or a different number of people. "
-        "Never agree to a deposit, a fee, a minimum spend, a cancellation charge, or to give a card. You have no card and no payment details. "
-        f"If they offer or ask for ANY of those, say exactly: \"{check}\" — then ask them to repeat the offer so it is noted, thank them, and end the call. "
+        f"The booking: {booking}"
+        "If asked: you are an AI, never the guest or a human. "
+        f"NEVER: {never}"
+        "Never accept a deposit, fee, minimum spend, cancellation charge or card (you have none). "
+        f"If they ask for any, say exactly \"{check}\", have them repeat it, thank them and end. "
+        f"{spell}"
         f"{contact}"
-        "Do not give any email address or any other personal detail. "
-        "If they say yes, ask for any reference. Then ALWAYS end with this exact recap and wait for the answer: "
-        f"\"{recap_sentence(lang, p)}\" Only a clear yes to it confirms. "
-        "If they state a different time, day, party or name, repeat the right one once and say the recap again; "
-        f"if they still differ, say exactly \"{check}\" and end the call. "
-        "If they say no, say to call back later, or are unsure, thank them and end the call. "
-        f"If they ask not to be contacted again, say exactly \"{_ack(lang)}\" and end the call. "
-        "Keep it short and polite. Do not leave a voicemail."
+        "No other personal detail of the guest's. "
+        f"On a yes, ask: \"{SP.ask_reference(c)}\" and repeat it back. "
+        f"Then say: \"{SP.own_reference_line(own_ref, c)}\" "
+        f"ALWAYS end with this exact recap and wait: \"{recap}\" Only a clear yes confirms. "
+        "If they differ on anything, correct it once and repeat the recap; "
+        f"if still different, say \"{check}\" and end. "
+        "If no, later, or unsure: thank them and end. "
+        f"If asked not to contact them again, say exactly \"{_ack(lang)}\" and end. "
+        "Keep it short and polite. No voicemail."
     )
+
+
+def own_ref_of(venue_key: str, on: date, at: time, party: int, name: str, today: date) -> str:
+    """Sasha 88 · her own reference for this booking — the same inputs both builders have."""
+    from . import spoken as SP
+    return SP.own_reference(venue_key, on.isoformat(), at.strftime("%H:%M"), party, name, today.isoformat())
+
+
+def instructions(lang: Lang, p: CallParticulars, venue: CallVenue, opening: str, check: str, own_ref: str = "") -> str:
+    """Bland's `task` for a table (task_text)."""
+    return task_text(lang, place="a restaurant", what="a table",
+                     booking=f"{p.party} people, {p.on.isoformat()} at {p.at.strftime('%H:%M')} (venue's local time), under the name {p.name}. ",
+                     never="Never accept another date, time or party size. ",
+                     opening=opening, check=check, recap=recap_sentence(lang, p), name=p.name, phone=p.phone, own_ref=own_ref)
 
 
 def cancel_instructions(lang: Lang, p: CallParticulars, opening: str, check: str, reference: Optional[str]) -> str:
@@ -430,9 +463,11 @@ def build_call(venue: CallVenue, p: CallParticulars, now: datetime, purpose: str
         raise CallRefused("venue_timezone_unavailable", f"the server cannot resolve {venue.timezone}, so it cannot say which day is which there") from None
     opening = opening_sentence(lang, p, today, purpose)
     check = check_sentence(lang, p)
-    task = instructions(lang, p, venue, opening, check) if purpose == "book" else cancel_instructions(lang, p, opening, check, reference)
+    own_ref = own_ref_of(venue.key, p.on, p.at, p.party, p.name, today) if purpose == "book" else None
+    task = instructions(lang, p, venue, opening, check, own_ref) if purpose == "book" else cancel_instructions(lang, p, opening, check, reference)
     brief = {
         "purpose": purpose, "timezone": venue.timezone, "reference": reference,
+        **({"own_reference": own_ref} if own_ref else {}),   # Sasha 88 · K-XXXX, said to the venue, on the receipt
         "venue_key": venue.key, "number": number, "language": lang.code,
         "recap": recap_sentence(lang, p) if purpose == "book" else None,
         "first_sentence": opening, "task": task, "check_sentence": check,
@@ -458,6 +493,7 @@ def build_call(venue: CallVenue, p: CallParticulars, now: datetime, purpose: str
         "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
         (f"If they ask for a contact number, I'll give yours, {p.phone}." if p.phone
          else "I'll give them no contact number; if they need one, I'll say you'll confirm directly."),
+        f"I'll ask for their booking reference and give them ours, {own_ref}; both go on your receipt.",
         "I'll tell you exactly what they said. Shall I call them now?",
     ]
     return {

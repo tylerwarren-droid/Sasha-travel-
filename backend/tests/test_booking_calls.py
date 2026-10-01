@@ -147,8 +147,10 @@ class Script(unittest.TestCase):
     def test_the_brief_carries_every_rule_and_the_read_back_says_what_she_will_do(self):
         b = C.build_call(C.test_line(), C.parse_call_particulars(JOHNSON), MONDAY)
         t = b["brief"]["task"]
-        for must in ("Never agree to a different date", "Never agree to a deposit", "I'll need to check that with the Johnsons.",
-                     "you are an AI concierge", "Do not leave a voicemail", "no contact number"):
+        for must in ("Never accept another date", "Never accept a deposit", "I'll need to check that with the Johnsons.",
+                     "you are an AI, never the guest or a human", "No voicemail", "no phone number to give",
+                     "Name: Johnson; if not caught, spell: \"J as in Juliett, O as in Oscar", "Could you give me a booking reference",
+                     f"Our own reference for it is K as in Kilo"):   # Sasha 88 · spelled, both references
             self.assertIn(must, t)
         self.assertLessEqual(len(t), 2000)
         self.assertEqual(b["brief"]["number"], "+351912000000")
@@ -157,7 +159,7 @@ class Script(unittest.TestCase):
 
     def test_a_guest_phone_is_given_only_when_asked_and_the_read_back_says_so(self):
         b = C.build_call(C.test_line(), C.parse_call_particulars({**JOHNSON, "phone": "+351 911 111 111"}), MONDAY)
-        self.assertIn("only if — they ask for a contact number", b["brief"]["task"])
+        self.assertIn('Only if asked for a phone number, say: "plus three five one, nine one one, one one one, one one one".', b["brief"]["task"])
         self.assertEqual(b["read_back_lines"][3], "If they ask for a contact number, I'll give yours, +351911111111.")
 
     def test_the_spanish_cancellation_la_contra_would_hear(self):

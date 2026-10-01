@@ -102,7 +102,8 @@ def opening(lang: C.Lang, o: Mapping[str, Any], today: date) -> str:
     return " ".join(s.split())
 
 
-def call_read_back(lang: C.Lang, o: Mapping[str, Any], venue_name: str, number: str, source: Optional[str], today: date) -> List[str]:
+def call_read_back(lang: C.Lang, o: Mapping[str, Any], venue_name: str, number: str, source: Optional[str], today: date,
+                   own_ref: str = "") -> List[str]:
     """What the guest approves for a booking call. A table: today's five lines exactly. Anything else: the same lines,
     with one more saying what, when, how many and how long — in plain English, so the guest reads what they asked for."""
     en = C.LANGUAGES["en"]
@@ -123,6 +124,7 @@ def call_read_back(lang: C.Lang, o: Mapping[str, Any], venue_name: str, number: 
         "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
         (f"If they ask for a contact number, I'll give yours, {phone}." if phone
          else "I'll give them no contact number; if they need one, I'll say you'll confirm directly."),
+        f"I'll ask for their booking reference and give them ours, {own_ref}; both go on your receipt.",
         "I'll tell you exactly what they said. Shall I call them now?",
     ]
     return lines
@@ -166,42 +168,23 @@ def _check(lang: C.Lang, o: Mapping[str, Any]) -> str:
     return C.check_sentence(lang, p)
 
 
-def instructions(lang: C.Lang, o: Mapping[str, Any], first: str, check: str) -> str:
-    """Bland's `task`, from the object. A table: calls.instructions' string exactly."""
+def instructions(lang: C.Lang, o: Mapping[str, Any], first: str, check: str, own_ref: str = "") -> str:
+    """Bland's `task`, from the object — calls.task_text, so a table is calls.instructions' string exactly."""
     on, at = _at(o)
     name = o["who"]["name"]
     phone = (o["who"].get("contact") or {}).get("mobile_e164")
-    contact = (f"If — and only if — they ask for a contact number, give {' '.join(phone)} (the guest's own number). "
-               if phone else "You have no contact number to give. If they ask for one, say the guest will confirm directly. ")
     if is_table(o):
         place, what = "a restaurant", "a table"
         booking = f"{o['how_many']['count']} people, {on.isoformat()} at {at.strftime('%H:%M')} (venue's local time), under the name {name}. "
-        never = "Never agree to a different date, a different time or a different number of people. "
+        never = "Never accept another date, time or party size. "
     else:
         place, what = "a venue", o["what"]["activity"]
         # the opener above and the recap below already state all of it, word for word: repeated here it only costs
         # Bland's 2,000 characters
         booking = f"{on.isoformat()} at {at.strftime('%H:%M')} venue time, under the name {name}. "
-        never = "Never agree to a different date, time, number, service or length. "
-    return (
-        f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning {place} to book {what} on behalf of a guest. Speak {lang.label} only. "
-        f"You already said: \"{first}\" "
-        f"The booking: {booking}"
-        "If they ask whether you are a person or a machine: you are an AI concierge. Never claim to be the guest or a human. "
-        "RULES YOU MUST NEVER BREAK: "
-        f"{never}"
-        "Never agree to a deposit, a fee, a minimum spend, a cancellation charge, or to give a card. You have no card and no payment details. "
-        f"If they offer or ask for ANY of those, say exactly: \"{check}\" — then ask them to repeat the offer so it is noted, thank them, and end the call. "
-        f"{contact}"
-        "Do not give any email address or any other personal detail. "
-        "If they say yes, ask for any reference. Then ALWAYS end with this exact recap and wait for the answer: "
-        f"\"{recap(lang, o)}\" Only a clear yes to it confirms. "
-        "If they state a different time, day, party or name, repeat the right one once and say the recap again; "
-        f"if they still differ, say exactly \"{check}\" and end the call. "
-        "If they say no, say to call back later, or are unsure, thank them and end the call. "
-        f"If they ask not to be contacted again, say exactly \"{C._ack(lang)}\" and end the call. "
-        "Keep it short and polite. Do not leave a voicemail."
-    )
+        never = "Never accept another date, time, number, service or length. "
+    return C.task_text(lang, place=place, what=what, booking=booking, never=never, opening=first, check=check,
+                       recap=recap(lang, o), name=name, phone=phone, own_ref=own_ref)
 
 
 def call_brief(o: Mapping[str, Any], venue: C.CallVenue, today: date, number: str) -> dict:
@@ -213,11 +196,12 @@ def call_brief(o: Mapping[str, Any], venue: C.CallVenue, today: date, number: st
     lang = C.LANGUAGES[venue.language]
     on, at = _at(o)
     first, check = opening(lang, o, today), _check(lang, o)
-    task = instructions(lang, o, first, check)
+    own_ref = C.own_ref_of(venue.key, on, at, o["how_many"]["count"], o["who"]["name"], today)
+    task = instructions(lang, o, first, check, own_ref)
     if len(task) > 2000:
         raise RS.ReservationRefused("brief_too_long", "the call's instructions exceed Bland's 2,000 characters")
     return {
-        "purpose": "book", "timezone": venue.timezone, "reference": None,
+        "purpose": "book", "timezone": venue.timezone, "reference": None, "own_reference": own_ref,
         "venue_key": venue.key, "number": number, "language": lang.code,
         "recap": recap(lang, o),
         "first_sentence": first, "task": task, "check_sentence": check,
@@ -422,7 +406,7 @@ def call_for(o: Mapping[str, Any], venue: C.CallVenue, now: datetime, number: st
     today = now.astimezone(ZoneInfo(venue.timezone)).date()
     if o["flow"] == "book":
         brief = call_brief(o, venue, today, number)
-        lines = call_read_back(lang, o, venue.name, number, venue.source, today)
+        lines = call_read_back(lang, o, venue.name, number, venue.source, today, brief["own_reference"])
     elif o["flow"] in RS.ASKING:
         first, check = ask_opening(lang, o, today), C.check_sentence(lang, C.CallParticulars(
             on=today, at=time(12, 0), party=1, name=o["who"]["name"], phone=None))

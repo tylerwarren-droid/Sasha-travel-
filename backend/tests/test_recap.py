@@ -39,7 +39,7 @@ class Sentence(unittest.TestCase):
 
     def test_it_is_in_the_brief_the_guest_approves_and_in_the_agents_instructions(self):
         self.assertIn(RECAP, BRIEF["task"])
-        self.assertIn("Only a clear yes to it confirms", BRIEF["task"])
+        self.assertIn("Only a clear yes confirms", BRIEF["task"])
         self.assertIsNone(C.build_call(VENUE, P, NOW, purpose="cancel", reference=None)["brief"]["recap"])
 
     def test_every_language_stays_under_blands_limit(self):

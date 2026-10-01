@@ -10,6 +10,11 @@ export const WHATSAPP_TEMPLATE_V2: Record<string, string> = {
   tr: "Merhaba, ben Sasha; Kanoe Technologies SL tarafından işletilen bir yapay zekâ konsiyerjiyim. {who} adına {date} tarihinde saat {time} için {n} kişilik bir masa rica etmek üzere yazıyorum. Bunun mümkün olup olmadığını bize bildirebilir misiniz? {who} ile önceden görüşmeden hiçbir depozito veya ücreti kabul etmeyeceğiz. Teşekkürler.",
 }
 
+/** S-64 · a party of ONE: the template's "{n} people" becomes "1 person". ⚠ A copy of backend wordings.py WHATSAPP_ONE. */
+export const WHATSAPP_ONE: Record<string, [string, string]> = {
+  en: ["{n} people", "{n} person"], es: ["{n} personas", "{n} persona"], pt: ["{n} pessoas", "{n} pessoa"],
+}
+
 /** country → the template's language (only these four exist; anything else is English) */
 export const WA_LANG: Record<string, string> = { ES: 'es', PT: 'pt', TR: 'tr' }
 const LOCALE: Record<string, string> = { en: 'en-GB', es: 'es-ES', pt: 'pt-PT', tr: 'tr-TR' }
@@ -21,5 +26,7 @@ export function whatsappText(country: string | null, name: string, party: number
   const surname = name.trim().split(/\s+/).pop() ?? name
   const who = party > 1 ? FAMILY[lang](surname) : name.trim()
   const date = dateIso ? new Date(`${dateIso}T12:00:00Z`).toLocaleDateString(LOCALE[lang], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) : '[date]'
-  return WHATSAPP_TEMPLATE_V2[lang].split('{who}').join(who).split('{n}').join(String(party)).split('{date}').join(date).split('{time}').join(time)
+  const one = party === 1 ? WHATSAPP_ONE[lang] : undefined
+  const template = one ? WHATSAPP_TEMPLATE_V2[lang].split(one[0]).join(one[1]) : WHATSAPP_TEMPLATE_V2[lang]
+  return template.split('{who}').join(who).split('{n}').join(String(party)).split('{date}').join(date).split('{time}').join(time)
 }

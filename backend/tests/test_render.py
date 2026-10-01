@@ -79,6 +79,17 @@ class GoldenEmailAndWhatsApp(unittest.TestCase):
             n += 1
         self.assertEqual(n, 24)
 
+    def test_one_person_is_one_person_everywhere(self):
+        from booking_signer import emailing as E
+        p = E.parse_email_particulars({"date": "2026-10-12", "time": "21:30", "party": 1, "name": "Anna Johnson", "email": "a@x.test"},
+                                      C.parse_call_particulars)
+        for code, want in (("es", "una mesa para 1 persona el"), ("pt", "uma mesa para 1 pessoa a"), ("fr", "une table pour 1 personne le"),
+                           ("it", "un tavolo per 1 persona il"), ("de", "einen Tisch für 1 Person am")):
+            self.assertIn(want, E.compose(code, "V", "v@x.test", p, "e")["text"], code)
+        o = RS.from_particulars(p, account_id=ACCT, venue_name="V", timezone="Europe/Lisbon", lang="pt")
+        self.assertIn("uma mesa para 1 pessoa no dia", R.whatsapp(o, "PT"))
+        self.assertIn("a table for 1 person on", R.whatsapp(o, "GB"))
+
     def test_a_tables_whatsapp_is_the_pages_text(self):
         import json, pathlib
         golden = json.loads((pathlib.Path(__file__).parent / "fixtures" / "whatsapp_golden_2026-10-01.json").read_text(encoding="utf-8"))

@@ -29,6 +29,15 @@ class Wordings(unittest.TestCase):
         found = dict(re.findall(r'^\s+(en|es|pt|tr): ("(?:[^"\\]|\\.)*"),$', src, re.M))
         self.assertEqual({k: json.loads(v) for k, v in found.items()}, W.WHATSAPP_TEMPLATE_V2)
 
+    def test_the_one_person_forms_are_the_same_on_the_page(self):
+        src = FRONTEND_TEMPLATE.read_text(encoding="utf-8")
+        start = src.index("export const WHATSAPP_ONE")
+        block = src[start:src.index("\n}\n", start)]
+        found = {k: [a, b] for k, a, b in re.findall(r'(en|es|pt): \["([^"]+)", "([^"]+)"\]', block)}
+        self.assertEqual(found, W.WHATSAPP_ONE)
+        for lang, (many, one) in W.WHATSAPP_ONE.items():
+            self.assertIn(many, W.WHATSAPP_TEMPLATE_V2[lang], lang)   # the plural it replaces is really in the template
+
     def test_opt_in_wordings_are_versioned_and_v1_is_kept_as_it_was(self):
         self.assertIn("an AI assistant", W.OPTIN_WORDINGS["whatsapp"]["v1"]["en"])   # stored v1 consents stay checkable
         w = W.optin_wording("web_submit", "es", url="https://v.test/reservas")

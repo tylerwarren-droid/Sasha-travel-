@@ -67,6 +67,10 @@ OPTIN_WORDINGS = {
 }
 CURRENT_OPTIN_VERSION = "v2"
 
+#: S-64 · a party of ONE in the WhatsApp text: the template's "{n} people" becomes "1 person" (founder, Sasha 44).
+#: ⚠ A copy is in frontend/lib/whatsapp-template.ts (WHATSAPP_ONE) — tests/test_wordings.py holds them equal.
+WHATSAPP_ONE = {"en": ["{n} people", "{n} person"], "es": ["{n} personas", "{n} persona"], "pt": ["{n} pessoas", "{n} pessoa"]}
+
 
 def optin_wording(channel: str, lang: str, version: str = CURRENT_OPTIN_VERSION, url: str = "") -> dict:
     """{version, text, sha256} — exactly what a venue is shown and what its opt-in row stores."""

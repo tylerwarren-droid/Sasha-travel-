@@ -245,7 +245,7 @@ def _count_noun(code: str, o: Mapping[str, Any]) -> str:
     from . import emailing as E
     n, unit = o["how_many"]["count"], o["how_many"]["unit"]
     if unit == "people":
-        return E._PEOPLE[code].format(n=n)
+        return (E._PERSON if n == 1 else E._PEOPLE)[code].format(n=n)
     one, many = _UNITS[code][unit]
     return (one if n == 1 else many.format(n=n)).split(" ", 1)[1]
 
@@ -296,7 +296,7 @@ def _wa_date(code: str, on: date) -> str:
 
 def whatsapp(o: Mapping[str, Any], country: Optional[str]) -> str:
     """WhatsApp Mode A's message (the GUEST sends it), from the object. A table: the page's text exactly."""
-    from .wordings import WHATSAPP_TEMPLATE_V2
+    from .wordings import WHATSAPP_ONE, WHATSAPP_TEMPLATE_V2
     o = RS.validate(o)
     if o["when"]["mode"] != "at":
         raise RS.ReservationRefused("flow_not_built", "only a booking at a set time can be written for WhatsApp from the object yet")
@@ -307,6 +307,8 @@ def whatsapp(o: Mapping[str, Any], country: Optional[str]) -> str:
     fam = {"en": "the {s} family", "es": "la familia {s}", "pt": "a família {s}", "tr": "{s} ailesi"}[code]
     who = fam.format(s=name.split()[-1]) if people and o["how_many"]["count"] > 1 else name
     t = WHATSAPP_TEMPLATE_V2[code]
+    if o["how_many"]["count"] == 1 and code in WHATSAPP_ONE:
+        t = t.replace(*WHATSAPP_ONE[code])
     if not is_table(o):
         what = o["what"]["activity_venue_lang"]
         # the count in the venue's own words ("2 sesiones"); Turkish has no unit table yet, so the bare number

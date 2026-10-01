@@ -102,6 +102,8 @@ _T = {
 }
 _WHO = {"en": "the {s} family", "es": "la familia {s}", "pt": "a família {s}", "fr": "la famille {s}", "it": "la famiglia {s}", "de": "Familie {s}"}
 _PEOPLE = {"en": "{n}", "es": "{n} personas", "pt": "{n} pessoas", "fr": "{n} personnes", "it": "{n} persone", "de": "{n} Personen"}
+#: S-64 · one person is one person: "1 persona", never "1 personas" (founder, Sasha 44)
+_PERSON = {"en": "{n}", "es": "{n} persona", "pt": "{n} pessoa", "fr": "{n} personne", "it": "{n} persona", "de": "{n} Person"}
 
 
 @dataclass(frozen=True)
@@ -130,7 +132,7 @@ def compose(lang: str, venue_name: str, venue_email: str, p: EmailParticulars, e
     who = _WHO[lang].format(s=surname) if p.party > 1 else p.name
     d = p.on.isoformat()
     t = p.at.strftime("%H:%M")
-    n = _PEOPLE[lang].format(n=p.party)
+    n = (_PERSON if p.party == 1 else _PEOPLE)[lang].format(n=p.party)
     email = {
         "from": _env("SASHA_EMAIL_FROM"),
         "to": venue_email,

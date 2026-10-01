@@ -344,8 +344,10 @@ async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
     if booking is None:
         return _refuse(404, "call_unknown", "no call with that id was placed for this account")
     b = booking["brief"] or {}
-    if b.get("purpose", "book") != "book" or booking["status"] != "answered" or booking.get("outcome") != "yes":
-        return _refuse(422, "nothing_to_cancel", "only a booking call the venue said yes to can be cancelled by phone")
+    # a yes, OR an unclear answer: the venue may be holding it (Calma, 1 Oct: a yes the check missed) — a cancellation
+    # is the safe call either way. A plain "no" holds nothing, so there is nothing to cancel.
+    if b.get("purpose", "book") != "book" or booking["status"] != "answered" or booking.get("outcome") not in ("yes", "unclear"):
+        return _refuse(422, "nothing_to_cancel", "only a booking the venue said yes to — or may be holding — can be cancelled by phone")
     lang_key = _LANG_BY_CODE.get(b.get("language"))
     if not b.get("timezone") or lang_key is None:
         return _refuse(422, "booking_brief_incomplete", "that booking's call does not record its language and timezone")

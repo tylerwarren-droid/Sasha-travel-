@@ -84,6 +84,18 @@ class Confirmed(unittest.TestCase):
         self.assertIn("never read in full", r.why)
 
 
+class SpokenNumbers(unittest.TestCase):
+    def test_calma_a_recap_read_with_its_numbers_spoken_is_found(self):
+        """1 Oct 2026, Calma (Bland f967898e): the transcript wrote "lunes cinco de octubre" for the recap's "lunes 5"."""
+        p = C.parse_call_particulars({"date": "2026-10-05", "time": "10:00", "party": 1, "name": "Tyler Warren"})
+        recap = "Para confirmar: un masaje relajante de 60 minutos, para una persona, lunes 5 de octubre, a las diez de la mañana, a nombre de Warren. ¿Correcto?"
+        spoken = recap.replace("lunes 5 de", "lunes cinco de")
+        asked = {"date": "2026-10-05", "time": "10:00", "party": 1, "name": "Tyler Warren", "recap": recap}
+        ans = RC.recap_answer([{"user": "assistant", "text": spoken}, {"user": "user", "text": "Sí, y necesito el apellido y el número de teléfono."},
+                               {"user": "user", "text": "¿Y el nombre?"}, {"user": "user", "text": "Pues ya estaría entonces, el lunes cinco a las"}], recap, asked)
+        self.assertTrue(ans["confirmed"], ans["why"])
+
+
 class Written(unittest.TestCase):
     ASKED = {"date": "2026-10-02", "time": "13:00", "party": 2, "name": "Tyler Warren"}
 

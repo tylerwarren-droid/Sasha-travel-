@@ -42,6 +42,13 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   const [q, setQ] = useState({ name: '', city: '', country: '', website: '' })
   // S-65 · "Find venues": a kind of place in a place → up to five Google listings; picking one reads THAT listing
   const [find, setFind] = useState({ what: '', where: '', country: '' })
+  // a link can name a booking call to CANCEL (…/booking-helper?cancel=<call id>): its panel reads everything from that call
+  const [cancelId, setCancelId] = useState<string | null>(null)
+  useEffect(() => {
+    const c = new URLSearchParams(window.location.search).get('cancel') ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(c)) return
+    ;(async () => { await Promise.resolve(); setCancelId(c) })().catch(() => { /* nothing to show */ })
+  }, [])
   const [finding, setFinding] = useState<'idle' | 'finding' | 'done' | 'stopped'>('idle')
   const [found, setFound] = useState<Candidate[]>([])
   const [findNote, setFindNote] = useState<string | null>(null)
@@ -176,6 +183,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
 
   return (
     <section className="mt-8 rounded border p-4">
+      {cancelId && <PhoneCall defaults={{ name: defaults.name, phone: '' }} cancelsCallId={cancelId} venueLabel="the venue" />}
       <h2 className="text-lg font-semibold">Find how to book a venue</h2>
       <div className="mt-3 rounded bg-black/5 p-3 text-sm">
         <p className="font-medium">Find venues</p>

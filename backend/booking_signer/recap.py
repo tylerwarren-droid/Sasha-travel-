@@ -112,13 +112,20 @@ _YES = re.compile(r"\b(si|sí|correcto|exacto|eso es|asi es|vale|perfecto|de acu
 _NO = re.compile(r"\b(no|nao|non|nein|not|incorrect|incorrecto|errado|falsch|sbagliato|wrong)\b")
 
 
+def _numbers(s: str) -> str:
+    """Digits and number words read the same: Bland's transcript writes what was SPOKEN — "lunes cinco de octubre" —
+    for a recap written "lunes 5 de octubre" (Calma, 1 Oct 2026: a recap read word for word was missed as "never read")."""
+    words = {k: v for k, v in heard._NUM.items() if " " not in k}
+    return " ".join(str(words[w]) if w in words else w for w in s.split())
+
+
 def recap_answer(transcripts: List[Mapping], recap: str, asked: Mapping) -> dict:
     """{confirmed: bool, why: str, quotes: [str]} — confirmed ONLY when Sasha's whole recap was spoken and the venue's
     next words are an explicit yes, with no "no" and nothing after it contradicting the request."""
-    target = _f(recap)
+    target = _numbers(_f(recap))
     idx = None
     for i, t in enumerate(transcripts):
-        if t.get("user") == "assistant" and target and target in _f(str(t.get("text") or "")):
+        if t.get("user") == "assistant" and target and target in _numbers(_f(str(t.get("text") or ""))):
             idx = i
     if idx is None:
         return {"confirmed": False, "quotes": [], "why": "Sasha's closing recap was never read in full, so nothing was confirmed against it"}

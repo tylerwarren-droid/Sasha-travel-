@@ -104,7 +104,8 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
   }
 
   const formNeeds = cancelsCallId ? [] : [!form.date && 'a date', !form.time && 'a time', !(form.party >= 1) && 'a party size', form.name.trim().length < 2 && 'a name']
-  const bookedCallId = !cancelsCallId && view?.status === 'answered' && view.outcome === 'yes' ? prepared?.call_id ?? null : null
+  // a yes, or an unclear answer (they may be holding it — Calma, 1 Oct): either way it can be cancelled
+  const bookedCallId = !cancelsCallId && view?.status === 'answered' && (view.outcome === 'yes' || view.outcome === 'unclear') ? prepared?.call_id ?? null : null
 
   return (
     <section className="mt-8 rounded border p-4">

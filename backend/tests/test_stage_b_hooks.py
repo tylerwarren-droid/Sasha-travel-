@@ -23,6 +23,8 @@ class Hooks(unittest.TestCase):
 class TheResponseCarriesIt(unittest.TestCase):
     def test_the_http_response_carries_booking_find(self):
         """1 Oct: the conductor returned booking_find, and the HTTP model dropped it — the chat never saw it."""
+        import asyncio
+        asyncio.set_event_loop(asyncio.new_event_loop())   # app.services.ideas_agent makes an asyncio.Lock at import (3.9 needs a loop)
         from fastapi.testclient import TestClient
         from app.main import app
         r = TestClient(app).post("/api/agents/conductor", json={"message": "find me a tattoo studio in Nairobi, KE"})

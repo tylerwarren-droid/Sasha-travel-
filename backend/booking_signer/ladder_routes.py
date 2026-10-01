@@ -131,7 +131,7 @@ async def draft_route(request: Request):
 
 @router.post("/venues/find")
 async def find_venues(request: Request):
-    """S-65 · "Find venues": {what, where, country?} → up to five Google listings. Search only — nothing is contacted."""
+    """S-65 · "Find venues": {what, where, country?} → up to twenty Google listings (S-68), not stored. Search only — nothing is contacted."""
     body = await _json(request)
     if body is None:
         return _refuse(400, "find_malformed", "send {what, where, country?} as a JSON object")

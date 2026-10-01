@@ -53,7 +53,9 @@ export default function ChatBooking({ find }: { find: Find }) {
             : rule.endsWith('_invalid') ? 'Tell me what kind of place, and where.' : refusal(r.json, r.status) })
           return
         }
-        setState({ phase: 'found', cards: (r.json.candidates ?? []) as Candidate[] })
+        // S-68 step 2 · the server searches 20 and says how many to show; until the ranking (step 6) they stay in Google's order
+        const show = typeof r.json.show === 'number' ? r.json.show : 5
+        setState({ phase: 'found', cards: ((r.json.candidates ?? []) as Candidate[]).slice(0, show) })
       } catch (e) {
         if (!off) setState({ phase: 'refused', words: `I couldn't search just now: ${(e as Error).message}.` })
       }

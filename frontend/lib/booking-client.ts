@@ -34,7 +34,10 @@ export const refusal = (j: Record<string, unknown>, status: number) =>
   `${typeof j.rule === 'string' ? j.rule : `HTTP ${status}`}${typeof j.message === 'string' ? ` — ${j.message}` : ''}`
 
 export type Candidate = { place_id: string; name: string | null; address: string | null; country: string | null; phone: string | null
-  website: string | null; type: string | null; status: string | null; listing_url: string }
+  website: string | null; type: string | null; status: string | null; listing_url: string
+  // S-68 step 2 · as the listing gives them; null when it doesn't say (never 0)
+  rating?: number | null; rating_count?: number | null; price_level?: number | null
+  location?: { lat: number; lng: number } | null; hours_periods?: unknown[] | null }
 export type Rung = { rung: string; available: boolean; fact_index: number | null; value: string; source_label: string; why_not: string | null }
 
 export const findVenues = (what: string, where: string, country?: string) =>

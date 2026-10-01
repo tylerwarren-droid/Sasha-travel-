@@ -53,17 +53,42 @@ class Find(unittest.TestCase):
     def tearDown(self):
         self.env.stop()
 
-    def test_up_to_five_candidates_with_their_listing_facts(self):
-        http = Http(search=R(200, {"places": [listing(i) for i in range(1, 8)]}))
+    def test_up_to_twenty_candidates_with_their_listing_facts(self):
+        http = Http(search=R(200, {"places": [listing(i) for i in range(1, 25)]}))
         out = run(V.find_venues(http, what="tattoo studio", where="Nairobi", country="ke", now=NOW))
-        self.assertEqual(len(out["candidates"]), 5)
+        self.assertEqual((len(out["candidates"]), out["show"]), (20, 5))
         c = out["candidates"][0]
         self.assertEqual((c["name"], c["address"], c["phone"], c["website"], c["type"], c["country"]),
                          ("Ink Studio 1", "1 Moi Ave, Nairobi, Kenya", "+254700000001", "https://ink1.example", "Tattoo shop", "KE"))
         method, url, headers, body = http.requests[0]
-        self.assertEqual(body, {"textQuery": "tattoo studio in Nairobi", "maxResultCount": 5, "regionCode": "KE"})
+        self.assertEqual(body, {"textQuery": "tattoo studio in Nairobi", "maxResultCount": 20, "regionCode": "KE"})
         self.assertIn("places.primaryTypeDisplayName", headers["X-Goog-FieldMask"])
         self.assertEqual(len(out["source"]["sha256"]), 64)
+
+    def test_ranking_facts_as_the_listing_gives_them(self):
+        """S-68 step 2 · a response shaped as Places (New) documents it. Synthetic, not recorded: the Maps terms forbid
+        storing real listing content (docs/sasha/S-68-step1-places-terms.md), and that includes test fixtures."""
+        full = listing(1, rating=4.8, userRatingCount=312, priceLevel="PRICE_LEVEL_MODERATE",
+                       location={"latitude": 40.4237, "longitude": -3.7004},
+                       regularOpeningHours={"openNow": False, "periods": [
+                           {"open": {"day": 2, "hour": 10, "minute": 0}, "close": {"day": 2, "hour": 14, "minute": 0}},
+                           {"open": {"day": 2, "hour": 17, "minute": 0}, "close": {"day": 2, "hour": 21, "minute": 0}}],
+                           "weekdayDescriptions": ["Tuesday: 10:00 AM – 2:00 PM, 5:00 – 9:00 PM"]})
+        bare = listing(2)                                              # a listing with none of them: all None, never 0
+        odd = listing(3, rating="4.8", userRatingCount=-1, priceLevel="PRICE_LEVEL_UNSPECIFIED",
+                      location={"latitude": 91, "longitude": 0}, regularOpeningHours={"periods": []})
+        http = Http(search=R(200, {"places": [full, bare, odd]}))
+        a, b, c = run(V.find_venues(http, what="tattoo studio", where="Madrid", country="ES", now=NOW))["candidates"]
+        self.assertEqual((a["rating"], a["rating_count"], a["price_level"], a["location"]),
+                         (4.8, 312, 2, {"lat": 40.4237, "lng": -3.7004}))
+        self.assertEqual(len(a["hours_periods"]), 2)                   # the split day stays two intervals
+        for x in (b, c):
+            self.assertEqual((x["rating"], x["rating_count"], x["price_level"], x["location"], x["hours_periods"]),
+                             (None, None, None, None, None))
+        mask = http.requests[0][2]["X-Goog-FieldMask"].split(",")
+        for f in ("places.rating", "places.userRatingCount", "places.priceLevel", "places.location", "places.regularOpeningHours"):
+            self.assertIn(f, mask)
+        self.assertNotIn("places.reviews", mask)                       # Enterprise + Atmosphere: never on a search
 
     def test_nothing_found_is_an_empty_list_not_an_error(self):
         out = run(V.find_venues(Http(search=R(200, {})), what="tattoo studio", where="Nowhere", country=None, now=NOW))

@@ -376,8 +376,16 @@ PLACE_URL = "https://places.googleapis.com/v1/places/{id}"
 PLACE_FIELDS = ",".join(f.removeprefix("places.") for f in PLACES_FIELDS.split(","))
 #: S-65 · what a candidate shows: its listing facts, nothing fetched from its own site yet
 FIND_FIELDS = ("places.id,places.displayName,places.formattedAddress,places.internationalPhoneNumber,places.nationalPhoneNumber,"
-               "places.websiteUri,places.addressComponents,places.primaryTypeDisplayName,places.businessStatus")
-FIND_MAX = 5
+               "places.websiteUri,places.addressComponents,places.primaryTypeDisplayName,places.businessStatus,"
+               # S-68 step 2 · what the ranking reads. The Enterprise SKU, which phone and website already reach
+               # (docs/sasha/S-68-step1-places-terms.md): the cost of a search does not change
+               "places.rating,places.userRatingCount,places.priceLevel,places.location,places.regularOpeningHours")
+#: S-68 · search wider, show fewer: 20 is Text Search's cap; the chat shows 3–5 of them
+FIND_MAX = 20
+SHOW_MAX = 5
+#: Places' priceLevel → the € shown; UNSPECIFIED and anything unknown are "not listed", never guessed
+PRICE_LEVELS = {"PRICE_LEVEL_FREE": 0, "PRICE_LEVEL_INEXPENSIVE": 1, "PRICE_LEVEL_MODERATE": 2,
+                "PRICE_LEVEL_EXPENSIVE": 3, "PRICE_LEVEL_VERY_EXPENSIVE": 4}
 _PLACE_ID = re.compile(r"[A-Za-z0-9_-]{10,300}")
 
 
@@ -455,8 +463,25 @@ class FindRefused(ReadRefused):
     pass
 
 
+def _ranking_facts(pl: dict) -> dict:
+    """S-68 step 2 · what the listing says that a ranking reads — each value exactly as Places gave it, or None when the
+    listing doesn't say (or says something malformed). Nothing is defaulted: a missing rating is "no rating", not 0."""
+    rating, count = pl.get("rating"), pl.get("userRatingCount")
+    loc = pl.get("location") or {}
+    lat, lng = loc.get("latitude"), loc.get("longitude")
+    num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    periods = (pl.get("regularOpeningHours") or {}).get("periods")
+    return {
+        "rating": float(rating) if num(rating) and 1 <= rating <= 5 else None,
+        "rating_count": int(count) if num(count) and count >= 0 and int(count) == count else None,
+        "price_level": PRICE_LEVELS.get(pl.get("priceLevel")),
+        "location": {"lat": float(lat), "lng": float(lng)} if num(lat) and num(lng) and -90 <= lat <= 90 and -180 <= lng <= 180 else None,
+        "hours_periods": periods if isinstance(periods, list) and periods else None,
+    }
+
+
 async def find_venues(http: Http, *, what: str, where: str, country: Optional[str], now: datetime) -> dict:
-    """S-65 · "Find venues": a kind of place in a place ("tattoo studio", "Nairobi, KE") → up to five candidates, each
+    """S-65 · "Find venues": a kind of place in a place ("tattoo studio", "Nairobi, KE") → up to twenty candidates (S-68; the chat shows `show` of them), each
     with what its Google listing says. Search only: nothing is contacted, nothing is read from their sites until one is
     picked, and then it is the existing venue read on THAT listing."""
     if not isinstance(what, str) or not 2 <= len(what.strip()) <= 60:
@@ -488,8 +513,8 @@ async def find_venues(http: Http, *, what: str, where: str, country: Optional[st
         out.append({"place_id": pl["id"], "name": (pl.get("displayName") or {}).get("text"), "address": pl.get("formattedAddress"),
                     "country": c, "phone": (to_e164(raw, c) if raw else None) or raw, "website": pl.get("websiteUri"),
                     "type": (pl.get("primaryTypeDisplayName") or {}).get("text"), "status": pl.get("businessStatus"),
-                    "listing_url": f"https://www.google.com/maps/place/?q=place_id:{pl['id']}"})
-    return {"query": body["textQuery"], "candidates": out,
+                    "listing_url": f"https://www.google.com/maps/place/?q=place_id:{pl['id']}", **_ranking_facts(pl)})
+    return {"query": body["textQuery"], "candidates": out, "show": SHOW_MAX,
             "source": {"url": PLACES_URL, "query": body["textQuery"], "result": f"HTTP 200 — {len(out)} listing(s)",
                        "sha256": sha, "fetched_at": now.isoformat()}}
 

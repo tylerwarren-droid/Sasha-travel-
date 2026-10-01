@@ -43,7 +43,11 @@ export type Candidate = { place_id: string; name: string | null; address: string
   // S-68 step 4 · at the time asked for, by its listing's hours; the server's own words ("Closed Tue 15:00 (opens 17:00)")
   open_at?: { known: boolean; open: boolean | null; words: string }
   // S-68 step 5 · before a pick, from the listing alone; the real ladder comes from the read
-  books?: { how: 'call' | 'site' | 'you'; words: string } }
+  books?: { how: 'call' | 'site' | 'you'; words: string }
+  rating_words?: string; price_words?: string }
+// S-68 step 6 · every chip's order, computed once on the server: a re-sort is no new search
+export type Ranking = { default: string; chips: Record<string, string>; orders: Record<string, string[]>
+  groups: Record<string, 'main' | 'hours_unknown' | 'closed_then' | 'closed_temporarily'>; count: string; explainers: Record<string, string> }
 export type Rung = { rung: string; available: boolean; fact_index: number | null; value: string; source_label: string; why_not: string | null }
 
 export const findVenues = (what: string, where: string, country?: string, near?: string, openAt?: string) =>

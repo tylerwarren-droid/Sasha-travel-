@@ -17,7 +17,7 @@
  *            When it cannot, the server's reason is shown and the booking page is the way on.
  */
 import { useEffect, useRef, useState } from 'react'
-import { FOUNDER_ONLY, findVenues, readVenue, refusal, type Candidate, type Rung } from '@/lib/booking-client'
+import { FOUNDER_ONLY, findVenues, readVenue, refusal, type Candidate, type Ranking, type Rung } from '@/lib/booking-client'
 import { setChatBookingHandler, takeTypedYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 import ChatBookingCall from './ChatBookingCall'
@@ -26,7 +26,7 @@ type Find = { what: string; where: string; country?: string; near?: string; open
 type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null }
 type State =
   | { phase: 'finding' } | { phase: 'founder_only' } | { phase: 'refused'; words: string }
-  | { phase: 'found'; cards: Candidate[]; near?: Near } | { phase: 'reading'; cards: Candidate[]; pick: Candidate }
+  | { phase: 'found'; cards: Candidate[]; near?: Near; ranking?: Ranking } | { phase: 'reading'; cards: Candidate[]; pick: Candidate }
   | { phase: 'read'; cards: Candidate[]; pick: Candidate; read: Read } | { phase: 'read_refused'; cards: Candidate[]; words: string }
 
 type Near = { asked: string; found: boolean; why?: string }
@@ -54,9 +54,13 @@ export default function ChatBooking({ find }: { find: Find }) {
             : rule.endsWith('_invalid') ? 'Tell me what kind of place, and where.' : refusal(r.json, r.status) })
           return
         }
-        // S-68 step 2 · the server searches 20 and says how many to show; until the ranking (step 6) they stay in Google's order
+        // S-68 steps 2, 6 · the server searches 20, ranks them, and says how many to show
         const show = typeof r.json.show === 'number' ? r.json.show : 5
-        setState({ phase: 'found', cards: ((r.json.candidates ?? []) as Candidate[]).slice(0, show), near: (r.json.near ?? undefined) as Near | undefined })
+        const all = (r.json.candidates ?? []) as Candidate[]
+        const ranking = (r.json.ranking ?? undefined) as Ranking | undefined
+        const byId = new Map(all.map((c) => [c.place_id, c]))
+        const ordered = ranking ? (ranking.orders[ranking.default] ?? []).map((id) => byId.get(id)).filter((c): c is Candidate => !!c) : all
+        setState({ phase: 'found', cards: ordered.slice(0, show), near: (r.json.near ?? undefined) as Near | undefined, ranking })
       } catch (e) {
         if (!off) setState({ phase: 'refused', words: `I couldn't search just now: ${(e as Error).message}.` })
       }
@@ -106,6 +110,7 @@ export default function ChatBooking({ find }: { find: Find }) {
       {cards.length === 0
         ? <div>Google has no listing for {find.what} in {find.where}.</div>
         : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{cards.length} {cards.length === 1 ? 'place' : 'places'} for {find.what} in {find.where} — from Google Maps; nobody has been contacted. Tap one, or say “the second one”.</div>}
+      {state.phase === 'found' && state.ranking && <div style={{ fontSize: 13, marginBottom: 4 }}>{state.ranking.count} · {state.ranking.explainers[state.ranking.default]}</div>}
       {state.phase === 'found' && find.open_at && <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Open then by their listed hours; availability is confirmed only when Sasha books.</div>}
       {state.phase === 'found' && state.near && !state.near.found && <div style={{ fontSize: 13, marginBottom: 6 }}>No distances: {state.near.why}</div>}
       <ol style={{ margin: 0, paddingLeft: 18 }}>
@@ -114,6 +119,7 @@ export default function ChatBooking({ find }: { find: Find }) {
             <strong>{c.name}</strong>{c.type ? <span style={{ opacity: 0.7 }}> · {c.type}</span> : null}
             {c.status && c.status !== 'OPERATIONAL' ? <span style={{ color: '#9a1c1c' }}> · {c.status.toLowerCase().replace(/_/g, ' ')}</span> : null}
             <div style={{ fontSize: 13, opacity: 0.85 }}>{c.address ?? 'no address listed'} · {c.phone ?? 'no phone listed'}{c.website ? ` · ${c.website}` : ''}</div>
+            {c.rating_words || c.price_words ? <div style={{ fontSize: 13 }}>{[c.rating_words, c.price_words].filter(Boolean).join(' · ')}</div> : null}
             {c.open_at ? <div style={{ fontSize: 13 }}>{c.open_at.words}</div> : null}
             {c.books ? <div style={{ fontSize: 13 }}>How Sasha books: {c.books.words}</div> : null}
             {c.distance ? <div style={{ fontSize: 13 }}>{c.distance}{state.phase === 'found' && state.near ? ` from ${state.near.asked}` : ''}</div> : null}

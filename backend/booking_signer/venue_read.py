@@ -616,7 +616,13 @@ async def find_venues(http: Http, *, what: str, where: str, country: Optional[st
             m = haversine_m(origin["location"], c["location"]) if origin["found"] and c["location"] else None
             c["distance_m"] = int(round(m)) if m is not None else None
             c["distance"] = distance_words(m) if origin["found"] else None
-    return {"query": body["textQuery"], "candidates": out, "show": SHOW_MAX,
+    # S-68 step 6 · every chip's order, once: a re-sort in the chat is no new search
+    from .ranking import price_words, rank, rating_words
+    for c in out:
+        c["rating_words"], c["price_words"] = rating_words(c), price_words(c)
+    ranking = rank(out, open_at=when.strftime("%Y-%m-%dT%H:%M") if when is not None else None,
+                   near_found=bool(origin and origin["found"]))
+    return {"query": body["textQuery"], "candidates": out, "show": SHOW_MAX, "ranking": ranking,
             **({"near": {k: origin[k] for k in ("asked", "found", "why") if k in origin}} if origin is not None else {}),
             **({"open_at": when.strftime("%Y-%m-%dT%H:%M")} if when is not None else {}),
             "source": {"url": PLACES_URL, "query": body["textQuery"], "result": f"HTTP 200 — {len(out)} listing(s)",

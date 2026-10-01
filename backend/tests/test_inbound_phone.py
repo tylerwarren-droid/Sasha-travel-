@@ -204,3 +204,12 @@ class OnPostgres(unittest.TestCase):
         row = self._q("select * from booking_inbound where provider_id = 'SMpgwa'")[0]
         self.assertEqual((row["channel"], str(row["trip_item_id"])), ("whatsapp", self.item))
         self.assertEqual(self._q("select method from booking_attempts where trip_item_id = $1::uuid order by attempted_at desc limit 1", self.item)[0]["method"], "whatsapp")
+
+    def test_an_sms_shows_on_the_receipt_from_postgres(self):
+        # Sasha 88 · what the venue WROTE is on the booking's receipt, verbatim
+        form = {"MessageSid": "SMpgrc", "From": "+34915001122", "To": "+447700900000", "Body": "Confirmada mesa jueves 20h Johnson"}
+        self.c.post("/api/booking/twilio/sms", data=form, headers={"X-Twilio-Signature": sign("sms", form)})
+        r = self.c.get(f"/api/booking/reservations/{self.item}/receipt")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual([(w["channel"], w["text"]) for w in r.json()["written"]], [("sms", "Confirmada mesa jueves 20h Johnson")])
+        self.assertIsNotNone(r.json()["proof"]["read_back_sha256"])

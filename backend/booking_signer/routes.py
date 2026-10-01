@@ -31,7 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import call_routes, contacts, inbound_phone, ladder_routes, optin_page, optins, reservation as RS, retention, stop
+from . import call_routes, contacts, inbound_phone, ladder_routes, optin_page, optins, receipt, reservation as RS, retention, stop
 from . import venue_read as V
 from .account import account_for
 from .gate import require_booking_key
@@ -476,8 +476,11 @@ async def reservations(request: Request):
         **what_of(r.get("request"), r["party_size"]),
         # the VENUE's own reservation number, only ever when its page or email gave one — never ours in its place
         "booking_reference": r["booking_reference"],
-        # Sasha's OWN reference (P807mv §3): the first 8 of the intent id — labelled as hers, never as the restaurant's
-        "sasha_reference": str(r["intent_id"])[:8],
+        # Sasha's OWN reference: since Sasha 88 the K-XXXX she said to the venue; before it (P807mv §3) the first 8 of
+        # the intent id — labelled as hers, never as the restaurant's
+        "sasha_reference": r.get("own_reference") or str(r["intent_id"])[:8],
+        # Sasha 88 · a phone booking has a receipt: the call, both references, the transcript, the proof
+        "receipt": f"/api/booking/reservations/{r['id']}/receipt" if (r.get("channel") == "phone") else None,
         "venue_words": r["venue_words"], "observed_by": r["observed_by"], "task_digest": r["task_digest"],
     } for r in rows]}
 
@@ -490,6 +493,8 @@ router.include_router(ladder_routes.router)
 router.include_router(contacts.router)
 # S-70 · Sasha's own number answers: SMS and voicemail onto the reservation
 router.include_router(inbound_phone.router)
+# Sasha 88 · the receipt of each booking
+router.include_router(receipt.router)
 # S-55 · the Work-with-Sasha page's server half (reached through the frontend's own route, which adds the key)
 router.include_router(optin_page.router)
 

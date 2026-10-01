@@ -383,11 +383,13 @@ class PostgresStore:
             "(t.date_time at time zone t.local_timezone)::date as local_date, "
             "(t.date_time at time zone t.local_timezone)::time as local_time, t.local_timezone, t.party_size, t.status, "
             "t.booking_reference, coalesce(a.response_received, c.venue_words) as venue_words, a.observed_by, k.task_digest, "
+            "c.own_reference, "   # Sasha 88 · her K-XXXX, said to the venue
             "t.request "   # S-64 step 14 · the activity, its length and its unit, for the screen
             "from trip_items t join trips p on p.id = t.trip_id "
             "left join lateral (select * from booking_intents y where y.trip_item_id = t.id order by y.created_at desc limit 1) i on true "
             "left join booking_tasks k on k.intent_id = i.intent_id "
-            "left join lateral (select call_id, venue_words from booking_calls z where z.trip_item_id = t.id order by z.created_at desc limit 1) c on true "
+            "left join lateral (select call_id, venue_words, brief->>'own_reference' as own_reference from booking_calls z "
+            "where z.trip_item_id = t.id order by z.created_at desc limit 1) c on true "
             "left join lateral (select email_id from booking_emails z where z.trip_item_id = t.id limit 1) e on true "
             "left join lateral (select link_id from booking_links z where z.trip_item_id = t.id limit 1) l on true "
             # a PREPARED item has no attempt — nothing was sent — so the attempt is optional

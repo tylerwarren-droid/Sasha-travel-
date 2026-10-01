@@ -15,10 +15,13 @@
  */
 import { useEffect, useState } from 'react'
 import { bookingUrl, bookingHeaders } from '@/lib/booking-api'
+import ReceiptCard from '../ReceiptCard'
 
 type Reservation = {
   id: string; channel: string; venue: string; date: string | null; time: string | null; timezone: string | null; party: number | null
   status: string; status_words: string; booking_reference: string | null; venue_words: string | null
+  // Sasha 88 · a phone booking's receipt: the place by its name, both references, the transcript, the proof
+  receipt: string | null
   // S-64 step 14 · what was asked for: the activity, its length, its count in its own unit
   what: string; unit: string; count: number | null; duration_min: number | null
 }
@@ -77,7 +80,7 @@ export default function SashaReservations() {
           {state.phase === 'loaded' && [...byDay].map(([day, rows]) => (
             <div key={day} style={{ marginBottom: 12 }}>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>{day ? dayHeader(day) : 'No day set yet — they were asked when they have space'}</div>
-              {rows.map((r) => (
+              {rows.map((r) => r.receipt ? <ReceiptCard key={r.id} path={r.receipt} /> : (
                 <div key={r.id} style={{ marginBottom: 8 }}>
                   <div>{r.time ? `${r.time} (${zoneName(r.timezone)}) · ` : ''}{r.venue} · {whatLine(r)} · {CHANNEL[r.channel] ?? r.channel}</div>
                   <div className="lw-note-s">{r.status_words}</div>

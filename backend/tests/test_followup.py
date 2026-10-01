@@ -85,7 +85,9 @@ class FollowUps:
         p, call, what = self.after("yes")
         self.assertEqual(what, "sent")
         mail = self.sends()[-1]
-        self.assertEqual((mail["to"], mail["bcc"], mail["subject"]), ([call["brief"]["followup"]["to"]], [GUEST], "Confirmación de la reserva a nombre de Anna Johnson"))
+        ref = call["brief"]["own_reference"]   # Sasha 88 · her reference, as she said it on the call
+        self.assertEqual((mail["to"], mail["bcc"], mail["subject"]), ([call["brief"]["followup"]["to"]], [GUEST], f"Confirmación de la reserva a nombre de Anna Johnson · Ref. {ref}"))
+        self.assertIn(f"(Ref. {ref}).", mail["text"])
         self.assertIn("les escribo para dejar por escrito la reserva que nos confirmaron", mail["text"])
         self.assertIn("Una mesa: jueves 8 de octubre", mail["text"])
         self.assertIn("Johnson", mail["text"])
@@ -98,7 +100,7 @@ class FollowUps:
         p, call, what = self.after("unclear")
         self.assertEqual(what, "sent")
         mail = self.sends()[-1]
-        self.assertEqual(mail["subject"], "¿Podrían confirmar la reserva a nombre de Anna Johnson?")
+        self.assertEqual(mail["subject"], f"¿Podrían confirmar la reserva a nombre de Anna Johnson? · Ref. {call['brief']['own_reference']}")
         self.assertIn("Acabo de hablar con ustedes por teléfono y no me quedó claro", mail["text"])
 
     def test_no_follow_up_for_a_no_or_when_email_is_off(self):

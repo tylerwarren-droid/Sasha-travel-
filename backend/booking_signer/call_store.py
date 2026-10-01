@@ -70,6 +70,16 @@ class MemoryCallStore:
         r = self.calls.get(call_id)
         return dict(r) if r and r["account_id"] == account_id else None
 
+    async def receipt_rows(self, account_id: str, trip_item_id: str) -> Optional[dict]:
+        """Sasha 88 · the booking call behind a reservation, the reservation, and what the venue WROTE about it."""
+        calls = [c for c in self.calls.values() if c.get("trip_item_id") == trip_item_id and c["account_id"] == account_id
+                 and (c.get("brief") or {}).get("purpose", "book") == "book"]
+        if not calls:
+            return None
+        call = max(calls, key=lambda c: c.get("created_at") or datetime.min)
+        return {"call": dict(call), "item": dict(self.trip_items.get(trip_item_id) or {}),
+                "written": [dict(w) for w in getattr(self, "written", []) if w.get("trip_item_id") == trip_item_id]}
+
     async def claim(self, account_id: str, call_id: str, approval: dict, now: datetime, fresh_after: datetime,
                     cap: int, since: datetime, account_cap: Optional[int] = None) -> str:
         """'claimed' | 'stale' | 'cap' | 'account_cap' | 'taken' | 'unknown' — in ONE step."""
@@ -244,6 +254,29 @@ class PostgresCallStore:
             return None
         return _row(await self._run(lambda c: c.fetchrow(
             "select * from booking_calls where call_id = $1 and account_id = $2", cid, uuid.UUID(account_id))))
+
+    async def receipt_rows(self, account_id, trip_item_id):
+        item_id = _uuid_or_none(trip_item_id)
+        if item_id is None:
+            return None
+
+        async def fn(conn):
+            call = await conn.fetchrow(
+                "select * from booking_calls where trip_item_id = $1 and account_id = $2 "
+                "and coalesce(brief->>'purpose', 'book') = 'book' order by created_at desc limit 1", item_id, uuid.UUID(account_id))
+            if call is None:
+                return None
+            item = await conn.fetchrow("select * from trip_items where id = $1", item_id)
+            # what the venue WROTE: an SMS or WhatsApp to Sasha's number, a voicemail, a reply to her email — verbatim
+            inbound = await conn.fetchval("select to_regclass('public.booking_inbound') is not null")   # 016, S-70
+            written = await conn.fetch(
+                ("select channel, null::text as from_addr, null::text as subject, body_text, recording_url, received_at "
+                 "from booking_inbound where trip_item_id = $1 union all " if inbound else "")
+                + "select 'email' as channel, r.from_addr, r.subject, r.body_text, null as recording_url, r.received_at "
+                "from booking_email_replies r join booking_emails e on e.email_id = r.email_id where e.trip_item_id = $1 "
+                "order by received_at", item_id)
+            return {"call": _row(call), "item": _row(item) or {}, "written": [_row(w) for w in written]}
+        return await self._run(fn)
 
     async def claim(self, account_id, call_id, approval, now, fresh_after, cap, since, account_cap=None) -> str:
         cid = _uuid_or_none(call_id)

@@ -173,15 +173,18 @@ def restatement(lang_code: str, o: Mapping[str, Any]) -> str:
     return s[:1].upper() + s[1:]
 
 
-def compose(kind: str, lang_code: str, o: Mapping[str, Any], to: str, bcc: Optional[str], email_id: str) -> dict:
+def compose(kind: str, lang_code: str, o: Mapping[str, Any], to: str, bcc: Optional[str], email_id: str,
+            own_ref: Optional[str] = None) -> dict:
     from .wordings import DISCLOSURE
     lang = lang_code if lang_code in _FU else "en"
     subj, body = _FU[lang][kind]
     name = o["who"]["name"]
     me = own_email() or os.getenv("SASHA_EMAIL_FROM", "")
     email = {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": to, "reply_to": E.act_address(email_id),
-             "subject": subj.format(name=name),
-             "text": body.format(disclosure=DISCLOSURE.get(lang, DISCLOSURE["en"]), core=restatement(lang, o), me=me, guest_short=name)}
+             "subject": subj.format(name=name) + (f" · Ref. {own_ref}" if own_ref else ""),
+             # Sasha 88 · her own reference, as she said it on the call, under the booking it restates
+             "text": body.format(disclosure=DISCLOSURE.get(lang, DISCLOSURE["en"]),
+                                 core=restatement(lang, o) + (f" (Ref. {own_ref})" if own_ref else ""), me=me, guest_short=name)}
     if bcc:
         email["bcc"] = bcc
     return email
@@ -213,7 +216,7 @@ async def after_call(call: Mapping[str, Any], outcome: Optional[str], now: datet
     store = LR.LADDER_STORE
     if await store.email_exists(email_id):
         return "already sent"
-    email = compose(kind, brief.get("language") or "en", o, fu["to"], fu.get("bcc"), email_id)
+    email = compose(kind, brief.get("language") or "en", o, fu["to"], fu.get("bcc"), email_id, brief.get("own_reference"))
     venue_key = str(brief.get("venue_key") or "")
     row = {"email_id": email_id, "account_id": str(call["account_id"]), "read_id": venue_key[5:] if venue_key.startswith("read:") else None,
            "email": email, "email_sha256": E.email_sha256(email), "read_back_lines": call["read_back_lines"],

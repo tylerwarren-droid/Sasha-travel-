@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { approveCall, bookingReq, getCall, prepareCall, refusal, reservations, type Rung, contactReq, type Consent, type Contact } from '@/lib/booking-client'
 import { setPendingYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
+import ReceiptCard from './ReceiptCard'
 
 type Draft = { parts?: { what?: { activity: string; activity_venue_lang: string; category: string }; when?: { mode: string; at?: string };
   how_many?: { count: number; unit: string }; flow?: string; who?: { name: string } } } | null
@@ -21,7 +22,7 @@ type Details = { activity: string; venueLang: string; category: string; date: st
 type View = { call_id: string; status: string; outcome?: string | null; venue_words?: string | null; say?: string | null; read_by?: string | null }
 type Phase =
   | { p: 'details' } | { p: 'preparing' } | { p: 'readback'; callId: string; lines: string[]; sha: string }
-  | { p: 'placing'; lines: string[] } | { p: 'calling'; callId: string; say: string } | { p: 'result'; view: View; itinerary: string }
+  | { p: 'placing'; lines: string[] } | { p: 'calling'; callId: string; say: string } | { p: 'result'; view: View; itinerary: string; receipt: string | null }
   | { p: 'refused'; words: string } | { p: 'not_now' }
 
 const SLEEP = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -122,10 +123,11 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
       if (v.status === 'placed' || v.status === 'placing') { setPhase({ p: 'calling', callId, say: `I'm on the phone to ${venue} now.` }); continue }
       // the itinerary line only from a row the server returns — never assumed
       const res = await reservations()
-      const row = ((res.json.reservations ?? []) as Array<{ intent_id: string; what: string; venue: string; date: string | null; time: string | null; status_words: string }>)
+      const row = ((res.json.reservations ?? []) as Array<{ intent_id: string; what: string; venue: string; date: string | null; time: string | null; status_words: string; receipt: string | null }>)
         .find((x) => x.intent_id === callId)
-      setPhase({ p: 'result', view: v, itinerary: row
-        ? `It's in your itinerary: ${row.what} at ${row.venue}${row.date ? `, ${row.date}${row.time ? ` at ${row.time}` : ''}` : ''}. Status: ${row.status_words}.`
+      // Sasha 88 · the place by the name the guest chose it by, never the words they searched with; and its receipt
+      setPhase({ p: 'result', view: v, receipt: row?.receipt ?? null, itinerary: row
+        ? `It's in your itinerary: ${row.what} at ${venue}${row.date ? `, ${row.date}${row.time ? ` at ${row.time}` : ''}` : ''}. Status: ${row.status_words}.`
         : 'Nothing was booked, so nothing was added to your itinerary.' })
       return
     }
@@ -202,6 +204,7 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
           {phase.view.venue_words ? <div style={{ marginTop: 4 }}>What they said, word for word: &ldquo;{phase.view.venue_words}&rdquo;</div> : null}
           {phase.view.read_by ? <div style={{ fontSize: 12, opacity: 0.7 }}>The outcome is {phase.view.read_by}; their words are verbatim.</div> : null}
           <div style={{ marginTop: 6 }}>{phase.itinerary}</div>
+          {phase.receipt ? <ReceiptCard path={phase.receipt} /> : null}
         </div>
       )}
     </div>

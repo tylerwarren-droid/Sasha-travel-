@@ -130,6 +130,12 @@ async def _follow_up(call: dict, reading) -> None:
             log.info("[followup] call %s: %s", call.get("call_id"), what)
     except Exception as e:
         log.error("[followup] call %s: the follow-up email failed: %s: %s", call.get("call_id"), type(e).__name__, e)
+    # Sasha 90 · the guest's receipt, after EVERY booking call, whatever the outcome — awaited, its failure logged
+    try:
+        from . import guest_receipt as GR
+        log.info("[guest_receipt] call %s: %s", call.get("call_id"), await GR.send_after_call(call))
+    except Exception as e:
+        log.error("[guest_receipt] call %s: the guest's receipt failed: %s: %s", call.get("call_id"), type(e).__name__, e)
 
 
 async def sweep_once() -> int:

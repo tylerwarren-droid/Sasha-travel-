@@ -74,3 +74,36 @@ class Receipt(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GuestReceipt(Receipt):
+    """Sasha 90 · after every booking, the guest gets the receipt by email from Sasha's own address — whatever the outcome."""
+    ENV = {"SASHA_EMAILS_ENABLED": "1", "SASHA_RESEND_API_KEY": "k", "SASHA_EMAIL_FROM": "Sasha <sasha@booking.kanoe.ai>",
+           "SASHA_INBOUND_DOMAIN": "booking.kanoe.ai", "SASHA_FOUNDER_EMAIL": "founder@kanoe.test"}
+
+    def send(self, prep):
+        import asyncio, os
+        from unittest import mock
+        from booking_signer import guest_receipt as GR
+        with mock.patch.dict(os.environ, self.ENV):
+            return asyncio.run(GR.send_after_call(self.calls.calls[prep["call_id"]]))
+
+    def test_the_guest_gets_the_receipt_with_both_references_and_their_words(self):
+        prep = self.booked()
+        self.assertEqual(self.send(prep), "sent")
+        mail = [b for m, u, b in self.web.requests if u == "https://api.resend.com/emails"][-1]
+        ref = self.calls.calls[prep["call_id"]]["brief"]["own_reference"]
+        self.assertEqual((mail["from"], mail["to"]), ("Sasha <sasha@booking.kanoe.ai>", ["founder@kanoe.test"]))
+        self.assertEqual(mail["subject"], f"Your booking at {BOTAVARA}: Confirmed by the restaurant · Ref. {ref}")
+        for must in (BOTAVARA, "a table · 2 people", "Under the name: Warren", "Their reference: 4417", f"Sasha's reference: {ref}",
+                     "Mesa reservada, gracias."):
+            self.assertIn(must, mail["text"])
+
+    def test_an_unclear_call_still_gets_its_receipt_and_never_without_an_address(self):
+        prep = self.booked()
+        self.calls.calls[prep["call_id"]].update(outcome="unclear", reading={"outcome": "unclear", "why": "not confirmed — \"Ok.\""})
+        self.calls.trip_items[prep["trip_item_id"]]["status"] = "unclear"
+        self.assertEqual(self.send(prep), "sent")
+        self.assertIn("How it was read: not confirmed", [b for m, u, b in self.web.requests if u == "https://api.resend.com/emails"][-1]["text"])
+        self.ENV = {**self.ENV, "SASHA_FOUNDER_EMAIL": ""}
+        self.assertEqual(self.send(prep), "not sent: the guest has no email address on their account")

@@ -149,6 +149,23 @@ async def find_venues(request: Request):
         return _refuse(503 if e.rule in ("places_not_configured", "places_unreachable", "places_refused") else 422, e.rule, str(e))
 
 
+STYLER = None   # S-68 step 9 · tests inject one; None is the model (style.anthropic_styler)
+
+
+@router.post("/venues/style")
+async def venue_style(request: Request):
+    """S-68 step 9 · style tags for the 3–5 cards shown, from each venue's OWN website (robots first), AI-summarised and
+    quoted; never Google reviews; nothing stored. {what, venues: [{place_id, website}]} → {styles: {place_id: …}}."""
+    from . import style as ST
+    body = await _json(request)
+    venues = body.get("venues") if body else None
+    if not isinstance(venues, list) or not all(isinstance(v, dict) for v in venues):
+        return _refuse(400, "style_malformed", "send {what, venues: [{place_id, website}]} as a JSON object")
+    if len(venues) > ST.MAX_SITES:
+        return _refuse(422, "style_too_many", f"style is read for the cards shown — at most {ST.MAX_SITES} sites")
+    return {"styles": await ST.styles(HTTP, venues, str(body.get("what") or ""), resolve=RESOLVE, styler=STYLER)}
+
+
 @router.get("/venues/read/{read_id}")
 async def get_read(read_id: str, request: Request):
     try:

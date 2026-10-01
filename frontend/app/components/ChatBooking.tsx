@@ -17,7 +17,7 @@
  *            When it cannot, the server's reason is shown and the booking page is the way on.
  */
 import { useEffect, useRef, useState } from 'react'
-import { FOUNDER_ONLY, findVenues, readVenue, refusal, type Candidate, type Ranking, type Rung } from '@/lib/booking-client'
+import { FOUNDER_ONLY, findVenues, readVenue, refusal, styleVenues, type Candidate, type Ranking, type Rung, type Style } from '@/lib/booking-client'
 import { setChatBookingHandler, takeTypedYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 import ChatBookingCall from './ChatBookingCall'
@@ -55,6 +55,8 @@ const ORDINAL: Record<string, number> = { first: 0, '1st': 0, one: 0, second: 1,
 export default function ChatBooking({ find }: { find: Find }) {
   const [state, setState] = useState<State>({ phase: 'finding' })
   const stateRef = useRef(state)
+  // S-68 step 9 · style per place_id, read for the cards SHOWN only; 'reading' while their sites are read
+  const [styles, setStyles] = useState<Record<string, Style | 'reading'>>({})
   useEffect(() => { stateRef.current = state }, [state])
 
   useEffect(() => {
@@ -91,6 +93,23 @@ export default function ChatBooking({ find }: { find: Find }) {
     if (s.phase !== 'found' || !s.ranking?.orders[chip]) return
     setState({ ...s, chip, cards: inOrder(s.all, s.ranking, chip, s.show) })
   }
+
+  const shownIds = state.phase === 'found' ? state.cards.map((c) => c.place_id).join(',') : ''
+  useEffect(() => {
+    const s = stateRef.current
+    if (s.phase !== 'found') return
+    const need = s.cards.filter((c) => !(c.place_id in styles))
+    if (!need.length) return
+    setStyles((m) => ({ ...m, ...Object.fromEntries(need.map((c) => [c.place_id, 'reading' as const])) }))
+    styleVenues(find.what, need.map((c) => ({ place_id: c.place_id, website: c.website })))
+      .then((r) => {
+        const got = (r.ok ? (r.json.styles ?? {}) : {}) as Record<string, Style>
+        const why = r.ok ? 'not read' : refusal(r.json, r.status)
+        setStyles((m) => ({ ...m, ...Object.fromEntries(need.map((c) => [c.place_id, got[c.place_id] ?? { why }])) }))
+      })
+      .catch((e) => setStyles((m) => ({ ...m, ...Object.fromEntries(need.map((c) => [c.place_id, { why: (e as Error).message }])) })))
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the cards shown change
+  }, [shownIds])
 
   async function pick(c: Candidate) {
     const cards = 'cards' in stateRef.current ? stateRef.current.cards : []
@@ -171,6 +190,14 @@ export default function ChatBooking({ find }: { find: Find }) {
               <div style={{ fontSize: 13 }}>{facts.filter(Boolean).join(' · ')}</div>
               {c.open_at ? <div style={{ fontSize: 13 }}>{c.open_at.words}</div> : null}
               {c.books ? <div style={{ fontSize: 13 }}>How Sasha books: {c.books.words}</div> : null}
+              {(() => {
+                const st = styles[c.place_id]
+                if (!st) return null
+                if (st === 'reading') return <div style={{ fontSize: 13, opacity: 0.7 }}>Style: reading their website…</div>
+                if (st.tags?.length) return <div style={{ fontSize: 13 }}>{st.label}: {st.tags.map((t) => t.tag).join(', ')}
+                  {st.source ? <> · <a href={st.source} target="_blank" rel="noopener noreferrer" title={st.tags.map((t) => `${t.tag}: “${t.quote}”`).join('\n')}>their website ↗</a></> : null}</div>
+                return <div style={{ fontSize: 12, opacity: 0.7 }}>Style: {st.why}</div>
+              })()}
               <div style={{ fontSize: 12, opacity: 0.75 }}>{c.address ?? 'no address listed'}</div>
               <span style={{ display: 'inline-flex', gap: 10, alignItems: 'flex-start', marginTop: 4 }}>
                 <GatedButton label="Choose" onClick={() => { pick(c).catch(() => { /* visible state set inside */ }) }}

@@ -52,6 +52,10 @@ export type Rung = { rung: string; available: boolean; fact_index: number | null
 
 export const findVenues = (what: string, where: string, country?: string, near?: string, openAt?: string) =>
   bookingReq('/api/booking/venues/find', { what, where, country: country || undefined, near: near || undefined, open_at: openAt || undefined })
+// S-68 step 9 · style for the cards shown (≤ 5), from each venue's own website; AI-summarised, quoted, not stored
+export type Style = { label?: string; tags?: { tag: string; quote: string }[]; source?: string; why?: string }
+export const styleVenues = (what: string, venues: { place_id: string; website: string | null }[]) =>
+  bookingReq('/api/booking/venues/style', { what, venues }, 60000)
 export const readVenue = (q: { name: string; city: string; country?: string; website?: string; place_id?: string; asked_for?: string }) =>
   bookingReq('/api/booking/venues/read', { name: q.name, city: q.city, country: q.country || undefined, website: q.website || undefined,
     ...(q.place_id ? { place_id: q.place_id, asked_for: q.asked_for } : {}) })

@@ -705,6 +705,22 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
         self.assertEqual(r.json(), {"ok": True, "matched": False})
         self.assertEqual(self.optins.rows[-1]["withdrawn_evidence"]["verbatim"], "No nos escribáis más, gracias.")
 
+    def test_s64_a_massage_booked_from_the_object_is_cancelled_as_a_massage(self):
+        v = self.read()
+        obj = {"schema": "reservation/1", "flow": "book", "who": {"name": "Tyler Warren"},
+               "what": {"activity": "a 60-minute relaxing massage", "activity_venue_lang": "un masaje relajante de 60 minutos", "category": "beauty"},
+               "where": {}, "when": {"mode": "at", "at": "2026-10-08T10:00", "duration_min": 60}, "how_many": {"count": 1, "unit": "people"}}
+        p = self.c.post("/api/booking/calls", json={"reservation": obj, "read_id": v["read_id"]}).json()
+        self.assertIn("para reservar un masaje relajante de 60 minutos para una persona", p["read_back"]["lines"][1])
+        self.assertEqual(self.calls.trip_items[self.calls.calls[p["call_id"]]["trip_item_id"]]["request_sha256"],
+                         self.calls.calls[p["call_id"]]["request_sha256"])           # the reservation's hash IS the call's
+        self.calls.calls[p["call_id"]].update(status="answered", outcome="yes", reading={"reference": None})
+        c = self.c.post("/api/booking/calls", json={"cancels_call_id": p["call_id"]})
+        self.assertEqual(c.status_code, 200, c.text)
+        lines = c.json()["read_back"]["lines"]
+        self.assertIn("para cancelar la reserva de un masaje relajante de 60 minutos", lines[1])
+        self.assertTrue(lines[2].startswith("This cancels your a 60-minute relaxing massage for 1 on 2026-10-08 at 10:00"))
+
     def test_quarantine_is_kept(self):
         body, h = signed({"type": "email.received", "data": {"email_id": "rcv_q", "to": ["hello@in.kanoe.test"], "from": "x@y.test"}})
         self.c.post("/api/booking/email/inbound", content=body, headers=h)

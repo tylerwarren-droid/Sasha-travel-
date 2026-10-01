@@ -226,6 +226,29 @@ async def prepare(request: Request):
             "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
 
 
+async def _cancel_from_object(account: str, booking: dict, b: dict, venue: C.CallVenue):
+    refused = await ladder_routes._optin_refusal(venue.venue_ids, "phone")
+    if refused:
+        return refused
+    now = NOW()
+    try:
+        built = R.cancel_for(b, venue, now, (booking.get("reading") or {}).get("reference"))
+    except (RS.ReservationRefused, C.CallRefused) as e:
+        return _refuse(422, getattr(e, "rule", "cancel_invalid"), str(e))
+    built["brief"]["cancels_call_id"] = booking["call_id"]
+    built["brief_sha256"] = C._sha256hex(C._canonical(built["brief"]))
+    row = {"call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "dialled_number": b["number"],
+           "language": b["language"], "guest_name": b["name"], "guest_phone": b.get("phone"), "brief": built["brief"],
+           "brief_sha256": built["brief_sha256"], "read_back_lines": built["read_back_lines"],
+           "read_back_sha256": built["read_back_sha256"], "created_at": now}
+    try:
+        item = await CALL_STORE.put_cancel_call(row, booking["trip_item_id"])
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    return {"call_id": row["call_id"], "trip_item_id": item, "purpose": "cancel",
+            "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
+
+
 async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now):
     """S-64 step 9 · a call from a reservation/1 object: a booking at a set time, or an ASKING call (quote-first,
     "when do you have space"). The venue and its number are still the ones READ (read_id), never the object's; the
@@ -293,6 +316,8 @@ async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
         return _refuse(422, "booking_brief_incomplete", "that booking's call does not record its language and timezone")
     venue = C.CallVenue(key=b["venue_key"], name=b.get("venue_name") or b["venue_key"], number_env="", language=lang_key,
                         timezone=b["timezone"], number=b["number"], source=b.get("number_source"), venue_ids=tuple(b.get("venue_ids") or ()) or None)
+    if b.get("activity_venue_lang"):   # S-64 · a booking made from the object: cancel THAT activity, never "a table"
+        return await _cancel_from_object(account, booking, b, venue)
     # S-54 · "any stop ends every channel" — a cancellation too; the guest can still cancel themselves
     refused = await ladder_routes._optin_refusal(venue.venue_ids, "phone")
     if refused:

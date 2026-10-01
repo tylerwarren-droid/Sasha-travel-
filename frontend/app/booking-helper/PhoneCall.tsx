@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react'
 import { bookingUrl as apiUrl, bookingHeaders as apiHeaders } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
+import type { Activity } from './Ladder'
 
 type CallsHealth = { enabled?: boolean; bland_configured?: boolean; per_day?: number; venues?: Record<string, { number_set?: boolean; language?: string; why?: string }> }
 type CallView = {
@@ -46,7 +47,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** `readId` (S-36): call the venue Magellan read, on the number it read. Without it: the test line. */
 /** `cancelsCallId` (S-47): this panel cancels that confirmed booking — everything is read from the booking call; no fields. */
-export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCallId, initial }: { defaults: { name: string; phone: string }; readId?: string; venueLabel?: string; factIndex?: number; cancelsCallId?: string; initial?: { date: string; time: string; party: number } }) {
+/** `activity` (S-64): not a table — the call is prepared from a reservation/1 object built from these fields. */
+export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCallId, initial, activity }: { defaults: { name: string; phone: string }; readId?: string; venueLabel?: string; factIndex?: number; cancelsCallId?: string; initial?: { date: string; time: string; party: number }; activity?: Activity }) {
   const [health, setHealth] = useState<CallsHealth | 'unreachable' | null>(null)
   // the booking link · a link's booking fills the form; the guest's own phone number is always typed by the guest
   const [form, setForm] = useState({ date: initial?.date ?? '', time: initial?.time || '20:00', party: initial?.party ?? 2, name: defaults.name, phone: '' })
@@ -76,7 +78,14 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
 
   async function prepare() {
     setPhase('preparing'); setNote(null); setView(null)
+    const reservation = activity && readId ? {
+      schema: 'reservation/1', flow: 'book', who: { name: form.name, ...(form.phone ? { contact: { mobile_e164: form.phone } } : {}) },
+      what: { activity: activity.activity, activity_venue_lang: activity.activity_venue_lang, category: activity.category },
+      where: {}, when: { mode: 'at', at: `${form.date}T${form.time}`, ...(activity.duration_min ? { duration_min: activity.duration_min } : {}) },
+      how_many: { count: form.party, unit: activity.unit },
+    } : null
     const r = await req('/api/booking/calls', cancelsCallId ? { cancels_call_id: cancelsCallId }
+      : reservation ? { reservation, read_id: readId, ...(factIndex !== undefined ? { fact_index: factIndex } : {}) }
       : { ...(readId ? { read_id: readId, ...(factIndex !== undefined ? { fact_index: factIndex } : {}) } : { venue: VENUE }), date: form.date, time: form.time, party: form.party, name: form.name, phone: form.phone || undefined })
     if (!r.ok) { setPhase('stopped'); setNote(`Not prepared: ${refusal(r.json, r.status)}. Nothing was dialled.`); return }
     const rb = r.json.read_back as { lines: string[]; sha256: string }
@@ -113,6 +122,7 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
   return (
     <section className="mt-8 rounded border p-4">
       <h2 className="text-lg font-semibold">{cancelsCallId ? `Cancel the booking${venueLabel ? ` at ${venueLabel}` : ''}` : venueLabel ? `Phone ${venueLabel}` : 'Phone a venue'}</h2>
+      {activity && !cancelsCallId && <p className="text-sm">To book: <strong>{activity.activity}</strong> ({activity.activity_venue_lang}){activity.duration_min ? `, ${activity.duration_min} minutes` : ''} — counted in {activity.unit}.</p>}
       <p className="rounded bg-red-50 p-2 font-medium text-red-900">⚠ This places a REAL phone call to the number shown in the read-back, once you press “Yes — call them”.</p>
       <p className="text-sm opacity-80">Sasha calls as an AI concierge operated by Kanoe Technologies SL, on your behalf, and tells you exactly what they said. She never agrees to a deposit, a fee, a card or a different time.</p>
       {!readId && h?.venues?.[VENUE] && <p className="text-xs opacity-70">Venue: the Sasha test line ({venue?.language ?? '—'}). At most {h.per_day} calls a day on this server.</p>}
@@ -155,7 +165,7 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
         </div>
       )}
 
-      {bookedCallId && <PhoneCall defaults={defaults} venueLabel={venueLabel} cancelsCallId={bookedCallId} />}
+      {bookedCallId && <PhoneCall defaults={defaults} venueLabel={venueLabel} cancelsCallId={bookedCallId} activity={activity} />}
     </section>
   )
 }

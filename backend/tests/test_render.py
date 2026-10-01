@@ -128,7 +128,7 @@ class Beyond(unittest.TestCase):
         v = C.CallVenue(key="read:s", name="Spa", number_env="", language="es", timezone="Europe/Madrid", number="+34910000000")
         b = R.call_brief(self.obj(), v, self.TODAY, "+34910000000")
         self.assertIn("phoning a venue to book a 60-minute relaxing massage on behalf of a guest", b["task"])
-        self.assertIn("a 60-minute relaxing massage (un masaje relajante), 1 people, 2026-10-03 at 11:00 (venue's local time), 60 minutes", b["task"])
+        self.assertIn("The booking: 2026-10-03 at 11:00 venue time, under the name Tyler Warren.", b["task"])
         self.assertIn("Never agree to a different date, time, number, service or length.", b["task"])
         self.assertEqual(b["recap"], "Para confirmar: un masaje relajante de 60 minutos, para una persona, sábado 3 de octubre, a las once de la mañana, a nombre de Warren. ¿Correcto?")
         self.assertIn(b["recap"], b["task"])

@@ -99,3 +99,38 @@ class Reading(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CancelAnActivity(unittest.TestCase):
+    """S-64 · cancelling a booking made from the object cancels THAT activity — never "una mesa"."""
+
+    def booked(self, code):
+        o = RS.validate({"schema": "reservation/1", "flow": "book", "who": {"name": "Tyler Warren", "account_id": ACCT},
+                         "what": {"activity": "a 60-minute relaxing massage", "activity_venue_lang": {"es": "un masaje relajante de 60 minutos",
+                                  "en": "a 60-minute relaxing massage", "pt": "uma massagem relaxante de 60 minutos", "fr": "un massage relaxant de 60 minutes",
+                                  "de": "eine Entspannungsmassage von 60 Minuten", "it": "un massaggio rilassante di 60 minuti"}[code.split("-")[0]],
+                                  "category": "beauty"},
+                         "where": {"venue_name": "Calma", "timezone": "Europe/Madrid", "venue_ids": []},
+                         "when": {"mode": "at", "at": "2026-10-05T10:00", "duration_min": 60}, "how_many": {"count": 1, "unit": "people"}})
+        v = C.CallVenue(key="read:c", name="Calma", number_env="", language=code, timezone="Europe/Madrid", number="+34919891916")
+        return R.call_for(o, v, NOW, "+34919891916")["brief"], v
+
+    def test_the_cancellation_names_the_massage_in_every_language(self):
+        want = {"es": "para cancelar la reserva de un masaje relajante de 60 minutos para una persona",
+                "en": "to cancel the booking of a 60-minute relaxing massage for one",
+                "pt": "para cancelar a reserva de uma massagem relaxante de 60 minutos",
+                "fr": "pour annuler la réservation d'un massage relaxant de 60 minutes",
+                "de": "um die Reservierung für eine Entspannungsmassage von 60 Minuten",
+                "it": "per cancellare la prenotazione di un massaggio rilassante di 60 minuti"}
+        for code in C.LANGUAGES:
+            b, v = self.booked(code)
+            c = R.cancel_for(b, v, NOW, None)
+            self.assertIn(want[code.split("-")[0]], c["brief"]["first_sentence"], code)
+            self.assertNotIn("mesa", c["brief"]["first_sentence"])
+            self.assertIn("This cancels your a 60-minute relaxing massage for 1 on 2026-10-05 at 10:00", c["read_back_lines"][2])
+            self.assertLessEqual(len(c["brief"]["task"]), 2000)
+
+    def test_the_booking_brief_carries_what_its_reply_is_checked_against(self):
+        b, _ = self.booked("es")
+        self.assertEqual((b["unit"], b["duration_min"], b["category"]), ("people", 60, "beauty"))
+        self.assertEqual(b["recap"], "Para confirmar: un masaje relajante de 60 minutos, para una persona, lunes 5 de octubre, a las diez de la mañana, a nombre de Warren. ¿Correcto?")

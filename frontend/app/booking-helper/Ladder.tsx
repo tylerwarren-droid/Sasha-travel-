@@ -41,6 +41,16 @@ async function req(path: string, body?: unknown): Promise<{ ok: boolean; status:
 const refusal = (j: Record<string, unknown>, status: number) =>
   `${typeof j.rule === 'string' ? j.rule : `HTTP ${status}`}${typeof j.message === 'string' ? ` — ${j.message}` : ''}`
 
+/** S-64 · a link can name an ACTIVITY (a massage, a tour…) instead of a table: &activity=…&activity_venue=…&category=…&unit=…&duration=… */
+export type Activity = { activity: string; activity_venue_lang: string; category: string; unit: string; duration_min?: number }
+function activityFrom(u: URLSearchParams): Activity | undefined {
+  const activity = (u.get('activity') ?? '').trim(), venueLang = (u.get('activity_venue') ?? '').trim()
+  if (!activity || !venueLang) return undefined
+  const d = Number(u.get('duration'))
+  return { activity, activity_venue_lang: venueLang, category: u.get('category') || 'other', unit: u.get('unit') || 'people',
+    ...(Number.isInteger(d) && d > 0 ? { duration_min: d } : {}) }
+}
+
 type Candidate = { place_id: string; name: string | null; address: string | null; country: string | null; phone: string | null
   website: string | null; type: string | null; status: string | null; listing_url: string }
 
@@ -58,7 +68,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   const [phoneFact, setPhoneFact] = useState<number | null>(null)
   // the booking link · a link can carry the whole booking (…/booking-helper?book=phone&lookup=…&number=…): the page reads the venue
   // itself, and the link's number only PICKS among the numbers read there — it is never dialled from the URL
-  const [linked, setLinked] = useState<{ number: string; source: string; date: string; time: string; party: number; name: string } | null>(null)
+  const [linked, setLinked] = useState<{ number: string; source: string; date: string; time: string; party: number; name: string; activity?: Activity } | null>(null)
   const autoRead = useRef(false)
   const [note, setNote] = useState<string | null>(null)
 
@@ -76,7 +86,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   const [linkNote, setLinkNote] = useState<string | null>(null)
   const [linkConfs, setLinkConfs] = useState<Array<{ text: string | null; counted: boolean; note: string | null }>>([])
 
-  type Linked = { number: string; source: string; date: string; time: string; party: number; name: string }
+  type Linked = { number: string; source: string; date: string; time: string; party: number; name: string; activity?: Activity }
 
   async function doFind() {
     setFinding('finding'); setFound([]); setFindNote(null)
@@ -118,7 +128,8 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
     const query = { name: u.get('lookup') ?? '', city: u.get('city') ?? '', country: (u.get('country') ?? '').toUpperCase(), website: '' }
     const party = Number(u.get('party'))
     const link: Linked = { number: u.get('number') ?? '', source: (u.get('number_source') ?? '').toLowerCase(), date: u.get('date') ?? '',
-      time: u.get('time') ?? '', party: Number.isInteger(party) && party >= 1 && party <= 20 ? party : 2, name: u.get('name') ?? defaults.name }
+      time: u.get('time') ?? '', party: Number.isInteger(party) && party >= 1 && party <= 20 ? party : 2, name: u.get('name') ?? defaults.name,
+      activity: activityFrom(u) }
     ;(async () => {
       await Promise.resolve()
       setQ(query); setLinked(link)
@@ -255,7 +266,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
           {phoneFact === null
             ? <p className="text-xs opacity-70">Waiting for: a number to be chosen.</p>
             : <PhoneCall key={phoneFact} defaults={{ name: linked?.name || defaults.name, phone: '' }} readId={read.read_id} venueLabel={read.venue} factIndex={phoneFact}
-                initial={linked ? { date: linked.date, time: linked.time, party: linked.party } : undefined} />}
+                initial={linked ? { date: linked.date, time: linked.time, party: linked.party } : undefined} activity={linked?.activity} />}
         </div>
       )}
 

@@ -179,10 +179,9 @@ def instructions(lang: C.Lang, o: Mapping[str, Any], first: str, check: str) -> 
         never = "Never agree to a different date, a different time or a different number of people. "
     else:
         place, what = "a venue", o["what"]["activity"]
-        dur = o["when"].get("duration_min")
-        booking = (f"{o['what']['activity']} ({o['what']['activity_venue_lang']}), {o['how_many']['count']} {o['how_many']['unit']}, "
-                   f"{on.isoformat()} at {at.strftime('%H:%M')} (venue's local time)" + (f", {dur} minutes" if dur else "")
-                   + f", under the name {name}. ")
+        # the opener above and the recap below already state all of it, word for word: repeated here it only costs
+        # Bland's 2,000 characters
+        booking = f"{on.isoformat()} at {at.strftime('%H:%M')} venue time, under the name {name}. "
         never = "Never agree to a different date, time, number, service or length. "
     return (
         f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning {place} to book {what} on behalf of a guest. Speak {lang.label} only. "
@@ -226,6 +225,10 @@ def call_brief(o: Mapping[str, Any], venue: C.CallVenue, today: date, number: st
         "phone": (o["who"].get("contact") or {}).get("mobile_e164"),
         "from": C.sasha_number(), "number_source": venue.source, "venue_name": venue.name,
         "venue_ids": list(venue.venue_ids) if venue.venue_ids else None,
+        # S-64 · not a table: what the venue's words are checked against (heard.py), and what a cancellation cancels
+        **({} if is_table(o) else {"activity": o["what"]["activity"], "activity_venue_lang": o["what"]["activity_venue_lang"],
+                                    "category": o["what"]["category"], "unit": o["how_many"]["unit"], "mode": "at",
+                                    **({"duration_min": o["when"]["duration_min"]} if o["when"].get("duration_min") else {})}),
     }
 
 
@@ -442,5 +445,79 @@ def call_for(o: Mapping[str, Any], venue: C.CallVenue, now: datetime, number: st
         lines = ask_read_back(lang, o, venue.name, number, venue.source, today)
     else:
         raise RS.ReservationRefused("flow_not_built", "a cancellation is prepared from the booking call itself (S-47)")
+    return {"brief": brief, "brief_sha256": C._sha256hex(C._canonical(brief)),
+            "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)), "local_timezone": venue.timezone}
+
+
+# ── S-64 · cancelling a booking made from the object (S-47's pattern, the activity instead of "a table") ────────────
+
+_CANCEL_SWAP = {  # the table phrase in each language's cancel opening → the activity
+    "en": ("cancel their table", "cancel the booking of {activity}"),
+    "es": ("de una mesa", "de {activity}"),
+    "pt": ("de uma mesa", "de {activity}"),
+    "fr": ("d'une table", "{de} {activity}"),
+    "de": ("eines Tisches", "für {activity}"),
+    "it": ("di un tavolo", "di {activity}"),
+}
+
+
+def cancel_opening(lang: C.Lang, o: Mapping[str, Any], today: date) -> str:
+    code = _code(lang)
+    old, new = _CANCEL_SWAP[code]
+    act = activity_phrase(lang, o)
+    de = "d'" if code == "fr" and act[:1].lower() in "aeiouhéè" else "de"
+    template = lang.cancel_opening.replace(old, new.replace("{activity}", "\x00").replace("{de}", de), 1)
+    when, at = spoken_when(lang, o, today)
+    s = template.replace("\x00", act.replace("{", "{{").replace("}", "}}")).replace("d' ", "d'")
+    s = s.format(party=party_of(lang, o), what=spoken_count(lang, o), when=when, at=at)
+    return " ".join(s.split())
+
+
+def cancel_for(booking_brief: Mapping[str, Any], venue: C.CallVenue, now: datetime, reference: Optional[str]) -> dict:
+    """The cancellation of a booking a call made from the object: brief, read-back and both hashes — everything read
+    from the booking call's own brief, nothing from the request."""
+    from zoneinfo import ZoneInfo
+    b = booking_brief
+    o = RS.validate({"schema": RS.SCHEMA, "flow": "cancel",
+                     "who": {"name": b["name"], "account_id": "cancel", **({"contact": {"mobile_e164": b["phone"]}} if b.get("phone") else {})},
+                     "what": {"activity": b["activity"], "activity_venue_lang": b["activity_venue_lang"], "category": b.get("category") or "other"},
+                     "where": {"venue_name": venue.name, "timezone": venue.timezone, "venue_ids": list(venue.venue_ids or ())},
+                     "when": {"mode": "at", "at": f"{b['date']}T{b['time']}", **({"duration_min": b["duration_min"]} if b.get("duration_min") else {})},
+                     "how_many": {"count": b["party"], "unit": b.get("unit") or "people"}})
+    lang = C.LANGUAGES[venue.language]
+    today = now.astimezone(ZoneInfo(venue.timezone)).date()
+    first = cancel_opening(lang, o, today)
+    check = C.check_sentence(lang, C.CallParticulars(on=today, at=time(12), party=1, name=b["name"], phone=None))
+    held = f'It is held under "{reference}". ' if reference else ""
+    task = (
+        f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning a venue to CANCEL an existing booking on behalf of a guest. Speak {lang.label} only. "
+        f"You already said: \"{first}\" "
+        f"The booking to cancel: {b['activity']} ({b['activity_venue_lang']}), {b['party']} {b.get('unit') or 'people'}, {b['date']} at {b['time']} (venue's local time), under the name {b['name']}. {held}"
+        "If they ask whether you are a person or a machine: you are an AI concierge. Never claim to be the guest or a human. "
+        "RULES YOU MUST NEVER BREAK: "
+        "Never agree to a cancellation fee, a charge, or to give a card. You have no card and no payment details. "
+        f"If they ask for ANY payment, say exactly: \"{check}\" — then thank them and end the call. "
+        "Do not move the booking to another day or time; only cancel it. Do not give any email address or personal detail. "
+        "If they confirm it is cancelled, repeat it back once (what, the day, the time, the name), thank them, and end the call. "
+        "If they cannot find the booking, or say to call back, thank them and end the call. "
+        f"If they ask not to be contacted again, say exactly \"{C._ack(lang)}\" and end the call. "
+        "Keep it short and polite. Do not leave a voicemail."
+    )
+    number = b["number"]
+    brief = {"purpose": "cancel", "timezone": venue.timezone, "reference": reference, "venue_key": venue.key, "number": number,
+             "language": lang.code, "recap": None, "first_sentence": first, "task": task, "check_sentence": check,
+             "party": b["party"], "date": b["date"], "time": b["time"], "name": b["name"], "phone": b.get("phone"),
+             "from": C.sasha_number(), "number_source": venue.source, "venue_name": venue.name,
+             "venue_ids": list(venue.venue_ids) if venue.venue_ids else None,
+             "activity": b["activity"], "activity_venue_lang": b["activity_venue_lang"], "unit": b.get("unit") or "people"}
+    en = C.LANGUAGES["en"]
+    oe = {**o, "what": {**o["what"], "activity_venue_lang": o["what"]["activity"]}}
+    lines = [
+        f"I'll phone {venue.name}, {number}" + (f" — the number on {venue.source}." if venue.source else "."),
+        f"I'll say: \"{first}\"" + ("" if lang.code == "en" else f" (in {lang.label}: {cancel_opening(en, oe, today)})"),
+        f"This cancels your {b['activity']} for {b['party']} on {b['date']} at {b['time']}, under {b['name']}" + (f', held under "{reference}".' if reference else "."),
+        "I won't agree to a cancellation fee or give a card. I'll tell them I need to check with you.",
+        "I'll tell you exactly what they said. Shall I call them now?",
+    ]
     return {"brief": brief, "brief_sha256": C._sha256hex(C._canonical(brief)),
             "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)), "local_timezone": venue.timezone}

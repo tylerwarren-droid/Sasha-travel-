@@ -69,6 +69,48 @@ def _window(t: str, day: Optional[str]) -> Optional[dict]:
     return {"earliest": f"{day}T{a}", "latest": f"{day}T{b}"}
 
 
+_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+_UNDER = re.compile(r"\b(?:under(?: the name(?: of)?)?|in the name of|name(?:d)?:?)\s+([A-ZÀ-Þ][\w'’.-]{1,40}(?:\s+[A-ZÀ-Þ][\w'’.-]{1,40}){0,2})")
+
+
+def plain_day(message: str, now: Optional[datetime] = None) -> Optional[str]:
+    """Sasha 86 · the day the message states: a plain date (handoff.plain_date), else today/tonight, else a weekday —
+    the next one, today included, exactly as the cards' "open then" reads it (handoff.plain_open_at). "Saturday" said
+    on Thursday 1 Oct 2026 is Saturday 3 Oct. Nothing else is guessed."""
+    day = HO.plain_date(message, now)
+    if day:
+        return day
+    t = (message or "").lower()
+    today = HO._today(now)
+    if re.search(r"\b(today|tonight|this evening)\b", t):
+        return today.isoformat()
+    m = re.search(r"\b(" + "|".join(_WEEKDAYS) + r")\b", t)
+    if m:
+        from datetime import timedelta
+        return (today + timedelta(days=(_WEEKDAYS.index(m[1]) - today.weekday()) % 7)).isoformat()
+    return None
+
+
+def plain_name(message: str) -> Optional[str]:
+    """Sasha 86 · the name a booking is under, when the message says so plainly ("under Warren"); else None."""
+    m = _UNDER.search(message or "")
+    return m[1].strip() if m else None
+
+
+def in_venue_language(what: Mapping[str, Any], lang: str) -> Dict[str, Any]:
+    """Sasha 86 · the activity as it is SAID AT THE VENUE: a word from the list in another language ("a table" for a
+    Spanish venue) becomes the venue's ("una mesa"). A wording the guest typed that is not on the list is kept as typed."""
+    out = dict(what)
+    code = (lang or "en").split("-")[0].lower()
+    said = str(out.get("activity_venue_lang") or "").strip()
+    for _rx, en, _cat, _unit, _flow, words in ACTIVITIES:
+        if out.get("activity") == en or said in words.values():
+            if code in words and (not said or said in words.values()):
+                out["activity_venue_lang"] = words[code]
+            break
+    return out
+
+
 def draft(message: str, now: Optional[datetime] = None, lang: str = "en") -> Dict[str, Any]:
     """{parts: what the message states, missing: [...], question: the ONE thing to ask next, or None}."""
     t = (message or "").lower()
@@ -78,7 +120,7 @@ def draft(message: str, now: Optional[datetime] = None, lang: str = "en") -> Dic
         _, en, category, unit, flow, words = act
         parts["what"] = {"activity": en, "activity_venue_lang": words.get(lang.split("-")[0], words["en"]), "category": category}
         parts["flow"] = "quote_first" if (flow == "quote_first" or _QUOTE.search(t)) else "book"
-    day = HO.plain_date(message, now)
+    day = plain_day(message, now)
     hhmm = _time(t)
     win = _window(t, day)
     if _ASK_SPACE.search(t) or (parts.get("flow") == "quote_first" and not (day and hhmm)):
@@ -103,6 +145,9 @@ def draft(message: str, now: Optional[datetime] = None, lang: str = "en") -> Dic
             m_act = re.search(act[0], t)
             if m_act and re.search(r"\b(a|an|one)\s+(?:[\w-]+\s+){0,3}$", t[:m_act.start()]):
                 parts["how_many"] = {"count": 1, "unit": unit}           # "a fine-line tattoo" says one
+    name = plain_name(message)
+    if name:
+        parts["who"] = {"name": name}
     missing = [k for k, ok in (("activity", "what" in parts), ("when", "when" in parts), ("count", "how_many" in parts)) if not ok]
     question = None
     if missing:

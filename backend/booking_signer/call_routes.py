@@ -22,12 +22,13 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping, Optional
+from typing import Any, List, Mapping, Optional, Tuple
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from . import calls as C
+from . import chat_request as CR
 from . import hours as H
 from . import places_terms as PT
 from . import followup as FU
@@ -234,12 +235,14 @@ async def prepare(request: Request):
     if len(built["brief"]["task"]) > 2000:   # Bland's limit; a truncated brief would drop a rule
         return _refuse(422, "brief_too_long", "the call's instructions exceed Bland's 2,000 characters")
     try:
-        built = _with_hours(built, await _read_of(account, built["brief"]), venue.timezone, now)
+        read = await _read_of(account, built["brief"])
+        built = _with_hours(built, read, venue.timezone, now)
         request_o = RS.try_from_particulars(p, account_id=account, venue_name=venue.name, timezone=venue.timezone,
                                             lang=built["brief"]["language"], venue_ids=venue.venue_ids or (),
                                             read_id=str(body["read_id"]) if body.get("read_id") else None)
         built = await _own_contact(account, built, venue, request_o)   # Sasha 74 · her email; the follow-up, said before the yes
         built = PT.seal_call(built, venue)   # Sasha 64 · a listing number: dialled, never stored or shown
+        built, shown = _named(built, read, venue.name)   # Sasha 86 · the chosen place's name: shown and hashed, not stored
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
     except PT.ListingUnavailable as e:
@@ -263,7 +266,7 @@ async def prepare(request: Request):
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
     return {"call_id": row["call_id"], "trip_item_id": item,
-            "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
+            "read_back": {"lines": shown, "sha256": row["read_back_sha256"]}}
 
 
 async def _read_of(account: str, brief: Mapping[str, Any]) -> Optional[dict]:
@@ -297,6 +300,24 @@ def _with_hours(built: dict, read: Optional[dict], timezone: str, now) -> dict:
     return {**built, "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines))}
 
 
+#: what a read-back line keeps in place of the listing's name when it is STORED (Sasha 64 · the name is shown, never kept)
+LISTING_NAME_STORED = "⟨the place you chose, by its Google Maps name — shown at the read-back, not stored⟩"
+
+
+def _named(built: dict, read: Optional[dict], stored_name: str) -> Tuple[dict, List[str]]:
+    """Sasha 86 · the read-back names the place the guest CHOSE by its listing's name, re-read now (hydrate_read) —
+    never the words they searched with ("dinner for 2 in Chamberí"). The guest sees and approves those words: the hash
+    covers them. What is stored keeps a marker where the name was (Sasha 64), as a listing number is kept as its hash.
+    → (the built call to store, the lines to show)."""
+    name = (((read or {}).get("listing") or {}).get("name") or "").strip()
+    lines = list(built["read_back_lines"])
+    if not name or name == stored_name or not stored_name:
+        return built, lines
+    shown = [ln.replace(stored_name, name) for ln in lines]
+    kept = [ln.replace(stored_name, LISTING_NAME_STORED) for ln in lines]
+    return {**built, "read_back_lines": kept, "read_back_sha256": C._sha256hex("\n".join(shown))}, shown
+
+
 async def _cancel_from_object(account: str, booking: dict, b: dict, venue: C.CallVenue):
     refused = await ladder_routes._optin_refusal(venue.venue_ids, "phone")
     if refused:
@@ -308,6 +329,10 @@ async def _cancel_from_object(account: str, booking: dict, b: dict, venue: C.Cal
         return _refuse(422, getattr(e, "rule", "cancel_invalid"), str(e))
     built["brief"]["cancels_call_id"] = booking["call_id"]
     built = PT.seal_call(built, venue)
+    try:
+        built, shown = _named(built, await _read_of(account, built["brief"]), venue.name)   # Sasha 86 · as the booking named it
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
     row = {"call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "dialled_number": built["dialled_number"],
            "language": b["language"], "guest_name": b["name"], "guest_phone": b.get("phone"), "brief": built["brief"],
            "brief_sha256": built["brief_sha256"], "read_back_lines": built["read_back_lines"],
@@ -317,7 +342,7 @@ async def _cancel_from_object(account: str, booking: dict, b: dict, venue: C.Cal
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
     return {"call_id": row["call_id"], "trip_item_id": item, "purpose": "cancel",
-            "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
+            "read_back": {"lines": shown, "sha256": row["read_back_sha256"]}}
 
 
 async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now):
@@ -330,7 +355,7 @@ async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now
     if extra:
         return _refuse(422, "call_malformed", f"a call from a reservation takes only the object and the read; not {sorted(extra)}")
     obj = body["reservation"] if isinstance(body["reservation"], dict) else {}
-    obj = {**obj, "who": {**(obj.get("who") or {}), "account_id": account},
+    obj = {**obj, **({"what": CR.in_venue_language(obj["what"], venue.language)} if isinstance(obj.get("what"), dict) else {}), "who": {**(obj.get("who") or {}), "account_id": account},
            "where": {**(obj.get("where") or {}), "read_id": str(body["read_id"]), "venue_ids": list(venue.venue_ids or ()),
                      "venue_name": venue.name, "timezone": venue.timezone}}
     try:
@@ -340,14 +365,16 @@ async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now
         return _refuse(422, e.rule, str(e).split(": ", 1)[-1])
     except C.CallRefused as e:
         return _refuse(422, e.rule, str(e))
-    if built["brief"]["purpose"] == "book":
-        try:
-            built = _with_hours(built, await _read_of(account, built["brief"]), venue.timezone, now)
-        except StorageUnavailable as e:
-            return _refuse(503, e.rule, e.detail)
+    try:
+        read = await _read_of(account, built["brief"])
+        if built["brief"]["purpose"] == "book":
+            built = _with_hours(built, read, venue.timezone, now)
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
     try:
         built = await _own_contact(account, built, venue, o)   # Sasha 74 · her email; the follow-up, said before the yes
         built = PT.seal_call(built, venue)   # Sasha 64 · a listing number: dialled, never stored or shown
+        built, shown = _named(built, read, venue.name)   # Sasha 86 · the chosen place's name: shown and hashed, not stored
     except PT.ListingUnavailable as e:
         return _refuse(422, e.rule, str(e))
     except StorageUnavailable as e:
@@ -372,7 +399,7 @@ async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
     return {"call_id": row["call_id"], "trip_item_id": item, "purpose": built["brief"]["purpose"],
-            "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
+            "read_back": {"lines": shown, "sha256": row["read_back_sha256"]}}
 
 
 _LANG_BY_CODE = {lang.code: key for key, lang in C.LANGUAGES.items()}
@@ -430,6 +457,10 @@ async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
         return _refuse(422, "brief_too_long", "the call's instructions exceed Bland's 2,000 characters")
     built["brief"]["cancels_call_id"] = booking_call_id
     built = PT.seal_call(built, venue)
+    try:
+        built, shown = _named(built, await _read_of(account, built["brief"]), venue.name)   # Sasha 86 · as the booking named it
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
     row = {"request": RS.try_from_particulars(p, account_id=account, venue_name=venue.name, timezone=venue.timezone,
                                               lang=b["language"], venue_ids=venue.venue_ids or (), flow="cancel"),
            "call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "dialled_number": built["dialled_number"],
@@ -441,7 +472,7 @@ async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
     return {"call_id": row["call_id"], "trip_item_id": item, "purpose": "cancel",
-            "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
+            "read_back": {"lines": shown, "sha256": row["read_back_sha256"]}}
 
 
 @router.post("/{call_id}/place")

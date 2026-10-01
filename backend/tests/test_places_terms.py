@@ -77,7 +77,8 @@ class PlacesTerms(unittest.TestCase):
         prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING})
         self.assertEqual(prep.status_code, 200, prep.text)
         lines = prep.json()["read_back"]["lines"]
-        self.assertEqual(lines[0], "I'll phone tattoo studio in Madrid on the number its Google Maps listing gives.")
+        # Sasha 86 · the chosen place is named by its listing's name, re-read now — shown and hashed, never stored
+        self.assertEqual(lines[0], f"I'll phone {NAME} on the number its Google Maps listing gives.")
         call = self.calls.calls[prep.json()["call_id"]]
         self.assert_no_listing_content({k: call[k] for k in ("brief", "read_back_lines", "dialled_number")}, "the call")
         self.assertEqual(call["dialled_number"], PT.number_key(NUMBER))
@@ -112,7 +113,7 @@ class PlacesTerms(unittest.TestCase):
         cancel = self.calls.calls[c.json()["call_id"]]
         self.assert_no_listing_content({k: cancel[k] for k in ("brief", "read_back_lines", "dialled_number")}, "the cancel call")
         self.assertEqual((cancel["dialled_number"], cancel["brief"]["number_ref"]["place_id"]), (PT.number_key(NUMBER), PID))
-        self.assertEqual(c.json()["read_back"]["lines"][0], "I'll phone tattoo studio in Madrid on the number its Google Maps listing gives.")
+        self.assertEqual(c.json()["read_back"]["lines"][0], f"I'll phone {NAME} on the number its Google Maps listing gives.")
 
     def test_the_venues_own_number_is_preferred_and_kept(self):
         self.web.listing = listing(website="https://www.lacontra.test/")           # its own site lists +34915001122
@@ -120,7 +121,7 @@ class PlacesTerms(unittest.TestCase):
         prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
         call = self.calls.calls[prep["call_id"]]
         self.assertEqual((call["dialled_number"], call["brief"]["number_source_kind"]), ("+34915001122", "site"))
-        self.assertEqual(prep["read_back"]["lines"][0], "I'll phone tattoo studio in Madrid, +34915001122 — the number on their website, lacontra.test.")
+        self.assertEqual(prep["read_back"]["lines"][0], f"I'll phone {NAME}, +34915001122 — the number on their website, lacontra.test.")
 
     def test_stored_name_rules(self):
         from booking_signer.venue_read import Fact, stored_name

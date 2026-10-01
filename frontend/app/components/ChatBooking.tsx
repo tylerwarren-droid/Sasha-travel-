@@ -87,7 +87,9 @@ export default function ChatBooking({ find }: { find: Find }) {
       }
     })()
     return () => { off = true }
-  }, [find.what, find.where, find.country, find.near, find.open_at, find.priority])
+  // Sasha 86 · every booking message starts afresh — a new `find` object, even for the same words, drops the last pick,
+  // its read and its details card, so nothing from an earlier request (another day, another count) is carried over
+  }, [find])
 
   function sortBy(chip: string) {
     const s = stateRef.current
@@ -227,8 +229,8 @@ export default function ChatBooking({ find }: { find: Find }) {
           </ul>
           {(() => {
             const ph = state.read.rungs.find((r) => r.rung === 'phone' && r.available)
-            return ph ? <ChatBookingCall readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
-              venue={state.pick.name ?? state.read.venue} draft={(find.draft ?? null) as never} whatText={find.what} /> : null
+            return ph ? <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
+              venue={state.pick.name ?? state.read.venue} draft={(find.draft ?? null) as never} whatText={find.what} openAt={find.open_at ?? null} /> : null
           })()}
           {lookup && <a href={`/booking-helper?book=phone&lookup=${encodeURIComponent(lookup.name ?? '')}&city=${encodeURIComponent(find.where)}&country=${encodeURIComponent(lookup.country ?? find.country ?? '')}`}
             target="_blank" rel="noopener noreferrer">Book it on the booking page ↗</a>}

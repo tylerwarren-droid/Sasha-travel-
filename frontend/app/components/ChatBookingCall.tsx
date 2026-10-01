@@ -15,7 +15,7 @@ import { setPendingYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 
 type Draft = { parts?: { what?: { activity: string; activity_venue_lang: string; category: string }; when?: { mode: string; at?: string };
-  how_many?: { count: number; unit: string }; flow?: string } } | null
+  how_many?: { count: number; unit: string }; flow?: string; who?: { name: string } } } | null
 type Details = { activity: string; venueLang: string; category: string; date: string; time: string; ask: boolean; count: number;
   unit: string; duration: string; name: string; mobile: string }
 type View = { call_id: string; status: string; outcome?: string | null; venue_words?: string | null; say?: string | null; read_by?: string | null }
@@ -26,14 +26,18 @@ type Phase =
 
 const SLEEP = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-export default function ChatBookingCall({ readId, country, phone, venue, draft, whatText }: {
-  readId: string; country: string | null; phone: Rung; venue: string; draft: Draft; whatText: string }) {
+export default function ChatBookingCall({ readId, country, phone, venue, draft, whatText, openAt }: {
+  readId: string; country: string | null; phone: Rung; venue: string; draft: Draft; whatText: string; openAt?: string | null }) {
+  // Sasha 86 · pre-filled from THIS message only (its draft, else the day and time its cards were filtered by) — every
+  // field visible and editable; nothing carried from an earlier request
   const parts = draft?.parts ?? {}
-  const at = parts.when?.mode === 'at' && parts.when.at ? parts.when.at.split('T') : ['', '']
+  const at = parts.when?.mode === 'at' && parts.when.at ? parts.when.at.split('T')
+    : openAt && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(openAt) ? openAt.split('T') : ['', '']
   const [d, setD] = useState<Details>({
     activity: parts.what?.activity ?? whatText, venueLang: parts.what?.activity_venue_lang ?? '', category: parts.what?.category ?? 'other',
     date: at[0], time: at[1], ask: parts.when?.mode === 'venue_proposes', count: parts.how_many?.count ?? 1, unit: parts.how_many?.unit ?? 'people',
-    duration: '', name: '', mobile: '' })
+    duration: '', name: parts.who?.name ?? '', mobile: '' })
+  const [langEdited, setLangEdited] = useState(false)
   const [phase, setPhase] = useState<Phase>({ p: 'details' })
   // S-62 step 5 · saved details: used if there are some; saved only with the consent sentence shown; deleted on request
   const [saved, setSaved] = useState<{ contact: Contact | null; consent: Consent } | { why: string } | null>(null)
@@ -71,9 +75,11 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
     let off = false
     bookingReq('/api/booking/draft', { text: whatText, country: country ?? undefined }).then((r) => {
       const w = (r.json.parts as { what?: { activity: string; activity_venue_lang: string; category: string } } | undefined)?.what
-      if (!off && w) setD((x) => ({ ...x, activity: x.activity || w.activity, venueLang: x.venueLang || w.activity_venue_lang, category: w.category }))
+      // Sasha 86 · the venue's language wins over the chat's English draft ("a table" → "una mesa"), unless the guest typed one
+      if (!off && w) setD((x) => ({ ...x, activity: x.activity || w.activity, venueLang: langEdited ? x.venueLang : (w.activity_venue_lang || x.venueLang), category: w.category }))
     }).catch(() => { /* the field stays for the guest to fill */ })
     return () => { off = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once per venue country; a later edit is the guest's
   }, [whatText, country])
 
   async function prepare() {
@@ -136,7 +142,8 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
   }, [phase.p === 'readback' ? phase.callId : null])
 
   const run = (f: () => Promise<void>) => () => { f().catch((e) => setPhase({ p: 'refused', words: (e as Error).message })) }
-  const input = { width: '100%', padding: '4px 6px', border: '1px solid rgba(0,0,0,.2)', borderRadius: 6 } as const
+  // Sasha 86 · explicit ink and paper: inside the dark chat an input inherited white text on its white box (invisible)
+  const input = { width: '100%', padding: '4px 6px', border: '1px solid rgba(0,0,0,.25)', borderRadius: 6, color: '#111', background: '#fff', colorScheme: 'light' } as const
   const needs = [
     d.activity.trim().length < 2 && 'what to book', d.venueLang.trim().length < 2 && `how to say it there`,
     !d.ask && !d.date && 'a day', !d.ask && !d.time && 'a time', !(d.count >= 1) && 'how many', d.name.trim().length < 2 && 'your name',
@@ -147,7 +154,7 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
       {(phase.p === 'details' || phase.p === 'preparing' || phase.p === 'refused') && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 13 }}>
           <label>What (your words)<input style={input} value={d.activity} onChange={(e) => setD({ ...d, activity: e.target.value })} /></label>
-          <label>As Sasha will say it there<input style={input} value={d.venueLang} onChange={(e) => setD({ ...d, venueLang: e.target.value })} /></label>
+          <label>As Sasha will say it there<input style={input} value={d.venueLang} onChange={(e) => { setLangEdited(true); setD({ ...d, venueLang: e.target.value }) }} /></label>
           <label style={{ gridColumn: '1 / -1' }}><input type="checkbox" checked={d.ask} onChange={(e) => setD({ ...d, ask: e.target.checked })} /> No set time — ask them when they have space</label>
           {!d.ask && <label>Day<input style={input} type="date" value={d.date} onChange={(e) => setD({ ...d, date: e.target.value })} /></label>}
           {!d.ask && <label>Time<input style={input} type="time" value={d.time} onChange={(e) => setD({ ...d, time: e.target.value })} /></label>}

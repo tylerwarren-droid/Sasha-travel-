@@ -152,7 +152,10 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
     m = _FIND.search(message or "")
     if not m:
         return None
-    what = " ".join(m["what"].split())
+    # Sasha 86 · "dinner for 2" is dinner, for two: the count belongs to the booking, not to what is searched for (or to
+    # the name a picked place falls back to)
+    what = re.sub(rf"\s+(?:for|party of)\s+(?:\d{{1,2}}|{'|'.join(_NUMBERS)})(?:\s+(?:people|persons|guests|of us))?$", "",
+                  " ".join(m["what"].split()), flags=re.I)
     raw = m["where"]
     # S-68 step 3 · "… in Madrid near Hotel Urban" / "near my hotel": what the distance is measured from, as said
     nm = re.search(r"[\s,]+(?:near|close to)\s+(?P<near>[^?.!;]{2,120})$", raw, re.I)

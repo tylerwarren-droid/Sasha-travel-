@@ -16,8 +16,19 @@ NOW = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
 class Hooks(unittest.TestCase):
     def test_both_hooks_are_in_the_conductor_in_order(self):
         h = routes.chat_hooks()
-        self.assertEqual(h, {"psi_handoff": True, "booking_drafts": True, "in_order": True},
+        self.assertEqual(h, {"psi_handoff": True, "booking_drafts": True, "response_fields": True, "in_order": True},
                          "a Stage B conductor hook is missing — re-apply it (CLAUDE.md, Stage B) and redeploy")
+
+
+class TheResponseCarriesIt(unittest.TestCase):
+    def test_the_http_response_carries_booking_find(self):
+        """1 Oct: the conductor returned booking_find, and the HTTP model dropped it — the chat never saw it."""
+        from fastapi.testclient import TestClient
+        from app.main import app
+        r = TestClient(app).post("/api/agents/conductor", json={"message": "find me a tattoo studio in Nairobi, KE"})
+        if r.status_code == 401:
+            self.skipTest("CONDUCTOR_API_SECRET is set here; the model check above still holds")
+        self.assertEqual(r.json().get("booking_find"), {"what": "tattoo studio", "where": "Nairobi", "country": "KE"}, r.text[:300])
 
 
 class Turn(unittest.TestCase):

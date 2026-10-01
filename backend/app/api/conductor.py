@@ -97,6 +97,8 @@ class ConductorResponse(BaseModel):
     # The saved card Sasha offers / charges on a booking turn (action confirm_card or
     # pay_saved_card): {"last4": "1003", "method": "saved_card"}.
     saved_card: Optional[dict] = None
+    booking_find: Optional[dict] = None  # S-66 chat booking (Stage B)
+    reservation_draft: Optional[dict] = None  # S-66 chat booking (Stage B)
     conversation_history: list
 
 
@@ -142,6 +144,8 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             itinerary_id=result.get("itinerary_id"),
             payment_item=result.get("payment_item"),
             saved_card=result.get("saved_card"),
+            booking_find=result.get("booking_find"),  # S-66 chat booking (Stage B)
+            reservation_draft=result.get("reservation_draft"),  # S-66 chat booking (Stage B)
             conversation_history=result["messages"],
         )
     except Exception as e:

@@ -196,6 +196,23 @@ reach the booking thread first. It REFUSES, loudly, if any anchor changed:
     PY
     grep -n "S-66 chat booking" frontend/app/components/SashaChat.tsx
 The build refuses if this is skipped: prebuild (scripts/check-outcome-surfaces.mjs) fails when SashaChat lacks it.
+The conductor's HTTP response carries only the fields its model declares, so the chat needs two more (S-66; the
+CTO's backend/app/api/conductor.py, dropped by every zip). Same rules — refuses loudly if an anchor moved:
+    cd ~/Projects/sasha-travel && python3 - <<'PY'
+    import pathlib
+    p = pathlib.Path("backend/app/api/conductor.py"); s = p.read_text()
+    if "S-66 chat booking" not in s:
+        a_model = "    saved_card: Optional[dict] = None\n    conversation_history: list\n"
+        a_call = "            saved_card=result.get(\"saved_card\"),\n"
+        if a_model not in s or a_call not in s:
+            raise SystemExit("⛔ STOP: api/conductor.py's anchors changed in this CTO drop — booking_find was NOT re-applied; the chat cannot book.")
+        s = s.replace(a_model, "    saved_card: Optional[dict] = None\n    booking_find: Optional[dict] = None  # S-66 chat booking (Stage B)\n    reservation_draft: Optional[dict] = None  # S-66 chat booking (Stage B)\n    conversation_history: list\n", 1)
+        s = s.replace(a_call, a_call + "            booking_find=result.get(\"booking_find\"),  # S-66 chat booking (Stage B)\n            reservation_draft=result.get(\"reservation_draft\"),  # S-66 chat booking (Stage B)\n", 1)
+        p.write_text(s); print("conductor response fields re-applied")
+    else: print("conductor response fields already present")
+    PY
+    grep -n "S-66 chat booking" backend/app/api/conductor.py
+backend/tests/test_stage_b_hooks.py fails, and /api/booking/health shows chat_hooks.response_fields false, if this is skipped.
 
 Booking mount re-apply command (S-17):
     cd ~/Projects/sasha-travel && python3 - <<'PY'

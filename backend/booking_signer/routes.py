@@ -155,8 +155,14 @@ def chat_hooks() -> dict:
     except OSError:
         return {k: False for k in CHAT_HOOKS} | {"error": "app/services/conductor.py could not be read"}
     out = {k: marker in src for k, marker in CHAT_HOOKS.items()}
+    # S-66 · the response model must carry booking_find, or the chat never sees it (1 Oct: the cards never mounted)
+    try:
+        api = (pathlib.Path(__file__).resolve().parents[1] / "app" / "api" / "conductor.py").read_text(encoding="utf-8")
+        out["response_fields"] = "booking_find: Optional[dict]" in api and 'booking_find=result.get("booking_find")' in api
+    except OSError:
+        out["response_fields"] = False
     # the drafts must run AFTER the Psi hand-off: Psi keeps its own link
-    out["in_order"] = all(out.values()) and src.index(CHAT_HOOKS["psi_handoff"]) < src.index(CHAT_HOOKS["booking_drafts"])
+    out["in_order"] = out["psi_handoff"] and out["booking_drafts"] and src.index(CHAT_HOOKS["psi_handoff"]) < src.index(CHAT_HOOKS["booking_drafts"])
     return out
 
 

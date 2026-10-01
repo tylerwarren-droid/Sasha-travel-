@@ -1815,6 +1815,11 @@ async def conduct(
     _handoff = booking_handoff(user_message, conversation_history)
     if _handoff is not None:
         return _handoff
+    # S-64 booking drafts: backend/booking_signer/chat_request.py. CTO zips drop this; Stage B re-applies it.
+    from booking_signer.chat_request import booking_turn  # noqa: E402
+    _draft_turn = booking_turn(user_message, conversation_history)
+    if _draft_turn is not None:
+        return _draft_turn
 
     # ── Card choice (second half of a booking) ─────────────────────────────────────────
     # Sasha's previous line was the saved-card question. Read this reply as the answer and

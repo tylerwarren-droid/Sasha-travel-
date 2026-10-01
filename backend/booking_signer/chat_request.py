@@ -96,7 +96,7 @@ def draft(message: str, now: Optional[datetime] = None, lang: str = "en") -> Dic
         if m:
             parts["how_many"] = {"count": _n(m[1]), "unit": u}
     if "how_many" not in parts:
-        p = HO.plain_party(message)
+        p = HO.plain_party(message) or (1 if re.search(r"\b(just me|only me|on my own|1 person|one person)\b", t) else None)
         if p:
             parts["how_many"] = {"count": p, "unit": "people"}
         elif unit and unit != "people":
@@ -123,3 +123,54 @@ def complete(d: Mapping[str, Any], *, who: Mapping[str, Any], where: Mapping[str
     obj = {"schema": RS.SCHEMA, "flow": p["flow"], "who": dict(who), "where": dict(where), "what": p["what"],
            "when": p["when"], "how_many": p["how_many"], **({"extras": {"notes": notes}} if notes else {})}
     return RS.validate(obj)
+
+
+# ── the chat turn (conductor hook, Stage B) ──────────────────────────────────────────────────────────────────────────
+
+_BOOK = re.compile(r"\b(book|booking|reserve|reservation|appointment)\b", re.I)
+
+
+def _thread(message: str, history: List[Mapping[str, Any]]) -> Optional[str]:
+    """The booking request this message belongs to: if Sasha's last line was one of the draft's questions, the guest's
+    lines since the request that started it, joined; else this message alone, if it is a booking request at all."""
+    asked = set(QUESTIONS.values()) | {QUESTIONS["count"].format(unit=u) for u in ("people", "sessions", "pieces", "places")}
+    last = next((h for h in reversed(history) if h.get("role") == "assistant"), None)
+    if last and any(str(last.get("content") or "").rstrip().endswith(q) for q in asked):
+        users: List[str] = []
+        for h in reversed(history):
+            if h.get("role") == "user":
+                users.insert(0, str(h.get("content") or ""))
+                if _BOOK.search(users[0]):
+                    return " ".join(users + [message])
+        return None
+    return message if _BOOK.search(message or "") and any(re.search(a[0], (message or "").lower()) for a in ACTIVITIES) else None
+
+
+def booking_turn(message: str, history: Optional[List[Mapping[str, Any]]] = None, now: Optional[datetime] = None) -> Optional[dict]:
+    """A full conductor turn for a booking request — ONE question for what is missing, or the complete draft — or None,
+    and the conductor carries on exactly as before. Psi has its own hand-off (handoff.py), which runs first."""
+    history = list(history or [])
+    text = _thread(message, history)
+    if text is None:
+        return None
+    d = draft(text, now)
+    if d["missing"]:
+        response = d["question"]
+    else:
+        p = d["parts"]
+        when = p["when"]
+        said = (p["when"]["at"].replace("T", " at ") if when["mode"] == "at"
+                else f"between {when['window']['earliest'][11:]} and {when['window']['latest'][11:]} on {when['window']['earliest'][:10]}" if when["mode"] == "window"
+                else "whenever they have space")
+        ask = {"quote_first": "ask what it would cost and when they could do it", "availability": "ask when they have space"}.get(p["flow"], "book it")
+        n, unit = p["how_many"]["count"], p["how_many"]["unit"]
+        one = {"people": "person", "sessions": "session", "pieces": "piece", "places": "place"}[unit]
+        response = (f"So: {p['what']['activity']}, {n} {one if n == 1 else unit}, {said}. "
+                    f"Which place? I'll look them up, {ask}, and read it all back to you before anything happens.")
+    return {
+        "response": response, "intents": ["booking"], "photos": [], "tools_used": [], "links": [],
+        "hotels": [], "bookings": [], "itinerary": None, "action": None, "booking_ref": None,
+        "itinerary_id": None, "payment_item": None, "saved_card": None,
+        "messages": history + [{"role": "user", "content": message}, {"role": "assistant", "content": response}],
+        "reservation_draft": d,   # S-64 step 11 · the parts of reservation/1 the conversation states, and what is missing
+    }

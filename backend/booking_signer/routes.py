@@ -138,7 +138,26 @@ async def health():
         "live_issue_enabled": LIVE_ISSUE_ENABLED,
         "calls": call_routes.status(),
         "ladder": ladder_routes.status(),
+        # S-64 · the two Stage B hooks in the CTO's conductor: false means a CTO drop removed one — booking-in-chat is off
+        "chat_hooks": chat_hooks(),
     }
+
+
+#: the lines Stage B re-applies to app/services/conductor.py (CLAUDE.md) — each must be present, or booking-in-chat is off
+CHAT_HOOKS = {"psi_handoff": "from booking_signer.handoff import booking_handoff",
+              "booking_drafts": "from booking_signer.chat_request import booking_turn"}
+
+
+def chat_hooks() -> dict:
+    import pathlib
+    try:
+        src = (pathlib.Path(__file__).resolve().parents[1] / "app" / "services" / "conductor.py").read_text(encoding="utf-8")
+    except OSError:
+        return {k: False for k in CHAT_HOOKS} | {"error": "app/services/conductor.py could not be read"}
+    out = {k: marker in src for k, marker in CHAT_HOOKS.items()}
+    # the drafts must run AFTER the Psi hand-off: Psi keeps its own link
+    out["in_order"] = all(out.values()) and src.index(CHAT_HOOKS["psi_handoff"]) < src.index(CHAT_HOOKS["booking_drafts"])
+    return out
 
 
 # ── pairing (contract §4) ─────────────────────────────────────────────────────────────────────

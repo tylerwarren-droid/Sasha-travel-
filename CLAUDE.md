@@ -70,6 +70,30 @@ loudly, if the anchor line it sits above has changed, rather than silently not a
     PY
     grep -n "booking_signer.handoff" backend/app/services/conductor.py
 
+Booking drafts re-apply command (S-64 step 11) — booking-in-chat for ANY venue: the conductor asks only what is missing
+and returns the reservation/1 draft. Sits directly under the S-26 hand-off, so RUN THE HAND-OFF COMMAND FIRST. It REFUSES,
+loudly, if the hand-off lines it sits under are not there:
+    cd ~/Projects/sasha-travel && python3 - <<'PY'
+    import pathlib
+    p = pathlib.Path("backend/app/services/conductor.py"); s = p.read_text()
+    if "from booking_signer.chat_request import booking_turn" not in s:
+        anchor = ("    _handoff = booking_handoff(user_message, conversation_history)\n"
+                  "    if _handoff is not None:\n"
+                  "        return _handoff\n")
+        block = ("    # S-64 booking drafts: backend/booking_signer/chat_request.py. CTO zips drop this; Stage B re-applies it.\n"
+                 "    from booking_signer.chat_request import booking_turn  # noqa: E402\n"
+                 "    _draft_turn = booking_turn(user_message, conversation_history)\n"
+                 "    if _draft_turn is not None:\n"
+                 "        return _draft_turn\n")
+        if anchor not in s:
+            raise SystemExit("⛔ STOP: the Psi hand-off lines (the anchor) are not in conductor.py — re-apply the S-26 hand-off first; the booking drafts were NOT applied.")
+        s = s.replace(anchor, anchor + block); p.write_text(s); print("booking drafts re-applied")
+    else: print("booking drafts already present")
+    PY
+    grep -n "booking_signer.chat_request" backend/app/services/conductor.py
+The suite refuses if this is skipped: backend/tests/test_stage_b_hooks.py fails, and /api/booking/health reports
+"chat_hooks": {"booking_drafts": false} (Stage E below).
+
 ## Repo-only files that MUST survive every sync
 - app/vietnam2/ — uses LEGACY component copies app/vietnam2/SashaChatLegacy.tsx and app/vietnam2/VoiceButton.tsx (CTO's rewritten SashaChat has an incompatible props interface). vietnam2 needs leaflet + @types/leaflet in package.json.
 - app/kanoe/
@@ -145,7 +169,7 @@ Stage A — tag + sync (write to script to avoid paste mangling):
     bash /tmp/sync.sh
 If deletions > 0, investigate each deleted file before proceeding (check it's not a repo-only file or a still-imported agent). Confirm the new conductor does not IMPORT any deleted agent (grep for 'from app.services.X import'); keyword-only references are safe.
 
-Stage B — re-apply CORS (command above), the booking hand-off (above), the booking mount (below), the reservations insertion (below), then import test.
+Stage B — re-apply CORS (command above), the booking hand-off (above), THEN the booking drafts (above, after the hand-off), the booking mount (below), the reservations insertion (below), then import test.
 
 Booking mount re-apply command (S-17):
     cd ~/Projects/sasha-travel && python3 - <<'PY'
@@ -210,7 +234,8 @@ Expected: backend 200, conductor 422, CORS header echoes project.kanoe.ai, vietn
 JSON with "mounted":true and "matches_pinned":true ("provisioned":true once the booking SQL has been run).
 ⚠ booking printing {"detail":"Not Found"} means the Stage B mount line was lost — re-apply it and redeploy.
     echo -n "hand-off: " && curl -s -o /tmp/ho.json -w "%{http_code} " -X POST https://sasha-travel-production.up.railway.app/api/agents/conductor -H "Content-Type: application/json" -H "Origin: https://project.kanoe.ai" -d '{"message":"book a table at Psi on 5 October at 8pm for 2"}' && (grep -o '/booking-helper?[^"]*' /tmp/ho.json || echo "⛔ HAND-OFF MISSING — the Stage B conductor hook was lost; re-apply it and redeploy")
-Expected: 200 and a /booking-helper?venue=restaurante-psi&date=…&time=20:00&party=2 link. (401 means CONDUCTOR_API_SECRET is
+    echo -n "drafts: " && curl -s https://sasha-travel-production.up.railway.app/api/booking/health | python3 -c "import sys,json; h=json.load(sys.stdin).get('chat_hooks') or {}; print('ok' if h.get('booking_drafts') and h.get('in_order') else '⛔ BOOKING DRAFTS MISSING — the S-64 Stage B conductor hook was lost; re-apply it and redeploy', h)"
+Expected: 200 and a /booking-helper?venue=restaurante-psi&date=…&time=20:00&party=2 link; drafts prints ok. (401 means CONDUCTOR_API_SECRET is
 set: add -H "X-Client-Key: <the frontend's NEXT_PUBLIC_CLIENT_KEY>".)
 
 Rollback if needed: git reset --hard pre-vX-<timestamp> (tag was set in Stage A).

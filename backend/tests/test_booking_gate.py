@@ -42,8 +42,11 @@ class Gate(unittest.TestCase):
             r = self.right.post("/api/booking/calls", json={})
         self.assertEqual((r.status_code, r.json()["detail"]["rule"]), (503, "booking_key_not_configured"))
 
-    def test_the_right_key_passes_the_gate(self):
+    def test_the_right_key_passes_the_gate_but_names_nobody(self):
+        """S-62 step 1 · the key proves the proxy, not a person: without an account, every booking route refuses."""
         r = self.right.post("/api/booking/calls", json={"venue": "nowhere"})
+        self.assertEqual((r.status_code, r.json()["detail"]["rule"]), (401, "account_required"))
+        r = self.right.post("/api/booking/calls", json={"venue": "nowhere"}, headers={"x-sasha-session": "founder"})
         self.assertEqual(r.json()["rule"], "venue_not_callable")   # past the gate, refused by the route itself
 
     def test_health_and_the_signed_webhook_are_exempt(self):

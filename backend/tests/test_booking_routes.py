@@ -69,7 +69,7 @@ class BookingRoutes:
         routes.PINNED_FINGERPRINT = routes.KEY.fingerprint  # the test key stands in for the pinned one
         app = FastAPI()
         app.include_router(routes.router)
-        self.client = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key"})
+        self.client = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key", "x-sasha-session": "founder"})
         self.client.__enter__()
 
     def tearDown(self):
@@ -379,7 +379,7 @@ class WithoutStorageOrAMount(unittest.TestCase):
         try:
             app = FastAPI()
             app.include_router(routes.router)
-            with TestClient(app, headers={"x-sasha-booking-key": "test-booking-key"}) as c:
+            with TestClient(app, headers={"x-sasha-booking-key": "test-booking-key", "x-sasha-session": "founder"}) as c:
                 r = c.post("/api/booking/pairing/challenge", json={})
                 self.assertEqual([r.status_code, r.json()["rule"]], [503, "storage_not_configured"])
                 self.assertEqual(c.get("/api/booking/health").json()["storage"]["configured"], False)

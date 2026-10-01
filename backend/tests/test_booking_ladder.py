@@ -382,7 +382,7 @@ class LadderRoutes:
         S.STOP_STORE = S.MemoryStopStore(self.optins, self.ladder, self.calls) if isinstance(self.ladder, MemoryLadderStore) else None
         app = FastAPI()
         app.include_router(routes.router)
-        self.c = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key"})
+        self.c = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key", "x-sasha-session": "founder"})
         self.c.__enter__()
 
     def tearDown(self):

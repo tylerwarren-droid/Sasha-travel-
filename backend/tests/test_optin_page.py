@@ -77,7 +77,7 @@ class Page:
         O.OPTIN_STORE, P.PAGE_STORE, P.HTTP, P.NOW = self.optins, self.store, self.mail, (lambda: self.now)
         app = FastAPI()
         app.include_router(routes.router)
-        self.c = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key"})
+        self.c = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key", "x-sasha-session": "founder"})
         self.c.__enter__()   # one event loop for the whole test, so a Postgres pool stays on it
 
     def tearDown(self):

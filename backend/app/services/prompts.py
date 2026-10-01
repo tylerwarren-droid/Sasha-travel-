@@ -33,10 +33,10 @@ VOICE_BREVITY = (
     "Keep any options to a brief spoken phrase, not a list."
 )
 
-_HEADERS = {
-    "apikey": SUPABASE_SERVICE_KEY,
-    "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-}
+# S-69 · a legacy JWT key (eyJ…) goes in both headers; a new `sb_secret_…` key ONLY as `apikey` — Supabase refuses it as a
+# Bearer token, so sending it there would fail every read on the new project.
+_HEADERS = {"apikey": SUPABASE_SERVICE_KEY,
+            **({"Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"} if SUPABASE_SERVICE_KEY.startswith("eyJ") else {})}
 
 # ── Static fallback registry ──────────────────────────────────────────────────
 
@@ -121,7 +121,11 @@ async def _do_refresh() -> None:
                 headers=_HEADERS,
                 timeout=5,
             )
-        rows = r.json() if r.status_code == 200 else []
+        if r.status_code != 200:
+            # S-69 · a refused or missing table is SAID, never read as "no prompts" — the static registry still serves
+            logger.warning("prompt_versions read refused: HTTP %s %s — using the static registry", r.status_code, r.text[:200])
+            return
+        rows = r.json()
         for row in rows:
             _cache[row["prompt_name"]] = (row["prompt_text"], now + TTL_SECONDS)
         logger.debug("Loaded %d prompt(s) from REST API", len(rows))

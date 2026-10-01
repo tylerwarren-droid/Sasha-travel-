@@ -27,10 +27,10 @@ TTL_SECONDS = 300
 _domain_cache: dict[str, tuple[Optional["ClientConfig"], float]] = {}
 _key_cache: dict[str, tuple[Optional["ClientConfig"], float]] = {}
 
-_HEADERS = {
-    "apikey": SUPABASE_SERVICE_KEY,
-    "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-}
+# S-69 · a legacy JWT key (eyJ…) goes in both headers; a new `sb_secret_…` key ONLY as `apikey` — Supabase refuses it as a
+# Bearer token, so sending it there would fail every read on the new project.
+_HEADERS = {"apikey": SUPABASE_SERVICE_KEY,
+            **({"Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"} if SUPABASE_SERVICE_KEY.startswith("eyJ") else {})}
 
 
 @dataclass

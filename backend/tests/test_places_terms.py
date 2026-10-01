@@ -128,6 +128,8 @@ class PlacesTerms(unittest.TestCase):
         self.assertEqual(stored_name("Calma", None, [site], None, "Madrid"), "Calma")             # typed: the guest's words
         self.assertEqual(stored_name(NAME, PID, [site], "massage", "Madrid"), "Calma Spa")       # picked: the site's own
         self.assertEqual(stored_name(NAME, PID, [], "massage", "Madrid"), "massage in Madrid")   # else what was asked for
+        seo = Fact("name", "Ink Sweet Tattoo Studio | Mejor estudio de tatuajes en Madrid", "site", "u", "l", "", "", "")
+        self.assertEqual(stored_name(NAME, PID, [seo], None, "Madrid"), "Ink Sweet Tattoo Studio")   # live, 1 Oct
 
 
 if __name__ == "__main__":

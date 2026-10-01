@@ -539,7 +539,7 @@ async def locate(http: Http, key: str, near: str, where: str, country: Optional[
 
 
 async def find_venues(http: Http, *, what: str, where: str, country: Optional[str], now: datetime,
-                      near: Optional[str] = None) -> dict:
+                      near: Optional[str] = None, open_at: Optional[str] = None) -> dict:
     """S-65 · "Find venues": a kind of place in a place ("tattoo studio", "Nairobi, KE") → up to twenty candidates (S-68; the chat shows `show` of them), each
     with what its Google listing says. Search only: nothing is contacted, nothing is read from their sites until one is
     picked, and then it is the existing venue read on THAT listing."""
@@ -555,6 +555,12 @@ async def find_venues(http: Http, *, what: str, where: str, country: Optional[st
         raise FindRefused("places_not_configured", "GOOGLE_PLACES_API_KEY is not set, so there is nothing to search with")
     if near is not None and (not isinstance(near, str) or not 2 <= len(near.strip()) <= 120):
         raise FindRefused("near_invalid", "near is 2–120 characters (a hotel's name, or an address)")
+    when = None
+    if open_at is not None:   # S-68 step 4 · the venue's LOCAL time the guest asked for
+        try:
+            when = datetime.strptime(str(open_at), "%Y-%m-%dT%H:%M")
+        except ValueError:
+            raise FindRefused("open_at_invalid", "open_at is the local time as YYYY-MM-DDTHH:MM") from None
     body = {"textQuery": f"{what.strip()} in {where.strip()}", "maxResultCount": FIND_MAX, **({"regionCode": country} if country else {})}
     try:
         r = await http("POST", PLACES_URL, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": FIND_FIELDS,
@@ -575,6 +581,10 @@ async def find_venues(http: Http, *, what: str, where: str, country: Optional[st
                     "country": c, "phone": (to_e164(raw, c) if raw else None) or raw, "website": pl.get("websiteUri"),
                     "type": (pl.get("primaryTypeDisplayName") or {}).get("text"), "status": pl.get("businessStatus"),
                     "listing_url": f"https://www.google.com/maps/place/?q=place_id:{pl['id']}", **_ranking_facts(pl)})
+    if when is not None:
+        from .hours import from_places_periods, open_at as _open_at
+        for c in out:
+            c["open_at"] = _open_at(from_places_periods(c["hours_periods"]), when)
     origin = await locate(http, key, near, where, country) if near else None
     if origin is not None:   # S-68 step 3 · straight-line distance from the place the guest named
         for c in out:
@@ -583,6 +593,7 @@ async def find_venues(http: Http, *, what: str, where: str, country: Optional[st
             c["distance"] = distance_words(m) if origin["found"] else None
     return {"query": body["textQuery"], "candidates": out, "show": SHOW_MAX,
             **({"near": {k: origin[k] for k in ("asked", "found", "why") if k in origin}} if origin is not None else {}),
+            **({"open_at": when.strftime("%Y-%m-%dT%H:%M")} if when is not None else {}),
             "source": {"url": PLACES_URL, "query": body["textQuery"], "result": f"HTTP 200 — {len(out)} listing(s)",
                        "sha256": sha, "fetched_at": now.isoformat()}}
 
@@ -632,8 +643,9 @@ def stored_name(name: str, place_id: Optional[str], facts: List[Fact], asked_for
     if not place_id:
         return name.strip()
     own = next((f.value for f in facts if f.kind == "name" and f.source_kind == "site"), None)
-    if own:
-        return own
+    if own:   # "Ink Sweet Tattoo Studio | Mejor estudio de tatuajes en Madrid" → its name, not its page title's tail
+        head = re.split(r"\s+[|·–—]\s+", own, maxsplit=1)[0].strip()
+        return head if len(head) >= 2 else own
     if isinstance(asked_for, str) and 2 <= len(asked_for.strip()) <= 60:
         return f"{asked_for.strip()} in {city.strip()}"[:80]
     return f"the place you picked in {city.strip()}"[:80]

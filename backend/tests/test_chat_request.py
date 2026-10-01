@@ -72,7 +72,8 @@ class AsksOnlyWhatIsMissing(unittest.TestCase):
 class FindCarriesTheDraft(unittest.TestCase):
     def test_the_find_turn_carries_the_draft_and_the_psi_link_is_retired(self):
         turn = HO.booking_handoff("Book a table in Lisbon for 2 on 2 October at 8pm", now=NOW)
-        self.assertEqual(turn["booking_find"], {"what": "table", "where": "Lisbon"})
+        # S-68 step 4 · the time asked for is also when they must be open
+        self.assertEqual(turn["booking_find"], {"what": "table", "where": "Lisbon", "open_at": "2026-10-02T20:00"})
         self.assertEqual(turn["reservation_draft"]["parts"]["how_many"], {"count": 2, "unit": "people"})
         self.assertEqual(turn["bookings"], [])
 

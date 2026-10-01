@@ -101,10 +101,37 @@ def plain_party(message: str) -> Optional[int]:
 #: S-66 (EU) step 5 · "find / book / reserve … {X} in {Y}" for ANY kind of place
 _FIND = re.compile(r"\b(?:find|book|reserve|look for|search for|get)\s+(?:me\s+|us\s+)?(?:an?\s+|some\s+|the\s+)?"
                    r"(?P<what>[a-z][\w'’ -]{1,58}?)\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
-_WHERE_END = re.compile(r"\s+(?:for|on|at|tomorrow|today|tonight|this|next|by|please|from)\b.*$", re.I)
+_WHERE_END = re.compile(r"\s+(?:for|on|at|tomorrow|today|tonight|this|next|by|please|from|open|opened)\b.*$", re.I)
 
 
-def find_request(message: str) -> Optional[dict]:
+_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
+def plain_open_at(message: str, now: Optional[datetime] = None) -> Optional[str]:
+    """S-68 step 4 · the local time a venue must be open at, "YYYY-MM-DDTHH:MM", or None. Taken only when a TIME is
+    stated plainly (17:00 · 5pm · 5:30 pm); the day is a weekday (the next one, today included), "today"/"tomorrow"
+    or a plain date, else today. Nothing is guessed: "Tuesday" alone, "the evening", "at 5" are None."""
+    t = (message or "").lower()
+    m = re.search(r"\b(\d{1,2})(?::([0-5]\d))?\s*(am|pm)\b", t)
+    if m and 1 <= int(m[1]) <= 12:
+        h, mi = int(m[1]) % 12 + (12 if m[3] == "pm" else 0), int(m[2] or 0)
+    else:
+        m = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", t)
+        if not m:
+            return None
+        h, mi = int(m[1]), int(m[2])
+    today = _today(now)
+    day = plain_date(message, now)
+    if day is None:
+        wd = re.search(r"\b(" + "|".join(_WEEKDAYS) + r")\b", t)
+        if wd:
+            day = (today + timedelta(days=(_WEEKDAYS.index(wd[1]) - today.weekday()) % 7)).isoformat()
+        else:
+            day = today.isoformat()   # "today" too
+    return f"{day}T{h:02d}:{mi:02d}"
+
+
+def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]:
     """{what, where, country?, near?} when the message asks for a kind of place in a place — else None. Nothing guessed:
     a country is taken only when written as a two-letter code ("Nairobi, KE")."""
     m = _FIND.search(message or "")
@@ -125,14 +152,16 @@ def find_request(message: str) -> Optional[dict]:
         where, country = cm[1].strip(), cm[2].upper()
     if len(what) < 2 or len(where) < 2:
         return None
-    return {"what": what, "where": where, **({"country": country} if country else {}), **({"near": near} if near else {})}
+    at = plain_open_at(message, now)
+    return {"what": what, "where": where, **({"country": country} if country else {}), **({"near": near} if near else {}),
+            **({"open_at": at} if at else {})}
 
 
 def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Optional[datetime] = None) -> Optional[dict]:
     """S-66 (EU) step 5 · a full conductor turn that starts a booking IN THE CHAT — `booking_find` for the chat to run
     Find venues with (S-65) — or None, and the conductor carries on. ⛔ It no longer opens /booking-helper: the Psi-only
     link is retired; any kind of place, anywhere, is found the same way, and nothing is contacted by finding it."""
-    f = find_request(message)
+    f = find_request(message, now)
     if f is None:
         return None
     where = f"{f['where']}{', ' + f['country'] if f.get('country') else ''}"

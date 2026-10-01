@@ -39,11 +39,13 @@ export type Candidate = { place_id: string; name: string | null; address: string
   rating?: number | null; rating_count?: number | null; price_level?: number | null
   location?: { lat: number; lng: number } | null; hours_periods?: unknown[] | null
   // S-68 step 3 · from the place the guest named; the server's own words ("1.2 km away (straight line)")
-  distance_m?: number | null; distance?: string | null }
+  distance_m?: number | null; distance?: string | null
+  // S-68 step 4 · at the time asked for, by its listing's hours; the server's own words ("Closed Tue 15:00 (opens 17:00)")
+  open_at?: { known: boolean; open: boolean | null; words: string } }
 export type Rung = { rung: string; available: boolean; fact_index: number | null; value: string; source_label: string; why_not: string | null }
 
-export const findVenues = (what: string, where: string, country?: string, near?: string) =>
-  bookingReq('/api/booking/venues/find', { what, where, country: country || undefined, near: near || undefined })
+export const findVenues = (what: string, where: string, country?: string, near?: string, openAt?: string) =>
+  bookingReq('/api/booking/venues/find', { what, where, country: country || undefined, near: near || undefined, open_at: openAt || undefined })
 export const readVenue = (q: { name: string; city: string; country?: string; website?: string; place_id?: string; asked_for?: string }) =>
   bookingReq('/api/booking/venues/read', { name: q.name, city: q.city, country: q.country || undefined, website: q.website || undefined,
     ...(q.place_id ? { place_id: q.place_id, asked_for: q.asked_for } : {}) })

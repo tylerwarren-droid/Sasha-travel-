@@ -89,7 +89,16 @@ def from_places_periods(periods: Any) -> Week:
             continue
         d = (int(o["day"]) + 6) % 7
         ot = time(int(o.get("hour", 0)), int(o.get("minute", 0)))
-        ct = time(int(c.get("hour", 23)), int(c.get("minute", 59))) if c and c.get("day") == o.get("day") else time(23, 59)
+        if not c and len(periods) == 1 and ot == time(0, 0):   # Google's "open 24 hours": one period, no close
+            return {x: [(time(0, 0), time(23, 59))] for x in range(7)}
+        if c and "day" in c and c.get("day") != o.get("day"):
+            # S-68 · past midnight (a bar, 20:00–02:00): the evening on its day, the small hours on the next
+            week.setdefault(d, []).append((ot, time(23, 59)))
+            ct = time(int(c.get("hour", 0)), int(c.get("minute", 0)))
+            if ct > time(0, 0):
+                week.setdefault((int(c["day"]) + 6) % 7, []).append((time(0, 0), ct))
+            continue
+        ct = time(int(c.get("hour", 23)), int(c.get("minute", 59))) if c else time(23, 59)
         week.setdefault(d, []).append((ot, ct))
     return {d: sorted(iv) for d, iv in week.items()}
 
@@ -177,3 +186,27 @@ def read_back_line(st: Mapping[str, Any], email_now: bool) -> Optional[str]:
     call = (datetime.fromisoformat(opens) + AFTER_OPENING).strftime("%H:%M")
     return (f"If they're closed when you say yes, I'll {'email them now and ' if email_now else ''}call when they open — "
             f"they open at {opens[11:]} on {opens[:10]}, so I'd call at {call}. Your yes covers that call.")
+
+
+# ── S-68 step 4 · OPEN AT the time the guest asked for — a listing's hours, before anything is picked ─────────────
+
+_DAY3 = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def open_at(week: Week, when: datetime) -> dict:
+    """Is a venue open at `when` (its LOCAL time, naive) by these hours? Split days stay split: a time in the gap is
+    closed. {known, open, words}: "Open Tue 17:00" · "Closed Tue 15:00 (opens 17:00)" · "Closed all day Tue" ·
+    "Closed Tue 22:00 (no later opening that day)" · "hours not listed". ⚠ Open is not available: the card says so."""
+    if not week:
+        return {"known": False, "open": None, "words": "hours not listed"}
+    d, t, day = when.weekday(), when.time(), _DAY3[when.weekday()]
+    at = f"{day} {t:%H:%M}"
+    intervals = week.get(d) or []
+    if not intervals:
+        return {"known": True, "open": False, "words": f"Closed all day {day}"}
+    if any(a <= t < b for a, b in intervals):
+        return {"known": True, "open": True, "words": f"Open {at}"}
+    later = [a for a, _b in intervals if a > t]
+    if later:
+        return {"known": True, "open": False, "words": f"Closed {at} (opens {min(later):%H:%M})"}
+    return {"known": True, "open": False, "words": f"Closed {at} (no later opening that day)"}

@@ -202,3 +202,25 @@ class Near(unittest.TestCase):
         with self.assertRaises(V.ReadRefused) as e:
             run(V.find_venues(http, what="tattoo studio", where="Madrid", country="ES", now=NOW, near="x"))
         self.assertEqual(e.exception.rule, "near_invalid")
+
+
+class OpenAtFind(unittest.TestCase):
+    def setUp(self):
+        self.env = mock.patch.dict(os.environ, {"GOOGLE_PLACES_API_KEY": "test-key"})
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+
+    def test_each_candidate_says_whether_it_is_open_then(self):
+        split = {"periods": [{"open": {"day": 2, "hour": 10, "minute": 0}, "close": {"day": 2, "hour": 14, "minute": 0}},
+                             {"open": {"day": 2, "hour": 17, "minute": 0}, "close": {"day": 2, "hour": 21, "minute": 0}}]}
+        http = Http(search=R(200, {"places": [listing(1, regularOpeningHours=split), listing(2)]}))
+        out = run(V.find_venues(http, what="tattoo studio", where="Madrid", country="ES", now=NOW, open_at="2026-10-06T15:00"))
+        self.assertEqual(out["open_at"], "2026-10-06T15:00")
+        a, b = out["candidates"]
+        self.assertEqual(a["open_at"]["words"], "Closed Tue 15:00 (opens 17:00)")
+        self.assertEqual(b["open_at"], {"known": False, "open": None, "words": "hours not listed"})
+        with self.assertRaises(V.ReadRefused) as e:
+            run(V.find_venues(http, what="tattoo studio", where="Madrid", country="ES", now=NOW, open_at="Tuesday"))
+        self.assertEqual(e.exception.rule, "open_at_invalid")

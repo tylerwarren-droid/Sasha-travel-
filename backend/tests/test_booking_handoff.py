@@ -39,6 +39,14 @@ class PlainValuesOnly(unittest.TestCase):
             self.assertEqual(plain_party(m), want, m)
 
 
+def _next(day):
+    """The next such weekday from NOW (today included), as the hand-off reads it."""
+    from datetime import timedelta
+    from booking_signer.handoff import _today, _WEEKDAYS
+    t = _today(NOW)
+    return (t + timedelta(days=(_WEEKDAYS.index(day) - t.weekday()) % 7)).isoformat()
+
+
 class TheTurn(unittest.TestCase):
     """S-66 (EU) step 5 · any kind of place, in any place: `booking_find` for the chat; the Psi link is retired."""
 
@@ -51,7 +59,11 @@ class TheTurn(unittest.TestCase):
                         # S-68 step 3 · what the distance is measured from, as said — "my hotel" is asked about later
                         ("find a tattoo parlour in Madrid near my hotel", {"what": "tattoo parlour", "where": "Madrid", "near": "my hotel"}),
                         ("find a tattoo studio in Madrid, near Hotel Urban for Tuesday", {"what": "tattoo studio", "where": "Madrid", "near": "Hotel Urban"}),
-                        ("find a cafe in Madrid close to Calle Mayor 10", {"what": "cafe", "where": "Madrid", "near": "Calle Mayor 10"})]:
+                        ("find a cafe in Madrid close to Calle Mayor 10", {"what": "cafe", "where": "Madrid", "near": "Calle Mayor 10"}),
+                        # S-68 step 4 · open at a time stated plainly; the day is the next one named, else today
+                        ("find a tattoo parlour in Madrid, open Tuesday 17:00, near my hotel",
+                         {"what": "tattoo parlour", "where": "Madrid", "near": "my hotel", "open_at": "%sT17:00" % _next("tuesday")}),
+                        ("find a bar in Madrid at 5", {"what": "bar", "where": "Madrid"})]:
             t = booking_handoff(m, [], NOW)
             self.assertEqual(t["booking_find"], want, m)
             self.assertIn("nobody is contacted by looking", t["response"])

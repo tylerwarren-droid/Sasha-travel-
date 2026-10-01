@@ -22,7 +22,7 @@ import { setChatBookingHandler, takeTypedYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 import ChatBookingCall from './ChatBookingCall'
 
-type Find = { what: string; where: string; country?: string; near?: string; draft?: unknown }
+type Find = { what: string; where: string; country?: string; near?: string; open_at?: string; draft?: unknown }
 type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null }
 type State =
   | { phase: 'finding' } | { phase: 'founder_only' } | { phase: 'refused'; words: string }
@@ -45,7 +45,7 @@ export default function ChatBooking({ find }: { find: Find }) {
     ;(async () => {
       setState({ phase: 'finding' })
       try {
-        const r = await findVenues(find.what, find.where, find.country, find.near)
+        const r = await findVenues(find.what, find.where, find.country, find.near, find.open_at)
         if (off) return
         if (r.status === 401) { setState({ phase: 'founder_only' }); return }
         if (!r.ok) {
@@ -62,7 +62,7 @@ export default function ChatBooking({ find }: { find: Find }) {
       }
     })()
     return () => { off = true }
-  }, [find.what, find.where, find.country, find.near])
+  }, [find.what, find.where, find.country, find.near, find.open_at])
 
   async function pick(c: Candidate) {
     const cards = 'cards' in stateRef.current ? stateRef.current.cards : []
@@ -106,6 +106,7 @@ export default function ChatBooking({ find }: { find: Find }) {
       {cards.length === 0
         ? <div>Google has no listing for {find.what} in {find.where}.</div>
         : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{cards.length} {cards.length === 1 ? 'place' : 'places'} for {find.what} in {find.where} — from Google Maps; nobody has been contacted. Tap one, or say “the second one”.</div>}
+      {state.phase === 'found' && find.open_at && <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Open then by their listed hours; availability is confirmed only when Sasha books.</div>}
       {state.phase === 'found' && state.near && !state.near.found && <div style={{ fontSize: 13, marginBottom: 6 }}>No distances: {state.near.why}</div>}
       <ol style={{ margin: 0, paddingLeft: 18 }}>
         {cards.map((c) => (
@@ -113,6 +114,7 @@ export default function ChatBooking({ find }: { find: Find }) {
             <strong>{c.name}</strong>{c.type ? <span style={{ opacity: 0.7 }}> · {c.type}</span> : null}
             {c.status && c.status !== 'OPERATIONAL' ? <span style={{ color: '#9a1c1c' }}> · {c.status.toLowerCase().replace(/_/g, ' ')}</span> : null}
             <div style={{ fontSize: 13, opacity: 0.85 }}>{c.address ?? 'no address listed'} · {c.phone ?? 'no phone listed'}{c.website ? ` · ${c.website}` : ''}</div>
+            {c.open_at ? <div style={{ fontSize: 13 }}>{c.open_at.words}</div> : null}
             {c.distance ? <div style={{ fontSize: 13 }}>{c.distance}{state.phase === 'found' && state.near ? ` from ${state.near.asked}` : ''}</div> : null}
             <div style={{ fontSize: 12, opacity: 0.6 }}>Google Maps</div>
             <GatedButton label={`Read ${c.name ?? 'this one'}`} onClick={() => { pick(c).catch(() => { /* visible state set inside */ }) }}

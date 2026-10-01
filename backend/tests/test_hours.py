@@ -77,3 +77,28 @@ class Rule(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OpenAt(unittest.TestCase):
+    """S-68 step 4 · open at the time the guest asked for, from a listing's periods — split days stay split."""
+
+    def P(self, day, oh, om, ch, cm, cday=None):
+        return {"open": {"day": day, "hour": oh, "minute": om}, "close": {"day": day if cday is None else cday, "hour": ch, "minute": cm}}
+
+    def test_a_split_day_gap_is_closed(self):
+        from datetime import datetime as dt
+        week = H.from_places_periods([self.P(2, 10, 0, 14, 0), self.P(2, 17, 0, 21, 0)])   # Tuesday (Google day 2)
+        self.assertEqual(H.open_at(week, dt(2026, 10, 6, 17, 0))["words"], "Open Tue 17:00")
+        self.assertEqual(H.open_at(week, dt(2026, 10, 6, 15, 0)), {"known": True, "open": False, "words": "Closed Tue 15:00 (opens 17:00)"})
+        self.assertEqual(H.open_at(week, dt(2026, 10, 6, 21, 0))["words"], "Closed Tue 21:00 (no later opening that day)")
+        self.assertEqual(H.open_at(week, dt(2026, 10, 5, 12, 0))["words"], "Closed all day Mon")
+        self.assertEqual(H.open_at({}, dt(2026, 10, 6, 17, 0)), {"known": False, "open": None, "words": "hours not listed"})
+
+    def test_past_midnight_and_open_24_hours(self):
+        from datetime import datetime as dt
+        bar = H.from_places_periods([self.P(5, 20, 0, 2, 0, cday=6)])                      # Fri 20:00 – Sat 02:00
+        self.assertEqual(H.open_at(bar, dt(2026, 10, 3, 1, 0))["words"], "Open Sat 01:00")
+        self.assertEqual(H.open_at(bar, dt(2026, 10, 2, 23, 0))["words"], "Open Fri 23:00")
+        self.assertFalse(H.open_at(bar, dt(2026, 10, 3, 3, 0))["open"])
+        always = H.from_places_periods([{"open": {"day": 0, "hour": 0, "minute": 0}}])
+        self.assertTrue(all(H.open_at(always, dt(2026, 10, d, 4, 0))["open"] for d in range(1, 8)))

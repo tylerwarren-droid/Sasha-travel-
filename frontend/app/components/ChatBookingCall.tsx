@@ -27,8 +27,10 @@ type Phase =
 
 const SLEEP = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-export default function ChatBookingCall({ readId, country, phone, venue, draft, whatText, openAt }: {
-  readId: string; country: string | null; phone: Rung; venue: string; draft: Draft; whatText: string; openAt?: string | null }) {
+export default function ChatBookingCall({ readId, country, phone, venue, draft, whatText, openAt, onContacted }: {
+  readId: string; country: string | null; phone: Rung; venue: string; draft: Draft; whatText: string; openAt?: string | null
+  /** Sasha 88 · told when a call is placed or scheduled, so the chat stops saying "nothing has been contacted" */
+  onContacted?: (how: 'calling' | 'scheduled') => void }) {
   // Sasha 86 · pre-filled from THIS message only (its draft, else the day and time its cards were filtered by) — every
   // field visible and editable; nothing carried from an earlier request
   const parts = draft?.parts ?? {}
@@ -112,8 +114,9 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
     setPhase({ p: 'placing', lines })
     const r = await approveCall(callId, sha, { how, said })
     if (!r.ok) { setPhase({ p: 'refused', words: `Not called — ${refusal(r.json, r.status)}. Nothing was dialled.` }); return }
-    if (r.json.status === 'scheduled') { setPhase({ p: 'refused', words: String(r.json.say) }); return }
+    if (r.json.status === 'scheduled') { onContacted?.('scheduled'); setPhase({ p: 'refused', words: String(r.json.say) }); return }
     if (r.json.status !== 'placed' && r.json.status !== 'uncertain') { setPhase({ p: 'refused', words: String(r.json.say ?? 'The call was not placed.') }); return }
+    onContacted?.('calling')
     setPhase({ p: 'calling', callId, say: String(r.json.say ?? 'Calling now.') })
     for (let i = 0; i < 48; i++) {                       // every 10 s, up to 8 minutes (Bland's ceiling is 4)
       await SLEEP(10000)
@@ -153,6 +156,9 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
   ]
   return (
     <div style={{ marginTop: 10, borderTop: '1px solid rgba(0,0,0,.1)', paddingTop: 10 }}>
+      {(phase.p === 'details' || phase.p === 'preparing') && (
+        <div style={{ fontSize: 13, marginBottom: 6 }}>I&rsquo;ll call {venue} for you. Check these — you&rsquo;ll see exactly what I&rsquo;ll say before I call, and I call only after your yes.</div>
+      )}
       {(phase.p === 'details' || phase.p === 'preparing' || phase.p === 'refused') && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 13 }}>
           <label>What (your words)<input style={input} value={d.activity} onChange={(e) => setD({ ...d, activity: e.target.value })} /></label>

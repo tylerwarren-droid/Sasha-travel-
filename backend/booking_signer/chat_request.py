@@ -113,6 +113,7 @@ def in_venue_language(what: Mapping[str, Any], lang: str) -> Dict[str, Any]:
 
 def draft(message: str, now: Optional[datetime] = None, lang: str = "en") -> Dict[str, Any]:
     """{parts: what the message states, missing: [...], question: the ONE thing to ask next, or None}."""
+    message = HO.spoken(message)   # Sasha 88 · "nine p.m." said aloud is 9pm
     t = (message or "").lower()
     parts: Dict[str, Any] = {}
     act = next((a for a in ACTIVITIES if re.search(a[0], t)), None)

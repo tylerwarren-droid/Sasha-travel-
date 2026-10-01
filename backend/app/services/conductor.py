@@ -731,6 +731,9 @@ CAPABILITY_FACTS = (
     "yet, say you'll pull it up — e.g. 'ask me for flights to Hanoi and I'll bring the "
     "options up' — instead of claiming you can't."
 )
+# Sasha 88 abilities: backend/booking_signer/abilities.py. CTO zips drop this; Stage B re-applies it.
+from booking_signer.abilities import ABILITIES as _SASHA_ABILITIES  # noqa: E402
+CAPABILITY_FACTS += _SASHA_ABILITIES
 
 
 # Sibling to NEVER_FAKE_BOOKING, and appended for the same reason: run_general only ever runs

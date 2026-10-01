@@ -35,6 +35,18 @@ _PSI = re.compile(r"\bpsi\b", re.I)
 _BOOKING = re.compile(r"\b(book|booking|reserve|reservation|table)\b", re.I)
 
 
+_WORD_HOURS = {w: n for n, w in enumerate(["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+                                           "ten", "eleven", "twelve"])}
+
+
+def spoken(message: str) -> str:
+    """Sasha 88 · a request SPOKEN to Sasha reads like a typed one: speech-to-text writes "9 p.m.", "nine p.m.",
+    "9 P.M." — the parsers read "9pm". Nothing else is changed."""
+    t = re.sub(r"\b([ap])\.\s?m\.?(?=\W|$)", lambda m: m[1].lower() + "m", message or "", flags=re.I)
+    t = re.sub(r"\b(\d{1,2})\s+([ap]m)\b", r"\1\2", t, flags=re.I)
+    return re.sub(r"\b(" + "|".join(_WORD_HOURS) + r")\s*([ap]m)\b", lambda m: f"{_WORD_HOURS[m[1].lower()]}{m[2].lower()}", t, flags=re.I)
+
+
 def is_psi_booking(message: str) -> bool:
     return bool(_PSI.search(message or "")) and bool(_BOOKING.search(message or ""))
 
@@ -180,6 +192,7 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
     """S-66 (EU) step 5 · a full conductor turn that starts a booking IN THE CHAT — `booking_find` for the chat to run
     Find venues with (S-65) — or None, and the conductor carries on. ⛔ It no longer opens /booking-helper: the Psi-only
     link is retired; any kind of place, anywhere, is found the same way, and nothing is contacted by finding it."""
+    message = spoken(message)
     f = find_request(message, now)
     if f is None:
         return None

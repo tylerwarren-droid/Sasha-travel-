@@ -148,7 +148,9 @@ async def health():
 
 #: the lines Stage B re-applies to app/services/conductor.py (CLAUDE.md) — each must be present, or booking-in-chat is off
 CHAT_HOOKS = {"psi_handoff": "from booking_signer.handoff import booking_handoff",
-              "booking_drafts": "from booking_signer.chat_request import booking_turn"}
+              "booking_drafts": "from booking_signer.chat_request import booking_turn",
+              # Sasha 88 · the model is told what she can do, so it never denies a call
+              "abilities": "from booking_signer.abilities import ABILITIES as _SASHA_ABILITIES"}
 
 
 def chat_hooks() -> dict:

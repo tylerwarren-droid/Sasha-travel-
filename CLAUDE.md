@@ -94,6 +94,23 @@ loudly, if the hand-off lines it sits under are not there:
 The suite refuses if this is skipped: backend/tests/test_stage_b_hooks.py fails, and /api/booking/health reports
 "chat_hooks": {"booking_drafts": false} (Stage E below).
 
+Sasha's abilities re-apply command (Sasha 88) — the conversational model is told what she can do (phone, email,
+WhatsApp, book, follow up, cancel), so the chat and the avatar never say she "can't call". Run after the booking drafts:
+    cd ~/Projects/sasha-travel && python3 - <<'PY'
+    import pathlib
+    p = pathlib.Path("backend/app/services/conductor.py"); s = p.read_text()
+    if "from booking_signer.abilities import ABILITIES" not in s:
+        anchor = "    \"options up' — instead of claiming you can't.\"\n)\n"
+        block = ("# Sasha 88 abilities: backend/booking_signer/abilities.py. CTO zips drop this; Stage B re-applies it.\n"
+                 "from booking_signer.abilities import ABILITIES as _SASHA_ABILITIES  # noqa: E402\n"
+                 "CAPABILITY_FACTS += _SASHA_ABILITIES\n")
+        if anchor not in s:
+            raise SystemExit("⛔ STOP: CAPABILITY_FACTS' closing line moved — find where CAPABILITY_FACTS is defined and add the block after it.")
+        s = s.replace(anchor, anchor + block); p.write_text(s); print("abilities re-applied")
+    else: print("abilities already present")
+    PY
+/api/booking/health reports "chat_hooks": {"abilities": false} if it is lost.
+
 ## Repo-only files that MUST survive every sync
 - app/vietnam2/ — uses LEGACY component copies app/vietnam2/SashaChatLegacy.tsx and app/vietnam2/VoiceButton.tsx (CTO's rewritten SashaChat has an incompatible props interface). vietnam2 needs leaflet + @types/leaflet in package.json.
 - app/kanoe/

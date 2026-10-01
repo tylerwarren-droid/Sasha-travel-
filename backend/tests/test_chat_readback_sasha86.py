@@ -34,6 +34,13 @@ class TheMessage(unittest.TestCase):
         p = CR.draft("book a table for 2 in Chamberí on Saturday at 9pm under Warren", datetime(2026, 10, 3, 9, 0, tzinfo=timezone.utc))["parts"]
         self.assertEqual((p["who"], p["when"]["at"]), ({"name": "Warren"}, "2026-10-03T21:00"))
 
+    def test_the_same_request_spoken_reaches_the_same_booking(self):
+        # Sasha 88 · a spoken "book me…" goes the same way as a typed one: speech-to-text writes "nine p.m."
+        for said in ("Book me dinner for two in Chamberí on Saturday at nine p.m.", "book dinner for 2 in Chamberí on Saturday at 9 P.M."):
+            r = H.booking_handoff(said, now=THURSDAY_1_OCT)
+            self.assertEqual((r["booking_find"]["where"], r["booking_find"]["open_at"]), ("Chamberí", "2026-10-03T21:00"), said)
+            self.assertEqual(r["reservation_draft"]["parts"]["when"]["at"], "2026-10-03T21:00", said)
+
     def test_the_activity_is_said_in_the_venues_language(self):
         en = {"activity": "a table", "activity_venue_lang": "a table", "category": "restaurant"}
         self.assertEqual(CR.in_venue_language(en, "es")["activity_venue_lang"], "una mesa")

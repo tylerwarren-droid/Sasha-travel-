@@ -16,8 +16,18 @@ NOW = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
 class Hooks(unittest.TestCase):
     def test_both_hooks_are_in_the_conductor_in_order(self):
         h = routes.chat_hooks()
-        self.assertEqual(h, {"psi_handoff": True, "booking_drafts": True, "response_fields": True, "in_order": True},
+        self.assertEqual(h, {"psi_handoff": True, "booking_drafts": True, "abilities": True, "response_fields": True, "in_order": True},
                          "a Stage B conductor hook is missing — re-apply it (CLAUDE.md, Stage B) and redeploy")
+
+
+class SheKnowsWhatSheCanDo(unittest.TestCase):
+    def test_the_model_is_told_she_phones_emails_and_books(self):
+        """Sasha 88 · 1 Oct: the avatar told the founder she "can't call"; the model had never been told she does."""
+        import asyncio
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        from app.services import conductor
+        for must in ("PHONE venues yourself", "NEVER say you can't call", "you'll see the read-back first", "email venues"):
+            self.assertIn(must, conductor.CAPABILITY_FACTS)
 
 
 class TheResponseCarriesIt(unittest.TestCase):

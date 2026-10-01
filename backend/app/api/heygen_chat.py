@@ -69,12 +69,12 @@ async def heygen_chat_completions(request: Request):
             reply = "I\'m working on that for you — could you give me just a moment and ask again?"
         except Exception as e:
             print(f"[HeyGen Chat] Conductor error: {e}")
-            reply = "I\'m here to help with your Vietnam trip. What would you like to know?"
+            reply = "I\'m here — what would you like me to find or book?"
 
         return StreamingResponse(stream_text(reply), media_type="text/event-stream")
 
     except Exception:
         return StreamingResponse(
-            stream_text("I\'m here to help with your Vietnam adventure!"),
+            stream_text("I\'m here — what would you like me to find or book?"),
             media_type="text/event-stream"
         )

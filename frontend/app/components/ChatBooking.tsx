@@ -58,6 +58,8 @@ export default function ChatBooking({ find }: { find: Find }) {
   const stateRef = useRef(state)
   // S-68 step 9 · style per place_id, read for the cards SHOWN only; 'reading' while their sites are read
   const [styles, setStyles] = useState<Record<string, Style | 'reading'>>({})
+  // Sasha 88 · once a call is placed or scheduled, "nobody has been contacted" is no longer true and is not shown
+  const [contacted, setContacted] = useState<'calling' | 'scheduled' | null>(null)
   useEffect(() => { stateRef.current = state }, [state])
 
   useEffect(() => {
@@ -165,7 +167,7 @@ export default function ChatBooking({ find }: { find: Find }) {
       <WhoIsBooking />
       {cards.length === 0
         ? <div>Google has no listing for {find.what} in {find.where}.</div>
-        : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{find.what} in {find.where} — from Google Maps; nobody has been contacted. Choose one, or say “the second one”.</div>}
+        : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{find.what} in {find.where} — from Google Maps{contacted ? '.' : '; nobody has been contacted. Choose one, or say “the second one”.'}</div>}
       {state.phase === 'found' && state.ranking && <div style={{ fontSize: 13, marginBottom: 4 }}>{state.ranking.count} · {state.ranking.explainers[state.chip]}</div>}
       {state.phase === 'found' && find.open_at && <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Open then by their listed hours; availability is confirmed only when Sasha books.</div>}
       {state.phase === 'found' && state.near && !state.near.found && <div style={{ fontSize: 13, marginBottom: 6 }}>No distances: {state.near.why}</div>}
@@ -230,11 +232,13 @@ export default function ChatBooking({ find }: { find: Find }) {
           {(() => {
             const ph = state.read.rungs.find((r) => r.rung === 'phone' && r.available)
             return ph ? <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
-              venue={state.pick.name ?? state.read.venue} draft={(find.draft ?? null) as never} whatText={find.what} openAt={find.open_at ?? null} /> : null
+              venue={state.pick.name ?? state.read.venue} draft={(find.draft ?? null) as never} whatText={find.what} openAt={find.open_at ?? null}
+              onContacted={setContacted} /> : null
           })()}
           {lookup && <a href={`/booking-helper?book=phone&lookup=${encodeURIComponent(lookup.name ?? '')}&city=${encodeURIComponent(find.where)}&country=${encodeURIComponent(lookup.country ?? find.country ?? '')}`}
             target="_blank" rel="noopener noreferrer">Book it on the booking page ↗</a>}
-          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>Nothing has been contacted yet.</div>
+          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>{contacted === 'calling' ? `Sasha has phoned ${state.pick.name ?? 'them'} — the result is above.`
+            : contacted === 'scheduled' ? 'A call is scheduled for when they open; nothing has been said to them yet.' : 'Nothing has been contacted yet.'}</div>
         </div>
       )}
     </div>

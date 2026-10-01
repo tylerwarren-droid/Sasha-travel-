@@ -1094,7 +1094,7 @@ export default function VietnamPage() {
           <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg,#8b5cf6,#6d28d9)', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 13, border: '2px solid rgba(255,255,255,.25)' }}>S</div>
           <div>
             <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1 }}>Sasha</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', marginTop: 2 }}>Vietnam Specialist · concierge</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', marginTop: 2 }}>AI concierge · Kanoe</div>
           </div>
         </div>
 

@@ -362,7 +362,21 @@ async def inbound(request: Request):
     if not isinstance(pid, str) or not pid:
         return _refuse(400, "event_malformed", "an inbound event carries the received email's id")
     now = NOW()
+    # Sasha 74 · Resend's webhooks are account-wide: mail for another product's domain arrives here too. It is not Sasha's
+    # to keep — ignored, nothing stored (not even quarantined).
+    ours = os.getenv("SASHA_INBOUND_DOMAIN", "").strip().lower()
+    to_list = data.get("to") if isinstance(data.get("to"), list) else [data.get("to")]
+    if not ours or not any((_address(a) or "").endswith("@" + ours) for a in to_list):
+        return {"ok": True, "ignored": "not addressed to Sasha's domain"}
     act = E.act_id_of(data.get("to"))
+    sender = _address(data.get("from"))
+    if act is None and sender:
+        # rule 1 · a reply to Sasha's OWN address (given on the phone, or a reply-all): the venue Sasha last emailed from
+        # that very address — matched by the sender, never by guessing from the words
+        try:
+            act = await LADDER_STORE.email_for_sender(sender)
+        except StorageUnavailable as ex:
+            return _refuse(503, ex.rule, ex.detail)
     try:
         if act is not None and not await LADDER_STORE.email_exists(act) and await LADDER_STORE.link_exists(act):
             return await _link_confirmation(act, pid, data, now)
@@ -378,9 +392,15 @@ async def inbound(request: Request):
                 await _stop_by_email(known, sender, text, pid, data, now)
             return {"ok": True, "matched": False}
         text, note = await _reply_text(pid)
-        await LADDER_STORE.add_reply({"provider_id": pid, "email_id": act, "from_addr": data.get("from"),
+        fresh = await LADDER_STORE.add_reply({"provider_id": pid, "email_id": act, "from_addr": data.get("from"),
                                       "subject": data.get("subject"), "body_text": text, "note": note, "received_at": now})
         await _stop_by_email(act, _address(data.get("from")), text, pid, data, now)
+        # Sasha 74 · rule 3 · a reply to the email after a call: read with the field checks; it moves the reservation only
+        # as far as its words go (confirmed / proposed), and is always shown as written
+        from . import followup as _FU
+        reading = await _FU.on_reply(act, text, now) if fresh else None   # a redelivery is read once
+        if reading:
+            log.info("[followup] reply to %s read as %s: %s", act, reading["result"], reading["why"])
         # S-66 · a reply to the request emailed while they were closed: the scheduled call is no longer needed
         from . import call_routes as _CR
         for cid in await _CR.CALL_STORE.scheduled_for_email(act):

@@ -30,6 +30,7 @@ from fastapi.responses import JSONResponse
 from . import calls as C
 from . import hours as H
 from . import places_terms as PT
+from . import followup as FU
 from . import render as R
 from . import reservation as RS
 from . import ladder_routes
@@ -120,6 +121,16 @@ RESOLVE_AFTER = timedelta(seconds=90)    # S-57 · longer than the 60 s the requ
 GIVE_UP_AFTER = timedelta(minutes=10)    # no call in Bland's log by then: it was not placed
 
 
+async def _follow_up(call: dict, reading) -> None:
+    """Sasha 74 · rules 2–3 — awaited here, never fire-and-forget; its failure is logged and never undoes the reading."""
+    try:
+        what = await FU.after_call(call, reading.outcome, NOW())
+        if what:
+            log.info("[followup] call %s: %s", call.get("call_id"), what)
+    except Exception as e:
+        log.error("[followup] call %s: the follow-up email failed: %s: %s", call.get("call_id"), type(e).__name__, e)
+
+
 async def sweep_once() -> int:
     """Read every placed call once. Returns how many were recorded."""
     key = C.bland_key()
@@ -157,6 +168,7 @@ async def sweep_once() -> int:
                                        {"call_id": str(call["call_id"]), "bland_call_id": call.get("bland_call_id")}, NOW(), spoken=True)
             if r.state != "in_progress" and await CALL_STORE.record_reading(call["call_id"], r, PT.scrub_bland(details, call.get("brief")), NOW()):
                 recorded += 1
+                await _follow_up(call, r)
         except Exception as e:  # one call's trouble never stops the others; it is retried next sweep
             log.warning("[booking_calls] sweep could not read call %s: %s: %s", call.get("call_id"), type(e).__name__, e)
     return recorded
@@ -219,6 +231,10 @@ async def prepare(request: Request):
         return _refuse(422, "brief_too_long", "the call's instructions exceed Bland's 2,000 characters")
     try:
         built = _with_hours(built, await _read_of(account, built["brief"]), venue.timezone, now)
+        request_o = RS.try_from_particulars(p, account_id=account, venue_name=venue.name, timezone=venue.timezone,
+                                            lang=built["brief"]["language"], venue_ids=venue.venue_ids or (),
+                                            read_id=str(body["read_id"]) if body.get("read_id") else None)
+        built = await _own_contact(account, built, venue, request_o)   # Sasha 74 · her email; the follow-up, said before the yes
         built = PT.seal_call(built, venue)   # Sasha 64 · a listing number: dialled, never stored or shown
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
@@ -226,9 +242,7 @@ async def prepare(request: Request):
         return _refuse(422, e.rule, str(e))
     row = {
         # S-64 step 3 · the reservation/1 object, written alongside the old columns
-        "request": RS.try_from_particulars(p, account_id=account, venue_name=venue.name, timezone=venue.timezone,
-                                           lang=built["brief"]["language"], venue_ids=venue.venue_ids or (),
-                                           read_id=str(body["read_id"]) if body.get("read_id") else None),
+        "request": request_o,
         "call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key,
         "dialled_number": built["dialled_number"], "language": built["brief"]["language"],
         "guest_name": p.name, "guest_phone": p.phone,
@@ -255,6 +269,16 @@ async def _read_of(account: str, brief: Mapping[str, Any]) -> Optional[dict]:
         return None
     row = await ladder_routes.LADDER_STORE.get_read(account, key[5:])
     return await PT.hydrate_read(HTTP, row["read"], NOW()) if row else None   # Sasha 64 · the listing's hours, re-read
+
+
+async def _own_contact(account: str, built: dict, venue, request_o) -> dict:
+    """Sasha 74 · rule 1 (her own email to the venue) and rules 2–3 (the follow-up email), in the read-back before the yes."""
+    if built["brief"].get("purpose") != "book" or not FU.own_email():
+        return built   # no address that answers yet: nothing is promised, nothing is looked up
+    key = str(built["brief"].get("venue_key") or "")
+    row = await ladder_routes.LADDER_STORE.get_read(account, key[5:]) if key.startswith("read:") else None
+    guest = await ladder_routes.LADDER_STORE.account_email(account)
+    return FU.with_own_contact(built, venue.name, (row or {}).get("read"), guest, request_o)
 
 
 def _with_hours(built: dict, read: Optional[dict], timezone: str, now) -> dict:
@@ -318,9 +342,12 @@ async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now
         except StorageUnavailable as e:
             return _refuse(503, e.rule, e.detail)
     try:
+        built = await _own_contact(account, built, venue, o)   # Sasha 74 · her email; the follow-up, said before the yes
         built = PT.seal_call(built, venue)   # Sasha 64 · a listing number: dialled, never stored or shown
     except PT.ListingUnavailable as e:
         return _refuse(422, e.rule, str(e))
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
     cols = RS.columns(o)
     row = {
         "request": o,
@@ -580,7 +607,8 @@ async def get_call(call_id: str, request: Request):
         if r.state == "in_progress":
             return {"call_id": call_id, "status": "placed", "say": C.say_for(name, r), "why": r.why}
         try:
-            await CALL_STORE.record_reading(call_id, r, details, NOW())
+            if await CALL_STORE.record_reading(call_id, r, PT.scrub_bland(details, call.get("brief")), NOW()):
+                await _follow_up(call, r)
             call = await CALL_STORE.get_call(account, call_id)
         except StorageUnavailable as e:
             return _refuse(503, e.rule, e.detail)

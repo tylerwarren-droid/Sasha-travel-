@@ -244,10 +244,37 @@ class MemoryLadderStore(MemoryLinks):
                  provider_answer=sent.answer, not_sent_why=sent.why, sent_at=now if sent.sent else None)
         if sent.sent:
             self.attempts.append({"trip_item_id": e["trip_item_id"], "method": "email", "status": "sent"})
-            self.trip_items[e["trip_item_id"]]["status"] = "attempting"
+            item = self.trip_items.get(e["trip_item_id"], {})
+            if item.get("status") == "pending":   # as Postgres does: a confirmed reservation is never set back by an email
+                item["status"] = "attempting"
 
     async def email_exists(self, email_id: str) -> bool:
         return email_id in self.emails
+
+    account_emails: Dict[str, str] = {}
+
+    async def account_email(self, account_id: str) -> Optional[str]:
+        return self.account_emails.get(account_id)
+
+    # ── Sasha 74 · the follow-up after a call, and the replies that move a reservation ──
+    async def put_followup_email(self, row: dict, trip_item_id: str) -> None:
+        if row["email_id"] in self.emails:
+            raise ValueError("a follow-up with this id already exists")
+        self.emails[row["email_id"]] = {**dict(row), "trip_item_id": trip_item_id, "status": "awaiting_approval"}
+
+    async def email_any(self, email_id: str) -> Optional[dict]:
+        e = self.emails.get(email_id)
+        return dict(e) if e else None
+
+    async def email_for_sender(self, addr: str) -> Optional[str]:
+        sent = [(e.get("sent_at") or e["created_at"], k) for k, e in self.emails.items()
+                if e["status"] == "sent" and str(e["email"].get("to", "")).lower() == addr.lower()]
+        return max(sent)[1] if sent else None
+
+    async def reply_outcome(self, email_id: str, trip_status: str, attempt_status: str, text: str, now: datetime) -> None:
+        e = self.emails[email_id]
+        self.trip_items[e["trip_item_id"]]["status"] = trip_status
+        self.attempts.append({"trip_item_id": e["trip_item_id"], "method": "email", "status": attempt_status, "response_received": text})
 
     async def add_reply(self, row: dict) -> bool:
         if any(r["provider_id"] == row["provider_id"] for r in self.replies):
@@ -371,6 +398,42 @@ class PostgresLadderStore(PostgresLinks):
     async def email_exists(self, email_id):
         eid = _uuid_or_none(email_id)
         return eid is not None and bool(await self._run(lambda c: c.fetchval("select 1 from booking_emails where email_id = $1", eid)))
+
+    # ── Sasha 74 · the follow-up after a call, and the replies that move a reservation ──
+    async def put_followup_email(self, row, trip_item_id):
+        """On the call's OWN reservation (no new trip item). A second insert of the same id fails: never twice."""
+        await self._run(lambda c: c.execute(
+            "insert into booking_emails (email_id, account_id, trip_item_id, read_id, email, email_sha256, read_back_lines, "
+            "read_back_sha256, status, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8,'awaiting_approval',$9)",
+            uuid.UUID(row["email_id"]), uuid.UUID(row["account_id"]), uuid.UUID(trip_item_id), uuid.UUID(row["read_id"]), row["email"],
+            row["email_sha256"], row["read_back_lines"], row["read_back_sha256"], row["created_at"]))
+
+    async def account_email(self, account_id):
+        """The account's own address in Supabase Auth — verified by its magic link. None for the demo account."""
+        aid = _uuid_or_none(account_id)
+        return None if aid is None else await self._run(lambda c: c.fetchval("select email from auth.users where id = $1", aid))
+
+    async def email_any(self, email_id):
+        eid = _uuid_or_none(email_id)
+        return None if eid is None else _row(await self._run(lambda c: c.fetchrow("select * from booking_emails where email_id = $1", eid)))
+
+    async def email_for_sender(self, addr):
+        v = await self._run(lambda c: c.fetchval(
+            "select email_id from booking_emails where status = 'sent' and lower(email->>'to') = lower($1) "
+            "order by coalesce(sent_at, created_at) desc limit 1", addr))
+        return str(v) if v else None
+
+    async def reply_outcome(self, email_id, trip_status, attempt_status, text, now):
+        async def fn(conn):
+            async with conn.transaction():
+                item = await conn.fetchval("select trip_item_id from booking_emails where email_id = $1", uuid.UUID(email_id))
+                if item is None:
+                    return
+                await conn.execute("update trip_items set status = $2, updated_at = now() where id = $1", item, trip_status)
+                await conn.execute("insert into booking_attempts (trip_item_id, method, attempted_at, status, response_received, response_at, observed_by) "
+                                   "values ($1, 'email', $2, $3, $4, $2, 'their email reply, read with the field checks (Sasha 74)')",
+                                   item, now, attempt_status, text[:4000])
+        await self._run(fn)
 
     async def add_reply(self, row):
         r = await self._run(lambda c: c.fetchrow(

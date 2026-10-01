@@ -763,7 +763,8 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
     def test_a_stop_sent_to_the_wrong_address_still_counts_from_a_venue_sasha_wrote_to(self):
         v, p = self.sent_email()
         r = self.reply(p, "rcv_x", "No nos escribáis más, gracias.", to="hello@in.kanoe.test")
-        self.assertEqual(r.json(), {"ok": True, "matched": False})
+        # Sasha 74 · rule 1: mail to Sasha's own domain from the venue she last emailed lands on that email's reservation
+        self.assertEqual(r.json(), {"ok": True, "matched": True})
         self.assertEqual(self.optins.rows[-1]["withdrawn_evidence"]["verbatim"], "No nos escribáis más, gracias.")
 
     def test_s64_a_massage_booked_from_the_object_is_cancelled_as_a_massage(self):

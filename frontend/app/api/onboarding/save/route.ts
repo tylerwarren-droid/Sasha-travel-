@@ -1,7 +1,12 @@
 import { NextRequest } from 'next/server'
 import { signedIn } from '@/lib/signed-in'
 
-const SUPABASE_URL = 'https://xlqtveusyfpffaejegiq.supabase.co'
+/** S-69 · the project comes from the environment (NEXT_PUBLIC_SUPABASE_URL) — never a ref written here, so moving
+ *  Sasha to a new Supabase project is an env change, not a code change. Missing → nothing is saved, and it says so. */
+const supabaseUrl = (): string | null => {
+  const u = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim().replace(/\/+$/, '')
+  return /^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(u) ? u : null
+}
 
 /**
  * S-58 · The service-role key is read from the environment ONLY — never written here, no fallback value. It used to
@@ -154,6 +159,11 @@ export async function POST(request: NextRequest) {
     is_active: goLive === true,
   }
 
+  const base = supabaseUrl()
+  if (!base) {
+    console.error('Onboarding save refused: NEXT_PUBLIC_SUPABASE_URL is not set (or not a Supabase project URL) on this deployment')
+    return Response.json({ error: 'Saving is not configured on this deployment (NEXT_PUBLIC_SUPABASE_URL is not set); nothing was saved' }, { status: 503 })
+  }
   const auth = serviceHeaders()
   if (!auth) {
     console.error('Onboarding save refused: SUPABASE_SERVICE_ROLE_KEY is not set on this deployment')
@@ -161,7 +171,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
+    const res = await fetch(`${base}/rest/v1/clients`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

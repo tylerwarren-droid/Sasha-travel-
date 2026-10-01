@@ -224,3 +224,27 @@ class OpenAtFind(unittest.TestCase):
         with self.assertRaises(V.ReadRefused) as e:
             run(V.find_venues(http, what="tattoo studio", where="Madrid", country="ES", now=NOW, open_at="Tuesday"))
         self.assertEqual(e.exception.rule, "open_at_invalid")
+
+
+class HowSheBooks(unittest.TestCase):
+    """S-68 step 5 · before a pick: a call only when a call can be made; never a platform; otherwise who does it."""
+
+    def c(self, **kw):
+        return {"country": "ES", "phone": "+34911223344", "website": None, **kw}
+
+    def test_each_case_in_words(self):
+        with mock.patch.dict(os.environ, {"SASHA_CALLS_ENABLED": "1"}):
+            self.assertEqual(V.how_she_books(self.c())["how"], "call")
+            self.assertEqual(V.how_she_books(self.c(country="JP"))["words"],
+                             "a phone number is listed, but Sasha has no call script in their language yet — you'd phone them")
+        with mock.patch.dict(os.environ, {"SASHA_CALLS_ENABLED": "0"}):
+            self.assertEqual(V.how_she_books(self.c())["words"], "a phone number is listed, but Sasha's calls are off right now — you'd phone them")
+            self.assertEqual(V.how_she_books(self.c(website="https://ink.example/"))["how"], "site")
+            self.assertEqual(V.how_she_books(self.c(phone=None, website="https://www.fresha.com/a/ink"))["words"],
+                             "they book through Fresha — you'd book there; Sasha never books on a platform")
+            self.assertEqual(V.how_she_books(self.c(phone=None))["words"], "no phone or site listed — you'd contact them")
+
+    def test_every_candidate_carries_it(self):
+        with mock.patch.dict(os.environ, {"GOOGLE_PLACES_API_KEY": "test-key", "SASHA_CALLS_ENABLED": "1"}):
+            out = run(V.find_venues(Http(search=R(200, {"places": [listing(1)]})), what="tattoo studio", where="Nairobi", country="KE", now=NOW))
+        self.assertEqual(out["candidates"][0]["books"], {"how": "call", "words": "Sasha can call them"})

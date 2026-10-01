@@ -41,7 +41,9 @@ export type Candidate = { place_id: string; name: string | null; address: string
   // S-68 step 3 · from the place the guest named; the server's own words ("1.2 km away (straight line)")
   distance_m?: number | null; distance?: string | null
   // S-68 step 4 · at the time asked for, by its listing's hours; the server's own words ("Closed Tue 15:00 (opens 17:00)")
-  open_at?: { known: boolean; open: boolean | null; words: string } }
+  open_at?: { known: boolean; open: boolean | null; words: string }
+  // S-68 step 5 · before a pick, from the listing alone; the real ladder comes from the read
+  books?: { how: 'call' | 'site' | 'you'; words: string } }
 export type Rung = { rung: string; available: boolean; fact_index: number | null; value: string; source_label: string; why_not: string | null }
 
 export const findVenues = (what: string, where: string, country?: string, near?: string, openAt?: string) =>

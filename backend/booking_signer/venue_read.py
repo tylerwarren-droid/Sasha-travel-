@@ -490,6 +490,30 @@ def _ranking_facts(pl: dict) -> dict:
     }
 
 
+def how_she_books(c: dict) -> dict:
+    """S-68 step 5 · BEFORE a pick, how Sasha would reach a candidate — from its listing alone, never claiming more.
+    The real ladder comes from the venue read after the pick (its own site first). {how, words}:
+      call · a listed phone, a call script in its country's language, and calls on;
+      site · a website that is the venue's own (a booking platform's page is never counted, S-37);
+      you  · otherwise — and why."""
+    from .calls import LANGUAGES, calls_enabled
+    lang = COUNTRIES.get(c.get("country") or "", (None, None, None, None))[2]
+    site = c.get("website")
+    plat = platform_of(site) if site else None
+    if c.get("phone") and lang in LANGUAGES:
+        if calls_enabled():
+            return {"how": "call", "words": "Sasha can call them"}
+        if not site or plat:
+            return {"how": "you", "words": "a phone number is listed, but Sasha's calls are off right now — you'd phone them"}
+    if site and not plat:
+        return {"how": "site", "words": "Sasha will check their site for a form or an email"}
+    if plat:
+        return {"how": "you", "words": f"they book through {plat} — you'd book there; Sasha never books on a platform"}
+    if c.get("phone"):
+        return {"how": "you", "words": "a phone number is listed, but Sasha has no call script in their language yet — you'd phone them"}
+    return {"how": "you", "words": "no phone or site listed — you'd contact them"}
+
+
 #: S-68 step 3 · where "near" is: one Text Search for the place the guest named, its location only (the Pro SKU)
 NEAR_FIELDS = "places.id,places.location"
 
@@ -581,6 +605,7 @@ async def find_venues(http: Http, *, what: str, where: str, country: Optional[st
                     "country": c, "phone": (to_e164(raw, c) if raw else None) or raw, "website": pl.get("websiteUri"),
                     "type": (pl.get("primaryTypeDisplayName") or {}).get("text"), "status": pl.get("businessStatus"),
                     "listing_url": f"https://www.google.com/maps/place/?q=place_id:{pl['id']}", **_ranking_facts(pl)})
+        out[-1]["books"] = how_she_books(out[-1])   # S-68 step 5
     if when is not None:
         from .hours import from_places_periods, open_at as _open_at
         for c in out:

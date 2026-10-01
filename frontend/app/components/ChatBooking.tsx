@@ -115,6 +115,7 @@ export default function ChatBooking({ find }: { find: Find }) {
             {c.status && c.status !== 'OPERATIONAL' ? <span style={{ color: '#9a1c1c' }}> · {c.status.toLowerCase().replace(/_/g, ' ')}</span> : null}
             <div style={{ fontSize: 13, opacity: 0.85 }}>{c.address ?? 'no address listed'} · {c.phone ?? 'no phone listed'}{c.website ? ` · ${c.website}` : ''}</div>
             {c.open_at ? <div style={{ fontSize: 13 }}>{c.open_at.words}</div> : null}
+            {c.books ? <div style={{ fontSize: 13 }}>How Sasha books: {c.books.words}</div> : null}
             {c.distance ? <div style={{ fontSize: 13 }}>{c.distance}{state.phase === 'found' && state.near ? ` from ${state.near.asked}` : ''}</div> : null}
             <div style={{ fontSize: 12, opacity: 0.6 }}>Google Maps</div>
             <GatedButton label={`Read ${c.name ?? 'this one'}`} onClick={() => { pick(c).catch(() => { /* visible state set inside */ }) }}

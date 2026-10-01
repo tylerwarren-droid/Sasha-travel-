@@ -7,10 +7,11 @@ be a hardcoded array in the frontend, which meant it said the same two trips for
 booking the guest genuinely made never showed up.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.services import chat_store
+from app.services.chat_account import chat_account
 
 router = APIRouter(prefix="/api/trips", tags=["trips"])
 
@@ -21,10 +22,11 @@ def _first_city(payload: dict) -> str:
 
 
 @router.get("")
-async def list_trips():
-    """Paid trips for the current guest, newest first."""
+async def list_trips(request: Request):
+    """Paid trips for the caller — a signed-in guest's own, or the public demo's — newest first (S-62 step 7)."""
+    account = await chat_account(request)
     try:
-        rows = await chat_store.list_booked_trips(chat_store.DEMO_USER_ID)
+        rows = await chat_store.list_booked_trips(account)
     except chat_store.TripsUnavailable as e:
         # S-45 · a failed read says it failed — the panel shows "couldn't be loaded", never "No trips yet"
         return JSONResponse({"trips": None, "error": "trips_unavailable", "message": str(e)}, status_code=503)

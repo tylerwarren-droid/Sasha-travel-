@@ -27,6 +27,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.services import chat_store
+from app.services.chat_account import chat_account, own_itinerary, own_offer
 from app.services.booking_ref import generate as generate_booking_ref
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
@@ -113,7 +114,7 @@ class ReserveRequest(BaseModel):
 
 
 @router.post("/reserve")
-async def reserve(body: ReserveRequest):
+async def reserve(body: ReserveRequest, request: Request):
     """Reservation-only booking — no payment (client feedback 2026-08-11).
 
     Sasha simply takes the reservation: the booking row is created and its reference minted
@@ -121,11 +122,12 @@ async def reserve(body: ReserveRequest):
     Stripe keys configured, which is the demo's normal state. The paid flow (create-checkout /
     verify / webhook) remains intact for when payments are re-enabled.
     """
-    offer = await chat_store.get_offer(body.offer_id) if body.offer_id else None
+    account = await chat_account(request)   # S-62 step 7 · only the caller's own offer or itinerary can be paid for
+    offer = await own_offer(body.offer_id, account) if body.offer_id else None
     if body.offer_id and not offer:
         raise HTTPException(status_code=404, detail="offer not found")
 
-    itinerary = await chat_store.get_itinerary(body.itinerary_id) if (body.itinerary_id and not offer) else None
+    itinerary = await own_itinerary(body.itinerary_id, account) if (body.itinerary_id and not offer) else None
     if body.itinerary_id and not offer and not itinerary:
         raise HTTPException(status_code=404, detail="itinerary not found")
     if not offer and not itinerary:
@@ -145,7 +147,7 @@ async def reserve(body: ReserveRequest):
         booking_id=str(uuid.uuid4()),
         stripe_session_id=sid,
         itinerary_id=("" if offer else (body.itinerary_id or "")),
-        user_id=chat_store.DEMO_USER_ID,
+        user_id=account,
         amount_usd=amount,
         offer_id=(body.offer_id if offer else None),
         kind=(offer.get("kind") if offer else None),
@@ -178,7 +180,7 @@ async def reserve(body: ReserveRequest):
 
 
 @router.post("/create-checkout")
-async def create_checkout(body: CheckoutRequest):
+async def create_checkout(body: CheckoutRequest, request: Request):
     """Create a Stripe Checkout Session and return its hosted URL for redirect.
 
     The price comes from the STORED itinerary, not from the request. Previously the caller
@@ -191,11 +193,12 @@ async def create_checkout(body: CheckoutRequest):
 
     # A single bookable card (hotel / flight / cab). Priced from the STORED offer, exactly like
     # a whole trip is priced from its stored itinerary — the browser's amount is never trusted.
-    offer = await chat_store.get_offer(body.offer_id) if body.offer_id else None
+    account = await chat_account(request)   # S-62 step 7 · only the caller's own offer or itinerary can be paid for
+    offer = await own_offer(body.offer_id, account) if body.offer_id else None
     if body.offer_id and not offer:
         raise HTTPException(status_code=404, detail="offer not found")
 
-    itinerary = await chat_store.get_itinerary(body.itinerary_id) if (body.itinerary_id and not offer) else None
+    itinerary = await own_itinerary(body.itinerary_id, account) if (body.itinerary_id and not offer) else None
     if body.itinerary_id and not offer and not itinerary:
         raise HTTPException(status_code=404, detail="itinerary not found")
 
@@ -278,7 +281,7 @@ async def create_checkout(body: CheckoutRequest):
             booking_id=str(uuid.uuid4()),
             stripe_session_id=session.id,
             itinerary_id=("" if offer else (body.itinerary_id or "")),
-            user_id=chat_store.DEMO_USER_ID,
+            user_id=account,
             amount_usd=amount,
             offer_id=(body.offer_id if offer else None),
             kind=(offer.get("kind") if offer else None),

@@ -498,5 +498,17 @@ async def list_sessions(user_id=DEMO_USER_ID) -> list:
     return await asyncio.to_thread(_list_sessions, user_id)
 
 
+def _session_owner(session_id) -> "Optional[str]":
+    _ensure()
+    with _connect() as conn:
+        r = conn.execute("SELECT user_id FROM chat_sessions WHERE id = ?", (session_id,)).fetchone()
+        return r["user_id"] if r else None
+
+
+async def session_owner(session_id) -> "Optional[str]":
+    """S-62 step 7 · who owns a chat session (None: it does not exist yet)."""
+    return await asyncio.to_thread(_session_owner, session_id)
+
+
 async def get_messages(session_id) -> list:
     return await asyncio.to_thread(_get_messages, session_id)

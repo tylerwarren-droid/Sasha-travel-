@@ -12,6 +12,7 @@ import TripPanel from './workspace/TripPanel'
 import YouPanel from './workspace/YouPanel'
 import ChatBooking from './ChatBooking'  // S-66 chat booking, Stage B re-applies
 import { takeChatText } from '@/lib/chat-booking-bus'
+import { guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // S-62 step 7
 import axios from 'axios'
 
 // `description` is the photographer's free-text Unsplash caption ("Colors", "4:51pm") — never
@@ -265,6 +266,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
    */
   const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string }) => {
     if (takeChatText(content)) { setMessages(prev => [...prev, { role: 'user', content }]); return }  // S-66 chat booking
+    await refreshGuestAuth()  // S-62 step 7 · a signed-in guest's chat is filed under their own account
     if (!content.trim()) return
     // Verbal stop — "Sasha, stop", "stop stop stop", "be quiet", a bare "wait"/"hold on".
     // In the live demo the guest said "stop" FIVE times in a row while Sasha narrated on;
@@ -330,7 +332,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
       // source for the context-driven interim line.
       fetch(apiUrl('/api/agents/classify'), {
         method: 'POST',
-        headers: apiHeaders(),
+        headers: apiHeaders(guestAuth()),  // S-62 step 7
         body: JSON.stringify({
           message: content,
           conversation_history: historyBeforeMessage,
@@ -372,8 +374,9 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         // No user_name: Sasha ASKS for the guest's name in her first reply (client feedback
         // 2026-08-11 — never assume the hardcoded demo profile is who's talking).
         force_intent: opts?.intent,              // set when the UI knows the intent (idea build)
-      }, { timeout: 60000, headers: apiHeaders() })  // bound the call so a hung backend can't stall the turn
+      }, { timeout: 60000, headers: apiHeaders(guestAuth()) })  // bound the call so a hung backend can't stall the turn · S-62 step 7
       const { response: sashaResponse, conversation_history, photos: respPhotos, links, hotels: hotelRecs, bookings: bookingCards, itinerary, action, booking_ref, itinerary_id, payment_item, saved_card } = response.data
+      if (response.data.session_id && response.data.session_id !== chatSessionIdRef.current) chatSessionIdRef.current = response.data.session_id  // S-62 step 7 · a session not ours is never continued
       if (response.data.booking_find) setBookingFind({ ...response.data.booking_find, draft: response.data.reservation_draft ?? null })  // S-66 chat booking
       // Replace local messages with server-authoritative history
       if (conversation_history?.length > 0) {

@@ -110,6 +110,11 @@ function main() {
     console.error("check-outcome-surfaces: SashaChat.tsx lacks the S-66 chat booking lines — run Stage B's chat booking re-apply (CLAUDE.md).");
     process.exit(1);
   }
+  // S-62 step 7 · the chat sends a signed-in guest's token and never continues a session that is not theirs
+  if ((chat.match(/S-62 step 7/g) || []).length < 5 || !chat.includes("apiHeaders(guestAuth())")) {
+    console.error("check-outcome-surfaces: SashaChat.tsx lacks the S-62 step 7 lines (guest token, session adoption) — re-apply them (CLAUDE.md, Stage B).");
+    process.exit(1);
+  }
   const you = readFileSync(join(ROOT, "app/components/workspace/YouPanel.tsx"), "utf8");
   if (!you.includes("S-45 Sasha reservations") || !you.includes("<SashaReservations />")) {
     console.error("check-outcome-surfaces: YouPanel.tsx lacks the S-45 Sasha reservations block — run Stage B's reservations re-apply (CLAUDE.md).");

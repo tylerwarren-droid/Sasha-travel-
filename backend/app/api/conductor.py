@@ -6,6 +6,7 @@ from app.services.conductor import conduct, classify_intents
 from app.services.llm import client, FAST_MODEL
 from app.services.prompts import get_prompt_async
 from app.services import chat_store
+from app.services.chat_account import chat_account, own_session
 
 router = APIRouter()
 
@@ -40,7 +41,7 @@ class ClassifyRequest(BaseModel):
 
 
 @router.post("/classify")
-async def classify(body: ClassifyRequest):
+async def classify(body: ClassifyRequest, request: Request):
     """Report which agents a message will fire — WITHOUT running them.
 
     Exists so the UI can react at the START of a turn instead of the end. An itinerary build
@@ -57,7 +58,9 @@ async def classify(body: ClassifyRequest):
     Pure keyword matching, no LLM and no agents — a few ms. Meant to be fired in PARALLEL with
     the conductor call so it costs the turn nothing.
     """
-    stored = await chat_store.latest_itinerary_for_session(body.session_id) if body.session_id else None
+    # S-62 step 7 · only the caller's own session is looked into
+    sid = await own_session(body.session_id, await chat_account(request)) if body.session_id else None
+    stored = await chat_store.latest_itinerary_for_session(sid) if sid else None
     has_itinerary = bool(stored) if body.session_id else None
     result = await classify_intents(body.message, body.conversation_history, has_itinerary)
     return {"intents": result.get("intents", []), "primary": result.get("primary")}
@@ -97,6 +100,7 @@ class ConductorResponse(BaseModel):
     # The saved card Sasha offers / charges on a booking turn (action confirm_card or
     # pay_saved_card): {"last4": "1003", "method": "saved_card"}.
     saved_card: Optional[dict] = None
+    session_id: Optional[str] = None  # S-62 step 7 · the session this turn was filed under (a new one if the sent id was not yours)
     booking_find: Optional[dict] = None  # S-66 chat booking (Stage B)
     reservation_draft: Optional[dict] = None  # S-66 chat booking (Stage B)
     conversation_history: list
@@ -104,11 +108,14 @@ class ConductorResponse(BaseModel):
 
 @router.post("/conductor")
 async def conductor_endpoint(body: ConductorRequest, request: Request):
+    # S-62 step 7 · WHO: a verified guest, or the public demo. A bad token is refused here, never turned into the demo.
+    account = await chat_account(request)
     try:
         client_config = getattr(request.state, "client", None)
         # Mint the session id BEFORE conducting: the conductor needs it to look up whether a
         # real itinerary exists for this session, and to file any plan it builds against it.
-        session_id = body.session_id or str(uuid.uuid4())
+        # S-62 step 7 · a session someone else owns is never appended to or read: this turn starts a new one.
+        session_id = await own_session(body.session_id, account) or str(uuid.uuid4())
         result = await conduct(
             user_message=body.message,
             conversation_history=body.conversation_history,
@@ -117,12 +124,12 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             user_name=body.user_name,
             force_intent=body.force_intent,
             session_id=session_id,
-            user_id=chat_store.DEMO_USER_ID,
+            user_id=account,
         )
         # Persist this turn (best-effort; a DB hiccup must never break the conversation).
         await chat_store.save_turn(
             session_id=session_id,
-            user_id=chat_store.DEMO_USER_ID,
+            user_id=account,
             user_message=body.message,
             assistant_response=result["response"],
             intents=result.get("intents"),
@@ -146,6 +153,7 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             saved_card=result.get("saved_card"),
             booking_find=result.get("booking_find"),  # S-66 chat booking (Stage B)
             reservation_draft=result.get("reservation_draft"),  # S-66 chat booking (Stage B)
+            session_id=session_id,
             conversation_history=result["messages"],
         )
     except Exception as e:

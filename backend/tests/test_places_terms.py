@@ -134,3 +134,25 @@ class PlacesTerms(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+from tests.test_booking_ladder import PG_URL, OnPostgres  # noqa: E402
+
+
+@unittest.skipUnless(PG_URL, "BOOKING_TEST_DATABASE_URL is not set — the Postgres half did NOT run")
+class PlacesTermsOnPostgres(unittest.TestCase):
+    """The live schema's checks hold the stored form too (013 met the old dialled_number check on 1 Oct)."""
+    setUpClass = classmethod(OnPostgres.setUpClass.__func__)
+    make_stores = OnPostgres.make_stores
+    _q = OnPostgres._q
+    setUp, tearDown, pick = PlacesTerms.setUp, PlacesTerms.tearDown, PlacesTerms.pick
+    BOOKING = PlacesTerms.BOOKING
+
+    def test_a_listing_number_call_is_recorded_hashed(self):
+        v = self.pick()
+        prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING})
+        self.assertEqual(prep.status_code, 200, prep.text)
+        row = self._q("select dialled_number, brief from booking_calls where call_id = $1::uuid", prep.json()["call_id"])[0]
+        self.assertEqual(row["dialled_number"], PT.number_key(NUMBER))
+        stored = self._q("select read from venue_reads where read_id = $1::uuid", v["read_id"])[0]["read"]
+        self.assertNotIn(NUMBER, json.dumps(stored, default=str))

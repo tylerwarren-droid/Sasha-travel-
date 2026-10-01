@@ -1,4 +1,5 @@
 -- 013 · Sasha 64 (finding A) · remove stored Google Maps content from the rows written before places_terms.py.
+-- ⚠ RUN 014 FIRST: the old dialled_number check refuses the hashed form (1 Oct: 013 stopped there, rolled back).
 -- ⛔ NOT APPLIED by any session. The founder runs it in the Supabase SQL editor (Sasha's project), section by section:
 --    run the PREVIEW, read it, then the transaction. Nothing outside these rows is touched.
 --

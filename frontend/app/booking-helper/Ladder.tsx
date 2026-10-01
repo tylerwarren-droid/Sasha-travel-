@@ -12,7 +12,7 @@
  * (scripts/check-outcome-surfaces.mjs holds this file to it).
  */
 import { useEffect, useRef, useState } from 'react'
-import { bookingUrl as apiUrl, bookingHeaders as apiHeaders } from '@/lib/booking-api'
+import { bookingReq, refusal } from '@/lib/booking-client'
 import { GatedButton } from './GatedButton'
 import { PhoneCall } from './PhoneCall'
 import { whatsappText } from '@/lib/whatsapp-template'
@@ -22,24 +22,8 @@ type Rung = { rung: string; available: boolean; value: string | null; source: st
 type Read = { read_id: string; venue: string; country: string | null; facts: Fact[]; rungs: Rung[]; say: string; sources: Array<{ url: string; result: string }> }
 type Reply = { from: string | null; text: string | null; note: string | null; received_at: string }
 
-const TIMEOUT_MS = 30000
 
-async function req(path: string, body?: unknown): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
-  const ctl = new AbortController()
-  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS)
-  let r: Response
-  try {
-    r = await fetch(apiUrl(path), body === undefined ? { headers: apiHeaders(), signal: ctl.signal } : { method: 'POST', headers: apiHeaders(), body: JSON.stringify(body), signal: ctl.signal })
-  } catch (e) {
-    throw new Error((e as Error).name === 'AbortError' ? `Sasha's server did not answer within ${TIMEOUT_MS / 1000}s` : `could not reach Sasha's server (${(e as Error).message})`)
-  } finally { clearTimeout(timer) }
-  let json: Record<string, unknown> = {}
-  try { json = await r.json() } catch { /* reported by status below */ }
-  return { ok: r.ok, status: r.status, json }
-}
 
-const refusal = (j: Record<string, unknown>, status: number) =>
-  `${typeof j.rule === 'string' ? j.rule : `HTTP ${status}`}${typeof j.message === 'string' ? ` — ${j.message}` : ''}`
 
 /** S-64 · a link can name an ACTIVITY (a massage, a tour…) instead of a table: &activity=…&activity_venue=…&category=…&unit=…&duration=… */
 export type Activity = { activity: string; activity_venue_lang: string; category: string; unit: string; duration_min?: number }
@@ -90,7 +74,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
 
   async function doFind() {
     setFinding('finding'); setFound([]); setFindNote(null)
-    const r = await req('/api/booking/venues/find', { what: find.what, where: find.where, country: find.country || undefined })
+    const r = await bookingReq('/api/booking/venues/find', { what: find.what, where: find.where, country: find.country || undefined })
     if (!r.ok) { setFinding('stopped'); setFindNote(`Could not search: ${refusal(r.json, r.status)}`); return }
     const c = (r.json.candidates ?? []) as Candidate[]
     setFound(c); setFinding('done')
@@ -105,7 +89,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
 
   async function doRead(query = q, link: Linked | null = linked, placeId?: string) {
     setReading('reading'); setRead(null); setPick(null); setNote(null)
-    const r = await req('/api/booking/venues/read', { name: query.name, city: query.city, country: query.country || undefined,
+    const r = await bookingReq('/api/booking/venues/read', { name: query.name, city: query.city, country: query.country || undefined,
       website: query.website || undefined, ...(placeId ? { place_id: placeId } : {}) })
     if (!r.ok) { setReading('stopped'); setNote(`Could not read them: ${refusal(r.json, r.status)}`); return }
     const got = r.json as unknown as Read
@@ -141,7 +125,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   async function prepareEmail() {
     if (!read) return
     setEmailPhase('preparing'); setEmailNote(null)
-    const r = await req('/api/booking/emails', { read_id: read.read_id, ...b })
+    const r = await bookingReq('/api/booking/emails', { read_id: read.read_id, ...b })
     if (!r.ok) { setEmailPhase('stopped'); setEmailNote(`Not written: ${refusal(r.json, r.status)}. Nothing was sent.`); return }
     const rb = r.json.read_back as { lines: string[]; sha256: string }
     setEmailLines(rb.lines); setEmailPrep({ email_id: r.json.email_id as string, sha256: rb.sha256 }); setEmailPhase('read_back')
@@ -150,7 +134,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   async function sendEmail() {
     if (!emailPrep) return
     setEmailPhase('sending'); setEmailNote(null)
-    const r = await req(`/api/booking/emails/${emailPrep.email_id}/send`, { read_back_sha256: emailPrep.sha256, approval: { how: 'button', said: null } })
+    const r = await bookingReq(`/api/booking/emails/${emailPrep.email_id}/send`, { read_back_sha256: emailPrep.sha256, approval: { how: 'button', said: null } })
     if (!r.ok) { setEmailPhase('stopped'); setEmailNote(`Not sent: ${refusal(r.json, r.status)}.`); return }
     setEmailNote(String(r.json.say ?? ''))
     setEmailPhase(r.json.status === 'sent' ? 'sent' : 'stopped')
@@ -158,7 +142,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
 
   async function checkReplies() {
     if (!emailPrep) return
-    const g = await req(`/api/booking/emails/${emailPrep.email_id}`)
+    const g = await bookingReq(`/api/booking/emails/${emailPrep.email_id}`)
     if (!g.ok) { setEmailNote(`Could not check for a reply: ${refusal(g.json, g.status)}`); return }
     setReplies((g.json.replies as Reply[]) ?? []); setEmailNote(String(g.json.say ?? ''))
   }
@@ -170,7 +154,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   async function prepareLink() {
     if (!read) return
     setLinkNote(null)
-    const r = await req('/api/booking/links', { read_id: read.read_id, date: b.date, time: b.time, party: b.party, name: b.name })
+    const r = await bookingReq('/api/booking/links', { read_id: read.read_id, date: b.date, time: b.time, party: b.party, name: b.name })
     if (!r.ok) { setLinkNote(`No link: ${refusal(r.json, r.status)}`); return }
     const rb = r.json.read_back as { lines: string[]; sha256: string }
     setLink({ link_id: r.json.link_id as string, url: r.json.url as string, sha256: rb.sha256, platform: r.json.platform as string, lines: rb.lines })
@@ -179,7 +163,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
 
   async function linkState(path: string, body?: unknown) {
     if (!link) return
-    const g = await req(`/api/booking/links/${link.link_id}${path}`, body)
+    const g = await bookingReq(`/api/booking/links/${link.link_id}${path}`, body)
     if (!g.ok) { setLinkNote(`Could not record it: ${refusal(g.json, g.status)}`); return }
     setLinkStatus(String(g.json.status ?? '')); setLinkNote(typeof g.json.say === 'string' ? g.json.say : null)
     if (Array.isArray(g.json.confirmations)) setLinkConfs(g.json.confirmations as Array<{ text: string | null; counted: boolean; note: string | null }>)

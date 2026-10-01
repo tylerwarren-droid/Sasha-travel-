@@ -10,7 +10,7 @@
  * The number is never typed here: the server holds it (backend/booking_signer/calls.py).
  */
 import { useEffect, useState } from 'react'
-import { bookingUrl as apiUrl, bookingHeaders as apiHeaders } from '@/lib/booking-api'
+import { bookingReq, refusal } from '@/lib/booking-client'
 import { GatedButton } from './GatedButton'
 import type { Activity } from './Ladder'
 
@@ -24,24 +24,8 @@ type Phase = 'idle' | 'preparing' | 'read_back' | 'placing' | 'on_call' | 'finis
 const VENUE = 'test-line'
 const POLL_MS = 5000
 const POLL_LIMIT = 90   // 7½ minutes: longer than Bland's 4-minute ceiling on the call itself
-const TIMEOUT_MS = 20000
 
-async function req(path: string, body?: unknown): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
-  const ctl = new AbortController()
-  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS)
-  let r: Response
-  try {
-    r = await fetch(apiUrl(path), body === undefined ? { headers: apiHeaders(), signal: ctl.signal } : { method: 'POST', headers: apiHeaders(), body: JSON.stringify(body), signal: ctl.signal })
-  } catch (e) {
-    throw new Error((e as Error).name === 'AbortError' ? `Sasha's server did not answer within ${TIMEOUT_MS / 1000}s` : `could not reach Sasha's server (${(e as Error).message})`)
-  } finally { clearTimeout(timer) }
-  let json: Record<string, unknown> = {}
-  try { json = await r.json() } catch { /* reported by status below */ }
-  return { ok: r.ok, status: r.status, json }
-}
 
-const refusal = (j: Record<string, unknown>, status: number) =>
-  `${typeof j.rule === 'string' ? j.rule : `HTTP ${status}`}${typeof j.message === 'string' ? ` — ${j.message}` : ''}`
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -59,7 +43,7 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
   const [note, setNote] = useState<string | null>(null)
 
   useEffect(() => {
-    const check = () => { req('/api/booking/health').then((r) => setHealth(((r.json as { calls?: CallsHealth }).calls) ?? 'unreachable')).catch(() => setHealth('unreachable')) }
+    const check = () => { bookingReq('/api/booking/health').then((r) => setHealth(((r.json as { calls?: CallsHealth }).calls) ?? 'unreachable')).catch(() => setHealth('unreachable')) }
     check()
     // the booking link · calls are switched on only when the founder is ready: the panel notices within 10 s, no reload needed
     const every = setInterval(check, 10000)
@@ -84,7 +68,7 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
       where: {}, when: { mode: 'at', at: `${form.date}T${form.time}`, ...(activity.duration_min ? { duration_min: activity.duration_min } : {}) },
       how_many: { count: form.party, unit: activity.unit },
     } : null
-    const r = await req('/api/booking/calls', cancelsCallId ? { cancels_call_id: cancelsCallId }
+    const r = await bookingReq('/api/booking/calls', cancelsCallId ? { cancels_call_id: cancelsCallId }
       : reservation ? { reservation, read_id: readId, ...(factIndex !== undefined ? { fact_index: factIndex } : {}) }
       : { ...(readId ? { read_id: readId, ...(factIndex !== undefined ? { fact_index: factIndex } : {}) } : { venue: VENUE }), date: form.date, time: form.time, party: form.party, name: form.name, phone: form.phone || undefined })
     if (!r.ok) { setPhase('stopped'); setNote(`Not prepared: ${refusal(r.json, r.status)}. Nothing was dialled.`); return }
@@ -95,7 +79,8 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
   async function place() {
     if (!prepared) return
     setPhase('placing'); setNote(null)
-    const r = await req(`/api/booking/calls/${prepared.call_id}/place`, { read_back_sha256: prepared.sha256, approval: { how: 'button', said: null } })
+    // 75 s: the server gives Bland up to 60 s to answer (S-57); a shorter wait here would say "no answer" while it dials
+    const r = await bookingReq(`/api/booking/calls/${prepared.call_id}/place`, { read_back_sha256: prepared.sha256, approval: { how: 'button', said: null } }, 75000)
     if (!r.ok) { setPhase('stopped'); setNote(`Not called: ${refusal(r.json, r.status)}. Nothing was dialled.`); return }
     // S-57 · 'uncertain': Bland didn't answer in time and may have dialled — follow it like a placed call; never "not placed"
     // S-66 · closed now by its listed hours: the call is scheduled for opening + 10 minutes, covered by this yes
@@ -104,7 +89,7 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
     setPhase('on_call'); setNote(String(r.json.say ?? 'Calling now.'))
     for (let i = 0; i < POLL_LIMIT; i++) {
       await sleep(POLL_MS)
-      const g = await req(`/api/booking/calls/${prepared.call_id}`)
+      const g = await bookingReq(`/api/booking/calls/${prepared.call_id}`)
       if (!g.ok) { setNote(`Could not check the call just now: ${refusal(g.json, g.status)}. Still trying.`); continue }
       const v = g.json as unknown as CallView
       setView(v)

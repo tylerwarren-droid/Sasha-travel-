@@ -24,14 +24,18 @@ from .store import BOOKINGS_TRIP_TITLE, PostgresStore, StorageUnavailable, Unkno
 
 #: The venue-facing status each outcome gives the reservation.
 TRIP_STATUS = {"yes": "confirmed", "no": "declined", "unclear": "unclear"}
+#: S-64 step 8 · an offer instead of a yes: the reservation says so; the attempt is `unclear` (never `confirmed`)
+OFFER_STATUS = {"proposed": "proposed", "quoted": "quoted", "waitlisted": "waitlisted"}
 
 
-def outcome_effect(purpose: str, outcome: str) -> Tuple[str, Optional[str]]:
+def outcome_effect(purpose: str, outcome: str, offer: Optional[dict] = None) -> Tuple[str, Optional[str]]:
     """(the attempt's status, the trip item's NEW status or None to leave it). S-47 · a cancellation that the venue
     confirmed cancels the reservation; one they refused or left unclear leaves the booking as it stands — never a guess
     that it is gone."""
     if purpose == "cancel":
         return {"yes": ("confirmed", "cancelled"), "no": ("declined", None), "unclear": ("unclear", None)}[outcome]
+    if offer and outcome != "yes" and offer.get("kind") in OFFER_STATUS:
+        return "unclear", OFFER_STATUS[offer["kind"]]
     return TRIP_STATUS[outcome], TRIP_STATUS[outcome]
 #: Who read the outcome, as recorded on the attempt.
 OBSERVED_BY_CALL = "Sasha's phone call — an AI reading of the transcript, with the venue's own words"
@@ -115,7 +119,7 @@ class MemoryCallStore:
                  reading=reading_json(reading), read_at=now)
         if reading.state == "answered":
             purpose = (r.get("brief") or {}).get("purpose", "book")
-            attempt, trip = outcome_effect(purpose, reading.outcome)
+            attempt, trip = outcome_effect(purpose, reading.outcome, getattr(reading, "offer", None))
             self.attempts.append({"trip_item_id": r["trip_item_id"], "method": "phone", "status": attempt,
                                   "response_received": reading.venue_words, "observed_by": OBSERVED_BY_CALL})
             if trip:
@@ -141,7 +145,7 @@ _TRIP = ("venue_name", "local_date", "local_time", "local_timezone", "party_size
 
 def reading_json(r) -> dict:
     return {"state": r.state, "outcome": r.outcome, "quote": r.quote, "reference": getattr(r, "reference", None), "raised": r.raised, "why": r.why,
-            "read_by": r.read_by, "bland_status": r.bland_status, "answered_by": r.answered_by}
+            "read_by": r.read_by, "bland_status": r.bland_status, "answered_by": r.answered_by, "offer": getattr(r, "offer", None)}
 
 
 class PostgresCallStore:
@@ -284,7 +288,7 @@ class PostgresCallStore:
                     return False   # already read by another poll: never recorded twice
                 if reading.state == "answered":
                     purpose = (row["brief"] or {}).get("purpose", "book")
-                    attempt, trip = outcome_effect(purpose, reading.outcome)
+                    attempt, trip = outcome_effect(purpose, reading.outcome, getattr(reading, "offer", None))
                     await conn.execute(
                         "insert into booking_attempts (trip_item_id, method, attempted_at, status, response_received, "
                         "response_at, observed_by) values ($1, 'phone', $2, $3, $4, $2, $5)",

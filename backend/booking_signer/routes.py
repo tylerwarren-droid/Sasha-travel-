@@ -403,6 +403,10 @@ STATUS_WORDS = {
     "guest_booked": "Booked by you — forward the confirmation to add the reference",
     # S-56 · the venue said stop while this was pending: never "declined", which would put words in their mouth
     "escalated": "Not confirmed — the venue asked Sasha to stop contacting them; you can still contact them yourself",
+    # S-64 step 8 · an offer is never a booking — none of these says "confirmed" or "booked"
+    "proposed": "Not booked — they offered a different time or day; read what they said",
+    "quoted": "Not booked — they gave a quote; read what they said",
+    "waitlisted": "Not booked — you are on their waiting list",
 }
 
 @router.get("/reservations")

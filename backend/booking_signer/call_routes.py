@@ -391,7 +391,7 @@ def _view(call: dict, name: str) -> dict:
            "outcome": call.get("outcome"), "venue_words": call.get("venue_words"),
            "quote": reading.get("quote"), "raised": reading.get("raised") or [], "why": reading.get("why"),
            # ⚠ labelled wherever it is shown: the outcome is a model's reading; their words are verbatim
-           "read_by": reading.get("read_by")}
+           "read_by": reading.get("read_by"), "offer": reading.get("offer")}
     if call["status"] == "not_placed":
         out["why"] = call.get("not_placed_why")
         out["say"] = f"I couldn't place the call: {call.get('not_placed_why')}"
@@ -402,6 +402,6 @@ def _view(call: dict, name: str) -> dict:
         out["say"] = None
     elif call["status"] in ("answered", "not_reached"):
         r = C.CallReading(state=call["status"], outcome=call.get("outcome"), venue_words=call.get("venue_words") or "",
-                          quote=reading.get("quote"), why=reading.get("why") or "")
+                          quote=reading.get("quote"), why=reading.get("why") or "", offer=reading.get("offer"))
         out["say"] = C.say_for(name, r, (call.get("brief") or {}).get("purpose", "book"))
     return out

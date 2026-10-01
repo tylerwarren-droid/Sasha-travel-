@@ -409,6 +409,16 @@ class CallRoutes:
         self.assertEqual(call_sha, item_sha)                     # the call carried out exactly this request
         self.assertEqual(self.trip_status(prep["call_id"]), "pending")   # the old columns, as before
 
+    def test_s64_a_waiting_list_is_recorded_as_waitlisted_and_never_confirmed(self):
+        prep = self.prepare()
+        self.assertEqual(self.yes(prep).json()["status"], "placed")
+        call_routes.READER = reader_says({"reading": "unclear", "quote": "", "raised": []})
+        self.bland.details = done(("user", "We're full on Thursday, but I can put you on the waiting list."))
+        v = self.c.get(f"/api/booking/calls/{prep['call_id']}").json()
+        self.assertEqual((v["status"], v["outcome"], v["offer"]["kind"]), ("answered", "unclear", "waitlisted"))
+        self.assertIn("waiting list — that is not a booking", v["say"])
+        self.assertEqual(self.trip_status(prep["call_id"]), "waitlisted")
+
     def test_off_means_no_read_back_and_no_call(self):
         with mock.patch.dict(os.environ, {"SASHA_CALLS_ENABLED": "0"}):
             r = self.c.post("/api/booking/calls", json=JOHNSON)

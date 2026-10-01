@@ -564,6 +564,9 @@ class CallReading:
     read_by: Optional[str] = None       #: set whenever a model read the transcript
     bland_status: Optional[str] = None
     answered_by: Optional[str] = None
+    #: S-64 step 8 · what the venue OFFERED instead of a yes: {"kind": proposed|quoted|waitlisted, "quote", …}. The outcome
+    #: stays `no`/`unclear` — an offer is never a booking, and never shown as confirmed.
+    offer: Optional[dict] = None
 
 
 def _norm(s: str) -> str:
@@ -696,14 +699,56 @@ async def read_call(details: Mapping[str, Any], reader: Reader, purpose: str = "
                                    + ". Check with them before relying on it.", **base)
     ref = parsed.get("reference")
     ref = ref.strip() if isinstance(ref, str) and ref.strip() and _quoted_by_venue(ref, turns) else None   # never invented
+    if reading != "yes":
+        # S-64 step 8 · they did not say yes: did they OFFER something instead? (a yes later contradicted is not an offer —
+        # La Contra stays `unclear`, with its lines)
+        offer = offer_in(turns, asked, purpose)
+        if offer:
+            return CallReading(state="answered", outcome=reading, venue_words=words, quote=quote if reading == "no" else None,
+                               raised=raised, read_by=READ_BY, offer=offer, why=offer["why"], **base)
     return CallReading(state="answered", outcome=reading, venue_words=words, quote=quote if reading != "unclear" else None,
                        raised=raised, read_by=READ_BY, reference=ref if reading == "yes" else None,
                        why={"yes": "they accepted the booking as asked", "no": "they declined",
                             "unclear": "their answer was neither a clear yes nor a clear no"}[reading], **base)
 
 
+_WAITLIST = re.compile(r"lista de espera|waiting ?list|wait ?list|liste d'attente|lista d'attesa|warteliste", re.IGNORECASE)
+
+
+def offer_in(turns: List[str], asked: Optional[Mapping[str, Any]], purpose: str) -> Optional[dict]:
+    """S-64 step 8 · what the venue offered instead of a yes, with its own words. Waitlist first, then a quote (on a
+    quote-first call), then another time or day. None when they offered nothing."""
+    wl = next((t for t in turns if _WAITLIST.search(t)), None)
+    if wl:
+        return {"kind": "waitlisted", "quote": wl, "why": "they offered their waiting list — that is not a booking"}
+    if purpose == "quote_first":
+        q = next((t for t in turns if _MONEY.search(t) or re.search(r"\d", t)), None)
+        if q:
+            return {"kind": "quoted", "quote": q, "why": "they gave a quote — nothing is booked"}
+    if asked:
+        if (asked.get("mode") or "at") == "venue_proposes":
+            ps = heard.proposals(turns)
+        else:
+            ps = [{"hour": m["said"], "quote": m["quote"]} for m in heard.mismatches(turns, asked) if m["what"] in ("time", "day")]
+        if ps:
+            return {"kind": "proposed", "quote": ps[0]["quote"], "proposals": [p["quote"] for p in ps],
+                    "why": "they offered a different time or day — nothing is booked"}
+    return None
+
+
 def say_for(venue_name: str, r: CallReading, purpose: str = "book") -> str:
     """What Sasha tells the guest. ⚠ Never 'booked' on anything but a quoted yes; always their words."""
+    offer = getattr(r, "offer", None)
+    if r.state == "answered" and offer and r.outcome != "yes":
+        q = offer["quote"]
+        if offer["kind"] == "waitlisted":
+            return (f"{venue_name} put you on their waiting list — that is not a booking. Their words: \"{q}\". "
+                    "I won't call them again without your yes.")
+        if offer["kind"] == "quoted":
+            return (f"{venue_name} gave a quote — nothing is booked. Their words: \"{q}\". "
+                    "If you want to go ahead, that is a new request and a new yes; I never pay a deposit for you.")
+        return (f"{venue_name} didn't confirm what you asked for; they offered something else. Their words: \"{q}\". "
+                "Nothing is booked — if you want it, tell me and I'll ask with a new read-back.")
     if r.state == "in_progress":
         return f"I'm on the phone to {venue_name} now."
     if r.state == "not_reached":

@@ -20,6 +20,7 @@ import unittest
 
 os.environ.setdefault("SASHA_BOOKING_KEY", "test-booking-key")   # S-41: the gate (gate.py)
 os.environ.setdefault("SASHA_CALL_SWEEP", "0")
+os.environ.setdefault("SASHA_SUPABASE_URL", "https://testref.supabase.co")   # S-69: guest tokens are checked against it
 from urllib.parse import urlsplit, urlunsplit
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey

@@ -34,7 +34,7 @@ SQL_DIR = HERE.parent / "booking_signer" / "sql"
 PG_URL = os.getenv("BOOKING_TEST_DATABASE_URL", "")
 NOW = datetime(2026, 10, 5, 11, 0, tzinfo=timezone.utc)   # a Monday
 SECRET = "whsec_" + base64.b64encode(b"test-webhook-secret-not-real").decode()
-ENV = {"SASHA_BOOKING_KEY": "test-booking-key", "SASHA_CALL_SWEEP": "0", "SASHA_CALLS_ENABLED": "1", "BLAND_API_KEY": "bland-test", "SASHA_TEST_CALL_NUMBER": "+351912000000",
+ENV = {"SASHA_BOOKING_KEY": "test-booking-key", "SASHA_SUPABASE_URL": "https://testref.supabase.co", "SASHA_CALL_SWEEP": "0", "SASHA_CALLS_ENABLED": "1", "BLAND_API_KEY": "bland-test", "SASHA_TEST_CALL_NUMBER": "+351912000000",
        "SASHA_EMAILS_ENABLED": "1", "SASHA_RESEND_API_KEY": "re_test", "RESEND_API_KEY": "", "SASHA_EMAIL_FROM": "Sasha <sasha@mail.kanoe.test>",
        "SASHA_INBOUND_DOMAIN": "in.kanoe.test", "RESEND_WEBHOOK_SECRET": SECRET, "GOOGLE_PLACES_API_KEY": "",
        "SASHA_PHONE_NUMBER": "", "SASHA_CALLS_PER_DAY": "3", "SASHA_EMAILS_PER_DAY": "5"}

@@ -30,7 +30,8 @@ class Contacts:
         raise NotImplementedError
 
     def setUp(self):
-        self.env = mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k", "SASHA_CALL_SWEEP": "0", "FOUNDER_ACCOUNT_ID": ""})
+        self.env = mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k", "SASHA_CALL_SWEEP": "0", "FOUNDER_ACCOUNT_ID": "",
+                                               "SASHA_SUPABASE_URL": "https://testref.supabase.co"})
         self.env.start()
         self.saved = (CT.STORE, CT.NOW, I.FETCH)
         CT.STORE, CT.NOW = self.make_store(), (lambda: NOW)

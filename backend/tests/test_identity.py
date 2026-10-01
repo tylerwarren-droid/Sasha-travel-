@@ -21,6 +21,7 @@ from booking_signer import identity as I, routes
 from booking_signer.account import DEMO_ACCOUNT_ID
 
 GUEST = "22222222-2222-4222-8222-222222222222"
+PROJECT = "https://testref.supabase.co"
 FOUNDER = "33333333-3333-4333-8333-333333333333"
 
 
@@ -40,13 +41,14 @@ FORGER, _ = keypair("kid-real")          # same kid, different key: a forgery
 
 
 def token(pem=SIGN, kid="kid-real", **over):
-    claims = {"sub": GUEST, "role": "authenticated", "aud": I.AUDIENCE, "iss": I.ISSUER, "exp": int(time.time()) + 600, **over}
+    claims = {"sub": GUEST, "role": "authenticated", "aud": I.AUDIENCE, "iss": f"{PROJECT}/auth/v1", "exp": int(time.time()) + 600, **over}
     return jwt.encode(claims, pem, algorithm="ES256", headers={"kid": kid})
 
 
 class Identity(unittest.TestCase):
     def setUp(self):
-        self.env = mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-test", "SASHA_CALL_SWEEP": "0", "FOUNDER_ACCOUNT_ID": ""})
+        self.env = mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-test", "SASHA_CALL_SWEEP": "0", "FOUNDER_ACCOUNT_ID": "",
+                                               "SASHA_SUPABASE_URL": PROJECT})
         self.env.start()
         self.fetches = 0
 
@@ -96,6 +98,15 @@ class Identity(unittest.TestCase):
         self.assertEqual(asyncio.run(I.resolve(req({"x-sasha-session": "founder"}))), DEMO_ACCOUNT_ID)   # until he has his own
         with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": FOUNDER}):
             self.assertEqual(asyncio.run(I.resolve(req({"x-sasha-session": "founder"}))), FOUNDER)
+
+    def test_no_project_configured_refuses_said(self):
+        """S-69 · no project ref in code: without SASHA_SUPABASE_URL, a token is refused (503), never checked elsewhere."""
+        with mock.patch.dict(os.environ, {"SASHA_SUPABASE_URL": ""}):
+            r = self.c.get("/api/booking/reservations", headers={"authorization": f"Bearer {token()}"})
+        self.assertEqual((r.status_code, r.json()["detail"]["rule"]), (503, "sign_in_not_configured"))
+        self.assertEqual(self.fetches, 0)
+        with mock.patch.dict(os.environ, {"SASHA_SUPABASE_URL": "https://evil.example.com"}):
+            self.assertIsNone(I.project_url())
 
     def test_keys_unreachable_fail_closed(self):
         async def down():

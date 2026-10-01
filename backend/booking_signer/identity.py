@@ -19,16 +19,24 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from fastapi import HTTPException, Request
 
-SUPABASE_URL = os.getenv("SASHA_SUPABASE_URL", "https://xlqtveusyfpffaejegiq.supabase.co").rstrip("/")
-ISSUER = f"{SUPABASE_URL}/auth/v1"
-JWKS_URL = f"{ISSUER}/.well-known/jwks.json"
 AUDIENCE = "authenticated"
+_PROJECT = re.compile(r"https://[a-z0-9-]+\.supabase\.co")
+
+
+def project_url() -> Optional[str]:
+    """S-69 · SASHA_SUPABASE_URL, read at call time — no project ref in code, so a move is an env change. None if unset."""
+    u = os.getenv("SASHA_SUPABASE_URL", "").strip().rstrip("/")
+    return u if _PROJECT.fullmatch(u) else None
+
+
+def issuer() -> str:
+    return f"{project_url()}/auth/v1"
 ALGORITHMS = ["ES256"]
 JWKS_TTL_S = 600
 SESSION_HEADER = "x-sasha-session"
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
-#: () → the JWKS document. Tests replace it; None = an HTTPS GET of JWKS_URL.
+#: () → the JWKS document. Tests replace it; None = an HTTPS GET of the project's JWKS (issuer()/.well-known/jwks.json).
 FetchJwks = Callable[[], Awaitable[Dict[str, Any]]]
 FETCH: Optional[FetchJwks] = None
 _cache: Dict[str, Any] = {"keys": None, "at": 0.0}
@@ -43,7 +51,7 @@ async def _fetch() -> Dict[str, Any]:
         return await FETCH()
     import httpx
     async with httpx.AsyncClient(timeout=10) as c:
-        r = await c.get(JWKS_URL)
+        r = await c.get(f"{issuer()}/.well-known/jwks.json")
         r.raise_for_status()
         return r.json()
 
@@ -64,6 +72,9 @@ async def verify_token(token: str) -> str:
     """A Supabase access token → its account id (`sub`), or a 401 saying why. Nothing in it is trusted unverified."""
     from jose import jwt
     from jose.exceptions import ExpiredSignatureError, JWTClaimsError, JWTError
+    if project_url() is None:   # ⛔ fail closed: with no project configured, no token can be verified — and it says so
+        raise HTTPException(503, {"ok": False, "rule": "sign_in_not_configured",
+                                  "message": "SASHA_SUPABASE_URL is not set on this server, so no sign-in can be checked; nothing was done"})
     try:
         kid = jwt.get_unverified_header(token).get("kid")
     except JWTError:
@@ -81,7 +92,7 @@ async def verify_token(token: str) -> str:
     if key is None:
         raise _refuse("account_token_invalid", "the sign-in token was not signed by Sasha's sign-in keys")
     try:
-        claims = jwt.decode(token, key, algorithms=ALGORITHMS, audience=AUDIENCE, issuer=ISSUER)
+        claims = jwt.decode(token, key, algorithms=ALGORITHMS, audience=AUDIENCE, issuer=issuer())
     except ExpiredSignatureError:
         raise _refuse("account_token_expired", "the sign-in has expired — sign in again") from None
     except (JWTClaimsError, JWTError):
@@ -118,4 +129,4 @@ async def resolve(request: Request) -> Optional[str]:
     raise _refuse("account_session_unknown", f"{SESSION_HEADER} is founder or demo")
 
 
-__all__ = ["resolve", "verify_token", "founder_account", "reset_cache", "SESSION_HEADER", "ISSUER", "AUDIENCE"]
+__all__ = ["resolve", "verify_token", "founder_account", "reset_cache", "project_url", "issuer", "SESSION_HEADER", "AUDIENCE"]

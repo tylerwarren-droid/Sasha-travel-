@@ -131,6 +131,27 @@ class CallParticulars:
     phone: Optional[str]        #: given to the venue ONLY if they ask, and only because the read-back says so
 
 
+def guest_phone(raw: Any, country: Any) -> Optional[str]:
+    """S-64 · the guest's number as E.164. "608 445 715" with phone_country ES → +34608445715 (venue_read.to_e164, the
+    same rules as a venue's number). Already international → kept. Neither → ASK ONCE which country, never guess."""
+    if raw is None or str(raw).strip() == "":
+        return None
+    from .venue_read import COUNTRIES, to_e164
+    s = re.sub(r"[\s().-]", "", str(raw))
+    if _E164.fullmatch(s):
+        return s
+    c = str(country or "").strip().upper()
+    if not c:
+        raise CallRefused("phone_country_needed", f"which country is the number {str(raw).strip()} from? Write it with its country "
+                                                  "code — e.g. +34 for Spain, +351 for Portugal — and I'll use it as given")
+    if c not in COUNTRIES:
+        raise CallRefused("phone_country_unknown", f"{c} is not a country whose numbers Sasha can read yet; give the number with its + code")
+    e = to_e164(str(raw), c)
+    if not e or not _E164.fullmatch(e):
+        raise CallRefused("phone_invalid", f"{str(raw).strip()} is not a {c} phone number Sasha can read; give it with its + code")
+    return e
+
+
 def parse_call_particulars(body: Mapping[str, Any]) -> CallParticulars:
     raw_date, raw_time = body.get("date"), body.get("time")
     try:
@@ -150,13 +171,7 @@ def parse_call_particulars(body: Mapping[str, Any]) -> CallParticulars:
     # hyphens only, 2–60 characters. Anything else is refused rather than read aloud.
     if not isinstance(name, str) or not 2 <= len(name.strip()) <= 60 or not _NAME.fullmatch(name.strip()):
         raise CallRefused("name_invalid", "name is 2–60 letters (spaces, apostrophes, dots and hyphens allowed)")
-    phone = body.get("phone")
-    if phone is not None and phone != "":
-        phone = re.sub(r"[\s().-]", "", str(phone))
-        if not _E164.fullmatch(phone):
-            raise CallRefused("phone_invalid", "phone, if given, is an E.164 number: + and 8–15 digits")
-    else:
-        phone = None
+    phone = guest_phone(body.get("phone"), body.get("phone_country"))
     if "number" in body or "phone_number" in body or "venue_phone" in body:
         raise CallRefused("number_from_request", "the number to call is never taken from the request — it comes from the venue")
     return CallParticulars(on=on, at=time(int(m.group(1)), int(m.group(2))), party=party, name=" ".join(name.split()), phone=phone)

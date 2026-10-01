@@ -213,10 +213,17 @@ async def record_intent(request: Request):
         return _refuse(422, e.rule, str(e))
     trip_id = body.get("trip_id")  # optional: one of this account's trips; else its "Sasha bookings" trip
     lang = next((c[2] for c in V.COUNTRIES.values() if c[3] == venue.timezone), "en")
+    # S-64 · the guest's number as E.164 for the object — asked once (phone_country) rather than dropping the object.
+    # The FORM still receives exactly what the guest typed: that is what they read back and approved.
+    from . import calls as _C
+    try:
+        mobile = _C.guest_phone(p.phone, body.get("phone_country"))
+    except _C.CallRefused as e:
+        return _refuse(422, e.rule, str(e).split(": ", 1)[-1])
     row = {
         # S-64 step 3 · the reservation/1 object, alongside (a form's free-text name may not fit it: then none)
         "request": RS.try_from_particulars(p, account_id=account, venue_name=venue.short_name, timezone=venue.timezone, lang=lang,
-                                           email=getattr(p, "email", None)),
+                                           email=getattr(p, "email", None), mobile=mobile),
         "intent_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "mode": mode,
         # → the trip item (the reservation)
         "venue_name": venue.short_name, "local_date": p.on, "local_time": p.at, "local_timezone": venue.timezone,

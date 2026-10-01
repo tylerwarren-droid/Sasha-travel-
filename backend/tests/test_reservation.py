@@ -126,3 +126,19 @@ class Kenya(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GuestPhone(unittest.TestCase):
+    def test_a_national_number_with_its_country_becomes_e164(self):
+        self.assertEqual(C.guest_phone("608 445 715", "ES"), "+34608445715")
+        self.assertEqual(C.guest_phone("0725 909 800", "ke"), "+254725909800")
+        self.assertEqual(C.guest_phone("+44 7700 900123", None), "+447700900123")
+        self.assertEqual(C.guest_phone("0034 608 445 715", "ES"), "+34608445715")
+        self.assertIsNone(C.guest_phone("", None))
+
+    def test_without_a_country_it_asks_once_and_never_guesses(self):
+        for raw, country, rule in (("608 445 715", None, "phone_country_needed"), ("608 445 715", "ZZ", "phone_country_unknown"),
+                                   ("12", "ES", "phone_invalid")):
+            with self.assertRaises(C.CallRefused) as e:
+                C.guest_phone(raw, country)
+            self.assertEqual(e.exception.rule, rule, raw)

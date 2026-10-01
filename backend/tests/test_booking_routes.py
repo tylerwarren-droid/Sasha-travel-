@@ -280,6 +280,16 @@ class OnMemory(BookingRoutes, unittest.TestCase):
     def make_store(self):
         return MemoryStore()
 
+    def test_s64_a_national_phone_is_asked_about_once_then_normalised_and_the_form_keeps_what_was_typed(self):
+        r = self.post("/intents", {**ANA, "phone": "912 000 000"})
+        self.assertEqual((r.status_code, r.json()["rule"]), (422, "phone_country_needed"))
+        self.assertIn("which country is the number 912 000 000 from?", r.json()["message"])
+        i = self.intent(phone="912 000 000", phone_country="PT")
+        rec = self.store.intents[i["intent_id"]]
+        item = self.store.trip_items[rec["trip_item_id"]]
+        self.assertEqual(item["request"]["who"]["contact"]["mobile_e164"], "+351912000000")
+        self.assertIn({"name": "rtb-phone", "value": "912 000 000", "selector": '[name="rtb-phone"]'}, rec["task"]["fields"])
+
 
 @unittest.skipUnless(PG_URL, "BOOKING_TEST_DATABASE_URL is not set — the Postgres half did NOT run")
 class OnPostgres(BookingRoutes, unittest.TestCase):

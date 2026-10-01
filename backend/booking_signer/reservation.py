@@ -212,7 +212,7 @@ TABLE = {"en": "a table", "es": "una mesa", "pt": "uma mesa", "fr": "une table",
 
 def from_particulars(p: Any, *, account_id: str, venue_name: str, timezone: str, lang: str,
                      venue_ids: Sequence[str] = (), read_id: Optional[str] = None, address: Optional[str] = None,
-                     email: Optional[str] = None, flow: str = "book") -> Dict[str, Any]:
+                     email: Optional[str] = None, flow: str = "book", mobile: Optional[str] = None) -> Dict[str, Any]:
     """Today's particulars (calls.CallParticulars / emailing.EmailParticulars: on, at, party, name, phone?, guest_email?)
     → a validated `reservation/1`. A table, at a time, for people — which is all today's rungs can express."""
     on: date = p.on
@@ -221,7 +221,7 @@ def from_particulars(p: Any, *, account_id: str, venue_name: str, timezone: str,
         "schema": SCHEMA,
         "who": {"name": p.name, "account_id": account_id,
                 "contact": {k: v for k, v in (("email", email or getattr(p, "guest_email", None)),
-                                              ("mobile_e164", getattr(p, "phone", None))) if v}},
+                                              ("mobile_e164", mobile or getattr(p, "phone", None))) if v}},
         "what": {"activity": "a table", "activity_venue_lang": TABLE.get(lang.split("-")[0], TABLE["en"]), "category": "restaurant"},
         "where": {"venue_name": venue_name, "timezone": timezone, "venue_ids": list(venue_ids),
                   **({"read_id": read_id} if read_id else {}), **({"address": address} if address else {})},

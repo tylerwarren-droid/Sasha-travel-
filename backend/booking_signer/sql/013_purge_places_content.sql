@@ -21,10 +21,10 @@
 -- ── PREVIEW (read-only) ────────────────────────────────────────────────────────────────────────────────────────
 select 'venue_reads with listing facts' what, count(*) n from venue_reads
   where exists (select 1 from jsonb_array_elements(read->'facts') f where f->>'source_kind' = 'places' and f->'value' <> 'null'::jsonb)
-union all select 'venue_reads picked from cards (name to replace)', count(*) from venue_reads where query->>'place_id' is not null
+union all select 'venue_reads picked from cards (name to replace)', count(*) from venue_reads where query->>'place_id' is not null and query ? 'name'
 union all select 'booking_calls on a listing number', count(*) from booking_calls where brief->>'number_source' like 'their Google listing%'
 union all select '  of which awaiting_approval', count(*) from booking_calls where brief->>'number_source' like 'their Google listing%' and status = 'awaiting_approval';
--- expected on 1 Oct 2026: 22 · 1 · 8 · 2
+-- expected on 1 Oct 2026: 22 · 1 · 8 · 2 (the read made by the S-68 proof is already in the new form: not counted)
 
 -- ── THE PURGE ──────────────────────────────────────────────────────────────────────────────────────────────────
 begin;
@@ -48,7 +48,7 @@ update venue_reads set
   venue_name = 'the place you picked in ' || coalesce(query->>'city', 'the city searched'),
   read = jsonb_set(read, '{name}', to_jsonb('the place you picked in ' || coalesce(query->>'city', 'the city searched'))),
   query = query - 'name'
-where query->>'place_id' is not null;
+where query->>'place_id' is not null and query ? 'name';   -- a read written after Sasha 64 has no listing name to replace
 
 update booking_calls c set
   dialled_number = 'sha256:' || encode(sha256(convert_to(c.dialled_number, 'UTF8')), 'hex'),

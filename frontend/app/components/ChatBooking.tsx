@@ -22,14 +22,25 @@ import { setChatBookingHandler, takeTypedYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 import ChatBookingCall from './ChatBookingCall'
 
-type Find = { what: string; where: string; country?: string; near?: string; open_at?: string; draft?: unknown }
+type Find = { what: string; where: string; country?: string; near?: string; open_at?: string; priority?: string; draft?: unknown }
 type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null }
 type State =
   | { phase: 'finding' } | { phase: 'founder_only' } | { phase: 'refused'; words: string }
-  | { phase: 'found'; cards: Candidate[]; near?: Near; ranking?: Ranking } | { phase: 'reading'; cards: Candidate[]; pick: Candidate }
+  | { phase: 'found'; cards: Candidate[]; near?: Near; ranking?: Ranking; all: Candidate[]; chip: string; show: number } | { phase: 'reading'; cards: Candidate[]; pick: Candidate }
   | { phase: 'read'; cards: Candidate[]; pick: Candidate; read: Read } | { phase: 'read_refused'; cards: Candidate[]; words: string }
 
 type Near = { asked: string; found: boolean; why?: string }
+// S-68 steps 6–7 · the cards in a chip's order, from the same 20 — no new search
+function inOrder(all: Candidate[], ranking: Ranking | undefined, chip: string, show: number): Candidate[] {
+  if (!ranking?.orders[chip]) return all.slice(0, show)
+  const byId = new Map(all.map((c) => [c.place_id, c]))
+  return ranking.orders[chip].map((id) => byId.get(id)).filter((c): c is Candidate => !!c).slice(0, show)
+}
+// a priority TYPED in answer to "What matters most?"
+const TYPED_CHIP: [string, RegExp][] = [['price', /\b(cheap|cheapest|price|budget|affordable)\b/i],
+  ['rated', /\b(best rated|rating|rated|reviews|best)\b/i], ['closest', /\b(closest|nearest|distance|near)\b/i],
+  ['open', /\b(open|opening|hours)\b/i]]
+
 const RUNG_NAME: Record<string, string> = { form: 'their booking form', link: 'their booking page', platform: 'a booking platform',
   phone: 'a phone call', email: 'an email', whatsapp: 'WhatsApp (you send it)' }
 const ORDINAL: Record<string, number> = { first: 0, '1st': 0, one: 0, second: 1, '2nd': 1, two: 1, third: 2, '3rd': 2, three: 2,
@@ -58,15 +69,22 @@ export default function ChatBooking({ find }: { find: Find }) {
         const show = typeof r.json.show === 'number' ? r.json.show : 5
         const all = (r.json.candidates ?? []) as Candidate[]
         const ranking = (r.json.ranking ?? undefined) as Ranking | undefined
-        const byId = new Map(all.map((c) => [c.place_id, c]))
-        const ordered = ranking ? (ranking.orders[ranking.default] ?? []).map((id) => byId.get(id)).filter((c): c is Candidate => !!c) : all
-        setState({ phase: 'found', cards: ordered.slice(0, show), near: (r.json.near ?? undefined) as Near | undefined, ranking })
+        // S-68 step 7 · the priority the guest stated, else best rated until they say
+        const chip = ranking && find.priority && ranking.orders[find.priority] ? find.priority : (ranking?.default ?? 'rated')
+        setState({ phase: 'found', cards: inOrder(all, ranking, chip, show), near: (r.json.near ?? undefined) as Near | undefined,
+          ranking, all, chip, show })
       } catch (e) {
         if (!off) setState({ phase: 'refused', words: `I couldn't search just now: ${(e as Error).message}.` })
       }
     })()
     return () => { off = true }
   }, [find.what, find.where, find.country, find.near, find.open_at])
+
+  function sortBy(chip: string) {
+    const s = stateRef.current
+    if (s.phase !== 'found' || !s.ranking?.orders[chip]) return
+    setState({ ...s, chip, cards: inOrder(s.all, s.ranking, chip, s.show) })
+  }
 
   async function pick(c: Candidate) {
     const cards = 'cards' in stateRef.current ? stateRef.current.cards : []
@@ -87,6 +105,12 @@ export default function ChatBooking({ find }: { find: Find }) {
     setChatBookingHandler((text: string) => {
       if (takeTypedYes(text)) return true   // step 9 · a typed yes to the pending read-back card
       const s = stateRef.current
+      // S-68 step 7 · a SHORT answer ("closest", "the cheapest", "best rated please") re-sorts; anything longer is a
+      // new message for Sasha (e.g. "the best restaurant in Hanoi?")
+      if (s.phase === 'found' && s.ranking && text.trim().split(/\s+/).length <= 4) {
+        const hit = TYPED_CHIP.find(([chip, rx]) => rx.test(text) && s.ranking?.orders[chip])
+        if (hit && !/\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\b/i.test(text)) { sortBy(hit[0]); return true }
+      }
       if (s.phase !== 'found' && s.phase !== 'read' && s.phase !== 'read_refused') return false
       const m = text.toLowerCase().match(/\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th|one|two|three|four|five)\b/)
       if (!m || !/\b(one|pick|choose|that|the)\b/.test(text.toLowerCase())) return false
@@ -110,7 +134,7 @@ export default function ChatBooking({ find }: { find: Find }) {
       {cards.length === 0
         ? <div>Google has no listing for {find.what} in {find.where}.</div>
         : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{cards.length} {cards.length === 1 ? 'place' : 'places'} for {find.what} in {find.where} — from Google Maps; nobody has been contacted. Tap one, or say “the second one”.</div>}
-      {state.phase === 'found' && state.ranking && <div style={{ fontSize: 13, marginBottom: 4 }}>{state.ranking.count} · {state.ranking.explainers[state.ranking.default]}</div>}
+      {state.phase === 'found' && state.ranking && <div style={{ fontSize: 13, marginBottom: 4 }}>{state.ranking.count} · {state.ranking.explainers[state.chip]}</div>}
       {state.phase === 'found' && find.open_at && <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Open then by their listed hours; availability is confirmed only when Sasha books.</div>}
       {state.phase === 'found' && state.near && !state.near.found && <div style={{ fontSize: 13, marginBottom: 6 }}>No distances: {state.near.why}</div>}
       <ol style={{ margin: 0, paddingLeft: 18 }}>

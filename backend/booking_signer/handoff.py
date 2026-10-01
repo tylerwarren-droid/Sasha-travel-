@@ -131,6 +131,21 @@ def plain_open_at(message: str, now: Optional[datetime] = None) -> Optional[str]
     return f"{day}T{h:02d}:{mi:02d}"
 
 
+#: S-68 step 7 · a priority the guest STATED, in their words — never inferred from anything else
+_PRIORITY = [("price", re.compile(r"\b(cheap(?:est)?|budget|affordable|inexpensive|not too expensive|good value|low[- ]cost)\b", re.I)),
+             ("rated", re.compile(r"\b(best[- ]rated|top[- ]rated|highly[- ]rated|best reviewed|well reviewed|the best|good reviews)\b", re.I)),
+             ("closest", re.compile(r"\b(closest|nearest|walking distance)\b", re.I))]
+PRIORITY_QUESTION = "What matters most: best rated, closest, price, or open at a time you want?"
+
+
+def plain_priority(message: str, near: Optional[str]) -> Optional[str]:
+    """rated · closest · price — when the message says so; "near X" with no other priority means closest."""
+    for key, rx in _PRIORITY:
+        if rx.search(message or ""):
+            return key
+    return "closest" if near else None
+
+
 def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]:
     """{what, where, country?, near?} when the message asks for a kind of place in a place — else None. Nothing guessed:
     a country is taken only when written as a two-letter code ("Nairobi, KE")."""
@@ -154,7 +169,8 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
         return None
     at = plain_open_at(message, now)
     return {"what": what, "where": where, **({"country": country} if country else {}), **({"near": near} if near else {}),
-            **({"open_at": at} if at else {})}
+            **({"open_at": at} if at else {}),
+            **({"priority": p} if (p := plain_priority(message, near)) else {})}   # absent: Sasha asks (S-68 step 7)
 
 
 def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Optional[datetime] = None) -> Optional[dict]:
@@ -165,7 +181,9 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
     if f is None:
         return None
     where = f"{f['where']}{', ' + f['country'] if f.get('country') else ''}"
-    response = f"Let me look for {f['what']} in {where} — from their Google listings; nobody is contacted by looking."
+    response = f"Let me look for {f['what']} in {where} — from Google Maps; nobody is contacted by looking."
+    if f.get("priority") is None:   # S-68 step 7 · asked ONCE, only when none was stated; best rated meanwhile
+        response += f" {PRIORITY_QUESTION} I'll show them best rated until you say."
     history = list(history or [])
     return {
         "response": response, "intents": ["booking"], "photos": [], "tools_used": [], "links": [],

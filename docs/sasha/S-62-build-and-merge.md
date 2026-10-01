@@ -99,3 +99,26 @@ booking_signer's `identity.verify_token` can be imported for (2): it is outside 
   - Then run the step-8 proof.
   - Step 7 (chat history per account, and the ownership check on `/api/chats/{id}`) is still open. It is the line for
     strangers.
+
+## Step 7 shipped — 1 Oct 2026 (Sasha 74, 71ffe2f)
+
+- **The chat sends a signed-in guest's Supabase token** (`frontend/lib/guest-auth.ts`, five "S-62 step 7" lines in
+  SashaChat, and YouPanel's trips fetch). The backend verifies it exactly as bookings are
+  (`app/services/chat_account.py` → `booking_signer.identity`).
+- **Theirs alone:**
+  - chats (list, and read by id);
+  - the conductor: a session someone else owns is never appended to or read, and a new one starts;
+  - classify: another account's itinerary is never looked into;
+  - payments: only your own itinerary or offer can be paid for;
+  - trips.
+  - Someone else's session answers exactly as one that does not exist.
+- **No token** means the public demo, as before. **A bad token is refused** (401), never the demo.
+- **Live:**
+  - an anonymous `/api/chats` answers 200;
+  - a session that is not yours answers 404;
+  - a bad token answers 401 `account_token_invalid`;
+  - classify answers anonymously;
+  - the founder's booking route is unaffected.
+  - Tests: `tests/test_chat_accounts.py` (6).
+- **Guest sign-in stays closed.** To open it, the founder flips two switches: Supabase "allow new users to sign up", and
+  Vercel `GUEST_SIGN_IN_ENABLED=1`. Then the step-8 proof runs, with two guests.

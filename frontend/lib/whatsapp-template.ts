@@ -28,5 +28,7 @@ export function whatsappText(country: string | null, name: string, party: number
   const date = dateIso ? new Date(`${dateIso}T12:00:00Z`).toLocaleDateString(LOCALE[lang], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) : '[date]'
   const one = party === 1 ? WHATSAPP_ONE[lang] : undefined
   const template = one ? WHATSAPP_TEMPLATE_V2[lang].split(one[0]).join(one[1]) : WHATSAPP_TEMPLATE_V2[lang]
-  return template.split('{who}').join(who).split('{n}').join(String(party)).split('{date}').join(date).split('{time}').join(time)
+  const text = template.split('{who}').join(who).split('{n}').join(String(party)).split('{date}').join(date).split('{time}').join(time)
+  // S-64 · Portuguese contracts "de a" → "da": "em nome da família Warren" (the backend renders the same)
+  return lang === 'pt' ? text.split('em nome de a ').join('em nome da ') : text
 }

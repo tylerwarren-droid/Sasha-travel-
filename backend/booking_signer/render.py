@@ -115,7 +115,9 @@ def call_read_back(lang: C.Lang, o: Mapping[str, Any], venue_name: str, number: 
     if not is_table(o):
         w = o["when"]
         when_iso = w.get("at") or (f"{w['window']['earliest']} to {w['window']['latest']}" if w.get("window") else "a time they propose")
-        lines.append(f"That is: {o['what']['activity']} ({o['what']['activity_venue_lang']}) · {o['how_many']['count']} {o['how_many']['unit']}"
+        n, unit = o["how_many"]["count"], o["how_many"]["unit"]
+        one = {"people": "person", "sessions": "session", "pieces": "piece", "places": "place"}[unit]
+        lines.append(f"That is: {o['what']['activity']} ({o['what']['activity_venue_lang']}) · {n} {one if n == 1 else unit}"
                      f" · {when_iso}" + (f" · {w['duration_min']} minutes" if w.get("duration_min") else "") + ".")
     lines += [
         "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
@@ -207,8 +209,8 @@ def call_brief(o: Mapping[str, Any], venue: C.CallVenue, today: date, number: st
     """The brief for a BOOKING call, from the object. ⛔ Same keys and, for a table, the same values as calls.build_call."""
     o = RS.validate(o)
     if o["flow"] != "book" or o["when"]["mode"] != "at":
-        raise RS.ReservationRefused("flow_not_built", "only a booking at a set time can be phoned from the object yet "
-                                                      "(a window, venue-proposes and quote-first come with S-64 steps 8–9)")
+        raise RS.ReservationRefused("flow_not_built", "a booking can be phoned only at a set time; for a window, ask them "
+                                                      "when they have space (an availability call) and book the time they give")
     lang = C.LANGUAGES[venue.language]
     on, at = _at(o)
     first, check = opening(lang, o, today), _check(lang, o)
@@ -307,14 +309,19 @@ def whatsapp(o: Mapping[str, Any], country: Optional[str]) -> str:
     fam = {"en": "the {s} family", "es": "la familia {s}", "pt": "a família {s}", "tr": "{s} ailesi"}[code]
     who = fam.format(s=name.split()[-1]) if people and o["how_many"]["count"] > 1 else name
     t = WHATSAPP_TEMPLATE_V2[code]
-    if o["how_many"]["count"] == 1 and code in WHATSAPP_ONE:
-        t = t.replace(*WHATSAPP_ONE[code])
     if not is_table(o):
         what = o["what"]["activity_venue_lang"]
         # the count in the venue's own words ("2 sesiones"); Turkish has no unit table yet, so the bare number
         count = _count_noun(code, o) if code in _UNITS else str(o["how_many"]["count"])
         t = t.replace(_WA_TABLE[code], f"{what} ({count})", 1)
-    return t.replace("{who}", who).replace("{n}", str(o["how_many"]["count"])).replace("{date}", _wa_date(code, on)).replace("{time}", at.strftime("%H:%M"))
+    elif o["how_many"]["count"] == 1 and code in WHATSAPP_ONE:
+        t = t.replace(*WHATSAPP_ONE[code])
+    return _contract(code, t.replace("{who}", who).replace("{n}", str(o["how_many"]["count"])).replace("{date}", _wa_date(code, on)).replace("{time}", at.strftime("%H:%M")))
+
+
+def _contract(code: str, s: str) -> str:
+    """Portuguese contracts "de a" → "da": "em nome da família Warren", never "em nome de a família". Same on the page."""
+    return s.replace("em nome de a ", "em nome da ") if code == "pt" else s
 
 
 # ── S-64 step 9 · the ASKING flows: quote-first and "when do you have space" ───────────────────────────────────────

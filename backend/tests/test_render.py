@@ -98,7 +98,7 @@ class GoldenEmailAndWhatsApp(unittest.TestCase):
             p = C.parse_call_particulars({"date": d, "time": t, "party": int(party), "name": name})
             o = RS.from_particulars(p, account_id=ACCT, venue_name="V", timezone="Europe/Madrid", lang="en")
             self.assertEqual(R.whatsapp(o, country), want, key)
-        self.assertEqual(len(golden), 5)
+        self.assertEqual(len(golden), 6)
 
 
 class Beyond(unittest.TestCase):

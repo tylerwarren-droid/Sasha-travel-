@@ -1,0 +1,174 @@
+{
+ "6.1_la_contra": {
+  "call": {
+   "first_sentence": "Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y llamo de parte de la familia Warren para reservar una mesa para comer para 4 personas el viernes a la 13:00. ¿Sería posible?",
+   "purpose": "book",
+   "read_back": [
+    "I'll phone La Contra, +34910536740 — the number on their Google listing.",
+    "I'll say: \"Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y llamo de parte de la familia Warren para reservar una mesa para comer para 4 personas el viernes a la 13:00. ¿Sería posible?\" (in Spanish: Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of the Warren family to book lunch for four on Friday at one in the afternoon. Is that possible?)",
+    "That is: lunch (una mesa para comer) · 4 people · 2026-10-02T13:00.",
+    "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
+    "If they ask for a contact number, I'll give yours, +34608445715.",
+    "I'll tell you exactly what they said. Shall I call them now?"
+   ],
+   "recap": "Para confirmar: una mesa para comer, para 4 personas, viernes 2 de octubre, a la una de la tarde, a nombre de Warren. ¿Correcto?",
+   "task_chars": 1911
+  },
+  "email": {
+   "subject": "Solicitud de reserva: una mesa para comer — 4 personas el 2026-10-02 a las 13:00",
+   "text": "Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y le escribo de parte de la familia Warren para pedir una mesa para comer, 4 personas el 2026-10-02 a las 13:00.\n\n¿Podrían responder a este correo para confirmarlo, o decirnos si no es posible?\n\nNo podemos aceptar por correo una señal ni otro horario en nombre de Tyler Warren; si hiciera falta, indíquenlo y lo decidirá.\n\nGracias,\nSasha (concierge de IA, Kanoe Technologies SL), en nombre de Tyler Warren"
+  },
+  "form": [
+   {
+    "name": "date",
+    "selector": "[name=\"date\"]",
+    "value": "2026-10-02"
+   },
+   {
+    "name": "time",
+    "selector": "[name=\"time\"]",
+    "value": "13:00"
+   },
+   {
+    "name": "party",
+    "selector": "[name=\"party\"]",
+    "value": "4"
+   },
+   {
+    "name": "name",
+    "selector": "[name=\"name\"]",
+    "value": "Tyler Warren"
+   },
+   {
+    "name": "email",
+    "selector": "[name=\"email\"]",
+    "value": "tyler@example.test"
+   }
+  ],
+  "request_sha256": "9e0de2debcd32a76d886fc0038eaafe0c9ad15eeef5caedfbe9f62d718e0a898",
+  "whatsapp": "Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y escribo en nombre de la familia Warren para pedir una mesa para comer (4 personas) el viernes, 2 de octubre de 2026 a las 13:00. ¿Nos puede decir si es posible? No aceptaremos ningún depósito ni cargo sin consultarlo antes con la familia Warren. Gracias."
+ },
+ "6.2a_king_ink_quote": {
+  "call": {
+   "first_sentence": "Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of Tyler Warren to ask what it would cost and when you could do a fine-line tattoo on the forearm, about 10 cm, for one piece. Could you tell me?",
+   "purpose": "quote_first",
+   "read_back": [
+    "I'll phone King Ink Tattoos, +254725909800 — the number on their Google listing.",
+    "I'll say: \"Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of Tyler Warren to ask what it would cost and when you could do a fine-line tattoo on the forearm, about 10 cm, for one piece. Could you tell me?\"",
+    "I'll ask what it would cost and when they could do it. I won't book anything, hold a slot, or agree to a deposit, a fee or a card.",
+    "Your photos are not sent on a call — only the description.",
+    "If they ask for a contact number, I'll give yours, +34608445715.",
+    "Whatever they offer comes back to you word for word; booking it is a new request and a new yes. Shall I call them now?"
+   ],
+   "recap": null,
+   "task_chars": 1607
+  },
+  "email": {
+   "refused": "flow_not_built",
+   "why": "only a booking at a set time can be emailed from the object yet"
+  },
+  "form": {
+   "refused": "no_time",
+   "why": "a booking form books a set day and time; this request asks the venue when — it can't be sent by form"
+  },
+  "request_sha256": "146972613d10a0599f05d794ed62ed60bc4254eb9bae2271e677d18abde4187d",
+  "whatsapp": {
+   "refused": "flow_not_built",
+   "why": "only a booking at a set time can be written for WhatsApp from the object yet"
+  }
+ },
+ "6.2b_king_ink_book": {
+  "call": {
+   "first_sentence": "Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of Tyler Warren to book a tattoo session of 120 minutes for one session on Thursday, 8 October, at three in the afternoon. Is that possible?",
+   "purpose": "book",
+   "read_back": [
+    "I'll phone King Ink Tattoos, +254725909800 — the number on their Google listing.",
+    "I'll say: \"Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of Tyler Warren to book a tattoo session of 120 minutes for one session on Thursday, 8 October, at three in the afternoon. Is that possible?\"",
+    "That is: a tattoo session (a tattoo session) · 1 session · 2026-10-08T15:00 · 120 minutes.",
+    "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
+    "If they ask for a contact number, I'll give yours, +34608445715.",
+    "I'll tell you exactly what they said. Shall I call them now?"
+   ],
+   "recap": "To confirm: a tattoo session of 120 minutes, for one session, Thursday 8 October, at three in the afternoon, under the name Warren. Is that right?",
+   "task_chars": 1968
+  },
+  "email": {
+   "subject": "Booking request: a tattoo session of 120 minutes — one session on 2026-10-08 at 15:00",
+   "text": "Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, writing on behalf of Tyler Warren to ask for a tattoo session of 120 minutes, one session on 2026-10-08 at 15:00.\n\nCould you reply to this email to confirm, or to tell us if that isn't possible?\n\nWe can't agree to a deposit or a different time by email on Tyler Warren's behalf — if either is needed, please say so and they will decide.\n\nThank you,\nSasha (AI concierge, Kanoe Technologies SL), for Tyler Warren"
+  },
+  "form": {
+   "refused": "unit_mismatch",
+   "why": "the form asks how many people; your request is 1 sessions — how many people will come?"
+  },
+  "request_sha256": "b99cceda9881b9b2cc88fb585bcf0fc16bf15d119c5cef8164e2fd54325c4ebe",
+  "whatsapp": "Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, writing on behalf of Tyler Warren to ask for a tattoo session (one session) on Thursday, 8 October 2026 at 15:00. Could you tell us whether that is possible? We will not agree to a deposit or fee without asking Tyler Warren first. Thank you."
+ },
+ "6.3_lisbon_kayak": {
+  "call": {
+   "first_sentence": "Olá, fala a Sasha, uma concierge de inteligência artificial operada pela Kanoe Technologies SL, a ligar em nome da família Warren para reservar um passeio de caiaque de 180 minutos para 2 pessoas no sábado às 9h30. É possível?",
+   "purpose": "book",
+   "read_back": [
+    "I'll phone Kayak Lisboa, +351910000000 — the number on their Google listing.",
+    "I'll say: \"Olá, fala a Sasha, uma concierge de inteligência artificial operada pela Kanoe Technologies SL, a ligar em nome da família Warren para reservar um passeio de caiaque de 180 minutos para 2 pessoas no sábado às 9h30. É possível?\" (in Portuguese: Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of the Warren family to book a 3-hour kayak tour of 180 minutes for two on Saturday at nine thirty in the morning. Is that possible?)",
+    "That is: a 3-hour kayak tour (um passeio de caiaque) · 2 people · 2026-10-03T09:30 · 180 minutes.",
+    "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
+    "If they ask for a contact number, I'll give yours, +34608445715.",
+    "I'll tell you exactly what they said. Shall I call them now?"
+   ],
+   "recap": "Para confirmar: um passeio de caiaque de 180 minutos, para 2 pessoas, sábado, 3 de outubro, às nove e meia da manhã, em nome de Warren. Está correto?",
+   "task_chars": 1988
+  },
+  "email": {
+   "subject": "Pedido de reserva: um passeio de caiaque de 180 minutos — 2 pessoas a 2026-10-03 às 09:30",
+   "text": "Olá, sou a Sasha, uma concierge de inteligência artificial operada pela Kanoe Technologies SL, e escrevo em nome de a família Warren para pedir um passeio de caiaque de 180 minutos, 2 pessoas a 2026-10-03 às 09:30.\n\nPoderiam responder a este email a confirmar, ou a dizer-nos se não for possível?\n\nNão podemos aceitar por email um sinal nem outro horário em nome de Tyler Warren; se for necessário, indiquem-no e decidirá.\n\nObrigada,\nSasha (concierge de IA, Kanoe Technologies SL), em nome de Tyler Warren"
+  },
+  "form": [
+   {
+    "name": "date",
+    "selector": "[name=\"date\"]",
+    "value": "2026-10-03"
+   },
+   {
+    "name": "time",
+    "selector": "[name=\"time\"]",
+    "value": "09:30"
+   },
+   {
+    "name": "party",
+    "selector": "[name=\"party\"]",
+    "value": "2"
+   },
+   {
+    "name": "name",
+    "selector": "[name=\"name\"]",
+    "value": "Tyler Warren"
+   },
+   {
+    "name": "email",
+    "selector": "[name=\"email\"]",
+    "value": "tyler@example.test"
+   }
+  ],
+  "request_sha256": "785da4fbbd59045d043da77965ef15a6eab5c5ab91c9c1c22f02fb7b085a4f11",
+  "whatsapp": "Olá, sou a Sasha, uma concierge de inteligência artificial operada pela Kanoe Technologies SL, e escrevo em nome da família Warren para pedir um passeio de caiaque (2 pessoas) no dia sábado, 3 de outubro de 2026 às 09:30. Pode dizer-nos se é possível? Não aceitaremos qualquer depósito ou taxa sem consultar primeiro a família Warren. Obrigada."
+ },
+ "6.4_madrid_spa": {
+  "call": {
+   "refused": "flow_not_built",
+   "why": "a booking can be phoned only at a set time; for a window, ask them when they have space (an availability call) and book the time they give"
+  },
+  "email": {
+   "refused": "flow_not_built",
+   "why": "only a booking at a set time can be emailed from the object yet"
+  },
+  "form": {
+   "refused": "no_time",
+   "why": "a booking form books a set day and time; this request asks the venue when — it can't be sent by form"
+  },
+  "request_sha256": "8b5b5b7b4c5d4273b87c680ccf95f20aea7d07adc21c351387391d6581667513",
+  "whatsapp": {
+   "refused": "flow_not_built",
+   "why": "only a booking at a set time can be written for WhatsApp from the object yet"
+  }
+ }
+}

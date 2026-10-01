@@ -233,9 +233,9 @@ Stage E — verify (wait ~3 min for Railway/Vercel):
 Expected: backend 200, conductor 422, CORS header echoes project.kanoe.ai, vietnam2 200, and booking prints
 JSON with "mounted":true and "matches_pinned":true ("provisioned":true once the booking SQL has been run).
 ⚠ booking printing {"detail":"Not Found"} means the Stage B mount line was lost — re-apply it and redeploy.
-    echo -n "hand-off: " && curl -s -o /tmp/ho.json -w "%{http_code} " -X POST https://sasha-travel-production.up.railway.app/api/agents/conductor -H "Content-Type: application/json" -H "Origin: https://project.kanoe.ai" -d '{"message":"book a table at Psi on 5 October at 8pm for 2"}' && (grep -o '/booking-helper?[^"]*' /tmp/ho.json || echo "⛔ HAND-OFF MISSING — the Stage B conductor hook was lost; re-apply it and redeploy")
+    echo -n "hand-off: " && curl -s -o /tmp/ho.json -w "%{http_code} " -X POST https://sasha-travel-production.up.railway.app/api/agents/conductor -H "Content-Type: application/json" -H "Origin: https://project.kanoe.ai" -d '{"message":"find me a tattoo studio in Nairobi"}' && (grep -o '"booking_find":{[^}]*}' /tmp/ho.json || echo "⛔ HAND-OFF MISSING — the Stage B conductor hook was lost; re-apply it and redeploy")
     echo -n "drafts: " && curl -s https://sasha-travel-production.up.railway.app/api/booking/health | python3 -c "import sys,json; h=json.load(sys.stdin).get('chat_hooks') or {}; print('ok' if h.get('booking_drafts') and h.get('in_order') else '⛔ BOOKING DRAFTS MISSING — the S-64 Stage B conductor hook was lost; re-apply it and redeploy', h)"
-Expected: 200 and a /booking-helper?venue=restaurante-psi&date=…&time=20:00&party=2 link; drafts prints ok. (401 means CONDUCTOR_API_SECRET is
+Expected: 200 and "booking_find":{"what":"tattoo studio","where":"Nairobi"} (S-66: the Psi console link is retired); drafts prints ok. (401 means CONDUCTOR_API_SECRET is
 set: add -H "X-Client-Key: <the frontend's NEXT_PUBLIC_CLIENT_KEY>".)
 
 Rollback if needed: git reset --hard pre-vX-<timestamp> (tag was set in Stage A).

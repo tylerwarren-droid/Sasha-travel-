@@ -1,18 +1,12 @@
-"""S-26 · Sasha recognises a booking at Restaurante Psi and hands it to her booking tab.
+"""S-26 → S-66 (EU) step 5 · Sasha recognises "find / book / reserve {X} in {Y}" and starts the booking IN THE CHAT.
 
 Called at the top of the conductor (app/services/conductor.py, `conduct()`), by a block Stage B re-applies after
-every CTO drop. It returns a full conductor turn — or None, and the conductor carries on as if it were not there.
+every CTO drop. It returns a full conductor turn carrying `booking_find: {what, where, country?}` — the chat runs Find
+venues with it (S-65: up to five Google listings, nothing contacted) — or None, and the conductor carries on.
 
-⚠ NARROW ON PURPOSE: one venue (Psi), dry run, and the yes is given in her tab — where the five read-back lines
-are shown and the approval is bound, by the server, to the exact words (booking_signer/routes.py). Nothing here
-signs, records or books anything; it only opens the tab.
-
-⚠ NO GUESSING. The date, time and party are taken from the message only when stated plainly; anything unclear
-is left empty and the tab asks. A wrong date, read back and approved, is a real harm; an empty field is not.
-
-The tab is opened by the chat's own restaurant card: a `bookings` entry whose option has no `offer_id` renders
-as a real link (SashaChat.tsx), and a click is the user gesture a new top-level tab needs — the helper refuses a
-framed page, and a tab opened without a click would be blocked as a pop-up.
+⛔ The Psi-only link to /booking-helper is RETIRED (S-66 §3.4): any kind of place, anywhere, is found the same way.
+⚠ NO GUESSING. The date, time and count are taken from the message only when stated plainly (`plain_*`, and the
+reservation/1 draft beside it); anything unclear is asked. A wrong date, read back and approved, is a real harm.
 """
 from __future__ import annotations
 
@@ -104,43 +98,53 @@ def plain_party(message: str) -> Optional[int]:
     return n if 1 <= n <= 20 else None
 
 
-def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Optional[datetime] = None) -> Optional[dict]:
-    """A full conductor turn that opens Sasha's booking tab for Psi — or None, and the conductor carries on."""
-    if not is_psi_booking(message):
+#: S-66 (EU) step 5 · "find / book / reserve … {X} in {Y}" for ANY kind of place
+_FIND = re.compile(r"\b(?:find|book|reserve|look for|search for|get)\s+(?:me\s+|us\s+)?(?:an?\s+|some\s+|the\s+)?"
+                   r"(?P<what>[a-z][\w'’ -]{1,58}?)\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
+_WHERE_END = re.compile(r"\s+(?:for|on|at|tomorrow|today|tonight|this|next|by|please|from)\b.*$", re.I)
+
+
+def find_request(message: str) -> Optional[dict]:
+    """{what, where, country?} when the message asks for a kind of place in a place — else None. Nothing guessed:
+    a country is taken only when written as a two-letter code ("Nairobi, KE")."""
+    m = _FIND.search(message or "")
+    if not m:
         return None
-    d, t, p = plain_date(message, now), plain_time(message), plain_party(message)
-    # `profile=demo`: the tab fills name, email and phone from a DEMO guest (P807mv) — line 4 of the read-back says the
-    # email and telephone aloud, and a room must never hear the founder's own
-    query = {"venue": "restaurante-psi", **({"date": d} if d else {}), **({"time": t} if t else {}), **({"party": p} if p else {}),
-             "profile": "demo"}
-    url = f"{BOOKING_TAB}?{urlencode(query)}"
-    known = ", ".join(x for x in [
-        (lambda x: f"{x:%A} {x.day} {x:%B}")(date.fromisoformat(d)) if d else None,
-        t, f"{p} {'person' if p == 1 else 'people'}" if p else None] if x)
-    missing = [x for x, v in (("the date", d), ("the time", t), ("how many people", p)) if not v]
-    response = (
-        f"I'll open my booking tab for Restaurante Psi{f' — {known}' if known else ''}. "
-        + (f"Add {', '.join(missing)} there. " if missing else "")
-        + "I'll read it all back before anything happens — and this is a dry run: I fill their form on your computer and stop before sending."
-    )
-    card = {"type": "restaurant", "title": "Restaurante Psi, Lisbon — booking",
-            "options": [{"name": "Open my booking tab", "detail": known or "details to add", "price": "dry run",
-                         "book_url": url}]}
+    what = " ".join(m["what"].split())
+    where = _WHERE_END.sub("", m["where"]).strip(" ,")
+    country = None
+    cm = re.fullmatch(r"(.+?),\s*([A-Za-z]{2})", where)
+    if cm:
+        where, country = cm[1].strip(), cm[2].upper()
+    if len(what) < 2 or len(where) < 2:
+        return None
+    return {"what": what, "where": where, **({"country": country} if country else {})}
+
+
+def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Optional[datetime] = None) -> Optional[dict]:
+    """S-66 (EU) step 5 · a full conductor turn that starts a booking IN THE CHAT — `booking_find` for the chat to run
+    Find venues with (S-65) — or None, and the conductor carries on. ⛔ It no longer opens /booking-helper: the Psi-only
+    link is retired; any kind of place, anywhere, is found the same way, and nothing is contacted by finding it."""
+    f = find_request(message)
+    if f is None:
+        return None
+    where = f"{f['where']}{', ' + f['country'] if f.get('country') else ''}"
+    response = f"Let me look for {f['what']} in {where} — from their Google listings; nobody is contacted by looking."
     history = list(history or [])
     return {
-        "response": response, "intents": ["restaurant"], "photos": [], "tools_used": [], "links": [],
-        "hotels": [], "bookings": [card], "itinerary": None, "action": None, "booking_ref": None,
+        "response": response, "intents": ["booking"], "photos": [], "tools_used": [], "links": [],
+        "hotels": [], "bookings": [], "itinerary": None, "action": None, "booking_ref": None,
         "itinerary_id": None, "payment_item": None, "saved_card": None,
         "messages": history + [{"role": "user", "content": message}, {"role": "assistant", "content": response}],
-        # S-64 step 11 · the same message as the parts of reservation/1 it states, and what is still to ask — carried
-        # alongside; the Psi link above is unchanged
+        "booking_find": f,
+        # S-64 step 11 · whatever else the message says (when, how many) as the parts of reservation/1 — for later
         "reservation_draft": _draft(message, now),
     }
 
 
 def _draft(message: str, now: Optional[datetime]) -> dict:
     from .chat_request import draft
-    return draft(message, now, lang="pt")
+    return draft(message, now)
 
 
-__all__ = ["booking_handoff", "is_psi_booking", "plain_date", "plain_time", "plain_party", "PSI_SLOTS"]
+__all__ = ["booking_handoff", "find_request", "is_psi_booking", "plain_date", "plain_time", "plain_party", "PSI_SLOTS"]

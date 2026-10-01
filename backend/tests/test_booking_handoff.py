@@ -40,23 +40,29 @@ class PlainValuesOnly(unittest.TestCase):
 
 
 class TheTurn(unittest.TestCase):
-    def test_everything_stated_goes_into_the_tab_link(self):
-        t = booking_handoff("Book a table at Psi on 5 October at 8pm for 2", [], NOW)
-        url = t["bookings"][0]["options"][0]["book_url"]
-        self.assertEqual(urlsplit(url).path, "/booking-helper")
-        self.assertEqual(parse_qs(urlsplit(url).query), {"venue": ["restaurante-psi"], "date": ["2026-10-05"], "time": ["20:00"], "party": ["2"], "profile": ["demo"]})
-        self.assertNotIn("offer_id", t["bookings"][0]["options"][0])  # so the card renders a LINK, not a payment button
-        self.assertIn("dry run", t["response"])
-        self.assertIn("Monday 5 October", t["response"])
-        self.assertEqual(t["messages"][-1], {"role": "assistant", "content": t["response"]})
+    """S-66 (EU) step 5 · any kind of place, in any place: `booking_find` for the chat; the Psi link is retired."""
 
-    def test_what_was_not_said_is_asked_for_not_guessed(self):
-        t = booking_handoff("book me a table at psi", [], NOW)
-        self.assertEqual(parse_qs(urlsplit(t["bookings"][0]["options"][0]["book_url"]).query), {"venue": ["restaurante-psi"], "profile": ["demo"]})
-        self.assertIn("Add the date, the time, how many people there", t["response"])
+    def test_find_x_in_y_for_any_kind_of_place(self):
+        for m, want in [("Find me a tattoo studio in Nairobi", {"what": "tattoo studio", "where": "Nairobi"}),
+                        ("book a massage in Madrid for 2 on Friday", {"what": "massage", "where": "Madrid"}),
+                        ("Can you reserve a kayak tour near Lisbon?", {"what": "kayak tour", "where": "Lisbon"}),
+                        ("find a tattoo studio in Nairobi, KE", {"what": "tattoo studio", "where": "Nairobi", "country": "KE"}),
+                        ("look for a restaurant in Hanoi tonight", {"what": "restaurant", "where": "Hanoi"})]:
+            t = booking_handoff(m, [], NOW)
+            self.assertEqual(t["booking_find"], want, m)
+            self.assertIn("nobody is contacted by looking", t["response"])
+            self.assertEqual(t["bookings"], [])                      # no console link, no card to the tab
+            self.assertEqual(t["messages"][-1], {"role": "assistant", "content": t["response"]})
 
-    def test_nothing_else_is_touched(self):
-        self.assertIsNone(booking_handoff("find me a restaurant in Hanoi", [], NOW))
+    def test_the_psi_link_is_retired_and_ordinary_chat_is_untouched(self):
+        self.assertIsNone(booking_handoff("Book a table at Psi on 5 October at 8pm for 2", [], NOW))   # no "in Y": the drafts ask which place
+        self.assertIsNone(booking_handoff("tell me about Hanoi", [], NOW))
+        self.assertIsNone(booking_handoff("what's the weather in Madrid", [], NOW))
+
+    def test_the_rest_of_the_message_is_kept_as_the_draft(self):
+        t = booking_handoff("book a massage in Madrid for 2 on 3 October at 11:00", [], NOW)
+        self.assertEqual(t["reservation_draft"]["parts"]["when"], {"mode": "at", "at": "2026-10-03T11:00"})
+        self.assertEqual(t["reservation_draft"]["parts"]["how_many"], {"count": 2, "unit": "people"})
 
 
 class TheHook(unittest.TestCase):
@@ -66,10 +72,10 @@ class TheHook(unittest.TestCase):
         self.assertLess(src.index("_handoff = booking_handoff(user_message, conversation_history)"),
                         src.index("# ── Card choice (second half of a booking)"))
 
-    def test_the_real_conduct_returns_the_handoff(self):
+    def test_the_real_conduct_returns_the_find(self):
         from app.services.conductor import conduct  # the real one — the hook returns before any model is called
-        t = asyncio.run(conduct("Book a table at Psi on 5 October at 8pm for 2"))
-        self.assertEqual(t["bookings"][0]["options"][0]["name"], "Open my booking tab")
+        t = asyncio.run(conduct("Find me a tattoo studio in Nairobi"))
+        self.assertEqual(t["booking_find"], {"what": "tattoo studio", "where": "Nairobi"})
 
 
 if __name__ == "__main__":

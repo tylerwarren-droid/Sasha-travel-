@@ -69,13 +69,12 @@ class AsksOnlyWhatIsMissing(unittest.TestCase):
             CR.complete(d("A table please"), who=WHO, where=WHERE)
 
 
-class ThePsiLinkStays(unittest.TestCase):
-    def test_the_handoff_is_unchanged_and_carries_the_draft(self):
-        turn = HO.booking_handoff("Book a table at Psi for 2 on 2 October at 8pm", now=NOW)
-        self.assertIn("/booking-helper?venue=restaurante-psi&date=2026-10-02&time=20%3A00&party=2&profile=demo",
-                      turn["bookings"][0]["options"][0]["book_url"])
-        self.assertEqual(turn["reservation_draft"]["parts"]["what"]["activity_venue_lang"], "uma mesa")
-        self.assertEqual(turn["reservation_draft"]["missing"], [])
+class FindCarriesTheDraft(unittest.TestCase):
+    def test_the_find_turn_carries_the_draft_and_the_psi_link_is_retired(self):
+        turn = HO.booking_handoff("Book a table in Lisbon for 2 on 2 October at 8pm", now=NOW)
+        self.assertEqual(turn["booking_find"], {"what": "table", "where": "Lisbon"})
+        self.assertEqual(turn["reservation_draft"]["parts"]["how_many"], {"count": 2, "unit": "people"})
+        self.assertEqual(turn["bookings"], [])
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import call_routes, contacts, ladder_routes, optin_page, optins, reservation as RS, retention, stop
+from . import call_routes, contacts, inbound_phone, ladder_routes, optin_page, optins, reservation as RS, retention, stop
 from . import venue_read as V
 from .account import account_for
 from .gate import require_booking_key
@@ -89,6 +89,7 @@ optins.OPTIN_STORE = PostgresOptinStore(STORE)   # S-54 · the refusal check rea
 optin_page.PAGE_STORE = optin_page.PostgresPageStore(STORE)   # S-55 · the Work-with-Sasha page (sql/009)
 stop.STOP_STORE = stop.PostgresStopStore(STORE)   # S-56 · a venue's stop, on any channel (sql/010)
 contacts.STORE = contacts.PostgresContactStore(STORE)   # S-62 step 5 · a guest's name and mobile (sql/015)
+inbound_phone.STORE = inbound_phone.PostgresInboundStore(STORE)   # S-70 · SMS and voicemail to Sasha's number (sql/016)
 
 
 def _now() -> datetime:
@@ -138,6 +139,7 @@ async def health():
         "storage": storage,
         "live_issue_enabled": LIVE_ISSUE_ENABLED,
         "calls": call_routes.status(),
+        "sasha_number": inbound_phone.status(),   # S-70
         "ladder": ladder_routes.status(),
         # S-64 · the two Stage B hooks in the CTO's conductor: false means a CTO drop removed one — booking-in-chat is off
         "chat_hooks": chat_hooks(),
@@ -486,6 +488,8 @@ router.include_router(call_routes.router)
 router.include_router(ladder_routes.router)
 # S-62 step 5 · the guest's saved name and mobile, with consent
 router.include_router(contacts.router)
+# S-70 · Sasha's own number answers: SMS and voicemail onto the reservation
+router.include_router(inbound_phone.router)
 # S-55 · the Work-with-Sasha page's server half (reached through the frontend's own route, which adds the key)
 router.include_router(optin_page.router)
 

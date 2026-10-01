@@ -36,6 +36,15 @@ given, and nothing else.
    - the representative's **mobile number**. Twilio may contact them on it; Twilio requires one that is not a Twilio
      number. The work email is taken to be `tyler@kanoe.ai` unless he says otherwise.
 
+**Given by the founder, 1 Oct 2026 (bundle input, not secrets):**
+- Kanoe Technologies SL, NIF **B23942923**;
+- registered address **Calle del Padre Damián 41, 28036 Madrid, Spain**;
+- authorised representative **Tyler Warren**, +34 608 445 715, tyler@kanoe.ai;
+- the Twilio Account SID, set on Railway by this tab as `TWILIO_ACCOUNT_SID` (kept out of the repo: GitHub's push
+  protection treats it as sensitive).
+- **Still needed:** `TWILIO_AUTH_TOKEN`, set on Railway by the founder himself. Both of his messages carried the
+  placeholder `<paste token>`, so nothing has been sent to Twilio yet.
+
 **This tab does the rest, through Twilio's API under `railway run`, with no credential printed:**
 - create the End-User (business, direct customer) and the Address;
 - create the GB-mobile business regulatory bundle, attach both, and submit it;
@@ -54,3 +63,17 @@ this tab's inbound SMS and voice handlers record on the reservation. Those are b
    the guest BCC'd — restating what, when, how many and the name. **Unclear outcome:** the *"I just spoke with you…
    can you confirm…"* version. A reply lands on the same reservation.
 4. **The after-hours email to the same reservation** (S-67 follow-up).
+
+## Built ahead of the number (Sasha 77)
+
+- **`booking_signer/inbound_phone.py`.** Each route is Twilio-signed and verified:
+  - `POST /api/booking/twilio/sms`: the SMS lands on the reservation of the most recent call Sasha placed to that number
+    (matched by digits, or by a listing number's hash). It is read with the field checks: a clear yes restating day,
+    time and number confirms; another time proposes; a stop ends every channel. There is never an automatic reply;
+  - `POST /api/booking/twilio/voice`: a Spanish and English greeting that says the message is recorded and goes to the
+    booking, then `<Record>`;
+  - `POST /api/booking/twilio/recording`: files the recording with that call.
+  - The sender is kept only as a sha256 key.
+- **`sql/016_inbound_phone.sql`** (`booking_inbound`): drafted, **not applied**, waiting for the founder's approval.
+- Tests: `tests/test_inbound_phone.py` (memory and Postgres).
+- The number is given to venues only once 016 is applied, the number is bought, and its webhooks point at these routes.

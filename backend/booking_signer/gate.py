@@ -20,7 +20,9 @@ from fastapi import HTTPException, Request
 
 HEADER = "x-sasha-booking-key"
 ENV = "SASHA_BOOKING_KEY"
-EXEMPT = {("GET", "/api/booking/health"), ("POST", "/api/booking/email/inbound")}
+EXEMPT = {("GET", "/api/booking/health"), ("POST", "/api/booking/email/inbound"),
+          # S-70 · Twilio's webhooks to Sasha's own number: each is Twilio-signed and verified (inbound_phone.signature_ok)
+          ("POST", "/api/booking/twilio/sms"), ("POST", "/api/booking/twilio/voice"), ("POST", "/api/booking/twilio/recording")}
 
 
 async def require_booking_key(request: Request) -> None:

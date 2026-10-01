@@ -46,5 +46,19 @@ check; it holds no listing content.
 ## Not done
 
 - **→ S-66 booking from the pick:** calls are off. The live in-chat call is held for the founder's venue pick (Sasha 62).
-- **Step 9 (style):** waiting on a decision. See the reply.
+- **Step 9 (style):** built per Sasha 65 and checked live below.
 - **013 purge:** written and dry-run, **not applied**. The founder runs it.
+
+## Step 9 live (Sasha 65: the cards shown, the venue's own site, no Style chip)
+
+This check covers the top 5 "best rated" cards of the proof search. HTTP 200 in 8.9 s; nothing was stored.
+
+- **Card 1:** Style (from their website, AI-summarised): Realism ["realismo"] · Trash polka ["trash polka"] ·
+  Traditional American ["tradicional americano"] · Blackwork ["blackwork"]
+- **Card 2:** Fine line ["Fine Line & Microrealismo"] · Microrealismo · Lettering · Ornamental, each quoted
+- **Card 3:** "their site answered HTTP 202". No text means no tags.
+- **Card 4:** "no website listed — no style without their own text"
+- **Card 5:** Microblading ["Si estas buscando dónde hacerte micropigmentación de cejas en Madrid"]. The quote is
+  real and on the page. It supports eyebrow micropigmentation, of which microblading is the common name, so the tag
+  is loose but sourced. The check requires the quote to be on the page, not the tag's own words, because many sites
+  are in Spanish.

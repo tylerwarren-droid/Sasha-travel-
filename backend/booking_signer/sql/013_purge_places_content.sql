@@ -69,7 +69,23 @@ update booking_calls c set
                       else replace(c.bland_answer::text, c.dialled_number, '⟨the listing''s number⟩')::jsonb end
 where c.brief->>'number_source' like 'their Google listing%';
 
--- ── CHECK before commit: every count must be 0 ─────────────────────────────────────────────────────────────────
+-- ── GUARD: the transaction aborts (and nothing is changed) unless every count below is 0 ──────────────────────
+do $$ declare bad int; begin
+  select coalesce(sum(n), 0) into bad from (
+select 'reads still holding a listing value' what, count(*) n from venue_reads
+  where exists (select 1 from jsonb_array_elements(read->'facts') f where f->>'source_kind' = 'places' and f->'value' <> 'null'::jsonb)
+union all select 'reads with a listing name/address', count(*) from venue_reads where read->'listing' ? 'name' or read->'listing' ? 'address'
+union all select 'calls with digits in dialled_number', count(*) from booking_calls where brief ? 'number_ref' and dialled_number not like 'sha256:%'
+union all select 'calls whose read-back names the listing', count(*) from booking_calls where read_back_lines::text like '%their Google listing (%'
+union all select 'calls whose brief names the listing', count(*) from booking_calls where brief::text like '%their Google listing (%'
+union all select 'calls without a place_id to re-read', count(*) from booking_calls where brief ? 'number_ref' and brief->'number_ref'->>'place_id' is null
+  ) t;
+  if bad <> 0 then raise exception '013 verify failed: % offending row(s) — rolled back, nothing changed', bad; end if;
+end $$;
+
+commit;
+
+-- ── VERIFY after commit (read-only): every count must be 0 ────────────────────────────────────────────────────
 select 'reads still holding a listing value' what, count(*) n from venue_reads
   where exists (select 1 from jsonb_array_elements(read->'facts') f where f->>'source_kind' = 'places' and f->'value' <> 'null'::jsonb)
 union all select 'reads with a listing name/address', count(*) from venue_reads where read->'listing' ? 'name' or read->'listing' ? 'address'
@@ -77,5 +93,3 @@ union all select 'calls with digits in dialled_number', count(*) from booking_ca
 union all select 'calls whose read-back names the listing', count(*) from booking_calls where read_back_lines::text like '%their Google listing (%'
 union all select 'calls whose brief names the listing', count(*) from booking_calls where brief::text like '%their Google listing (%'
 union all select 'calls without a place_id to re-read', count(*) from booking_calls where brief ? 'number_ref' and brief->'number_ref'->>'place_id' is null;
-
-commit;   -- or: rollback;

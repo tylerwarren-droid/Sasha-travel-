@@ -9,8 +9,31 @@ twilio.com/docs/whatsapp/self-sign-up.*
 - The number is already Twilio's (S-70), and Twilio's sign-up registers it as a WhatsApp sender.
 - **That removes S-61's Meta app, system user, permanent token, app secret and Meta payment screen.** Twilio carries
   the messages through the account we already have.
-- ○ **Billing** is not stated on Twilio's sign-up page. Twilio's WhatsApp pricing (Twilio's fee plus Meta's,
-  passed through) is the expected model, but it is **to be confirmed** before the first template is sent.
+- ✅ **Billing, read at source on 1 Oct 2026 (Sasha 80).** Saved raw in `docs/sasha/replies/`, sha256 below.
+  - **Meta charges per message, not per conversation.** Per-conversation pricing ended on 1 July 2025. *"You are only
+    charged when a template message is delivered. All non-template messages are free."* Utility templates sent inside
+    an open 24-hour customer-service window are also free (https://developers.facebook.com/docs/whatsapp/pricing).
+  - **Meta's rate card, effective 1 July 2026.** The market is the **recipient's** country code, so a Spanish venue
+    is billed at the Spain rate. Rates are per delivered template:
+
+    | Market | Marketing | Utility | Authentication | Service |
+    |---|---|---|---|---|
+    | Spain | €0.0585 | €0.0166 | €0.0166 | n/a (free) |
+    | United Kingdom | €0.0526 | €0.0182 | €0.0182 | n/a (free) |
+
+    The same rows in GBP: Spain £0.0509/£0.0144, UK £0.0458/£0.0159. In USD: Spain $0.0707/$0.0200, UK $0.0635/$0.0220.
+  - **Twilio adds *"$0.005, inbound or outbound"* per message** on top, for every message, including free ones
+    (https://www.twilio.com/en-us/whatsapp/pricing).
+  - **What it means for Sasha:**
+    - A venue's reply, and Sasha's answer inside 24 hours, cost **$0.005 each** (Twilio only).
+    - Sasha writing first (Mode B) is a **utility template**: about **€0.0166 + $0.005 ≈ 2.1 cents per venue
+      contacted in Spain**.
+    - Marketing templates are never used.
+  - Files and their sha256:
+    - `2026-10-01_meta_whatsapp-rates_EUR.csv` `9b686c9a…390bf`
+    - `…_GBP.csv` `6f4e17e0…191a7`
+    - `…_USD.csv` `9aa0fcb6…08ffa`
+    - `2026-10-01_twilio_whatsapp-pricing.html` `6f727dc0…736d0`
 
 ## Before the founder starts (the tab; none of his time)
 
@@ -19,7 +42,14 @@ twilio.com/docs/whatsapp/self-sign-up.*
   link to the privacy notice. kanoe.ai itself is hosted elsewhere (Apache, at GoDaddy), so we can't edit it. This page
   is the website given to Meta.
 - The UK number must be bought (S-70) and **not already on WhatsApp**. It is new, so it isn't.
-- The inbound handler learns Twilio's `whatsapp:+…` senders before the first message: a channel value and one migration.
+- ✅ **The inbound handler takes Twilio's `whatsapp:+…` senders (Sasha 80).**
+  - They arrive on the same signed `/api/booking/twilio/sms` webhook and follow exactly the SMS rules: matched to the
+    last call by the bare number or its hash, read with the field checks, a stop recorded as said on WhatsApp, and
+    never an automatic reply.
+  - The outcome is recorded as a `whatsapp` attempt.
+  - It needs **`017_inbound_whatsapp.sql`**, which widens two check constraints and changes no rows. **Not yet
+    applied: it is waiting for the founder's go.** Until it is applied, a WhatsApp message is refused with a 5xx and
+    Twilio retries it. SMS is unaffected.
 
 ## The founder's unavoidable steps
 

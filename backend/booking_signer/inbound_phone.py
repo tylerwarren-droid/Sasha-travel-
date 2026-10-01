@@ -1,6 +1,7 @@
 """S-70 · SASHA'S OWN NUMBER ANSWERS: a venue's SMS or voicemail lands on the reservation it is about.
 
-  POST /api/booking/twilio/sms        an SMS to Sasha's number → recorded on the reservation, read with the field checks
+  POST /api/booking/twilio/sms        an SMS — or a WhatsApp message (S-71: Twilio posts both here, a WhatsApp sender as
+                                      `whatsapp:+…`) — to Sasha's number → recorded on the reservation, read with the field checks
   POST /api/booking/twilio/voice      a call to Sasha's number → a short greeting, then the venue's message is recorded
   POST /api/booking/twilio/recording  Twilio's note that the recording is ready → filed with that call
 
@@ -9,6 +10,7 @@
   · Matched by the SENDER'S NUMBER to the most recent call Sasha placed to it (its digits, or — for a Google Maps
     listing number, Sasha 64 — the hash it is stored as). Never by guessing from the words.
   · Never stores a number's digits: the sender is kept as its sha256 key (places_terms.number_key).
+  · A WhatsApp message follows exactly the SMS rules; only its channel (and the stop's `said_on`) says WhatsApp.
   · Never replies by itself. An SMS that restates the day, time and number with a clear yes CONFIRMS; another time is a
     PROPOSAL; a stop ends every channel (S-56); anything else is recorded and shown as written.
 """
@@ -52,6 +54,17 @@ def signature_ok(url: str, params: Mapping[str, str], signature: Optional[str], 
     payload = url + "".join(f"{k}{params[k]}" for k in sorted(params))
     want = base64.b64encode(hmac.new(token.encode(), payload.encode(), hashlib.sha1).digest()).decode()
     return hmac.compare_digest(want, signature)
+
+
+def _channel_and_number(sender: str):
+    """Twilio writes a WhatsApp sender as `whatsapp:+447…`; an SMS sender is the bare number."""
+    if sender.lower().startswith("whatsapp:"):
+        return "whatsapp", sender[len("whatsapp:"):].strip()
+    return "sms", sender
+
+
+_ATTEMPT = {"sms": ("phone", "their SMS to Sasha's number, read with the field checks (S-70)"),
+            "whatsapp": ("whatsapp", "their WhatsApp message to Sasha's number, read with the field checks (S-71)")}
 
 
 def _twiml(inner: str = "") -> Response:
@@ -98,9 +111,10 @@ class MemoryInboundStore:
     async def set_reading(self, provider_id: str, reading: dict) -> None:
         self.rows[provider_id]["reading"] = reading
 
-    async def outcome(self, trip_item_id: str, trip_status: str, attempt_status: str, text: str, now: datetime) -> None:
+    async def outcome(self, trip_item_id: str, trip_status: str, attempt_status: str, text: str, now: datetime, channel: str = "sms") -> None:
         self.calls.trip_items[trip_item_id]["status"] = trip_status
-        self.calls.attempts.append({"trip_item_id": trip_item_id, "method": "phone", "status": attempt_status, "response_received": text})
+        self.calls.attempts.append({"trip_item_id": trip_item_id, "method": _ATTEMPT[channel][0], "status": attempt_status,
+                                    "response_received": text, "observed_by": _ATTEMPT[channel][1]})
 
     async def request_of(self, trip_item_id: str) -> Optional[dict]:
         return (self.calls.trip_items.get(trip_item_id) or {}).get("request")
@@ -141,13 +155,15 @@ class PostgresInboundStore:
     async def set_reading(self, provider_id, reading):
         await self._run(lambda c: c.execute("update booking_inbound set reading = $2 where provider_id = $1", provider_id, reading))
 
-    async def outcome(self, trip_item_id, trip_status, attempt_status, text, now):
+    async def outcome(self, trip_item_id, trip_status, attempt_status, text, now, channel="sms"):
+        method, observed_by = _ATTEMPT[channel]
+
         async def fn(conn):
             async with conn.transaction():
                 await conn.execute("update trip_items set status = $2, updated_at = now() where id = $1", uuid_(trip_item_id), trip_status)
                 await conn.execute("insert into booking_attempts (trip_item_id, method, attempted_at, status, response_received, response_at, observed_by) "
-                                   "values ($1, 'phone', $2, $3, $4, $2, 'their SMS to Sasha''s number, read with the field checks (S-70)')",
-                                   uuid_(trip_item_id), now, attempt_status, text[:4000])
+                                   "values ($1, $5, $2, $3, $4, $2, $6)",
+                                   uuid_(trip_item_id), now, attempt_status, text[:4000], method, observed_by)
         await self._run(fn)
 
     async def request_of(self, trip_item_id):
@@ -168,20 +184,22 @@ async def sms(request: Request):
     p = await _verified(request, "sms")
     if p is None:
         return Response("not a verified request from Twilio", status_code=403)
-    sender, body, sid = p.get("From", ""), p.get("Body", ""), p.get("MessageSid") or p.get("SmsSid")
+    channel, sender = _channel_and_number(p.get("From", ""))
+    body, sid = p.get("Body", ""), p.get("MessageSid") or p.get("SmsSid")
     if not sid:
         return Response("no message id", status_code=400)
     now = NOW()
     try:
         call = await STORE.call_for_number(sender, now - MATCH_WINDOW) if sender else None
-        row = {"provider_id": sid, "channel": "sms", "from_key": PT.number_key(sender) if sender else "unknown", "to_number": p.get("To"),
+        row = {"provider_id": sid, "channel": channel, "from_key": PT.number_key(sender) if sender else "unknown",
+               "to_number": _channel_and_number(p.get("To", ""))[1] or None,
                "body_text": body, "call_id": str(call["call_id"]) if call else None,
                "trip_item_id": str(call["trip_item_id"]) if call else None, "received_at": now}
         fresh = await STORE.put(row)
         if fresh and call:
             await _read_sms(row, call, body, now)
     except StorageUnavailable as e:
-        log.error("[inbound_phone] SMS %s not recorded: %s", sid, e.detail)
+        log.error("[inbound_phone] %s %s not recorded: %s", channel, sid, e.detail)
         return Response(e.detail, status_code=503)   # non-2xx: Twilio retries, nothing is lost
     return _twiml()   # never an automatic reply
 
@@ -190,7 +208,7 @@ async def _read_sms(row: dict, call: dict, body: str, now: datetime) -> None:
     from . import followup as FU, stop as S
     brief = call.get("brief") or {}
     if S.STOP_STORE is not None and S.detect(body):
-        await S.on_venue_words(brief.get("venue_ids"), "sms", row["from_key"], body,
+        await S.on_venue_words(brief.get("venue_ids"), row["channel"], row["from_key"], body,
                                {"provider_id": row["provider_id"], "call_id": row["call_id"]}, now)
         return
     o = (brief.get("followup") or {}).get("request") or await STORE.request_of(row["trip_item_id"])
@@ -200,8 +218,8 @@ async def _read_sms(row: dict, call: dict, body: str, now: datetime) -> None:
     await STORE.set_reading(row["provider_id"], r)
     status = {"confirmed": "confirmed", "proposed": "proposed", "declined": "unclear"}.get(r["result"])
     if status:
-        await STORE.outcome(row["trip_item_id"], status, "confirmed" if status == "confirmed" else "unclear", body, now)
-    log.info("[inbound_phone] SMS %s on reservation %s read as %s", row["provider_id"], row["trip_item_id"], r["result"])
+        await STORE.outcome(row["trip_item_id"], status, "confirmed" if status == "confirmed" else "unclear", body, now, row["channel"])
+    log.info("[inbound_phone] %s %s on reservation %s read as %s", row["channel"], row["provider_id"], row["trip_item_id"], r["result"])
 
 
 @router.post("/voice")

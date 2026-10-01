@@ -108,6 +108,32 @@ class InboundPhone(unittest.TestCase):
         self.assertEqual(r.status_code, 204)
         self.assertEqual((IP.STORE.rows["CA1"]["recording_url"], IP.STORE.rows["CA1"]["recording_seconds"]), ("https://api.twilio.com/rec/RE1", 14))
 
+    def wa(self, sid, sender, body):
+        return self.post("sms", {"MessageSid": sid, "From": f"whatsapp:{sender}", "To": "whatsapp:+447700900000", "Body": body})
+
+    def test_a_whatsapp_message_follows_the_sms_rules_on_its_own_channel(self):
+        r = self.wa("SMwa1", SITE_NUMBER, "Confirmado: mesa para 4 personas el jueves 8 de octubre a las 20:00, a nombre de Johnson.")
+        self.assertEqual((r.status_code, r.text.endswith("<Response></Response>")), (200, True))      # never an automatic reply
+        row = IP.STORE.rows["SMwa1"]
+        self.assertEqual((row["channel"], row["trip_item_id"], row["to_number"]), ("whatsapp", "t-site", "+447700900000"))
+        self.assertEqual(row["from_key"], PT.number_key(SITE_NUMBER))                                  # the bare number's key
+        self.assertNotIn(SITE_NUMBER, json.dumps(row, default=str))
+        self.assertEqual(self.calls.trip_items["t-site"]["status"], "confirmed")
+        self.assertEqual(self.calls.attempts[-1]["method"], "whatsapp")
+        self.wa("SMwa2", LISTING_NUMBER, "Os podemos dar el jueves 8 a las 22:00 para 4.")              # a listing number, by its hash
+        self.assertEqual((IP.STORE.rows["SMwa2"]["trip_item_id"], self.calls.trip_items["t-list"]["status"]), ("t-list", "proposed"))
+
+    def test_a_stop_on_whatsapp_is_said_on_whatsapp(self):
+        seen = []
+
+        class Stops:
+            async def record(self, venue_ids, said_on, scope, words, evidence, now):
+                seen.append(said_on)
+                return S.Stopped(rows=1, guests_told=0, first=True) if hasattr(S, "Stopped") else None
+        S.STOP_STORE = Stops()
+        self.wa("SMwa3", SITE_NUMBER, "No nos escribáis más, gracias.")
+        self.assertEqual(seen, ["whatsapp"])
+
     def test_the_signature_scheme(self):
         form = {"b": "2", "a": "1"}
         self.assertTrue(IP.signature_ok(f"{BASE}/api/booking/twilio/sms", form, sign("sms", form), TOKEN))
@@ -132,17 +158,20 @@ class OnPostgres(unittest.TestCase):
     def setUpClass(cls):
         TBL.OnPostgres.setUpClass.__func__(cls)
         import asyncio, asyncpg, pathlib
-        sql = (pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql" / "016_inbound_phone.sql").read_text()
+        d = pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql"
+        sqls = [(d / f).read_text() for f in ("016_inbound_phone.sql", "017_inbound_whatsapp.sql")]
 
         async def apply():
             c = await asyncpg.connect(TBL.PG_URL)
             try:
-                await c.execute(sql[sql.index("begin;"):sql.index("-- VERIFY")])
+                for sql in sqls:
+                    await c.execute(sql[sql.index("begin;"):sql.index("-- VERIFY")])
             finally:
                 await c.close()
         asyncio.run(apply())
 
     def setUp(self):
+        self._q("delete from booking_inbound")   # it references booking_calls, which the ladder's wipe deletes
         TBL.LadderRoutes.setUp(self)
         self.tok = mock.patch.dict(os.environ, {"TWILIO_AUTH_TOKEN": TOKEN, "TWILIO_WEBHOOK_BASE": BASE})
         self.tok.start()
@@ -166,3 +195,12 @@ class OnPostgres(unittest.TestCase):
         row = self._q("select * from booking_inbound where provider_id = 'SMpg1'")[0]
         self.assertEqual((str(row["trip_item_id"]), row["from_key"]), (self.item, PT.number_key("+34915001122")))
         self.assertEqual(self._q("select status from trip_items where id = $1::uuid", self.item)[0]["status"], "confirmed")
+
+    def test_a_whatsapp_message_lands_as_a_whatsapp_attempt_in_postgres(self):
+        form = {"MessageSid": "SMpgwa", "From": "whatsapp:+34915001122", "To": "whatsapp:+447700900000",
+                "Body": "Confirmado: mesa para 4 personas el jueves 8 de octubre a las 20:00, a nombre de Johnson."}
+        r = self.c.post("/api/booking/twilio/sms", data=form, headers={"X-Twilio-Signature": sign("sms", form)})
+        self.assertEqual(r.status_code, 200, r.text)
+        row = self._q("select * from booking_inbound where provider_id = 'SMpgwa'")[0]
+        self.assertEqual((row["channel"], str(row["trip_item_id"])), ("whatsapp", self.item))
+        self.assertEqual(self._q("select method from booking_attempts where trip_item_id = $1::uuid order by attempted_at desc limit 1", self.item)[0]["method"], "whatsapp")

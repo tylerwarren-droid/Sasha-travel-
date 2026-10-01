@@ -1,0 +1,45 @@
+"Cost per message in GBP on the WhatsApp Business Platform, effective July 1, 2026",,,,,,
+We charge on a per-message basis on the WhatsApp Business Platform. Learn more here:,,,,https://developers.facebook.com/docs/whatsapp/pricing,,
+Marketing rates apply across Cloud API and Marketing Messages Lite API. Learn more here:,,,,https://developers.facebook.com/docs/whatsapp/pricing,,
+"Some markets are mapped to a ""Rest of"" region or ""Other."" Learn more here:",,,,https://developers.facebook.com/docs/whatsapp/pricing#country-calling-codes,,
+"In some markets, we have authentication-international rates. Learn more here:",,,,https://developers.facebook.com/docs/whatsapp/pricing/authentication-international-rates,,
+Market,Currency,Marketing,Utility,Authentication,"Authentication-
+International",Service
+Argentina,GBP,0.0445,0.0188,0.0188,n/a,n/a
+Brazil,GBP,0.0451,0.0049,0.0049,n/a,n/a
+Chile,GBP,0.0641,0.0144,0.0144,n/a,n/a
+Colombia,GBP,0.0090,0.0004,0.0004,n/a,n/a
+Egypt,GBP,0.0464,0.0026,0.0026,0.0469,n/a
+France,GBP,0.0620,0.0216,0.0216,n/a,n/a
+Germany,GBP,0.0985,0.0397,0.0397,n/a,n/a
+Hong Kong,GBP,0.0528,0.0189,0.0189,n/a,n/a
+Hungary,GBP,0.0620,0.0251,0.0251,n/a,n/a
+India,GBP,0.0086,0.0010,0.0010,0.0219,n/a
+Indonesia,GBP,0.0297,0.0180,0.0180,0.0979,n/a
+Israel,GBP,0.0254,0.0038,0.0038,n/a,n/a
+Italy,GBP,0.0573,0.0216,0.0216,n/a,n/a
+Malaysia,GBP,0.0620,0.0101,0.0101,0.0302,n/a
+Mexico,GBP,0.0221,0.0062,0.0062,n/a,n/a
+Netherlands,GBP,0.1152,0.0361,0.0361,n/a,n/a
+Nigeria,GBP,0.0372,0.0048,0.0048,0.0541,n/a
+Pakistan,GBP,0.0341,0.0072,0.0072,0.0541,n/a
+Peru,GBP,0.0507,0.0144,0.0144,n/a,n/a
+Poland,GBP,0.0261,0.0087,0.0087,n/a,n/a
+Qatar,GBP,0.0246,0.0086,0.0086,n/a,n/a
+Romania,GBP,0.0620,0.0208,0.0208,n/a,n/a
+Russia,GBP,0.0578,0.0288,0.0288,n/a,n/a
+Saudi Arabia,GBP,0.0360,0.0077,0.0077,0.0431,n/a
+Singapore,GBP,0.0528,0.0116,0.0116,n/a,n/a
+South Africa,GBP,0.0273,0.0055,0.0055,0.0144,n/a
+Spain,GBP,0.0509,0.0144,0.0144,n/a,n/a
+Turkey,GBP,0.0078,0.0006,0.0006,n/a,n/a
+United Arab Emirates,GBP,0.0360,0.0113,0.0113,0.0367,n/a
+United Kingdom,GBP,0.0458,0.0159,0.0159,n/a,n/a
+North America,GBP,0.0180,0.0025,0.0025,n/a,n/a
+Rest of Africa,GBP,0.0162,0.0029,0.0029,n/a,n/a
+Rest of Asia Pacific,GBP,0.0528,0.0082,0.0082,n/a,n/a
+Rest of Central & Eastern Europe,GBP,0.0620,0.0152,0.0152,n/a,n/a
+Rest of Latin America,GBP,0.0534,0.0081,0.0081,n/a,n/a
+Rest of Middle East,GBP,0.0246,0.0065,0.0065,n/a,n/a
+Rest of Western Europe,GBP,0.0427,0.0123,0.0123,n/a,n/a
+Other,GBP,0.0435,0.0056,0.0056,n/a,n/a

@@ -1,0 +1,45 @@
+"Cost per message in EUR on the WhatsApp Business Platform, effective July 1, 2026",,,,,,
+We charge on a per-message basis on the WhatsApp Business Platform. Learn more here:,,,,https://developers.facebook.com/docs/whatsapp/pricing,,
+Marketing rates apply across Cloud API and Marketing Messages Lite API. Learn more here:,,,,https://developers.facebook.com/docs/whatsapp/pricing,,
+"Some markets are mapped to a ""Rest of"" region or ""Other."" Learn more here:",,,,https://developers.facebook.com/docs/whatsapp/pricing#country-calling-codes,,
+"In some markets, we have authentication-international rates. Learn more here:",,,,https://developers.facebook.com/docs/whatsapp/pricing/authentication-international-rates,,
+Market,Currency,Marketing,Utility,Authentication,"Authentication-
+International",Service
+Argentina,EUR,0.0512,0.0216,0.0216,n/a,n/a
+Brazil,EUR,0.0518,0.0056,0.0056,n/a,n/a
+Chile,EUR,0.0736,0.0166,0.0166,n/a,n/a
+Colombia,EUR,0.0104,0.0008,0.0008,n/a,n/a
+Egypt,EUR,0.0533,0.0030,0.0030,0.0538,n/a
+France,EUR,0.0712,0.0248,0.0248,n/a,n/a
+Germany,EUR,0.1131,0.0456,0.0456,n/a,n/a
+Hong Kong,EUR,0.0606,0.0216,0.0216,n/a,n/a
+Hungary,EUR,0.0712,0.0289,0.0289,n/a,n/a
+India,EUR,0.0099,0.0012,0.0012,0.0252,n/a
+Indonesia,EUR,0.0341,0.0208,0.0208,0.1129,n/a
+Israel,EUR,0.0292,0.0044,0.0044,n/a,n/a
+Italy,EUR,0.0658,0.0248,0.0248,n/a,n/a
+Malaysia,EUR,0.0712,0.0116,0.0116,0.0346,n/a
+Mexico,EUR,0.0253,0.0071,0.0071,n/a,n/a
+Netherlands,EUR,0.1323,0.0414,0.0414,n/a,n/a
+Nigeria,EUR,0.0428,0.0056,0.0056,0.0622,n/a
+Pakistan,EUR,0.0392,0.0083,0.0083,0.0622,n/a
+Peru,EUR,0.0582,0.0166,0.0166,n/a,n/a
+Poland,EUR,0.0303,0.0101,0.0101,n/a,n/a
+Qatar,EUR,0.0282,0.0099,0.0099,n/a,n/a
+Romania,EUR,0.0712,0.0239,0.0239,n/a,n/a
+Russia,EUR,0.0664,0.0331,0.0331,n/a,n/a
+Saudi Arabia,EUR,0.0414,0.0088,0.0088,0.0495,n/a
+Singapore,EUR,0.0606,0.0133,0.0133,n/a,n/a
+South Africa,EUR,0.0314,0.0063,0.0063,0.0166,n/a
+Spain,EUR,0.0585,0.0166,0.0166,n/a,n/a
+Turkey,EUR,0.0090,0.0007,0.0007,n/a,n/a
+United Arab Emirates,EUR,0.0415,0.0130,0.0130,0.0421,n/a
+United Kingdom,EUR,0.0526,0.0182,0.0182,n/a,n/a
+North America,EUR,0.0207,0.0028,0.0028,n/a,n/a
+Rest of Africa,EUR,0.0186,0.0033,0.0033,n/a,n/a
+Rest of Asia Pacific,EUR,0.0606,0.0094,0.0094,n/a,n/a
+Rest of Central & Eastern Europe,EUR,0.0712,0.0175,0.0175,n/a,n/a
+Rest of Latin America,EUR,0.0612,0.0094,0.0094,n/a,n/a
+Rest of Middle East,EUR,0.0282,0.0075,0.0075,n/a,n/a
+Rest of Western Europe,EUR,0.0490,0.0142,0.0142,n/a,n/a
+Other,EUR,0.0500,0.0064,0.0064,n/a,n/a

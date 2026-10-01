@@ -116,6 +116,19 @@ async def read_venue(request: Request):
     return _read_view(row)
 
 
+@router.post("/draft")
+async def draft_route(request: Request):
+    """S-66 step 7 · the parts of reservation/1 a text states, worded for the venue's country — the chat's booking card
+    asks only for what is missing. Deterministic (chat_request.draft); nothing is contacted, nothing is stored."""
+    body = await _json(request)
+    if body is None:
+        return _refuse(400, "draft_malformed", "send {text, country?} as a JSON object")
+    from .chat_request import draft
+    country = str(body.get("country") or "").upper()
+    lang = V.COUNTRIES[country][2] if country in V.COUNTRIES else "en"
+    return draft(str(body.get("text") or "")[:500], NOW(), lang)
+
+
 @router.post("/venues/find")
 async def find_venues(request: Request):
     """S-65 · "Find venues": {what, where, country?} → up to five Google listings. Search only — nothing is contacted."""

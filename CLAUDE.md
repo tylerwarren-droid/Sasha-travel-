@@ -186,10 +186,10 @@ reach the booking thread first. It REFUSES, loudly, if any anchor changed:
         if any(a not in s for a in (a_imp, a_state, a_send, a_resp, a_jsx)):
             raise SystemExit("⛔ STOP: SashaChat's anchors changed in this CTO drop — chat booking was NOT re-applied. Place it by hand.")
         s = s.replace(a_imp, a_imp + "import ChatBooking from './ChatBooking'  // S-66 chat booking, Stage B re-applies\nimport { takeChatText } from '@/lib/chat-booking-bus'\n", 1)
-        s = s.replace(a_state, "  const [bookingFind, setBookingFind] = useState<{ what: string; where: string; country?: string } | null>(null)  // S-66 chat booking\n" + a_state, 1)
+        s = s.replace(a_state, "  const [bookingFind, setBookingFind] = useState<{ what: string; where: string; country?: string; draft?: unknown } | null>(null)  // S-66 chat booking\n" + a_state, 1)
         s = s.replace(a_send, a_send + "    if (takeChatText(content)) { setMessages(prev => [...prev, { role: 'user', content }]); return }  // S-66 chat booking\n", 1)
         i = s.index(a_resp); j = s.index("\n", i) + 1
-        s = s[:j] + "      if (response.data.booking_find) setBookingFind(response.data.booking_find)  // S-66 chat booking\n" + s[j:]
+        s = s[:j] + "      if (response.data.booking_find) setBookingFind({ ...response.data.booking_find, draft: response.data.reservation_draft ?? null })  // S-66 chat booking\n" + s[j:]
         s = s.replace(a_jsx, "        {/* S-66 chat booking: repo-only component. CTO zips drop this; Stage B re-applies it. */}\n        {bookingFind && <ChatBooking key={`${bookingFind.what}|${bookingFind.where}`} find={bookingFind} />}\n" + a_jsx, 1)
         p.write_text(s); print("chat booking re-applied")
     else: print("chat booking already present")

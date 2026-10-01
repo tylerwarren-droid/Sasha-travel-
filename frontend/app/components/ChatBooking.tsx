@@ -12,15 +12,17 @@
  *   step 4 · PICK → READ: a tap, or "the second one" typed → POST /venues/read with THAT listing's place_id → the
  *            server's own sentence and its rungs: available ones by name, unavailable ones with their reason.
  *
- * ⚠ Booking from the chat itself (the read-back card, the yes, the call) is S-66 steps 7–9: until then the only button
- * after a read is the booking page, opened on that venue — no button here promises what the chat cannot yet do.
+ *   steps 7–9 · when the venue can be PHONED (the server says so in its rungs), ChatBookingCall asks the details once,
+ *            shows the server's read-back, takes the yes (button or typed) and shows the result and the itinerary line.
+ *            When it cannot, the server's reason is shown and the booking page is the way on.
  */
 import { useEffect, useRef, useState } from 'react'
 import { FOUNDER_ONLY, findVenues, readVenue, refusal, type Candidate, type Rung } from '@/lib/booking-client'
-import { setChatBookingHandler } from '@/lib/chat-booking-bus'
+import { setChatBookingHandler, takeTypedYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
+import ChatBookingCall from './ChatBookingCall'
 
-type Find = { what: string; where: string; country?: string }
+type Find = { what: string; where: string; country?: string; draft?: unknown }
 type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null }
 type State =
   | { phase: 'finding' } | { phase: 'founder_only' } | { phase: 'refused'; words: string }
@@ -75,6 +77,7 @@ export default function ChatBooking({ find }: { find: Find }) {
   // "the second one" typed in the chat picks a card; anything else is not ours (the conductor gets it)
   useEffect(() => {
     setChatBookingHandler((text: string) => {
+      if (takeTypedYes(text)) return true   // step 9 · a typed yes to the pending read-back card
       const s = stateRef.current
       if (s.phase !== 'found' && s.phase !== 'read' && s.phase !== 'read_refused') return false
       const m = text.toLowerCase().match(/\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th|one|two|three|four|five)\b/)
@@ -122,9 +125,14 @@ export default function ChatBooking({ find }: { find: Find }) {
                 {!r.available && r.why_not ? <div style={{ fontSize: 13, opacity: 0.8 }}>Not available: {r.why_not}</div> : null}</li>
             ))}
           </ul>
+          {(() => {
+            const ph = state.read.rungs.find((r) => r.rung === 'phone' && r.available)
+            return ph ? <ChatBookingCall readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
+              venue={state.pick.name ?? state.read.venue} draft={(find.draft ?? null) as never} whatText={find.what} /> : null
+          })()}
           {lookup && <a href={`/booking-helper?book=phone&lookup=${encodeURIComponent(lookup.name ?? '')}&city=${encodeURIComponent(find.where)}&country=${encodeURIComponent(lookup.country ?? find.country ?? '')}`}
             target="_blank" rel="noopener noreferrer">Book it on the booking page ↗</a>}
-          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>Booking it right here in the chat comes next; nothing has been contacted.</div>
+          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>Nothing has been contacted yet.</div>
         </div>
       )}
     </div>

@@ -1,0 +1,153 @@
+'use client'
+
+/**
+ * S-66 (EU) steps 7–9 · BOOKING BY PHONE INSIDE THE CHAT: the details asked once → the server's read-back, word for
+ * word → the yes (a button, or a typed "yes" bound to THIS card's read-back hash) → the call → the result in the venue's
+ * words → "it's in your itinerary", said only once /reservations returns the row. Rendered by ChatBooking after a read.
+ *
+ * Every sentence shown is the server's (`read_back.lines`, `say`, `status_words`) or built from the object the guest
+ * filled in. A refusal is shown as the server said it — calls off, opted out, the 15-minute window — and nothing is
+ * dialled. Nothing here decides an outcome: the recap check and every rule run on the server.
+ */
+import { useEffect, useState } from 'react'
+import { approveCall, bookingReq, getCall, prepareCall, refusal, reservations, type Rung } from '@/lib/booking-client'
+import { setPendingYes } from '@/lib/chat-booking-bus'
+import { GatedButton } from '../booking-helper/GatedButton'
+
+type Draft = { parts?: { what?: { activity: string; activity_venue_lang: string; category: string }; when?: { mode: string; at?: string };
+  how_many?: { count: number; unit: string }; flow?: string } } | null
+type Details = { activity: string; venueLang: string; category: string; date: string; time: string; ask: boolean; count: number;
+  unit: string; duration: string; name: string; mobile: string }
+type View = { call_id: string; status: string; outcome?: string | null; venue_words?: string | null; say?: string | null; read_by?: string | null }
+type Phase =
+  | { p: 'details' } | { p: 'preparing' } | { p: 'readback'; callId: string; lines: string[]; sha: string }
+  | { p: 'placing'; lines: string[] } | { p: 'calling'; callId: string; say: string } | { p: 'result'; view: View; itinerary: string }
+  | { p: 'refused'; words: string } | { p: 'not_now' }
+
+const SLEEP = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+export default function ChatBookingCall({ readId, country, phone, venue, draft, whatText }: {
+  readId: string; country: string | null; phone: Rung; venue: string; draft: Draft; whatText: string }) {
+  const parts = draft?.parts ?? {}
+  const at = parts.when?.mode === 'at' && parts.when.at ? parts.when.at.split('T') : ['', '']
+  const [d, setD] = useState<Details>({
+    activity: parts.what?.activity ?? whatText, venueLang: parts.what?.activity_venue_lang ?? '', category: parts.what?.category ?? 'other',
+    date: at[0], time: at[1], ask: parts.when?.mode === 'venue_proposes', count: parts.how_many?.count ?? 1, unit: parts.how_many?.unit ?? 'people',
+    duration: '', name: '', mobile: '' })
+  const [phase, setPhase] = useState<Phase>({ p: 'details' })
+
+  // the activity worded in the venue's language, once — from the server's deterministic list (nothing invented)
+  useEffect(() => {
+    let off = false
+    bookingReq('/api/booking/draft', { text: whatText, country: country ?? undefined }).then((r) => {
+      const w = (r.json.parts as { what?: { activity: string; activity_venue_lang: string; category: string } } | undefined)?.what
+      if (!off && w) setD((x) => ({ ...x, activity: x.activity || w.activity, venueLang: x.venueLang || w.activity_venue_lang, category: w.category }))
+    }).catch(() => { /* the field stays for the guest to fill */ })
+    return () => { off = true }
+  }, [whatText, country])
+
+  async function prepare() {
+    setPhase({ p: 'preparing' })
+    const reservation = {
+      schema: 'reservation/1', flow: d.ask ? 'availability' : 'book',
+      who: { name: d.name.trim(), ...(d.mobile.trim() ? { contact: { mobile_e164: d.mobile.trim() } } : {}) },
+      what: { activity: d.activity.trim(), activity_venue_lang: d.venueLang.trim(), category: d.category },
+      where: {}, when: d.ask ? { mode: 'venue_proposes' } : { mode: 'at', at: `${d.date}T${d.time}`, ...(Number(d.duration) > 0 ? { duration_min: Number(d.duration) } : {}) },
+      how_many: { count: d.count, unit: d.unit },
+    }
+    const r = await prepareCall({ reservation, read_id: readId, ...(phone.fact_index !== null ? { fact_index: phone.fact_index } : {}) })
+    if (!r.ok) { setPhase({ p: 'refused', words: `Not prepared — ${refusal(r.json, r.status)}. Nothing was dialled.` }); return }
+    const rb = r.json.read_back as { lines: string[]; sha256: string }
+    setPhase({ p: 'readback', callId: String(r.json.call_id), lines: rb.lines, sha: rb.sha256 })
+  }
+
+  async function approve(callId: string, sha: string, lines: string[], how: 'button' | 'chat', said: string | null) {
+    setPendingYes(null)
+    setPhase({ p: 'placing', lines })
+    const r = await approveCall(callId, sha, { how, said })
+    if (!r.ok) { setPhase({ p: 'refused', words: `Not called — ${refusal(r.json, r.status)}. Nothing was dialled.` }); return }
+    if (r.json.status === 'scheduled') { setPhase({ p: 'refused', words: String(r.json.say) }); return }
+    if (r.json.status !== 'placed' && r.json.status !== 'uncertain') { setPhase({ p: 'refused', words: String(r.json.say ?? 'The call was not placed.') }); return }
+    setPhase({ p: 'calling', callId, say: String(r.json.say ?? 'Calling now.') })
+    for (let i = 0; i < 48; i++) {                       // every 10 s, up to 8 minutes (Bland's ceiling is 4)
+      await SLEEP(10000)
+      const g = await getCall(callId)
+      if (!g.ok) continue
+      const v = g.json as unknown as View
+      if (v.status === 'placed' || v.status === 'placing') { setPhase({ p: 'calling', callId, say: `I'm on the phone to ${venue} now.` }); continue }
+      // the itinerary line only from a row the server returns — never assumed
+      const res = await reservations()
+      const row = ((res.json.reservations ?? []) as Array<{ intent_id: string; what: string; venue: string; date: string | null; time: string | null; status_words: string }>)
+        .find((x) => x.intent_id === callId)
+      setPhase({ p: 'result', view: v, itinerary: row
+        ? `It's in your itinerary: ${row.what} at ${row.venue}${row.date ? `, ${row.date}${row.time ? ` at ${row.time}` : ''}` : ''}. Status: ${row.status_words}.`
+        : 'Nothing was booked, so nothing was added to your itinerary.' })
+      return
+    }
+    setPhase({ p: 'refused', words: 'The call has not finished after 8 minutes; its result is kept on the server and will show in your reservations.' })
+  }
+
+  // a typed "yes" binds to THIS card while its read-back is showing
+  useEffect(() => {
+    if (phase.p !== 'readback') return
+    const { callId, sha, lines } = phase
+    setPendingYes((said) => { approve(callId, sha, lines, 'chat', said).catch((e) => setPhase({ p: 'refused', words: (e as Error).message })) })
+    return () => setPendingYes(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-armed for each new read-back card
+  }, [phase.p === 'readback' ? phase.callId : null])
+
+  const run = (f: () => Promise<void>) => () => { f().catch((e) => setPhase({ p: 'refused', words: (e as Error).message })) }
+  const input = { width: '100%', padding: '4px 6px', border: '1px solid rgba(0,0,0,.2)', borderRadius: 6 } as const
+  const needs = [
+    d.activity.trim().length < 2 && 'what to book', d.venueLang.trim().length < 2 && `how to say it there`,
+    !d.ask && !d.date && 'a day', !d.ask && !d.time && 'a time', !(d.count >= 1) && 'how many', d.name.trim().length < 2 && 'your name',
+    phase.p === 'preparing' && 'the read-back',
+  ]
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid rgba(0,0,0,.1)', paddingTop: 10 }}>
+      {(phase.p === 'details' || phase.p === 'preparing' || phase.p === 'refused') && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 13 }}>
+          <label>What (your words)<input style={input} value={d.activity} onChange={(e) => setD({ ...d, activity: e.target.value })} /></label>
+          <label>As Sasha will say it there<input style={input} value={d.venueLang} onChange={(e) => setD({ ...d, venueLang: e.target.value })} /></label>
+          <label style={{ gridColumn: '1 / -1' }}><input type="checkbox" checked={d.ask} onChange={(e) => setD({ ...d, ask: e.target.checked })} /> No set time — ask them when they have space</label>
+          {!d.ask && <label>Day<input style={input} type="date" value={d.date} onChange={(e) => setD({ ...d, date: e.target.value })} /></label>}
+          {!d.ask && <label>Time<input style={input} type="time" value={d.time} onChange={(e) => setD({ ...d, time: e.target.value })} /></label>}
+          <label>How many<input style={input} type="number" min={1} max={100} value={d.count} onChange={(e) => setD({ ...d, count: Number(e.target.value) })} /></label>
+          <label>Counted in<select style={input} value={d.unit} onChange={(e) => setD({ ...d, unit: e.target.value })}>
+            <option value="people">people</option><option value="sessions">sessions</option><option value="pieces">pieces</option><option value="places">places</option></select></label>
+          {!d.ask && <label>Length in minutes (if it matters)<input style={input} inputMode="numeric" value={d.duration} onChange={(e) => setD({ ...d, duration: e.target.value })} /></label>}
+          <label>Your name<input style={input} value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} /></label>
+          <label style={{ gridColumn: '1 / -1' }}>Your mobile, given only if they ask (+34…)<input style={input} value={d.mobile} onChange={(e) => setD({ ...d, mobile: e.target.value })} /></label>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <GatedButton label={`Prepare the call to ${venue}`} onClick={run(prepare)} needs={needs} />
+          </div>
+        </div>
+      )}
+      {phase.p === 'refused' && <div style={{ marginTop: 6 }}>{phase.words}</div>}
+      {(phase.p === 'readback' || phase.p === 'placing') && (
+        <div>
+          <div style={{ fontWeight: 600 }}>Here&rsquo;s what I&rsquo;ll do — please check it. Your yes covers exactly these words:</div>
+          <ol style={{ paddingLeft: 18 }}>{phase.lines.map((l, i) => <li key={i}>{l}</li>)}</ol>
+          {phase.p === 'readback' && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <GatedButton label="Yes, go ahead" onClick={run(() => approve(phase.callId, phase.sha, phase.lines, 'button', null))} needs={[]} />
+              <GatedButton label="No" onClick={() => { setPendingYes(null); setPhase({ p: 'not_now' }) }} needs={[]} />
+              <span style={{ fontSize: 12, opacity: 0.7 }}>or type “yes”</span>
+            </div>
+          )}
+          {phase.p === 'placing' && <div>Placing the call…</div>}
+        </div>
+      )}
+      {phase.p === 'not_now' && <div>Nothing was dialled. Say the word if you want me to try again.</div>}
+      {phase.p === 'calling' && <div>{phase.say}</div>}
+      {phase.p === 'result' && (
+        <div>
+          <div style={{ fontWeight: 600 }}>{phase.view.say}</div>
+          {phase.view.venue_words ? <div style={{ marginTop: 4 }}>What they said, word for word: &ldquo;{phase.view.venue_words}&rdquo;</div> : null}
+          {phase.view.read_by ? <div style={{ fontSize: 12, opacity: 0.7 }}>The outcome is {phase.view.read_by}; their words are verbatim.</div> : null}
+          <div style={{ marginTop: 6 }}>{phase.itinerary}</div>
+        </div>
+      )}
+    </div>
+  )
+}

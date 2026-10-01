@@ -767,6 +767,12 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
                                                                             "approval": {"how": "chat", "said": "yes please"}})
         self.assertEqual(r.json()["status"], "sent", r.text)
 
+    def test_s66_the_draft_route_words_the_activity_for_the_venues_country(self):
+        r = self.c.post("/api/booking/draft", json={"text": "massage place", "country": "ES"}).json()
+        self.assertEqual(r["parts"]["what"], {"activity": "a massage", "activity_venue_lang": "un masaje", "category": "beauty"})
+        self.assertEqual(self.c.post("/api/booking/draft", json={"text": "tattoo studio", "country": "KE"}).json()["parts"]["what"]["activity_venue_lang"], "a tattoo")
+        self.assertEqual(self.c.post("/api/booking/draft", json={"text": "something unusual"}).json()["missing"][0], "activity")
+
     def test_quarantine_is_kept(self):
         body, h = signed({"type": "email.received", "data": {"email_id": "rcv_q", "to": ["hello@in.kanoe.test"], "from": "x@y.test"}})
         self.c.post("/api/booking/email/inbound", content=body, headers=h)

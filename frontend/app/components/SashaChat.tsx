@@ -186,7 +186,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
   // turn — real options from live web search. Hotel/flight/cab options carry a server-priced
   // `offer_id` (+ amount_usd) so they can be booked & paid through Stripe like the whole trip;
   // options without one (activities, restaurants, fallbacks) keep the external deep-link.
-  const [bookingFind, setBookingFind] = useState<{ what: string; where: string; country?: string } | null>(null)  // S-66 chat booking
+  const [bookingFind, setBookingFind] = useState<{ what: string; where: string; country?: string; draft?: unknown } | null>(null)  // S-66 chat booking
   const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number }[] }[]>([])
   // Photos Sasha surfaced, keyed by the index of the assistant message that produced them.
   const [photosByMsg, setPhotosByMsg] = useState<Record<number, Photo[]>>({})
@@ -374,7 +374,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         force_intent: opts?.intent,              // set when the UI knows the intent (idea build)
       }, { timeout: 60000, headers: apiHeaders() })  // bound the call so a hung backend can't stall the turn
       const { response: sashaResponse, conversation_history, photos: respPhotos, links, hotels: hotelRecs, bookings: bookingCards, itinerary, action, booking_ref, itinerary_id, payment_item, saved_card } = response.data
-      if (response.data.booking_find) setBookingFind(response.data.booking_find)  // S-66 chat booking
+      if (response.data.booking_find) setBookingFind({ ...response.data.booking_find, draft: response.data.reservation_draft ?? null })  // S-66 chat booking
       // Replace local messages with server-authoritative history
       if (conversation_history?.length > 0) {
         setMessages(conversation_history)

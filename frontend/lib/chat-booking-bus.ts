@@ -13,3 +13,17 @@ export function setChatBookingHandler(h: Handler | null): void { handler = h }
 export function takeChatText(text: string): boolean {
   try { return handler ? handler(text) : false } catch { return false }
 }
+
+/** S-66 step 9 · the ONE pending read-back card a typed "yes" may approve (the newest; a new card replaces it). */
+type Pending = (said: string) => void
+let pending: Pending | null = null
+export function setPendingYes(p: Pending | null): void { pending = p }
+const YES = /^\s*(yes|yeah|yep|go ahead|ok(ay)?|s[ií]|vale|claro|sim|oui|ja|confirm(ed)?)\b/i
+/** true → the typed line was a yes and went to the pending card (bound to ITS read-back hash by the server) */
+export function takeTypedYes(text: string): boolean {
+  if (!pending || !YES.test(text)) return false
+  const p = pending
+  pending = null
+  p(text.trim())
+  return true
+}

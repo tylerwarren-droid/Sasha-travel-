@@ -195,3 +195,47 @@ Either enable the legacy JWT keys on the new project, or patch those two files t
   - pause the old project.
 - **Chat:** create the project.
 - **Sasha tab:** §5, the schema and copy, the verification, the live checks.
+
+## Done — 1 Oct 2026 (Sasha 71–73)
+
+- **New project:** sasha-prod `yjafyzywzbmhlilxhzuz` (eu-west-1, Postgres 17.11), AppliedDiligence.AI organisation.
+- **Secrets, never printed:**
+  - the secret key via `supabase projects api-keys --reveal`;
+  - the DB password generated locally and set by the Management API (`PATCH …/database/password`, 200);
+  - the pooler `aws-0-eu-west-1.pooler.supabase.com:5432` (session mode, as before).
+  - Every secret file, and the founder's CLI token, was deleted from the scratchpad afterwards.
+- **Schema, by the method flagged in Sasha 71:** no pg_dump 17 exists on this machine, so the SQL files were applied
+  verbatim with `supabase db query`:
+  - ensure_rls, A1, A2 without its seed, A3, 001–011 and 014;
+  - the 5 live-only tables, from the old catalog;
+  - `set_updated_at` as live had it.
+  - **Catalog proof:** all 742 old objects (columns, defaults, constraints, indexes, triggers, policies, function
+    bodies, RLS, grants, extensions, the event trigger) are identical in the new project. The only additions are the
+    37 objects of `booking_references` and `prompt_versions`, empty; the static prompt registry stays authoritative.
+- **Data:** copied with json_populate_recordset in FK order.
+  - Fixes on the way:
+    - OVERRIDING SYSTEM VALUE for identity ids;
+    - 002_clients_schema's 2 starter rows deleted in the new project, so only the 3 real clients remain;
+    - sequences set equal to old.
+  - At the switch, retention_log was topped up (+18 rows the old backend wrote while restarting).
+  - **Final check, old against new:** 14 tables plus the demo user plus Calma, all identical by count and md5;
+    retention_log at 730 on both; Calma confirmed with `bfe60570…c00`.
+- **Env:**
+  - Vercel sasha-heygen (production and preview): `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`,
+    `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the publishable key), `DATABASE_URL`. Then a production redeploy.
+  - Railway backend: `DATABASE_URL`, `SUPABASE_SERVICE_KEY`, `SASHA_SUPABASE_URL`.
+  - Railway measure-forms: `DATABASE_URL`, with no deploy.
+  - Calls stayed off (`SASHA_CALLS_ENABLED=0`) throughout.
+- **Live proofs:**
+  - an onboarding save (founder session) landed in the **new** database, and not in the old one;
+  - a booking read (`/venues/read`, La Contra) landed in the new database with no listing values stored, and not in
+    the old one.
+  - Both scratch rows were deleted, each delete confirmed by `returning`.
+- **The old project `xlqtveusyfpffaejegiq` is PAUSED** (status INACTIVE). Its REST and auth answer 540, so the leaked
+  key opens nothing. It can be restored for 90 days if a rollback is ever needed.
+- **⚠ For the founder:**
+  - `SUPABASE_URL` is **not set** on Railway, and never was: `app/services/tenant.py` and `prompts.py` have never read
+    the database. It was left unset, for parity. Setting it would switch on client lookups and prompt reads; that is
+    his call.
+  - Vercel projects sasha-travel and sasha-travel-hdyp do not serve project.kanoe.ai. If they still point at the old
+    project, they now point at a paused one.

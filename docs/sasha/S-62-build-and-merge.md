@@ -71,3 +71,31 @@ booking_signer's `identity.verify_token` can be imported for (2): it is outside 
   and 5 emails.
 - **Onboarding is founder-only, not "any signed-in user"**, until business accounts exist.
 - **The founder maps to the demo account until `FOUNDER_ACCOUNT_ID` is set**, so his existing reservations don't vanish.
+
+## Shipped — 1 Oct 2026 (Sasha 73), guest sign-in HELD CLOSED
+
+- **Step 0: done by moving the database (S-69).**
+  - The leaked key's project is paused: it answers 540 to everything.
+  - The new keys are in place, and an onboarding save works.
+  - A booking read works against the new database.
+- **015** applied on sasha-prod: guest_contacts, RLS on, no policies, 0 rows.
+- **Auth on sasha-prod** (Management API, read back):
+  - site URL `https://project.kanoe.ai`, with `/auth/callback` as the only redirect;
+  - SMTP via Resend (`smtp.resend.com:465`) from `sasha@booking.kanoe.ai`, verified in Resend. It uses a **dedicated
+    Resend key restricted to sending from booking.kanoe.ai** ("supabase-auth-smtp (sasha-prod)"), not Sasha's own key;
+  - magic-link and confirmation emails name Sasha and Kanoe Technologies SL, and link the privacy notice;
+  - JWT signing ES256.
+- **Merged and deployed (c842326).** Vercel and Railway both went live.
+- **Live checks:**
+  - the founder's booking route works through the new identity check (reservations 200, Calma confirmed);
+  - whoami says founder;
+  - an unsigned booking call answers 401 `sign_in_required`;
+  - an unsigned onboarding save answers 401;
+  - `/sign-in` says "isn't open yet";
+  - a Supabase sign-up answers 422 `signup_disabled`.
+- **To OPEN guest sign-in, the founder flips TWO switches:**
+  1. Supabase sasha-prod: Auth → "Allow new users to sign up" (`disable_signup` false);
+  2. Vercel sasha-heygen: `GUEST_SIGN_IN_ENABLED=1`, then redeploy.
+  - Then run the step-8 proof.
+  - Step 7 (chat history per account, and the ownership check on `/api/chats/{id}`) is still open. It is the line for
+    strangers.

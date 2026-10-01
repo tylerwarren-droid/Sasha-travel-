@@ -53,7 +53,8 @@ point is **unverified**.
 
 ## ⚠ Findings about TODAY's product, not caused by S-68 (for the founder)
 
-These need a decision. Nothing has been changed for them.
+**Decided, Sasha 64 (founder): the safe route now, reversibly, flagged for counsel.** What was built is listed after
+the questions below.
 
 - **A. Saved listing data.** ToS §3.2.3(a)(iii) forbids copying and saving business names, addresses or user reviews.
   Venue reads, reservations and trip items store the venue name, phone and opening periods taken from the Google
@@ -67,9 +68,49 @@ These need a decision. Nothing has been changed for them.
   tags drawn from Google **reviews** may fall under this. Tags from the venue's **own site** do not. Recommendation:
   step 9 uses the site only, unless the founder decides otherwise.
 
+## Sasha 64 · what was done
+
+- **A.** Venue reads are stored without listing content (`backend/booking_signer/places_terms.py`). Each listing fact
+  keeps only its kind, its place and the `place_id`; the listing keeps only its `place_id`. Whenever a read is shown
+  or a call is prepared, the listing is re-read from Google. A venue picked from the cards is stored under its own
+  site's name (`og:site_name` or a schema.org `name`). Failing that, it is stored under the guest's words ("tattoo
+  studio in Madrid"). It is never stored under the listing's name.
+  The rows written before this are cleaned by `backend/booking_signer/sql/013_purge_places_content.sql`
+  (22 reads, 8 calls). That file is **not applied**: the founder runs it. It was dry-run on a local Postgres, and
+  every check count came back 0.
+- **B.** The venue's own number is preferred. A listing number is only dialled: it is re-read at the dial and
+  checked against the hash the guest approved, and a changed number is not dialled. The read-back says "on the
+  number its Google Maps listing gives", without the digits. The stored record holds only
+  `number_ref {place_id, sha256}`, `dialled_number = "sha256:…"` and `number_source_kind`, and Bland's answers are
+  stored without the digits. The spoken parts never carried listing text, and a test now holds that.
+- **C.** Step 9 builds style tags from the venue's own site only, never from Google reviews.
+- The cards credit **"Google Maps"**.
+
+## Counsel questions (A and B)
+
+1. **Booking records (A).** Does keeping a venue's name, address or phone, taken from a Places response, *inside one
+   guest's booking record* (as evidence of what was booked and where, kept for the retention period) count as
+   "copy and save business names, addresses" under ToS §3.2.3(a)(iii)? Or does it fall outside, as an end user's
+   transaction record, the way the Autocomplete exception treats an address the end user chose? If it falls
+   outside, how long may it be kept?
+2. **Derived facts (A).** Is a fact *derived* from listing content Google Maps Content too? Examples: "they open at
+   10:00 on Monday", merged with the venue's own site hours, in a stored read-back line; the scheduled call time.
+   Today these are stored. They are not purged, pending this answer.
+3. **The hash (A/B).** May we store a sha256 of a listing phone number, so that the number dialled is provably the
+   number approved? The digits themselves are not stored.
+4. **Dialling (B).** Is dialling a listing's phone number through a voice-AI call service (Bland) "use of Google
+   Maps Content with text-to-speech services" under ToS §3.2.3(a)(iv)? Nothing from the listing is spoken; the
+   number is passed to the telephony provider only to place the call.
+5. **Speaking (B).** If a guest *typed* a venue's name and it happens to equal the listing's name, may it be
+   spoken? Today it is never spoken; the question decides whether the call may say "is this {name}?" to catch a
+   wrong number.
+6. **Ranking (S-68 step 8).** The terms recommend explaining the main ranking factors to European users. Does the
+   one-line explainer we plan (the chosen sort, the ≥ 20-review rule, the tie-breaks) meet the P2B Regulation as
+   applied here, or does it need a fuller page?
+
 ## Effect on the S-68 steps
 
 - Step 2: proceed, at no extra cost per search.
 - Step 3: geocode per search, not cached.
 - Step 8: "Google Maps" attribution and the ranking explainer line.
-- Step 9: held on finding C. Otherwise it is site-only.
+- Step 9: site-only (Sasha 64, finding C); no `reviews` field, so the search stays at the Enterprise SKU.

@@ -27,6 +27,7 @@ from . import calls as C
 from . import emailing as E
 from . import ladder as L
 from . import optins as O
+from . import places_terms as PT
 from . import reservation as RS
 from . import slot_link as SL
 from . import stop as S
@@ -82,12 +83,14 @@ def status() -> dict:
             "emails_per_day": email_cap()}
 
 
-def _read_view(row: dict) -> dict:
-    read = row["read"]
+def _read_view(row: dict, read: Optional[dict] = None) -> dict:
+    """`read`: the read with its listing re-read (places_terms.hydrate_read) — shown, never stored."""
+    read = read if read is not None else row["read"]
     chosen = L.choose(read)
     return {"read_id": row["read_id"], "venue": read["name"], "country": read.get("country"), "listing": read.get("listing"),
             "facts": [{k: f[k] for k in ("kind", "value", "source_label", "source_url", "snippet", "fetched_at")} for f in read["facts"]],
-            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"]}
+            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"],
+            **({"listing_reread": read["listing_reread"]} if read.get("listing_reread") else {})}
 
 
 # ── reading a venue ───────────────────────────────────────────────────────────────────────────
@@ -103,17 +106,21 @@ async def read_venue(request: Request):
     try:
         read = await V.read_venue(HTTP, name=body.get("name"), city=body.get("city"), country=body.get("country"),
                                   website=body.get("website") or None, now=now, resolve=RESOLVE,
-                                  place_id=body.get("place_id") or None)   # S-65 · the listing picked in "Find venues"
+                                  place_id=body.get("place_id") or None,   # S-65 · the listing picked in "Find venues"
+                                  asked_for=body.get("asked_for") if isinstance(body.get("asked_for"), str) else None)
     except V.ReadRefused as e:
         return _refuse(422, e.rule, str(e))
+    # Sasha 64 · A · stored WITHOUT the listing's content: a name picked from the Google Maps cards is the listing's, so
+    # only the guest's own words ("asked_for") are kept with the place_id; the full read is shown once, now
+    keys = ("city", "country", "website", "place_id", "asked_for") if body.get("place_id") else ("name", "city", "country", "website")
     row = {"read_id": str(uuid.uuid4()), "account_id": account_for(request),
-           "query": {k: body.get(k) for k in ("name", "city", "country", "website", "place_id")},
-           "venue_name": read.name, "country": read.country, "read": read.to_json(), "created_at": now}
+           "query": {k: body.get(k) for k in keys},
+           "venue_name": read.name, "country": read.country, "read": PT.storable_read(read.to_json()), "created_at": now}
     try:
         await LADDER_STORE.put_read(row)
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
-    return _read_view(row)
+    return _read_view(row, {**read.to_json(), "listing": {**(read.listing or {}), "attribution": "Google Maps"} if read.listing else None})
 
 
 @router.post("/draft")
@@ -149,7 +156,7 @@ async def get_read(read_id: str, request: Request):
         return _refuse(503, e.rule, e.detail)
     if row is None:
         return _refuse(404, "read_unknown", "no venue read with that id for this account")
-    return _read_view(row)
+    return _read_view(row, await PT.hydrate_read(HTTP, row["read"], NOW()))
 
 
 async def _optin_refusal(venue_ids, channel: str, scope: Optional[str] = None):
@@ -167,19 +174,22 @@ async def call_venue_from_read(account: str, read_id: Any, fact_index: Any = Non
     row = await LADDER_STORE.get_read(account, str(read_id))
     if row is None:
         raise C.CallRefused("read_unknown", "no venue read with that id for this account")
-    read = row["read"]
-    phones = [(i, f) for i, f in enumerate(read["facts"]) if f["kind"] == "phone"]
+    read = await PT.hydrate_read(HTTP, row["read"], NOW())   # Sasha 64 · a listing number is re-read, not stored
+    phones = [(i, f) for i, f in enumerate(read["facts"]) if f["kind"] == "phone" and f.get("value")]
     if isinstance(fact_index, int):
         phones = [(i, f) for i, f in phones if i == fact_index]
     if not phones:
-        raise C.CallRefused("no_phone_read", "no phone number was read for this venue")
-    _, f = phones[0]
+        raise C.CallRefused("no_phone_read", "no phone number was read for this venue"
+                            + (f" ({read['listing_reread']})" if read.get("listing_reread", "").startswith("not") else ""))
+    # B · the venue's OWN number first (the read lists its site's facts first); the listing's only when it has none
+    _, f = sorted(phones, key=lambda x: x[1].get("source_kind") != "site")[0]
     country = read.get("country")
     if country not in V.COUNTRIES:
         raise C.CallRefused("venue_country_unknown", "the venue's country is not known, so neither its language nor its day can be")
     _, _, lang, tz = V.COUNTRIES[country]
     return C.CallVenue(key=f"read:{row['read_id']}", name=read["name"], number_env="", language=lang, timezone=tz,
-                       number=f["value"], source=f["source_label"], venue_ids=tuple(O.venue_ids_of(read)))
+                       number=f["value"], source=f["source_label"], venue_ids=tuple(O.venue_ids_of(read)),
+                       number_kind=f.get("source_kind"), place_id=PT.place_id_of(read))
 
 
 # ── the email rung ────────────────────────────────────────────────────────────────────────────

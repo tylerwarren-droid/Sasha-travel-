@@ -83,7 +83,8 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
     setFinding('finding'); setFound([]); setFindNote(null)
     const r = await bookingReq('/api/booking/venues/find', { what: find.what, where: find.where, country: find.country || undefined })
     if (!r.ok) { setFinding('stopped'); setFindNote(`Could not search: ${refusal(r.json, r.status)}`); return }
-    const c = (r.json.candidates ?? []) as Candidate[]
+    // S-68 · the server searches 20 and says how many to show
+    const c = ((r.json.candidates ?? []) as Candidate[]).slice(0, typeof r.json.show === 'number' ? r.json.show : 5)
     setFound(c); setFinding('done')
     if (!c.length) setFindNote(`Google has no listing for “${String(r.json.query)}”.`)
   }
@@ -91,13 +92,14 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   async function pickCandidate(c: Candidate) {
     const query = { name: c.name ?? find.what, city: find.where, country: c.country ?? find.country, website: '' }
     setQ(query)
-    await doRead(query, null, c.place_id)
+    await doRead(query, null, c.place_id, find.what)
   }
 
-  async function doRead(query = q, link: Linked | null = linked, placeId?: string) {
+  async function doRead(query = q, link: Linked | null = linked, placeId?: string, askedFor?: string) {
     setReading('reading'); setRead(null); setPick(null); setNote(null)
     const r = await bookingReq('/api/booking/venues/read', { name: query.name, city: query.city, country: query.country || undefined,
-      website: query.website || undefined, ...(placeId ? { place_id: placeId } : {}) })
+      // Sasha 64 · a picked listing is stored by place_id with the guest's own words, never the listing's name
+      website: query.website || undefined, ...(placeId ? { place_id: placeId, asked_for: askedFor } : {}) })
     if (!r.ok) { setReading('stopped'); setNote(`Could not read them: ${refusal(r.json, r.status)}`); return }
     const got = r.json as unknown as Read
     setRead(got); setReading('done')
@@ -205,7 +207,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
                 <span className="font-medium">{c.name}</span>{c.type ? <span className="opacity-70"> · {c.type}</span> : null}
                 {c.status && c.status !== 'OPERATIONAL' ? <span className="text-red-800"> · {c.status.toLowerCase().replace(/_/g, ' ')}</span> : null}
                 <div className="opacity-80">{c.address ?? 'no address listed'} · {c.phone ?? 'no phone listed'}{c.website ? ` · ${c.website}` : ''}</div>
-                <div className="opacity-60">as their Google listing says (<a className="underline" href={c.listing_url} target="_blank" rel="noreferrer">listing</a>)</div>
+                <div className="opacity-60">from Google Maps (<a className="underline" href={c.listing_url} target="_blank" rel="noreferrer">listing</a>)</div>
                 <div className="mt-1">
                   <GatedButton label="Read this one" onClick={run(() => pickCandidate(c), (m) => { setReading('stopped'); setNote(m) })}
                     needs={[reading === 'reading' && 'the read to finish']} />

@@ -172,7 +172,7 @@ class Reading(unittest.TestCase):
         with mock.patch.dict(os.environ, {"GOOGLE_PLACES_API_KEY": "places-test"}):
             read = run(V.read_venue(web, name="La Contra", city="Madrid", country=None, website=None, now=NOW, resolve=PUBLIC))
         self.assertEqual(read.country, "ES")
-        label = "their Google listing (La Contra, Calle de la Contra 1, Madrid)"
+        label = "their Google Maps listing"   # Sasha 64 · stored; the listing's name and address are not
         self.assertEqual([(f.kind, f.value, f.source_label) for f in read.facts],
                          [("phone", "+34915001122", label), ("address", "Calle de la Contra 1, Madrid", label),
                           ("hours", "Monday: Closed · Tuesday: 1:00 – 4:00 PM, 8:00 – 11:30 PM", label)])

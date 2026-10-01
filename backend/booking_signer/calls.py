@@ -63,6 +63,8 @@ class CallVenue:
     number: Optional[str] = None   #: S-36 · a number MAGELLAN READ (venue_read.py) — used instead of number_env
     source: Optional[str] = None   #: where that number was read: "their website, lacontra.es" / "their Google listing"
     venue_ids: Optional[tuple] = None  #: S-54/55 · every id its opt-in records may use (optins.venue_ids_of); None = the test line
+    number_kind: Optional[str] = None  #: Sasha 64 · "site" | "places" — a listing number is dialled, never stored (places_terms)
+    place_id: Optional[str] = None     #: the listing it was read from, to re-read it at the dial
 
 
 def _env(name: str, default: str = "") -> str:
@@ -497,6 +499,11 @@ _NEVER_SENT = {"ConnectError", "ConnectTimeout", "PoolTimeout", "UnsupportedProt
                "ConnectionError", "ConnectionRefusedError", "gaierror"}
 
 
+def _same_number(to, stored) -> bool:
+    from .places_terms import same_number
+    return same_number(to, stored)
+
+
 async def calls_in_log(http: Http, key: str, number: str, since: datetime) -> List[dict]:
     """S-57 · Bland's OWN log: its calls to `number` created at or after `since` (a minute's slack for clocks)."""
     r = await http("GET", f"{BLAND_CALLS_URL}?limit=100", headers={"authorization": key})
@@ -509,7 +516,7 @@ async def calls_in_log(http: Http, key: str, number: str, since: datetime) -> Li
             at = datetime.fromisoformat(str(c.get("created_at")).replace("Z", "+00:00"))
         except ValueError:
             continue
-        if c.get("to") == number and at >= since - timedelta(minutes=1):
+        if _same_number(c.get("to"), number) and at >= since - timedelta(minutes=1):   # Sasha 64 · digits or a listing number's hash
             out.append({**c, "_created": at})
     return sorted(out, key=lambda c: c["_created"])
 

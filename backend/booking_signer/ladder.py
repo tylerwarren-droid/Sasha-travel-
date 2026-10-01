@@ -62,7 +62,8 @@ class Rung:
 def choose(read: dict, host_of=lambda u: None) -> dict:
     """`read` is VenueRead.to_json(). Returns the rungs in ladder order and the sentence she says."""
     facts = read.get("facts") or []
-    first = lambda kind: next(((i, f) for i, f in enumerate(facts) if f["kind"] == kind), (None, None))
+    # Sasha 64 · a listing fact that could not be re-read has no value: it is not a way to reach them
+    first = lambda kind: next(((i, f) for i, f in enumerate(facts) if f["kind"] == kind and f.get("value") is not None), (None, None))
     rungs: List[Rung] = []
 
     i, form = first("booking_form")

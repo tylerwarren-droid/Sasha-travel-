@@ -17,6 +17,7 @@ page asks (GET), so there is no background task to be lost on a redeploy.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 import os
 import uuid
@@ -28,6 +29,7 @@ from fastapi.responses import JSONResponse
 
 from . import calls as C
 from . import hours as H
+from . import places_terms as PT
 from . import render as R
 from . import reservation as RS
 from . import ladder_routes
@@ -131,7 +133,7 @@ async def sweep_once() -> int:
                 log.warning("[booking_calls] call %s: its placing went unanswered, but Bland's log has it as %s", call["call_id"], b["call_id"])
             elif call["approved_at"] < now - GIVE_UP_AFTER:
                 await CALL_STORE.resolve(call["call_id"], None, None,
-                                         f"Bland's call log has no call to {call['dialled_number']} in the "
+                                         "Bland's call log has no call to this venue's number in the "
                                          f"{int(GIVE_UP_AFTER.total_seconds() // 60)} minutes after the request went unanswered")
         except Exception as e:
             log.warning("[booking_calls] could not check Bland's log for call %s: %s: %s", call.get("call_id"), type(e).__name__, e)
@@ -145,7 +147,7 @@ async def sweep_once() -> int:
                 await S.on_venue_words((call.get("brief") or {}).get("venue_ids"), "phone", call["dialled_number"],
                                        "\n".join(C.venue_turns(details)),
                                        {"call_id": str(call["call_id"]), "bland_call_id": call.get("bland_call_id")}, NOW(), spoken=True)
-            if r.state != "in_progress" and await CALL_STORE.record_reading(call["call_id"], r, details, NOW()):
+            if r.state != "in_progress" and await CALL_STORE.record_reading(call["call_id"], r, PT.scrub_bland(details, call.get("brief")), NOW()):
                 recorded += 1
         except Exception as e:  # one call's trouble never stops the others; it is retried next sweep
             log.warning("[booking_calls] sweep could not read call %s: %s: %s", call.get("call_id"), type(e).__name__, e)
@@ -209,15 +211,18 @@ async def prepare(request: Request):
         return _refuse(422, "brief_too_long", "the call's instructions exceed Bland's 2,000 characters")
     try:
         built = _with_hours(built, await _read_of(account, built["brief"]), venue.timezone, now)
+        built = PT.seal_call(built, venue)   # Sasha 64 · a listing number: dialled, never stored or shown
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
+    except PT.ListingUnavailable as e:
+        return _refuse(422, e.rule, str(e))
     row = {
         # S-64 step 3 · the reservation/1 object, written alongside the old columns
         "request": RS.try_from_particulars(p, account_id=account, venue_name=venue.name, timezone=venue.timezone,
                                            lang=built["brief"]["language"], venue_ids=venue.venue_ids or (),
                                            read_id=str(body["read_id"]) if body.get("read_id") else None),
         "call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key,
-        "dialled_number": built["brief"]["number"], "language": built["brief"]["language"],
+        "dialled_number": built["dialled_number"], "language": built["brief"]["language"],
         "guest_name": p.name, "guest_phone": p.phone,
         "brief": built["brief"], "brief_sha256": built["brief_sha256"],
         "read_back_lines": built["read_back_lines"], "read_back_sha256": built["read_back_sha256"],
@@ -241,7 +246,7 @@ async def _read_of(account: str, brief: Mapping[str, Any]) -> Optional[dict]:
     if not key.startswith("read:"):
         return None
     row = await ladder_routes.LADDER_STORE.get_read(account, key[5:])
-    return row["read"] if row else None
+    return await PT.hydrate_read(HTTP, row["read"], NOW()) if row else None   # Sasha 64 · the listing's hours, re-read
 
 
 def _with_hours(built: dict, read: Optional[dict], timezone: str, now) -> dict:
@@ -266,8 +271,8 @@ async def _cancel_from_object(account: str, booking: dict, b: dict, venue: C.Cal
     except (RS.ReservationRefused, C.CallRefused) as e:
         return _refuse(422, getattr(e, "rule", "cancel_invalid"), str(e))
     built["brief"]["cancels_call_id"] = booking["call_id"]
-    built["brief_sha256"] = C._sha256hex(C._canonical(built["brief"]))
-    row = {"call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "dialled_number": b["number"],
+    built = PT.seal_call(built, venue)
+    row = {"call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "dialled_number": built["dialled_number"],
            "language": b["language"], "guest_name": b["name"], "guest_phone": b.get("phone"), "brief": built["brief"],
            "brief_sha256": built["brief_sha256"], "read_back_lines": built["read_back_lines"],
            "read_back_sha256": built["read_back_sha256"], "created_at": now}
@@ -304,11 +309,15 @@ async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now
             built = _with_hours(built, await _read_of(account, built["brief"]), venue.timezone, now)
         except StorageUnavailable as e:
             return _refuse(503, e.rule, e.detail)
+    try:
+        built = PT.seal_call(built, venue)   # Sasha 64 · a listing number: dialled, never stored or shown
+    except PT.ListingUnavailable as e:
+        return _refuse(422, e.rule, str(e))
     cols = RS.columns(o)
     row = {
         "request": o,
         "call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key,
-        "dialled_number": built["brief"]["number"], "language": built["brief"]["language"],
+        "dialled_number": built["dialled_number"], "language": built["brief"]["language"],
         "guest_name": o["who"]["name"], "guest_phone": (o["who"].get("contact") or {}).get("mobile_e164"),
         "brief": built["brief"], "brief_sha256": built["brief_sha256"],
         "read_back_lines": built["read_back_lines"], "read_back_sha256": built["read_back_sha256"],
@@ -351,8 +360,21 @@ async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
     lang_key = _LANG_BY_CODE.get(b.get("language"))
     if not b.get("timezone") or lang_key is None:
         return _refuse(422, "booking_brief_incomplete", "that booking's call does not record its language and timezone")
+    ref = b.get("number_ref") or {}
+    # a booking made before Sasha 64 (and before 013's purge) still holds a listing number's digits: it is a listing
+    # number all the same, and its cancellation is stored the new way
+    listed = bool(ref) or str(b.get("number_source") or "").startswith("their Google")
+    try:
+        number = b["number"] or await PT.listing_number(HTTP, ref, NOW())   # Sasha 64 · re-read, checked, not stored
+        place_id = ref.get("place_id") or (PT.place_id_of(await _read_of(account, b) or {}) if listed else None)
+    except PT.ListingUnavailable as e:
+        return _refuse(422, e.rule, str(e).replace("nothing was dialled", "the cancellation could not be prepared"))
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
     venue = C.CallVenue(key=b["venue_key"], name=b.get("venue_name") or b["venue_key"], number_env="", language=lang_key,
-                        timezone=b["timezone"], number=b["number"], source=b.get("number_source"), venue_ids=tuple(b.get("venue_ids") or ()) or None)
+                        timezone=b["timezone"], number=number, source=PT.LISTING_LABEL if listed else b.get("number_source"),
+                        venue_ids=tuple(b.get("venue_ids") or ()) or None,
+                        number_kind="places" if listed else b.get("number_source_kind") or "site", place_id=place_id)
     if b.get("activity_venue_lang"):   # S-64 · a booking made from the object: cancel THAT activity, never "a table"
         return await _cancel_from_object(account, booking, b, venue)
     # S-54 · "any stop ends every channel" — a cancellation too; the guest can still cancel themselves
@@ -368,10 +390,10 @@ async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
     if len(built["brief"]["task"]) > 2000:
         return _refuse(422, "brief_too_long", "the call's instructions exceed Bland's 2,000 characters")
     built["brief"]["cancels_call_id"] = booking_call_id
-    built["brief_sha256"] = C._sha256hex(C._canonical(built["brief"]))
+    built = PT.seal_call(built, venue)
     row = {"request": RS.try_from_particulars(p, account_id=account, venue_name=venue.name, timezone=venue.timezone,
                                               lang=b["language"], venue_ids=venue.venue_ids or (), flow="cancel"),
-           "call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "dialled_number": b["number"],
+           "call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "dialled_number": built["dialled_number"],
            "language": b["language"], "guest_name": p.name, "guest_phone": p.phone, "brief": built["brief"],
            "brief_sha256": built["brief_sha256"], "read_back_lines": built["read_back_lines"],
            "read_back_sha256": built["read_back_sha256"], "created_at": now}
@@ -421,6 +443,11 @@ async def place(call_id: str, request: Request):
         st = H.status(read, NOW(), brief["timezone"]) if read else {"known": False}
         if st.get("known") and st.get("open_now") is False and st.get("call_at"):
             return await _schedule(account, call_id, call, body, a, st)
+    # Sasha 64 · a listing number is re-read now and must be the one approved — before the claim, so a refusal costs nothing
+    try:
+        dial = await PT.dialable(HTTP, brief, NOW())
+    except PT.ListingUnavailable as e:
+        return _refuse(422, e.rule, str(e))
     # S-57 · never a second call while an earlier one to this number may have been placed
     try:
         if await CALL_STORE.unresolved_to(call["dialled_number"]):
@@ -444,7 +471,8 @@ async def place(call_id: str, request: Request):
     if claimed != "claimed":
         return _refuse(404, "call_unknown", "no call with that id was prepared for this account")
 
-    placed = await C.place_call(HTTP, C.bland_key(), C.bland_payload(brief, call_id))
+    placed = await C.place_call(HTTP, C.bland_key(), C.bland_payload(dial, call_id))
+    placed = dataclasses.replace(placed, answer=PT.scrub_bland(placed.answer, brief))
     if placed.uncertain:
         try:
             await CALL_STORE.mark_placed(call_id, placed, NOW())
@@ -497,14 +525,19 @@ async def place_due() -> int:
         if C.calls_enabled() is False or not C.bland_key():
             await CALL_STORE.cancel_scheduled(cid, "calls were switched off when it was due, so nothing was dialled")
             continue
+        try:
+            dial = await PT.dialable(HTTP, call["brief"], now)   # Sasha 64 · re-read and checked, before the claim
+        except PT.ListingUnavailable as e:
+            await CALL_STORE.cancel_scheduled(cid, str(e))
+            continue
         r = await CALL_STORE.start_scheduled(cid, cap(), cap_window(now))
         if r == "cap":
             await CALL_STORE.cancel_scheduled(cid, f"{cap()} calls had already been placed in the last 24 hours; nothing was dialled")
             continue
         if r != "claimed":
             continue
-        placed = await C.place_call(HTTP, C.bland_key(), C.bland_payload(call["brief"], cid))
-        await CALL_STORE.mark_placed(cid, placed, NOW())
+        placed = await C.place_call(HTTP, C.bland_key(), C.bland_payload(dial, cid))
+        await CALL_STORE.mark_placed(cid, dataclasses.replace(placed, answer=PT.scrub_bland(placed.answer, call["brief"])), NOW())
         placed_n += 1
     return placed_n
 

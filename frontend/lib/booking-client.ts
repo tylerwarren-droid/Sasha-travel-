@@ -42,9 +42,9 @@ export type Rung = { rung: string; available: boolean; fact_index: number | null
 
 export const findVenues = (what: string, where: string, country?: string) =>
   bookingReq('/api/booking/venues/find', { what, where, country: country || undefined })
-export const readVenue = (q: { name: string; city: string; country?: string; website?: string; place_id?: string }) =>
+export const readVenue = (q: { name: string; city: string; country?: string; website?: string; place_id?: string; asked_for?: string }) =>
   bookingReq('/api/booking/venues/read', { name: q.name, city: q.city, country: q.country || undefined, website: q.website || undefined,
-    ...(q.place_id ? { place_id: q.place_id } : {}) })
+    ...(q.place_id ? { place_id: q.place_id, asked_for: q.asked_for } : {}) })
 export const prepareCall = (body: Record<string, unknown>) => bookingReq('/api/booking/calls', body)
 export const approveCall = (callId: string, sha256: string, approval: { how: 'button' | 'voice' | 'chat'; said: string | null }) =>
   bookingReq(`/api/booking/calls/${callId}/place`, { read_back_sha256: sha256, approval })

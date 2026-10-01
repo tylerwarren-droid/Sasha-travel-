@@ -123,6 +123,7 @@ class _Page(HTMLParser):
         self.ld: List[str] = []
         self.forms: List[Dict[str, Any]] = []
         self.text: List[str] = []
+        self.site_names: List[str] = []
         self._a: Optional[List[str]] = None
         self._href: Optional[str] = None
         self._ld = False
@@ -138,6 +139,8 @@ class _Page(HTMLParser):
             self._ld, self.ld = True, self.ld + [""]
         elif tag in ("script", "style"):
             self._skip += 1
+        if tag == "meta" and a.get("property", "").lower() == "og:site_name" and a.get("content", "").strip():
+            self.site_names.append(a["content"].strip())   # Sasha 64 · the venue's name as its OWN site gives it
         if tag == "form":
             self.forms.append({"action": a.get("action", ""), "fields": []})
         if tag in ("input", "select", "textarea") and self.forms:
@@ -240,6 +243,9 @@ def facts_from_html(html: str, url: str, country: Optional[str], fetched_at: str
             e = e.removeprefix("mailto:").strip()
             if _EMAIL.fullmatch(e):
                 add("email", e.lower(), f'"email": "{e}"')
+        # Sasha 64 · the venue's OWN name (schema.org): what the booking is stored under, never the listing's
+        if isinstance(data, dict) and isinstance(data.get("name"), str) and data.get("@type") and 2 <= len(data["name"].strip()) <= 80:
+            add("name", data["name"].strip(), f'"name": "{data["name"].strip()}"')
         # S-66 · the venue's OWN opening hours (schema.org), which the hours check reads before Google's
         from .hours import from_jsonld
         week = from_jsonld(data)
@@ -248,6 +254,9 @@ def facts_from_html(html: str, url: str, country: Optional[str], fetched_at: str
             text = " · ".join(f"{names[d]} " + ", ".join(f"{a:%H:%M}–{b:%H:%M}" for a, b in week[d]) for d in sorted(week))
             add("hours", text, '"openingHours…" (schema.org)',
                 {"week": {str(d): [[f"{a:%H:%M}", f"{b:%H:%M}"] for a, b in iv] for d, iv in week.items()}})
+    for n in p.site_names:
+        if 2 <= len(n) <= 80:
+            add("name", n, f'<meta property="og:site_name" content="{n}">')
     text = " ".join(" ".join(p.text).split())
     for m in _EMAIL.finditer(text):
         addr = m.group(0).rstrip(".").lower()
@@ -403,7 +412,8 @@ def _place_facts(pl: dict, sha: str, now: datetime) -> Tuple[List[Fact], dict, O
     n = to_e164(phone_raw, country) if phone_raw else None
     # ⚠ the listing's own name and address go into the label, so the read-back says WHICH listing — a wrong match is
     # heard before the yes, never discovered after
-    label = f"their Google listing ({listing['name']}, {listing['address']})"
+    # Sasha 64 · the label is stored; the listing's name and address are not (places_terms) — the chat shows the listing
+    label = "their Google Maps listing"
     if n:
         facts.append(Fact("phone", n, "places", link, label, f'"internationalPhoneNumber": "{phone_raw}"',
                           now.isoformat(), sha, {"listing": listing}))
@@ -520,13 +530,15 @@ async def find_venues(http: Http, *, what: str, where: str, country: Optional[st
 
 
 async def read_venue(http: Http, *, name: str, city: str, country: Optional[str], website: Optional[str],
-                     now: datetime, resolve: Resolve = _resolve, place_id: Optional[str] = None) -> VenueRead:
+                     now: datetime, resolve: Resolve = _resolve, place_id: Optional[str] = None,
+                     asked_for: Optional[str] = None) -> VenueRead:
     if not isinstance(name, str) or not 2 <= len(name.strip()) <= 80:
         raise ReadRefused("name_invalid", "a venue name is 2–80 characters")
     if not isinstance(city, str) or not 2 <= len(city.strip()) <= 60:
         raise ReadRefused("city_invalid", "a city is 2–60 characters")
     country = country.upper() if isinstance(country, str) and country.strip() else None
     facts: List[Fact] = []
+    places_facts: List[Fact] = []
     sources: List[dict] = []
     listing = None
     key = places_key()
@@ -535,7 +547,7 @@ async def read_venue(http: Http, *, name: str, city: str, country: Optional[str]
             raise ReadRefused("place_id_invalid", "not a Google place id")
         f, s, listing, pc, site = (await read_place_id(http, key, place_id, now) if place_id
                                    else await read_places(http, key, name.strip(), city.strip(), now))
-        facts += f
+        places_facts = f
         sources += s
         country = country or pc
         website = website or site
@@ -545,8 +557,25 @@ async def read_venue(http: Http, *, name: str, city: str, country: Optional[str]
         try:
             public_url(website, resolve)
             f, s = await read_site(http, website, country, now, resolve)
-            facts += [x for x in f if (x.kind, x.value) not in {(y.kind, y.value) for y in facts}]
+            facts += f
             sources += s
         except ReadRefused as e:
             sources.append({"url": website, "result": f"not fetched — {e}"})
-    return VenueRead(name=name.strip(), country=country, facts=facts, sources=sources, listing=listing)
+    # Sasha 64 · B · the venue's OWN site first: a number it publishes is the one called; the listing's only fills gaps
+    facts += [x for x in places_facts if (x.kind, x.value) not in {(y.kind, y.value) for y in facts}]
+    return VenueRead(name=stored_name(name, place_id, facts, asked_for, city), country=country, facts=facts,
+                     sources=sources, listing=listing)
+
+
+def stored_name(name: str, place_id: Optional[str], facts: List[Fact], asked_for: Optional[str], city: str) -> str:
+    """Sasha 64 · A · the name a read, a reservation and an itinerary are STORED under — never the listing's.
+    Typed by the guest (no place_id): their words. Picked from the Google Maps cards (place_id): the venue's own site's
+    name, else what the guest asked for ("tattoo studio in Madrid")."""
+    if not place_id:
+        return name.strip()
+    own = next((f.value for f in facts if f.kind == "name" and f.source_kind == "site"), None)
+    if own:
+        return own
+    if isinstance(asked_for, str) and 2 <= len(asked_for.strip()) <= 60:
+        return f"{asked_for.strip()} in {city.strip()}"[:80]
+    return f"the place you picked in {city.strip()}"[:80]

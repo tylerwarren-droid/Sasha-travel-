@@ -67,7 +67,8 @@ export default function ChatBooking({ find }: { find: Find }) {
     const cards = 'cards' in stateRef.current ? stateRef.current.cards : []
     setState({ phase: 'reading', cards, pick: c })
     try {
-      const r = await readVenue({ name: c.name ?? find.what, city: find.where, country: c.country ?? find.country, place_id: c.place_id })
+      // Sasha 64 · stored by place_id with the guest's own words ("asked_for"); the listing's name is shown, never stored
+      const r = await readVenue({ name: c.name ?? find.what, city: find.where, country: c.country ?? find.country, place_id: c.place_id, asked_for: find.what })
       if (r.status === 401) { setState({ phase: 'founder_only' }); return }
       if (!r.ok) { setState({ phase: 'read_refused', cards, words: refusal(r.json, r.status) }); return }
       setState({ phase: 'read', cards, pick: c, read: r.json as unknown as Read })
@@ -103,14 +104,14 @@ export default function ChatBooking({ find }: { find: Find }) {
     <div style={box}>
       {cards.length === 0
         ? <div>Google has no listing for {find.what} in {find.where}.</div>
-        : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{cards.length} {cards.length === 1 ? 'place' : 'places'} for {find.what} in {find.where} — from their Google listings; nobody has been contacted. Tap one, or say “the second one”.</div>}
+        : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{cards.length} {cards.length === 1 ? 'place' : 'places'} for {find.what} in {find.where} — from Google Maps; nobody has been contacted. Tap one, or say “the second one”.</div>}
       <ol style={{ margin: 0, paddingLeft: 18 }}>
         {cards.map((c) => (
           <li key={c.place_id} style={{ marginBottom: 8 }}>
             <strong>{c.name}</strong>{c.type ? <span style={{ opacity: 0.7 }}> · {c.type}</span> : null}
             {c.status && c.status !== 'OPERATIONAL' ? <span style={{ color: '#9a1c1c' }}> · {c.status.toLowerCase().replace(/_/g, ' ')}</span> : null}
             <div style={{ fontSize: 13, opacity: 0.85 }}>{c.address ?? 'no address listed'} · {c.phone ?? 'no phone listed'}{c.website ? ` · ${c.website}` : ''}</div>
-            <div style={{ fontSize: 12, opacity: 0.6 }}>from its Google listing</div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>Google Maps</div>
             <GatedButton label={`Read ${c.name ?? 'this one'}`} onClick={() => { pick(c).catch(() => { /* visible state set inside */ }) }}
               needs={[state.phase === 'reading' && 'the read in progress to finish']} />
           </li>

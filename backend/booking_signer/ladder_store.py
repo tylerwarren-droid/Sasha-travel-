@@ -220,7 +220,7 @@ class MemoryLadderStore(MemoryLinks):
         e = self.emails.get(email_id)
         return dict(e) if e and e["account_id"] == account_id else None
 
-    async def claim_email(self, account_id, email_id, approval, now, fresh_after, cap, since) -> str:
+    async def claim_email(self, account_id, email_id, approval, now, fresh_after, cap, since, account_cap=None) -> str:
         e = self.emails.get(email_id)
         if not e or e["account_id"] != account_id:
             return "unknown"
@@ -230,6 +230,9 @@ class MemoryLadderStore(MemoryLinks):
             return "stale"
         if sum(1 for x in self.emails.values() if x["status"] in SENT_OR_TRYING and x.get("approved_at") and x["approved_at"] >= since) >= cap:
             return "cap"
+        if account_cap is not None and sum(1 for x in self.emails.values() if x["account_id"] == account_id and x["status"] in SENT_OR_TRYING
+                                           and x.get("approved_at") and x["approved_at"] >= since) >= account_cap:
+            return "account_cap"   # S-62 step 2
         e.update(status="sending", approval=approval, approved_at=now)
         return "claimed"
 
@@ -322,7 +325,7 @@ class PostgresLadderStore(PostgresLinks):
         return _row(await self._run(lambda c: c.fetchrow(
             "select * from booking_emails where email_id = $1 and account_id = $2", eid, uuid.UUID(account_id))))
 
-    async def claim_email(self, account_id, email_id, approval, now, fresh_after, cap, since):
+    async def claim_email(self, account_id, email_id, approval, now, fresh_after, cap, since, account_cap=None):
         eid = _uuid_or_none(email_id)
         if eid is None:
             return "unknown"
@@ -342,6 +345,10 @@ class PostgresLadderStore(PostgresLinks):
                                         list(SENT_OR_TRYING), since)
                 if n >= cap:
                     return "cap"
+                if account_cap is not None and await conn.fetchval(
+                        "select count(*) from booking_emails where account_id = $3 and status = any($1::text[]) and approved_at >= $2",
+                        list(SENT_OR_TRYING), since, uuid.UUID(account_id)) >= account_cap:
+                    return "account_cap"   # S-62 step 2
                 await conn.execute("update booking_emails set status = 'sending', approval = $2, approved_at = $3 where email_id = $1",
                                    eid, approval, now)
                 return "claimed"

@@ -136,15 +136,16 @@ if __name__ == "__main__":
     unittest.main()
 
 
-from tests.test_booking_ladder import PG_URL, OnPostgres  # noqa: E402
+from tests import test_booking_ladder as TBL  # noqa: E402
+from tests.test_booking_ladder import PG_URL  # noqa: E402
 
 
 @unittest.skipUnless(PG_URL, "BOOKING_TEST_DATABASE_URL is not set — the Postgres half did NOT run")
 class PlacesTermsOnPostgres(unittest.TestCase):
     """The live schema's checks hold the stored form too (013 met the old dialled_number check on 1 Oct)."""
-    setUpClass = classmethod(OnPostgres.setUpClass.__func__)
-    make_stores = OnPostgres.make_stores
-    _q = OnPostgres._q
+    setUpClass = classmethod(TBL.OnPostgres.setUpClass.__func__)
+    make_stores = TBL.OnPostgres.make_stores
+    _q = TBL.OnPostgres._q
     setUp, tearDown, pick = PlacesTerms.setUp, PlacesTerms.tearDown, PlacesTerms.pick
     BOOKING = PlacesTerms.BOOKING
 

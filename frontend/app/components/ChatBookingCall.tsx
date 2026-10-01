@@ -10,7 +10,7 @@
  * dialled. Nothing here decides an outcome: the recap check and every rule run on the server.
  */
 import { useEffect, useState } from 'react'
-import { approveCall, bookingReq, getCall, prepareCall, refusal, reservations, type Rung } from '@/lib/booking-client'
+import { approveCall, bookingReq, getCall, prepareCall, refusal, reservations, type Rung, contactReq, type Consent, type Contact } from '@/lib/booking-client'
 import { setPendingYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 
@@ -35,6 +35,36 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
     date: at[0], time: at[1], ask: parts.when?.mode === 'venue_proposes', count: parts.how_many?.count ?? 1, unit: parts.how_many?.unit ?? 'people',
     duration: '', name: '', mobile: '' })
   const [phase, setPhase] = useState<Phase>({ p: 'details' })
+  // S-62 step 5 · saved details: used if there are some; saved only with the consent sentence shown; deleted on request
+  const [saved, setSaved] = useState<{ contact: Contact | null; consent: Consent } | { why: string } | null>(null)
+  const [keep, setKeep] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+  useEffect(() => {
+    let off = false
+    ;(async () => {
+      try {
+        const r = await contactReq('GET')
+        if (off) return
+        if (!r.ok) { setSaved({ why: refusal(r.json, r.status) }); return }
+        const got = r.json as { contact: Contact | null; consent: Consent }
+        setSaved(got)
+        if (got.contact) setD((x) => ({ ...x, name: x.name || got.contact!.name, mobile: x.mobile || got.contact!.mobile_e164 }))
+      } catch (e) {
+        if (!off) setSaved({ why: (e as Error).message })
+      }
+    })()
+    return () => { off = true }
+  }, [])
+
+  async function forget() {
+    try {
+      const r = await contactReq('DELETE')
+      setNote(r.ok ? String(r.json.say ?? 'Deleted.') : `Not deleted — ${refusal(r.json, r.status)}`)
+      if (r.ok && saved && 'consent' in saved) setSaved({ ...saved, contact: null })
+    } catch (e) {
+      setNote(`Not deleted — ${(e as Error).message}`)
+    }
+  }
 
   // the activity worded in the venue's language, once — from the server's deterministic list (nothing invented)
   useEffect(() => {
@@ -48,6 +78,15 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
 
   async function prepare() {
     setPhase({ p: 'preparing' })
+    if (keep && saved && 'consent' in saved) {   // S-62 step 5 · saved under the exact sentence shown, or not at all — and said
+      try {
+        const r = await contactReq('PUT', { name: d.name, mobile: d.mobile, consent_version: saved.consent.version, consent_sha256: saved.consent.sha256 })
+        setNote(r.ok ? 'Saved for next time.' : `Not saved — ${refusal(r.json, r.status)}`)
+        if (r.ok) setSaved({ ...saved, contact: (r.json.contact as Contact) ?? null })
+      } catch (e) {
+        setNote(`Not saved — ${(e as Error).message}`)
+      }
+    }
     const reservation = {
       schema: 'reservation/1', flow: d.ask ? 'availability' : 'book',
       who: { name: d.name.trim(), ...(d.mobile.trim() ? { contact: { mobile_e164: d.mobile.trim() } } : {}) },
@@ -118,6 +157,16 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
           {!d.ask && <label>Length in minutes (if it matters)<input style={input} inputMode="numeric" value={d.duration} onChange={(e) => setD({ ...d, duration: e.target.value })} /></label>}
           <label>Your name<input style={input} value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} /></label>
           <label style={{ gridColumn: '1 / -1' }}>Your mobile, given only if they ask (+34…)<input style={input} value={d.mobile} onChange={(e) => setD({ ...d, mobile: e.target.value })} /></label>
+          {saved && 'consent' in saved && (
+            <div style={{ gridColumn: '1 / -1', fontSize: 12 }}>
+              {saved.contact
+                ? <>Using your saved name and mobile. <button type="button" onClick={run(forget)} style={{ textDecoration: 'underline' }}>Delete my saved details</button></>
+                : <label><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} /> Save my name and mobile for next time.{' '}
+                    {saved.consent.text} <a href={saved.consent.privacy} target="_blank" rel="noopener noreferrer">Privacy</a></label>}
+            </div>
+          )}
+          {saved && 'why' in saved && <div style={{ gridColumn: '1 / -1', fontSize: 12, opacity: 0.7 }}>Saved details aren&rsquo;t available: {saved.why}</div>}
+          {note && <div style={{ gridColumn: '1 / -1', fontSize: 12 }}>{note}</div>}
           <div style={{ gridColumn: '1 / -1' }}>
             <GatedButton label={`Prepare the call to ${venue}`} onClick={run(prepare)} needs={needs} />
           </div>

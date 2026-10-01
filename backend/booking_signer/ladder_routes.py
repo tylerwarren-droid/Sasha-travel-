@@ -64,6 +64,14 @@ def email_cap() -> int:
         return 5
 
 
+def account_email_cap() -> int:
+    """S-62 step 2 · emails per ACCOUNT per 24 h, as well as the server's cap (SASHA_EMAILS_PER_ACCOUNT_PER_DAY, default 5)."""
+    try:
+        return max(0, int(os.getenv("SASHA_EMAILS_PER_ACCOUNT_PER_DAY", "5")))
+    except ValueError:
+        return 5
+
+
 def _refuse(status: int, rule: str, message: str) -> JSONResponse:
     return JSONResponse({"ok": False, "rule": rule, "message": message}, status_code=status)
 
@@ -80,7 +88,7 @@ def status() -> dict:
     """For /api/booking/health."""
     return {"places_configured": bool(V.places_key()), "emails": L.emails_ready() or "ready",
             "calls": L.calls_ready() or "ready", "sasha_number_set": C.sasha_number() is not None,
-            "emails_per_day": email_cap()}
+            "emails_per_day": email_cap(), "emails_per_account_per_day": account_email_cap()}
 
 
 def _read_view(row: dict, read: Optional[dict] = None) -> dict:
@@ -294,7 +302,8 @@ async def send_email(email_id: str, request: Request):
     approval = {"by": account, "how": a["how"], "said": a.get("said"), "at": now.isoformat(),
                 "read_back_sha256": e["read_back_sha256"], "email_sha256": e["email_sha256"]}
     try:
-        claimed = await LADDER_STORE.claim_email(account, email_id, approval, now, now - APPROVAL_WINDOW, email_cap(), cap_window(now))
+        claimed = await LADDER_STORE.claim_email(account, email_id, approval, now, now - APPROVAL_WINDOW, email_cap(), cap_window(now),
+                                                 account_email_cap())
     except StorageUnavailable as ex:
         return _refuse(503, ex.rule, ex.detail)
     if claimed == "taken":
@@ -303,6 +312,8 @@ async def send_email(email_id: str, request: Request):
         return _refuse(422, "read_back_expired", "that read-back is more than 15 minutes old; prepare the email again")
     if claimed == "cap":
         return _refuse(429, "daily_email_limit", f"{email_cap()} emails have been sent in the last 24 hours, the most this server allows")
+    if claimed == "account_cap":
+        return _refuse(429, "account_daily_email_limit", f"this account has sent {account_email_cap()} emails in the last 24 hours, the most one account may")
     if claimed != "claimed":
         return _refuse(404, "email_unknown", "no email with that id was prepared for this account")
     sent = await E.send(HTTP, e["email"])

@@ -20,6 +20,7 @@ import unittest
 
 os.environ.setdefault("SASHA_BOOKING_KEY", "test-booking-key")   # S-41: the gate (gate.py)
 os.environ.setdefault("SASHA_CALL_SWEEP", "0")
+os.environ.setdefault("SASHA_SUPABASE_URL", "https://testref.supabase.co")   # S-69: guest tokens are checked against it
 from urllib.parse import urlsplit, urlunsplit
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
@@ -69,7 +70,7 @@ class BookingRoutes:
         routes.PINNED_FINGERPRINT = routes.KEY.fingerprint  # the test key stands in for the pinned one
         app = FastAPI()
         app.include_router(routes.router)
-        self.client = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key"})
+        self.client = TestClient(app, headers={"x-sasha-booking-key": "test-booking-key", "x-sasha-session": "founder"})
         self.client.__enter__()
 
     def tearDown(self):
@@ -208,6 +209,35 @@ class BookingRoutes:
     def test_an_intent_outside_this_accounts_trips_records_nothing(self):
         r = self.post("/intents", {**ANA, "trip_id": "00000000-0000-4000-8000-00000000beef"})
         self.assertEqual([r.status_code, r.json()["rule"]], [404, "trip_unknown"])
+
+    def test_s62_another_account_sees_none_of_it(self):
+        """S-62 step 2 · B (a verified guest) gets nothing of A's: not the reservation, not the intent's approval,
+        not the devices — each answering exactly as for an id that never existed."""
+        from booking_signer import identity as I
+        from tests.test_identity import JWK, token
+        async def fetch():
+            return {"keys": [JWK]}
+        saved, I.FETCH = I.FETCH, fetch
+        I.reset_cache()
+        try:
+            i, _, digest = self.issued()                                                         # A: the founder
+            self.report(digest, self.dry_run_report(i["intent_id"]))
+            b = {"authorization": f"Bearer {token()}", "x-sasha-session": ""}
+            mine = self.client.get("/api/booking/reservations").json()["reservations"]
+            theirs = self.client.get("/api/booking/reservations", headers=b)
+            self.assertEqual(theirs.status_code, 200, theirs.text)
+            self.assertIn(i["trip_item_id"], [x["id"] for x in mine])
+            self.assertEqual(theirs.json()["reservations"], [])
+            body = {"device_id": DEVICE_ID, "approval": {"how": "voice", "said": "yes"}}
+            real = self.client.post(f"/api/booking/intents/{i['intent_id']}/issue", json=body, headers=b)
+            ghost = self.client.post("/api/booking/intents/00000000-0000-4000-8000-000000000000/issue", json=body, headers=b)
+            self.assertNotEqual(real.status_code, 200)
+            self.assertEqual((real.status_code, real.json()), (ghost.status_code, ghost.json()))
+            self.assertEqual(self.client.get("/api/booking/devices").json()["devices"], [DEVICE_ID])       # A's device…
+            self.assertEqual(self.client.get("/api/booking/devices", headers=b).json()["devices"], [])    # …not B's
+        finally:
+            I.FETCH = saved
+            I.reset_cache()
 
     def test_a_dry_run_records_no_outcome_and_leaves_the_reservation_prepared(self):
         # S-26: nothing was sent, so there is no OUTCOME and no attempt — but the form WAS filled and checked on
@@ -379,7 +409,7 @@ class WithoutStorageOrAMount(unittest.TestCase):
         try:
             app = FastAPI()
             app.include_router(routes.router)
-            with TestClient(app, headers={"x-sasha-booking-key": "test-booking-key"}) as c:
+            with TestClient(app, headers={"x-sasha-booking-key": "test-booking-key", "x-sasha-session": "founder"}) as c:
                 r = c.post("/api/booking/pairing/challenge", json={})
                 self.assertEqual([r.status_code, r.json()["rule"]], [503, "storage_not_configured"])
                 self.assertEqual(c.get("/api/booking/health").json()["storage"]["configured"], False)

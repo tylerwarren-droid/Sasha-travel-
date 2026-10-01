@@ -34,3 +34,6 @@ async def require_booking_key(request: Request) -> None:
     if not got or not hmac.compare_digest(got.encode(), want.encode()):
         raise HTTPException(401, {"ok": False, "rule": "booking_key_required",
                                   "message": "this route needs the booking key — it is reached through the founder's signed-in booking page"})
+    # S-62 step 1 · the key proves the proxy; WHO is a verified token or the founder's session (identity.py)
+    from .identity import resolve
+    request.state.account = await resolve(request)

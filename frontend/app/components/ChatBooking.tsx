@@ -17,10 +17,11 @@
  *            When it cannot, the server's reason is shown and the booking page is the way on.
  */
 import { useEffect, useRef, useState } from 'react'
-import { FOUNDER_ONLY, findVenues, readVenue, refusal, styleVenues, type Candidate, type Ranking, type Rung, type Style } from '@/lib/booking-client'
+import { findVenues, readVenue, refusal, styleVenues, type Candidate, type Ranking, type Rung, type Style } from '@/lib/booking-client'
 import { setChatBookingHandler, takeTypedYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 import ChatBookingCall from './ChatBookingCall'
+import { SignInToBook, WhoIsBooking } from './SignedInLine'
 
 type Find = { what: string; where: string; country?: string; near?: string; open_at?: string; priority?: string; draft?: unknown }
 type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null }
@@ -86,7 +87,7 @@ export default function ChatBooking({ find }: { find: Find }) {
       }
     })()
     return () => { off = true }
-  }, [find.what, find.where, find.country, find.near, find.open_at])
+  }, [find.what, find.where, find.country, find.near, find.open_at, find.priority])
 
   function sortBy(chip: string) {
     const s = stateRef.current
@@ -152,13 +153,14 @@ export default function ChatBooking({ find }: { find: Find }) {
   }, [])
 
   const box = { border: '1px solid rgba(0,0,0,.12)', borderRadius: 10, padding: 12, margin: '8px 0' } as const
-  if (state.phase === 'founder_only') return <div style={box}>{FOUNDER_ONLY}</div>
+  if (state.phase === 'founder_only') return <div style={box}><SignInToBook /></div>
   if (state.phase === 'finding') return <div style={box}>Looking for {find.what} in {find.where}…</div>
   if (state.phase === 'refused') return <div style={box}>{state.words}</div>
   const cards = state.cards
   const lookup = state.phase === 'read' ? state.pick : null
   return (
     <div style={box}>
+      <WhoIsBooking />
       {cards.length === 0
         ? <div>Google has no listing for {find.what} in {find.where}.</div>
         : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{find.what} in {find.where} — from Google Maps; nobody has been contacted. Choose one, or say “the second one”.</div>}

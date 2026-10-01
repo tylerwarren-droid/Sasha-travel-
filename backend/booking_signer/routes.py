@@ -31,7 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import call_routes, ladder_routes, optin_page, optins, reservation as RS, retention, stop
+from . import call_routes, contacts, ladder_routes, optin_page, optins, reservation as RS, retention, stop
 from . import venue_read as V
 from .account import account_for
 from .gate import require_booking_key
@@ -88,6 +88,7 @@ ladder_routes.LADDER_STORE = PostgresLadderStore(STORE)
 optins.OPTIN_STORE = PostgresOptinStore(STORE)   # S-54 · the refusal check reads venue_optins (sql/008)
 optin_page.PAGE_STORE = optin_page.PostgresPageStore(STORE)   # S-55 · the Work-with-Sasha page (sql/009)
 stop.STOP_STORE = stop.PostgresStopStore(STORE)   # S-56 · a venue's stop, on any channel (sql/010)
+contacts.STORE = contacts.PostgresContactStore(STORE)   # S-62 step 5 · a guest's name and mobile (sql/015)
 
 
 def _now() -> datetime:
@@ -483,6 +484,8 @@ async def reservations(request: Request):
 router.include_router(call_routes.router)
 # S-36 · the ladder: venue reads, the email rung, the inbound webhook
 router.include_router(ladder_routes.router)
+# S-62 step 5 · the guest's saved name and mobile, with consent
+router.include_router(contacts.router)
 # S-55 · the Work-with-Sasha page's server half (reached through the frontend's own route, which adds the key)
 router.include_router(optin_page.router)
 

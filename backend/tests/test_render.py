@@ -43,6 +43,25 @@ class Golden(unittest.TestCase):
         self.assertEqual(n, len(C.LANGUAGES) * len(CASES))
 
 
+class GoldenBrief(unittest.TestCase):
+    """S-64 step 5 · the call brief from the object IS today's brief for a table: same dict, so the same sha256."""
+
+    def test_a_tables_brief_is_todays_brief(self):
+        from zoneinfo import ZoneInfo
+        n = 0
+        for code, case in itertools.product(C.LANGUAGES, CASES):
+            p = C.parse_call_particulars(case)
+            v = C.CallVenue(key="read:x", name="La Contra", number_env="", language=code, timezone="Europe/Madrid",
+                            number="+34910536740", source="their Google listing", venue_ids=("places:ChIJ-x",))
+            built = C.build_call(v, p, NOW)
+            o = RS.from_particulars(p, account_id=ACCT, venue_name="La Contra", timezone="Europe/Madrid", lang=C.LANGUAGES[code].code)
+            brief = R.call_brief(o, v, NOW.astimezone(ZoneInfo("Europe/Madrid")).date(), "+34910536740")
+            self.assertEqual(brief, built["brief"], (code, case))
+            self.assertEqual(C._sha256hex(C._canonical(brief)), built["brief_sha256"])
+            n += 1
+        self.assertEqual(n, 24)
+
+
 class Beyond(unittest.TestCase):
     TODAY = NOW.date()
 
@@ -65,6 +84,23 @@ class Beyond(unittest.TestCase):
         q = self.obj(flow="quote_first", when={"mode": "venue_proposes"}, how_many={"count": 1, "unit": "pieces"},
                      what={"activity": "a fine-line tattoo", "activity_venue_lang": "a fine-line tattoo", "category": "beauty"})
         self.assertIn("to book a fine-line tattoo for one piece whenever you have space", R.opening(C.LANGUAGES["en"], q, self.TODAY))
+
+    def test_a_spa_brief_names_the_service_its_length_and_widens_the_rules(self):
+        v = C.CallVenue(key="read:s", name="Spa", number_env="", language="es", timezone="Europe/Madrid", number="+34910000000")
+        b = R.call_brief(self.obj(), v, self.TODAY, "+34910000000")
+        self.assertIn("phoning a venue to book a 60-minute relaxing massage on behalf of a guest", b["task"])
+        self.assertIn("a 60-minute relaxing massage (un masaje relajante), 1 people, 2026-10-03 at 11:00 (venue's local time), 60 minutes", b["task"])
+        self.assertIn("Never agree to a different date, time, number, service or length.", b["task"])
+        self.assertEqual(b["recap"], "Para confirmar: un masaje relajante de 60 minutos, para una persona, sábado 3 de octubre, a las once de la mañana, a nombre de Warren. ¿Correcto?")
+        self.assertIn(b["recap"], b["task"])
+        self.assertLessEqual(len(b["task"]), 2000)
+
+    def test_a_window_is_not_phoned_from_the_object_yet(self):
+        v = C.CallVenue(key="read:s", name="Spa", number_env="", language="es", timezone="Europe/Madrid", number="+34910000000")
+        w = self.obj(when={"mode": "window", "window": {"earliest": "2026-10-03T10:00", "latest": "2026-10-03T13:00"}})
+        with self.assertRaises(RS.ReservationRefused) as e:
+            R.call_brief(w, v, self.TODAY, "+34910000000")
+        self.assertEqual(e.exception.rule, "flow_not_built")
 
     def test_sessions_and_the_extra_read_back_line(self):
         o = self.obj(how_many={"count": 2, "unit": "sessions"})

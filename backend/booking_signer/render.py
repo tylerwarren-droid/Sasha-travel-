@@ -16,6 +16,7 @@ from datetime import date, datetime, time
 from typing import Any, List, Mapping, Optional
 
 from . import calls as C
+from . import recap as RC
 from . import reservation as RS
 
 _BETWEEN = {"en": "between {a} and {b}", "es": "entre las {a} y las {b}", "pt": "entre as {a} e as {b}",
@@ -130,3 +131,97 @@ def opening_en(o: Mapping[str, Any], today: date) -> str:
     en = C.LANGUAGES["en"]
     oe = {**o, "what": {**o["what"], "activity_venue_lang": o["what"]["activity"] if not is_table(o) else RS.TABLE["en"]}}
     return opening(en, oe, today)
+
+
+# ── S-64 step 5 · the call brief, from the object ──────────────────────────────────────────────────────────────────
+#
+# ⛔ For a table, `call_brief` returns EXACTLY the brief calls.build_call returns today (tests/test_render.py: dict
+# equality, so the same brief_sha256 the guest's approval binds). For any other activity at a time, the same
+# instructions with the activity, its count, its duration and the rules widened to service and duration.
+# A window or venue_proposes is a different conversation (S-64 §3) and is refused here until its flow is built.
+
+_RECAP_PREFIX = {"es": ("Para confirmar:", "a nombre de", "¿Correcto?"), "pt": ("Para confirmar:", "em nome de", "Está correto?"),
+                 "fr": ("Pour confirmer :", "au nom de", "C'est bien ça ?"), "de": ("Zur Bestätigung:", "auf den Namen", "Ist das richtig?"),
+                 "it": ("Per confermare:", "a nome", "È corretto?"), "en": ("To confirm:", "under the name", "Is that right?")}
+
+
+def recap(lang: C.Lang, o: Mapping[str, Any]) -> str:
+    """The closing recap (S-60/S-63). A table: S-60's sentence exactly. Otherwise the same frame, with the activity."""
+    on, at = _at(o)
+    p = _particulars(o, on, at)
+    if is_table(o):
+        return C.recap_sentence(lang, p)
+    pre, under, q = _RECAP_PREFIX[_code(lang)]
+    when = RC.when_words(lang.code, lang.weekdays, lang.months, on, at)
+    return f"{pre} {activity_phrase(lang, o)}, {spoken_count(lang, o)}, {when}, {under} {C.surname_of(p.name)}. {q}"
+
+
+def _check(lang: C.Lang, o: Mapping[str, Any]) -> str:
+    on, at = _at(o)
+    p = _particulars(o, on, at)
+    if o["how_many"]["unit"] != "people":   # "the Warrens" only for a party of people
+        p = C.CallParticulars(on=on, at=at, party=1, name=p.name, phone=p.phone)
+    return C.check_sentence(lang, p)
+
+
+def instructions(lang: C.Lang, o: Mapping[str, Any], first: str, check: str) -> str:
+    """Bland's `task`, from the object. A table: calls.instructions' string exactly."""
+    on, at = _at(o)
+    name = o["who"]["name"]
+    phone = (o["who"].get("contact") or {}).get("mobile_e164")
+    contact = (f"If — and only if — they ask for a contact number, give {' '.join(phone)} (the guest's own number). "
+               if phone else "You have no contact number to give. If they ask for one, say the guest will confirm directly. ")
+    if is_table(o):
+        place, what = "a restaurant", "a table"
+        booking = f"{o['how_many']['count']} people, {on.isoformat()} at {at.strftime('%H:%M')} (venue's local time), under the name {name}. "
+        never = "Never agree to a different date, a different time or a different number of people. "
+    else:
+        place, what = "a venue", o["what"]["activity"]
+        dur = o["when"].get("duration_min")
+        booking = (f"{o['what']['activity']} ({o['what']['activity_venue_lang']}), {o['how_many']['count']} {o['how_many']['unit']}, "
+                   f"{on.isoformat()} at {at.strftime('%H:%M')} (venue's local time)" + (f", {dur} minutes" if dur else "")
+                   + f", under the name {name}. ")
+        never = "Never agree to a different date, time, number, service or length. "
+    return (
+        f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning {place} to book {what} on behalf of a guest. Speak {lang.label} only. "
+        f"You already said: \"{first}\" "
+        f"The booking: {booking}"
+        "If they ask whether you are a person or a machine: you are an AI concierge. Never claim to be the guest or a human. "
+        "RULES YOU MUST NEVER BREAK: "
+        f"{never}"
+        "Never agree to a deposit, a fee, a minimum spend, a cancellation charge, or to give a card. You have no card and no payment details. "
+        f"If they offer or ask for ANY of those, say exactly: \"{check}\" — then ask them to repeat the offer so it is noted, thank them, and end the call. "
+        f"{contact}"
+        "Do not give any email address or any other personal detail. "
+        "If they say yes, ask for any reference. Then ALWAYS end with this exact recap and wait for the answer: "
+        f"\"{recap(lang, o)}\" Only a clear yes to it confirms. "
+        "If they state a different time, day, party or name, repeat the right one once and say the recap again; "
+        f"if they still differ, say exactly \"{check}\" and end the call. "
+        "If they say no, say to call back later, or are unsure, thank them and end the call. "
+        f"If they ask not to be contacted again, say exactly \"{C._ack(lang)}\" and end the call. "
+        "Keep it short and polite. Do not leave a voicemail."
+    )
+
+
+def call_brief(o: Mapping[str, Any], venue: C.CallVenue, today: date, number: str) -> dict:
+    """The brief for a BOOKING call, from the object. ⛔ Same keys and, for a table, the same values as calls.build_call."""
+    o = RS.validate(o)
+    if o["flow"] != "book" or o["when"]["mode"] != "at":
+        raise RS.ReservationRefused("flow_not_built", "only a booking at a set time can be phoned from the object yet "
+                                                      "(a window, venue-proposes and quote-first come with S-64 steps 8–9)")
+    lang = C.LANGUAGES[venue.language]
+    on, at = _at(o)
+    first, check = opening(lang, o, today), _check(lang, o)
+    task = instructions(lang, o, first, check)
+    if len(task) > 2000:
+        raise RS.ReservationRefused("brief_too_long", "the call's instructions exceed Bland's 2,000 characters")
+    return {
+        "purpose": "book", "timezone": venue.timezone, "reference": None,
+        "venue_key": venue.key, "number": number, "language": lang.code,
+        "recap": recap(lang, o),
+        "first_sentence": first, "task": task, "check_sentence": check,
+        "party": o["how_many"]["count"], "date": on.isoformat(), "time": at.strftime("%H:%M"), "name": o["who"]["name"],
+        "phone": (o["who"].get("contact") or {}).get("mobile_e164"),
+        "from": C.sasha_number(), "number_source": venue.source, "venue_name": venue.name,
+        "venue_ids": list(venue.venue_ids) if venue.venue_ids else None,
+    }

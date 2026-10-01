@@ -66,6 +66,22 @@ def _hm24(t: time, h_word: str, sep: str) -> str:
     return f"{t.hour} {h_word}" + (f" {sep}{t.minute:02d}" if t.minute else "")
 
 
+def when_words(lang_code: str, weekdays, months, on: date, at: time) -> str:
+    """"viernes 2 de octubre, a la una de la tarde" — the day and time as every recap says them (S-64 step 5 reuses it)."""
+    wd, mo = weekdays[on.weekday()], months[on.month - 1]
+    if lang_code.startswith("es"):
+        return f"{wd} {on.day} de {mo}, {_es_at(at)}"
+    if lang_code.startswith("pt"):
+        return f"{wd}, {on.day} de {mo}, {_pt_at(at)}"
+    if lang_code.startswith("fr"):
+        return f"{wd} {on.day} {mo}, à {_hm24(at, 'heures', '')}"
+    if lang_code.startswith("de"):
+        return f"{wd}, {on.day}. {mo}, um {_hm24(at, 'Uhr', '')}"
+    if lang_code.startswith("it"):
+        return f"{wd} {on.day} {mo}, alle {at.hour}" + (f" e {at.minute}" if at.minute else "")
+    return f"{wd} {on.day} {mo}, {_en_at(at)}"
+
+
 #: lang code → (prefix, the recap, the question). Weekday and month words come from calls.LANGUAGES.
 def sentence(lang_code: str, weekdays, months, on: date, at: time, party: int, surname: str) -> str:
     wd, mo = weekdays[on.weekday()], months[on.month - 1]

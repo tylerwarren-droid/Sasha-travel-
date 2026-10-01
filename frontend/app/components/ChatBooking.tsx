@@ -41,6 +41,12 @@ const TYPED_CHIP: [string, RegExp][] = [['price', /\b(cheap|cheapest|price|budge
   ['rated', /\b(best rated|rating|rated|reviews|best)\b/i], ['closest', /\b(closest|nearest|distance|near)\b/i],
   ['open', /\b(open|opening|hours)\b/i]]
 
+// S-68 step 8 · the chips; one that cannot sort yet says what it needs
+const CHIPS: [string, string, string][] = [['rated', '★ Best rated', 'ratings in the results'],
+  ['closest', '📍 Closest', 'a hotel or address to measure from (say “near …”)'], ['price', '€ Price', 'price levels in the results'],
+  ['open', '🕑 Open then', 'a day and time (say “open Tuesday 17:00”)']]
+const GROUP_WORDS: Record<string, string> = { closed_then: 'closed then', hours_unknown: 'hours not listed', closed_temporarily: 'temporarily closed' }
+
 const RUNG_NAME: Record<string, string> = { form: 'their booking form', link: 'their booking page', platform: 'a booking platform',
   phone: 'a phone call', email: 'an email', whatsapp: 'WhatsApp (you send it)' }
 const ORDINAL: Record<string, number> = { first: 0, '1st': 0, one: 0, second: 1, '2nd': 1, two: 1, third: 2, '3rd': 2, three: 2,
@@ -133,26 +139,49 @@ export default function ChatBooking({ find }: { find: Find }) {
     <div style={box}>
       {cards.length === 0
         ? <div>Google has no listing for {find.what} in {find.where}.</div>
-        : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{cards.length} {cards.length === 1 ? 'place' : 'places'} for {find.what} in {find.where} — from Google Maps; nobody has been contacted. Tap one, or say “the second one”.</div>}
+        : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{find.what} in {find.where} — from Google Maps; nobody has been contacted. Choose one, or say “the second one”.</div>}
       {state.phase === 'found' && state.ranking && <div style={{ fontSize: 13, marginBottom: 4 }}>{state.ranking.count} · {state.ranking.explainers[state.chip]}</div>}
       {state.phase === 'found' && find.open_at && <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Open then by their listed hours; availability is confirmed only when Sasha books.</div>}
       {state.phase === 'found' && state.near && !state.near.found && <div style={{ fontSize: 13, marginBottom: 6 }}>No distances: {state.near.why}</div>}
+      {state.phase === 'found' && state.ranking && cards.length > 0 && (
+        <div style={{ margin: '4px 0 8px' }}>
+          {!find.priority && <div style={{ fontSize: 13, marginBottom: 4 }}>What matters most? Tap one, or say it.</div>}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {CHIPS.map(([chip, label, needs]) => (
+              <GatedButton key={chip} label={state.chip === chip ? `✓ ${label}` : label} onClick={() => sortBy(chip)}
+                needs={[!state.ranking?.orders[chip] && needs]} done={state.chip === chip && 'sorted this way'} />
+            ))}
+          </div>
+        </div>
+      )}
       <ol style={{ margin: 0, paddingLeft: 18 }}>
-        {cards.map((c) => (
-          <li key={c.place_id} style={{ marginBottom: 8 }}>
-            <strong>{c.name}</strong>{c.type ? <span style={{ opacity: 0.7 }}> · {c.type}</span> : null}
-            {c.status && c.status !== 'OPERATIONAL' ? <span style={{ color: '#9a1c1c' }}> · {c.status.toLowerCase().replace(/_/g, ' ')}</span> : null}
-            <div style={{ fontSize: 13, opacity: 0.85 }}>{c.address ?? 'no address listed'} · {c.phone ?? 'no phone listed'}{c.website ? ` · ${c.website}` : ''}</div>
-            {c.rating_words || c.price_words ? <div style={{ fontSize: 13 }}>{[c.rating_words, c.price_words].filter(Boolean).join(' · ')}</div> : null}
-            {c.open_at ? <div style={{ fontSize: 13 }}>{c.open_at.words}</div> : null}
-            {c.books ? <div style={{ fontSize: 13 }}>How Sasha books: {c.books.words}</div> : null}
-            {c.distance ? <div style={{ fontSize: 13 }}>{c.distance}{state.phase === 'found' && state.near ? ` from ${state.near.asked}` : ''}</div> : null}
-            <div style={{ fontSize: 12, opacity: 0.6 }}>Google Maps</div>
-            <GatedButton label={`Read ${c.name ?? 'this one'}`} onClick={() => { pick(c).catch(() => { /* visible state set inside */ }) }}
-              needs={[state.phase === 'reading' && 'the read in progress to finish']} />
-          </li>
-        ))}
+        {cards.map((c) => {
+          // S-68 step 8 · every value said, a missing one in words; a place not open then is greyed, never dropped
+          const group = state.phase === 'found' ? state.ranking?.groups[c.place_id] : undefined
+          const grey = group === 'closed_then' || group === 'closed_temporarily'
+          const near = state.phase === 'found' && state.near?.found
+          const facts = [c.rating_words ?? 'no rating', near ? (c.distance ?? 'distance not known') : null, c.price_words ?? 'price level not listed']
+          return (
+            <li key={c.place_id} style={{ marginBottom: 10, opacity: grey ? 0.55 : 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span><strong>{c.name ?? 'no name listed'}</strong>{c.type ? <span style={{ opacity: 0.7 }}> · {c.type}</span> : null}
+                  {group && group !== 'main' ? <span style={{ color: '#9a1c1c' }}> · {GROUP_WORDS[group]}</span> : null}</span>
+                <span style={{ fontSize: 12, opacity: 0.6, whiteSpace: 'nowrap' }}>Google Maps</span>
+              </div>
+              <div style={{ fontSize: 13 }}>{facts.filter(Boolean).join(' · ')}</div>
+              {c.open_at ? <div style={{ fontSize: 13 }}>{c.open_at.words}</div> : null}
+              {c.books ? <div style={{ fontSize: 13 }}>How Sasha books: {c.books.words}</div> : null}
+              <div style={{ fontSize: 12, opacity: 0.75 }}>{c.address ?? 'no address listed'}</div>
+              <span style={{ display: 'inline-flex', gap: 10, alignItems: 'flex-start', marginTop: 4 }}>
+                <GatedButton label="Choose" onClick={() => { pick(c).catch(() => { /* visible state set inside */ }) }}
+                  needs={[state.phase === 'reading' && 'the read in progress to finish']} />
+                <a href={c.listing_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13 }}>Their listing ↗</a>
+              </span>
+            </li>
+          )
+        })}
       </ol>
+      {cards.length > 0 && <div style={{ fontSize: 12, opacity: 0.6 }}>Places, ratings, prices and hours: Google Maps.</div>}
       {state.phase === 'reading' && <div>Reading how {state.pick.name} takes bookings…</div>}
       {state.phase === 'read_refused' && <div>I couldn&rsquo;t read them: {state.words}</div>}
       {state.phase === 'read' && (

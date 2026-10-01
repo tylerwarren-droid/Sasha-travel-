@@ -169,7 +169,33 @@ Stage A — tag + sync (write to script to avoid paste mangling):
     bash /tmp/sync.sh
 If deletions > 0, investigate each deleted file before proceeding (check it's not a repo-only file or a still-imported agent). Confirm the new conductor does not IMPORT any deleted agent (grep for 'from app.services.X import'); keyword-only references are safe.
 
-Stage B — re-apply CORS (command above), the booking hand-off (above), THEN the booking drafts (above, after the hand-off), the booking mount (below), the reservations insertion (below), then import test.
+Stage B — re-apply CORS (command above), the booking hand-off (above), THEN the booking drafts (above, after the hand-off), the chat booking (above), the booking mount (below), the reservations insertion (below), then import test.
+
+Chat booking re-apply command (S-66, EU's booking-in-chat) — SashaChat.tsx is the CTO's; every zip drops these five
+lines. They give the chat Find → pick → read (frontend/app/components/ChatBooking.tsx, repo-only) and let a typed line
+reach the booking thread first. It REFUSES, loudly, if any anchor changed:
+    cd ~/Projects/sasha-travel && python3 - <<'PY'
+    import pathlib
+    p = pathlib.Path("frontend/app/components/SashaChat.tsx"); s = p.read_text()
+    if "S-66 chat booking" not in s:
+        a_imp = "import YouPanel from './workspace/YouPanel'\n"
+        a_state = "  const [bookings, setBookings] = useState<"
+        a_send = "  const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string }) => {\n"
+        a_resp = "      const { response: sashaResponse, conversation_history,"
+        a_jsx = "        {(hotels.length > 0 || bookings.length > 0 || bookingLinks.length > 0) && ("
+        if any(a not in s for a in (a_imp, a_state, a_send, a_resp, a_jsx)):
+            raise SystemExit("⛔ STOP: SashaChat's anchors changed in this CTO drop — chat booking was NOT re-applied. Place it by hand.")
+        s = s.replace(a_imp, a_imp + "import ChatBooking from './ChatBooking'  // S-66 chat booking, Stage B re-applies\nimport { takeChatText } from '@/lib/chat-booking-bus'\n", 1)
+        s = s.replace(a_state, "  const [bookingFind, setBookingFind] = useState<{ what: string; where: string; country?: string } | null>(null)  // S-66 chat booking\n" + a_state, 1)
+        s = s.replace(a_send, a_send + "    if (takeChatText(content)) { setMessages(prev => [...prev, { role: 'user', content }]); return }  // S-66 chat booking\n", 1)
+        i = s.index(a_resp); j = s.index("\n", i) + 1
+        s = s[:j] + "      if (response.data.booking_find) setBookingFind(response.data.booking_find)  // S-66 chat booking\n" + s[j:]
+        s = s.replace(a_jsx, "        {/* S-66 chat booking: repo-only component. CTO zips drop this; Stage B re-applies it. */}\n        {bookingFind && <ChatBooking key={`${bookingFind.what}|${bookingFind.where}`} find={bookingFind} />}\n" + a_jsx, 1)
+        p.write_text(s); print("chat booking re-applied")
+    else: print("chat booking already present")
+    PY
+    grep -n "S-66 chat booking" frontend/app/components/SashaChat.tsx
+The build refuses if this is skipped: prebuild (scripts/check-outcome-surfaces.mjs) fails when SashaChat lacks it.
 
 Booking mount re-apply command (S-17):
     cd ~/Projects/sasha-travel && python3 - <<'PY'

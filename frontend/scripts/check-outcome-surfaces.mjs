@@ -27,7 +27,7 @@ import { join } from "node:path";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 /** Pages where a person acts and must learn what happened. Add a page here when it becomes one. */
-export const OUTCOME_SURFACES = ["app/booking-helper/page.tsx", "app/booking-helper/PhoneCall.tsx", "app/booking-helper/Ladder.tsx", "app/booking-helper/FounderGate.tsx", "app/components/workspace/SashaReservations.tsx"];
+export const OUTCOME_SURFACES = ["app/booking-helper/page.tsx", "app/booking-helper/PhoneCall.tsx", "app/booking-helper/Ladder.tsx", "app/booking-helper/FounderGate.tsx", "app/components/workspace/SashaReservations.tsx", "app/components/ChatBooking.tsx"];
 /** The one component allowed to set `disabled=` — because it derives it from rendered needs. */
 export const GATED_BUTTON = "app/booking-helper/GatedButton.tsx";
 
@@ -104,6 +104,12 @@ function main() {
   }
   // S-45 · Sasha's reservations in the guest's trip view. A CTO drop overwrites YouPanel.tsx; Stage B re-inserts the
   // block. A skipped Stage B must FAIL the build, never ship a trip view that silently lost the reservations.
+  // S-66 · booking inside the chat. A CTO drop overwrites SashaChat.tsx; Stage B re-inserts the five lines (CLAUDE.md).
+  const chat = readFileSync(join(ROOT, "app/components/SashaChat.tsx"), "utf8");
+  if ((chat.match(/S-66 chat booking/g) || []).length < 5 || !chat.includes("<ChatBooking ") || !chat.includes("takeChatText(content)")) {
+    console.error("check-outcome-surfaces: SashaChat.tsx lacks the S-66 chat booking lines — run Stage B's chat booking re-apply (CLAUDE.md).");
+    process.exit(1);
+  }
   const you = readFileSync(join(ROOT, "app/components/workspace/YouPanel.tsx"), "utf8");
   if (!you.includes("S-45 Sasha reservations") || !you.includes("<SashaReservations />")) {
     console.error("check-outcome-surfaces: YouPanel.tsx lacks the S-45 Sasha reservations block — run Stage B's reservations re-apply (CLAUDE.md).");

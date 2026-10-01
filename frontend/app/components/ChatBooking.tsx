@@ -1,0 +1,132 @@
+'use client'
+
+/**
+ * S-66 (EU) steps 1, 3, 4 · BOOKING INSIDE SASHA'S CHAT — find, pick, read. Repo-only: a CTO drop does not ship this
+ * file, and Stage B re-inserts it into SashaChat (CLAUDE.md; scripts/check-outcome-surfaces.mjs fails the build if the
+ * insertion is missing).
+ *
+ *   step 1 · THE GATE: every request goes through /api/booking-proxy (lib/booking-client). No founder session (401) →
+ *            "Booking is only open to the founder's account for now." and no buttons — nothing else.
+ *   step 3 · FIND: the conductor's `booking_find` → POST /venues/find → up to five cards, each "from its Google
+ *            listing". Nothing is contacted. Refusals are shown as they come.
+ *   step 4 · PICK → READ: a tap, or "the second one" typed → POST /venues/read with THAT listing's place_id → the
+ *            server's own sentence and its rungs: available ones by name, unavailable ones with their reason.
+ *
+ * ⚠ Booking from the chat itself (the read-back card, the yes, the call) is S-66 steps 7–9: until then the only button
+ * after a read is the booking page, opened on that venue — no button here promises what the chat cannot yet do.
+ */
+import { useEffect, useRef, useState } from 'react'
+import { FOUNDER_ONLY, findVenues, readVenue, refusal, type Candidate, type Rung } from '@/lib/booking-client'
+import { setChatBookingHandler } from '@/lib/chat-booking-bus'
+import { GatedButton } from '../booking-helper/GatedButton'
+
+type Find = { what: string; where: string; country?: string }
+type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null }
+type State =
+  | { phase: 'finding' } | { phase: 'founder_only' } | { phase: 'refused'; words: string }
+  | { phase: 'found'; cards: Candidate[] } | { phase: 'reading'; cards: Candidate[]; pick: Candidate }
+  | { phase: 'read'; cards: Candidate[]; pick: Candidate; read: Read } | { phase: 'read_refused'; cards: Candidate[]; words: string }
+
+const RUNG_NAME: Record<string, string> = { form: 'their booking form', link: 'their booking page', platform: 'a booking platform',
+  phone: 'a phone call', email: 'an email', whatsapp: 'WhatsApp (you send it)' }
+const ORDINAL: Record<string, number> = { first: 0, '1st': 0, one: 0, second: 1, '2nd': 1, two: 1, third: 2, '3rd': 2, three: 2,
+  fourth: 3, '4th': 3, four: 3, fifth: 4, '5th': 4, five: 4 }
+
+export default function ChatBooking({ find }: { find: Find }) {
+  const [state, setState] = useState<State>({ phase: 'finding' })
+  const stateRef = useRef(state)
+  useEffect(() => { stateRef.current = state }, [state])
+
+  useEffect(() => {
+    let off = false
+    ;(async () => {
+      setState({ phase: 'finding' })
+      try {
+        const r = await findVenues(find.what, find.where, find.country)
+        if (off) return
+        if (r.status === 401) { setState({ phase: 'founder_only' }); return }
+        if (!r.ok) {
+          const rule = String(r.json.rule ?? '')
+          setState({ phase: 'refused', words: rule.startsWith('places_') ? "I can't search for places right now."
+            : rule.endsWith('_invalid') ? 'Tell me what kind of place, and where.' : refusal(r.json, r.status) })
+          return
+        }
+        setState({ phase: 'found', cards: (r.json.candidates ?? []) as Candidate[] })
+      } catch (e) {
+        if (!off) setState({ phase: 'refused', words: `I couldn't search just now: ${(e as Error).message}.` })
+      }
+    })()
+    return () => { off = true }
+  }, [find.what, find.where, find.country])
+
+  async function pick(c: Candidate) {
+    const cards = 'cards' in stateRef.current ? stateRef.current.cards : []
+    setState({ phase: 'reading', cards, pick: c })
+    try {
+      const r = await readVenue({ name: c.name ?? find.what, city: find.where, country: c.country ?? find.country, place_id: c.place_id })
+      if (r.status === 401) { setState({ phase: 'founder_only' }); return }
+      if (!r.ok) { setState({ phase: 'read_refused', cards, words: refusal(r.json, r.status) }); return }
+      setState({ phase: 'read', cards, pick: c, read: r.json as unknown as Read })
+    } catch (e) {
+      setState({ phase: 'read_refused', cards, words: (e as Error).message })
+    }
+  }
+
+  // "the second one" typed in the chat picks a card; anything else is not ours (the conductor gets it)
+  useEffect(() => {
+    setChatBookingHandler((text: string) => {
+      const s = stateRef.current
+      if (s.phase !== 'found' && s.phase !== 'read' && s.phase !== 'read_refused') return false
+      const m = text.toLowerCase().match(/\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th|one|two|three|four|five)\b/)
+      if (!m || !/\b(one|pick|choose|that|the)\b/.test(text.toLowerCase())) return false
+      const card = s.cards[ORDINAL[m[1]]]
+      if (!card) return false
+      pick(card).catch(() => { /* every path above sets a visible state */ })
+      return true
+    })
+    return () => setChatBookingHandler(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- one handler for the thread's life; it reads the state through a ref
+  }, [])
+
+  const box = { border: '1px solid rgba(0,0,0,.12)', borderRadius: 10, padding: 12, margin: '8px 0' } as const
+  if (state.phase === 'founder_only') return <div style={box}>{FOUNDER_ONLY}</div>
+  if (state.phase === 'finding') return <div style={box}>Looking for {find.what} in {find.where}…</div>
+  if (state.phase === 'refused') return <div style={box}>{state.words}</div>
+  const cards = state.cards
+  const lookup = state.phase === 'read' ? state.pick : null
+  return (
+    <div style={box}>
+      {cards.length === 0
+        ? <div>Google has no listing for {find.what} in {find.where}.</div>
+        : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{cards.length} {cards.length === 1 ? 'place' : 'places'} for {find.what} in {find.where} — from their Google listings; nobody has been contacted. Tap one, or say “the second one”.</div>}
+      <ol style={{ margin: 0, paddingLeft: 18 }}>
+        {cards.map((c) => (
+          <li key={c.place_id} style={{ marginBottom: 8 }}>
+            <strong>{c.name}</strong>{c.type ? <span style={{ opacity: 0.7 }}> · {c.type}</span> : null}
+            {c.status && c.status !== 'OPERATIONAL' ? <span style={{ color: '#9a1c1c' }}> · {c.status.toLowerCase().replace(/_/g, ' ')}</span> : null}
+            <div style={{ fontSize: 13, opacity: 0.85 }}>{c.address ?? 'no address listed'} · {c.phone ?? 'no phone listed'}{c.website ? ` · ${c.website}` : ''}</div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>from its Google listing</div>
+            <GatedButton label={`Read ${c.name ?? 'this one'}`} onClick={() => { pick(c).catch(() => { /* visible state set inside */ }) }}
+              needs={[state.phase === 'reading' && 'the read in progress to finish']} />
+          </li>
+        ))}
+      </ol>
+      {state.phase === 'reading' && <div>Reading how {state.pick.name} takes bookings…</div>}
+      {state.phase === 'read_refused' && <div>I couldn&rsquo;t read them: {state.words}</div>}
+      {state.phase === 'read' && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontWeight: 600 }}>{state.read.say}</div>
+          <ul style={{ margin: '6px 0', paddingLeft: 18 }}>
+            {state.read.rungs.map((r, i) => (
+              <li key={i}>{RUNG_NAME[r.rung] ?? r.rung}: {r.value} <span style={{ opacity: 0.6 }}>— on {r.source_label}</span>
+                {!r.available && r.why_not ? <div style={{ fontSize: 13, opacity: 0.8 }}>Not available: {r.why_not}</div> : null}</li>
+            ))}
+          </ul>
+          {lookup && <a href={`/booking-helper?book=phone&lookup=${encodeURIComponent(lookup.name ?? '')}&city=${encodeURIComponent(find.where)}&country=${encodeURIComponent(lookup.country ?? find.country ?? '')}`}
+            target="_blank" rel="noopener noreferrer">Book it on the booking page ↗</a>}
+          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>Booking it right here in the chat comes next; nothing has been contacted.</div>
+        </div>
+      )}
+    </div>
+  )
+}

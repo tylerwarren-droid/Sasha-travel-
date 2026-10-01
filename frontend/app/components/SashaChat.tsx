@@ -10,6 +10,8 @@ import type { RichItinerary } from './ItineraryDays'
 import IdeasPanel, { Idea } from './workspace/IdeasPanel'
 import TripPanel from './workspace/TripPanel'
 import YouPanel from './workspace/YouPanel'
+import ChatBooking from './ChatBooking'  // S-66 chat booking, Stage B re-applies
+import { takeChatText } from '@/lib/chat-booking-bus'
 import axios from 'axios'
 
 // `description` is the photographer's free-text Unsplash caption ("Colors", "4:51pm") — never
@@ -184,6 +186,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
   // turn — real options from live web search. Hotel/flight/cab options carry a server-priced
   // `offer_id` (+ amount_usd) so they can be booked & paid through Stripe like the whole trip;
   // options without one (activities, restaurants, fallbacks) keep the external deep-link.
+  const [bookingFind, setBookingFind] = useState<{ what: string; where: string; country?: string } | null>(null)  // S-66 chat booking
   const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number }[] }[]>([])
   // Photos Sasha surfaced, keyed by the index of the assistant message that produced them.
   const [photosByMsg, setPhotosByMsg] = useState<Record<number, Photo[]>>({})
@@ -261,6 +264,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
    * her instead, which is what a person expects: you pressed it, she stops and does it.
    */
   const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string }) => {
+    if (takeChatText(content)) { setMessages(prev => [...prev, { role: 'user', content }]); return }  // S-66 chat booking
     if (!content.trim()) return
     // Verbal stop — "Sasha, stop", "stop stop stop", "be quiet", a bare "wait"/"hold on".
     // In the live demo the guest said "stop" FIVE times in a row while Sasha narrated on;
@@ -370,6 +374,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         force_intent: opts?.intent,              // set when the UI knows the intent (idea build)
       }, { timeout: 60000, headers: apiHeaders() })  // bound the call so a hung backend can't stall the turn
       const { response: sashaResponse, conversation_history, photos: respPhotos, links, hotels: hotelRecs, bookings: bookingCards, itinerary, action, booking_ref, itinerary_id, payment_item, saved_card } = response.data
+      if (response.data.booking_find) setBookingFind(response.data.booking_find)  // S-66 chat booking
       // Replace local messages with server-authoritative history
       if (conversation_history?.length > 0) {
         setMessages(conversation_history)
@@ -720,6 +725,8 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         {/* ── Stays / flights / transfers / activities surfaced this turn (context-driven).
              These belong with the conversation: they're what Sasha just found in answer to
              what was said, so they sit under the newest message rather than in a tab. ── */}
+        {/* S-66 chat booking: repo-only component. CTO zips drop this; Stage B re-applies it. */}
+        {bookingFind && <ChatBooking key={`${bookingFind.what}|${bookingFind.where}`} find={bookingFind} />}
         {(hotels.length > 0 || bookings.length > 0 || bookingLinks.length > 0) && (
           <>
             <div ref={resultsRef} className="lw-when">Found for you</div>

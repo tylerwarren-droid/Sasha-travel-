@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { signedIn } from '@/lib/signed-in'
+import { founderSignedIn } from '@/lib/signed-in'
 
 const SUPABASE_URL = 'https://xlqtveusyfpffaejegiq.supabase.co'
 
@@ -125,8 +125,9 @@ function buildConfig(formData: OnboardingData): Record<string, unknown> {
 
 export async function POST(request: NextRequest) {
   // S-62 sign-in gate (step 0, founder 1 Oct, Sasha 42): this route writes `clients` rows with the service-role key, so
-  // nobody unsigned may reach it. A CTO drop that replaces this file fails the build (scripts/check-outcome-surfaces.mjs).
-  if (!(await signedIn())) {
+  // only the FOUNDER may reach it — a signed-in guest (S-62 step 4) must never upsert a business's row. A CTO drop that
+  // replaces this file fails the build (scripts/check-outcome-surfaces.mjs).
+  if (!(await founderSignedIn())) {
     return Response.json({ error: 'Sign in to save onboarding; nothing was saved', rule: 'sign_in_required' }, { status: 401 })
   }
   let body: { formData: OnboardingData; goLive?: boolean }

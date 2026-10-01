@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
 import { COOKIE, valid } from '@/lib/founder-session'
+import { guest } from '@/lib/guest-session'
 
 /**
  * S-41 · The booking pass-through. The booking page calls THIS (same origin); it checks the founder's session and
@@ -11,9 +12,18 @@ import { COOKIE, valid } from '@/lib/founder-session'
  * routes is never forwarded.
  */
 async function pass(request: Request, ctx: { params: Promise<{ path: string[] }> }): Promise<Response> {
+  // S-62 step 4 · WHO: the founder's session, or a guest verified with Supabase (only while guest sign-in is open).
+  // The backend is told which — the founder by name, a guest by their signed access token, which it verifies again.
   const store = await cookies()
-  if (!valid(store.get(COOKIE)?.value)) {
-    return NextResponse.json({ ok: false, rule: 'founder_session_required', message: 'Sign in as the founder to use the booking page.' }, { status: 401 })
+  let who: Record<string, string>
+  if (valid(store.get(COOKIE)?.value)) {
+    who = { 'x-sasha-session': 'founder' }
+  } else {
+    const g = await guest()
+    if (!g) {
+      return NextResponse.json({ ok: false, rule: 'sign_in_required', message: 'Sign in to book with Sasha.' }, { status: 401 })
+    }
+    who = { authorization: `Bearer ${g.accessToken}` }
   }
   const key = (process.env.SASHA_BOOKING_KEY ?? '').trim()
   if (!key) {
@@ -24,7 +34,7 @@ async function pass(request: Request, ctx: { params: Promise<{ path: string[] }>
     return NextResponse.json({ ok: false, rule: 'path_refused', message: 'not a booking route' }, { status: 400 })
   }
   const url = `${API_URL}/api/booking/${path.map(encodeURIComponent).join('/')}${new URL(request.url).search}`
-  const init: RequestInit = { method: request.method, headers: { 'content-type': 'application/json', 'x-sasha-booking-key': key }, cache: 'no-store' }
+  const init: RequestInit = { method: request.method, headers: { 'content-type': 'application/json', 'x-sasha-booking-key': key, ...who }, cache: 'no-store' }
   if (request.method !== 'GET') init.body = await request.text()
   let r: Response
   try {

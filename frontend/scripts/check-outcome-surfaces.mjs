@@ -125,8 +125,8 @@ function main() {
   // S-62 step 0 · onboarding writes `clients` with the service-role key: the sign-in check must come before any write.
   // A CTO drop replaces this route; a lost gate must FAIL the build, never ship an open write again.
   const onboard = strip(readFileSync(join(ROOT, "app/api/onboarding/save/route.ts"), "utf8"));
-  const gate = onboard.indexOf("if (!(await signedIn()))"), write = onboard.indexOf("rest/v1/clients");
-  if (gate < 0 || write < 0 || gate > write || !onboard.includes("from '@/lib/signed-in'")) {
+  const gate = onboard.indexOf("if (!(await founderSignedIn()))"), write = onboard.indexOf("rest/v1/clients");
+  if (gate < 0 || write < 0 || gate > write || !onboard.includes("import { founderSignedIn } from '@/lib/signed-in'")) {
     console.error("check-outcome-surfaces: app/api/onboarding/save/route.ts writes without the S-62 sign-in gate before it — re-apply it (CLAUDE.md, Stage B).");
     process.exit(1);
   }

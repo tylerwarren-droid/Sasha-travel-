@@ -109,27 +109,40 @@ def sources(read: Mapping[str, Any]) -> List[dict]:
     return out
 
 
+def _intersect(a: List[Tuple[time, time]], b: List[Tuple[time, time]]) -> List[Tuple[time, time]]:
+    out = []
+    for x0, x1 in a:
+        for y0, y1 in b:
+            lo, hi = max(x0, y0), min(x1, y1)
+            if lo < hi:
+                out.append((lo, hi))
+    return sorted(out)
+
+
 def merge(srcs: List[dict]) -> Tuple[Week, List[str]]:
-    """One week from all sources: per day the LATER opening and the EARLIER closing; closed if any source says closed.
-    Returns the week and the disagreements, in plain words, for the record."""
+    """One week from all sources: a time is OPEN only when EVERY source lists it open — so a split day stays split
+    (Calma's 10:00–14:00 and 16:00–20:00: never "open" at 15:00), the later opening and the earlier closing win, and a
+    day any source lists as closed is closed. Returns the week and the disagreements, in plain words."""
     if not srcs:
         return {}, []
-    days = set.intersection(*(set(s["week"]) for s in srcs))
     week: Week = {}
     notes: List[str] = []
     names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    fmt = lambda iv: ", ".join(f"{a:%H:%M}–{b:%H:%M}" for a, b in iv)
     for d in range(7):
-        opens = [s["week"][d][0][0] for s in srcs if d in s["week"]]
-        closes = [s["week"][d][-1][1] for s in srcs if d in s["week"]]
-        if d not in days:
-            if opens:
-                notes.append(f"{names[d]}: one source lists it closed — treated as closed")
+        lists = [s["week"].get(d) for s in srcs]
+        if not any(lists):
             continue
-        o, c = max(opens), min(closes)
-        if len(set(opens)) > 1 or len(set(closes)) > 1:
-            notes.append(f"{names[d]}: sources disagree ({', '.join(f'{a:%H:%M}' for a in opens)} opening) — using {o:%H:%M}–{c:%H:%M}")
-        if o < c:
-            week[d] = [(o, c)]
+        if not all(lists):
+            notes.append(f"{names[d]}: one source lists it closed — treated as closed")
+            continue
+        iv = lists[0]
+        for other in lists[1:]:
+            iv = _intersect(iv, other)
+        if len({tuple(x) for x in lists}) > 1:
+            notes.append(f"{names[d]}: sources disagree ({' / '.join(fmt(x) for x in lists)}) — using {fmt(iv) or 'closed'}")
+        if iv:
+            week[d] = iv
     return week, notes
 
 

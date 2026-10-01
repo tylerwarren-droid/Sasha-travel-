@@ -32,13 +32,31 @@ class Parse(unittest.TestCase):
         self.assertNotIn(6, w)                                         # Sunday: closed
 
 
+class SplitDay(unittest.TestCase):
+    """Calma's listing (Sasha 60): 10:00–14:00 and 16:00–20:00 — closed between, whatever the other source says."""
+    SPLIT = {"kind": "hours", "source_kind": "places", "source_label": "their Google listing",
+             "detail": {"periods": [{"open": {"day": 1, "hour": 10, "minute": 0}, "close": {"day": 1, "hour": 14, "minute": 0}},
+                                    {"open": {"day": 1, "hour": 16, "minute": 0}, "close": {"day": 1, "hour": 20, "minute": 0}}]}}
+
+    def test_a_split_day_stays_split_and_the_gap_is_closed(self):
+        read = {"facts": [SITE, self.SPLIT]}
+        week, _ = H.merge(H.sources(read))
+        self.assertEqual(week[0], [(time(10), time(14)), (time(16), time(20))])
+        at_1500 = datetime(2026, 10, 5, 13, 0, tzinfo=timezone.utc)          # Monday 15:00 in Madrid
+        st = H.status(read, at_1500, "Europe/Madrid")
+        self.assertEqual((st["open_now"], st["opens_at"]), (False, "2026-10-05 16:00"))
+        self.assertEqual(st["call_at"], "2026-10-05T14:10:00+00:00")           # 16:10 Madrid
+        at_1100 = datetime(2026, 10, 5, 9, 0, tzinfo=timezone.utc)
+        self.assertTrue(H.status(read, at_1100, "Europe/Madrid")["open_now"])
+
+
 class Rule(unittest.TestCase):
     def test_site_first_and_the_later_opening_wins(self):
         srcs = H.sources(READ)
         self.assertEqual([s["kind"] for s in srcs], ["site", "places"])
         week, notes = H.merge(srcs)
         self.assertEqual(week[0], [(time(10), time(20))])
-        self.assertIn("Mon: sources disagree (09:00, 10:00 opening) — using 10:00–20:00", notes)
+        self.assertIn("Mon: sources disagree (09:00–20:00 / 10:00–20:00) — using 10:00–20:00", notes)
         self.assertNotIn(5, week)                                      # Saturday: the site does not list it — closed
         self.assertIn("Sat: one source lists it closed — treated as closed", notes)
 

@@ -23,6 +23,9 @@ ENV = "SASHA_BOOKING_KEY"
 EXEMPT = {("GET", "/api/booking/health"), ("POST", "/api/booking/email/inbound"),
           # S-70 · Twilio's webhooks to Sasha's own number: each is Twilio-signed and verified (inbound_phone.signature_ok)
           ("POST", "/api/booking/twilio/sms"), ("POST", "/api/booking/twilio/voice"), ("POST", "/api/booking/twilio/recording")}
+# Sasha 89 · the TEST VENUE is a public web page with a booking form, like any venue's: its page and its form post are
+# open (it books nothing real); its book of submissions is not (GET …/test-venue/submissions needs the key)
+EXEMPT |= {(m, f"/api/booking/test-venue/{v}") for m in ("GET", "POST") for v in ("plain", "consent", "captcha")}
 
 
 async def require_booking_key(request: Request) -> None:

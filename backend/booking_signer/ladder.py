@@ -69,10 +69,11 @@ def choose(read: dict, host_of=lambda u: None) -> dict:
     i, form = first("booking_form")
     ip, plat = first("platform")
     if form:
-        from urllib.parse import urlsplit
-        mapped = (urlsplit(form["source_url"]).hostname or "") in MAPPED_FORM_HOSTS
+        # Sasha 89 · a form Sasha may SEND: our test venue, or a venue the founder approved and mapped (form_rung)
+        from .form_rung import form_map
+        mapped = form_map(form.get("source_url") or form["value"]) is not None
         rungs.append(Rung("form", mapped, i, form["value"], form["source_label"],
-                          None if mapped else "they have a booking form on their site, but I can't fill a form I haven't mapped yet"))
+                          None if mapped else "they have a booking form on their site, but I can't send a form that hasn't been mapped and approved yet"))
     if plat:
         page = SL.platform_page(read)
         if page:

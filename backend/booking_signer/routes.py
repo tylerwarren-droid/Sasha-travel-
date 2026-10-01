@@ -31,7 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import call_routes, contacts, inbound_phone, ladder_routes, optin_page, optins, receipt, reservation as RS, retention, stop
+from . import call_routes, contacts, form_rung, inbound_phone, ladder_routes, optin_page, optins, receipt, reservation as RS, retention, stop
 from . import venue_read as V
 from .account import account_for
 from .gate import require_booking_key
@@ -90,6 +90,7 @@ optin_page.PAGE_STORE = optin_page.PostgresPageStore(STORE)   # S-55 · the Work
 stop.STOP_STORE = stop.PostgresStopStore(STORE)   # S-56 · a venue's stop, on any channel (sql/010)
 contacts.STORE = contacts.PostgresContactStore(STORE)   # S-62 step 5 · a guest's name and mobile (sql/015)
 inbound_phone.STORE = inbound_phone.PostgresInboundStore(STORE)   # S-70 · SMS and voicemail to Sasha's number (sql/016)
+form_rung.STORE = form_rung.PostgresFormStore(STORE)   # Sasha 89 · the form rung, submitting (sql/018)
 
 
 def _now() -> datetime:
@@ -140,6 +141,7 @@ async def health():
         "live_issue_enabled": LIVE_ISSUE_ENABLED,
         "calls": call_routes.status(),
         "sasha_number": inbound_phone.status(),   # S-70
+        "forms": form_rung.forms_status(),   # Sasha 89
         "ladder": ladder_routes.status(),
         # S-64 · the two Stage B hooks in the CTO's conductor: false means a CTO drop removed one — booking-in-chat is off
         "chat_hooks": chat_hooks(),
@@ -497,6 +499,8 @@ router.include_router(contacts.router)
 router.include_router(inbound_phone.router)
 # Sasha 88 · the receipt of each booking
 router.include_router(receipt.router)
+# Sasha 89 · the form rung, submitting — and our own test venue to prove it on
+router.include_router(form_rung.router)
 # S-55 · the Work-with-Sasha page's server half (reached through the frontend's own route, which adds the key)
 router.include_router(optin_page.router)
 

@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import { bookingReq, refusal } from '@/lib/booking-client'
 import { GatedButton } from './GatedButton'
 import { PhoneCall } from './PhoneCall'
+import { FormSend } from './FormSend'
 import { whatsappText } from '@/lib/whatsapp-template'
 
 type Fact = { kind: string; value: string; source_label: string; source_url: string }
@@ -241,12 +242,18 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
             {read.rungs.filter((r) => !r.available && r.why_not).map((r, i) => <li key={i} className="text-xs opacity-70">{r.rung}: {r.why_not}</li>)}
           </ul>
           <div className="mt-3 flex flex-wrap gap-2">
+            {rung('form')?.available && <GatedButton label="Send their booking form" onClick={() => setPick('form')} needs={[]} done={pick === 'form' && 'Chosen'} />}
             {rung('link')?.available && <GatedButton label={`Their ${rung('link')?.value} page`} onClick={() => setPick('link')} needs={[]} done={pick === 'link' && 'Chosen'} />}
             {rung('phone')?.available && <GatedButton label="Phone them" onClick={() => setPick('phone')} needs={[]} done={pick === 'phone' && 'Chosen'} />}
             {rung('email')?.available && <GatedButton label="Email them" onClick={() => setPick('email')} needs={[]} done={pick === 'email' && 'Chosen'} />}
             {wa?.available && <GatedButton label="WhatsApp (you send it)" onClick={() => setPick('whatsapp')} needs={[]} done={pick === 'whatsapp' && 'Chosen'} />}
           </div>
         </div>
+      )}
+
+      {read && pick === 'form' && (
+        // Sasha 89 · the form rung, submitting: every field read back, sent once after the yes
+        <FormSend key={read.read_id} readId={read.read_id} venueLabel={read.venue} defaults={{ name: linked?.name || defaults.name, email: defaults.email, phone: defaults.phone }} />
       )}
 
       {read && pick === 'phone' && (

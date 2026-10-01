@@ -132,7 +132,15 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
         "hotels": [], "bookings": [card], "itinerary": None, "action": None, "booking_ref": None,
         "itinerary_id": None, "payment_item": None, "saved_card": None,
         "messages": history + [{"role": "user", "content": message}, {"role": "assistant", "content": response}],
+        # S-64 step 11 · the same message as the parts of reservation/1 it states, and what is still to ask — carried
+        # alongside; the Psi link above is unchanged
+        "reservation_draft": _draft(message, now),
     }
+
+
+def _draft(message: str, now: Optional[datetime]) -> dict:
+    from .chat_request import draft
+    return draft(message, now, lang="pt")
 
 
 __all__ = ["booking_handoff", "is_psi_booking", "plain_date", "plain_time", "plain_party", "PSI_SLOTS"]

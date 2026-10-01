@@ -29,6 +29,21 @@ export async function bookingReq(path: string, body?: unknown, timeoutMs = 30000
   return { ok: r.ok, status: r.status, json }
 }
 
+/** S-62 step 5 · the guest's saved name and mobile (GET / PUT / DELETE /contact), with the consent they're saved under */
+export type Consent = { version: string; text: string; sha256: string; privacy: string }
+export type Contact = { name: string; mobile_e164: string; consent_version: string; consent_at: string }
+export async function contactReq(method: 'GET' | 'PUT' | 'DELETE', body?: unknown): Promise<Res> {
+  let r: Response
+  try {
+    r = await fetch(bookingUrl('/api/booking/contact'), { method, headers: bookingHeaders(), ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+  } catch (e) {
+    throw new Error(`could not reach Sasha's server (${(e as Error).message})`)
+  }
+  let json: Record<string, unknown> = {}
+  try { json = await r.json() } catch { /* reported by its status */ }
+  return { ok: r.ok, status: r.status, json }
+}
+
 /** "rule — message", as the server said it */
 export const refusal = (j: Record<string, unknown>, status: number) =>
   `${typeof j.rule === 'string' ? j.rule : `HTTP ${status}`}${typeof j.message === 'string' ? ` — ${j.message}` : ''}`

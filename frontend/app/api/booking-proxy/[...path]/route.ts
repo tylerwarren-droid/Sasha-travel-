@@ -52,3 +52,5 @@ async function pass(request: Request, ctx: { params: Promise<{ path: string[] }>
 
 export const GET = pass
 export const POST = pass
+export const PUT = pass      // S-62 step 5 · the guest's saved details
+export const DELETE = pass

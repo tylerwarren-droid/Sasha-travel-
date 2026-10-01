@@ -22,13 +22,14 @@ import { setChatBookingHandler, takeTypedYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 import ChatBookingCall from './ChatBookingCall'
 
-type Find = { what: string; where: string; country?: string; draft?: unknown }
+type Find = { what: string; where: string; country?: string; near?: string; draft?: unknown }
 type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null }
 type State =
   | { phase: 'finding' } | { phase: 'founder_only' } | { phase: 'refused'; words: string }
-  | { phase: 'found'; cards: Candidate[] } | { phase: 'reading'; cards: Candidate[]; pick: Candidate }
+  | { phase: 'found'; cards: Candidate[]; near?: Near } | { phase: 'reading'; cards: Candidate[]; pick: Candidate }
   | { phase: 'read'; cards: Candidate[]; pick: Candidate; read: Read } | { phase: 'read_refused'; cards: Candidate[]; words: string }
 
+type Near = { asked: string; found: boolean; why?: string }
 const RUNG_NAME: Record<string, string> = { form: 'their booking form', link: 'their booking page', platform: 'a booking platform',
   phone: 'a phone call', email: 'an email', whatsapp: 'WhatsApp (you send it)' }
 const ORDINAL: Record<string, number> = { first: 0, '1st': 0, one: 0, second: 1, '2nd': 1, two: 1, third: 2, '3rd': 2, three: 2,
@@ -44,7 +45,7 @@ export default function ChatBooking({ find }: { find: Find }) {
     ;(async () => {
       setState({ phase: 'finding' })
       try {
-        const r = await findVenues(find.what, find.where, find.country)
+        const r = await findVenues(find.what, find.where, find.country, find.near)
         if (off) return
         if (r.status === 401) { setState({ phase: 'founder_only' }); return }
         if (!r.ok) {
@@ -55,13 +56,13 @@ export default function ChatBooking({ find }: { find: Find }) {
         }
         // S-68 step 2 · the server searches 20 and says how many to show; until the ranking (step 6) they stay in Google's order
         const show = typeof r.json.show === 'number' ? r.json.show : 5
-        setState({ phase: 'found', cards: ((r.json.candidates ?? []) as Candidate[]).slice(0, show) })
+        setState({ phase: 'found', cards: ((r.json.candidates ?? []) as Candidate[]).slice(0, show), near: (r.json.near ?? undefined) as Near | undefined })
       } catch (e) {
         if (!off) setState({ phase: 'refused', words: `I couldn't search just now: ${(e as Error).message}.` })
       }
     })()
     return () => { off = true }
-  }, [find.what, find.where, find.country])
+  }, [find.what, find.where, find.country, find.near])
 
   async function pick(c: Candidate) {
     const cards = 'cards' in stateRef.current ? stateRef.current.cards : []
@@ -105,12 +106,14 @@ export default function ChatBooking({ find }: { find: Find }) {
       {cards.length === 0
         ? <div>Google has no listing for {find.what} in {find.where}.</div>
         : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{cards.length} {cards.length === 1 ? 'place' : 'places'} for {find.what} in {find.where} — from Google Maps; nobody has been contacted. Tap one, or say “the second one”.</div>}
+      {state.phase === 'found' && state.near && !state.near.found && <div style={{ fontSize: 13, marginBottom: 6 }}>No distances: {state.near.why}</div>}
       <ol style={{ margin: 0, paddingLeft: 18 }}>
         {cards.map((c) => (
           <li key={c.place_id} style={{ marginBottom: 8 }}>
             <strong>{c.name}</strong>{c.type ? <span style={{ opacity: 0.7 }}> · {c.type}</span> : null}
             {c.status && c.status !== 'OPERATIONAL' ? <span style={{ color: '#9a1c1c' }}> · {c.status.toLowerCase().replace(/_/g, ' ')}</span> : null}
             <div style={{ fontSize: 13, opacity: 0.85 }}>{c.address ?? 'no address listed'} · {c.phone ?? 'no phone listed'}{c.website ? ` · ${c.website}` : ''}</div>
+            {c.distance ? <div style={{ fontSize: 13 }}>{c.distance}{state.phase === 'found' && state.near ? ` from ${state.near.asked}` : ''}</div> : null}
             <div style={{ fontSize: 12, opacity: 0.6 }}>Google Maps</div>
             <GatedButton label={`Read ${c.name ?? 'this one'}`} onClick={() => { pick(c).catch(() => { /* visible state set inside */ }) }}
               needs={[state.phase === 'reading' && 'the read in progress to finish']} />

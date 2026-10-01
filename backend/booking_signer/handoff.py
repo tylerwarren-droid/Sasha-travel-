@@ -105,20 +105,27 @@ _WHERE_END = re.compile(r"\s+(?:for|on|at|tomorrow|today|tonight|this|next|by|pl
 
 
 def find_request(message: str) -> Optional[dict]:
-    """{what, where, country?} when the message asks for a kind of place in a place — else None. Nothing guessed:
+    """{what, where, country?, near?} when the message asks for a kind of place in a place — else None. Nothing guessed:
     a country is taken only when written as a two-letter code ("Nairobi, KE")."""
     m = _FIND.search(message or "")
     if not m:
         return None
     what = " ".join(m["what"].split())
-    where = _WHERE_END.sub("", m["where"]).strip(" ,")
+    raw = m["where"]
+    # S-68 step 3 · "… in Madrid near Hotel Urban" / "near my hotel": what the distance is measured from, as said
+    nm = re.search(r"[\s,]+(?:near|close to)\s+(?P<near>[^?.!;]{2,120})$", raw, re.I)
+    near = None
+    if nm:
+        raw = raw[:nm.start()]
+        near = re.sub(r"\s+(?:for|on|at|tomorrow|today|tonight|this|next|please|from)\b.*$", "", nm["near"], flags=re.I).strip(" ,") or None
+    where = _WHERE_END.sub("", raw).strip(" ,")
     country = None
     cm = re.fullmatch(r"(.+?),\s*([A-Za-z]{2})", where)
     if cm:
         where, country = cm[1].strip(), cm[2].upper()
     if len(what) < 2 or len(where) < 2:
         return None
-    return {"what": what, "where": where, **({"country": country} if country else {})}
+    return {"what": what, "where": where, **({"country": country} if country else {}), **({"near": near} if near else {})}
 
 
 def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Optional[datetime] = None) -> Optional[dict]:

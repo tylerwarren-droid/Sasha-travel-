@@ -143,7 +143,8 @@ async def find_venues(request: Request):
     if body is None:
         return _refuse(400, "find_malformed", "send {what, where, country?} as a JSON object")
     try:
-        return await V.find_venues(HTTP, what=body.get("what"), where=body.get("where"), country=body.get("country"), now=NOW())
+        return await V.find_venues(HTTP, what=body.get("what"), where=body.get("where"), country=body.get("country"), now=NOW(),
+                                   near=body.get("near"))   # S-68 step 3
     except V.ReadRefused as e:
         return _refuse(503 if e.rule in ("places_not_configured", "places_unreachable", "places_refused") else 422, e.rule, str(e))
 

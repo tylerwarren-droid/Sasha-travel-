@@ -140,3 +140,65 @@ class Pick(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Near(unittest.TestCase):
+    """S-68 step 3 · straight-line distance from the place the guest named — measured per search, never stored."""
+
+    def setUp(self):
+        self.env = mock.patch.dict(os.environ, {"GOOGLE_PLACES_API_KEY": "test-key"})
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+
+    class Two(Http):
+        """The venue search and the "near" lookup, told apart by their field masks."""
+        def __init__(self, search, near):
+            super().__init__(search=search)
+            self.near = near
+
+        async def __call__(self, method, url, headers, json=None):
+            self.requests.append((method, url, headers, json))
+            return self.near if headers["X-Goog-FieldMask"] == V.NEAR_FIELDS else self.search
+
+    SOL = {"latitude": 40.41694, "longitude": -3.70361}             # Puerta del Sol
+    def test_haversine_and_its_words(self):
+        retiro = {"lat": 40.41528, "lng": -3.68444}                     # El Retiro: ~1.6 km east
+        m = V.haversine_m({"lat": 40.41694, "lng": -3.70361}, retiro)
+        self.assertTrue(1600 < m < 1650, m)
+        self.assertEqual(V.distance_words(m), "1.6 km away (straight line)")
+        self.assertEqual(V.distance_words(347), "350 m away (straight line)")
+        self.assertEqual(V.distance_words(3), "10 m away (straight line)")
+        self.assertEqual(V.distance_words(None), "distance not known")
+
+    def test_distances_from_the_place_named(self):
+        near = listing(9, location=self.SOL)
+        a = listing(1, location={"latitude": 40.41528, "longitude": -3.68444})
+        b = listing(2)                                                    # no location in its listing
+        http = self.Two(R(200, {"places": [a, b]}), R(200, {"places": [near]}))
+        out = run(V.find_venues(http, what="tattoo studio", where="Madrid", country="ES", now=NOW, near="Hotel Urban"))
+        self.assertEqual(out["near"], {"asked": "Hotel Urban", "found": True})
+        x, y = out["candidates"]
+        self.assertEqual(x["distance"], "1.6 km away (straight line)")
+        self.assertEqual((y["distance_m"], y["distance"]), (None, "distance not known"))
+        lookup = [r for r in http.requests if r[2]["X-Goog-FieldMask"] == V.NEAR_FIELDS][0]
+        self.assertEqual(lookup[3], {"textQuery": "Hotel Urban, Madrid", "maxResultCount": 1, "regionCode": "ES"})
+
+    def test_my_hotel_is_asked_for_never_guessed(self):
+        http = self.Two(R(200, {"places": [listing(1)]}), R(200, {"places": [listing(9, location=self.SOL)]}))
+        out = run(V.find_venues(http, what="tattoo studio", where="Madrid", country="ES", now=NOW, near="my hotel"))
+        self.assertFalse(out["near"]["found"])
+        self.assertIn("which hotel?", out["near"]["why"])
+        self.assertEqual(len(http.requests), 1)                           # no lookup for a place not named
+        c = out["candidates"][0]
+        self.assertEqual((c["distance_m"], c["distance"]), (None, None))
+
+    def test_a_place_google_cannot_find_gives_no_distances_and_says_so(self):
+        http = self.Two(R(200, {"places": [listing(1, location=self.SOL)]}), R(200, {}))
+        out = run(V.find_venues(http, what="tattoo studio", where="Madrid", country="ES", now=NOW, near="Hotel Nowhere"))
+        self.assertEqual(out["near"], {"asked": "Hotel Nowhere", "found": False, "why": "Google Maps has no place matching 'Hotel Nowhere' in Madrid"})
+        self.assertIsNone(out["candidates"][0]["distance_m"])
+        with self.assertRaises(V.ReadRefused) as e:
+            run(V.find_venues(http, what="tattoo studio", where="Madrid", country="ES", now=NOW, near="x"))
+        self.assertEqual(e.exception.rule, "near_invalid")

@@ -490,7 +490,56 @@ def _ranking_facts(pl: dict) -> dict:
     }
 
 
-async def find_venues(http: Http, *, what: str, where: str, country: Optional[str], now: datetime) -> dict:
+#: S-68 step 3 · where "near" is: one Text Search for the place the guest named, its location only (the Pro SKU)
+NEAR_FIELDS = "places.id,places.location"
+
+
+def haversine_m(a: dict, b: dict) -> float:
+    """Straight-line distance in metres between two {lat, lng}: never a walking or driving distance."""
+    from math import asin, cos, radians, sin, sqrt
+    la1, lo1, la2, lo2 = map(radians, (a["lat"], a["lng"], b["lat"], b["lng"]))
+    h = sin((la2 - la1) / 2) ** 2 + cos(la1) * cos(la2) * sin((lo2 - lo1) / 2) ** 2
+    return 2 * 6_371_000 * asin(sqrt(h))
+
+
+def distance_words(m: Optional[float]) -> str:
+    """"350 m away (straight line)" · "1.2 km away (straight line)" · "distance not known" — never "nearby"."""
+    if m is None:
+        return "distance not known"
+    if m < 1000:
+        return f"{max(10, int(round(m / 10.0)) * 10)} m away (straight line)"
+    return f"{m / 1000:.1f} km away (straight line)"
+
+
+#: "near my hotel" names no place: the guest is asked for it, never guessed (no itinerary holds a hotel today)
+_NEAR_UNNAMED = re.compile(r"(?:my|our|the)\s+(?:hotel|apartment|airbnb|flat|place|accommodation)", re.I)
+
+
+async def locate(http: Http, key: str, near: str, where: str, country: Optional[str]) -> dict:
+    """The place the guest said ("Hotel Urban", "Calle Mayor 10") → {asked, found, location?, place_id?, why?}.
+    Read for THIS search only, never stored (the Maps terms: no caching)."""
+    out: Dict[str, Any] = {"asked": near, "found": False}
+    if _NEAR_UNNAMED.fullmatch(near.strip()):
+        out["why"] = "which hotel? — tell me its name or address and I'll measure from it"
+        return out
+    body = {"textQuery": f"{near.strip()}, {where.strip()}", "maxResultCount": 1, **({"regionCode": country} if country else {})}
+    try:
+        r = await http("POST", PLACES_URL, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": NEAR_FIELDS,
+                                                    "content-type": "application/json"}, json=body)
+        data = r.json()
+    except Exception as e:
+        out["why"] = f"I couldn't look up {near!r}: {type(e).__name__}"
+        return out
+    pl = ((data.get("places") or [None])[0] if isinstance(data, dict) and r.status_code == 200 else None) or {}
+    loc = _ranking_facts(pl)["location"] if isinstance(pl, dict) else None
+    if not loc:
+        out["why"] = f"Google Maps has no place matching {near!r} in {where}"
+        return out
+    return {**out, "found": True, "location": loc, "place_id": pl.get("id")}
+
+
+async def find_venues(http: Http, *, what: str, where: str, country: Optional[str], now: datetime,
+                      near: Optional[str] = None) -> dict:
     """S-65 · "Find venues": a kind of place in a place ("tattoo studio", "Nairobi, KE") → up to twenty candidates (S-68; the chat shows `show` of them), each
     with what its Google listing says. Search only: nothing is contacted, nothing is read from their sites until one is
     picked, and then it is the existing venue read on THAT listing."""
@@ -504,6 +553,8 @@ async def find_venues(http: Http, *, what: str, where: str, country: Optional[st
     key = places_key()
     if not key:
         raise FindRefused("places_not_configured", "GOOGLE_PLACES_API_KEY is not set, so there is nothing to search with")
+    if near is not None and (not isinstance(near, str) or not 2 <= len(near.strip()) <= 120):
+        raise FindRefused("near_invalid", "near is 2–120 characters (a hotel's name, or an address)")
     body = {"textQuery": f"{what.strip()} in {where.strip()}", "maxResultCount": FIND_MAX, **({"regionCode": country} if country else {})}
     try:
         r = await http("POST", PLACES_URL, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": FIND_FIELDS,
@@ -524,7 +575,14 @@ async def find_venues(http: Http, *, what: str, where: str, country: Optional[st
                     "country": c, "phone": (to_e164(raw, c) if raw else None) or raw, "website": pl.get("websiteUri"),
                     "type": (pl.get("primaryTypeDisplayName") or {}).get("text"), "status": pl.get("businessStatus"),
                     "listing_url": f"https://www.google.com/maps/place/?q=place_id:{pl['id']}", **_ranking_facts(pl)})
+    origin = await locate(http, key, near, where, country) if near else None
+    if origin is not None:   # S-68 step 3 · straight-line distance from the place the guest named
+        for c in out:
+            m = haversine_m(origin["location"], c["location"]) if origin["found"] and c["location"] else None
+            c["distance_m"] = int(round(m)) if m is not None else None
+            c["distance"] = distance_words(m) if origin["found"] else None
     return {"query": body["textQuery"], "candidates": out, "show": SHOW_MAX,
+            **({"near": {k: origin[k] for k in ("asked", "found", "why") if k in origin}} if origin is not None else {}),
             "source": {"url": PLACES_URL, "query": body["textQuery"], "result": f"HTTP 200 — {len(out)} listing(s)",
                        "sha256": sha, "fetched_at": now.isoformat()}}
 

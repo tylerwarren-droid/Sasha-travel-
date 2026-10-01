@@ -47,7 +47,11 @@ class TheTurn(unittest.TestCase):
                         ("book a massage in Madrid for 2 on Friday", {"what": "massage", "where": "Madrid"}),
                         ("Can you reserve a kayak tour near Lisbon?", {"what": "kayak tour", "where": "Lisbon"}),
                         ("find a tattoo studio in Nairobi, KE", {"what": "tattoo studio", "where": "Nairobi", "country": "KE"}),
-                        ("look for a restaurant in Hanoi tonight", {"what": "restaurant", "where": "Hanoi"})]:
+                        ("look for a restaurant in Hanoi tonight", {"what": "restaurant", "where": "Hanoi"}),
+                        # S-68 step 3 · what the distance is measured from, as said — "my hotel" is asked about later
+                        ("find a tattoo parlour in Madrid near my hotel", {"what": "tattoo parlour", "where": "Madrid", "near": "my hotel"}),
+                        ("find a tattoo studio in Madrid, near Hotel Urban for Tuesday", {"what": "tattoo studio", "where": "Madrid", "near": "Hotel Urban"}),
+                        ("find a cafe in Madrid close to Calle Mayor 10", {"what": "cafe", "where": "Madrid", "near": "Calle Mayor 10"})]:
             t = booking_handoff(m, [], NOW)
             self.assertEqual(t["booking_find"], want, m)
             self.assertIn("nobody is contacted by looking", t["response"])

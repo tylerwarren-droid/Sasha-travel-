@@ -501,6 +501,26 @@ class LadderRoutes:
         self.assertEqual((r.status_code, r.json()["rule"]), (503, "storage_unreachable"))
         self.assertIn("could not be checked, so nothing was sent", r.json()["message"])
 
+    def test_s64_an_asking_call_from_the_object_reads_back_and_never_books(self):
+        v = self.read()
+        obj = {"schema": "reservation/1", "flow": "availability", "who": {"name": "Anna Johnson"},
+               "what": {"activity": "dinner for a group", "activity_venue_lang": "una cena de grupo", "category": "restaurant"},
+               "where": {}, "when": {"mode": "venue_proposes"}, "how_many": {"count": 8, "unit": "people"}}
+        r = self.c.post("/api/booking/calls", json={"reservation": obj, "read_id": v["read_id"]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["purpose"], "availability")
+        lines = r.json()["read_back"]["lines"]
+        self.assertEqual(lines[0], "I'll phone La Contra, +34915001122 — the number on their website, lacontra.test.")
+        self.assertIn("para preguntar cuándo tendrían hueco para una cena de grupo, para 8 personas", lines[1])
+        self.assertIn("I won't book anything", lines[2])
+        # the object cannot carry its own number, account or venue: the read's and the caller's are used
+        bad = self.c.post("/api/booking/calls", json={"reservation": obj})       # no read: no venue, no number, nothing built
+        self.assertEqual((bad.status_code, bad.json()["rule"]), (422, "venue_not_callable"))
+        test_line = self.c.post("/api/booking/calls", json={"reservation": obj, "venue": "test-line"})
+        self.assertEqual(test_line.json()["rule"], "read_required")
+        book = self.c.post("/api/booking/calls", json={"reservation": {**obj, "flow": "book"}, "read_id": v["read_id"]})
+        self.assertEqual(book.json()["rule"], "when_invalid")
+
     def test_the_email_rung_end_to_end(self):
         v = self.read()
         prep = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"})

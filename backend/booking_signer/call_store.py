@@ -180,8 +180,9 @@ class PostgresCallStore:
                         tid = await conn.fetchval("insert into trips (owner_id, title) values ($1, $2) returning id", acct, BOOKINGS_TRIP_TITLE)
                 item_id = await conn.fetchval(
                     "insert into trip_items (trip_id, type, status, provider_name, date_time, local_timezone, party_size) "
-                    "values ($1, 'restaurant', 'pending', $2, ($3::date + $4::time) at time zone $5, $5, $6) returning id",
-                    tid, row["venue_name"], row["local_date"], row["local_time"], row["local_timezone"], row["party_size"])
+                    "values ($1, $7, 'pending', $2, ($3::date + $4::time) at time zone $5, $5, $6) returning id",
+                    tid, row["venue_name"], row["local_date"], row["local_time"], row["local_timezone"], row["party_size"],
+                    row.get("type") or "restaurant")   # S-64 · the object's category; no time on an asking call
                 await conn.execute(
                     "insert into booking_calls (call_id, account_id, trip_item_id, venue_key, dialled_number, language, "
                     "guest_name, guest_phone, brief, brief_sha256, read_back_lines, read_back_sha256, status, created_at) "

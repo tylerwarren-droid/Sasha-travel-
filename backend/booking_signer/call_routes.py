@@ -27,6 +27,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from . import calls as C
+from . import render as R
 from . import reservation as RS
 from . import ladder_routes
 from . import stop as S
@@ -192,6 +193,8 @@ async def prepare(request: Request):
     if refused:
         return refused
     now = NOW()
+    if body.get("reservation") is not None:
+        return await _prepare_from_object(account, venue, body, now)
     try:
         p = C.parse_call_particulars(body)
         built = C.build_call(venue, p, now)
@@ -220,6 +223,49 @@ async def prepare(request: Request):
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
     return {"call_id": row["call_id"], "trip_item_id": item,
+            "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
+
+
+async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now):
+    """S-64 step 9 · a call from a reservation/1 object: a booking at a set time, or an ASKING call (quote-first,
+    "when do you have space"). The venue and its number are still the ones READ (read_id), never the object's; the
+    account is the caller's own, never the object's."""
+    if not body.get("read_id"):
+        return _refuse(422, "read_required", "a call from a reservation needs the venue read (read_id) its number comes from")
+    extra = set(body) - {"reservation", "read_id", "fact_index", "trip_id"}
+    if extra:
+        return _refuse(422, "call_malformed", f"a call from a reservation takes only the object and the read; not {sorted(extra)}")
+    obj = body["reservation"] if isinstance(body["reservation"], dict) else {}
+    obj = {**obj, "who": {**(obj.get("who") or {}), "account_id": account},
+           "where": {**(obj.get("where") or {}), "read_id": str(body["read_id"]), "venue_ids": list(venue.venue_ids or ()),
+                     "venue_name": venue.name, "timezone": venue.timezone}}
+    try:
+        o = RS.validate(obj)
+        built = R.call_for(o, venue, now, C.number_of(venue))
+    except RS.ReservationRefused as e:
+        return _refuse(422, e.rule, str(e).split(": ", 1)[-1])
+    except C.CallRefused as e:
+        return _refuse(422, e.rule, str(e))
+    cols = RS.columns(o)
+    row = {
+        "request": o,
+        "call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key,
+        "dialled_number": built["brief"]["number"], "language": built["brief"]["language"],
+        "guest_name": o["who"]["name"], "guest_phone": (o["who"].get("contact") or {}).get("mobile_e164"),
+        "brief": built["brief"], "brief_sha256": built["brief_sha256"],
+        "read_back_lines": built["read_back_lines"], "read_back_sha256": built["read_back_sha256"],
+        "created_at": now, "type": o["what"]["category"],
+        "venue_name": venue.name, "local_date": cols.get("local_date"), "local_time": cols.get("local_time"),
+        "local_timezone": venue.timezone, "party_size": cols.get("party_size"),
+    }
+    trip_id = body.get("trip_id")
+    try:
+        item = await CALL_STORE.put_call(row, trip_id if isinstance(trip_id, str) and trip_id else None)
+    except UnknownTrip:
+        return _refuse(404, "trip_unknown", "no trip with that id belongs to this account; nothing was recorded")
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    return {"call_id": row["call_id"], "trip_item_id": item, "purpose": built["brief"]["purpose"],
             "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
 
 

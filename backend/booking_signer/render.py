@@ -315,3 +315,125 @@ def whatsapp(o: Mapping[str, Any], country: Optional[str]) -> str:
         count = _count_noun(code, o) if code in _UNITS else str(o["how_many"]["count"])
         t = t.replace(_WA_TABLE[code], f"{what} ({count})", 1)
     return t.replace("{who}", who).replace("{n}", str(o["how_many"]["count"])).replace("{date}", _wa_date(code, on)).replace("{time}", at.strftime("%H:%M"))
+
+
+# ── S-64 step 9 · the ASKING flows: quote-first and "when do you have space" ───────────────────────────────────────
+#
+# Neither books anything. The opener discloses first (S-52) and asks; the agent writes down every price and time as
+# said and repeats each once; there is NO closing recap (no booking is made — the recap belongs to a booking). Whatever
+# the venue offers is read as `quoted` / `proposed` (step 8) and comes back to the guest: taking it is a NEW `book`
+# request, with a new read-back and a new yes. Photos are not sent by phone; on email they wait for an asset store.
+
+_ASK = {
+    "en": ("Hello, this is {d}, calling {party} to ask {ask} {act}, {count}{when}. Could you tell me?",
+           "what it would cost and when you could do", "when you would have space for"),
+    "es": ("Hola, soy {d}, y llamo {party} para preguntar {ask} {act}, {count}{when}. ¿Me lo podrían decir?",
+           "cuánto costaría y cuándo podrían hacer", "cuándo tendrían hueco para"),
+    "pt": ("Olá, fala a {d}, a ligar {party} para perguntar {ask} {act}, {count}{when}. Pode dizer-me?",
+           "quanto custaria e quando poderiam fazer", "quando teriam disponibilidade para"),
+    "fr": ("Bonjour, ici {d}. J'appelle {party} pour savoir {ask} {act}, {count}{when}. Pourriez-vous me le dire ?",
+           "combien coûterait et quand vous pourriez faire", "quand vous auriez de la place pour"),
+    "de": ("Hallo, hier ist {d}. Ich rufe {party} an und möchte wissen, {ask} {act}, {count}{when}. Können Sie mir das sagen?",
+           "was es kosten würde und wann Sie Zeit hätten für", "wann Sie Platz hätten für"),
+    "it": ("Buongiorno, sono {d}. Chiamo {party} per sapere {ask} {act}, {count}{when}. Me lo potrebbe dire?",
+           "quanto costerebbe e quando potreste fare", "quando avreste posto per"),
+}
+
+
+def ask_opening(lang: C.Lang, o: Mapping[str, Any], today: date) -> str:
+    from .wordings import DISCLOSURE
+    code = _code(lang)
+    frame, quote_ask, space_ask = _ASK[code]
+    ask = quote_ask if o["flow"] == "quote_first" else space_ask
+    when = ""
+    if o["when"]["mode"] != "venue_proposes":
+        w, at = spoken_when(lang, o, today)
+        when = f" {w} {at}".rstrip()
+    party = party_of(lang, o)
+    s = frame.format(d=DISCLOSURE.get(code, DISCLOSURE["en"]), party=party, ask=ask, act=activity_phrase(lang, o),
+                     count=spoken_count(lang, o), when=when)
+    return " ".join(s.split())
+
+
+def ask_instructions(lang: C.Lang, o: Mapping[str, Any], first: str, check: str) -> str:
+    phone = (o["who"].get("contact") or {}).get("mobile_e164")
+    contact = (f"If — and only if — they ask for a contact number, give {' '.join(phone)} (the guest's own number). "
+               if phone else "You have no contact number to give. If they ask for one, say the guest will confirm directly. ")
+    quote = o["flow"] == "quote_first"
+    spec = o["what"].get("spec")
+    return (
+        f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning a venue to ASK — not to book — "
+        f"{'what it would cost and ' if quote else ''}when they could do {o['what']['activity']} ({o['what']['activity_venue_lang']}), "
+        f"{o['how_many']['count']} {o['how_many']['unit']}, for {o['who']['name']}. Speak {lang.label} only. "
+        f"You already said: \"{first}\" "
+        + (f"If they ask what exactly: {spec}. " if spec else "")
+        + "If they ask whether you are a person or a machine: you are an AI concierge. Never claim to be the guest or a human. "
+        "RULES YOU MUST NEVER BREAK: "
+        "Do NOT book anything and do not hold a slot, even if they offer to. "
+        "Never agree to a deposit, a fee or a card. You have no card and no payment details. "
+        f"If they want to book now or ask for any payment, say exactly: \"{check}\" "
+        f"{contact}"
+        "Do not give any email address or any other personal detail. "
+        f"Write down every {'price and every ' if quote else ''}time or day they offer, exactly as they say it, and repeat each back once. "
+        "Then thank them and end the call — the guest decides, and a booking is a separate call. "
+        "If they say no or that they cannot help, thank them and end the call. "
+        f"If they ask not to be contacted again, say exactly \"{C._ack(lang)}\" and end the call. "
+        "Keep it short and polite. Do not leave a voicemail."
+    )
+
+
+def ask_read_back(lang: C.Lang, o: Mapping[str, Any], venue_name: str, number: str, source: Optional[str], today: date) -> List[str]:
+    en = C.LANGUAGES["en"]
+    quote = o["flow"] == "quote_first"
+    phone = (o["who"].get("contact") or {}).get("mobile_e164")
+    first = ask_opening(lang, o, today)
+    oe = {**o, "what": {**o["what"], "activity_venue_lang": o["what"]["activity"]}}
+    lines = [
+        f"I'll phone {venue_name}, {number}" + (f" — the number on {source}." if source else "."),
+        f"I'll say: \"{first}\"" + ("" if lang.code == "en" else f" (in {lang.label}: {ask_opening(en, oe, today)})"),
+        f"I'll ask {'what it would cost and ' if quote else ''}when they could do it. I won't book anything, hold a slot, or agree to a deposit, a fee or a card.",
+    ]
+    if o["what"].get("photos"):
+        lines.append("Your photos are not sent on a call — only the description.")
+    lines += [
+        (f"If they ask for a contact number, I'll give yours, {phone}." if phone
+         else "I'll give them no contact number; if they need one, I'll say you'll confirm directly."),
+        f"Whatever they offer comes back to you word for word; booking it is a new request and a new yes. Shall I call them now?",
+    ]
+    return lines
+
+
+def call_for(o: Mapping[str, Any], venue: C.CallVenue, now: datetime, number: str) -> dict:
+    """S-64 step 9 · the call — brief, read-back and both hashes — for ANY object a call can carry out.
+    A booking at a set time: call_brief + call_read_back (a table: today's, byte for byte). Asking: the flows above."""
+    from zoneinfo import ZoneInfo
+    o = RS.validate(o)
+    lang = C.LANGUAGES[venue.language]
+    today = now.astimezone(ZoneInfo(venue.timezone)).date()
+    if o["flow"] == "book":
+        brief = call_brief(o, venue, today, number)
+        lines = call_read_back(lang, o, venue.name, number, venue.source, today)
+    elif o["flow"] in RS.ASKING:
+        first, check = ask_opening(lang, o, today), C.check_sentence(lang, C.CallParticulars(
+            on=today, at=time(12, 0), party=1, name=o["who"]["name"], phone=None))
+        task = ask_instructions(lang, o, first, check)
+        if len(task) > 2000:
+            raise RS.ReservationRefused("brief_too_long", "the call's instructions exceed Bland's 2,000 characters")
+        w = o["when"]
+        on_at = w.get("at", "T").split("T")
+        brief = {
+            "purpose": o["flow"], "timezone": venue.timezone, "reference": None,
+            "venue_key": venue.key, "number": number, "language": lang.code,
+            "recap": None,   # ⛔ no booking is made on an asking call, so there is no closing recap
+            "first_sentence": first, "task": task, "check_sentence": check,
+            "party": o["how_many"]["count"], "date": on_at[0] or None, "time": on_at[1] or None, "name": o["who"]["name"],
+            "phone": (o["who"].get("contact") or {}).get("mobile_e164"),
+            "from": C.sasha_number(), "number_source": venue.source, "venue_name": venue.name,
+            "venue_ids": list(venue.venue_ids) if venue.venue_ids else None,
+            "mode": w["mode"],
+        }
+        lines = ask_read_back(lang, o, venue.name, number, venue.source, today)
+    else:
+        raise RS.ReservationRefused("flow_not_built", "a cancellation is prepared from the booking call itself (S-47)")
+    return {"brief": brief, "brief_sha256": C._sha256hex(C._canonical(brief)),
+            "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)), "local_timezone": venue.timezone}

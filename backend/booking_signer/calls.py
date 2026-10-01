@@ -674,6 +674,8 @@ async def read_call(details: Mapping[str, Any], reader: Reader, purpose: str = "
     reading, quote = parsed.get("reading"), parsed.get("quote")
     if reading not in ("yes", "no", "unclear"):
         reading = "unclear"
+    if purpose in ASKING and reading == "yes":
+        reading = "unclear"   # S-64 step 9 · an asking call is never a booking: a "yes" there is not a yes to anything
     if reading in ("yes", "no") and not _quoted_by_venue(quote, turns):
         return CallReading(state="answered", outcome="unclear", venue_words=words, raised=raised, read_by=READ_BY,
                            why=f"the reading said {reading} but could not quote the venue saying it; here are their words", **base)
@@ -712,6 +714,7 @@ async def read_call(details: Mapping[str, Any], reader: Reader, purpose: str = "
                             "unclear": "their answer was neither a clear yes nor a clear no"}[reading], **base)
 
 
+ASKING = ("quote_first", "availability")   # S-64 step 9 · the calls that ask and never book
 _WAITLIST = re.compile(r"lista de espera|waiting ?list|wait ?list|liste d'attente|lista d'attesa|warteliste", re.IGNORECASE)
 
 
@@ -722,9 +725,16 @@ def offer_in(turns: List[str], asked: Optional[Mapping[str, Any]], purpose: str)
     if wl:
         return {"kind": "waitlisted", "quote": wl, "why": "they offered their waiting list — that is not a booking"}
     if purpose == "quote_first":
-        q = next((t for t in turns if _MONEY.search(t) or re.search(r"\d", t)), None)
+        q = next((t for t in turns if _MONEY.search(t)), None) or next((t for t in turns if re.search(r"\d", t) and not heard._hours_said(t)), None)
         if q:
-            return {"kind": "quoted", "quote": q, "why": "they gave a quote — nothing is booked"}
+            return {"kind": "quoted", "quote": q, "why": "they gave a quote — nothing is booked",
+                    "proposals": [p["quote"] for p in heard.proposals(turns)]}
+    if purpose in ASKING:
+        ps = heard.proposals(turns)
+        if ps:
+            return {"kind": "proposed", "quote": ps[0]["quote"], "proposals": [p["quote"] for p in ps],
+                    "why": "they offered times — nothing is booked"}
+        return None
     if asked:
         if (asked.get("mode") or "at") == "venue_proposes":
             ps = heard.proposals(turns)

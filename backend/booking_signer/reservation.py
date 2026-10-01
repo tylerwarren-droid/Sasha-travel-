@@ -26,7 +26,10 @@ from .canonical import canonical_json
 SCHEMA = "reservation/1"
 CATEGORIES = ("restaurant", "experience", "beauty", "appointment", "other")
 UNITS = ("people", "sessions", "pieces", "places")
-FLOWS = ("book", "quote_first", "cancel")
+#: S-64 step 9 · "availability" — "when do you have space for …?" — is the §3 venue-proposes row as a flow of its own:
+#: it asks, it never books, and whatever is offered comes back to the guest for a new yes
+FLOWS = ("book", "quote_first", "availability", "cancel")
+ASKING = ("quote_first", "availability")
 MODES = ("at", "window", "venue_proposes")
 CONSTRAINTS = {"no_deposit": True, "no_card": True}
 
@@ -161,8 +164,8 @@ def validate(obj: Mapping[str, Any]) -> Dict[str, Any]:
     elif mode == "venue_proposes":
         if when.get("at") or when.get("window"):
             raise ReservationRefused("when_invalid", "venue_proposes carries no time of its own")
-        if flow == "book":
-            raise ReservationRefused("when_invalid", "a booking needs a time: venue_proposes is for asking when they have space")
+        if flow not in ASKING:
+            raise ReservationRefused("when_invalid", "a booking needs a time: venue_proposes is for asking (quote_first or availability)")
     if when.get("duration_min") is not None:
         when_out["duration_min"] = _int(when["duration_min"], 5, 1440, "duration_invalid", "when.duration_min")
     if when.get("fixed_start") is not None:

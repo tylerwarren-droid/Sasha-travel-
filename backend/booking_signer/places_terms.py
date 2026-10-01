@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import re
 from datetime import datetime
 from typing import Any, Dict, Mapping, Optional
 
@@ -156,11 +157,36 @@ async def dialable(http, brief: Mapping[str, Any], now: datetime) -> dict:
     return {**brief, "number": await listing_number(http, brief["number_ref"], now)}
 
 
+_DIALLED_KEYS = ("to", "phone_number", "short_to")
+
+
 def scrub_bland(obj: Any, brief: Mapping[str, Any]) -> Any:
-    """Bland's answers and call details, as stored: a listing number's digits are not kept (`to`/`phone_number`)."""
+    """Bland's answers and call details, as stored: a listing number's digits are not kept — at ANY depth.
+    ⚠ 1 Oct 2026 (call a1c85ca6): Bland echoes the dialled number inside `variables` (`to`, `phone_number`, and
+    `short_to` without its country code); only the top level was scrubbed, so the digits were stored. Every string
+    holding the number, in any of its forms, is now replaced."""
     if not (brief or {}).get("number_ref") or not isinstance(obj, dict):
         return obj
-    return {k: (NUMBER_HIDDEN if k in ("to", "phone_number") and isinstance(v, str) else v) for k, v in obj.items()}
+    forms = set()
+    for d in (obj, obj.get("variables") if isinstance(obj.get("variables"), dict) else {}):
+        for k in ("to", "phone_number"):
+            digits = re.sub(r"\D", "", str(d.get(k) or ""))
+            if len(digits) >= 7:
+                forms |= {f"+{digits}", digits, digits[-10:], digits[-9:]}
+    forms = sorted((f for f in forms if len(f.lstrip("+")) >= 9), key=len, reverse=True)
+
+    def walk(v: Any, key: Optional[str] = None) -> Any:
+        if isinstance(v, dict):
+            return {k: walk(x, k) for k, x in v.items()}
+        if isinstance(v, list):
+            return [walk(x) for x in v]
+        if isinstance(v, str):
+            if key in _DIALLED_KEYS:
+                return NUMBER_HIDDEN
+            for f in forms:
+                v = v.replace(f, NUMBER_HIDDEN)
+        return v
+    return walk(obj)
 
 
 __all__ = ["storable_read", "hydrate_read", "seal_call", "dialable", "listing_number", "number_key", "same_number",

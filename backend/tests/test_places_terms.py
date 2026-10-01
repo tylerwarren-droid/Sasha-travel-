@@ -115,6 +115,16 @@ class PlacesTerms(unittest.TestCase):
         self.assertEqual((cancel["dialled_number"], cancel["brief"]["number_ref"]["place_id"]), (PT.number_key(NUMBER), PID))
         self.assertEqual(c.json()["read_back"]["lines"][0], f"I'll phone {NAME} on the number its Google Maps listing gives.")
 
+    def test_blands_echo_of_the_number_is_scrubbed_at_any_depth(self):
+        # 1 Oct 2026, call a1c85ca6: the digits came back inside `variables`, with and without the country code
+        brief = {"number_ref": {"source": "places", "place_id": PID}}
+        details = {"to": NUMBER, "from": "+441566700605", "variables": {"to": NUMBER, "phone_number": NUMBER, "short_to": "911223344",
+                   "from": "+441566700605"}, "transcripts": [{"text": f"llamando al {NUMBER[1:]}"}]}
+        out = PT.scrub_bland(details, brief)
+        self.assertNotIn("911223344", json.dumps(out))
+        self.assertEqual((out["variables"]["from"], out["from"]), ("+441566700605", "+441566700605"))   # our own caller ID stays
+        self.assertEqual(PT.scrub_bland(details, {"number": NUMBER}), details)                           # a site number is kept
+
     def test_the_venues_own_number_is_preferred_and_kept(self):
         self.web.listing = listing(website="https://www.lacontra.test/")           # its own site lists +34915001122
         v = self.pick()

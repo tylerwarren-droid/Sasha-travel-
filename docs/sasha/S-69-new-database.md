@@ -35,7 +35,7 @@ database, never the files):
 | # | File | Creates or changes | Replay? |
 |---|---|---|---|
 | A1 | `backend/migrations/001_initial_schema.sql` | user_profiles, organizations, traveler_profiles, trips, trip_items, booking_attempts, documents, escalations, conversations, calendar_events; their RLS policies; `set_updated_at` | yes (in the dump) |
-| A2 | `backend/migrations/001_kanoe_schema.sql` | booking_references, prompt_versions | **never applied live**; the founder decides |
+| A2 | `backend/migrations/001_kanoe_schema.sql` | booking_references, prompt_versions | **apply (Sasha 69)**: `prompts.py` reads prompt_versions. ⚠ **Without its seed INSERT**: the seed marks May-era prompts *active* ("Maximum 3 sentences"), and `prompts.py` overlays active rows onto its newer static prompts, which would quietly change how Sasha speaks. The tables are created empty; the static registry stays authoritative until a prompt is deliberately activated. booking_references: nothing in code reads it (one docstring mentions it) |
 | A3 | `backend/migrations/002_clients_schema.sql` | clients, client_api_keys | yes |
 | 001 | `booking_signer/sql/001_booking_storage.sql` | booking_pairing_challenges, booking_devices, booking_intents, booking_tasks, booking_reports; **the demo auth user `11111111-1111-4111-8111-111111111111`** (no email, no password) | yes. The demo user must exist before any data (FKs) |
 | 002 | `002_prepared_status.sql` | trip_items status gains "prepared" | yes |
@@ -64,7 +64,7 @@ database, never the files):
 
 | Table | Rows | Copy? | Note |
 |---|---:|---|---|
-| auth.users | 4 | **the demo user only, by 001** | The other 3 are e-mail sign-ups from May (gmail.com, kanoe.ai, medpark.us). **No row anywhere references them.** They can sign in again by magic link. Copying password hashes across projects is not done. The founder decides. |
+| auth.users | 4 | **the demo user only, by 001** | **Decided (Sasha 69): the other 3 are NOT copied.** They are e-mail sign-ups from May (gmail.com, kanoe.ai, medpark.us) that no row references; they can sign in again by magic link. |
 | trips | 1 | yes | the demo account's "Bookings" trip |
 | **trip_items** | **10** | yes | **includes Calma**: confirmed, request_sha256 `bfe605709212edd7c52060a8376266728b67124e8e52a1a12e9ba7807b769c00`. The others: 5 restaurant (4 pending, 1 prepared, 1 unclear) and 4 beauty pending |
 | booking_calls | 8 | yes | already purged (013): numbers hashed, each with its place_id |
@@ -110,14 +110,16 @@ Read from the code today. The founder confirms each name is set where listed (th
 
 **Railway, the measure-forms service (`b1f4dac4…`, disconnected):** `DATABASE_URL`, the same new URL.
 
-**Vercel, the frontend for project.kanoe.ai** (three projects exist: sasha-heygen, sasha-travel, sasha-travel-hdyp; the
-founder confirms which serve it, and each gets the same):
+**Vercel: project.kanoe.ai is served by `sasha-heygen`** (team applied-diligence), found with the CLI on 1 Oct:
+`vercel inspect project.kanoe.ai` names `sasha-heygen`, production, Ready. Its production env holds the names below
+plus a `DATABASE_URL` (swap it too). sasha-travel and sasha-travel-hdyp do not serve the site.
 
 | Variable | Read by | New value |
 |---|---|---|
 | `SUPABASE_SERVICE_ROLE_KEY` | `app/api/onboarding/save/route.ts` | the new secret key |
 | `NEXT_PUBLIC_SUPABASE_URL` | `lib/auth.ts`, `lib/supabase.ts`, S-62 guest session | `https://<new-ref>.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the same | the new **publishable** key |
+| `DATABASE_URL` | set on sasha-heygen (production) | the new pooler URL |
 
 ⚠ **A new project issues `sb_publishable_…` / `sb_secret_…` keys.** An `sb_secret_` key is refused as a Bearer token:
 - `onboarding/save` already sends it as `apikey` only;
@@ -139,6 +141,11 @@ Either enable the legacy JWT keys on the new project, or patch those two files t
 - **Email sign-ups on; other providers off.** Rate limits at Supabase's defaults.
 
 ## 5. Code changes before the cut-over (Sasha tab, through the full gate)
+
+**Built and tested, 1 Oct (Sasha 69); held on branches until the cut-over:**
+- branch `s69-pre-cutover`: items 1 and 3, plus the prompt_versions read now logs a refusal instead of reading it as
+  "no prompts" (465 pass, build clean);
+- branch `s62-guest-accounts`: item 2 (461 pass).
 
 1. `frontend/app/api/onboarding/save/route.ts`: the project URL is **hardcoded** to the old ref. Read
    `NEXT_PUBLIC_SUPABASE_URL` instead, and refuse (503, said) if it is missing.

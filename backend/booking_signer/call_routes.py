@@ -141,6 +141,10 @@ async def sweep_once() -> int:
         await place_due()   # S-66 · scheduled calls whose venue has now opened
     except Exception as e:
         log.warning("[booking_calls] could not place a scheduled call: %s: %s", type(e).__name__, e)
+    try:
+        await ladder_routes.reread_replies()   # Sasha 76 · a reply whose words could not be fetched, fetched again
+    except Exception as e:
+        log.warning("[booking_calls] could not re-read unread email replies: %s: %s", type(e).__name__, e)
     # S-57 · first, every call whose placing went unanswered: Bland's own log says whether it dialled
     now = NOW()
     for call in await CALL_STORE.unresolved(now - RESOLVE_AFTER):

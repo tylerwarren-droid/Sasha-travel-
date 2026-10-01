@@ -295,6 +295,15 @@ class MemoryLadderStore(MemoryLinks):
     async def replies_for(self, email_id: str) -> List[dict]:
         return sorted([dict(r) for r in self.replies if r["email_id"] == email_id], key=lambda r: r["received_at"])
 
+    # ── Sasha 76 · a reply whose words could not be fetched is fetched again, never left unread ──
+    async def unread_replies(self) -> List[dict]:
+        return [dict(r) for r in self.replies if r.get("body_text") is None and "could not be fetched" in str(r.get("note") or "")]
+
+    async def set_reply_text(self, provider_id: str, text: Optional[str], note: Optional[str]) -> None:
+        for r in self.replies:
+            if r["provider_id"] == provider_id:
+                r.update(body_text=text, note=note)
+
 
 _TRIP = ("venue_name",)
 
@@ -462,4 +471,14 @@ class PostgresLadderStore(PostgresLinks):
         rows = await self._run(lambda c: c.fetch(
             "select * from booking_email_replies where email_id = $1 order by received_at", uuid.UUID(email_id)))
         return [_row(r) for r in rows]
+
+    async def unread_replies(self):
+        rows = await self._run(lambda c: c.fetch(
+            "select * from booking_email_replies where body_text is null and note like '%could not be fetched%' "
+            "and received_at > now() - interval '7 days' order by received_at limit 20"))
+        return [_row(r) for r in rows]
+
+    async def set_reply_text(self, provider_id, text, note):
+        await self._run(lambda c: c.execute("update booking_email_replies set body_text = $2, note = $3 where provider_id = $1",
+                                            provider_id, text, note))
 

@@ -217,8 +217,14 @@ def verify_svix(secret: str, headers: Mapping[str, str], body: bytes, now: Optio
     return any(hmac.compare_digest(expected, part.split(",", 1)[1]) for part in sig.split() if part.startswith("v1,"))
 
 
+#: Sasha 76 · reading a RECEIVED email needs a full-access Resend key; Sasha's own key is restricted to sending (so a leak
+#: of it can only send as her). This one is used for nothing but reading her inbound mail. Without it: the sending key.
+READ_KEY_VAR = "SASHA_RESEND_READ_KEY"
+
+
 async def fetch_received(http: Http, provider_id: str) -> dict:
-    r = await http("GET", RESEND_RECEIVED_URL.format(id=provider_id), headers={"authorization": f"Bearer {_env(KEY_VAR)}"})
+    key = _env(READ_KEY_VAR) or _env(KEY_VAR)
+    r = await http("GET", RESEND_RECEIVED_URL.format(id=provider_id), headers={"authorization": f"Bearer {key}"})
     if r.status_code != 200:
         raise EmailRefused("received_email_unavailable", f"the mail service answered HTTP {r.status_code} for {provider_id}")
     return r.json()

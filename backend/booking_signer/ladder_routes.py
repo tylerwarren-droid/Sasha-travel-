@@ -415,6 +415,22 @@ def _address(v: Any) -> Optional[str]:
     return m.group(0).lower() if m else None
 
 
+async def reread_replies() -> int:
+    """Sasha 76 · the sweeper fetches again every reply whose words could not be fetched (a key, an outage), then reads it
+    with the field checks — a reply is never left unread because of a moment's failure. Returns how many were read."""
+    from . import followup as _FU
+    done = 0
+    for r in await LADDER_STORE.unread_replies():
+        text, note = await _reply_text(r["provider_id"])
+        if text is None and note and "could not be fetched" in note:
+            continue   # still failing: tried again next sweep
+        await LADDER_STORE.set_reply_text(r["provider_id"], text, note)
+        reading = await _FU.on_reply(str(r["email_id"]), text, NOW())
+        log.info("[followup] reply %s re-read%s", r["provider_id"], f": {reading['result']} ({reading['why']})" if reading else "")
+        done += 1
+    return done
+
+
 async def _reply_text(pid: str):
     try:
         full = await E.fetch_received(HTTP, pid)

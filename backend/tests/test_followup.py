@@ -177,6 +177,19 @@ class FollowUps:
                            "> Solicitud de mesa para 4 personas el 2026-10-08 a las 20:00", "rcv_rung_bare")
         self.assertEqual(self.trip_status(p["trip_item_id"]), before)
 
+    def test_a_reply_whose_words_could_not_be_fetched_is_read_on_the_next_sweep(self):
+        """Sasha 76 · live, 1 Oct: the sending-only key could not read received mail; both replies landed unread."""
+        from booking_signer import ladder_routes as LR
+        p = self.rung_email()
+        body, h = signed({"type": "email.received", "data": {"email_id": "rcv_late", "from": "Tyler <tyler@kanoe.test>",
+                                                            "to": [f"act-{p['email_id']}@in.kanoe.test"], "subject": "Re: Solicitud"}})
+        self.c.post("/api/booking/email/inbound", content=body, headers=h)                  # Resend has no body for it yet → unread
+        self.assertNotEqual(self.trip_status(p["trip_item_id"]), "confirmed")
+        self.web.resend_received["rcv_late"] = {"text": "Confirmado: mesa para 4 personas el jueves 8 de octubre a las 20:00, a nombre de Johnson."}
+        self.assertEqual(self.c.portal.call(LR.reread_replies), 1)
+        self.assertEqual(self.trip_status(p["trip_item_id"]), "confirmed")
+        self.assertEqual(self.c.portal.call(LR.reread_replies), 0)                             # read once
+
     def test_own_words(self):
         self.assertEqual(FU.own_words("Vale\n\nOn Thu, Oct 1, 2026 at 5:20 PM Sasha (Kanoe) <a@b.c> wrote:\n> x"), "Vale")
         self.assertEqual(FU.own_words("Perfecto\n\nDe: Sasha (Kanoe) <sasha@booking.kanoe.ai>\nEnviado: jueves"), "Perfecto")

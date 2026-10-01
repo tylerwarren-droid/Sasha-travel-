@@ -15,6 +15,7 @@ export type Receipt = {
   references: { venue: string | null; sasha: string | null }; their_words: string | null
   reading: { outcome?: string; why?: string; quote?: string; read_by?: string }
   transcript: { who: 'Sasha' | 'Venue'; text: string; at: string | null }[]
+  written_promise: { asked: string | null; their_answer: string | null; note?: string } | null
   recording: { kept: boolean; why: string }
   written: { channel: string; from: string | null; subject: string | null; text: string | null; recording_url: string | null; received_at: string | null }[]
   proof: { read_back: string[]; read_back_sha256: string | null; approved: { how: string | null; said: string | null; at: string | null }
@@ -47,6 +48,14 @@ export function ReceiptView({ r }: { r: Receipt }) {
       </div>
       {r.their_words ? <div style={{ marginTop: 4 }}>What they said: &ldquo;{r.their_words}&rdquo;</div> : null}
       {r.reading.why ? <div style={small}>{r.reading.why}{r.reading.read_by ? ` — ${r.reading.read_by}` : ''}</div> : null}
+      {r.written_promise && (
+        // Sasha 90 (a) · asked to confirm in writing: what they said to it, verbatim
+        <div style={{ marginTop: 4, fontSize: 13 }}>
+          {r.written_promise.asked
+            ? <>Asked to confirm in writing — they said: {r.written_promise.their_answer ? <>&ldquo;{r.written_promise.their_answer}&rdquo;</> : 'nothing'}</>
+            : r.written_promise.note}
+        </div>
+      )}
       {r.written.length > 0 && (
         <div style={{ marginTop: 6 }}>
           <div style={{ fontWeight: 600 }}>What they wrote</div>

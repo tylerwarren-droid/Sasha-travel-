@@ -380,6 +380,16 @@ async def inbound(request: Request):
     try:
         if act is not None and not await LADDER_STORE.email_exists(act) and await LADDER_STORE.link_exists(act):
             return await _link_confirmation(act, pid, data, now)
+        if act is None:
+            # Sasha 90 (a) · a written confirmation she asked for on the call, sent to her own address: onto its booking
+            from . import inbound_phone as _IP
+            if _IP.STORE is not None:
+                text, _ = await _reply_text(pid)
+                try:
+                    if await _IP.on_written_email(pid, sender, data.get("subject"), text, now):
+                        return {"ok": True, "matched": True, "as": "written confirmation after a call"}
+                except StorageUnavailable as ex:   # it is still kept: quarantined below, and the reason logged
+                    log.error("[inbound] %s could not be matched to a call (%s); quarantined instead", pid, ex.detail)
         if act is None or not await LADDER_STORE.email_exists(act):
             await LADDER_STORE.quarantine({"provider_id": pid, "to_addrs": data.get("to"), "from_addr": data.get("from"),
                                            "subject": data.get("subject"), "received_at": now,

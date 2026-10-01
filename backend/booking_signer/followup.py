@@ -22,7 +22,7 @@ import os
 import re
 import uuid
 from datetime import datetime
-from typing import Any, Mapping, Optional
+from typing import Any, List, Mapping, Optional
 
 from . import emailing as E
 
@@ -60,6 +60,32 @@ def venue_email(read: Optional[Mapping[str, Any]]) -> Optional[dict]:
 
 # ── rule 1 and the read-back that covers rules 2–3 ───────────────────────────────────────────────────────────────────
 
+#: Sasha 90 (a) · after the recap's yes, she asks for it IN WRITING — to the guest's mobile, or to her own address
+CONFIRM_ASK = {
+    "es": ("¿Nos podrían enviar una confirmación por SMS o por email? Al móvil del cliente, {mobile}, o a {email}.",
+           "¿Nos podrían enviar una confirmación por email a {email}?"),
+    "en": ("Could you send us a confirmation by text or email? To the guest's mobile, {mobile}, or to {email}.",
+           "Could you send us a confirmation by email to {email}?"),
+    "fr": ("Pourriez-vous nous envoyer une confirmation par SMS ou par e-mail ? Au portable du client, {mobile}, ou à {email}.",
+           "Pourriez-vous nous envoyer une confirmation par e-mail à {email} ?"),
+    "it": ("Potreste inviarci una conferma via SMS o email? Al cellulare del cliente, {mobile}, oppure a {email}.",
+           "Potreste inviarci una conferma via email a {email}?"),
+    "pt": ("Poderiam enviar-nos uma confirmação por SMS ou por email? Para o telemóvel do cliente, {mobile}, ou para {email}.",
+           "Poderiam enviar-nos uma confirmação por email para {email}?"),
+    "de": ("Könnten Sie uns eine Bestätigung per SMS oder E-Mail schicken? An das Handy des Gastes, {mobile}, oder an {email}.",
+           "Könnten Sie uns eine Bestätigung per E-Mail an {email} schicken?"),
+}
+
+
+def confirm_ask(lang_code: str, me: str, mobile: Optional[str]) -> List[str]:
+    """The ask, as she says it — with the guest's mobile in the venue's digits when there is one; the shorter one after."""
+    from . import spoken as SP
+    c = SP.code(lang_code)
+    with_mobile, email_only = CONFIRM_ASK.get(c, CONFIRM_ASK["en"])
+    out = [with_mobile.format(mobile=SP.digits(mobile, c), email=spoken(me, c))] if mobile else []
+    return out + [email_only.format(email=spoken(me, c))]
+
+
 def with_own_contact(built: dict, venue_name: str, read: Optional[Mapping[str, Any]], guest_email: Optional[str],
                      request: Optional[Mapping[str, Any]] = None) -> dict:
     """A booking call's brief and read-back, with Sasha's email given to the venue and the follow-up said before the yes.
@@ -74,14 +100,27 @@ def with_own_contact(built: dict, venue_name: str, read: Optional[Mapping[str, A
     me = own_email()
     if me:
         lang = brief.get("language") or "en"
-        say = f"After the recap, give Sasha's email for any change: \"{spoken(me, lang)}\". Spell it if asked. "
+        mobile = brief.get("phone")
         task = brief["task"]
         anchor = "Keep it short and polite."
-        new_task = task.replace(anchor, say + anchor, 1) if anchor in task else task + " " + say
-        if len(new_task) <= 2000:   # Bland's limit: if it would not fit, she does not say it — and the read-back does not claim it
-            brief["task"] = new_task
-            brief["sasha_email"] = me
-            extra.append(f"I'll give them my own email, {me}, for any change — their reply comes to me and onto this booking.")
+        # Sasha 90 (a) · the written confirmation asked for, the longest wording that fits Bland's 2,000 — else, as before,
+        # her email for any change. If none fits she says none of it, and the read-back does not claim it.
+        asks = [(a, f"After the recap's yes, ask: \"{a}\" Note what they agree to; spell the address if asked. ") for a in confirm_ask(lang, me, mobile)]
+        asks.append((None, f"After the recap, give Sasha's email for any change: \"{spoken(me, lang)}\". Spell it if asked. "))
+        for ask, say in asks:
+            new_task = task.replace(anchor, say + anchor, 1) if anchor in task else task + " " + say
+            if len(new_task) <= 2000:
+                brief["task"] = new_task
+                brief["sasha_email"] = me
+                if ask:
+                    brief["confirm_ask"] = ask
+                    to_mobile = bool(mobile) and ask == confirm_ask(lang, me, mobile)[0]   # the wording that names the mobile
+                    extra.append("After their yes I'll ask them to confirm it in writing — "
+                                 + (f"by text to your mobile ({mobile}) or " if to_mobile else "")
+                                 + f"by email to me ({me}); what they send comes onto this booking.")
+                else:
+                    extra.append(f"I'll give them my own email, {me}, for any change — their reply comes to me and onto this booking.")
+                break
     v = venue_email(read)
     if v and not emails_ready() and me and isinstance(request, Mapping) and (request.get("when") or {}).get("mode") == "at":
         # the follow-up's whole content is fixed now, inside the brief the guest's yes binds: where, to whom, and what it restates
@@ -89,7 +128,7 @@ def with_own_contact(built: dict, venue_name: str, read: Optional[Mapping[str, A
         extra.append(f"After the call I'll email {venue_name} at {v['to']} (the address on {v['source_label']}) to confirm it in writing"
                      + (f" — you're copied privately at {guest_email}" if guest_email else "")
                      + ". If their answer is unclear, that email asks them to confirm, and their reply comes onto this booking.")
-    elif me:
+    elif me and not brief.get("confirm_ask"):
         extra.append(f"{venue_name} publishes no email address, so I can't confirm it with them in writing — the call's result is what you'll have.")
     if not extra:
         return built

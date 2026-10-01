@@ -57,13 +57,15 @@ class FollowUps:
     def test_the_read_back_says_her_email_and_the_follow_up_before_the_yes(self):
         _, p = self.prepare()
         lines = p["read_back"]["lines"]
-        self.assertIn("I'll give them my own email, sasha@in.kanoe.test, for any change — their reply comes to me and onto this booking.", lines)
+        # Sasha 90 (a) · her address is now given as the written confirmation she asks for after the yes
+        self.assertTrue(any(l.startswith("After their yes I'll ask them to confirm it in writing — ") and "sasha@in.kanoe.test" in l for l in lines), lines)
         follow = [l for l in lines if l.startswith("After the call I'll email La Contra at ")]
         self.assertEqual(len(follow), 1, lines)
         self.assertIn(f"you're copied privately at {GUEST}", follow[0])
         self.assertTrue(lines[-1].endswith("Shall I call them now?"))
         brief = self.call_row(p["call_id"])["brief"]
-        self.assertIn('"sasha arroba in punto kanoe punto test"', brief["task"])          # said in Spanish, spelled out
+        self.assertIn("sasha arroba in punto kanoe punto test", brief["confirm_ask"])          # said in Spanish, spelled out
+        self.assertIn(brief["confirm_ask"], brief["task"])
         self.assertLessEqual(len(brief["task"]), 2000)
         self.assertEqual((brief["sasha_email"], brief["followup"]["bcc"]), ("sasha@in.kanoe.test", GUEST))
         self.assertTrue(brief["followup"]["to"].endswith("@lacontra.test"))

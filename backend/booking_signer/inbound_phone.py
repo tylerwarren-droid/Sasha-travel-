@@ -63,7 +63,8 @@ def _channel_and_number(sender: str):
     return "sms", sender
 
 
-_ATTEMPT = {"sms": ("phone", "their SMS to Sasha's number, read with the field checks (S-70)"),
+_ATTEMPT = {"email": ("email", "their email to Sasha's own address after the call, read with the field checks (Sasha 90)"),
+            "sms": ("phone", "their SMS to Sasha's number, read with the field checks (S-70)"),
             "whatsapp": ("whatsapp", "their WhatsApp message to Sasha's number, read with the field checks (S-71)")}
 
 
@@ -119,6 +120,10 @@ class MemoryInboundStore:
     async def request_of(self, trip_item_id: str) -> Optional[dict]:
         return (self.calls.trip_items.get(trip_item_id) or {}).get("request")
 
+    async def booking_calls_since(self, since: datetime) -> List[dict]:
+        return [dict(c) for c in self.calls.calls.values() if c.get("created_at") and c["created_at"] >= since
+                and (c.get("brief") or {}).get("purpose", "book") == "book" and c.get("status") in ("answered", "placed")]
+
 
 class PostgresInboundStore:
     def __init__(self, base) -> None:
@@ -168,6 +173,11 @@ class PostgresInboundStore:
 
     async def request_of(self, trip_item_id):
         return await self._run(lambda c: c.fetchval("select request from trip_items where id = $1", uuid_(trip_item_id)))
+
+    async def booking_calls_since(self, since):
+        return [_row(r) for r in await self._run(lambda c: c.fetch(
+            "select call_id, trip_item_id, brief, status, created_at from booking_calls where created_at >= $1 "
+            "and coalesce(brief->>'purpose', 'book') = 'book' and status in ('answered', 'placed')", since))]
 
 
 def uuid_(v):
@@ -258,6 +268,47 @@ async def recording(request: Request):
     except StorageUnavailable as e:
         return Response(e.detail, status_code=503)
     return Response("", status_code=204)
+
+
+# ── Sasha 90 (a) · a written confirmation EMAILED to Sasha's own address after a call ─────────────────────────────
+
+WRITTEN_WINDOW = timedelta(days=14)
+
+
+def _surname(brief: Mapping[str, Any]) -> str:
+    words = str(brief.get("name") or "").split()
+    return words[-1] if words else ""
+
+
+async def match_written(subject: Optional[str], text: Optional[str], now: datetime) -> Optional[dict]:
+    """The booking call an email to Sasha's own address is about — by HER reference (K-XXXX) when it is quoted, else by
+    the guest's surname when exactly one recent call asked for a confirmation under it. Never by guessing: two
+    candidates, or none, is None (the mail is quarantined, as before)."""
+    import re
+    hay = f"{subject or ''}\n{text or ''}"
+    calls = [c for c in await STORE.booking_calls_since(now - WRITTEN_WINDOW) if (c.get("brief") or {}).get("sasha_email")]
+    by_ref = [c for c in calls if (c["brief"].get("own_reference") or "") and re.search(rf"\b{re.escape(c['brief']['own_reference'])}\b", hay, re.I)]
+    if len(by_ref) == 1:
+        return by_ref[0]
+    if by_ref:
+        return None
+    by_name = [c for c in calls if len(_surname(c["brief"])) >= 3 and re.search(rf"\b{re.escape(_surname(c['brief']))}\b", hay, re.I)]
+    items = {str(c["trip_item_id"]) for c in by_name}
+    return max(by_name, key=lambda c: c["created_at"]) if len(items) == 1 else None
+
+
+async def on_written_email(provider_id: str, sender: Optional[str], subject: Optional[str], text: Optional[str], now: datetime) -> bool:
+    """File a venue's email to Sasha's address on the booking it confirms, and read it like an SMS. False: not matched."""
+    call = await match_written(subject, text, now)
+    if call is None:
+        return False
+    key = "sha256:" + hashlib.sha256(sender.strip().lower().encode()).hexdigest() if sender else "unknown"   # the sender, hashed
+    row = {"provider_id": provider_id, "channel": "email", "from_key": key,
+           "to_number": None, "body_text": text, "call_id": str(call["call_id"]), "trip_item_id": str(call["trip_item_id"]),
+           "received_at": now}
+    if await STORE.put(row) and text:
+        await _read_sms(row, call, text, now)
+    return True
 
 
 def status() -> dict:

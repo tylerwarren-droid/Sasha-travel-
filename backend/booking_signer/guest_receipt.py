@@ -42,6 +42,13 @@ def compose(rc: Mapping[str, Any], to: str) -> dict:
     ]
     if words:
         lines += [f"What they said, word for word: \"{words}\""]
+    wp = rc.get("written_promise") or {}
+    if wp.get("asked"):
+        lines += [f"Asked to confirm in writing, they said: \"{wp['their_answer']}\"" if wp.get("their_answer")
+                  else "Asked to confirm in writing, they didn't answer."]
+    for w in rc.get("written") or []:
+        if w.get("text"):
+            lines += [f"They wrote ({w.get('channel')}): \"{w['text'][:500]}\""]
     if why:
         lines += [f"How it was read: {why}"]
     lines += ["", "The whole call, word for word, and the yes it rests on are on this booking's receipt in your itinerary.",

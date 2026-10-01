@@ -107,3 +107,57 @@ class GuestReceipt(Receipt):
         self.assertIn("How it was read: not confirmed", [b for m, u, b in self.web.requests if u == "https://api.resend.com/emails"][-1]["text"])
         self.ENV = {**self.ENV, "SASHA_FOUNDER_EMAIL": ""}
         self.assertEqual(self.send(prep), "not sent: the guest has no email address on their account")
+
+
+class WrittenPromise(unittest.TestCase):
+    """Sasha 90 (a) · what the venue said when asked to confirm in writing — verbatim, on the receipt."""
+    def test_their_answer_is_kept_verbatim(self):
+        turns = [{"who": "Sasha", "text": "Para confirmar: … ¿Correcto?"}, {"who": "Venue", "text": "Correcto."},
+                 {"who": "Sasha", "text": "¿Nos podrían enviar una confirmación por SMS o por email? Al móvil del cliente, …"},
+                 {"who": "Venue", "text": "Sí, te mando un SMS ahora."}, {"who": "Venue", "text": "Al móvil."}, {"who": "Sasha", "text": "Gracias."}]
+        self.assertEqual(RC.written_promise({"confirm_ask": "x"}, turns),
+                         {"asked": turns[2]["text"], "their_answer": "Sí, te mando un SMS ahora. / Al móvil."})
+        self.assertIsNone(RC.written_promise({}, turns))                      # not asked on this call
+        self.assertEqual(RC.written_promise({"confirm_ask": "x"}, turns[:2])["asked"], None)
+
+
+class EmailedConfirmation(unittest.TestCase):
+    """Sasha 90 (a) · a venue's email to Sasha's own address lands on the booking — by her reference, or one surname only."""
+    def setUp(self):
+        import asyncio
+        from datetime import datetime, timezone, timedelta
+        from booking_signer import inbound_phone as IP
+        from booking_signer.call_store import MemoryCallStore
+        self.asyncio, self.IP = asyncio, IP
+        self.now = datetime(2026, 10, 1, 19, 0, tzinfo=timezone.utc)
+        self.calls = MemoryCallStore()
+        O = {"schema": "reservation/1", "flow": "book", "who": {"name": "Warren"},
+             "what": {"activity": "a table", "activity_venue_lang": "una mesa", "category": "restaurant"}, "where": {},
+             "when": {"mode": "at", "at": "2026-10-03T21:00"}, "how_many": {"count": 2, "unit": "people"}}
+        for cid, item, name, ref in (("c1", "t1", "Warren", "K-HH42"), ("c2", "t2", "García", "K-7FA3")):
+            self.calls.trip_items[item] = {"id": item, "status": "unclear", "request": {**O, "who": {"name": name}}}
+            self.calls.calls[cid] = {"call_id": cid, "trip_item_id": item, "status": "answered", "created_at": self.now - timedelta(hours=1),
+                                     "brief": {"purpose": "book", "name": name, "own_reference": ref, "sasha_email": "sasha@booking.kanoe.ai",
+                                               "venue_ids": ["places:x"], "followup": {"request": {**O, "who": {"name": name}}}}}
+        self.saved = IP.STORE
+        IP.STORE = IP.MemoryInboundStore(self.calls)
+
+    def tearDown(self):
+        self.IP.STORE = self.saved
+
+    def file(self, pid, subject, text):
+        return self.asyncio.run(self.IP.on_written_email(pid, "reservas@botavara.test", subject, text, self.now))
+
+    def test_by_sashas_reference_it_lands_and_confirms(self):
+        self.assertTrue(self.file("re1", "Reserva K-HH42", "Confirmado: mesa para 2 personas el sábado 3 de octubre a las 21:00, a nombre de Warren."))
+        row = self.IP.STORE.rows["re1"]
+        self.assertEqual((row["channel"], row["trip_item_id"]), ("email", "t1"))
+        self.assertNotIn("botavara", json.dumps(row, default=str))               # the sender, hashed
+        self.assertEqual(self.calls.trip_items["t1"]["status"], "confirmed")
+
+    def test_by_a_surname_only_when_it_is_the_only_one_and_never_by_guess(self):
+        self.assertTrue(self.file("re2", "Reserva", "Hola, confirmamos la mesa de García."))
+        self.assertEqual(self.IP.STORE.rows["re2"]["trip_item_id"], "t2")
+        self.assertFalse(self.file("re3", "Reserva", "Hola, confirmamos las mesas de Warren y García."))   # two: not guessed
+        self.assertFalse(self.file("re4", "Hola", "¿Tenéis mesa mañana?"))                                # none
+        self.assertNotIn("re3", self.IP.STORE.rows)

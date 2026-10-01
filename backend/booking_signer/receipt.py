@@ -41,6 +41,25 @@ def transcript(details: Optional[Mapping[str, Any]]) -> List[dict]:
     return out
 
 
+_ASKED_IN_WRITING = ("confirmación por", "confirmation by", "confirmation par", "conferma via", "confirmação por", "bestätigung per")
+
+
+def written_promise(brief: Mapping[str, Any], turns: List[dict]) -> Optional[dict]:
+    """Sasha 90 (a) · what the venue agreed when she asked for a written confirmation: her question as she said it, and
+    their answer verbatim (their lines until she speaks again). None when it was not asked on this call."""
+    if not brief.get("confirm_ask"):
+        return None
+    for i, t in enumerate(turns):
+        if t["who"] == "Sasha" and any(k in t["text"].lower() for k in _ASKED_IN_WRITING):
+            answer = []
+            for u in turns[i + 1:]:
+                if u["who"] == "Sasha":
+                    break
+                answer.append(u["text"])
+            return {"asked": t["text"], "their_answer": " / ".join(answer) or None}
+    return {"asked": None, "their_answer": None, "note": "she was to ask, but the call ended before she did"}
+
+
 def build(call: Mapping[str, Any], item: Mapping[str, Any], written: List[Mapping[str, Any]], venue: Mapping[str, Any],
           shown_lines: Optional[List[str]] = None) -> Dict[str, Any]:
     """The receipt, from the stored rows. `venue` is {name, source}: who the guest chose, as shown now."""
@@ -66,6 +85,8 @@ def build(call: Mapping[str, Any], item: Mapping[str, Any], written: List[Mappin
         "their_words": call.get("venue_words"),
         "reading": {k: reading.get(k) for k in ("outcome", "why", "quote", "read_by") if reading.get(k) is not None},
         "transcript": transcript(call.get("bland_details")),
+        # Sasha 90 (a) · the written confirmation she asked for, and what they said to it
+        "written_promise": written_promise(brief, transcript(call.get("bland_details"))),
         "recording": {"kept": False, "why": RECORDING_NOT_KEPT},
         "written": [{"channel": w.get("channel"), "from": w.get("from_addr"), "subject": w.get("subject"),
                      "text": w.get("body_text"), "recording_url": w.get("recording_url"),

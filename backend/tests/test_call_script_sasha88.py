@@ -65,3 +65,28 @@ class TheCallReplayed(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WrittenConfirmation(unittest.TestCase):
+    """Sasha 90 (a) · after the recap's yes she asks for it IN WRITING — by SMS to the guest's mobile, or by email to her."""
+    ENV = {"SASHA_EMAIL_FROM": "Sasha <sasha@booking.kanoe.ai>", "SASHA_INBOUND_DOMAIN": "booking.kanoe.ai",
+           "SASHA_RESEND_API_KEY": "k", "RESEND_WEBHOOK_SECRET": "w"}
+
+    def built(self, **kw):
+        with mock.patch.dict(os.environ, self.ENV):
+            return FU.with_own_contact(C.build_call(BOTAVARA, C.parse_call_particulars({**ASKED, **kw}), NOW), "Botavara", None, None)
+
+    def test_she_asks_in_spanish_with_the_guests_mobile_in_spanish_digits(self):
+        out = self.built()
+        ask = ("¿Nos podrían enviar una confirmación por SMS o por email? Al móvil del cliente, seis cero ocho, cuatro cuatro cinco, "
+               "siete uno cinco, o a sasha arroba booking punto kanoe punto ai.")
+        self.assertEqual(out["brief"]["confirm_ask"], ask)
+        self.assertIn(f'After the recap\'s yes, ask: "{ask}"', out["brief"]["task"])
+        self.assertLessEqual(len(out["brief"]["task"]), 2000)
+        self.assertIn("After their yes I'll ask them to confirm it in writing — by text to your mobile (+34608445715) or by email to me "
+                      "(sasha@booking.kanoe.ai); what they send comes onto this booking.", out["read_back_lines"])
+
+    def test_a_long_name_still_gets_the_email_ask_within_blands_limit(self):
+        out = self.built(name="Alexandra Montgomery-Fitzwilliam")
+        self.assertEqual(out["brief"]["confirm_ask"], "¿Nos podrían enviar una confirmación por email a sasha arroba booking punto kanoe punto ai?")
+        self.assertLessEqual(len(out["brief"]["task"]), 2000)

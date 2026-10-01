@@ -98,6 +98,8 @@ export function PhoneCall({ defaults, readId, venueLabel, factIndex, cancelsCall
     const r = await req(`/api/booking/calls/${prepared.call_id}/place`, { read_back_sha256: prepared.sha256, approval: { how: 'button', said: null } })
     if (!r.ok) { setPhase('stopped'); setNote(`Not called: ${refusal(r.json, r.status)}. Nothing was dialled.`); return }
     // S-57 · 'uncertain': Bland didn't answer in time and may have dialled — follow it like a placed call; never "not placed"
+    // S-66 · closed now by its listed hours: the call is scheduled for opening + 10 minutes, covered by this yes
+    if (r.json.status === 'scheduled') { setPhase('finished'); setNote(`${String(r.json.say)} Reload this page after then to see what they said.`); return }
     if (r.json.status !== 'placed' && r.json.status !== 'uncertain') { setPhase('stopped'); setNote(String(r.json.say ?? 'The call was not placed.')); return }
     setPhase('on_call'); setNote(String(r.json.say ?? 'Calling now.'))
     for (let i = 0; i < POLL_LIMIT; i++) {

@@ -21,12 +21,13 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from . import calls as C
+from . import hours as H
 from . import render as R
 from . import reservation as RS
 from . import ladder_routes
@@ -115,6 +116,10 @@ async def sweep_once() -> int:
     if not key or CALL_STORE is None:
         return 0
     recorded = 0
+    try:
+        await place_due()   # S-66 · scheduled calls whose venue has now opened
+    except Exception as e:
+        log.warning("[booking_calls] could not place a scheduled call: %s: %s", type(e).__name__, e)
     # S-57 · first, every call whose placing went unanswered: Bland's own log says whether it dialled
     now = NOW()
     for call in await CALL_STORE.unresolved(now - RESOLVE_AFTER):
@@ -202,6 +207,10 @@ async def prepare(request: Request):
         return _refuse(422, e.rule, str(e))
     if len(built["brief"]["task"]) > 2000:   # Bland's limit; a truncated brief would drop a rule
         return _refuse(422, "brief_too_long", "the call's instructions exceed Bland's 2,000 characters")
+    try:
+        built = _with_hours(built, await _read_of(account, built["brief"]), venue.timezone, now)
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
     row = {
         # S-64 step 3 · the reservation/1 object, written alongside the old columns
         "request": RS.try_from_particulars(p, account_id=account, venue_name=venue.name, timezone=venue.timezone,
@@ -224,6 +233,27 @@ async def prepare(request: Request):
         return _refuse(503, e.rule, e.detail)
     return {"call_id": row["call_id"], "trip_item_id": item,
             "read_back": {"lines": row["read_back_lines"], "sha256": row["read_back_sha256"]}}
+
+
+async def _read_of(account: str, brief: Mapping[str, Any]) -> Optional[dict]:
+    """The venue read a call's number came from ("read:<id>"), or None (the test line)."""
+    key = str((brief or {}).get("venue_key") or "")
+    if not key.startswith("read:"):
+        return None
+    row = await ladder_routes.LADDER_STORE.get_read(account, key[5:])
+    return row["read"] if row else None
+
+
+def _with_hours(built: dict, read: Optional[dict], timezone: str, now) -> dict:
+    """S-66 · the read-back says what happens if they are closed when the guest says yes — the yes covers that call."""
+    if not read:
+        return built
+    line = H.read_back_line(H.status(read, now, timezone), email_now=False)
+    if not line:
+        return built
+    lines = list(built["read_back_lines"])
+    lines.insert(len(lines) - 1, line)
+    return {**built, "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines))}
 
 
 async def _cancel_from_object(account: str, booking: dict, b: dict, venue: C.CallVenue):
@@ -269,6 +299,11 @@ async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now
         return _refuse(422, e.rule, str(e).split(": ", 1)[-1])
     except C.CallRefused as e:
         return _refuse(422, e.rule, str(e))
+    if built["brief"]["purpose"] == "book":
+        try:
+            built = _with_hours(built, await _read_of(account, built["brief"]), venue.timezone, now)
+        except StorageUnavailable as e:
+            return _refuse(503, e.rule, e.detail)
     cols = RS.columns(o)
     row = {
         "request": o,
@@ -374,6 +409,15 @@ async def place(call_id: str, request: Request):
     refused = await ladder_routes._optin_refusal(brief.get("venue_ids"), "phone")
     if refused:
         return refused
+    # S-66 · CLOSED NOW by its listed hours → no call now: scheduled for opening + 10 minutes, covered by this yes
+    if brief.get("purpose") == "book":
+        try:
+            read = await _read_of(account, brief)
+        except StorageUnavailable as e:
+            return _refuse(503, e.rule, e.detail)
+        st = H.status(read, NOW(), brief["timezone"]) if read else {"known": False}
+        if st.get("known") and st.get("open_now") is False and st.get("call_at"):
+            return await _schedule(account, call_id, call, body, a, st)
     # S-57 · never a second call while an earlier one to this number may have been placed
     try:
         if await CALL_STORE.unresolved_to(call["dialled_number"]):
@@ -417,6 +461,49 @@ async def place(call_id: str, request: Request):
         return {"ok": False, "status": "not_placed", "rule": "call_not_placed", "why": placed.why,
                 "say": f"I couldn't place the call: {placed.why}"}
     return {"ok": True, "status": "placed", "say": f"Calling {_name(call)} now."}
+
+
+async def _schedule(account: str, call_id: str, call: dict, body: dict, a: dict, st: dict):
+    now = NOW()
+    approval = {"by": account, "how": a["how"], "said": a.get("said"), "at": now.isoformat(),
+                "read_back_sha256": call["read_back_sha256"], "brief_sha256": call["brief_sha256"],
+                "scheduled_for": st["call_at"], "opens_at": st["opens_at"], "hours_basis": st["basis"], "hours_notes": st["notes"]}
+    try:
+        r = await CALL_STORE.schedule(account, call_id, approval, now, now - APPROVAL_WINDOW)
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    if r == "taken":
+        return _refuse(409, "call_already_placed", "this call was already approved; a second call is a new read-back and a new yes")
+    if r == "stale":
+        return _refuse(422, "read_back_expired", "that read-back is more than 15 minutes old; prepare the call again")
+    if r != "scheduled":
+        return _refuse(404, "call_unknown", "no call with that id was prepared for this account")
+    opens = st["opens_at"][11:]
+    call_hhmm = (datetime.fromisoformat(st["opens_at"]) + H.AFTER_OPENING).strftime("%H:%M")
+    # the email rung is not live: when it is, the request is emailed here and a reply cancels the call (inbound)
+    return {"ok": True, "status": "scheduled", "scheduled_for": st["call_at"],
+            "say": f"{_name(call)} is closed now by its listed hours — they open at {opens} — so I'll call at {call_hhmm}, as your yes covered."}
+
+
+async def place_due() -> int:
+    """S-66 · the sweeper places every scheduled call whose time has come (opening + 10 minutes)."""
+    now = NOW()
+    placed_n = 0
+    for call in await CALL_STORE.due(now):
+        cid = str(call["call_id"])
+        if C.calls_enabled() is False or not C.bland_key():
+            await CALL_STORE.cancel_scheduled(cid, "calls were switched off when it was due, so nothing was dialled")
+            continue
+        r = await CALL_STORE.start_scheduled(cid, cap(), cap_window(now))
+        if r == "cap":
+            await CALL_STORE.cancel_scheduled(cid, f"{cap()} calls had already been placed in the last 24 hours; nothing was dialled")
+            continue
+        if r != "claimed":
+            continue
+        placed = await C.place_call(HTTP, C.bland_key(), C.bland_payload(call["brief"], cid))
+        await CALL_STORE.mark_placed(cid, placed, NOW())
+        placed_n += 1
+    return placed_n
 
 
 @router.get("/{call_id}")
@@ -469,6 +556,11 @@ def _view(call: dict, name: str) -> dict:
     elif call["status"] == "placing":
         out["say"] = ("Bland hasn't told me yet whether the call was placed. I'm checking its own call log; I won't call "
                       "them again until it says.")
+    elif call["status"] == "awaiting_approval" and (call.get("approval") or {}).get("scheduled_for"):
+        ap = call["approval"]
+        out["status"] = "scheduled"
+        out["say"] = (f"Scheduled: they were closed when you said yes (they open at {ap['opens_at'][11:]}), so I'll call "
+                      f"ten minutes after they open. Nothing has been dialled yet.")
     elif call["status"] == "awaiting_approval":
         out["say"] = None
     elif call["status"] in ("answered", "not_reached"):

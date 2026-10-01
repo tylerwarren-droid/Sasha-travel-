@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from booking_signer import call_routes, calls as C, optins as O, routes
+from booking_signer.account import DEMO_ACCOUNT_ID
 from booking_signer.call_store import MemoryCallStore, PostgresCallStore
 from booking_signer.store import PostgresStore
 
@@ -418,6 +419,23 @@ class CallRoutes:
         self.assertEqual((v["status"], v["outcome"], v["offer"]["kind"]), ("answered", "unclear", "waitlisted"))
         self.assertIn("waiting list — that is not a booking", v["say"])
         self.assertEqual(self.trip_status(prep["call_id"]), "waitlisted")
+
+    def test_s66_the_store_schedules_holds_and_releases_a_call(self):
+        prep = self.prepare()
+        cid = prep["call_id"]
+        at = (self.now + timedelta(hours=1)).isoformat()
+        run_ = lambda coro: self.c.portal.call(lambda: coro)
+        self.assertEqual(run_(self.store.schedule(DEMO_ACCOUNT_ID, cid,
+                                                  {"scheduled_for": at, "how": "button"}, self.now, self.now - timedelta(minutes=15))), "scheduled")
+        self.assertEqual(run_(self.store.claim(DEMO_ACCOUNT_ID, cid, {}, self.now, self.now - timedelta(minutes=15), 3,
+                                               self.now - timedelta(days=1))), "taken")      # a second yes cannot dial early
+        self.assertEqual(run_(self.store.due(self.now)), [])
+        later = self.now + timedelta(hours=2)
+        self.assertEqual([str(c["call_id"]) for c in run_(self.store.due(later))], [cid])
+        run_(self.store.link_email(cid, "e-1"))
+        self.assertEqual(run_(self.store.scheduled_for_email("e-1")), [cid])
+        self.assertEqual(run_(self.store.start_scheduled(cid, 3, later - timedelta(days=1))), "claimed")
+        self.assertFalse(run_(self.store.cancel_scheduled(cid, "too late")))                # already placing: not cancelled
 
     def test_off_means_no_read_back_and_no_call(self):
         with mock.patch.dict(os.environ, {"SASHA_CALLS_ENABLED": "0"}):

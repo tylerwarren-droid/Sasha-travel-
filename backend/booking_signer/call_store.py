@@ -76,7 +76,7 @@ class MemoryCallStore:
         r = self.calls.get(call_id)
         if not r or r["account_id"] != account_id:
             return "unknown"
-        if r["status"] != "awaiting_approval":
+        if r["status"] != "awaiting_approval" or r.get("approval"):   # S-66 · a scheduled call is already approved
             return "taken"
         if r["created_at"] < fresh_after:
             return "stale"
@@ -84,6 +84,44 @@ class MemoryCallStore:
             return "cap"
         r.update(status="placing", approval=approval, approved_at=now)
         return "claimed"
+
+    # ── S-66 · a call scheduled for the venue's opening (its yes given while it was closed) ──
+    async def schedule(self, account_id, call_id, approval, now, fresh_after) -> str:
+        r = self.calls.get(call_id)
+        if not r or r["account_id"] != account_id:
+            return "unknown"
+        if r["status"] != "awaiting_approval" or r.get("approval"):
+            return "taken"
+        if r["created_at"] < fresh_after:
+            return "stale"
+        r.update(approval=dict(approval), approved_at=now)
+        return "scheduled"
+
+    async def link_email(self, call_id, email_id) -> None:
+        self.calls[call_id]["approval"]["email_id"] = email_id
+
+    async def due(self, now) -> list:
+        return [dict(c) for c in self.calls.values() if c["status"] == "awaiting_approval" and (c.get("approval") or {}).get("scheduled_for")
+                and datetime.fromisoformat(c["approval"]["scheduled_for"]) <= now]
+
+    async def start_scheduled(self, call_id, cap, since) -> str:
+        r = self.calls[call_id]
+        if r["status"] != "awaiting_approval" or not (r.get("approval") or {}).get("scheduled_for"):
+            return "taken"
+        if sum(1 for c in self.calls.values() if c["status"] in DIALLED and c.get("approved_at") and c["approved_at"] >= since) >= cap:
+            return "cap"
+        r["status"] = "placing"
+        return "claimed"
+
+    async def cancel_scheduled(self, call_id, why) -> bool:
+        r = self.calls[call_id]
+        if r["status"] != "awaiting_approval" or not (r.get("approval") or {}).get("scheduled_for"):
+            return False
+        r.update(status="not_placed", not_placed_why=why)
+        return True
+
+    async def scheduled_for_email(self, email_id) -> list:
+        return [cid for cid, c in self.calls.items() if c["status"] == "awaiting_approval" and (c.get("approval") or {}).get("email_id") == email_id]
 
     async def mark_placed(self, call_id: str, placed, now: datetime) -> None:
         r = self.calls[call_id]
@@ -210,11 +248,11 @@ class PostgresCallStore:
             async with conn.transaction():
                 # ⚠ serialised: two approvals racing for the last call of the day cannot both win
                 await conn.execute("lock table booking_calls in share row exclusive mode")
-                r = await conn.fetchrow("select status, created_at from booking_calls where call_id = $1 and account_id = $2",
+                r = await conn.fetchrow("select status, created_at, approval from booking_calls where call_id = $1 and account_id = $2",
                                         cid, uuid.UUID(account_id))
                 if r is None:
                     return "unknown"
-                if r["status"] != "awaiting_approval":
+                if r["status"] != "awaiting_approval" or r["approval"]:   # S-66 · a scheduled call is already approved
                     return "taken"
                 if r["created_at"] < fresh_after:
                     return "stale"
@@ -226,6 +264,63 @@ class PostgresCallStore:
                                    cid, approval, now)
                 return "claimed"
         return await self._run(fn)
+
+    # ── S-66 · a call scheduled for the venue's opening ──
+    async def schedule(self, account_id, call_id, approval, now, fresh_after) -> str:
+        cid = _uuid_or_none(call_id)
+        if cid is None:
+            return "unknown"
+
+        async def fn(conn):
+            async with conn.transaction():
+                r = await conn.fetchrow("select status, created_at, approval from booking_calls where call_id = $1 and account_id = $2 for update",
+                                        cid, uuid.UUID(account_id))
+                if r is None:
+                    return "unknown"
+                if r["status"] != "awaiting_approval" or r["approval"]:
+                    return "taken"
+                if r["created_at"] < fresh_after:
+                    return "stale"
+                await conn.execute("update booking_calls set approval = $2, approved_at = $3 where call_id = $1", cid, approval, now)
+                return "scheduled"
+        return await self._run(fn)
+
+    async def link_email(self, call_id, email_id) -> None:
+        await self._run(lambda c: c.execute(
+            "update booking_calls set approval = approval || jsonb_build_object('email_id', $2::text) where call_id = $1",
+            uuid.UUID(call_id), email_id))
+
+    async def due(self, now) -> list:
+        rows = await self._run(lambda c: c.fetch(
+            "select * from booking_calls where status = 'awaiting_approval' and approval ? 'scheduled_for' "
+            "and (approval->>'scheduled_for')::timestamptz <= $1 order by approved_at limit 20", now))
+        return [_row(r) for r in rows]
+
+    async def start_scheduled(self, call_id, cap, since) -> str:
+        async def fn(conn):
+            async with conn.transaction():
+                await conn.execute("lock table booking_calls in share row exclusive mode")
+                r = await conn.fetchrow("select status, approval from booking_calls where call_id = $1", uuid.UUID(call_id))
+                if r is None or r["status"] != "awaiting_approval" or not (r["approval"] or {}).get("scheduled_for"):
+                    return "taken"
+                n = await conn.fetchval("select count(*) from booking_calls where status = any($1::text[]) and approved_at >= $2",
+                                        list(DIALLED), since)
+                if n >= cap:
+                    return "cap"
+                await conn.execute("update booking_calls set status = 'placing' where call_id = $1", uuid.UUID(call_id))
+                return "claimed"
+        return await self._run(fn)
+
+    async def cancel_scheduled(self, call_id, why) -> bool:
+        r = await self._run(lambda c: c.fetchval(
+            "update booking_calls set status = 'not_placed', not_placed_why = $2 where call_id = $1 and status = 'awaiting_approval' "
+            "and approval ? 'scheduled_for' returning call_id", uuid.UUID(call_id), why))
+        return r is not None
+
+    async def scheduled_for_email(self, email_id) -> list:
+        rows = await self._run(lambda c: c.fetch(
+            "select call_id from booking_calls where status = 'awaiting_approval' and approval->>'email_id' = $1", str(email_id)))
+        return [str(r["call_id"]) for r in rows]
 
     async def mark_placed(self, call_id, placed, now) -> None:
         if getattr(placed, "uncertain", False):   # S-57 · stays 'placing' until Bland's log says

@@ -328,6 +328,10 @@ async def inbound(request: Request):
         await LADDER_STORE.add_reply({"provider_id": pid, "email_id": act, "from_addr": data.get("from"),
                                       "subject": data.get("subject"), "body_text": text, "note": note, "received_at": now})
         await _stop_by_email(act, _address(data.get("from")), text, pid, data, now)
+        # S-66 · a reply to the request emailed while they were closed: the scheduled call is no longer needed
+        from . import call_routes as _CR
+        for cid in await _CR.CALL_STORE.scheduled_for_email(act):
+            await _CR.CALL_STORE.cancel_scheduled(cid, "they replied by email before the call, so no call was made — their reply is with the email")
     except StorageUnavailable as ex:
         return _refuse(503, ex.rule, ex.detail)   # a non-2xx makes the mail service retry — nothing is lost
     return {"ok": True, "matched": True}

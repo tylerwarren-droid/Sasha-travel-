@@ -240,6 +240,14 @@ def facts_from_html(html: str, url: str, country: Optional[str], fetched_at: str
             e = e.removeprefix("mailto:").strip()
             if _EMAIL.fullmatch(e):
                 add("email", e.lower(), f'"email": "{e}"')
+        # S-66 · the venue's OWN opening hours (schema.org), which the hours check reads before Google's
+        from .hours import from_jsonld
+        week = from_jsonld(data)
+        if week:
+            names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+            text = " · ".join(f"{names[d]} " + ", ".join(f"{a:%H:%M}–{b:%H:%M}" for a, b in week[d]) for d in sorted(week))
+            add("hours", text, '"openingHours…" (schema.org)',
+                {"week": {str(d): [[f"{a:%H:%M}", f"{b:%H:%M}"] for a, b in iv] for d, iv in week.items()}})
     text = " ".join(" ".join(p.text).split())
     for m in _EMAIL.finditer(text):
         addr = m.group(0).rstrip(".").lower()

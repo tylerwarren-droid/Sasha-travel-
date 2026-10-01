@@ -721,6 +721,45 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
         self.assertIn("para cancelar la reserva de un masaje relajante de 60 minutos", lines[1])
         self.assertTrue(lines[2].startswith("This cancels your a 60-minute relaxing massage for 1 on 2026-10-08 at 10:00"))
 
+    def test_s66_closed_now_the_call_is_scheduled_for_opening_and_placed_then(self):
+        from datetime import datetime as _dt, timezone as _tz
+        from tests.test_hours import GOOGLE
+        v = self.read()
+        self.ladder.reads[v["read_id"]]["read"]["facts"].append(GOOGLE)      # their listing: Mon–Fri 10:00–20:00
+        self.now = _dt(2026, 10, 5, 7, 30, tzinfo=_tz.utc)                   # Monday 09:30 in Madrid: closed
+        prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
+        self.assertIn("If they're closed when you say yes, I'll call when they open — they open at 10:00 on 2026-10-05, "
+                      "so I'd call at 10:10. Your yes covers that call.", prep["read_back"]["lines"])
+        yes = {"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}}
+        r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json=yes).json()
+        self.assertEqual(r["status"], "scheduled")
+        self.assertIn("is closed now by its listed hours — they open at 10:00 — so I'll call at 10:10", r["say"])
+        self.assertEqual(self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json=yes).json()["rule"], "call_already_placed")
+        self.assertEqual(self.c.get(f"/api/booking/calls/{prep['call_id']}").json()["status"], "scheduled")
+        bland = lambda: [u for m, u, b in self.web.requests if u.startswith("https://api.bland.ai") and m == "POST"]
+        self.assertEqual(bland(), [])                                         # nothing dialled while closed
+        self.now = _dt(2026, 10, 5, 8, 9, tzinfo=_tz.utc)                     # 10:09: not yet
+        self.c.portal.call(call_routes.sweep_once)
+        self.assertEqual(bland(), [])
+        self.now = _dt(2026, 10, 5, 8, 11, tzinfo=_tz.utc)                    # 10:11: placed, once
+        self.c.portal.call(call_routes.sweep_once)
+        self.c.portal.call(call_routes.sweep_once)
+        self.assertEqual(len(bland()), 1)
+        self.assertEqual(self.calls.calls[prep["call_id"]]["status"], "placed")
+
+    def test_s66_a_reply_by_email_cancels_the_scheduled_call(self):
+        from datetime import datetime as _dt, timezone as _tz
+        from tests.test_hours import GOOGLE
+        v, p = self.sent_email()
+        self.ladder.reads[v["read_id"]]["read"]["facts"].append(GOOGLE)
+        self.now = _dt(2026, 10, 5, 7, 30, tzinfo=_tz.utc)
+        prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
+        self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
+        self.c.portal.call(self.calls.link_email, prep["call_id"], p["email_id"])
+        self.reply(p, "rcv_yes", "Sí, perfecto, les esperamos.")
+        c = self.calls.calls[prep["call_id"]]
+        self.assertEqual((c["status"], c["not_placed_why"][:40]), ("not_placed", "they replied by email before the call, s"))
+
     def test_quarantine_is_kept(self):
         body, h = signed({"type": "email.received", "data": {"email_id": "rcv_q", "to": ["hello@in.kanoe.test"], "from": "x@y.test"}})
         self.c.post("/api/booking/email/inbound", content=body, headers=h)

@@ -130,7 +130,14 @@ function main() {
     console.error("check-outcome-surfaces: app/api/onboarding/save/route.ts writes without the S-62 sign-in gate before it — re-apply it (CLAUDE.md, Stage B).");
     process.exit(1);
   }
-  console.log(`check-outcome-surfaces: ${FIXTURES.length} fixtures caught as expected; ${OUTCOME_SURFACES.length} outcome surface(s) clean; onboarding save is signed-in only.`);
+  // S-62 · Go Live must never show success for a refused or failed save (Sasha 67): Stage B re-applies it to the CTO's pages
+  const page = strip(readFileSync(join(ROOT, "app/onboarding/page.tsx"), "utf8"));
+  const step6 = strip(readFileSync(join(ROOT, "app/onboarding/components/Step6Deploy.tsx"), "utf8"));
+  if (!/if \(!res\.ok\) \{[\s\S]*?throw new Error\(why\)/.test(page) || !step6.includes("setGoLiveError(") || !step6.includes("{goLiveError && (")) {
+    console.error("check-outcome-surfaces: onboarding Go Live can show success for a refused save — run python3 frontend/scripts/stage_b_onboarding_honesty.py (CLAUDE.md, Stage B).");
+    process.exit(1);
+  }
+  console.log(`check-outcome-surfaces: ${FIXTURES.length} fixtures caught as expected; ${OUTCOME_SURFACES.length} outcome surface(s) clean; onboarding save is signed-in only and Go Live is honest.`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();

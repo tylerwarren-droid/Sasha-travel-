@@ -50,6 +50,7 @@ export default function Step6Deploy({ data, onGoLive }: Step6Props) {
   )
   const [isGoingLive, setIsGoingLive] = useState(false)
   const [isLive, setIsLive] = useState(false)
+  const [goLiveError, setGoLiveError] = useState<string | null>(null)  // S-62 onboarding honesty (Stage B)
 
   const slug = data.slug || data.business_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
@@ -67,8 +68,11 @@ export default function Step6Deploy({ data, onGoLive }: Step6Props) {
     if (!allChecked || isGoingLive) return
     setIsGoingLive(true)
     try {
+      setGoLiveError(null)
       await onGoLive()
       setIsLive(true)
+    } catch (e) {  // S-62 onboarding honesty: not live — say why, in the server's words
+      setGoLiveError(e instanceof Error && e.message ? e.message : 'the save did not go through')
     } finally {
       setIsGoingLive(false)
     }
@@ -296,6 +300,12 @@ export default function Step6Deploy({ data, onGoLive }: Step6Props) {
           )}
         </button>
       </div>
+
+      {goLiveError && (  /* S-62 onboarding honesty */
+        <p role="alert" className="text-center text-sm" style={{ color: '#9A1C1C' }}>
+          Not live — nothing was published: {goLiveError}
+        </p>
+      )}
 
       {!allChecked && (
         <p className="text-center text-xs" style={{ color: '#9CA3AF' }}>

@@ -97,11 +97,21 @@ export default function OnboardingPage() {
       completed_steps: Array.from(new Set([...formData.completed_steps, 6])),
     }
     setFormData(updatedData)
-    await fetch('/api/onboarding/save', {
+    // S-62 onboarding honesty (Stage B): a refused or failed save never reaches "Sasha is live!" — the server's own
+    // reason is thrown to Step6Deploy, which shows it. The draft is kept until the save is accepted.
+    const res = await fetch('/api/onboarding/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ formData: updatedData, goLive: true }),
     })
+    if (!res.ok) {
+      let why = `the server answered HTTP ${res.status}`
+      try {
+        const j = await res.json() as { error?: string; message?: string }
+        why = j.error ?? j.message ?? why
+      } catch { /* not JSON: the status says it */ }
+      throw new Error(why)
+    }
     // Clear draft
     try {
       localStorage.removeItem(DRAFT_KEY)

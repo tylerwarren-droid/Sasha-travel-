@@ -170,7 +170,7 @@ Stage A — tag + sync (write to script to avoid paste mangling):
     bash /tmp/sync.sh
 If deletions > 0, investigate each deleted file before proceeding (check it's not a repo-only file or a still-imported agent). Confirm the new conductor does not IMPORT any deleted agent (grep for 'from app.services.X import'); keyword-only references are safe.
 
-Stage B — re-apply CORS (command above), the booking hand-off (above), THEN the booking drafts (above, after the hand-off), the chat booking (above), the booking mount (below), the reservations insertion (below), then import test.
+Stage B — re-apply CORS (command above), the booking hand-off (above), THEN the booking drafts (above, after the hand-off), the chat booking (above), the booking mount (below), the reservations insertion (below), the onboarding honesty (`python3 frontend/scripts/stage_b_onboarding_honesty.py`, S-62: Go Live never shows success for a refused save; refuses loudly if an anchor moved; the prebuild fails without it) and the onboarding sign-in gate (see Repo-only files), then import test.
 
 Chat booking re-apply command (S-66, EU's booking-in-chat) — SashaChat.tsx is the CTO's; every zip drops these five
 lines. They give the chat Find → pick → read (frontend/app/components/ChatBooking.tsx, repo-only) and let a typed line

@@ -98,6 +98,7 @@ The suite refuses if this is skipped: backend/tests/test_stage_b_hooks.py fails,
 - app/vietnam2/ — uses LEGACY component copies app/vietnam2/SashaChatLegacy.tsx and app/vietnam2/VoiceButton.tsx (CTO's rewritten SashaChat has an incompatible props interface). vietnam2 needs leaflet + @types/leaflet in package.json.
 - app/kanoe/
 - frontend/app/booking-helper/ — the booking page (S-25): repo-only. Stage A's frontend rsync has no --delete, so it survives unless the CTO ships a file at the same path.
+- frontend/lib/signed-in.ts (S-62) — repo-only. AND the S-62 sign-in gate inside the CTO's frontend/app/api/onboarding/save/route.ts: if a drop replaces that file, re-add `import { signedIn } from '@/lib/signed-in'` and, first in POST, `if (!(await signedIn())) return Response.json({ error: 'Sign in to save onboarding; nothing was saved', rule: 'sign_in_required' }, { status: 401 })`. The build refuses until it is back (prebuild).
 - frontend/public/sasha_investor.html — investor portal, LIVE-ONLY. Never touch via repo without Tyler downloading/verifying/confirming first.
 
 ## Investor portal notes

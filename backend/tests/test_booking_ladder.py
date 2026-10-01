@@ -427,14 +427,21 @@ class LadderRoutes:
         self.assertEqual(bland[0]["language"], "es")
         self.assertNotIn("from", bland[0])   # no Sasha number yet: Bland's own caller ID
 
-    def test_once_sashas_number_exists_it_is_the_caller_id_but_never_given_out(self):
-        with mock.patch.dict(os.environ, {"SASHA_PHONE_NUMBER": "+44 7700 900123"}):
-            v = self.read()
-            prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
-            self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
-        bland = [b for m, u, b in self.web.requests if u.startswith("https://api.bland.ai")][0]
-        self.assertEqual(bland["from"], "+447700900123")
-        self.assertNotIn("7700900123", bland["task"])
+    def test_sashas_own_number_is_not_the_caller_id_until_bland_holds_it(self):
+        """S-70 · SASHA_PHONE_NUMBER receives (SMS, voicemail); only SASHA_CALLER_ID — set once the number is imported
+        into Bland — goes out as `from`. A number Bland does not hold would make every call fail."""
+        def first_bland_payload(env):
+            self.web.requests.clear()
+            with mock.patch.dict(os.environ, env):
+                v = self.read()
+                prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
+                self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
+            return [b for m, u, b in self.web.requests if u.startswith("https://api.bland.ai")][0]
+        own_only = first_bland_payload({"SASHA_PHONE_NUMBER": "+44 7700 900123"})
+        self.assertNotIn("from", own_only)                                   # Bland's own caller ID
+        imported = first_bland_payload({"SASHA_PHONE_NUMBER": "+44 7700 900123", "SASHA_CALLER_ID": "+44 7700 900123"})
+        self.assertEqual(imported["from"], "+447700900123")
+        self.assertNotIn("7700900123", imported["task"])
 
     def test_the_three_a_day_limit_holds_for_read_numbers(self):
         v = self.read()

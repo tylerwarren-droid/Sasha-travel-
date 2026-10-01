@@ -111,12 +111,21 @@ def bland_key() -> str:
     return _env("BLAND_API_KEY")
 
 
-def sasha_number() -> Optional[str]:
-    """S-35/36 · Sasha's own number (SASHA_PHONE_NUMBER), once bought. Until it exists this is None and calls go out
-    on Bland's own caller ID. ⚠ It is used as CALLER ID only: nothing answers it yet (no inbound agent, no SMS
-    webhook), so it is never GIVEN as a contact number — a number nobody answers is never handed out (S-32)."""
-    n = re.sub(r"[\s().-]", "", _env("SASHA_PHONE_NUMBER"))
+def _e164_env(name: str) -> Optional[str]:
+    n = re.sub(r"[\s().-]", "", _env(name))
     return n if _E164.fullmatch(n) else None
+
+
+def sasha_number() -> Optional[str]:
+    """S-70 · Sasha's OWN number (SASHA_PHONE_NUMBER): it RECEIVES — SMS and voicemail land on the reservation
+    (inbound_phone.py). It is NOT the caller ID of Bland's calls: Bland can only call from a number it holds."""
+    return _e164_env("SASHA_PHONE_NUMBER")
+
+
+def caller_id() -> Optional[str]:
+    """S-70 · the caller ID Bland's calls go out with — SASHA_CALLER_ID, set only once Sasha's number is imported into
+    Bland. Unset: Bland's own caller ID, as today. A number Bland does not hold would make every call fail."""
+    return _e164_env("SASHA_CALLER_ID")
 
 
 # ── the particulars ─────────────────────────────────────────────────────────────────────────────
@@ -428,7 +437,7 @@ def build_call(venue: CallVenue, p: CallParticulars, now: datetime, purpose: str
         "recap": recap_sentence(lang, p) if purpose == "book" else None,
         "first_sentence": opening, "task": task, "check_sentence": check,
         "party": p.party, "date": p.on.isoformat(), "time": p.at.strftime("%H:%M"), "name": p.name, "phone": p.phone,
-        "from": sasha_number(), "number_source": venue.source, "venue_name": venue.name,
+        "from": caller_id(), "number_source": venue.source, "venue_name": venue.name,
         "venue_ids": list(venue.venue_ids) if venue.venue_ids else None,
     }
     en = LANGUAGES["en"]

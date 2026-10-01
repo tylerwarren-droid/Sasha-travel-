@@ -124,6 +124,7 @@ class _Page(HTMLParser):
         self.forms: List[Dict[str, Any]] = []
         self.text: List[str] = []
         self.site_names: List[str] = []
+        self.share_images: List[str] = []   # Sasha 88 · og:image / twitter:image: the picture the venue chose for its site
         self._a: Optional[List[str]] = None
         self._href: Optional[str] = None
         self._ld = False
@@ -141,6 +142,9 @@ class _Page(HTMLParser):
             self._skip += 1
         if tag == "meta" and a.get("property", "").lower() == "og:site_name" and a.get("content", "").strip():
             self.site_names.append(a["content"].strip())   # Sasha 64 · the venue's name as its OWN site gives it
+        if tag == "meta" and (a.get("property") or a.get("name") or "").lower() in ("og:image", "og:image:secure_url", "og:image:url", "twitter:image") \
+                and a.get("content", "").strip():
+            self.share_images.append(a["content"].strip())
         if tag == "form":
             self.forms.append({"action": a.get("action", ""), "fields": []})
         if tag in ("input", "select", "textarea") and self.forms:

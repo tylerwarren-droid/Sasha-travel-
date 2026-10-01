@@ -95,7 +95,26 @@ async def page_text(http, url: str, resolve) -> Dict[str, Any]:
     except Exception:
         pass
     text = " ".join(" ".join(p.text).split())
-    return {"url": final, "text": text[:TEXT_CHARS]} if text else {"why": "their page has no text to read"}
+    image = share_image(final, p.share_images, resolve)
+    out = {"url": final, "text": text[:TEXT_CHARS]} if text else {"why": "their page has no text to read", "url": final}
+    return {**out, **({"image": image} if image else {})}
+
+
+def share_image(page_url: str, found: List[str], resolve) -> Optional[str]:
+    """Sasha 88 · the venue's OWN share picture (og:image / twitter:image), read from the same page as its style — an
+    https URL on a public host, absolute. Never fetched by us, never stored: the guest's browser shows it from their site.
+    None when the page names none — then no photo, never a Google one."""
+    from urllib.parse import urljoin, urlparse
+    for raw in found:
+        url = urljoin(page_url, raw.strip())
+        if urlparse(url).scheme != "https" or len(url) > 1000:
+            continue
+        try:
+            V.public_url(url, resolve)
+        except Exception:
+            continue
+        return url
+    return None
 
 
 async def styles(http, venues: List[dict], what: str, *, resolve=None, styler: Optional[Styler] = None) -> Dict[str, dict]:
@@ -108,14 +127,15 @@ async def styles(http, venues: List[dict], what: str, *, resolve=None, styler: O
         if not isinstance(site, str) or not site.strip():
             return pid, {"why": "no website listed — no style without their own text"}
         page = await page_text(http, site.strip(), resolve)
+        photo = {"photo": {"url": page["image"], "source": page["url"]}} if page.get("image") else {}   # Sasha 88
         if "text" not in page:
-            return pid, {"why": page["why"]}
+            return pid, {"why": page["why"], **photo}
         try:
             tags = checked_tags(await styler(system, page["text"]), page["text"])
         except Exception as e:
-            return pid, {"why": f"the summary could not be made ({type(e).__name__})"}
-        return pid, ({"label": LABEL, "tags": tags, "source": page["url"]} if tags
-                     else {"why": "their website doesn't say which styles", "source": page["url"]})
+            return pid, {"why": f"the summary could not be made ({type(e).__name__})", **photo}
+        return pid, ({"label": LABEL, "tags": tags, "source": page["url"], **photo} if tags
+                     else {"why": "their website doesn't say which styles", "source": page["url"], **photo})
 
     import asyncio
     done = await asyncio.gather(*(one(v) for v in venues[:MAX_SITES] if isinstance(v.get("place_id"), str)))

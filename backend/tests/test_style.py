@@ -103,3 +103,26 @@ class Route(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Photos(unittest.TestCase):
+    """Sasha 88 · the venue's OWN share picture, from the same fetch as its style: robots first, https, never stored."""
+    SHARE = ('<html><head><meta property="og:image" content="/img/sala.jpg"><meta name="twitter:image" content="https://cdn.ink.test/t.jpg">'
+             '</head><body><p>We love fine-line work.</p></body></html>')
+
+    def test_a_card_gets_the_sites_own_picture_or_none(self):
+        web = Web(pages={"https://ink.test/": R(200, text=self.SHARE), "https://plain.test/": R(200, text=PAGE),
+                         "https://insecure.test/": R(200, text='<meta property="og:image" content="http://insecure.test/a.jpg"><p>Hola.</p>'),
+                         "https://blocked.test/": R(200, text=self.SHARE)},
+                  robots={"blocked.test": "User-agent: *\nDisallow: /"})
+
+        async def styler(system, text):
+            return reply(("fine-line", "We love fine-line work"))
+        out = run(ST.styles(web, [{"place_id": "a", "website": "https://ink.test/"}, {"place_id": "b", "website": "https://plain.test/"},
+                                  {"place_id": "c", "website": "https://insecure.test/"}, {"place_id": "d", "website": "https://blocked.test/"}],
+                            "tattoo studio", resolve=PUBLIC, styler=styler))
+        self.assertEqual(out["a"]["photo"], {"url": "https://ink.test/img/sala.jpg", "source": "https://ink.test/"})   # relative → absolute
+        self.assertNotIn("photo", out["b"])                       # their page names no picture: none, never a Google one
+        self.assertNotIn("photo", out["c"])                       # only https
+        self.assertNotIn("photo", out["d"])                       # robots first: the page is never read
+        self.assertFalse([u for m, u, b in web.requests if u.endswith(".jpg")])   # the picture is never fetched by us

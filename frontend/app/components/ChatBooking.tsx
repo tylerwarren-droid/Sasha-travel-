@@ -60,6 +60,8 @@ export default function ChatBooking({ find }: { find: Find }) {
   const [styles, setStyles] = useState<Record<string, Style | 'reading'>>({})
   // Sasha 88 · once a call is placed or scheduled, "nobody has been contacted" is no longer true and is not shown
   const [contacted, setContacted] = useState<'calling' | 'scheduled' | null>(null)
+  // Sasha 88 · a site's picture that fails to load is simply not shown (no broken image, no stand-in)
+  const [badPhoto, setBadPhoto] = useState<Record<string, true>>({})
   useEffect(() => { stateRef.current = state }, [state])
 
   useEffect(() => {
@@ -191,6 +193,21 @@ export default function ChatBooking({ find }: { find: Find }) {
           const facts = [c.rating_words ?? 'no rating', near ? (c.distance ?? 'distance not known') : null, c.price_words ?? 'price level not listed']
           return (
             <li key={c.place_id} style={{ marginBottom: 10, opacity: grey ? 0.55 : 1 }}>
+              {(() => {
+                // Sasha 88 · the venue's own share picture, from its website — linked to the site; none when it has none
+                const st = styles[c.place_id]
+                const ph = st && st !== 'reading' ? st.photo : undefined
+                if (!ph || badPhoto[c.place_id]) return null
+                return (
+                  <a href={ph.source} target="_blank" rel="noopener noreferrer" style={{ display: 'block', margin: '2px 0 6px' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- shown from the venue's own host; never fetched or stored by us */}
+                    <img src={ph.url} alt={`${c.name ?? 'This place'} — from their website`} loading="lazy" referrerPolicy="no-referrer"
+                      onError={() => setBadPhoto((m) => ({ ...m, [c.place_id]: true }))}
+                      style={{ width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
+                    <span style={{ fontSize: 11, opacity: 0.65 }}>Photo: their website ↗</span>
+                  </a>
+                )
+              })()}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <span><strong>{c.name ?? 'no name listed'}</strong>{c.type ? <span style={{ opacity: 0.7 }}> · {c.type}</span> : null}
                   {group && group !== 'main' ? <span style={{ color: '#9a1c1c' }}> · {GROUP_WORDS[group]}</span> : null}</span>

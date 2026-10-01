@@ -13,19 +13,38 @@ So a venue's confirmation or change reaches Sasha, lands **on the reservation**,
 lands on the reservation, and an inbound SMS/voice handler that does the same. Until then the read-back says what is
 given, and nothing else.
 
-## Buying the number — steps for the founder (in Twilio's console; check each screen as it appears)
-1. **Twilio account** for Kanoe Technologies SL (console.twilio.com), upgraded from trial (a trial account cannot
-   buy a UK mobile or send to unverified numbers).
-2. **Regulatory compliance → Bundles:** UK **mobile** numbers need an approved **regulatory bundle**: the business
-   (Kanoe Technologies SL, its registered address, its NIF) and the documents Twilio asks for at that screen. Approval
-   can take a few working days — this is the long pole; start it first.
-3. **Phone Numbers → Buy a number:** country **United Kingdom**, type **Mobile**, capabilities **Voice + SMS**; attach the
-   approved bundle; buy.
-4. **Tell this tab the number** (it is not a secret). For the credentials, **set them yourself** (standing rule 17 —
-   never pasted in chat): on Railway `Sasha-travel-`, `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`; and
-   `SASHA_PHONE_NUMBER` = the number in E.164 (+44…).
-5. **Do not point its webhooks anywhere yet** — this tab builds the inbound SMS/voice handlers (they record on the
-   reservation, never reply on their own) and gives you the two URLs to paste in.
+## Buying the number: the founder's unavoidable steps (Sasha 75)
+
+**Read at source, 1 Oct 2026** (twilio.com/en-us/guidelines/gb/regulatory). For a UK **mobile** number held by a
+**business**:
+- **no supporting documents** are required;
+- **the address may be anywhere in the world**, so Kanoe's Spanish address is fine. A UK address is needed only for
+  local/national numbers, not mobile;
+- the bundle needs: business name; registration authority and number; website; business address; an authorised
+  representative's name, mobile phone and work email; the business classification (direct customer).
+
+**The founder does three things:**
+
+1. **Twilio account for Kanoe Technologies SL**, upgraded from trial (twilio.com/console). Sign-up, identity check and
+   payment method are his alone. A trial account cannot buy a UK mobile.
+2. **On Railway (Sasha-travel-, backend service), set two variables himself:** `TWILIO_ACCOUNT_SID` and
+   `TWILIO_AUTH_TOKEN`, from the Twilio Console's front page (rule 17: never pasted in chat). Then he says "Twilio set".
+3. **Tell this tab, in chat, the four facts it cannot know.** None of them is a secret:
+   - Kanoe Technologies SL's **NIF/CIF**;
+   - its **registered address**;
+   - the **authorised representative** (him, presumably: name and title);
+   - the representative's **mobile number**. Twilio may contact them on it; Twilio requires one that is not a Twilio
+     number. The work email is taken to be `tyler@kanoe.ai` unless he says otherwise.
+
+**This tab does the rest, through Twilio's API under `railway run`, with no credential printed:**
+- create the End-User (business, direct customer) and the Address;
+- create the GB-mobile business regulatory bundle, attach both, and submit it;
+- watch its status, and say when Twilio approves it or what it asks for;
+- on approval, buy a UK **mobile** number with **Voice + SMS**, attached to the bundle;
+- record it as `SASHA_PHONE_NUMBER` on Railway (not a secret).
+
+**Not until something answers it (S-32):** the number is not given to venues, and its webhooks are not pointed, until
+this tab's inbound SMS and voice handlers record on the reservation. Those are built while the bundle is in review.
 
 ## What this tab builds (after the number and the domain exist)
 1. **The brief and the email carry Sasha's contact** (her email; her number once inbound works), next to the guest's

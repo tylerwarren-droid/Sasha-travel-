@@ -3,8 +3,7 @@
 *Sasha tab, 1 Oct 2026 (Sasha 68). **Plan only: nothing is created.** Chat creates the project after the founder approves
 the cost. Every count and schema fact below was read today from the live project (read-only), not taken from files.*
 
-> ⚠ Numbering: `docs/sasha/S-69-sasha-own-contact.md` (Sasha's own Twilio number and contact rule) already holds S-69.
-> The founder's numbering wins. That doc can become S-70 if he says so.
+> Numbering: the own-contact doc that held S-69 is now `docs/sasha/S-70-sasha-own-contact.md` (Sasha 69).
 
 ## 0. Why, and what moves
 

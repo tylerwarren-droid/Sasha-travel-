@@ -71,8 +71,8 @@ class MemoryCallStore:
         return dict(r) if r and r["account_id"] == account_id else None
 
     async def claim(self, account_id: str, call_id: str, approval: dict, now: datetime, fresh_after: datetime,
-                    cap: int, since: datetime) -> str:
-        """'claimed' | 'stale' | 'cap' | 'taken' | 'unknown' — in ONE step."""
+                    cap: int, since: datetime, account_cap: Optional[int] = None) -> str:
+        """'claimed' | 'stale' | 'cap' | 'account_cap' | 'taken' | 'unknown' — in ONE step."""
         r = self.calls.get(call_id)
         if not r or r["account_id"] != account_id:
             return "unknown"
@@ -82,6 +82,9 @@ class MemoryCallStore:
             return "stale"
         if sum(1 for c in self.calls.values() if c["status"] in DIALLED and c.get("approved_at") and c["approved_at"] >= since) >= cap:
             return "cap"
+        if account_cap is not None and sum(1 for c in self.calls.values() if c["account_id"] == account_id and c["status"] in DIALLED
+                                           and c.get("approved_at") and c["approved_at"] >= since) >= account_cap:
+            return "account_cap"   # S-62 step 2 · per account as well as global
         r.update(status="placing", approval=approval, approved_at=now)
         return "claimed"
 
@@ -104,12 +107,15 @@ class MemoryCallStore:
         return [dict(c) for c in self.calls.values() if c["status"] == "awaiting_approval" and (c.get("approval") or {}).get("scheduled_for")
                 and datetime.fromisoformat(c["approval"]["scheduled_for"]) <= now]
 
-    async def start_scheduled(self, call_id, cap, since) -> str:
+    async def start_scheduled(self, call_id, cap, since, account_cap: Optional[int] = None) -> str:
         r = self.calls[call_id]
         if r["status"] != "awaiting_approval" or not (r.get("approval") or {}).get("scheduled_for"):
             return "taken"
         if sum(1 for c in self.calls.values() if c["status"] in DIALLED and c.get("approved_at") and c["approved_at"] >= since) >= cap:
             return "cap"
+        if account_cap is not None and sum(1 for c in self.calls.values() if c["account_id"] == r["account_id"] and c["status"] in DIALLED
+                                           and c.get("approved_at") and c["approved_at"] >= since and c is not r) >= account_cap:
+            return "account_cap"
         r["status"] = "placing"
         return "claimed"
 
@@ -239,7 +245,7 @@ class PostgresCallStore:
         return _row(await self._run(lambda c: c.fetchrow(
             "select * from booking_calls where call_id = $1 and account_id = $2", cid, uuid.UUID(account_id))))
 
-    async def claim(self, account_id, call_id, approval, now, fresh_after, cap, since) -> str:
+    async def claim(self, account_id, call_id, approval, now, fresh_after, cap, since, account_cap=None) -> str:
         cid = _uuid_or_none(call_id)
         if cid is None:
             return "unknown"
@@ -260,6 +266,10 @@ class PostgresCallStore:
                                         list(DIALLED), since)
                 if n >= cap:
                     return "cap"
+                if account_cap is not None and await conn.fetchval(
+                        "select count(*) from booking_calls where account_id = $3 and status = any($1::text[]) and approved_at >= $2",
+                        list(DIALLED), since, uuid.UUID(account_id)) >= account_cap:
+                    return "account_cap"   # S-62 step 2
                 await conn.execute("update booking_calls set status = 'placing', approval = $2, approved_at = $3 where call_id = $1",
                                    cid, approval, now)
                 return "claimed"
@@ -296,17 +306,21 @@ class PostgresCallStore:
             "and (approval->>'scheduled_for')::timestamptz <= $1 order by approved_at limit 20", now))
         return [_row(r) for r in rows]
 
-    async def start_scheduled(self, call_id, cap, since) -> str:
+    async def start_scheduled(self, call_id, cap, since, account_cap=None) -> str:
         async def fn(conn):
             async with conn.transaction():
                 await conn.execute("lock table booking_calls in share row exclusive mode")
-                r = await conn.fetchrow("select status, approval from booking_calls where call_id = $1", uuid.UUID(call_id))
+                r = await conn.fetchrow("select status, approval, account_id from booking_calls where call_id = $1", uuid.UUID(call_id))
                 if r is None or r["status"] != "awaiting_approval" or not (r["approval"] or {}).get("scheduled_for"):
                     return "taken"
                 n = await conn.fetchval("select count(*) from booking_calls where status = any($1::text[]) and approved_at >= $2",
                                         list(DIALLED), since)
                 if n >= cap:
                     return "cap"
+                if account_cap is not None and await conn.fetchval(
+                        "select count(*) from booking_calls where account_id = $3 and status = any($1::text[]) and approved_at >= $2",
+                        list(DIALLED), since, r["account_id"]) >= account_cap:
+                    return "account_cap"
                 await conn.execute("update booking_calls set status = 'placing' where call_id = $1", uuid.UUID(call_id))
                 return "claimed"
         return await self._run(fn)

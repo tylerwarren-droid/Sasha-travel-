@@ -67,6 +67,14 @@ def cap() -> int:
         return 3
 
 
+def account_cap() -> int:
+    """S-62 step 2 · calls per ACCOUNT per 24 h, as well as the server's cap (SASHA_CALLS_PER_ACCOUNT_PER_DAY, default 10)."""
+    try:
+        return max(0, int(os.getenv("SASHA_CALLS_PER_ACCOUNT_PER_DAY", "10")))
+    except ValueError:
+        return 10
+
+
 def _refuse(status: int, rule: str, message: str) -> JSONResponse:
     return JSONResponse({"ok": False, "rule": rule, "message": message}, status_code=status)
 
@@ -88,7 +96,7 @@ def status() -> dict:
             venues[k] = {"number_set": True, "language": v.language}
         except C.CallRefused as e:
             venues[k] = {"number_set": False, "why": e.rule}
-    return {"enabled": C.calls_enabled(), "bland_configured": bool(C.bland_key()), "per_day": cap(), "venues": venues}
+    return {"enabled": C.calls_enabled(), "bland_configured": bool(C.bland_key()), "per_day": cap(), "per_account_per_day": account_cap(), "venues": venues}
 
 
 def _off() -> Optional[JSONResponse]:
@@ -459,7 +467,7 @@ async def place(call_id: str, request: Request):
     approval = {"by": account, "how": a["how"], "said": a.get("said"), "at": now.isoformat(),
                 "read_back_sha256": call["read_back_sha256"], "brief_sha256": call["brief_sha256"]}
     try:
-        claimed = await CALL_STORE.claim(account, call_id, approval, now, now - APPROVAL_WINDOW, cap(), cap_window(now))
+        claimed = await CALL_STORE.claim(account, call_id, approval, now, now - APPROVAL_WINDOW, cap(), cap_window(now), account_cap())
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
     if claimed == "taken":
@@ -468,6 +476,8 @@ async def place(call_id: str, request: Request):
         return _refuse(422, "read_back_expired", "that read-back is more than 15 minutes old; prepare the call again")
     if claimed == "cap":
         return _refuse(429, "daily_call_limit", f"{cap()} calls have been placed in the last 24 hours, the most this server allows")
+    if claimed == "account_cap":
+        return _refuse(429, "account_daily_call_limit", f"this account has placed {account_cap()} calls in the last 24 hours, the most one account may")
     if claimed != "claimed":
         return _refuse(404, "call_unknown", "no call with that id was prepared for this account")
 
@@ -530,9 +540,12 @@ async def place_due() -> int:
         except PT.ListingUnavailable as e:
             await CALL_STORE.cancel_scheduled(cid, str(e))
             continue
-        r = await CALL_STORE.start_scheduled(cid, cap(), cap_window(now))
+        r = await CALL_STORE.start_scheduled(cid, cap(), cap_window(now), account_cap())
         if r == "cap":
             await CALL_STORE.cancel_scheduled(cid, f"{cap()} calls had already been placed in the last 24 hours; nothing was dialled")
+            continue
+        if r == "account_cap":
+            await CALL_STORE.cancel_scheduled(cid, f"this account had already placed {account_cap()} calls in the last 24 hours; nothing was dialled")
             continue
         if r != "claimed":
             continue

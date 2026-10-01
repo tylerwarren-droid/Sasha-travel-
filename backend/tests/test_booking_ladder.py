@@ -444,6 +444,67 @@ class LadderRoutes:
         self.assertEqual((r.status_code, r.json()["rule"]), (429, "daily_call_limit"))
         self.assertEqual(len([1 for m, u, b in self.web.requests if u.startswith("https://api.bland.ai")]), 3)
 
+    # ── S-62 step 2 · each account sees only its own: A's ids answer B exactly as ids that do not exist ─────
+
+    def as_guest(self):
+        """B: a signed-in guest — a real ES256 token verified against test keys (tests/test_identity.py)."""
+        from booking_signer import identity as I
+        from tests.test_identity import JWK, token
+        async def fetch():
+            return {"keys": [JWK]}
+        saved = I.FETCH
+        I.FETCH = fetch
+        I.reset_cache()
+        self.addCleanup(lambda: (setattr(I, "FETCH", saved), I.reset_cache()))
+        return {"x-sasha-booking-key": "test-booking-key", "authorization": f"Bearer {token()}", "x-sasha-session": ""}
+
+    def test_s62_another_account_sees_none_of_it(self):
+        v = self.read()                                                                                     # A: the founder
+        call = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
+        mail = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"}).json()
+        lv = self.link_read() if hasattr(self, "link_read") else None
+        link = self.c.post("/api/booking/links", json={"read_id": lv["read_id"], **self.BOOKING}).json() if lv else None
+        b = self.as_guest()
+        ghost = "00000000-0000-4000-8000-000000000000"
+        yes = {"read_back_sha256": "0" * 64, "approval": {"how": "button"}}
+
+        def same(method, path_for, body_for=lambda i: None):
+            """B on A's id answers exactly as B on an id that never existed — never 200, never "forbidden"."""
+            got = [self.c.request(method, path_for(i), json=body_for(i), headers=b) for i in (real, ghost)]
+            self.assertNotEqual(got[0].status_code, 200, path_for(real))
+            self.assertEqual((got[0].status_code, got[0].json()), (got[1].status_code, got[1].json()), path_for(real))
+            self.assertIn(got[0].status_code, (404, 422), path_for(real))
+
+        real = v["read_id"]
+        same("GET", lambda i: f"/api/booking/venues/read/{i}")
+        same("POST", lambda i: "/api/booking/calls", lambda i: {"read_id": i, **self.BOOKING})
+        same("POST", lambda i: "/api/booking/emails", lambda i: {"read_id": i, **self.BOOKING, "email": "b@example.test"})
+        same("POST", lambda i: "/api/booking/links", lambda i: {"read_id": i, **self.BOOKING})
+        real = call["call_id"]
+        same("GET", lambda i: f"/api/booking/calls/{i}")
+        same("POST", lambda i: f"/api/booking/calls/{i}/place", lambda i: {**yes, "read_back_sha256": call["read_back"]["sha256"]} if i == real else {**yes, "read_back_sha256": call["read_back"]["sha256"]})
+        same("POST", lambda i: "/api/booking/calls", lambda i: {"cancels_call_id": i})
+        real = mail["email_id"]
+        same("GET", lambda i: f"/api/booking/emails/{i}")
+        same("POST", lambda i: f"/api/booking/emails/{i}/send", lambda i: {**yes, "read_back_sha256": mail["read_back"]["sha256"]})
+        if link:
+            real = link["link_id"]
+            same("GET", lambda i: f"/api/booking/links/{i}")
+            same("POST", lambda i: f"/api/booking/links/{i}/opened", lambda i: {})
+            same("POST", lambda i: f"/api/booking/links/{i}/booked", lambda i: {"said": "booked"})
+        self.assertFalse([u for m, u, _ in self.web.requests if u.startswith("https://api.bland.ai")])     # nothing dialled for B
+        self.assertEqual(self.c.get(f"/api/booking/calls/{call['call_id']}").status_code, 200)              # A still sees it
+
+    def test_s62_a_per_account_daily_call_cap(self):
+        v = self.read()
+        with mock.patch.dict(os.environ, {"SASHA_CALLS_PER_ACCOUNT_PER_DAY": "1"}):
+            rs = []
+            for i in range(2):
+                prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
+                rs.append(self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}}))
+        self.assertEqual(rs[0].json()["status"], "placed")
+        self.assertEqual((rs[1].status_code, rs[1].json()["rule"]), (429, "account_daily_call_limit"))
+
     # ── S-54 · the refusal check: a venue that said stop is never contacted by Sasha again ──────────────────
 
     def venue_id(self, v):

@@ -17,9 +17,17 @@ import { useEffect, useState } from 'react'
 import { bookingUrl, bookingHeaders } from '@/lib/booking-api'
 
 type Reservation = {
-  id: string; channel: string; venue: string; date: string; time: string; timezone: string | null; party: number
+  id: string; channel: string; venue: string; date: string | null; time: string | null; timezone: string | null; party: number | null
   status: string; status_words: string; booking_reference: string | null; venue_words: string | null
+  // S-64 step 14 · what was asked for: the activity, its length, its count in its own unit
+  what: string; unit: string; count: number | null; duration_min: number | null
 }
+
+const UNIT_ONE: Record<string, string> = { people: 'person', sessions: 'session', pieces: 'piece', places: 'place' }
+/** "a 60-minute relaxing massage · 1 person" · "a table · 4 people" · "a tattoo session, 120 min · 1 session" */
+const whatLine = (r: Reservation) =>
+  `${r.what}${r.duration_min && !r.what.includes(String(r.duration_min)) ? `, ${r.duration_min} min` : ''}`
+  + (r.count ? ` · ${r.count} ${r.count === 1 ? (UNIT_ONE[r.unit] ?? r.unit) : r.unit}` : '')
 type State = { phase: 'loading' } | { phase: 'hidden' } | { phase: 'failed' } | { phase: 'loaded'; items: Reservation[] }
 
 const CHANNEL: Record<string, string> = { phone: 'by phone', email: 'by email', link: 'by their booking page', form: 'by their booking form' }
@@ -53,8 +61,9 @@ export default function SashaReservations() {
   if (state.phase === 'hidden') return null
   const byDay = new Map<string, Reservation[]>()
   if (state.phase === 'loaded') {
-    for (const r of [...state.items].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))) {
-      byDay.set(r.date, [...(byDay.get(r.date) ?? []), r])
+    for (const r of [...state.items].sort((a, b) => `${a.date ?? '9'}${a.time ?? ''}`.localeCompare(`${b.date ?? '9'}${b.time ?? ''}`))) {
+      const key = r.date ?? ''   // an ASKING call's reservation has no day yet: grouped last, said plainly
+      byDay.set(key, [...(byDay.get(key) ?? []), r])
     }
   }
   return (
@@ -67,10 +76,10 @@ export default function SashaReservations() {
           {state.phase === 'loaded' && state.items.length === 0 && <div className="lw-note-s">No reservations made through Sasha yet.</div>}
           {state.phase === 'loaded' && [...byDay].map(([day, rows]) => (
             <div key={day} style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>{dayHeader(day)}</div>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{day ? dayHeader(day) : 'No day set yet — they were asked when they have space'}</div>
               {rows.map((r) => (
                 <div key={r.id} style={{ marginBottom: 8 }}>
-                  <div>{r.time} ({zoneName(r.timezone)}) · {r.venue} · {r.party} {r.party === 1 ? 'person' : 'people'} · {CHANNEL[r.channel] ?? r.channel}</div>
+                  <div>{r.time ? `${r.time} (${zoneName(r.timezone)}) · ` : ''}{r.venue} · {whatLine(r)} · {CHANNEL[r.channel] ?? r.channel}</div>
                   <div className="lw-note-s">{r.status_words}</div>
                   <div className="lw-note-s">{r.booking_reference ? `Their reference: ${r.booking_reference}` : 'They gave no reference'}</div>
                   {r.venue_words ? <div className="lw-note-s">What they said: &ldquo;{r.venue_words}&rdquo;</div> : null}

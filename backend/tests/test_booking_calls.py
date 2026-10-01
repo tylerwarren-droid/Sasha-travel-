@@ -714,6 +714,40 @@ class OnPostgres(CallRoutes, unittest.TestCase):
         self.assertEqual((r["channel"], r["status"], r["date"], r["time"], r["party"], r["booking_reference"]),
                          ("phone", "confirmed", "2026-10-08", "20:00", 4, "Johnson"))
         self.assertEqual(r["venue_words"], "Yes, that's fine. Under Johnson. / Yes, that's right.")   # every word they said, the yes to the recap included
+        self.assertEqual((r["what"], r["count"], r["unit"], r["status_words"]), ("a table", 4, "people", "Confirmed by the restaurant"))
+
+    def test_s64_the_reservations_say_the_activity_its_length_and_its_unit(self):
+        """S-64 step 14 · a massage is shown as a massage, for 60 minutes, for one person, confirmed by the VENUE; an offer
+        with no day yet is listed without a made-up one."""
+        saved = routes.STORE
+        routes.STORE = self.base
+        self.addCleanup(lambda: setattr(routes, "STORE", saved))
+        from booking_signer import reservation as RS
+        def obj(**over):
+            o = {"schema": "reservation/1", "flow": "book", "who": {"name": "Tyler Warren", "account_id": DEMO_ACCOUNT_ID},
+                 "what": {"activity": "a 60-minute relaxing massage", "activity_venue_lang": "un masaje relajante de 60 minutos", "category": "beauty"},
+                 "where": {"venue_name": "Calma", "timezone": "Europe/Madrid", "venue_ids": []},
+                 "when": {"mode": "at", "at": "2026-10-05T10:00", "duration_min": 60}, "how_many": {"count": 1, "unit": "people"}}
+            o.update(over)
+            return RS.validate(o)
+        def put(o, status, cid):
+            b = C.build_call(C.test_line(), C.parse_call_particulars(JOHNSON), MONDAY)
+            cols = RS.columns(o)
+            row = {"call_id": cid, "account_id": DEMO_ACCOUNT_ID, "venue_key": "read:x", "dialled_number": "+34919891916", "language": "es",
+                   "guest_name": "Tyler Warren", "guest_phone": None, "brief": b["brief"], "brief_sha256": b["brief_sha256"],
+                   "read_back_lines": b["read_back_lines"], "read_back_sha256": b["read_back_sha256"], "created_at": MONDAY,
+                   "venue_name": "Calma", "local_date": cols.get("local_date"), "local_time": cols.get("local_time"),
+                   "local_timezone": "Europe/Madrid", "party_size": cols.get("party_size"), "type": "beauty", "request": o}
+            self.c.portal.call(lambda: self.store.put_call(row, None))
+            self._q("update trip_items t set status = $2 from booking_calls c where c.trip_item_id = t.id and c.call_id = $1::uuid", cid, status)
+        put(obj(), "confirmed", "11111111-1111-4111-8111-0000000000c1")
+        put(obj(flow="availability", when={"mode": "venue_proposes"}), "proposed", "11111111-1111-4111-8111-0000000000c2")
+        rows = {x["intent_id"]: x for x in self.c.get("/api/booking/reservations").json()["reservations"]}
+        m = rows["11111111-1111-4111-8111-0000000000c1"]
+        self.assertEqual((m["what"], m["duration_min"], m["count"], m["unit"], m["date"], m["time"], m["status_words"]),
+                         ("a 60-minute relaxing massage", 60, 1, "people", "2026-10-05", "10:00", "Confirmed by the venue"))
+        q = rows["11111111-1111-4111-8111-0000000000c2"]
+        self.assertEqual((q["date"], q["time"], q["status_words"]), (None, None, "Not booked — they offered a different time or day; read what they said"))
 
     def test_the_block_refuses_to_run_twice(self):
         import asyncpg

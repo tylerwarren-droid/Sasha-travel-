@@ -435,6 +435,21 @@ STATUS_WORDS = {
     "waitlisted": "Not booked — you are on their waiting list",
 }
 
+def what_of(request, party) -> dict:
+    req = request if isinstance(request, dict) else ({} if not request else __import__("json").loads(request))
+    if not req:
+        return {"what": "a table", "category": "restaurant", "count": party, "unit": "people", "duration_min": None}
+    return {"what": req["what"]["activity"], "category": req["what"]["category"], "count": req["how_many"]["count"],
+            "unit": req["how_many"]["unit"], "duration_min": (req.get("when") or {}).get("duration_min")}
+
+
+def status_words(status: str, request) -> str:
+    """"…by the restaurant" only for a restaurant; anything else is "the venue"."""
+    words = STATUS_WORDS.get(status, status)
+    category = what_of(request, None)["category"]
+    return words if category == "restaurant" else words.replace("the restaurant", "the venue")
+
+
 @router.get("/reservations")
 async def reservations(request: Request):
     try:
@@ -443,8 +458,13 @@ async def reservations(request: Request):
         return _unavailable(e)
     return {"reservations": [{
         "id": r["id"], "trip_id": r["trip_id"], "intent_id": r["intent_id"], "channel": r.get("channel") or "form", "venue": r["venue"],
-        "date": r["local_date"].isoformat(), "time": r["local_time"].strftime("%H:%M"), "timezone": r["local_timezone"],
-        "party": r["party_size"], "status": r["status"], "status_words": STATUS_WORDS.get(r["status"], r["status"]),
+        # an ASKING call's reservation has no time of its own yet (S-64 step 9): null, never a made-up one
+        "date": r["local_date"].isoformat() if r["local_date"] else None,
+        "time": r["local_time"].strftime("%H:%M") if r["local_time"] else None, "timezone": r["local_timezone"],
+        "party": r["party_size"], "status": r["status"], "status_words": status_words(r["status"], r.get("request")),
+        # S-64 step 14 · WHAT was asked for — the activity, its length and its count in its own unit (a table when the
+        # row predates the object and nothing else is known)
+        **what_of(r.get("request"), r["party_size"]),
         # the VENUE's own reservation number, only ever when its page or email gave one — never ours in its place
         "booking_reference": r["booking_reference"],
         # Sasha's OWN reference (P807mv §3): the first 8 of the intent id — labelled as hers, never as the restaurant's

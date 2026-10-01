@@ -167,7 +167,7 @@ class MemoryStore:
                         "venue": item["provider_name"], "local_date": item["local_date"], "local_time": item["local_time"],
                         "local_timezone": item["local_timezone"], "party_size": item["party_size"], "status": item["status"],
                         "booking_reference": item["booking_reference"], "venue_words": att.get("venue_words"),
-                        "observed_by": att.get("observed_by"),
+                        "observed_by": att.get("observed_by"), "request": item.get("request"),
                         "task_digest": self.tasks.get(intent["intent_id"], {}).get("task_digest")})
         return sorted(out, key=lambda r: (r["local_date"], r["local_time"]))
 
@@ -382,7 +382,8 @@ class PostgresStore:
             "t.provider_name as venue, "
             "(t.date_time at time zone t.local_timezone)::date as local_date, "
             "(t.date_time at time zone t.local_timezone)::time as local_time, t.local_timezone, t.party_size, t.status, "
-            "t.booking_reference, coalesce(a.response_received, c.venue_words) as venue_words, a.observed_by, k.task_digest "
+            "t.booking_reference, coalesce(a.response_received, c.venue_words) as venue_words, a.observed_by, k.task_digest, "
+            "t.request "   # S-64 step 14 · the activity, its length and its unit, for the screen
             "from trip_items t join trips p on p.id = t.trip_id "
             "left join lateral (select * from booking_intents y where y.trip_item_id = t.id order by y.created_at desc limit 1) i on true "
             "left join booking_tasks k on k.intent_id = i.intent_id "
@@ -391,7 +392,7 @@ class PostgresStore:
             "left join lateral (select link_id from booking_links z where z.trip_item_id = t.id limit 1) l on true "
             # a PREPARED item has no attempt — nothing was sent — so the attempt is optional
             "left join lateral (select * from booking_attempts x where x.trip_item_id = t.id order by x.attempted_at desc limit 1) a on true "
-            "where p.owner_id = $1 and t.status <> 'pending' order by local_date, local_time", uuid.UUID(account_id)))
+            "where p.owner_id = $1 and t.status <> 'pending' order by local_date nulls last, local_time nulls last", uuid.UUID(account_id)))
         return [_row(r) for r in rows]
 
 

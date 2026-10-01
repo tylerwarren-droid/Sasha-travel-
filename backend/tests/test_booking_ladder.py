@@ -760,6 +760,13 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
         c = self.calls.calls[prep["call_id"]]
         self.assertEqual((c["status"], c["not_placed_why"][:40]), ("not_placed", "they replied by email before the call, s"))
 
+    def test_s66_a_yes_typed_in_the_chat_sends_the_email(self):
+        v = self.read()
+        p = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"}).json()
+        r = self.c.post(f"/api/booking/emails/{p['email_id']}/send", json={"read_back_sha256": p["read_back"]["sha256"],
+                                                                            "approval": {"how": "chat", "said": "yes please"}})
+        self.assertEqual(r.json()["status"], "sent", r.text)
+
     def test_quarantine_is_kept(self):
         body, h = signed({"type": "email.received", "data": {"email_id": "rcv_q", "to": ["hello@in.kanoe.test"], "from": "x@y.test"}})
         self.c.post("/api/booking/email/inbound", content=body, headers=h)

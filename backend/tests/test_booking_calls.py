@@ -437,6 +437,19 @@ class CallRoutes:
         self.assertEqual(run_(self.store.start_scheduled(cid, 3, later - timedelta(days=1))), "claimed")
         self.assertFalse(run_(self.store.cancel_scheduled(cid, "too late")))                # already placing: not cancelled
 
+    def test_s66_a_yes_typed_in_the_chat_places_the_call_with_its_words(self):
+        prep = self.prepare()
+        bad = self.c.post(f"/api/booking/calls/{prep['call_id']}/place",
+                          json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "chat", "said": "  "}})
+        self.assertEqual(bad.json()["rule"], "approval_void")                  # a typed yes needs its words
+        r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place",
+                        json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "chat", "said": "yes, go ahead"}})
+        self.assertEqual(r.json()["status"], "placed", r.text)
+        wrong = self.prepare(party=3)                                             # a different read-back, so a different hash
+        self.assertEqual(self.c.post(f"/api/booking/calls/{wrong['call_id']}/place",
+                                     json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "chat", "said": "yes"}}).json()["rule"],
+                         "approval_void")                                        # bound to THAT card's read-back, never another's
+
     def test_off_means_no_read_back_and_no_call(self):
         with mock.patch.dict(os.environ, {"SASHA_CALLS_ENABLED": "0"}):
             r = self.c.post("/api/booking/calls", json=JOHNSON)

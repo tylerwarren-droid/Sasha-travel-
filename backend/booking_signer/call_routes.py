@@ -400,8 +400,9 @@ async def place(call_id: str, request: Request):
     if body.get("read_back_sha256") != call["read_back_sha256"]:
         return _refuse(422, "approval_void", "the approval was given to different words from this call's read-back")
     a = body.get("approval") if isinstance(body.get("approval"), dict) else {}
-    if a.get("how") not in ("button", "voice") or (a.get("how") == "voice" and not str(a.get("said") or "").strip()):
-        return _refuse(422, "approval_void", "an approval is by button, or by voice with the words said")
+    # S-66 (EU) step 6 · a yes TYPED in the chat counts too — with the guest's exact words, kept with the approval
+    if a.get("how") not in ("button", "voice", "chat") or (a.get("how") in ("voice", "chat") and not str(a.get("said") or "").strip()):
+        return _refuse(422, "approval_void", "an approval is by button, or by voice or typed in the chat with the words said")
     brief = call["brief"]
     if C._sha256hex(C._canonical(brief)) != call["brief_sha256"]:
         return _refuse(409, "brief_changed", "the stored brief no longer matches what was read back; nothing was dialled")

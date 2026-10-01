@@ -236,8 +236,9 @@ async def send_email(email_id: str, request: Request):
     if body.get("read_back_sha256") != e["read_back_sha256"]:
         return _refuse(422, "approval_void", "the approval was given to different words from this email's read-back")
     a = body.get("approval") if isinstance(body.get("approval"), dict) else {}
-    if a.get("how") not in ("button", "voice") or (a.get("how") == "voice" and not str(a.get("said") or "").strip()):
-        return _refuse(422, "approval_void", "an approval is by button, or by voice with the words said")
+    # S-66 (EU) step 6 · a yes TYPED in the chat counts too — with the guest's exact words, kept with the approval
+    if a.get("how") not in ("button", "voice", "chat") or (a.get("how") in ("voice", "chat") and not str(a.get("said") or "").strip()):
+        return _refuse(422, "approval_void", "an approval is by button, or by voice or typed in the chat with the words said")
     if E.email_sha256(e["email"]) != e["email_sha256"]:
         return _refuse(409, "email_changed", "the stored email no longer matches what was read back; nothing was sent")
     # S-54 · checked again at the send: a venue can withdraw between the read-back and the yes

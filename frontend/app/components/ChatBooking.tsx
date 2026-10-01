@@ -101,13 +101,16 @@ export default function ChatBooking({ find }: { find: Find }) {
     const need = s.cards.filter((c) => !(c.place_id in styles))
     if (!need.length) return
     setStyles((m) => ({ ...m, ...Object.fromEntries(need.map((c) => [c.place_id, 'reading' as const])) }))
-    styleVenues(find.what, need.map((c) => ({ place_id: c.place_id, website: c.website })))
-      .then((r) => {
+    ;(async () => {
+      try {
+        const r = await styleVenues(find.what, need.map((c) => ({ place_id: c.place_id, website: c.website })))
         const got = (r.ok ? (r.json.styles ?? {}) : {}) as Record<string, Style>
         const why = r.ok ? 'not read' : refusal(r.json, r.status)
         setStyles((m) => ({ ...m, ...Object.fromEntries(need.map((c) => [c.place_id, got[c.place_id] ?? { why }])) }))
-      })
-      .catch((e) => setStyles((m) => ({ ...m, ...Object.fromEntries(need.map((c) => [c.place_id, { why: (e as Error).message }])) })))
+      } catch (e) {
+        setStyles((m) => ({ ...m, ...Object.fromEntries(need.map((c) => [c.place_id, { why: (e as Error).message }])) }))
+      }
+    })()
   // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the cards shown change
   }, [shownIds])
 

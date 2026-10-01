@@ -143,6 +143,45 @@ class FollowUps:
         self.assertEqual(FU.reply_reading("No, lo siento, estamos completos.", o)["result"], "declined")
         self.assertEqual(FU.reply_reading("Podemos a las 21:00.", o)["result"], "proposed")
 
+    # ── Sasha 75 · the email rung's own booking: the reply is read the same way ───────────────────────────────────
+
+    def rung_email(self):
+        v = self.read()
+        p = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **LadderRoutes.BOOKING, "email": GUEST}).json()
+        r = self.c.post(f"/api/booking/emails/{p['email_id']}/send", json={"read_back_sha256": p["read_back"]["sha256"], "approval": {"how": "button"}})
+        self.assertEqual(r.json()["status"], "sent", r.text)
+        return p
+
+    def rung_reply(self, p, text, pid):
+        self.web.resend_received[pid] = {"text": text}
+        body, h = signed({"type": "email.received", "data": {"email_id": pid, "from": "Tyler <tyler@kanoe.test>",
+                                                            "to": [f"act-{p['email_id']}@in.kanoe.test"], "subject": "Re: Solicitud de mesa"}})
+        return self.c.post("/api/booking/email/inbound", content=body, headers=h).json()
+
+    def test_an_email_rung_booking_confirmed_by_reply(self):
+        p = self.rung_email()
+        quoted = ("Confirmado: mesa para 4 personas el jueves 8 de octubre a las 20:00, a nombre de Johnson.\n\n"
+                  "El jue, 1 oct 2026 a las 17:20, Sasha (Kanoe) <act-x@in.kanoe.test> escribió:\n> Solicitud de mesa…")
+        self.assertEqual(self.rung_reply(p, quoted, "rcv_rung_ok"), {"ok": True, "matched": True})
+        self.assertEqual(self.trip_status(p["trip_item_id"]), "confirmed")
+
+    def test_an_email_rung_reply_with_another_time_is_proposed(self):
+        p = self.rung_email()
+        self.rung_reply(p, "A las 20:00 no podemos; os ofrecemos el jueves 8 a las 21:30 para 4.\n\nOn Thu wrote:\n> …", "rcv_rung_prop")
+        self.assertEqual(self.trip_status(p["trip_item_id"]), "proposed")
+
+    def test_a_bare_yes_above_our_quoted_email_confirms_nothing(self):
+        p = self.rung_email()
+        before = self.trip_status(p["trip_item_id"])
+        self.rung_reply(p, "Sí.\n\nEl jue, 1 oct 2026 a las 17:20, Sasha (Kanoe) <act-x@in.kanoe.test> escribió:\n"
+                           "> Solicitud de mesa para 4 personas el 2026-10-08 a las 20:00", "rcv_rung_bare")
+        self.assertEqual(self.trip_status(p["trip_item_id"]), before)
+
+    def test_own_words(self):
+        self.assertEqual(FU.own_words("Vale\n\nOn Thu, Oct 1, 2026 at 5:20 PM Sasha (Kanoe) <a@b.c> wrote:\n> x"), "Vale")
+        self.assertEqual(FU.own_words("Perfecto\n\nDe: Sasha (Kanoe) <sasha@booking.kanoe.ai>\nEnviado: jueves"), "Perfecto")
+        self.assertEqual(FU.own_words("Ok\n-----Original Message-----\nFrom: x"), "Ok")
+
     # ── inbound: other products' mail is not Sasha's ──────────────────────────────────────────────────────────────
 
     def test_mail_for_another_domain_is_ignored_and_nothing_is_kept(self):

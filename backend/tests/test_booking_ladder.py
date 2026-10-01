@@ -607,7 +607,8 @@ class LadderRoutes:
         g = self.c.get(f"/api/booking/emails/{p['email_id']}").json()
         self.assertEqual([x["text"] for x in g["replies"]], ["Sí, perfecto: mesa para 4 el jueves a las 20:00."])
         self.assertEqual(g["say"], "They replied — here are their words.")
-        self.assertEqual(self.trip_status_of_email(p["email_id"]), "attempting")   # a reply never moves the status itself
+        # Sasha 74/75 · an explicit yes restating the number, day and time confirms (before: a reply never moved the status)
+        self.assertEqual(self.trip_status_of_email(p["email_id"]), "confirmed")
 
     def test_resend_refusing_is_not_sent_with_its_words(self):
         self.web.resend_send = R(403, {"message": "The mail.kanoe.test domain is not verified"})
@@ -753,7 +754,7 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
         v, p = self.sent_email()
         self.reply(p, "rcv_ok", "Sí, perfecto: mesa para 4 el jueves a las 20:00. Para cualquier cambio, llamadnos.")
         self.assertEqual((self.optins.rows, self.acks()), ([], []))
-        self.assertEqual(self.trip_status_of_email(p["email_id"]), "attempting")
+        self.assertEqual(self.trip_status_of_email(p["email_id"]), "confirmed")   # Sasha 75 · a restating yes confirms
 
     def test_a_stop_quoted_from_below_the_reply_is_not_theirs(self):
         v, p = self.sent_email()

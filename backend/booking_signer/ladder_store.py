@@ -271,6 +271,10 @@ class MemoryLadderStore(MemoryLinks):
                 if e["status"] == "sent" and str(e["email"].get("to", "")).lower() == addr.lower()]
         return max(sent)[1] if sent else None
 
+    async def request_of_email(self, email_id: str) -> Optional[dict]:
+        e = self.emails.get(email_id)
+        return (self.trip_items.get(e["trip_item_id"]) or {}).get("request") if e else None
+
     async def reply_outcome(self, email_id: str, trip_status: str, attempt_status: str, text: str, now: datetime) -> None:
         e = self.emails[email_id]
         self.trip_items[e["trip_item_id"]]["status"] = trip_status
@@ -422,6 +426,11 @@ class PostgresLadderStore(PostgresLinks):
             "select email_id from booking_emails where status = 'sent' and lower(email->>'to') = lower($1) "
             "order by coalesce(sent_at, created_at) desc limit 1", addr))
         return str(v) if v else None
+
+    async def request_of_email(self, email_id):
+        eid = _uuid_or_none(email_id)
+        return None if eid is None else await self._run(lambda c: c.fetchval(
+            "select t.request from trip_items t join booking_emails e on e.trip_item_id = t.id where e.email_id = $1", eid))
 
     async def reply_outcome(self, email_id, trip_status, attempt_status, text, now):
         async def fn(conn):

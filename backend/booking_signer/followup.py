@@ -239,6 +239,32 @@ async def after_call(call: Mapping[str, Any], outcome: Optional[str], now: datet
 
 # ── rule 3 · the venue's reply, read with the field checks ───────────────────────────────────────────────────────────
 
+#: where a mail client starts quoting our own email: "On … wrote:", "El … escribió:", "Le … a écrit :", "Il … ha scritto:",
+#: "Am … schrieb …:", "Em … escreveu:", an Outlook header block, or a ">" line — however long the attribution line is
+_QUOTE_START = re.compile(
+    r"^\s*(?:>|-{2,}\s*(?:original message|mensaje original|mensagem original|message d'origine|messaggio originale|ursprüngliche nachricht)"
+    r"|(?:from|de|von|da|de\s*:)\s*:.*@"
+    r"|.*\b(?:wrote|escribi[oó]|a écrit|ha scritto|schrieb|escreveu)\s*:?\s*$)", re.I)
+
+
+#: a written yes, beyond the spoken one (recap._YES): the words a venue writes when it books it (folded: no accents)
+_WRITTEN_YES = re.compile(r"\b(confirmad[oa]s?|confirmamos|lo confirmo|reservad[oa]s?|queda reservad[oa]|tienen la reserva|"
+                          r"confirmed|booked|reserved|all set|"
+                          r"confirme[e]?s?|reserve[e]?s?|"
+                          r"confermat[oa]|prenotat[oa]|"
+                          r"bestatigt|gebucht|reserviert)\b")
+
+
+def own_words(text: Optional[str]) -> str:
+    """What they WROTE, without the quote of our own email beneath it — so a bare "Sí" never confirms by our own words."""
+    out = []
+    for line in str(text or "").splitlines():
+        if _QUOTE_START.match(line):
+            break
+        out.append(line)
+    return "\n".join(out).strip()
+
+
 def reply_reading(text: Optional[str], o: Mapping[str, Any]) -> dict:
     """{result: confirmed | proposed | declined | none, why, quote}. Conservative: only an explicit yes that restates the
     day, time and number, with nothing different, confirms. Never the reverse of what was written."""
@@ -246,30 +272,36 @@ def reply_reading(text: Optional[str], o: Mapping[str, Any]) -> dict:
     t = " ".join(str(text or "").split())
     if not t:
         return {"result": "none", "why": "the reply had no text to read", "quote": None}
-    body = re.split(r"\n\s*(?:on .{0,80}wrote:|el .{0,80}escribi[oó]:|>)", str(text), maxsplit=1, flags=re.I)[0]   # their words, not our quoted email
+    body = own_words(text)   # their words, never our quoted email
     asked = H.asked_from(o)
     off = H.mismatches([body], asked)
     times = [m for m in off if m["what"] == "time"]
     if times:
         return {"result": "proposed", "why": f"they wrote another time: \"{times[0]['quote'][:200]}\"", "quote": times[0]["quote"][:300]}
     f = RC._f(body)
-    if RC._NO.search(f) and not RC._YES.search(f):
+    yes = bool(RC._YES.search(f) or _WRITTEN_YES.search(f))
+    no = bool(RC._NO.search(f))
+    if no and not yes:
         return {"result": "declined", "why": "they wrote no", "quote": body.strip()[:300]}
-    if RC._YES.search(f) and not off and RC.restates(body, asked):
+    if yes and not no and not off and RC.restates(body, asked):   # any "no" in it: never read as a confirmation
         return {"result": "confirmed", "why": "an explicit yes restating the day, time and number", "quote": body.strip()[:300]}
     return {"result": "none", "why": "the reply neither confirms the day, time and number nor proposes another time — shown as written",
             "quote": body.strip()[:300]}
 
 
 async def on_reply(email_id: str, text: Optional[str], now: datetime) -> Optional[dict]:
-    """A reply to a follow-up email: read it, and move the reservation only as far as the words go."""
+    """A reply to Sasha's email — the follow-up after a call, or an email-rung request (Sasha 75): read it, and move the
+    reservation only as far as its words go."""
     from . import call_routes as CR, ladder_routes as LR
     e = await LR.LADDER_STORE.email_any(email_id)
-    after = ((e or {}).get("approval") or {}).get("after_call")
-    if not after:
+    if not e:
         return None
-    call = await CR.CALL_STORE.get_call(str(e["account_id"]), after)
-    o = (((call or {}).get("brief") or {}).get("followup") or {}).get("request")
+    after = (e.get("approval") or {}).get("after_call")
+    if after:
+        call = await CR.CALL_STORE.get_call(str(e["account_id"]), after)
+        o = (((call or {}).get("brief") or {}).get("followup") or {}).get("request")
+    else:
+        o = await LR.LADDER_STORE.request_of_email(email_id)   # the email rung's own reservation/1 object
     if not isinstance(o, dict):
         return None
     r = reply_reading(text, o)

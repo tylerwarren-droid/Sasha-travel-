@@ -334,6 +334,10 @@ class MemoryFormStore:
         r = self.forms.get(form_id)
         return dict(r) if r and r["account_id"] == account else None
 
+    async def for_item(self, account: str, trip_item_id: str) -> Optional[dict]:
+        rs = [dict(r) for r in self.forms.values() if r.get("trip_item_id") == trip_item_id and r["account_id"] == account]
+        return rs[-1] if rs else None
+
     async def claim(self, account, form_id, approval, now, fresh_after) -> str:
         r = self.forms.get(form_id)
         if not r or r["account_id"] != account:
@@ -399,6 +403,13 @@ class PostgresFormStore:
             return None
         return _row(await self._run(lambda c: c.fetchrow("select * from booking_forms where form_id = $1 and account_id = $2",
                                                          fid, uuid.UUID(account))))
+
+    async def for_item(self, account, trip_item_id):
+        iid = _uuid_or_none(trip_item_id)
+        if iid is None:
+            return None
+        return _row(await self._run(lambda c: c.fetchrow(
+            "select * from booking_forms where trip_item_id = $1 and account_id = $2 order by created_at desc limit 1", iid, uuid.UUID(account))))
 
     async def claim(self, account, form_id, approval, now, fresh_after) -> str:
         async def fn(conn):
@@ -822,8 +833,21 @@ async def _book(variant: str, form: Dict[str, str]) -> HTMLResponse:
         cuando = f"{dias[d.weekday()]} {d.day} de {meses[d.month - 1]} a las {form['hora']}"
     except ValueError:
         cuando = f"{form['fecha']} a las {form['hora']}"
+    cancel = f"{public_base()}/api/booking/test-venue/cancel/{ref}"   # Sasha 99 · a cancel link, as real venues send
     return HTMLResponse(f"<html><body><h1>Reserva confirmada</h1><p>Confirmado: mesa para {escape(form['personas'])} personas el "
-                        f"{escape(cuando)}, a nombre de {escape(form['nombre'])}.</p><p>Localizador: {ref}</p></body></html>")
+                        f"{escape(cuando)}, a nombre de {escape(form['nombre'])}.</p><p>Localizador: {ref}</p>"
+                        f"<p>Para cancelar: {cancel}</p></body></html>")
+
+
+@router.get("/test-venue/cancel/{ref}", response_class=HTMLResponse)
+async def test_venue_cancel(ref: str):
+    """The test venue's own cancel link: the booking in its book is marked cancelled, and its page says so."""
+    hit = next((x for x in TEST_SUBMISSIONS if x["reference"] == ref), None)
+    if hit is None:
+        return HTMLResponse(f"<p>No encontramos la reserva {escape(ref)}.</p>", status_code=404)
+    hit["cancelled_at"] = NOW().isoformat()
+    return HTMLResponse(f"<html><body><h1>Reserva cancelada</h1><p>La reserva {escape(ref)} a nombre de {escape(hit['fields'].get('nombre', ''))} "
+                        f"queda cancelada. Gracias.</p></body></html>")
 
 
 __all__ = ["router", "form_map", "read_form", "roles_for", "MemoryFormStore", "PostgresFormStore", "test_venue_url",

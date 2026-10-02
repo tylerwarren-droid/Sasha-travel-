@@ -31,7 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import call_routes, contacts, form_rung, inbound_phone, ladder_routes, optin_page, optins, receipt, reservation as RS, retention, stop
+from . import call_routes, cancel_routes, contacts, form_rung, inbound_phone, ladder_routes, optin_page, optins, receipt, reservation as RS, retention, stop
 from . import venue_read as V
 from .account import account_for
 from .gate import require_booking_key
@@ -502,6 +502,8 @@ router.include_router(inbound_phone.router)
 router.include_router(receipt.router)
 # Sasha 89 · the form rung, submitting — and our own test venue to prove it on
 router.include_router(form_rung.router)
+# Sasha 99 · cancelling by the best route there is (link, email, text, call)
+router.include_router(cancel_routes.router)
 # S-55 · the Work-with-Sasha page's server half (reached through the frontend's own route, which adds the key)
 router.include_router(optin_page.router)
 

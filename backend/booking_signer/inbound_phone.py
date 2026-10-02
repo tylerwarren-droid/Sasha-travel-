@@ -120,6 +120,11 @@ class MemoryInboundStore:
     async def request_of(self, trip_item_id: str) -> Optional[dict]:
         return (self.calls.trip_items.get(trip_item_id) or {}).get("request")
 
+    async def cancel_pending(self, trip_item_id) -> bool:
+        from .cancel_routes import CANCEL_REQUESTED
+        atts = [a for a in self.calls.attempts if a.get("trip_item_id") == trip_item_id]
+        return bool(atts) and str(atts[-1].get("observed_by") or "").startswith(CANCEL_REQUESTED)
+
     async def booking_calls_since(self, since: datetime) -> List[dict]:
         return [dict(c) for c in self.calls.calls.values() if c.get("created_at") and c["created_at"] >= since
                 and (c.get("brief") or {}).get("purpose", "book") == "book" and c.get("status") in ("answered", "placed")]
@@ -174,6 +179,12 @@ class PostgresInboundStore:
     async def request_of(self, trip_item_id):
         return await self._run(lambda c: c.fetchval("select request from trip_items where id = $1", uuid_(trip_item_id)))
 
+    async def cancel_pending(self, trip_item_id):
+        from .cancel_routes import CANCEL_REQUESTED
+        last = await self._run(lambda c: c.fetchval("select observed_by from booking_attempts where trip_item_id = $1 "
+                                                    "order by attempted_at desc limit 1", uuid_(trip_item_id)))
+        return str(last or "").startswith(CANCEL_REQUESTED)
+
     async def booking_calls_since(self, since):
         return [_row(r) for r in await self._run(lambda c: c.fetch(
             "select call_id, trip_item_id, brief, status, created_at from booking_calls where created_at >= $1 "
@@ -220,6 +231,14 @@ async def _read_sms(row: dict, call: dict, body: str, now: datetime) -> None:
     if S.STOP_STORE is not None and S.detect(body):
         await S.on_venue_words(brief.get("venue_ids"), row["channel"], row["from_key"], body,
                                {"provider_id": row["provider_id"], "call_id": row["call_id"]}, now)
+        return
+    if await STORE.cancel_pending(row["trip_item_id"]):
+        # Sasha 99 · the venue answering Sasha's cancellation: cancelled only if their words say so
+        from .cancel_routes import cancel_reading, _record
+        r = cancel_reading(body)
+        await STORE.set_reading(row["provider_id"], {**r, "about": "cancellation"})
+        await _record(str(call.get("account_id")), str(row["trip_item_id"]), "phone", r, body,
+                      f"their {row['channel']} reply to Sasha's cancellation: {r['why']}", now)
         return
     o = (brief.get("followup") or {}).get("request") or await STORE.request_of(row["trip_item_id"])
     if not isinstance(o, dict):

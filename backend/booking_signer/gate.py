@@ -33,6 +33,8 @@ EXEMPT |= {("GET", "/api/booking/test-venue/wizard"), ("POST", "/api/booking/tes
 async def require_booking_key(request: Request) -> None:
     if (request.method, request.url.path.rstrip("/")) in EXEMPT:
         return
+    if request.method == "GET" and request.url.path.startswith("/api/booking/test-venue/cancel/"):
+        return   # Sasha 99 · the test venue's own cancel links — a public page, like any venue's
     want = os.getenv(ENV, "").strip()
     if not want:
         raise HTTPException(503, {"ok": False, "rule": "booking_key_not_configured",

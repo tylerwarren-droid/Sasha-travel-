@@ -358,6 +358,17 @@ async def on_reply(email_id: str, text: Optional[str], now: datetime) -> Optiona
     e = await LR.LADDER_STORE.email_any(email_id)
     if not e:
         return None
+    if (e.get("approval") or {}).get("kind") == "cancel":
+        # Sasha 99 · a reply to Sasha's CANCEL email: cancelled only if their words say so
+        from .cancel_routes import cancel_reading, _record
+        r = cancel_reading(text)
+        await _record(str(e["account_id"]), str(e.get("trip_item_id")), "email", r, text or "",
+                      f"their reply to Sasha's cancellation email: {r['why']}", now)
+        if r["result"] == "cancelled":
+            from . import guest_receipt as GR
+            await GR.send_for_route(str(e["account_id"]), (e.get("email") or {}).get("to") or "the venue", "their reply to Sasha's email",
+                                    "Cancelled by the venue", {"their_words": text})
+        return r
     after = (e.get("approval") or {}).get("after_call")
     if after:
         call = await CR.CALL_STORE.get_call(str(e["account_id"]), after)

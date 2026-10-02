@@ -81,13 +81,14 @@ def compose_cancel(brief: Mapping[str, Any], venue: str, outcome: Optional[str],
             "subject": f"{'Cancelled' if done else 'Not cancelled yet'}: your booking at {venue}", "text": "\n".join(lines)}
 
 
-async def send_sms(to: Optional[str], body: str) -> str:
-    """Sasha 96 · a text to the guest FROM Sasha's own number (S-70). Off unless SASHA_SMS_TO_GUEST=1; never fakes a send."""
+async def send_sms(to: Optional[str], body: str, switch: str = "SASHA_SMS_TO_GUEST") -> str:
+    """Sasha 96 · a text FROM Sasha's own number (S-70) — to the guest (SASHA_SMS_TO_GUEST) or, for a cancellation, to
+    a venue's mobile (SASHA_SMS_TO_VENUES). Off unless its switch is 1; never fakes a send."""
     import base64
     import urllib.parse
     from . import calls as C, ladder_routes as LR
-    if os.getenv("SASHA_SMS_TO_GUEST", "").strip() != "1":
-        return "sms not sent: texts to guests are off (SASHA_SMS_TO_GUEST is not 1)"
+    if os.getenv(switch, "").strip() != "1":
+        return f"sms not sent: texts to {'guests' if switch == 'SASHA_SMS_TO_GUEST' else 'venues'} are off ({switch} is not 1)"
     sid, token, frm = os.getenv("TWILIO_ACCOUNT_SID", "").strip(), os.getenv("TWILIO_AUTH_TOKEN", "").strip(), C.sasha_number()
     if not (sid and token and frm and to):
         return "sms not sent: no Twilio account, no Sasha number, or no guest mobile"

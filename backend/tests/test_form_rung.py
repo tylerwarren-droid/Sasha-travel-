@@ -320,3 +320,64 @@ class Hanakura(unittest.TestCase):
                                                           "reservation": reservation(when={"mode": "at", "at": "2026-10-03T19:00"})})
         self.assertEqual((bad.status_code, bad.json()["rule"]), (422, "form_option_unavailable"))
         self.assertEqual(self.posts, [])
+
+
+class CancelRoutes(unittest.TestCase):
+    """Sasha 99 · cancelling by the best route: their cancel link (own site: opened and kept; a platform's: the guest
+    presses), else email, else text, else call — 'cancelled' only when their words say so."""
+    make_stores = FormRung.make_stores
+    setUp = FormRung.setUp
+    tearDown = FormRung.tearDown
+    read = FormRung.read
+
+    def booked(self):
+        v = self.read()
+        prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
+        self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
+        return prep["trip_item_id"]
+
+    def test_their_own_cancel_link_is_used_and_cancelled_only_on_their_words(self):
+        item = self.booked()
+        plan = self.c.get(f"/api/booking/reservations/{item}/cancel").json()
+        self.assertEqual((plan["route"], plan["platform"]), ("link", None), plan)
+        self.assertTrue(plan["url"].startswith(f"{BASE}/api/booking/test-venue/cancel/TV-"))
+        self.assertIn("I'll open it once and keep their page word for word", "\n".join(plan["read_back"]["lines"]))
+        self.assertEqual(self.calls.trip_items[item]["status"], "confirmed")                         # nothing done by asking
+        bad = self.c.post(f"/api/booking/reservations/{item}/cancel", json={"read_back_sha256": "0" * 64, "approval": {"how": "button"}})
+        self.assertEqual(bad.json()["rule"], "read_back_mismatch")
+        done = self.c.post(f"/api/booking/reservations/{item}/cancel",
+                           json={"read_back_sha256": plan["read_back"]["sha256"], "approval": {"how": "chat", "said": "yes"}}).json()
+        self.assertEqual((done["status"], done["say"]), ("cancelled", "Reservation cancelled."), done)
+        self.assertIn("queda cancelada", done["their_words"])
+        self.assertEqual(self.calls.trip_items[item]["status"], "cancelled")
+        self.assertTrue(FR.TEST_SUBMISSIONS[-1].get("cancelled_at"))                                  # the venue's own book agrees
+
+    def test_a_platforms_cancel_link_is_pressed_by_the_guest_never_opened(self):
+        from booking_signer import cancel_routes as CX
+        p = CX.plan({"texts": ["Gestiona tu reserva: https://www.covermanager.com/cancel/abc123?lang=es"], "read": {"facts": []}, "call": None})
+        self.assertEqual((p["route"], p["platform"]), ("link", "CoverManager"))
+        w = CX.words({"request": {}, "venue": "Coque", "read": {}}, p)
+        self.assertIn("you press it", w["lines"][1])
+
+    def test_their_words_decide(self):
+        from booking_signer import cancel_routes as CX
+        self.assertEqual(CX.cancel_reading("Hecho, la reserva queda cancelada. Un saludo")["result"], "cancelled")
+        self.assertEqual(CX.cancel_reading("Your booking has been cancelled.")["result"], "cancelled")
+        self.assertEqual(CX.cancel_reading("Lo sentimos, no se puede cancelar con tan poca antelación.")["result"], "not_confirmed")
+        self.assertEqual(CX.cancel_reading("Recibido, gracias.")["result"], "not_confirmed")
+        self.assertEqual(CX.cancel_links(["Para anular: https://x.es/reservas/anular?id=1 · web: https://x.es/"]), ["https://x.es/reservas/anular?id=1"])
+
+    def test_a_reply_to_her_cancel_email_cancels_only_when_it_says_so(self):
+        import asyncio
+        from booking_signer import followup as FU, ladder_routes as LR
+        item = self.booked()
+        for eid, text, want in (("e-no", "Recibido, lo miramos.", "confirmed"), ("e-yes", "Hecho, su reserva queda cancelada.", "cancelled")):
+            LR.LADDER_STORE.emails[eid] = {"email_id": eid, "account_id": "11111111-1111-4111-8111-111111111111", "trip_item_id": item,
+                                           "approval": {"kind": "cancel"}, "email": {"to": "reservas@venue.test"}, "status": "sent"}
+            r = asyncio.run(FU.on_reply(eid, text, datetime_now()))
+            self.assertEqual(self.calls.trip_items[item]["status"], want, (eid, r))
+
+
+def datetime_now():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc)

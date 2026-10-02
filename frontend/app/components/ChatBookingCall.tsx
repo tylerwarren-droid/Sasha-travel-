@@ -9,7 +9,7 @@
  * filled in. A refusal is shown as the server said it — calls off, opted out, the 15-minute window — and nothing is
  * dialled. Nothing here decides an outcome: the recap check and every rule run on the server.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { approveCall, bookingReq, getCall, prepareCall, guestRefusal as refusal, reservations, type Rung, contactReq, type Consent, type Contact } from '@/lib/booking-client'
 import { setPendingYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
@@ -50,6 +50,11 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
   // detail, and ONE question is asked only when something essential is missing
   const [showForm, setShowForm] = useState(false)
   const [autoTried, setAutoTried] = useState(false)
+  // Sasha 100 · the one question, and then the result, are brought into view as they appear
+  const stepRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (['readback', 'calling', 'result', 'refused'].includes(phase.p)) stepRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [phase.p])
   useEffect(() => {
     let off = false
     ;(async () => {
@@ -173,7 +178,7 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
     phase.p === 'preparing' && 'the read-back',
   ]
   return (
-    <div style={{ marginTop: 10, borderTop: '1px solid rgba(0,0,0,.1)', paddingTop: 10 }}>
+    <div ref={stepRef} style={{ marginTop: 10, borderTop: '1px solid rgba(0,0,0,.1)', paddingTop: 10 }}>
       {phase.p === 'preparing' && !showForm && <div style={{ fontSize: 13 }}>Getting it ready for {venue}…</div>}
       {phase.p === 'details' && missing && !showForm && (
         // Sasha 96 · ONE question, only for something essential the request didn't say

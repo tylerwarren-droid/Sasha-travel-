@@ -65,6 +65,9 @@ export default function ChatBooking({ find }: { find: Find }) {
   const [badPhoto, setBadPhoto] = useState<Record<string, true>>({})
   // Sasha 95 · the slot link leads when a platform is their booking route; a call only if the guest asks for one
   const [callInstead, setCallInstead] = useState(false)
+  // Sasha 100 · the cards arrive after the message the chat scrolled to — bring them (and each next step) into view
+  const listRef = useRef<HTMLOListElement | null>(null)
+  const readRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => { stateRef.current = state }, [state])
 
   useEffect(() => {
@@ -97,6 +100,11 @@ export default function ChatBooking({ find }: { find: Find }) {
   // Sasha 86 · every booking message starts afresh — a new `find` object, even for the same words, drops the last pick,
   // its read and its details card, so nothing from an earlier request (another day, another count) is carried over
   }, [find])
+
+  useEffect(() => {
+    const el = state.phase === 'found' && state.cards.length ? listRef.current : state.phase === 'read' ? readRef.current : null
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [state.phase])
 
   function sortBy(chip: string) {
     const s = stateRef.current
@@ -173,21 +181,7 @@ export default function ChatBooking({ find }: { find: Find }) {
       {cards.length === 0
         ? <div>Google has no listing for {find.what} in {find.where}.</div>
         : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{find.what} in {find.where} — from Google Maps{contacted ? '.' : '; nobody has been contacted. Choose one, or say “the second one”.'}</div>}
-      {state.phase === 'found' && state.ranking && <div style={{ fontSize: 13, marginBottom: 4 }}>{state.ranking.count} · {state.ranking.explainers[state.chip]}</div>}
-      {state.phase === 'found' && find.open_at && <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Open then by their listed hours; availability is confirmed only when Sasha books.</div>}
-      {state.phase === 'found' && state.near && !state.near.found && <div style={{ fontSize: 13, marginBottom: 6 }}>No distances: {state.near.why}</div>}
-      {state.phase === 'found' && state.ranking && cards.length > 0 && (
-        <div style={{ margin: '4px 0 8px' }}>
-          {!find.priority && <div style={{ fontSize: 13, marginBottom: 4 }}>What matters most? Tap one, or say it.</div>}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {CHIPS.map(([chip, label, needs]) => (
-              <GatedButton key={chip} label={state.chip === chip ? `✓ ${label}` : label} onClick={() => sortBy(chip)}
-                needs={[!state.ranking?.orders[chip] && needs]} done={state.chip === chip && 'sorted this way'} />
-            ))}
-          </div>
-        </div>
-      )}
-      <ol style={{ margin: 0, paddingLeft: 18 }}>
+      <ol ref={listRef} style={{ margin: 0, paddingLeft: 18 }}>
         {cards.map((c, idx) => {
           // S-68 step 8 · every value said, a missing one in words; a place not open then is greyed, never dropped
           const group = state.phase === 'found' ? state.ranking?.groups[c.place_id] : undefined
@@ -239,11 +233,26 @@ export default function ChatBooking({ find }: { find: Find }) {
           )
         })}
       </ol>
+      {/* Sasha 100 · the cards come first; why they're in this order, and the chips, follow */}
+      {state.phase === 'found' && state.ranking && <div style={{ fontSize: 13, marginBottom: 4 }}>{state.ranking.count} · {state.ranking.explainers[state.chip]}</div>}
+      {state.phase === 'found' && find.open_at && <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Open then by their listed hours; availability is confirmed only when Sasha books.</div>}
+      {state.phase === 'found' && state.near && !state.near.found && <div style={{ fontSize: 13, marginBottom: 6 }}>No distances: {state.near.why}</div>}
+      {state.phase === 'found' && state.ranking && cards.length > 0 && (
+        <div style={{ margin: '4px 0 8px' }}>
+          {!find.priority && <div style={{ fontSize: 13, marginBottom: 4 }}>What matters most? Tap one, or say it.</div>}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {CHIPS.map(([chip, label, needs]) => (
+              <GatedButton key={chip} label={state.chip === chip ? `✓ ${label}` : label} onClick={() => sortBy(chip)}
+                needs={[!state.ranking?.orders[chip] && needs]} done={state.chip === chip && 'sorted this way'} />
+            ))}
+          </div>
+        </div>
+      )}
       {cards.length > 0 && <div style={{ fontSize: 12, opacity: 0.6 }}>Places, ratings, prices and hours: Google Maps.</div>}
       {state.phase === 'reading' && <div>Reading how {state.pick.name} takes bookings…</div>}
       {state.phase === 'read_refused' && <div>I couldn&rsquo;t read them: {state.words}</div>}
       {state.phase === 'read' && (
-        <div style={{ marginTop: 8 }}>
+        <div ref={readRef} style={{ marginTop: 8 }}>
           <div style={{ fontWeight: 600 }}>{state.read.say}</div>
           <ul style={{ margin: '6px 0', paddingLeft: 18 }}>
             {state.read.rungs.map((r, i) => (

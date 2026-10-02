@@ -299,6 +299,30 @@ async def after_call(call: Mapping[str, Any], outcome: Optional[str], now: datet
     return "sent" if sent.sent else f"not sent: {sent.why}"
 
 
+SMS_ASK = {"es": "Hola, soy Sasha (Kanoe Technologies SL). Les llamé por esta reserva y se cortó: {what}. ¿Nos la pueden "
+                  "confirmar respondiendo a este SMS? Gracias.",
+           "en": "Hello, this is Sasha (Kanoe Technologies SL). I called about this booking and we were cut off: {what}. Could "
+                 "you confirm it by replying to this text? Thank you."}
+
+
+async def sms_ask(call: Mapping[str, Any]) -> str:
+    """Sasha 108 · an unclear booking with no email to ask: a text to the MOBILE the venue publishes, from Sasha's own
+    number (SASHA_SMS_TO_VENUES), whose reply lands on the booking (inbound_phone). Returns what happened, in words."""
+    from . import cancel_routes as CNR, guest_receipt as GR, ladder_routes as LR
+    brief = call.get("brief") or {}
+    o = (brief.get("followup") or {}).get("request") or call.get("request")
+    venue_key = str(brief.get("venue_key") or "")
+    if not isinstance(o, dict) or not venue_key.startswith("read:"):
+        return "sms not sent: no reservation or venue read to restate"
+    row = await LR.LADDER_STORE.get_read(str(call["account_id"]), venue_key[5:])
+    mob = CNR._mobile(((row or {}).get("read") or {}).get("facts") or [])
+    if not mob:
+        return "sms not sent: the venue publishes no mobile"
+    lang = (brief.get("language") or "en")[:2]
+    text = SMS_ASK.get(lang, SMS_ASK["en"]).format(what=restatement(brief.get("language") or "en", o))
+    return await GR.send_sms(mob, text, "SASHA_SMS_TO_VENUES")
+
+
 # ── rule 3 · the venue's reply, read with the field checks ───────────────────────────────────────────────────────────
 
 #: where a mail client starts quoting our own email: "On … wrote:", "El … escribió:", "Le … a écrit :", "Il … ha scritto:",

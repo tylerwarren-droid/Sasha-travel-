@@ -334,6 +334,14 @@ class Turns(Base):
         f = self.finds()[0]
         self.assertEqual((f["what"], f["where"], f["open_at"]), ("Indian dinner", "Malasaña, Madrid", "2026-10-03T21:00"))
 
+    def test_sasha108_calling_names_the_venue_not_the_search(self):
+        GW.api.place = {"status": "placed", "say": "Calling Indian dinner in Chamberí, Madrid now."}
+        self.pick_first()
+        self.say("vale")
+        self.assertIn("📞 Calling Botavara Chamberí now.", self.bodies())
+        self.assertNotIn("Indian dinner", " ".join(self.bodies()))
+        self.assertEqual(self.spawned, ["watch_call"])
+
     def test_sasha104_unsure_asks_one_question(self):
         self.say("can you sort out Saturday night for 2?")
         self.assertEqual(self.bodies(), [GW.ASK_ONE])
@@ -360,8 +368,32 @@ class Progress(Base):
             return next(seq)
         with mock.patch.object(GW, "WATCH_CALL", (0, 5)), mock.patch.object(GW, "api", fake):
             run(GW.watch_call(ch, SANDBOX, ACCOUNT, "call-1", "Botavara", "book"))
-        self.assertEqual(self.bodies()[:2], ["Booked: Botavara confirmed it.", "What they said, word for word: “Sí, perfecto.”"])
-        self.assertEqual(len([b for b in self.bodies() if b.startswith("Booked")]), 1)
+        self.assertEqual(self.bodies()[:2], ["✅ Booked: Botavara.", "Their words: “Sí, perfecto.”"])
+        self.assertEqual(len([b for b in self.bodies() if b.startswith("✅")]), 1)
+
+    def test_sasha108_an_unclear_call_is_followed_by_its_confirmation_call_in_plain_words(self):
+        """2 Oct, live: Yatri said "Sí, sí" and hung up before the recap. Plain status lines, the VENUE's name, never the
+        search words ("Indian dinner in Chamberí"), never "closing recap" / "who pressed it"."""
+        ch = self.link()
+        run(GW.STORE.put_state(GW.wa_key(GUEST), {"history": [], "pending": None, "last_inbound_at": NOW, "link_tries": []}))
+        seq = {"call-1": iter([(200, {"status": "placed"}),
+                                (200, {"status": "answered", "outcome": "unclear", "venue_words": "Hola, muy buenas. / Hola. / Sí, sí. / Ok.",
+                                       "say": "Not confirmed with Indian dinner in Chamberí, Madrid: closing recap…", "confirmation_call_id": "call-2"})]),
+               "call-2": iter([(200, {"status": "answered", "outcome": "yes", "venue_words": "Sí, sábado a las nueve, dos, Warren. Correcto."})])}
+
+        async def fake(account, method, path, body=None, timeout=90.0):
+            return next(seq[path.rsplit("/", 1)[1]])
+        with mock.patch.object(GW, "WATCH_CALL", (0, 5)), mock.patch.object(GW, "api", fake):
+            run(GW.watch_call(ch, SANDBOX, ACCOUNT, "call-1", "Restaurante Yatri", "book", "Saturday 3 October at 21:00, 2 people"))
+        self.assertEqual(self.bodies(), [
+            "⚠ Not confirmed yet: Restaurante Yatri didn't clearly confirm it.",
+            "Their words: “Hola, muy buenas. / Hola. / Sí, sí. / Ok.”",
+            "I'm calling Restaurante Yatri back once now to confirm it — I'll tell you here.",
+            "✅ Booked: Restaurante Yatri, Saturday 3 October at 21:00, 2 people.",
+            "Their words: “Sí, sábado a las nueve, dos, Warren. Correcto.”"])
+        joined = " ".join(self.bodies())
+        for jargon in ("Indian dinner", "recap", "pressed", "Bland"):
+            self.assertNotIn(jargon, joined)
 
 
 @unittest.skipUnless(TBL.PG_URL, "BOOKING_TEST_DATABASE_URL is not set — the Postgres half did NOT run")

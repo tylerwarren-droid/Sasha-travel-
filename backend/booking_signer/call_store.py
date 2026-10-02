@@ -70,6 +70,10 @@ class MemoryCallStore:
         r = self.calls.get(call_id)
         return dict(r) if r and r["account_id"] == account_id else None
 
+    async def confirming(self, call_id: str) -> Optional[str]:
+        """Sasha 108 · the confirmation call placed after this unclear call, if any."""
+        return next((k for k, c in self.calls.items() if (c.get("brief") or {}).get("confirms_call_id") == call_id), None)
+
     async def receipt_rows(self, account_id: str, trip_item_id: str) -> Optional[dict]:
         """Sasha 88 · the booking call behind a reservation, the reservation, and what the venue WROTE about it."""
         calls = [c for c in self.calls.values() if c.get("trip_item_id") == trip_item_id and c["account_id"] == account_id
@@ -247,6 +251,12 @@ class PostgresCallStore:
                 await write_request(conn, item_id, "booking_calls", "call_id", uuid.UUID(row["call_id"]), row.get("request"))
                 return str(item_id)
         return await self._run(fn)
+
+    async def confirming(self, call_id: str) -> Optional[str]:
+        """Sasha 108 · the confirmation call placed after this unclear call, if any."""
+        r = await self._run(lambda c: c.fetchval(
+            "select call_id from booking_calls where brief->>'confirms_call_id' = $1 order by created_at limit 1", call_id))
+        return str(r) if r else None
 
     async def get_call(self, account_id: str, call_id: str) -> Optional[dict]:
         cid = _uuid_or_none(call_id)

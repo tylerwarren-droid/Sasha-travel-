@@ -124,12 +124,88 @@ RESOLVE_AFTER = timedelta(seconds=90)    # S-57 · longer than the 60 s the requ
 GIVE_UP_AFTER = timedelta(minutes=10)    # no call in Bland's log by then: it was not placed
 
 
+#: Sasha 108 · an UNCLEAR booking call resolves itself: ONE short confirmation call to the same venue, at once, covered by
+#: the guest's yes (it confirms the same booking, it books nothing new), ending with the explicit recap. Spanish and
+#: English venues; any other language goes straight to the written ask.
+CONFIRM_OPENING = {
+    "es": "Hola, soy Sasha otra vez, la concierge de inteligencia artificial de Kanoe Technologies SL. Les llamé hace un "
+          "momento por una reserva y se cortó la llamada. ",
+    "en": "Hello, it's Sasha again, the AI concierge from Kanoe Technologies SL. I called a moment ago about a booking and "
+          "we were cut off. ",
+}
+CONFIRM_TASK = ("This is a short CONFIRMATION call. Minutes ago you called this venue to book exactly this booking, and the "
+                "call ended before it was confirmed. Do NOT book it a second time: if they say it is already noted, that is "
+                "fine — still read the recap and wait for its yes. ")
+
+
+def confirm_brief(call: dict) -> Optional[dict]:
+    """The confirmation call's brief: the booking's own brief, its opening now the call-back sentence with the recap."""
+    brief = dict(call.get("brief") or {})
+    lang = (brief.get("language") or "")[:2]
+    if brief.get("purpose") != "book" or brief.get("confirms_call_id") or lang not in CONFIRM_OPENING or not brief.get("recap"):
+        return None
+    first = CONFIRM_OPENING[lang] + brief["recap"]
+    task = str(brief.get("task") or "")
+    old_first = brief.get("first_sentence") or ""
+    task = task.replace(f'You already said: "{old_first}"', f'You already said: "{first}"') if old_first in task else task
+    return {**brief, "first_sentence": first, "task": CONFIRM_TASK + task, "confirms_call_id": str(call["call_id"])}
+
+
+async def confirm_unclear(call: dict) -> str:
+    """Place the ONE confirmation call. Returns "placed" or why not, in words (logged; the tests read it)."""
+    if not C.calls_enabled() or not C.bland_key():
+        return "not placed: phone calls are off"
+    brief = confirm_brief(call)
+    if brief is None:
+        return "not placed: not a booking call that can be confirmed by phone (or already a confirmation)"
+    if await CALL_STORE.confirming(str(call["call_id"])):
+        return "not placed: a confirmation call already exists"
+    refused = await ladder_routes._optin_refusal(brief.get("venue_ids"), "phone")
+    if refused:
+        return "not placed: the venue asked not to be called"
+    now = NOW()
+    lines = list(call["read_back_lines"]) + [f"Sasha calls back once to confirm it, as your yes covered: \"{brief['first_sentence']}\""]
+    row = {"call_id": str(uuid.uuid4()), "account_id": str(call["account_id"]), "venue_key": call["venue_key"],
+           "dialled_number": call["dialled_number"], "language": call["language"], "guest_name": call.get("guest_name"),
+           "guest_phone": call.get("guest_phone"), "brief": brief, "brief_sha256": C._sha256hex(C._canonical(brief)),
+           "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)), "created_at": now,
+           "request": call.get("request")}
+    await CALL_STORE.put_cancel_call(row, str(call["trip_item_id"]))   # the SAME reservation (no new trip item)
+    try:
+        dial = await PT.dialable(HTTP, brief, now)
+    except PT.ListingUnavailable as e:
+        return f"not placed: {e}"
+    approval = {"by": str(call["account_id"]), "how": "auto", "said": None, "at": now.isoformat(), "kind": "confirm_unclear",
+                "after_call": str(call["call_id"]), "covered_by_read_back_sha256": call["read_back_sha256"],
+                "read_back_sha256": row["read_back_sha256"], "brief_sha256": row["brief_sha256"]}
+    claimed = await CALL_STORE.claim(str(call["account_id"]), row["call_id"], approval, now, now - APPROVAL_WINDOW, cap(),
+                                     cap_window(now), account_cap())
+    if claimed != "claimed":
+        return f"not placed: {claimed}"
+    placed = await C.place_call(HTTP, C.bland_key(), C.bland_payload(dial, row["call_id"]))
+    placed = dataclasses.replace(placed, answer=PT.scrub_bland(placed.answer, brief))
+    await CALL_STORE.mark_placed(row["call_id"], placed, NOW())
+    return "placed" if (placed.placed or placed.uncertain) else f"not placed: {placed.why}"
+
+
 async def _follow_up(call: dict, reading) -> None:
     """Sasha 74 · rules 2–3 — awaited here, never fire-and-forget; its failure is logged and never undoes the reading."""
+    if reading.outcome == "unclear" and (call.get("brief") or {}).get("purpose") == "book" \
+            and not (call.get("brief") or {}).get("confirms_call_id"):
+        try:
+            what = await confirm_unclear(call)
+        except Exception as e:
+            what = f"not placed: {type(e).__name__}: {e}"
+        log.info("[confirm] call %s was unclear; the confirmation call: %s", call.get("call_id"), what)
+        if what == "placed":
+            return   # the written ask and the receipt follow the confirmation call's own result
     try:
         what = await FU.after_call(call, reading.outcome, NOW())
         if what:
             log.info("[followup] call %s: %s", call.get("call_id"), what)
+        # Sasha 108 · unclear and no email went: a text to the venue's own mobile, where they publish one
+        if reading.outcome == "unclear" and (call.get("brief") or {}).get("purpose") == "book" and what != "sent":
+            log.info("[followup] call %s: %s", call.get("call_id"), await FU.sms_ask(call))
     except Exception as e:
         log.error("[followup] call %s: the follow-up email failed: %s: %s", call.get("call_id"), type(e).__name__, e)
     # Sasha 90 · the guest's receipt, after EVERY booking call, whatever the outcome — awaited, its failure logged
@@ -657,7 +733,12 @@ async def get_call(call_id: str, request: Request):
             call = await CALL_STORE.get_call(account, call_id)
         except StorageUnavailable as e:
             return _refuse(503, e.rule, e.detail)
-    return _view(call, name)
+    out = _view(call, name)
+    try:   # Sasha 108 · an unclear call's confirmation call, so the chat and WhatsApp can follow it
+        out["confirmation_call_id"] = await CALL_STORE.confirming(str(call["call_id"]))
+    except StorageUnavailable:
+        out["confirmation_call_id"] = None
+    return out
 
 
 def _name(call: dict) -> str:
@@ -668,6 +749,7 @@ def _name(call: dict) -> str:
 def _view(call: dict, name: str) -> dict:
     reading = call.get("reading") or {}
     out = {"call_id": call["call_id"], "status": call["status"], "read_back": call["read_back_lines"],
+           "confirms_call_id": (call.get("brief") or {}).get("confirms_call_id"),   # Sasha 108
            "outcome": call.get("outcome"), "venue_words": call.get("venue_words"),
            "quote": reading.get("quote"), "raised": reading.get("raised") or [], "why": reading.get("why"),
            # ⚠ labelled wherever it is shown: the outcome is a model's reading; their words are verbatim

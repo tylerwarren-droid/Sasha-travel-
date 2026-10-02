@@ -879,7 +879,8 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
     if "form" in rungs:
         status, j = await api(ctx["account"], "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": reservation})
         if status == 200:
-            await _ask_yes(ctx, "form", j["form_id"], j["read_back"], SN.confirm_sentence(reservation, rd["venue"]), rd["venue"])
+            await _ask_yes(ctx, "form", j["form_id"], j["read_back"], SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
+                           extra={"summary": summary(reservation)})
             return
         log.info("[guest_whatsapp] form rung refused (%s); trying the next rung", status)
     if "link" in rungs and reservation["when"]["mode"] == "at":
@@ -898,7 +899,8 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
         status, j = await api(ctx["account"], "POST", "/api/booking/calls",
                               {"reservation": reservation, "read_id": rd["read_id"], **({"fact_index": fi} if fi is not None else {})})
         if status == 200:
-            await _ask_yes(ctx, "call", j["call_id"], j["read_back"], j.get("sentence") or SN.confirm_sentence(reservation, rd["venue"]), rd["venue"])
+            await _ask_yes(ctx, "call", j["call_id"], j["read_back"], j.get("sentence") or SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
+                           extra={"summary": summary(reservation)})
             return
         st["pending"] = None
         out.text(f"Not prepared — {refusal_words(j, status)}. Nothing was dialled.")
@@ -921,62 +923,106 @@ async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: st
 
 # ── the yes → placed → progress → the result ────────────────────────────────────────────────────────────────────────
 
+def summary(o: dict) -> str:
+    """'Saturday 3 October at 21:00, 2 people' — the booking as the guest asked for it."""
+    w, n = o.get("when") or {}, (o.get("how_many") or {}).get("count")
+    when = "whenever they have space" if w.get("mode") == "venue_proposes" else \
+        f"{SN.day_words(str(w.get('at') or '')[:10])} at {str(w.get('at') or '')[11:16]}"
+    return f"{when}, {n} {'person' if n == 1 else 'people'}"
+
+
 async def _approve(ctx: dict, pend: dict, how: dict) -> None:
-    out, account = ctx["out"], ctx["account"]
+    out, account, venue = ctx["out"], ctx["account"], pend["venue"]
     if pend["rung"] == "form":
         status, j = await api(account, "POST", f"/api/booking/forms/{pend['id']}/send", {"read_back_sha256": pend["sha"], "approval": how}, timeout=120)
         if status != 200:
-            out.text(f"Not sent — {refusal_words(j, status)}.")
+            out.text(f"❌ Not sent to {venue}: {refusal_words(j, status)}.")
             return
-        out.text(str(j.get("say") or "Sent."))
+        ok = j.get("status") == "confirmed"
+        out.text(f"✅ Booked: {venue}, {pend.get('summary', '')}." if ok else f"⚠ Not confirmed yet: I sent {venue} their booking form; "
+                 f"their page didn't say it's booked.")
         if j.get("their_page"):
-            out.text(f"Their page answered, word for word: “{str(j['their_page'])[:600]}”")
-        out.text("Who pressed it: Sasha, on their booking form." + _receipt_note())
+            out.text(f"Their page said: “{str(j['their_page'])[:500]}”")
+        if _receipt_note():
+            out.text(_receipt_note().strip())
         return
     status, j = await api(account, "POST", f"/api/booking/calls/{pend['id']}/place", {"read_back_sha256": pend["sha"], "approval": how}, timeout=120)
     if status != 200:
-        out.text(f"Not called — {refusal_words(j, status)}. Nothing was dialled.")
+        out.text(f"❌ Not called: {refusal_words(j, status)}. Nothing was dialled.")
         return
-    out.text(str(j.get("say") or f"Calling {pend['venue']} now."))
+    if j.get("status") == "scheduled":   # Sasha 108 · the venue's own name, never the search words
+        at = str(j.get("scheduled_for") or "")[11:16]
+        out.text(f"{venue} is closed right now, so I'll call them at {at} — your yes covers that call.")
+        return
+    out.text(f"📞 Calling {venue} now." if j.get("status") in ("placed", "uncertain") else f"❌ I couldn't call {venue}: {j.get('why') or 'not placed'}.")
     if j.get("status") in ("placed", "uncertain"):
-        _spawn(watch_call(ctx["ch"], ctx["frm"], account, pend["id"], pend["venue"], "book"))
+        _spawn(watch_call(ctx["ch"], ctx["frm"], account, pend["id"], venue, "book", pend.get("summary", "")))
 
 
 def _receipt_note() -> str:
     from .ladder import emails_ready
-    return "" if emails_ready() else " Your receipt goes to your email."
+    return "" if emails_ready() else " Your receipt is in your email."
 
 
-async def watch_call(ch: dict, frm: str, account: str, call_id: str, venue: str, purpose: str) -> None:
-    """Progress and the result, sent only when the call's state CHANGES — never two messages for one state."""
+def result_lines(v: dict, venue: str, purpose: str, what: str = "") -> List[str]:
+    """Sasha 108 · a result in plain words: ONE status line, then the venue's own words. Never internal terms."""
+    state, outcome = v.get("status"), v.get("outcome")
+    if purpose == "cancel":
+        head = (f"✅ Cancelled: {venue} confirmed it." if outcome == "yes" else
+                f"❌ {venue} didn't cancel it." if outcome == "no" else
+                f"⚠ Not cancelled yet: {venue} didn't confirm it.")
+    elif state == "answered" and outcome == "yes":
+        head = f"✅ Booked: {venue}" + (f", {what}." if what else ".")
+    elif state == "answered" and outcome == "no":
+        head = f"❌ {venue} said no."
+    elif state == "not_reached":
+        head = f"⚠ Not confirmed yet: {venue} didn't pick up."
+    else:
+        head = f"⚠ Not confirmed yet: {venue} didn't clearly confirm it."
+    out = [head]
+    if v.get("venue_words"):
+        out.append(f"Their words: “{v['venue_words']}”")
+    return out
+
+
+async def watch_call(ch: dict, frm: str, account: str, call_id: str, venue: str, purpose: str, what: str = "",
+                     confirming: bool = False) -> None:
+    """The result once the call ends — one message per call, never two for one state; an unclear booking follows its
+    ONE confirmation call (Sasha 108) through to its own result."""
     every, times = WATCH_CALL
-    seen = None
     for _ in range(times):
         await asyncio.sleep(every)
         status, v = await api(account, "GET", f"/api/booking/calls/{call_id}")
-        if status != 200:
+        if status != 200 or v.get("status") in ("placed", "placing", "awaiting_approval"):
             continue
-        state = v.get("status")
-        if state == seen:
-            continue
-        seen = state
         st = await STORE.get_state(ch["wa_id_sha256"])
-        if state in ("placed", "placing"):
-            continue
         out = Out()
-        if purpose == "cancel":
-            done = v.get("outcome") == "yes"
-            out.text(f"{venue} has cancelled your booking." if done else str(v.get("say") or "It is not cancelled yet."))
-        else:
-            out.text(str(v.get("say") or "The call has finished."))
-        if v.get("venue_words"):
-            out.text(f"What they said, word for word: “{v['venue_words']}”")
-        out.text("Who pressed it: Sasha, by phone." + _receipt_note())
+        for line in result_lines(v, venue, purpose, what):
+            out.text(line)
+        settled = v.get("status") == "answered" and v.get("outcome") in ("yes", "no")
+        follow = None
+        if purpose == "book" and not settled and not confirming:
+            follow = v.get("confirmation_call_id")
+            if not follow:   # the confirmation is placed as the result is recorded: give it a moment
+                for _ in range(6):
+                    await asyncio.sleep(5 if every else 0)
+                    _s, v2 = await api(account, "GET", f"/api/booking/calls/{call_id}")
+                    follow = (v2 or {}).get("confirmation_call_id")
+                    if follow:
+                        break
+        if follow:
+            out.text(f"I'm calling {venue} back once now to confirm it — I'll tell you here.")
+        elif purpose == "book" and not settled:
+            out.text("I've asked them to confirm in writing where I can; anything they send goes onto your booking and receipt.")
+        elif settled and v.get("outcome") == "yes" and _receipt_note():
+            out.text(_receipt_note().strip())
         await deliver(ch, frm, out, st.get("last_inbound_at"))
+        if follow:
+            await watch_call(ch, frm, account, follow, venue, purpose, what, confirming=True)
         return
     st = await STORE.get_state(ch["wa_id_sha256"])
-    await deliver(ch, frm, Out().text("The call hasn't finished after 8 minutes; its result is kept, and the receipt will "
-                                      "follow by email."), st.get("last_inbound_at"))
+    await deliver(ch, frm, Out().text(f"⚠ The call to {venue} hasn't finished after 8 minutes; I'll keep its result, and the receipt "
+                                      f"follows by email."), st.get("last_inbound_at"))
 
 
 # ── receipts and cancelling ─────────────────────────────────────────────────────────────────────────────────────────

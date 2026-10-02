@@ -469,6 +469,24 @@ class CallRoutes:
         r = self.c.post("/api/booking/calls", json={**JOHNSON, "phone_number": "+15555550100"})
         self.assertEqual(r.json()["rule"], "number_from_request")
 
+    def test_sasha108_an_unclear_booking_gets_one_confirmation_call_on_the_same_reservation(self):
+        prep = self.prepare()
+        self.assertEqual(self.yes(prep).json()["status"], "placed")
+        from booking_signer.identity import founder_account
+        acct = founder_account()
+        call = self.c.portal.call(self.store.get_call, str(acct), prep["call_id"])
+        before = len(self.bland.requests)
+        self.assertEqual(self.c.portal.call(call_routes.confirm_unclear, call), "placed")
+        self.assertEqual(len(self.bland.requests), before + 1)
+        conf_id = self.c.portal.call(self.store.confirming, prep["call_id"])
+        conf = self.c.portal.call(self.store.get_call, str(acct), conf_id)
+        self.assertEqual(str(conf["trip_item_id"]), str(call["trip_item_id"]))                 # the SAME reservation
+        self.assertEqual((conf["approval"]["how"], conf["approval"]["kind"]), ("auto", "confirm_unclear"))
+        self.assertTrue(conf["brief"]["first_sentence"].endswith(call["brief"]["recap"]))      # it ends with the recap
+        self.assertEqual(conf["brief"]["confirms_call_id"], prep["call_id"])
+        self.assertEqual(self.c.portal.call(call_routes.confirm_unclear, call), "not placed: a confirmation call already exists")
+        self.assertIsNone(call_routes.confirm_brief(conf))                                      # never a confirmation of a confirmation
+
     def test_the_yes_must_be_for_this_read_back(self):
         prep = self.prepare()
         r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": "0" * 64, "approval": {"how": "button"}})

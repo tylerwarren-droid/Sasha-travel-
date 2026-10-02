@@ -324,6 +324,12 @@ async def send_email(email_id: str, request: Request):
         return _refuse(503, getattr(ex, "rule", "not_recorded"), f"the mail service answered {'accepted' if sent.sent else 'not accepted'}, but it could not be recorded: {ex}")
     if not sent.sent:
         return {"ok": False, "status": "not_sent", "rule": "email_not_sent", "why": sent.why, "say": f"I couldn't send it: {sent.why}"}
+    # Sasha 99 · the guest's receipt after the email booking, too
+    from . import guest_receipt as GR
+    read = await LADDER_STORE.get_read(account, str(e.get("read_id"))) if e.get("read_id") else None
+    log.info("[booking_ladder] email %s guest receipt: %s", email_id, await GR.send_for_route(
+        account, (read or {}).get("venue_name") or e["email"]["to"], f"an email from Sasha to {e['email']['to']}",
+        "Requested — waiting for their reply", {"their_words": None}))
     return {"ok": True, "status": "sent",
             "say": f"Sent to {e['email']['to']} — our mail service accepted it. I'll show you their reply the moment it arrives."}
 
@@ -551,6 +557,17 @@ async def link_booked(link_id: str, request: Request):
         return _refuse(503, e.rule, e.detail)
     if r == "unknown":
         return _refuse(404, "link_unknown", "no link with that id for this account")
+    # Sasha 99 · the guest's receipt after a slot link, too — on their word until the platform's confirmation arrives
+    from . import guest_receipt as GR
+    try:
+        l = await LADDER_STORE.get_link(account, link_id)
+    except StorageUnavailable:
+        l = None
+    if l:
+        log.info("[booking_ladder] link %s guest receipt: %s", link_id, await GR.send_for_route(
+            account, l.get("venue_name") or "the venue", f"their {l.get('platform')} page — you made the final press",
+            "Booked by you, on your word — not confirmed until the platform's confirmation arrives",
+            {"when": f"{l.get('local_date')} at {str(l.get('local_time'))[:5]}" if l.get("local_date") else None, "party": l.get("party_size")}))
     return await get_link(link_id, request)
 
 

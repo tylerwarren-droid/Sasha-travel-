@@ -118,6 +118,34 @@ class FormRung(unittest.TestCase):   # LadderRoutes' set-up, not its tests
             self.assertEqual((prep.status_code, prep.json()["rule"]), (422, rule), variant)
         self.assertEqual(self.posts, [])
 
+    def test_a_comments_box_asks_the_venue_to_copy_sasha_and_the_guests_email_stays(self):
+        # Sasha 99 · the guest keeps the reminder; a copy (and any cancel link) reaches Sasha through the comments box
+        env = {"SASHA_EMAIL_FROM": "Sasha <sasha@booking.kanoe.ai>", "SASHA_INBOUND_DOMAIN": "booking.kanoe.ai",
+               "SASHA_RESEND_API_KEY": "k", "RESEND_WEBHOOK_SECRET": "w"}
+        with mock.patch.dict(os.environ, env):
+            v = self.read()
+            prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
+            self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
+        text = "\n".join(prep["read_back"]["lines"])
+        self.assertIn("· Comentarios: Por favor, envíen también una copia de la confirmación a sasha@booking.kanoe.ai.", text)
+        self.assertIn("· Email: tyler@kanoe.test", text)
+        data = self.posts[0][1]
+        self.assertEqual((data["email"], data["comentarios"]), ("tyler@kanoe.test", "Por favor, envíen también una copia de la confirmación a sasha@booking.kanoe.ai."))
+
+    def test_the_guest_gets_a_receipt_after_the_form_too(self):
+        # Sasha 99 · a receipt after EVERY route, not only a call
+        env = {"SASHA_EMAILS_ENABLED": "1", "SASHA_RESEND_API_KEY": "k", "SASHA_EMAIL_FROM": "Sasha <sasha@booking.kanoe.ai>",
+               "SASHA_INBOUND_DOMAIN": "booking.kanoe.ai", "SASHA_FOUNDER_EMAIL": "founder@kanoe.test"}
+        with mock.patch.dict(os.environ, env):
+            v = self.read()
+            prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
+            self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
+        mail = [b for m, u, b in self.web.requests if u == "https://api.resend.com/emails"][-1]
+        self.assertEqual((mail["to"], mail["subject"]), (["founder@kanoe.test"], "Your booking at venue.sasha.test: Confirmed by the venue"))
+        for must in ("How: their own booking form, sent by Sasha after your yes", "When: 2026-10-10 at 21:00", "Their reference: TV-",
+                     "What they answered, word for word:"):
+            self.assertIn(must, mail["text"])
+
     def test_the_wizard_reads_back_both_steps_and_sends_step_two_only_after_step_one(self):
         # Sasha 94 · the day on one page, the details on the next
         v = self.read("wizard")

@@ -83,3 +83,11 @@ contact method, so domain verification is not needed).
 - **Mode B** (Sasha writes first) needs Meta-approved **templates**. They are drafted from S-49 (disclosure first) and
   submitted through Twilio for approval. Until then, **Mode A** stands: the guest sends from their own WhatsApp
   (S-48).
+
+## Sasha 98 · the document for Meta's verification
+
+- **What the founder has:** the Santander *certificado de titularidad de cuenta* (Kanoe Technologies SL, NIF
+  B23942923, signed, 2026-02-18; **no address**; it carries the account's IBAN, which goes only into the upload).
+- **For Meta:** it proves the **legal name**. Meta also checks the **address** typed in step 6 against a document. If
+  Meta asks for an address document, the AEAT *certificado de situación censal* (step 5) shows both the name and the
+  address. Use that one if Meta refuses the bank certificate.

@@ -252,6 +252,31 @@ def venue_formats(filled: List[Dict[str, str]], fields: List[Dict[str, Any]], m:
     return out
 
 
+#: Sasha 99 · the line that asks a venue to copy Sasha — in a comments box, never in place of the guest's own address
+_COPY_ASK = {"ES": "Por favor, envíen también una copia de la confirmación a {me}.", "PT": "Por favor, enviem também uma cópia da confirmação para {me}.",
+             "FR": "Merci d'envoyer aussi une copie de la confirmation à {me}.", "IT": "Per favore, inviate anche una copia della conferma a {me}.",
+             "DE": "Bitte senden Sie eine Kopie der Bestätigung auch an {me}."}
+
+
+def with_sasha_copy(filled: List[Dict[str, str]], fields: List[Dict[str, Any]], country: Optional[str]) -> List[Dict[str, str]]:
+    """The guest's own email and phone stay in the form's single email/phone fields (they need the reminder); a
+    comments field, when there is one, asks the venue to copy Sasha too — so the confirmation and any cancel link
+    reach her. No comments field: nothing added (the form is never repurposed)."""
+    from .followup import own_email
+    me = own_email()
+    box = next((f for f in fields if f.get("role") == "free_text"), None)
+    if not me or box is None:
+        return filled
+    ask = _COPY_ASK.get((country or "").upper(), "Please also send a copy of the confirmation to {me}.").format(me=me)
+    out, done = [], False
+    for f in filled:
+        if f["name"] == box["name"]:
+            f = {**f, "value": f"{f['value']} · {ask}" if f.get("value") else ask}
+            done = True
+        out.append(f)
+    return out if done else out + [{"name": box["name"], "value": ask}]
+
+
 def effective_action(live: Dict[str, Any], m: Dict[str, Any]) -> Optional[str]:
     """Where the form really goes: the approved map's endpoint (https, on the venue's own site) or the form's action."""
     a = m.get("action")
@@ -493,6 +518,10 @@ async def prepare(request: Request):
     except FF.Stop as e:
         return _refuse(422, f"form_{e.rule}", e.ask)
     filled += [{"name": f["name"], "value": m["fixed"][f["name"]][0]} for f in fields if f["role"] == "fixed"]
+    if wizard:   # the comments box is on the details page
+        filled2 = with_sasha_copy(filled2, step2, read.get("country"))
+    else:
+        filled = with_sasha_copy(filled, fields, read.get("country"))
     action = effective_action(live, m)
     if action is None:
         return _refuse(422, "form_endpoint", "their form's real address isn't on their own site over https; Sasha won't send it")
@@ -626,6 +655,16 @@ async def send(form_id: str, request: Request):
                "response_text": text, "response_sha256": _sha(text), "reading": reading,
                "booking_reference": ref_m.group(1) if ref_m else None}
     await STORE.finish(form_id, outcome, trip, attempt, now)
+    # Sasha 99 · the guest's receipt after the form, too
+    from . import guest_receipt as GR
+    o = (await _request_of(f)) or {}
+    when = (o.get("when") or {}).get("at", "").replace("T", " at ")
+    log.info("[form_rung] %s guest receipt: %s", form_id, await GR.send_for_route(
+        account, urlsplit(f["page_url"]).hostname or "the venue", "their own booking form, sent by Sasha after your yes",
+        {"confirmed": "Confirmed by the venue", "proposed": "They offered something else", "declined": "They said no"}.get(
+            reading.get("result"), "Requested — not confirmed until they confirm"),
+        {"what": (o.get("what") or {}).get("activity"), "when": when, "party": (o.get("how_many") or {}).get("count"),
+         "name": (o.get("who") or {}).get("name"), "venue_reference": outcome.get("booking_reference"), "their_words": text}))
     say = {"confirmed": "Sent. Their page confirms it, word for word below.",
            "proposed": "Sent. Their page offers something different — read it below before relying on anything.",
            "declined": "Sent. Their page says no — their words are below."}.get(reading.get("result"),

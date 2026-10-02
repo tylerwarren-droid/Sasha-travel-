@@ -55,3 +55,21 @@ drafts the request.
   checks every 15 minutes. Nothing is bought until it is approved.
 - Until a number of Sasha's own is imported, Bland's own caller ID is used. A venue calling it back does not reach
   Sasha, so every call gives Sasha's email for any change (Sasha 74).
+
+## Submitted, 2 Oct 2026 (Sasha 98–99)
+
+- **Document:** the founder's Santander *certificado de titularidad de cuenta*. It is digitally signed, dated
+  2026-02-18, and shows Kanoe Technologies SL and NIF B23942923, but **no address**. Its IBAN was never printed or
+  stored by the tab; it went only to Twilio, in the upload.
+- **Submitted as** Twilio's only accepted Spanish business type (`business_registration`), named for what it is.
+  The address entered in the form is `AD0a4aaadb46db5e5b0544d19f7147ef98` (Calle del Padre Damián 41, 28036 Madrid).
+- **Twilio's automatic evaluation:** `compliant`. Bundle **`BU540e16714e1c9cc16227cac6da2d7884`** is **in review** at
+  Twilio, and a watcher checks it every 15 minutes.
+- ⚠ **If the reviewers want a separate proof of the address**, Twilio's Spanish rules accept exactly one of these,
+  showing Calle del Padre Damián 41, 28036 Madrid (the area the +34 91 prefix covers; never a PO box):
+  - a registration document showing the name, the NIF **and the address**: the AEAT *certificado de situación
+    censal* (its *domicilio fiscal*) or the Registro Mercantil *nota simple* (its *domicilio social*);
+  - a **utility bill** (electricity, water, gas, telecoms);
+  - a **tax notice**;
+  - a **rent receipt**;
+  - a **title deed**.

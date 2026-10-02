@@ -168,4 +168,42 @@ async def send_after_cancel(call: Mapping[str, Any]) -> str:
     return "sent"
 
 
-__all__ = ["compose", "compose_cancel", "send_after_call", "send_after_cancel", "send_sms", "address_of"]
+def compose_route(venue: str, route: str, status: str, details: Mapping[str, Any], to: str) -> dict:
+    """Sasha 99 · the receipt for a booking made by FORM, EMAIL or SLOT LINK — the same facts as a call's receipt holds."""
+    lines = ["Here is the receipt for the booking Sasha made for you.", "", venue]
+    for label, key in (("What", "what"), ("When", "when"), ("For", "party"), ("Under the name", "name")):
+        if details.get(key):
+            lines.append(f"{label}: {details[key]}")
+    lines += [f"How: {route}", f"Status: {status}"]
+    if details.get("venue_reference"):
+        lines.append(f"Their reference: {details['venue_reference']}")
+    if details.get("their_words"):
+        lines.append(f"What they answered, word for word: \"{str(details['their_words'])[:1500]}\"")
+    lines += ["", "Nothing in this email is new: it restates what was sent and what they answered.", "",
+              "— Sasha (AI concierge, Kanoe Technologies SL)"]
+    return {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": to, "subject": f"Your booking at {venue}: {status}", "text": "\n".join(lines)}
+
+
+async def send_for_route(account: str, venue: str, route: str, status: str, details: Mapping[str, Any]) -> str:
+    """Sasha 99 · the guest's receipt after a form, an email or a slot link — awaited by the route; never fatal to it."""
+    from . import ladder_routes as LR
+    from .ladder import emails_ready
+    try:
+        why = emails_ready()
+        if why:
+            return f"not sent: {why}"
+        to = await address_of(account)
+        if not to:
+            return "not sent: the guest has no email address on their account"
+        sent = await E.send(LR.HTTP, compose_route(venue, route, status, details, to))
+        if not sent.sent:
+            log.error("[guest_receipt] %s receipt not sent: %s", route, sent.why)
+            return f"not sent: {sent.why}"
+        log.info("[guest_receipt] %s receipt sent to the guest", route)
+        return "sent"
+    except Exception as e:   # a receipt failure is logged, never undoes the booking step it follows
+        log.error("[guest_receipt] %s receipt failed: %s: %s", route, type(e).__name__, e)
+        return f"not sent: {type(e).__name__}"
+
+
+__all__ = ["compose_route", "send_for_route", "compose", "compose_cancel", "send_after_call", "send_after_cancel", "send_sms", "address_of"]

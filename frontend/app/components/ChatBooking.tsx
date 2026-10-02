@@ -188,7 +188,7 @@ export default function ChatBooking({ find }: { find: Find }) {
         </div>
       )}
       <ol style={{ margin: 0, paddingLeft: 18 }}>
-        {cards.map((c) => {
+        {cards.map((c, idx) => {
           // S-68 step 8 · every value said, a missing one in words; a place not open then is greyed, never dropped
           const group = state.phase === 'found' ? state.ranking?.groups[c.place_id] : undefined
           const grey = group === 'closed_then' || group === 'closed_temporarily'
@@ -212,7 +212,9 @@ export default function ChatBooking({ find }: { find: Find }) {
                 )
               })()}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <span><strong>{c.name ?? 'no name listed'}</strong>{c.type ? <span style={{ opacity: 0.7 }}> · {c.type}</span> : null}
+                <span>{idx === 0 && state.phase === 'found' && !grey
+                    ? <span style={{ fontSize: 11, padding: '1px 6px', marginRight: 6, borderRadius: 8, background: '#c9a227', color: '#111' }}>Sasha&rsquo;s pick</span> : null}
+                  <strong>{c.name ?? 'no name listed'}</strong>{c.type ? <span style={{ opacity: 0.7 }}> · {c.type}</span> : null}
                   {group && group !== 'main' ? <span style={{ color: '#9a1c1c' }}> · {GROUP_WORDS[group]}</span> : null}</span>
                 <span style={{ fontSize: 12, opacity: 0.6, whiteSpace: 'nowrap' }}>Google Maps</span>
               </div>

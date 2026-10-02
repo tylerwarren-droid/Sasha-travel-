@@ -94,6 +94,16 @@ loudly, if the hand-off lines it sits under are not there:
 The suite refuses if this is skipped: backend/tests/test_stage_b_hooks.py fails, and /api/booking/health reports
 "chat_hooks": {"booking_drafts": false} (Stage E below).
 
+Chat cancel (Sasha 96) — "cancel X" is a conductor hand-off (`booking_cancel`, backend/booking_signer/handoff.py) the
+chat renders as ChatCancel. Three CTO-file lines, each marked "Sasha 96 chat cancel (Stage B)":
+  · backend/app/api/conductor.py: `booking_cancel: Optional[dict] = None` after `booking_find` in the response model, and
+    `booking_cancel=result.get("booking_cancel"),` after `booking_find=result.get("booking_find"),` in the call;
+  · frontend/app/components/SashaChat.tsx: the import (`import ChatCancel from './ChatCancel'`), the state
+    (`const [bookingCancel, setBookingCancel] = useState<{ venue: string; n: number } | null>(null)`), the setter after
+    the booking_find one (`if (response.data.booking_cancel) setBookingCancel({ ...response.data.booking_cancel, n: Date.now() })`),
+    and the JSX after ChatBooking's (`{bookingCancel && <ChatCancel key={bookingCancel.n} venue={bookingCancel.venue} />}`).
+/api/booking/health reports "chat_hooks": {"response_fields": false} if the conductor lines are lost.
+
 Sasha's abilities re-apply command (Sasha 88) — the conversational model is told what she can do (phone, email,
 WhatsApp, book, follow up, cancel), so the chat and the avatar never say she "can't call". Run after the booking drafts:
     cd ~/Projects/sasha-travel && python3 - <<'PY'

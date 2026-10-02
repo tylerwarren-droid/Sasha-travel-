@@ -188,11 +188,34 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
             **({"priority": p} if (p := plain_priority(message, near)) else {})}   # absent: Sasha asks (S-68 step 7)
 
 
+#: Sasha 96 · "cancel my booking at Botavara" · "cancel Botavara" · "cancela la reserva en Botavara"
+_CANCEL = re.compile(r"^\s*(?:please\s+)?(?:cancel|cancela(?:r)?|anula(?:r)?)\s+(?:my\s+|mi\s+|the\s+|la\s+)?"
+                     r"(?:(?:booking|reservation|table|reserva|mesa)\s+)?(?:(?:at|in|for|en|de|con)\s+)?(?P<venue>[^?.!]{2,80}?)\s*[?.!]*\s*$", re.I)
+
+
+def cancel_request(message: str) -> Optional[dict]:
+    """{venue} when the message asks to cancel a booking at a named place — else None. The chat finds which reservation
+    it is (by the venue's real name, from its receipt) and asks one yes; nothing is cancelled by asking."""
+    m = _CANCEL.match(message or "")
+    if not m:
+        return None
+    venue = re.sub(r"\s+(?:please|por favor|for (?:me|us)|tonight|today|tomorrow|on \w+day)$", "", m["venue"].strip(), flags=re.I).strip(" ,")
+    return {"venue": venue} if len(venue) >= 2 else None
+
+
 def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Optional[datetime] = None) -> Optional[dict]:
     """S-66 (EU) step 5 · a full conductor turn that starts a booking IN THE CHAT — `booking_find` for the chat to run
     Find venues with (S-65) — or None, and the conductor carries on. ⛔ It no longer opens /booking-helper: the Psi-only
     link is retired; any kind of place, anywhere, is found the same way, and nothing is contacted by finding it."""
     message = spoken(message)
+    c = cancel_request(message)
+    if c is not None:
+        response = f"Let me find your booking at {c['venue']} — I'll ask you once before I cancel anything."
+        history = list(history or [])
+        return {"response": response, "intents": ["booking"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
+                "messages": history + [{"role": "user", "content": message}, {"role": "assistant", "content": response}],
+                "booking_cancel": c}
     f = find_request(message, now)
     if f is None:
         return None

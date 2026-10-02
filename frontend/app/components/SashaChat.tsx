@@ -11,6 +11,7 @@ import IdeasPanel, { Idea } from './workspace/IdeasPanel'
 import TripPanel from './workspace/TripPanel'
 import YouPanel from './workspace/YouPanel'
 import ChatBooking from './ChatBooking'  // S-66 chat booking, Stage B re-applies
+import ChatCancel from './ChatCancel'  // Sasha 96 chat cancel, Stage B re-applies
 import { takeChatText } from '@/lib/chat-booking-bus'
 import { guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // S-62 step 7
 import axios from 'axios'
@@ -188,6 +189,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
   // `offer_id` (+ amount_usd) so they can be booked & paid through Stripe like the whole trip;
   // options without one (activities, restaurants, fallbacks) keep the external deep-link.
   const [bookingFind, setBookingFind] = useState<{ what: string; where: string; country?: string; draft?: unknown } | null>(null)  // S-66 chat booking
+  const [bookingCancel, setBookingCancel] = useState<{ venue: string; n: number } | null>(null)  // Sasha 96 chat cancel (Stage B)
   const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number }[] }[]>([])
   // Photos Sasha surfaced, keyed by the index of the assistant message that produced them.
   const [photosByMsg, setPhotosByMsg] = useState<Record<number, Photo[]>>({})
@@ -378,6 +380,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
       const { response: sashaResponse, conversation_history, photos: respPhotos, links, hotels: hotelRecs, bookings: bookingCards, itinerary, action, booking_ref, itinerary_id, payment_item, saved_card } = response.data
       if (response.data.session_id && response.data.session_id !== chatSessionIdRef.current) chatSessionIdRef.current = response.data.session_id  // S-62 step 7 · a session not ours is never continued
       if (response.data.booking_find) setBookingFind({ ...response.data.booking_find, draft: response.data.reservation_draft ?? null })  // S-66 chat booking
+      if (response.data.booking_cancel) setBookingCancel({ ...response.data.booking_cancel, n: Date.now() })  // Sasha 96 chat cancel (Stage B)
       // Replace local messages with server-authoritative history
       if (conversation_history?.length > 0) {
         setMessages(conversation_history)
@@ -730,6 +733,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
              what was said, so they sit under the newest message rather than in a tab. ── */}
         {/* S-66 chat booking: repo-only component. CTO zips drop this; Stage B re-applies it. */}
         {bookingFind && <ChatBooking key={`${bookingFind.what}|${bookingFind.where}`} find={bookingFind} />}
+        {bookingCancel && <ChatCancel key={bookingCancel.n} venue={bookingCancel.venue} />}{/* Sasha 96 chat cancel (Stage B) */}
         {(hotels.length > 0 || bookings.length > 0 || bookingLinks.length > 0) && (
           <>
             <div ref={resultsRef} className="lw-when">Found for you</div>

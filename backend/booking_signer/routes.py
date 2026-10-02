@@ -165,7 +165,8 @@ def chat_hooks() -> dict:
     # S-66 · the response model must carry booking_find, or the chat never sees it (1 Oct: the cards never mounted)
     try:
         api = (pathlib.Path(__file__).resolve().parents[1] / "app" / "api" / "conductor.py").read_text(encoding="utf-8")
-        out["response_fields"] = "booking_find: Optional[dict]" in api and 'booking_find=result.get("booking_find")' in api
+        out["response_fields"] = ("booking_find: Optional[dict]" in api and 'booking_find=result.get("booking_find")' in api
+                                  and "booking_cancel: Optional[dict]" in api and 'booking_cancel=result.get("booking_cancel")' in api)
     except OSError:
         out["response_fields"] = False
     # the drafts must run AFTER the Psi hand-off: Psi keeps its own link

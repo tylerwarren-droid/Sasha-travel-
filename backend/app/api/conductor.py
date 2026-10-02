@@ -102,6 +102,7 @@ class ConductorResponse(BaseModel):
     saved_card: Optional[dict] = None
     session_id: Optional[str] = None  # S-62 step 7 · the session this turn was filed under (a new one if the sent id was not yours)
     booking_find: Optional[dict] = None  # S-66 chat booking (Stage B)
+    booking_cancel: Optional[dict] = None  # Sasha 96 chat cancel (Stage B)
     reservation_draft: Optional[dict] = None  # S-66 chat booking (Stage B)
     conversation_history: list
 
@@ -152,6 +153,7 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             payment_item=result.get("payment_item"),
             saved_card=result.get("saved_card"),
             booking_find=result.get("booking_find"),  # S-66 chat booking (Stage B)
+            booking_cancel=result.get("booking_cancel"),  # Sasha 96 chat cancel (Stage B)
             reservation_draft=result.get("reservation_draft"),  # S-66 chat booking (Stage B)
             session_id=session_id,
             conversation_history=result["messages"],

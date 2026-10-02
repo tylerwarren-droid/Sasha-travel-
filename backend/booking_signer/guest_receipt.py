@@ -66,11 +66,54 @@ async def address_of(account: str) -> Optional[str]:
     return addr
 
 
+def compose_cancel(brief: Mapping[str, Any], venue: str, outcome: Optional[str], words: Optional[str], to: str) -> dict:
+    """Sasha 96 · the guest's copy of a cancellation: done or not, with the venue's words as the proof."""
+    done = outcome == "yes"
+    when = " at ".join(x for x in (brief.get("date"), brief.get("time")) if x)
+    lines = [("Your reservation is cancelled." if done else "Your reservation is NOT cancelled yet — read their words below."), "",
+             venue, f"Was: {when}, for {brief.get('party') or '—'}, under {brief.get('name') or '—'}"
+             + (f" · their reference {brief['reference']}" if brief.get("reference") else ""), ""]
+    if words:
+        lines += [f"What they said on the call, word for word: \"{words}\""]
+    lines += ["", "The call is kept, word for word, on the booking's receipt in your itinerary.", "",
+              "— Sasha (AI concierge, Kanoe Technologies SL)"]
+    return {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": to,
+            "subject": f"{'Cancelled' if done else 'Not cancelled yet'}: your booking at {venue}", "text": "\n".join(lines)}
+
+
+async def send_sms(to: Optional[str], body: str) -> str:
+    """Sasha 96 · a text to the guest FROM Sasha's own number (S-70). Off unless SASHA_SMS_TO_GUEST=1; never fakes a send."""
+    import base64
+    import urllib.parse
+    from . import calls as C, ladder_routes as LR
+    if os.getenv("SASHA_SMS_TO_GUEST", "").strip() != "1":
+        return "sms not sent: texts to guests are off (SASHA_SMS_TO_GUEST is not 1)"
+    sid, token, frm = os.getenv("TWILIO_ACCOUNT_SID", "").strip(), os.getenv("TWILIO_AUTH_TOKEN", "").strip(), C.sasha_number()
+    if not (sid and token and frm and to):
+        return "sms not sent: no Twilio account, no Sasha number, or no guest mobile"
+    auth = base64.b64encode(f"{sid}:{token}".encode()).decode()
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
+            r = await client.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json",
+                                  headers={"authorization": f"Basic {auth}"}, data={"From": frm, "To": to, "Body": body[:600]})
+        ok = r.status_code in (200, 201) and (r.json() or {}).get("sid")
+        if not ok:
+            log.error("[guest_receipt] SMS to the guest not accepted: HTTP %s %s", r.status_code, r.text[:200])
+        return "sms sent" if ok else f"sms not sent: Twilio answered HTTP {r.status_code}"
+    except Exception as e:
+        log.error("[guest_receipt] SMS to the guest failed: %s: %s", type(e).__name__, e)
+        return f"sms not sent: {type(e).__name__}"
+
+
 async def send_after_call(call: Mapping[str, Any]) -> str:
     """Once a booking call's reading is recorded. Returns what happened, in words (logged; the tests read it)."""
     from . import call_routes as CRT, ladder_routes as LR, receipt as RC
     from .ladder import emails_ready
-    if ((call.get("brief") or {}).get("purpose") or "book") != "book":
+    brief = call.get("brief") or {}
+    if (brief.get("purpose") or "book") == "cancel":
+        return await send_after_cancel(call)
+    if (brief.get("purpose") or "book") != "book":
         return "not a booking call"
     why = emails_ready()
     if why:
@@ -91,7 +134,38 @@ async def send_after_call(call: Mapping[str, Any]) -> str:
         log.error("[guest_receipt] call %s: the receipt email was not sent: %s", call.get("call_id"), sent.why)
         return f"not sent: {sent.why}"
     log.info("[guest_receipt] call %s: receipt sent to the guest (%s)", call.get("call_id"), sent.provider_id)
+    refs = rc.get("references") or {}
+    sms = await send_sms(rc.get("phone_given_if_asked"),
+                         f"Sasha: {rc['venue']['name']}, {rc.get('date')} {rc.get('time') or ''}, {rc.get('count') or ''} — "
+                         f"{rc.get('status_words')}." + (f" Ref. {refs['sasha']}." if refs.get("sasha") else "") + " Receipt in your email.")
+    log.info("[guest_receipt] call %s: %s", call.get("call_id"), sms)
     return "sent"
 
 
-__all__ = ["compose", "send_after_call", "address_of"]
+async def send_after_cancel(call: Mapping[str, Any]) -> str:
+    """Sasha 96 · after a CANCEL call's reading: the guest's copy by email (and a text, when texts are on)."""
+    from . import call_routes as CRT, ladder_routes as LR
+    from .ladder import emails_ready
+    why = emails_ready()
+    if why:
+        return f"not sent: {why}"
+    account = str(call["account_id"])
+    to = await address_of(account)
+    if not to:
+        return "not sent: the guest has no email address on their account"
+    brief = call.get("brief") or {}
+    read = await CRT._read_of(account, brief)
+    venue = (((read or {}).get("listing") or {}).get("name") or "").strip() or brief.get("venue_name") or "the venue"
+    fresh = await CRT.CALL_STORE.get_call(account, str(call["call_id"])) or dict(call)
+    sent = await E.send(LR.HTTP, compose_cancel(brief, venue, fresh.get("outcome"), fresh.get("venue_words"), to))
+    if not sent.sent:
+        log.error("[guest_receipt] cancel call %s: the guest's copy was not sent: %s", call.get("call_id"), sent.why)
+        return f"not sent: {sent.why}"
+    done = fresh.get("outcome") == "yes"
+    log.info("[guest_receipt] cancel call %s: %s", call.get("call_id"), await send_sms(
+        brief.get("phone"), f"Sasha: your booking at {venue}, {brief.get('date')} {brief.get('time')} — "
+                            + ("cancelled." if done else "NOT cancelled yet; details in your email.")))
+    return "sent"
+
+
+__all__ = ["compose", "compose_cancel", "send_after_call", "send_after_cancel", "send_sms", "address_of"]

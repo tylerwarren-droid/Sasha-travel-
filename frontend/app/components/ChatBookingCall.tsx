@@ -46,6 +46,10 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
   const [saved, setSaved] = useState<{ contact: Contact | null; consent: Consent } | { why: string } | null>(null)
   const [keep, setKeep] = useState(false)
   const [note, setNote] = useState<string | null>(null)
+  // Sasha 96 · booking is automatic from the guest's side: no form on the normal path — it is opened only to change a
+  // detail, and ONE question is asked only when something essential is missing
+  const [showForm, setShowForm] = useState(false)
+  const [autoTried, setAutoTried] = useState(false)
   useEffect(() => {
     let off = false
     ;(async () => {
@@ -147,6 +151,20 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
   }, [phase.p === 'readback' ? phase.callId : null])
 
   const run = (f: () => Promise<void>) => () => { f().catch((e) => setPhase({ p: 'refused', words: (e as Error).message })) }
+  // the ONE essential still missing, asked as a question (null: nothing — she prepares it herself)
+  const missing: null | { key: 'date' | 'time' | 'count' | 'name'; ask: string } =
+    !d.ask && !d.date ? { key: 'date', ask: 'Which day?' } : !d.ask && !d.time ? { key: 'time', ask: 'What time?' }
+      : !(d.count >= 1) ? { key: 'count', ask: 'For how many?' } : d.name.trim().length < 2 ? { key: 'name', ask: 'Whose name should it be under?' } : null
+  useEffect(() => {
+    // once the saved details are known, she prepares it herself — nothing to press
+    if (autoTried || phase.p !== 'details' || saved === null || missing || d.venueLang.trim().length < 2) return
+    setAutoTried(true)
+    prepare().catch((e) => setPhase({ p: 'refused', words: (e as Error).message }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-checked as the details arrive
+  }, [saved, missing?.key, d.venueLang, phase.p, autoTried])
+  const surname = d.name.trim().split(/\s+/).pop() ?? ''
+  const dayWords = d.date ? new Date(`${d.date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }) : ''
+  const confirmSentence = `Book ${venue} for ${d.count}${d.unit === 'people' ? '' : ` ${d.unit}`}, ${d.ask ? 'whenever they have space' : `${dayWords} at ${d.time}`}, under ${surname}?`
   // Sasha 86 · explicit ink and paper: inside the dark chat an input inherited white text on its white box (invisible)
   const input = { width: '100%', padding: '4px 6px', border: '1px solid rgba(0,0,0,.25)', borderRadius: 6, color: '#111', background: '#fff', colorScheme: 'light' } as const
   const needs = [
@@ -156,10 +174,18 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
   ]
   return (
     <div style={{ marginTop: 10, borderTop: '1px solid rgba(0,0,0,.1)', paddingTop: 10 }}>
-      {(phase.p === 'details' || phase.p === 'preparing') && (
-        <div style={{ fontSize: 13, marginBottom: 6 }}>I&rsquo;ll call {venue} for you. Check these — you&rsquo;ll see exactly what I&rsquo;ll say before I call, and I call only after your yes.</div>
+      {phase.p === 'preparing' && !showForm && <div style={{ fontSize: 13 }}>Getting it ready for {venue}…</div>}
+      {phase.p === 'details' && missing && !showForm && (
+        // Sasha 96 · ONE question, only for something essential the request didn't say
+        <div style={{ fontSize: 13 }}>
+          <div style={{ marginBottom: 4 }}>{missing.ask}</div>
+          {missing.key === 'date' && <input style={{ ...input, width: 180 }} type="date" value={d.date} onChange={(e) => setD({ ...d, date: e.target.value })} />}
+          {missing.key === 'time' && <input style={{ ...input, width: 140 }} type="time" value={d.time} onChange={(e) => setD({ ...d, time: e.target.value })} />}
+          {missing.key === 'count' && <input style={{ ...input, width: 100 }} type="number" min={1} max={100} value={d.count || ''} onChange={(e) => setD({ ...d, count: Number(e.target.value) })} />}
+          {missing.key === 'name' && <input style={{ ...input, width: 240 }} value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} />}
+        </div>
       )}
-      {(phase.p === 'details' || phase.p === 'preparing' || phase.p === 'refused') && (
+      {(showForm || (phase.p === 'refused' && showForm)) && (phase.p === 'details' || phase.p === 'preparing' || phase.p === 'refused') && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 13 }}>
           <label>What (your words)<input style={input} value={d.activity} onChange={(e) => setD({ ...d, activity: e.target.value })} /></label>
           <label>As Sasha will say it there<input style={input} value={d.venueLang} onChange={(e) => { setLangEdited(true); setD({ ...d, venueLang: e.target.value }) }} /></label>
@@ -183,22 +209,29 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
           {saved && 'why' in saved && <div style={{ gridColumn: '1 / -1', fontSize: 12, opacity: 0.7 }}>Saved details aren&rsquo;t available: {saved.why}</div>}
           {note && <div style={{ gridColumn: '1 / -1', fontSize: 12 }}>{note}</div>}
           <div style={{ gridColumn: '1 / -1' }}>
-            <GatedButton label={`Prepare the call to ${venue}`} onClick={run(prepare)} needs={needs} />
+            <GatedButton label="Use these details" onClick={run(async () => { setShowForm(false); await prepare() })} needs={needs} />
           </div>
         </div>
       )}
-      {phase.p === 'refused' && <div style={{ marginTop: 6 }}>{phase.words}</div>}
+      {phase.p === 'refused' && <div style={{ marginTop: 6 }}>{phase.words}
+        {!showForm && <> <button type="button" onClick={() => { setShowForm(true); setPhase({ p: 'details' }) }} style={{ fontSize: 12, textDecoration: 'underline' }}>Change details</button></>}</div>}
       {(phase.p === 'readback' || phase.p === 'placing') && (
         <div>
-          <div style={{ fontWeight: 600 }}>Here&rsquo;s what I&rsquo;ll do — please check it. Your yes covers exactly these words:</div>
-          <ol style={{ paddingLeft: 18 }}>{phase.lines.map((l, i) => <li key={i}>{l}</li>)}</ol>
+          {/* Sasha 96 · ONE confirmation sentence; the yes still binds to the full read-back's hash, which is one tap away */}
+          <div style={{ fontWeight: 600 }}>{confirmSentence}</div>
           {phase.p === 'readback' && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <GatedButton label="Yes, go ahead" onClick={run(() => approve(phase.callId, phase.sha, phase.lines, 'button', null))} needs={[]} />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+              <GatedButton label="Yes" onClick={run(() => approve(phase.callId, phase.sha, phase.lines, 'button', null))} needs={[]} />
               <GatedButton label="No" onClick={() => { setPendingYes(null); setPhase({ p: 'not_now' }) }} needs={[]} />
-              <span style={{ fontSize: 12, opacity: 0.7 }}>or type “yes”</span>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>or say “yes”</span>
+              <button type="button" onClick={() => { setPendingYes(null); setShowForm(true); setPhase({ p: 'details' }) }} style={{ fontSize: 12, textDecoration: 'underline' }}>Change details</button>
             </div>
           )}
+          <details style={{ marginTop: 6, fontSize: 13 }}>
+            <summary>See exactly what I&rsquo;ll say</summary>
+            <div style={{ fontSize: 12, opacity: 0.75, margin: '4px 0' }}>Your yes covers exactly these words:</div>
+            <ol style={{ paddingLeft: 18 }}>{phase.lines.map((l, i) => <li key={i}>{l}</li>)}</ol>
+          </details>
           {phase.p === 'placing' && <div>Placing the call…</div>}
         </div>
       )}

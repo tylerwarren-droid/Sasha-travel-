@@ -161,3 +161,40 @@ class EmailedConfirmation(unittest.TestCase):
         self.assertFalse(self.file("re3", "Reserva", "Hola, confirmamos las mesas de Warren y García."))   # two: not guessed
         self.assertFalse(self.file("re4", "Hola", "¿Tenéis mesa mañana?"))                                # none
         self.assertNotIn("re3", self.IP.STORE.rows)
+
+
+class Cancelling(Receipt):
+    """Sasha 96 · "cancel X" is found by the chat; after the cancel call the guest gets the copy, with the proof."""
+    ENV = GuestReceipt.ENV
+
+    def test_cancel_requests_are_recognised_and_nothing_else(self):
+        from booking_signer import handoff as H
+        self.assertEqual(H.cancel_request("cancel my booking at Botavara Chamberí"), {"venue": "Botavara Chamberí"})
+        self.assertEqual(H.cancel_request("Cancela la reserva en Botavara, por favor"), {"venue": "Botavara"})
+        self.assertEqual(H.cancel_request("cancel Botavara"), {"venue": "Botavara"})
+        self.assertIsNone(H.cancel_request("book dinner for 2 in Chamberí on Saturday at 9pm"))
+        turn = H.booking_handoff("cancel Botavara")
+        self.assertEqual(turn["booking_cancel"], {"venue": "Botavara"})
+        self.assertIn("I'll ask you once before I cancel anything", turn["response"])
+
+    def test_the_guest_gets_the_cancellation_copy_with_their_words(self):
+        import asyncio, os
+        from unittest import mock
+        from booking_signer import guest_receipt as GR
+        prep = self.booked()
+        booking = self.calls.calls[prep["call_id"]]
+        self.calls.calls["cx"] = {"call_id": "cx", "account_id": booking["account_id"], "trip_item_id": prep["trip_item_id"],
+                                  "status": "answered", "outcome": "yes", "venue_words": "Vale, queda anulada.",
+                                  "brief": {"purpose": "cancel", "venue_key": booking["brief"]["venue_key"], "venue_name": "dinner in Chamberí",
+                                            "date": "2026-10-10", "time": "21:00", "party": 2, "name": "Warren", "phone": "+34608445715"}}
+        with mock.patch.dict(os.environ, self.ENV):
+            self.assertEqual(asyncio.run(GR.send_after_call(self.calls.calls["cx"])), "sent")
+        mail = [b for m, u, b in self.web.requests if u == "https://api.resend.com/emails"][-1]
+        self.assertEqual(mail["subject"], f"Cancelled: your booking at {BOTAVARA}")
+        for must in ("Your reservation is cancelled.", "Was: 2026-10-10 at 21:00, for 2, under Warren", '"Vale, queda anulada."'):
+            self.assertIn(must, mail["text"])
+
+    def test_no_text_to_the_guest_unless_switched_on(self):
+        import asyncio
+        from booking_signer import guest_receipt as GR
+        self.assertEqual(asyncio.run(GR.send_sms("+34608445715", "x")), "sms not sent: texts to guests are off (SASHA_SMS_TO_GUEST is not 1)")

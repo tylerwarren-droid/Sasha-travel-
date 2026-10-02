@@ -203,7 +203,7 @@ class Turns(Base):
         self.assertTrue(medias[0]["body"].startswith("Sasha's pick · A Very Long Restaurant"))
         body, buttons = GW.SENDER.contents[0]
         self.assertEqual(body, "Which one?")
-        self.assertTrue(all(len(GW.title(t)) <= 25 for t, _ in buttons))
+        self.assertTrue(all(len(GW.title(t)) <= 20 for t, _ in buttons))   # Sasha 117 · 25 failed live (63013)
         self.assertEqual(len(buttons), 3)
 
     def test_sasha117_the_rehearsal_books_our_test_venue_never_a_real_one(self):

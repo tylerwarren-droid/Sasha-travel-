@@ -65,7 +65,7 @@ APPROVAL_WINDOW = timedelta(minutes=15)       # = call_routes.APPROVAL_WINDOW
 SESSION_WINDOW = timedelta(hours=24)          # WhatsApp's customer-service window
 SEND_GAP = 3.1                                # the sandbox sends one message every three seconds
 HISTORY_KEEP = 20
-TITLE_MAX = 25                                # WhatsApp's button-title limit
+TITLE_MAX = 20                                # WhatsApp's reply-button title limit (Sasha 117: 25 failed, Twilio 63013)
 WATCH_CALL = (10, 48)                         # every 10 s, up to 8 minutes (as the web chat)
 WATCH_CANCEL = (30, 60)                       # every 30 s, up to 30 minutes, for a written cancellation
 
@@ -750,10 +750,12 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
     photos = await _photos(account, f.get("what") or "", shown)
     if rehearsal(account):   # Sasha 117 · the dress rehearsal books OUR test venue, never a real one; the card says so
         shown = shown[:2] + [TEST_CARD]                   # still three: WhatsApp shows at most three reply buttons
-    out.text(f"{f.get('what')} in {f.get('where')} — {ranking.get('count') or f'{len(cands)} found'}"
+    what = f.get("what") or ""
+    out.text(f"{what[:1].upper() + what[1:]} in {f.get('where')} — {ranking.get('count') or f'{len(cands)} found'}"
              f"{' · €€€ and up first' if luxe else ''}. From Google Maps; nobody has been contacted.")
     for c in shown:
-        line = " · ".join(x for x in (c.get("name") or "no name listed", rating_words(c), distance_words(c.get("distance_m"))) if x)
+        line = " · ".join(x for x in (c.get("name") or "no name listed", rating_words(c),
+                                       distance_words(c["distance_m"]) if c.get("distance_m") is not None else None) if x)
         if c is TEST_CARD:
             line = "Rehearsal · Sasha Test Venue — ours, not a real restaurant: booking it contacts no one"
         out.media(("Sasha's pick · " if c["place_id"] == pick else "") + line, photos.get(c["place_id"]))

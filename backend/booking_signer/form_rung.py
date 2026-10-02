@@ -70,6 +70,11 @@ def _test_host() -> str:
     return urlsplit(public_base()).hostname or ""
 
 
+def is_test_venue(url: str) -> bool:
+    u = urlsplit(url or "")
+    return (u.hostname or "").lower() == _test_host() and u.path.startswith("/api/booking/test-venue/")
+
+
 def form_map(url: str) -> Optional[Dict[str, Any]]:
     """The map for the form at `url`, if Sasha may send it — the test venue always, a real host only when approved."""
     u = urlsplit(url or "")

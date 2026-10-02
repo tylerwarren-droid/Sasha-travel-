@@ -118,6 +118,14 @@ class FormRung(unittest.TestCase):   # LadderRoutes' set-up, not its tests
             self.assertEqual((prep.status_code, prep.json()["rule"]), (422, rule), variant)
         self.assertEqual(self.posts, [])
 
+    def test_our_test_venue_is_never_looked_up_on_google(self):
+        # Sasha 94 · 2 Oct: "Sasha Test Venue, Madrid" pulled a real restaurant's listing and phone into the read
+        with mock.patch.dict(os.environ, {"GOOGLE_PLACES_API_KEY": "places-test"}):
+            v = self.read()
+        self.assertFalse([u for m, u, b in self.web.requests if "places.googleapis.com" in u])
+        self.assertEqual({f["kind"] for f in v["facts"]}, {"name", "booking_form"})
+        self.assertIn("never looked up on Google", " ".join(s["result"] for s in v["sources"]))
+
     def test_a_real_venue_is_never_sent_until_approved(self):
         self.assertIsNone(FR.form_map("https://www.restaurante-real.es/reservas"))
         FR.FORM_MAPS["www.restaurante-real.es"] = {"fields": FR.TEST_FIELDS, "date_fmt": str, "time_fmt": str}

@@ -646,7 +646,13 @@ async def read_venue(http: Http, *, name: str, city: str, country: Optional[str]
     sources: List[dict] = []
     listing = None
     key = places_key()
-    if key:
+    # Sasha 94 · OUR OWN test venue is never looked up on Google: its name could match a real place (1 Oct: "Sasha Test
+    # Venue, Madrid" pulled Restaurante Sacha's listing and phone into the read). Its own site is the whole read.
+    from .form_rung import is_test_venue
+    if website and is_test_venue(website):
+        key = None
+        sources.append({"url": PLACES_URL, "result": "not read — our own test venue is never looked up on Google"})
+    elif key:
         if place_id is not None and not (isinstance(place_id, str) and _PLACE_ID.fullmatch(place_id)):
             raise ReadRefused("place_id_invalid", "not a Google place id")
         f, s, listing, pc, site = (await read_place_id(http, key, place_id, now) if place_id
@@ -655,7 +661,7 @@ async def read_venue(http: Http, *, name: str, city: str, country: Optional[str]
         sources += s
         country = country or pc
         website = website or site
-    else:
+    elif not key:
         sources.append({"url": PLACES_URL, "result": "not read — GOOGLE_PLACES_API_KEY is not set"})
     if website:
         try:

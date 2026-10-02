@@ -1,12 +1,14 @@
 -- 022 · S-79 · Google Calendar: the guest's connection (its refresh token sealed in the vault, 021), which Google event
 -- mirrors which booking, and ONE outbox fed by a trigger — status is written in eleven places, and a Python hook in
 -- each would be missed by the twelfth writer; the trigger can't be.
+-- Sasha 112: the mirror table is booking_calendar_events — a legacy public.calendar_events (001_initial_schema.sql; 0 rows,
+-- 4 RLS policies, read by no code) already exists and is left as it is.
 -- Verified against the live schema (sasha-prod) on 2 Oct 2026: 021 (vault_items) is applied; trip_items has status
 -- text, date_time timestamptz; none of the three tables exists. Depends on 021.
 -- ⛔ NOT APPLIED by any session: the founder approves, then it is applied by chat (preview, transaction, verify).
 
 -- PREVIEW (read-only): must be three NULLs, and vault_items present
-select to_regclass('public.calendar_links'), to_regclass('public.calendar_events'), to_regclass('public.calendar_outbox'),
+select to_regclass('public.calendar_links'), to_regclass('public.booking_calendar_events'), to_regclass('public.calendar_outbox'),
        to_regclass('public.vault_items') as vault_items_present;
 
 begin;
@@ -22,7 +24,7 @@ create table calendar_links (
   needs_reconnect_at       timestamptz,                          -- invalid_grant: the 7-day testing expiry, or a revoke
   told_reconnect_at        timestamptz                           -- the guest is told ONCE per expiry
 );
-create table calendar_events (
+create table booking_calendar_events (
   trip_item_id     uuid        primary key references trip_items (id) on delete cascade,
   account_id       uuid        not null references auth.users (id) on delete cascade,
   google_event_id  text        not null,
@@ -50,11 +52,11 @@ end $fn$;
 create trigger trip_items_calendar_outbox after update of status, date_time on trip_items
   for each row execute function trip_items_status_to_outbox();
 alter table calendar_links  enable row level security;
-alter table calendar_events enable row level security;
+alter table booking_calendar_events enable row level security;
 alter table calendar_outbox enable row level security;
 commit;
 
 -- VERIFY (read-only): three rows rls true / 0 policies; the trigger present
 select relname, relrowsecurity, (select count(*) from pg_policies p where p.tablename = c.relname) as policies
-from pg_class c where relname in ('calendar_links', 'calendar_events', 'calendar_outbox') order by relname;
+from pg_class c where relname in ('calendar_links', 'booking_calendar_events', 'calendar_outbox') order by relname;
 select tgname from pg_trigger where tgname = 'trip_items_calendar_outbox';

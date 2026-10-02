@@ -192,7 +192,7 @@ class OnPostgresTrigger(unittest.TestCase):
             c = await asyncpg.connect(TBL.PG_URL)
             try:
                 root = pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql"
-                await c.execute("drop table if exists calendar_links, calendar_events, calendar_outbox")
+                await c.execute("drop table if exists calendar_links, booking_calendar_events, calendar_outbox")
                 await c.execute("drop trigger if exists trip_items_calendar_outbox on trip_items")
                 if not await c.fetchval("select to_regclass('public.vault_items') is not null"):
                     sql = (root / "021_vault.sql").read_text()

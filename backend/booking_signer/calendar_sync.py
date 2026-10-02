@@ -226,18 +226,18 @@ class PostgresCalendarStore:
         await self._run(lambda c: c.execute("update calendar_outbox set attempts = attempts + 1, last_error = $2 where id = $1", oid, error[:500]))
 
     async def get_event(self, trip_item_id):
-        r = await self._run(lambda c: c.fetchrow("select * from calendar_events where trip_item_id = $1", uuid.UUID(trip_item_id)))
+        r = await self._run(lambda c: c.fetchrow("select * from booking_calendar_events where trip_item_id = $1", uuid.UUID(trip_item_id)))
         return {**dict(r), "trip_item_id": str(r["trip_item_id"]), "account_id": str(r["account_id"])} if r else None
 
     async def put_event(self, row):
         await self._run(lambda c: c.execute(
-            "insert into calendar_events (trip_item_id, account_id, google_event_id, etag, synced_status, synced_at) "
+            "insert into booking_calendar_events (trip_item_id, account_id, google_event_id, etag, synced_status, synced_at) "
             "values ($1,$2,$3,$4,$5,now()) on conflict (trip_item_id) do update set google_event_id = excluded.google_event_id, "
             "etag = excluded.etag, synced_status = excluded.synced_status, synced_at = now()",
             uuid.UUID(row["trip_item_id"]), uuid.UUID(row["account_id"]), row["google_event_id"], row.get("etag"), row["synced_status"]))
 
     async def delete_event(self, trip_item_id):
-        await self._run(lambda c: c.execute("delete from calendar_events where trip_item_id = $1", uuid.UUID(trip_item_id)))
+        await self._run(lambda c: c.execute("delete from booking_calendar_events where trip_item_id = $1", uuid.UUID(trip_item_id)))
 
 
 STORE: Any = None   # routes.py sets the Postgres store; tests a memory one

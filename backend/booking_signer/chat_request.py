@@ -122,7 +122,7 @@ def draft(message: str, now: Optional[datetime] = None, lang: str = "en") -> Dic
         parts["what"] = {"activity": en, "activity_venue_lang": words.get(lang.split("-")[0], words["en"]), "category": category}
         parts["flow"] = "quote_first" if (flow == "quote_first" or _QUOTE.search(t)) else "book"
     day = plain_day(message, now)
-    hhmm = _time(t)
+    hhmm = _time(t) or HO.context_time(message)   # Sasha 101 · "dinner … at nine" is 21:00
     win = _window(t, day)
     if _ASK_SPACE.search(t) or (parts.get("flow") == "quote_first" and not (day and hhmm)):
         parts["when"] = {"mode": "venue_proposes"}

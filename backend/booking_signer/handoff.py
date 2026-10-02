@@ -113,7 +113,47 @@ def plain_party(message: str) -> Optional[int]:
 #: S-66 (EU) step 5 · "find / book / reserve … {X} in {Y}" for ANY kind of place
 _FIND = re.compile(r"\b(?:find|book|reserve|look for|search for|get)\s+(?:me\s+|us\s+)?(?:an?\s+|some\s+|the\s+)?"
                    r"(?P<what>[a-z][\w'’ -]{1,58}?)\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
-_WHERE_END = re.compile(r"\s+(?:for|on|at|tomorrow|today|tonight|this|next|by|please|from|open|opened)\b.*$", re.I)
+#: Sasha 101 · how a request is SPOKEN without "book": "I'd like a luxury dinner in …", "can you get us a table in …".
+#: Taken only when what is asked for is a bookable thing (a table, a meal, a place to book) — "I want to see the museum
+#: in Madrid" is not a booking.
+_SOFT = re.compile(r"\b(?:i(?:'d| would) like|we(?:'d| would) like|i want|we want|i need|we need|looking for|"
+                   r"can (?:i|we|you) (?:get|have|find)|could (?:i|we|you) (?:get|have|find)|"
+                   r"(?:let'?s|let us) (?:book|get|have))\s+(?:to (?:book|reserve|have|get)\s+)?(?:me\s+|us\s+)?"
+                   r"(?:an?\s+|some\s+|the\s+)?(?P<what>[a-z][\w'’ -]{1,58}?)\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
+#: a request that STARTS with the thing itself: "lunch for 4 in Malasaña tomorrow at two", "a table for two in Chamberí…"
+_BARE = re.compile(r"^\s*(?:(?:an?|some)\s+)?(?P<what>(?:[a-záéíóúñ'’-]+\s+){0,3}?(?:table|dinner|lunch|breakfast|brunch|supper)"
+                   r"(?:\s+for\s+\w+(?:\s+(?:people|of us))?)?)\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
+_BOOKABLE = re.compile(r"\b(table|dinner|lunch|breakfast|brunch|supper|restaurant|bistro|tapas|bar|caf[eé]|spa|massage|tour|"
+                       r"hotel|room|studio|salon|class|session|appointment|reservation)s?\b", re.I)
+_DINNER = re.compile(r"\b(dinner|supper|cena|cenar|tonight|evening|noche|night|table|restaurant|mesa)\b", re.I)
+_LUNCH = re.compile(r"\b(lunch|comida|almuerzo|almorzar)\b", re.I)
+_MORNING = re.compile(r"\b(morning|mañana|breakfast|desayuno|a\.?m\.?)\b", re.I)
+
+
+def context_time(message: str) -> Optional[str]:
+    """Sasha 101 · a bare hour as people SAY it — "dinner … at nine" is 21:00, "lunch at two" is 14:00 — unless they
+    say morning or am. Only for a meal said in the same request; otherwise a bare "at 9" stays unknown and is asked."""
+    t = (message or "").lower()
+    m = re.search(r"\bat\s+(\d{1,2}|" + "|".join(_NUMBERS) + r")(?::([0-5]\d))?(?:\s*o'?clock)?\b(?!\s*(?:am|pm|a\.m|p\.m|:))", t)
+    if not m:
+        return None
+    h = int(m[1]) if m[1].isdigit() else _NUMBERS[m[1]]
+    mi = int(m[2] or 0)
+    if not 1 <= h <= 12:
+        return None
+    if _MORNING.search(t):   # breakfast, morning, am: the hour as said
+        return f"{h:02d}:{mi:02d}" if 5 <= h <= 11 else None
+    if _DINNER.search(t) and h <= 11:
+        h += 12
+    elif _LUNCH.search(t) and h <= 5:
+        h += 12
+    elif not (_DINNER.search(t) or _LUNCH.search(t)):
+        return None
+    return f"{h:02d}:{mi:02d}"
+
+
+_WHERE_END = re.compile(r"(?:\s+|\s*,\s*)(?:for|on|at|tomorrow|today|tonight|this|next|by|please|from|open|opened|"
+                        r"monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b.*$", re.I)
 
 
 _WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
@@ -129,9 +169,10 @@ def plain_open_at(message: str, now: Optional[datetime] = None) -> Optional[str]
         h, mi = int(m[1]) % 12 + (12 if m[3] == "pm" else 0), int(m[2] or 0)
     else:
         m = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", t)
-        if not m:
+        ct = None if m else context_time(message)   # Sasha 101 · "dinner … at nine" said aloud
+        if not (m or ct):
             return None
-        h, mi = int(m[1]), int(m[2])
+        h, mi = (int(m[1]), int(m[2])) if m else (int(ct[:2]), int(ct[3:]))
     today = _today(now)
     day = plain_date(message, now)
     if day is None:
@@ -163,11 +204,19 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
     a country is taken only when written as a two-letter code ("Nairobi, KE")."""
     m = _FIND.search(message or "")
     if not m:
+        m = _SOFT.search(message or "")
+        if m and not _BOOKABLE.search(m["what"]):
+            m = None
+    if not m:
+        m = _BARE.search(message or "")
+    if not m:
         return None
     # Sasha 86 · "dinner for 2" is dinner, for two: the count belongs to the booking, not to what is searched for (or to
     # the name a picked place falls back to)
-    what = re.sub(rf"\s+(?:for|party of)\s+(?:\d{{1,2}}|{'|'.join(_NUMBERS)})(?:\s+(?:people|persons|guests|of us))?$", "",
+    what = re.sub(rf"\s+(?:for|party of)\s+(?:\d{{1,2}}|{'|'.join(_NUMBERS)})(?:\s+(?:people|persons|guests|of us))?\b", "",
                   " ".join(m["what"].split()), flags=re.I)
+    # Sasha 101 · "a table at a luxury restaurant" searches for the luxury restaurant — every qualifier kept
+    what = re.sub(r"^(?:a\s+)?table\s+(?:at|in)\s+(?:an?\s+|the\s+)?", "", what, flags=re.I).strip() or what
     raw = m["where"]
     # S-68 step 3 · "… in Madrid near Hotel Urban" / "near my hotel": what the distance is measured from, as said
     nm = re.search(r"[\s,]+(?:near|close to)\s+(?P<near>[^?.!;]{2,120})$", raw, re.I)
@@ -217,6 +266,17 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
                 "messages": history + [{"role": "user", "content": message}, {"role": "assistant", "content": response}],
                 "booking_cancel": c}
     f = find_request(message, now)
+    if f is None:
+        # Sasha 101 · a spoken request often arrives in pieces (a pause ends the turn): "Book a luxury dinner for two" /
+        # "in Chamberí on Saturday at nine". The guest's last lines and this one, read together, as one request.
+        users = [str(h.get("content") or "") for h in (history or []) if h.get("role") == "user"][-2:]
+        for k in (1, 2):
+            if len(users) >= k:
+                joined = " ".join(re.sub(r"[.!?]+\s*$", "", u.strip()) for u in users[-k:] + [message])
+                f = find_request(joined, now)
+                if f is not None:
+                    message = joined
+                    break
     if f is None:
         return None
     where = f"{f['where']}{', ' + f['country'] if f.get('country') else ''}"

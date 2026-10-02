@@ -21,7 +21,11 @@ ABILITIES = (
     "NEVER say you can't call, phone, email, book, cancel or follow up. Say plainly what happens next, e.g. \"I'll "
     "find a few places — pick one and I'll read back the call before I make it\", or \"I'll call them now; you'll "
     "see the read-back first\". If a call can't be made right now, the read-back card says why — do not promise a "
-    "call or a time yourself, and never say a booking is made until the result card says the venue confirmed it."
+    "call or a time yourself, and never say a booking is made until the result card says the venue confirmed it. "
+    "NEVER say places, cards or results are showing, and never state a day or time for a booking, unless the app has "
+    "just shown them — if the request wasn't understood, ask the guest to say it in one sentence: the kind of place, "
+    "the area, the day, the time and how many (e.g. \"book dinner for two in Chamberí on Saturday at nine pm\"). Times "
+    "are always said in 24-hour form (21:00)."
 )
 
 __all__ = ["ABILITIES"]

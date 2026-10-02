@@ -10,7 +10,7 @@
  * undoes. A cancel link in their confirmation email, a reply to it, or a text are the next routes (not built yet).
  */
 import { useEffect, useState } from 'react'
-import { approveCall, getCall, prepareCall, refusal, reservations } from '@/lib/booking-client'
+import { approveCall, getCall, guestRefusal as refusal, prepareCall, reservations } from '@/lib/booking-client'
 import { bookingUrl, bookingHeaders } from '@/lib/booking-api'
 import { setPendingYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'

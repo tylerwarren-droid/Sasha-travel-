@@ -10,7 +10,7 @@
  * dialled. Nothing here decides an outcome: the recap check and every rule run on the server.
  */
 import { useEffect, useState } from 'react'
-import { approveCall, bookingReq, getCall, prepareCall, refusal, reservations, type Rung, contactReq, type Consent, type Contact } from '@/lib/booking-client'
+import { approveCall, bookingReq, getCall, prepareCall, guestRefusal as refusal, reservations, type Rung, contactReq, type Consent, type Contact } from '@/lib/booking-client'
 import { setPendingYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 import ReceiptCard from './ReceiptCard'

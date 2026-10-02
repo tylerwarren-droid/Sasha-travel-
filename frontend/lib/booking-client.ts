@@ -48,6 +48,19 @@ export async function contactReq(method: 'GET' | 'PUT' | 'DELETE', body?: unknow
 export const refusal = (j: Record<string, unknown>, status: number) =>
   `${typeof j.rule === 'string' ? j.rule : `HTTP ${status}`}${typeof j.message === 'string' ? ` — ${j.message}` : ''}`
 
+/** Sasha 96 · the same refusal in a GUEST's words: never a rule code or a server setting's name */
+const GUEST_WORDS: Record<string, string> = {
+  calls_disabled: "Sasha's phone calls are switched off right now",
+  emails_disabled: "Sasha's emails are switched off right now",
+  forms_disabled: 'sending booking forms is switched off right now',
+}
+export const guestRefusal = (j: Record<string, unknown>, status: number) => {
+  const rule = typeof j.rule === 'string' ? j.rule : ''
+  if (GUEST_WORDS[rule]) return GUEST_WORDS[rule]
+  const msg = typeof j.message === 'string' ? j.message : `the server answered ${status}`
+  return msg.replace(/\s*\([A-Z][A-Z0-9_]{5,}[^)]*\)/g, '').replace(/;?\s*nothing was (dialled|sent|filled)\.?$/i, '').trim()
+}
+
 export type Candidate = { place_id: string; name: string | null; address: string | null; country: string | null; phone: string | null
   website: string | null; type: string | null; status: string | null; listing_url: string
   // S-68 step 2 · as the listing gives them; null when it doesn't say (never 0)

@@ -9,7 +9,7 @@
  * the guest must first join it ("join …"), which the server names when it knows the words.
  */
 import { useEffect, useState } from 'react'
-import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
+import { bookingReq, contactReq, guestRefusal as refusal, type Consent } from '@/lib/booking-client'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
 
@@ -23,6 +23,9 @@ export function WhatsAppLink() {
   const [ticked, setTicked] = useState(false)
   const [code, setCode] = useState<Code | null>(null)
   const [busy, setBusy] = useState(false)
+  // Sasha 104 · a WhatsApp booking needs the name and mobile to book under — saved here, once, under their own consent
+  const [contact, setContact] = useState<{ saved: boolean; consent: Consent } | null>(null)
+  const [who, setWho] = useState({ name: '', mobile: '', ticked: false })
 
   async function load() {
     const r = await bookingReq('/api/booking/whatsapp')
@@ -36,6 +39,9 @@ export function WhatsAppLink() {
       if (r.ok) setView(r.json as unknown as View)
       else setWords(refusal(r.json, r.status))
     }).catch((e) => { if (!off) setWords((e as Error).message) })
+    contactReq('GET').then((r) => {
+      if (!off && r.ok) setContact({ saved: !!r.json.contact, consent: r.json.consent as Consent })
+    }).catch(() => { /* the code step says what is missing */ })
     return () => { off = true }
   }, [])
 
@@ -43,6 +49,11 @@ export function WhatsAppLink() {
     if (!view) return
     setBusy(true)
     try {
+      if (contact && !contact.saved) {
+        const c = await contactReq('PUT', { name: who.name.trim(), mobile: who.mobile.trim(), consent_version: contact.consent.version, consent_sha256: contact.consent.sha256 })
+        if (!c.ok) { setWords(`Not saved, so no code — ${refusal(c.json, c.status)}.`); return }
+        setContact({ ...contact, saved: true })
+      }
       const r = await bookingReq('/api/booking/whatsapp/link', { consent_version: view.consent.version, consent_sha256: view.consent.sha256 })
       if (!r.ok) { setWords(`No code — ${refusal(r.json, r.status)}.`); return }
       setCode(r.json as unknown as Code)
@@ -78,8 +89,21 @@ export function WhatsAppLink() {
             <input type="checkbox" checked={ticked} onChange={(e) => setTicked(e.target.checked)} />
             <span>{view.consent.text}</span>
           </label>
+          {contact && !contact.saved && (
+            <div className="space-y-1 rounded bg-neutral-50 p-2">
+              <p>The name and mobile Sasha books under (once):</p>
+              <input className="w-full rounded border px-2 py-1" placeholder="Your name" value={who.name} onChange={(e) => setWho({ ...who, name: e.target.value })} />
+              <input className="w-full rounded border px-2 py-1" placeholder="Mobile, e.g. +34 600 000 000" value={who.mobile} onChange={(e) => setWho({ ...who, mobile: e.target.value })} />
+              <label className="flex items-start gap-2">
+                <input type="checkbox" checked={who.ticked} onChange={(e) => setWho({ ...who, ticked: e.target.checked })} />
+                <span>{contact.consent.text}</span>
+              </label>
+            </div>
+          )}
           <GatedButton label="Get my link code" onClick={() => { getCode().catch((e) => setWords((e as Error).message)) }}
-            needs={[!ticked && 'the box above ticked', busy && 'the last step to finish']} />
+            needs={[!ticked && 'the box above ticked', contact && !contact.saved && who.name.trim().length < 2 && 'your name',
+              contact && !contact.saved && who.mobile.trim().length < 8 && 'your mobile', contact && !contact.saved && !who.ticked && 'the details box ticked',
+              busy && 'the last step to finish']} />
         </div>
       )}
       {code && (

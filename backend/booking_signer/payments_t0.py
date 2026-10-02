@@ -144,7 +144,8 @@ async def after_call(call: dict, reading, venue: str) -> Optional[dict]:
         return None
     brief = call.get("brief") or {}
     minor = amount_of(quote) or amount_of(reading.venue_words or "")
-    when = f"{brief.get('date')} at {brief.get('time')}, {brief.get('party')} people" if brief.get("date") else "your booking"
+    from . import sentences as SN   # Sasha 117 · "Saturday 3 October at 21:00", never "2026-10-03" in the guest's sentence
+    when = f"{SN.day_words(brief.get('date'))} at {brief.get('time')}, {brief.get('party')} people" if brief.get("date") else "your booking"
     lines = read_back(venue, minor, quote[:300], when)
     row = {"id": str(uuid.uuid4()), "account_id": str(call["account_id"]), "trip_item_id": str(call["trip_item_id"]), "payee": venue,
            "purpose": "deposit", "amount_minor": minor, "currency": "EUR", "venue_terms_quote": quote[:500],

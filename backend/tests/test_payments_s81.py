@@ -71,7 +71,7 @@ class Tier0(unittest.TestCase):
     def test_1_one_amount_one_yes(self):
         pr = run(PT0.after_call(self.call, Reading("Sí. / Pero necesitamos una señal de 20 euros por tarjeta."), "Casa Lucio"))
         self.assertEqual((pr["amount_minor"], pr["payee"], pr["tier"]), (2000, "Casa Lucio", "guest_direct"))
-        self.assertTrue(pr["read_back_lines"][0].startswith("Casa Lucio needs €20 deposit for 2026-10-03 at 21:00, 2 people."))
+        self.assertTrue(pr["read_back_lines"][0].startswith("Casa Lucio needs €20 deposit for Saturday 3 October at 21:00, 2 people."))
         self.assertIn("I never see your card", pr["read_back_lines"][1])
         other = PT0.read_back("Casa Lucio", 3000, "30 euros", "2026-10-03 at 21:00, 2 people")
         self.assertNotEqual(PT0.sha(other), pr["read_back_sha256"])                  # another amount, another yes

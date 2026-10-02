@@ -1091,6 +1091,10 @@ async def push_confirmation_result(call: dict, reading, nxt: Optional[str]) -> s
         out.text(line)
     settled = reading.state == "answered" and reading.outcome in ("yes", "no")
     if purpose == "cancel":
+        if nxt and nxt.startswith("scheduled for "):   # Sasha 109 · nobody answered: once more, as the yes covered
+            out = Out().text(f"I'll call {venue} once more at {nxt[len('scheduled for '):]} to cancel it — your yes covers it.")
+        elif not (call.get("approval") or {}).get("scheduled_for"):
+            return "not sent: an immediate cancelling call is told by its watcher"
         st = await STORE.get_state(ch["wa_id_sha256"])
         return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, st.get("last_inbound_at")))
     if nxt and nxt.startswith("scheduled for "):

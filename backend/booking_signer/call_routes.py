@@ -128,9 +128,9 @@ GIVE_UP_AFTER = timedelta(minutes=10)    # no call in Bland's log by then: it wa
 #: the guest's yes (it confirms the same booking, it books nothing new), ending with the explicit recap. Spanish and
 #: English venues; any other language goes straight to the written ask.
 CONFIRM_OPENING = {
-    "es": "Hola, soy Sasha otra vez, la concierge de inteligencia artificial de Kanoe Technologies SL. Les llamé hace un "
+    "es": "Hola, soy Sasha otra vez, la concierge de inteligencia artificial operada por Kanoe Technologies SL. Les llamé hace un "
           "momento por una reserva y se cortó la llamada. ",
-    "en": "Hello, it's Sasha again, the AI concierge from Kanoe Technologies SL. I called a moment ago about a booking and "
+    "en": "Hello, it's Sasha again, the AI concierge operated by Kanoe Technologies SL. I called a moment ago about a booking and "
           "we were cut off. ",
 }
 CONFIRM_TASK = ("This is a short CONFIRMATION call. Minutes ago you called this venue to book exactly this booking, and the "
@@ -192,10 +192,11 @@ async def retry_confirmation(conf: dict) -> str:
     """Sasha 108 · a confirmation call that reached no one (voicemail, no answer) is tried ONCE more — when the venue
     opens by its listed hours, else in 30 minutes — covered by the same yes. Never a third attempt."""
     brief = dict(conf.get("brief") or {})
-    original = brief.get("confirms_call_id")
+    field = "confirms_call_id" if brief.get("confirms_call_id") else "cancels_call_id"   # Sasha 109 · a cancelling call too
+    original = brief.get(field)
     if not original:
-        return "not scheduled: not a confirmation call"
-    if len(await CALL_STORE.confirmations(original)) >= 2:
+        return "not scheduled: not a confirmation or cancelling call"
+    if len(await CALL_STORE.confirmations(original, field)) >= 2:
         return "not scheduled: it was already tried twice"
     if not C.calls_enabled() or not C.bland_key():
         return "not scheduled: phone calls are off"
@@ -215,7 +216,8 @@ async def retry_confirmation(conf: dict) -> str:
            "brief": brief, "brief_sha256": conf["brief_sha256"], "read_back_lines": conf["read_back_lines"],
            "read_back_sha256": conf["read_back_sha256"], "created_at": now, "request": conf.get("request")}
     await CALL_STORE.put_cancel_call(row, str(conf["trip_item_id"]))   # the SAME reservation
-    approval = {"by": account, "how": "auto", "said": None, "at": now.isoformat(), "kind": "confirm_retry", "after_call": str(conf["call_id"]),
+    approval = {"by": account, "how": "auto", "said": None, "at": now.isoformat(),
+                "kind": "confirm_retry" if field == "confirms_call_id" else "cancel_retry", "after_call": str(conf["call_id"]),
                 "covered_by_read_back_sha256": (conf.get("approval") or {}).get("covered_by_read_back_sha256"),
                 "read_back_sha256": row["read_back_sha256"], "brief_sha256": row["brief_sha256"],
                 "scheduled_for": when, "opens_at": opens, "hours_basis": basis, "hours_notes": notes}
@@ -225,11 +227,12 @@ async def retry_confirmation(conf: dict) -> str:
 
 async def _follow_up(call: dict, reading) -> None:
     """Sasha 74 · rules 2–3 — awaited here, never fire-and-forget; its failure is logged and never undoes the reading."""
-    if (call.get("brief") or {}).get("confirms_call_id") or (call.get("approval") or {}).get("scheduled_for"):
+    if (call.get("brief") or {}).get("confirms_call_id") or (call.get("approval") or {}).get("scheduled_for") \
+            or ((call.get("brief") or {}).get("purpose") == "cancel" and reading.state == "not_reached"):
         # Sasha 108 · a confirmation call's own result: retried once if nobody answered, and told to the guest on
         # WhatsApp from HERE — a call scheduled hours ahead has no one watching it
         nxt = None
-        if reading.state == "not_reached" and (call.get("brief") or {}).get("confirms_call_id"):
+        if reading.state == "not_reached" and ((call.get("brief") or {}).get("confirms_call_id") or (call.get("brief") or {}).get("cancels_call_id")):
             try:
                 nxt = await retry_confirmation(call)
             except Exception as e:

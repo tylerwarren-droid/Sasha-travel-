@@ -26,13 +26,24 @@ class TheCallReplayed(unittest.TestCase):
         self.built = C.build_call(BOTAVARA, C.parse_call_particulars(ASKED), NOW)
         self.task = self.built["brief"]["task"]
 
+    def test_sasha109_talked_over_she_never_restarts_her_opening(self):
+        """Yatri, 2 Oct (Bland): venue "Hola, muy buenas." · Sasha "Hola, soy Sasha, una concie-" · venue "Hola." · 15 s of
+        silence · the WHOLE opening again · "Sí, sí." · the venue hung up before the recap. Talked over, she now says one
+        short line that still says she is an AI, then the request — never the opening from the top."""
+        self.assertIn('If talked over, never restart it: say "Perdón, soy Sasha, una inteligencia artificial." and the request, briefly.',
+                      self.task)
+        self.assertIn("inteligencia artificial", C.barge_in("es"))               # the disclosure survives the barge-in
+        for code in C.LANGUAGES:
+            self.assertIn(C.barge_in(code), C.already_said(code, "x"))
+        self.assertLessEqual(len(self.task), 2000)
+
     def test_the_name_is_spelled_as_madrid_spells_it_not_letter_by_english_letter(self):
         self.assertIn('Name: Warren; if not caught, spell: "W de Washington, A de Alicante, R de Roma, R de Roma, '
                       'E de España, N de Navarra".', self.task)
         self.assertNotIn("W A R R E N", self.task)
 
     def test_the_guests_number_is_said_in_spanish_digits_when_they_ask(self):
-        self.assertIn('Only if asked for a phone number, say: "seis cero ocho, cuatro cuatro cinco, siete uno cinco".', self.task)
+        self.assertIn('Only if asked for a number, say: "seis cero ocho, cuatro cuatro cinco, siete uno cinco".', self.task)
         self.assertNotIn("+ 3 4", self.task)
         self.assertNotIn("nine", self.task)
 

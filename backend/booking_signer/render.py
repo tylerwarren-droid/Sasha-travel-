@@ -359,7 +359,7 @@ def ask_instructions(lang: C.Lang, o: Mapping[str, Any], first: str, check: str)
         f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning a venue to ASK — not to book — "
         f"{'what it would cost and ' if quote else ''}when they could do {o['what']['activity']} ({o['what']['activity_venue_lang']}), "
         f"{o['how_many']['count']} {o['how_many']['unit']}, for {o['who']['name']}. Speak {lang.label} only. "
-        f"You already said: \"{first}\" "
+        f"{C.already_said(lang.code, first)}"
         + (f"If they ask what exactly: {spec}. " if spec else "")
         + "If they ask whether you are a person or a machine: you are an AI concierge. Never claim to be the guest or a human. "
         "RULES YOU MUST NEVER BREAK: "
@@ -475,7 +475,7 @@ def cancel_for(booking_brief: Mapping[str, Any], venue: C.CallVenue, now: dateti
     held = f'It is held under "{reference}". ' if reference else ""
     task = (
         f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning a venue to CANCEL an existing booking on behalf of a guest. Speak {lang.label} only. "
-        f"You already said: \"{first}\" "
+        f"{C.already_said(lang.code, first)}"
         f"The booking to cancel: {b['activity']} ({b['activity_venue_lang']}), {b['party']} {b.get('unit') or 'people'}, {b['date']} at {b['time']} (venue's local time), under the name {b['name']}. {held}"
         "If they ask whether you are a person or a machine: you are an AI concierge. Never claim to be the guest or a human. "
         "RULES YOU MUST NEVER BREAK: "

@@ -148,7 +148,7 @@ class Script(unittest.TestCase):
         b = C.build_call(C.test_line(), C.parse_call_particulars(JOHNSON), MONDAY)
         t = b["brief"]["task"]
         for must in ("Never accept another date", "Never accept a deposit", "I'll need to check that with the Johnsons.",
-                     "you are an AI, never the guest or a human", "No voicemail", "no phone number to give",
+                     "an AI, never the guest or a human", "No voicemail", "no phone number to give",
                      "Name: Johnson; if not caught, spell: \"J as in Juliett, O as in Oscar", "Could you give me a booking reference",
                      f"Our own reference for it is K as in Kilo"):   # Sasha 88 · spelled, both references
             self.assertIn(must, t)
@@ -159,7 +159,7 @@ class Script(unittest.TestCase):
 
     def test_a_guest_phone_is_given_only_when_asked_and_the_read_back_says_so(self):
         b = C.build_call(C.test_line(), C.parse_call_particulars({**JOHNSON, "phone": "+351 911 111 111"}), MONDAY)
-        self.assertIn('Only if asked for a phone number, say: "plus three five one, nine one one, one one one, one one one".', b["brief"]["task"])
+        self.assertIn('Only if asked for a number, say: "plus three five one, nine one one, one one one, one one one".', b["brief"]["task"])
         self.assertEqual(b["read_back_lines"][3], "If they ask for a contact number, I'll give yours, +351911111111.")
 
     def test_the_spanish_cancellation_la_contra_would_hear(self):
@@ -517,6 +517,23 @@ class CallRoutes:
         self.assertEqual(str(rows["call"]["call_id"]), prep["call_id"])
         r = self.c.post("/api/booking/calls", json={"cancels_call_id": prep["call_id"]})
         self.assertEqual(r.status_code, 200, r.text)                                              # an unclear booking can be cancelled
+
+    def test_sasha109_a_cancelling_call_nobody_answered_is_tried_once_more(self):
+        """Live: Yatri's cancelling call (15:21) reached no one; an answering machine cancels nothing."""
+        from booking_signer.identity import founder_account
+        acct = str(founder_account())
+        prep = self.prepare()
+        self.yes(prep)
+        self.c.portal.call(self.store.record_reading, prep["call_id"],
+                           C.CallReading(state="answered", outcome="unclear", venue_words="Sí, sí.", quote="Sí, sí.", why=""), {}, self.now)
+        cx = self.c.post("/api/booking/calls", json={"cancels_call_id": prep["call_id"]}).json()
+        self.c.post(f"/api/booking/calls/{cx['call_id']}/place", json={"read_back_sha256": cx["read_back"]["sha256"], "approval": {"how": "button"}})
+        cancel = self.c.portal.call(self.store.get_call, acct, cx["call_id"])
+        r = self.c.portal.call(call_routes.retry_confirmation, cancel)
+        self.assertTrue(r.startswith("scheduled for "), r)
+        tries = self.c.portal.call(self.store.confirmations, prep["call_id"], "cancels_call_id")
+        self.assertEqual([t["approval"].get("kind") for t in tries][1], "cancel_retry")
+        self.assertEqual(self.c.portal.call(call_routes.retry_confirmation, tries[1]), "not scheduled: it was already tried twice")
 
     def test_the_yes_must_be_for_this_read_back(self):
         prep = self.prepare()

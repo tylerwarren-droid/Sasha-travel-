@@ -365,6 +365,25 @@ def recap_sentence(lang: Lang, p: CallParticulars) -> str:
 TASK_SPELL_MAX = 160
 
 
+#: Sasha 109 · talked over, Sasha NEVER restarts her whole opening (Yatri, 2 Oct: a "Hola." over "una concie-" cost
+#: 15 seconds of silence, then the full sentence again, and the venue hung up). She says one short line that still says
+#: she is an AI, then the request — the rest of her opening from its verb on.
+_BARGE = {"en": "Sorry, this is Sasha, an AI concierge.", "es": "Perdón, soy Sasha, una inteligencia artificial.",
+          "pt": "Desculpe, fala a Sasha, uma inteligência artificial.", "fr": "Pardon, ici Sasha, une intelligence artificielle.",
+          "de": "Entschuldigung, hier ist Sasha, eine KI.", "it": "Scusi, sono Sasha, un'intelligenza artificiale."}
+
+
+def barge_in(code: str) -> str:
+    return _BARGE.get((code or "en")[:2], _BARGE["en"])
+
+
+def already_said(code: str, opening: str) -> str:
+    """The task's line about the first sentence — and, talked over, never that sentence again (Bland's 2,000 characters
+    hold: the request is not quoted twice)."""
+    return (f"You already said: \"{opening}\" If talked over, never restart it: say \"{barge_in(code)}\" "
+            f"and the request, briefly. ")
+
+
 def task_text(lang: Lang, *, place: str, what: str, booking: str, never: str, opening: str, check: str, recap: str,
               name: str, phone: Optional[str], own_ref: str) -> str:
     """Bland's `task` for a BOOKING call — one text for both builders (calls.build_call, render.call_brief), so a table
@@ -376,32 +395,32 @@ def task_text(lang: Lang, *, place: str, what: str, booking: str, never: str, op
     from . import spoken as SP
     c = lang.code
     surname = surname_of(name)
-    contact = (f"Only if asked for a phone number, say: \"{SP.digits(phone, c)}\". " if phone
+    contact = (f"Only if asked for a number, say: \"{SP.digits(phone, c)}\". " if phone
                else "You have no phone number to give; if asked, the guest will confirm directly. ")
     spelled = SP.spell(surname, c)
     spell = f"Name: {surname}; if not caught, spell: \"{spelled}\". "
     if len(spelled) > TASK_SPELL_MAX:   # a long name: the rule, not the letters — so the email still fits (followup.py)
         spell = f"Name: {surname}; if not caught, spell it letter by letter, each with a {lang.label} word for it. "
     return (
-        f"You are Sasha, an AI concierge (Kanoe Technologies SL), booking {what} at {place} for a guest. "
+        f"You are Sasha, an AI concierge, booking {what} at {place} for a guest. "
         f"Speak {lang.label} only, numbers and letters too. "
-        f"You already said: \"{opening}\" "
+        f"{already_said(c, opening)}"
         f"The booking: {booking}"
-        "If asked: you are an AI, never the guest or a human. "
+        "If asked: an AI, never the guest or a human. "
         f"NEVER: {never}"
-        "Never accept a deposit, fee, minimum spend, cancellation charge or card (you have none). "
+        "Never accept a deposit, fee, minimum spend, cancellation charge or card. "
         f"If they ask for any, say exactly \"{check}\", have them repeat it, thank them and end. "
         f"{spell}"
         f"{contact}"
-        "No other personal detail of the guest's. "
+        "No other guest details. "
         f"On a yes, ask: \"{SP.ask_reference(c)}\" and repeat it back. "
         f"Then say: \"{SP.own_reference_line(own_ref, c)}\" "
-        f"ALWAYS end with this exact recap and wait: \"{recap}\" Only a clear yes confirms. "
-        "If they differ on anything, correct it once and repeat the recap; "
+        f"ALWAYS end with this recap and wait: \"{recap}\" Only a clear yes confirms. "
+        "If anything differs, correct it once and repeat the recap; "
         f"if still different, say \"{check}\" and end. "
         "If no, later, or unsure: thank them and end. "
-        f"If asked not to contact them again, say exactly \"{_ack(lang)}\" and end. "
-        "Keep it short and polite. No voicemail."
+        f"If asked not to call again, say exactly \"{_ack(lang)}\" and end. "
+        "Be brief and polite. No voicemail."
     )
 
 
@@ -424,7 +443,7 @@ def cancel_instructions(lang: Lang, p: CallParticulars, opening: str, check: str
     held = f'It is held under "{reference}". ' if reference else ""
     return (
         f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning a restaurant to CANCEL an existing table booking on behalf of a guest. Speak {lang.label} only. "
-        f"You already said: \"{opening}\" "
+        f"{already_said(lang.code, opening)}"
         f"The booking to cancel: {p.party} people, {p.on.isoformat()} at {p.at.strftime('%H:%M')} (venue's local time), under the name {p.name}. {held}"
         "If they ask whether you are a person or a machine: you are an AI concierge. Never claim to be the guest or a human. "
         "RULES YOU MUST NEVER BREAK: "

@@ -1366,9 +1366,17 @@ async def _cancel_find(ctx: dict, asked: Optional[str]) -> None:
         words = [w for w in re.findall(r"[a-z0-9]+", _fold(asked)) if len(w) > 2]
         hits = [r for r in rows
                 if words and all(any(x.startswith(w) or w.startswith(x) for x in re.findall(r"[a-z0-9]+", _fold(r["venue"]))) for w in words)]
-        if not hits:
+        if not hits and not rows:
             out.text(f"I can't find an upcoming booking of yours at {asked}.")
             return
+        if not hits:   # Sasha 117 · "the Retiro dinner": guests name the area or the meal, not the venue — show their bookings
+            out.text(f"I can't find a booking called “{asked}”.")
+            hits = rows if len(rows) > 1 else []
+            if not hits:
+                rows = rows[:1]
+                out.text(f"Your one upcoming booking is {rows[0]['venue']}.")
+                await _cancel_row(ctx, rows[0])
+                return
     else:
         hits = rows
         if not hits:

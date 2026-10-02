@@ -270,6 +270,10 @@ class Turns(Base):
         self.say("Cancel the Retiro dinner.")
         self.assertEqual(len([c for c in GW.api.calls if c[2] == "/api/booking/venues/find"]), n)   # no new search
         self.assertIn("/api/booking/reservations", self.api_paths())                                # the cancel path
+        # … and "the Retiro dinner" is not a venue's name: the one upcoming booking is offered, by its own name
+        self.assertIn("I can't find a booking called “Retiro dinner”.", self.bodies())
+        self.assertIn("Your one upcoming booking is Botavara Chamberí.", self.bodies())
+        self.assertEqual(GW.SENDER.contents[-1][0], "Cancel Botavara Chamberí, Saturday 3 October at 21:00, for 2, under Tyler Warren?")
 
     def pick_first(self):
         self.say("dinner for 2 in Chamberí on Saturday at 9")

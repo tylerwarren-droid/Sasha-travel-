@@ -206,6 +206,23 @@ class Turns(Base):
         self.assertTrue(all(len(GW.title(t)) <= 25 for t, _ in buttons))
         self.assertEqual(len(buttons), 3)
 
+    def test_sasha117_the_rehearsal_books_our_test_venue_never_a_real_one(self):
+        """The dress rehearsal (calls off): the third card is our test venue, on the founder's account only."""
+        from booking_signer.form_rung import test_venue_url
+        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "1", "FOUNDER_ACCOUNT_ID": ACCOUNT}):
+            self.say("dinner for 2 in Chamberí on Saturday at 9")
+            _, buttons = GW.SENDER.contents[-1]
+            self.assertEqual([t for t, _ in buttons][2], "Sasha Test Venue")
+            self.assertIn("Rehearsal · Sasha Test Venue — ours, not a real restaurant: booking it contacts no one", self.bodies())
+            self.say("Sasha Test Venue", payload=buttons[2][1])
+        read = next(c for c in GW.api.calls if c[2] == "/api/booking/venues/read")[3]
+        self.assertEqual(read, {"name": "Sasha Test Venue", "city": "Chamberí, Madrid", "country": "ES", "website": test_venue_url()})
+        self.assertNotIn("place_id", read)                                   # never looked up on Google
+        GW.SENDER.contents.clear()
+        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "", "FOUNDER_ACCOUNT_ID": ACCOUNT}):
+            self.say("dinner for 2 in Chamberí on Saturday at 9")
+        self.assertNotIn("Sasha Test Venue", [t for t, _ in GW.SENDER.contents[-1][1]])   # off unless asked for
+
     def pick_first(self):
         self.say("dinner for 2 in Chamberí on Saturday at 9")
         _, buttons = GW.SENDER.contents[-1]

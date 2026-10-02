@@ -745,16 +745,29 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
         return
     pick = shown[0]["place_id"] if luxe else (ranking.get("picks") or {}).get(chip)
     photos = await _photos(account, f.get("what") or "", shown)
+    if rehearsal(account):   # Sasha 117 · the dress rehearsal books OUR test venue, never a real one; the card says so
+        shown = shown[:2] + [TEST_CARD]                   # still three: WhatsApp shows at most three reply buttons
     out.text(f"{f.get('what')} in {f.get('where')} — {ranking.get('count') or f'{len(cands)} found'}"
              f"{' · €€€ and up first' if luxe else ''}. From Google Maps; nobody has been contacted.")
     for c in shown:
         line = " · ".join(x for x in (c.get("name") or "no name listed", rating_words(c), distance_words(c.get("distance_m"))) if x)
+        if c is TEST_CARD:
+            line = "Rehearsal · Sasha Test Venue — ours, not a real restaurant: booking it contacts no one"
         out.media(("Sasha's pick · " if c["place_id"] == pick else "") + line, photos.get(c["place_id"]))
     nonce = secrets.token_hex(3)
     out.ask("Which one?", [(c.get("name") or f"Option {i + 1}", f"pick:{nonce}:{i}") for i, c in enumerate(shown)])
     ctx["st"]["pending"] = {"kind": "cards", "at": ctx["now"].isoformat(), "nonce": nonce, "find": f,
                             "draft": draft.get("parts") or {},
                             "cards": [{"place_id": c["place_id"], "name": c.get("name"), "country": c.get("country")} for c in shown]}
+
+
+TEST_CARD = {"place_id": "sasha-test-venue", "name": "Sasha Test Venue", "country": "ES"}
+
+
+def rehearsal(account: str) -> bool:
+    """SASHA_REHEARSAL=1, and only on the founder's own account: the cards end with our test venue."""
+    from .identity import founder_account
+    return os.getenv("SASHA_REHEARSAL", "") == "1" and account == founder_account()
 
 
 async def _photos(account: str, what: str, shown: List[dict]) -> Dict[str, str]:
@@ -976,9 +989,14 @@ def _picked(pend: dict, body: str, payload: str) -> Optional[int]:
 
 async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
     out, account, f = ctx["out"], ctx["account"], pend["find"]
-    status, read = await api(account, "POST", "/api/booking/venues/read",
-                             {"name": card.get("name") or f.get("what"), "city": f.get("where"), "country": card.get("country") or f.get("country"),
-                              "place_id": card["place_id"], "asked_for": f.get("what")})
+    if card.get("place_id") == TEST_CARD["place_id"]:
+        from .form_rung import test_venue_url
+        status, read = await api(account, "POST", "/api/booking/venues/read",
+                                 {"name": TEST_CARD["name"], "city": f.get("where") or "Madrid", "country": "ES", "website": test_venue_url()})
+    else:
+        status, read = await api(account, "POST", "/api/booking/venues/read",
+                                 {"name": card.get("name") or f.get("what"), "city": f.get("where"), "country": card.get("country") or f.get("country"),
+                                  "place_id": card["place_id"], "asked_for": f.get("what")})
     if status != 200:
         ctx["st"]["pending"] = None
         out.text(f"I couldn't read how {card.get('name') or 'they'} take bookings — {refusal_words(read, status)}.")

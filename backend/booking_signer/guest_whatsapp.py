@@ -1336,9 +1336,17 @@ async def _upcoming(account: str) -> List[dict]:
     status, j = await api(account, "GET", "/api/booking/reservations")
     if status != 200:
         return []
-    today = NOW().date().isoformat()
-    rows = [r for r in j.get("reservations") or [] if r.get("status") not in ("cancelled", "declined", "failed")
-            and (not r.get("date") or r["date"] >= today)]
+    from zoneinfo import ZoneInfo
+
+    def ahead(r):   # Sasha 117 · today's 13:00 is not upcoming at 22:51 — the time counts, in the booking's own zone
+        if not r.get("date"):
+            return True
+        try:
+            local = NOW().astimezone(ZoneInfo(r.get("timezone") or "Europe/Madrid"))
+        except Exception:
+            local = NOW()
+        return r["date"] > local.date().isoformat() or (r["date"] == local.date().isoformat() and (r.get("time") or "23:59") >= local.strftime("%H:%M"))
+    rows = [r for r in j.get("reservations") or [] if r.get("status") not in ("cancelled", "declined", "failed") and ahead(r)]
     for r in rows:   # a phone booking's real name is on its receipt (the stored row keeps a marker, Sasha 64)
         if r.get("receipt"):
             s, rc = await api(account, "GET", r["receipt"])
@@ -1385,6 +1393,8 @@ async def _cancel_find(ctx: dict, asked: Optional[str]) -> None:
     if len(hits) > 1:
         hits = hits[:9]
         lines = [f"{i + 1}. {r['venue']} — {SN.day_words(r.get('date')) or 'no day set'}{' at ' + r['time'] if r.get('time') else ''}"
+                 + (f" · {r['status_words']}" if r.get("status_words") else "")
+                 + (f" · ref {r['booking_reference']}" if r.get("booking_reference") else "")   # Sasha 117 · two alike, told apart
                  for i, r in enumerate(hits)]
         out.text("Which one should I cancel?\n" + "\n".join(lines) + "\nReply with its number.")
         ctx["st"]["pending"] = {"kind": "cancel_pick", "at": ctx["now"].isoformat(), "rows": [{"id": r["id"], "venue": r["venue"]} for r in hits]}

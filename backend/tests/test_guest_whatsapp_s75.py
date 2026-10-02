@@ -275,6 +275,20 @@ class Turns(Base):
         self.assertIn("Your one upcoming booking is Botavara Chamberí.", self.bodies())
         self.assertEqual(GW.SENDER.contents[-1][0], "Cancel Botavara Chamberí, Saturday 3 October at 21:00, for 2, under Tyler Warren?")
 
+    def test_sasha117_the_cancel_list_is_upcoming_only_and_tells_twins_apart(self):
+        """Live, 2 Oct 22:51: the list offered today's 13:00 bookings, and two "Sasha Test Venue — Saturday 3 October at 21:00"."""
+        self.now = datetime(2026, 10, 2, 20, 51, tzinfo=timezone.utc)                      # 22:51 in Madrid
+        base = {"party": 2, "status": "confirmed", "status_words": "confirmed by the restaurant", "receipt": None, "timezone": "Europe/Madrid"}
+        GW.api.reservations = [{**base, "id": "t-1", "venue": "La Contra", "date": "2026-10-02", "time": "13:00"},
+                               {**base, "id": "t-2", "venue": "Sasha Test Venue", "date": "2026-10-03", "time": "21:00", "booking_reference": "TV-62BB32"},
+                               {**base, "id": "t-3", "venue": "Sasha Test Venue", "date": "2026-10-03", "time": "21:00", "booking_reference": "TV-FE41E1"}]
+        with mock.patch.object(GW, "NOW", lambda: self.now):
+            self.say("Cancel the Retiro dinner.")
+        listed = self.bodies()[-1]
+        self.assertNotIn("La Contra", listed)
+        self.assertIn("1. Sasha Test Venue — Saturday 3 October at 21:00 · confirmed by the restaurant · ref TV-62BB32", listed)
+        self.assertIn("2. Sasha Test Venue — Saturday 3 October at 21:00 · confirmed by the restaurant · ref TV-FE41E1", listed)
+
     def pick_first(self):
         self.say("dinner for 2 in Chamberí on Saturday at 9")
         _, buttons = GW.SENDER.contents[-1]

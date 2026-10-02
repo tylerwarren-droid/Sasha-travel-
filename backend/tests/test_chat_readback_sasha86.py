@@ -23,7 +23,7 @@ TABERNA = "La Taberna de Paula"
 class TheMessage(unittest.TestCase):
     def test_saturday_at_9pm_said_on_thursday_1_october_is_saturday_3_october_at_21_00(self):
         r = H.booking_handoff(MESSAGE, now=THURSDAY_1_OCT)
-        self.assertEqual(r["booking_find"], {"what": "dinner", "where": "Chamberí", "open_at": "2026-10-03T21:00"})
+        self.assertEqual(r["booking_find"], {"what": "dinner", "where": "Chamberí, Madrid", "country": "ES", "open_at": "2026-10-03T21:00"})
         p = r["reservation_draft"]["parts"]
         self.assertEqual(p["when"], {"mode": "at", "at": "2026-10-03T21:00"})
         self.assertEqual(p["how_many"], {"count": 2, "unit": "people"})
@@ -38,7 +38,7 @@ class TheMessage(unittest.TestCase):
         # Sasha 88 · a spoken "book me…" goes the same way as a typed one: speech-to-text writes "nine p.m."
         for said in ("Book me dinner for two in Chamberí on Saturday at nine p.m.", "book dinner for 2 in Chamberí on Saturday at 9 P.M."):
             r = H.booking_handoff(said, now=THURSDAY_1_OCT)
-            self.assertEqual((r["booking_find"]["where"], r["booking_find"]["open_at"]), ("Chamberí", "2026-10-03T21:00"), said)
+            self.assertEqual((r["booking_find"]["where"], r["booking_find"]["open_at"]), ("Chamberí, Madrid", "2026-10-03T21:00"), said)
             self.assertEqual(r["reservation_draft"]["parts"]["when"]["at"], "2026-10-03T21:00", said)
 
     def test_the_activity_is_said_in_the_venues_language(self):

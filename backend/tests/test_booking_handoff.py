@@ -52,18 +52,18 @@ class TheTurn(unittest.TestCase):
 
     def test_find_x_in_y_for_any_kind_of_place(self):
         for m, want in [("Find me a tattoo studio in Nairobi", {"what": "tattoo studio", "where": "Nairobi"}),
-                        ("book a massage in Madrid for 2 on Friday", {"what": "massage", "where": "Madrid"}),
+                        ("book a massage in Madrid for 2 on Friday", {"what": "massage", "where": "Madrid", "country": "ES"}),
                         ("Can you reserve a kayak tour near Lisbon?", {"what": "kayak tour", "where": "Lisbon"}),
                         ("find a tattoo studio in Nairobi, KE", {"what": "tattoo studio", "where": "Nairobi", "country": "KE"}),
                         ("look for a restaurant in Hanoi tonight", {"what": "restaurant", "where": "Hanoi"}),
                         # S-68 step 3 · what the distance is measured from, as said — "my hotel" is asked about later
-                        ("find a tattoo parlour in Madrid near my hotel", {"what": "tattoo parlour", "where": "Madrid", "near": "my hotel"}),
-                        ("find a tattoo studio in Madrid, near Hotel Urban for Tuesday", {"what": "tattoo studio", "where": "Madrid", "near": "Hotel Urban"}),
-                        ("find a cafe in Madrid close to Calle Mayor 10", {"what": "cafe", "where": "Madrid", "near": "Calle Mayor 10"}),
+                        ("find a tattoo parlour in Madrid near my hotel", {"what": "tattoo parlour", "where": "Madrid", "country": "ES", "near": "my hotel"}),
+                        ("find a tattoo studio in Madrid, near Hotel Urban for Tuesday", {"what": "tattoo studio", "where": "Madrid", "country": "ES", "near": "Hotel Urban"}),
+                        ("find a cafe in Madrid close to Calle Mayor 10", {"what": "cafe", "where": "Madrid", "country": "ES", "near": "Calle Mayor 10"}),
                         # S-68 step 4 · open at a time stated plainly; the day is the next one named, else today
                         ("find a tattoo parlour in Madrid, open Tuesday 17:00, near my hotel",
-                         {"what": "tattoo parlour", "where": "Madrid", "near": "my hotel", "open_at": "%sT17:00" % _next("tuesday")}),
-                        ("find a bar in Madrid at 5", {"what": "bar", "where": "Madrid"})]:
+                         {"what": "tattoo parlour", "where": "Madrid", "country": "ES", "near": "my hotel", "open_at": "%sT17:00" % _next("tuesday")}),
+                        ("find a bar in Madrid at 5", {"what": "bar", "where": "Madrid", "country": "ES"})]:
             t = booking_handoff(m, [], NOW)
             self.assertEqual({k: v for k, v in t["booking_find"].items() if k != "priority"}, want, m)
             self.assertIn("nobody is contacted by looking", t["response"])

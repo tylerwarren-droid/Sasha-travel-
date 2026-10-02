@@ -199,6 +199,28 @@ def plain_priority(message: str, near: Optional[str]) -> Optional[str]:
     return "closest" if near else None
 
 
+#: Sasha 101 · the places a guest SAYS that speech-to-text mangles: "Chamberí" came back "Chambhuri" and the search found
+#: India. A near-miss of one of these (and no country said) is that neighbourhood, in its city and country.
+KNOWN_PLACES = {
+    "Chamberí": ("Madrid", "ES"), "Malasaña": ("Madrid", "ES"), "Chueca": ("Madrid", "ES"), "Lavapiés": ("Madrid", "ES"),
+    "La Latina": ("Madrid", "ES"), "Salamanca": ("Madrid", "ES"), "Retiro": ("Madrid", "ES"), "Sol": ("Madrid", "ES"),
+    "Huertas": ("Madrid", "ES"), "Chamartín": ("Madrid", "ES"), "Tetuán": ("Madrid", "ES"), "Arganzuela": ("Madrid", "ES"),
+    "Moncloa": ("Madrid", "ES"), "Argüelles": ("Madrid", "ES"), "Conde Duque": ("Madrid", "ES"), "Las Letras": ("Madrid", "ES"),
+    "Madrid": (None, "ES"),
+}
+
+
+def known_place(where: str) -> Optional[tuple]:
+    """(neighbourhood, its city, its country) when `where` is one of KNOWN_PLACES or a near-miss of it, else None."""
+    import difflib
+    import unicodedata
+    fold = lambda x: unicodedata.normalize("NFD", x).encode("ascii", "ignore").decode().lower().strip()
+    names = {fold(k): k for k in KNOWN_PLACES}
+    w = fold(where)
+    hit = names.get(w) or next((names[m] for m in difflib.get_close_matches(w, list(names), n=1, cutoff=0.72)), None)
+    return (hit, *KNOWN_PLACES[hit]) if hit else None
+
+
 def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]:
     """{what, where, country?, near?} when the message asks for a kind of place in a place — else None. Nothing guessed:
     a country is taken only when written as a two-letter code ("Nairobi, KE")."""
@@ -231,6 +253,10 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
         where, country = cm[1].strip(), cm[2].upper()
     if len(what) < 2 or len(where) < 2:
         return None
+    if country is None:
+        kp = known_place(where)
+        if kp:   # "Chambhuri" → Chamberí, Madrid · ES (the search is then in the right country)
+            where, country = (f"{kp[0]}, {kp[1]}" if kp[1] else kp[0]), kp[2]
     at = plain_open_at(message, now)
     return {"what": what, "where": where, **({"country": country} if country else {}), **({"near": near} if near else {}),
             **({"open_at": at} if at else {}),

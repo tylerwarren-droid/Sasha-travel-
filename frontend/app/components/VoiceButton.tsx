@@ -187,6 +187,10 @@ function preferredAudioDeviceId(list: MediaDeviceInfo[], stored: string): string
   return local?.deviceId || ''
 }
 
+// Sasha 101 · place names guests SAY that the recogniser mangles ("Chamberí" came back "Chambhuri"): nova-3 keyterms
+const KEYTERMS = ['Chamberí', 'Malasaña', 'Chueca', 'Lavapiés', 'La Latina', 'Salamanca', 'Retiro', 'Chamartín', 'Argüelles', 'Moncloa', 'Huertas']
+  .map((k) => `&keyterm=${encodeURIComponent(k)}`).join('')
+
 export default function VoiceButton({ onTranscript, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices }: VoiceButtonProps) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
@@ -383,7 +387,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
 
       const dgLang = DG_LANG[languageRef.current || 'en'] || 'en-US'
       const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${ctx.sampleRate}&channels=1&model=nova-3&language=${dgLang}&smart_format=true&interim_results=true&endpointing=150&utterance_end_ms=1000&vad_events=true`,
+        `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${ctx.sampleRate}&channels=1&model=nova-3&language=${dgLang}&smart_format=true&interim_results=true&endpointing=150&utterance_end_ms=1000&vad_events=true${KEYTERMS}`,
         ['token', dgKey]
       )
       wsRef.current = ws

@@ -591,7 +591,10 @@ _CANCEL_WORD = re.compile(r"\b(cancel|cancell?ation|cancela|cancelar|cancelad|ca
 _NOT_CANCEL = re.compile(r"\b(?:don'?t|do not|no\s+(?:lo\s+)?(?:canceles|anules)|never mind)\b.*\b(?:cancel|cancela|anula)", re.I)
 _CANCEL_FILLER = re.compile(r"\b(no|please|pls|por favor|can you|could you|you|i want to|i'd like to|want to|to|cancel|cancell?ation|cancela|"
                            r"cancelar|cancelad|cancele|anula|anular|anulad|anule|my|the|a|booking|reservation|table|reserva|"
-                           r"mesa|la|el|mi|de|en|at|for|it|that|this|one|lo|esa|esta|ese|now|ahora|thanks|gracias)\b", re.I)
+                           r"mesa|la|el|mi|de|en|at|for|it|that|this|one|lo|esa|esta|ese|now|ahora|thanks|gracias|"
+                           # Sasha 117 · the meal and the day are not the venue's name: "the dinner at Hanakura" → Hanakura
+                           r"dinner|lunch|breakfast|brunch|meal|cena|comida|almuerzo|desayuno|appointment|cita|"
+                           r"tonight|today|tomorrow|hoy|ma[nñ]ana|esta noche|on|del|al|con|with)\b", re.I)
 
 
 def cancel_intent(body: str) -> Optional[str]:

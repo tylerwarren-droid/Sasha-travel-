@@ -271,7 +271,7 @@ class Turns(Base):
         self.assertEqual(len([c for c in GW.api.calls if c[2] == "/api/booking/venues/find"]), n)   # no new search
         self.assertIn("/api/booking/reservations", self.api_paths())                                # the cancel path
         # … and "the Retiro dinner" is not a venue's name: the one upcoming booking is offered, by its own name
-        self.assertIn("I can't find a booking called “Retiro dinner”.", self.bodies())
+        self.assertIn("I can't find a booking called “Retiro”.", self.bodies())
         self.assertIn("Your one upcoming booking is Botavara Chamberí.", self.bodies())
         self.assertEqual(GW.SENDER.contents[-1][0], "Cancel Botavara Chamberí, Saturday 3 October at 21:00, for 2, under Tyler Warren?")
 
@@ -471,6 +471,31 @@ class Turns(Base):
                  "cancel my booking at Botavara please": "Botavara", "don't cancel it": None, "dinner for 2 tomorrow": None}
         for msg, want in cases.items():
             self.assertEqual(GW.cancel_intent(msg), want, msg)
+
+    def test_sasha117_the_dinner_and_the_day_are_not_the_venues_name(self):
+        cases = {"cancel the dinner at Hanakura": "Hanakura", "cancel my Hanakura booking": "Hanakura",
+                 "Cancel the Hanakura dinner.": "Hanakura", "cancel lunch at Botavara tomorrow": "Botavara",
+                 "cancela la cena en Hanakura": "Hanakura", "anula mi reserva de Hanakura": "Hanakura",
+                 "Cancel the Retiro dinner.": "Retiro", "cancel my dinner": ""}
+        for msg, want in cases.items():
+            self.assertEqual(GW.cancel_intent(msg), want, msg)
+
+    def test_sasha117_cancel_wins_over_search_with_or_without_cards(self):
+        """Live, 2 Oct: "Cancel the Retiro dinner." became a search ("Cancel Retiro dinner dinner in Retiro…" with cards)."""
+        for msg in ("Cancel the Botavara dinner.", "cancel my Botavara booking", "cancel the dinner at Botavara",
+                    "Cancel the Retiro dinner.", "cancela la cena en Botavara"):
+            for cards_first in (False, True):
+                GW.api.calls.clear()
+                run(GW.STORE.put_state(GW.wa_key(GUEST), {"history": [], "pending": None, "last_inbound_at": NOW, "link_tries": []}))
+                if cards_first:
+                    self.say("dinner for 2 in Chamberí on Saturday at 9")
+                    self.assertEqual(run(GW.STORE.get_state(GW.wa_key(GUEST)))["pending"]["kind"], "cards")
+                finds = len([c for c in GW.api.calls if c[2] == "/api/booking/venues/find"])
+                self.say(msg)
+                self.assertEqual(len([c for c in GW.api.calls if c[2] == "/api/booking/venues/find"]), finds, (msg, cards_first))   # no search
+                self.assertTrue(GW.SENDER.contents[-1][0].startswith("Cancel Botavara Chamberí"), (msg, cards_first))      # the one sentence
+                self.assertEqual(GW.SENDER.contents[-1][1][0][0], "Yes, cancel")
+                self.assertFalse(any(c[1] == "POST" and c[2].endswith("/cancel") for c in GW.api.calls))                   # nothing until the yes
 
     def test_receipts(self):
         self.say("my bookings")

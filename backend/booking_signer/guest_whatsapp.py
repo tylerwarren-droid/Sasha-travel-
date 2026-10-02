@@ -1453,7 +1453,12 @@ async def _cancel_approve(ctx: dict, pend: dict, how: dict) -> None:
         if j.get("their_words"):
             out.text(f"Their words: “{j['their_words']}”")
         return
-    out.text(f"Cancelling with {venue} now. {j.get('say') or ''}".strip() + " I'll tell you here once they confirm it in writing.")
+    if j.get("status") == "not_confirmed" and j.get("their_words"):   # Sasha 117 · "their words are below" — and they are
+        out.text(f"⚠ Not cancelled yet: {venue}'s page didn't say it's cancelled.")
+        out.text(f"Their page said: “{str(j['their_words'])[:500]}”")
+        out.text("I'll tell you here if they confirm it in writing.")
+    else:
+        out.text(f"Cancelling with {venue} now. {j.get('say') or ''}".strip() + " I'll tell you here once they confirm it in writing.")
     _spawn(watch_cancel(ctx["ch"], ctx["frm"], account, pend["trip_item_id"], venue))
 
 

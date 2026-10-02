@@ -818,6 +818,18 @@ async def test_venue_book(variant: str, request: Request):
     return await _book(variant, {k: str(v) for k, v in (await request.form()).items()})
 
 
+def _tv_ref(body: str) -> str:
+    """Sasha 117 · the test venue's reference carries its own check (TV-XXXXXX-YY): its book is in memory and a redeploy
+    empties it, so it still knows a reference it issued — as a real venue's would — without keeping anyone's data."""
+    k = (os.getenv("SASHA_BOOKING_KEY", "") or "test-venue").encode()
+    return f"TV-{body}-{hashlib.sha256(k + b':tv:' + body.encode()).hexdigest()[:2].upper()}"
+
+
+def _tv_ref_ok(ref: str) -> bool:
+    m = re.fullmatch(r"TV-([0-9A-F]{6})-[0-9A-F]{2}", ref or "")
+    return bool(m) and _tv_ref(m[1]) == ref
+
+
 async def _book(variant: str, form: Dict[str, str]) -> HTMLResponse:
     """The test venue's book: record one reservation and answer as a restaurant would."""
     if form.get("website_url"):
@@ -827,7 +839,7 @@ async def _book(variant: str, form: Dict[str, str]) -> HTMLResponse:
         missing.append("acepto")
     if missing:
         return HTMLResponse(f"<p>Faltan campos: {escape(', '.join(missing))}.</p>", status_code=422)
-    ref = "TV-" + uuid.uuid4().hex[:6].upper()
+    ref = _tv_ref(uuid.uuid4().hex[:6].upper())
     TEST_SUBMISSIONS.append({"variant": variant, "received_at": NOW().isoformat(), "reference": ref,
                              "fields": {k: v for k, v in form.items() if k != "token"}, "had_token": bool(form.get("token"))})
     del TEST_SUBMISSIONS[:-50]
@@ -848,11 +860,12 @@ async def _book(variant: str, form: Dict[str, str]) -> HTMLResponse:
 async def test_venue_cancel(ref: str):
     """The test venue's own cancel link: the booking in its book is marked cancelled, and its page says so."""
     hit = next((x for x in TEST_SUBMISSIONS if x["reference"] == ref), None)
-    if hit is None:
+    if hit is None and not _tv_ref_ok(ref):
         return HTMLResponse(f"<p>No encontramos la reserva {escape(ref)}.</p>", status_code=404)
-    hit["cancelled_at"] = NOW().isoformat()
-    return HTMLResponse(f"<html><body><h1>Reserva cancelada</h1><p>La reserva {escape(ref)} a nombre de {escape(hit['fields'].get('nombre', ''))} "
-                        f"queda cancelada. Gracias.</p></body></html>")
+    if hit is not None:
+        hit["cancelled_at"] = NOW().isoformat()
+    name = f" a nombre de {escape(hit['fields'].get('nombre', ''))}" if hit else ""
+    return HTMLResponse(f"<html><body><h1>Reserva cancelada</h1><p>La reserva {escape(ref)}{name} queda cancelada. Gracias.</p></body></html>")
 
 
 __all__ = ["router", "form_map", "read_form", "roles_for", "MemoryFormStore", "PostgresFormStore", "test_venue_url",

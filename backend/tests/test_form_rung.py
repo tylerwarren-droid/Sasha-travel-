@@ -100,7 +100,7 @@ class FormRung(unittest.TestCase):   # LadderRoutes' set-up, not its tests
         j = sent.json()
         self.assertEqual((j["status"], j["reading"]["result"]), ("sent", "confirmed"), j)
         self.assertIn("Confirmado: mesa para 2 personas el sábado 10 de octubre a las 21:00, a nombre de Tyler Warren.", j["their_page"])
-        self.assertRegex(j["booking_reference"], r"^TV-[0-9A-F]{6}$")
+        self.assertRegex(j["booking_reference"], r"^TV-[0-9A-F]{6}-[0-9A-F]{2}$")
         url, data = self.posts[0]
         self.assertEqual(url, f"{BASE}/api/booking/test-venue/plain")
         self.assertTrue(data["token"]) and self.assertNotIn("website_url", data)
@@ -351,6 +351,17 @@ class CancelRoutes(unittest.TestCase):
         self.assertIn("queda cancelada", done["their_words"])
         self.assertEqual(self.calls.trip_items[item]["status"], "cancelled")
         self.assertTrue(FR.TEST_SUBMISSIONS[-1].get("cancelled_at"))                                  # the venue's own book agrees
+
+    def test_sasha117_the_test_venue_still_knows_its_reference_after_a_redeploy(self):
+        """Live, 2 Oct: a redeploy emptied the test venue's in-memory book, so its cancel page said "No encontramos"."""
+        item = self.booked()
+        plan = self.c.get(f"/api/booking/reservations/{item}/cancel").json()
+        FR.TEST_SUBMISSIONS.clear()                                                                  # the redeploy
+        done = self.c.post(f"/api/booking/reservations/{item}/cancel",
+                           json={"read_back_sha256": plan["read_back"]["sha256"], "approval": {"how": "chat", "said": "yes"}}).json()
+        self.assertEqual(done["status"], "cancelled", done)
+        ref = plan["url"].rsplit("/", 1)[1]
+        self.assertEqual(self.c.get(f"/api/booking/test-venue/cancel/{ref[:-1]}{'0' if ref[-1] != '0' else '1'}").status_code, 404)   # not a forged one
 
     def test_a_platforms_cancel_link_is_pressed_by_the_guest_never_opened(self):
         from booking_signer import cancel_routes as CX

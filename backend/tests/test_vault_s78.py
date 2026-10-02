@@ -52,8 +52,9 @@ class Base(unittest.TestCase):
         self.env.start()
         VK.reset()
         from booking_signer import proactive as PR
-        from booking_signer import invitations as IV
-        self.saved = (VC.STORE, GW.STORE, CT.STORE, VG.LOG_DELETION, PR.STORE, IV.STORE)
+        from booking_signer import invitations as IV, mailbox as MB
+        self.saved = (VC.STORE, GW.STORE, CT.STORE, VG.LOG_DELETION, PR.STORE, IV.STORE, MB.STORE)
+        MB.STORE = MB.MemoryMailboxStore()
         VC.STORE, GW.STORE, CT.STORE, PR.STORE = MemoryVaultStore(), GW.MemoryGuestStore(), CT.MemoryContactStore(), PR.MemoryProactiveStore()
         IV.STORE = IV.MemoryInviteStore()
         self.erasures = []
@@ -71,8 +72,8 @@ class Base(unittest.TestCase):
 
     def tearDown(self):
         from booking_signer import proactive as PR
-        from booking_signer import invitations as IV
-        VC.STORE, GW.STORE, CT.STORE, VG.LOG_DELETION, PR.STORE, IV.STORE = self.saved
+        from booking_signer import invitations as IV, mailbox as MB
+        VC.STORE, GW.STORE, CT.STORE, VG.LOG_DELETION, PR.STORE, IV.STORE, MB.STORE = self.saved
         self.env.stop()
         VK.reset()
         os.unlink(self.kek_file)
@@ -283,7 +284,7 @@ class Gdpr(Base):
         self.assertEqual((VC.STORE.items, GW.STORE.channels, CT.STORE.rows), ({}, {}, {}))
         self.assertEqual(self.erasures, [{"vault_items": 1, "vault_uses": 0, "vault_events": 1, "guest_channels": 1,
                                           "guest_wa_state": 1, "guest_link_codes": 0, "guest_contacts": 1,
-                                          "proactive_sent": 0, "proactive_prefs": 0, "guest_places": 0, "booking_invitations": 0}])
+                                          "proactive_sent": 0, "proactive_prefs": 0, "guest_places": 0, "booking_invitations": 0, "mailbox_finds": 0}])
 
     def test_export_is_metadata_only(self):
         self.save()

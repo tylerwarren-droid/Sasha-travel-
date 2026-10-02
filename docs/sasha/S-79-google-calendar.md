@@ -249,3 +249,22 @@ alter table public.calendar_outbox enable row level security;
 - **G-2:** the connection-consent exception to V-2, or per-booking "Add to calendar".
 - **G-3:** the test users.
 - **G-4:** delete vs mark a cancelled event.
+
+---
+
+## Built, Sasha 109–110 (2 Oct 2026, `c4aec72`): §5.1–5.4 in code
+
+- **`booking_signer/calendar_sync.py`:**
+  - connect, the callback and disconnect, with a signed 10-minute state (the callback is gate-exempt and names the
+    account only through that state);
+  - §4's map;
+  - the outbox drainer (`SASHA_CALENDAR_LOOP`, running only once Google is configured);
+  - the 7-day expiry: "Expired, reconnect", the guest told once, rows kept;
+  - free/busy: one read-back line inside the hash, on the call path.
+- **`vault.use_connection`** (in `crypto.py`): oauth, google.com, the calendar purposes only, every use logged. The
+  refresh token is exchanged there and never leaves it.
+- **Migration 022** is drafted (row 119), with the trigger. **Web:** the "Google Calendar" block on the booking page.
+- **Waiting on:**
+  - the founder's §2 console setup (Calendar API, the consent screen in testing, the OAuth client, the three env vars);
+  - the vault being open (Cloud KMS, S-78 V-1; it needs his `gcloud auth login`);
+  - free/busy on the form and email rungs (only the call rung is wired so far).

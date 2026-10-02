@@ -177,3 +177,25 @@ recorded (`approval.how = 'chat'`, `said` = the guest's words).
 - **M-1:** `gmail.readonly` vs metadata only.
 - **M-2:** when to start CASA, if Gmail is to leave testing.
 - **M-3:** model parsing allowed for unmatched-by-rules messages (and counsel's Limited Use view).
+
+---
+
+## Built, Sasha 109–110 (2 Oct 2026): §5.1–5.5 in code, testing mode
+
+- **`booking_signer/mailbox.py`:**
+  - the one narrow search (`newer_than:90d` plus booking senders or booking words, always);
+  - rules-first parsing (ES/EN/PT dates, the `_REF` reference, amounts, the K-reference);
+  - the vault guard on what is extracted;
+  - matching by reference, then K-reference, then venue ±90 min;
+  - one-sentence offers stored with their hash (`offered_sentence`, one column added to 025), applied only on the yes
+    (the status write, so S-79's trigger updates the calendar);
+  - the 6-hourly sync (`SASHA_MAILBOX_LOOP`, only once Google is configured);
+  - disconnect: revoke at Google, shred the vault item, delete the finds.
+- **The connection is its own vault item** (purpose `gmail_read`), made through S-79's shared callback (state
+  `product: gmail`), so Calendar and Gmail disconnect independently.
+- **The model (M-3) is gated off** (`SASHA_MAILBOX_MODEL` unset): rules only until counsel's Limited Use view.
+- **Not built yet:**
+  - bill attachments (the PDF needs the guest's yes and a store);
+  - the deposit-request offer (S-81 tier 0 takes over);
+  - `history.list` incremental sync (each run is the narrow search).
+- **Migration 025** is drafted. **Web:** the "Gmail (read-only, beta)" block. Tests: `tests/test_mailbox_s82.py`, 1–6.

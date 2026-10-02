@@ -94,6 +94,9 @@ async def delete_everything(request: Request):
         from .. import invitations as IV
         if IV.STORE is not None:   # S-80 · invitations they sent
             counts.update(await IV.STORE.delete_account(account))
+        from .. import mailbox as MB
+        if MB.STORE is not None:   # S-82 · what was found in their inbox (facts only; the token went with the vault)
+            counts["mailbox_finds"] = await MB.STORE.delete_account_finds(account)
         await LOG_DELETION(account, counts, now)
     except StorageUnavailable as e:
         log.error("[gdpr] erasure incomplete: %s", e.detail)

@@ -69,8 +69,8 @@ def _key() -> bytes:
     return hashlib.sha256(("sasha-calendar-state:" + k).encode()).digest()
 
 
-def make_state(account: str, version: str, now: Optional[float] = None) -> str:
-    body = json.dumps({"a": account, "v": version, "n": secrets.token_hex(8), "e": int((now or time.time()) + STATE_LIFE)},
+def make_state(account: str, version: str, now: Optional[float] = None, product: str = "calendar") -> str:
+    body = json.dumps({"a": account, "v": version, "p": product, "n": secrets.token_hex(8), "e": int((now or time.time()) + STATE_LIFE)},
                       separators=(",", ":")).encode()
     sig = hmac.new(_key(), body, hashlib.sha256).digest()
     return base64.urlsafe_b64encode(body).decode().rstrip("=") + "." + base64.urlsafe_b64encode(sig).decode().rstrip("=")
@@ -490,6 +490,15 @@ async def calendar_callback(request: Request):
         return RedirectResponse(web_url("google=failed"), status_code=303)
     account, now = st["a"], NOW()
     granted = (tok.get("scope") or "").split()
+    if st.get("p") == "gmail":   # S-82 · the same Google sign-in, for read-only mail: its own token, its own consent
+        from . import mailbox as MB
+        if MB.SCOPE not in granted:
+            return RedirectResponse(web_url("gmail=scopes_missing").replace("#calendar", "#gmail"), status_code=303)
+        try:
+            await MB.on_connected(account, tok["refresh_token"], st["v"], now)
+        except kms.VaultClosed:
+            return RedirectResponse(web_url("gmail=vault_closed").replace("#calendar", "#gmail"), status_code=303)
+        return RedirectResponse(web_url("gmail=connected").replace("#calendar", "#gmail"), status_code=303)
     if not all(sc in granted for sc in SCOPES):
         return RedirectResponse(web_url("google=scopes_missing"), status_code=303)
     item_id = str(uuid.uuid4())

@@ -133,7 +133,8 @@ async def use(account: str, item_id: str, *, approval: Optional[dict], approved_
 
 #: S-79 G-2 · a CONNECTION the guest consented to (Google Calendar) is used without a per-booking yes — but only by
 #: these purposes, only for an oauth item of this provider, every use logged. Site logins never come this way (V-2).
-CONNECTION_PURPOSES = {"google.com": ("calendar_sync", "calendar_freebusy", "calendar_setup", "calendar_revoke")}
+CONNECTION_PURPOSES = {"google.com": ("calendar_sync", "calendar_freebusy", "calendar_setup", "calendar_revoke",
+                                     "gmail_read", "gmail_revoke")}   # S-82 · read-only mail
 
 
 async def _google_refresh(refresh_token: str) -> dict:

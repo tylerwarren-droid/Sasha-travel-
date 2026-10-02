@@ -836,6 +836,14 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         st["pending"] = None
         await _cancel_row(ctx, pend["rows"][i])
         return True
+    if kind == "mailbox":   # S-82 · ONE find from their inbox, one yes
+        if payload.startswith(("yes:", "no:")) or YS.is_yes(body) or _NO.match(body or ""):
+            st["pending"] = None
+            yes = payload.startswith("yes:") or (not payload and YS.is_yes(body))
+            status, j = await api(ctx["account"], "POST", f"/api/booking/mailbox/finds/{pend['id']}", {"offer_sha256": pend["sha"], "yes": yes})
+            out.text(str(j.get("say")) if status == 200 else f"Not changed — {refusal_words(j, status)}.")
+            return True
+        return False
     if kind == "payment":   # S-81 tier 0 · the deposit: one yes asks the venue for ITS link; the guest pays them directly
         if payload.startswith("no:") or (not payload and _NO.match(body)):
             st["pending"] = None

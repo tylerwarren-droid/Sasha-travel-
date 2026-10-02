@@ -153,6 +153,16 @@ class MemoryGuestStore:
     async def put_state(self, key: str, st: dict) -> None:
         self.state[key] = dict(st)
 
+    async def delete_account(self, account: str) -> Dict[str, int]:
+        keys = [k for k, c in self.channels.items() if c["account_id"] == account]
+        for k in keys:
+            del self.channels[k]
+            self.state.pop(k, None)
+        codes = [k for k, c in self.codes.items() if c["account_id"] == account]
+        for k in codes:
+            del self.codes[k]
+        return {"guest_channels": len(keys), "guest_wa_state": len(keys), "guest_link_codes": len(codes)}
+
 
 class PostgresGuestStore:
     def __init__(self, base) -> None:
@@ -226,6 +236,16 @@ class PostgresGuestStore:
             "pending = excluded.pending, last_inbound_at = excluded.last_inbound_at, link_tries = excluded.link_tries, updated_at = now()",
             key, json.dumps(st.get("history") or []), json.dumps(st["pending"]) if st.get("pending") is not None else None,
             st.get("last_inbound_at"), json.dumps(st.get("link_tries") or [])))
+
+    async def delete_account(self, account):
+        async def go(c):
+            async with c.transaction():
+                a = uuid.UUID(account)
+                st = await c.execute("delete from guest_wa_state where wa_id_sha256 in (select wa_id_sha256 from guest_channels where account_id = $1)", a)
+                ch = await c.execute("delete from guest_channels where account_id = $1", a)
+                co = await c.execute("delete from guest_link_codes where account_id = $1", a)
+                return {"guest_channels": int(ch.split()[-1]), "guest_wa_state": int(st.split()[-1]), "guest_link_codes": int(co.split()[-1])}
+        return await self._run(go)
 
 
 STORE: Any = None   # routes.py sets the Postgres store; tests set a memory one

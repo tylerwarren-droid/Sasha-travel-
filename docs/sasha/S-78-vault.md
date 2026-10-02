@@ -290,3 +290,58 @@ alter table public.vault_events enable row level security;
 - **V-3: DECIDED (EU 114): plaintext export OFF.** Export is metadata and use history only; "reveal" stays per item behind re-auth on the Vault page.
 - **V-4: DECIDED (EU 114): a DPIA before ANY health (special-category) item.** The vault refuses `special_category = true` until the DPIA is recorded: the vault API refuses a health item while the config `SASHA_VAULT_HEALTH_DPIA_REF` (the DPIA document's reference) is unset, and logs the refusal.
 - **Numbering: DECIDED (EU 114): this is S-78.**
+
+---
+
+## Built, Sasha 102 (2 Oct 2026): steps 1–8 in code; step 9 stays a separate ticket
+
+- **Step 1 (`267b71c`), the input guard:** `vault/guard.py`, first in `conduct()`, in `save_turn` and in the voice log
+  line. Earlier history lines are blanked too (the browser sends them back). The same guard runs on WhatsApp (S-75).
+  - Proven live on 2 Oct: a fake password to the production conductor got the fixed reply, and nothing came back in the
+    history.
+- **Step 2, `vault/kms.py` + `vault/crypto.py`:**
+  - AES-256-GCM per item, a fresh DEK and nonce on every write, and AAD = account‖item‖kind.
+  - **Google Cloud KMS over its REST API** (V-1), with a service-account token the module signs itself (RS256, the
+    pinned `cryptography`). No new dependency.
+  - The local KEK file is for tests and dev only, and is refused when `ENV` or `RAILWAY_ENVIRONMENT_NAME` is
+    `production`.
+  - Neither configured: the vault is closed, and says so.
+- **Step 3:** migration **021** is drafted (`sql/021_vault.sql`) and handed to chat to apply. Not applied by this tab.
+- **Step 4, `vault/api.py`:**
+  - list (metadata and use history only), create, update (reseal with a new DEK), revoke (crypto-shred and cancel
+    pending uses), revoke-all;
+  - R8: Luhn over every field, the site and the label included;
+  - `oauth` is listed but **not offered**: no site is connected by sign-in;
+  - V-4: a health item is refused while `SASHA_VAULT_HEALTH_DPIA_REF` is unset, then accepted only with the Art. 9
+    consent (versioned and hashed).
+- **Step 5:** `/vault` (founder-gated, like the booking page). Kinds are strongest first; there's the last-resort
+  wording, revoke and revoke-all, the use history, the data download and delete-everything.
+- **Step 6, `crypto.use()`, the only decrypt path:**
+  - the approval must be ≤ 15 minutes old;
+  - its hash must match the approved lines;
+  - those lines must contain *"I'll sign in to {provider} with your saved {label}."*;
+  - one use per approval (`vault_uses` unique, claimed before decrypting).
+  - Tests fail if `_open` appears in any other module, or if a ciphertext is SELECTed anywhere but `crypto.py`.
+- **Step 7, the scrubber:** `Secret.scrub()` inside each use replaces every value it opened with `[vault:label]`, and a
+  failing action's error is stored scrubbed.
+  - **There's no executor to wire it into yet** (§0): each consumer must pass its outputs through it. That is part of
+    step 9's ticket.
+- **Step 8, `vault/gdpr.py`:**
+  - `DELETE /api/booking/account/data`: a typed "delete everything" **and** a sign-in within the last 10 minutes (the
+    token's `amr`; the founder's session header is not a sign-in). It removes the vault, the WhatsApp link, codes and
+    state, and the saved contact, with one `retention_log` line per table;
+  - `GET /api/booking/account/export`: metadata only (V-3).
+  - The privacy notice (EN/ES) gains the vault section, Google Cloud KMS as a processor, and the self-service
+    delete/download line.
+- **Not built, on purpose:**
+  - **"Reveal" behind re-auth (V-3's per-item reveal).** It would be a second decrypt path beside `use()`, so it needs
+    its own decision.
+  - **§4.1's handle-and-label capability fact for the model, the read-back access line in the rungs, and the receipt
+    line:** each belongs to the first consumer (step 9). Nothing can use a saved access until then, and the page says
+    so.
+- **⚠ Before the vault opens in production (V-1), the founder's part:**
+  1. Create a Cloud KMS key (symmetric, encrypt/decrypt) and a service account allowed only
+     `cloudkms.cryptoKeyEncrypterDecrypter` on that key.
+  2. Set `SASHA_VAULT_KMS_KEY` (the key's resource name) and `SASHA_VAULT_GCP_SA_JSON` (the service account's JSON key)
+     on Railway.
+  - Until then, `/api/booking/health` reports `vault: {open: false}` and nothing can be saved.

@@ -42,6 +42,15 @@ function En() {
         <li><b>Nothing is sent before you approve.</b> Sasha reads the booking back to you and waits for your yes.</li>
       </ul>
 
+      <H>Your saved accesses (the vault)</H>
+      <ul className="ml-5 mt-2 list-disc space-y-2">
+        <li><b>Only if you add one.</b> You may save a login, an app password or a membership number Sasha may need to book for you. Each is <b>encrypted on its own</b>, with a key held in <b>Google Cloud’s key service</b>, outside our database.</li>
+        <li><b>The AI model never sees it.</b> It is opened only inside the booking you approved, at the moment of use, and <b>only if the read-back you said yes to names it</b>. One yes, one use. Every use is logged and shown to you. <b>No booking uses a saved access yet</b>; the vault is ready before anything may use it.</li>
+        <li><b>Never card numbers.</b> Payments go through Stripe, which never shows us your card.</li>
+        <li><b>Health-related accesses</b> (a clinic portal, a health-card number) are <b>not accepted</b> until a data-protection impact assessment is done; then only with your explicit consent (Art. 9(2)(a)).</li>
+        <li><b>One tap deletes it</b>: its key and its encrypted copy are destroyed. For a password, change it at the site too; we can’t revoke a password there for you. <b>Lawful basis:</b> performing our agreement with you (6(1)(b)).</li>
+      </ul>
+
       <H>If you are a venue</H>
       <ul className="ml-5 mt-2 list-disc space-y-2">
         <li><b>Your published contact details.</b> Sasha reads the phone number, email address and WhatsApp link <b>your own website or Google listing publishes</b>, and records where and when she read them. <b>Lawful basis: our legitimate interest in contacting a business about a booking it offers publicly</b> (Art. 6(1)(f)). This notice is our information to you under Art. 14.</li>
@@ -63,6 +72,7 @@ function En() {
         [<b key="r">Resend</b>, 'sending and receiving email', 'USA'],
         [<b key="m">Meta (WhatsApp Business)</b>, <>WhatsApp messages from Sasha’s own number, <b>once that service starts</b></>, 'EU/USA'],
         [<b key="a">Anthropic</b>, 'an AI model reading call transcripts and replies', 'USA'],
+        [<b key="k">Google Cloud (Key Management)</b>, <>holding the key that locks your saved accesses; <b>it never sees them</b></>, '[region]'],
         [<b key="rw">Railway</b>, 'hosting Sasha’s server', '[region]'],
         [<b key="d">[database host]</b>, 'storing bookings and records', '[region]'],
         [<b key="g">Google (Places)</b>, <>reading venues’ published listings; <b>no guest data is sent</b></>, 'USA'],
@@ -78,7 +88,7 @@ function En() {
       ]} />
 
       <H>Your rights</H>
-      <p className="mt-2">You may ask for <b>access</b> to your data, <b>correction</b>, <b>deletion</b>, <b>restriction</b>, <b>portability</b>, and <b>object</b> to our use based on legitimate interest. <b>You may withdraw consent at any time</b>; for venues, the withdraw link or an email to us does it. Write to <b>tyler@kanoe.ai</b>. We reply within one month.</p>
+      <p className="mt-2">You may ask for <b>access</b> to your data, <b>correction</b>, <b>deletion</b>, <b>restriction</b>, <b>portability</b>, and <b>object</b> to our use based on legitimate interest. <b>You may withdraw consent at any time</b>; for venues, the withdraw link or an email to us does it. Write to <b>tyler@kanoe.ai</b>. We reply within one month. <b>Signed in, you can delete your saved accesses, WhatsApp link and saved details yourself, and download a copy of what we hold</b> (saved accesses as names and history only, never their contents).</p>
       <p className="mt-3"><b>You can complain to the Spanish data protection authority</b>: <b>Agencia Española de Protección de Datos (AEPD)</b>, C/ Jorge Juan 6, 28001 Madrid, <b>www.aepd.es</b>.</p>
       <p className="mt-6 text-sm italic">Last updated: [date].</p>
     </>
@@ -97,6 +107,15 @@ function Es() {
         <li><b>Qué enviamos al establecimiento:</b> tu <b>nombre</b>, el <b>número de personas</b>, y la <b>fecha y hora</b>. <b>Tu teléfono solo si el establecimiento pide un número de contacto y nos lo has dado.</b> <b>Si Sasha reserva por email, recibes una copia oculta (CCO): el establecimiento no ve tu dirección de email.</b> Sasha te lo dice antes de que lo apruebes.</li>
         <li><b>Para qué:</b> para hacer la reserva que pediste. <b>Base legal: la ejecución de nuestro acuerdo contigo</b> (RGPD art. 6.1.b).</li>
         <li><b>No se envía nada sin tu aprobación.</b> Sasha te lee la reserva y espera tu «sí».</li>
+      </ul>
+
+      <H>Tus accesos guardados (la bóveda)</H>
+      <ul className="ml-5 mt-2 list-disc space-y-2">
+        <li><b>Solo si añades uno.</b> Puedes guardar un acceso, una contraseña de aplicación o un número de socio que Sasha necesite para reservar por ti. Cada uno se <b>cifra por separado</b>, con una clave custodiada en el <b>servicio de claves de Google Cloud</b>, fuera de nuestra base de datos.</li>
+        <li><b>El modelo de IA nunca lo ve.</b> Solo se abre dentro de la reserva que aprobaste, en el momento de usarlo, y <b>solo si la lectura a la que dijiste sí lo nombra</b>. Un sí, un uso. Cada uso queda registrado y se te muestra. <b>Ninguna reserva usa todavía un acceso guardado</b>.</li>
+        <li><b>Nunca números de tarjeta.</b> Los pagos van por Stripe, que nunca nos muestra tu tarjeta.</li>
+        <li><b>Accesos de salud</b> (un portal clínico, una tarjeta sanitaria) <b>no se aceptan</b> hasta hacer una evaluación de impacto; después, solo con tu consentimiento explícito (art. 9.2.a).</li>
+        <li><b>Un toque lo borra</b>: su clave y su copia cifrada se destruyen. Si es una contraseña, cámbiala también en el sitio; nosotros no podemos revocarla allí. <b>Base legal:</b> la ejecución de nuestro acuerdo contigo (6.1.b).</li>
       </ul>
 
       <H>Si eres un establecimiento</H>
@@ -120,6 +139,7 @@ function Es() {
         [<b key="r">Resend</b>, 'envío y recepción de emails', 'EE. UU.'],
         [<b key="m">Meta (WhatsApp Business)</b>, <>mensajes de WhatsApp desde el número de Sasha, <b>cuando ese servicio empiece</b></>, 'UE/EE. UU.'],
         [<b key="a">Anthropic</b>, 'un modelo de IA que lee transcripciones y respuestas', 'EE. UU.'],
+        [<b key="k">Google Cloud (Key Management)</b>, <>custodia de la clave que protege tus accesos guardados; <b>nunca los ve</b></>, '[región]'],
         [<b key="rw">Railway</b>, 'alojamiento del servidor de Sasha', '[región]'],
         [<b key="d">[proveedor de base de datos]</b>, 'almacenamiento de reservas y registros', '[región]'],
         [<b key="g">Google (Places)</b>, <>lectura de fichas publicadas de establecimientos; <b>no se envían datos de clientes</b></>, 'EE. UU.'],
@@ -135,7 +155,7 @@ function Es() {
       ]} />
 
       <H>Tus derechos</H>
-      <p className="mt-2">Puedes pedir <b>acceso</b> a tus datos, su <b>rectificación</b>, <b>supresión</b>, <b>limitación</b> y <b>portabilidad</b>, y <b>oponerte</b> al uso basado en interés legítimo. <b>Puedes retirar tu consentimiento cuando quieras</b>; si eres un establecimiento, basta con el enlace de retirada o un email. Escribe a <b>tyler@kanoe.ai</b>. Respondemos en un plazo de un mes.</p>
+      <p className="mt-2">Puedes pedir <b>acceso</b> a tus datos, su <b>rectificación</b>, <b>supresión</b>, <b>limitación</b> y <b>portabilidad</b>, y <b>oponerte</b> al uso basado en interés legítimo. <b>Puedes retirar tu consentimiento cuando quieras</b>; si eres un establecimiento, basta con el enlace de retirada o un email. Escribe a <b>tyler@kanoe.ai</b>. Respondemos en un plazo de un mes. <b>Con tu sesión iniciada, puedes borrar tú mismo tus accesos guardados, tu enlace de WhatsApp y tus datos guardados, y descargar una copia de lo que tenemos</b> (los accesos, solo como nombres e historial, nunca su contenido).</p>
       <p className="mt-3"><b>Puedes reclamar ante la Agencia Española de Protección de Datos (AEPD)</b>, C/ Jorge Juan 6, 28001 Madrid, <b>www.aepd.es</b>.</p>
       <p className="mt-6 text-sm italic">Última actualización: [fecha].</p>
     </>

@@ -272,6 +272,23 @@ class Turns(Base):
         self.assertFalse(any("has cancelled" in b for b in self.bodies()))
         self.assertEqual(self.spawned, ["watch_cancel"])                            # watching for their written words
 
+    def test_sasha104_the_founders_live_message_shows_cards(self):
+        """2 Oct, live in the sandbox: this exact message got the out-of-scope sentence."""
+        self.say("Dinner for 2 on Saturday at 2100 in Chamberi. Something luxurious and romantic")
+        find = GW.api.calls[0][3]
+        self.assertEqual((find["what"], find["where"], find["open_at"]), ("luxurious and romantic Dinner", "Chamberí, Madrid", "2026-10-03T21:00"))
+        self.assertEqual(GW.SENDER.contents[-1][0], "Which one?")
+
+    def test_sasha104_unsure_asks_one_question(self):
+        self.say("can you sort out Saturday night for 2?")
+        self.assertEqual(self.bodies(), [GW.ASK_ONE])
+
+    def test_sasha104_a_voice_note_is_asked_to_be_typed(self):
+        ch = run(GW.STORE.channel_for(GW.wa_key(GUEST)))
+        run(GW.turn(ch, SANDBOX, {"From": f"whatsapp:{GUEST}", "Body": "", "NumMedia": "1", "MediaContentType0": "audio/ogg"}))
+        self.assertIn("voice notes", self.bodies()[-1])
+        self.assertEqual(GW.api.calls, [])
+
     def test_receipts(self):
         self.say("my bookings")
         self.assertIn("• Botavara Chamberí — Saturday 3 October at 21:00, 2 — confirmed by the restaurant", self.bodies()[-1])

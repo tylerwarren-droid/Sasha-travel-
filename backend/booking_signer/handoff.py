@@ -39,11 +39,49 @@ _WORD_HOURS = {w: n for n, w in enumerate(["zero", "one", "two", "three", "four"
                                            "ten", "eleven", "twelve"])}
 
 
+#: Sasha 104 · a Spanish request, read by the same parsers: only booking phrasing is rewritten, and only when the message
+#: reads as Spanish. Place names and qualifiers ("algo romántico") are left as written.
+_ES_MARK = re.compile(r"\b(cena|cenar|comida|almuerzo|desayuno|mesa|reserv\w*|res[eé]rvame|para\s+(?:\d|dos|tres|cuatro|seis)|"
+                      r"s[aá]bado|domingo|lunes|martes|mi[eé]rcoles|jueves|viernes|a las|personas|quiero|quisiera|busco|b[uú]scame)\b", re.I)
+_ES_NUM = {"una": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9,
+           "diez": 10, "once": 11, "doce": 12}
+_ES_DAYS = {"lunes": "monday", "martes": "tuesday", "miércoles": "wednesday", "miercoles": "wednesday", "jueves": "thursday",
+            "viernes": "friday", "sábado": "saturday", "sabado": "saturday", "domingo": "sunday"}
+_ES_WORDS = [(r"\b(?:quiero|quisiera|queremos|necesito|necesitamos)\s+(?:reservar|una reserva(?:\s+de)?)\b", "book"),
+             (r"\b(?:res[eé]rvame|res[eé]rvanos|reserva|reservar|reservad)\b", "book"),
+             (r"\b(?:b[uú]scame|b[uú]scanos|busca|buscar|busco|buscamos)\b", "find"),
+             (r"\b(?:quiero|quisiera|queremos)\b", "i want"),
+             (r"\bcenar\b|\bcena\b", "dinner"), (r"\b(?:comida|almuerzo|almorzar|comer)\b", "lunch"),
+             (r"\bdesayuno\b", "breakfast"), (r"\bmesa\b", "table"), (r"\bun restaurante\b", "a restaurant"),
+             (r"\b(?:una|un)\s+(?=table|dinner|lunch|breakfast|restaurant)", "a "),
+             (r"\b(\d{1,2})\s+de\s+la\s+(?:noche|tarde)\b", r"\1pm"),
+             (r"\b(?:esta\s+noche)\b", "tonight"), (r"\bhoy\b", "today"),
+             (r"(?<!la )(?<!de )\bma[nñ]ana\b(?!\s+por\s+la)", "tomorrow"),
+             (r"\bpara\s+(?:el|este|esta)\s+", "on "), (r"\b(?:el|este|esta)\s+(?=(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b)", "on "),
+             (r"\ba\s+las\b", "at"), (r"\bcerca\s+de(?:l)?\b", "near"), (r"\ben\b", "in")]
+
+
+def _es(t: str) -> str:
+    if not _ES_MARK.search(t):
+        return t
+    for rx, rep in _ES_WORDS:
+        t = re.sub(rx, rep, t, flags=re.I)
+    t = re.sub(r"\bpara\s+(\d{1,2}|" + "|".join(_ES_NUM) + r")\b(?:\s+personas)?",
+               lambda m: f"for {m[1] if m[1].isdigit() else _ES_NUM[m[1].lower()]}", t, flags=re.I)
+    t = re.sub(r"\b(\d{1,2}|" + "|".join(_ES_NUM) + r")\s+personas\b",
+               lambda m: f"{m[1] if m[1].isdigit() else _ES_NUM[m[1].lower()]} people", t, flags=re.I)
+    return re.sub(r"\b(" + "|".join(_ES_DAYS) + r")\b", lambda m: _ES_DAYS[m[1].lower()], t, flags=re.I)
+
+
 def spoken(message: str) -> str:
     """Sasha 88 · a request SPOKEN to Sasha reads like a typed one: speech-to-text writes "9 p.m.", "nine p.m.",
-    "9 P.M." — the parsers read "9pm". Nothing else is changed."""
-    t = re.sub(r"\b([ap])\.\s?m\.?(?=\W|$)", lambda m: m[1].lower() + "m", message or "", flags=re.I)
+    "9 P.M." — the parsers read "9pm". Sasha 104 · "2100", "21h" and a Spanish request read the same way."""
+    t = _es(message or "")
+    t = re.sub(r"\b([ap])\.\s?m\.?(?=\W|$)", lambda m: m[1].lower() + "m", t, flags=re.I)
     t = re.sub(r"\b(\d{1,2})\s+([ap]m)\b", r"\1\2", t, flags=re.I)
+    # Sasha 104 · "at 2100", "a las 2130", "2100h" — a 24-hour clock written without its colon is that time
+    t = re.sub(r"\b(at|a las|by|from)\s+([01]\d|2[0-3])([0-5]\d)h?\b", r"\1 \2:\3", t, flags=re.I)
+    t = re.sub(r"\b([01]?\d|2[0-3])h(?:([0-5]\d))?\b", lambda m: f"{int(m[1])}:{m[2] or '00'}", t, flags=re.I)   # "21h", "21h30"
     return re.sub(r"\b(" + "|".join(_WORD_HOURS) + r")\s*([ap]m)\b", lambda m: f"{_WORD_HOURS[m[1].lower()]}{m[2].lower()}", t, flags=re.I)
 
 
@@ -110,19 +148,23 @@ def plain_party(message: str) -> Optional[int]:
     return n if 1 <= n <= 20 else None
 
 
+#: Sasha 104 · the day, time or party said BEFORE the area: "dinner for 2 on Saturday at 21:00 in Chamberí"
+#: "at a luxury restaurant" names the PLACE, never a time: the when-part never takes "at a / an / the …"
+_WHEN = (r"(?:\s+(?:for|on|at(?!\s+(?:an?|the)\b)|this|next|tomorrow|tonight|today|el|a las|para)\b"
+         r"(?:(?!\bat\s+(?:an?|the)\b)[^?.!;]){0,48}?)?")
 #: S-66 (EU) step 5 · "find / book / reserve … {X} in {Y}" for ANY kind of place
 _FIND = re.compile(r"\b(?:find|book|reserve|look for|search for|get)\s+(?:me\s+|us\s+)?(?:an?\s+|some\s+|the\s+)?"
-                   r"(?P<what>[a-z][\w'’ -]{1,58}?)\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
+                   r"(?P<what>[a-z][\w'’ -]{1,58}?)" + _WHEN + r"\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
 #: Sasha 101 · how a request is SPOKEN without "book": "I'd like a luxury dinner in …", "can you get us a table in …".
 #: Taken only when what is asked for is a bookable thing (a table, a meal, a place to book) — "I want to see the museum
 #: in Madrid" is not a booking.
 _SOFT = re.compile(r"\b(?:i(?:'d| would) like|we(?:'d| would) like|i want|we want|i need|we need|looking for|"
                    r"can (?:i|we|you) (?:get|have|find)|could (?:i|we|you) (?:get|have|find)|"
                    r"(?:let'?s|let us) (?:book|get|have))\s+(?:to (?:book|reserve|have|get)\s+)?(?:me\s+|us\s+)?"
-                   r"(?:an?\s+|some\s+|the\s+)?(?P<what>[a-z][\w'’ -]{1,58}?)\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
+                   r"(?:an?\s+|some\s+|the\s+)?(?P<what>[a-z][\w'’ -]{1,58}?)" + _WHEN + r"\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
 #: a request that STARTS with the thing itself: "lunch for 4 in Malasaña tomorrow at two", "a table for two in Chamberí…"
 _BARE = re.compile(r"^\s*(?:(?:an?|some)\s+)?(?P<what>(?:[a-záéíóúñ'’-]+\s+){0,3}?(?:table|dinner|lunch|breakfast|brunch|supper)"
-                   r"(?:\s+for\s+\w+(?:\s+(?:people|of us))?)?)\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
+                   r"(?:\s+for\s+\w+(?:\s+(?:people|of us))?)?)" + _WHEN + r"\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
 _BOOKABLE = re.compile(r"\b(table|dinner|lunch|breakfast|brunch|supper|restaurant|bistro|tapas|bar|caf[eé]|spa|massage|tour|"
                        r"hotel|room|studio|salon|class|session|appointment|reservation)s?\b", re.I)
 _DINNER = re.compile(r"\b(dinner|supper|cena|cenar|tonight|evening|noche|night|table|restaurant|mesa)\b", re.I)
@@ -239,6 +281,13 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
                   " ".join(m["what"].split()), flags=re.I)
     # Sasha 101 · "a table at a luxury restaurant" searches for the luxury restaurant — every qualifier kept
     what = re.sub(r"^(?:a\s+)?table\s+(?:at|in)\s+(?:an?\s+|the\s+)?", "", what, flags=re.I).strip() or what
+    # Sasha 104 · a short sentence of qualifiers after the request ("Something luxurious and romantic.") is part of what
+    # is searched for — every qualifier the guest said, kept
+    after = re.split(r"[.!;]\s*", (message or "")[m.end():], maxsplit=1)
+    extra = after[1] if len(after) > 1 else ""
+    q = re.sub(r"^(?:something|somewhere|a place|ideally|preferably|it should be|we want|i want|i'd like)\s+", "", extra.strip(" .!?"), flags=re.I)
+    if q and len(q.split()) <= 6 and not re.search(r"\d|\b(?:for|on|at|in|near|tomorrow|today|tonight)\b", q, re.I):
+        what = f"{q} {what}"
     raw = m["where"]
     # S-68 step 3 · "… in Madrid near Hotel Urban" / "near my hotel": what the distance is measured from, as said
     nm = re.search(r"[\s,]+(?:near|close to)\s+(?P<near>[^?.!;]{2,120})$", raw, re.I)
@@ -251,6 +300,14 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
     cm = re.fullmatch(r"(.+?),\s*([A-Za-z]{2})", where)
     if cm:
         where, country = cm[1].strip(), cm[2].upper()
+    elif "," in where:
+        # Sasha 104 · "in Chamberí, somewhere romantic": the place, then a qualifier — kept with what is searched for
+        head, tail = where.split(",", 1)
+        tail = re.sub(r"^\s*(?:somewhere|something|algo|alg[uú]n sitio|a place)\s+", "", tail).strip(" .")
+        if known_place(head.strip()) or len(tail.split()) <= 4:
+            where = head.strip()
+            if tail and not known_place(tail):
+                what = f"{tail} {what}"
     if len(what) < 2 or len(where) < 2:
         return None
     if country is None:
@@ -282,8 +339,9 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
     """S-66 (EU) step 5 · a full conductor turn that starts a booking IN THE CHAT — `booking_find` for the chat to run
     Find venues with (S-65) — or None, and the conductor carries on. ⛔ It no longer opens /booking-helper: the Psi-only
     link is retired; any kind of place, anywhere, is found the same way, and nothing is contacted by finding it."""
+    said = message
     message = spoken(message)
-    c = cancel_request(message)
+    c = cancel_request(said) or cancel_request(message)   # Sasha 104 · the guest's own words first ("cancela la reserva en X")
     if c is not None:
         response = f"Let me find your booking at {c['venue']} — I'll ask you once before I cancel anything."
         history = list(history or [])

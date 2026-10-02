@@ -232,10 +232,10 @@ class PostgresGuestStore:
     async def put_state(self, key, st):
         await self._run(lambda c: c.execute(
             "insert into guest_wa_state (wa_id_sha256, history, pending, last_inbound_at, link_tries, updated_at) "
-            "values ($1, $2::jsonb, $3::jsonb, $4, $5::jsonb, now()) on conflict (wa_id_sha256) do update set history = excluded.history, "
+            "values ($1, $2, $3, $4, $5, now()) on conflict (wa_id_sha256) do update set history = excluded.history, "
             "pending = excluded.pending, last_inbound_at = excluded.last_inbound_at, link_tries = excluded.link_tries, updated_at = now()",
-            key, json.dumps(st.get("history") or []), json.dumps(st["pending"]) if st.get("pending") is not None else None,
-            st.get("last_inbound_at"), json.dumps(st.get("link_tries") or [])))
+            # the pool's jsonb codec encodes: pass the values themselves (Sasha 104 · a json.dumps here stored a JSON string)
+            key, st.get("history") or [], st.get("pending"), st.get("last_inbound_at"), st.get("link_tries") or []))
 
     async def delete_account(self, account):
         async def go(c):
@@ -513,6 +513,14 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         await STORE.put_state(key, st)
         await deliver({**ch, "opted_out_at": None}, frm, out.text(STOPPED), now)   # said once, then silence
         return out
+    if not body and not payload:
+        # Sasha 104 · a voice note or a picture arrives with no words: voice notes are phase 3 (F-3), so say so plainly
+        has_media = int(p.get("NumMedia") or 0) > 0
+        out.text("I can't listen to voice notes or read pictures here yet — please type it in one message, e.g. \"dinner "
+                 "for 2 in Chamberí on Saturday at 21:00\"." if has_media else HELP)
+        await STORE.put_state(key, st)
+        await deliver(ch, frm, out, now)
+        return out
     if G.looks_like_secret(body):
         # S-78 · never stored (not in the history either), never passed on
         out.text(G.CARD_REPLY if G.looks_like_secret(body) == "card" else G.SECRET_REPLY)
@@ -555,7 +563,25 @@ async def _new_request(ctx: dict, body: str) -> None:
     if t is not None:
         out.text(t["response"])
         return
+    # Sasha 104 · out of scope ONLY when there is clearly no booking, change or cancel in it; unsure → one question
+    if maybe_booking(body):
+        out.text(ASK_ONE)
+        return
     out.text(OUT_OF_SCOPE.format(web=web_url()))
+
+
+ASK_ONE = ("Shall I book that? Tell me in one message — the kind of place, the area, the day, the time and how many, e.g. "
+           "\"dinner for 2 in Chamberí on Saturday at 21:00\".")
+_HINT = re.compile(r"\b(book|booking|reserv\w*|res[eé]rv\w*|cancel\w*|anul\w*|change|move|table|mesa|dinner|cena|lunch|comida|"
+                   r"almuerzo|breakfast|desayuno|brunch|restaurant\w*|bar|tapas|spa|massage|masaje|tour|hotel|tonight|tomorrow|"
+                   r"ma[nñ]ana|hoy|esta noche|for \d+|para \d+|people|personas|"
+                   r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b"
+                   r"|\b\d{1,2}(?::\d{2})?\s*(?:am|pm|h)\b|\b\d{1,2}:\d{2}\b|\b(?:at|a las)\s+\d{3,4}\b", re.I)
+
+
+def maybe_booking(body: str) -> bool:
+    """Anything that MIGHT be a booking, a change or a cancellation — a place to book, a day, a time, a party."""
+    return bool(_HINT.search(body or ""))
 
 
 # ── find → cards ────────────────────────────────────────────────────────────────────────────────────────────────────

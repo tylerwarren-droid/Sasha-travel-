@@ -12,9 +12,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Sasha 104 · the link preview (WhatsApp, iMessage, Slack) for every page without its own: no Vietnam
+const PREVIEW = { title: "Sasha by Kanoe: AI concierge",
+  description: "Talk to Sasha: she finds places and books them for you — only after your yes." };
 export const metadata: Metadata = {
-  title: "Sasha — AI Travel Concierge",
-  description: "Talk to Sasha, your real-time AI travel concierge for Vietnam.",
+  metadataBase: new URL("https://project.kanoe.ai"),
+  title: PREVIEW.title,
+  description: PREVIEW.description,
+  openGraph: { ...PREVIEW, siteName: "Sasha by Kanoe", type: "website", url: "/" },
+  twitter: { card: "summary", ...PREVIEW },
 };
 
 export default function RootLayout({

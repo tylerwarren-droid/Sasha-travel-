@@ -94,6 +94,13 @@ class PathI(TG.Base):
         self.assertEqual(told[1], 'Where should I look — an area, e.g. "Chamberí"?')
         self.assertNotIn(JON, " ".join(self.bodies()))
 
+    def test_3b_jons_tap_never_waits_for_the_inviters_search(self):
+        """Sasha 117 · live: the choose answered after 24 s — it awaited the inviter's whole place search."""
+        import inspect
+        src = inspect.getsource(IV.invite_choose)
+        self.assertNotIn("await _tell_inviter", src)
+        self.assertEqual(src.count("background.add_task(_tell_inviter_logged"), 2)
+
     def test_4_jon_opts_in_only_to_this_invitation_and_a_bad_code_is_refused(self):
         inv = self.invite()
         self.assertIsNone(run(IV.on_invite_message(JON, "hello")))

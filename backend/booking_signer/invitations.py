@@ -24,7 +24,7 @@ from datetime import date, datetime, time as dtime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 
 from . import sentences as SN
@@ -313,7 +313,7 @@ async def invite_get(code: str, request: Request):
 
 
 @router.post("/{code}/choose")
-async def invite_choose(code: str, request: Request):
+async def invite_choose(code: str, request: Request, background: BackgroundTasks):
     if _limited(request):
         return _refuse(429, "slow_down", "too many requests — try again in a minute")
     try:
@@ -332,7 +332,7 @@ async def invite_choose(code: str, request: Request):
         if body.get("none"):
             await STORE.update(code, status="declined", chosen_at=NOW(), invitee_consent_at=NOW(),
                                invitee_consent_text_sha256=body["consent_sha256"])
-            await _tell_inviter(inv, None)
+            background.add_task(_tell_inviter_logged, inv, None)
             return {"status": "declined", "say": f"OK — {inv['inviter_first_name']} will know none of these times work."}
         return _refuse(422, "slot_invalid", "pick one of the times shown")
     first = re.sub(r"[^\wáéíóúñü' -]", "", str(body.get("first_name") or ""))[:40].strip() or inv.get("invitee_first_name")
@@ -340,8 +340,16 @@ async def invite_choose(code: str, request: Request):
     await STORE.update(code, chosen_slot=i, chosen_at=now, status="chosen", invitee_first_name=first, invitee_consent_at=now,
                        invitee_consent_text_sha256=body["consent_sha256"])
     inv = await STORE.get(code)
-    await _tell_inviter(inv, i)
+    # Sasha 117 · Jon's tap is answered at once; the inviter is told (and searched for) after — it took 24 s live
+    background.add_task(_tell_inviter_logged, inv, i)
     return {"status": "chosen", "say": f"Thanks — {inv['inviter_first_name']} will book it and you'll see it here."}
+
+
+async def _tell_inviter_logged(inv: dict, i: Optional[int]) -> None:
+    try:
+        await _tell_inviter(inv, i)
+    except Exception as e:   # after the response: nobody else would see it
+        log.error("[invitations] telling the inviter failed: %s: %s", type(e).__name__, e)
 
 
 async def _tell_inviter(inv: dict, i: Optional[int]) -> None:

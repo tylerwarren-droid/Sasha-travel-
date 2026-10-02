@@ -47,6 +47,12 @@ class ReadAsABooking(unittest.TestCase):
     def test_qualifiers_are_kept_for_the_search(self):
         self.assertIn("luxurious and romantic", H.booking_handoff(CASES[0][0], now=NOW)["booking_find"]["what"])
 
+    def test_qualities_survive_a_request_joined_from_several_lines(self):
+        """Live: the qualities sentence was dropped when "Saturday at 2100" was joined with the earlier line."""
+        hist = [{"role": "user", "content": CASES[0][0]}, {"role": "assistant", "content": "On WhatsApp I can book…"}]
+        f = H.booking_handoff("Saturday at 2100", hist, now=NOW)["booking_find"]
+        self.assertIn("luxurious", f["what"]); self.assertIn("romantic", f["what"])
+
     def test_clocks(self):
         self.assertEqual(H.spoken("at 2100"), "at 21:00")
         self.assertEqual(H.spoken("a las 21h"), "at 21:00")

@@ -600,14 +600,17 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
     ranking = j.get("ranking") or {}
     chip = f.get("priority") if f.get("priority") in (ranking.get("orders") or {}) else ranking.get("default", "rated")
     order = (ranking.get("orders") or {}).get(chip) or list(cands)
+    luxe = any(q in HO.LUXURY for q in HO.qualities(f.get("what") or ""))
+    if luxe:   # Sasha 104 · "luxury": Google's €€€ and €€€€ first, best rated within; the rest after, never dropped
+        order = sorted(order, key=lambda pid: not ((cands.get(pid) or {}).get("price_level") or 0) >= 3)
     shown = [cands[i] for i in order if i in cands][:3]
     if not shown:
         out.text(f"I found no {f.get('what')} in {f.get('where')}. Try another area or kind of place.")
         return
-    pick = (ranking.get("picks") or {}).get(chip)
+    pick = shown[0]["place_id"] if luxe else (ranking.get("picks") or {}).get(chip)
     photos = await _photos(account, f.get("what") or "", shown)
-    out.text(f"{f.get('what')} in {f.get('where')} — {ranking.get('count') or f'{len(cands)} found'}. From Google Maps; "
-             f"nobody has been contacted.")
+    out.text(f"{f.get('what')} in {f.get('where')} — {ranking.get('count') or f'{len(cands)} found'}"
+             f"{' · €€€ and up first' if luxe else ''}. From Google Maps; nobody has been contacted.")
     for c in shown:
         line = " · ".join(x for x in (c.get("name") or "no name listed", rating_words(c), distance_words(c.get("distance_m"))) if x)
         out.media(("Sasha's pick · " if c["place_id"] == pick else "") + line, photos.get(c["place_id"]))
@@ -652,16 +655,15 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             return False
         i = _picked(pend, body, payload)
         if i is None:
-            other = refinement(body)
-            if not other and HO.booking_handoff(body, st.get("history") or []) is not None:
-                st["pending"] = None
-                return False                               # a new request: start afresh
-            if other:
-                # Sasha 104 · "How about Indian food?" while choosing: the same area, day, time and party, another kind
-                st["pending"] = None
-                await _find(ctx, {**pend["find"], "what": other}, {"parts": pend.get("draft") or {}})
+            # Sasha 104 · while the cards show, anything that is not a pick is a REFINEMENT of this search: the area,
+            # day, time and party are kept unless the message changes them; the kind of place is replaced; every
+            # quality asked for is kept. A plain yes/no/thanks gets the question again.
+            merged = refine(pend, body, ctx["now"])
+            if merged is None:
+                out.text("Which one? Tap a name, or send its number (1, 2 or 3) — or tell me what else to look for.")
                 return True
-            out.text("Which one? Tap a name, or send its number (1, 2 or 3) — or tell me what else to look for.")
+            st["pending"] = None
+            await _find(ctx, merged[0], {"parts": merged[1]})
             return True
         await _picked_card(ctx, pend, pend["cards"][i])
         return True
@@ -711,26 +713,48 @@ _QUALITY = re.compile(r"\b(luxury|luxurious|upscale|fancy|fine[- ]dining|romanti
                       r"rom[aá]ntico)\b", re.I)
 
 
-def refinement(body: str) -> Optional[str]:
-    """Another kind of place, said while the cards are showing — "How about Indian food?", "my wife likes Indian food.
-    Can you find me an Indian food spot? Luxury please", "¿Y comida india?" — with every qualifier said; or None. A message
-    that names an area is a new request (the hand-off reads it)."""
-    t = body or ""
-    if re.search(r"\b(?:in|near|around|en|cerca de)\s+[A-ZÁÉÍÓÚ]", t):
+_MEAL = re.compile(r"\b(dinner|lunch|breakfast|brunch|supper)\b", re.I)
+_NOT_A_KIND = re.compile(r"\b(food|cuisine|comida|cocina|spot|place|restaurants?|restaurante|sitio|so|actually|well|ok|okay|hmm|"
+                         r"please|por favor|my|wife|husband|partner|girlfriend|boyfriend|friend|we|i|she|he|they|likes?|loves?|"
+                         r"prefers?|would|like|want|wants|can|could|you|find|search|look|for|get|show|me|us|an?|the|some|"
+                         r"something|somewhere|instead|then|how|what|about|maybe|rather|really|y|o|qu[eé]|tal|mejor|algo|de|un|"
+                         r"una|and|e|is|it|that|this|one|more|other|another|different|do|have|any|nice|good|great|"
+                         r"no|nah|nope|yes|yeah|thanks|thank|gracias|vale|s[ií])\b", re.I)
+
+
+def refine(pend: dict, body: str, now) -> Optional[tuple]:
+    """(the new find, the draft) for a message said while the cards show — or None when it asks nothing new."""
+    f, draft = dict(pend["find"]), dict(pend.get("draft") or {})
+    said = HO.spoken(body or "")
+    new_q = HO.qualities(said)
+    whole = HO.find_request(said, now)                     # a new area (and maybe a new kind): take what it names
+    if whole:
+        f.update({k: v for k, v in whole.items() if k in ("where", "country", "near", "open_at")})
+    else:
+        am = re.search(r"\b(?:in|near|around|en|cerca de)\s+(?P<where>[A-ZÁÉÍÓÚ][^?.!,;]{1,60}?)\s*(?:[?.!,;]|$)", said)
+        if am:                                             # "how about Indian in Malasaña": the area moves, the rest stays
+            kp = HO.known_place(am["where"].strip())
+            f.update({"where": f"{kp[0]}, {kp[1]}" if kp and kp[1] else am["where"].strip()}, **({"country": kp[2]} if kp else {}))
+            said = said[:am.start()] + said[am.end():]
+        if HO.plain_open_at(said, now) and re.search(r"\d|\b(?:at|a las)\b", said):
+            f["open_at"] = HO.plain_open_at(said, now)
+    party = HO.plain_party(said)
+    if party:
+        draft["how_many"] = {"count": party, "unit": "people"}
+    rest = HO._QUALITY.sub(" ", said)
+    rest = _NOT_A_KIND.sub(" ", re.sub(r"[^\wáéíóúñü' -]", " ", rest))
+    kind = " ".join(dict.fromkeys(w for w in rest.split() if w.isalpha() and len(w) > 1))
+    if whole and whole.get("what"):
+        kind = _MEAL.sub("", re.sub(HO._QUALITY, "", whole["what"])).strip() or kind
+    if not (kind or new_q or whole or party or f.get("open_at") != pend["find"].get("open_at")):
         return None
-    what = None
-    for rx in (_REFINE, _FIND_ONLY, _LIKES):
-        for m in rx.finditer(t) if rx is not _REFINE else filter(None, [rx.match(t)]):
-            w = re.sub(r"\s+(?:spot|place)$", "", m["what"].strip(), flags=re.I)
-            if 1 <= len(w.split()) <= 5 and not re.search(r"\d", w) and not re.fullmatch(r"(?:one|that|it|this|something)", w, re.I):
-                what = w
-                break
-        if what:
-            break
-    if not what:
-        return None
-    quals = [q for q in dict.fromkeys(x.lower() for x in _QUALITY.findall(t)) if q not in what.lower()]
-    return " ".join(quals + [what])
+    old = f.get("what") or ""
+    old_q = HO.qualities(old)
+    meal = (_MEAL.search(old) or [None])[0]
+    base = f"{kind} {meal.lower() if meal else 'restaurant'}" if kind else HO._QUALITY.sub("", old).strip()
+    f["what"] = " ".join(list(dict.fromkeys(new_q + old_q)) + [re.sub(r"\s+", " ", base).strip()])
+    f.pop("priority", None)
+    return f, draft
 
 
 def _payload_ok(pend: dict, payload: str) -> bool:

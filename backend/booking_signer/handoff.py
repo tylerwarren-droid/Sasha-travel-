@@ -263,6 +263,16 @@ def known_place(where: str) -> Optional[tuple]:
     return (hit, *KNOWN_PLACES[hit]) if hit else None
 
 
+#: Sasha 104 · the qualities a guest asks for — kept in what is searched for, wherever in the request they were said
+_QUALITY = re.compile(r"\b(luxury|luxurious|upscale|fancy|fine[- ]dining|romantic|cheap|casual|quiet|cosy|cozy|vegetarian|vegan|"
+                      r"lujo|lujoso|rom[aá]ntico|rom[aá]ntica|barato|tranquilo)\b", re.I)
+LUXURY = ("luxury", "luxurious", "upscale", "fancy", "fine dining", "fine-dining", "lujo", "lujoso")
+
+
+def qualities(text: str) -> List[str]:
+    return list(dict.fromkeys(q.lower() for q in _QUALITY.findall(text or "")))
+
+
 def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]:
     """{what, where, country?, near?} when the message asks for a kind of place in a place — else None. Nothing guessed:
     a country is taken only when written as a two-letter code ("Nairobi, KE")."""
@@ -314,6 +324,10 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
         kp = known_place(where)
         if kp:   # "Chambhuri" → Chamberí, Madrid · ES (the search is then in the right country)
             where, country = (f"{kp[0]}, {kp[1]}" if kp[1] else kp[0]), kp[2]
+    # Sasha 104 · a quality said anywhere (a request joined from several lines kept only "Dinner") is kept
+    missing_q = [q for q in qualities(message) if q not in what.lower()]
+    if missing_q:
+        what = " ".join(missing_q + [what])
     at = plain_open_at(message, now)
     return {"what": what, "where": where, **({"country": country} if country else {}), **({"near": near} if near else {}),
             **({"open_at": at} if at else {}),

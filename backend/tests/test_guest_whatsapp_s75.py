@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
@@ -279,17 +280,59 @@ class Turns(Base):
         self.assertEqual((find["what"], find["where"], find["open_at"]), ("luxurious and romantic Dinner", "Chamberí, Madrid", "2026-10-03T21:00"))
         self.assertEqual(GW.SENDER.contents[-1][0], "Which one?")
 
-    def test_sasha104_a_change_of_mind_while_choosing_searches_again(self):
-        """2 Oct, live: "How about Indian food?" after the cards got "Which one?" again."""
-        self.say("dinner for 2 in Chamberí on Saturday at 21:00")
+    def seed_live_state(self):
+        """The founder's guest_wa_state as stored on sasha-prod at 11:37 UTC, 2 Oct (cards pending, find.what "Dinner")."""
+        run(GW.STORE.put_state(GW.wa_key(GUEST), {
+            "history": [{"role": "user", "content": "Dinner for 2 on Saturday at 2100 in Chamberi. Something luxurious and romantic"},
+                        {"role": "assistant", "content": GW.OUT_OF_SCOPE.format(web=GW.web_url())}],
+            "pending": {"kind": "cards", "at": NOW.isoformat(), "nonce": "a1b2c3",
+                        "find": {"what": "Dinner", "where": "Chamberí, Madrid", "country": "ES", "open_at": "2026-10-03T21:00"},
+                        "draft": {"when": {"mode": "at", "at": "2026-10-03T21:00"}, "how_many": {"count": 2, "unit": "people"}},
+                        "cards": [{"name": "DUM DUM | Chamberí", "country": "ES", "place_id": "ChIJUeGquRkpQg0R7oY8og3UkYE"},
+                                  {"name": "La Taberna de Paula", "country": "ES", "place_id": "ChIJi0x5BFwoQg0RLv9wFoCDvMo"},
+                                  {"name": "IN Ristolab Chamberí | Restaurante italiano y Carnes Madrid", "country": "ES",
+                                   "place_id": "ChIJX1WWcgApQg0R7rNhhOsakC8"}]},
+            "last_inbound_at": NOW, "link_tries": []}))
+
+    def finds(self):
+        return [c[3] for c in GW.api.calls if c[2] == "/api/booking/venues/find"]
+
+    def test_sasha104_the_founders_refinements_replayed_against_the_stored_state(self):
+        """2 Oct, live: "How about Indian food?" and "So, actually my wife likes Indian food…" both got "Which one?"."""
+        self.seed_live_state()
         self.say("How about Indian food?")
-        finds = [c[3] for c in GW.api.calls if c[2] == "/api/booking/venues/find"]
-        self.assertEqual(len(finds), 2)
-        self.assertEqual((finds[1]["what"], finds[1]["where"], finds[1]["open_at"]), ("Indian food", "Chamberí, Madrid", "2026-10-03T21:00"))
-        self.assertEqual([GW.refinement(x) for x in ("¿Y comida india?", "what about sushi", "2", "the second one",
-                                                     "So, actually my wife likes Indian food. Can you find me an Indian food spot? Luxury please",
-                                                     "how about Indian in Malasaña")],
-                         ["comida india", "sushi", None, None, "luxury Indian food", None])
+        self.say("So, actually my wife likes Indian food. Can you find me an Indian food spot? Luxury please")
+        self.say("Indian food, luxury please")
+        f = self.finds()
+        self.assertEqual([x["what"] for x in f], ["Indian dinner", "luxury Indian dinner", "luxury Indian dinner"])
+        for x in f:   # the area, the day and the time are kept
+            self.assertEqual((x["where"], x["country"], x["open_at"]), ("Chamberí, Madrid", "ES", "2026-10-03T21:00"))
+        st = run(GW.STORE.get_state(GW.wa_key(GUEST)))
+        self.assertEqual(st["pending"]["draft"]["how_many"], {"count": 2, "unit": "people"})   # the party too
+        self.assertEqual(st["pending"]["kind"], "cards")
+        self.assertNotIn("Which one? Tap a name", " ".join(self.bodies()))
+
+    def test_sasha104_luxury_puts_three_euro_signs_first(self):
+        self.seed_live_state()
+        priced = [{**c, "price_level": p} for c, p in zip(CANDS, (2, 1, 3, 4))]
+        with mock.patch.object(sys.modules[__name__], "CANDS", priced):
+            self.say("Indian food, luxury please")
+        medias = [s["body"] for s in GW.SENDER.sent if s["content"] is None][1:]
+        self.assertTrue(medias[0].startswith("Sasha's pick · Casa Lucio"), medias)   # €€€ (rated before €€€€ in the order)
+        self.assertTrue(medias[1].startswith("Fourth Place"), medias)
+        self.assertIn("€€€ and up first", self.bodies()[0])
+
+    def test_sasha104_a_plain_yes_while_choosing_asks_again(self):
+        self.seed_live_state()
+        self.say("ok thanks")
+        self.assertEqual(GW.api.calls, [])
+        self.assertTrue(self.bodies()[-1].startswith("Which one?"))
+
+    def test_sasha104_a_new_area_while_choosing_moves_the_search(self):
+        self.seed_live_state()
+        self.say("how about Indian in Malasaña")
+        f = self.finds()[0]
+        self.assertEqual((f["what"], f["where"], f["open_at"]), ("Indian dinner", "Malasaña, Madrid", "2026-10-03T21:00"))
 
     def test_sasha104_unsure_asks_one_question(self):
         self.say("can you sort out Saturday night for 2?")

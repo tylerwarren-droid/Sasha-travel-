@@ -125,6 +125,17 @@ class Connection(Base):
         r = TestClient(app).get("/google/callback?state=nope&code=x")
         self.assertEqual((r.status_code, r.json()["rule"]), (400, "state_invalid"))
 
+    def test_4c_a_failed_gmail_connect_is_the_gmail_blocks_word(self):
+        """2 Oct 2026: a failure on the Gmail sign-in arrived as ?google=failed, over a Calendar that was connected."""
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        app = FastAPI(); app.include_router(CS.router)
+        c = TestClient(app)
+        for product, want in (("gmail", "?gmail=failed#gmail"), ("calendar", "?google=failed#calendar")):
+            r = c.get(f"/google/callback?state={CS.make_state(ACCOUNT, 'v1', product=product)}&code=x", follow_redirects=False)
+            self.assertEqual(r.status_code, 303)
+            self.assertTrue(r.headers["location"].endswith(want), r.headers["location"])
+
 
 class Drain(Base):
     def item(self, status, tid="t-1"):

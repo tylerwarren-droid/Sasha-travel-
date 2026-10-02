@@ -42,6 +42,9 @@ CONSENT = {"v1": ("Sasha will look in your Gmail only for emails about bookings,
 CURRENT = "v1"
 PLATFORMS = ("thefork.com", "eltenedor.es", "thefork.es", "fresha.com", "covermanager.com", "zenchef.com", "opentable.com",
              "opentable.es", "booking.com", "resy.com", "sevenrooms.com", "quandoo.com", "restaurantes.com")
+PLATFORM_NAMES = {"thefork": "TheFork", "eltenedor": "ElTenedor", "opentable": "OpenTable", "covermanager": "CoverManager",
+                  "zenchef": "Zenchef", "resy": "Resy", "sevenrooms": "SevenRooms", "quandoo": "Quandoo", "fresha": "Fresha",
+                  "booking.com": "Booking.com", "restaurantes.com": "Restaurantes.com"}
 KEYWORDS = ("reserva", "booking", "reservation", "confirmación", "confirmation", "cancelación", "cancellation", "factura",
             "invoice", "receipt", "recibo")
 
@@ -67,15 +70,16 @@ _MONTHS = {"enero": 1, "january": 1, "janeiro": 1, "febrero": 2, "february": 2, 
            "abril": 4, "april": 4, "mayo": 5, "may": 5, "maio": 5, "junio": 6, "june": 6, "junho": 6, "julio": 7, "july": 7,
            "julho": 7, "agosto": 8, "august": 8, "septiembre": 9, "setiembre": 9, "september": 9, "setembro": 9, "octubre": 10,
            "october": 10, "outubro": 10, "noviembre": 11, "november": 11, "novembro": 11, "diciembre": 12, "december": 12,
-           "dezembro": 12}
+           "dezembro": 12, "jan": 1, "feb": 2, "apr": 4, "jun": 6, "jul": 7, "aug": 8, "sep": 9, "sept": 9, "oct": 10, "nov": 11,
+           "dec": 12, "ene": 1, "abr": 4, "ago": 8, "dic": 12}
 _MONTH_RX = "|".join(sorted(_MONTHS, key=len, reverse=True))
-_DATE_WORDS = re.compile(rf"\b(\d{{1,2}})\s*(?:de\s+)?({_MONTH_RX})(?:\s*(?:de\s+)?(\d{{4}}))?", re.I)
-_DATE_WORDS_EN = re.compile(rf"\b({_MONTH_RX})\s+(\d{{1,2}})(?:st|nd|rd|th)?(?:,?\s*(\d{{4}}))?", re.I)
+_DATE_WORDS = re.compile(rf"\b(\d{{1,2}})\s*(?:de\s+)?({_MONTH_RX})\b\.?(?:\s*(?:de\s+)?(\d{{4}}))?", re.I)
+_DATE_WORDS_EN = re.compile(rf"\b({_MONTH_RX})\b\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?(?:,?\s*(\d{{4}}))?", re.I)
 _DATE_NUM = re.compile(r"\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})\b")
-_TIME = re.compile(r"\b([01]?\d|2[0-3])[:.h]([0-5]\d)\b|\b(\d{1,2})\s*(am|pm)\b", re.I)
+_TIME = re.compile(r"\b([01]?\d|2[0-3])[:.h]([0-5]\d)(?:\s*([ap])\.?m\b\.?)?|\b(\d{1,2})\s*([ap])\.?m\b", re.I)
 _PARTY = re.compile(r"\b(\d{1,2})\s*(?:personas|comensales|people|guests|persons|pessoas|pax|adults?|adultos)\b", re.I)
 _AMOUNT = re.compile(r"(?:€|\bEUR)\s?(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s?(?:€|EUR\b)", re.I)
-_CONFIRM = re.compile(r"confirmad[ao]|reserva confirmada|est[aá] confirmada|booking (?:is )?confirmed|reservation (?:is )?confirmed|"
+_CONFIRM = re.compile(r"confirmad[ao]|reserva confirmada|est[aá] confirmada|booking (?:is )?confirmed|reservation (?:is )?confirmed|\bis confirmed\b|"
                       r"we look forward|te esperamos|os esperamos|le esperamos|confirmamos|your booking|tu reserva|su reserva (?:est[aá]|queda)", re.I)
 _CANCEL = re.compile(r"cancelad[ao]|anulad[ao]|cancellation confirmed|has been cancelled|has been canceled|reserva cancelada", re.I)
 _BILL = re.compile(r"\b(factura|invoice|receipt|recibo|ticket de compra)\b", re.I)
@@ -108,8 +112,10 @@ def _when(text: str, now: datetime, tz: str = "Europe/Madrid") -> Optional[str]:
     if tm:
         if tm[1]:
             hh, mi = int(tm[1]), int(tm[2])
+            if tm[3]:
+                hh = hh % 12 + (12 if tm[3].lower() == "p" else 0)
         else:
-            hh, mi = int(tm[3]) % 12 + (12 if tm[4].lower() == "pm" else 0), 0
+            hh, mi = int(tm[4]) % 12 + (12 if tm[5].lower() == "p" else 0), 0
     return f"{dd.isoformat()}T{hh:02d}:{mi:02d}" if hh is not None else dd.isoformat()
 
 
@@ -124,6 +130,36 @@ def _amount(text: str) -> Optional[int]:
         return None
 
 
+_NAME = r"([A-ZÁÉÍÓÚÑÜ0-9][^\n,.!?¡¿|:;()\[\]<>\"]{1,60}?)"
+_NAME_END = r"(?=\s+(?:est[aá]|is|has|ha|queda|para|for|el|la|on|a las|at \d|de \d|del \d)\b|\s*[-–—,.!?|:;(\n]|\s*$)"
+_VENUE_AT = re.compile(rf"\b(?:reserva|reservation|booking|mesa|table|cita|appointment)\s+(?:en|at|in|chez|with|con)\s+(?:el\s+|la\s+|the\s+)?{_NAME}{_NAME_END}", re.I)
+_VENUE_DASH = re.compile(rf"(?:confirmad[ao]|confirmed|confirmación de (?:tu |su )?reserva|cancelad[ao]|cancell?ed)\s*[-–—:|]\s*{_NAME}{_NAME_END}", re.I)
+
+
+def platform_of(sender: str) -> Optional[str]:
+    """TheFork, OpenTable, CoverManager … when the email was sent by a booking platform rather than by the venue."""
+    s = _fold(sender or "")
+    addr = (re.search(r"<([^>]+)>", s) or [None, s])[1]
+    dom = addr.rsplit("@", 1)[-1].strip()
+    if any(dom == p or dom.endswith("." + p) for p in PLATFORMS):
+        key = next((k for k in PLATFORM_NAMES if k in dom), None)
+        return PLATFORM_NAMES.get(key) if key else dom
+    name = re.sub(r"\s*<.*?>\s*$", "", s).strip().strip('"')
+    return next((v for k, v in PLATFORM_NAMES.items() if k in name.replace(" ", "")), None)
+
+
+def venue_in(subject: str, body: str) -> Optional[str]:
+    """The venue's own name, from a platform's email: "Tu reserva en Casa Lucio está confirmada", "Your booking at X …",
+    "Reserva confirmada - X". Subject first. None rather than a guess — never the platform's name."""
+    for text in (subject or "", (body or "")[:3000]):
+        for rx in (_VENUE_AT, _VENUE_DASH):
+            for m in rx.finditer(text):
+                v = m[1].strip(" -–—'\"")
+                if v and platform_of(v) is None and not re.fullmatch(r"\d+|(?:tu|su|your|our)\b.*", v, re.I):
+                    return v
+    return None
+
+
 def read(subject: str, sender: str, body: str, now: datetime) -> Tuple[str, dict, str]:
     """(kind, facts, parsed_by) — by rules. Facts never include a card number, and never the body."""
     from .form_rung import _REF
@@ -131,13 +167,14 @@ def read(subject: str, sender: str, body: str, now: datetime) -> Tuple[str, dict
     text = f"{subject}\n{body}"
     kind = ("cancellation" if _CANCEL.search(text) else "change" if _CHANGE.search(text) else
             "bill" if _BILL.search(subject or "") and _AMOUNT.search(text) else "confirmation" if _CONFIRM.search(text) else "other")
-    name = re.sub(r"\s*<.*?>\s*$", "", sender or "").strip().strip('"') or None
+    via = platform_of(sender)
+    name = venue_in(subject, body) if via else (re.sub(r"\s*<.*?>\s*$", "", sender or "").strip().strip('"') or None)
     ref = _REF.search(text)
     party = _PARTY.search(text)
     facts = {"venue": name, "at": _when(text, now), "party": int(party[1]) if party else None,
              "reference": ref[1] if ref else None, "amount_minor": _amount(text) if kind in ("bill", "receipt") or "señal" in text.lower() or "deposit" in text.lower() else None,
              "currency": "EUR" if _AMOUNT.search(text) else None,
-             "sasha_ref": (re.search(r"\bK-[A-Z0-9]{4}\b", text) or [None])[0]}
+             "sasha_ref": (re.search(r"\bK-[A-Z0-9]{4}\b", text) or [None])[0], "via": via}
     for k, v in list(facts.items()):
         if isinstance(v, str) and has_card_number(v):   # the vault guard on what is extracted
             facts[k] = None
@@ -173,8 +210,20 @@ def match(facts: dict, rows: List[dict]) -> Tuple[Optional[dict], Optional[str]]
     return None, None
 
 
-def offer(kind: str, facts: dict, row: Optional[dict]) -> Optional[Tuple[str, str]]:
-    """(action, the ONE sentence) — or None when there is nothing to offer."""
+def upcoming(at: Optional[str], now: datetime, tz: str = "Europe/Madrid") -> bool:
+    """A found booking still ahead of the guest (a date alone counts until the day is over). Local time, as _when writes it."""
+    if not at:
+        return False
+    local = now.astimezone(ZoneInfo(tz)).replace(tzinfo=None)
+    try:
+        return datetime.fromisoformat(at) > local if "T" in at else date.fromisoformat(at[:10]) >= local.date()
+    except ValueError:
+        return False
+
+
+def offer(kind: str, facts: dict, row: Optional[dict], now: Optional[datetime] = None) -> Optional[Tuple[str, str]]:
+    """(action, the ONE sentence) — or None when there is nothing to offer. A booking already in the past is never offered:
+    it stays as a find, quietly, as history."""
     from . import sentences as SN
     venue = (row or {}).get("venue") or facts.get("venue") or "A venue"
     at = facts.get("at") or ""
@@ -185,8 +234,9 @@ def offer(kind: str, facts: dict, row: Optional[dict]) -> Optional[Tuple[str, st
         return "confirm", f"{venue}'s email confirms {when}{party}{ref}. Mark it confirmed?"
     if row and kind == "cancellation" and row.get("status") not in ("cancelled",):
         return "cancel", f"{venue}'s email says your {when} booking is cancelled. Update it?"
-    if row is None and kind == "confirmation" and facts.get("venue") and at:
-        return "add", f"Your inbox has a booking at {venue}, {when}{party}. Add it to your itinerary?"
+    if row is None and kind == "confirmation" and facts.get("venue") and upcoming(at, now or NOW()):
+        via = f" (via {facts['via']})" if facts.get("via") else ""
+        return "add", f"Your inbox has a booking at {venue}{via}, {when}{party}. Add it to your itinerary?"
     return None
 
 
@@ -304,9 +354,9 @@ class PostgresMailboxStore:
         return [self._f(r) for r in rows]
 
     async def set_find(self, fid, **kw):
-        cols = [k for k in kw if k in ("action_status", "trip_item_id")]
+        cols = [k for k in kw if k in ("action_status", "trip_item_id", "facts")]
         vals = [uuid.UUID(kw[k]) if k == "trip_item_id" and kw[k] else kw[k] for k in cols]
-        sets = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(cols))
+        sets = ", ".join(f"{k} = ${i + 2}" + ("::jsonb" if k == "facts" else "") for i, k in enumerate(cols))
         await self._run(lambda c: c.execute(f"update mailbox_finds set {sets} where id = $1", uuid.UUID(fid), *vals))
 
     async def all_links(self):
@@ -407,7 +457,7 @@ async def sync(account: str) -> List[dict]:
         row, basis = match(facts, rows)
         if kind == "other" and row and MODEL_READER and os.getenv("SASHA_MAILBOX_MODEL", "") == "1":
             kind, facts, parsed_by = await MODEL_READER(body, row), facts, "model"   # M-3 · matched and unread by rules only
-        off = offer(kind, facts, row)
+        off = offer(kind, facts, row, now)
         find = {"id": str(uuid.uuid4()), "account_id": account, "gmail_message_id": m["id"],
                 "body_sha256": hashlib.sha256(body.encode()).hexdigest(), "kind": kind, "facts": facts, "parsed_by": parsed_by,
                 "trip_item_id": (row or {}).get("id"), "match_basis": basis, "offered_action": off[0] if off else None,
@@ -415,6 +465,9 @@ async def sync(account: str) -> List[dict]:
                 "action_status": "offered" if off else "none"}
         await STORE.put_find(find)
         found.append(find)
+    for f in await STORE.list_finds(account):          # an "add" not answered before its day: withdrawn, kept as history
+        if f["action_status"] == "offered" and f.get("offered_action") == "add" and not upcoming((f.get("facts") or {}).get("at"), now):
+            await STORE.set_find(f["id"], action_status="none")
     await STORE.set_link(account, last_sync_at=now)
     await _offer_on_whatsapp(account, [f for f in found if f["offered_action"]])
     return found

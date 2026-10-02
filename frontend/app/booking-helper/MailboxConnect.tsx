@@ -27,12 +27,19 @@ export function MailboxConnect() {
   }
   useEffect(() => {
     let off = false
-    const q = new URLSearchParams(window.location.search).get('gmail')
+    const params = new URLSearchParams(window.location.search)
+    const q = params.get('gmail')
+    if (q) {                                     // read once, then gone: a reload or a later connect never shows a stale word
+      params.delete('gmail')
+      const rest = params.toString()
+      window.history.replaceState(null, '', window.location.pathname + (rest ? `?${rest}` : '') + window.location.hash)
+    }
     bookingReq('/api/booking/mailbox').then((r) => {
       if (off) return
       if (r.ok) setView(r.json as unknown as View)
       else setWords(refusal(r.json, r.status))
-      if (q) setWords({ connected: 'Connected — Sasha looked for booking emails.', scopes_missing: 'Not connected — the read-only permission is needed.',
+      const connected = r.ok && (r.json as unknown as View).connected
+      if (q && !(connected && q !== 'connected')) setWords({ connected: 'Connected — Sasha looked for booking emails.', failed: 'Not connected — Google’s answer could not be used. Try again.', scopes_missing: 'Not connected — the read-only permission is needed.',
         vault_closed: 'Not connected — the vault that keeps the access is not open on this server yet.' }[q] ?? null)
     }).catch((e) => { if (!off) setWords((e as Error).message) })
     return () => { off = true }

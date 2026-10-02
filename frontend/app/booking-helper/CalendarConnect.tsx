@@ -24,12 +24,19 @@ export function CalendarConnect() {
 
   useEffect(() => {
     let off = false
-    const q = new URLSearchParams(window.location.search).get('google')
+    const params = new URLSearchParams(window.location.search)
+    const q = params.get('google')
+    if (q) {                                     // read once, then gone: a reload or a later connect never shows a stale word
+      params.delete('google')
+      const rest = params.toString()
+      window.history.replaceState(null, '', window.location.pathname + (rest ? `?${rest}` : '') + window.location.hash)
+    }
     bookingReq('/api/booking/google').then((r) => {
       if (off) return
       if (r.ok) setView(r.json as unknown as View)
       else setWords(refusal(r.json, r.status))
-      if (q) setWords({ connected: 'Connected.', declined: 'Not connected — you declined on Google’s page.',
+      const connected = r.ok && (r.json as unknown as View).connected
+      if (q && !(connected && q !== 'connected')) setWords({ connected: 'Connected.', declined: 'Not connected — you declined on Google’s page.',
         failed: 'Not connected — Google’s answer could not be used. Try again.', scopes_missing: 'Not connected — both permissions are needed.',
         vault_closed: 'Not connected — the vault that keeps the access is not open on this server yet.' }[q] ?? null)
     }).catch((e) => { if (!off) setWords((e as Error).message) })

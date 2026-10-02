@@ -487,6 +487,8 @@ async def calendar_callback(request: Request):
         "redirect_uri": os.getenv("SASHA_GOOGLE_OAUTH_REDIRECT", "").strip(), "grant_type": "authorization_code"})
     if s != 200 or not tok.get("refresh_token") or not tok.get("access_token"):
         log.error("[calendar] the code exchange failed: HTTP %s %s", s, tok.get("error"))
+        if st.get("p") == "gmail":   # the Gmail block's failure, not the calendar's
+            return RedirectResponse(web_url("gmail=failed").replace("#calendar", "#gmail"), status_code=303)
         return RedirectResponse(web_url("google=failed"), status_code=303)
     account, now = st["a"], NOW()
     granted = (tok.get("scope") or "").split()

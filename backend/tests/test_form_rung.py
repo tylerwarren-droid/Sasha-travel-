@@ -225,3 +225,70 @@ class OnPostgres(unittest.TestCase):
         self.assertEqual((item["status"], item["booking_reference"]), ("confirmed", sent.json()["booking_reference"]))
         att = self._q("select method, status from booking_attempts where trip_item_id = $1::uuid", prep["trip_item_id"])
         self.assertEqual([(a["method"], a["status"]) for a in att], [("web_form", "confirmed")])
+
+
+HANAKURA_PAGE = """<html><head><title>Hanakura</title></head><body><form method="post" enctype="multipart/form-data" > <fieldset>
+<input type="text" name="nombre" id="nombre" value="" placeholder="Nombre y apellidos" />
+<input type="text" name="telefono" id="telefono" value="" placeholder="Teléfono" />
+<input type="text" name="email" id="email" value="" placeholder="Email" />
+<label>Comensales</label> <select id="comensales" name="comensales"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+<label>Fecha</label> <input type="text" name="fecha" id="fecha" placeholder="Elige fecha">
+<label>Hora</label> <select id="hora" name="hora"><option value="20:30">20:30</option><option value="21:00">21:00</option><option value="21:30">21:30</option></select>
+<select id="menu" name="menu"><option value="degustacion" selected>No deseo menú degustación</option><option value="hanakura">Menú degustación Hanakura</option></select>
+<input type="submit" value="Enviar mensaje" name="submit" id="submitButton" /></fieldset></form></body></html>"""
+
+
+class Hanakura(unittest.TestCase):
+    """Sasha 96 · the founder's one approved real form: its own markup (read live 2 Oct 2026), replayed offline."""
+    make_stores = FormRung.make_stores
+
+    def setUp(self):
+        FormRung.setUp(self)
+        self.web.pages["http://www.hanakura.es/solicitar-reserva.html"] = R(200, text=HANAKURA_PAGE)
+
+        async def post(url, data, headers):
+            self.posts.append((url, dict(data)))
+            return R(200, text="<p>Su petición de reserva se ha enviado correctamente. Le confirmaremos la reserva por email.</p>")
+        FR.FORM_POST = post
+
+    tearDown = FormRung.tearDown
+
+    def prep(self):
+        with mock.patch.dict(os.environ, {"SASHA_FORM_HOSTS": "www.hanakura.es", "SASHA_FORMS_ENABLED": "1"}):
+            r = self.c.post("/api/booking/venues/read", json={"name": "Hanakura", "city": "Madrid", "country": "ES",
+                                                              "website": "http://www.hanakura.es/solicitar-reserva.html"})
+            self.assertTrue(next(x for x in r.json()["rungs"] if x["rung"] == "form")["available"])
+            obj = reservation(when={"mode": "at", "at": "2026-10-03T21:00"})
+            return self.c.post("/api/booking/forms", json={"read_id": r.json()["read_id"], "reservation": obj})
+
+    def test_the_read_back_shows_hanakuras_own_formats_and_the_real_endpoint(self):
+        prep = self.prep()
+        self.assertEqual(prep.status_code, 200, prep.text)
+        text = "\n".join(prep.json()["read_back"]["lines"])
+        for must in ("to https://www.hanakura.es/formularios/reservar.php", "· Fecha: 03/10/2026", "· Hora: 21:00", "· Comensales: 2",
+                     "· Nombre y apellidos: Tyler Warren", "· Email: tyler@kanoe.test", "· Teléfono: 608445715",
+                     "· Menús degustación (their default, \"No deseo menú degustación\"): degustacion"):
+            self.assertIn(must, text)
+
+    def test_it_is_sent_once_over_https_to_their_endpoint_and_not_without_approval(self):
+        prep = self.prep().json()
+        with mock.patch.dict(os.environ, {"SASHA_FORM_HOSTS": "www.hanakura.es", "SASHA_FORMS_ENABLED": "1"}):
+            sent = self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"],
+                                                                                   "approval": {"how": "button"}}).json()
+        self.assertEqual(sent["status"], "sent", sent)
+        url, data = self.posts[0]
+        self.assertEqual(url, "https://www.hanakura.es/formularios/reservar.php")
+        self.assertEqual(data, {"nombre": "Tyler Warren", "telefono": "608445715", "email": "tyler@kanoe.test", "comensales": "2",
+                                "fecha": "03/10/2026", "hora": "21:00", "menu": "degustacion"})
+        self.assertEqual(sent["reading"]["result"] in ("none", "confirmed", "proposed", "declined"), True)
+        self.assertIn("Su petición de reserva se ha enviado correctamente", sent["their_page"])
+        self.assertIsNone(FR.form_map("http://www.hanakura.es/solicitar-reserva.html"))   # outside the approval: not sendable
+
+    def test_a_time_their_form_does_not_offer_stops_before_anything_is_sent(self):
+        with mock.patch.dict(os.environ, {"SASHA_FORM_HOSTS": "www.hanakura.es", "SASHA_FORMS_ENABLED": "1"}):
+            r = self.c.post("/api/booking/venues/read", json={"name": "Hanakura", "city": "Madrid", "country": "ES",
+                                                              "website": "http://www.hanakura.es/solicitar-reserva.html"})
+            bad = self.c.post("/api/booking/forms", json={"read_id": r.json()["read_id"],
+                                                          "reservation": reservation(when={"mode": "at", "at": "2026-10-03T19:00"})})
+        self.assertEqual((bad.status_code, bad.json()["rule"]), (422, "form_option_unavailable"))
+        self.assertEqual(self.posts, [])

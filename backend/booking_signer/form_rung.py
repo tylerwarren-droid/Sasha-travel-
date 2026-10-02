@@ -62,8 +62,34 @@ def test_venue_url(variant: str = "plain") -> str:
 TEST_FIELDS = {"fecha": ("date", "Día"), "hora": ("time", "Hora"), "personas": ("party_size", "Personas"),
                "nombre": ("person_name", "Nombre"), "email": ("email", "Email"), "telefono": ("phone", "Teléfono"),
                "comentarios": ("free_text", "Comentarios")}
-#: a real venue's form, once the founder approves it: host → {page path prefix, fields, date/time formats}. None yet.
-FORM_MAPS: Dict[str, Dict[str, Any]] = {}
+def _es_national(e164: str) -> str:
+    """+34608445715 → 608445715: a Spanish form that takes exactly 9 digits (its own validation says so)."""
+    d = re.sub(r"\D", "", e164 or "")
+    if d.startswith("34") and len(d) == 11:
+        d = d[2:]
+    if len(d) != 9:
+        raise FF.Stop("phone_format", "their form takes a 9-digit Spanish phone number; yours isn't one — which number should they have?")
+    return d
+
+
+#: A real venue's form, once the founder APPROVES it (its host also in SASHA_FORM_HOSTS). Every entry says where each
+#: fact came from. Keys: fields (name → role, label), action (the real endpoint, https, same site), fixed (name → value,
+#: label: sent as the venue's own default), date_fmt, time_fmt, phone_fmt, provenance.
+_HANAKURA = {
+    "fields": {"nombre": ("person_name", "Nombre y apellidos"), "telefono": ("phone", "Teléfono"), "email": ("email", "Email"),
+               "comensales": ("party_size", "Comensales"), "fecha": ("date", "Fecha"), "hora": ("time", "Hora")},
+    "fixed": {"menu": ("degustacion", "Menús degustación (their default, \"No deseo menú degustación\")")},
+    "action": "https://www.hanakura.es/formularios/reservar.php",
+    "date_fmt": lambda d: d.strftime("%d/%m/%Y"),
+    "time_fmt": lambda t: t.strftime("%H:%M"),
+    "phone_fmt": _es_national,
+    "provenance": ("Sasha 96, 2 Oct 2026, read live from hanakura.es: the form on /solicitar-reserva.html (no action; "
+                   "fields nombre, telefono, email, comensales 1–10, fecha, hora 13:30–23:00, menu default 'degustacion'); "
+                   "/formularios/validation_reservas.js posts $('form').serialize() to formularios/reservar.php, requires "
+                   "telefono of exactly 9 digits, and dates by jQuery UI's Spanish datepicker (dd/mm/yyyy), closed Mondays. "
+                   "No robots.txt; aviso-legal says nothing on automated use. Approved by the founder, 2 Oct 2026."),
+}
+FORM_MAPS: Dict[str, Dict[str, Any]] = {"www.hanakura.es": _HANAKURA, "hanakura.es": _HANAKURA}
 
 
 def _test_host() -> str:
@@ -120,6 +146,8 @@ class _LiveForm(HTMLParser):
             self.forms.append({"action": a.get("action", ""), "method": (a.get("method") or "get").lower(), "fields": []})
         if tag == "label":
             self._label_for, self._label = a.get("for"), []
+        if tag == "option" and self.forms and self.forms[-1]["fields"] and self.forms[-1]["fields"][-1]["type"] == "select":
+            self.forms[-1]["fields"][-1].setdefault("options", []).append(a.get("value", ""))
         if tag in ("input", "select", "textarea") and self.forms:
             typ = (a.get("type") or ("select" if tag == "select" else "textarea" if tag == "textarea" else "text")).lower()
             style = (a.get("style") or "").replace(" ", "").lower()
@@ -177,6 +205,8 @@ def roles_for(live: Dict[str, Any], m: Dict[str, Any]) -> List[Dict[str, Any]]:
         elif x["name"] in m["fields"]:
             role, label = m["fields"][x["name"]]
             out.append({**x, "role": role, "label": label})
+        elif x["name"] in (m.get("fixed") or {}):
+            out.append({**x, "role": "fixed", "label": m["fixed"][x["name"]][1]})
         elif x["type"] in ("checkbox", "radio"):
             out.append({**x, "role": "consent"})          # a box to tick is the guest's, never Sasha's
         else:
@@ -206,9 +236,35 @@ _STEP_ONE = {"date", "time", "date_time", "party_size", "service"}
 _STEP_TWO = ("person_name", "given_name", "family_name", "email", "phone", "free_text")
 
 
+def venue_formats(filled: List[Dict[str, str]], fields: List[Dict[str, Any]], m: Dict[str, Any]) -> List[Dict[str, str]]:
+    """The venue's own formats (a phone as its validation demands) and, for a list, only a value it actually offers."""
+    by = {f["name"]: f for f in fields}
+    out = []
+    for f in filled:
+        v, live = f["value"], by.get(f["name"]) or {}
+        if live.get("role") == "phone" and m.get("phone_fmt"):
+            v = m["phone_fmt"](v)
+        opts = live.get("options")
+        if opts and v not in opts:
+            raise FF.Stop("option_unavailable", f"their form's '{live.get('label') or f['name']}' doesn't offer {v} "
+                                                f"(it offers {', '.join(opts)}) — which should it be?")
+        out.append({**f, "value": v})
+    return out
+
+
+def effective_action(live: Dict[str, Any], m: Dict[str, Any]) -> Optional[str]:
+    """Where the form really goes: the approved map's endpoint (https, on the venue's own site) or the form's action."""
+    a = m.get("action")
+    if not a:
+        return live["action"]
+    if urlsplit(a).scheme != "https" or reg_host(a) != reg_host(live.get("page_url") or live["action"]):
+        return None
+    return a
+
+
 def is_wizard(fields: List[Dict[str, Any]], m: Dict[str, Any]) -> bool:
     """A first page that asks only WHEN (and how many), on a form whose map also holds the guest's details."""
-    asked = {f["role"] for f in fields if f["role"] not in ("hidden", "trap")}
+    asked = {f["role"] for f in fields if f["role"] not in ("hidden", "trap", "fixed")}
     return bool(asked) and asked <= _STEP_ONE and any(r in _STEP_TWO for r, _ in m["fields"].values())
 
 
@@ -431,10 +487,16 @@ async def prepare(request: Request):
     wizard = is_wizard(fields, m)
     step2 = step_two_fields(m) if wizard else []
     try:
-        filled = FF.fill(o, [f for f in fields if f["role"] != "hidden"], date_fmt=m["date_fmt"], time_fmt=m["time_fmt"])
+        filled = FF.fill(o, [f for f in fields if f["role"] not in ("hidden", "fixed")], date_fmt=m["date_fmt"], time_fmt=m["time_fmt"])
         filled2 = FF.fill(o, step2, date_fmt=m["date_fmt"], time_fmt=m["time_fmt"]) if wizard else []
+        filled, filled2 = venue_formats(filled, fields, m), venue_formats(filled2, step2, m)
     except FF.Stop as e:
         return _refuse(422, f"form_{e.rule}", e.ask)
+    filled += [{"name": f["name"], "value": m["fixed"][f["name"]][0]} for f in fields if f["role"] == "fixed"]
+    action = effective_action(live, m)
+    if action is None:
+        return _refuse(422, "form_endpoint", "their form's real address isn't on their own site over https; Sasha won't send it")
+    live = {**live, "action": action}
     labels = {f["name"]: f.get("label") or f["name"] for f in fields + step2}
     roles = {f["name"]: f["role"] for f in fields + step2}
     shown = [{"name": f["name"], "label": labels.get(f["name"], f["name"]), "role": roles.get(f["name"]), "value": f["value"],
@@ -511,6 +573,7 @@ async def send(form_id: str, request: Request):
         return await not_sent("their form now asks you to accept its terms — that box is yours, not Sasha's")
     missing = [x["name"] for x in f["fields"] if x.get("step", 1) == 1 and x["name"] not in names]   # step 2 is checked after step 1
     unmapped = [x["name"] for x in fields if x["role"] == "other" and x["required"]]
+    live = {**live, "action": effective_action(live, m) or "(no approved endpoint)"}
     if missing or unmapped or live["action"] != f["action_url"]:
         return await not_sent("their form changed since you approved it" + (f" (gone: {', '.join(missing)})" if missing else "")
                               + (f" (new required: {', '.join(unmapped)})" if unmapped else ""))

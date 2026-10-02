@@ -223,6 +223,38 @@ class Turns(Base):
             self.say("dinner for 2 in Chamberí on Saturday at 9")
         self.assertNotIn("Sasha Test Venue", [t for t, _ in GW.SENDER.contents[-1][1]])   # off unless asked for
 
+    def test_sasha117_a_form_gets_the_accounts_own_email_and_a_refusal_says_why(self):
+        """Live, 2 Oct: the test venue's form needs an email; WhatsApp sent only the mobile → "I can't book … right now"."""
+        from booking_signer import ladder_routes as LR, ladder_store as LS
+        saved = LR.LADDER_STORE
+        LR.LADDER_STORE = LS.MemoryLadderStore()
+        LR.LADDER_STORE.account_emails = {ACCOUNT: "guest@example.com"}
+        api = GW.api
+
+        async def fake(account, method, path, body=None, timeout=90.0):
+            if path == "/api/booking/venues/read":
+                return 200, {"read_id": "r-1", "venue": "Sasha Test Venue", "country": "ES", "listing": None, "say": "x",
+                             "rungs": [{"rung": "form", "available": True, "fact_index": 1, "value": "https://x/form"}]}
+            if path == "/api/booking/forms":
+                fake.forms.append(body)
+                if not body["reservation"]["who"]["contact"].get("email"):
+                    return 422, {"rule": "form_email_missing", "message": "the form needs your email address — which one should they have?"}
+                return 200, {"form_id": "form-1234", "read_back": {"lines": ["Email: guest@example.com"], "sha256": "f" * 64}}
+            return await api(account, method, path, body, timeout)
+        fake.forms = []
+        GW.api = fake
+        try:
+            self.pick_first()
+            self.assertEqual(fake.forms[-1]["reservation"]["who"]["contact"], {"mobile_e164": GUEST, "email": "guest@example.com"})
+            self.assertEqual(GW.SENDER.contents[-1][1][0][0], "Yes, book it")
+            LR.LADDER_STORE.account_emails = {}
+            with mock.patch.dict(os.environ, {"SASHA_FOUNDER_EMAIL": ""}):
+                self.pick_first()
+            self.assertEqual(self.bodies()[-1], "I can't book A Very Long Restaurant Name In Madrid from here right now — the form needs your email address — "
+                                                "which one should they have? Nothing was sent.")
+        finally:
+            GW.api, LR.LADDER_STORE = api, saved
+
     def pick_first(self):
         self.say("dinner for 2 in Chamberí on Saturday at 9")
         _, buttons = GW.SENDER.contents[-1]

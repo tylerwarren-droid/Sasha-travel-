@@ -1091,13 +1091,19 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
     if reservation["flow"] == "quote_first":
         reservation["flow"] = "book"
     rungs = rd["rungs"]
+    why = None
     if "form" in rungs:
-        status, j = await api(ctx["account"], "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": reservation})
+        # Sasha 117 · a form wants an email: the account's own (the one receipts go to), shown in the read-back the yes approves
+        from . import guest_receipt as GR, ladder_routes as LR
+        email = await GR.address_of(ctx["account"]) if LR.LADDER_STORE is not None else None
+        res_form = {**reservation, "who": {**reservation["who"], "contact": {**reservation["who"]["contact"], **({"email": email} if email else {})}}}
+        status, j = await api(ctx["account"], "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": res_form})
         if status == 200:
             await _ask_yes(ctx, "form", j["form_id"], j["read_back"], SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
                            extra={"summary": summary(reservation)})
             return
-        log.info("[guest_whatsapp] form rung refused (%s); trying the next rung", status)
+        why = refusal_words(j, status)
+        log.warning("[guest_whatsapp] form rung refused (%s: %s); trying the next rung", status, j.get("rule"))
     if "link" in rungs and reservation["when"]["mode"] == "at":
         at = reservation["when"]["at"]
         status, j = await api(ctx["account"], "POST", "/api/booking/links", {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16],
@@ -1121,7 +1127,8 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
         out.text(f"Not prepared — {refusal_words(j, status)}. Nothing was dialled.")
         return
     st["pending"] = None
-    out.text(f"I can't book {rd['venue']} from here right now. Nothing was sent.")
+    said = f"I can't book {rd['venue']} from here right now" + (f" — {why}" if why else "")
+    out.text(said + ("" if said.endswith(("?", ".")) else ".") + " Nothing was sent.")
 
 
 async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: str, venue: str, kind: str = "confirm",

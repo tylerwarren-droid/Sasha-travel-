@@ -493,6 +493,13 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
         await STORE.put_state(key, {"history": [], "pending": None, "last_inbound_at": now, "link_tries": []})
         log.info("[guest_whatsapp] a WhatsApp number was linked to an account")
         return _twiml_message(LINKED)
+    from . import invitations as IV   # S-80 · Jon opting in to ONE invitation, or stopping it
+    joined = await IV.on_invite_message(sender, p.get("Body") or "")
+    if joined:
+        return _twiml_message(joined)
+    stopped = await IV.on_invitee_stop(sender, p.get("Body") or "")
+    if stopped:
+        return _twiml_message(stopped)
     # an unknown sender: one fixed sentence, at most every ten minutes; only the hash and the time are kept
     tries = [t for t in st.get("link_tries") or [] if _dt(t) > now - timedelta(hours=1)]
     onboarded = [t for t in tries if t.startswith("onboard:")]
@@ -648,6 +655,11 @@ async def _new_request(ctx: dict, body: str) -> None:
     if _RECEIPTS.search(body):
         await _receipts(ctx)
         return
+    from . import invitations as IV   # S-80 · "book dinner with Jon this week"
+    inv_req = IV.invite_request(body, ctx["now"])
+    if inv_req is not None and IV.STORE is not None:
+        await _invite(ctx, inv_req)
+        return
     h = HO.booking_handoff(body, history)
     if h is not None:
         if h.get("booking_cancel"):
@@ -681,6 +693,31 @@ _HINT = re.compile(r"\b(book|booking|reserv\w*|res[eé]rv\w*|cancel\w*|anul\w*|c
 def maybe_booking(body: str) -> bool:
     """Anything that MIGHT be a booking, a change or a cancellation — a place to book, a day, a time, a party."""
     return bool(_HINT.search(body or ""))
+
+
+async def _invite(ctx: dict, req: dict) -> None:
+    """S-80 path I · the invitation, sent by the INVITER from their own WhatsApp (Sasha writes to no one new)."""
+    from . import invitations as IV
+    out = ctx["out"]
+    if req["window"] is None:
+        out.text(f"Which days for {req['activity']} with {req['invitee']} — this week, next week, or a day?")
+        ctx["st"]["pending"] = {"kind": "invite_window", "at": ctx["now"].isoformat(), "req": {**req, "window": None}}
+        return
+    s, cj = await api(ctx["account"], "GET", "/api/booking/contact")
+    first = (((cj.get("contact") or {}).get("name") or "").split() or [""])[0] if s == 200 else ""
+    if not first:
+        out.text(NO_CONTACT.format(web=web_url()))
+        return
+    inv = await IV.create(ctx["account"], first.title(), req, ctx["now"])
+    if not inv["slots"]:
+        out.text(f"I couldn't find a time you're free for {req['activity']} then. Tell me other days.")
+        return
+    lines = "\n".join(f"• {IV.slot_words(x)}" for x in inv["slots"])
+    seen = "I can't see your calendar, so these are suggestions:" if inv["unseen"] else "Times you're free:"
+    out.text(f"{seen}\n{lines}")
+    out.text(f"Send {req['invitee']} this invitation from your own WhatsApp — it opens a page where they pick a time; I don't "
+             f"message them unless they ask me to:\n{IV.share_link(first.title(), req['activity'], inv['code'])}")
+    out.text("When they pick, I'll tell you here — and the booking stays yours: nothing is booked until your yes.")
 
 
 # ── find → cards ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -768,6 +805,25 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         return True
     if kind == "need":
         return await _answer_need(ctx, pend, body)
+    if kind == "invite_window":   # S-80 · the days, asked once
+        from . import invitations as IV
+        w = IV.window(body, now)
+        st["pending"] = None
+        if w is None:
+            return False
+        await _invite(ctx, {**pend["req"], "window": w})
+        return True
+    if kind == "invite_where":   # S-80 · the inviter names the area for the slot their guest picked
+        from . import invitations as IV
+        area = re.sub(r"^\s*(?:in|en|near|around)\s+", "", body or "", flags=re.I).strip(" .!?")
+        if not area or cancel_intent(body) is not None:
+            st["pending"] = None
+            return False
+        st["pending"] = None
+        await _find(ctx, IV.HO_find(pend["activity"], area, pend["open_at"]), {"parts": pend["draft"]})
+        if st.get("pending"):
+            st["pending"]["invite_code"] = pend["invite_code"]
+        return True
     if kind == "cancel_pick":
         m = re.fullmatch(r"\s*(\d)\s*[.)]?\s*", body or "")
         i = int(m[1]) - 1 if m else next((k for k, r in enumerate(pend["rows"]) if body and _fold(body).strip() in _fold(r["venue"])), None)
@@ -916,7 +972,8 @@ async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
             draft["what"] = d["parts"]["what"]
     if f.get("open_at") and (draft.get("when") or {}).get("mode") != "at":
         draft["when"] = {"mode": "at", "at": f["open_at"]}
-    nxt = {"kind": "need", "at": ctx["now"].isoformat(), "read": {"read_id": read["read_id"], "country": read.get("country"),
+    nxt = {"kind": "need", "at": ctx["now"].isoformat(), "invite_code": pend.get("invite_code"),
+           "read": {"read_id": read["read_id"], "country": read.get("country"),
            "venue": venue, "rungs": {k: {"fact_index": r.get("fact_index"), "value": r.get("value")} for k, r in rungs.items()}},
            "draft": draft}
     await _prepare_or_ask(ctx, nxt)
@@ -1011,7 +1068,7 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
                               {"reservation": reservation, "read_id": rd["read_id"], **({"fact_index": fi} if fi is not None else {})})
         if status == 200:
             await _ask_yes(ctx, "call", j["call_id"], j["read_back"], j.get("sentence") or SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
-                           extra={"summary": summary(reservation)})
+                           extra={"summary": summary(reservation), "invite_code": pend.get("invite_code"), "trip_item_id": j.get("trip_item_id")})
             return
         st["pending"] = None
         out.text(f"Not prepared — {refusal_words(j, status)}. Nothing was dialled.")
@@ -1065,6 +1122,9 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
         at = str(j.get("scheduled_for") or "")[11:16]
         out.text(f"{venue} is closed right now, so I'll call them at {at} — your yes covers that call.")
         return
+    if pend.get("invite_code") and pend.get("trip_item_id"):   # S-80 · the invitation follows the inviter's booking
+        from . import invitations as IV
+        await IV.STORE.update(pend["invite_code"], trip_item_id=pend["trip_item_id"])
     out.text(f"📞 Calling {venue} now." if j.get("status") in ("placed", "uncertain") else f"❌ I couldn't call {venue}: {j.get('why') or 'not placed'}.")
     if j.get("status") in ("placed", "uncertain"):
         _spawn(watch_call(ctx["ch"], ctx["frm"], account, pend["id"], venue, "book", pend.get("summary", "")))

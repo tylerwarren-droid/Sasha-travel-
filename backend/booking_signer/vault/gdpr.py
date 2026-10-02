@@ -91,6 +91,9 @@ async def delete_everything(request: Request):
         from .. import proactive as PR
         if PR.STORE is not None:   # S-83 · the reminder ledger, the opt-outs and the saved starting point
             counts.update(await PR.STORE.delete_account(account))
+        from .. import invitations as IV
+        if IV.STORE is not None:   # S-80 · invitations they sent
+            counts.update(await IV.STORE.delete_account(account))
         await LOG_DELETION(account, counts, now)
     except StorageUnavailable as e:
         log.error("[gdpr] erasure incomplete: %s", e.detail)

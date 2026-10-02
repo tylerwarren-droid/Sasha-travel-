@@ -430,6 +430,9 @@ async def _forever() -> None:
     while True:
         try:
             await tick(NOW())
+            from . import invitations as IV   # S-80 · an invitation's booking confirmed or cancelled → the invitee told
+            for what in await IV.tick():
+                log.info("[invite] %s", what)
         except StorageUnavailable as e:
             log.error("[proactive] not running: %s", e.detail)   # 026 not applied yet: said, every ten minutes
             await asyncio.sleep(600)

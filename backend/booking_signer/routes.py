@@ -31,7 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import calendar_sync, call_routes, cancel_routes, contacts, form_rung, guest_whatsapp, inbound_phone, ladder_routes, optin_page, optins, proactive, receipt, reservation as RS, retention, stop
+from . import calendar_sync, call_routes, invitations, cancel_routes, contacts, form_rung, guest_whatsapp, inbound_phone, ladder_routes, optin_page, optins, proactive, receipt, reservation as RS, retention, stop
 from . import venue_read as V
 from .vault import api as vault_api, crypto as vault_crypto, gdpr as vault_gdpr, kms as vault_kms
 from .vault.store import PostgresVaultStore
@@ -97,6 +97,7 @@ guest_whatsapp.STORE = guest_whatsapp.PostgresGuestStore(STORE)   # S-75 · gues
 vault_crypto.STORE = PostgresVaultStore(STORE)   # S-78 · the vault (sql/021)
 proactive.STORE = proactive.PostgresProactiveStore(STORE)   # S-83 · reminders (sql/026)
 calendar_sync.STORE = calendar_sync.PostgresCalendarStore(STORE)   # S-79 · Google Calendar (sql/022)
+invitations.STORE = invitations.PostgresInviteStore(STORE)   # S-80 · invitations (sql/023)
 
 
 def _now() -> datetime:
@@ -528,6 +529,7 @@ router.include_router(vault_api.router)   # S-78 · /api/booking/vault
 router.include_router(vault_gdpr.router)   # S-78 §9 · /api/booking/account/{data,export}
 router.include_router(proactive.router)   # S-83 · /api/booking/proactive
 router.include_router(calendar_sync.router)   # S-79 · /api/booking/google
+router.include_router(invitations.router)   # S-80 · /api/booking/invite (public, rate-limited)
 # Sasha 99 · cancelling by the best route there is (link, email, text, call)
 router.include_router(cancel_routes.router)
 # S-55 · the Work-with-Sasha page's server half (reached through the frontend's own route, which adds the key)

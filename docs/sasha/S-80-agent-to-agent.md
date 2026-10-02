@@ -164,3 +164,29 @@ alter table public.booking_invitations enable row level security;   -- backend o
 - **A-1:** dinner-hour defaults per activity (dinner 20:30–22:30; lunch 13:30–15:30 in Spain).
 - **A-2:** whether Jon may cancel his own attendance with a reduced party size (default: he tells Ana, and Ana decides).
 - **A-3:** the invitation expiry (default: the end of the window, max 7 days).
+
+---
+
+## Built, Sasha 109–110 (2 Oct 2026): path I
+
+- **`booking_signer/invitations.py`:**
+  - `invite_request`: "with {Name}", "invite {Name} to…", "for me and {Name}", plus a window. Without one, Sasha asks
+    once.
+  - `slots`: different days first, nothing anyone is busy for. The inviter's busy ranges come from S-79 when connected;
+    otherwise the message says *"I can't see your calendar, so these are suggestions"*.
+  - The public page's JSON and choose route (rate-limited per address; no account).
+  - Jon's `INVITE {code}` opt-in and his `STOP`.
+  - The watcher (in the proactive loop): Jon is told when the inviter's booking is confirmed or cancelled, on the page,
+    and on WhatsApp only if he opted in.
+- **WhatsApp (S-75):**
+  - "book dinner with Jon this week" → the slots and a `wa.me/?text=` share link the INVITER sends from their own
+    WhatsApp. Sasha writes to no one new.
+  - Jon's choice → the inviter is told, then asked "Where?" (or gets the cards at once if they named an area). Their own
+    read-back and their own yes book it, and the invitation follows that booking.
+- **Web:** `/invite/{code}`, through a key-free pass-through limited to the two invite routes.
+- **Two deviations, recorded:**
+  1. `invitee_number_e164` is kept ONLY after Jon sends `INVITE {code}`. A later WhatsApp to him can't be sent to a
+     hash; it is erased with the invitation, and his STOP drops it.
+  2. The invite intent is wired into WhatsApp. The web chat is unchanged for now.
+- **Not built yet:** path L (Jon a linked guest, with his own per-invitation free/busy yes), then the live test 7.
+- **Tests:** `tests/test_invitations_s80.py` covers §5 tests 1–6.

@@ -673,8 +673,10 @@ async def send(form_id: str, request: Request):
     from . import guest_receipt as GR
     o = (await _request_of(f)) or {}
     when = (o.get("when") or {}).get("at", "").replace("T", " at ")
+    from . import ladder_routes as LR   # Sasha 117 · the receipt names the VENUE, not its web host (Sasha 108's rule)
+    rd = await LR.LADDER_STORE.get_read(account, str(f["read_id"])) if LR.LADDER_STORE is not None and f.get("read_id") else None
     log.info("[form_rung] %s guest receipt: %s", form_id, await GR.send_for_route(
-        account, urlsplit(f["page_url"]).hostname or "the venue", "their own booking form, sent by Sasha after your yes",
+        account, (rd or {}).get("venue_name") or urlsplit(f["page_url"]).hostname or "the venue", "their own booking form, sent by Sasha after your yes",
         {"confirmed": "Confirmed by the venue", "proposed": "They offered something else", "declined": "They said no"}.get(
             reading.get("result"), "Requested — not confirmed until they confirm"),
         {"what": (o.get("what") or {}).get("activity"), "when": when, "party": (o.get("how_many") or {}).get("count"),

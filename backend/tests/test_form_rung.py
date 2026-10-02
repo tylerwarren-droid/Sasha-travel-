@@ -141,7 +141,7 @@ class FormRung(unittest.TestCase):   # LadderRoutes' set-up, not its tests
             prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
             self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
         mail = [b for m, u, b in self.web.requests if u == "https://api.resend.com/emails"][-1]
-        self.assertEqual((mail["to"], mail["subject"]), (["founder@kanoe.test"], "Your booking at venue.sasha.test: Confirmed by the venue"))
+        self.assertEqual((mail["to"], mail["subject"]), (["founder@kanoe.test"], "Your booking at Sasha Test Venue: Confirmed by the venue"))   # Sasha 117 · the venue, not its host
         for must in ("How: their own booking form, sent by Sasha after your yes", "When: 2026-10-10 at 21:00", "Their reference: TV-",
                      "What they answered, word for word:"):
             self.assertIn(must, mail["text"])

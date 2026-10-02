@@ -239,7 +239,11 @@ class Turns(Base):
                 fake.forms.append(body)
                 if not body["reservation"]["who"]["contact"].get("email"):
                     return 422, {"rule": "form_email_missing", "message": "the form needs your email address — which one should they have?"}
-                return 200, {"form_id": "form-1234", "read_back": {"lines": ["Email: guest@example.com"], "sha256": "f" * 64}}
+                return 200, {"form_id": "form-1234", "read_back": {"lines": ["I'll send the booking form:", "· Email: guest@example.com"],
+                                                                     "sha256": "f" * 64}}
+            if path == "/api/booking/forms/form-1234/send":   # the live answer of 2 Oct: status "sent", the verdict in reading
+                return 200, {"status": "sent", "reading": {"result": "confirmed"}, "booking_reference": "TV-FE41E1",
+                             "their_page": "Reserva confirmada Confirmado: mesa para 2 personas… Localizador: TV-FE41E1"}
             return await api(account, method, path, body, timeout)
         fake.forms = []
         GW.api = fake
@@ -247,6 +251,10 @@ class Turns(Base):
             self.pick_first()
             self.assertEqual(fake.forms[-1]["reservation"]["who"]["contact"], {"mobile_e164": GUEST, "email": "guest@example.com"})
             self.assertEqual(GW.SENDER.contents[-1][1][0][0], "Yes, book it")
+            self.assertIn("Exactly what I'll send:\n• I'll send the booking form:\n• Email: guest@example.com", self.bodies())   # one bullet
+            self.say("Yes, book it", payload=GW.SENDER.contents[-1][1][0][1])
+            self.assertIn("✅ Booked: A Very Long Restaurant Name In Madrid, Saturday 3 October at 21:00, 2 people. Their reference: TV-FE41E1.",
+                          self.bodies())                                   # was "⚠ Not confirmed yet" over a confirmed booking
             LR.LADDER_STORE.account_emails = {}
             with mock.patch.dict(os.environ, {"SASHA_FOUNDER_EMAIL": ""}):
                 self.pick_first()

@@ -1131,11 +1131,15 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
     out.text(said + ("" if said.endswith(("?", ".")) else ".") + " Nothing was sent.")
 
 
+_BULLET = re.compile(r"^[·•]\s*")
+
+
 async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: str, venue: str, kind: str = "confirm",
                    extra: Optional[dict] = None) -> None:
     out = ctx["out"]
     sha = read_back["sha256"]
-    out.text("Exactly what I'll " + ("say" if rung == "call" else "send") + ":\n" + "\n".join(f"• {ln}" for ln in read_back["lines"]))
+    out.text("Exactly what I'll " + ("say" if rung == "call" else "send") + ":\n" +
+             "\n".join("• " + _BULLET.sub("", ln) for ln in read_back["lines"]))   # Sasha 117 · one bullet, not "• ·"
     tag = f"{rid[:8]}:{sha[:16]}"
     yes_title = "Yes, book it" if kind == "confirm" else "Yes, cancel"
     out.ask(sentence, [(yes_title, f"yes:{tag}"), ("No", f"no:{tag}")])
@@ -1160,9 +1164,14 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
         if status != 200:
             out.text(f"❌ Not sent to {venue}: {refusal_words(j, status)}.")
             return
-        ok = j.get("status") == "confirmed"
-        out.text(f"✅ Booked: {venue}, {pend.get('summary', '')}." if ok else f"⚠ Not confirmed yet: I sent {venue} their booking form; "
-                 f"their page didn't say it's booked.")
+        # Sasha 117 · the send is "sent"; what the venue's page SAID is the reading — "confirmed" was never the status
+        result = (j.get("reading") or {}).get("result") if j.get("status") == "sent" else None
+        ref = f" Their reference: {j['booking_reference']}." if j.get("booking_reference") and result == "confirmed" else ""
+        out.text({"confirmed": f"✅ Booked: {venue}, {pend.get('summary', '')}.{ref}",
+                  "proposed": f"⚠ Not confirmed yet: {venue}'s page offers something different — read it below.",
+                  "declined": f"❌ They said no: {venue}'s page turned it down."}.get(result) or
+                 (f"⚠ Not confirmed yet: I sent {venue} their booking form; their page didn't say it's booked." if j.get("status") == "sent"
+                  else f"⚠ Not confirmed yet: {j.get('say') or 'their site did not answer clearly'}"))
         if j.get("their_page"):
             out.text(f"Their page said: “{str(j['their_page'])[:500]}”")
         if _receipt_note():

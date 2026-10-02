@@ -118,6 +118,44 @@ class FormRung(unittest.TestCase):   # LadderRoutes' set-up, not its tests
             self.assertEqual((prep.status_code, prep.json()["rule"]), (422, rule), variant)
         self.assertEqual(self.posts, [])
 
+    def test_the_wizard_reads_back_both_steps_and_sends_step_two_only_after_step_one(self):
+        # Sasha 94 · the day on one page, the details on the next
+        v = self.read("wizard")
+        prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()})
+        self.assertEqual(prep.status_code, 200, prep.text)
+        text = "\n".join(prep.json()["read_back"]["lines"])
+        one, two = text.split("Step 2")
+        for must in ("· Día: 2026-10-10", "· Hora: 21:00", "· Personas: 2"):
+            self.assertIn(must, one)
+        for must in ("· Nombre: Tyler Warren", "· Email: tyler@kanoe.test", "· Teléfono: +34608445715"):
+            self.assertIn(must, two)
+        self.assertIn("only the day and the number of people will have reached them", text)
+        self.assertEqual(self.posts, [])
+        sent = self.c.post(f"/api/booking/forms/{prep.json()['form_id']}/send",
+                           json={"read_back_sha256": prep.json()["read_back"]["sha256"], "approval": {"how": "button"}}).json()
+        self.assertEqual((sent["status"], sent["reading"]["result"]), ("sent", "confirmed"), sent)
+        (u1, d1), (u2, d2) = self.posts
+        self.assertEqual((u1, set(d1) - {"token"}), (f"{BASE}/api/booking/test-venue/wizard/step2", {"fecha", "hora", "personas"}))
+        self.assertTrue(u2.endswith("/api/booking/test-venue/wizard/confirm"))
+        self.assertEqual((d2["nombre"], d2["fecha"]), ("Tyler Warren", "2026-10-10"))   # its own hidden fields carried the day
+        self.assertNotIn("website_url", d2)
+        self.assertEqual([x["variant"] for x in FR.TEST_SUBMISSIONS], ["wizard"])
+
+    def test_the_wizard_stops_at_a_step_two_it_was_not_approved_for(self):
+        v = self.read("wizard")
+        prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
+        saved = FR._WIZARD_TWO
+        FR._WIZARD_TWO = saved.replace('<button type="submit">', '<input id="acepto" name="acepto" type="checkbox" required><button type="submit">')
+        try:
+            sent = self.c.post(f"/api/booking/forms/{prep['form_id']}/send",
+                               json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}}).json()
+        finally:
+            FR._WIZARD_TWO = saved
+        self.assertEqual(sent["status"], "not_sent")
+        self.assertIn("Only the day and the number of people reached them; nothing is booked", sent["say"])
+        self.assertEqual(len(self.posts), 1)                                    # step 1 only
+        self.assertEqual(FR.TEST_SUBMISSIONS, [])
+
     def test_our_test_venue_is_never_looked_up_on_google(self):
         # Sasha 94 · 2 Oct: "Sasha Test Venue, Madrid" pulled a real restaurant's listing and phone into the read
         with mock.patch.dict(os.environ, {"GOOGLE_PLACES_API_KEY": "places-test"}):

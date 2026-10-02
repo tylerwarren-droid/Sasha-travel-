@@ -26,6 +26,8 @@ EXEMPT = {("GET", "/api/booking/health"), ("POST", "/api/booking/email/inbound")
 # Sasha 89 · the TEST VENUE is a public web page with a booking form, like any venue's: its page and its form post are
 # open (it books nothing real); its book of submissions is not (GET …/test-venue/submissions needs the key)
 EXEMPT |= {(m, f"/api/booking/test-venue/{v}") for m in ("GET", "POST") for v in ("plain", "consent", "captcha")}
+EXEMPT |= {("GET", "/api/booking/test-venue/wizard"), ("POST", "/api/booking/test-venue/wizard/step2"),
+           ("POST", "/api/booking/test-venue/wizard/confirm")}   # Sasha 94 · the two-step variant
 
 
 async def require_booking_key(request: Request) -> None:

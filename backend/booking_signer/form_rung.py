@@ -45,7 +45,7 @@ router = APIRouter(tags=["booking-form-rung"])
 APPROVAL_WINDOW = timedelta(minutes=15)
 NOW = lambda: datetime.now(timezone.utc)
 RESPONSE_CHARS = 4000
-TEST_VARIANTS = ("plain", "consent", "captcha")
+TEST_VARIANTS = ("plain", "consent", "captcha", "wizard")
 
 
 def public_base() -> str:
@@ -196,6 +196,37 @@ def read_back(page_url: str, action: str, filled: List[Dict[str, str]], hidden: 
     if hidden:
         lines.append(f"· plus the page's own hidden fields, sent with the page's values: {', '.join(hidden)}.")
     lines += ["I won't tick any box agreeing to their terms, and I stop at any CAPTCHA.",
+              "Their answer page is kept word for word. I send it once. Shall I send it?"]
+    return lines
+
+
+# ── Sasha 94 · the WIZARD: the date on one page, the details on the next ─────────────────────────────────────────
+
+_STEP_ONE = {"date", "time", "date_time", "party_size", "service"}
+_STEP_TWO = ("person_name", "given_name", "family_name", "email", "phone", "free_text")
+
+
+def is_wizard(fields: List[Dict[str, Any]], m: Dict[str, Any]) -> bool:
+    """A first page that asks only WHEN (and how many), on a form whose map also holds the guest's details."""
+    asked = {f["role"] for f in fields if f["role"] not in ("hidden", "trap")}
+    return bool(asked) and asked <= _STEP_ONE and any(r in _STEP_TWO for r, _ in m["fields"].values())
+
+
+def step_two_fields(m: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The details page as its map says it is — it exists only once step 1 is sent, so it is checked live then."""
+    return [{"name": n, "role": r, "label": lbl, "required": r in ("person_name", "email", "phone")}
+            for n, (r, lbl) in m["fields"].items() if r in _STEP_TWO]
+
+
+def read_back_wizard(page_url: str, action: str, shown: List[Dict[str, Any]], hidden: List[str], venue: str) -> List[str]:
+    lines = [f"{venue}'s own booking form ({page_url}) has two steps. Step 1 — the day — sent to {action}:"]
+    lines += [f"· {f['label']}: {f['value']}" for f in shown if f.get("step") == 1]
+    if hidden:
+        lines.append(f"· plus the page's own hidden fields, with the page's values: {', '.join(hidden)}.")
+    lines.append("Step 2 — the page step 1 opens — with exactly these fields:")
+    lines += [f"· {f['label']}: {f['value']}" for f in shown if f.get("step") == 2]
+    lines += ["If step 2 asks for anything else, has a CAPTCHA or a box agreeing to their terms, I stop there: only the day "
+              "and the number of people will have reached them, and nothing is booked.",
               "Their answer page is kept word for word. I send it once. Shall I send it?"]
     return lines
 
@@ -397,15 +428,22 @@ async def prepare(request: Request):
     if live["method"] != "post":
         return _refuse(422, "form_not_post", "their form doesn't post a booking (it's a search or a link); Sasha won't send it")
     fields = roles_for(live, m)
+    wizard = is_wizard(fields, m)
+    step2 = step_two_fields(m) if wizard else []
     try:
         filled = FF.fill(o, [f for f in fields if f["role"] != "hidden"], date_fmt=m["date_fmt"], time_fmt=m["time_fmt"])
+        filled2 = FF.fill(o, step2, date_fmt=m["date_fmt"], time_fmt=m["time_fmt"]) if wizard else []
     except FF.Stop as e:
         return _refuse(422, f"form_{e.rule}", e.ask)
-    labels = {f["name"]: f.get("label") or f["name"] for f in fields}
-    shown = [{"name": f["name"], "label": labels.get(f["name"], f["name"]), "role": next((x["role"] for x in fields if x["name"] == f["name"]), None),
-              "value": f["value"]} for f in filled]
+    labels = {f["name"]: f.get("label") or f["name"] for f in fields + step2}
+    roles = {f["name"]: f["role"] for f in fields + step2}
+    shown = [{"name": f["name"], "label": labels.get(f["name"], f["name"]), "role": roles.get(f["name"]), "value": f["value"],
+              **({"step": 1} if wizard else {})} for f in filled]
+    shown += [{"name": f["name"], "label": labels.get(f["name"], f["name"]), "role": roles.get(f["name"]), "value": f["value"], "step": 2}
+              for f in filled2]
     hidden = [f["name"] for f in fields if f["role"] == "hidden"]
-    lines = read_back(live["page_url"], live["action"], shown, hidden, read["name"])
+    lines = (read_back_wizard(live["page_url"], live["action"], shown, hidden, read["name"]) if wizard
+             else read_back(live["page_url"], live["action"], shown, hidden, read["name"]))
     now = NOW()
     form_id = str(uuid.uuid4())
     rec = {"form_id": form_id, "account_id": account, "read_id": str(row["read_id"]), "host": urlsplit(live["page_url"]).hostname,
@@ -471,23 +509,49 @@ async def send(form_id: str, request: Request):
         return await not_sent("their form now has a CAPTCHA — Sasha never solves one")
     if any(x["role"] == "consent" and x["required"] for x in fields):
         return await not_sent("their form now asks you to accept its terms — that box is yours, not Sasha's")
-    missing = [x["name"] for x in f["fields"] if x["name"] not in names]
+    missing = [x["name"] for x in f["fields"] if x.get("step", 1) == 1 and x["name"] not in names]   # step 2 is checked after step 1
     unmapped = [x["name"] for x in fields if x["role"] == "other" and x["required"]]
     if missing or unmapped or live["action"] != f["action_url"]:
         return await not_sent("their form changed since you approved it" + (f" (gone: {', '.join(missing)})" if missing else "")
                               + (f" (new required: {', '.join(unmapped)})" if unmapped else ""))
+    wizard = any(x.get("step") == 2 for x in f["fields"])
     data = {x["name"]: x.get("value", "") for x in fields if x["role"] == "hidden"}
-    data.update({x["name"]: x["value"] for x in f["fields"]})
+    data.update({x["name"]: x["value"] for x in f["fields"] if x.get("step", 1) == 1})
     try:
-        r = await FORM_POST(f["action_url"], data, {"user-agent": V.USER_AGENT, "referer": f["page_url"]})
-        final = f["action_url"]
-        if r.status_code in (301, 302, 303) and r.headers.get("location"):
-            final = urljoin(final, r.headers["location"])
-            from . import ladder_routes as LR
-            final, r = await V._get(LR.HTTP, final, LR.RESOLVE)
+        r, final = await _post(f["action_url"], data, f["page_url"])
     except Exception as e:
         await STORE.finish(form_id, {"status": "failed", "not_sent_why": f"{type(e).__name__}: {e}"[:300]}, "unclear", "unclear", now)
         return {"status": "failed", "say": "I sent it, but their site didn't answer clearly — it may or may not have arrived. Check with them before relying on it."}
+    if wizard:
+        # Sasha 94 · step 1 has gone (the day, how many): step 2 is read, checked against the map, and only then sent
+        async def stopped(why: str):
+            await STORE.finish(form_id, {"status": "not_sent", "not_sent_why": f"step 2: {why}", "http_status": r.status_code},
+                               "failed", "failed", now)
+            return {"status": "not_sent", "say": f"I stopped at step 2: {why}. Only the day and the number of people reached "
+                                                 "them; nothing is booked."}
+        page2 = read_form(r.text or "", final) if r.status_code < 400 else {"why": f"their site answered HTTP {r.status_code}"}
+        if "why" in page2:
+            return await stopped(f"no details page came back ({page2['why']})")
+        if reg_host(page2["action"]) != reg_host(f["page_url"]) or page2["method"] != "post":
+            return await stopped("the details page sends somewhere else (another site, or not a booking post)")
+        fields2 = roles_for(page2, m)
+        names2 = {x["name"] for x in fields2}
+        if any(x["role"] == "challenge" for x in fields2):
+            return await stopped("it has a CAPTCHA — Sasha never solves one")
+        if any(x["role"] == "consent" and x["required"] for x in fields2):
+            return await stopped("it asks you to accept its terms — that box is yours, not Sasha's")
+        gone = [x["name"] for x in f["fields"] if x.get("step") == 2 and x["name"] not in names2]
+        extra = [x["name"] for x in fields2 if x["role"] == "other" and x["required"]]
+        if gone or extra:
+            return await stopped("it isn't the page you approved" + (f" (missing: {', '.join(gone)})" if gone else "")
+                                 + (f" (it also requires: {', '.join(extra)})" if extra else ""))
+        data2 = {x["name"]: x.get("value", "") for x in fields2 if x["role"] == "hidden"}
+        data2.update({x["name"]: x["value"] for x in f["fields"] if x.get("step") == 2})
+        try:
+            r, final = await _post(page2["action"], data2, final)
+        except Exception as e:
+            await STORE.finish(form_id, {"status": "failed", "not_sent_why": f"step 2: {type(e).__name__}: {e}"[:300]}, "unclear", "unclear", now)
+            return {"status": "failed", "say": "I sent step 2, but their site didn't answer clearly — it may or may not have arrived. Check with them."}
     text = " ".join(" ".join(_LiveForm_text(r.text or "")).split())[:RESPONSE_CHARS]
     reading = FU.reply_reading(text, (await _request_of(f)) or {}) if text else {"result": "none", "why": "their answer page had no text"}
     ref_m = _REF.search(text)
@@ -507,6 +571,22 @@ async def send(form_id: str, request: Request):
         say = f"Their site answered HTTP {r.status_code}; it may not have arrived. Their words are below."
     return {"status": outcome["status"], "say": say, "their_page": text, "reading": reading,
             "booking_reference": outcome["booking_reference"], "http_status": r.status_code}
+
+
+def reg_host(url: str) -> str:
+    parts = (urlsplit(url or "").hostname or "").lower().split(".")
+    return ".".join(parts[-3:]) if len(parts) > 2 and parts[-2] in ("co", "com") else ".".join(parts[-2:])
+
+
+async def _post(url: str, data: Dict[str, str], referer: str):
+    """POST the form; one redirect followed, checked (venue_read's guards). → (response, final url)."""
+    r = await FORM_POST(url, data, {"user-agent": V.USER_AGENT, "referer": referer})
+    final = url
+    if r.status_code in (301, 302, 303) and r.headers.get("location"):
+        final = urljoin(final, r.headers["location"])
+        from . import ladder_routes as LR
+        final, r = await V._get(LR.HTTP, final, LR.RESOLVE)
+    return r, final
 
 
 def _LiveForm_text(html: str) -> List[str]:
@@ -566,10 +646,47 @@ async def test_venue_submissions():
     return {"submissions": TEST_SUBMISSIONS[-20:]}
 
 
+_WIZARD_ONE = """<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Sasha Test Venue — reservas (paso 1)</title>
+<meta property="og:site_name" content="Sasha Test Venue"></head><body><h1>Sasha Test Venue</h1>
+<p>Restaurante de pruebas de Kanoe. No es un restaurante real. Paso 1 de 2: elige el día.</p>
+<form method="post" action="/api/booking/test-venue/wizard/step2"><input type="hidden" name="token" value="{token}">
+<label for="fecha">Día</label><input id="fecha" name="fecha" type="date" required>
+<label for="hora">Hora</label><input id="hora" name="hora" type="time" required>
+<label for="personas">Personas</label><input id="personas" name="personas" type="number" min="1" max="20" required>
+<button type="submit">Ver disponibilidad</button></form></body></html>"""
+
+_WIZARD_TWO = """<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Sasha Test Venue — reservas (paso 2)</title></head><body>
+<p>Paso 2 de 2: hay mesa el {fecha} a las {hora} para {personas}. Tus datos:</p>
+<form method="post" action="/api/booking/test-venue/wizard/confirm">
+<input type="hidden" name="token" value="{token}"><input type="hidden" name="fecha" value="{fecha}">
+<input type="hidden" name="hora" value="{hora}"><input type="hidden" name="personas" value="{personas}">
+<label for="nombre">Nombre</label><input id="nombre" name="nombre" required>
+<label for="email">Email</label><input id="email" name="email" type="email" required>
+<label for="telefono">Teléfono</label><input id="telefono" name="telefono" type="tel" required>
+<label for="comentarios">Comentarios</label><textarea id="comentarios" name="comentarios"></textarea>
+<input name="website_url" style="display:none" tabindex="-1" autocomplete="off">
+<button type="submit">Confirmar reserva</button></form></body></html>"""
+
+
+@router.post("/test-venue/wizard/step2", response_class=HTMLResponse)
+async def test_venue_wizard_two(request: Request):
+    form = {k: str(v) for k, v in (await request.form()).items()}
+    if not all(form.get(k) for k in ("fecha", "hora", "personas")):
+        return HTMLResponse("<p>Elige día, hora y personas.</p>", status_code=422)
+    return HTMLResponse(_WIZARD_TWO.format(**{k: escape(form.get(k, "")) for k in ("fecha", "hora", "personas", "token")}))
+
+
+@router.post("/test-venue/wizard/confirm", response_class=HTMLResponse)
+async def test_venue_wizard_confirm(request: Request):
+    return await _book("wizard", {k: str(v) for k, v in (await request.form()).items()})
+
+
 @router.get("/test-venue/{variant}", response_class=HTMLResponse)
 async def test_venue(variant: str):
     if variant not in TEST_VARIANTS:
         return HTMLResponse("not found", status_code=404)
+    if variant == "wizard":
+        return HTMLResponse(_WIZARD_ONE.format(token=uuid.uuid4().hex))
     head = '<script src="https://www.google.com/recaptcha/api.js" async defer></script>' if variant == "captcha" else ""
     extra = {"consent": '<input id="acepto" name="acepto" type="checkbox" required><label for="acepto">Acepto la política de privacidad</label>\n',
              "captcha": '<div class="g-recaptcha" data-sitekey="test-site-key"></div>\n'}.get(variant, "")
@@ -578,9 +695,13 @@ async def test_venue(variant: str):
 
 @router.post("/test-venue/{variant}", response_class=HTMLResponse)
 async def test_venue_book(variant: str, request: Request):
-    if variant not in TEST_VARIANTS:
+    if variant not in TEST_VARIANTS or variant == "wizard":
         return HTMLResponse("not found", status_code=404)
-    form = {k: str(v) for k, v in (await request.form()).items()}
+    return await _book(variant, {k: str(v) for k, v in (await request.form()).items()})
+
+
+async def _book(variant: str, form: Dict[str, str]) -> HTMLResponse:
+    """The test venue's book: record one reservation and answer as a restaurant would."""
     if form.get("website_url"):
         return HTMLResponse("<p>Rechazado.</p>", status_code=400)            # a filled honeypot is a bot
     missing = [k for k in ("fecha", "hora", "personas", "nombre", "email", "telefono") if not form.get(k)]

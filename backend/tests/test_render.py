@@ -114,7 +114,7 @@ class Beyond(unittest.TestCase):
 
     def test_a_spa_service_with_its_duration(self):
         s = R.opening(C.LANGUAGES["es"], self.obj(), self.TODAY)
-        self.assertEqual(s, "Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y llamo de parte de "
+        self.assertEqual(s, "Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL, y llamo de parte de "
                             "Tyler Warren para reservar un masaje relajante de 60 minutos para una persona el sábado a las 11:00. ¿Sería posible?")
 
     def test_a_window_and_venue_proposes(self):

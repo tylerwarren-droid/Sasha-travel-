@@ -1,11 +1,11 @@
 {
  "6.1_la_contra": {
   "call": {
-   "first_sentence": "Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y llamo de parte de la familia Warren para reservar una mesa para comer para 4 personas el viernes a la 13:00. ¿Sería posible?",
+   "first_sentence": "Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL, y llamo de parte de la familia Warren para reservar una mesa para comer para 4 personas el viernes a la 13:00. ¿Sería posible?",
    "purpose": "book",
    "read_back": [
     "I'll phone La Contra, +34910536740 — the number on their Google listing.",
-    "I'll say: \"Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y llamo de parte de la familia Warren para reservar una mesa para comer para 4 personas el viernes a la 13:00. ¿Sería posible?\" (in Spanish: Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of the Warren family to book lunch for four on Friday at one in the afternoon. Is that possible?)",
+    "I'll say: \"Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL, y llamo de parte de la familia Warren para reservar una mesa para comer para 4 personas el viernes a la 13:00. ¿Sería posible?\" (in Spanish: Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling on behalf of the Warren family to book lunch for four on Friday at one in the afternoon. Is that possible?)",
     "That is: lunch (una mesa para comer) · 4 people · 2026-10-02T13:00.",
     "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
     "If they ask for a contact number, I'll give yours, +34608445715.",
@@ -13,7 +13,7 @@
     "I'll tell you exactly what they said. Shall I call them now?"
    ],
    "recap": "Para confirmar: una mesa para comer, para 4 personas, viernes 2 de octubre, a la una de la tarde, a nombre de Warren. ¿Correcto?",
-   "task_chars": 1785
+   "task_chars": 1776
   },
   "email": {
    "subject": "Solicitud de reserva: una mesa para comer — 4 personas el 2026-10-02 a las 13:00",
@@ -51,18 +51,18 @@
  },
  "6.2a_king_ink_quote": {
   "call": {
-   "first_sentence": "Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of Tyler Warren to ask what it would cost and when you could do a fine-line tattoo on the forearm, about 10 cm, for one piece. Could you tell me?",
+   "first_sentence": "Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling on behalf of Tyler Warren to ask what it would cost and when you could do a fine-line tattoo on the forearm, about 10 cm, for one piece. Could you tell me?",
    "purpose": "quote_first",
    "read_back": [
     "I'll phone King Ink Tattoos, +254725909800 — the number on their Google listing.",
-    "I'll say: \"Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of Tyler Warren to ask what it would cost and when you could do a fine-line tattoo on the forearm, about 10 cm, for one piece. Could you tell me?\"",
+    "I'll say: \"Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling on behalf of Tyler Warren to ask what it would cost and when you could do a fine-line tattoo on the forearm, about 10 cm, for one piece. Could you tell me?\"",
     "I'll ask what it would cost and when they could do it. I won't book anything, hold a slot, or agree to a deposit, a fee or a card.",
     "Your photos are not sent on a call — only the description.",
     "If they ask for a contact number, I'll give yours, +34608445715.",
     "Whatever they offer comes back to you word for word; booking it is a new request and a new yes. Shall I call them now?"
    ],
    "recap": null,
-   "task_chars": 1712
+   "task_chars": 1705
   },
   "email": {
    "refused": "flow_not_built",
@@ -80,11 +80,11 @@
  },
  "6.2b_king_ink_book": {
   "call": {
-   "first_sentence": "Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of Tyler Warren to book a tattoo session of 120 minutes for one session on Thursday, 8 October, at three in the afternoon. Is that possible?",
+   "first_sentence": "Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling on behalf of Tyler Warren to book a tattoo session of 120 minutes for one session on Thursday, 8 October, at three in the afternoon. Is that possible?",
    "purpose": "book",
    "read_back": [
     "I'll phone King Ink Tattoos, +254725909800 — the number on their Google listing.",
-    "I'll say: \"Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of Tyler Warren to book a tattoo session of 120 minutes for one session on Thursday, 8 October, at three in the afternoon. Is that possible?\"",
+    "I'll say: \"Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling on behalf of Tyler Warren to book a tattoo session of 120 minutes for one session on Thursday, 8 October, at three in the afternoon. Is that possible?\"",
     "That is: a tattoo session (a tattoo session) · 1 session · 2026-10-08T15:00 · 120 minutes.",
     "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
     "If they ask for a contact number, I'll give yours, +34608445715.",
@@ -92,7 +92,7 @@
     "I'll tell you exactly what they said. Shall I call them now?"
    ],
    "recap": "To confirm: a tattoo session of 120 minutes, for one session, Thursday 8 October, at three in the afternoon, under the name Warren. Is that right?",
-   "task_chars": 1832
+   "task_chars": 1825
   },
   "email": {
    "subject": "Booking request: a tattoo session of 120 minutes — one session on 2026-10-08 at 15:00",
@@ -107,11 +107,11 @@
  },
  "6.3_lisbon_kayak": {
   "call": {
-   "first_sentence": "Olá, fala a Sasha, uma concierge de inteligência artificial operada pela Kanoe Technologies SL, a ligar em nome da família Warren para reservar um passeio de caiaque de 180 minutos para 2 pessoas no sábado às 9h30. É possível?",
+   "first_sentence": "Olá, fala a Sasha, uma concierge de inteligência artificial da Kanoe Technologies SL, a ligar em nome da família Warren para reservar um passeio de caiaque de 180 minutos para 2 pessoas no sábado às 9h30. É possível?",
    "purpose": "book",
    "read_back": [
     "I'll phone Kayak Lisboa, +351910000000 — the number on their Google listing.",
-    "I'll say: \"Olá, fala a Sasha, uma concierge de inteligência artificial operada pela Kanoe Technologies SL, a ligar em nome da família Warren para reservar um passeio de caiaque de 180 minutos para 2 pessoas no sábado às 9h30. É possível?\" (in Portuguese: Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of the Warren family to book a 3-hour kayak tour of 180 minutes for two on Saturday at nine thirty in the morning. Is that possible?)",
+    "I'll say: \"Olá, fala a Sasha, uma concierge de inteligência artificial da Kanoe Technologies SL, a ligar em nome da família Warren para reservar um passeio de caiaque de 180 minutos para 2 pessoas no sábado às 9h30. É possível?\" (in Portuguese: Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling on behalf of the Warren family to book a 3-hour kayak tour of 180 minutes for two on Saturday at nine thirty in the morning. Is that possible?)",
     "That is: a 3-hour kayak tour (um passeio de caiaque) · 2 people · 2026-10-03T09:30 · 180 minutes.",
     "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
     "If they ask for a contact number, I'll give yours, +34608445715.",
@@ -119,7 +119,7 @@
     "I'll tell you exactly what they said. Shall I call them now?"
    ],
    "recap": "Para confirmar: um passeio de caiaque de 180 minutos, para 2 pessoas, sábado, 3 de outubro, às nove e meia da manhã, em nome de Warren. Está correto?",
-   "task_chars": 1830
+   "task_chars": 1820
   },
   "email": {
    "subject": "Pedido de reserva: um passeio de caiaque de 180 minutos — 2 pessoas a 2026-10-03 às 09:30",

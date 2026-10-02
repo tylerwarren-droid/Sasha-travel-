@@ -88,6 +88,9 @@ async def delete_everything(request: Request):
         if GW.STORE is not None:
             counts.update(await GW.STORE.delete_account(account))
         counts["guest_contacts"] = 1 if (contacts.STORE is not None and await contacts.STORE.delete(account)) else 0
+        from .. import proactive as PR
+        if PR.STORE is not None:   # S-83 · the reminder ledger, the opt-outs and the saved starting point
+            counts.update(await PR.STORE.delete_account(account))
         await LOG_DELETION(account, counts, now)
     except StorageUnavailable as e:
         log.error("[gdpr] erasure incomplete: %s", e.detail)

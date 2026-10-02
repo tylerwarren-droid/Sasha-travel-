@@ -51,8 +51,9 @@ class Base(unittest.TestCase):
                                                 "SASHA_VAULT_HEALTH_DPIA_REF": ""})
         self.env.start()
         VK.reset()
-        self.saved = (VC.STORE, GW.STORE, CT.STORE, VG.LOG_DELETION)
-        VC.STORE, GW.STORE, CT.STORE = MemoryVaultStore(), GW.MemoryGuestStore(), CT.MemoryContactStore()
+        from booking_signer import proactive as PR
+        self.saved = (VC.STORE, GW.STORE, CT.STORE, VG.LOG_DELETION, PR.STORE)
+        VC.STORE, GW.STORE, CT.STORE, PR.STORE = MemoryVaultStore(), GW.MemoryGuestStore(), CT.MemoryContactStore(), PR.MemoryProactiveStore()
         self.erasures = []
 
         async def log_deletion(account, counts, now):
@@ -67,7 +68,8 @@ class Base(unittest.TestCase):
         self.c = TestClient(app)
 
     def tearDown(self):
-        VC.STORE, GW.STORE, CT.STORE, VG.LOG_DELETION = self.saved
+        from booking_signer import proactive as PR
+        VC.STORE, GW.STORE, CT.STORE, VG.LOG_DELETION, PR.STORE = self.saved
         self.env.stop()
         VK.reset()
         os.unlink(self.kek_file)
@@ -277,7 +279,8 @@ class Gdpr(Base):
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual((VC.STORE.items, GW.STORE.channels, CT.STORE.rows), ({}, {}, {}))
         self.assertEqual(self.erasures, [{"vault_items": 1, "vault_uses": 0, "vault_events": 1, "guest_channels": 1,
-                                          "guest_wa_state": 1, "guest_link_codes": 0, "guest_contacts": 1}])
+                                          "guest_wa_state": 1, "guest_link_codes": 0, "guest_contacts": 1,
+                                          "proactive_sent": 0, "proactive_prefs": 0, "guest_places": 0}])
 
     def test_export_is_metadata_only(self):
         self.save()

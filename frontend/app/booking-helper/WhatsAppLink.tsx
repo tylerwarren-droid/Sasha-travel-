@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { bookingReq, contactReq, guestRefusal as refusal, type Consent } from '@/lib/booking-client'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
+import { Reminders } from './Reminders'
 
 type View = { linked: boolean; opted_out: boolean; number: string | null; join: string | null
   consent: { version: string; text: string; sha256: string } }
@@ -81,6 +82,7 @@ export function WhatsAppLink() {
         <div className="space-y-1">
           <p>Linked{view.opted_out ? ' — but you sent STOP, so Sasha sends nothing there. Send START to resume.' : '. Message Sasha on WhatsApp to book.'}</p>
           <GatedButton label="Unlink" onClick={() => { unlink().catch((e) => setWords((e as Error).message)) }} needs={[busy && 'the last step to finish']} />
+          <Reminders />
         </div>
       )}
       {view && view.number && !view.linked && !code && (

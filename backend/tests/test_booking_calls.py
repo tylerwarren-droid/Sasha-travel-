@@ -103,16 +103,17 @@ class Script(unittest.TestCase):
         p = C.parse_call_particulars(JOHNSON)
         self.assertEqual(
             C.opening_sentence(C.LANGUAGES["en"], p, MONDAY.date()),
-            "Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of the Johnson family to book a table for four "
+            "Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling on behalf of the Johnson family to book a table for four "
             "on Thursday at eight in the evening. Is that possible?")
         self.assertEqual(C.check_sentence(C.LANGUAGES["en"], p), "I'll need to check that with the Johnsons.")
 
     def test_every_language_discloses_the_AI_at_the_first_sentence(self):
         p = C.parse_call_particulars(JOHNSON)
-        # S-52 · "an AI concierge operated by Kanoe Technologies SL", first, in every language
-        marks = {"en": "AI concierge operated by Kanoe Technologies SL", "pt": "concierge de inteligência artificial operada pela Kanoe Technologies SL",
-                 "es": "concierge de inteligencia artificial operada por Kanoe Technologies SL", "fr": "concierge d'intelligence artificielle exploitée par Kanoe Technologies SL",
-                 "de": "KI-Concierge von Kanoe Technologies SL", "it": "concierge di intelligenza artificiale gestita da Kanoe Technologies SL"}
+        # S-52 · the AI and the operator's legal name, first, in every language — the shorter form the founder approved
+        # in Sasha 110 (2 Oct): "…una concierge de inteligencia artificial de Kanoe Technologies SL…"
+        marks = {"en": "AI concierge from Kanoe Technologies SL", "pt": "concierge de inteligência artificial da Kanoe Technologies SL",
+                 "es": "concierge de inteligencia artificial de Kanoe Technologies SL", "fr": "concierge d'intelligence artificielle de Kanoe Technologies SL",
+                 "de": "KI-Concierge von Kanoe Technologies SL", "it": "concierge di intelligenza artificiale di Kanoe Technologies SL"}
         self.assertEqual(set(marks), set(C.LANGUAGES))
         for code, mark in marks.items():
             s = C.opening_sentence(C.LANGUAGES[code], p, MONDAY.date())
@@ -124,7 +125,7 @@ class Script(unittest.TestCase):
     def test_a_date_more_than_six_days_away_is_said_with_its_date(self):
         p = C.parse_call_particulars({**JOHNSON, "date": "2026-10-20", "time": "13:30", "party": 1, "name": "Jon Peters"})
         self.assertEqual(C.opening_sentence(C.LANGUAGES["en"], p, MONDAY.date()),
-                         "Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of Jon Peters to book a table for one "
+                         "Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling on behalf of Jon Peters to book a table for one "
                          "on Tuesday, 20 October, at one thirty in the afternoon. Is that possible?")
 
     def test_a_date_already_past_at_the_venue_is_refused(self):
@@ -166,10 +167,10 @@ class Script(unittest.TestCase):
         p = C.parse_call_particulars({"date": "2026-10-02", "time": "21:00", "party": 2, "name": "Tyler Warren"})
         today = datetime(2026, 9, 30).date()
         self.assertEqual(C.opening_sentence(C.LANGUAGES["es"], p, today, "cancel"),
-                         "Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y llamo de parte de la familia Warren para cancelar la reserva de una mesa "
+                         "Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL, y llamo de parte de la familia Warren para cancelar la reserva de una mesa "
                          "para 2 personas el viernes a las 21:00. ¿Podrían cancelarla, por favor?")
         self.assertEqual(C.opening_sentence(C.LANGUAGES["es"], p, today),
-                         "Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y llamo de parte de la familia Warren para reservar una mesa "
+                         "Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL, y llamo de parte de la familia Warren para reservar una mesa "
                          "para 2 personas el viernes a las 21:00. ¿Sería posible?")
 
     def test_the_payload_bland_receives(self):

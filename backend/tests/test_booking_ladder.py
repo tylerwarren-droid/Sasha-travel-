@@ -267,7 +267,7 @@ class Email(unittest.TestCase):
         self.assertNotIn("anna@example.test", e["text"])
         self.assertEqual((e["to"], e["bcc"], e["reply_to"]),
                          ("reservas@lacontra.test", "anna@example.test", "act-11111111-2222-4333-8444-555555555555@in.kanoe.test"))
-        self.assertTrue(e["text"].startswith("Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL"))
+        self.assertTrue(e["text"].startswith("Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL"))   # email: unchanged
         self.assertIn("la familia Johnson", e["text"])
         lines = E.read_back(e, "La Contra", "their website, lacontra.test")
         self.assertIn("they won't see your address", lines[1])
@@ -418,7 +418,7 @@ class LadderRoutes:
         self.assertEqual(prep.status_code, 200, prep.text)
         lines = prep.json()["read_back"]["lines"]
         self.assertEqual(lines[0], "I'll phone La Contra, +34915001122 — the number on their website, lacontra.test.")
-        self.assertIn("Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL", lines[1])
+        self.assertIn("Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL", lines[1])
         r = self.c.post(f"/api/booking/calls/{prep.json()['call_id']}/place",
                         json={"read_back_sha256": prep.json()["read_back"]["sha256"], "approval": {"how": "button"}})
         self.assertEqual(r.json()["status"], "placed", r.text)

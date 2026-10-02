@@ -37,7 +37,7 @@ class Render(unittest.TestCase):
         self.assertEqual(b["brief"]["purpose"], "quote_first")
         self.assertIsNone(b["brief"]["recap"])                           # no booking, no recap
         self.assertEqual(b["brief"]["first_sentence"],
-                         "Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, calling on behalf of Tyler Warren "
+                         "Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling on behalf of Tyler Warren "
                          "to ask what it would cost and when you could do a fine-line tattoo on the forearm, for one piece. Could you tell me?")
         self.assertIn("Do NOT book anything and do not hold a slot", b["brief"]["task"])
         self.assertIn("If they ask what exactly: fine-line, forearm, about 10 cm.", b["brief"]["task"])
@@ -53,7 +53,7 @@ class Render(unittest.TestCase):
         v = C.CallVenue(key="read:s", name="Spa", number_env="", language="es", timezone="Europe/Madrid", number="+34910000000")
         b = R.call_for(o, v, NOW, "+34910000000")
         self.assertEqual(b["brief"]["first_sentence"],
-                         "Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y llamo de parte de "
+                         "Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL, y llamo de parte de "
                          "Tyler Warren para preguntar cuándo tendrían hueco para un masaje de 60 minutos, para una persona. ¿Me lo podrían decir?")
         self.assertIn("(in Spanish: Hello, this is Sasha", b["read_back_lines"][1])
 

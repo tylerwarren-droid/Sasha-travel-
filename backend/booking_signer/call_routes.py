@@ -128,9 +128,9 @@ GIVE_UP_AFTER = timedelta(minutes=10)    # no call in Bland's log by then: it wa
 #: the guest's yes (it confirms the same booking, it books nothing new), ending with the explicit recap. Spanish and
 #: English venues; any other language goes straight to the written ask.
 CONFIRM_OPENING = {
-    "es": "Hola, soy Sasha otra vez, la concierge de inteligencia artificial operada por Kanoe Technologies SL. Les llamé hace un "
+    "es": "Hola, soy Sasha otra vez, la concierge de inteligencia artificial de Kanoe Technologies SL. Les llamé hace un "
           "momento por una reserva y se cortó la llamada. ",
-    "en": "Hello, it's Sasha again, the AI concierge operated by Kanoe Technologies SL. I called a moment ago about a booking and "
+    "en": "Hello, it's Sasha again, the AI concierge from Kanoe Technologies SL. I called a moment ago about a booking and "
           "we were cut off. ",
 }
 CONFIRM_TASK = ("This is a short CONFIRMATION call. Minutes ago you called this venue to book exactly this booking, and the "

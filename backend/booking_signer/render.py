@@ -334,6 +334,17 @@ _ASK = {
 }
 
 
+#: Sasha 110 · ON THE PHONE the disclosure is the shorter form the founder approved ("…de Kanoe Technologies SL"); the
+#: written wordings (WhatsApp, email, the consents — versioned and hashed) keep theirs
+_PHONE_SHORT = (("operated by", "from"), ("operada por", "de"), ("operada pela", "da"), ("exploitée par", "de"), ("gestita da", "di"))
+
+
+def phone_disclosure(text: str) -> str:
+    for a, b in _PHONE_SHORT:
+        text = text.replace(f" {a} Kanoe Technologies SL", f" {b} Kanoe Technologies SL")
+    return text
+
+
 def ask_opening(lang: C.Lang, o: Mapping[str, Any], today: date) -> str:
     from .wordings import DISCLOSURE
     code = _code(lang)
@@ -344,7 +355,7 @@ def ask_opening(lang: C.Lang, o: Mapping[str, Any], today: date) -> str:
         w, at = spoken_when(lang, o, today)
         when = f" {w} {at}".rstrip()
     party = party_of(lang, o)
-    s = frame.format(d=DISCLOSURE.get(code, DISCLOSURE["en"]), party=party, ask=ask, act=activity_phrase(lang, o),
+    s = frame.format(d=phone_disclosure(DISCLOSURE.get(code, DISCLOSURE["en"])), party=party, ask=ask, act=activity_phrase(lang, o),
                      count=spoken_count(lang, o), when=when)
     return " ".join(s.split())
 

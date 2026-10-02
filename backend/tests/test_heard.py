@@ -15,7 +15,7 @@ LA_CONTRA = [
     ("user", "Diga."),
     ("assistant", "Hola, soy Sasha, una conc-"),
     ("user", "Diga."),
-    ("assistant", "Hola, soy Sasha, una concierge de inteligencia artificial operada por Kanoe Technologies SL, y llamo de parte de la familia Warren para reservar una mesa para 2 personas el viernes a la 13:00. ¿Sería posible?"),
+    ("assistant", "Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL, y llamo de parte de la familia Warren para reservar una mesa para 2 personas el viernes a la 13:00. ¿Sería posible?"),
     ("user", "Un momento, por favor."),
     ("assistant", "[Waiting]"),
     ("user", "¿El viernes dos?"),

@@ -43,8 +43,21 @@ log = logging.getLogger("booking_signer.guest_whatsapp")
 NOW = lambda: datetime.now(timezone.utc)
 
 CONSENT = {"v2": ("Sasha by Kanoe will message you on WhatsApp about the bookings you ask for: confirmations, progress "
-                  "and receipts. Reply STOP at any time to stop.")}
-CURRENT = "v2"
+                  "and receipts. Reply STOP at any time to stop."),
+           # S-83 §3a · reminders get their own line (EU 122); v2 links keep citing v2
+           "v3": ("Sasha by Kanoe will message you on WhatsApp about the bookings you ask for: confirmations, progress "
+                  "and receipts. Reply STOP at any time to stop.\n"
+                  "She will also send you reminders about those bookings: the day before, when it's time to leave, and a "
+                  "morning summary — never between 22:00 and 08:00, at most 4 a day. Reply STOP REMINDERS to stop just these.")}
+CURRENT = "v3"
+
+
+def consent_at_least(version: str, n: int) -> bool:
+    """'v10' ≥ 'v3' — versions compared as numbers, never as strings."""
+    try:
+        return int(str(version)[1:]) >= n
+    except ValueError:
+        return False
 CODE_LIFE = timedelta(minutes=10)
 LINK_TRIES_PER_HOUR = 5
 CARDS_LIFE = timedelta(minutes=60)
@@ -147,6 +160,13 @@ class MemoryGuestStore:
         if key in self.channels:
             self.channels[key]["opted_out_at"] = at
 
+    async def all_channels(self) -> List[dict]:
+        return [dict(c) for c in self.channels.values() if not c.get("opted_out_at")]
+
+    async def set_consent(self, key: str, version: str, sha: str, at: datetime) -> None:
+        if key in self.channels:
+            self.channels[key].update(consent_wording_version=version, consent_text_sha256=sha, consent_at=at)
+
     async def get_state(self, key: str) -> dict:
         return dict(self.state.get(key) or {"history": [], "pending": None, "last_inbound_at": None, "link_tries": []})
 
@@ -219,6 +239,15 @@ class PostgresGuestStore:
         await self._run(lambda c: c.execute(
             "update guest_channels set opted_out_at = $2 where channel = 'whatsapp' and wa_id_sha256 = $1", key, at))
 
+    async def all_channels(self):
+        rows = await self._run(lambda c: c.fetch("select * from guest_channels where channel = 'whatsapp' and opted_out_at is null"))
+        return [self._ch(r) for r in rows]
+
+    async def set_consent(self, key, version, sha, at):
+        await self._run(lambda c: c.execute(
+            "update guest_channels set consent_wording_version = $2, consent_text_sha256 = $3, consent_at = $4 "
+            "where channel = 'whatsapp' and wa_id_sha256 = $1", key, version, sha, at))
+
     async def get_state(self, key):
         r = await self._run(lambda c: c.fetchrow("select * from guest_wa_state where wa_id_sha256 = $1", key))
         if not r:
@@ -284,13 +313,16 @@ class Sender:
             log.error("[guest_whatsapp] quick-reply content failed: %s: %s", type(e).__name__, e)
         return None
 
-    async def send(self, frm: str, to: str, *, body: str = "", media: Optional[str] = None, content_sid: Optional[str] = None) -> str:
+    async def send(self, frm: str, to: str, *, body: str = "", media: Optional[str] = None, content_sid: Optional[str] = None,
+                   variables: Optional[dict] = None) -> str:
         auth = self._auth()
         if not auth:
             return "not sent: no Twilio account"
         data = {"From": f"whatsapp:{frm}", "To": f"whatsapp:{to}"}
         if content_sid:
             data["ContentSid"] = content_sid
+            if variables:   # S-83 §2 · an approved template's numbered variables
+                data["ContentVariables"] = json.dumps({str(k): str(v) for k, v in variables.items()})
         else:
             data["Body"] = body[:1500]
             if media:
@@ -507,6 +539,12 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         await STORE.put_state(key, st)
         await deliver(ch, frm, out, now)
         return out
+    reminders = await _reminders_words(ch, body, now)   # S-83 §3a · STOP REMINDERS / YES REMINDERS
+    if reminders:
+        out.text(reminders)
+        await STORE.put_state(key, st)
+        await deliver(ch, frm, out, now)
+        return out
     if _STOP.match(body):
         await STORE.set_opted_out(key, now)
         st["pending"] = None
@@ -531,6 +569,9 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     handled = await _answer_pending(ctx, body, payload)
     if not handled:
         await _new_request(ctx, body)
+    offer = await _reminders_offer(ch)
+    if offer:
+        out.text(offer)
     st["history"] = (st.get("history") or []) + [{"role": "user", "content": body}] + \
                     ([{"role": "assistant", "content": out.said()}] if out.items else [])
     st["history"] = st["history"][-HISTORY_KEEP:]
@@ -553,6 +594,43 @@ def cancel_intent(body: str) -> Optional[str]:
         return None
     rest = _CANCEL_FILLER.sub(" ", re.sub(r"[^\wáéíóúñü' -]", " ", t))
     return " ".join(rest.split())
+
+
+_STOP_REM = re.compile(r"^\s*(stop|parar|baja)\s+(reminders?|recordatorios?)\s*[.!]?\s*$", re.I)
+_YES_REM = re.compile(r"^\s*(yes|s[ií]|start)\s+(reminders?|recordatorios?)\s*[.!]?\s*$", re.I)
+REMINDERS_OFFER = ("Want reminders about your bookings (the day before, when it's time to leave, a morning summary)? "
+                   "Reply YES REMINDERS.")
+
+
+async def _reminders_words(ch: dict, body: str, now) -> Optional[str]:
+    from . import proactive as PR
+    if PR.STORE is None:
+        return None
+    if _STOP_REM.match(body or ""):
+        await PR.STORE.set_prefs(ch["account_id"], all_off=True)
+        return "OK — no more reminders. Confirmations and receipts still come."
+    if _YES_REM.match(body or ""):
+        c = consent("v3")
+        await STORE.set_consent(ch["wa_id_sha256"], c["version"], c["sha256"], now)
+        await PR.STORE.set_prefs(ch["account_id"], all_off=False)
+        return ("Done — reminders are on: the day before, when it's time to leave and a morning summary, never between "
+                "22:00 and 08:00, at most 4 a day. Reply STOP REMINDERS to stop just these.")
+    return None
+
+
+async def _reminders_offer(ch: dict) -> Optional[str]:
+    """S-83 §3a · a v2 guest is asked ONCE, in reply to their next message; ignored or declined, never again."""
+    from . import proactive as PR
+    if PR.STORE is None or consent_at_least(ch.get("consent_wording_version") or "v0", 3):
+        return None
+    try:
+        if await PR.STORE.get_prefs(ch["account_id"]) is not None:
+            return None
+        await PR.STORE.set_prefs(ch["account_id"], all_off=True)   # recorded as asked: off until they say YES
+    except StorageUnavailable as e:
+        log.info("[guest_whatsapp] reminders offer skipped: %s", e.detail)
+        return None
+    return REMINDERS_OFFER
 
 
 async def _new_request(ctx: dict, body: str) -> None:

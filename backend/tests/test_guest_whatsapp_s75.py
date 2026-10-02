@@ -1,0 +1,353 @@
+"""S-75 steps 4–9 · Sasha on WhatsApp for guests, in the sandbox: who wrote decides everything, a venue is never answered,
+the model is never called, a yes binds only to its own question, STOP is silence. Offline (the booking routes are faked
+at the in-process boundary; the webhook is the real one).
+
+    cd backend && python -m unittest tests.test_guest_whatsapp_s75 -v
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import unittest
+from datetime import datetime, timedelta, timezone
+from unittest import mock
+
+from booking_signer import guest_whatsapp as GW, inbound_phone as IP, places_terms as PT
+from booking_signer.vault import guard as G
+from tests import test_booking_ladder as TBL, test_inbound_phone as TIP   # modules: their tests are not collected twice
+
+SANDBOX = "+14155238886"
+GUEST = "+447700900123"
+ACCOUNT = "22222222-2222-4222-8222-222222222222"
+NOW = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
+
+
+def run(coro):
+    return asyncio.get_event_loop().run_until_complete(coro)
+
+
+class FakeSender:
+    def __init__(self):
+        self.sent, self.contents = [], []
+
+    async def quick_reply(self, body, buttons):
+        self.contents.append((body, buttons))
+        return f"HX{len(self.contents)}"
+
+    async def send(self, frm, to, *, body="", media=None, content_sid=None):
+        self.sent.append({"from": frm, "to": to, "body": body, "media": media, "content": content_sid})
+        return "sent"
+
+
+CANDS = [{"place_id": f"p{i}", "name": n, "country": "ES", "rating": r, "rating_count": 200, "distance_m": d, "website": None}
+         for i, (n, r, d) in enumerate((("Botavara Chamberí", 4.6, 300), ("A Very Long Restaurant Name In Madrid", 4.8, 900),
+                                        ("Casa Lucio", 4.4, 1200), ("Fourth Place", 4.1, 50)))]
+
+
+class FakeApi:
+    def __init__(self):
+        self.calls = []
+        self.contact = {"name": "Tyler Warren", "mobile_e164": GUEST}
+        self.place = {"status": "placed", "say": "I'm on the phone to Botavara Chamberí now."}
+        self.cancel_post = {"status": "requested", "say": "I've emailed them to cancel it."}
+
+    async def __call__(self, account, method, path, body=None, timeout=90.0):
+        self.calls.append((account, method, path, body))
+        if path == "/api/booking/venues/find":
+            return 200, {"candidates": CANDS, "ranking": {"default": "rated", "orders": {"rated": ["p1", "p0", "p2", "p3"]},
+                                                          "picks": {"rated": "p1"}, "count": "4 places found"}}
+        if path == "/api/booking/venues/read":
+            return 200, {"read_id": "r-1", "venue": "Botavara", "country": "ES", "listing": {"name": "Botavara Chamberí"},
+                         "rungs": [{"rung": "phone", "available": True, "fact_index": 2, "value": "+34 91 000"}], "say": "x"}
+        if path == "/api/booking/contact":
+            return 200, {"contact": self.contact}
+        if path == "/api/booking/calls" and method == "POST":
+            if body.get("cancels_call_id"):
+                return 200, {"call_id": "cancel-call-1", "read_back": {"lines": ["I'll ask them to cancel."], "sha256": "c" * 64}}
+            return 200, {"call_id": "call-12345678", "read_back": {"lines": ["Hola, quería reservar…"], "sha256": "a" * 64},
+                         "sentence": "Book Botavara Chamberí for 2, Saturday 3 October at 21:00, under Warren?"}
+        if path.endswith("/place"):
+            return 200, self.place
+        if path == "/api/booking/reservations":
+            return 200, {"reservations": [{"id": "t-1", "venue": "Botavara Chamberí", "date": "2026-10-03", "time": "21:00",
+                                           "party": 2, "status": "confirmed", "status_words": "confirmed by the restaurant", "receipt": None}]}
+        if path == "/api/booking/reservations/t-1/cancel" and method == "GET":
+            return 200, {"route": "email", "venue": "Botavara Chamberí", "call_id": None,
+                         "read_back": {"lines": ["I'll email them to cancel."], "sha256": "e" * 64},
+                         "sentence": "Cancel Botavara Chamberí, Saturday 3 October at 21:00, for 2, under Tyler Warren?"}
+        if path == "/api/booking/reservations/t-1/cancel" and method == "POST":
+            return 200, self.cancel_post
+        return 404, {"message": f"no fake for {method} {path}"}
+
+
+class Base(unittest.TestCase):
+    def setUp(self):
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        self.env = mock.patch.dict(os.environ, {"SASHA_GUEST_WHATSAPP_TO": SANDBOX, "SASHA_EMAILS": "", "SASHA_WEB_URL": "https://sasha.test"})
+        self.env.start()
+        self.gw_saved = (GW.STORE, GW.SENDER, GW.api, GW.NOW, GW._spawn)
+        GW.STORE, GW.SENDER, GW.api = GW.MemoryGuestStore(), FakeSender(), FakeApi()
+        self.spawned = []
+        GW._spawn = lambda coro: (self.spawned.append(coro.__name__), coro.close())   # watchers are tested on their own
+        self.now = NOW
+        GW.NOW = lambda: self.now
+        self.model = mock.patch("app.services.llm.client.messages.create", side_effect=AssertionError("the model was called"))
+        self.model.start()
+
+    def tearDown(self):
+        self.model.stop()
+        GW.STORE, GW.SENDER, GW.api, GW.NOW, GW._spawn = self.gw_saved
+        self.env.stop()
+
+    def link(self, opted_out=None):
+        run(GW.STORE.link({"account_id": ACCOUNT, "wa_id_sha256": GW.wa_key(GUEST), "number_e164": GUEST, "linked_at": NOW,
+                           "consent_at": NOW, "consent_wording_version": "v2", "consent_text_sha256": GW.consent()["sha256"],
+                           "opted_out_at": opted_out}))
+        return run(GW.STORE.channel_for(GW.wa_key(GUEST)))
+
+    def say(self, body, payload="", text=""):
+        ch = run(GW.STORE.channel_for(GW.wa_key(GUEST)))
+        return run(GW.turn(ch, SANDBOX, {"From": f"whatsapp:{GUEST}", "To": f"whatsapp:{SANDBOX}", "Body": body,
+                                         "ButtonPayload": payload, "ButtonText": text}))
+
+    def bodies(self):
+        return [s["body"] for s in GW.SENDER.sent]
+
+    def api_paths(self):
+        return [c[2] for c in GW.api.calls]
+
+
+class Webhook(Base):
+    """Through the real webhook: who wrote, on which number."""
+
+    def setUp(self):
+        super().setUp()
+        TIP.InboundPhone.setUp(self)
+
+    def tearDown(self):
+        TIP.InboundPhone.tearDown(self)
+        super().tearDown()
+
+    def wa(self, sid, sender, body, to):
+        form = {"MessageSid": sid, "From": f"whatsapp:{sender}", "To": f"whatsapp:{to}", "Body": body}
+        return self.c.post("/api/booking/twilio/sms", data=form, headers={"X-Twilio-Signature": TIP.sign("sms", form)})
+
+    def test_on_sashas_own_number_a_venue_is_filed_exactly_as_before_and_never_answered(self):
+        r = self.wa("SM1", TIP.SITE_NUMBER, "Confirmado: mesa para 4 personas el jueves 8 de octubre a las 20:00.", "+447915914215")
+        self.assertTrue(r.text.endswith("<Response></Response>"))
+        self.assertEqual(IP.STORE.rows["SM1"]["trip_item_id"], "t-site")
+        self.assertEqual(GW.SENDER.sent, [])
+
+    def test_on_the_guest_number_a_venue_still_takes_the_venue_path(self):
+        r = self.wa("SM2", TIP.SITE_NUMBER, "Confirmado", SANDBOX)
+        self.assertTrue(r.text.endswith("<Response></Response>"))
+        self.assertIn("SM2", IP.STORE.rows)
+
+    def test_an_unknown_sender_gets_one_sentence_and_only_their_hash_is_kept(self):
+        r = self.wa("SM3", GUEST, "hello?", SANDBOX)
+        self.assertIn("link your account first", r.text)
+        self.assertNotIn("SM3", IP.STORE.rows)                                    # not filed as a venue's message
+        self.assertNotIn(GUEST, json.dumps(GW.STORE.state, default=str))          # never the digits
+        self.assertNotIn("hello", json.dumps(GW.STORE.state, default=str))        # nor the words
+        self.assertFalse(self.wa("SM4", GUEST, "anyone?", SANDBOX).text.count("<Message>"))   # not again within ten minutes
+
+    def test_a_link_code_works_once_and_expires(self):
+        c = GW.consent()
+        run(GW.STORE.put_code({"code": "123456", "account_id": ACCOUNT, "consent_at": NOW,
+                               "consent_wording_version": "v2", "consent_text_sha256": c["sha256"], "created_at": NOW}))
+        self.assertIn("Linked.", self.wa("SM5", GUEST, "LINK 123456", SANDBOX).text)
+        ch = run(GW.STORE.channel_for(GW.wa_key(GUEST)))
+        self.assertEqual((ch["account_id"], ch["consent_wording_version"]), (ACCOUNT, "v2"))
+        other = "+447700900999"
+        self.assertIn("didn't work", self.wa("SM6", other, "LINK 123456", SANDBOX).text)            # used: once only
+        run(GW.STORE.put_code({"code": "654321", "account_id": ACCOUNT, "consent_at": NOW, "consent_wording_version": "v2",
+                               "consent_text_sha256": c["sha256"], "created_at": NOW - timedelta(minutes=11)}))
+        self.assertIn("didn't work", self.wa("SM7", other, "LINK 654321", SANDBOX).text)            # ten minutes, then gone
+
+    def test_link_tries_are_limited(self):
+        for i in range(5):
+            self.assertIn("didn't work", self.wa(f"SMx{i}", GUEST, "LINK 000000", SANDBOX).text)
+        self.assertIn("Too many tries", self.wa("SMx5", GUEST, "LINK 000000", SANDBOX).text)
+
+    def test_a_linked_guest_is_answered_in_the_background_not_in_the_webhook(self):
+        self.link()
+        r = self.wa("SM8", GUEST, "dinner for 2 in Chamberí on Saturday at 9", SANDBOX)
+        self.assertTrue(r.text.endswith("<Response></Response>"))
+        self.assertEqual(self.spawned, ["_turn"])
+        self.assertNotIn("SM8", IP.STORE.rows)
+
+
+class Turns(Base):
+    def setUp(self):
+        super().setUp()
+        self.link()
+        run(GW.STORE.put_state(GW.wa_key(GUEST), {"history": [], "pending": None, "last_inbound_at": NOW, "link_tries": []}))
+
+    def test_anything_but_booking_gets_the_fixed_sentence_and_no_model(self):
+        self.say("write me a poem about Madrid")
+        self.assertEqual(self.bodies(), [GW.OUT_OF_SCOPE.format(web=GW.web_url())])
+        self.assertEqual(GW.api.calls, [])
+
+    def test_a_spoken_style_request_shows_three_cards_and_one_question(self):
+        self.say("Book a luxury dinner for two in Chamberí on Saturday at nine.")
+        find = GW.api.calls[0][3]
+        self.assertEqual((find["where"], find["country"], find["open_at"]), ("Chamberí, Madrid", "ES", "2026-10-03T21:00"))
+        medias = [s for s in GW.SENDER.sent if s["content"] is None][1:]
+        self.assertEqual(len(medias), 3)
+        self.assertTrue(medias[0]["body"].startswith("Sasha's pick · A Very Long Restaurant"))
+        body, buttons = GW.SENDER.contents[0]
+        self.assertEqual(body, "Which one?")
+        self.assertTrue(all(len(GW.title(t)) <= 25 for t, _ in buttons))
+        self.assertEqual(len(buttons), 3)
+
+    def pick_first(self):
+        self.say("dinner for 2 in Chamberí on Saturday at 9")
+        _, buttons = GW.SENDER.contents[-1]
+        self.say("A Very Long…", payload=buttons[0][1])
+
+    def test_a_pick_reads_the_place_and_asks_one_sentence_bound_to_its_read_back(self):
+        self.pick_first()
+        body, buttons = GW.SENDER.contents[-1]
+        self.assertEqual(body, "Book Botavara Chamberí for 2, Saturday 3 October at 21:00, under Warren?")
+        self.assertEqual(buttons[0], ("Yes, book it", "yes:call-123:" + "a" * 16))
+        self.assertIn("Exactly what I'll say:\n• Hola, quería reservar…", self.bodies())
+        prep = next(c for c in GW.api.calls if c[2] == "/api/booking/calls")[3]
+        self.assertEqual(prep["reservation"]["who"], {"name": "Tyler Warren", "contact": {"mobile_e164": GUEST}})
+        self.assertEqual(prep["fact_index"], 2)
+
+    def test_a_typed_vale_binds_to_the_newest_question_with_its_words(self):
+        self.pick_first()
+        self.say("vale")
+        place = next(c for c in GW.api.calls if c[2].endswith("/place"))
+        self.assertEqual(place[2], "/api/booking/calls/call-12345678/place")
+        self.assertEqual(place[3], {"read_back_sha256": "a" * 64, "approval": {"how": "whatsapp_text", "said": "vale"}})
+
+    def test_the_button_yes_and_a_stale_button(self):
+        self.pick_first()
+        self.say("Yes, book it", payload="yes:call-123:" + "b" * 16, text="Yes, book it")        # an older card's hash
+        self.assertFalse(any(c[2].endswith("/place") for c in GW.api.calls))
+        self.assertIn("earlier question", self.bodies()[-1])
+
+    def test_a_yes_after_fifteen_minutes_places_nothing(self):
+        self.pick_first()
+        self.now = NOW + timedelta(minutes=16)
+        self.say("yes")
+        self.assertFalse(any(c[2].endswith("/place") for c in GW.api.calls))
+        self.assertIn("expired", self.bodies()[-1])
+
+    def test_no_contact_saved_means_no_booking(self):
+        GW.api.contact = None
+        self.pick_first()
+        self.assertFalse(any(c[2] == "/api/booking/calls" for c in GW.api.calls))
+        self.assertIn("name and mobile", self.bodies()[-1])
+
+    def test_stop_is_said_once_then_silence_and_start_resumes(self):
+        self.say("STOP")
+        self.assertEqual(self.bodies(), [GW.STOPPED])
+        self.say("dinner for 2 in Chamberí on Saturday at 9")
+        self.assertEqual(self.bodies(), [GW.STOPPED])                              # nothing at all
+        self.assertEqual(GW.api.calls, [])
+        self.say("START")
+        self.assertEqual(self.bodies()[-1], GW.STARTED)
+
+    def test_a_password_is_never_kept(self):
+        self.say("my Mercadona password is hunter2!")
+        self.assertEqual(self.bodies(), [G.SECRET_REPLY])
+        self.assertNotIn("hunter2", json.dumps(GW.STORE.state, default=str))
+
+    def test_outside_twenty_four_hours_nothing_is_sent(self):
+        ch = run(GW.STORE.channel_for(GW.wa_key(GUEST)))
+        self.assertEqual(run(GW.deliver(ch, SANDBOX, GW.Out().text("hi"), NOW - timedelta(hours=25))), ["not sent: outside the 24-hour window"])
+        self.assertEqual(GW.SENDER.sent, [])
+
+    def test_cancel_by_email_says_cancelling_never_cancelled_until_their_words(self):
+        self.say("cancel Botavara")
+        body, buttons = GW.SENDER.contents[-1]
+        self.assertEqual(body, "Cancel Botavara Chamberí, Saturday 3 October at 21:00, for 2, under Tyler Warren?")
+        self.say("Yes, cancel", payload=buttons[0][1], text="Yes, cancel")
+        post = next(c for c in GW.api.calls if c[1] == "POST" and c[2].endswith("/cancel"))
+        self.assertEqual(post[3]["approval"], {"how": "whatsapp_button", "said": "Yes, cancel"})
+        self.assertTrue(self.bodies()[-1].startswith("Cancelling with Botavara Chamberí now."))
+        self.assertFalse(any("has cancelled" in b for b in self.bodies()))
+        self.assertEqual(self.spawned, ["watch_cancel"])                            # watching for their written words
+
+    def test_receipts(self):
+        self.say("my bookings")
+        self.assertIn("• Botavara Chamberí — Saturday 3 October at 21:00, 2 — confirmed by the restaurant", self.bodies()[-1])
+
+
+class Progress(Base):
+    def test_one_message_per_state_never_two(self):
+        ch = self.link()
+        run(GW.STORE.put_state(GW.wa_key(GUEST), {"history": [], "pending": None, "last_inbound_at": NOW, "link_tries": []}))
+        seq = iter([(200, {"status": "placed"}), (200, {"status": "placed"}),
+                    (200, {"status": "answered", "outcome": "yes", "say": "Booked: Botavara confirmed it.", "venue_words": "Sí, perfecto."})])
+
+        async def fake(account, method, path, body=None, timeout=90.0):
+            return next(seq)
+        with mock.patch.object(GW, "WATCH_CALL", (0, 5)), mock.patch.object(GW, "api", fake):
+            run(GW.watch_call(ch, SANDBOX, ACCOUNT, "call-1", "Botavara", "book"))
+        self.assertEqual(self.bodies()[:2], ["Booked: Botavara confirmed it.", "What they said, word for word: “Sí, perfecto.”"])
+        self.assertEqual(len([b for b in self.bodies() if b.startswith("Booked")]), 1)
+
+
+@unittest.skipUnless(TBL.PG_URL, "BOOKING_TEST_DATABASE_URL is not set — the Postgres half did NOT run")
+class OnPostgresStore(unittest.TestCase):
+    """sql/020 as written: a code once, a link replacing the account's old one, STOP, the state round trip."""
+
+    @classmethod
+    def setUpClass(cls):
+        TBL.OnPostgres.setUpClass.__func__(cls)
+        import asyncpg
+        import pathlib
+
+        async def apply():
+            c = await asyncpg.connect(TBL.PG_URL)
+            try:
+                sql = (pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql" / "020_guest_channels.sql").read_text()
+                await c.execute("drop table if exists guest_channels, guest_link_codes, guest_wa_state")
+                await c.execute(sql[sql.index("begin;"):sql.index("-- VERIFY")])
+            finally:
+                await c.close()
+        asyncio.run(apply())
+
+    def test_the_store(self):
+        from booking_signer.store import PostgresStore
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        base = PostgresStore(TBL.PG_URL)
+        st = GW.PostgresGuestStore(base)
+        acct = TBL.DEMO_ACCOUNT_ID
+        c = GW.consent()
+
+        async def go():
+            try:
+                row = {"code": "111111", "account_id": acct, "consent_at": NOW, "consent_wording_version": "v2",
+                       "consent_text_sha256": c["sha256"], "created_at": NOW}
+                self.assertTrue(await st.put_code(row))
+                self.assertFalse(await st.put_code(row))                                   # one code, one row
+                self.assertIsNone(await st.take_code("111111", NOW + timedelta(minutes=11)))   # expired
+                got = await st.take_code("111111", NOW + timedelta(minutes=1))
+                self.assertEqual(got["account_id"], acct)
+                self.assertIsNone(await st.take_code("111111", NOW + timedelta(minutes=2)))   # used
+                link = {"account_id": acct, "wa_id_sha256": GW.wa_key(GUEST), "number_e164": GUEST, "linked_at": NOW,
+                        "consent_at": NOW, "consent_wording_version": "v2", "consent_text_sha256": c["sha256"]}
+                await st.link(link)
+                await st.link({**link, "wa_id_sha256": GW.wa_key("+447700900999"), "number_e164": "+447700900999"})
+                self.assertIsNone(await st.channel_for(GW.wa_key(GUEST)))                 # one WhatsApp per account
+                self.assertEqual((await st.channel_of_account(acct))["number_e164"], "+447700900999")
+                await st.set_opted_out(GW.wa_key("+447700900999"), NOW)
+                self.assertEqual((await st.channel_for(GW.wa_key("+447700900999")))["opted_out_at"], NOW)
+                state = {"history": [{"role": "user", "content": "dinner"}], "pending": {"kind": "cards", "nonce": "ab"},
+                         "last_inbound_at": NOW, "link_tries": ["2026-10-02T12:00:00+00:00"]}
+                await st.put_state("a" * 64, state)
+                self.assertEqual(await st.get_state("a" * 64), state)
+                self.assertEqual((await st.unlink(acct))["account_id"], acct)
+                self.assertIsNone(await st.channel_of_account(acct))
+            finally:
+                await base.close()
+        asyncio.get_event_loop().run_until_complete(go())
+
+
+if __name__ == "__main__":
+    unittest.main()

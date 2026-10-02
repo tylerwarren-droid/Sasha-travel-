@@ -31,7 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import call_routes, cancel_routes, contacts, form_rung, inbound_phone, ladder_routes, optin_page, optins, receipt, reservation as RS, retention, stop
+from . import call_routes, cancel_routes, contacts, form_rung, guest_whatsapp, inbound_phone, ladder_routes, optin_page, optins, receipt, reservation as RS, retention, stop
 from . import venue_read as V
 from .account import account_for
 from .gate import require_booking_key
@@ -91,6 +91,7 @@ stop.STOP_STORE = stop.PostgresStopStore(STORE)   # S-56 · a venue's stop, on a
 contacts.STORE = contacts.PostgresContactStore(STORE)   # S-62 step 5 · a guest's name and mobile (sql/015)
 inbound_phone.STORE = inbound_phone.PostgresInboundStore(STORE)   # S-70 · SMS and voicemail to Sasha's number (sql/016)
 form_rung.STORE = form_rung.PostgresFormStore(STORE)   # Sasha 89 · the form rung, submitting (sql/018)
+guest_whatsapp.STORE = guest_whatsapp.PostgresGuestStore(STORE)   # S-75 · guests on WhatsApp (sql/020)
 
 
 def _now() -> datetime:
@@ -142,6 +143,7 @@ async def health():
         "calls": call_routes.status(),
         "sasha_number": inbound_phone.status(),   # S-70
         "forms": form_rung.forms_status(),   # Sasha 89
+        "whatsapp_guests": guest_whatsapp.status(),   # S-75 · the sandbox phase
         "ladder": ladder_routes.status(),
         # S-64 · the two Stage B hooks in the CTO's conductor: false means a CTO drop removed one — booking-in-chat is off
         "chat_hooks": chat_hooks(),
@@ -513,6 +515,7 @@ router.include_router(inbound_phone.router)
 router.include_router(receipt.router)
 # Sasha 89 · the form rung, submitting — and our own test venue to prove it on
 router.include_router(form_rung.router)
+router.include_router(guest_whatsapp.router)   # S-75 · /api/booking/whatsapp
 # Sasha 99 · cancelling by the best route there is (link, email, text, call)
 router.include_router(cancel_routes.router)
 # S-55 · the Work-with-Sasha page's server half (reached through the frontend's own route, which adds the key)

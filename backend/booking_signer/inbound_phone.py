@@ -209,6 +209,18 @@ async def sms(request: Request):
     body, sid = p.get("Body", ""), p.get("MessageSid") or p.get("SmsSid")
     if not sid:
         return Response("no message id", status_code=400)
+    if channel == "whatsapp":
+        # S-75 · a GUEST on a guest number (the sandbox's, SASHA_GUEST_WHATSAPP_TO): linked → their booking turn; "LINK
+        # 123456" → linking; anyone else → one fixed sentence. None (every other number, or a venue): the code below,
+        # byte for byte — a venue is never answered.
+        from . import guest_whatsapp as GW
+        try:
+            inner = await GW.dispatch(p, lambda n: STORE.call_for_number(n, NOW() - MATCH_WINDOW))
+        except StorageUnavailable as e:
+            log.error("[inbound_phone] a guest's WhatsApp %s was not handled: %s", sid, e.detail)
+            return _twiml()   # a guest number: never filed as a venue's message
+        if inner is not None:
+            return _twiml(inner)
     now = NOW()
     try:
         call = await STORE.call_for_number(sender, now - MATCH_WINDOW) if sender else None

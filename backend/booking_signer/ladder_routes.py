@@ -32,6 +32,7 @@ from . import reservation as RS
 from . import slot_link as SL
 from . import stop as S
 from . import venue_read as V
+from . import yes as YS
 from .account import account_for
 from .call_store import cap_window
 from .store import AlreadyRecorded, StorageUnavailable, UnknownTrip
@@ -286,8 +287,8 @@ async def send_email(email_id: str, request: Request):
         return _refuse(422, "approval_void", "the approval was given to different words from this email's read-back")
     a = body.get("approval") if isinstance(body.get("approval"), dict) else {}
     # S-66 (EU) step 6 · a yes TYPED in the chat counts too — with the guest's exact words, kept with the approval
-    if a.get("how") not in ("button", "voice", "chat") or (a.get("how") in ("voice", "chat") and not str(a.get("said") or "").strip()):
-        return _refuse(422, "approval_void", "an approval is by button, or by voice or typed in the chat with the words said")
+    if not YS.approval_ok(a):   # S-75 step 2 · WhatsApp's button and typed yes too (yes.py)
+        return _refuse(422, "approval_void", YS.APPROVAL_VOID)
     if E.email_sha256(e["email"]) != e["email_sha256"]:
         return _refuse(409, "email_changed", "the stored email no longer matches what was read back; nothing was sent")
     # S-54 · checked again at the send: a venue can withdraw between the read-back and the yes
@@ -550,7 +551,7 @@ async def link_booked(link_id: str, request: Request):
     """The guest says they booked — recorded as THEIR word (`guest_booked`), never as the platform's confirmation."""
     body = await _json(request) or {}
     account = account_for(request)
-    said = {"how": body.get("how") if body.get("how") in ("button", "voice", "chat") else "button", "said": body.get("said")}
+    said = {"how": body.get("how") if body.get("how") in YS.HOWS else "button", "said": body.get("said")}
     try:
         r = await LADDER_STORE.guest_booked(account, link_id, said, NOW())
     except StorageUnavailable as e:

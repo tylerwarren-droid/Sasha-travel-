@@ -18,10 +18,10 @@ import type { Receipt } from './ReceiptCard'
 
 type Row = { id: string; channel: string; status: string; date: string | null; time: string | null; venue: string; party: number | null; receipt: string | null }
 type Found = { rc: Pick<Receipt, 'venue' | 'date' | 'time' | 'count' | 'for_whom'> & { call_id?: string; trip_item_id: string } }
-type Plan = { route: 'link' | 'email' | 'sms' | 'call' | null; venue: string; url: string | null; platform: string | null; call_id: string | null
+type Plan = { route: 'link' | 'email' | 'sms' | 'call' | null; venue: string; url: string | null; platform: string | null; call_id: string | null; sentence?: string
   read_back: { lines: string[]; sha256: string } }
 type Phase = { p: 'finding' } | { p: 'none'; words: string } | { p: 'choose'; options: Found[] } | { p: 'preparing'; f: Found }
-  | { p: 'ask'; f: Found; callId: string; lines: string[]; sha: string; route: Plan['route'] }
+  | { p: 'ask'; f: Found; callId: string; lines: string[]; sha: string; route: Plan['route']; sentence: string }
   | { p: 'press'; f: Found; url: string; platform: string } | { p: 'cancelling'; f: Found } | { p: 'done'; f: Found; say: string; words: string | null; cancelled: boolean }
   | { p: 'refused'; words: string } | { p: 'not_now' }
 
@@ -42,13 +42,13 @@ export default function ChatCancel({ venue }: { venue: string }) {
     if (plan.route === null) { setPhase({ p: 'refused', words: plan.read_back.lines[0] }); return }
     if (plan.route !== 'call') {
       setPhase({ p: 'ask', f: { rc: { ...f.rc, venue: { ...f.rc.venue, name: plan.venue || f.rc.venue.name } } }, callId: '', lines: plan.read_back.lines,
-        sha: plan.read_back.sha256, route: plan.route })
+        sha: plan.read_back.sha256, route: plan.route, sentence: plan.sentence ?? '' })
       return
     }
     const r = await prepareCall({ cancels_call_id: plan.call_id })
     if (!r.ok) { setPhase({ p: 'refused', words: `I can't cancel it by phone right now — ${refusal(r.json, r.status)}. Nothing was dialled.` }); return }
     const rb = r.json.read_back as { lines: string[]; sha256: string }
-    setPhase({ p: 'ask', f, callId: String(r.json.call_id), lines: rb.lines, sha: rb.sha256, route: 'call' })
+    setPhase({ p: 'ask', f, callId: String(r.json.call_id), lines: rb.lines, sha: rb.sha256, route: 'call', sentence: plan.sentence ?? '' })
   }
 
   async function goOther(f: Found, sha: string, how: 'button' | 'chat', said: string | null) {
@@ -132,7 +132,8 @@ export default function ChatCancel({ venue }: { venue: string }) {
       {phase.p === 'preparing' && <div>Getting the cancellation ready…</div>}
       {phase.p === 'ask' && (
         <div>
-          <div style={{ fontWeight: 600 }}>{sentence(phase.f)}</div>
+          {/* S-75 step 1 · the server's sentence (sentences.py) — WhatsApp asks the same words */}
+          <div style={{ fontWeight: 600 }}>{phase.sentence || sentence(phase.f)}</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
             <GatedButton label="Yes, cancel it" onClick={() => { (phase.route === 'call' ? approve(phase.callId, phase.sha, phase.f, 'button', null)
               : goOther(phase.f, phase.sha, 'button', null)).catch((e) => setPhase({ p: 'refused', words: (e as Error).message })) }} needs={[]} />

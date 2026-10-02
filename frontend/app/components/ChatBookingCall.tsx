@@ -46,6 +46,8 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
   const [saved, setSaved] = useState<{ contact: Contact | null; consent: Consent } | { why: string } | null>(null)
   const [keep, setKeep] = useState(false)
   const [note, setNote] = useState<string | null>(null)
+  // S-75 step 1 · the one sentence the guest is asked comes from the server (sentences.py), so WhatsApp says the same words
+  const [confirmSentence, setConfirmSentence] = useState('')
   // Sasha 96 · booking is automatic from the guest's side: no form on the normal path — it is opened only to change a
   // detail, and ONE question is asked only when something essential is missing
   const [showForm, setShowForm] = useState(false)
@@ -115,6 +117,7 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
     const r = await prepareCall({ reservation, read_id: readId, ...(phone.fact_index !== null ? { fact_index: phone.fact_index } : {}) })
     if (!r.ok) { setPhase({ p: 'refused', words: `Not prepared — ${refusal(r.json, r.status)}. Nothing was dialled.` }); return }
     const rb = r.json.read_back as { lines: string[]; sha256: string }
+    setConfirmSentence(String(r.json.sentence ?? ''))
     setPhase({ p: 'readback', callId: String(r.json.call_id), lines: rb.lines, sha: rb.sha256 })
   }
 
@@ -167,9 +170,6 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
     prepare().catch((e) => setPhase({ p: 'refused', words: (e as Error).message }))
   // eslint-disable-next-line react-hooks/exhaustive-deps -- re-checked as the details arrive
   }, [saved, missing?.key, d.venueLang, phase.p, autoTried])
-  const surname = d.name.trim().split(/\s+/).pop() ?? ''
-  const dayWords = d.date ? new Date(`${d.date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }) : ''
-  const confirmSentence = `Book ${venue} for ${d.count}${d.unit === 'people' ? '' : ` ${d.unit}`}, ${d.ask ? 'whenever they have space' : `${dayWords} at ${d.time}`}, under ${surname}?`
   // Sasha 86 · explicit ink and paper: inside the dark chat an input inherited white text on its white box (invisible)
   const input = { width: '100%', padding: '4px 6px', border: '1px solid rgba(0,0,0,.25)', borderRadius: 6, color: '#111', background: '#fff', colorScheme: 'light' } as const
   const needs = [

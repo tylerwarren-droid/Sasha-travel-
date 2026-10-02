@@ -182,7 +182,7 @@ export default function ChatBooking({ find }: { find: Find }) {
         ? <div>Google has no listing for {find.what} in {find.where}.</div>
         : <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>{find.what} in {find.where} — from Google Maps{contacted ? '.' : '; nobody has been contacted. Choose one, or say “the second one”.'}</div>}
       <ol ref={listRef} style={{ margin: 0, paddingLeft: 18 }}>
-        {cards.map((c, idx) => {
+        {cards.map((c) => {
           // S-68 step 8 · every value said, a missing one in words; a place not open then is greyed, never dropped
           const group = state.phase === 'found' ? state.ranking?.groups[c.place_id] : undefined
           const grey = group === 'closed_then' || group === 'closed_temporarily'
@@ -206,7 +206,7 @@ export default function ChatBooking({ find }: { find: Find }) {
                 )
               })()}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <span>{idx === 0 && state.phase === 'found' && !grey
+                <span>{state.phase === 'found' && state.ranking?.picks?.[state.chip] === c.place_id   /* S-75 step 1 · the server's pick (ranking.py) */
                     ? <span style={{ fontSize: 11, padding: '1px 6px', marginRight: 6, borderRadius: 8, background: '#c9a227', color: '#111' }}>Sasha&rsquo;s pick</span> : null}
                   <strong>{c.name ?? 'no name listed'}</strong>{c.type ? <span style={{ opacity: 0.7 }}> · {c.type}</span> : null}
                   {group && group !== 'main' ? <span style={{ color: '#9a1c1c' }}> · {GROUP_WORDS[group]}</span> : null}</span>

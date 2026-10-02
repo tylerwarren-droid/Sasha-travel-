@@ -34,6 +34,8 @@ from . import places_terms as PT
 from . import followup as FU
 from . import render as R
 from . import reservation as RS
+from . import sentences as SN
+from . import yes as YS
 from . import ladder_routes
 from . import stop as S
 from .account import account_for
@@ -404,8 +406,10 @@ async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now
         return _refuse(404, "trip_unknown", "no trip with that id belongs to this account; nothing was recorded")
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
+    # S-75 step 1 · the one sentence the guest is asked, built here so the web and WhatsApp say the same words
+    sentence = SN.confirm_sentence(o, (((read or {}).get("listing") or {}).get("name") or "").strip() or venue.name)
     return {"call_id": row["call_id"], "trip_item_id": item, "purpose": built["brief"]["purpose"],
-            "read_back": {"lines": shown, "sha256": row["read_back_sha256"]}}
+            "read_back": {"lines": shown, "sha256": row["read_back_sha256"]}, "sentence": sentence}
 
 
 _LANG_BY_CODE = {lang.code: key for key, lang in C.LANGUAGES.items()}
@@ -501,8 +505,8 @@ async def place(call_id: str, request: Request):
         return _refuse(422, "approval_void", "the approval was given to different words from this call's read-back")
     a = body.get("approval") if isinstance(body.get("approval"), dict) else {}
     # S-66 (EU) step 6 · a yes TYPED in the chat counts too — with the guest's exact words, kept with the approval
-    if a.get("how") not in ("button", "voice", "chat") or (a.get("how") in ("voice", "chat") and not str(a.get("said") or "").strip()):
-        return _refuse(422, "approval_void", "an approval is by button, or by voice or typed in the chat with the words said")
+    if not YS.approval_ok(a):   # S-75 step 2 · WhatsApp's button and typed yes too (yes.py)
+        return _refuse(422, "approval_void", YS.APPROVAL_VOID)
     brief = call["brief"]
     if C._sha256hex(C._canonical(brief)) != call["brief_sha256"]:
         return _refuse(409, "brief_changed", "the stored brief no longer matches what was read back; nothing was dialled")

@@ -74,7 +74,7 @@ export type Candidate = { place_id: string; name: string | null; address: string
   books?: { how: 'call' | 'site' | 'you'; words: string }
   rating_words?: string; price_words?: string }
 // S-68 step 6 · every chip's order, computed once on the server: a re-sort is no new search
-export type Ranking = { default: string; chips: Record<string, string>; orders: Record<string, string[]>
+export type Ranking = { default: string; pick?: string | null; picks?: Record<string, string | null>; chips: Record<string, string>; orders: Record<string, string[]>
   groups: Record<string, 'main' | 'hours_unknown' | 'closed_then' | 'closed_temporarily'>; count: string; explainers: Record<string, string> }
 export type Rung = { rung: string; available: boolean; fact_index: number | null; value: string; source_label: string; why_not: string | null }
 

@@ -89,7 +89,12 @@ def rank(candidates: List[Dict[str, Any]], *, open_at: Optional[str], near_found
     if timed:
         for chip in ("rated", "closest", "price"):
             explain[chip] += f" Places not open at {hhmm} by their listed hours come after."
-    return {"default": "rated", "chips": {k: CHIPS[k] for k in CHIPS if k in orders}, "orders": orders,
+    # S-75 step 1 · "Sasha's pick" is decided HERE, so the web and WhatsApp mark the same place: under each ordering, the
+    # first place not closed then (a greyed card is never the pick)
+    picks = {chip: next((pid for pid in ids if groups[pid] not in ("closed_then", "closed_temporarily", "gone")), None)
+             for chip, ids in orders.items()}
+    return {"default": "rated", "pick": picks.get("rated"), "picks": picks,
+            "chips": {k: CHIPS[k] for k in CHIPS if k in orders}, "orders": orders,
             "groups": {k: v for k, v in groups.items() if v != "gone"}, "count": count,
             "explainers": {k: v for k, v in explain.items() if k in orders}}
 

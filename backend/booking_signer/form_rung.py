@@ -35,6 +35,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from . import formfill as FF
+from . import yes as YS
 from . import reservation as RS
 from . import venue_read as V
 from .account import account_for
@@ -572,6 +573,8 @@ async def send(form_id: str, request: Request):
         body = None
     if not isinstance(body, dict) or not isinstance(body.get("approval"), dict):
         return _refuse(400, "approval_void", "send {read_back_sha256, approval: {how, said}}")
+    if not YS.approval_ok(body["approval"]):   # S-75 step 2 · the same rule as a call's yes (yes.py)
+        return _refuse(422, "approval_void", YS.APPROVAL_VOID)
     account = account_for(request)
     try:
         f = await STORE.get(account, form_id)

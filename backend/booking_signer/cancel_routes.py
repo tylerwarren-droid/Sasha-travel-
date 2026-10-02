@@ -28,7 +28,9 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from . import sentences as SN
 from . import venue_read as V
+from . import yes as YS
 from .account import account_for
 from .store import StorageUnavailable
 
@@ -179,7 +181,8 @@ async def cancel_plan(trip_item_id: str, request: Request):
     p = plan(b)
     w = words(b, p)
     return {"route": p["route"], "venue": b["venue"], "tried": p["tried"], "url": p.get("url"), "platform": p.get("platform"),
-            "call_id": p.get("call_id"), "read_back": {"lines": w["lines"], "sha256": w["sha256"]}}
+            "call_id": p.get("call_id"), "read_back": {"lines": w["lines"], "sha256": w["sha256"]},
+            "sentence": SN.cancel_sentence(b["request"] or {}, b["venue"])}   # S-75 step 1 · one owner of the words
 
 
 @router.post("/{trip_item_id}/cancel")
@@ -191,6 +194,8 @@ async def cancel_go(trip_item_id: str, request: Request):
         body = None
     if not isinstance(body, dict) or not isinstance(body.get("approval"), dict):
         return _refuse(400, "approval_void", "send {read_back_sha256, approval: {how, said}}")
+    if not YS.approval_ok(body["approval"]):   # S-75 step 2 · the same rule as a call's yes (yes.py)
+        return _refuse(422, "approval_void", YS.APPROVAL_VOID)
     account = account_for(request)
     b = await _booking(account, trip_item_id)
     if b is None:

@@ -111,16 +111,17 @@ def say(rungs: List[Rung], name: str) -> str:
     elif "form" in by:
         lead = "They have a booking form, but I can't fill it yet."
     elif "link" in by:
-        lead = f"They book through {by['link'].value}."
+        # Sasha 95 · their only booking route is a platform widget: the slot link is the way, and the guest presses
+        lead = f"They book only through {by['link'].value}, so you make the final press there — I can't press it for you."
     elif "platform" in by:
         lead = f"They book through {by['platform'].value}, which I can't use yet."
     else:
         lead = "They have no booking form."
     offers = []
     if by.get("link"):
-        offers.append(f"I'll send you their {by['link'].value} page with your table filled in — one press"
+        offers.append(f"I'll send you their {by['link'].value} page with your table filled in — one press, yours"
                       if by["link"].slot_filled else
-                      f"I'll send you their {by['link'].value} page to book it yourself")
+                      f"I'll send you their {by['link'].value} page and the exact day, time and number to pick")
     if by.get("form") and by["form"].available:
         offers.append("I'll fill in their form")
     if by.get("phone") and by["phone"].available:

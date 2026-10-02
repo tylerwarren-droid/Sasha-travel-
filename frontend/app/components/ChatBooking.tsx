@@ -21,6 +21,7 @@ import { findVenues, readVenue, refusal, styleVenues, type Candidate, type Ranki
 import { setChatBookingHandler, takeTypedYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 import ChatBookingCall from './ChatBookingCall'
+import ChatBookingLink from './ChatBookingLink'
 import { SignInToBook, WhoIsBooking } from './SignedInLine'
 
 type Find = { what: string; where: string; country?: string; near?: string; open_at?: string; priority?: string; draft?: unknown }
@@ -62,6 +63,8 @@ export default function ChatBooking({ find }: { find: Find }) {
   const [contacted, setContacted] = useState<'calling' | 'scheduled' | null>(null)
   // Sasha 88 · a site's picture that fails to load is simply not shown (no broken image, no stand-in)
   const [badPhoto, setBadPhoto] = useState<Record<string, true>>({})
+  // Sasha 95 · the slot link leads when a platform is their booking route; a call only if the guest asks for one
+  const [callInstead, setCallInstead] = useState(false)
   useEffect(() => { stateRef.current = state }, [state])
 
   useEffect(() => {
@@ -247,7 +250,14 @@ export default function ChatBooking({ find }: { find: Find }) {
             ))}
           </ul>
           {(() => {
+            const ln = state.read.rungs.find((r) => r.rung === 'link' && r.available)
             const ph = state.read.rungs.find((r) => r.rung === 'phone' && r.available)
+            if (ln && !callInstead) {
+              return <>
+                <ChatBookingLink key={state.read.read_id} readId={state.read.read_id} platform={ln.value} draft={(find.draft ?? null) as never} openAt={find.open_at ?? null} />
+                {ph ? <button type="button" onClick={() => setCallInstead(true)} style={{ marginTop: 6, fontSize: 12, textDecoration: 'underline' }}>or have Sasha call them instead</button> : null}
+              </>
+            }
             return ph ? <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
               venue={state.pick.name ?? state.read.venue} draft={(find.draft ?? null) as never} whatText={find.what} openAt={find.open_at ?? null}
               onContacted={setContacted} /> : null

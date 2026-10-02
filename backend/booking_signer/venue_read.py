@@ -205,6 +205,14 @@ def facts_from_html(html: str, url: str, country: Optional[str], fetched_at: str
 
     def add(kind, value, snippet, detail=None):
         if (kind, value) in seen:
+            if kind == "platform" and detail:
+                # Sasha 95 · EVERY link and embed to that platform is kept, not only the first: the first CoverManager link
+                # on a page can be its gift-voucher shop (/eco/buy_products/…), the booking page a later one
+                f0 = next(f for f in facts if f.kind == kind and f.value == value)
+                for k, v in detail.items():
+                    f0.detail.setdefault(k + "s", [f0.detail.get(k)] if f0.detail.get(k) else [])
+                    if v not in f0.detail[k + "s"]:
+                        f0.detail[k + "s"].append(v)
             return
         seen.add((kind, value))
         facts.append(Fact(kind, value, "site", url, label, snippet[:200], fetched_at, sha, detail or {}))

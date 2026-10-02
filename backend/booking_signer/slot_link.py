@@ -13,9 +13,10 @@ TO A BOOKING PLATFORM. The link is built from two strings we already hold:
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, time
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
 from .venue_read import platform_of
@@ -54,17 +55,69 @@ class LinkRefused(Exception):
         self.rule = rule
 
 
+# ── Sasha 95 · CoverManager: which of its URLs is a venue's BOOKING page ────────────────────────────────────────
+#
+# From the links 40 Madrid venues publish on their own sites (2 Oct 2026; covermanager.com itself never requested):
+#   booking:   /reservation/module_restaurant/<slug>/<language>  ·  /reserve/module_restaurant/<slug>/<language>
+#              /go/<slug>/<xx>   (a short link the venue publishes)
+#   NOT booking: /js/… (the widget's script) · /eco/buy_products/… (gift vouchers) · /marketplace/… · /reserve/gtmcrossdomain/…
+# Query strings seen were tracking (fbclid, source, utm_*) or widget display (day=1…7, timefix, template): never a booking
+# pre-fill — those are dropped. No date/party pre-fill was seen anywhere; that needs the founder's capture (RECIPES).
+
+_CM_MODULE = re.compile(r"^/(?:reservation|reserve)/module_restaurant/([A-Za-z0-9._-]+)(?:/([a-z]+))?/?$")
+_CM_GO = re.compile(r"^/go/([A-Za-z0-9._-]+)/([a-z]{2})/?$")
+
+
+def covermanager_page(url: str) -> Optional[str]:
+    """The canonical booking page for a CoverManager URL a venue published, or None if it isn't a booking page."""
+    u = urlsplit(url.replace("&quot;", "").replace("&quot", "").replace("&amp;", "&"))
+    if not (u.hostname or "").endswith("covermanager.com"):
+        return None
+    m = _CM_MODULE.match(u.path)
+    if m:
+        return f"https://www.covermanager.com/reservation/module_restaurant/{m.group(1)}/{m.group(2) or 'spanish'}"
+    m = _CM_GO.match(u.path)
+    if m:
+        return f"https://www.covermanager.com/go/{m.group(1)}/{m.group(2)}"
+    return None
+
+
+def _slug(page: str) -> str:
+    return urlsplit(page).path.split("/")[-2].lower()
+
+
+def _candidates(f: dict) -> List[tuple]:
+    """(url, how) for every link (an <a>) and embed (an iframe/script) the read kept for this platform fact."""
+    d = f.get("detail") or {}
+    out = [(u, "link") for u in ([d.get("link")] + list(d.get("links") or [])) if isinstance(u, str)]
+    out += [(u, "embed") for u in ([d.get("embed")] + list(d.get("embeds") or [])) if isinstance(u, str)]
+    return out
+
+
 def platform_page(read: dict) -> Optional[tuple]:
-    """(platform, page URL, source label) from a READ platform fact whose link is on that platform's own host, https."""
+    """(platform, page URL, source label) — the venue's booking page on its platform, from what its own site links.
+    CoverManager: only a booking page (never its gift shop or script), cleaned of tracking; a linked page before an
+    embedded one; several DIFFERENT restaurants linked (a group's site) and none chosen → None, never a guess.
+    Other platforms: a link on the platform's own host, https, as before."""
     for f in read.get("facts") or []:
         if f.get("kind") != "platform":
             continue
-        link = (f.get("detail") or {}).get("link")
-        if not isinstance(link, str):
+        if f["value"] == "CoverManager":
+            pages = [(covermanager_page(u), how) for u, how in _candidates(f)]
+            pages = [(p, how) for p, how in pages if p]
+            for how in ("link", "embed"):
+                slugs = {_slug(p) for p, h in pages if h == how}
+                if len(slugs) == 1:
+                    return f["value"], next(p for p, h in pages if h == how), f["source_label"]
+                if len(slugs) > 1:
+                    return None    # a group's restaurants: which one is THIS venue is the guest's to say
             continue
-        u = urlsplit(link)
-        if u.scheme == "https" and u.hostname and platform_of(link) == f["value"]:
-            return f["value"], link, f["source_label"]
+        for link, how in _candidates(f):
+            if how != "link":
+                continue
+            u = urlsplit(link)
+            if u.scheme == "https" and u.hostname and platform_of(link) == f["value"]:
+                return f["value"], link, f["source_label"]
     return None
 
 
@@ -103,8 +156,9 @@ def read_back(venue: str, link: SlotLink, on: date, at: time, party: int, forwar
                  f"If it's free, press Reserve and it's booked in your name — {link.platform} sends the confirmation to you. "
                  f"If that time isn't free, their page will show you what is."]
     else:
-        lines = [f"{venue} takes bookings through {link.platform}. I can't book there for you, but here's their {link.platform} page.",
-                 f"Pick {when}, for {party}, there — it's booked in your name, and {link.platform} sends the confirmation to you."]
+        lines = [f"{venue} takes bookings only through {link.platform}, so you make the final press — I can't press their button for you.",
+                 f"Here's their {link.platform} page: pick {when}, for {party}, there. It's booked in your name, and "
+                 f"{link.platform} sends the confirmation to you."]
     lines.append(f"I found their page on {link.source_label}. Nothing is reserved until you press their button.")
     if forward_to:
         lines.append(f"When the confirmation arrives, forward it to {forward_to} and I'll put it in your trip.")

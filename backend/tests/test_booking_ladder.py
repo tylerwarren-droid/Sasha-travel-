@@ -654,7 +654,9 @@ class SlotLinkRoutes:
 
     def test_the_chooser_offers_the_platform_page_first(self):
         v = self.link_read()
-        self.assertEqual(v["say"], "They book through OpenTable. I'll send you their OpenTable page to book it yourself — or I'll call them. Which?")
+        # Sasha 95 · their only booking route is a platform widget: the slot link leads, and the guest presses
+        self.assertEqual(v["say"], "They book only through OpenTable, so you make the final press there — I can't press it for you. "
+                                   "I'll send you their OpenTable page and the exact day, time and number to pick — or I'll call them. Which?")
 
     def test_the_link_is_the_page_read_on_their_site_and_says_who_books(self):
         v = self.link_read()
@@ -663,7 +665,7 @@ class SlotLinkRoutes:
         p = r.json()
         self.assertEqual((p["platform"], p["slot_filled"]), ("OpenTable", False))
         lines = p["read_back"]["lines"]
-        self.assertIn("I can't book there for you", lines[0])
+        self.assertIn("you make the final press — I can't press their button for you", lines[0])
         self.assertIn("Pick Thursday 8 October at 8 pm, for 4, there — it's booked in your name", lines[1])
         self.assertIn("Nothing is reserved until you press their button.", lines[2])
         self.assertIn(f"act-{p['link_id']}@in.kanoe.test", lines[3])
@@ -914,3 +916,45 @@ class OnPostgres(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CoverManagerPage(unittest.TestCase):
+    """Sasha 95 · which CoverManager URL is a venue's BOOKING page — from links venues publish (2 Oct 2026, 40 Madrid
+    sites; covermanager.com itself never requested)."""
+    def read(self, *details):
+        return {"facts": [{"kind": "platform", "value": "CoverManager", "source_label": "their website, x.es", "detail": d} for d in details[:1]]
+                if len(details) == 1 else [{"kind": "platform", "value": "CoverManager", "source_label": "their website, x.es",
+                                            "detail": {k: v for d in details for k, v in d.items()}}]}
+
+    def test_the_booking_page_never_the_gift_shop_and_without_tracking(self):
+        from booking_signer import slot_link as SL
+        r = {"facts": [{"kind": "platform", "value": "CoverManager", "source_label": "their website, boomboomciao.es", "detail": {
+            "link": "https://www.covermanager.com/eco/buy_products/restaurante-boomboomciao/spanish",
+            "links": ["https://www.covermanager.com/reservation/module_restaurant/restaurante-boomboomciao/spanish?day=1&day=2&timefix=09:30"]}}]}
+        self.assertEqual(SL.platform_page(r)[1], "https://www.covermanager.com/reservation/module_restaurant/restaurante-boomboomciao/spanish")
+        self.assertEqual(SL.covermanager_page("https://www.covermanager.com/reservation/module_restaurant/olea-madrid/spanish?source=INSTAGRAM&fbclid=x"),
+                         "https://www.covermanager.com/reservation/module_restaurant/olea-madrid/spanish")
+        self.assertEqual(SL.covermanager_page("https://www.covermanager.com/go/bacira/es"), "https://www.covermanager.com/go/bacira/es")
+        for not_booking in ("https://www.covermanager.com/js/iframeResizer.min.js", "https://www.covermanager.com/marketplace/results/abc",
+                            "https://www.covermanager.com/reserve/gtmcrossdomain/restaurante-canbonet"):
+            self.assertIsNone(SL.covermanager_page(not_booking), not_booking)
+
+    def test_an_embed_only_venue_gets_its_page_and_a_groups_site_gets_none(self):
+        from booking_signer import slot_link as SL
+        embed = {"facts": [{"kind": "platform", "value": "CoverManager", "source_label": "their website, kulto.es", "detail": {
+            "embed": "https://www.covermanager.com/js/iframeResizer.min.js",
+            "embeds": ["https://www.covermanager.com/reserve/module_restaurant/kulto/spanish"]}}]}
+        self.assertEqual(SL.platform_page(embed)[1], "https://www.covermanager.com/reservation/module_restaurant/kulto/spanish")
+        group = {"facts": [{"kind": "platform", "value": "CoverManager", "source_label": "their website, saona.com", "detail": {
+            "embeds": ["https://www.covermanager.com/reservation/module_restaurant/saona-aqua/spanish",
+                       "https://www.covermanager.com/reservation/module_restaurant/saona-gandia/spanish"]}}]}
+        self.assertIsNone(SL.platform_page(group))                               # which of the group's restaurants: never guessed
+
+    def test_the_read_keeps_every_link_to_the_platform(self):
+        facts = V.facts_from_html('<a href="https://www.covermanager.com/eco/buy_products/r/spanish">Regala</a>'
+                                  '<a href="https://www.covermanager.com/reservation/module_restaurant/r/spanish">Reservar</a>',
+                                  "https://r.es/", "ES", "2026-10-02T00:00:00Z")
+        cm = [f for f in facts if f.kind == "platform"]
+        self.assertEqual(len(cm), 1)
+        self.assertEqual(cm[0].detail["links"], ["https://www.covermanager.com/eco/buy_products/r/spanish",
+                                                 "https://www.covermanager.com/reservation/module_restaurant/r/spanish"])

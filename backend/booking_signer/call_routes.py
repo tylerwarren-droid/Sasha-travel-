@@ -243,7 +243,19 @@ async def _follow_up(call: dict, reading) -> None:
             log.info("[confirm] whatsapp: %s", await GW.push_confirmation_result(call, reading, nxt))
         except Exception as e:
             log.error("[confirm] the WhatsApp result failed: %s: %s", type(e).__name__, e)
-    if reading.outcome == "unclear" and (call.get("brief") or {}).get("purpose") == "book" \
+    # S-81 tier 0 · the venue asked for a deposit: a payment request and ONE question to the guest — never a
+    # confirmation call (they need money, not a recap)
+    deposit = None
+    if reading.outcome == "unclear" and (call.get("brief") or {}).get("purpose") == "book":
+        try:
+            from . import guest_whatsapp as GW, payments_t0 as PT0
+            deposit = await PT0.after_call(call, reading, await GW.venue_display(call))
+            if deposit:
+                log.info("[payments] call %s: a deposit was asked; request %s: %s", call.get("call_id"), deposit["id"],
+                         await GW.push_payment_question(call, deposit))
+        except Exception as e:
+            log.error("[payments] the deposit request failed: %s: %s", type(e).__name__, e)
+    if reading.outcome == "unclear" and not deposit and (call.get("brief") or {}).get("purpose") == "book" \
             and not (call.get("brief") or {}).get("confirms_call_id"):
         try:
             what = await confirm_unclear(call)

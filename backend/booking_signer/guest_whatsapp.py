@@ -836,6 +836,22 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         st["pending"] = None
         await _cancel_row(ctx, pend["rows"][i])
         return True
+    if kind == "payment":   # S-81 tier 0 · the deposit: one yes asks the venue for ITS link; the guest pays them directly
+        if payload.startswith("no:") or (not payload and _NO.match(body)):
+            st["pending"] = None
+            out.text(f"OK — I haven't asked {pend['venue']} for anything. The booking isn't confirmed without their deposit.")
+            return True
+        if payload.startswith("yes:") or YS.is_yes(body):
+            if now - at > APPROVAL_WINDOW:
+                st["pending"] = None
+                out.text("That question has expired (15 minutes) — nothing was asked. Tell me if you still want the link.")
+                return True
+            st["pending"] = None
+            how = {"how": "whatsapp_button", "said": ctx.get("button_text") or None} if payload else {"how": "whatsapp_text", "said": body}
+            status, j = await api(ctx["account"], "POST", f"/api/booking/payments/{pend['id']}/approve", {"read_back_sha256": pend["sha"], "approval": how})
+            out.text(str(j.get("say")) if status == 200 else f"Not asked — {refusal_words(j, status)}.")
+            return True
+        return False
     if kind in ("confirm", "cancel_confirm"):
         fresh = now - at <= APPROVAL_WINDOW
         if payload.startswith("no:") or (not payload and _NO.match(body)):
@@ -1242,6 +1258,22 @@ async def push_confirmation_result(call: dict, reading, nxt: Optional[str]) -> s
     elif reading.outcome == "yes" and _receipt_note():
         out.text(_receipt_note().strip())
     st = await STORE.get_state(ch["wa_id_sha256"])
+    return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, st.get("last_inbound_at")))
+
+
+async def push_payment_question(call: dict, pr: dict) -> str:
+    """S-81 tier 0 · the ONE sentence for the deposit, with Yes/No bound to its read-back hash."""
+    if STORE is None or not guest_numbers():
+        return "not sent: WhatsApp for guests is off"
+    ch = await STORE.channel_of_account(str(call["account_id"]))
+    if not ch:
+        return "not sent: no WhatsApp linked (the web shows it)"
+    st = await STORE.get_state(ch["wa_id_sha256"])
+    out = Out().text("\n".join(pr["read_back_lines"][:2]))
+    tag = f"{pr['id'][:8]}:{pr['read_back_sha256'][:16]}"
+    out.ask(pr["read_back_lines"][-1], [("Yes, ask them", f"yes:{tag}"), ("No", f"no:{tag}")])
+    st["pending"] = {"kind": "payment", "at": NOW().isoformat(), "id": pr["id"], "sha": pr["read_back_sha256"], "venue": pr["payee"]}
+    await STORE.put_state(ch["wa_id_sha256"], st)
     return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, st.get("last_inbound_at")))
 
 

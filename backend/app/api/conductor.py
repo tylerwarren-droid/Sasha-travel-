@@ -97,8 +97,7 @@ class ConductorResponse(BaseModel):
     # A single matched option the guest asked to book by VOICE — the frontend opens the
     # payment popup for it directly (same flow as tapping Book & Pay on its card).
     payment_item: Optional[dict] = None
-    # The saved card Sasha offers / charges on a booking turn (action confirm_card or
-    # pay_saved_card): {"last4": "1003", "method": "saved_card"}.
+    # S-81 · always null: there is no card on file (the "ending 1003" demo card was removed — it faked a payment)
     saved_card: Optional[dict] = None
     session_id: Optional[str] = None  # S-62 step 7 · the session this turn was filed under (a new one if the sent id was not yours)
     booking_find: Optional[dict] = None  # S-66 chat booking (Stage B)

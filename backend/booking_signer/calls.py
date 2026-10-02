@@ -377,6 +377,12 @@ def barge_in(code: str) -> str:
     return _BARGE.get((code or "en")[:2], _BARGE["en"])
 
 
+#: S-81 tier 0 · the guest pays the venue DIRECTLY: Sasha agrees to nothing, gives no card (never on a phone call — it
+#: would sit in a transcript), and asks how they take it. A money "yes" still reads as unclear (_MONEY).
+DEPOSIT_RULE = ("Agree to no deposit and give no card. If they need one: ask how they take it (a payment link to the "
+                "guest is best), say the guest pays them directly, get the amount, thank them and end. ")
+
+
 def already_said(code: str, opening: str) -> str:
     """The task's line about the first sentence — and, talked over, never that sentence again (Bland's 2,000 characters
     hold: the request is not quoted twice)."""
@@ -403,24 +409,23 @@ def task_text(lang: Lang, *, place: str, what: str, booking: str, never: str, op
         spell = f"Name: {surname}; if not caught, spell it letter by letter, each with a {lang.label} word for it. "
     return (
         f"You are Sasha, an AI concierge, booking {what} at {place} for a guest. "
-        f"Speak {lang.label} only, numbers and letters too. "
+        f"Speak {lang.label} only, numbers too. "
         f"{already_said(c, opening)}"
         f"The booking: {booking}"
         "If asked: an AI, never the guest or a human. "
         f"NEVER: {never}"
-        "Never accept a deposit, fee, minimum spend, cancellation charge or card. "
-        f"If they ask for any, say exactly \"{check}\", have them repeat it, thank them and end. "
+        f"{DEPOSIT_RULE}Any other fee: say exactly \"{check}\" and end. "
         f"{spell}"
         f"{contact}"
         "No other guest details. "
         f"On a yes, ask: \"{SP.ask_reference(c)}\" and repeat it back. "
         f"Then say: \"{SP.own_reference_line(own_ref, c)}\" "
-        f"ALWAYS end with this recap and wait: \"{recap}\" Only a clear yes confirms. "
+        f"End with this recap and wait: \"{recap}\" Only a clear yes confirms. "
         "If anything differs, correct it once and repeat the recap; "
-        f"if still different, say \"{check}\" and end. "
+        "if still different, say the fee sentence and end. "
         "If no, later, or unsure: thank them and end. "
         f"If asked not to call again, say exactly \"{_ack(lang)}\" and end. "
-        "Be brief and polite. No voicemail."
+        "Be brief. No voicemail."
     )
 
 

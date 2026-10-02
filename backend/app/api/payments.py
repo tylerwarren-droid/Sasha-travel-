@@ -140,7 +140,10 @@ async def reserve(body: ReserveRequest, request: Request):
         amount = float(itinerary.get("total_usd") or 0)
         label = itinerary.get("title") or "Your trip"
 
-    paid_with_card = body.payment_method == "saved_card"
+    # S-81 · there is no card on file: a reservation is never "paid with a saved card" (the demo constant was a fake)
+    if body.payment_method == "saved_card":
+        raise HTTPException(status_code=422, detail="no card is on file — pay on the secure payment form")
+    paid_with_card = False
     card_last4 = (body.card_last4 or "").strip()[-4:] if paid_with_card else None
     sid = f"{'card' if paid_with_card else 'resv'}-{uuid.uuid4()}"
     await chat_store.create_booking(

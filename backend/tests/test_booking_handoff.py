@@ -96,7 +96,7 @@ class TheHook(unittest.TestCase):
         src = (BACKEND / "app" / "services" / "conductor.py").read_text(encoding="utf-8")
         self.assertIn("from booking_signer.handoff import booking_handoff", src)
         self.assertLess(src.index("_handoff = booking_handoff(user_message, conversation_history)"),
-                        src.index("# ── Card choice (second half of a booking)"))
+                        src.index("general_prompt = await get_prompt_async(\"conductor.general\")"))   # before any model is loaded
 
     def test_the_real_conduct_returns_the_find(self):
         from app.services.conductor import conduct  # the real one — the hook returns before any model is called

@@ -148,7 +148,7 @@ class Script(unittest.TestCase):
     def test_the_brief_carries_every_rule_and_the_read_back_says_what_she_will_do(self):
         b = C.build_call(C.test_line(), C.parse_call_particulars(JOHNSON), MONDAY)
         t = b["brief"]["task"]
-        for must in ("Never accept another date", "Never accept a deposit", "I'll need to check that with the Johnsons.",
+        for must in ("Never accept another date", "Agree to no deposit and give no card", "I'll need to check that with the Johnsons.",
                      "an AI, never the guest or a human", "No voicemail", "no phone number to give",
                      "Name: Johnson; if not caught, spell: \"J as in Juliett, O as in Oscar", "Could you give me a booking reference",
                      f"Our own reference for it is K as in Kilo"):   # Sasha 88 · spelled, both references

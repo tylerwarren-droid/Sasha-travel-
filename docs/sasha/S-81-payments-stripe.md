@@ -201,3 +201,30 @@ alter table public.payment_requests enable row level security;   -- backend only
 - **P-1:** Kanoe's fee on deposits, if any.
 - **P-2:** apply for Issuing now (it takes Stripe's review time) or after counsel.
 - **P-3:** which tier the pilot hotels' guests get (default: tier 0 only).
+
+---
+
+## Built, Sasha 109–110 (2 Oct 2026): step 1, the mock removed and tier 0
+
+- **The mock card is gone (test 7).**
+  - `SAVED_CARD_LAST4`, the "ending 1003" question and the branch that said a payment was done (with none made) are
+    removed from `app/services/conductor.py`.
+  - "Book it" now opens the real payment: one offer → `await_payment_item` (the payment popup); the whole trip →
+    `await_payment` (Stripe Checkout). Sasha says nothing is charged or booked until the payment goes through.
+  - `POST /api/payments/reserve` refuses `payment_method: saved_card`.
+  - The You tab no longer shows "card ending …".
+- **Tier 0:**
+  - **The call's rule (`calls.DEPOSIT_RULE`):** agree to no deposit and give no card; ask how they take it (a payment
+    link to the guest is best); say the guest pays them directly; get the amount. `_MONEY` still makes a money "yes"
+    unclear.
+  - **After the call (`payments_t0.after_call`, from `call_routes._follow_up`):** a payment request, once per booking.
+    It carries the venue's own words, the amount if they said one, and a three-line read-back with its hash. On
+    WhatsApp, ONE sentence and Yes/No. **No confirmation call is placed for a deposit-unclear call.**
+  - **On the yes (`POST /api/booking/payments/{id}/approve`, hash-bound):** the venue is asked, in writing, to send the
+    guest its own payment link (a text to its published mobile when venue texts are on, else an email).
+    `payer = guest_direct`.
+- **`CONSTRAINTS` is unchanged** (`no_deposit: true, no_card: true`). Stored reservation objects and their hashes
+  depend on its keys; tier 0 is expressed by the call rule and the payment request instead.
+- **Migration 024** is drafted, with two additions: the stored read-back, and one open request per booking and purpose.
+- **Not built (parked by EU 120):** tiers 1 and 2, the receipt's money line in the email (§5; WhatsApp says it), and the
+  Stripe SDK upgrade.

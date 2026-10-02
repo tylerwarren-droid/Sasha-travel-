@@ -73,8 +73,7 @@ export default function YouPanel({ user, plannedThisSession = 0, language = 'en'
     when: monthYear(t.paid_at),
     title: t.title,
     sub: [t.days ? `${t.days} day${t.days === 1 ? '' : 's'}` : '',
-          t.amount_usd ? `$${Math.round(t.amount_usd).toLocaleString()}` : '',
-          t.card_last4 ? `Paid · card ending ${t.card_last4}` : '']
+          t.amount_usd ? `$${Math.round(t.amount_usd).toLocaleString()}` : '']   // S-81 · no "card ending …": the saved card was a demo constant
       .filter(Boolean).join(' · ') || 'Booked with Sasha',
     ref: t.booking_ref,
   }))

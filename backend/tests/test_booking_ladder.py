@@ -666,7 +666,7 @@ class SlotLinkRoutes:
         self.assertEqual((p["platform"], p["slot_filled"]), ("OpenTable", False))
         lines = p["read_back"]["lines"]
         self.assertIn("you make the final press — I can't press their button for you", lines[0])
-        self.assertIn("Pick Thursday 8 October at 8 pm, for 4, there — it's booked in your name", lines[1])
+        self.assertIn("pick Thursday 8 October at 8 pm, for 4, there. It's booked in your name", lines[1])
         self.assertIn("Nothing is reserved until you press their button.", lines[2])
         self.assertIn(f"act-{p['link_id']}@in.kanoe.test", lines[3])
         self.assertFalse(any("opentable" in u for m, u, b in self.web.requests))   # the platform was never contacted

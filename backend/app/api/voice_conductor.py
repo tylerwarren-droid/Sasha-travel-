@@ -110,7 +110,8 @@ async def voice_conductor(
                 "photos": []
             })
 
-        print(f"[Voice Conductor] Transcript: {transcript}")
+        from booking_signer.vault.guard import for_log  # S-78 input guard (Stage B): a secret never reaches the log
+        print(f"[Voice Conductor] Transcript: {for_log(transcript)}")
 
         # Step 2 — Route through The Conductor
         try:

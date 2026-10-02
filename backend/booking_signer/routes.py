@@ -152,7 +152,11 @@ async def health():
 CHAT_HOOKS = {"psi_handoff": "from booking_signer.handoff import booking_handoff",
               "booking_drafts": "from booking_signer.chat_request import booking_turn",
               # Sasha 88 · the model is told what she can do, so it never denies a call
-              "abilities": "from booking_signer.abilities import ABILITIES as _SASHA_ABILITIES"}
+              "abilities": "from booking_signer.abilities import ABILITIES as _SASHA_ABILITIES",
+              # S-78 step 1 · a password or card number typed in the chat never reaches the model
+              "input_guard": "from booking_signer.vault.guard import guard_turn, clean_history"}
+#: S-78 step 1 · the line Stage B re-applies to app/services/chat_store.py's save_turn — a secret is never stored
+SAVE_GUARD = "from booking_signer.vault.guard import looks_like_secret"
 
 
 def chat_hooks() -> dict:
@@ -169,8 +173,15 @@ def chat_hooks() -> dict:
                                   and "booking_cancel: Optional[dict]" in api and 'booking_cancel=result.get("booking_cancel")' in api)
     except OSError:
         out["response_fields"] = False
+    try:
+        store = (pathlib.Path(__file__).resolve().parents[1] / "app" / "services" / "chat_store.py").read_text(encoding="utf-8")
+        out["save_guard"] = SAVE_GUARD in store
+    except OSError:
+        out["save_guard"] = False
     # the drafts must run AFTER the Psi hand-off: Psi keeps its own link
     out["in_order"] = out["psi_handoff"] and out["booking_drafts"] and src.index(CHAT_HOOKS["psi_handoff"]) < src.index(CHAT_HOOKS["booking_drafts"])
+    # S-78 · the guard runs BEFORE everything that reads the message or the history
+    out["guard_first"] = out["input_guard"] and out["psi_handoff"] and src.index(CHAT_HOOKS["input_guard"]) < src.index(CHAT_HOOKS["psi_handoff"])
     return out
 
 

@@ -1813,6 +1813,13 @@ async def conduct(
                 "booking_ref": None, "itinerary_id": None,
                 "messages": list(conversation_history)}
 
+    # S-78 input guard: backend/booking_signer/vault/guard.py. Zips drop this; Stage B re-applies it. FIRST, before any reader.
+    from booking_signer.vault.guard import guard_turn, clean_history  # noqa: E402
+    _guarded = guard_turn(user_message, conversation_history)
+    if _guarded is not None:
+        return _guarded
+    conversation_history = clean_history(conversation_history)
+
     # S-26 booking hand-off: backend/booking_signer/handoff.py. CTO zips drop this; Stage B re-applies it.
     from booking_signer.handoff import booking_handoff  # noqa: E402
     _handoff = booking_handoff(user_message, conversation_history)

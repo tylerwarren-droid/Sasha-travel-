@@ -121,6 +121,18 @@ WhatsApp, book, follow up, cancel), so the chat and the avatar never say she "ca
     PY
 /api/booking/health reports "chat_hooks": {"abilities": false} if it is lost.
 
+S-78 input guard (Sasha 102) — a password, PIN, code, key or card number typed or spoken in the chat never reaches the
+model and is never stored (backend/booking_signer/vault/guard.py, repo-only). Three externally-supplied-file lines,
+each marked "S-78 input guard":
+  · backend/app/services/conductor.py, in conduct(), right after the empty-transcript return and BEFORE the S-26
+    hand-off: `from booking_signer.vault.guard import guard_turn, clean_history`, then `_guarded = guard_turn(user_message,
+    conversation_history)`, `if _guarded is not None: return _guarded`, `conversation_history = clean_history(conversation_history)`;
+  · backend/app/services/chat_store.py, first in save_turn: `from booking_signer.vault.guard import looks_like_secret`,
+    `if looks_like_secret(user_message) or looks_like_secret(title): return`;
+  · backend/app/api/voice_conductor.py: the transcript print goes through `for_log(transcript)`.
+/api/booking/health reports "chat_hooks": {"input_guard": false}, {"save_guard": false} or {"guard_first": false} if
+one is lost or moved below the hand-off; tests/test_stage_b_hooks.py and tests/test_input_guard_s78.py fail too.
+
 ## Repo-only files that MUST survive every sync
 - app/vietnam2/ — uses LEGACY component copies app/vietnam2/SashaChatLegacy.tsx and app/vietnam2/VoiceButton.tsx (CTO's rewritten SashaChat has an incompatible props interface). vietnam2 needs leaflet + @types/leaflet in package.json.
 - app/kanoe/

@@ -485,6 +485,10 @@ async def list_booked_trips(user_id=DEMO_USER_ID) -> list:
 
 async def save_turn(session_id, user_id, user_message, assistant_response,
                     intents=None, booking_ref=None, language="en", title="") -> None:
+    # S-78 input guard: backend/booking_signer/vault/guard.py. Zips drop this; Stage B re-applies it. A secret is never stored.
+    from booking_signer.vault.guard import looks_like_secret  # noqa: E402
+    if looks_like_secret(user_message) or looks_like_secret(title):
+        return
     try:
         await asyncio.to_thread(
             _save_turn, session_id, user_id, user_message, assistant_response,

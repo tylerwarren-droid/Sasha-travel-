@@ -16,7 +16,8 @@ NOW = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
 class Hooks(unittest.TestCase):
     def test_both_hooks_are_in_the_conductor_in_order(self):
         h = routes.chat_hooks()
-        self.assertEqual(h, {"psi_handoff": True, "booking_drafts": True, "abilities": True, "response_fields": True, "in_order": True},
+        self.assertEqual(h, {"psi_handoff": True, "booking_drafts": True, "abilities": True, "input_guard": True,
+                             "response_fields": True, "save_guard": True, "in_order": True, "guard_first": True},
                          "a Stage B conductor hook is missing — re-apply it (CLAUDE.md, Stage B) and redeploy")
 
 

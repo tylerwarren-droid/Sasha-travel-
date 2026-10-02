@@ -703,15 +703,34 @@ _REFINE = re.compile(r"^\s*¿?\s*(?:how about|what about|maybe|or|rather|instead
                      r"(?P<what>[^?.!]{2,60}?)\s*(?:instead|then|please|por favor|mejor)?\s*[?.!]*\s*$", re.I)
 
 
+_FIND_ONLY = re.compile(r"\b(?:find|look for|search for|get|book|show)\s+(?:me\s+|us\s+)?(?:an?\s+|some\s+|the\s+)?"
+                        r"(?P<what>[a-z][\w'’ -]{1,40}?)\s*(?:spot|place|restaurant|instead)?\s*(?:[?.!,;]|$)", re.I)
+_LIKES = re.compile(r"\b(?:likes?|loves?|prefers?|fancy|fancies|craving|in the mood for|le gusta|prefiere|nos apetece)\s+"
+                    r"(?P<what>[a-záéíóúñ][\w ]{1,30}?\s+(?:food|cuisine|restaurants?|comida|cocina))\b", re.I)
+_QUALITY = re.compile(r"\b(luxury|luxurious|upscale|fancy|fine[- ]dining|romantic|cheap|casual|quiet|vegetarian|vegan|lujo|"
+                      r"rom[aá]ntico)\b", re.I)
+
+
 def refinement(body: str) -> Optional[str]:
-    """Another kind of place, said while the cards are showing ("How about Indian food?", "¿Y comida india?") — or None."""
-    m = _REFINE.match(body or "")
-    if not m:
+    """Another kind of place, said while the cards are showing — "How about Indian food?", "my wife likes Indian food.
+    Can you find me an Indian food spot? Luxury please", "¿Y comida india?" — with every qualifier said; or None. A message
+    that names an area is a new request (the hand-off reads it)."""
+    t = body or ""
+    if re.search(r"\b(?:in|near|around|en|cerca de)\s+[A-ZÁÉÍÓÚ]", t):
         return None
-    what = m["what"].strip()
-    if re.search(r"\b(?:in|near|around|en|cerca)\b", what, re.I):
-        return None                                        # a new area is a new request (the hand-off reads it)
-    return what if 1 <= len(what.split()) <= 5 and not re.search(r"\d", what) else None
+    what = None
+    for rx in (_REFINE, _FIND_ONLY, _LIKES):
+        for m in rx.finditer(t) if rx is not _REFINE else filter(None, [rx.match(t)]):
+            w = re.sub(r"\s+(?:spot|place)$", "", m["what"].strip(), flags=re.I)
+            if 1 <= len(w.split()) <= 5 and not re.search(r"\d", w) and not re.fullmatch(r"(?:one|that|it|this|something)", w, re.I):
+                what = w
+                break
+        if what:
+            break
+    if not what:
+        return None
+    quals = [q for q in dict.fromkeys(x.lower() for x in _QUALITY.findall(t)) if q not in what.lower()]
+    return " ".join(quals + [what])
 
 
 def _payload_ok(pend: dict, payload: str) -> bool:

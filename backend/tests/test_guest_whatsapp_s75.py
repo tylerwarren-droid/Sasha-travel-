@@ -286,8 +286,10 @@ class Turns(Base):
         finds = [c[3] for c in GW.api.calls if c[2] == "/api/booking/venues/find"]
         self.assertEqual(len(finds), 2)
         self.assertEqual((finds[1]["what"], finds[1]["where"], finds[1]["open_at"]), ("Indian food", "Chamberí, Madrid", "2026-10-03T21:00"))
-        self.assertEqual([GW.refinement(x) for x in ("¿Y comida india?", "what about sushi", "2", "the second one")],
-                         ["comida india", "sushi", None, None])
+        self.assertEqual([GW.refinement(x) for x in ("¿Y comida india?", "what about sushi", "2", "the second one",
+                                                     "So, actually my wife likes Indian food. Can you find me an Indian food spot? Luxury please",
+                                                     "how about Indian in Malasaña")],
+                         ["comida india", "sushi", None, None, "luxury Indian food", None])
 
     def test_sasha104_unsure_asks_one_question(self):
         self.say("can you sort out Saturday night for 2?")

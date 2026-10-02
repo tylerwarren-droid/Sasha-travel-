@@ -12,6 +12,7 @@ import { PhoneCall } from './PhoneCall'
 import { Ladder } from './Ladder'
 import { FounderGate } from './FounderGate'
 import { WhatsAppLink } from './WhatsAppLink'
+import { CalendarConnect } from './CalendarConnect'
 
 /** The details pre-filled while testing; every field stays editable. */
 const DEMO_PROFILE = { name: 'Jon Peters', email: 'jon@kanoe.ai', phone: '+44 20 7946 0123' }
@@ -30,6 +31,7 @@ export default function BookingHelperPage() {
       <Ladder defaults={DEMO_PROFILE} />
       <PhoneCall defaults={DEMO_PROFILE} />
       <WhatsAppLink />
+      <CalendarConnect />
     </main>
     </FounderGate>
   )

@@ -227,6 +227,12 @@ async def vault_revoke_all(request: Request):
                 done.append(r)
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
+    try:   # S-79 · a calendar connection's token is among them: its link goes too
+        from .. import calendar_sync as CS
+        if CS.STORE is not None and any(m["kind"] == "oauth" for m in done):
+            await CS.STORE.delete_link(account)
+    except StorageUnavailable as e:
+        log.warning("[vault] the calendar link was not removed: %s", e.detail)
     return {"revoked": len(done), "say": [f"{m['label']}: {_revoked_words(m)}" for m in done]}
 
 

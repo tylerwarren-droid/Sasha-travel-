@@ -28,6 +28,8 @@ EXEMPT = {("GET", "/api/booking/health"), ("POST", "/api/booking/email/inbound")
 EXEMPT |= {(m, f"/api/booking/test-venue/{v}") for m in ("GET", "POST") for v in ("plain", "consent", "captcha")}
 EXEMPT |= {("GET", "/api/booking/test-venue/wizard"), ("POST", "/api/booking/test-venue/wizard/step2"),
            ("POST", "/api/booking/test-venue/wizard/confirm")}   # Sasha 94 · the two-step variant
+# S-79 · Google's OAuth redirect: no key can ride on it; its signed, 10-minute `state` names the account (calendar_sync)
+EXEMPT |= {("GET", "/api/booking/google/callback")}
 
 
 async def require_booking_key(request: Request) -> None:

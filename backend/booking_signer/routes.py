@@ -31,7 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from . import call_routes, cancel_routes, contacts, form_rung, guest_whatsapp, inbound_phone, ladder_routes, optin_page, optins, proactive, receipt, reservation as RS, retention, stop
+from . import calendar_sync, call_routes, cancel_routes, contacts, form_rung, guest_whatsapp, inbound_phone, ladder_routes, optin_page, optins, proactive, receipt, reservation as RS, retention, stop
 from . import venue_read as V
 from .vault import api as vault_api, crypto as vault_crypto, gdpr as vault_gdpr, kms as vault_kms
 from .vault.store import PostgresVaultStore
@@ -96,6 +96,7 @@ form_rung.STORE = form_rung.PostgresFormStore(STORE)   # Sasha 89 · the form ru
 guest_whatsapp.STORE = guest_whatsapp.PostgresGuestStore(STORE)   # S-75 · guests on WhatsApp (sql/020)
 vault_crypto.STORE = PostgresVaultStore(STORE)   # S-78 · the vault (sql/021)
 proactive.STORE = proactive.PostgresProactiveStore(STORE)   # S-83 · reminders (sql/026)
+calendar_sync.STORE = calendar_sync.PostgresCalendarStore(STORE)   # S-79 · Google Calendar (sql/022)
 
 
 def _now() -> datetime:
@@ -149,6 +150,7 @@ async def health():
         "forms": form_rung.forms_status(),   # Sasha 89
         "whatsapp_guests": guest_whatsapp.status(),   # S-75 · the sandbox phase
         "proactive": proactive.status(),   # S-83
+        "calendar": calendar_sync.status(),   # S-79
         "vault": {**vault_kms.status(), "health_items": bool(vault_api.dpia_ref())},   # S-78 · V-1 Cloud KMS; V-4 the DPIA gate
         "ladder": ladder_routes.status(),
         # S-64 · the two Stage B hooks in the CTO's conductor: false means a CTO drop removed one — booking-in-chat is off
@@ -525,6 +527,7 @@ router.include_router(guest_whatsapp.router)   # S-75 · /api/booking/whatsapp
 router.include_router(vault_api.router)   # S-78 · /api/booking/vault
 router.include_router(vault_gdpr.router)   # S-78 §9 · /api/booking/account/{data,export}
 router.include_router(proactive.router)   # S-83 · /api/booking/proactive
+router.include_router(calendar_sync.router)   # S-79 · /api/booking/google
 # Sasha 99 · cancelling by the best route there is (link, email, text, call)
 router.include_router(cancel_routes.router)
 # S-55 · the Work-with-Sasha page's server half (reached through the frontend's own route, which adds the key)
@@ -536,3 +539,4 @@ router.include_router(optin_page.router)
 async def _start_retention() -> None:
     retention.start()
     proactive.start()   # S-83 · the reminders loop (SASHA_PROACTIVE_LOOP; off in tests)
+    calendar_sync.start()   # S-79 · the calendar outbox drainer (SASHA_CALENDAR_LOOP; only once Google is configured)

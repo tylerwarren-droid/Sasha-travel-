@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -130,4 +131,59 @@ async def use(account: str, item_id: str, *, approval: Optional[dict], approved_
         await STORE.end_use(use_id, status, words, NOW())
 
 
-__all__ = ["seal", "use", "access_line", "Secret", "UseRefused", "SEALED_SQL", "APPROVAL_WINDOW"]
+#: S-79 G-2 · a CONNECTION the guest consented to (Google Calendar) is used without a per-booking yes — but only by
+#: these purposes, only for an oauth item of this provider, every use logged. Site logins never come this way (V-2).
+CONNECTION_PURPOSES = {"google.com": ("calendar_sync", "calendar_freebusy", "calendar_setup", "calendar_revoke")}
+
+
+async def _google_refresh(refresh_token: str) -> dict:
+    import httpx
+    async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as c:
+        r = await c.post("https://oauth2.googleapis.com/token", data={
+            "client_id": os.getenv("SASHA_GOOGLE_OAUTH_CLIENT_ID", "").strip(),
+            "client_secret": os.getenv("SASHA_GOOGLE_OAUTH_CLIENT_SECRET", "").strip(),
+            "refresh_token": refresh_token, "grant_type": "refresh_token"})
+    j = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    if r.status_code != 200 or not j.get("access_token"):
+        raise UseRefused("connection_" + str(j.get("error") or f"http_{r.status_code}"), "Google refused the connection's token")
+    return j
+
+
+GOOGLE_REFRESH = _google_refresh   # tests replace it
+
+
+async def use_connection(account: str, item_id: str, *, purpose: str, revoke: bool = False) -> str:
+    """An ACCESS token for one call to the provider (never the refresh token, which stays here). revoke=True revokes the
+    refresh token at Google instead and returns "revoked"."""
+    row = await STORE.fetch_sealed(SEALED_SQL, item_id, account)
+    if not row or row.get("revoked_at") or row.get("ciphertext") is None:
+        raise UseRefused("vault_item_unavailable", "that connection is not in your vault (or was revoked)")
+    if row["kind"] != "oauth" or purpose not in CONNECTION_PURPOSES.get(row["provider"], ()):
+        raise UseRefused("connection_purpose_refused", "that saved access is not a connection usable for this")
+    now = NOW()
+    use_id = await STORE.claim_use(account, item_id, purpose, purpose,
+                                   hashlib.sha256(f"connection:{uuid.uuid4()}".encode()).hexdigest(), now)
+    raw = bytearray(await _open(account, row))
+    secret = Secret(row["label"], json.loads(bytes(raw)))
+    for i in range(len(raw)):
+        raw[i] = 0
+    status, words = "failed", None
+    try:
+        if revoke:
+            import httpx
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as c:
+                r = await c.post("https://oauth2.googleapis.com/revoke", data={"token": secret.get("refresh_token")})
+            status, words = ("done", "revoked at Google") if r.status_code == 200 else ("failed", f"Google answered HTTP {r.status_code}")
+            return "revoked" if status == "done" else f"not revoked: HTTP {r.status_code}"
+        j = await GOOGLE_REFRESH(secret.get("refresh_token"))
+        status = "done"
+        return j["access_token"]
+    except Exception as e:
+        words = secret.scrub(f"{type(e).__name__}: {e}")
+        raise
+    finally:
+        secret._drop()
+        await STORE.end_use(use_id, status, words, NOW())
+
+
+__all__ = ["seal", "use", "use_connection", "access_line", "Secret", "UseRefused", "SEALED_SQL", "APPROVAL_WINDOW", "CONNECTION_PURPOSES"]

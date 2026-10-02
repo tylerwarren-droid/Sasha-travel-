@@ -512,6 +512,12 @@ async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now
     try:
         built = await _own_contact(account, built, venue, o)   # Sasha 74 · her email; the follow-up, said before the yes
         built = PT.seal_call(built, venue)   # Sasha 64 · a listing number: dialled, never stored or shown
+        # S-79 §5.4 · their calendar shows something then: one line, inside the hash — never a block
+        if built["brief"]["purpose"] == "book" and (o.get("when") or {}).get("mode") == "at":
+            from zoneinfo import ZoneInfo
+            from . import calendar_sync as CS
+            start = datetime.fromisoformat(o["when"]["at"]).replace(tzinfo=ZoneInfo(venue.timezone))
+            built = await CS.with_busy_line(account, built, start, int(o["when"].get("duration_min") or 120), venue.timezone)
         built, shown = _named(built, read, venue.name)   # Sasha 86 · the chosen place's name: shown and hashed, not stored
     except PT.ListingUnavailable as e:
         return _refuse(422, e.rule, str(e))

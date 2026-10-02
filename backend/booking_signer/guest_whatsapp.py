@@ -637,6 +637,9 @@ async def _reminders_offer(ch: dict) -> Optional[str]:
     except StorageUnavailable as e:
         log.info("[guest_whatsapp] reminders offer skipped: %s", e.detail)
         return None
+    except Exception as e:   # Sasha 117 · an offer is never worth the guest's whole turn (it was: a SQL type error)
+        log.error("[guest_whatsapp] reminders offer failed, skipped: %s: %s", type(e).__name__, e)
+        return None
     return REMINDERS_OFFER
 
 

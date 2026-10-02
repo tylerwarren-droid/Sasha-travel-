@@ -215,5 +215,42 @@ class ConsentGate(Base):
         self.assertEqual(run(PR.STORE.get_prefs(ACCOUNT))["all_off"], True)   # asked, not answered: off
 
 
+class OnPostgresPrefs(unittest.TestCase):
+    """Sasha 117 · live, 2 Oct: set_prefs(all_off=True) with no off_kinds failed in Postgres ("off_kinds is of type text[]
+    but expression is of type text"), and with it every WhatsApp turn of a v2 guest. The memory store hid it."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests import test_booking_ladder as TBL
+        TBL.OnPostgres.setUpClass.__func__(cls)
+        import asyncpg, pathlib
+        cls.url = TBL.PG_URL
+
+        async def apply():
+            c = await asyncpg.connect(cls.url)
+            try:
+                await c.execute("drop table if exists proactive_sent, proactive_prefs, guest_places cascade")
+                sql = (pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql" / "026_proactive.sql").read_text()
+                await c.execute(sql[sql.index("begin;"):sql.index("-- VERIFY")])
+            finally:
+                await c.close()
+        asyncio.run(apply())
+
+    def test_set_prefs_with_and_without_kinds(self):
+        from booking_signer.store import PostgresStore
+
+        async def go():
+            st = PR.PostgresProactiveStore(PostgresStore(self.url))
+            from tests.test_booking_ladder import DEMO_ACCOUNT_ID as a
+            first = await st.set_prefs(a, all_off=True)                       # the reminders offer's write
+            second = await st.set_prefs(a, off_kinds=["day_before"])            # all_off kept
+            third = await st.set_prefs(a, all_off=False)                        # off_kinds kept
+            return first, second, third
+        first, second, third = asyncio.run(go())
+        self.assertEqual((first["all_off"], first["off_kinds"]), (True, []))
+        self.assertEqual((second["all_off"], second["off_kinds"]), (True, ["day_before"]))
+        self.assertEqual((third["all_off"], third["off_kinds"]), (False, ["day_before"]))
+
+
 if __name__ == "__main__":
     unittest.main()

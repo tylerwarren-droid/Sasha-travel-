@@ -265,9 +265,9 @@ class PostgresProactiveStore:
 
     async def set_prefs(self, account, all_off=None, off_kinds=None):
         r = await self._run(lambda c: c.fetchrow(
-            "insert into proactive_prefs (account_id, all_off, off_kinds) values ($1, coalesce($2, false), coalesce($3, '{}')) "
-            "on conflict (account_id) do update set all_off = coalesce($2, proactive_prefs.all_off), "
-            "off_kinds = coalesce($3, proactive_prefs.off_kinds), updated_at = now() returning *",
+            "insert into proactive_prefs (account_id, all_off, off_kinds) values ($1, coalesce($2::boolean, false), coalesce($3::text[], '{}'::text[])) "
+            "on conflict (account_id) do update set all_off = coalesce($2::boolean, proactive_prefs.all_off), "
+            "off_kinds = coalesce($3::text[], proactive_prefs.off_kinds), updated_at = now() returning *",
             uuid.UUID(account), all_off, off_kinds))
         return {**dict(r), "account_id": str(r["account_id"]), "off_kinds": list(r["off_kinds"] or [])}
 

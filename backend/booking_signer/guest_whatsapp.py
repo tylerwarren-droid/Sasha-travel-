@@ -803,6 +803,12 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         return False
     at = _dt(pend.get("at") or "")
     kind = pend["kind"]
+    # Sasha 117 · "Cancel the Retiro dinner" while cards (or another open question) show is a CANCELLATION, never a
+    # refinement or an answer — live, it searched for "Cancel Retiro dinner dinner". Not for a yes/no on a booking or a
+    # cancel ("No, cancel" there means "don't"), nor while choosing which booking to cancel.
+    if not payload and kind not in ("confirm", "cancel_confirm", "cancel_pick") and cancel_intent(body) is not None:
+        st["pending"] = None
+        return False
     if kind == "cards":
         if now - at > CARDS_LIFE:
             st["pending"] = None

@@ -263,6 +263,14 @@ class Turns(Base):
         finally:
             GW.api, LR.LADDER_STORE = api, saved
 
+    def test_sasha117_cancel_while_cards_show_is_a_cancellation(self):
+        """Live, 2 Oct: "Cancel the Retiro dinner." with cards on screen searched for "Cancel Retiro dinner dinner"."""
+        self.say("dinner for 2 in Chamberí on Saturday at 9")
+        n = len([c for c in GW.api.calls if c[2] == "/api/booking/venues/find"])
+        self.say("Cancel the Retiro dinner.")
+        self.assertEqual(len([c for c in GW.api.calls if c[2] == "/api/booking/venues/find"]), n)   # no new search
+        self.assertIn("/api/booking/reservations", self.api_paths())                                # the cancel path
+
     def pick_first(self):
         self.say("dinner for 2 in Chamberí on Saturday at 9")
         _, buttons = GW.SENDER.contents[-1]

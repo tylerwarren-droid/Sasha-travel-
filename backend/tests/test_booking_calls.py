@@ -503,6 +503,21 @@ class CallRoutes:
         self.assertEqual(str(tries[1]["trip_item_id"]), str(call["trip_item_id"]))
         self.assertEqual(self.c.portal.call(call_routes.retry_confirmation, tries[1]), "not scheduled: it was already tried twice")
 
+    def test_sasha109_the_answered_call_stays_the_booking_after_an_unanswered_confirmation(self):
+        """Live: Yatri's confirmation calls (one voicemail, one stopped) made "cancel" pick a call never answered."""
+        from booking_signer.identity import founder_account
+        acct = str(founder_account())
+        prep = self.prepare()
+        self.yes(prep)
+        call = self.c.portal.call(self.store.get_call, acct, prep["call_id"])
+        self.c.portal.call(call_routes.confirm_unclear, call)
+        self.c.portal.call(self.store.record_reading, prep["call_id"],
+                           C.CallReading(state="answered", outcome="unclear", venue_words="Sí, sí.", quote="Sí, sí.", why=""), {}, self.now)
+        rows = self.c.portal.call(self.store.receipt_rows, acct, str(call["trip_item_id"]))
+        self.assertEqual(str(rows["call"]["call_id"]), prep["call_id"])
+        r = self.c.post("/api/booking/calls", json={"cancels_call_id": prep["call_id"]})
+        self.assertEqual(r.status_code, 200, r.text)                                              # an unclear booking can be cancelled
+
     def test_the_yes_must_be_for_this_read_back(self):
         prep = self.prepare()
         r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": "0" * 64, "approval": {"how": "button"}})

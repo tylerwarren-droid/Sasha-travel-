@@ -85,7 +85,7 @@ class MemoryCallStore:
                  and (c.get("brief") or {}).get("purpose", "book") == "book"]
         if not calls:
             return None
-        call = max(calls, key=lambda c: c.get("created_at") or datetime.min)
+        call = max(calls, key=lambda c: (c.get("status") == "answered", c.get("created_at") or datetime.min))   # Sasha 109
         return {"call": dict(call), "item": dict(self.trip_items.get(trip_item_id) or {}),
                 "written": [dict(w) for w in getattr(self, "written", []) if w.get("trip_item_id") == trip_item_id]}
 
@@ -284,7 +284,10 @@ class PostgresCallStore:
         async def fn(conn):
             call = await conn.fetchrow(
                 "select * from booking_calls where trip_item_id = $1 and account_id = $2 "
-                "and coalesce(brief->>'purpose', 'book') = 'book' order by created_at desc limit 1", item_id, uuid.UUID(account_id))
+                "and coalesce(brief->>'purpose', 'book') = 'book' "
+                # Sasha 109 · the latest call a VENUE answered (a confirmation that reached no one, or never dialled, does
+                # not replace the call that spoke to them); else the latest
+                "order by (status = 'answered') desc, created_at desc limit 1", item_id, uuid.UUID(account_id))
             if call is None:
                 return None
             item = await conn.fetchrow("select * from trip_items where id = $1", item_id)

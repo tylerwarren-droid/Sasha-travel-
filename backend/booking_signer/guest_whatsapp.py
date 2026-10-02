@@ -1010,19 +1010,60 @@ async def watch_call(ch: dict, frm: str, account: str, call_id: str, venue: str,
                     follow = (v2 or {}).get("confirmation_call_id")
                     if follow:
                         break
-        if follow:
+        if follow:   # its own result is sent from where it is recorded (push_confirmation_result)
             out.text(f"I'm calling {venue} back once now to confirm it — I'll tell you here.")
         elif purpose == "book" and not settled:
             out.text("I've asked them to confirm in writing where I can; anything they send goes onto your booking and receipt.")
         elif settled and v.get("outcome") == "yes" and _receipt_note():
             out.text(_receipt_note().strip())
         await deliver(ch, frm, out, st.get("last_inbound_at"))
-        if follow:
-            await watch_call(ch, frm, account, follow, venue, purpose, what, confirming=True)
         return
     st = await STORE.get_state(ch["wa_id_sha256"])
     await deliver(ch, frm, Out().text(f"⚠ The call to {venue} hasn't finished after 8 minutes; I'll keep its result, and the receipt "
                                       f"follows by email."), st.get("last_inbound_at"))
+
+
+async def venue_display(call: dict) -> str:
+    """The venue's own name for the guest: the listing re-read now (Sasha 64 — a listing's name is shown, never stored)."""
+    from . import ladder_routes as LR
+    brief = call.get("brief") or {}
+    vk = str(brief.get("venue_key") or "")
+    try:
+        row = await LR.LADDER_STORE.get_read(str(call["account_id"]), vk[5:]) if vk.startswith("read:") else None
+        if row:
+            read = await LR.PT.hydrate_read(LR.HTTP, row["read"], NOW())
+            name = ((read.get("listing") or {}).get("name") or "").strip()   # never the stored search words
+            if name:
+                return name
+    except Exception as e:
+        log.info("[guest_whatsapp] the venue's name could not be re-read: %s", type(e).__name__)
+    return "the venue"
+
+
+async def push_confirmation_result(call: dict, reading, nxt: Optional[str]) -> str:
+    """Sasha 108 · a confirmation call's result, sent to the guest's WhatsApp from where it is recorded (the call may run
+    hours after anyone is watching): one status line, their words, and what happens next."""
+    if STORE is None or not guest_numbers():
+        return "not sent: WhatsApp for guests is off"
+    ch = await STORE.channel_of_account(str(call["account_id"]))
+    if not ch:
+        return "not sent: the guest has no WhatsApp linked"
+    brief = call.get("brief") or {}
+    venue = await venue_display(call)
+    n = brief.get("party")
+    what = f"{SN.day_words(str(brief.get('date') or ''))} at {brief.get('time')}, {n} {'person' if n == 1 else 'people'}" if brief.get("date") else ""
+    out = Out()
+    for line in result_lines({"status": reading.state, "outcome": reading.outcome, "venue_words": reading.venue_words}, venue, "book", what):
+        out.text(line)
+    settled = reading.state == "answered" and reading.outcome in ("yes", "no")
+    if nxt and nxt.startswith("scheduled for "):
+        out.text(f"I'll call {venue} once more at {nxt[len('scheduled for '):]}, when they open — your yes covers it.")
+    elif not settled:
+        out.text("I've asked them to confirm in writing where I can; anything they send goes onto your booking and receipt.")
+    elif reading.outcome == "yes" and _receipt_note():
+        out.text(_receipt_note().strip())
+    st = await STORE.get_state(ch["wa_id_sha256"])
+    return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, st.get("last_inbound_at")))
 
 
 # ── receipts and cancelling ─────────────────────────────────────────────────────────────────────────────────────────

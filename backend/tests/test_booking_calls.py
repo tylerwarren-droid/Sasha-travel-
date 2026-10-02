@@ -487,6 +487,22 @@ class CallRoutes:
         self.assertEqual(self.c.portal.call(call_routes.confirm_unclear, call), "not placed: a confirmation call already exists")
         self.assertIsNone(call_routes.confirm_brief(conf))                                      # never a confirmation of a confirmation
 
+    def test_sasha108_a_confirmation_nobody_answered_is_tried_once_more_never_a_third_time(self):
+        from booking_signer.identity import founder_account
+        prep = self.prepare()
+        self.yes(prep)
+        acct = founder_account()
+        call = self.c.portal.call(self.store.get_call, str(acct), prep["call_id"])
+        self.c.portal.call(call_routes.confirm_unclear, call)
+        conf = self.c.portal.call(self.store.get_call, str(acct), self.c.portal.call(self.store.confirming, prep["call_id"]))
+        r = self.c.portal.call(call_routes.retry_confirmation, conf)
+        self.assertTrue(r.startswith("scheduled for "), r)
+        tries = self.c.portal.call(self.store.confirmations, prep["call_id"])
+        self.assertEqual(len(tries), 2)
+        self.assertEqual(tries[1]["approval"]["kind"], "confirm_retry")
+        self.assertEqual(str(tries[1]["trip_item_id"]), str(call["trip_item_id"]))
+        self.assertEqual(self.c.portal.call(call_routes.retry_confirmation, tries[1]), "not scheduled: it was already tried twice")
+
     def test_the_yes_must_be_for_this_read_back(self):
         prep = self.prepare()
         r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": "0" * 64, "approval": {"how": "button"}})

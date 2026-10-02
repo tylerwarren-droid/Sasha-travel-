@@ -74,6 +74,11 @@ class MemoryCallStore:
         """Sasha 108 · the confirmation call placed after this unclear call, if any."""
         return next((k for k, c in self.calls.items() if (c.get("brief") or {}).get("confirms_call_id") == call_id), None)
 
+    async def confirmations(self, call_id: str) -> list:
+        """Sasha 108 · every confirmation call of this booking call, oldest first."""
+        return sorted((dict(c) for c in self.calls.values() if (c.get("brief") or {}).get("confirms_call_id") == call_id),
+                      key=lambda c: c.get("created_at") or datetime.min)
+
     async def receipt_rows(self, account_id: str, trip_item_id: str) -> Optional[dict]:
         """Sasha 88 · the booking call behind a reservation, the reservation, and what the venue WROTE about it."""
         calls = [c for c in self.calls.values() if c.get("trip_item_id") == trip_item_id and c["account_id"] == account_id
@@ -251,6 +256,12 @@ class PostgresCallStore:
                 await write_request(conn, item_id, "booking_calls", "call_id", uuid.UUID(row["call_id"]), row.get("request"))
                 return str(item_id)
         return await self._run(fn)
+
+    async def confirmations(self, call_id: str) -> list:
+        """Sasha 108 · every confirmation call of this booking call, oldest first."""
+        rows = await self._run(lambda c: c.fetch(
+            "select * from booking_calls where brief->>'confirms_call_id' = $1 order by created_at", call_id))
+        return [_row(r) for r in rows]
 
     async def confirming(self, call_id: str) -> Optional[str]:
         """Sasha 108 · the confirmation call placed after this unclear call, if any."""

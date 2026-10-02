@@ -371,6 +371,28 @@ class Progress(Base):
         self.assertEqual(self.bodies()[:2], ["✅ Booked: Botavara.", "Their words: “Sí, perfecto.”"])
         self.assertEqual(len([b for b in self.bodies() if b.startswith("✅")]), 1)
 
+    def test_sasha108_the_confirmation_result_is_pushed_from_where_it_is_recorded(self):
+        """The confirmation call may run at 19:40, hours after anyone watched: its result is sent when it is recorded."""
+        self.link()
+        run(GW.STORE.put_state(GW.wa_key(GUEST), {"history": [], "pending": None, "last_inbound_at": NOW, "link_tries": []}))
+        call = {"account_id": ACCOUNT, "brief": {"date": "2026-10-03", "time": "21:00", "party": 2, "venue_name": "Indian dinner in Chamberí, Madrid"}}
+
+        class R:
+            state, outcome, venue_words = "not_reached", None, None
+
+        async def name(c):
+            return "Restaurante Yatri"
+        with mock.patch.object(GW, "venue_display", name):
+            run(GW.push_confirmation_result(call, R, "scheduled for 19:40"))
+            R.state, R.outcome, R.venue_words = "answered", "yes", "Sí, apuntado: sábado, dos, Warren."
+            run(GW.push_confirmation_result(call, R, None))
+        self.assertEqual(self.bodies(), [
+            "⚠ Not confirmed yet: Restaurante Yatri didn't pick up.",
+            "I'll call Restaurante Yatri once more at 19:40, when they open — your yes covers it.",
+            "✅ Booked: Restaurante Yatri, Saturday 3 October at 21:00, 2 people.",
+            "Their words: “Sí, apuntado: sábado, dos, Warren.”"])
+        self.assertNotIn("Indian dinner", " ".join(self.bodies()))
+
     def test_sasha108_an_unclear_call_is_followed_by_its_confirmation_call_in_plain_words(self):
         """2 Oct, live: Yatri said "Sí, sí" and hung up before the recap. Plain status lines, the VENUE's name, never the
         search words ("Indian dinner in Chamberí"), never "closing recap" / "who pressed it"."""
@@ -388,9 +410,7 @@ class Progress(Base):
         self.assertEqual(self.bodies(), [
             "⚠ Not confirmed yet: Restaurante Yatri didn't clearly confirm it.",
             "Their words: “Hola, muy buenas. / Hola. / Sí, sí. / Ok.”",
-            "I'm calling Restaurante Yatri back once now to confirm it — I'll tell you here.",
-            "✅ Booked: Restaurante Yatri, Saturday 3 October at 21:00, 2 people.",
-            "Their words: “Sí, sábado a las nueve, dos, Warren. Correcto.”"])
+            "I'm calling Restaurante Yatri back once now to confirm it — I'll tell you here."])
         joined = " ".join(self.bodies())
         for jargon in ("Indian dinner", "recap", "pressed", "Bland"):
             self.assertNotIn(jargon, joined)

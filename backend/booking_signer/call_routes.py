@@ -188,8 +188,58 @@ async def confirm_unclear(call: dict) -> str:
     return "placed" if (placed.placed or placed.uncertain) else f"not placed: {placed.why}"
 
 
+async def retry_confirmation(conf: dict) -> str:
+    """Sasha 108 · a confirmation call that reached no one (voicemail, no answer) is tried ONCE more — when the venue
+    opens by its listed hours, else in 30 minutes — covered by the same yes. Never a third attempt."""
+    brief = dict(conf.get("brief") or {})
+    original = brief.get("confirms_call_id")
+    if not original:
+        return "not scheduled: not a confirmation call"
+    if len(await CALL_STORE.confirmations(original)) >= 2:
+        return "not scheduled: it was already tried twice"
+    if not C.calls_enabled() or not C.bland_key():
+        return "not scheduled: phone calls are off"
+    account, now = str(conf["account_id"]), NOW()
+    read = await _read_of(account, brief)
+    st = H.status(read, now, brief["timezone"]) if read else {"known": False}
+    if st.get("known") and st.get("open_now") is False and st.get("call_at"):
+        when, opens, basis, notes = st["call_at"], st["opens_at"], st.get("basis"), st.get("notes")
+        hhmm = (datetime.fromisoformat(st["opens_at"]) + H.AFTER_OPENING).strftime("%H:%M")
+    else:
+        later = now + timedelta(minutes=30)
+        when, opens, basis, notes = later.isoformat(), later.isoformat(), "30 minutes after a call nobody answered", []
+        from zoneinfo import ZoneInfo
+        hhmm = later.astimezone(ZoneInfo(brief["timezone"])).strftime("%H:%M")
+    row = {"call_id": str(uuid.uuid4()), "account_id": account, "venue_key": conf["venue_key"], "dialled_number": conf["dialled_number"],
+           "language": conf["language"], "guest_name": conf.get("guest_name"), "guest_phone": conf.get("guest_phone"),
+           "brief": brief, "brief_sha256": conf["brief_sha256"], "read_back_lines": conf["read_back_lines"],
+           "read_back_sha256": conf["read_back_sha256"], "created_at": now, "request": conf.get("request")}
+    await CALL_STORE.put_cancel_call(row, str(conf["trip_item_id"]))   # the SAME reservation
+    approval = {"by": account, "how": "auto", "said": None, "at": now.isoformat(), "kind": "confirm_retry", "after_call": str(conf["call_id"]),
+                "covered_by_read_back_sha256": (conf.get("approval") or {}).get("covered_by_read_back_sha256"),
+                "read_back_sha256": row["read_back_sha256"], "brief_sha256": row["brief_sha256"],
+                "scheduled_for": when, "opens_at": opens, "hours_basis": basis, "hours_notes": notes}
+    r = await CALL_STORE.schedule(account, row["call_id"], approval, now, now - APPROVAL_WINDOW)
+    return f"scheduled for {hhmm}" if r == "scheduled" else f"not scheduled: {r}"
+
+
 async def _follow_up(call: dict, reading) -> None:
     """Sasha 74 · rules 2–3 — awaited here, never fire-and-forget; its failure is logged and never undoes the reading."""
+    if (call.get("brief") or {}).get("confirms_call_id"):
+        # Sasha 108 · a confirmation call's own result: retried once if nobody answered, and told to the guest on
+        # WhatsApp from HERE — a call scheduled hours ahead has no one watching it
+        nxt = None
+        if reading.state == "not_reached":
+            try:
+                nxt = await retry_confirmation(call)
+            except Exception as e:
+                nxt = f"not scheduled: {type(e).__name__}: {e}"
+            log.info("[confirm] confirmation call %s reached no one; the retry: %s", call.get("call_id"), nxt)
+        try:
+            from . import guest_whatsapp as GW
+            log.info("[confirm] whatsapp: %s", await GW.push_confirmation_result(call, reading, nxt))
+        except Exception as e:
+            log.error("[confirm] the WhatsApp result failed: %s: %s", type(e).__name__, e)
     if reading.outcome == "unclear" and (call.get("brief") or {}).get("purpose") == "book" \
             and not (call.get("brief") or {}).get("confirms_call_id"):
         try:
@@ -204,7 +254,8 @@ async def _follow_up(call: dict, reading) -> None:
         if what:
             log.info("[followup] call %s: %s", call.get("call_id"), what)
         # Sasha 108 · unclear and no email went: a text to the venue's own mobile, where they publish one
-        if reading.outcome == "unclear" and (call.get("brief") or {}).get("purpose") == "book" and what != "sent":
+        if (reading.outcome == "unclear" or (reading.state == "not_reached" and (call.get("brief") or {}).get("confirms_call_id"))) \
+                and (call.get("brief") or {}).get("purpose") == "book" and what != "sent":
             log.info("[followup] call %s: %s", call.get("call_id"), await FU.sms_ask(call))
     except Exception as e:
         log.error("[followup] call %s: the follow-up email failed: %s: %s", call.get("call_id"), type(e).__name__, e)

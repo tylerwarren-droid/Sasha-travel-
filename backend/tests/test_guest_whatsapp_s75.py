@@ -279,6 +279,16 @@ class Turns(Base):
         self.assertEqual((find["what"], find["where"], find["open_at"]), ("luxurious and romantic Dinner", "Chamberí, Madrid", "2026-10-03T21:00"))
         self.assertEqual(GW.SENDER.contents[-1][0], "Which one?")
 
+    def test_sasha104_a_change_of_mind_while_choosing_searches_again(self):
+        """2 Oct, live: "How about Indian food?" after the cards got "Which one?" again."""
+        self.say("dinner for 2 in Chamberí on Saturday at 21:00")
+        self.say("How about Indian food?")
+        finds = [c[3] for c in GW.api.calls if c[2] == "/api/booking/venues/find"]
+        self.assertEqual(len(finds), 2)
+        self.assertEqual((finds[1]["what"], finds[1]["where"], finds[1]["open_at"]), ("Indian food", "Chamberí, Madrid", "2026-10-03T21:00"))
+        self.assertEqual([GW.refinement(x) for x in ("¿Y comida india?", "what about sushi", "2", "the second one")],
+                         ["comida india", "sushi", None, None])
+
     def test_sasha104_unsure_asks_one_question(self):
         self.say("can you sort out Saturday night for 2?")
         self.assertEqual(self.bodies(), [GW.ASK_ONE])

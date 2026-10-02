@@ -652,10 +652,16 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             return False
         i = _picked(pend, body, payload)
         if i is None:
-            if HO.booking_handoff(body, st.get("history") or []) is not None:
+            other = refinement(body)
+            if not other and HO.booking_handoff(body, st.get("history") or []) is not None:
                 st["pending"] = None
                 return False                               # a new request: start afresh
-            out.text("Which one? Tap a name, or send its number (1, 2 or 3).")
+            if other:
+                # Sasha 104 · "How about Indian food?" while choosing: the same area, day, time and party, another kind
+                st["pending"] = None
+                await _find(ctx, {**pend["find"], "what": other}, {"parts": pend.get("draft") or {}})
+                return True
+            out.text("Which one? Tap a name, or send its number (1, 2 or 3) — or tell me what else to look for.")
             return True
         await _picked_card(ctx, pend, pend["cards"][i])
         return True
@@ -691,6 +697,21 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             return True
         return False
     return False
+
+
+_REFINE = re.compile(r"^\s*¿?\s*(?:how about|what about|maybe|or|rather|instead|actually|y|qu[eé] tal|mejor|o)\s+(?:some\s+|an?\s+|algo de\s+|un\s+|una\s+)?"
+                     r"(?P<what>[^?.!]{2,60}?)\s*(?:instead|then|please|por favor|mejor)?\s*[?.!]*\s*$", re.I)
+
+
+def refinement(body: str) -> Optional[str]:
+    """Another kind of place, said while the cards are showing ("How about Indian food?", "¿Y comida india?") — or None."""
+    m = _REFINE.match(body or "")
+    if not m:
+        return None
+    what = m["what"].strip()
+    if re.search(r"\b(?:in|near|around|en|cerca)\b", what, re.I):
+        return None                                        # a new area is a new request (the hand-off reads it)
+    return what if 1 <= len(what.split()) <= 5 and not re.search(r"\d", what) else None
 
 
 def _payload_ok(pend: dict, payload: str) -> bool:

@@ -225,11 +225,11 @@ async def retry_confirmation(conf: dict) -> str:
 
 async def _follow_up(call: dict, reading) -> None:
     """Sasha 74 · rules 2–3 — awaited here, never fire-and-forget; its failure is logged and never undoes the reading."""
-    if (call.get("brief") or {}).get("confirms_call_id"):
+    if (call.get("brief") or {}).get("confirms_call_id") or (call.get("approval") or {}).get("scheduled_for"):
         # Sasha 108 · a confirmation call's own result: retried once if nobody answered, and told to the guest on
         # WhatsApp from HERE — a call scheduled hours ahead has no one watching it
         nxt = None
-        if reading.state == "not_reached":
+        if reading.state == "not_reached" and (call.get("brief") or {}).get("confirms_call_id"):
             try:
                 nxt = await retry_confirmation(call)
             except Exception as e:
@@ -642,7 +642,8 @@ async def place(call_id: str, request: Request):
     if refused:
         return refused
     # S-66 · CLOSED NOW by its listed hours → no call now: scheduled for opening + 10 minutes, covered by this yes
-    if brief.get("purpose") == "book":
+    # (Sasha 109 · a cancelling call too: a closed venue's answering machine cancels nothing)
+    if brief.get("purpose") in ("book", "cancel"):
         try:
             read = await _read_of(account, brief)
         except StorageUnavailable as e:

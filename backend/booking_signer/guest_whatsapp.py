@@ -539,12 +539,33 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     return out
 
 
+_CANCEL_WORD = re.compile(r"\b(cancel|cancell?ation|cancela|cancelar|cancelad|cancele|anula|anular|anulad|anule)\b", re.I)
+_NOT_CANCEL = re.compile(r"\b(?:don'?t|do not|no\s+(?:lo\s+)?(?:canceles|anules)|never mind)\b.*\b(?:cancel|cancela|anula)", re.I)
+_CANCEL_FILLER = re.compile(r"\b(no|please|pls|por favor|can you|could you|you|i want to|i'd like to|want to|to|cancel|cancell?ation|cancela|"
+                           r"cancelar|cancelad|cancele|anula|anular|anulad|anule|my|the|a|booking|reservation|table|reserva|"
+                           r"mesa|la|el|mi|de|en|at|for|it|that|this|one|lo|esa|esta|ese|now|ahora|thanks|gracias)\b", re.I)
+
+
+def cancel_intent(body: str) -> Optional[str]:
+    """Sasha 109 · None: not a cancellation. "": cancel, no place named. Else the place's name as said."""
+    t = body or ""
+    if not _CANCEL_WORD.search(t) or _NOT_CANCEL.search(t):
+        return None
+    rest = _CANCEL_FILLER.sub(" ", re.sub(r"[^\wáéíóúñü' -]", " ", t))
+    return " ".join(rest.split())
+
+
 async def _new_request(ctx: dict, body: str) -> None:
     """The scope gate: a booking, a cancellation, receipts or help — anything else is the one fixed sentence."""
     out, st = ctx["out"], ctx["st"]
     history = st.get("history") or []
     if _HELP.match(body):
         out.text(HELP)
+        return
+    # Sasha 109 · CANCEL before anything else: "Please cancel", "No Please Cancel Yatri", "cancela", "anula la de Yatri"
+    ci = cancel_intent(body)
+    if ci is not None:
+        await _cancel_find(ctx, ci or None)
         return
     if _RECEIPTS.search(body):
         await _receipts(ctx)
@@ -669,6 +690,18 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         return True
     if kind == "need":
         return await _answer_need(ctx, pend, body)
+    if kind == "cancel_pick":
+        m = re.fullmatch(r"\s*(\d)\s*[.)]?\s*", body or "")
+        i = int(m[1]) - 1 if m else next((k for k, r in enumerate(pend["rows"]) if body and _fold(body).strip() in _fold(r["venue"])), None)
+        if i is None or not 0 <= i < len(pend["rows"]):
+            if cancel_intent(body) is None and HO.booking_handoff(body, []) is not None:
+                st["pending"] = None
+                return False
+            out.text("Reply with the number of the booking to cancel.")
+            return True
+        st["pending"] = None
+        await _cancel_row(ctx, pend["rows"][i])
+        return True
     if kind in ("confirm", "cancel_confirm"):
         fresh = now - at <= APPROVAL_WINDOW
         if payload.startswith("no:") or (not payload and _NO.match(body)):
@@ -1053,9 +1086,13 @@ async def push_confirmation_result(call: dict, reading, nxt: Optional[str]) -> s
     n = brief.get("party")
     what = f"{SN.day_words(str(brief.get('date') or ''))} at {brief.get('time')}, {n} {'person' if n == 1 else 'people'}" if brief.get("date") else ""
     out = Out()
-    for line in result_lines({"status": reading.state, "outcome": reading.outcome, "venue_words": reading.venue_words}, venue, "book", what):
+    purpose = "cancel" if brief.get("purpose") == "cancel" else "book"
+    for line in result_lines({"status": reading.state, "outcome": reading.outcome, "venue_words": reading.venue_words}, venue, purpose, what):
         out.text(line)
     settled = reading.state == "answered" and reading.outcome in ("yes", "no")
+    if purpose == "cancel":
+        st = await STORE.get_state(ch["wa_id_sha256"])
+        return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, st.get("last_inbound_at")))
     if nxt and nxt.startswith("scheduled for "):
         out.text(f"I'll call {venue} once more at {nxt[len('scheduled for '):]} — your yes covers it.")
     elif not settled:
@@ -1093,18 +1130,35 @@ async def _receipts(ctx: dict) -> None:
     ctx["out"].text("Your upcoming bookings:\n" + "\n".join(lines) + "\nEach receipt is in your email.")
 
 
-async def _cancel_find(ctx: dict, asked: str) -> None:
+async def _cancel_find(ctx: dict, asked: Optional[str]) -> None:
+    """Sasha 109 · the booking a cancellation means: the one named, or — no name — the most recent active one; several →
+    a numbered list. Then ONE sentence and one yes (_cancel_row)."""
     out, account = ctx["out"], ctx["account"]
-    words = [w for w in re.findall(r"[a-z0-9]+", _fold(asked)) if len(w) > 2]
-    hits = [r for r in await _upcoming(account)
-            if words and all(any(x.startswith(w) or w.startswith(x) for x in re.findall(r"[a-z0-9]+", _fold(r["venue"]))) for w in words)]
-    if not hits:
-        out.text(f"I can't find an upcoming booking of yours at {asked}.")
-        return
+    rows = await _upcoming(account)
+    if asked:
+        words = [w for w in re.findall(r"[a-z0-9]+", _fold(asked)) if len(w) > 2]
+        hits = [r for r in rows
+                if words and all(any(x.startswith(w) or w.startswith(x) for x in re.findall(r"[a-z0-9]+", _fold(r["venue"]))) for w in words)]
+        if not hits:
+            out.text(f"I can't find an upcoming booking of yours at {asked}.")
+            return
+    else:
+        hits = rows
+        if not hits:
+            out.text("You have no upcoming bookings with me to cancel.")
+            return
     if len(hits) > 1:
-        out.text("You have more than one booking there — tell me the day, e.g. \"cancel " + asked + " on Saturday\".")
+        hits = hits[:9]
+        lines = [f"{i + 1}. {r['venue']} — {SN.day_words(r.get('date')) or 'no day set'}{' at ' + r['time'] if r.get('time') else ''}"
+                 for i, r in enumerate(hits)]
+        out.text("Which one should I cancel?\n" + "\n".join(lines) + "\nReply with its number.")
+        ctx["st"]["pending"] = {"kind": "cancel_pick", "at": ctx["now"].isoformat(), "rows": [{"id": r["id"], "venue": r["venue"]} for r in hits]}
         return
-    r = hits[0]
+    await _cancel_row(ctx, hits[0])
+
+
+async def _cancel_row(ctx: dict, r: dict) -> None:
+    out, account = ctx["out"], ctx["account"]
     status, plan = await api(account, "GET", f"/api/booking/reservations/{r['id']}/cancel")
     if status != 200:
         out.text(f"I can't cancel it right now — {refusal_words(plan, status)}.")
@@ -1132,7 +1186,11 @@ async def _cancel_approve(ctx: dict, pend: dict, how: dict) -> None:
         if status != 200:
             out.text(f"Not cancelled — {refusal_words(j, status)}. Nothing was dialled.")
             return
-        out.text(f"Cancelling with {venue} now — by phone.")
+        if j.get("status") == "scheduled":   # Sasha 109 · closed now: the cancelling call waits for them to open
+            out.text(f"{venue} is closed right now, so I'll call them to cancel at {str(j.get('scheduled_for') or '')[11:16]} — "
+                     f"I'll tell you here what they say.")
+            return
+        out.text(f"📞 Calling {venue} now to cancel.")
         _spawn(watch_call(ctx["ch"], ctx["frm"], account, pend["id"], venue, "cancel"))
         return
     status, j = await api(account, "POST", f"/api/booking/reservations/{pend['trip_item_id']}/cancel",

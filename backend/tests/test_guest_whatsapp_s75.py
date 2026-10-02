@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -52,6 +53,8 @@ class FakeApi:
         self.contact = {"name": "Tyler Warren", "mobile_e164": GUEST}
         self.place = {"status": "placed", "say": "I'm on the phone to Botavara Chamberí now."}
         self.cancel_post = {"status": "requested", "say": "I've emailed them to cancel it."}
+        self.reservations = [{"id": "t-1", "venue": "Botavara Chamberí", "date": "2026-10-03", "time": "21:00", "party": 2,
+                              "status": "confirmed", "status_words": "confirmed by the restaurant", "receipt": None}]
 
     async def __call__(self, account, method, path, body=None, timeout=90.0):
         self.calls.append((account, method, path, body))
@@ -71,12 +74,13 @@ class FakeApi:
         if path.endswith("/place"):
             return 200, self.place
         if path == "/api/booking/reservations":
-            return 200, {"reservations": [{"id": "t-1", "venue": "Botavara Chamberí", "date": "2026-10-03", "time": "21:00",
-                                           "party": 2, "status": "confirmed", "status_words": "confirmed by the restaurant", "receipt": None}]}
-        if path == "/api/booking/reservations/t-1/cancel" and method == "GET":
-            return 200, {"route": "email", "venue": "Botavara Chamberí", "call_id": None,
+            return 200, {"reservations": self.reservations}
+        m = re.fullmatch(r"/api/booking/reservations/(t-\d)/cancel", path)
+        if m and method == "GET":
+            r = next(x for x in self.reservations if x["id"] == m[1])
+            return 200, {"route": "email", "venue": r["venue"], "call_id": None,
                          "read_back": {"lines": ["I'll email them to cancel."], "sha256": "e" * 64},
-                         "sentence": "Cancel Botavara Chamberí, Saturday 3 October at 21:00, for 2, under Tyler Warren?"}
+                         "sentence": f"Cancel {r['venue']}, Saturday 3 October at 21:00, for 2, under Tyler Warren?"}
         if path == "/api/booking/reservations/t-1/cancel" and method == "POST":
             return 200, self.cancel_post
         return 404, {"message": f"no fake for {method} {path}"}
@@ -351,6 +355,36 @@ class Turns(Base):
         run(GW.turn(ch, SANDBOX, {"From": f"whatsapp:{GUEST}", "Body": "", "NumMedia": "1", "MediaContentType0": "audio/ogg"}))
         self.assertIn("voice notes", self.bodies()[-1])
         self.assertEqual(GW.api.calls, [])
+
+    YATRI = {"id": "t-2", "venue": "Restaurante Yatri", "date": "2026-10-03", "time": "21:00", "party": 2, "status": "unclear",
+             "status_words": "not confirmed yet", "receipt": None}
+
+    def test_sasha109_the_founders_cancels(self):
+        """2 Oct, live: "Please cancel" and "No Please Cancel Yatri" both got "Shall I book that?"."""
+        GW.api.reservations = [self.YATRI]
+        self.say("Please cancel")                                     # no name: his one active booking
+        self.assertEqual(GW.SENDER.contents[-1][0], "Cancel Restaurante Yatri, Saturday 3 October at 21:00, for 2, under Tyler Warren?")
+        self.say("No")                                                 # the No answers the question; nothing is cancelled
+        self.assertEqual(self.bodies()[-1], "OK — nothing was cancelled.")
+        self.say("No Please Cancel Yatri")
+        body, buttons = GW.SENDER.contents[-1]
+        self.assertTrue(body.startswith("Cancel Restaurante Yatri"))
+        self.assertEqual(buttons[0][0], "Yes, cancel")
+        self.assertNotIn(GW.ASK_ONE, self.bodies())
+        self.assertFalse(any(c[1] == "POST" and c[2].endswith("/cancel") for c in GW.api.calls))   # nothing until the yes
+
+    def test_sasha109_several_bookings_get_a_numbered_list(self):
+        GW.api.reservations = [GW.api.reservations[0], self.YATRI]
+        self.say("cancela")
+        self.assertTrue(self.bodies()[-1].startswith("Which one should I cancel?\n1. Botavara Chamberí"))
+        self.say("2")
+        self.assertTrue(GW.SENDER.contents[-1][0].startswith("Cancel Restaurante Yatri"))
+
+    def test_sasha109_what_is_a_cancel(self):
+        cases = {"Please cancel": "", "No Please Cancel Yatri": "Yatri", "cancela": "", "anula la reserva de Yatri": "Yatri",
+                 "cancel my booking at Botavara please": "Botavara", "don't cancel it": None, "dinner for 2 tomorrow": None}
+        for msg, want in cases.items():
+            self.assertEqual(GW.cancel_intent(msg), want, msg)
 
     def test_receipts(self):
         self.say("my bookings")

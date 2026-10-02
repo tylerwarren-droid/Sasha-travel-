@@ -819,6 +819,22 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
         self.assertEqual(len(bland()), 1)
         self.assertEqual(self.calls.calls[prep["call_id"]]["status"], "placed")
 
+    def test_sasha109_a_cancelling_call_to_a_closed_venue_waits_for_them_to_open(self):
+        """A closed venue's answering machine cancels nothing: the cancelling call is scheduled like a booking call."""
+        from datetime import datetime as _dt, timezone as _tz
+        from tests.test_hours import GOOGLE
+        v = self.read()
+        self.ladder.reads[v["read_id"]]["read"]["facts"].append(GOOGLE)      # Mon–Fri 10:00–20:00
+        self.now = _dt(2026, 10, 5, 12, 0, tzinfo=_tz.utc)                   # Monday 14:00 in Madrid: open
+        prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
+        self.calls.calls[prep["call_id"]].update(status="answered", outcome="yes", reading={"reference": None})
+        self.now = _dt(2026, 10, 5, 19, 0, tzinfo=_tz.utc)                   # 21:00: closed
+        c = self.c.post("/api/booking/calls", json={"cancels_call_id": prep["call_id"]}).json()
+        r = self.c.post(f"/api/booking/calls/{c['call_id']}/place",
+                        json={"read_back_sha256": c["read_back"]["sha256"], "approval": {"how": "whatsapp_button"}}).json()
+        self.assertEqual(r["status"], "scheduled", r)
+        self.assertEqual([u for m, u, b in self.web.requests if u.startswith("https://api.bland.ai") and m == "POST"], [])
+
     def test_s66_a_reply_by_email_cancels_the_scheduled_call(self):
         from datetime import datetime as _dt, timezone as _tz
         from tests.test_hours import GOOGLE

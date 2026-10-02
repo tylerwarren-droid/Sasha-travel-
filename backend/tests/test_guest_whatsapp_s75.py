@@ -388,7 +388,7 @@ class Progress(Base):
             run(GW.push_confirmation_result(call, R, None))
         self.assertEqual(self.bodies(), [
             "⚠ Not confirmed yet: Restaurante Yatri didn't pick up.",
-            "I'll call Restaurante Yatri once more at 19:40, when they open — your yes covers it.",
+            "I'll call Restaurante Yatri once more at 19:40 — your yes covers it.",
             "✅ Booked: Restaurante Yatri, Saturday 3 October at 21:00, 2 people.",
             "Their words: “Sí, apuntado: sábado, dos, Warren.”"])
         self.assertNotIn("Indian dinner", " ".join(self.bodies()))

@@ -1057,7 +1057,7 @@ async def push_confirmation_result(call: dict, reading, nxt: Optional[str]) -> s
         out.text(line)
     settled = reading.state == "answered" and reading.outcome in ("yes", "no")
     if nxt and nxt.startswith("scheduled for "):
-        out.text(f"I'll call {venue} once more at {nxt[len('scheduled for '):]}, when they open — your yes covers it.")
+        out.text(f"I'll call {venue} once more at {nxt[len('scheduled for '):]} — your yes covers it.")
     elif not settled:
         out.text("I've asked them to confirm in writing where I can; anything they send goes onto your booking and receipt.")
     elif reading.outcome == "yes" and _receipt_note():

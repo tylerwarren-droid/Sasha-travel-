@@ -90,3 +90,27 @@ class WrittenConfirmation(unittest.TestCase):
         out = self.built(name="Alexandra Montgomery-Fitzwilliam")
         self.assertEqual(out["brief"]["confirm_ask"], "¿Nos podrían enviar una confirmación por email a sasha arroba booking punto kanoe punto ai?")
         self.assertLessEqual(len(out["brief"]["task"]), 2000)
+
+
+class SashasOwnNumber(unittest.TestCase):
+    """Sasha 92 · her number is live: venues are asked to text IT, and a call from it carries her Twilio account's key."""
+    def test_the_ask_names_her_own_number_in_spanish_digits(self):
+        with mock.patch.dict(os.environ, {**WrittenConfirmation.ENV, "SASHA_PHONE_NUMBER": "+447915914215"}):
+            out = FU.with_own_contact(C.build_call(BOTAVARA, C.parse_call_particulars(ASKED), NOW), "Botavara", None, None)
+        self.assertEqual(out["brief"]["confirm_ask"], "¿Nos podrían enviar una confirmación por SMS a nuestro número, más cuatro cuatro, "
+                         "siete nueve uno, cinco nueve uno, cuatro dos, uno cinco, o por email a sasha arroba booking punto kanoe punto ai?")
+        self.assertLessEqual(len(out["brief"]["task"]), 2000)
+        self.assertIn("by text to my own number (+447915914215)", "\n".join(out["read_back_lines"]))
+
+    def test_a_call_from_her_own_number_sends_the_encrypted_key_and_no_other_call_does(self):
+        import asyncio
+        seen = []
+
+        async def http(method, url, headers=None, json=None):
+            seen.append(dict(headers))
+            from tests.test_booking_ladder import R
+            return R(200, {"status": "success", "call_id": "b1"})
+        with mock.patch.dict(os.environ, {"BLAND_ENCRYPTED_KEY": "ek-test"}):
+            asyncio.run(C.place_call(http, "k", {"phone_number": "+34910000000", "from": "+447915914215", "task": "t"}))
+            asyncio.run(C.place_call(http, "k", {"phone_number": "+34910000000", "task": "t"}))
+        self.assertEqual((seen[0].get("encrypted_key"), seen[1].get("encrypted_key")), ("ek-test", None))

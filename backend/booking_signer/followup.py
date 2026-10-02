@@ -77,12 +77,29 @@ CONFIRM_ASK = {
 }
 
 
+#: Sasha 92 · once her own number is live, an SMS to IT is asked for too — it lands on the reservation (inbound_phone)
+CONFIRM_ASK_SASHA = {
+    "es": "¿Nos podrían enviar una confirmación por SMS a nuestro número, {sasha}, o por email a {email}?",
+    "en": "Could you send us a confirmation by text to our number, {sasha}, or by email to {email}?",
+    "fr": "Pourriez-vous nous envoyer une confirmation par SMS à notre numéro, {sasha}, ou par e-mail à {email} ?",
+    "it": "Potreste inviarci una conferma via SMS al nostro numero, {sasha}, oppure via email a {email}?",
+    "pt": "Poderiam enviar-nos uma confirmação por SMS para o nosso número, {sasha}, ou por email para {email}?",
+    "de": "Könnten Sie uns eine Bestätigung per SMS an unsere Nummer, {sasha}, oder per E-Mail an {email} schicken?",
+}
+
+
 def confirm_ask(lang_code: str, me: str, mobile: Optional[str]) -> List[str]:
-    """The ask, as she says it — with the guest's mobile in the venue's digits when there is one; the shorter one after."""
-    from . import spoken as SP
+    """The ask, as she says it, longest first: to SASHA'S OWN number (S-70, once live) and her email — what reaches her
+    lands on the booking by itself; then to the guest's mobile and her email; then her email alone."""
+    from . import calls as C, spoken as SP
     c = SP.code(lang_code)
     with_mobile, email_only = CONFIRM_ASK.get(c, CONFIRM_ASK["en"])
-    out = [with_mobile.format(mobile=SP.digits(mobile, c), email=spoken(me, c))] if mobile else []
+    out = []
+    sasha = C.sasha_number()
+    if sasha:
+        out.append(CONFIRM_ASK_SASHA.get(c, CONFIRM_ASK_SASHA["en"]).format(sasha=SP.digits(sasha, c), email=spoken(me, c)))
+    if mobile:
+        out.append(with_mobile.format(mobile=SP.digits(mobile, c), email=spoken(me, c)))
     return out + [email_only.format(email=spoken(me, c))]
 
 
@@ -105,7 +122,7 @@ def with_own_contact(built: dict, venue_name: str, read: Optional[Mapping[str, A
         anchor = "Keep it short and polite."
         # Sasha 90 (a) · the written confirmation asked for, the longest wording that fits Bland's 2,000 — else, as before,
         # her email for any change. If none fits she says none of it, and the read-back does not claim it.
-        asks = [(a, f"After the recap's yes, ask: \"{a}\" Note what they agree to; spell the address if asked. ") for a in confirm_ask(lang, me, mobile)]
+        asks = [(a, f"After the recap's yes, ask: \"{a}\" Note their answer. ") for a in confirm_ask(lang, me, mobile)]
         asks.append((None, f"After the recap, give Sasha's email for any change: \"{spoken(me, lang)}\". Spell it if asked. "))
         for ask, say in asks:
             new_task = task.replace(anchor, say + anchor, 1) if anchor in task else task + " " + say
@@ -114,9 +131,12 @@ def with_own_contact(built: dict, venue_name: str, read: Optional[Mapping[str, A
                 brief["sasha_email"] = me
                 if ask:
                     brief["confirm_ask"] = ask
-                    to_mobile = bool(mobile) and ask == confirm_ask(lang, me, mobile)[0]   # the wording that names the mobile
+                    from . import calls as _C
+                    sasha = _C.sasha_number()
+                    to_sasha = bool(sasha) and ask == confirm_ask(lang, me, mobile)[0]          # the wording naming her number
+                    to_mobile = bool(mobile) and not to_sasha and ask != confirm_ask(lang, me, mobile)[-1]
                     extra.append("After their yes I'll ask them to confirm it in writing — "
-                                 + (f"by text to your mobile ({mobile}) or " if to_mobile else "")
+                                 + (f"by text to my own number ({sasha}) or " if to_sasha else f"by text to your mobile ({mobile}) or " if to_mobile else "")
                                  + f"by email to me ({me}); what they send comes onto this booking.")
                 else:
                     extra.append(f"I'll give them my own email, {me}, for any change — their reply comes to me and onto this booking.")

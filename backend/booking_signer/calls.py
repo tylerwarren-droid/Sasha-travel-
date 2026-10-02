@@ -571,7 +571,12 @@ async def place_call(http: Http, key: str, payload: Mapping[str, Any]) -> Placed
     an error status, a 200 without success, a body that is not JSON, no call id, a network error — is NOT placed,
     with Bland's own words kept. There is no path that reports a call Bland did not accept."""
     try:
-        r = await http("POST", BLAND_CALLS_URL, headers={"authorization": key, "content-type": "application/json"}, json=dict(payload))
+        headers = {"authorization": key, "content-type": "application/json"}
+        # S-70 · a call FROM Sasha's own number goes through her Twilio account: Bland needs that account's encrypted key
+        ek = os.getenv("BLAND_ENCRYPTED_KEY", "").strip()
+        if payload.get("from") and ek:
+            headers["encrypted_key"] = ek
+        r = await http("POST", BLAND_CALLS_URL, headers=headers, json=dict(payload))
     except Exception as e:
         if type(e).__name__ in _NEVER_SENT:   # the connection was never made: nothing reached Bland
             return Placed(False, None, None, None, f"Bland could not be reached: {type(e).__name__}: {e}")

@@ -94,3 +94,37 @@ class OnWhatsApp(TG.Base):
         n = len([c for c in GW.api.calls if c[2] == "/api/booking/venues/read"])
         self.say("Request from hotel", payload=choice[1][1])
         self.assertEqual(len([c for c in GW.api.calls if c[2] == "/api/booking/venues/read"]), n + 1)   # read, as any real booking
+
+
+class EmailOnlyVenue(TG.Base):
+    """Rehearsal (3 Oct): 'Request from hotel' at a hotel that publishes only an email stopped dead — a guard from before the
+    email route (Sasha 130) skipped it."""
+
+    def test_an_email_only_hotel_gets_the_email_route(self):
+        self.link()
+        api = GW.api
+
+        async def fake(account, method, path, body=None, timeout=90.0):
+            if path == "/api/booking/venues/read":
+                return 200, {"read_id": "r-h", "venue": "ARTIEM", "country": "ES", "listing": {"name": "ARTIEM Madrid"}, "say": "x", "facts": [],
+                             "rungs": [{"rung": "email", "available": True, "fact_index": 1, "value": "res@artiem.es"}]}
+            if path == "/api/booking/emails":
+                fake.email = body
+                return 200, {"email_id": "e-h", "read_back": {"lines": ["I'll email ARTIEM Madrid"], "sha256": "e" * 64}}
+            return await api(account, method, path, body, timeout)
+        fake.calls, fake.email = api.calls, None
+        GW.api = fake
+        from booking_signer import ladder_routes as LR, ladder_store as LS
+        saved = LR.LADDER_STORE
+        LR.LADDER_STORE = LS.MemoryLadderStore()
+        LR.LADDER_STORE.account_emails = {TG.ACCOUNT: "guest@example.com"}
+        try:
+            self.say("a hotel in Madrid from 20 to 22 October for 2")
+            _, cards = GW.SENDER.contents[-1]
+            self.say("x", payload=cards[0][1])
+            _, choice = GW.SENDER.contents[-1]
+            self.say("Request from hotel", payload=choice[1][1])
+        finally:
+            GW.api, LR.LADDER_STORE = api, saved
+        self.assertEqual(fake.email["nights"], 2)                               # the ROOM request, for its nights
+        self.assertIn("I'll email them", "\n".join(self.bodies()))

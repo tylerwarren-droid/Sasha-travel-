@@ -774,8 +774,8 @@ async def _hotels(ctx: dict, body: str) -> None:
         return
     f = HO.find_request(f"hotel in {m['w'].strip()}", ctx["now"]) or {"what": "hotel", "where": m["w"].strip()}
     party = HO.plain_party(body or "") or 2
-    out.text(f"Hotels can't be booked instantly here yet, so I'll find them and ask the one you pick for a room — {nights} night"
-             f"{'s' if nights != 1 else ''} from {SN.day_words(a)}, {party} {'person' if party == 1 else 'people'}.")
+    out.text(f"Hotels for {nights} night{'s' if nights != 1 else ''} from {SN.day_words(a)}, {party} {'person' if party == 1 else 'people'}. "
+             f"For the one you pick: a TEST booking (no hotel contacted), or a real request to the hotel.")
     ctx["no_test_card"] = True
     await _find(ctx, {"what": "hotel", "where": f.get("where") or m["w"].strip(), "country": f.get("country")},
                 {"parts": {"what": {"activity": "a room", "activity_venue_lang": "a room", "category": "other"},
@@ -1670,7 +1670,7 @@ async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
         return
     venue = (read.get("listing") or {}).get("name") or card.get("name") or read.get("venue")
     rungs = {r["rung"]: r for r in read.get("rungs") or [] if r.get("available")}
-    if not any(k in rungs for k in ("form", "link", "phone")):
+    if not any(k in rungs for k in ("form", "link", "phone", "email")):   # Sasha 135 · an email-only venue has a route (Sasha 130)
         ctx["st"]["pending"] = None
         out.text(f"{read.get('say') or 'I found no way to book them that I may use.'} Nothing was sent.")
         return

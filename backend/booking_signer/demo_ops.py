@@ -154,7 +154,7 @@ async def reset(request: Request):
     from . import demo_spa as DSP
     out["demo_spa_bookings_cleared"] = len(DSP.BOOKINGS)
     DSP.BOOKINGS.clear()
-    return {"ok": True, **out, "say": "Demo reset: test-venue, demo-spa and TEST-flight bookings cancelled (their calendar events go within a minute); real bookings untouched."}
+    return {"ok": True, **out, "say": "Demo reset: test-venue, demo-spa and TEST flight and hotel bookings cancelled (their calendar events go within a minute); real bookings untouched."}
 
 
 __all__ = ["router"]

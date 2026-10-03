@@ -141,8 +141,8 @@ class Hotels(TG.Base):
         self.link()
         self.say("a hotel in Hoi An from 14 to 16 November for 2")
         said = "\n".join(self.bodies())
-        self.assertIn("Hotels can't be booked instantly here yet", said)
-        self.assertIn("2 nights from Saturday 14 November, 2 people", said)
+        self.assertIn("Hotels for 2 nights from Saturday 14 November, 2 people. For the one you pick: a TEST booking (no hotel contacted), "
+                      "or a real request to the hotel.", said)
         find = next(c for c in GW.api.calls if c[2] == "/api/booking/venues/find")[3]
         self.assertEqual(find["what"], "hotel")
 

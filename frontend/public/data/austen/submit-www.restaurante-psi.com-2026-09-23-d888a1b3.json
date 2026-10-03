@@ -173,7 +173,7 @@
    "does_it_change_this_outcome": "NO.",
    "why_not": "⚠⚠⚠ The page-after body of THIS act was not kept (P803ka-1), so there is nothing to re-judge against. It is LIKELY that this submission succeeded and returned this same page carrying the thanks line — the response was 35,884 B against 41,127 B served, and the established wording is short enough to account for a smaller page. But likely is not evidence. An outcome corrected by inference rather than by evidence is exactly what this estate refuses, and the correction would be indistinguishable from a wish.",
    "so": "UNREACHABLE STANDS. This entry is APPENDED and the outcome above is untouched — history, never a rewrite.",
-   "what_would_settle_it": "✅ An email from Restaurante Psi to tyler@kanoe.ai. The plugin emails the customer on submission, so an email is evidence from OUTSIDE our own system that the booking exists. If one arrived, an outcome of REQUESTED may be APPENDED to this intent on that basis, citing the email rather than this reasoning.",
+   "what_would_settle_it": "✅ An email from Restaurante Psi to [the founder's email — redacted on this public copy]. The plugin emails the customer on submission, so an email is evidence from OUTSIDE our own system that the booking exists. If one arrived, an outcome of REQUESTED may be APPENDED to this intent on that basis, citing the email rather than this reasoning.",
    "what_would_not_settle_it": "⛔ A second submission. It would produce a readable page-after — the runner now keeps the body — but it would also produce a SECOND TABLE, and it would say nothing about whether THIS act landed."
   }
  ]

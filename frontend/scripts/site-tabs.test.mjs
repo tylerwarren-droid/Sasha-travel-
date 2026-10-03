@@ -64,3 +64,15 @@ test('CampusMe and Relocation link to the CR tab\'s showcase pages, with the fic
   assert.match(read('app/(site)/content/relocation.ts'), /The applicant shown here is fictional/)
   assert.ok(existsSync(join(root, 'public/data/austen/submit-www.handelsregister.de-2026-09-23.json')))
 })
+
+test('Sasha 124 · no personal email or phone number in the site\'s own content or its public records', () => {
+  const files = [...CONTENT.map(([n]) => `app/(site)/content/${n}.ts`),
+    'app/(site)/content/austen/submit-www.handelsregister.de-2026-09-23.json', 'app/(site)/content/austen/submit-www.restaurante-psi.com-2026-09-23-d888a1b3.json',
+    'public/data/austen/submit-www.handelsregister.de-2026-09-23.json', 'public/data/austen/submit-www.restaurante-psi.com-2026-09-23-d888a1b3.json',
+    'app/components/site/SiteShell.tsx']
+  for (const f of files) {
+    const src = read(f)
+    assert.doesNotMatch(src, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/, `${f}: an email address`)
+    assert.doesNotMatch(src, /\+\d{2}[\s\d]{8,}/, `${f}: a phone number`)
+  }
+})

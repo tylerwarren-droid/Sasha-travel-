@@ -131,10 +131,12 @@ async def reset(request: Request):
                 "select ti.id from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 and ti.provider_name = $2 "
                 "and ti.status <> 'cancelled'", a, TEST_VENUE)]
             n_items = await c.execute("update trip_items set status = 'cancelled', updated_at = now() where id = any($1)", items)
-            n_finds = await c.execute("delete from mailbox_finds where account_id = $1 and facts->>'venue' = $2", a, TEST_VENUE)
+            # withdrawn, NOT deleted: a deleted find is unseen again, and the next check re-offers the old email (rehearsal 2)
+            n_finds = await c.execute("update mailbox_finds set action_status = 'none' where account_id = $1 and facts->>'venue' = $2 "
+                                      "and action_status = 'offered'", a, TEST_VENUE)
             n_sent = await c.execute("delete from proactive_sent where account_id = $1 and trip_item_id in (select ti.id from trip_items ti "
                                      "join trips t on t.id = ti.trip_id where t.owner_id = $1 and ti.provider_name = $2)", a, TEST_VENUE)
-            return {"test_venue_bookings_cancelled": int(n_items.split()[-1]), "gmail_finds_cleared": int(n_finds.split()[-1]),
+            return {"test_venue_bookings_cancelled": int(n_items.split()[-1]), "gmail_finds_withdrawn": int(n_finds.split()[-1]),
                     "reminder_ledger_cleared": int(n_sent.split()[-1])}
     try:
         out = await LR.LADDER_STORE._run(go)

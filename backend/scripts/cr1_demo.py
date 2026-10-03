@@ -4,6 +4,7 @@
     railway run python -m scripts.cr1_demo reset [campus|relocation|health|all] [--account founder|demo] [--vault]
     railway run python -m scripts.cr1_demo health
     railway run python -m scripts.cr1_demo showcase          # two PUBLIC example pages, fictional people, kept to 31 Dec
+    railway run python -m scripts.cr1_demo officer           # CR 8 · the case officer's queue (made once; then its URL)
 
 REHEARSE runs docs/products/CR-1-demo.md through the REAL code: the real WhatsApp turn (guest_whatsapp.turn and the
 CR 1 hook), the real schools' calendars (read-only, paced), the real vault (KMS) and the real model (on the PUBLISHED
@@ -279,6 +280,22 @@ async def rehearse(n: int, account_name: str = "demo") -> pathlib.Path:
     await beat("H17 padrón date → reminders", "20 October 2026", expect="I'll remind you here")
     await beat("H18 exit", "exit", expect="Back to Sasha")
 
+    # ── Part 4 · the case officer (CR 8): the page, one return, the mark — then the queue put back as it was ──
+    ocid = await _officer_id(create=True)
+    kept = await _officer_returned(ocid)
+    page("O1 officer queue", f"/officer/{ocid}", "need attention before they")
+    t = time.monotonic()
+    req = urllib.request.Request(f"{web()}/api/products/relocation/officer/{ocid}/return/A-1042", method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            ok, said = r.status == 200 and b'"sent":false' in r.read().replace(b" ", b""), f"HTTP {r.status}"
+    except Exception as e:
+        ok, said = False, f"{type(e).__name__}: {e}"
+    rows.append({"beat": "O2 return A-1042", "sent": "POST return/A-1042", "compute_s": round(time.monotonic() - t, 1), "msgs": 0,
+                 "room_s": round(time.monotonic() - t, 1), "ok": ok, "said": said, "expect": "recorded, sent:false"})
+    print(f"{'✓' if ok else '✗'} {'O2 return A-1042':<34} {rows[-1]['room_s']:5.1f}s ({said})", flush=True)
+    page("O3 the mark on the page", f"/officer/{ocid}", "Returned to the applicant")
+    await _officer_returned(ocid, kept)          # the queue as it was before the rehearsal
     total = time.monotonic() - t0
     cleaned = await _clean_own(account, before)
     print("cleaned up its own rows: " + ", ".join(f"{k} {v}" for k, v in cleaned.items()), flush=True)
@@ -312,6 +329,14 @@ async def rehearse(n: int, account_name: str = "demo") -> pathlib.Path:
 
 
 async def reset(what: str, account_name: str, vault: bool) -> None:
+    if what == "officer":                       # CR 8 · the queue stays (the site links it); its "returned" marks go
+        cid = await _officer_id(create=False)
+        if not cid:
+            print("no officer queue yet — run: cr1_demo.sh officer")
+            return
+        n = len(await _officer_returned(cid, {}))
+        print(f"reset officer: {n} 'returned' mark(s) cleared; the queue is at {web()}/officer/{cid}")
+        return
     from booking_signer import routes as BR
     from booking_signer.identity import founder_account
     account = DEMO if account_name == "demo" else founder_account()   # reset may run on the fallback: it says so
@@ -412,6 +437,47 @@ async def showcase() -> None:
           f"(fictional people, real forms; kept until {SHOWCASE_UNTIL}; reset never deletes them)")
 
 
+async def _officer_id(create: bool) -> Optional[str]:
+    """CR 8 · the ONE stable officer queue (the site links it): found, or made once. Showcase: never deleted by a reset."""
+    from booking_signer import routes as BR
+    from products import store as ST
+    await ST.choose(BR.STORE)
+    cid = await BR.STORE._run(lambda c: c.fetchval(
+        "select id from product_cases where product = 'relocation' and state->>'kind' = 'officer_queue' "
+        "and expires_at > now() order by created_at limit 1"))
+    if cid or not create:
+        return cid
+    cid = ST.new_id()
+    state = {"kind": "officer_queue", "showcase": True, "fictional": True, "returned": {}}
+
+    async def ins(conn):
+        await conn.execute("insert into product_cases (id, product, account_id, wa_id_sha256, state, expires_at) "
+                           "values ($1, 'relocation', $2, 'showcase', $3::jsonb, $4::date)", cid, uuid.UUID(DEMO), state,
+                           datetime.fromisoformat(SHOWCASE_UNTIL).date())
+    await BR.STORE._run(ins)
+    return cid
+
+
+async def officer() -> None:
+    cid = await _officer_id(create=True)
+    print(f"Case officer queue (click-through, fictional): {web()}/officer/{cid}  (kept until {SHOWCASE_UNTIL}; reset officer "
+          "clears the 'returned' marks, never the page)")
+
+
+async def _officer_returned(cid: str, returned: Optional[dict] = None) -> dict:
+    from booking_signer import routes as BR
+
+    async def go(c):
+        row = await c.fetchrow("select state from product_cases where id = $1", cid)
+        st = row["state"] if isinstance(row["state"], dict) else json.loads(row["state"])
+        before = dict(st.get("returned") or {})
+        if returned is not None:
+            st["returned"] = returned
+            await c.execute("update product_cases set state = $2::jsonb, updated_at = now() where id = $1", cid, st)
+        return before
+    return await BR.STORE._run(go)
+
+
 async def health() -> None:
     with urllib.request.urlopen(f"{web()}/api/products/health", timeout=30) as r:
         print(r.read().decode())
@@ -419,14 +485,16 @@ async def health() -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["rehearse", "reset", "health", "showcase"])
-    ap.add_argument("what", nargs="?", default="all", choices=["all", "campus", "relocation", "health"])
+    ap.add_argument("cmd", choices=["rehearse", "reset", "health", "showcase", "officer"])
+    ap.add_argument("what", nargs="?", default="all", choices=["all", "campus", "relocation", "health", "officer"])
     ap.add_argument("--account", default="founder", choices=["founder", "demo"])
     ap.add_argument("--vault", action="store_true")
     ap.add_argument("--n", type=int, default=1)
     a = ap.parse_args()
     if a.cmd == "rehearse":
         asyncio.run(rehearse(a.n, a.account if "--account" in sys.argv else "demo"))
+    elif a.cmd == "officer":
+        asyncio.run(officer())
     elif a.cmd == "showcase":
         asyncio.run(showcase())
     elif a.cmd == "reset":

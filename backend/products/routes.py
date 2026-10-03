@@ -136,3 +136,42 @@ async def health_case(cid: str) -> dict:
             "fictional": bool(st.get("fictional")), "checklist": st.get("checklist"), "reminders": st.get("reminders"),
             "padron_date": st.get("padron_date"), "sermas": HS.SERMAS, "read_on": HS.READ_ON,
             "expires_at": str(c["expires_at"]), "submits": False}
+
+
+# ── CR 8 · the case officer's queue (fictional applications; the real checks) ─────────────────────────────────────
+
+async def _officer_case(cid: str) -> dict:
+    c = await _case(cid, "relocation")
+    if (c["state"] or {}).get("kind") != "officer_queue":
+        raise HTTPException(404, {"ok": False, "rule": "case_not_found", "message": "This page has expired or never existed."})
+    return c
+
+
+@router.get("/relocation/officer/{cid}")
+async def officer_queue(cid: str) -> dict:
+    from .relocation import officer as OF
+    c = await _officer_case(cid)
+    returned = c["state"].get("returned") or {}
+    apps = [{**a, "returned": returned.get(a["id"]), "message": OF.return_message(a)} for a in OF.queue()]
+    return {"ok": True, "applications": apps, "fictional": True, "kind": "click-through", "sends": False,
+            "expires_at": str(c["expires_at"])}
+
+
+@router.post("/relocation/officer/{cid}/return/{app_id}")
+async def officer_return(cid: str, app_id: str) -> dict:
+    """RECORDS that the case officer returned the application, with the exact message. Nothing is sent to anyone."""
+    from datetime import datetime, timezone
+    from .relocation import officer as OF
+    c = await _officer_case(cid)
+    app = next((a for a in OF.queue() if a["id"] == app_id), None)
+    if app is None:
+        raise HTTPException(404, {"ok": False, "rule": "application_unknown", "message": "No such application in this queue."})
+    if app["status"] == "complete":
+        raise HTTPException(409, {"ok": False, "rule": "nothing_to_return", "message": "This application is complete — nothing to return."})
+    st = c["state"]
+    st.setdefault("returned", {})
+    if app_id not in st["returned"]:
+        st["returned"][app_id] = {"at": datetime.now(timezone.utc).isoformat(), "items": app["open_items"],
+                                  "message": OF.return_message(app)}
+        await ST.STORE.update(cid, st)
+    return {"ok": True, "returned": st["returned"][app_id], "sent": False}

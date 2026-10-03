@@ -114,7 +114,8 @@ async def session_paid(session_id: str) -> Optional[dict]:
     s, cs = await HTTP("GET", f"/checkout/sessions/{session_id}", {})
     if s != 200 or cs.get("livemode") or cs.get("status") != "complete" or cs.get("payment_status") != "paid":
         return None
-    return {"amount": (cs.get("amount_total") or 0) / 100, "currency": (cs.get("currency") or "eur").upper(), "payment": cs.get("payment_intent")}
+    return {"amount": (cs.get("amount_total") or 0) / 100, "currency": (cs.get("currency") or "eur").upper(), "payment": cs.get("payment_intent"),
+            "created": cs.get("created") or 0}
 
 
 # ── Sasha 136 · the public page Stripe returns to — no sign-in, nothing personal: the payment's state and the booking's ──
@@ -157,6 +158,9 @@ async def done(request: Request):
         return _page("Paid (TEST) — " + ("booked (TEST)" if out["ok"] else "not booked"), out["line"],
                      "The same message is on WhatsApp. You can close this page.", False)
     paid = await session_paid(sid) if key() else None
+    if paid and time.time() - (paid.get("created") or 0) > 600:   # this page can't see it (another process, a redeploy): say so, stop waiting
+        return _page("Paid (TEST)", f"Stripe recorded the TEST payment ({paid['currency']} {paid['amount']:.2f}); nothing was charged.",
+                     "The booking's result is in your WhatsApp messages from Sasha — this page can't show it. You can close it.", False)
     if paid:
         return _page("Paid (TEST). Sasha is booking it — check WhatsApp.",
                      f"Stripe recorded the TEST payment ({paid['currency']} {paid['amount']:.2f}); nothing was charged.",

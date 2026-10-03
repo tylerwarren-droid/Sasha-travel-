@@ -55,7 +55,9 @@ class ReturnPage(unittest.TestCase):
         t = self.c.get(f"/api/booking/test-pay/done?s={SID}").text
         self.assertIn("Payment not recorded yet", t)
         self.assertIn('http-equiv="refresh"', t)
-        self.session = {"status": "complete", "payment_status": "paid", "amount_total": 37790, "currency": "eur", "payment_intent": "pi_1"}
+        import time as _t
+        self.session = {"status": "complete", "payment_status": "paid", "amount_total": 37790, "currency": "eur", "payment_intent": "pi_1",
+                        "created": int(_t.time())}
         t = self.c.get(f"/api/booking/test-pay/done?s={SID}").text
         self.assertIn("Paid (TEST). Sasha is booking it — check WhatsApp.", t)
         self.assertIn("TEST — nothing is charged", t)
@@ -68,3 +70,9 @@ class ReturnPage(unittest.TestCase):
     def test_a_made_up_link_says_so_and_back_says_nothing_was_paid(self):
         self.assertIn("a test payment Sasha made", self.c.get("/api/booking/test-pay/done?s=<script>").text)
         self.assertIn("nothing was paid and nothing was booked", self.c.get(f"/api/booking/test-pay/back?s={SID}").text)
+
+    def test_an_old_paid_session_it_cannot_see_stops_waiting(self):
+        self.session = {"status": "complete", "payment_status": "paid", "amount_total": 37790, "currency": "eur", "payment_intent": "pi_1", "created": 1}
+        t = self.c.get(f"/api/booking/test-pay/done?s={SID}").text
+        self.assertIn("The booking&#x27;s result is in your WhatsApp messages from Sasha", t)
+        self.assertNotIn('http-equiv="refresh"', t)

@@ -111,6 +111,25 @@ Register on the school's page.
 read-back 19 s (call prepare ≈ 13 s) · yes → "📞 Calling" 9 s · SERMAS page 11 s, DEMO 7 s · new in Madrid 7 s + reminders 4 s.
 Whole health part ≈ 1 min 45 s, plus talking. **All three parts: ≈ 4 min 45 s, plus talking.**
 
+## Part 4 — The public sector: "we make citizens arrive complete" (≈1 min, CLICK-THROUGH)
+
+Open **https://project.kanoe.ai/officer/vxgS8Ol0xgzR8D-kNaIk3Q**. Once the site hold lifts it's linked from the
+Relocation tab: "For administrations: the case officer's queue (click-through) →".
+
+| Show | Say |
+|---|---|
+| The banner: CLICK-THROUGH, fictional names | "These five people are invented. The form, the checks and the consulate's checklist are the real ones." |
+| "5 applications — 4 need attention before they're assessed", sorted | what an administration, an NGO or a law firm sees: the same checks Sasha runs for the applicant, from the other side |
+| Bruno: "postcode 08010 is in Barcelona, but the province written is Madrid", two documents missing | every line is the check's own words, or the consulate's checklist verbatim — no score invented, no percentage |
+| Chen: the NIE fails its control letter; "3º B izquierda interior" won't fit the box | |
+| Ana: complete — "8 left for the applicant (section 5, the Dehú consent, the signature) — expected, not a fault" | we never sign or declare for anyone |
+| **Return to applicant with this list** → "See the message" | "It records the list; in this illustration nothing is sent." |
+
+**Reset:** `bash ~/Developer/Sasha-travel-/backend/scripts/cr1_demo.sh reset officer`. It clears the "returned" marks;
+the page stays.
+**Rehearsed:** O1–O3 in rehearsals 8 and 9 (≈ 4 s). The rehearsal returns A-1042 and then puts the queue back as it
+was. **All four parts: ≈ 4 min 55 s of waiting, plus talking.**
+
 ## Not shown, and why
 - A real registration or a real filing: by design, until the founder decides.
 - Relocation sections 2 and 3 (a family member's resources, a representative): not built. The file marks them "not

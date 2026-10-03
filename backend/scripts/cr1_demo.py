@@ -65,10 +65,53 @@ class Capture:
 
 def _account(name: str) -> str:
     from booking_signer.identity import founder_account
-    a = DEMO if name == "demo" else founder_account()
-    if name == "founder" and a == DEMO:
-        raise SystemExit("⛔ FOUNDER_ACCOUNT_ID isn't set on Railway: the founder still acts as the demo account. Use --account demo.")
-    return a
+    if name == "founder" and not os.getenv("FOUNDER_ACCOUNT_ID", "").strip():
+        raise SystemExit("⛔ FOUNDER_ACCOUNT_ID isn't set on Railway: the founder's account isn't named. Use --account demo.")
+    return DEMO if name == "demo" else founder_account()   # (since CR 3 they are the same account: 11111111-…)
+
+
+async def _snapshot(account: str) -> dict:
+    """What CR 1 rows the account has BEFORE a rehearsal — so the rehearsal removes only what IT made."""
+    from booking_signer import routes as BR
+    from booking_signer.vault import crypto as VC
+    acct = uuid.UUID(account)
+
+    async def q(c):
+        cases = {r["id"] for r in await c.fetch("select id from product_cases where account_id = $1", acct)}
+        visits = {str(r["id"]) for r in await c.fetch(
+            "select ti.id from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 "
+            "and ti.type = 'experience' and ti.provider_name like '% campus visit — %'", acct)}
+        return cases, visits
+    cases, visits = await BR.STORE._run(q)
+    vault = {str(m["id"]) for m in await VC.STORE.list(account)}
+    return {"cases": cases, "visits": visits, "vault": vault}
+
+
+async def _clean_own(account: str, before: dict) -> dict:
+    """Deletes ONLY the cases and campus visits this rehearsal created, and revokes ONLY the vault items it created
+    (never a booking, a Google link or a vault item that was there before)."""
+    from booking_signer import routes as BR
+    from booking_signer.vault import crypto as VC
+    from products.campus.turn import is_profile
+    after = await _snapshot(account)
+    new_cases, new_visits = after["cases"] - before["cases"], after["visits"] - before["visits"]
+
+    async def go(c):
+        async with c.transaction():
+            a = await c.execute("delete from product_cases where id = any($1::text[]) and coalesce(state->>'showcase','false') <> 'true'",
+                                list(new_cases))
+            b = await c.execute("delete from trip_items where id = any($1::uuid[]) and type = 'experience' "
+                                "and provider_name like '% campus visit — %'", [uuid.UUID(x) for x in new_visits])
+            return int(a.split()[-1]), int(b.split()[-1])
+    n_cases, n_visits = await BR.STORE._run(go)
+    n_vault = 0
+    now = datetime.now(timezone.utc)
+    for m in await VC.STORE.list(account):
+        if str(m["id"]) not in before["vault"] and is_profile(m):
+            if await VC.STORE.revoke(account, m["id"], now):
+                await VC.STORE.event(account, m["id"], "revoked", {"by": "cr1_demo rehearse — its own item"}, now)
+                n_vault += 1
+    return {"cases": n_cases, "campus visits": n_visits, "vault items it created": n_vault}
 
 
 async def _setup(account: str):
@@ -124,6 +167,7 @@ def _page(path: str) -> tuple:
 async def rehearse(n: int, account_name: str = "demo") -> pathlib.Path:
     account = _account(account_name)
     GW, key = await _setup(account)
+    before = await _snapshot(account)
     from booking_signer.vault import crypto as VC
     from products.campus.turn import is_profile
     has_vault = any(is_profile(r) for r in await VC.STORE.list(account))
@@ -182,6 +226,8 @@ async def rehearse(n: int, account_name: str = "demo") -> pathlib.Path:
     await beat("R14 exit", "exit", expect="Back to Sasha")
 
     total = time.monotonic() - t0
+    cleaned = await _clean_own(account, before)
+    print("cleaned up its own rows: " + ", ".join(f"{k} {v}" for k, v in cleaned.items()), flush=True)
     OUT.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     f = OUT / f"rehearsal-{n}-{stamp}.md"
@@ -189,7 +235,8 @@ async def rehearse(n: int, account_name: str = "demo") -> pathlib.Path:
     lines = [f"# CR 1 rehearsal {n} — {stamp} UTC", "",
              f"Real code, real schools, real vault, real model (published specimen), real Postgres, as the {account_name.upper()} "
              f"account ({account[:8]}…). "
-             f"WhatsApp captured (nothing sent). Vault item present at start: {has_vault}.", "",
+             f"WhatsApp captured on a fictional number (nothing sent). Vault item present at start: {has_vault}. "
+             f"Afterwards it removed only what it created: " + ", ".join(f"{k} {v}" for k, v in cleaned.items()) + ".", "",
              f"**Beats: {sum(r['ok'] for r in rows)}/{len(rows)} as expected · the room waits {room:.0f} s in all "
              f"(compute + {SANDBOX_GAP} s per sandbox message) · script wall time {total:.0f} s.**", "",
              "| beat | sent | compute s | msgs | the room waits s | ok |", "|---|---|---|---|---|---|"]

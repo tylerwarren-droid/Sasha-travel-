@@ -1104,6 +1104,14 @@ def _picked(pend: dict, body: str, payload: str) -> Optional[int]:
 
 # ── a card picked → read → the details → the read-back and the ONE sentence ─────────────────────────────────────────
 
+#: Sasha 121 · cuisines (EN/ES): a search for one of these is a search for a table
+CUISINE = re.compile(r"\b(japanese|japon[eé]s[a]?|sushi|ramen|indian|indi[oa]|italian[oa]?|italiano|chinese|chino|thai|tailand[eé]s|"
+                     r"mexican[oa]?|peruvian[oa]?|peruano|korean[oa]?|coreano|vietnamese|vietnamita|french|franc[eé]s|spanish|"
+                     r"espa[nñ]ol[a]?|tapas|mediterranean|mediterr[aá]ne[oa]|greek|grieg[oa]|lebanese|liban[eé]s|turkish|turc[oa]|"
+                     r"vegan[oa]?|vegetarian[oa]?|steak|seafood|marisco|marisquer[ií]a|pizza|pizzer[ií]a|burger|hamburguesa|"
+                     r"asador|brunch|fusion|fusi[oó]n|nikkei|argentin[oa]|galleg[oa]|vasc[oa])\b", re.I)
+
+
 async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
     out, account, f = ctx["out"], ctx["account"], pend["find"]
     if card.get("place_id") == TEST_CARD["place_id"]:
@@ -1129,6 +1137,10 @@ async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
         _s, d = await api(account, "POST", "/api/booking/draft", {"text": f.get("what"), "country": read.get("country") or f.get("country")})
         if (d.get("parts") or {}).get("what"):
             draft["what"] = d["parts"]["what"]
+        elif CUISINE.search(f.get("what") or ""):   # Sasha 121 · "Japanese in Salamanca" — a cuisine is a table, not a question
+            _s, d = await api(account, "POST", "/api/booking/draft", {"text": f"{f.get('what')} restaurant", "country": read.get("country") or f.get("country")})
+            if (d.get("parts") or {}).get("what"):
+                draft["what"] = d["parts"]["what"]
     if f.get("open_at") and (draft.get("when") or {}).get("mode") != "at":
         draft["when"] = {"mode": "at", "at": f["open_at"]}
     nxt = {"kind": "need", "at": ctx["now"].isoformat(), "invite_code": pend.get("invite_code"),

@@ -510,6 +510,28 @@ class Turns(Base):
         self.say("cancel tomorrow's dinner")
         self.assertTrue(GW.SENDER.contents[-1][0].startswith("Cancel Casa Lucio"))
 
+    def test_sasha121_a_cuisine_is_a_table_not_a_question(self):
+        """Rehearsal 1, beat C: "find us Japanese for two in Salamanca at 21:30" → pick → "What should I book there…?"."""
+        api = GW.api
+        drafts = []
+
+        async def fake(account, method, path, body=None, timeout=90.0):
+            if path == "/api/booking/draft":
+                drafts.append(body["text"])
+                return 200, {"parts": {"what": {"activity": "a table", "activity_venue_lang": "una mesa", "category": "restaurant"}}
+                             if "restaurant" in body["text"] else {}}
+            return await api(account, method, path, body, timeout)
+        GW.api = fake
+        fake.calls = api.calls
+        try:
+            self.say("find us Japanese for two in Salamanca at 21:30")
+            _, buttons = GW.SENDER.contents[-1]
+            self.say("x", payload=buttons[0][1])
+        finally:
+            GW.api = api
+        self.assertEqual(drafts, ["Japanese", "Japanese restaurant"])
+        self.assertNotIn("What should I book there", " ".join(self.bodies()))
+
     def test_receipts(self):
         self.say("my bookings")
         self.assertIn("• Botavara Chamberí — Saturday 3 October at 21:00, 2 — confirmed by the restaurant", self.bodies()[-1])

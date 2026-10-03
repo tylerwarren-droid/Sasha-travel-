@@ -576,6 +576,10 @@ async def send(form_id: str, request: Request):
     if not YS.approval_ok(body["approval"]):   # S-75 step 2 · the same rule as a call's yes (yes.py)
         return _refuse(422, "approval_void", YS.APPROVAL_VOID)
     account = account_for(request)
+    from .limits import check
+    over = check(account, "form_send")   # Sasha 120 · a real submission to a venue: capped per guest
+    if over:
+        return over
     try:
         f = await STORE.get(account, form_id)
     except StorageUnavailable as e:

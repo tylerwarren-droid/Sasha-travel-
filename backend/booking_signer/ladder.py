@@ -40,7 +40,10 @@ def emails_ready() -> Optional[str]:
     return None
 
 
-def calls_ready() -> Optional[str]:
+def calls_ready(account: Optional[str] = None) -> Optional[str]:
+    from .limits import calls_on, CALLS_OFF_FOR_ACCOUNT
+    if not calls_on(account):   # Sasha 120 · guests: off until the founder switches calls on for them
+        return CALLS_OFF_FOR_ACCOUNT
     if not C.calls_enabled():
         return "phone calls are off on this server (SASHA_CALLS_ENABLED is not 1)"
     if not C.bland_key():
@@ -59,7 +62,7 @@ class Rung:
     slot_filled: Optional[bool] = None   #: link rung only: True when a verified recipe fills the slot in the URL
 
 
-def choose(read: dict, host_of=lambda u: None) -> dict:
+def choose(read: dict, host_of=lambda u: None, account: Optional[str] = None) -> dict:
     """`read` is VenueRead.to_json(). Returns the rungs in ladder order and the sentence she says."""
     facts = read.get("facts") or []
     # Sasha 64 · a listing fact that could not be re-read has no value: it is not a way to reach them
@@ -87,7 +90,7 @@ def choose(read: dict, host_of=lambda u: None) -> dict:
     i, phone = first("phone")
     if phone:
         lang = COUNTRIES.get(read.get("country") or "", (None, None, None, None))[2]
-        why = calls_ready() or (None if lang in C.LANGUAGES else
+        why = calls_ready(account) or (None if lang in C.LANGUAGES else
                                 f"I can't yet make a call in the language spoken there ({lang or 'unknown country'})")
         rungs.append(Rung("phone", why is None, i, phone["value"], phone["source_label"], why))
 

@@ -472,6 +472,11 @@ class LadderRoutes:
         lv = self.link_read() if hasattr(self, "link_read") else None
         link = self.c.post("/api/booking/links", json={"read_id": lv["read_id"], **self.BOOKING}).json() if lv else None
         b = self.as_guest()
+        # Sasha 120 · the guest's calls are switched on here, so what is tested is the OWNERSHIP refusal, not the calls switch
+        from booking_signer import limits as _LM
+        _on = mock.patch.object(_LM, "calls_on", lambda account: True)
+        _on.start()
+        self.addCleanup(_on.stop)
         ghost = "00000000-0000-4000-8000-000000000000"
         yes = {"read_back_sha256": "0" * 64, "approval": {"how": "button"}}
 

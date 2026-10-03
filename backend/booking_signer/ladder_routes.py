@@ -95,7 +95,7 @@ def status() -> dict:
 def _read_view(row: dict, read: Optional[dict] = None) -> dict:
     """`read`: the read with its listing re-read (places_terms.hydrate_read) — shown, never stored."""
     read = read if read is not None else row["read"]
-    chosen = L.choose(read)
+    chosen = L.choose(read, account=row.get("account_id"))
     return {"read_id": row["read_id"], "venue": read["name"], "country": read.get("country"), "listing": read.get("listing"),
             "facts": [{k: f[k] for k in ("kind", "value", "source_label", "source_url", "snippet", "fetched_at")} for f in read["facts"]],
             "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"],
@@ -106,6 +106,10 @@ def _read_view(row: dict, read: Optional[dict] = None) -> dict:
 
 @router.post("/venues/read")
 async def read_venue(request: Request):
+    from .limits import check
+    over = check(account_for(request), "read")   # Sasha 120
+    if over:
+        return over
     body = await _json(request)
     if body is None:
         return _refuse(400, "read_malformed", "send {name, city, country?, website?} as a JSON object")
@@ -148,6 +152,10 @@ async def draft_route(request: Request):
 @router.post("/venues/find")
 async def find_venues(request: Request):
     """S-65 · "Find venues": {what, where, country?} → up to twenty Google listings (S-68), not stored. Search only — nothing is contacted."""
+    from .limits import check
+    over = check(account_for(request), "find")   # Sasha 120 · each search is a paid Places request
+    if over:
+        return over
     body = await _json(request)
     if body is None:
         return _refuse(400, "find_malformed", "send {what, where, country?} as a JSON object")

@@ -103,7 +103,10 @@ def status() -> dict:
     return {"enabled": C.calls_enabled(), "bland_configured": bool(C.bland_key()), "per_day": cap(), "per_account_per_day": account_cap(), "venues": venues}
 
 
-def _off() -> Optional[JSONResponse]:
+def _off(account: Optional[str] = None) -> Optional[JSONResponse]:
+    from .limits import calls_on, CALLS_OFF_FOR_ACCOUNT
+    if not calls_on(account):   # Sasha 120 · a guest's calls stay off until the founder switches them on for that account
+        return _refuse(403, "calls_off_for_account", CALLS_OFF_FOR_ACCOUNT + "; nothing was dialled")
     if not C.calls_enabled():
         return _refuse(422, "calls_disabled", "phone calls are off on this server (SASHA_CALLS_ENABLED is not 1); nothing was dialled")
     if not C.bland_key():
@@ -350,7 +353,7 @@ async def _start_sweeper() -> None:
 @router.post("")
 async def prepare(request: Request):
     """The read-back for a call. ⚠ Refused outright while calls are off: a yes button that cannot dial is a lie."""
-    off = _off()
+    off = _off() or _off(account_for(request))
     if off:
         return off
     body = await _json(request)
@@ -689,7 +692,7 @@ async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
 
 @router.post("/{call_id}/place")
 async def place(call_id: str, request: Request):
-    off = _off()
+    off = _off() or _off(account_for(request))
     if off:
         return off
     body = await _json(request)

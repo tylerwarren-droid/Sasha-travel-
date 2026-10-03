@@ -5,6 +5,7 @@ import { User } from '@/types'
 import { CURRENT_USER } from '@/lib/currentUser'
 import { apiUrl, apiHeaders } from '@/lib/api'
 import SashaReservations from './SashaReservations'  // S-45, Stage B re-applies
+import ProductReminders from './ProductReminders'  // CR 10 · the products' dated reminders, in their own block (not bookings)
 
 interface YouPanelProps {
   user: User
@@ -150,6 +151,7 @@ export default function YouPanel({ user, plannedThisSession = 0, language = 'en'
 
       {/* S-45 Sasha reservations: repo-only component. CTO zips drop this; Stage B re-applies it. */}
       <SashaReservations />
+      <ProductReminders />
 
       <div className="lw-when">Where you've been</div>
       <div className="lw-card">

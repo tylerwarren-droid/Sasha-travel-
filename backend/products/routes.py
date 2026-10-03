@@ -5,6 +5,8 @@ unknown id is a plain 404 that says so.
   GET /api/booking/products/health                       which store, which schools are proven, the watch loop
   GET /api/booking/products/campus/{id}                  the hand-over: the school's form, question by question
   GET /api/booking/products/campus/{id}/visit.ics        the visit, for any calendar
+  GET /api/booking/products/relocation/{id}              the reviewer's screen: every EX-01 widget, its state, its checks
+  GET /api/booking/products/relocation/{id}/EX-01-prepared.pdf   the official PDF, prepared — not signed, not filed
 """
 from __future__ import annotations
 
@@ -89,3 +91,24 @@ async def campus_ics(cid: str) -> Response:
         raise HTTPException(404, {"ok": False, "rule": "case_not_found", "message": "Nothing was prepared on this page."})
     body = VS.ics(SC.SCHOOLS[st["school"]], st["session"], cid, st.get("status") == "confirmed_in_writing")
     return Response(body, media_type="text/calendar", headers={"content-disposition": 'attachment; filename="campus-visit.ics"'})
+
+
+@router.get("/relocation/{cid}")
+async def relocation_case(cid: str) -> dict:
+    from .relocation import ex01 as E
+    c = await _case(cid, "relocation")
+    st = c["state"]
+    return {"ok": True, "rows": st["rows"], "counts": st["counts"], "checks": st["checks"], "status": st.get("status"),
+            "route": st.get("route"), "fictional": st.get("fictional", False), "prepared_at": st.get("prepared_at"),
+            "signed_at": st.get("signed_at"), "after": st.get("after"), "expires_at": str(c["expires_at"]),
+            "form": {"name": "EX-01", "title": "Autorización de residencia temporal no lucrativa", "pages": 3,
+                     "widgets": len(st["rows"]), "pdf_sha256": E.PDF_SHA256}, "submits": False}
+
+
+@router.get("/relocation/{cid}/EX-01-prepared.pdf")
+async def relocation_pdf(cid: str) -> Response:
+    from .relocation import ex01 as E
+    c = await _case(cid, "relocation")
+    pdf = E.fill(c["state"]["rows"])   # rebuilt from the rows every time: the guard runs on every download
+    return Response(pdf, media_type="application/pdf",
+                    headers={"content-disposition": 'inline; filename="EX-01-prepared-not-signed.pdf"'})

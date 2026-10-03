@@ -1,0 +1,119 @@
+import type { Metadata } from 'next'
+import { productsGet } from '@/lib/products'
+
+export const metadata: Metadata = { title: 'Your EX-01 · prepared, not signed, not filed', robots: { index: false, follow: false } }
+export const dynamic = 'force-dynamic'
+
+/**
+ * CR 1 · the relocation reviewer's screen (AD P807lu's design, built here for a real file): every one of the EX-01's 96
+ * widgets in reading order, its state, where its value came from, and what the reviewer agent checked.
+ * ⛔ Each blank kind has its OWN style (P807lu §2.1) · no percentage or ratio anywhere (§2.5) · never "submitted",
+ * "certified", or a time figure (§5) · the signature box is drawn as left for the applicant, not signed.
+ */
+type Check = { level: 'ok' | 'check' | 'problem'; why: string }
+type Row = {
+  name: string; page: number; type: string; section: string; label: string; measured_label: string | null
+  state: 'filled' | 'answered_by_sibling' | 'prepared_not_adopted' | 'blank_no_data' | 'blank_no_mapping' | 'blank_unplaced' | 'not_applicable'
+  value: string | null; provenance: string | null; why: string | null; the_person_must?: string; kind?: string
+  checks: Check[]; verdict: Check['level'] | null
+}
+type File = {
+  rows: Row[]; counts: Record<Row['state'], number>; checks: Record<Check['level'], number>; status: string; route: string | null
+  fictional: boolean; prepared_at: string; signed_at: string | null; expires_at: string
+  form: { name: string; title: string; pages: number; widgets: number; pdf_sha256: string }
+}
+
+const STATE: Record<Row['state'], { cls: string; chip: string }> = {
+  filled: { cls: 'rf-filled border-emerald-300 bg-emerald-50', chip: '✓ filled' },
+  answered_by_sibling: { cls: 'rf-sibling border-emerald-100 bg-white', chip: 'answered on this row' },
+  prepared_not_adopted: { cls: 'rf-prepared border-2 border-amber-500 bg-amber-50', chip: '⚠ yours to make' },
+  blank_no_data: { cls: 'rf-nodata border-dashed border-slate-400 bg-white', chip: '○ blank — no data' },
+  blank_no_mapping: { cls: 'rf-nomapping border-dotted border-slate-500 bg-slate-50', chip: '◍ blank — no mapping' },
+  blank_unplaced: { cls: 'rf-unplaced border-double border-4 border-rose-300 bg-rose-50', chip: '⚠ blank — unplaced' },
+  not_applicable: { cls: 'rf-na border-slate-200 bg-slate-100 text-slate-500', chip: '— not your case' },
+}
+const VERDICT: Record<Check['level'], string> = { ok: 'text-emerald-700', check: 'text-amber-700', problem: 'text-rose-700 font-semibold' }
+const at = (iso: string | null | undefined) => (iso ? new Date(iso).toUTCString().replace(' GMT', ' UTC') : '—')
+
+function RowView({ r }: { r: Row }) {
+  const s = STATE[r.state]
+  return (
+    <li className={`rounded border p-3 ${s.cls}`}>
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-sm"><span className="font-medium">{r.label}</span> <span className="text-xs text-slate-400">{r.name} · p{r.page}</span></span>
+        <span className="shrink-0 text-xs uppercase tracking-wide text-slate-600">{s.chip}</span>
+      </div>
+      {r.state === 'prepared_not_adopted' ? (
+        <div className="mt-2 rounded border-2 border-dashed border-amber-600 p-3 text-sm">
+          <div className="font-semibold tracking-wide">LEFT FOR THE APPLICANT — NOT {r.kind === 'signature' ? 'SIGNED' : 'TICKED'}</div>
+          <div className="mt-1">Kanoe does not {r.kind === 'signature' ? 'sign' : 'tick this'}. Nothing we place here is {r.kind === 'signature' ? 'a signature' : 'your decision'}.</div>
+          <div className="mt-1 text-slate-700">You must {r.the_person_must}.</div>
+        </div>
+      ) : (
+        <>
+          {r.value && <div className="mt-1 font-mono text-base">{r.value}</div>}
+          {r.provenance && <div className="mt-0.5 text-xs text-slate-600">from: {r.provenance}</div>}
+          {r.why && <div className="mt-0.5 text-xs text-slate-600">{r.why}</div>}
+        </>
+      )}
+      {r.checks.length > 0 && (
+        <ul className="mt-1 space-y-0.5 text-xs">
+          {r.checks.map((c, i) => <li key={i} className={VERDICT[c.level]}>reviewer: {c.level === 'ok' ? '✓' : c.level === 'check' ? '△' : '✗'} {c.why}</li>)}
+        </ul>
+      )}
+    </li>
+  )
+}
+
+export default async function RelocationFile({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const r = await productsGet<File>(`/relocation/${encodeURIComponent(id)}`)
+  if (!r.ok) {
+    return <main className="min-h-screen bg-white"><div className="mx-auto max-w-3xl px-4 py-12 text-slate-800"><h1 className="text-xl font-semibold">Your EX-01</h1><p className="mt-4">{r.message}</p></div></main>
+  }
+  const f = r.data
+  const sections: string[] = []
+  for (const row of f.rows) if (!sections.includes(row.section)) sections.push(row.section)
+  const filled = f.counts.filled ?? 0
+  const yours = f.counts.prepared_not_adopted ?? 0
+  const noData = f.counts.blank_no_data ?? 0
+  const noMap = f.counts.blank_no_mapping ?? 0
+  const unplaced = f.counts.blank_unplaced ?? 0
+  const na = f.counts.not_applicable ?? 0
+  const sib = f.counts.answered_by_sibling ?? 0
+  return (
+    <main className="min-h-screen bg-white"><div className="mx-auto max-w-3xl px-4 py-8 text-slate-800">
+      {f.fictional && (
+        <p className="mb-4 rounded border border-violet-300 bg-violet-50 p-3 text-sm">Illustration: the applicant is fictional — every value marked “fictional demo applicant” is invented. The form and the checks are real.</p>
+      )}
+      <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Prepared · not signed · not filed</p>
+      <h1 className="mt-1 text-2xl font-semibold">{f.form.name} · {f.form.title}</h1>
+      <p className="mt-1 text-slate-600">{f.form.widgets} fields read · {f.form.pages} pages · AcroForm</p>
+      <ul className="mt-3 space-y-0.5 text-sm">
+        <li><b>{filled}</b> filled from your answers, each naming its source{sib ? ` (and ${sib} box${sib === 1 ? '' : 'es'} on the same rows left unticked because your answer is the box beside them)` : ''}</li>
+        <li><b>{yours}</b> left for you — we do not sign, consent or state your intent</li>
+        <li><b>{noData}</b> blank because we hold nothing for them{noMap ? `; ${noMap} blank because nothing we hold answers them` : ''}{unplaced ? `; ${unplaced} not placed — a person classifies them first` : ''}</li>
+        <li><b>{na}</b> blank because that part of the form isn’t your case</li>
+      </ul>
+      <p className="mt-2 text-sm">Reviewer: <span className={VERDICT.ok}>{f.checks.ok} fine</span> · <span className={VERDICT.check}>{f.checks.check} to look at</span> · <span className={VERDICT.problem}>{f.checks.problem} problem{f.checks.problem === 1 ? '' : 's'}</span></p>
+
+      <section className="mt-5 rounded-lg border border-slate-300 p-4 text-sm">
+        <p>Kanoe prepares this form. It does not file it. We fill what your answers and documents already say, we leave what only you can say, and we hand you the form. The application is yours to sign and yours to lodge{f.route === 'renewal' ? ' — renewals, electronically.' : ' — for a first application, on paper at a Spanish consulate.'}</p>
+        <a href={`/api/products/relocation/${encodeURIComponent(id)}/EX-01-prepared.pdf`} className="mt-3 inline-block rounded bg-slate-900 px-4 py-2 text-white">Download the official PDF, prepared ↓</a>
+        {f.signed_at && <p className="mt-2 text-slate-600">You told us you signed it on {at(f.signed_at)}. We didn’t sign or tick anything for you.</p>}
+      </section>
+
+      {sections.map((sec) => (
+        <section key={sec} className="mt-8">
+          <h2 className="text-base font-semibold">{sec}</h2>
+          <ol className="mt-2 space-y-2">{f.rows.filter((x) => x.section === sec).map((x) => <RowView key={x.name} r={x} />)}</ol>
+        </section>
+      ))}
+
+      <p className="mt-10 text-xs text-slate-500">
+        The official form, unaltered except for the boxes filled (sha256 {f.form.pdf_sha256.slice(0, 12)}…). Prepared {at(f.prepared_at)}; this page expires {at(f.expires_at)}.
+        Kanoe Technologies SL · Calle Padre Damián 41, 28036 Madrid.
+      </p>
+    </div></main>
+  )
+}

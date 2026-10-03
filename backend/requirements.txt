@@ -16,3 +16,4 @@ python-dotenv==1.0.1
 cryptography==43.0.3
 tzdata
 duckdb
+pypdf==6.19.0  # CR 1 · filling the official EX-01 PDF (products/relocation/ex01.py)

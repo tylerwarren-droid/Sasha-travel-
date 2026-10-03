@@ -302,7 +302,7 @@ def parse_form(body: str) -> List[Question]:
                 last_p = re.sub(r"\s+", " ", _text(seg)).strip()[:300]
             continue
         lab = re.search(r'class="form_label"[^>]*>(.*?)</(?:label|div)>', seg, re.S)
-        label = re.sub(r"\s+", " ", _text(lab.group(1))).strip().rstrip("*").strip() if lab else ""
+        label = re.sub(r"\s*\*\s*", " ", re.sub(r"\s+", " ", _text(lab.group(1)))).strip() if lab else ""   # the page shows its own "*"
         if not label and m.group(2) == "checkbox":
             label = last_p
         exp = re.search(r'data-export="([^"]*)"', m.group(3))

@@ -82,7 +82,52 @@ Two Slate variants were found in the schools' own scripts on 3 Oct 2026:
 - ⚠ **Open:** account deletion (`vault/gdpr.py`, the Sasha tab's) doesn't yet delete `product_cases`. The 30-day expiry
   bounds it. For the Sasha tab, or for me with their OK.
 
-## §4 Relocation — M2 (this section is filled when it's built)
+## §4 Relocation (EX-01)
+
+- **The form:** `backend/products/relocation/ex01-official.pdf`, the founder's download, byte for byte (sha256
+  `3fd926b6…`), plus AD's measured field map, copied unedited.
+- **Which box takes which fact:** `ex01_map.json`. **Classified by a person from the rendered form** (pages rendered and
+  read against each widget's rect), so all **96** widgets are placed and 0 are unplaced.
+  - ⚠ This differs from AD's 44 / 1 / 51, which came from nearest-text labels.
+  - **AD's labels are wrong on the date-of-birth row:** Texto8/9/10 are birth **day/month/year**, not "(2)" and "Lugar";
+    the same holds for Texto34–36 in §2.
+  - Nº, Piso and Provincia (Texto17/18/21) are AD's "unlabelled".
+- **Irreducible (never filled; `fill()` raises `DeclarationRefused`):** AD's 8-set.
+  - Dehú **CONSIENTO** (Casilla 20);
+  - **section 5** (Casillas 21–26: initial or renewal, holder or family). That is the applicant's statement of intent.
+    The route they tell us on WhatsApp is kept as **their answer** for the checklist, and never turned into a tick;
+  - the **signature** (Texto68).
+- **Intake** (`relocation/turn.py`): first the route, then who holds the resources, then who presents it. After that, 23
+  questions, one at a time, each with its own validator (`facts.py`). Each fact is stored as `{value, source, read_on}`.
+  "DEMO" fills the rest with a **fictional** applicant, and every such value says so.
+- **Rows** (`ex01.rows`), one per widget, in reading order. Seven distinct states:
+  - **filled** (value + "from: …");
+  - **answered on this row** (the sibling boxes of a ticked answer);
+  - **yours to make** (the 8, with "LEFT FOR THE APPLICANT — NOT SIGNED");
+  - **blank — no data**;
+  - **blank — no mapping** (the consulate's DIR3 fields);
+  - **blank — unplaced**;
+  - **not your case** ("en su caso" sections that don't apply).
+- **The reviewer agent** (`relocation/checker.py`, deterministic, every rule readable), per row ok / check / problem
+  with the reason:
+  - provenance;
+  - formats;
+  - the **NIE control letter (mod 23)**;
+  - **postcode vs province** (INE codes);
+  - **two sources disagreeing** (both shown);
+  - an expired passport;
+  - an applicant under 18 (legal representative);
+  - **a value that won't fit its box on paper** (the render showed "3º B" clipped to "3º" in section 1's Piso box; the
+    check now flags exactly that row);
+  - the irreducible rows confirmed empty.
+- **Screens and files:**
+  - the reviewer screen `/relocation-file/{id}`: counts derived from the rows, **no percentage**, the not-a-filing-service
+    paragraph, the download;
+  - the PDF is rebuilt from the rows on every download, so the guard runs every time;
+  - on WhatsApp the PDF goes out as media, then "print, complete section 5 yourself, decide on the Dehú consent, sign" →
+    "SIGNED" → "signed by you, on your word".
+- **M3:** reading a passport photo (the model, values confirmed one by one), the official appointment page (located
+  from a fetched official page, never pressed), the checklist with a source per item, reminders.
 
 ## §5 Never
 

@@ -38,10 +38,10 @@ export default async function CampusHandover({ params }: { params: Promise<{ id:
   const r = await productsGet<Case>(`/campus/${encodeURIComponent(id)}`)
   if (!r.ok) {
     return (
-      <main className="mx-auto max-w-2xl px-4 py-12 text-slate-800">
+      <main className="min-h-screen bg-white"><div className="mx-auto max-w-2xl px-4 py-12 text-slate-800">
         <h1 className="text-xl font-semibold">CampusMe</h1>
         <p className="mt-4">{r.message}</p>
-      </main>
+      </div></main>
     )
   }
   const c = r.data
@@ -49,7 +49,7 @@ export default async function CampusHandover({ params }: { params: Promise<{ id:
   const filled = (c.counts.fill ?? 0) + (c.counts.choose ?? 0)
   const yours = c.counts.you ?? 0
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8 text-slate-800">
+    <main className="min-h-screen bg-white"><div className="mx-auto max-w-2xl px-4 py-8 text-slate-800">
       <p className="text-sm font-medium uppercase tracking-wide text-slate-500">CampusMe · prepared, not sent</p>
       <h1 className="mt-1 text-2xl font-semibold">{c.school.full_name}: {s.title.split(' · ')[0]}</h1>
       <p className="mt-1 text-slate-600">{when(s.day, s.start)} ({c.school.city} time){s.location ? ` · ${s.location}` : ''}</p>
@@ -100,6 +100,6 @@ export default async function CampusHandover({ params }: { params: Promise<{ id:
         Form read from {c.school.host} at {at(c.form_read?.at ?? undefined)} (sha256 {c.form_read?.sha256.slice(0, 12)}…). This page expires {at(c.expires_at)}.
         CampusMe by Kanoe Technologies SL · Calle Padre Damián 41, 28036 Madrid.
       </p>
-    </main>
+    </div></main>
   )
 }

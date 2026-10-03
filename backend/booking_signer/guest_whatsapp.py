@@ -594,7 +594,7 @@ _CANCEL_FILLER = re.compile(r"\b(no|please|pls|por favor|can you|could you|you|i
                            r"mesa|la|el|mi|de|en|at|for|it|that|this|one|lo|esa|esta|ese|now|ahora|thanks|gracias|"
                            # Sasha 117 · the meal and the day are not the venue's name: "the dinner at Hanakura" → Hanakura
                            r"dinner|lunch|breakfast|brunch|meal|cena|comida|almuerzo|desayuno|appointment|cita|"
-                           r"tonight|today|tomorrow|hoy|ma[nñ]ana|esta noche|on|del|al|con|with)\b", re.I)
+                           r"tonight|today|tomorrow|hoy|ma[nñ]ana|esta noche|noche|on|del|al|con|with)\b", re.I)
 
 
 def cancel_intent(body: str) -> Optional[str]:
@@ -602,8 +602,21 @@ def cancel_intent(body: str) -> Optional[str]:
     t = body or ""
     if not _CANCEL_WORD.search(t) or _NOT_CANCEL.search(t):
         return None
+    t = re.sub(r"['’]s\b", "", t)                                   # Sasha 121 · "tonight's dinner" → "tonight dinner"
     rest = _CANCEL_FILLER.sub(" ", re.sub(r"[^\wáéíóúñü' -]", " ", t))
-    return " ".join(rest.split())
+    words = [w for w in rest.split() if len(w.strip("'")) >= 2]
+    return " ".join(words) if any(len(w) >= 3 for w in words) else ""
+
+
+_DAY_HINT = re.compile(r"\b(tonight|today|esta noche|hoy|tomorrow|ma[nñ]ana)\b", re.I)
+
+
+def cancel_day(body: str) -> Optional[str]:
+    """Sasha 121 · "cancel tonight's dinner": the day said is a FILTER on their bookings — "today" or "tomorrow" — never a name."""
+    m = _DAY_HINT.search(body or "")
+    if not m:
+        return None
+    return "tomorrow" if _fold(m[1]).startswith(("tomorrow", "manana")) else "today"
 
 
 _STOP_REM = re.compile(r"^\s*(stop|parar|baja)\s+(reminders?|recordatorios?)\s*[.!]?\s*$", re.I)
@@ -656,6 +669,7 @@ async def _new_request(ctx: dict, body: str) -> None:
     # Sasha 109 · CANCEL before anything else: "Please cancel", "No Please Cancel Yatri", "cancela", "anula la de Yatri"
     ci = cancel_intent(body)
     if ci is not None:
+        ctx["cancel_day"] = cancel_day(body)
         await _cancel_find(ctx, ci or None)
         return
     if _RECEIPTS.search(body):
@@ -1462,6 +1476,16 @@ async def _cancel_find(ctx: dict, asked: Optional[str]) -> None:
     a numbered list. Then ONE sentence and one yes (_cancel_row)."""
     out, account = ctx["out"], ctx["account"]
     rows = await _upcoming(account)
+    day = ctx.get("cancel_day")
+    if day:   # Sasha 121 · "tonight's" / "tomorrow's": only that day's bookings
+        from zoneinfo import ZoneInfo
+        local = ctx["now"].astimezone(ZoneInfo("Europe/Madrid")).date()
+        want = (local + timedelta(days=1 if day == "tomorrow" else 0)).isoformat()
+        same = [r for r in rows if r.get("date") == want]
+        if not same:
+            out.text(f"You have no booking with me {'tomorrow' if day == 'tomorrow' else 'today'}.")
+            return
+        rows = same
     if asked:
         words = [w for w in re.findall(r"[a-z0-9]+", _fold(asked)) if len(w) > 2]
         hits = [r for r in rows

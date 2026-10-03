@@ -497,6 +497,19 @@ class Turns(Base):
                 self.assertEqual(GW.SENDER.contents[-1][1][0][0], "Yes, cancel")
                 self.assertFalse(any(c[1] == "POST" and c[2].endswith("/cancel") for c in GW.api.calls))                   # nothing until the yes
 
+    def test_sasha121_tonights_dinner_is_todays_booking_not_a_name(self):
+        """Investor demo v2, beat B: "cancel tonight's dinner" was read as a booking called "'s"."""
+        self.assertEqual((GW.cancel_intent("cancel tonight's dinner"), GW.cancel_day("cancel tonight's dinner")), ("", "today"))
+        self.assertEqual((GW.cancel_intent("cancela la cena de esta noche"), GW.cancel_day("cancela la cena de esta noche")), ("", "today"))
+        self.assertEqual(GW.cancel_day("cancel tomorrow's lunch at Botavara"), "tomorrow")
+        base = {"party": 2, "status": "confirmed", "status_words": "confirmed by the restaurant", "receipt": None, "timezone": "Europe/Madrid"}
+        GW.api.reservations = [{**base, "id": "t-1", "venue": "Botavara Chamberí", "date": "2026-10-02", "time": "21:00"},
+                               {**base, "id": "t-2", "venue": "Casa Lucio", "date": "2026-10-03", "time": "21:00"}]
+        self.say("cancel tonight's dinner")                                          # NOW is 2 Oct 12:00 UTC
+        self.assertTrue(GW.SENDER.contents[-1][0].startswith("Cancel Botavara Chamberí"))   # only tonight's — one, offered
+        self.say("cancel tomorrow's dinner")
+        self.assertTrue(GW.SENDER.contents[-1][0].startswith("Cancel Casa Lucio"))
+
     def test_receipts(self):
         self.say("my bookings")
         self.assertIn("• Botavara Chamberí — Saturday 3 October at 21:00, 2 — confirmed by the restaurant", self.bodies()[-1])

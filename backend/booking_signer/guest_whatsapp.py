@@ -1291,6 +1291,10 @@ _NOT_A_KIND = re.compile(r"\b(food|cuisine|comida|cocina|spot|place|restaurants?
                          r"no|nah|nope|yes|yeah|thanks|thank|gracias|vale|s[ií])\b", re.I)
 
 
+_WHEN_WORDS = re.compile(r"\b(today|tonight|tomorrow|at|on|am|pm|next|week|hoy|mañana|esta|noche|"
+                         r"monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", re.I)
+
+
 def refine(pend: dict, body: str, now) -> Optional[tuple]:
     """(the new find, the draft) for a message said while the cards show — or None when it asks nothing new."""
     f, draft = dict(pend["find"]), dict(pend.get("draft") or {})
@@ -1311,10 +1315,16 @@ def refine(pend: dict, body: str, now) -> Optional[tuple]:
     if party:
         draft["how_many"] = {"count": party, "unit": "people"}
     rest = HO._QUALITY.sub(" ", said)
+    for name, code in HO.COUNTRY_NAMES.items():   # Sasha 126 · "in Hanoi, Vietnam": the country, never a kind of place
+        if re.search(rf"\b{name}\b", rest, re.I):
+            rest, f["country"] = re.sub(rf"\b{name}\b", " ", rest, flags=re.I), code
+    rest = _WHEN_WORDS.sub(" ", rest)
     rest = _NOT_A_KIND.sub(" ", re.sub(r"[^\wáéíóúñü' -]", " ", rest))
     kind = " ".join(dict.fromkeys(w for w in rest.split() if w.isalpha() and len(w) > 1))
     if whole and whole.get("what"):
-        kind = _MEAL.sub("", re.sub(HO._QUALITY, "", whole["what"])).strip() or kind
+        # Sasha 126 · a whole new request names its own kind: "dinner … in Hanoi, Vietnam tomorrow" is dinner, never the
+        # leftover words ("Hanoi Vietnam tomorrow at")
+        kind = _MEAL.sub("", re.sub(HO._QUALITY, "", whole["what"])).strip()
     if not (kind or new_q or whole or party or f.get("open_at") != pend["find"].get("open_at")):
         return None
     old = f.get("what") or ""

@@ -186,3 +186,13 @@ class Vietnam(unittest.TestCase):
         f = HO.booking_handoff("dinner for 2 in Hoi An, Vietnam tomorrow at 7pm", [])["booking_find"]
         self.assertEqual((f["what"], f["where"], f["country"]), ("dinner", "Hoi An", "VN"))
         self.assertEqual(HO.booking_handoff("dinner in Chamberí, somewhere romantic", [])["booking_find"]["what"], "romantic dinner")
+
+    def test_a_whole_new_request_over_open_cards_keeps_its_own_kind(self):
+        """Rehearsal 2: Hanoi said while Hoi An's cards showed searched "Hanoi Vietnam tomorrow at dinner"."""
+        from datetime import datetime, timezone
+        now = datetime(2026, 10, 3, 10, 0, tzinfo=timezone.utc)
+        pend = {"find": {"what": "dinner", "where": "Hoi An", "country": "VN", "open_at": "2026-10-04T19:00"}, "draft": {}}
+        f, _ = GW.refine(pend, "dinner for 2 in Hanoi, Vietnam tomorrow at 7pm", now)
+        self.assertEqual((f["what"], f["where"], f["country"]), ("dinner", "Hanoi", "VN"))
+        f, _ = GW.refine(pend, "Japanese for 2 in Hanoi, Vietnam tomorrow at 7pm", now)
+        self.assertEqual(f["what"], "Japanese dinner")

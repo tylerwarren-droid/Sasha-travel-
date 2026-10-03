@@ -153,7 +153,7 @@ class OnWhatsApp(TG.Base):
         self.assertEqual(got["Texto1"], "EXAMPLE000")
         self.assertFalse(IRREDUCIBLE & set(got))
         self.say("SIGNED")
-        self.assertIn("I didn't sign or tick anything for you", self.bodies()[-1])
+        self.assertIn("I didn't sign or tick anything for you", self.bodies()[-2])   # then: where you lodge it
         self.assertEqual(run(ST.STORE.get(cid))["state"]["status"], "signed_on_your_word")
         st = run(GW.STORE.get_state(GW.wa_key(TG.GUEST)))
         self.assertNotIn("EXAMPLE000", json.dumps(st.get("history"), default=str))   # never in Sasha's history

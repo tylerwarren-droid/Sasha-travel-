@@ -145,7 +145,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         from . import after
         await after.signed(ctx)
         return
-    if step in ("prepared", "signed", "cita", "done"):
+    if step in ("prepared", "signed", "residence", "entry", "done"):
         from . import after
         if await after.on_message(ctx, t, payload):
             return

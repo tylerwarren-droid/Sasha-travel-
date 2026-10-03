@@ -40,6 +40,8 @@ async def _expire_daily() -> None:
     import logging
     while True:
         try:
+            from .relocation import after
+            await after.due()                       # relocation reminders whose day has come
             n = await ST.expire_once()
             if n:
                 logging.getLogger("products").info("[products] %d expired case(s) deleted", n)

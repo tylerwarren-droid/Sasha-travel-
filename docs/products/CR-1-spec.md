@@ -126,8 +126,24 @@ Two Slate variants were found in the schools' own scripts on 3 Oct 2026:
   - the PDF is rebuilt from the rows on every download, so the guard runs every time;
   - on WhatsApp the PDF goes out as media, then "print, complete section 5 yourself, decide on the Dehú consent, sign" →
     "SIGNED" → "signed by you, on your word".
-- **M3:** reading a passport photo (the model, values confirmed one by one), the official appointment page (located
-  from a fetched official page, never pressed), the checklist with a source per item, reminders.
+- **Passport photo** (`relocation/docread.py`), the one model call in the products:
+  - `claude-opus-5-5`, strict JSON schema (structured outputs), `fallbacks: "default"`;
+  - the person is told first that the photo goes to Anthropic's model once and isn't kept;
+  - the reading is **checked against the passport's own ICAO 9303 check digits** (number, birth date, expiry from the
+    MRZ). A value its check digit contradicts is **never kept**;
+  - everything is read back, and becomes a fact only on their yes;
+  - surnames are kept whole as printed, because splitting "VAN DER BERG" would invent surnames;
+  - a value they had typed differently stays as a second source, and the reviewer shows the disagreement.
+- **After signing** (`relocation/after.py`), sourced from the **Spanish Consulate General in London's own sheet**
+  (`docs/products/reads/`, dated 11 Feb 2022, sha256 `31ca97e4…`):
+  - its appointment route, its 11 documents (the passport's "valid at least one year" computed from the file), the
+    90-day window, and the TIE within a month of entry, booked on the official *cita previa de extranjería* page;
+  - a consulate whose own page hasn't been read gets **no link**;
+  - reminders: apply-from date, certificate freshness, TIE. They are in-session only in the sandbox, and are shown on
+    the file page.
+- ⚠ **Read slip (3 Oct):** sede.administracionespublicas.gob.es's robots.txt allows visits 01:00–06:45 GMT at 1/min; it
+  was fetched once outside that window. It is not fetched again; its URL comes from that one read.
+- **Demo:** `CR-1-demo.md`.
 
 ## §5 Never
 

@@ -20,6 +20,12 @@ type Row = {
 type File = {
   rows: Row[]; counts: Record<Row['state'], number>; checks: Record<Check['level'], number>; status: string; route: string | null
   fictional: boolean; prepared_at: string; signed_at: string | null; expires_at: string
+  after: null | {
+    residence?: string; entry_date?: string
+    consulate?: null | { office: string; appointment_url: string; appointment_words: string; one_per_person: string; source: { name: string; url: string; dated: string; read: string } }
+    checklist?: { key: string; words: string; source: string; status: 'yours' | 'ok' | 'problem' | 'prepared' | 'not_needed'; why: string | null }[]
+    reminders?: { on: string; text: string; sent: boolean }[]
+  }
   form: { name: string; title: string; pages: number; widgets: number; pdf_sha256: string }
 }
 
@@ -102,6 +108,37 @@ export default async function RelocationFile({ params }: { params: Promise<{ id:
         <a href={`/api/products/relocation/${encodeURIComponent(id)}/EX-01-prepared.pdf`} className="mt-3 inline-block rounded bg-slate-900 px-4 py-2 text-white">Download the official PDF, prepared ↓</a>
         {f.signed_at && <p className="mt-2 text-slate-600">You told us you signed it on {at(f.signed_at)}. We didn’t sign or tick anything for you.</p>}
       </section>
+
+      {f.after && (
+        <section className="mt-6 rounded-lg border border-sky-300 bg-sky-50 p-4 text-sm">
+          <h2 className="text-base font-semibold">After you sign: you lodge it</h2>
+          {f.after.consulate ? (
+            <>
+              <p className="mt-2">Your consulate: <b>{f.after.consulate.office}</b>. Its own sheet: “{f.after.consulate.appointment_words}”:{' '}
+                <a className="underline" href={f.after.consulate.appointment_url} target="_blank" rel="noopener noreferrer">{f.after.consulate.appointment_url}</a>.
+                {' '}You book it and go in person; {f.after.consulate.one_per_person}. Kanoe doesn’t book or press anything.</p>
+              <p className="mt-1 text-xs text-slate-600">Source: <a className="underline" href={f.after.consulate.source.url} target="_blank" rel="noopener noreferrer">{f.after.consulate.source.name}</a>, dated {f.after.consulate.source.dated}, read {f.after.consulate.source.read}. It may be out of date — the consulate’s current page decides.</p>
+            </>
+          ) : (
+            <p className="mt-2">We haven’t read the Spanish consulate’s own page for where you live, so we give no link we haven’t checked.</p>
+          )}
+          {f.after.checklist && (
+            <ol className="mt-3 space-y-1">
+              {f.after.checklist.map((c) => (
+                <li key={c.key} className={c.status === 'problem' ? 'text-rose-700 font-semibold' : c.status === 'ok' || c.status === 'prepared' ? 'text-emerald-800' : c.status === 'not_needed' ? 'text-slate-500' : ''}>
+                  {c.status === 'ok' || c.status === 'prepared' ? '✓' : c.status === 'problem' ? '✗' : c.status === 'not_needed' ? '—' : '☐'} {c.words}{c.why ? ` — ${c.why}` : ''}
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="mt-3">After you enter Spain, the sheet gives you one month to request your TIE at an Oficina de Extranjería or police station. The official appointment page: <a className="underline" href="https://sede.administracionespublicas.gob.es/pagina/index/directorio/icpplus" target="_blank" rel="noopener noreferrer">Cita previa de extranjería</a>. You choose the office and press; we never book it.</p>
+          {f.after.reminders && f.after.reminders.length > 0 && (
+            <ul className="mt-3 space-y-0.5 text-xs text-slate-700">
+              {f.after.reminders.map((r) => <li key={r.on}>⏰ {new Date(`${r.on}T12:00:00Z`).toUTCString().slice(5, 16)}: {r.text}{r.sent ? ' (sent)' : ''}</li>)}
+            </ul>
+          )}
+        </section>
+      )}
 
       {sections.map((sec) => (
         <section key={sec} className="mt-8">

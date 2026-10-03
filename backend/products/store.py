@@ -53,6 +53,10 @@ class MemoryCaseStore:
         return [copy.deepcopy(r) for r in self.rows.values()
                 if r["account_id"] == account and r["product"] == product and r["expires_at"] > now]
 
+    async def of_product(self, product: str) -> List[dict]:
+        now = NOW()
+        return [copy.deepcopy(r) for r in self.rows.values() if r["product"] == product and r["expires_at"] > now]
+
     async def watching(self) -> List[dict]:
         now = NOW()
         return [copy.deepcopy(r) for r in self.rows.values()
@@ -100,6 +104,11 @@ class PostgresCaseStore:
         rows = await self._run(lambda c: c.fetch(
             "select * from product_cases where account_id = $1 and product = $2 and expires_at > now() "
             "order by created_at desc limit 20", uuid.UUID(account), product))
+        return [self._row(r) for r in rows]
+
+    async def of_product(self, product):
+        rows = await self._run(lambda c: c.fetch(
+            "select * from product_cases where product = $1 and expires_at > now() limit 500", product))
         return [self._row(r) for r in rows]
 
     async def watching(self):

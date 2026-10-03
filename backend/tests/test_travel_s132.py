@@ -284,3 +284,58 @@ class ProductHandOff(TG.Base):
         with mock.patch.object(PW, "product_turn", product_turn), mock.patch.object(GW, "_flights", flights):
             self.say("book my flights")
         self.assertEqual(seen, ["flights from London to Madrid on 1 March 2027 for 1"])
+
+
+class ThisWeek(unittest.TestCase):
+    """CR 13 · "what do I need to do this week?" — bookings and the products' deadlines, by day, with sources."""
+
+    def test_bookings_and_deadlines_merge_by_day(self):
+        rows = [{"date": "2026-10-06", "time": "21:00", "type": "restaurant", "venue": "Botavara", "party": 2},
+                {"date": "2026-10-08", "time": "15:00", "type": "hotel", "venue": "ARTIEM (TEST booking — no hotel contacted)", "booking_reference": "TEST-AB12CD"}]
+
+        async def agenda(account, start, end):
+            return [{"on": "2026-10-07", "time": None, "text": "Book the NIE appointment", "product": "relocation", "kind": "deadline",
+                     "source": "the consulate's own page"}]
+        import types, sys
+        mod = types.ModuleType("products.agenda"); mod.agenda = agenda
+        with mock.patch.dict(sys.modules, {"products.agenda": mod}):
+            got = asyncio.run(IQ.week("a", "what do I need to do this week?", rows, datetime(2026, 10, 5, 9, tzinfo=timezone.utc)))
+        self.assertEqual(got, ["This week:", "Tuesday 6 October:", "• 21:00 Botavara, 2 people",
+                               "Wednesday 7 October:", "• Book the NIE appointment (relocation; source: the consulate's own page)",
+                               "Thursday 8 October:", "• 15:00 ARTIEM (TEST booking — no hotel contacted) — TEST"])
+
+    def test_it_is_an_itinerary_question(self):
+        self.assertTrue(IQ.QUESTION.search("what do I need to do this week?"))
+        self.assertTrue(IQ.QUESTION.search("what's on next week?"))
+
+
+class TripPlanOnTheWeb(unittest.TestCase):
+    """CR 13 · conduct(): the products' trip plan speaks first; its hand-off sentence is answered by Sasha's own flow."""
+
+    def test_handoff_runs_sasha_s_flow_under_the_plan(self):
+        from app.services import conductor as CD
+        calls = []
+
+        async def trip(account, message, now=None):
+            calls.append(message)
+            if message == "plan the trip":
+                return {"agent": "products_trip", "response": "Your plan: dinner first.", "handoff": "dinner for 2 in Chamberí on Saturday at 9"}
+            return None
+        import types, sys
+        mod = types.ModuleType("products.trip"); mod.web_turn = trip
+        with mock.patch.dict(sys.modules, {"products.trip": mod}):
+            out = asyncio.run(CD.conduct("plan the trip", [], user_id="11111111-1111-4111-8111-111111111111"))
+        self.assertTrue(out["response"].startswith("Your plan: dinner first.\n\n"))
+        self.assertIn("booking_find", out)                                            # Sasha's own find turn, under the plan
+        self.assertEqual(out["messages"][-2], {"role": "user", "content": "plan the trip"})
+
+    def test_no_plan_no_change(self):
+        from app.services import conductor as CD
+        import types, sys
+
+        async def trip(account, message, now=None):
+            return None
+        mod = types.ModuleType("products.trip"); mod.web_turn = trip
+        with mock.patch.dict(sys.modules, {"products.trip": mod}):
+            out = asyncio.run(CD.conduct("dinner for 2 in Chamberí on Saturday at 9", [], user_id="u"))
+        self.assertIn("booking_find", out)

@@ -1773,6 +1773,25 @@ async def conduct(
     _itinerary = await web_turn(user_message, user_id, conversation_history)
     if _itinerary is not None:
         return _itinerary
+    # CR 13 · the products' trip plan (backend/products/trip.py, CR's): its words first; a hand-off sentence is answered by
+    # Sasha's own flow (its read-back, its one yes, its TEST labels) and shown under them. Wired here by the Sasha tab.
+    try:
+        from products.trip import web_turn as _trip_web  # noqa: E402
+        _trip = await _trip_web(user_id, user_message) if user_id else None
+    except Exception as e:   # a product's failure never stops the chat — and is never a silent one
+        print(f"[Conductor] trip plan failed: {type(e).__name__}: {e}")   # the conductor's own logging
+        _trip = None
+    if _trip is not None:
+        if _trip.get("handoff"):
+            inner = dict(await conduct(_trip["handoff"], conversation_history, client_config, language, user_name, None, session_id, user_id))
+            inner["response"] = _trip["response"] + (f"\n\n{inner['response']}" if inner.get("response") else "")
+            inner["messages"] = list(conversation_history) + [{"role": "user", "content": user_message},
+                                                              {"role": "assistant", "content": inner["response"]}]
+            return inner
+        return {"response": _trip["response"], "intents": ["trip_plan"], "photos": [], "tools_used": [], "links": [], "hotels": [],
+                "bookings": [], "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None,
+                "saved_card": None, "messages": list(conversation_history) + [{"role": "user", "content": user_message},
+                                                                              {"role": "assistant", "content": _trip["response"]}]}
 
 
     # Recent conversation text — used so booking links/hotels keep the destination in mind

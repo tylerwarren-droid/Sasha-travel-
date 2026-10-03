@@ -161,8 +161,42 @@ async def time_for(account: str, text: str, rows: List[dict], now: datetime) -> 
     return [verdict] + note
 
 
+WEEK = re.compile(r"\bwhat do i (?:need|have) to do (?:this|next) week\b|\bwhat(?:'s| is) (?:on )?(?:for )?(?:this|next) week\b"
+                  r"|\bmy week\b|\bwhat do i have (?:this|next) week\b", re.I)
 QUESTION = re.compile(r"\bwhere (?:am i|are we|will i be)\b|\bdo i have time\b|\bwhat(?:'s| is) (?:on )?my (?:itinerary|plan|schedule)\b"
-                      r"|\bwhat do i have (?:on|tomorrow|today|this)\b|\bwhere do i (?:sleep|stay)\b", re.I)
+                      r"|\bwhat do i have (?:on|tomorrow|today|this)\b|\bwhere do i (?:sleep|stay)\b|" + WEEK.pattern, re.I)
+
+
+async def week(account: str, text: str, rows: List[dict], now: datetime) -> List[str]:
+    """CR 13 · "what do I need to do this week?" — Sasha's bookings AND the products' dated deadlines (products.agenda, read-only),
+    in one list by day, each product item with its source. Next week = next Monday to Sunday."""
+    today = now.astimezone(ZoneInfo("Europe/Madrid")).date()
+    if re.search(r"\bnext week\b", text or "", re.I):
+        start = today + timedelta(days=7 - today.weekday())
+        end, label = start + timedelta(days=6), "Next week"
+    else:
+        start, end, label = today, today + timedelta(days=6 - today.weekday()), "This week"
+    items: List[Tuple[str, str, str]] = []
+    for r in rows:
+        if r.get("date") and start.isoformat() <= r["date"] <= end.isoformat():
+            items.append((r["date"], r.get("time") or "", f"{_what(r)}" + (" — TEST" if (r.get("booking_reference") or "").startswith("TEST-") else "")))
+    try:
+        from products.agenda import agenda
+        for a in await agenda(account, start, end):
+            if a.get("kind") == "visit" and any("campus visit" in (r.get("venue") or "") and r.get("date") == a["on"] for r in rows):
+                continue   # the same visit is already a booking
+            items.append((a["on"], a.get("time") or "", f"{(a.get('time') + ' ') if a.get('time') else ''}{a['text']} ({a['product']}; source: {a['source']})"))
+    except Exception as e:   # the products' list missing never hides the bookings — and is said
+        items.append((end.isoformat(), "99", f"(Your paperwork deadlines couldn't be read just now: {type(e).__name__}.)"))
+    if not items:
+        return [f"{label}: nothing booked and nothing due."]
+    out, day = [f"{label}:"], None
+    for d, t, line in sorted(items):
+        if d != day:
+            out.append(f"{SN.day_words(d)}:")
+            day = d
+        out.append(f"• {line}")
+    return out
 
 
 async def web_turn(message: str, user_id: Optional[str], history: list) -> Optional[dict]:
@@ -185,6 +219,8 @@ async def web_turn(message: str, user_id: Optional[str], history: list) -> Optio
 
 async def answer(account: str, text: str, now: datetime) -> List[str]:
     rows = await _rows(account)
+    if WEEK.search(text or ""):
+        return await week(account, text, rows, now)
     if re.search(r"\bdo i have time\b", text or "", re.I):
         return await time_for(account, text, rows, now)
     d = day_of(text, now)

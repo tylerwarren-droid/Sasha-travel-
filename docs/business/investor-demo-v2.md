@@ -71,19 +71,67 @@ Akaneya** (4.8★), so a friendly venue among them needs no change to the line. 
 3. **Smithers Restaurant** (S-50 list): publishes phone, WhatsApp and email. The line then names it: "dinner for two at
    Smithers tonight at nine".
 
-**The request (Spanish, from the founder):**
+**Their public routes, read from their own sites and listings on 3 Oct.** Both take bookings through a platform, so on
+the laptop Sasha first offers the platform link. **For the live call, tap "or have Sasha call them instead".**
 
-> Hola, soy Tyler Warren, fundador de Kanoe Technologies, en Madrid. Hemos creado Sasha, una concierge de inteligencia
-> artificial que reserva por teléfono y siempre dice que es una IA. El [día] la presentamos a inversores y nos gustaría
-> hacer una demostración en directo con vosotros: hacia las [hora], Sasha os llamaría para reservar una mesa para dos a
-> nombre de Warren, y poco después la cancelaríamos. La llamada se escucharía en directo en la sala; no se grabaría ni se
-> difundiría. Sería una reserva de prueba, cancelada en el momento y sin ningún coste para vosotros. ¿Nos dais vuestro
-> permiso por escrito (un sí a este mensaje basta)? Muchas gracias. Tyler — +34 608 44 57 15
+| Venue | Address | Write to | Phone (Sasha calls this one) | Books via |
+|---|---|---|---|---|
+| **Araia** | C/ de Murillo 3, Chamberí | **gestion@araia.es** (their website) | +34 610 869 537 (their Google listing) | Restoo |
+| **Pilar Akaneya** | C. de Espronceda 33, Chamberí | No email, form or WhatsApp published (their group site, akaneyajapan.com) | **+34 913 307 699** (their website, Madrid) | CoverManager |
+
+### 2.1 Araia: by email to gestion@araia.es
+
+**Asunto:** Demostración con inversores: una reserva de prueba por teléfono (Kanoe / Sasha)
+
+> Hola, equipo de Araia:
+>
+> Soy Tyler Warren, fundador de Kanoe Technologies, en Madrid. Hemos creado Sasha, una concierge de inteligencia
+> artificial que reserva restaurantes por teléfono y que siempre dice, en la primera frase, que es una IA.
+>
+> El [día] a las [hora] presentamos Sasha a inversores y nos encantaría hacerlo con vosotros:
+> - Sasha os llamaría al 610 869 537 para reservar una mesa para dos a nombre de Warren.
+> - Poco después cancelaríamos la reserva por email, en el mismo momento.
+> - La llamada se escucharía en directo en la sala. No se grabaría ni se difundiría.
+> - Es una reserva de prueba, sin ningún coste para vosotros y sin ocupar una mesa real.
+>
+> ¿Nos dais permiso por escrito? Un "sí" en respuesta a este correo basta. Si preferís otra hora u otro número,
+> decídnoslo.
+>
+> Muchas gracias,
+> Tyler Warren — Kanoe Technologies SL — +34 608 44 57 15
+
+### 2.2 Pilar Akaneya: by phone to +34 913 307 699
+
+They publish no email or WhatsApp, so the founder calls, then asks for their yes in writing. If they give an email or
+WhatsApp, he sends the text below there.
+
+**Said on the phone:**
+
+> Hola, soy Tyler Warren, de Kanoe Technologies. Hemos creado Sasha, una concierge de inteligencia artificial que reserva
+> por teléfono y siempre dice que es una IA. El [día] la presentamos a inversores: ¿nos dejaríais hacer una reserva de
+> prueba con vosotros? Sasha os llamaría a las [hora] para reservar una mesa para dos a nombre de Warren, y la
+> cancelaríamos enseguida. La llamada se escucharía en directo en la sala, sin grabarla. ¿A qué email o WhatsApp os
+> mando los detalles para que nos digáis que sí por escrito?
+
+**Then sent, to the address they give:**
+
+> Hola, soy Tyler Warren (Kanoe Technologies), como hablamos por teléfono:
+> - El [día] a las [hora], Sasha, nuestra concierge de IA, os llamaría al 913 307 699 para reservar una mesa para dos
+>   a nombre de Warren.
+> - La cancelaríamos enseguida.
+> - La llamada se escucharía en directo ante inversores, sin grabarla ni difundirla.
+> - Sin ningún coste para vosotros.
+>
+> ¿Nos confirmáis por escrito que estáis de acuerdo? Un "sí" basta.
+>
+> ¡Gracias! Tyler — +34 608 44 57 15
 
 **Rules:**
 - Their written yes must be in hand before calls are switched on.
 - **No recording is played.**
 - The demo booking is cancelled the same day.
+- **Rehearse beat A against their real cards the evening before:** the first two cards change with the day and the
+  hour.
 
 ---
 

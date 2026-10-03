@@ -264,3 +264,23 @@ class Qualified(unittest.TestCase):
         self.assertEqual(IQ.qualified("Madrid"), "Madrid, Spain")
         self.assertEqual(IQ.qualified("Chamberí"), "Chamberí, Madrid, Spain")
         self.assertEqual(IQ.qualified("Calle de Velázquez 8, Madrid"), "Calle de Velázquez 8, Madrid")
+
+
+class ProductHandOff(TG.Base):
+    """CR 13 · a product hands Sasha a sentence: her flow answers it as if typed; a button is never rewritten."""
+
+    def test_a_handed_sentence_runs_sasha_s_flow(self):
+        self.link()
+        from products import whatsapp as PW
+        seen = []
+
+        async def product_turn(ch, frm, p, st, out, now, early=None):
+            if p.get("Body") == "book my flights":
+                p["KanoeSaid"], p["Body"] = p["Body"], "flights from London to Madrid on 1 March 2027 for 1"
+            return False
+
+        async def flights(ctx, body):
+            seen.append(body)
+        with mock.patch.object(PW, "product_turn", product_turn), mock.patch.object(GW, "_flights", flights):
+            self.say("book my flights")
+        self.assertEqual(seen, ["flights from London to Madrid on 1 March 2027 for 1"])

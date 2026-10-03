@@ -570,6 +570,11 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         await STORE.put_state(key, st)   # never into Sasha's history: a product's answers (passport facts) aren't hers
         await deliver(ch, frm, out, now)
         return out
+    # CR 13 products: a product may hand Sasha a sentence ("flights from London to Madrid on 2027-03-01 for 1") — answered exactly
+    # as if typed; every booking still needs its own read-back and yes. Never a button's answer: a payload is never rewritten.
+    handed = (p.get("Body") or "").strip()
+    if handed and handed != body and not payload:
+        body = handed
     if not body and not payload:
         # Sasha 104 · a voice note or a picture arrives with no words: voice notes are phase 3 (F-3), so say so plainly
         has_media = int(p.get("NumMedia") or 0) > 0

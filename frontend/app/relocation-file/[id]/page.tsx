@@ -109,6 +109,30 @@ export default async function RelocationFile({ params }: { params: Promise<{ id:
         {f.signed_at && <p className="mt-2 text-slate-600">You told us you signed it on {at(f.signed_at)}. We didn’t sign or tick anything for you.</p>}
       </section>
 
+      {/* CR 10 · said plainly, always: who does what, and where the checklist comes from */}
+      <section className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
+        <div className="rounded-lg border border-slate-300 p-4">
+          <h2 className="font-semibold">Sasha prepares</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>fills the official EX-01’s boxes from your answers, each naming where it came from;</li>
+            <li>checks every field (postcode and province, the NIE’s control letter, text that won’t fit a box, your passport’s validity);</li>
+            <li>finds your consulate’s own appointment page and the document checklist;</li>
+            <li>reminds you of the dates that matter.</li>
+          </ul>
+        </div>
+        <div className="rounded-lg border border-amber-400 p-4">
+          <h2 className="font-semibold">You press</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>section 5 (first application or renewal; holder or family member);</li>
+            <li>the Dehú consent — yours to decide;</li>
+            <li>the signature, by hand, and the place and date;</li>
+            <li>booking the consulate’s appointment, and lodging the application in person.</li>
+          </ul>
+          <p className="mt-2 text-xs text-slate-600">Sasha never signs, ticks a consent, books a government appointment or files anything for you.</p>
+        </div>
+      </section>
+      <p className="mt-3 text-xs text-slate-600">The document checklist comes from the Spanish Consulate General in London’s own requirements sheet for this visa, dated 11 February 2022 (read 3 October 2026). It may be out of date — the consulate’s current page decides. Other consulates’ pages haven’t been read yet.</p>
+
       {f.after && (
         <section className="mt-6 rounded-lg border border-sky-300 bg-sky-50 p-4 text-sm">
           <h2 className="text-base font-semibold">After you sign: you lodge it</h2>

@@ -296,7 +296,7 @@ class OnWhatsApp(Fixtures):
         self.say("campus")
         self.assertIn("CampusMe here", self.bodies()[-1])
         self.say("exit")
-        self.assertEqual(self.bodies()[-1], PW.LEFT)
+        self.assertEqual(self.bodies()[-1], "OK.")
         self.say("hello")
         self.assertIn("Tell me what to book", self.bodies()[-1])
         self.assertEqual(self.api_paths(), [])                          # Sasha's booking routes never called by CampusMe

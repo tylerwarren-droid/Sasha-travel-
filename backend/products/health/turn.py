@@ -101,7 +101,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
             out.ask(CHOOSE, [("1. Private clinic", "hx:priv"), ("2. Public (SERMAS)", "hx:pub"), ("3. New in Madrid", "hx:new")])
         else:
             pend["step"] = None
-            out.text("OK — nothing kept. Say EXIT to go back to Sasha.")
+            out.text("OK — nothing kept.")
         return
     if step == "choose" or payload in ("hx:priv", "hx:pub", "hx:new"):
         pick = payload or {"1": "hx:priv", "2": "hx:pub", "3": "hx:new"}.get(t[:1], "")
@@ -141,7 +141,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
     if re.fullmatch(r"(?i)demo", t) and step == "pub_offer":
         await _public_handover(ctx, dict(FICTIONAL), "a fictional demo patient (not a real person)", fictional=True)
         return
-    out.text("Say EXIT to go back to Sasha, or HEALTH to start again.")
+    return False   # CR 10 · not health's: Sasha answers it
 
 
 # ── (a) a private clinic, by phone, through Sasha's own call path ──────────────────────────────────────────────────
@@ -357,7 +357,7 @@ async def _new_reminders(ctx: dict, t: str) -> None:
     pend, out, now = ctx["st"]["pending"], ctx["out"], ctx["now"]
     if re.match(r"(?i)^\s*skip\b", t):
         pend["step"] = "done"
-        out.text("OK — no reminders. Everything is on your page. Say EXIT to go back to Sasha.")
+        out.text("OK — no reminders. Everything is on your page.")
         return
     d = F.parse_date(t)
     if not d:
@@ -403,3 +403,29 @@ async def due(now: Optional[datetime] = None) -> int:
         if changed:
             await ST.STORE.update(c["id"], st)
     return sent
+
+
+# ── CR 10 · one Sasha: is this message an answer to health's own question? And what context goes to Sasha ──────────
+
+def claims(pend: dict, body: str, payload: str, media: list) -> bool:
+    step, t = pend.get("step"), (body or "").strip()
+    if payload.startswith(("hx:", "hxyes:", "hxno:", "hxv:", "hxvno:")):
+        return True
+    if step in ("consent", "call_confirm", "pub_vault_confirm"):
+        return YS.is_yes(t) or bool(re.match(r"(?i)^\s*no\b", t))
+    if step == "choose":
+        return bool(re.match(r"^\s*[123]\b", t) or re.search(r"(?i)\bprivate|privad|public|sermas|p[uú]blic|new|nuev|tarjeta", t))
+    if step == "when":
+        return parse_when(t, datetime.now(MADRID)) is not None
+    if step == "pub_offer":
+        return bool(re.fullmatch(r"(?i)demo", t))
+    if step == "padron_date":
+        from ..relocation import facts as F
+        return bool(F.parse_date(t)) or bool(re.match(r"(?i)^\s*skip\b", t))
+    return False
+
+
+def context(pend: dict) -> dict:
+    """Health hands Sasha only the city — never a reason, a card code or an appointment's purpose."""
+    return {"product": "health", "city": "Madrid", "country": "Spain", "dates": [], "name": None,
+            "line": "[Health: in Madrid, Spain]"}

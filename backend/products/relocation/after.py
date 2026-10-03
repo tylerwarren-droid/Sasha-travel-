@@ -159,12 +159,13 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
     if step == "entry":
         if re.match(r"(?i)^\s*skip\b", body):
             pend["step"] = "done"
-            out.text("OK — no reminders. Your file page has everything. Say EXIT to go back to Sasha.")
+            out.text("OK — no reminders. Your file page has everything.")
             return True
         d = F.parse_date(body)
         if not d or d <= now.date().isoformat():
             out.text("A future date please, like 1 March 2027 — or SKIP.")
             return True
+        pend["entry_date"] = d   # CR 10 · context for Sasha's other skills (e.g. flights)
         rs = reminders(d, now.date())
         case = await ST.STORE.get(pend.get("case_id") or "")
         after = (case or {}).get("state", {}).get("after") or {}
@@ -176,8 +177,7 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
         out.text(f"I'll remind you here:\n{lines}\n(WhatsApp lets me write first only within 24 hours of your last message; "
                  "otherwise the reminder waits for your next message, and it's always on your file page.)")
         return True
-    out.text("Your file and checklist are on your file page. Say EXIT to go back to Sasha.")
-    return True
+    return False   # CR 10 · not relocation's: Sasha answers it, in the same chat
 
 
 async def due(now: Optional[datetime] = None) -> int:

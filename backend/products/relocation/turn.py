@@ -23,7 +23,7 @@ log = logging.getLogger("products.relocation")
 
 INTRO = ("Relocation to Spain 🇪🇸 — the residence form EX-01 (non-lucrative residence). I assemble it from your answers, "
          "check every field, and hand you the official PDF. *You* sign it and *you* lodge it: I never file anything, and I "
-         "never tick or sign the parts that are yours to decide. Say EXIT at any time to go back to Sasha.")
+         "never tick or sign the parts that are yours to decide. Ask me anything else at any time — a booking, a flight — and we'll come back to this.")
 ROUTE_Q = ("First: is this your *first* application (made from outside Spain, at a consulate) or a *renewal* of a "
            "residence you already hold?")
 RESOURCES_Q = "Who holds the economic resources the application relies on — *you*, or a *family member*?"
@@ -153,7 +153,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         pend["step"] = "route"
         out.text(ROUTE_Q)
         return
-    out.text("Say EXIT to go back to Sasha, or answer the question above.")
+    return False   # CR 10 · not relocation's: Sasha answers it
 
 
 def _next_question(pend: dict, out) -> None:
@@ -203,3 +203,45 @@ async def _prepare(ctx: dict) -> None:
     out.media("The official EX-01, prepared — not signed, not filed.", f"{web()}/api/products/relocation/{cid}/EX-01-prepared.pdf")
     out.text("When you've checked it: print it, complete section 5 yourself, decide on the Dehú consent, write the place "
              "and date, and sign in the FIRMA box. Reply SIGNED when that's done.")
+
+
+# ── CR 10 · one Sasha: is this message an answer to relocation's own question? And what context goes to Sasha ──────
+
+def claims(pend: dict, body: str, payload: str, media: list) -> bool:
+    step, t = pend.get("step"), (body or "").strip()
+    if payload.startswith("rx:") or (media and step not in (None, "done")):
+        return True
+    if re.fullmatch(r"(?i)demo", t) and step not in (None, "prepared", "signed", "residence", "entry", "done"):
+        return True
+    if step == "route":
+        return bool(re.search(r"(?i)\bfirst|initial|inicial|new\b|renew|renovaci", t))
+    if step == "resources":
+        return bool(re.search(r"(?i)\b(me|myself|i do|mine|yo)\b|family|spouse|wife|husband|partner|parent|familiar", t))
+    if step == "presenter":
+        return bool(re.search(r"(?i)\b(me|myself|yourself|i will|i'll|yo)\b|represent|lawyer|abogad|gestor|someone", t))
+    if step == "facts":
+        q = next((x for x in F.APPLICANT if x[0] == pend.get("asking")), None)
+        return bool(q) and q[2](t)[1] is None
+    if step == "notices":
+        return F._yesno(t)[1] is None
+    if step == "doc_confirm":
+        return bool(re.match(r"(?i)^\s*(yes|no|y|n|sí|si)\b", t))
+    if step == "prepared":
+        return bool(re.match(r"(?i)^\s*(signed|i signed|firmado)\b", t))
+    if step == "residence":
+        return 0 < len(t.split()) <= 4 and not re.search(r"\d", t)
+    if step == "entry":
+        return bool(F.parse_date(t)) or bool(re.match(r"(?i)^\s*skip\b", t))
+    return False
+
+
+def context(pend: dict) -> dict:
+    """Minimum necessary for Sasha's other skills: where, when, who — never a passport fact."""
+    f = pend.get("facts") or {}
+    a = f.get("applicant") or {}
+    town = (a.get("address_town") or {}).get("value") or "Madrid"
+    name = " ".join(x for x in ((a.get("given_names") or {}).get("value"), (a.get("surname_1") or {}).get("value")) if x)
+    return {"product": "relocation", "city": town, "country": "Spain", "dates": [d for d in [pend.get("entry_date")] if d],
+            "name": name or None, "line": f"[Relocation: moving to {town}, Spain"
+            + (f"; planned entry {pend['entry_date']}" if pend.get("entry_date") else "")
+            + (f"; applicant {name}" if name else "") + "]"}

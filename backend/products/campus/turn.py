@@ -36,7 +36,7 @@ DAYS_READ_MAX = 4                 # days read per school per ask (each a request
 
 INTRO = ("CampusMe here 🎓 I read each university's own visit calendar, show you real sessions, prepare the school's "
          "registration form with your student's details, and you press Register. Tell me the schools and the month, e.g. "
-         "\"Yale and Penn in November for my son\". Say EXIT to go back to Sasha.")
+         "\"Yale and Penn in November for my son\". Anything else — a booking, a flight — just ask; we'll come back to this.")
 NO_SUBMIT = "I prepare the form; you press Register on the school's own page — CampusMe never submits it."
 
 
@@ -527,3 +527,42 @@ async def _keep_watch(ctx: dict, a: RQ.Ask) -> None:
     except Exception as e:
         log.error("[campus] the watch wasn't kept: %s", type(e).__name__)
     pend.pop("watch", None)
+
+
+# ── CR 10 · one Sasha: is this message an answer to CampusMe's own question? And what context goes to Sasha ─────────
+
+def claims(pend: dict, body: str, payload: str, media: list) -> bool:
+    step, t = pend.get("step"), (body or "").strip()
+    if payload.startswith(("cm:", "cmyes:", "cmno:")):
+        return True
+    if step == "ask":
+        a = RQ.parse(t, date.today())
+        return bool(a.schools or a.unreadable or a.month or a.day)
+    if step == "cards":
+        return _pick(pend, t, payload) is not None
+    if step == "profile":
+        k = pend.get("asking")
+        return {"name": lambda: len(t.split()) >= 2 and not re.search(r"\d", t),
+                "email": lambda: bool(_EMAIL.match(t)),
+                "birthdate": lambda: bool(parse_birthdate(t)),
+                "high_school": lambda: len(t) >= 3,
+                "grad_year": lambda: bool(re.search(r"\b20[2-3]\d\b", t))}.get(k, lambda: False)()
+    if step in ("save", "confirm"):
+        return YS.is_yes(t) or bool(re.match(r"(?i)^\s*(no|nope|not now|just this once)\b", t))
+    if step == "handed_over":
+        return bool(re.match(r"(?i)^\s*(registered|done|booked|i registered|we registered)\b", t)) or \
+            (len(t) >= 40 and bool(re.search(r"(?i)\b(confirm|registered|registration)", t)))
+    if step == "registered":
+        return len(t) >= 40 and bool(re.search(r"(?i)\b(confirm|registered|registration)", t))
+    return False
+
+
+def context(pend: dict) -> dict:
+    a = RQ.from_state(pend["ask"]) if pend.get("ask") else None
+    x = pend.get("chosen") or {}
+    schools = [s["name"] for s in (a.schools if a else [])]
+    cities = [SC.SCHOOLS[x["school"]]["city"]] if x.get("school") else [s["city"] for s in (a.schools if a else [])]
+    dates = [x["day"]] if x.get("day") else ([a.when_words()] if a and (a.month or a.day) else [])
+    return {"product": "campus", "city": ", ".join(dict.fromkeys(cities)) or None, "country": "United States",
+            "dates": dates, "name": None, "line": f"[CampusMe: campus visits — {' and '.join(schools) or 'universities'}"
+            + (f" ({'; '.join(dict.fromkeys(cities))})" if cities else "") + (f", {dates[0]}" if dates else "") + "]"}

@@ -215,4 +215,4 @@ class NewInMadrid(Base):
         self.assertIn("Tell me what to book", self.bodies()[-1])
         self.say("salud")
         self.say("exit")
-        self.assertIn("HEALTH", self.bodies()[-1])
+        self.assertEqual(self.bodies()[-1], "OK.")

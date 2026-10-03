@@ -53,6 +53,25 @@ class MemoryCaseStore:
         return [copy.deepcopy(r) for r in self.rows.values()
                 if r["account_id"] == account and r["product"] == product and r["expires_at"] > now]
 
+    async def conversations(self, wa_key: str) -> List[dict]:
+        """CR 10 · this WhatsApp number's set-aside product conversations (one row per product)."""
+        now = NOW()
+        return [copy.deepcopy(r) for r in self.rows.values() if r["wa_id_sha256"] == wa_key and r["expires_at"] > now
+                and (r["state"] or {}).get("kind") == "conversation"]
+
+    async def put_conversation(self, wa_key: str, account: str, product: str, pending: dict) -> None:
+        for r in self.rows.values():
+            if r["wa_id_sha256"] == wa_key and r["product"] == product and (r["state"] or {}).get("kind") == "conversation":
+                r["state"] = {"kind": "conversation", "pending": copy.deepcopy(pending)}
+                r["updated_at"] = NOW()
+                return
+        await self.put(product, account, wa_key, {"kind": "conversation", "pending": pending})
+
+    async def drop_conversation(self, wa_key: str, product: str) -> None:
+        for k in [k for k, r in self.rows.items() if r["wa_id_sha256"] == wa_key and r["product"] == product
+                  and (r["state"] or {}).get("kind") == "conversation"]:
+            del self.rows[k]
+
     async def of_product(self, product: str) -> List[dict]:
         now = NOW()
         return [copy.deepcopy(r) for r in self.rows.values() if r["product"] == product and r["expires_at"] > now]
@@ -105,6 +124,25 @@ class PostgresCaseStore:
             "select * from product_cases where account_id = $1 and product = $2 and expires_at > now() "
             "order by created_at desc limit 20", uuid.UUID(account), product))
         return [self._row(r) for r in rows]
+
+    async def conversations(self, wa_key):
+        rows = await self._run(lambda c: c.fetch(
+            "select * from product_cases where wa_id_sha256 = $1 and state->>'kind' = 'conversation' and expires_at > now() "
+            "order by updated_at desc", wa_key))
+        return [self._row(r) for r in rows]
+
+    async def put_conversation(self, wa_key, account, product, pending):
+        state = {"kind": "conversation", "pending": pending}
+        n = await self._run(lambda c: c.execute(
+            "update product_cases set state = $3::jsonb, updated_at = now(), expires_at = now() + $4::interval "
+            "where wa_id_sha256 = $1 and product = $2 and state->>'kind' = 'conversation'", wa_key, product, state, EXPIRES))
+        if n.split()[-1] == "0":
+            await self.put(product, account, wa_key, state)
+
+    async def drop_conversation(self, wa_key, product):
+        await self._run(lambda c: c.execute(
+            "delete from product_cases where wa_id_sha256 = $1 and product = $2 and state->>'kind' = 'conversation'",
+            wa_key, product))
 
     async def of_product(self, product):
         rows = await self._run(lambda c: c.fetch(

@@ -549,6 +549,8 @@ router.include_router(_ops.router)   # Sasha 121 · /api/booking/ops (founder on
 from . import demo_shop as _demo_shop  # noqa: E402
 router.include_router(_demo_shop.router)   # Sasha 121 (F) · Kanoe Demo Market (ours; sells nothing)
 router.include_router(_demo_shop.ops)
+from . import test_deposit as _test_deposit  # noqa: E402
+router.include_router(_test_deposit.ops)   # Sasha 131 · /api/booking/ops/test-deposit/* (founder only; Stripe TEST mode)
 from . import route_costs as _route_costs  # noqa: E402
 router.include_router(_route_costs.router)   # Sasha 131 · /api/booking/ops/route-costs (founder only)
 from . import demo_spa as _demo_spa  # noqa: E402

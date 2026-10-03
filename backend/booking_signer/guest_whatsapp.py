@@ -1688,6 +1688,8 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
             out.text(f"Their page said: “{str(j['their_page'])[:500]}”")
         if _receipt_note():
             out.text(_receipt_note().strip())
+        if result == "confirmed" and venue == "Sasha Test Venue" and os.getenv("SASHA_TEST_VENUE_DEPOSIT", "") == "1":
+            await _test_deposit(ctx)   # Sasha 131 (4) · one touch, on their page — a TEST payment
         return
     if pend["rung"] == "call_email":   # Sasha 131 · URGENT: both on the one yes — the email first (it can't be refused by a ring)
         s2, ej = await api(account, "POST", f"/api/booking/emails/{pend['email_id']}/send", {"read_back_sha256": pend["email_sha"], "approval": how}, timeout=60)
@@ -1774,6 +1776,36 @@ async def offer_no_reply_call(ch: dict, b: dict, read_row: dict) -> str:
     return await offer_escalation(ch, b, read_row, "call",
                                   f"No reply yet from {venue} to my email about {SN.day_words(b['date'])} at {b['time']}. Shall I call them? "
                                   f"I'll show you exactly what I'll say first.", "Yes, prepare the call")
+
+
+WATCH_DEPOSIT = (15, 40)   # every 15 s for 10 minutes
+
+
+async def _test_deposit(ctx: dict) -> None:
+    from . import test_deposit as TD
+    got = await TD.link()
+    if "why" in got:
+        ctx["out"].text(f"(Their test deposit page isn't available: {got['why']}.)")
+        return
+    ctx["out"].text(TD.message(got["url"]))
+    _spawn(watch_deposit(ctx["ch"], ctx["frm"], got["id"], time.time()))
+
+
+async def watch_deposit(ch: dict, frm: str, link_id: str, since: float) -> None:
+    """Their page's own record (Stripe, TEST mode) decides — never the guest's word, never assumed."""
+    from . import test_deposit as TD
+    every, times = WATCH_DEPOSIT
+    for _ in range(times):
+        await asyncio.sleep(every)
+        paid = await TD.paid_since(link_id, since)
+        if paid:
+            st = await STORE.get_state(ch["wa_id_sha256"])
+            await deliver(ch, frm, Out().text(f"✅ Deposit paid on their page — TEST payment, nothing was charged: €{paid['amount']:.2f}. "
+                                              f"Stripe's record: {paid['payment']}."), st.get("last_inbound_at"))
+            return
+    st = await STORE.get_state(ch["wa_id_sha256"])
+    await deliver(ch, frm, Out().text("Their page doesn't show the test deposit paid after 10 minutes. The link still works if you "
+                                      "want to try again."), st.get("last_inbound_at"))
 
 
 WATCH_GMAIL = (30, 10)   # every 30 s, ten times: a platform's confirmation email usually lands within a minute or two

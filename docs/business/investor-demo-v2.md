@@ -158,7 +158,7 @@ The timings are from the two rehearsals on 3 Oct (each beat's wait, measured in 
 
 | # | Beat | Device | What you say / tap | What appears | Rehearsal 1 · 2 | Fallback |
 |---|---|---|---|---|---|---|
-| A | **Book by voice** | Laptop | 🎤 "Luxury dinner for two in Chamberí tonight at nine" | Cards (today): **Araia** · **Pilar Akaneya** · the friendly venue (or "Sasha Test Venue — ours, rehearsal"). Pick → read-back of exactly what she'll say (or send) → **one sentence** → **Yes** | 14.6 · 13.9 | Calls off or no answer within 60 s: the **test-venue card** → "✅ … Reserva confirmada … TV-…" |
+| A | **Book by voice** | Laptop | 🎤 "Luxury dinner for two in Chamberí tonight at nine" | Cards (today): **Araia** · a second real card (Pilar Akaneya on 3 Oct, but ⛔ not to be picked, see §2) · the friendly venue (or "Sasha Test Venue — ours, rehearsal"). Pick → read-back of exactly what she'll say (or send) → **one sentence** → **Yes** | 14.6 · 13.9 | Calls off or no answer within 60 s: the **test-venue card** → "✅ … Reserva confirmada … TV-…" |
 | A | → the call (friendly venue) | Laptop speaker | — | "Hola, soy Sasha, una concierge de inteligencia artificial…" (the AI disclosure first) → the recap → "¿Correcto?" → their yes | not rehearsed (calls off) | Say: "real venues don't always pick up — that's the point of the ladder"; use the test venue |
 | A | → receipt + calendar | Laptop | — | The result in the chat, the receipt email, and the event on **"Sasha bookings"** in Google Calendar | event after 17.6 · 11.8 | Skip the calendar if Google has expired (reconnect the night before) |
 | B | **Cancel** | Phone | "Cancel tonight's dinner" → **Yes, cancel** | "Cancel …, Saturday … at 21:00, for 2, under Tyler Warren?" → "Sasha Test Venue has cancelled your booking." + **their words** ("Reserva cancelada … queda cancelada. Gracias.") | 9.1 + 7.7 · 8.7 + 7.0 | Several tonight → a numbered list; reply with its number (+4 s) |
@@ -182,7 +182,9 @@ For "luxury dinner for two in Chamberí tonight at nine", the cards on 3 Oct wer
 Akaneya** (4.8★), so a friendly venue among them needs no change to the line. Three proposals:
 
 1. **Araia** (Chamberí): the first card.
-2. **Pilar Akaneya** (Chamberí): the second card.
+2. ~~**Pilar Akaneya** (Chamberí): the second card.~~ **⛔ DROPPED from the demo (Sasha 131).** The booking page its group
+   site links is `restaurante-carlotaakaneyamadrid`, possibly the sister restaurant Carlota Akaneya. A one-tap or a call
+   could reach the wrong restaurant. Don't pick it on stage, and don't send §2.2.
 3. **Smithers Restaurant** (S-50 list): publishes phone, WhatsApp and email. The line then names it: "dinner for two at
    Smithers tonight at nine".
 
@@ -215,7 +217,7 @@ the laptop Sasha first offers the platform link. **For the live call, tap "or ha
 > Muchas gracias,
 > Tyler Warren — Kanoe Technologies SL — +34 608 44 57 15
 
-### 2.2 Pilar Akaneya: by phone to +34 913 307 699
+### 2.2 Pilar Akaneya: by phone to +34 913 307 699 — ⛔ DROPPED (Sasha 131): not sent; kept for the record
 
 They publish no email or WhatsApp, so the founder calls, then asks for their yes in writing. If they give an email or
 WhatsApp, he sends the text below there.

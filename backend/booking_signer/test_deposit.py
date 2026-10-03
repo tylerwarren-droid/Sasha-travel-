@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 log = logging.getLogger("booking_signer.test_deposit")
 ops = APIRouter(prefix="/ops", tags=["booking-ops"])
@@ -93,9 +94,12 @@ async def checkout(amount: str, currency: str, label: str, ref: str) -> Dict[str
         cents = int(round(float(amount) * 100))
     except ValueError:
         return {"why": f"not an amount: {amount!r}"}
-    you = os.getenv("SASHA_WEB_URL", "https://project.kanoe.ai").rstrip("/") + "/you"   # after paying: their bookings, where it appears
+    # Sasha 136 · after paying, the phone's browser lands on a PUBLIC page (no sign-in): "Paid (TEST) — check WhatsApp", with the
+    # booking's status once known. Stripe fills {CHECKOUT_SESSION_ID} itself.
+    from .form_rung import public_base
+    back = f"{public_base()}/api/booking/test-pay"
     s, j = await HTTP("POST", "/checkout/sessions", {
-        "mode": "payment", "success_url": you, "cancel_url": you,
+        "mode": "payment", "success_url": f"{back}/done?s={{CHECKOUT_SESSION_ID}}", "cancel_url": f"{back}/back?s={{CHECKOUT_SESSION_ID}}",
         "line_items[0][quantity]": 1, "line_items[0][price_data][currency]": currency.lower(),
         "line_items[0][price_data][unit_amount]": cents, "line_items[0][price_data][product_data][name]": f"TEST payment — {label}"[:250],
         "metadata[test_payment]": "true", "metadata[sasha_ref]": ref[:100]})
@@ -111,6 +115,60 @@ async def session_paid(session_id: str) -> Optional[dict]:
     if s != 200 or cs.get("livemode") or cs.get("status") != "complete" or cs.get("payment_status") != "paid":
         return None
     return {"amount": (cs.get("amount_total") or 0) / 100, "currency": (cs.get("currency") or "eur").upper(), "payment": cs.get("payment_intent")}
+
+
+# ── Sasha 136 · the public page Stripe returns to — no sign-in, nothing personal: the payment's state and the booking's ──
+
+public = APIRouter(prefix="/test-pay", tags=["test-pay"])
+OUTCOMES: Dict[str, dict] = {}   # Stripe session → what Sasha did with it (this server's memory; the watchers write it)
+_SID = re.compile(r"cs_test_[A-Za-z0-9]{10,200}")
+
+
+def note(session_id: str, ok: bool, line: str) -> None:
+    """The booking's outcome for this payment, for the return page. `line` names the booking — never the guest."""
+    if session_id:
+        OUTCOMES[session_id] = {"ok": ok, "line": line[:300]}
+        if len(OUTCOMES) > 500:
+            OUTCOMES.pop(next(iter(OUTCOMES)))
+
+
+_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+{refresh}<title>Sasha — test payment</title><style>body{{font:17px/1.5 -apple-system,system-ui,sans-serif;max-width:32rem;margin:3rem auto;
+padding:0 1.25rem;color:#111;background:#fff}}h1{{font-size:1.4rem}}.t{{display:inline-block;background:#fff3cd;border:1px solid #e0c36b;
+border-radius:6px;padding:.1rem .5rem;font-size:.85rem}}.s{{color:#555}}@media (prefers-color-scheme:dark){{body{{color:#eee;background:#111}}
+.s{{color:#aaa}}.t{{background:#3a3110;border-color:#7a6620;color:#f3e2a8}}}}</style></head><body>
+<span class="t">TEST — nothing is charged</span><h1>{title}</h1><p>{body}</p><p class="s">{status}</p></body></html>"""
+
+
+def _page(title: str, body: str, status: str, refresh: bool) -> HTMLResponse:
+    from html import escape
+    return HTMLResponse(_PAGE.format(title=escape(title), body=escape(body), status=escape(status),
+                                     refresh='<meta http-equiv="refresh" content="5">' if refresh else ""),
+                        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
+
+@public.get("/done")
+async def done(request: Request):
+    sid = request.query_params.get("s") or ""
+    if not _SID.fullmatch(sid):
+        return _page("Test payment", "This link isn't a test payment Sasha made.", "", False)
+    out = OUTCOMES.get(sid)
+    if out:
+        return _page("Paid (TEST) — " + ("booked (TEST)" if out["ok"] else "not booked"), out["line"],
+                     "The same message is on WhatsApp. You can close this page.", False)
+    paid = await session_paid(sid) if key() else None
+    if paid:
+        return _page("Paid (TEST). Sasha is booking it — check WhatsApp.",
+                     f"Stripe recorded the TEST payment ({paid['currency']} {paid['amount']:.2f}); nothing was charged.",
+                     "Waiting for the booking… this page updates by itself.", True)
+    return _page("Payment not recorded yet", "Stripe hasn't recorded this TEST payment yet. If you just paid, give it a moment.",
+                 "This page updates by itself.", True)
+
+
+@public.get("/back")
+async def back(request: Request):
+    return _page("Not paid", "You left the test payment page, so nothing was paid and nothing was booked.",
+                 "Ask Sasha on WhatsApp to send the page again whenever you like.", False)
 
 
 def message(url: str) -> str:

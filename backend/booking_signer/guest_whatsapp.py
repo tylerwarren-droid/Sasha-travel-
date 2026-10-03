@@ -829,6 +829,8 @@ async def watch_hotel_payment(ch: dict, frm: str, account: str, p: dict, session
             continue
         ref = HT.new_ref()
         await HT.RECORD(account, p["hotel"], p["city"], HT.tz_of(p.get("country")), p["checkin"], p["nights"], p["party"], ref)
+        TD.note(session_id, True, f"🧪 {HT.LABEL}: {p['hotel']}, {p['checkin']}, {p['nights']} night{'s' if p['nights'] != 1 else ''}. "
+                                  f"Reference {ref} — in your itinerary and calendar, marked TEST.")
         st = await STORE.get_state(ch["wa_id_sha256"])
         await deliver(ch, frm, Out().text(f"🧪 {HT.LABEL}: {p['hotel']}, {SN.day_words(p['checkin'])}, {p['nights']} night"
                                           f"{'s' if p['nights'] != 1 else ''}. Reference {ref}. It's in your itinerary and calendar marked TEST — "
@@ -907,9 +909,11 @@ async def watch_flight_payment(ch: dict, frm: str, account: str, c: dict, sessio
         o = await TR.order(c, name, email, phone)
         st = await STORE.get_state(ch["wa_id_sha256"])
         if "why" in o:
+            TD.note(session_id, False, f"Your test payment went through, but the test flight wasn't booked: {o['why']}.")
             await deliver(ch, frm, Out().text(f"Your test payment went through, but the test flight wasn't booked: {o['why']}."), st.get("last_inbound_at"))
             return
         await TR.RECORD(account, c, o["booking_reference"] or "")
+        TD.note(session_id, True, f"✅ Booked (TEST): {TR.card_line(c)}. Reference {o['booking_reference']}. In your itinerary and calendar.")
         await deliver(ch, frm, Out().text(f"✅ Booked (TEST): {TR.card_line(c)}. Reference {o['booking_reference']}. "
                                           f"It's in your itinerary and on your calendar — {TR.LABEL}."), st.get("last_inbound_at"))
         return

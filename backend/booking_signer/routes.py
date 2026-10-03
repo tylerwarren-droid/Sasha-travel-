@@ -558,7 +558,8 @@ router.include_router(_hotel_test.router)   # Sasha 135 · /api/booking/travel/h
 from . import travel as _travel  # noqa: E402
 router.include_router(_travel.router)   # Sasha 132 · /api/booking/travel/flight/* (Duffel TEST mode)
 from . import test_deposit as _test_deposit  # noqa: E402
-router.include_router(_test_deposit.ops)   # Sasha 131 · /api/booking/ops/test-deposit/* (founder only; Stripe TEST mode)
+router.include_router(_test_deposit.ops)
+router.include_router(_test_deposit.public)   # Sasha 136 · /api/booking/test-pay/{done,back} — Stripe's return page, public   # Sasha 131 · /api/booking/ops/test-deposit/* (founder only; Stripe TEST mode)
 from . import route_costs as _route_costs  # noqa: E402
 router.include_router(_route_costs.router)   # Sasha 131 · /api/booking/ops/route-costs (founder only)
 from . import demo_spa as _demo_spa  # noqa: E402

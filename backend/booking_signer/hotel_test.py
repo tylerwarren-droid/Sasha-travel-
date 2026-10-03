@@ -156,6 +156,7 @@ async def status(request: Request):
     await RECORD(account_for(request), r["hotel"], r["city"], tz_of(r.get("country")), r["checkin"], r["nights"], r["party"], ref)
     _BOOKED[sid] = {"reference": ref, "say": f"{LABEL}: {r['hotel']}, {r['checkin']}, {r['nights']} night{'s' if r['nights'] != 1 else ''}. "
                                              f"Reference {ref} — in your itinerary and calendar as a TEST booking. Nothing was reserved or charged."}
+    TD.note(sid, True, _BOOKED[sid]["say"])
     return {"ok": True, "status": "booked", **_BOOKED[sid]}
 
 

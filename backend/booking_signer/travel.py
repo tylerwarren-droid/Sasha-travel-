@@ -247,7 +247,9 @@ async def flight_status(request: Request):
         return {"ok": True, "status": "failed", "say": "paid (test), but the offer has gone — nothing booked"}
     o = await order(c, who["name"], who["email"], who["phone"])
     if "why" in o:
+        TD.note(sid, False, f"Paid (TEST), but not booked: {o['why']}")
         return {"ok": True, "status": "failed", "say": f"paid (test), but not booked: {o['why']}"}
     await RECORD(account, c, o["booking_reference"] or "")
     _BOOKED[sid] = {"booking_reference": o["booking_reference"], "say": f"✅ Booked (TEST): {card_line(c)}. Reference {o['booking_reference']} — {LABEL}."}
+    TD.note(sid, True, _BOOKED[sid]["say"])
     return {"ok": True, "status": "booked", **_BOOKED[sid]}

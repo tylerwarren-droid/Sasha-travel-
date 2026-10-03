@@ -1,5 +1,6 @@
 'use client'
 import { FlightBookTest } from './FlightBookTest'  // Sasha 132
+import { HotelBookTest } from './HotelBookTest'  // Sasha 135
 import { useState, useRef, useEffect, MutableRefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2 } from 'lucide-react'
@@ -799,9 +800,12 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
                         <div className="o2">{'★'.repeat(h.stars)} · from ${h.price_from}/night{h.rating ? ` · ${h.rating}/10` : (h.city ? ` · ${h.city}` : '')}</div>
                         {h.tag && <span className="tag">{h.tag}</span>}
                       </div>
+                      {/* Sasha 135 · Reserve = a TEST booking (no hotel contacted) until a real hotel provider is on */}
+                      <HotelBookTest hotel={h.name} city={h.city} nights={h.nights} />
                       {h.offer_id && (h.amount_usd ?? 0) > 0 ? (
-                        <button className="price" onClick={() => onBookItem?.({ offer_id: h.offer_id!, label: `${h.nights ?? 1} night${(h.nights ?? 1) !== 1 ? 's' : ''} · ${h.name}`, amount_usd: h.amount_usd!, kind: 'hotel', name: h.name })}>
-                          Reserve · ${h.amount_usd!.toLocaleString()}
+                        /* the trip-plan path (payments.py /reserve): saves it to the trip — no hotel contacted, said so after */
+                        <button className="viewlink" onClick={() => onBookItem?.({ offer_id: h.offer_id!, label: `${h.nights ?? 1} night${(h.nights ?? 1) !== 1 ? 's' : ''} · ${h.name}`, amount_usd: h.amount_usd!, kind: 'hotel', name: h.name })}>
+                          Save · ${h.amount_usd!.toLocaleString()}
                         </button>
                       ) : (
                         /* No server-priced offer — informational only, never an external

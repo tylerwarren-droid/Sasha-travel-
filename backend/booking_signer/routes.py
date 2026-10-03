@@ -505,7 +505,8 @@ async def reservations(request: Request):
         # an ASKING call's reservation has no time of its own yet (S-64 step 9): null, never a made-up one
         "date": r["local_date"].isoformat() if r["local_date"] else None,
         "time": r["local_time"].strftime("%H:%M") if r["local_time"] else None, "timezone": r["local_timezone"],
-        "party": r["party_size"], "status": r["status"], "status_words": status_words(r["status"], r.get("request")),
+        "party": r["party_size"], "status": r["status"], "status_words": ("Test booking: no hotel contacted" if (r["booking_reference"] or "").startswith("TEST-")   # Sasha 135
+                         else status_words(r["status"], r.get("request"))),
         # S-64 step 14 · WHAT was asked for — the activity, its length and its count in its own unit (a table when the
         # row predates the object and nothing else is known)
         **what_of(r.get("request"), r["party_size"]),
@@ -552,6 +553,8 @@ router.include_router(_ops.router)   # Sasha 121 · /api/booking/ops (founder on
 from . import demo_shop as _demo_shop  # noqa: E402
 router.include_router(_demo_shop.router)   # Sasha 121 (F) · Kanoe Demo Market (ours; sells nothing)
 router.include_router(_demo_shop.ops)
+from . import hotel_test as _hotel_test  # noqa: E402
+router.include_router(_hotel_test.router)   # Sasha 135 · /api/booking/travel/hotel/* (TEST bookings: no hotel contacted)
 from . import travel as _travel  # noqa: E402
 router.include_router(_travel.router)   # Sasha 132 · /api/booking/travel/flight/* (Duffel TEST mode)
 from . import test_deposit as _test_deposit  # noqa: E402

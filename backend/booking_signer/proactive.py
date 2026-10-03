@@ -101,7 +101,9 @@ def render(kind: str, b: dict, extra: Optional[dict] = None, now: Optional[datet
         return f"{venue} confirmed in writing ✅: {when}, {_party(b)}{ref}."
     if kind == "morning_brief":
         items = extra["items"]
-        return "Today: " + " · ".join(f"{x.get('time') or '—'} {x.get('venue')} ({'confirmed' if x.get('status') in CONFIRMED else 'not confirmed yet'})"
+        return "Today: " + " · ".join(f"{x.get('time') or '—'} {x.get('venue')} ("
+                                      + ("TEST booking" if (x.get("booking_reference") or "").startswith("TEST-") or "(TEST booking" in (x.get("venue") or "")
+                                         else "confirmed" if x.get("status") in CONFIRMED else "not confirmed yet") + ")"
                                       for x in items)
     raise ValueError(kind)
 

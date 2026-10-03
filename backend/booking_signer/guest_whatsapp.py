@@ -782,6 +782,63 @@ async def _hotels(ctx: dict, body: str) -> None:
                            "when": {"mode": "at", "at": f"{a}T15:00"}, "how_many": {"count": party, "unit": "people"}, "nights": nights}})
 
 
+async def _hotel_choice(ctx: dict, pend: dict, card: dict) -> None:
+    """Sasha 135 · two honest options for a hotel card: a TEST booking (no hotel contacted), or the REAL request to the hotel."""
+    from . import hotel_test as HT
+    name = card.get("name") or "this hotel"
+    tag_id = hashlib.sha256((card.get("place_id") or name).encode()).hexdigest()[:8]
+    sha = hashlib.sha256(f"{tag_id}|{pend.get('at')}".encode()).hexdigest()
+    ctx["out"].ask(f"{name}: make a TEST booking ({HT.LABEL.lower()}; nothing reserved or charged), or ask the hotel for a real room?",
+                   [("Test booking", f"test:{tag_id}:{sha[:16]}"), ("Request from hotel", f"req:{tag_id}:{sha[:16]}")])
+    ctx["st"]["pending"] = {"kind": "hotel_choice", "at": ctx["now"].isoformat(), "id": tag_id, "sha": sha, "card": card,
+                            "cards_pend": {k: v for k, v in pend.items() if k != "kind"} | {"kind": "cards"}}
+
+
+async def _hotel_test_ask(ctx: dict, pend: dict) -> None:
+    from . import hotel_test as HT
+    d = pend["cards_pend"].get("draft") or {}
+    f = pend["cards_pend"].get("find") or {}
+    hotel, city = pend["card"].get("name") or "the hotel", f.get("where") or ""
+    checkin, nights, party = (d.get("when") or {}).get("at", "")[:10], int(d.get("nights") or 1), int((d.get("how_many") or {}).get("count") or 2)
+    q = HT.quote(hotel, city, checkin, nights, party)
+    ctx["out"].text("Exactly what I'll do:\n" + "\n".join("• " + ln for ln in q["lines"]))
+    rid = hashlib.sha256(hotel.encode()).hexdigest()[:8]
+    ctx["out"].ask(f"Make the TEST booking at {hotel}? (No hotel contacted.)", [("Yes, test-book it", f"yes:{rid}:{q['sha256'][:16]}"),
+                                                                              ("No", f"no:{rid}:{q['sha256'][:16]}")])
+    ctx["st"]["pending"] = {"kind": "hotel_test_confirm", "at": ctx["now"].isoformat(), "id": rid, "sha": q["sha256"], "hotel": hotel,
+                            "city": city, "country": f.get("country"), "checkin": checkin, "nights": nights, "party": party, "eur": q["eur"]}
+
+
+async def _hotel_test_pay(ctx: dict, pend: dict) -> None:
+    from . import hotel_test as HT, test_deposit as TD
+    got = await TD.checkout(f"{pend['eur']:.2f}", "EUR", f"{HT.LABEL} — {pend['hotel']} {pend['checkin']} ({pend['nights']} nights)", pend["sha"][:16])
+    if "why" in got:
+        ctx["out"].text(f"I can't take the test payment yet — {got['why']}. No test booking was made.")
+        return
+    ctx["out"].text(f"One touch: pay the TEST price (€{pend['eur']:.2f}) on Stripe's test page — Apple Pay or your phone's saved card; nothing "
+                    f"is charged and no hotel is contacted.\n{got['url']}\nI'll add the TEST booking the moment it's paid.")
+    _spawn(watch_hotel_payment(ctx["ch"], ctx["frm"], ctx["account"], pend, got["id"]))
+
+
+async def watch_hotel_payment(ch: dict, frm: str, account: str, p: dict, session_id: str) -> None:
+    from . import hotel_test as HT, test_deposit as TD
+    every, times = WATCH_PAY
+    for _ in range(times):
+        await asyncio.sleep(every)
+        if not await TD.session_paid(session_id):
+            continue
+        ref = HT.new_ref()
+        await HT.RECORD(account, p["hotel"], p["city"], HT.tz_of(p.get("country")), p["checkin"], p["nights"], p["party"], ref)
+        st = await STORE.get_state(ch["wa_id_sha256"])
+        await deliver(ch, frm, Out().text(f"🧪 {HT.LABEL}: {p['hotel']}, {SN.day_words(p['checkin'])}, {p['nights']} night"
+                                          f"{'s' if p['nights'] != 1 else ''}. Reference {ref}. It's in your itinerary and calendar marked TEST — "
+                                          f"nothing was reserved or charged. For a real room, ask for the hotel again and choose “Request from hotel”."),
+                      st.get("last_inbound_at"))
+        return
+    st = await STORE.get_state(ch["wa_id_sha256"])
+    await deliver(ch, frm, Out().text("The test payment wasn't completed within 10 minutes, so no test booking was made."), st.get("last_inbound_at"))
+
+
 async def _flights(ctx: dict, body: str) -> None:
     from . import travel as TR
     out = ctx["out"]
@@ -1333,6 +1390,28 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             out.text(str(j.get("say")) if status == 200 else f"Not asked — {refusal_words(j, status)}.")
             return True
         return False
+    if kind == "hotel_choice":   # Sasha 135 · TEST booking, or the real request to the hotel
+        st["pending"] = None
+        if payload.startswith("test:") or re.search(r"\btest\b", body or "", re.I):
+            await _hotel_test_ask(ctx, pend)
+            return True
+        if payload.startswith("req:") or re.search(r"\b(request|ask|real)\b", body or "", re.I):
+            await _picked_card(ctx, {**pend["cards_pend"], "real": True}, pend["card"])
+            return True
+        out.text("Tap “Test booking” or “Request from hotel”.")
+        st["pending"] = pend
+        return True
+    if kind == "hotel_test_confirm":
+        if payload.startswith("no:") or (not payload and _NO.match(body)):
+            st["pending"] = None
+            out.text("OK — no test booking made.")
+            return True
+        if payload.startswith("yes:") or YS.is_yes(body):
+            st["pending"] = None
+            await _hotel_test_pay(ctx, pend)
+            return True
+        out.text("Tap Yes or No.")
+        return True
     if kind == "flight_cards":   # Sasha 132
         i = _picked(pend, body, payload)
         if i is None and re.fullmatch(r"\s*[123]\s*", body or ""):
@@ -1533,6 +1612,8 @@ def _payload_ok(pend: dict, payload: str) -> bool:
     if pend["kind"] in ("cards", "flight_cards"):
         return payload.startswith(f"pick:{pend['nonce']}:")
     tag = f"{str(pend.get('id', ''))[:8]}:{str(pend.get('sha', ''))[:16]}"
+    if pend["kind"] == "hotel_choice":   # Sasha 135
+        return payload in (f"test:{tag}", f"req:{tag}")
     return payload in (f"yes:{tag}", f"no:{tag}")
 
 
@@ -1571,6 +1652,9 @@ async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
             out.text(f"Together with the restaurant, I can book only Kanoe Demo Spa today. Tap it, or ask me for "
                      f"{card.get('name') or 'that spa'} on its own. Nothing was sent.")
             ctx["st"]["pending"] = pend
+        return
+    if (pend.get("draft") or {}).get("nights") and not pend.get("real"):   # Sasha 135 · a hotel: TEST booking, or the real request
+        await _hotel_choice(ctx, pend, card)
         return
     if card.get("place_id") == TEST_CARD["place_id"]:
         from .form_rung import test_venue_url

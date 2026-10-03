@@ -114,6 +114,8 @@ def event_body(item: dict, action: str) -> dict:
         ref = item.get("booking_reference")
         title, status = name, "confirmed"
         desc = f"Booked by Sasha · {item.get('party_size') or '—'} people" + (f" · ref {ref}" if ref else "") + f" · {web_url()}"
+        if (ref or "").startswith("TEST-") or "(TEST booking" in name:   # Sasha 135 · a TEST booking says so, here too
+            desc = f"TEST booking — no hotel or provider was contacted; nothing is reserved." + (f" Ref {ref}." if ref else "") + f" {web_url()}"
     body = {"summary": title, "description": desc, "status": status, "transparency": "opaque",
             "start": {"dateTime": start.isoformat(), "timeZone": tz},
             "end": {"dateTime": (start + timedelta(minutes=minutes)).isoformat(), "timeZone": tz}}

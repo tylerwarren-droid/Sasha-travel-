@@ -12,6 +12,7 @@ The activity is in the venue's language ONCE, at prepare (`what.activity_venue_l
 """
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, time
 from typing import Any, List, Mapping, Optional
 
@@ -518,7 +519,7 @@ def cancel_for(booking_brief: Mapping[str, Any], venue: C.CallVenue, now: dateti
     lines = [
         f"I'll phone {venue.name}, {number}" + (f" — the number on {venue.source}." if venue.source else "."),
         f"I'll say: \"{first}\"" + ("" if lang.code == "en" else f" (in {lang.label}: {cancel_opening(en, oe, today)})"),
-        f"This cancels your {b['activity']} for {b['party']} on {b['date']} at {b['time']}, under {b['name']}" + (f', held under "{reference}".' if reference else "."),
+        f"This cancels your {re.sub(r'^(?:a|an|the) ', '', b['activity'])} for {b['party']} on {b['date']} at {b['time']}, under {b['name']}" + (f', held under "{reference}".' if reference else "."),
         "I won't agree to a cancellation fee or give a card. I'll tell them I need to check with you.",
         "I'll tell you exactly what they said. Shall I call them now?",
     ]

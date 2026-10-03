@@ -127,7 +127,7 @@ class CancelAnActivity(unittest.TestCase):
             c = R.cancel_for(b, v, NOW, None)
             self.assertIn(want[code.split("-")[0]], c["brief"]["first_sentence"], code)
             self.assertNotIn("mesa", c["brief"]["first_sentence"])
-            self.assertIn("This cancels your a 60-minute relaxing massage for 1 on 2026-10-05 at 10:00", c["read_back_lines"][2])
+            self.assertIn("This cancels your 60-minute relaxing massage for 1 on 2026-10-05 at 10:00", c["read_back_lines"][2])
             self.assertLessEqual(len(c["brief"]["task"]), 2000)
 
     def test_the_booking_brief_carries_what_its_reply_is_checked_against(self):

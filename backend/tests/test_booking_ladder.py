@@ -791,7 +791,7 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
         self.assertEqual(c.status_code, 200, c.text)
         lines = c.json()["read_back"]["lines"]
         self.assertIn("Llamo para cancelar la reserva del jueves, un masaje relajante de 60 minutos", lines[1])
-        self.assertTrue(lines[2].startswith("This cancels your a 60-minute relaxing massage for 1 on 2026-10-08 at 10:00"))
+        self.assertTrue(lines[2].startswith("This cancels your 60-minute relaxing massage for 1 on 2026-10-08 at 10:00"))
 
     def test_s66_closed_now_the_call_is_scheduled_for_opening_and_placed_then(self):
         from datetime import datetime as _dt, timezone as _tz

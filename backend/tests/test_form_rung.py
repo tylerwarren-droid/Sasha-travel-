@@ -384,6 +384,7 @@ class CancelRoutes(unittest.TestCase):
         lines = "\n".join(j["read_back"]["lines"])
         self.assertIn("+34914454691 — the number on their website, venue.sasha.test", lines)
         self.assertIn("Llamo para cancelar la reserva del sábado a nombre de Warren", lines)   # a table needs no naming
+        self.assertIn("This cancels your table for 2 on 2026-10-10 at 21:00", lines)                 # not "your a table"
         call = self.calls.calls[j["call_id"]]
         self.assertTrue(call["brief"]["recap"].endswith("¿Confirmado?"))
         self.assertEqual(call["brief"]["cancels_trip_item_id"], item)

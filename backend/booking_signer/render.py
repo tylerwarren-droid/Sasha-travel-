@@ -175,7 +175,7 @@ def instructions(lang: C.Lang, o: Mapping[str, Any], first: str, check: str, own
     phone = (o["who"].get("contact") or {}).get("mobile_e164")
     if is_table(o):
         place, what = "a restaurant", "a table"
-        booking = f"{o['how_many']['count']} people, {on.isoformat()} at {at.strftime('%H:%M')} (venue's local time), under the name {name}. "
+        booking = f"{o['how_many']['count']} people, {on.isoformat()} at {at.strftime('%H:%M')} local time, under the name {name}. "
         never = "Never accept another date, time or party size. "
     else:
         place, what = "a venue", o["what"]["activity"]

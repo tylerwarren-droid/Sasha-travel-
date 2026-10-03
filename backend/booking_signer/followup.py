@@ -88,18 +88,25 @@ CONFIRM_ASK_SASHA = {
 }
 
 
+#: Sasha 118 · the shortest ask to SASHA's own number alone — a text to it lands on the booking by itself
+CONFIRM_ASK_SMS = {
+    "es": "¿Nos lo pueden confirmar por SMS al {sasha}?", "en": "Could you confirm it by text to {sasha}?",
+    "fr": "Pourriez-vous le confirmer par SMS au {sasha} ?", "it": "Può confermarlo con un SMS al {sasha}?",
+    "pt": "Pode confirmar por SMS para o {sasha}?", "de": "Können Sie es per SMS an {sasha} bestätigen?",
+}
+
+
 def confirm_ask(lang_code: str, me: str, mobile: Optional[str]) -> List[str]:
-    """The ask, as she says it, longest first: to SASHA'S OWN number (S-70, once live) and her email — what reaches her
-    lands on the booking by itself; then to the guest's mobile and her email; then her email alone."""
+    """The ask, as she says it, longest first — always to SASHA (Sasha 118: never the guest's mobile; what reaches her lands
+    on the booking by itself): her number and her email; her number alone; her email alone. `mobile` is no longer used."""
     from . import calls as C, spoken as SP
     c = SP.code(lang_code)
-    with_mobile, email_only = CONFIRM_ASK.get(c, CONFIRM_ASK["en"])
+    _with_mobile, email_only = CONFIRM_ASK.get(c, CONFIRM_ASK["en"])
     out = []
     sasha = C.sasha_number()
     if sasha:
         out.append(CONFIRM_ASK_SASHA.get(c, CONFIRM_ASK_SASHA["en"]).format(sasha=SP.digits(sasha, c), email=spoken(me, c)))
-    if mobile:
-        out.append(with_mobile.format(mobile=SP.digits(mobile, c), email=spoken(me, c)))
+        out.append(CONFIRM_ASK_SMS.get(c, CONFIRM_ASK_SMS["en"]).format(sasha=SP.digits(sasha, c)))
     return out + [email_only.format(email=spoken(me, c))]
 
 
@@ -119,13 +126,21 @@ def with_own_contact(built: dict, venue_name: str, read: Optional[Mapping[str, A
         lang = brief.get("language") or "en"
         mobile = brief.get("phone")
         task = brief["task"]
-        anchor = "Keep it short and polite."
+        anchor = "If no, later, or unsure:"
         # Sasha 90 (a) · the written confirmation asked for, the longest wording that fits Bland's 2,000 — else, as before,
         # her email for any change. If none fits she says none of it, and the read-back does not claim it.
-        asks = [(a, f"After the recap's yes, ask: \"{a}\" Note their answer. ") for a in confirm_ask(lang, me, mobile)]
+        # Sasha 118 · to SASHA only, said right after her own reference; for room, the venue's-reference question goes before
+        # the written ask does (a text to her number is what lands on the booking)
+        asks = [(a, f"Then ask: \"{a}\" Note their answer. ") for a in confirm_ask(lang, me, mobile)]
         asks.append((None, f"After the recap, give Sasha's email for any change: \"{spoken(me, lang)}\". Spell it if asked. "))
-        for ask, say in asks:
-            new_task = task.replace(anchor, say + anchor, 1) if anchor in task else task + " " + say
+        ask_ref = re.search(r'After the yes, ask: "[^"]*" and repeat it back\. ', task)
+        bases = [task] + ([task.replace(ask_ref[0], "", 1)] if ask_ref else [])
+        sms = [x for x in asks if x[0] and x[0] in confirm_ask(lang, me, mobile)[:-1] and C.sasha_number()]
+        rest = [x for x in asks if x not in sms]
+        # her number first, keeping the venue's-reference question if it can; then her email; then the change line
+        tried = [(a, s_, b) for b in bases for a, s_ in sms] + [(a, s_, b) for a, s_ in rest for b in bases]
+        for ask, say, base in tried:
+            new_task = base.replace(anchor, say + anchor, 1) if anchor in base else base + " " + say
             if len(new_task) <= 2000:
                 brief["task"] = new_task
                 brief["sasha_email"] = me
@@ -133,11 +148,10 @@ def with_own_contact(built: dict, venue_name: str, read: Optional[Mapping[str, A
                     brief["confirm_ask"] = ask
                     from . import calls as _C
                     sasha = _C.sasha_number()
-                    to_sasha = bool(sasha) and ask == confirm_ask(lang, me, mobile)[0]          # the wording naming her number
-                    to_mobile = bool(mobile) and not to_sasha and ask != confirm_ask(lang, me, mobile)[-1]
-                    extra.append("After their yes I'll ask them to confirm it in writing — "
-                                 + (f"by text to my own number ({sasha}) or " if to_sasha else f"by text to your mobile ({mobile}) or " if to_mobile else "")
-                                 + f"by email to me ({me}); what they send comes onto this booking.")
+                    kinds = confirm_ask(lang, me, mobile)
+                    by = (f"by text to my own number ({sasha}) or by email to me ({me})" if sasha and ask == kinds[0] else
+                          f"by text to my own number ({sasha})" if sasha and ask == kinds[1] else f"by email to me ({me})")
+                    extra.append(f"After their yes I'll ask them to confirm it in writing — {by}; what they send comes onto this booking.")
                 else:
                     extra.append(f"I'll give them my own email, {me}, for any change — their reply comes to me and onto this booking.")
                 break

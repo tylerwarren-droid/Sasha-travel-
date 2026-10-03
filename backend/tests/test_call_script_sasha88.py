@@ -37,6 +37,28 @@ class TheCallReplayed(unittest.TestCase):
             self.assertIn(C.barge_in(code), C.already_said(code, "x"))
         self.assertLessEqual(len(self.task), 2000)
 
+    def test_sasha118_the_recap_comes_first_okay_is_asked_again_and_the_venue_is_asked_to_text_sasha(self):
+        with mock.patch.dict(os.environ, {**WrittenConfirmation.ENV, "SASHA_PHONE_NUMBER": "+447915914215"}):
+            out = FU.with_own_contact(C.build_call(BOTAVARA, C.parse_call_particulars(ASKED), NOW), "Botavara", None, None)
+        t = out["brief"]["task"]
+        recap = 'On a yes, say at once: "Para confirmar: sábado 3 de octubre, a las nueve de la noche, dos personas, a nombre de Warren. ¿Correcto?"'
+        self.assertIn(recap, t)
+        self.assertLess(t.index(recap), t.index("¿Me da un número de reserva"))          # Yatri: the recap is never last in line
+        self.assertIn('to just "ok", ask once: "¿Es correcto, sí?"', t)
+        ask = out["brief"]["confirm_ask"]
+        self.assertIn("más cuatro cuatro, siete nueve uno, cinco nueve uno, cuatro dos, uno cinco", ask)   # SASHA's number
+        self.assertNotIn("seis cero ocho", ask)                                            # never the guest's
+        self.assertLess(t.index("Por nuestra parte, la referencia"), t.index(f'Then ask: "{ask}"'))
+        self.assertLessEqual(len(t), 2000)
+
+    def test_sasha118_a_long_request_still_fits_and_keeps_the_recap(self):
+        with mock.patch.dict(os.environ, {"SASHA_PHONE_NUMBER": "+447915914215"}):
+            t = C.task_text(C.LANGUAGES["es"], place="a spa", what="a relaxing massage " + "x" * 300, booking="b " * 120, never="n. ",
+                            opening="o " * 100, check="c", recap="Para confirmar: … ¿Correcto?", name="Warren", phone="+34608445715",
+                            own_ref="KHH42")
+        self.assertLessEqual(len(t), 2000)
+        self.assertIn("Para confirmar: … ¿Correcto?", t)
+
     def test_the_name_is_spelled_as_madrid_spells_it_not_letter_by_english_letter(self):
         self.assertIn('Name: Warren; if not caught, spell: "W de Washington, A de Alicante, R de Roma, R de Roma, '
                       'E de España, N de Navarra".', self.task)
@@ -50,8 +72,8 @@ class TheCallReplayed(unittest.TestCase):
     def test_both_references_are_asked_for_and_given_in_spanish(self):
         ref = self.built["brief"]["own_reference"]
         self.assertRegex(ref, SP.REF_RX)
-        self.assertIn('On a yes, ask: "¿Me da un número de reserva o localizador?" and repeat it back.', self.task)
-        self.assertIn(f'Then say: "{SP.own_reference_line(ref, "es")}"', self.task)
+        self.assertIn('After the yes, ask: "¿Me da un número de reserva o localizador?" and repeat it back.', self.task)
+        self.assertIn(f'Say: "{SP.own_reference_line(ref, "es")}"', self.task)
         self.assertTrue(SP.own_reference_line(ref, "es").startswith("Por nuestra parte, la referencia es K de Kilo, "))
         self.assertIn(f"give them ours, {ref}; both go on your receipt.", "\n".join(self.built["read_back_lines"]))
 
@@ -87,15 +109,16 @@ class WrittenConfirmation(unittest.TestCase):
         with mock.patch.dict(os.environ, self.ENV):
             return FU.with_own_contact(C.build_call(BOTAVARA, C.parse_call_particulars({**ASKED, **kw}), NOW), "Botavara", None, None)
 
-    def test_she_asks_in_spanish_with_the_guests_mobile_in_spanish_digits(self):
+    def test_sasha118_never_to_the_guests_mobile(self):
+        """Sasha 90 asked the venue to text the GUEST's mobile — a confirmation Sasha never sees. Sasha 118: only hers."""
         out = self.built()
-        ask = ("¿Nos podrían enviar una confirmación por SMS o por email? Al móvil del cliente, seis cero ocho, cuatro cuatro cinco, "
-               "siete uno cinco, o a sasha arroba booking punto kanoe punto ai.")
+        ask = "¿Nos podrían enviar una confirmación por email a sasha arroba booking punto kanoe punto ai?"
         self.assertEqual(out["brief"]["confirm_ask"], ask)
-        self.assertIn(f'After the recap\'s yes, ask: "{ask}"', out["brief"]["task"])
+        self.assertNotIn("608", out["brief"]["confirm_ask"])
+        self.assertIn(f'Then ask: "{ask}"', out["brief"]["task"])
         self.assertLessEqual(len(out["brief"]["task"]), 2000)
-        self.assertIn("After their yes I'll ask them to confirm it in writing — by text to your mobile (+34608445715) or by email to me "
-                      "(sasha@booking.kanoe.ai); what they send comes onto this booking.", out["read_back_lines"])
+        self.assertIn("After their yes I'll ask them to confirm it in writing — by email to me (sasha@booking.kanoe.ai); what they send "
+                      "comes onto this booking.", out["read_back_lines"])
 
     def test_a_long_name_still_gets_the_email_ask_within_blands_limit(self):
         out = self.built(name="Alexandra Montgomery-Fitzwilliam")
@@ -108,8 +131,10 @@ class SashasOwnNumber(unittest.TestCase):
     def test_the_ask_names_her_own_number_in_spanish_digits(self):
         with mock.patch.dict(os.environ, {**WrittenConfirmation.ENV, "SASHA_PHONE_NUMBER": "+447915914215"}):
             out = FU.with_own_contact(C.build_call(BOTAVARA, C.parse_call_particulars(ASKED), NOW), "Botavara", None, None)
-        self.assertEqual(out["brief"]["confirm_ask"], "¿Nos podrían enviar una confirmación por SMS a nuestro número, más cuatro cuatro, "
-                         "siete nueve uno, cinco nueve uno, cuatro dos, uno cinco, o por email a sasha arroba booking punto kanoe punto ai?")
+        # Sasha 118 · the short wording to her number, so the venue's-reference question still fits
+        self.assertEqual(out["brief"]["confirm_ask"], "¿Nos lo pueden confirmar por SMS al más cuatro cuatro, "
+                         "siete nueve uno, cinco nueve uno, cuatro dos, uno cinco?")
+        self.assertIn("¿Me da un número de reserva o localizador?", out["brief"]["task"])
         self.assertLessEqual(len(out["brief"]["task"]), 2000)
         self.assertIn("by text to my own number (+447915914215)", "\n".join(out["read_back_lines"]))
 

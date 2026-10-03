@@ -132,9 +132,17 @@ def recap_answer(transcripts: List[Mapping], recap: str, asked: Mapping) -> dict
     after = [str(t.get("text") or "").strip() for t in transcripts[idx + 1:] if t.get("user") == "user" and str(t.get("text") or "").strip()]
     if not after:
         return {"confirmed": False, "quotes": [], "why": "the venue said nothing after Sasha's recap"}
+    # Sasha 118 · an answer that is neither yes nor no ("Ok.", "Mm.") is not the answer: the next ones are read — Botavara,
+    # 1 Oct: "Ok." and then "Correcto." — up to three turns, and the first explicit yes or no decides. A "no" decides too.
     first = after[0]
-    f = _f(first)
-    if _NO.search(f) or not _YES.search(f):
+    for said in after[:3]:
+        f = _f(said)
+        if _NO.search(f):
+            return {"confirmed": False, "quotes": [said], "why": f"the venue's answer to the recap was not an explicit yes: \"{said}\""}
+        if _YES.search(f):
+            first = said
+            break
+    else:
         return {"confirmed": False, "quotes": [first], "why": f"the venue's answer to the recap was not an explicit yes: \"{first}\""}
     off = heard.mismatches(after, asked)
     if off:

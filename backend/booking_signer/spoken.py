@@ -58,6 +58,9 @@ ASK_REFERENCE = {
     "pt": "Pode dar-me um número de reserva?",
     "de": "Können Sie mir eine Reservierungsnummer geben?",
 }
+#: Sasha 118 · after the recap's "ok"/"vale" (Botavara, 1 Oct: "Ok." — then "Correcto." while she was already talking)
+RECAP_AGAIN = {"es": "¿Es correcto, sí?", "en": "Is that right, yes?", "fr": "C'est bien ça, oui ?", "it": "È corretto, sì?",
+               "pt": "Está correto, sim?", "de": "Ist das richtig, ja?"}
 _OWN_REFERENCE = {
     "es": "Por nuestra parte, la referencia es {ref}.",
     "en": "Our own reference for it is {ref}.",
@@ -135,4 +138,5 @@ def ask_reference(lang_code: str) -> str:
     return ASK_REFERENCE[code(lang_code)]
 
 
-__all__ = ["spell", "digits", "own_reference", "say_reference", "own_reference_line", "ask_reference", "REF_RX", "code"]
+__all__ = ["spell", "digits", "own_reference", "say_reference", "own_reference_line", "ask_reference", "REF_RX", "code",
+           "RECAP_AGAIN"]

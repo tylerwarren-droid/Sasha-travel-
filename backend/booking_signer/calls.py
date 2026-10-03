@@ -379,8 +379,8 @@ def barge_in(code: str) -> str:
 
 #: S-81 tier 0 · the guest pays the venue DIRECTLY: Sasha agrees to nothing, gives no card (never on a phone call — it
 #: would sit in a transcript), and asks how they take it. A money "yes" still reads as unclear (_MONEY).
-DEPOSIT_RULE = ("Agree to no deposit and give no card. If they need one: ask how they take it (a payment link to the "
-                "guest is best), say the guest pays them directly, get the amount, thank them and end. ")
+DEPOSIT_RULE = ("Agree to no deposit, give no card. If they need one: ask how they take it (a payment link is best), "
+                "say the guest pays them directly, get the amount, thank them, end. ")
 
 
 def already_said(code: str, opening: str) -> str:
@@ -392,6 +392,18 @@ def already_said(code: str, opening: str) -> str:
 
 def task_text(lang: Lang, *, place: str, what: str, booking: str, never: str, opening: str, check: str, recap: str,
               name: str, phone: Optional[str], own_ref: str) -> str:
+    """Sasha 118 · within Bland's 2,000 characters, always: when a request is long, the venue's-reference question goes
+    first, then the spelled name becomes the rule. (The written-confirmation ask is added after: followup.with_own_contact.)"""
+    for drop in ((), ("ask_ref",), ("ask_ref", "spell")):
+        t = _task_text(lang, place=place, what=what, booking=booking, never=never, opening=opening, check=check, recap=recap,
+                       name=name, phone=phone, own_ref=own_ref, drop=drop)
+        if len(t) <= TASK_MAX:
+            return t
+    return t
+
+
+def _task_text(lang: Lang, *, place: str, what: str, booking: str, never: str, opening: str, check: str, recap: str,
+               name: str, phone: Optional[str], own_ref: str, drop=()) -> str:
     """Bland's `task` for a BOOKING call — one text for both builders (calls.build_call, render.call_brief), so a table
     is still byte for byte the same brief. ⚠ Every rule the founder set is here, and the brief is hashed into the approval.
 
@@ -405,7 +417,7 @@ def task_text(lang: Lang, *, place: str, what: str, booking: str, never: str, op
                else "You have no phone number to give; if asked, the guest will confirm directly. ")
     spelled = SP.spell(surname, c)
     spell = f"Name: {surname}; if not caught, spell: \"{spelled}\". "
-    if len(spelled) > TASK_SPELL_MAX:   # a long name: the rule, not the letters — so the email still fits (followup.py)
+    if len(spelled) > TASK_SPELL_MAX or "spell" in drop:   # a long name: the rule, not the letters (followup.py)
         spell = f"Name: {surname}; if not caught, spell it letter by letter, each with a {lang.label} word for it. "
     return (
         f"You are Sasha, an AI concierge, booking {what} at {place} for a guest. "
@@ -418,15 +430,20 @@ def task_text(lang: Lang, *, place: str, what: str, booking: str, never: str, op
         f"{spell}"
         f"{contact}"
         "No other guest details. "
-        f"On a yes, ask: \"{SP.ask_reference(c)}\" and repeat it back. "
-        f"Then say: \"{SP.own_reference_line(own_ref, c)}\" "
-        f"End with this recap and wait: \"{recap}\" Only a clear yes confirms. "
-        "If anything differs, correct it once and repeat the recap; "
-        "if still different, say the fee sentence and end. "
+        # Sasha 118 · the recap comes AT ONCE after their yes (Yatri, 2 Oct: the reference question came first and the call
+        # ended before any recap), she waits in silence for the answer, and an "ok" alone is asked once more
+        f"On a yes, say at once: \"{recap}\" and wait silently for the answer. Only a clear yes confirms; "
+        f"to just \"ok\", ask once: \"{SP.RECAP_AGAIN[SP.code(c)]}\" "
+        "If anything differs, correct it once and repeat the recap; if still different, say the fee sentence and end. "
+        + ("" if "ask_ref" in drop else f"After the yes, ask: \"{SP.ask_reference(c)}\" and repeat it back. ")
+        + f"Say: \"{SP.own_reference_line(own_ref, c)}\" "
         "If no, later, or unsure: thank them and end. "
         f"If asked not to call again, say exactly \"{_ack(lang)}\" and end. "
         "Be brief. No voicemail."
     )
+
+
+TASK_MAX = 2000   # Bland's limit on `task`
 
 
 def own_ref_of(venue_key: str, on: date, at: time, party: int, name: str, today: date) -> str:
@@ -438,7 +455,7 @@ def own_ref_of(venue_key: str, on: date, at: time, party: int, name: str, today:
 def instructions(lang: Lang, p: CallParticulars, venue: CallVenue, opening: str, check: str, own_ref: str = "") -> str:
     """Bland's `task` for a table (task_text)."""
     return task_text(lang, place="a restaurant", what="a table",
-                     booking=f"{p.party} people, {p.on.isoformat()} at {p.at.strftime('%H:%M')} (venue's local time), under the name {p.name}. ",
+                     booking=f"{p.party} people, {p.on.isoformat()} at {p.at.strftime('%H:%M')} local time, under the name {p.name}. ",
                      never="Never accept another date, time or party size. ",
                      opening=opening, check=check, recap=recap_sentence(lang, p), name=p.name, phone=p.phone, own_ref=own_ref)
 

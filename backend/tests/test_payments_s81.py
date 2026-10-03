@@ -62,7 +62,7 @@ class Tier0(unittest.TestCase):
 
     def test_2_the_call_agrees_to_no_money_and_a_money_yes_stays_unclear(self):
         self.assertTrue(RS.CONSTRAINTS["no_card"])                              # Sasha never gives a card
-        for must in ("Agree to no deposit and give no card", "payment link", "the guest pays them directly"):
+        for must in ("Agree to no deposit, give no card", "payment link", "the guest pays them directly"):
             self.assertIn(must, C.DEPOSIT_RULE)
         for never in ("card number", "cvv", "expiry"):
             self.assertNotIn(never, C.DEPOSIT_RULE.lower())

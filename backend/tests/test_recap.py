@@ -96,6 +96,27 @@ class SpokenNumbers(unittest.TestCase):
         self.assertTrue(ans["confirmed"], ans["why"])
 
 
+class OkThenCorrecto(unittest.TestCase):
+    """Sasha 118 · Botavara, 1 Oct (a1c85ca6): recap → "Ok." → "Correcto." (said over her sign-off) was read as unclear."""
+    RECAP = "Para confirmar: sábado 3 de octubre, a las nueve de la noche, dos personas, a nombre de Warren. ¿Correcto?"
+    ASKED = {"date": "2026-10-03", "time": "21:00", "party": 2, "name": "Warren", "recap": RECAP}
+
+    def answer(self, *venue):
+        return RC.recap_answer([{"user": "assistant", "text": self.RECAP}] + [{"user": "user", "text": v} for v in venue], self.RECAP, self.ASKED)
+
+    def test_ok_then_correcto_is_a_yes(self):
+        a = self.answer("Ok.", "Correcto.")
+        self.assertTrue(a["confirmed"], a["why"])
+        self.assertEqual(a["quotes"], ["Correcto."])
+
+    def test_ok_then_no_is_not(self):
+        self.assertFalse(self.answer("Ok.", "No, a las diez.")["confirmed"])
+
+    def test_ok_alone_is_not(self):
+        self.assertFalse(self.answer("Ok.")["confirmed"])
+        self.assertFalse(self.answer("Ok.", "Mm.", "Ya.", "Sí.")["confirmed"])            # three turns, then it stops
+
+
 class Written(unittest.TestCase):
     ASKED = {"date": "2026-10-02", "time": "13:00", "party": 2, "name": "Tyler Warren"}
 

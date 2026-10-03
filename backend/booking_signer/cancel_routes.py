@@ -22,6 +22,7 @@ import os
 import re
 import uuid
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Mapping, Optional
 from urllib.parse import urlsplit
 
@@ -89,7 +90,8 @@ async def _booking(account: str, trip_item_id: str) -> Optional[dict]:
     read_row = await LR.LADDER_STORE.get_read(account, str(read_id)) if read_id else None
     read = await LR.PT.hydrate_read(LR.HTTP, read_row["read"], NOW()) if read_row else {}
     texts = [w.get("body_text") for w in (rows or {}).get("written") or []] + ([form.get("response_text")] if form else [])
-    return {"request": request, "read": read, "read_row": read_row, "texts": [t for t in texts if t],
+    return {"request": request, "read": read, "read_row": read_row, "texts": [t for t in texts if t], "form": form,
+            "item": item,
             "call": (rows or {}).get("call"), "venue": ((read.get("listing") or {}).get("name") or (read_row or {}).get("venue_name") or "the venue")}
 
 
@@ -130,6 +132,29 @@ _SMS = {"es": "Hola, soy Sasha, concierge de IA de Kanoe. Cancelo la reserva de 
         "en": "Hi, this is Sasha, an AI concierge with Kanoe. Cancelling {name}'s booking: {core}. Could you confirm by replying to this text? Thanks."}
 
 
+_MADE = {"es": {"call": "por teléfono", "form": "con el formulario de su web", "dias": ["lunes", "martes", "miércoles", "jueves",
+               "viernes", "sábado", "domingo"], "meses": ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+               "septiembre", "octubre", "noviembre", "diciembre"], "ref": "Referencia", "made": "La reserva se hizo {how} el {day}."},
+         "en": {"call": "by phone", "form": "with the form on your website", "ref": "Reference", "made": "It was made {how} on {day}."}}
+
+
+def identifies(b: Mapping[str, Any], lang: str) -> str:
+    """Sasha 119 · what lets the venue FIND the booking: its references (theirs, then Sasha's K-…), and how and when it was
+    made — "La reserva se hizo por teléfono el jueves 1 de octubre." — every one only when it is known."""
+    from . import sentences as SN
+    w = _MADE.get(lang, _MADE["en"])
+    item, call, form = b.get("item") or {}, b.get("call") or {}, b.get("form") or {}
+    refs = [r for r in (item.get("booking_reference"), (call.get("brief") or {}).get("own_reference")) if r]
+    out = [f"{w['ref']}: {' / '.join(refs)}."] if refs else []
+    how, at = ("call", call.get("created_at")) if call.get("created_at") else ("form", form.get("created_at")) if form.get("created_at") else (None, None)
+    if how and at is not None:
+        at = datetime.fromisoformat(at) if isinstance(at, str) else at
+        d = at.astimezone(ZoneInfo("Europe/Madrid")).date()
+        day = f"{w['dias'][d.weekday()]} {d.day} de {w['meses'][d.month - 1]}" if lang == "es" else SN.day_words(d.isoformat())
+        out.append(w["made"].format(how=w[how], day=day))
+    return " ".join(out)
+
+
 def _lang(read: Mapping[str, Any]) -> str:
     return "es" if (read or {}).get("country") in ("ES", "MX", "AR", "CO", "CL", "PE") else "en"
 
@@ -149,7 +174,8 @@ def words(b: Mapping[str, Any], p: Mapping[str, Any]) -> Dict[str, Any]:
                          "I'll open it once and keep their page word for word. It's cancelled only if their page says so."])
     elif p["route"] == "email":
         subj, body = _EMAIL[lang]
-        out["email"] = {"subject": subj.format(name=name), "text": body.format(name=name, core=core)}
+        ident = identifies(b, lang)
+        out["email"] = {"subject": subj.format(name=name), "text": body.format(name=name, core=core + (f".\n{ident[:-1]}" if ident else ""))}
         out["lines"] = [f"I'll email {venue} at {p['to']} (the address on {p['source_label']}), from my own address:",
                         f"\"{out['email']['subject']}\" — {out['email']['text'][:400]}",
                         "It's cancelled only once their reply says so; their reply comes onto this booking."]

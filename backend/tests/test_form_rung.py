@@ -370,6 +370,20 @@ class CancelRoutes(unittest.TestCase):
         w = CX.words({"request": {}, "venue": "Coque", "read": {}}, p)
         self.assertIn("you press it", w["lines"][1])
 
+    def test_sasha119_the_cancellation_email_says_how_to_find_the_booking(self):
+        """Hanakura and Botavara, 3 Oct: neither booking had a reference — the email says how and when it was made."""
+        from datetime import datetime, timezone
+        from booking_signer import cancel_routes as CX
+        b = {"request": reservation(who={"name": "Tyler Warren"}), "venue": "Hanakura", "read": {"country": "ES"},
+             "item": {"booking_reference": None}, "call": None, "form": {"created_at": datetime(2026, 10, 2, 9, 30, tzinfo=timezone.utc)}}
+        w = CX.words(b, {"route": "email", "to": "info@hanakura.es", "source_label": "their website, hanakura.es"})
+        self.assertEqual(w["email"]["subject"], "Cancelación de la reserva a nombre de Tyler Warren")
+        self.assertIn("La reserva se hizo con el formulario de su web el viernes 2 de octubre.", w["email"]["text"])
+        self.assertIn("¿Podrían confirmarnos la cancelación respondiendo a este correo?", w["email"]["text"])
+        b2 = {**b, "form": None, "item": {"booking_reference": "TF8842"},
+              "call": {"created_at": datetime(2026, 10, 1, 17, 56, tzinfo=timezone.utc), "brief": {"own_reference": "KHH42"}}}
+        self.assertEqual(CX.identifies(b2, "es"), "Referencia: TF8842 / KHH42. La reserva se hizo por teléfono el jueves 1 de octubre.")
+
     def test_their_words_decide(self):
         from booking_signer import cancel_routes as CX
         self.assertEqual(CX.cancel_reading("Hecho, la reserva queda cancelada. Un saludo")["result"], "cancelled")

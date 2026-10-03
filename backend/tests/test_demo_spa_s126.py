@@ -196,3 +196,26 @@ class Vietnam(unittest.TestCase):
         self.assertEqual((f["what"], f["where"], f["country"]), ("dinner", "Hanoi", "VN"))
         f, _ = GW.refine(pend, "Japanese for 2 in Hanoi, Vietnam tomorrow at 7pm", now)
         self.assertEqual(f["what"], "Japanese dinner")
+
+
+class SavedAsTheVaultSavesIt(Spa):
+    """Sasha 131 · the vault names a site by its ADDRESS: a login saved as demo-spa.kanoe.ai is found and its read-back
+    names that provider exactly (vault.use checks the line)."""
+
+    def save_login(self, password=None):
+        item = str(uuid.uuid4())
+        sealed = run(VC.seal(TG.ACCOUNT, item, "password", json.dumps({"username": DSP.USERNAME, "password": password or DSP.demo_password()}).encode()))
+        now = datetime.now(timezone.utc)
+        run(VC.STORE.create({"id": item, "account_id": TG.ACCOUNT, "provider": DSP.SITE, "label": "Kanoe Demo Spa membership",
+                             "kind": "password", **sealed, "special_category": False, "created_at": now, "updated_at": now}))
+        return item
+
+    def test_membership_one_yes_one_use_logged_then_revoked(self):
+        item = self.save_login()
+        self.say("Use my spa membership to book a massage on Tuesday at 18:00")
+        self.assertIn("• I'll sign in to demo-spa.kanoe.ai with your saved Kanoe Demo Spa membership.", "\n".join(self.bodies()))
+        self.assertIn("• I'll book a 60-minute relaxing massage there: Tuesday", "\n".join(self.bodies()))   # the line a comment once swallowed
+        _, buttons = GW.SENDER.contents[-1]
+        self.say("Yes, book it", payload=buttons[0][1])
+        self.assertRegex("\n".join(self.bodies()), r"✅ Booked: a 60-minute relaxing massage at Kanoe Demo Spa")
+        self.assertEqual([(u["action_kind"], u["status"]) for u in run(VC.STORE.uses_of(TG.ACCOUNT))], [("demo_spa_booking", "done")])

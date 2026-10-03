@@ -50,9 +50,9 @@ def status() -> None:
         elif name == "reminders":
             print(f"reminders: {'off' if (j.get('prefs') or {}).get('all_off') else 'on'} · starting point: {(j.get('place') or {}).get('label')}")
         elif name == "vault":
-            for site in ("Kanoe Demo Market", "Kanoe Demo Spa"):
-                have = [i for i in j.get("items", []) if i.get("provider") == site and not i.get("revoked_at")]
-                print(f"vault: {site} login saved: {bool(have)}")
+            for site, addr in (("Kanoe Demo Market", "demo-market.kanoe.ai"), ("Kanoe Demo Spa", "demo-spa.kanoe.ai")):
+                have = [i for i in j.get("items", []) if i.get("provider") in (site, addr) and not i.get("revoked_at")]
+                print(f"vault: {site} login saved ({addr}): {bool(have)}")
 
 
 def main(cmd: str) -> None:

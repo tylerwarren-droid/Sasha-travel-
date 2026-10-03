@@ -542,6 +542,23 @@ async def prepare(request: Request):
         filled2 = with_sasha_copy(filled2, step2, read.get("country"))
     else:
         filled = with_sasha_copy(filled, fields, read.get("country"))
+    # Sasha 131 (3) · a matching LOYALTY number from the vault: named in the read-back (the yes covers it), opened only at
+    # the send, written into their comments box — never on a call
+    loyalty = None
+    if body.get("loyalty_item_id"):
+        from . import loyalty as LY
+        from .vault import crypto as VC
+        item = await VC.STORE.get(account, str(body["loyalty_item_id"])) if VC.STORE else None
+        box = next((f for f in (step2 if wizard else fields) if f.get("role") == "free_text"), None)
+        if item and item.get("kind") == "identifier" and not item.get("revoked_at") and box is not None \
+                and LY.matches(str(item.get("provider") or ""), read["name"], o["what"]["category"]):
+            loyalty = {"item_id": str(item["id"]), "line": VC.access_line(item["provider"], item["label"], "identifier"), "box": box["name"]}
+            tgt = filled2 if wizard else filled
+            hit = next((f for f in tgt if f["name"] == box["name"]), None)
+            if hit:
+                hit["value"] = LY.comment_with(hit.get("value") or "", item["provider"])
+            else:
+                tgt.append({"name": box["name"], "value": LY.comment_with("", item["provider"])})
     action = effective_action(live, m)
     if action is None:
         return _refuse(422, "form_endpoint", "their form's real address isn't on their own site over https; Sasha won't send it")
@@ -549,12 +566,15 @@ async def prepare(request: Request):
     labels = {f["name"]: f.get("label") or f["name"] for f in fields + step2}
     roles = {f["name"]: f["role"] for f in fields + step2}
     shown = [{"name": f["name"], "label": labels.get(f["name"], f["name"]), "role": roles.get(f["name"]), "value": f["value"],
-              **({"step": 1} if wizard else {})} for f in filled]
-    shown += [{"name": f["name"], "label": labels.get(f["name"], f["name"]), "role": roles.get(f["name"]), "value": f["value"], "step": 2}
-              for f in filled2]
+              **({"step": 1} if wizard else {}), **({"loyalty_item": loyalty["item_id"]} if loyalty and f["name"] == loyalty["box"] else {})}
+             for f in filled]
+    shown += [{"name": f["name"], "label": labels.get(f["name"], f["name"]), "role": roles.get(f["name"]), "value": f["value"], "step": 2,
+               **({"loyalty_item": loyalty["item_id"]} if loyalty and f["name"] == loyalty["box"] else {})} for f in filled2]
     hidden = [f["name"] for f in fields if f["role"] == "hidden"]
     lines = (read_back_wizard(live["page_url"], live["action"], shown, hidden, read["name"]) if wizard
              else read_back(live["page_url"], live["action"], shown, hidden, read["name"]))
+    if loyalty:
+        lines = lines[:1] + [loyalty["line"]] + lines[1:]
     now = NOW()
     form_id = str(uuid.uuid4())
     rec = {"form_id": form_id, "account_id": account, "read_id": str(row["read_id"]), "host": urlsplit(live["page_url"]).hostname,
@@ -633,6 +653,20 @@ async def send(form_id: str, request: Request):
         return await not_sent("their form changed since you approved it" + (f" (gone: {', '.join(missing)})" if missing else "")
                               + (f" (new required: {', '.join(unmapped)})" if unmapped else ""))
     wizard = any(x.get("step") == 2 for x in f["fields"])
+    number = None
+    lf = next((x for x in f["fields"] if x.get("loyalty_item")), None)
+    if lf:   # Sasha 131 (3) · the loyalty number, opened ONCE under this yes, logged; written in, never shown back
+        from . import loyalty as LY
+        from .vault import crypto as VC
+        try:
+            async with VC.use(account, lf["loyalty_item"], approval={"read_back_sha256": f["read_back_sha256"], "at": now.isoformat()},
+                              approved_lines=list(f["read_back_lines"]), action_kind="loyalty_number", action_ref=form_id) as secret:
+                number = (secret.get("value") or "").strip() or None
+        except VC.UseRefused as e:
+            return await not_sent(f"your loyalty number couldn't be used ({e})")
+        for x in f["fields"]:
+            if x is lf:
+                x["value"] = x["value"].replace(LY.TOKEN, number or "")
     data = {x["name"]: x.get("value", "") for x in fields if x["role"] == "hidden"}
     data.update({x["name"]: x["value"] for x in f["fields"] if x.get("step", 1) == 1})
     try:
@@ -671,6 +705,8 @@ async def send(form_id: str, request: Request):
             await STORE.finish(form_id, {"status": "failed", "not_sent_why": f"step 2: {type(e).__name__}: {e}"[:300]}, "unclear", "unclear", now)
             return {"status": "failed", "say": "I sent step 2, but their site didn't answer clearly — it may or may not have arrived. Check with them."}
     text = " ".join(" ".join(_LiveForm_text(r.text or "")).split())[:RESPONSE_CHARS]
+    if number:   # their page may echo the comments: the number is kept out of the stored words
+        text = text.replace(number, "…" + number[-4:])
     reading = FU.reply_reading(text, (await _request_of(f)) or {}) if text else {"result": "none", "why": "their answer page had no text"}
     ref_m = _REF.search(text)
     trip, attempt = {"confirmed": ("confirmed", "confirmed"), "proposed": ("proposed", "unclear"),

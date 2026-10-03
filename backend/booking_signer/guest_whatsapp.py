@@ -825,7 +825,7 @@ async def _combo_final(ctx: dict) -> None:
         out.text("I don't have a saved Kanoe Demo Spa login in your vault. Add it in You → My accounts. Nothing was sent.")
         return
     spa_at = f"{c['day']}T{c['times']['spa']}"
-    spa_lines = DSP.read_back(item["label"], spa_at)
+    spa_lines = DSP.read_back(item["label"], spa_at, item["provider"])
     spa_sha = hashlib.sha256("\n".join(spa_lines).encode()).hexdigest()
     c.update({"stage": "confirm", "spa": {"id": str(item["id"]), "lines": spa_lines, "sha": spa_sha, "at": spa_at}})
     out.text("Exactly what I'll do — both, on one yes:\n1) " + r["venue"] + ":\n" + "\n".join("• " + _BULLET.sub("", ln) for ln in r["lines"])
@@ -899,7 +899,7 @@ async def _spa_when(ctx: dict, pend: dict, body: str) -> bool:
 
 async def _spa_ask(ctx: dict, item: dict, at: str) -> None:
     from . import demo_spa as DSP
-    lines = DSP.read_back(item["label"], at)
+    lines = DSP.read_back(item["label"], at, item["provider"])
     sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
     ctx["out"].text("Exactly what I'll do:\n" + "\n".join("• " + ln for ln in lines))
     rid = str(item["id"])
@@ -939,7 +939,7 @@ async def _reorder(ctx: dict) -> None:
     if item is None:
         out.text(f"I don't have a saved login for {DS.PROVIDER} in your vault. Add it in You → My accounts, then ask me again.")
         return
-    lines = DS.read_back(item["label"])
+    lines = DS.read_back(item["label"], item["provider"])
     sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
     out.text("Exactly what I'll do:\n" + "\n".join("• " + ln for ln in lines))
     rid = str(item["id"])
@@ -1557,7 +1557,10 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
             from . import guest_receipt as GR, ladder_routes as LR
             email = await GR.address_of(ctx["account"]) if LR.LADDER_STORE is not None else None
             res_form = {**reservation, "who": {**reservation["who"], "contact": {**reservation["who"]["contact"], **({"email": email} if email else {})}}}
-            status, j = await api(ctx["account"], "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": res_form})
+            from . import loyalty as LY   # Sasha 131 (3) · a matching loyalty number from the vault, under this yes
+            ly = await LY.find_for(ctx["account"], rd["venue"], (d.get("what") or {}).get("category"))
+            status, j = await api(ctx["account"], "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": res_form,
+                                                                                 **({"loyalty_item_id": str(ly["id"])} if ly else {})})
             if status == 200:
                 if combo:   # Sasha 126 · held for the ONE combined yes
                     st["combo"]["restaurant"] = {"id": j["form_id"], "sha": j["read_back"]["sha256"], "lines": j["read_back"]["lines"],

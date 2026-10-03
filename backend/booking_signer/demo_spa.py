@@ -35,6 +35,7 @@ log = logging.getLogger("booking_signer.demo_spa")
 router = APIRouter(prefix="/demo-spa", tags=["demo-spa"])
 ops = APIRouter(prefix="/ops", tags=["booking-ops"])
 PROVIDER = "Kanoe Demo Spa"
+SITE = "demo-spa.kanoe.ai"   # Sasha 131 · the vault names a site by its address: this is what the guest saves
 USERNAME = "member@kanoe-demo.spa"
 TREATMENT = ("relaxing-60", "Masaje relajante, 60 min", "a 60-minute relaxing massage")
 SESSION_S = 30 * 60
@@ -117,7 +118,7 @@ async def demo_login_for_founder(request: Request):
     if no:
         return no
     return {"provider": PROVIDER, "username": USERNAME, "password": demo_password(), "portal": f"{_base()}/api/booking/demo-spa",
-            "say": "Save it in You → My accounts (the vault): site 'Kanoe Demo Spa', kind 'Password'."}
+            "site": SITE, "say": f"Save it in You → My accounts (the vault): site '{SITE}', kind 'Password'."}
 
 
 def _base() -> str:
@@ -131,17 +132,18 @@ INTENT = re.compile(r"\b(spa|massage|masaje)\b.*\b(membership|member|socio|membr
                     r"|\bkanoe demo spa\b", re.I)
 
 
-def read_back(label: str, at: str) -> List[str]:
+def read_back(label: str, at: str, provider: str = PROVIDER) -> List[str]:
     from .vault.crypto import access_line
     from . import sentences as SN
-    return [access_line(PROVIDER, label), f"I'll book {TREATMENT[2]} there: {SN.day_words(at[:10])} at {at[11:16]}.",
+    # the item's OWN provider: vault.use checks this exact line
+    return [access_line(provider, label), f"I'll book {TREATMENT[2]} there: {SN.day_words(at[:10])} at {at[11:16]}.",
             "It's Kanoe's demo spa: nothing is paid, and it's not a real appointment. I book once."]
 
 
 async def find_item(account: str) -> Optional[dict]:
     from .vault import crypto as VC
     rows = await VC.STORE.list(account)
-    return next((r for r in rows if not r.get("revoked_at") and str(r.get("provider") or "").strip().lower() == PROVIDER.lower()
+    return next((r for r in rows if not r.get("revoked_at") and str(r.get("provider") or "").strip().lower() in (PROVIDER.lower(), SITE)
                  and r.get("kind") in ("password", "app_password")), None)
 
 

@@ -13,7 +13,7 @@ import { GatedButton } from './GatedButton'
 export function DemoControls() {
   const [words, setWords] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [login, setLogin] = useState<{ username: string; password: string; site: string } | null>(null)
+  const [login, setLogin] = useState<{ username: string; password: string; site: string; name: string } | null>(null)
   async function run(path: string, label: string) {
     setBusy(true); setWords(`${label}…`)
     try {
@@ -25,7 +25,8 @@ export function DemoControls() {
   async function showLogin(path: string, site: string) {
     const r = await fetch(bookingUrl(path), { headers: bookingHeaders() })
     const j = await r.json().catch(() => ({}))
-    if (r.ok) setLogin({ ...(j as { username: string; password: string }), site }); else setWords(`${site} login — ${refusal(j, r.status)}.`)
+    // Sasha 131 · the vault takes a site ADDRESS (demo-spa.kanoe.ai), which the server names; the display name stays
+    if (r.ok) setLogin({ ...(j as { username: string; password: string; site: string }), name: site }); else setWords(`${site} login — ${refusal(j, r.status)}.`)
   }
   const needs = [busy && 'the last step to finish']
   return (
@@ -39,7 +40,7 @@ export function DemoControls() {
         <GatedButton label="Spa · Demo spa membership" onClick={() => { showLogin('/api/booking/ops/demo-spa-login', 'Kanoe Demo Spa') }} needs={needs} />
       </div>
       {words && <p>{words}</p>}
-      {login && <p className="text-xs">{login.site} (ours — a demo, nothing real): <strong>{login.username}</strong> / <code>{login.password}</code> — save it in
+      {login && <p className="text-xs">{login.name} (ours — a demo, nothing real): <strong>{login.username}</strong> / <code>{login.password}</code> — save it in
         {' '}<a className="underline" href="/vault">My accounts</a> as site &ldquo;{login.site}&rdquo;, kind &ldquo;Password&rdquo;.</p>}
     </section>
   )

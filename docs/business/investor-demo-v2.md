@@ -16,7 +16,7 @@ The storyline for Wednesday. It sits **before** beats A–G (§1), which stay as
 
 - **You → My accounts:** save the **Kanoe Demo Spa** membership.
   - Get it from the ops page (*Spa · Demo spa membership*) or `demo.py spa-login`.
-  - Site "Kanoe Demo Spa", kind "Password".
+  - Site **demo-spa.kanoe.ai**, kind "Password". (The vault takes a site's address; "Kanoe Demo Spa" is refused.)
   - `demo.py status` now reports both saved logins.
 - **Changed from the brief:** the storyline said "use my **Calma** membership". Calma Madrid is a real spa, and a portal
   in its name would impersonate it. The member portal is therefore **Kanoe Demo Spa**: ours, labelled as ours, it charges
@@ -133,7 +133,7 @@ with them on 5 Oct, which is a natural moment to ask in person.
    guesses a travel time.
 4. **You → My accounts:** save the Kanoe Demo Market login.
    - Get it from the ops page (`/booking-helper` → *Investor demo* → *F · Demo shop login*).
-   - Site "Kanoe Demo Market", kind "Password".
+   - Site **demo-market.kanoe.ai**, kind "Password". (The vault takes a site's address.)
 5. **The friendly venue (§2):** written consent in hand. Then switch calls on (`SASHA_CALLS_ENABLED=1` on Railway) for
    the demo window only.
 6. **Reset and check:** on the ops page press *Reset the demo*, or run

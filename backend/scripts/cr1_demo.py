@@ -1,6 +1,6 @@
 """CR 1 · the demo's controls: rehearse it end to end, and reset it in one command.
 
-    railway run python -m scripts.cr1_demo rehearse [--n 1]   # both parts, as the DEMO account; WhatsApp CAPTURED
+    railway run python -m scripts.cr1_demo rehearse [--n 1] [--account founder]   # default: the DEMO account; WhatsApp CAPTURED
     railway run python -m scripts.cr1_demo reset [campus|relocation|all] [--account founder|demo] [--vault]
     railway run python -m scripts.cr1_demo health
     railway run python -m scripts.cr1_demo showcase          # two PUBLIC example pages, fictional people, kept to 31 Dec
@@ -63,7 +63,15 @@ class Capture:
         return "sent"
 
 
-async def _setup():
+def _account(name: str) -> str:
+    from booking_signer.identity import founder_account
+    a = DEMO if name == "demo" else founder_account()
+    if name == "founder" and a == DEMO:
+        raise SystemExit("⛔ FOUNDER_ACCOUNT_ID isn't set on Railway: the founder still acts as the demo account. Use --account demo.")
+    return a
+
+
+async def _setup(account: str):
     from booking_signer import guest_whatsapp as GW, routes as BR
     from products import store as ST
     from products.campus import slate as SL
@@ -81,7 +89,7 @@ async def _setup():
     DR.FETCH = specimen
     key = GW.wa_key(NUMBER)
     now = datetime.now(timezone.utc)
-    await GW.STORE.link({"account_id": DEMO, "wa_id_sha256": key, "number_e164": NUMBER, "linked_at": now, "consent_at": now,
+    await GW.STORE.link({"account_id": account, "wa_id_sha256": key, "number_e164": NUMBER, "linked_at": now, "consent_at": now,
                          "consent_wording_version": "v3", "consent_text_sha256": GW.consent("v3")["sha256"]})
     return GW, key
 
@@ -113,11 +121,12 @@ def _page(path: str) -> tuple:
         return time.monotonic() - t, getattr(e, "code", 0), b""
 
 
-async def rehearse(n: int) -> pathlib.Path:
-    GW, key = await _setup()
+async def rehearse(n: int, account_name: str = "demo") -> pathlib.Path:
+    account = _account(account_name)
+    GW, key = await _setup(account)
     from booking_signer.vault import crypto as VC
     from products.campus.turn import is_profile
-    has_vault = any(is_profile(r) for r in await VC.STORE.list(DEMO))
+    has_vault = any(is_profile(r) for r in await VC.STORE.list(account))
     rows, t0 = [], time.monotonic()
 
     async def beat(label, body="", payload="", media=False, expect=None):
@@ -178,7 +187,8 @@ async def rehearse(n: int) -> pathlib.Path:
     f = OUT / f"rehearsal-{n}-{stamp}.md"
     room = sum(r["room_s"] for r in rows)
     lines = [f"# CR 1 rehearsal {n} — {stamp} UTC", "",
-             f"Real code, real schools, real vault, real model (published specimen), real Postgres, as the DEMO account. "
+             f"Real code, real schools, real vault, real model (published specimen), real Postgres, as the {account_name.upper()} "
+             f"account ({account[:8]}…). "
              f"WhatsApp captured (nothing sent). Vault item present at start: {has_vault}.", "",
              f"**Beats: {sum(r['ok'] for r in rows)}/{len(rows)} as expected · the room waits {room:.0f} s in all "
              f"(compute + {SANDBOX_GAP} s per sandbox message) · script wall time {total:.0f} s.**", "",
@@ -196,7 +206,7 @@ async def rehearse(n: int) -> pathlib.Path:
 async def reset(what: str, account_name: str, vault: bool) -> None:
     from booking_signer import routes as BR
     from booking_signer.identity import founder_account
-    account = DEMO if account_name == "demo" else founder_account()
+    account = DEMO if account_name == "demo" else founder_account()   # reset may run on the fallback: it says so
     acct = uuid.UUID(account)
     products = ["campus", "relocation"] if what == "all" else [what]
 
@@ -298,7 +308,7 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=1)
     a = ap.parse_args()
     if a.cmd == "rehearse":
-        asyncio.run(rehearse(a.n))
+        asyncio.run(rehearse(a.n, a.account if "--account" in sys.argv else "demo"))
     elif a.cmd == "showcase":
         asyncio.run(showcase())
     elif a.cmd == "reset":

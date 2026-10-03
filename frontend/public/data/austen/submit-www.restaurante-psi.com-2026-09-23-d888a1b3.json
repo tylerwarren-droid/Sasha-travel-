@@ -1,0 +1,180 @@
+{
+ "intent": {
+  "id": "d888a1b3-c713-4cb3-8b9e-11b4f67c72b9",
+  "target": {
+   "kind": "restaurant",
+   "name": "Restaurante Psi, Lisbon",
+   "identified_by": {
+    "kind": "fetched_page",
+    "page_url": "https://www.restaurante-psi.com/reservas/",
+    "page_sha256": "90ad300635ebf43b24f8ee786d15f1870e01ad4b5fc29b4b3a4de83c8ef5759b",
+    "at": "2026-09-23T14:36:33.665Z"
+   },
+   "address": "https://www.restaurante-psi.com/reservas/"
+  },
+  "channel": "web_form",
+  "ask": "a table for 2 at Restaurante Psi on 2026-09-25 at 20:00 (Europe/Lisbon), under the name Tyler Warren",
+  "requested_by": "the founder",
+  "authorised_by": {
+   "who": "the founder",
+   "ref": "P803ka — chat instruction, 23 September 2026",
+   "at": "2026-09-23T14:36:30.665Z"
+  },
+  "irreversible": false,
+  "spend_cap": null,
+  "recorded_at": "2026-09-23T14:36:32.665Z",
+  "retry_of": null
+ },
+ "approval": {
+  "filled_values_sha256": "d99c8ffcce12e34689ce853630b4bd1b9ebd0553241a9cc4ceb8b97c36757a37",
+  "mapping_sha256": "8c5a43e75e55cdc5009a191edbd61574991c735edd292612fad2e19b99d932c4",
+  "form_key": "https://www.restaurante-psi.com/reservas/#0",
+  "approved_by": "the founder",
+  "approved_at": "2026-09-23T14:36:34.665Z",
+  "capture_sha256": "dfc6ca87b86144ea020c6208d5cb323ddf4dd06e59639fbd13618aeb6f082513",
+  "intent_id": "d888a1b3-c713-4cb3-8b9e-11b4f67c72b9",
+  "note": "P803ka — the founder supplied every value in chat and instructed the act"
+ },
+ "capture": {
+  "form_key": "https://www.restaurante-psi.com/reservas/#0",
+  "captured_at": "2026-09-23T14:36:33.665Z",
+  "will_send": [
+   {
+    "label": "Data",
+    "selector": "[name=\"rtb-date\"]",
+    "value_sha256": "9084799d18d3bcf690635350c805b2eae8371bdef13a6dc1aab38daf6ae44043",
+    "provenance": "the founder's own instruction, chat, 23 September 2026"
+   },
+   {
+    "label": "Hora",
+    "selector": "[name=\"rtb-time\"]",
+    "value_sha256": "4190a74434240bdac3bb5a1c2c331653e46158abd9c0b59f84ab060b16606ea6",
+    "provenance": "the founder's own instruction, chat, 23 September 2026"
+   },
+   {
+    "label": "Pessoas",
+    "selector": "[name=\"rtb-party\"]",
+    "value_sha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+    "provenance": "the founder's own instruction, chat, 23 September 2026"
+   },
+   {
+    "label": "Nome",
+    "selector": "[name=\"rtb-name\"]",
+    "value_sha256": "2aa8d9ffc64214556f577aa91b35261df1c50532efa207ecb36f009fd8f52d47",
+    "provenance": "the founder's own name, as he gave it"
+   },
+   {
+    "label": "Email",
+    "selector": "[name=\"rtb-email\"]",
+    "value_sha256": "5217f5b7bdf3cf1b5d27c8d6869fd53faa10a6ab2e846e02dc66be19464f159d",
+    "provenance": "the founder's own email, as he gave it"
+   },
+   {
+    "label": "Telefone",
+    "selector": "[name=\"rtb-phone\"]",
+    "value_sha256": "9c4994ae4ad24644f2dfb89adbf58f48567b8489e69f854a8202ad67f5e7694e",
+    "provenance": "the founder's own telephone, as he gave it"
+   }
+  ],
+  "will_not_send": [
+   {
+    "label": "Message",
+    "selector": "[name=\"rtb-message\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   }
+  ],
+  "tokens_read_fresh": [],
+  "mapping_sha256": "8c5a43e75e55cdc5009a191edbd61574991c735edd292612fad2e19b99d932c4",
+  "filled_values_sha256": "d99c8ffcce12e34689ce853630b4bd1b9ebd0553241a9cc4ceb8b97c36757a37",
+  "live_hash": "183102f024ca4db08ee3253dd98f864fc79e6c07d1a2ee22b9eaa551397e0176",
+  "submitted": false
+ },
+ "submission": {
+  "method": "POST",
+  "action": "https://www.restaurante-psi.com/reservas/",
+  "filled_values_sha256": "d99c8ffcce12e34689ce853630b4bd1b9ebd0553241a9cc4ceb8b97c36757a37",
+  "payload_sha256": "78496345bc197aeb6ae25e49e51782c5e3e3f7a47008c5dc2569db7f18245623",
+  "body": [
+   {
+    "name": "action",
+    "value_sha256": "9cf52fedbd3beda7a3222ed214b28b2bd408ba3cf69567266ae510e01434b060"
+   },
+   {
+    "name": "rtb-date",
+    "value_sha256": "9084799d18d3bcf690635350c805b2eae8371bdef13a6dc1aab38daf6ae44043"
+   },
+   {
+    "name": "rtb-time",
+    "value_sha256": "4190a74434240bdac3bb5a1c2c331653e46158abd9c0b59f84ab060b16606ea6"
+   },
+   {
+    "name": "rtb-party",
+    "value_sha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"
+   },
+   {
+    "name": "rtb-name",
+    "value_sha256": "2aa8d9ffc64214556f577aa91b35261df1c50532efa207ecb36f009fd8f52d47"
+   },
+   {
+    "name": "rtb-email",
+    "value_sha256": "5217f5b7bdf3cf1b5d27c8d6869fd53faa10a6ab2e846e02dc66be19464f159d"
+   },
+   {
+    "name": "rtb-phone",
+    "value_sha256": "9c4994ae4ad24644f2dfb89adbf58f48567b8489e69f854a8202ad67f5e7694e"
+   }
+  ]
+ },
+ "page_after": {
+  "http_status": 200,
+  "bytes": 35884,
+  "final_url": "https://www.restaurante-psi.com/reservas/",
+  "reading": {
+   "kind": "unrecognised",
+   "why": "the page-after matches neither the accepted wording (\"pending\") nor any refusal the spec declares, and it is THE SAME PAGE we submitted from. ⚠⚠⚠ HTTP 200 and 35,884 bytes establish that the server answered, and nothing more. This is UNREACHABLE or FAILED — never a weaker CONFIRMED.",
+   "saw": {
+    "status": 200,
+    "bytes": 35884,
+    "same_page": true
+   }
+  }
+ },
+ "outcome": {
+  "id": "6aecab5d-8dfc-4a37-89dd-18a8641a086c",
+  "intent_id": "d888a1b3-c713-4cb3-8b9e-11b4f67c72b9",
+  "kind": "unreachable",
+  "target": {
+   "kind": "restaurant",
+   "name": "Restaurante Psi, Lisbon",
+   "identified_by": {
+    "kind": "fetched_page",
+    "page_url": "https://www.restaurante-psi.com/reservas/",
+    "page_sha256": "90ad300635ebf43b24f8ee786d15f1870e01ad4b5fc29b4b3a4de83c8ef5759b",
+    "at": "2026-09-23T14:36:33.665Z"
+   },
+   "address": "https://www.restaurante-psi.com/reservas/"
+  },
+  "channel": "web_form",
+  "acted_at": "2026-09-23T14:36:33.667Z",
+  "target_said": null,
+  "reference": null,
+  "next_action": "the page-after could not be read against the spec. ⚠ Nothing was established — not a refusal and not an acceptance. Read the page by hand before any retry, and a retry is a NEW intent.",
+  "our_error": null,
+  "status": "valid",
+  "void_reasons": []
+ },
+ "our_error": null,
+ "appended": [
+  {
+   "at": "2026-09-23",
+   "by": "P803kb",
+   "what_is_now_known": "The accepted wording of this page is established: \"Thanks, your booking request is waiting to be confirmed. Updates will be sent to the email address you provided.\" — read by the founder in his own browser after a booking he made himself, 23 September 2026. It renders in ENGLISH on a Portuguese page.",
+   "does_it_change_this_outcome": "NO.",
+   "why_not": "⚠⚠⚠ The page-after body of THIS act was not kept (P803ka-1), so there is nothing to re-judge against. It is LIKELY that this submission succeeded and returned this same page carrying the thanks line — the response was 35,884 B against 41,127 B served, and the established wording is short enough to account for a smaller page. But likely is not evidence. An outcome corrected by inference rather than by evidence is exactly what this estate refuses, and the correction would be indistinguishable from a wish.",
+   "so": "UNREACHABLE STANDS. This entry is APPENDED and the outcome above is untouched — history, never a rewrite.",
+   "what_would_settle_it": "✅ An email from Restaurante Psi to tyler@kanoe.ai. The plugin emails the customer on submission, so an email is evidence from OUTSIDE our own system that the booking exists. If one arrived, an outcome of REQUESTED may be APPENDED to this intent on that basis, citing the email rather than this reasoning.",
+   "what_would_not_settle_it": "⛔ A second submission. It would produce a readable page-after — the runner now keeps the body — but it would also produce a SECOND TABLE, and it would say nothing about whether THIS act landed."
+  }
+ ]
+}

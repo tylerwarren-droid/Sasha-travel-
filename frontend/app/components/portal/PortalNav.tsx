@@ -8,7 +8,7 @@ import LogoMark from './LogoMark'
 // The portal's six sections are real routes now, so the nav is ordinary navigation and the
 // active tab is derived from the URL instead of the old showPanel() class juggling.
 export const PORTAL_TABS = [
-  { href: '/', label: 'Teaser' },
+  { href: '/archive', label: 'Teaser' },   // Sasha 123 · the Teaser moved to /archive; "/" is the new site
   { href: '/deck', label: 'Investor Deck' },
   // NOTE: /onboarding is already taken by the B2B onboarding wizard app, so the portal's
   // walkthrough of that flow lives at /walkthrough.

@@ -1,0 +1,36 @@
+/* Sasha 123 · the new project.kanoe.ai: a light, readable surface with the portal's fonts (kanoe-site-scope.md §9.3) */
+.page { min-height: 100vh; width: 100%; background: #f7f6f2; color: #14202b; font-family: var(--site-body), system-ui, sans-serif; }
+.header { position: sticky; top: 0; z-index: 50; background: #ffffffee; backdrop-filter: blur(8px); border-bottom: 1px solid #e6e2d8; }
+.headerInner { max-width: 1080px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.logo { font-family: var(--site-head), serif; font-size: 22px; color: #0d2b3e; text-decoration: none; margin-right: 8px; }
+.nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab { padding: 7px 12px; border-radius: 6px; font-size: 14px; color: #3c4b57; text-decoration: none; }
+.tab:hover { background: #eef3f2; }
+.active { background: #0d2b3e; color: #fff; }
+.active:hover { background: #0d2b3e; }
+.main { max-width: 860px; margin: 0 auto; padding: 48px 16px 64px; }
+.headline { font-family: var(--site-head), serif; font-size: 40px; line-height: 1.15; color: #0d2b3e; margin: 0 0 28px; }
+@media (max-width: 640px) { .headline { font-size: 30px; } }
+.lines { list-style: none; padding: 0; margin: 0 0 24px; display: grid; gap: 14px; }
+.line { display: flex; gap: 12px; align-items: flex-start; font-size: 17px; line-height: 1.5; }
+.mark { flex: none; width: 26px; text-align: center; font-size: 18px; line-height: 1.4; cursor: help; }
+.status { border-left: 4px solid #c99a2e; background: #fbf5e6; padding: 12px 14px; margin: 0 0 28px; font-size: 15px; line-height: 1.5; color: #3d2f00; }
+.statusLabel { font-weight: 600; margin-right: 6px; }
+.demo { border: 1px solid #dcd7cb; border-radius: 10px; background: #fff; padding: 16px; }
+.chip { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 4px; margin-right: 8px; vertical-align: 1px; }
+.chip_live { background: #dff3e8; color: #135c35; }
+.chip_clickthrough { background: #e4ecfb; color: #1d3f86; }
+.chip_concept { background: #eee9f7; color: #4b3381; }
+.demoSentence { font-size: 15px; }
+.demoLinks { margin: 12px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 15px; }
+.demoLinks a { color: #0d5c7a; }
+.legend { font-size: 13px; color: #5c6a74; margin: 18px 0 0; }
+.acts { display: grid; gap: 14px; margin-top: 14px; }
+.act { border: 1px solid #e6e2d8; border-radius: 8px; padding: 12px 14px; background: #fcfbf8; font-size: 14px; line-height: 1.5; }
+.act dt { font-weight: 600; color: #3c4b57; }
+.act dd { margin: 0 0 6px; }
+.outcome_confirmed { color: #135c35; font-weight: 700; }
+.outcome_other { color: #8a4b00; font-weight: 700; }
+.footer { border-top: 1px solid #e6e2d8; background: #fff; }
+.footerInner { max-width: 1080px; margin: 0 auto; padding: 18px 16px; font-size: 13px; color: #5c6a74; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.footerInner a { color: #3c4b57; }

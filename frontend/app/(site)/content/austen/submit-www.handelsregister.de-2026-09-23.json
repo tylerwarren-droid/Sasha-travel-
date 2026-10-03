@@ -1,0 +1,339 @@
+{
+ "intent": {
+  "id": "ddc21b07-56b6-4a8e-af38-7b158451f4dc",
+  "target": {
+   "kind": "register",
+   "name": "Handelsregister — advanced search",
+   "identified_by": {
+    "kind": "fetched_page",
+    "page_url": "https://www.handelsregister.de/rp_web/erweitertesuche/welcome.xhtml",
+    "page_sha256": "2c2aab7cfae313ef1a2c05e97e930a8f4ca307b668a3cf8e6bd26175ba6c326c",
+    "at": "2026-09-23T13:48:04.507Z"
+   },
+   "address": "https://www.handelsregister.de/rp_web/erweitertesuche/welcome.xhtml"
+  },
+  "channel": "web_form",
+  "ask": "search the Handelsregister for \"ZZZQQQ NICHTEXISTIERENDE GESELLSCHAFT XYZ\" under § 9 HGB",
+  "requested_by": "the founder",
+  "authorised_by": {
+   "who": "the founder",
+   "ref": "P803jw nil",
+   "at": "2026-09-23T13:48:02.507Z"
+  },
+  "irreversible": false,
+  "spend_cap": null,
+  "recorded_at": "2026-09-23T13:48:03.507Z",
+  "retry_of": null
+ },
+ "approval": {
+  "filled_values_sha256": "e5cb179fee4bd0b170b11e689ae91a467346a64ae5972de8ccd8180cb357cb9c",
+  "mapping_sha256": "6fa14252f100594a369b7753a3c1a773721211b9dd3ec1a7b3bf24ee8e2f5222",
+  "form_key": "https://www.handelsregister.de/rp_web/erweitertesuche/welcome.xhtml#3",
+  "approved_by": "the founder",
+  "approved_at": "2026-09-23T13:48:05.507Z",
+  "capture_sha256": "262c701ec3fc121d399ec0a80de6cbed213459bd6cf93f9525a8c1b21bee83cd",
+  "intent_id": "ddc21b07-56b6-4a8e-af38-7b158451f4dc",
+  "note": "P803jw live grading run"
+ },
+ "capture": {
+  "form_key": "https://www.handelsregister.de/rp_web/erweitertesuche/welcome.xhtml#3",
+  "captured_at": "2026-09-23T13:48:04.507Z",
+  "will_send": [
+   {
+    "label": "Firma oder Schlagwörter:",
+    "selector": "[name=\"form:schlagwoerter\"]",
+    "value": "ZZZQQQ NICHTEXISTIERENDE GESELLSCHAFT XYZ",
+    "provenance": "held value for company_name"
+   },
+   {
+    "label": "alle Schlagwörter enthalten.",
+    "selector": "#form:schlagwortOptionen:0",
+    "value": "3",
+    "provenance": "the rail's own decision, not the form's: exact-name matching (\"den genauen Firmennamen\")"
+   },
+   {
+    "label": "Zusätzliche Suchoptionen:",
+    "selector": "[name=\"form:auchGeloeschte_input\"]",
+    "value": "on",
+    "provenance": "the rail's own decision, not the form's: closed register sheets included"
+   }
+  ],
+  "will_not_send": [
+   {
+    "label": "Baden-Württemberg",
+    "selector": "[name=\"form:Baden-Württemberg_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Bayern",
+    "selector": "[name=\"form:Bayern_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Berlin",
+    "selector": "[name=\"form:Berlin_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Brandenburg",
+    "selector": "[name=\"form:Brandenburg_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Bremen",
+    "selector": "[name=\"form:Bremen_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Hamburg",
+    "selector": "[name=\"form:Hamburg_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Hessen",
+    "selector": "[name=\"form:Hessen_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Mecklenburg-Vorpommern",
+    "selector": "[name=\"form:Mecklenburg-Vorpommern_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Niedersachsen",
+    "selector": "[name=\"form:Niedersachsen_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Nordrhein-Westfalen",
+    "selector": "[name=\"form:Nordrhein-Westfalen_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Rheinland-Pfalz",
+    "selector": "[name=\"form:Rheinland-Pfalz_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Saarland",
+    "selector": "[name=\"form:Saarland_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Sachsen",
+    "selector": "[name=\"form:Sachsen_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Sachsen-Anhalt",
+    "selector": "[name=\"form:Sachsen-Anhalt_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Schleswig-Holstein",
+    "selector": "[name=\"form:Schleswig-Holstein_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Thüringen",
+    "selector": "[name=\"form:Thüringen_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "ähnlich lautende Schlagwörter enthalten.",
+    "selector": "[name=\"form:aenlichLautendeSchlagwoerterBoolChkbox_input\"]",
+    "status": "unfillable_option",
+    "why": "we hold \"ZZZQQQ NICHTEXISTIERENDE GESELLSCHAFT XYZ\" and the page serves 1 option(s), none of them that. NOTHING IS APPROXIMATED — the closest option is not the right one unless the page says it is"
+   },
+   {
+    "label": "Niederlassung / Sitz:",
+    "selector": "[name=\"form:NiederlassungSitz\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Nur nach Zweigniederlassungen neuen Rechts suchen.",
+    "selector": "[name=\"form:nurZweigniederlassungenBoolChkbox_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Registerart:",
+    "selector": "[name=\"form:registerArt_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Registernummer:",
+    "selector": "[name=\"form:registerNummer\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for registration_number; left empty rather than guessed"
+   },
+   {
+    "label": "Registergericht:",
+    "selector": "[name=\"form:registergericht_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for register_court; left empty rather than guessed"
+   },
+   {
+    "label": "[name=\"form:registergericht_filter\"]",
+    "selector": "[name=\"form:registergericht_filter\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for free_text; left empty rather than guessed"
+   },
+   {
+    "label": "Rechtsform:",
+    "selector": "[name=\"form:rechtsform_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for legal_form; left empty rather than guessed"
+   },
+   {
+    "label": "Staat",
+    "selector": "[name=\"form:staat_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for country; left empty rather than guessed"
+   },
+   {
+    "label": "Postleitzahl:",
+    "selector": "[name=\"form:postleitzahl\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for postcode; left empty rather than guessed"
+   },
+   {
+    "label": "Ort:",
+    "selector": "[name=\"form:ort\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for address; left empty rather than guessed"
+   },
+   {
+    "label": "Straße:",
+    "selector": "[name=\"form:strasse\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for address; left empty rather than guessed"
+   },
+   {
+    "label": "Ergebnisse pro Seite:",
+    "selector": "[name=\"form:ergebnisseProSeite_input\"]",
+    "status": "skipped_optional",
+    "why": "optional, and we hold nothing for page_size; left empty rather than guessed"
+   }
+  ],
+  "tokens_read_fresh": [
+   "[name=\"javax.faces.ViewState\"]"
+  ],
+  "mapping_sha256": "6fa14252f100594a369b7753a3c1a773721211b9dd3ec1a7b3bf24ee8e2f5222",
+  "filled_values_sha256": "e5cb179fee4bd0b170b11e689ae91a467346a64ae5972de8ccd8180cb357cb9c",
+  "live_hash": "e2b082a86a1ac5d9f80799dd5077b115a42ea5c50dfad10388d1befb85a1f96f",
+  "submitted": false
+ },
+ "submission": {
+  "form_key": "https://www.handelsregister.de/rp_web/erweitertesuche/welcome.xhtml#3",
+  "method": "POST",
+  "action": "https://www.handelsregister.de/rp_web/erweitertesuche/welcome.xhtml;jsessionid=FA621F9FD16FA330A6F6382040239530.tc04n02",
+  "body": [
+   {
+    "name": "javax.faces.ViewState",
+    "value_sha256": "7b76757e90226265c9a0cfb22935fc8a436eada9f5551aee30ca6a7a1b6392ea"
+   },
+   {
+    "name": "form:schlagwoerter",
+    "value_sha256": "962358961a840a88fda58fd065e871174985164b7b651d33232a5fe9a8de1a67"
+   },
+   {
+    "name": "form:schlagwortOptionen",
+    "value_sha256": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"
+   },
+   {
+    "name": "form:auchGeloeschte_input",
+    "value_sha256": "b8d31e852725afb1e26d53bab6095b2bff1749c9275be13ed1c05a56ed31ec09"
+   }
+  ],
+  "filled_values_sha256": "e5cb179fee4bd0b170b11e689ae91a467346a64ae5972de8ccd8180cb357cb9c",
+  "payload_sha256": "db803dd0755a4fe49d49a88c0643dadf0bfeb54990a6bb73e7ae9c1392ad0d73"
+ },
+ "page_after": {
+  "requests": [
+   {
+    "url": "https://www.handelsregister.de/rp_web/welcome.xhtml",
+    "status": 200,
+    "bytes": 50194
+   },
+   {
+    "url": "https://www.handelsregister.de/rp_web/welcome.xhtml",
+    "status": 302,
+    "bytes": 0
+   },
+   {
+    "url": "https://www.handelsregister.de/rp_web/erweitertesuche/welcome.xhtml",
+    "status": 200,
+    "bytes": 177657
+   },
+   {
+    "url": "https://www.handelsregister.de/rp_web/erweitertesuche/welcome.xhtml",
+    "status": 302,
+    "bytes": 0
+   },
+   {
+    "url": "https://www.handelsregister.de/rp_web/sucheErgebnisse/welcome.xhtml?cid=1",
+    "status": 200,
+    "bytes": 62196
+   }
+  ],
+  "final_url": "https://www.handelsregister.de/rp_web/sucheErgebnisse/welcome.xhtml?cid=1",
+  "reading": {
+   "kind": "accepted",
+   "matched": "Direkte Treffer 0-0 von 0 Treffer",
+   "where": "the page",
+   "reference": "0",
+   "why": "the page says \"Direkte Treffer 0-0 von 0 Treffer\", and the reference it gives back is \"0\". ⚠ A nil result matches this too, and correctly: the act ran and the answer is nothing."
+  },
+  "route_assertion": null,
+  "rows": 0,
+  "total": 0
+ },
+ "outcome": {
+  "id": "55700fc9-b433-402d-bc32-873d7dc57596",
+  "intent_id": "ddc21b07-56b6-4a8e-af38-7b158451f4dc",
+  "kind": "confirmed",
+  "target": {
+   "kind": "register",
+   "name": "Handelsregister — advanced search",
+   "identified_by": {
+    "kind": "fetched_page",
+    "page_url": "https://www.handelsregister.de/rp_web/erweitertesuche/welcome.xhtml",
+    "page_sha256": "2c2aab7cfae313ef1a2c05e97e930a8f4ca307b668a3cf8e6bd26175ba6c326c",
+    "at": "2026-09-23T13:48:04.507Z"
+   },
+   "address": "https://www.handelsregister.de/rp_web/erweitertesuche/welcome.xhtml"
+  },
+  "channel": "web_form",
+  "acted_at": "2026-09-23T13:48:04.508Z",
+  "target_said": {
+   "text": "Direkte Treffer 0-0 von 0 Treffer",
+   "via": "web_form",
+   "at": "2026-09-23T13:48:18.849Z"
+  },
+  "reference": "0",
+  "next_action": "confirmed by the page's own words. Keep the reference (0) and verify the details against what the page said.",
+  "our_error": null,
+  "status": "valid",
+  "void_reasons": []
+ },
+ "our_error": null
+}

@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { DM_Sans, DM_Serif_Display } from 'next/font/google'
 import PortalNav from './PortalNav'
+import ArchiveBanner from './ArchiveBanner'
 import './portal.css'
 
 // The portal CSS asks for 'DM Sans' / 'DM Serif Display' by family name. Serving them through
@@ -34,6 +35,7 @@ export default function PortalShell({ children, navRight }: { children: ReactNod
     <>
       {/* Point the stylesheet's font variables at the next/font families. */}
       <style>{`:root{--body:${dmSans.style.fontFamily};--head:${dmSerif.style.fontFamily}}`}</style>
+      <ArchiveBanner />{/* Sasha 123 · A-4 */}
       <PortalNav right={navRight} />
       {children}
     </>

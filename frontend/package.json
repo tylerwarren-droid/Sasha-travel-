@@ -6,7 +6,8 @@
     "dev": "next dev --port 3000",
     "prebuild": "node scripts/check-outcome-surfaces.mjs",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node --test scripts/site-tabs.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.26.0",

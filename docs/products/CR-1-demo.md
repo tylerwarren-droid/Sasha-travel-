@@ -8,7 +8,7 @@
 ```
 bash ~/Developer/Sasha-travel-/backend/scripts/cr1_demo.sh health      # must say "store":"postgres"
 bash ~/Developer/Sasha-travel-/backend/scripts/cr1_demo.sh rehearse    # the whole demo, WhatsApp CAPTURED (nothing reaches a phone), timed
-bash ~/Developer/Sasha-travel-/backend/scripts/cr1_demo.sh reset       # back to the start: CampusMe + relocation (add "campus" or "relocation" for one)
+bash ~/Developer/Sasha-travel-/backend/scripts/cr1_demo.sh reset       # back to the start: CampusMe + relocation + health (or name one)
 bash ~/Developer/Sasha-travel-/backend/scripts/cr1_demo.sh reset all --vault   # also forget the saved student details
 ```
 
@@ -85,6 +85,27 @@ Register on the school's page.
   read gets no link.
 - *"Pre-filled cita previa?"* — Neither the consulate's nor the Extranjería system takes a pre-filled link. We give the
   official page plus every value to copy. The person presses.
+
+## Part 3 — Health, inside S-77's line (≈3 min)
+
+**Before:**
+- 029 applied.
+- For a LIVE private-clinic call, on Railway for the demo window only: `SASHA_TEST_CALL_NUMBER` = the phone that will
+  ring (the founder's own, standing in for the clinic) and `SASHA_CALLS_ENABLED=1`. Without these the beat says
+  plainly "nothing to call / calls are off — nothing was dialled".
+- Switch calls back off after the demo.
+
+| Send | What comes back | Say |
+|---|---|---|
+| `health I need a doctor this week` | the consent: "only what the appointment needs — never why you need a doctor — at most 30 days; I never sign in, book or press on a public health website" → Yes | health data: Art. 9, minimum necessary |
+| **1. Private clinic** → `Tuesday 10:00` | "Exactly what I'll say: … para reservar **una cita con el médico general** para una persona…" → **Yes, call them** | Sasha's own call path, one yes; the test clinic is the test line |
+| — | "📞 Calling Kanoe Test Clinic now" → the phone rings, in Spanish (live only with calls on) | |
+| `exit` · `salud` → Yes → **2. Public (SERMAS)** | "I don't keep health card details yet — that needs Kanoe's data-protection assessment first" + the page | ⚠ honest: no DPIA, so no stored identifiers |
+| `DEMO` | the hand-over with a **fictional** patient: the official SERMAS link, card code, date of birth, DNI/NIE ready to copy, "you press" | values come from the vault when the DPIA exists; gone after 24 h |
+| `exit` · `health` → Yes → **3. New in Madrid** | padrón → INSS (DAD) → tarjeta sanitaria → family doctor, each step from its official page; "I never hunt for padrón appointments" | |
+| `20 October 2026` | reminders: the volante is valid 90 days | |
+
+**Never:** sign in on SERMAS, submit, look for free slots, call a public health centre, ask why.
 
 ## Not shown, and why
 - A real registration or a real filing: by design, until the founder decides.

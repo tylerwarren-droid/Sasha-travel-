@@ -61,8 +61,11 @@ async def _open(account: str, row: dict) -> bytes:
     return AESGCM(dek).decrypt(bytes(row["nonce"]), bytes(row["ciphertext"]), aad)
 
 
-def access_line(provider: str, label: str) -> str:
-    """The read-back line that names the access — the approval must contain it, so its hash covers it."""
+def access_line(provider: str, label: str, kind: Optional[str] = None) -> str:
+    """The read-back line that names the access — the approval must contain it, so its hash covers it.
+    CR 1 · an `identifier` signs nobody in (a membership number, a student's details): its line says it is USED."""
+    if kind == "identifier":
+        return f"I'll use your saved {label} from your vault, for {provider} only."
     return f"I'll sign in to {provider} with your saved {label}."
 
 
@@ -110,7 +113,7 @@ async def use(account: str, item_id: str, *, approval: Optional[dict], approved_
         raise UseRefused("vault_approval_stale", "that yes is more than 15 minutes old")
     if hashlib.sha256("\n".join(approved_lines).encode()).hexdigest() != approval["read_back_sha256"]:
         raise UseRefused("vault_read_back_mismatch", "the yes was to different words")
-    if access_line(row["provider"], row["label"]) not in approved_lines:
+    if access_line(row["provider"], row["label"], row.get("kind")) not in approved_lines:
         raise UseRefused("vault_access_not_approved", "the read-back you said yes to did not name this saved access")
     use_id = await STORE.claim_use(account, item_id, action_kind, action_ref, approval["read_back_sha256"], now)
     if use_id is None:

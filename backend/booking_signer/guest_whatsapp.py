@@ -558,6 +558,16 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         await STORE.put_state(key, st)
         await deliver({**ch, "opted_out_at": None}, frm, out.text(STOPPED), now)   # said once, then silence
         return out
+    # CR 1 products (backend/products/whatsapp.py): CampusMe / relocation by MODE on this one sandbox number. Not in a
+    # mode and no "campus…"/"relocation…" keyword → returns False at once and everything below runs as before.
+    from products import whatsapp as PW
+
+    async def _early(text: str) -> None:   # "Reading Yale's calendar…" goes out before a slow read, not after it
+        await deliver(ch, frm, Out().text(text), now)
+    if await PW.product_turn(ch, frm, p, st, out, now, early=_early):
+        await STORE.put_state(key, st)   # never into Sasha's history: a product's answers (passport facts) aren't hers
+        await deliver(ch, frm, out, now)
+        return out
     if not body and not payload:
         # Sasha 104 · a voice note or a picture arrives with no words: voice notes are phase 3 (F-3), so say so plainly
         has_media = int(p.get("NumMedia") or 0) > 0

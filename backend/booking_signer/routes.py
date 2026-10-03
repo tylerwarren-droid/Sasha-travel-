@@ -546,6 +546,8 @@ router.include_router(_demo_ops.router)   # Sasha 121 · the investor demo's con
 router.include_router(cancel_routes.router)
 # S-55 · the Work-with-Sasha page's server half (reached through the frontend's own route, which adds the key)
 router.include_router(optin_page.router)
+from products import routes as _products  # noqa: E402
+router.include_router(_products.router)   # CR 1 products · /api/booking/products/* (CampusMe, relocation; backend/products/)
 
 
 # S-53 · the daily retention job (retention.py) starts with the app; off in tests and without a database

@@ -1,7 +1,7 @@
 """CR 1 · the demo's controls: rehearse it end to end, and reset it in one command.
 
     railway run python -m scripts.cr1_demo rehearse [--n 1] [--account founder]   # default: the DEMO account; WhatsApp CAPTURED
-    railway run python -m scripts.cr1_demo reset [campus|relocation|all] [--account founder|demo] [--vault]
+    railway run python -m scripts.cr1_demo reset [campus|relocation|health|all] [--account founder|demo] [--vault]
     railway run python -m scripts.cr1_demo health
     railway run python -m scripts.cr1_demo showcase          # two PUBLIC example pages, fictional people, kept to 31 Dec
 
@@ -81,10 +81,15 @@ async def _snapshot(account: str) -> dict:
         visits = {str(r["id"]) for r in await c.fetch(
             "select ti.id from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 "
             "and ti.type = 'experience' and ti.provider_name like '% campus visit — %'", acct)}
-        return cases, visits
-    cases, visits = await BR.STORE._run(q)
+        clinic = {str(r["id"]) for r in await c.fetch(
+            "select ti.id from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 and ti.provider_name = $2",
+            acct, "Kanoe Test Clinic")}
+        reads = {str(r["read_id"]) for r in await c.fetch(
+            "select read_id from venue_reads where account_id = $1 and venue_name = 'Kanoe Test Clinic'", acct)}
+        return cases, visits, clinic, reads
+    cases, visits, clinic, reads = await BR.STORE._run(q)
     vault = {str(m["id"]) for m in await VC.STORE.list(account)}
-    return {"cases": cases, "visits": visits, "vault": vault}
+    return {"cases": cases, "visits": visits, "vault": vault, "clinic": clinic, "reads": reads}
 
 
 async def _clean_own(account: str, before: dict) -> dict:
@@ -95,6 +100,8 @@ async def _clean_own(account: str, before: dict) -> dict:
     from products.campus.turn import is_profile
     after = await _snapshot(account)
     new_cases, new_visits = after["cases"] - before["cases"], after["visits"] - before["visits"]
+    new_clinic = [uuid.UUID(x) for x in after["clinic"] - before["clinic"]]
+    new_reads = [uuid.UUID(x) for x in after["reads"] - before["reads"]]
 
     async def go(c):
         async with c.transaction():
@@ -102,8 +109,13 @@ async def _clean_own(account: str, before: dict) -> dict:
                                 list(new_cases))
             b = await c.execute("delete from trip_items where id = any($1::uuid[]) and type = 'experience' "
                                 "and provider_name like '% campus visit — %'", [uuid.UUID(x) for x in new_visits])
-            return int(a.split()[-1]), int(b.split()[-1])
-    n_cases, n_visits = await BR.STORE._run(go)
+            # CR 4 · the test clinic's call: its rows go, so a rehearsal never counts against the real daily call cap
+            await c.execute("delete from booking_attempts where trip_item_id = any($1::uuid[])", new_clinic)
+            calls = await c.execute("delete from booking_calls where trip_item_id = any($1::uuid[])", new_clinic)
+            d = await c.execute("delete from trip_items where id = any($1::uuid[]) and provider_name = 'Kanoe Test Clinic'", new_clinic)
+            await c.execute("delete from venue_reads where read_id = any($1::uuid[]) and venue_name = 'Kanoe Test Clinic'", new_reads)
+            return int(a.split()[-1]), int(b.split()[-1]) + int(d.split()[-1]), int(calls.split()[-1])
+    n_cases, n_visits, n_calls = await BR.STORE._run(go)
     n_vault = 0
     now = datetime.now(timezone.utc)
     for m in await VC.STORE.list(account):
@@ -111,7 +123,8 @@ async def _clean_own(account: str, before: dict) -> dict:
             if await VC.STORE.revoke(account, m["id"], now):
                 await VC.STORE.event(account, m["id"], "revoked", {"by": "cr1_demo rehearse — its own item"}, now)
                 n_vault += 1
-    return {"cases": n_cases, "campus visits": n_visits, "vault items it created": n_vault}
+    return {"cases": n_cases, "bookings (campus visits, the clinic)": n_visits, "call rows": n_calls,
+            "vault items it created": n_vault}
 
 
 async def _setup(account: str):
@@ -130,6 +143,26 @@ async def _setup(account: str):
     async def specimen(url):                      # the "photo the person sent" is the published specimen
         return open(small, "rb").read(), "image/jpeg"
     DR.FETCH = specimen
+    # CR 4 · the private-clinic call goes through Sasha's REAL call routes — with only Bland faked, in this process:
+    # nothing is dialled, and Railway's own SASHA_CALLS_ENABLED (0) is untouched
+    from booking_signer import call_routes as CR, calls as CL
+    os.environ["SASHA_CALLS_ENABLED"] = "1"
+    os.environ["SASHA_TEST_CALL_NUMBER"] = "+34600000000"     # a fictional number: the fake Bland never dials anything
+    real_http = CR.HTTP
+
+    class _R:
+        def __init__(self, status, body):
+            self.status_code, self._b = status, body
+
+        def json(self):
+            return self._b
+
+    async def fake_bland(method, url, **kw):
+        if url == CL.BLAND_CALLS_URL:
+            return _R(200, {"status": "success", "call_id": f"rehearsal-{uuid.uuid4().hex[:12]}"})
+        return await real_http(method, url, **kw)
+    CR.HTTP = fake_bland
+    GW._spawn = lambda coro: coro.close()                       # no call watcher: there is no call to watch
     key = GW.wa_key(NUMBER)
     now = datetime.now(timezone.utc)
     await GW.STORE.link({"account_id": account, "wa_id_sha256": key, "number_e164": NUMBER, "linked_at": now, "consent_at": now,
@@ -224,6 +257,27 @@ async def rehearse(n: int, account_name: str = "demo") -> pathlib.Path:
     await beat("R12 UK → consulate + checklist", "UK", expect="Consulado General de España en Londres")
     await beat("R13 entry date → reminders", "1 March 2027", expect="I'll remind you here")
     await beat("R14 exit", "exit", expect="Back to Sasha")
+    # ── Part 3 · health (CR 4) ──
+    await beat("H1 health → consent", "health I need a doctor this week", expect="never why you need a doctor")
+    await beat("H2 consent yes → choose", payload="hx:consent:yes", expect="A private clinic")
+    await beat("H3 private", payload="hx:priv", expect="Which day and time")
+    await beat("H4 Tuesday 10:00 → read-back", "Tuesday 10:00", expect="una cita con el médico general")
+    await beat("H5 yes → the call", payload=_button(GW, 0), expect="📞")
+    await beat("H6 exit", "exit", expect="Back to Sasha")
+    await beat("H7 health again → consent", "salud", expect="never why you need a doctor")
+    await beat("H8 consent → choose", payload="hx:consent:yes", expect="A private clinic")
+    said = await beat("H9 public (SERMAS) → hand-over", payload="hx:pub", expect="health-handover/")
+    await beat("H10 DEMO → fictional patient", "DEMO", expect="health-handover/")
+    hid = said.split("/health-handover/")[1][:22] if "/health-handover/" in said else ""
+    page("H11 SERMAS hand-over page", f"/health-handover/{hid}", "Open SERMAS")
+    await beat("H12 exit", "exit", expect="Back to Sasha")
+    await beat("H13 health → consent", "health", expect="never why you need a doctor")
+    await beat("H14 consent → choose", payload="hx:consent:yes", expect="A private clinic")
+    said = await beat("H15 new in Madrid → checklist", payload="hx:new", expect="Padrón (town hall)")
+    nid = said.split("/health-handover/")[1][:22] if "/health-handover/" in said else ""
+    page("H16 checklist page", f"/health-handover/{nid}", "Your health card and your family doctor")
+    await beat("H17 padrón date → reminders", "20 October 2026", expect="I'll remind you here")
+    await beat("H18 exit", "exit", expect="Back to Sasha")
 
     total = time.monotonic() - t0
     cleaned = await _clean_own(account, before)
@@ -255,7 +309,7 @@ async def reset(what: str, account_name: str, vault: bool) -> None:
     from booking_signer.identity import founder_account
     account = DEMO if account_name == "demo" else founder_account()   # reset may run on the fallback: it says so
     acct = uuid.UUID(account)
-    products = ["campus", "relocation"] if what == "all" else [what]
+    products = ["campus", "relocation", "health"] if what == "all" else [what]
 
     async def go(conn):
         out = {}
@@ -267,6 +321,16 @@ async def reset(what: str, account_name: str, vault: bool) -> None:
                 out["campus visits in bookings"] = int((await conn.execute(
                     "delete from trip_items where id in (select ti.id from trip_items ti join trips t on t.id = ti.trip_id "
                     "where t.owner_id = $1 and ti.type = 'experience' and ti.provider_name like '% campus visit — %')", acct)).split()[-1])
+            if "health" in products:
+                # the stand-in clinic's bookings and call rows (a live demo call leaves them); never any other booking
+                ids = [r["id"] for r in await conn.fetch(
+                    "select ti.id from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 "
+                    "and ti.provider_name = 'Kanoe Test Clinic'", acct)]
+                await conn.execute("delete from booking_attempts where trip_item_id = any($1::uuid[])", ids)
+                await conn.execute("delete from booking_calls where trip_item_id = any($1::uuid[])", ids)
+                out["test-clinic bookings"] = int((await conn.execute(
+                    "delete from trip_items where id = any($1::uuid[])", ids)).split()[-1])
+                await conn.execute("delete from venue_reads where account_id = $1 and venue_name = 'Kanoe Test Clinic'", acct)
             out["open product mode on WhatsApp"] = int((await conn.execute(
                 "update guest_wa_state set pending = null where pending->>'kind' = 'product' and pending->>'product' = any($2::text[]) "
                 "and wa_id_sha256 in (select wa_id_sha256 from guest_channels where account_id = $1)", acct, products)).split()[-1])
@@ -349,7 +413,7 @@ async def health() -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["rehearse", "reset", "health", "showcase"])
-    ap.add_argument("what", nargs="?", default="all", choices=["all", "campus", "relocation"])
+    ap.add_argument("what", nargs="?", default="all", choices=["all", "campus", "relocation", "health"])
     ap.add_argument("--account", default="founder", choices=["founder", "demo"])
     ap.add_argument("--vault", action="store_true")
     ap.add_argument("--n", type=int, default=1)

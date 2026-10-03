@@ -24,9 +24,10 @@ MODE_IDLE = timedelta(hours=6)
 
 _CAMPUS = re.compile(r"^\s*(campus\s*me|campusme|campus)\b", re.I)
 _RELOC = re.compile(r"^\s*(relocation|relocate|relocating|reloc|ex-?01|residencia)\b", re.I)
+_HEALTH = re.compile(r"^\s*(salud|health|sanidad|m[eé]dico\s+en\s+madrid)\b", re.I)
 _EXIT = re.compile(r"^\s*(exit|sasha|back|back to sasha|quit|salir)\s*[.!]?\s*$", re.I)
 
-LEFT = "Back to Sasha — tell me what to book. (Say CAMPUS or RELOCATION to switch again.)"
+LEFT = "Back to Sasha — tell me what to book. (Say CAMPUS, RELOCATION or HEALTH to switch again.)"
 
 
 async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now, early=None) -> bool:
@@ -46,6 +47,8 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         entering = "campus"
     elif _RELOC.match(body):
         entering = "relocation"
+    elif _HEALTH.match(body):
+        entering = "health"
     if not current and not entering:
         return False
     if current and _EXIT.match(body) and not payload:
@@ -62,7 +65,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
     product = st["pending"]["product"]
     rest = body
     if entering:
-        rest = (_CAMPUS if entering == "campus" else _RELOC).sub("", body, count=1).strip(" :,-")
+        rest = {"campus": _CAMPUS, "relocation": _RELOC, "health": _HEALTH}[entering].sub("", body, count=1).strip(" :,-")
         # "campus visits at Yale…": the keyword is part of the sentence, so the product reads the whole of it
         rest = body if rest and not re.match(r"^(me|mode)\b", rest, re.I) else rest
     ctx = {"account": ch["account_id"], "ch": ch, "frm": frm, "st": st, "now": now, "out": out,
@@ -70,6 +73,9 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
     if product == "campus":
         from .campus import turn as CT
         await CT.turn(ctx, rest, payload, entering=bool(entering))
+    elif product == "health":
+        from .health import turn as HT
+        await HT.turn(ctx, rest, payload, entering=bool(entering))
     else:
         from .relocation import turn as RT
         await RT.turn(ctx, rest, payload, entering=bool(entering))

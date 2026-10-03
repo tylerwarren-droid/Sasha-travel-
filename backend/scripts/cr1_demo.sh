@@ -3,7 +3,7 @@
 # environment under ~/.cache, the Railway link); the production secrets stay in Railway and are never printed.
 #
 #   bash ~/Developer/Sasha-travel-/backend/scripts/cr1_demo.sh reset            # before the demo: YOUR account, both products
-#   bash ~/Developer/Sasha-travel-/backend/scripts/cr1_demo.sh reset campus     # just CampusMe (or: relocation)
+#   bash ~/Developer/Sasha-travel-/backend/scripts/cr1_demo.sh reset campus     # just CampusMe (or: relocation, health)
 #   bash ~/Developer/Sasha-travel-/backend/scripts/cr1_demo.sh reset all --vault   # also forget the saved student details
 #   bash ~/Developer/Sasha-travel-/backend/scripts/cr1_demo.sh rehearse         # the whole demo, WhatsApp captured, timed
 #   bash ~/Developer/Sasha-travel-/backend/scripts/cr1_demo.sh health

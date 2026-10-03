@@ -41,7 +41,9 @@ async def _expire_daily() -> None:
     while True:
         try:
             from .relocation import after
+            from .health import turn as health
             await after.due()                       # relocation reminders whose day has come
+            await health.due()                      # health reminders; hand-over identifiers dropped after 24 h
             n = await ST.expire_once()
             if n:
                 logging.getLogger("products").info("[products] %d expired case(s) deleted", n)
@@ -116,3 +118,21 @@ async def relocation_pdf(cid: str) -> Response:
     pdf = E.fill(c["state"]["rows"])   # rebuilt from the rows every time: the guard runs on every download
     return Response(pdf, media_type="application/pdf",
                     headers={"content-disposition": 'inline; filename="EX-01-prepared-not-signed.pdf"'})
+
+
+@router.get("/health/{cid}")
+async def health_case(cid: str) -> dict:
+    """The health hand-over or the new-in-Madrid checklist. The identifiers are served only inside their 24 hours, and
+    dropped from the case the first time they're found expired (the daily job drops them too)."""
+    from datetime import datetime, timezone
+    from .health import sources as HS
+    c = await _case(cid, "health")
+    st = c["state"]
+    if st.get("values") and (st.get("values_expire_at") or "") <= datetime.now(timezone.utc).isoformat():
+        st["values"] = None
+        await ST.STORE.update(cid, st)
+    return {"ok": True, "kind": st.get("kind"), "appointment_type": st.get("appointment_type"), "values": st.get("values"),
+            "values_source": st.get("values_source"), "values_expire_at": st.get("values_expire_at"),
+            "fictional": bool(st.get("fictional")), "checklist": st.get("checklist"), "reminders": st.get("reminders"),
+            "padron_date": st.get("padron_date"), "sermas": HS.SERMAS, "read_on": HS.READ_ON,
+            "expires_at": str(c["expires_at"]), "submits": False}

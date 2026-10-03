@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /*/!ut/
+Disallow: *MIE20250320DOC23MO*
+Sitemap: https://www.seg-social.es/sitemap.xml

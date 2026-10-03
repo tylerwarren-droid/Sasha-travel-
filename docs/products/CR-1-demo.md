@@ -79,6 +79,7 @@ Register on the school's page.
 | open the link | the reviewer screen: 96 fields, every value "from: …". The reviewer agent: e.g. **"postcode 08010 is in Barcelona, but the province written is Madrid"**, **"“3º B” may not fit this box on paper"**. The signature box reads **"LEFT FOR THE APPLICANT — NOT SIGNED"** |
 | `SIGNED` | "signed by you, on your word. I didn't sign or tick anything" → "Which country do you live in?" |
 | `UK` | "*Consulado General de España en Londres*. Its own sheet says: 'Applicants must request their appointment following the instructions on the Consulate's website' → link. You book it and go in person." + the checklist (11 items from the consulate's sheet, **dated 11 Feb 2022**, said as such; the passport's ≥ 1 year **computed**) |
+| `1 2 3` | **CR 12 · the document pack**: each document named and numbered in the sheet's own order ("01_…"), gathered ✓ / still to gather ☐ |
 | `1 March 2027` | reminders: apply from 1 Dec (the 90-day window); the TIE within a month of entry, with the official *cita previa de extranjería* page. The reminders are listed in "You → Reminders" |
 | `consulate booked 12 November 10:00` | "Added to your itinerary: your consulate appointment … — booked by you. I'll remind you the day before". It shows in "You → My bookings", like any booking |
 
@@ -88,6 +89,21 @@ Register on the school's page.
   read gets no link.
 - *"Pre-filled cita previa?"* — Neither the consulate's nor the Extranjería system takes a pre-filled link. We give the
   official page plus every value to copy. The person presses.
+
+### Part 2b — An American moving to Spain (CR 12, ≈1½ min; rehearse alone with `cr1_demo.sh rehearse us --account founder`)
+
+| Send | What comes back |
+|---|---|
+| … `DEMO` · `SIGNED` → `USA` | "Which US state do you live in? … I match yours from the consulate's own page, never a guess." |
+| `New Jersey` | "*Consulado General de España en Nueva York* — its own page (dated 23 de marzo de 2022) names New Jersey." Its route in its own words: an appointment request by **email** → "I've drafted that email in Spanish … you send it from your own address … I never send it." Its own 10-item list on the file page |
+| `1 3 4 6-8` | the **document pack**, in New York's order: `01_National-visa-application-form` ✓ … `05_Proof-of-economic-means` ☐ still to gather — with its words on originals and copies |
+| open the file page | the drafted email (To / Subject / the lettered lines, passport number left *[to fill]*) with "Open it in your email app — you press Send"; the pack; the source page and its read date |
+| `1 March 2027` | one reminder: the TIE within 1 month of entry — the only date New York's page gives (no 90-day window: it doesn't state one) |
+
+**The honest lines, if asked:** *"Other US consulates?"* — Seven of eight read on 3 Oct 2026. Only New York adapts the
+ministry's text; Washington, Los Angeles, Miami, Chicago, Boston and San Francisco publish the template with "Lugar de
+presentación" empty — Sasha says so and gives no route. Houston's site answered 503 twice: no list from it. California is
+split by county exactly as Los Angeles's page lists them. (docs/products/reads/us/READS.md)
 
 ## Part 3 — Health, inside S-77's line (≈3 min)
 

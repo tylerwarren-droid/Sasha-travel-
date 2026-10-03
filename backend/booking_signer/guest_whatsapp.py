@@ -1204,6 +1204,16 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             out.text(str(j.get("say")) if status == 200 else f"Not asked — {refusal_words(j, status)}.")
             return True
         return False
+    if kind == "no_reply_call":   # Sasha 130 · yes → the call's OWN read-back and yes; no → nothing
+        if payload.startswith("no:") or (not payload and _NO.match(body)):
+            st["pending"] = None
+            out.text("OK — no call. I'll show you their reply if one arrives.")
+            return True
+        if payload.startswith("yes:") or YS.is_yes(body):
+            st["pending"] = None
+            await _prepare_or_ask(ctx, {"kind": "need", "at": now.isoformat(), "read": pend["read"], "draft": pend["draft"], "prefer": "call"})
+            return True
+        return False
     if kind in ("combo_when", "spa_when"):   # Sasha 126 · the day and the time(s), asked once
         if kind == "combo_when":
             return await _combo_when(ctx, pend, body)
@@ -1254,6 +1264,13 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             st["pending"] = None
             await (_approve(ctx, pend, how) if kind == "confirm" else _cancel_approve(ctx, pend, how))
             return True
+        from . import decide as D
+        want = D.preference(body) if kind == "confirm" and pend.get("read") else None
+        if want and want != {"form": "form", "call": "call", "email": "email"}.get(pend.get("rung")):   # Sasha 130 · the override
+            st["pending"] = None
+            await _prepare_or_ask(ctx, {"kind": "need", "at": now.isoformat(), "read": pend["read"], "draft": pend["draft"],
+                                        "invite_code": pend.get("invite_code"), "prefer": want})
+            return True
         if HO.booking_handoff(body, st.get("history") or []) is not None:
             st["pending"] = None
             return False
@@ -1263,8 +1280,18 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         if re.match(r"^\s*booked\b", body, re.I):
             st["pending"] = None
             status, j = await api(ctx["account"], "POST", f"/api/booking/links/{pend['link_id']}/booked", {"how": "whatsapp_text", "said": body})
-            out.text("Noted — booked on their page, by you. It's in your bookings as you told me; their confirmation email is the proof."
-                     if status == 200 else f"I couldn't record it — {refusal_words(j, status)}.")
+            if status != 200:
+                out.text(f"I couldn't record it — {refusal_words(j, status)}.")
+                return True
+            out.text("Noted — booked on their page, by you. I'm looking for their confirmation email in your Gmail now.")
+            _spawn(watch_gmail_confirmation(ctx["ch"], ctx["frm"], ctx["account"], pend.get("venue") or "", pend.get("when") or ""))
+            return True
+        from . import decide as D
+        want = D.preference(body)
+        if want and want != "one_tap" and pend.get("read"):   # Sasha 130 · "call them instead" — the guest's way
+            st["pending"] = None
+            await _prepare_or_ask(ctx, {"kind": "need", "at": now.isoformat(), "read": pend["read"], "draft": pend["draft"],
+                                        "invite_code": pend.get("invite_code"), "prefer": want})
             return True
         return False
     return False
@@ -1411,9 +1438,33 @@ async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
         draft["when"] = {"mode": "at", "at": f["open_at"]}
     nxt = {"kind": "need", "at": ctx["now"].isoformat(), "invite_code": pend.get("invite_code"),
            "read": {"read_id": read["read_id"], "country": read.get("country"),
-           "venue": venue, "rungs": {k: {"fact_index": r.get("fact_index"), "value": r.get("value")} for k, r in rungs.items()}},
+           "venue": venue, "rungs": {k: {"fact_index": r.get("fact_index"), "value": r.get("value")} for k, r in rungs.items()},
+           **_hours_of(read, ctx["now"])},
            "draft": draft}
     await _prepare_or_ask(ctx, nxt)
+
+
+def _hours_of(read: dict, now) -> dict:
+    """Sasha 130 · open now / next opening, in the venue's own day — for the decision. Unknown stays unknown (None)."""
+    from . import hours as H, venue_read as V
+    tz = (V.COUNTRIES.get(read.get("country") or "") or (None, None, None, "Europe/Madrid"))[3]
+    try:
+        s = H.status(read, now, tz)
+    except Exception as e:
+        log.info("[guest_whatsapp] no hours: %s", type(e).__name__)
+        return {"open_now": None, "opens_at": None}
+    return {"open_now": s.get("open_now"), "opens_at": (s.get("opens_at") or "")[11:16] or None}
+
+
+def decision_of(rd: dict, prefer: Optional[str] = None):
+    """Sasha 130 · the read, as the decision workflow sees it."""
+    from . import calls as C, decide as D, venue_read as V
+    rungs = rd.get("rungs") or {}
+    lang = (V.COUNTRIES.get(rd.get("country") or "") or (None, None, "en"))[2]
+    link = (rungs.get("link") or {}).get("value") or ""
+    return D.decide(D.Venue(form="form" in rungs, platform=(V.platform_of(link) or "their booking page") if "link" in rungs else None,
+                            phone="phone" in rungs, email="email" in rungs, open_now=rd.get("open_now"), opens_at=rd.get("opens_at"),
+                            scripted=lang in C.LANGUAGES, calls_on=True, language_label=C.LANGUAGE_NAMES.get(lang, "")), prefer)
 
 
 _NEED_Q = {"what": "What should I book there — a table, a massage, a class…?", "when": "Which day and time?",
@@ -1482,51 +1533,73 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
         reservation["flow"] = "book"
     rungs = rd["rungs"]
     why = None
-    if "form" in rungs:
-        # Sasha 117 · a form wants an email: the account's own (the one receipts go to), shown in the read-back the yes approves
-        from . import guest_receipt as GR, ladder_routes as LR
-        email = await GR.address_of(ctx["account"]) if LR.LADDER_STORE is not None else None
-        res_form = {**reservation, "who": {**reservation["who"], "contact": {**reservation["who"]["contact"], **({"email": email} if email else {})}}}
-        status, j = await api(ctx["account"], "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": res_form})
-        if status == 200:
-            if (st.get("combo") or {}).get("stage") == "restaurant":   # Sasha 126 · held for the ONE combined yes
-                st["combo"]["restaurant"] = {"id": j["form_id"], "sha": j["read_back"]["sha256"], "lines": j["read_back"]["lines"],
-                                             "venue": rd["venue"], "summary": summary(reservation)}
-                st["pending"] = None
-                await _combo_spa(ctx)
+    # Sasha 130 · THE DECISION (decide.py): the route, and its reason said to the guest first; the others in order after it
+    dv = decision_of(rd, pend.get("prefer"))
+    combo = (st.get("combo") or {}).get("stage") == "restaurant"
+    order = [r for r in [dv.route] + dv.alternatives if r] if not combo else ["form"]
+    if dv.route and not combo:
+        out.text(dv.reason)
+    keep = {"read": rd, "draft": d, "invite_code": pend.get("invite_code")}   # so "call them instead" can re-decide
+    for route in order:
+        if route == "form" and "form" in rungs:
+            # Sasha 117 · a form wants an email: the account's own (the one receipts go to), shown in the read-back the yes approves
+            from . import guest_receipt as GR, ladder_routes as LR
+            email = await GR.address_of(ctx["account"]) if LR.LADDER_STORE is not None else None
+            res_form = {**reservation, "who": {**reservation["who"], "contact": {**reservation["who"]["contact"], **({"email": email} if email else {})}}}
+            status, j = await api(ctx["account"], "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": res_form})
+            if status == 200:
+                if combo:   # Sasha 126 · held for the ONE combined yes
+                    st["combo"]["restaurant"] = {"id": j["form_id"], "sha": j["read_back"]["sha256"], "lines": j["read_back"]["lines"],
+                                                 "venue": rd["venue"], "summary": summary(reservation)}
+                    st["pending"] = None
+                    await _combo_spa(ctx)
+                    return
+                await _ask_yes(ctx, "form", j["form_id"], j["read_back"], SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
+                               extra={"summary": summary(reservation), **keep})
                 return
-            await _ask_yes(ctx, "form", j["form_id"], j["read_back"], SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
-                           extra={"summary": summary(reservation)})
+            why = refusal_words(j, status)
+            log.warning("[guest_whatsapp] form rung refused (%s: %s); trying the next route", status, j.get("rule"))
+        if combo:   # Sasha 126 · together, only through their own form today
+            st["combo"], st["pending"] = None, None
+            out.text(f"I can't book {rd['venue']} together with the spa from here (no form I may send{', and calls are off' if 'phone' in rungs else ''}). "
+                     f"Nothing was sent. Pick a place I can book by its form, or ask for each one separately.")
             return
-        why = refusal_words(j, status)
-        log.warning("[guest_whatsapp] form rung refused (%s: %s); trying the next rung", status, j.get("rule"))
-    if (st.get("combo") or {}).get("stage") == "restaurant":   # Sasha 126 · together, only through their own form today
-        st["combo"], st["pending"] = None, None
-        out.text(f"I can't book {rd['venue']} together with the spa from here (no form I may send{', and calls are off' if 'phone' in rungs else ''}). "
-                 f"Nothing was sent. Pick a place I can book by its form, or ask for each one separately.")
-        return
-    if "link" in rungs and reservation["when"]["mode"] == "at":
-        at = reservation["when"]["at"]
-        status, j = await api(ctx["account"], "POST", "/api/booking/links", {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16],
-                                                                              "party": reservation["how_many"]["count"], "name": contact["name"]})
-        if status == 200:
-            st["pending"] = {"kind": "link", "at": ctx["now"].isoformat(), "link_id": j["link_id"]}
-            out.text(f"{rd['venue']} takes bookings on {j.get('platform') or 'their booking page'}, so you press the final button "
-                     f"there — I can't. {'The day, time and party are filled in' if j.get('slot_filled') else 'Choose the day, time and party there'}: "
-                     f"{j['url']}\nReply BOOKED once it's done.")
-            return
-        log.info("[guest_whatsapp] link rung refused (%s); trying the phone", status)
-    if "phone" in rungs:
-        fi = rungs["phone"].get("fact_index")
-        status, j = await api(ctx["account"], "POST", "/api/booking/calls",
-                              {"reservation": reservation, "read_id": rd["read_id"], **({"fact_index": fi} if fi is not None else {})})
-        if status == 200:
-            await _ask_yes(ctx, "call", j["call_id"], j["read_back"], j.get("sentence") or SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
-                           extra={"summary": summary(reservation), "invite_code": pend.get("invite_code"), "trip_item_id": j.get("trip_item_id")})
-            return
-        st["pending"] = None
-        out.text(f"Not prepared — {refusal_words(j, status)}. Nothing was dialled.")
-        return
+        if route == "one_tap" and "link" in rungs and reservation["when"]["mode"] == "at":
+            at = reservation["when"]["at"]
+            status, j = await api(ctx["account"], "POST", "/api/booking/links", {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16],
+                                                                                  "party": reservation["how_many"]["count"], "name": contact["name"]})
+            if status == 200:
+                st["pending"] = {"kind": "link", "at": ctx["now"].isoformat(), "link_id": j["link_id"], "venue": rd["venue"], "when": at, **keep}
+                out.text(f"One tap: {rd['venue']}'s booking page on {j.get('platform') or 'their platform'} — "
+                         f"{'the day, time and party are filled in' if j.get('slot_filled') else 'choose the day, time and party there'}. "
+                         f"Press their confirm button; I can't press it for you.\n{j['url']}\n"
+                         f"Reply BOOKED once it's done, and I'll find their confirmation email in your Gmail and file it.")
+                return
+            log.info("[guest_whatsapp] one-tap link refused (%s); trying the next route", status)
+        if route == "call" and "phone" in rungs:
+            fi = rungs["phone"].get("fact_index")
+            status, j = await api(ctx["account"], "POST", "/api/booking/calls",
+                                  {"reservation": reservation, "read_id": rd["read_id"], **({"fact_index": fi} if fi is not None else {})})
+            if status == 200:
+                await _ask_yes(ctx, "call", j["call_id"], j["read_back"], j.get("sentence") or SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
+                               extra={"summary": summary(reservation), "invite_code": pend.get("invite_code"), "trip_item_id": j.get("trip_item_id"),
+                                      "read": rd, "draft": d})
+                return
+            why = refusal_words(j, status)
+            log.info("[guest_whatsapp] call refused (%s); trying the next route", status)
+        if route == "email" and "email" in rungs and reservation["when"]["mode"] == "at":
+            from . import guest_receipt as GR, ladder_routes as LR
+            mine = await GR.address_of(ctx["account"]) if LR.LADDER_STORE is not None else None
+            at = reservation["when"]["at"]
+            status, j = await api(ctx["account"], "POST", "/api/booking/emails",
+                                  {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": reservation["how_many"]["count"],
+                                   "name": contact["name"], "email": mine or ""})
+            if status == 200:
+                await _ask_yes(ctx, "email", j["email_id"], j["read_back"], SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
+                               extra={"summary": summary(reservation), "then": dv.then if dv.route == "email" else None, **keep})
+                return
+            why = refusal_words(j, status)
+            log.info("[guest_whatsapp] email refused (%s); trying the next route", status)
     st["pending"] = None
     said = f"I can't book {rd['venue']} from here right now" + (f" — {why}" if why else "")
     out.text(said + ("" if said.endswith(("?", ".")) else ".") + " Nothing was sent.")
@@ -1578,6 +1651,16 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
         if _receipt_note():
             out.text(_receipt_note().strip())
         return
+    if pend["rung"] == "email":   # Sasha 130 · the email route: sent is "requested", never "booked"
+        status, j = await api(account, "POST", f"/api/booking/emails/{pend['id']}/send", {"read_back_sha256": pend["sha"], "approval": how}, timeout=60)
+        if status != 200 or j.get("status") != "sent":
+            out.text(f"❌ Not sent to {venue}: {j.get('say') or refusal_words(j, status)}.")
+            return
+        out.text(f"✉️ Emailed {venue} — {pend.get('summary', '')}. Not booked yet: I'll show you their reply word for word the moment it arrives.")
+        from . import proactive as PR
+        if pend.get("then") and PR.no_reply_call_on():   # said only when the follow-up really runs (migration 028)
+            out.text(pend["then"])
+        return
     status, j = await api(account, "POST", f"/api/booking/calls/{pend['id']}/place", {"read_back_sha256": pend["sha"], "approval": how}, timeout=120)
     if status != 200:
         out.text(f"❌ Not called: {refusal_words(j, status)}. Nothing was dialled.")
@@ -1618,6 +1701,57 @@ def result_lines(v: dict, venue: str, purpose: str, what: str = "") -> List[str]
     if v.get("venue_words"):
         out.append(f"Their words: “{v['venue_words']}”")
     return out
+
+
+async def offer_no_reply_call(ch: dict, b: dict, read_row: dict) -> str:
+    """Sasha 130 · the email had no reply and they've just opened: ONE question, inside the 24-hour window only."""
+    st = await STORE.get_state(ch["wa_id_sha256"])
+    last = st.get("last_inbound_at")
+    if not (last and NOW() - last <= SESSION_WINDOW) or not guest_numbers():
+        return "not sent: outside the 24-hour window"
+    read = read_row.get("read") or {}
+    venue = b.get("venue") or read.get("name") or "the venue"
+    rd = {"read_id": str(read_row.get("read_id") or b["read_id"]), "country": read.get("country"), "venue": venue,
+          "rungs": {"phone": {"fact_index": None, "value": None}}, "open_now": True, "opens_at": None}
+    draft = {"what": {"activity": b.get("what") or "a table", "activity_venue_lang": b.get("what") or "a table",
+                      "category": b.get("category") or "restaurant"},
+             "when": {"mode": "at", "at": f"{b['date']}T{b['time']}"}, "how_many": {"count": b.get("count") or b.get("party"), "unit": "people"}}
+    sha = hashlib.sha256(f"{b['id']}|no_reply_call".encode()).hexdigest()
+    out = Out().ask(f"No reply yet from {venue} to my email about {SN.day_words(b['date'])} at {b['time']}. They've just opened — "
+                    f"shall I call them? I'll show you exactly what I'll say first.",
+                    [("Yes, prepare the call", f"yes:{b['id'][:8]}:{sha[:16]}"), ("No", f"no:{b['id'][:8]}:{sha[:16]}")])
+    st["pending"] = {"kind": "no_reply_call", "at": NOW().isoformat(), "id": b["id"], "sha": sha, "read": rd, "draft": draft}
+    await STORE.put_state(ch["wa_id_sha256"], st)
+    return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, last))
+
+
+WATCH_GMAIL = (30, 10)   # every 30 s, ten times: a platform's confirmation email usually lands within a minute or two
+
+
+async def watch_gmail_confirmation(ch: dict, frm: str, account: str, venue: str, when: str) -> None:
+    """Sasha 130 · ONE-TAP, the second half: after the guest pressed the platform's button and said BOOKED, Sasha looks in
+    their Gmail for the confirmation. mailbox.sync matches it to the booking (reference, else venue + day) and offers it
+    here — "Yes" files it on the booking and its receipt. Nothing found is said, never assumed."""
+    from . import mailbox as MB
+    link = await MB.STORE.get_link(account) if MB.STORE else None
+    if not link or link.get("needs_reconnect_at"):
+        st = await STORE.get_state(ch["wa_id_sha256"])
+        await deliver(ch, frm, Out().text(f"Your Gmail isn't connected{' (it needs reconnecting)' if link else ''}, so I can't find "
+                                          f"{venue}'s confirmation myself. Forward it to me, or connect Gmail in You."), st.get("last_inbound_at"))
+        return
+    every, times = WATCH_GMAIL
+    for _ in range(times):
+        await asyncio.sleep(every)
+        try:
+            found = await MB.sync(account)   # a matched confirmation is offered on WhatsApp by sync itself
+        except Exception as e:
+            log.warning("[guest_whatsapp] Gmail check failed: %s", type(e).__name__)
+            continue
+        if any(f.get("trip_item_id") and f.get("offered_action") for f in found):
+            return
+    st = await STORE.get_state(ch["wa_id_sha256"])
+    await deliver(ch, frm, Out().text(f"No confirmation email from {venue} in your Gmail after 5 minutes. Your booking stays as you "
+                                      f"told me; I'll keep checking with your usual email checks, or forward it to me."), st.get("last_inbound_at"))
 
 
 async def watch_call(ch: dict, frm: str, account: str, call_id: str, venue: str, purpose: str, what: str = "",

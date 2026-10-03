@@ -125,6 +125,10 @@ def parse_email_particulars(body: Mapping[str, Any], parse_call) -> EmailParticu
     return EmailParticulars(on=p.on, at=p.at, party=p.party, name=p.name, guest_email=g.strip().lower())
 
 
+#: Sasha 130 · the languages Sasha writes booking emails in; any other country's venue is written to in English (said)
+TEMPLATE_LANGS = frozenset(_T)
+
+
 def compose(lang: str, venue_name: str, venue_email: str, p: EmailParticulars, email_id: str) -> dict:
     lang = lang if lang in _T else "en"
     subj_t, body_t = _T[lang]

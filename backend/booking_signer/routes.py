@@ -482,6 +482,11 @@ def what_of(request, party) -> dict:
             "unit": req["how_many"]["unit"], "duration_min": (req.get("when") or {}).get("duration_min")}
 
 
+def _read_id_of(request) -> Optional[str]:
+    req = request if isinstance(request, dict) else ({} if not request else __import__("json").loads(request))
+    return ((req or {}).get("where") or {}).get("read_id")
+
+
 def status_words(status: str, request) -> str:
     """"…by the restaurant" only for a restaurant; anything else is "the venue"."""
     words = STATUS_WORDS.get(status, status)
@@ -512,6 +517,9 @@ async def reservations(request: Request):
         # Sasha 88 · a phone booking has a receipt: the call, both references, the transcript, the proof
         "receipt": f"/api/booking/reservations/{r['id']}/receipt" if (r.get("channel") == "phone") else None,
         "venue_words": r["venue_words"], "observed_by": r["observed_by"], "task_digest": r["task_digest"],
+        # Sasha 130 · the venue read it was made from (an id, never the venue's details), so a no-reply email can be
+        # followed by an offer to call at their opening
+        "read_id": _read_id_of(r.get("request")),
     } for r in rows]}
 
 

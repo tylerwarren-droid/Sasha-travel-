@@ -436,6 +436,49 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
     return done
 
 
+# ── Sasha 130 · EMAIL, THEN A CALL AT OPENING: no reply to Sasha's email → at their opening, the guest is ASKED ─────
+
+def no_reply_call_on() -> bool:
+    """On only once migration 028 lets the ledger hold 'no_reply_call' (the dedupe): until then nothing is promised."""
+    return os.getenv("SASHA_NO_REPLY_CALL", "") == "1"
+
+
+OPENED_WITHIN = timedelta(hours=2)   # "at opening": open now, and closed two hours ago
+
+
+async def no_reply_offers(now: datetime) -> List[dict]:
+    """For each still-unanswered email booking whose venue has just opened: ONE WhatsApp question — "shall I call them?".
+    The yes leads to the call's own read-back and its own yes; nothing is dialled from here."""
+    from . import guest_whatsapp as GW, hours as H, ladder_routes as LR
+    if not no_reply_call_on() or STORE is None or GW.STORE is None or LR.LADDER_STORE is None:
+        return []
+    done: List[dict] = []
+    for ch in await GW.STORE.all_channels():
+        account = ch["account_id"]
+        for b in await GW._upcoming(account):
+            if b.get("channel") != "email" or b.get("status") not in ("requested", "attempting") or not b.get("read_id"):
+                continue
+            row = await LR.LADDER_STORE.get_read(account, str(b["read_id"]))
+            read = (row or {}).get("read") or {}
+            if not any(f.get("kind") == "phone" for f in read.get("facts") or []):
+                continue
+            tz = b.get("timezone") or "Europe/Madrid"
+            try:
+                opened = H.status(read, now, tz).get("open_now") and H.status(read, now - OPENED_WITHIN, tz).get("open_now") is False
+            except Exception:
+                continue
+            if not opened:
+                continue
+            sid = await STORE.claim({"account_id": account, "trip_item_id": b["id"], "kind": "no_reply_call",
+                                     "local_day": now.astimezone(ZoneInfo(tz)).date(), "status_at_send": b.get("status")})
+            if sid is None:
+                continue
+            outcome = await GW.offer_no_reply_call(ch, b, row)
+            await STORE.finish(sid, "whatsapp_session" if outcome == "sent" else "skipped", outcome)
+            done.append({"kind": "no_reply_call", "booking": b["id"], "outcome": outcome})
+    return done
+
+
 # ── the loop (the retention pattern) ────────────────────────────────────────────────────────────────────────────────
 
 _task: Optional[asyncio.Task] = None
@@ -445,6 +488,8 @@ async def _forever() -> None:
     while True:
         try:
             await tick(NOW())
+            for what in await no_reply_offers(NOW()):   # Sasha 130
+                log.info("[proactive] %s", what)
             from . import invitations as IV   # S-80 · an invitation's booking confirmed or cancelled → the invitee told
             for what in await IV.tick():
                 log.info("[invite] %s", what)

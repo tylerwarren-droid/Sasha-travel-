@@ -46,3 +46,14 @@ class EnglishAbroad(unittest.TestCase):
         p = C.parse_call_particulars({"date": "2026-10-05", "time": "21:00", "party": 2, "name": "Tyler Warren"})
         built = C.build_call(v, p, NOW)
         self.assertEqual(C.with_language_note(built, v), built)
+
+
+class EnglishEmail(unittest.TestCase):
+    def test_vietnamese_venues_are_written_to_in_english(self):
+        from booking_signer import emailing as E
+        self.assertNotIn("vi", E.TEMPLATE_LANGS)
+        self.assertIn("es", E.TEMPLATE_LANGS)
+        from datetime import date, time
+        p = E.EmailParticulars(on=date(2026, 10, 5), at=time(19, 0), party=2, name="Tyler Warren", guest_email="guest@example.com")
+        mail = E.compose("vi", "Mate", "contact@materes.com", p, "x")
+        self.assertTrue(mail["text"].startswith("Hello, this is Sasha, an AI concierge"))

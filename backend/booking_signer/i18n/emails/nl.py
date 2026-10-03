@@ -1,6 +1,7 @@
 """Dutch (nl) · ⚠ AI-written, NOT native-reviewed (STATUS). Formal "u"; Netherlands usage (Flemish readers will follow it)."""
 CODE, NAME, STATUS = "nl", "Dutch", "ai_unreviewed"
-DISCLOSURE = "Sasha, een AI-conciërge van Kanoe Technologies SL"
+from booking_signer.wordings import DISCLOSURE as _DISCLOSURE  # noqa: E402  (the single source: calls and emails)
+DISCLOSURE = _DISCLOSURE["nl"]
 TABLE = "een tafel"
 
 

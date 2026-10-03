@@ -1,6 +1,7 @@
 """Japanese (ja) · ⚠ AI-written, NOT native-reviewed (STATUS). Business keigo (です・ます / いただけますでしょうか)."""
 CODE, NAME, STATUS = "ja", "Japanese", "ai_unreviewed"
-DISCLOSURE = "Kanoe Technologies SL が運営する AI コンシェルジュの Sasha"
+from booking_signer.wordings import DISCLOSURE as _DISCLOSURE  # noqa: E402  (the single source: calls and emails)
+DISCLOSURE = _DISCLOSURE["ja"]
 TABLE = "お席"
 
 

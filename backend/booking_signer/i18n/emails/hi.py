@@ -1,7 +1,8 @@
 """Hindi (hi) · ⚠ AI-written, NOT native-reviewed (STATUS). Formal आप; Devanagari. The reviewer should say whether
 English loanwords (टेबल, बुकिंग, ईमेल) — common in Indian business email — read better than शुद्ध alternatives."""
 CODE, NAME, STATUS = "hi", "Hindi", "ai_unreviewed"
-DISCLOSURE = "Sasha, Kanoe Technologies SL द्वारा संचालित एक AI कंसीयर्ज (कृत्रिम बुद्धिमत्ता सहायक)"
+from booking_signer.wordings import DISCLOSURE as _DISCLOSURE  # noqa: E402  (the single source: calls and emails)
+DISCLOSURE = _DISCLOSURE["hi"]
 TABLE = "एक टेबल"
 
 

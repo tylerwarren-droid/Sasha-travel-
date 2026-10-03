@@ -130,6 +130,9 @@ TEMPLATE_LANGS = frozenset(_T)
 
 
 def compose(lang: str, venue_name: str, venue_email: str, p: EmailParticulars, email_id: str) -> dict:
+    from .i18n import emails as I18N   # CR 7 i18n · 12 more languages; unreviewed ones go only to our test addresses
+    if lang in I18N.LANGS and I18N.usable(lang, venue_email):
+        return I18N.table_email(lang, venue_email, p, email_id)
     lang = lang if lang in _T else "en"
     subj_t, body_t = _T[lang]
     surname = p.name.split()[-1]

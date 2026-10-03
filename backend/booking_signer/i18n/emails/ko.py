@@ -1,6 +1,7 @@
 """Korean (ko) · ⚠ AI-written, NOT native-reviewed (STATUS). Formal 합니다체."""
 CODE, NAME, STATUS = "ko", "Korean", "ai_unreviewed"
-DISCLOSURE = "Kanoe Technologies SL이 운영하는 AI 컨시어지 Sasha"
+from booking_signer.wordings import DISCLOSURE as _DISCLOSURE  # noqa: E402  (the single source: calls and emails)
+DISCLOSURE = _DISCLOSURE["ko"]
 TABLE = "테이블"
 
 

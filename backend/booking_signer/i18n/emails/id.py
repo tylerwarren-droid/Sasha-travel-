@@ -1,6 +1,7 @@
 """Indonesian (id) · ⚠ AI-written, NOT native-reviewed (STATUS). Formal register (Bapak/Ibu, Anda)."""
 CODE, NAME, STATUS = "id", "Indonesian", "ai_unreviewed"
-DISCLOSURE = "Sasha, concierge kecerdasan buatan (AI) yang dikelola oleh Kanoe Technologies SL"
+from booking_signer.wordings import DISCLOSURE as _DISCLOSURE  # noqa: E402  (the single source: calls and emails)
+DISCLOSURE = _DISCLOSURE["id"]
 TABLE = "meja"
 
 

@@ -1,7 +1,8 @@
 """Chinese, Simplified (zh) · ⚠ AI-written, NOT native-reviewed (STATUS). Mainland usage; formal 您.
 ⚠ A venue in Taiwan or Hong Kong reads Traditional characters — not drafted; the reviewer should say if zh-Hant is needed."""
 CODE, NAME, STATUS = "zh", "Chinese (Simplified)", "ai_unreviewed"
-DISCLOSURE = "Sasha，由 Kanoe Technologies SL 运营的人工智能礼宾助理"
+from booking_signer.wordings import DISCLOSURE as _DISCLOSURE  # noqa: E402  (the single source: calls and emails)
+DISCLOSURE = _DISCLOSURE["zh"]
 TABLE = "一张餐桌"
 
 

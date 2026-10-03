@@ -1,7 +1,8 @@
 """Swedish (sv) · ⚠ AI-written, NOT native-reviewed (STATUS). Polite but plain ("du"-reform register; Swedish business
 email does not use "Ni" today — the reviewer should confirm)."""
 CODE, NAME, STATUS = "sv", "Swedish", "ai_unreviewed"
-DISCLOSURE = "Sasha, en AI-concierge som drivs av Kanoe Technologies SL"
+from booking_signer.wordings import DISCLOSURE as _DISCLOSURE  # noqa: E402  (the single source: calls and emails)
+DISCLOSURE = _DISCLOSURE["sv"]
 TABLE = "ett bord"
 
 

@@ -1,7 +1,8 @@
 """Arabic, Modern Standard (ar) · ⚠ AI-written, NOT native-reviewed (STATUS). Formal MSA, plural address (حضراتكم).
 Digits are Western Arabic (0–9) for dates/times/counts — the reviewer may prefer Eastern Arabic (٠–٩) for some markets."""
 CODE, NAME, STATUS = "ar", "Arabic", "ai_unreviewed"
-DISCLOSURE = "ساشا، مساعدة استقبال (كونسيرج) تعمل بالذكاء الاصطناعي وتديرها شركة Kanoe Technologies SL"
+from booking_signer.wordings import DISCLOSURE as _DISCLOSURE  # noqa: E402  (the single source: calls and emails)
+DISCLOSURE = _DISCLOSURE["ar"]
 TABLE = "طاولة"
 
 

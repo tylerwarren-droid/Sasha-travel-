@@ -2,7 +2,8 @@
 Poles book: na 1 osobę · na 2–4 osoby · na 5–21 osób · na 22–24 osoby. Names follow "w imieniu:" / "na nazwisko" so they
 never need declining."""
 CODE, NAME, STATUS = "pl", "Polish", "ai_unreviewed"
-DISCLOSURE = "Sasha, konsjerżka oparta na sztucznej inteligencji, prowadzona przez Kanoe Technologies SL"
+from booking_signer.wordings import DISCLOSURE as _DISCLOSURE  # noqa: E402  (the single source: calls and emails)
+DISCLOSURE = _DISCLOSURE["pl"]
 TABLE = "stolik"
 
 

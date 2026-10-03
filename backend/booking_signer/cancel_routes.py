@@ -173,9 +173,15 @@ def words(b: Mapping[str, Any], p: Mapping[str, Any]) -> Dict[str, Any]:
                         [f"{venue} sent a cancel link on their own website: {p['url']}.",
                          "I'll open it once and keep their page word for word. It's cancelled only if their page says so."])
     elif p["route"] == "email":
-        subj, body = _EMAIL[lang]
-        ident = identifies(b, lang)
-        out["email"] = {"subject": subj.format(name=name), "text": body.format(name=name, core=core + (f".\n{ident[:-1]}" if ident else ""))}
+        from .i18n import emails as I18N   # CR 7 i18n · the venue's own language, when usable (else today's es/en)
+        vl = I18N.venue_lang(b.get("read"))
+        if vl in I18N.LANGS and I18N.usable(vl, p["to"]):
+            subj_x, text_x = I18N.cancel_texts(vl, o, name)
+            out["email"], out["lang"] = {"subject": subj_x, "text": text_x}, vl
+        else:
+            subj, body = _EMAIL[lang]
+            ident = identifies(b, lang)
+            out["email"] = {"subject": subj.format(name=name), "text": body.format(name=name, core=core + (f".\n{ident[:-1]}" if ident else ""))}
         out["lines"] = [f"I'll email {venue} at {p['to']} (the address on {p['source_label']}), from my own address:",
                         f"\"{out['email']['subject']}\" — {out['email']['text'][:400]}",
                         "It's cancelled only once their reply says so; their reply comes onto this booking."]

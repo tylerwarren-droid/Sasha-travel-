@@ -25,6 +25,20 @@ DISCLOSURE = {
     "fr": "Sasha, une concierge d'intelligence artificielle exploitée par Kanoe Technologies SL",
     "de": "Sasha, eine KI-Concierge von Kanoe Technologies SL",
     "it": "Sasha, una concierge di intelligenza artificiale gestita da Kanoe Technologies SL",
+    # CR 7 i18n · the 11 below are AI-written, NOT native-reviewed (booking_signer/i18n/emails/, review sheets in
+    # docs/sasha/i18n/emails/). One wording per language for calls AND emails. "vi" is for EMAILS only: Bland has no
+    # Vietnamese voice (Sasha 129), so Vietnam is called in English.
+    "zh": "Sasha，由 Kanoe Technologies SL 运营的人工智能礼宾助理",
+    "ja": "Kanoe Technologies SL が運営する AI コンシェルジュの Sasha",
+    "ko": "Kanoe Technologies SL이 운영하는 AI 컨시어지 Sasha",
+    "ar": "ساشا، مساعدة استقبال (كونسيرج) تعمل بالذكاء الاصطناعي وتديرها شركة Kanoe Technologies SL",
+    "hi": "Sasha, Kanoe Technologies SL द्वारा संचालित एक AI कंसीयर्ज (कृत्रिम बुद्धिमत्ता सहायक)",
+    "ru": "Саша (Sasha), ИИ-консьерж, работающий от имени компании Kanoe Technologies SL",
+    "nl": "Sasha, een AI-conciërge van Kanoe Technologies SL",
+    "pl": "Sasha, konsjerżka oparta na sztucznej inteligencji, prowadzona przez Kanoe Technologies SL",
+    "id": "Sasha, concierge kecerdasan buatan (AI) yang dikelola oleh Kanoe Technologies SL",
+    "sv": "Sasha, en AI-concierge som drivs av Kanoe Technologies SL",
+    "vi": "Sasha, trợ lý AI (concierge trí tuệ nhân tạo) do Kanoe Technologies SL vận hành",
 }
 
 #: S-48 §3 · the first-contact WhatsApp text, v2. {who} {n} {date} {time}. The same text is Mode A's pre-filled message.

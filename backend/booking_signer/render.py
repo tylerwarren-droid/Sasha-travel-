@@ -249,11 +249,14 @@ def email(o: Mapping[str, Any], lang_code: str, venue_email: str, email_id: str)
     guest = (o["who"].get("contact") or {}).get("email")
     if not guest:
         raise RS.ReservationRefused("contact_invalid", "an email request BCCs the guest, so it needs their address")
+    from .i18n import emails as I18N   # CR 7 i18n
+    if lang_code in I18N.LANGS and I18N.usable(lang_code, venue_email) and not is_table(o):
+        return I18N.object_email(lang_code, o, venue_email, email_id)
     code = lang_code if lang_code in E._T else "en"
     on, at = _at(o)
     p = E.EmailParticulars(on=on, at=at, party=o["how_many"]["count"], name=o["who"]["name"], guest_email=guest.lower())
     if is_table(o):
-        return E.compose(code, o["where"]["venue_name"], venue_email, p, email_id)
+        return E.compose(lang_code if lang_code in I18N.LANGS else code, o["where"]["venue_name"], venue_email, p, email_id)   # CR 7 i18n
     subj_word, table_phrase = _EMAIL_TABLE[code]
     subj_t, body_t = E._T[code]
     n = _count_noun(code, o)

@@ -1,6 +1,7 @@
 """Vietnamese (vi) · ⚠ AI-written, NOT native-reviewed (STATUS). Polite written register (quý vị / quý nhà hàng)."""
 CODE, NAME, STATUS = "vi", "Vietnamese", "ai_unreviewed"
-DISCLOSURE = "Sasha, trợ lý AI (concierge trí tuệ nhân tạo) do Kanoe Technologies SL vận hành"
+from booking_signer.wordings import DISCLOSURE as _DISCLOSURE  # noqa: E402  (the single source: calls and emails)
+DISCLOSURE = _DISCLOSURE["vi"]
 TABLE = "một bàn"
 
 

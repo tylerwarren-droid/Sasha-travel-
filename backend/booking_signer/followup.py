@@ -249,6 +249,9 @@ def restatement(lang_code: str, o: Mapping[str, Any]) -> str:
 def compose(kind: str, lang_code: str, o: Mapping[str, Any], to: str, bcc: Optional[str], email_id: str,
             own_ref: Optional[str] = None) -> dict:
     from .wordings import DISCLOSURE
+    from .i18n import emails as I18N   # CR 7 i18n
+    if lang_code in I18N.LANGS and I18N.usable(lang_code, to):
+        return I18N.followup_email(kind, lang_code, o, to, bcc, email_id, own_email() or os.getenv("SASHA_EMAIL_FROM", ""), own_ref)
     lang = lang_code if lang_code in _FU else "en"
     subj, body = _FU[lang][kind]
     name = o["who"]["name"]

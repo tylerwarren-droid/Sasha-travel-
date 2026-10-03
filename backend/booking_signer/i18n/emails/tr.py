@@ -1,7 +1,8 @@
 """Turkish (tr) · ⚠ AI-written, NOT native-reviewed (STATUS). Formal "siz". The disclosure is wordings.DISCLOSURE["tr"]
 VERBATIM (already used on calls/WhatsApp), so the venue reads the same words it hears."""
 CODE, NAME, STATUS = "tr", "Turkish", "ai_unreviewed"
-DISCLOSURE = "Sasha; Kanoe Technologies SL tarafından işletilen bir yapay zekâ konsiyerjiyim"
+from booking_signer.wordings import DISCLOSURE as _DISCLOSURE  # noqa: E402  (the single source: calls and emails)
+DISCLOSURE = _DISCLOSURE["tr"]
 TABLE = "bir masa"
 
 

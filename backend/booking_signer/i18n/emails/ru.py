@@ -1,7 +1,8 @@
 """Russian (ru) · ⚠ AI-written, NOT native-reviewed (STATUS). Formal «Вы». Counts follow the number after «на»:
 на 1 человека · на 2–4 человека · на 5–20 человек · на 21 человека · на 22 человека · на 25 человек."""
 CODE, NAME, STATUS = "ru", "Russian", "ai_unreviewed"
-DISCLOSURE = "Саша (Sasha), ИИ-консьерж, работающий от имени компании Kanoe Technologies SL"
+from booking_signer.wordings import DISCLOSURE as _DISCLOSURE  # noqa: E402  (the single source: calls and emails)
+DISCLOSURE = _DISCLOSURE["ru"]
 TABLE = "столик"
 
 

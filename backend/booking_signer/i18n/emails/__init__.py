@@ -93,5 +93,74 @@ def back_translation(lang: str, kind: str) -> Tuple[str, str]:
     return mod(lang).BACK[kind]
 
 
+# ── the hooks' helpers: each returns exactly the shape the code it stands in for returns ─────────────────────────────
+
+def venue_lang(read) -> Optional[str]:
+    """The venue's language by its country (venue_read.COUNTRIES — the Sasha tab's mapping), or None."""
+    from booking_signer import venue_read as V
+    c = (read or {}).get("country")
+    return V.COUNTRIES[c][2] if c in V.COUNTRIES else None
+
+
+def _particulars(o) -> dict:
+    from booking_signer import render as R
+    at = o["when"]["at"]
+    what = None if R.is_table(o) else (o["what"].get("activity_venue_lang") or o["what"].get("activity"))
+    return {"table": what is None, "what": what, "d": at[:10], "t": at[11:16], "n": int(o["how_many"]["count"]),
+            "name": o["who"]["name"]}
+
+
+def object_core(lang: str, o) -> str:
+    x = _particulars(o)
+    return core(lang, what=x["what"], d=x["d"], t=x["t"], n=x["n"], name=x["name"])
+
+
+def _headers(venue_email: str, bcc: Optional[str], email_id: str) -> dict:
+    from booking_signer import emailing as E
+    h = {"from": E._env("SASHA_EMAIL_FROM"), "to": venue_email, "reply_to": E.act_address(email_id)}
+    if bcc:
+        h["bcc"] = bcc
+    return h
+
+
+def table_email(lang: str, venue_email: str, p, email_id: str) -> dict:
+    """emailing.compose's email, in `lang` (p: emailing.EmailParticulars)."""
+    subj, body = request(lang, table=True, what=None, d=p.on.isoformat(), t=p.at.strftime("%H:%M"), n=p.party, name=p.name)
+    return {**_headers(venue_email, p.guest_email, email_id), "subject": subj, "text": body}
+
+
+def object_email(lang: str, o, venue_email: str, email_id: str) -> dict:
+    """render.email's email for a booking that isn't a table, in `lang`."""
+    x = _particulars(o)
+    guest = ((o["who"].get("contact") or {}).get("email") or "").lower() or None
+    subj, body = request(lang, table=x["table"], what=x["what"], d=x["d"], t=x["t"], n=x["n"], name=x["name"])
+    return {**_headers(venue_email, guest, email_id), "subject": subj, "text": body}
+
+
+def followup_email(kind: str, lang: str, o, to: str, bcc: Optional[str], email_id: str, me: str,
+                   own_ref: Optional[str] = None) -> dict:
+    """followup.compose's email, in `lang`."""
+    c = object_core(lang, o) + (f" (Ref. {own_ref})" if own_ref else "")
+    subj, body = followup(kind, lang, core_text=c, name=o["who"]["name"], me=me)
+    return {**_headers(to, bcc, email_id), "subject": subj + (f" · Ref. {own_ref}" if own_ref else ""), "text": body}
+
+
+def cancel_texts(lang: str, o, name: str) -> Tuple[str, str]:
+    """cancel_routes' (subject, text), in `lang`."""
+    return cancel(lang, core_text=object_core(lang, o) if o.get("what") else name, name=name)
+
+
+def read_back_line(lang: str, to: str) -> Optional[str]:
+    """What the guest is told before the yes — never "in English" when it isn't (Sasha tab, CR 7 amendment 2)."""
+    if not usable(lang, to):
+        return None
+    name = mod(lang).NAME
+    if reviewed(lang):
+        who, when = REVIEWED[lang]
+        return f"I'll write in {name} (reviewed by {who}, {when})."
+    return f"I'll write in {name} — an unreviewed draft, to our own test address only."
+
+
 __all__ = ["LANGS", "KINDS", "REVIEWED", "usable", "reviewed", "is_test_address", "count", "core", "request", "cancel",
-           "followup", "back_translation", "mod"]
+           "followup", "back_translation", "mod", "venue_lang", "object_core", "table_email",
+           "object_email", "followup_email", "cancel_texts", "read_back_line"]

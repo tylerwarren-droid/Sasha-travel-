@@ -283,7 +283,9 @@ async def prepare_email(request: Request):
     email = E.compose(lang, read["name"], f["value"], p, email_id)
     lines = E.read_back(email, read["name"], f["source_label"])
     if lang not in E.TEMPLATE_LANGS:   # Sasha 130 · e.g. Vietnam: written in English, and said so before the yes
-        lines.insert(1, f"I'll write in English: I have no {C.LANGUAGE_NAMES.get(lang, repr(lang))} template.")
+        from .i18n import emails as I18N   # CR 7 i18n · …unless an i18n template is usable: then it says THAT
+        lines.insert(1, I18N.read_back_line(lang, f["value"])
+                     or f"I'll write in English: I have no {C.LANGUAGE_NAMES.get(lang, repr(lang))} template.")
     rec = {"request": RS.try_from_particulars(p, account_id=account, venue_name=read["name"], timezone=tz, lang=lang,
                                               venue_ids=O.venue_ids_of(read), read_id=str(row["read_id"])),   # S-64 step 3
            "email_id": email_id, "account_id": account, "read_id": row["read_id"], "email": email,

@@ -6,6 +6,7 @@
 
 | Piece | State |
 |---|---|
+| **Vietnamese-language calls** | **NOT SUPPORTED.** Bland's live `/v1/models` (3 Oct) lists no Vietnamese in any model. Calls to Vietnam use English abroad. Who could add Vietnamese later: docs/sasha/Sasha-129-call-language-matrix.md §1. |
 | **English abroad** (call language) | **Built and pushed (12afa93).** Details in §1.1. |
 | **Twilio: dialling +84** | **OFF.** Twilio's geo permission for Vietnam is disabled (read via the API on 3 Oct; Spain is on). Bland dials through our Twilio number (caller ID +44…), so every +84 call fails until it is switched on. **Founder action, §2.** It is an account security setting, so I didn't change it. |
 | **Bland: international** | **Unproven.** Nothing in our setup blocks it, but no +84 call has ever been placed. The first real call proves it or shows Bland's refusal in its own words. |

@@ -443,20 +443,28 @@ def no_reply_call_on() -> bool:
     return os.getenv("SASHA_NO_REPLY_CALL", "") == "1"
 
 
-OPENED_WITHIN = timedelta(hours=2)   # "at opening": open now, and closed two hours ago
+def tap_escalation_on() -> bool:
+    """On only once migration 031 lets the ledger hold 'tap_expired'."""
+    return os.getenv("SASHA_TAP_ESCALATION", "") == "1"
+
+
+def _daytime(now: datetime, tz: str) -> bool:
+    return 10 <= now.astimezone(ZoneInfo(tz)).hour < 20
 
 
 async def no_reply_offers(now: datetime) -> List[dict]:
-    """For each still-unanswered email booking whose venue has just opened: ONE WhatsApp question — "shall I call them?".
-    The yes leads to the call's own read-back and its own yes; nothing is dialled from here."""
-    from . import guest_whatsapp as GW, hours as H, ladder_routes as LR
+    """Sasha 131 · an email with no venue reply after SASHA_EMAIL_REPLY_HOURS (24 h) → ONE WhatsApp question: "shall I call
+    them?" — when they're open (by their hours), else in the daytime when their hours aren't known."""
+    from . import decide as D, guest_whatsapp as GW, hours as H, ladder_routes as LR
     if not no_reply_call_on() or STORE is None or GW.STORE is None or LR.LADDER_STORE is None:
         return []
     done: List[dict] = []
     for ch in await GW.STORE.all_channels():
         account = ch["account_id"]
         for b in await GW._upcoming(account):
-            if b.get("channel") != "email" or b.get("status") not in ("requested", "attempting") or not b.get("read_id"):
+            if b.get("channel") != "email" or b.get("status") not in ("requested", "attempting") or not b.get("read_id") or not b.get("requested_at"):
+                continue
+            if now - datetime.fromisoformat(b["requested_at"]) < timedelta(hours=D.reply_hours()):
                 continue
             row = await LR.LADDER_STORE.get_read(account, str(b["read_id"]))
             read = (row or {}).get("read") or {}
@@ -464,10 +472,10 @@ async def no_reply_offers(now: datetime) -> List[dict]:
                 continue
             tz = b.get("timezone") or "Europe/Madrid"
             try:
-                opened = H.status(read, now, tz).get("open_now") and H.status(read, now - OPENED_WITHIN, tz).get("open_now") is False
+                st = H.status(read, now, tz)
             except Exception:
-                continue
-            if not opened:
+                st = {"known": False}
+            if not (st.get("open_now") if st.get("known") else _daytime(now, tz)):
                 continue
             sid = await STORE.claim({"account_id": account, "trip_item_id": b["id"], "kind": "no_reply_call",
                                      "local_day": now.astimezone(ZoneInfo(tz)).date(), "status_at_send": b.get("status")})
@@ -476,6 +484,41 @@ async def no_reply_offers(now: datetime) -> List[dict]:
             outcome = await GW.offer_no_reply_call(ch, b, row)
             await STORE.finish(sid, "whatsapp_session" if outcome == "sent" else "skipped", outcome)
             done.append({"kind": "no_reply_call", "booking": b["id"], "outcome": outcome})
+    return done
+
+
+async def tap_offers(now: datetime) -> List[dict]:
+    """Sasha 131 · a one-tap page not pressed within SASHA_TAP_WINDOW_MIN → ONE question: email them (or, urgent, call and
+    email; or, with no address, call). Its yes leads to that route's own read-back and yes."""
+    from . import decide as D, guest_whatsapp as GW, ladder_routes as LR
+    if not tap_escalation_on() or STORE is None or GW.STORE is None or LR.LADDER_STORE is None or not hasattr(LR.LADDER_STORE, "stale_links"):
+        return []
+    done: List[dict] = []
+    chans = {c["account_id"]: c for c in await GW.STORE.all_channels()}
+    for l in await LR.LADDER_STORE.stale_links(now - timedelta(minutes=D.tap_window_min())):
+        ch = chans.get(l["account_id"])
+        if not ch or not l.get("local_date"):
+            continue
+        row = await LR.LADDER_STORE.get_read(l["account_id"], l["read_id"])
+        kinds = {f.get("kind") for f in ((row or {}).get("read") or {}).get("facts") or []}
+        tz = l.get("local_timezone") or "Europe/Madrid"
+        start = datetime.combine(l["local_date"], l["local_time"], tzinfo=ZoneInfo(tz))
+        soon = (start - now) < timedelta(hours=D.urgent_hours())
+        prefer = "call_email" if soon and {"phone", "email"} <= kinds else "email" if "email" in kinds else "call" if "phone" in kinds else None
+        if prefer is None:
+            continue
+        sid = await STORE.claim({"account_id": l["account_id"], "trip_item_id": l["trip_item_id"], "kind": "tap_expired",
+                                 "local_day": now.astimezone(ZoneInfo(tz)).date(), "status_at_send": "link_sent"})
+        if sid is None:
+            continue
+        b = {"id": l["trip_item_id"], "venue": l["venue"], "date": l["local_date"].isoformat(), "time": l["local_time"].strftime("%H:%M"),
+             "party": l.get("party_size"), "read_id": l["read_id"]}
+        ask = {"email": ("email them instead", "Yes, prepare the email"), "call": ("call them instead", "Yes, prepare the call"),
+               "call_email": ("call and email them now — it's soon", "Yes, prepare both")}[prefer]
+        outcome = await GW.offer_escalation(ch, b, row, prefer, f"Not booked on {l['venue']}'s page yet for {SN.day_words(b['date'])} at "
+                                            f"{b['time']}. Shall I {ask[0]}? I'll show you exactly what I'll send first.", ask[1])
+        await STORE.finish(sid, "whatsapp_session" if outcome == "sent" else "skipped", outcome)
+        done.append({"kind": "tap_expired", "booking": l["trip_item_id"], "outcome": outcome})
     return done
 
 
@@ -488,7 +531,7 @@ async def _forever() -> None:
     while True:
         try:
             await tick(NOW())
-            for what in await no_reply_offers(NOW()):   # Sasha 130
+            for what in await no_reply_offers(NOW()) + await tap_offers(NOW()):   # Sasha 130/131 · the escalation policy
                 log.info("[proactive] %s", what)
             from . import invitations as IV   # S-80 · an invitation's booking confirmed or cancelled → the invitee told
             for what in await IV.tick():

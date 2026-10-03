@@ -150,9 +150,9 @@ class Script(unittest.TestCase):
         t = b["brief"]["task"]
         for must in ("Never accept another date", "Agree to no deposit, give no card", "I'll need to check that with the Johnsons.",
                      "an AI, never the guest or a human", "No voicemail", "no phone number to give",
-                     "Name: Johnson; if not caught, spell: \"J as in Juliett, O as in Oscar", "Could you give me a booking reference",
-                     f"Our own reference for it is K as in Kilo"):   # Sasha 88 · spelled, both references
+                     "Name: Johnson; if not caught, spell: \"J as in Juliett, O as in Oscar", "Could you give me a booking reference"):
             self.assertIn(must, t)
+        self.assertNotIn("Our own reference", t)   # Sasha 131 · ours is never said on a call — written channels only
         self.assertLessEqual(len(t), 2000)
         self.assertEqual(b["brief"]["number"], "+351912000000")
         self.assertIn("+351912000000", b["read_back_lines"][0])

@@ -489,8 +489,8 @@ def _task_text(lang: Lang, *, place: str, what: str, booking: str, never: str, o
         f"to just \"ok\", ask once: \"{SP.RECAP_AGAIN[SP.code(c)]}\" "
         "If anything differs, correct it once and repeat the recap; if still different, say the fee sentence and end. "
         + ("" if "ask_ref" in drop else f"After the yes, ask: \"{SP.ask_reference(c)}\" and repeat it back. ")
-        + f"Say: \"{SP.own_reference_line(own_ref, c)}\" "
-        "If no, later, or unsure: thank them and end. "
+        # Sasha 131 · our K-reference is NEVER said on a call: written channels only (receipt, emails, the venue's reply)
+        + "If no, later, or unsure: thank them and end. "
         f"If asked not to call again, say exactly \"{_ack(lang)}\" and end. "
         "Be brief. No voicemail."
     )
@@ -590,7 +590,7 @@ def build_call(venue: CallVenue, p: CallParticulars, now: datetime, purpose: str
         "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
         (f"If they ask for a contact number, I'll give yours, {p.phone}." if p.phone
          else "I'll give them no contact number; if they need one, I'll say you'll confirm directly."),
-        f"I'll ask for their booking reference and give them ours, {own_ref}; both go on your receipt.",
+        f"I'll ask for their booking reference; it goes on your receipt with ours, {own_ref}, which I only ever give in writing.",
         "I'll tell you exactly what they said. Shall I call them now?",
     ]
     return {

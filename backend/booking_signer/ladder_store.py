@@ -57,6 +57,13 @@ class MemoryLinks:
             self.trip_items[l["trip_item_id"]]["status"] = "link_sent"
         return "ok"
 
+    async def stale_links(self, before):
+        """Sasha 131 · one-tap pages the guest hasn't pressed on (offered / opened) since before `before`."""
+        return [{"link_id": k, "account_id": l["account_id"], "trip_item_id": l["trip_item_id"], "read_id": str(l["read_id"]),
+                 "created_at": l["created_at"], "venue": l["venue_name"], "local_date": l.get("local_date"), "local_time": l.get("local_time"),
+                 "local_timezone": l.get("local_timezone"), "party_size": l.get("party_size")}
+                for k, l in self.links.items() if l["status"] in ("offered", "link_sent") and l["created_at"] < before]
+
     async def guest_booked(self, account_id, link_id, said, now):
         l = self.links.get(link_id)
         if not l or l["account_id"] != account_id:
@@ -148,6 +155,14 @@ class PostgresLinks:
 
     async def open_link(self, account_id, link_id, now):
         return await self._move(account_id, link_id, ("offered",), "link_sent", ", opened_at = $4", now)
+
+    async def stale_links(self, before):
+        rows = await self._run_links(lambda c: c.fetch(
+            "select l.link_id, l.account_id, l.trip_item_id, l.read_id, l.created_at, t.provider_name as venue, "
+            "(t.date_time at time zone t.local_timezone)::date as local_date, (t.date_time at time zone t.local_timezone)::time as local_time, "
+            "t.local_timezone, t.party_size from booking_links l join trip_items t on t.id = l.trip_item_id "
+            "where l.status in ('offered','link_sent') and l.created_at < $1 and t.status <> 'cancelled' and t.date_time > now()", before))
+        return [{k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in dict(r).items()} for r in rows]
 
     async def guest_booked(self, account_id, link_id, said, now):
         return await self._move(account_id, link_id, ("offered", "link_sent"), "guest_booked",

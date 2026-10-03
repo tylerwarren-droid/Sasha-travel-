@@ -125,7 +125,7 @@ def call_read_back(lang: C.Lang, o: Mapping[str, Any], venue_name: str, number: 
         "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
         (f"If they ask for a contact number, I'll give yours, {phone}." if phone
          else "I'll give them no contact number; if they need one, I'll say you'll confirm directly."),
-        f"I'll ask for their booking reference and give them ours, {own_ref}; both go on your receipt.",
+        f"I'll ask for their booking reference; it goes on your receipt with ours, {own_ref}, which I only ever give in writing.",
         "I'll tell you exactly what they said. Shall I call them now?",
     ]
     return lines

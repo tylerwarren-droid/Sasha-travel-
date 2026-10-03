@@ -1207,11 +1207,12 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
     if kind == "no_reply_call":   # Sasha 130 · yes → the call's OWN read-back and yes; no → nothing
         if payload.startswith("no:") or (not payload and _NO.match(body)):
             st["pending"] = None
-            out.text("OK — no call. I'll show you their reply if one arrives.")
+            out.text("OK — nothing more. I'll show you their reply if one arrives.")
             return True
         if payload.startswith("yes:") or YS.is_yes(body):
             st["pending"] = None
-            await _prepare_or_ask(ctx, {"kind": "need", "at": now.isoformat(), "read": pend["read"], "draft": pend["draft"], "prefer": "call"})
+            await _prepare_or_ask(ctx, {"kind": "need", "at": now.isoformat(), "read": pend["read"], "draft": pend["draft"],
+                                        "prefer": pend.get("prefer") or "call"})
             return True
         return False
     if kind in ("combo_when", "spa_when"):   # Sasha 126 · the day and the time(s), asked once
@@ -1266,7 +1267,7 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             return True
         from . import decide as D
         want = D.preference(body) if kind == "confirm" and pend.get("read") else None
-        if want and want != {"form": "form", "call": "call", "email": "email"}.get(pend.get("rung")):   # Sasha 130 · the override
+        if want and want != {"form": "form", "call": "call", "email": "email", "call_email": "call_email"}.get(pend.get("rung")):   # Sasha 130 · the override
             st["pending"] = None
             await _prepare_or_ask(ctx, {"kind": "need", "at": now.isoformat(), "read": pend["read"], "draft": pend["draft"],
                                         "invite_code": pend.get("invite_code"), "prefer": want})
@@ -1456,16 +1457,25 @@ def _hours_of(read: dict, now) -> dict:
     return {"open_now": s.get("open_now"), "opens_at": (s.get("opens_at") or "")[11:16] or None}
 
 
-def decision_of(rd: dict, prefer: Optional[str] = None):
-    """Sasha 130 · the read, as the decision workflow sees it."""
+def decision_of(rd: dict, prefer: Optional[str] = None, at: Optional[str] = None, now=None):
+    """Sasha 130 · the read, as the decision workflow sees it. Sasha 131 · `at` (the booking's local time) makes it urgent."""
     from . import calls as C, decide as D, venue_read as V
     rungs = rd.get("rungs") or {}
-    lang = (V.COUNTRIES.get(rd.get("country") or "") or (None, None, "en"))[2]
+    country = V.COUNTRIES.get(rd.get("country") or "") or (None, None, "en", "Europe/Madrid")
+    lang = country[2]
+    hours = None
+    if at and now:
+        try:
+            from zoneinfo import ZoneInfo
+            hours = (datetime.fromisoformat(at).replace(tzinfo=ZoneInfo(country[3])) - now).total_seconds() / 3600
+        except Exception:
+            hours = None
     link = (rungs.get("link") or {}).get("value") or ""   # the link rung's value is the platform's NAME ("CoverManager")
     name = (V.platform_of(link) if link.startswith("http") else link) or "an online booking platform"
     return D.decide(D.Venue(form="form" in rungs, platform=name if "link" in rungs else None,
                             phone="phone" in rungs, email="email" in rungs, open_now=rd.get("open_now"), opens_at=rd.get("opens_at"),
-                            scripted=lang in C.LANGUAGES, calls_on=True, language_label=C.LANGUAGE_NAMES.get(lang, "")), prefer)
+                            scripted=lang in C.LANGUAGES, calls_on=True, language_label=C.LANGUAGE_NAMES.get(lang, ""),
+                            hours_until=hours), prefer)
 
 
 _NEED_Q = {"what": "What should I book there — a table, a massage, a class…?", "when": "Which day and time?",
@@ -1535,7 +1545,7 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
     rungs = rd["rungs"]
     why = None
     # Sasha 130 · THE DECISION (decide.py): the route, and its reason said to the guest first; the others in order after it
-    dv = decision_of(rd, pend.get("prefer"))
+    dv = decision_of(rd, pend.get("prefer"), (reservation.get("when") or {}).get("at"), ctx["now"])
     combo = (st.get("combo") or {}).get("stage") == "restaurant"
     order = [r for r in [dv.route] + dv.alternatives if r] if not combo else ["form"]
     if dv.route and not combo:
@@ -1575,8 +1585,32 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
                          f"{'the day, time and party are filled in' if j.get('slot_filled') else 'choose the day, time and party there'}. "
                          f"Press their confirm button; I can't press it for you.\n{j['url']}\n"
                          f"Reply BOOKED once it's done, and I'll find their confirmation email in your Gmail and file it.")
+                from . import proactive as PR
+                if dv.then and dv.route == "one_tap" and PR.tap_escalation_on():   # said only when the escalation really runs
+                    out.text(dv.then)
                 return
             log.info("[guest_whatsapp] one-tap link refused (%s); trying the next route", status)
+        if route == "call_email" and "phone" in rungs and "email" in rungs and reservation["when"]["mode"] == "at":
+            # Sasha 131 · URGENT: the call AND the email, both read back, on ONE yes
+            fi = rungs["phone"].get("fact_index")
+            from . import guest_receipt as GR, ladder_routes as LR
+            mine = await GR.address_of(ctx["account"]) if LR.LADDER_STORE is not None else None
+            at = reservation["when"]["at"]
+            s1, cj = await api(ctx["account"], "POST", "/api/booking/calls",
+                               {"reservation": reservation, "read_id": rd["read_id"], **({"fact_index": fi} if fi is not None else {})})
+            s2, ej = await api(ctx["account"], "POST", "/api/booking/emails",
+                               {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": reservation["how_many"]["count"],
+                                "name": contact["name"], "email": mine or ""})
+            if s1 == 200 and s2 == 200:
+                both = hashlib.sha256(f"{cj['read_back']['sha256']}|{ej['read_back']['sha256']}".encode()).hexdigest()
+                lines = ["The call:"] + cj["read_back"]["lines"] + ["The email, sent at the same time:"] + ej["read_back"]["lines"]
+                await _ask_yes(ctx, "call_email", cj["call_id"], {"lines": lines, "sha256": both},
+                               "Call and email them now? " + SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
+                               extra={"summary": summary(reservation), "trip_item_id": cj.get("trip_item_id"), "call_sha": cj["read_back"]["sha256"],
+                                      "email_id": ej["email_id"], "email_sha": ej["read_back"]["sha256"], **keep})
+                return
+            why = refusal_words(cj if s1 != 200 else ej, s1 if s1 != 200 else s2)
+            log.info("[guest_whatsapp] call+email refused (%s/%s); trying the next route", s1, s2)
         if route == "call" and "phone" in rungs:
             fi = rungs["phone"].get("fact_index")
             status, j = await api(ctx["account"], "POST", "/api/booking/calls",
@@ -1652,6 +1686,10 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
         if _receipt_note():
             out.text(_receipt_note().strip())
         return
+    if pend["rung"] == "call_email":   # Sasha 131 · URGENT: both on the one yes — the email first (it can't be refused by a ring)
+        s2, ej = await api(account, "POST", f"/api/booking/emails/{pend['email_id']}/send", {"read_back_sha256": pend["email_sha"], "approval": how}, timeout=60)
+        out.text(f"✉️ Emailed {venue}." if s2 == 200 and ej.get("status") == "sent" else f"❌ The email to {venue} wasn't sent: {ej.get('say') or refusal_words(ej, s2)}.")
+        pend = {**pend, "rung": "call", "sha": pend["call_sha"]}
     if pend["rung"] == "email":   # Sasha 130 · the email route: sent is "requested", never "booked"
         status, j = await api(account, "POST", f"/api/booking/emails/{pend['id']}/send", {"read_back_sha256": pend["sha"], "approval": how}, timeout=60)
         if status != 200 or j.get("status") != "sent":
@@ -1704,26 +1742,35 @@ def result_lines(v: dict, venue: str, purpose: str, what: str = "") -> List[str]
     return out
 
 
-async def offer_no_reply_call(ch: dict, b: dict, read_row: dict) -> str:
-    """Sasha 130 · the email had no reply and they've just opened: ONE question, inside the 24-hour window only."""
+async def offer_escalation(ch: dict, b: dict, read_row: dict, prefer: str, question: str, yes_title: str) -> str:
+    """Sasha 130/131 · the next rung of the escalation policy, ASKED: one question, inside the 24-hour window only. Its yes
+    leads to that route's own read-back and yes; nothing is sent or dialled from the question itself."""
     st = await STORE.get_state(ch["wa_id_sha256"])
     last = st.get("last_inbound_at")
     if not (last and NOW() - last <= SESSION_WINDOW) or not guest_numbers():
         return "not sent: outside the 24-hour window"
     read = read_row.get("read") or {}
     venue = b.get("venue") or read.get("name") or "the venue"
+    kinds = {f.get("kind") for f in read.get("facts") or []}
     rd = {"read_id": str(read_row.get("read_id") or b["read_id"]), "country": read.get("country"), "venue": venue,
-          "rungs": {"phone": {"fact_index": None, "value": None}}, "open_now": True, "opens_at": None}
+          "rungs": {**({"phone": {"fact_index": None, "value": None}} if "phone" in kinds else {}),
+                    **({"email": {"fact_index": None, "value": None}} if "email" in kinds else {})},
+          "open_now": None, "opens_at": None}
     draft = {"what": {"activity": b.get("what") or "a table", "activity_venue_lang": b.get("what") or "a table",
                       "category": b.get("category") or "restaurant"},
              "when": {"mode": "at", "at": f"{b['date']}T{b['time']}"}, "how_many": {"count": b.get("count") or b.get("party"), "unit": "people"}}
-    sha = hashlib.sha256(f"{b['id']}|no_reply_call".encode()).hexdigest()
-    out = Out().ask(f"No reply yet from {venue} to my email about {SN.day_words(b['date'])} at {b['time']}. They've just opened — "
-                    f"shall I call them? I'll show you exactly what I'll say first.",
-                    [("Yes, prepare the call", f"yes:{b['id'][:8]}:{sha[:16]}"), ("No", f"no:{b['id'][:8]}:{sha[:16]}")])
-    st["pending"] = {"kind": "no_reply_call", "at": NOW().isoformat(), "id": b["id"], "sha": sha, "read": rd, "draft": draft}
+    sha = hashlib.sha256(f"{b['id']}|{prefer}".encode()).hexdigest()
+    out = Out().ask(question, [(yes_title, f"yes:{b['id'][:8]}:{sha[:16]}"), ("No", f"no:{b['id'][:8]}:{sha[:16]}")])
+    st["pending"] = {"kind": "no_reply_call", "at": NOW().isoformat(), "id": b["id"], "sha": sha, "read": rd, "draft": draft, "prefer": prefer}
     await STORE.put_state(ch["wa_id_sha256"], st)
     return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, last))
+
+
+async def offer_no_reply_call(ch: dict, b: dict, read_row: dict) -> str:
+    venue = b.get("venue") or (read_row.get("read") or {}).get("name") or "the venue"
+    return await offer_escalation(ch, b, read_row, "call",
+                                  f"No reply yet from {venue} to my email about {SN.day_words(b['date'])} at {b['time']}. Shall I call them? "
+                                  f"I'll show you exactly what I'll say first.", "Yes, prepare the call")
 
 
 WATCH_GMAIL = (30, 10)   # every 30 s, ten times: a platform's confirmation email usually lands within a minute or two

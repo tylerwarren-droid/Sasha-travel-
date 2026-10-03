@@ -520,6 +520,7 @@ async def reservations(request: Request):
         # Sasha 130 · the venue read it was made from (an id, never the venue's details), so a no-reply email can be
         # followed by an offer to call at their opening
         "read_id": _read_id_of(r.get("request")),
+        "requested_at": r["requested_at"].isoformat() if r.get("requested_at") else None,   # Sasha 131 · the email's send time
     } for r in rows]}
 
 
@@ -548,6 +549,8 @@ router.include_router(_ops.router)   # Sasha 121 · /api/booking/ops (founder on
 from . import demo_shop as _demo_shop  # noqa: E402
 router.include_router(_demo_shop.router)   # Sasha 121 (F) · Kanoe Demo Market (ours; sells nothing)
 router.include_router(_demo_shop.ops)
+from . import route_costs as _route_costs  # noqa: E402
+router.include_router(_route_costs.router)   # Sasha 131 · /api/booking/ops/route-costs (founder only)
 from . import demo_spa as _demo_spa  # noqa: E402
 router.include_router(_demo_spa.router)   # Sasha 126 (3) · Kanoe Demo Spa (ours; books nothing real)
 router.include_router(_demo_spa.ops)

@@ -48,7 +48,8 @@ class TheCallReplayed(unittest.TestCase):
         ask = out["brief"]["confirm_ask"]
         self.assertIn("más cuatro cuatro, siete nueve uno, cinco nueve uno, cuatro dos, uno cinco", ask)   # SASHA's number
         self.assertNotIn("seis cero ocho", ask)                                            # never the guest's
-        self.assertLess(t.index("Por nuestra parte, la referencia"), t.index(f'Then ask: "{ask}"'))
+        self.assertNotIn("Por nuestra parte, la referencia", t)                          # Sasha 131: ours only in writing
+        self.assertIn(f'Then ask: "{ask}"', t)
         self.assertLessEqual(len(t), 2000)
 
     def test_sasha118_a_long_request_still_fits_and_keeps_the_recap(self):
@@ -69,13 +70,16 @@ class TheCallReplayed(unittest.TestCase):
         self.assertNotIn("+ 3 4", self.task)
         self.assertNotIn("nine", self.task)
 
-    def test_both_references_are_asked_for_and_given_in_spanish(self):
+    def test_their_reference_is_asked_for_and_ours_is_never_said_on_the_call(self):
+        """Sasha 131 (supersedes Sasha 88's spoken K-reference): ours goes in writing only — receipt, emails."""
         ref = self.built["brief"]["own_reference"]
         self.assertRegex(ref, SP.REF_RX)
+        self.assertEqual(self.built["brief"]["own_reference"], ref)                 # still made, for the receipt
         self.assertIn('After the yes, ask: "¿Me da un número de reserva o localizador?" and repeat it back.', self.task)
-        self.assertIn(f'Say: "{SP.own_reference_line(ref, "es")}"', self.task)
-        self.assertTrue(SP.own_reference_line(ref, "es").startswith("Por nuestra parte, la referencia es K de Kilo, "))
-        self.assertIn(f"give them ours, {ref}; both go on your receipt.", "\n".join(self.built["read_back_lines"]))
+        self.assertNotIn(SP.own_reference_line(ref, "es"), self.task)
+        self.assertNotIn(ref, self.task)
+        self.assertNotIn("K de Kilo", self.task)
+        self.assertIn(f"ours, {ref}, which I only ever give in writing.", "\n".join(self.built["read_back_lines"]))
 
     def test_the_closing_recap_restates_the_name(self):
         self.assertEqual(self.built["brief"]["recap"],
@@ -131,9 +135,10 @@ class SashasOwnNumber(unittest.TestCase):
     def test_the_ask_names_her_own_number_in_spanish_digits(self):
         with mock.patch.dict(os.environ, {**WrittenConfirmation.ENV, "SASHA_PHONE_NUMBER": "+447915914215"}):
             out = FU.with_own_contact(C.build_call(BOTAVARA, C.parse_call_particulars(ASKED), NOW), "Botavara", None, None)
-        # Sasha 118 · the short wording to her number, so the venue's-reference question still fits
-        self.assertEqual(out["brief"]["confirm_ask"], "¿Nos lo pueden confirmar por SMS al más cuatro cuatro, "
-                         "siete nueve uno, cinco nueve uno, cuatro dos, uno cinco?")
+        # Sasha 131 · with our K-reference no longer said, the full ask (her number AND her email) fits again
+        self.assertEqual(out["brief"]["confirm_ask"], "¿Nos podrían enviar una confirmación por SMS a nuestro número, más cuatro "
+                         "cuatro, siete nueve uno, cinco nueve uno, cuatro dos, uno cinco, o por email a sasha arroba booking punto "
+                         "kanoe punto ai?")
         self.assertIn("¿Me da un número de reserva o localizador?", out["brief"]["task"])
         self.assertLessEqual(len(out["brief"]["task"]), 2000)
         self.assertIn("by text to my own number (+447915914215)", "\n".join(out["read_back_lines"]))

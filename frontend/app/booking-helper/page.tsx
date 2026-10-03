@@ -12,6 +12,7 @@ import { Ladder } from './Ladder'
 import { FounderGate } from './FounderGate'
 import { InviteGuest } from './InviteGuest'
 import { DemoControls } from './DemoControls'
+import { RouteCosts } from './RouteCosts'
 
 /** The details pre-filled while testing; every field stays editable. */
 const DEMO_PROFILE = { name: 'Jon Peters', email: 'guest@example.com', phone: '+44 20 7946 0123' }
@@ -32,6 +33,7 @@ export default function OpsPage() {
         </ul>
       </header>
       <DemoControls />
+      <RouteCosts />
       <InviteGuest />
       <Ladder defaults={DEMO_PROFILE} />
       <PhoneCall defaults={DEMO_PROFILE} />

@@ -9,11 +9,11 @@
     "That is: lunch (una mesa para comer) · 4 people · 2026-10-02T13:00.",
     "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
     "If they ask for a contact number, I'll give yours, +34608445715.",
-    "I'll ask for their booking reference and give them ours, K-3DVW; both go on your receipt.",
+    "I'll ask for their booking reference; it goes on your receipt with ours, K-3DVW, which I only ever give in writing.",
     "I'll tell you exactly what they said. Shall I call them now?"
    ],
    "recap": "Para confirmar: una mesa para comer, para 4 personas, viernes 2 de octubre, a la una de la tarde, a nombre de Warren. ¿Correcto?",
-   "task_chars": 1841
+   "task_chars": 1733
   },
   "email": {
    "subject": "Solicitud de reserva: una mesa para comer — 4 personas el 2026-10-02 a las 13:00",
@@ -88,11 +88,11 @@
     "That is: a tattoo session (a tattoo session) · 1 session · 2026-10-08T15:00 · 120 minutes.",
     "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
     "If they ask for a contact number, I'll give yours, +34608445715.",
-    "I'll ask for their booking reference and give them ours, K-4YCP; both go on your receipt.",
+    "I'll ask for their booking reference; it goes on your receipt with ours, K-4YCP, which I only ever give in writing.",
     "I'll tell you exactly what they said. Shall I call them now?"
    ],
    "recap": "To confirm: a tattoo session of 120 minutes, for one session, Thursday 8 October, at three in the afternoon, under the name Warren. Is that right?",
-   "task_chars": 1895
+   "task_chars": 1793
   },
   "email": {
    "subject": "Booking request: a tattoo session of 120 minutes — one session on 2026-10-08 at 15:00",
@@ -115,11 +115,11 @@
     "That is: a 3-hour kayak tour (um passeio de caiaque) · 2 people · 2026-10-03T09:30 · 180 minutes.",
     "I won't agree to a deposit, a fee, a card or a different time. I'll tell them I need to check with you.",
     "If they ask for a contact number, I'll give yours, +34608445715.",
-    "I'll ask for their booking reference and give them ours, K-4DMY; both go on your receipt.",
+    "I'll ask for their booking reference; it goes on your receipt with ours, K-4DMY, which I only ever give in writing.",
     "I'll tell you exactly what they said. Shall I call them now?"
    ],
    "recap": "Para confirmar: um passeio de caiaque de 180 minutos, para 2 pessoas, sábado, 3 de outubro, às nove e meia da manhã, em nome de Warren. Está correto?",
-   "task_chars": 1884
+   "task_chars": 1789
   },
   "email": {
    "subject": "Pedido de reserva: um passeio de caiaque de 180 minutos — 2 pessoas a 2026-10-03 às 09:30",

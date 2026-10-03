@@ -102,3 +102,21 @@ class CasesOnPostgres(unittest.TestCase):
                 await c.close()
         r = run(row())
         self.assertEqual((r["status"], r["type"], r["title"], str(r["t"])), ("guest_booked", "visa", "Sasha bookings", "10:00:00"))
+
+    def test_cr13_a_skill_conversation_lives_under_a_real_product_and_never_touches_its_row(self):
+        """028's CHECK allows campus/relocation/health only: the trip plan is stored under the product it serves,
+        marked state.skill — and the product's own conversation row is a different row."""
+        wa = "cr13-" + uuid.uuid4().hex[:8]
+
+        async def body():
+            await ST.STORE.put_conversation(wa, ACCOUNT, "relocation", {"step": "appointments"})
+            await ST.STORE.put_conversation(wa, ACCOUNT, "trip", {"for": "relocation", "step": "origin"})
+            await ST.STORE.put_conversation(wa, ACCOUNT, "trip", {"for": "relocation", "step": "handed"})
+            got = {r["product"]: r["state"]["pending"]["step"] for r in await ST.STORE.conversations(wa)}
+            await ST.STORE.drop_conversation(wa, "trip")
+            left = [r["product"] for r in await ST.STORE.conversations(wa)]
+            await ST.STORE.drop_conversation(wa, "relocation")
+            return got, left
+        got, left = run(self._with_store(body))
+        self.assertEqual(got, {"relocation": "appointments", "trip": "handed"})
+        self.assertEqual(left, ["relocation"])

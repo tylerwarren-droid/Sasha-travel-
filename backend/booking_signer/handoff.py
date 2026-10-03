@@ -371,6 +371,10 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
                 "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
                 "messages": history + [{"role": "user", "content": message}, {"role": "assistant", "content": response}],
                 "booking_cancel": c}
+    # the stay is what's being booked ("a hotel in Madrid"), not a place said ("… near my hotel")
+    if re.search(r"\b(?:hotels?|hostels?|apartments?|alojamiento|a room|habitaci[oó]n)\s+(?:in|at|en|near|cerca)\b", message or "", re.I) and \
+            not re.search(r"\b(dinner|lunch|table|restaurant|cena|mesa)\b", message or "", re.I):
+        return None   # Sasha 137 · a stay is the hotel flow's (cards with Reserve (TEST), or a real request) — never a table search
     f = find_request(message, now)
     if f is None:
         # Sasha 101 · a spoken request often arrives in pieces (a pause ends the turn): "Book a luxury dinner for two" /

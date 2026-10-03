@@ -1278,14 +1278,15 @@ async def run_flight_intent(message: str, history: list, session_id: "Optional[s
     # comes later, after passenger details, revalidation and payment are wired end-to-end.
     if card.get("_provider") == "duffel":
         _from = f" from {_orig}" if _orig else ""
+        _to = card.get("dest") or dest   # Sasha 137 · the card's OWN destination — never the page's default (it said "to Vietnam" for Madrid)
         if has_prices:
             spoken = (
-                f"I found a few flights to {dest}{_from} — {_named_options(opts)}. "
-                "I've put the options on screen for you; tap View on any flight to inspect it."
+                f"I found a few flights to {_to}{_from} — {_named_options(opts)}. "
+                "They're on screen; \"Book it (TEST)\" makes a TEST booking (no real ticket, nothing charged)."
             )
         else:
             spoken = (
-                f"I found flight options{_from} to {dest} and put them on screen for you. "
+                f"I found flight options{_from} to {_to} and put them on screen for you. "
                 "Tap View on any option to inspect it."
             )
         return {"agent": "flight", "response": spoken, "data": {"booking": card}}

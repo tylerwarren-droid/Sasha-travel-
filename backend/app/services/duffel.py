@@ -175,6 +175,10 @@ async def _resolve_place(query: str) -> Optional[str]:
     cities = [p for p in data if isinstance(p, dict) and p.get("type") == "city" and p.get("iata_code")]
     if cities:
         return str(cities[0]["iata_code"]).upper()
+    # Sasha 137 · an airport's CITY code first ("London" → LON, not Biggin Hill; "Chicago" → CHI, not Rockford)
+    city_code = next((p.get("iata_city_code") for p in data if isinstance(p, dict) and p.get("iata_city_code")), None)
+    if city_code:
+        return str(city_code).upper()
 
     first = next((p for p in data if isinstance(p, dict) and p.get("iata_code")), None)
     return str(first["iata_code"]).upper() if first else None

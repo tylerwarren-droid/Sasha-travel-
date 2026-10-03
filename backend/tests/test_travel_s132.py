@@ -339,3 +339,22 @@ class TripPlanOnTheWeb(unittest.TestCase):
         with mock.patch.dict(sys.modules, {"products.trip": mod}):
             out = asyncio.run(CD.conduct("dinner for 2 in Chamberí on Saturday at 9", [], user_id="u"))
         self.assertIn("booking_find", out)
+
+
+class WebWording(unittest.TestCase):
+    """CR 13 web rehearsal (3 Oct): the flight sentence named the page's default ('to Vietnam') for London → Madrid; the hotel hand-off
+    was joined with earlier lines into a table search; Duffel's London resolved to Biggin Hill."""
+
+    def test_a_stay_is_never_a_table_search_even_after_other_lines(self):
+        from booking_signer.handoff import booking_handoff
+        hist = [{"role": "user", "content": "book my flights"}, {"role": "user", "content": "London"}]
+        self.assertIsNone(booking_handoff("a hotel in Madrid, Spain from 2027-03-01 to 2027-03-04 for 1", hist))
+        self.assertIsNotNone(booking_handoff("dinner for 2 in Chamberí on Saturday at 9", []))
+
+    def test_the_city_code_wins_over_a_small_airport(self):
+        from app.services import duffel as D
+
+        async def req(method, path, params=None, **kw):
+            return [{"type": "airport", "iata_code": "BQH", "iata_city_code": "LON", "name": "Biggin Hill"}]
+        with mock.patch.object(D, "_request", req):
+            self.assertEqual(asyncio.run(D._resolve_place("London")), "LON")

@@ -18,7 +18,7 @@ from . import handoff as HO, sentences as SN
 _ORD = re.compile(r"\bthe\s+(\d{1,2})(?:st|nd|rd|th)\b", re.I)
 _TIME = re.compile(r"\b(\d{1,2})(?:[:.h](\d{2}))?\s*(am|pm)?\b", re.I)
 _BETWEEN = re.compile(r"\bbetween\s+(?P<a>[0-9:.h apm]+?)\s+and\s+(?P<b>[0-9:.h apm]+?)(?=\s|$|[,.?!])", re.I)
-_TO = re.compile(r"\b(?:drive|fly|go|get)\s+to\s+(?P<x>[A-ZÁÉÍÓÚ][\wáéíóúñ .'-]*?)(?=\s+(?:between|and|on|by|from)\b|[,.?!]|$)", re.I)
+_TO = re.compile(r"\b(?:drive|fly|go|get)\b.*?\bto\s+(?P<x>[A-ZÁÉÍÓÚ][\wáéíóúñ .'-]*?)(?=\s+(?:between|and|on|by|from)\b|[,.?!]|$)")
 _FROM = re.compile(r"\bfrom\s+(?P<x>[A-ZÁÉÍÓÚ][\wáéíóúñ .'-]*?)(?=\s+(?:between|and|on|to)\b|[,.?!]|$)")
 
 
@@ -122,9 +122,10 @@ async def time_for(account: str, text: str, rows: List[dict], now: datetime) -> 
             return [f"No flight from {origin} to {dest} leaves after {bw['a'].strip()} and lands by {bw['b'].strip()} on "
                     f"{SN.day_words(d.isoformat())} (Duffel's TEST schedules, the 3 cheapest)."] + note
         return [f"Yes — {TR.card_line(fits[0])}, within your {window // 60}h {window % 60:02d}m window (Duffel TEST schedules)."] + note
-    origin = None
+    fm = _FROM.search(text or "")
+    origin = fm["x"].strip() if fm else None   # "… drive from Madrid to Toledo …": said, it wins
     prior = [r for r in rows if r.get("date") == d.isoformat() and r.get("time") and tuple(int(x) for x in r["time"].split(":")) <= a]
-    if prior and (prior[-1].get("address") or prior[-1].get("location")):
+    if not origin and prior and (prior[-1].get("address") or prior[-1].get("location")):
         origin = prior[-1].get("address") or prior[-1].get("location")
     if not origin and PR.STORE is not None:
         place = await PR.STORE.default_place(account)

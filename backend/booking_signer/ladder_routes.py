@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -180,7 +181,9 @@ async def find_venues(request: Request):
     if body is None:
         return _refuse(400, "find_malformed", "send {what, where, country?} as a JSON object")
     try:
-        return _with_rehearsal(account_for(request), await V.find_venues(HTTP, what=body.get("what"), where=body.get("where"),
+        _rehearse = _with_rehearsal if not re.search(r"\b(hotel|room|stay|hostel|homestay)\b", str(body.get("what") or ""), re.I) \
+            else (lambda a, out: out)   # Sasha 132 · our test RESTAURANT is never offered as a hotel
+        return _rehearse(account_for(request), await V.find_venues(HTTP, what=body.get("what"), where=body.get("where"),
                                country=body.get("country"), now=NOW(), near=body.get("near"), open_at=body.get("open_at")))   # S-68 steps 3–4
     except V.ReadRefused as e:
         return _refuse(503 if e.rule in ("places_not_configured", "places_unreachable", "places_refused") else 422, e.rule, str(e))

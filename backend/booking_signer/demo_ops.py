@@ -128,7 +128,8 @@ async def reset(request: Request):
     async def go(c):
         async with c.transaction():
             items = [r["id"] for r in await c.fetch(
-                "select ti.id from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 and ti.provider_name = any($2::text[]) "
+                "select ti.id from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 "
+                "and (ti.provider_name = any($2::text[]) or ti.provider_name like '%(TEST booking)') "   # Sasha 132 · and TEST flights
                 "and ti.status <> 'cancelled'", a, [TEST_VENUE, "Kanoe Demo Spa"])]   # Sasha 126 · and the demo spa's
             n_items = await c.execute("update trip_items set status = 'cancelled', updated_at = now() where id = any($1)", items)
             # withdrawn, NOT deleted: a deleted find is unseen again, and the next check re-offers the old email (rehearsal 2)
@@ -153,7 +154,7 @@ async def reset(request: Request):
     from . import demo_spa as DSP
     out["demo_spa_bookings_cleared"] = len(DSP.BOOKINGS)
     DSP.BOOKINGS.clear()
-    return {"ok": True, **out, "say": "Demo reset: test-venue and demo-spa bookings cancelled (their calendar events go within a minute); real bookings untouched."}
+    return {"ok": True, **out, "say": "Demo reset: test-venue, demo-spa and TEST-flight bookings cancelled (their calendar events go within a minute); real bookings untouched."}
 
 
 __all__ = ["router"]

@@ -186,3 +186,46 @@ class Itinerary(unittest.TestCase):
         self.assertIsNone(asyncio.run(IQ.web_turn("dinner for 2 in Chamberí", "a", [])))
         t = asyncio.run(IQ.web_turn("where am I on the 5th?", None, []))
         self.assertEqual(t["response"], "Sign in, and I'll answer from your own bookings.")
+
+
+class Rehearsal2Fixes(unittest.TestCase):
+    """Rehearsal 1 (3 Oct): 'fly from Madrid to Lisbon' lost Lisbon; 'drive from X' was ignored."""
+
+    def test_from_and_to_are_both_read(self):
+        t = "do I have time to fly from Madrid to Lisbon between 9 and 14 on 12 November?"
+        self.assertEqual((IQ._TO.search(t)["x"], IQ._FROM.search(t)["x"]), ("Lisbon", "Madrid"))
+        self.assertEqual(IQ._TO.search("do I have time to drive to Toledo between 13:00 and 18:00 on the 5th?")["x"], "Toledo")
+
+    def test_drive_from_said_is_the_origin(self):
+        from booking_signer import proactive as PR
+        seen = []
+
+        async def travel(o, d, depart, mode):
+            seen.append(o)
+            return 60 * 60
+        with mock.patch.object(PR, "travel", travel), mock.patch.object(PR, "STORE", None):
+            asyncio.run(IQ.time_for("a", "do I have time to drive from Madrid to Toledo between 13:00 and 18:00 on 5 November?", [],
+                                    datetime(2026, 10, 3, tzinfo=timezone.utc)))
+        self.assertEqual(seen, ["Madrid"])
+
+
+class FindRoute(unittest.TestCase):
+    """The /venues/find ROUTE itself (a missing import once hid here): our test restaurant is never a hotel card."""
+
+    def test_rehearsal_card_for_dinner_not_for_a_hotel(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from booking_signer import ladder_routes as LR, venue_read as V
+        founder = "11111111-1111-4111-8111-111111111111"
+
+        async def find(http, **kw):
+            return {"candidates": [{"place_id": "a", "name": "A"}], "ranking": {"orders": {"rated": ["a"]}, "picks": {"rated": "a"}}}
+        app = FastAPI()
+        app.include_router(LR.router, prefix="/api/booking")
+        with mock.patch.object(V, "find_venues", find), mock.patch.object(LR, "account_for", lambda r: founder), \
+                mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "1", "FOUNDER_ACCOUNT_ID": ""}):
+            c = TestClient(app)
+            dinner = c.post("/api/booking/venues/find", json={"what": "dinner", "where": "Madrid"}).json()
+            hotel = c.post("/api/booking/venues/find", json={"what": "hotel", "where": "Hoi An"}).json()
+        self.assertIn("sasha-test-venue", [x["place_id"] for x in dinner["candidates"]])
+        self.assertNotIn("sasha-test-venue", [x["place_id"] for x in hotel["candidates"]])

@@ -800,7 +800,8 @@ async def _flights(ctx: dict, body: str) -> None:
     for i, c in enumerate(got["cards"]):
         out.text(f"{i + 1}. {TR.card_line(c)}")
     nonce = secrets.token_hex(3)
-    out.ask("Which one?", [(f"{c['owner']} {c['amount']}"[:20], f"pick:{nonce}:{i}") for i, c in enumerate(got["cards"])])
+    out.ask("Which one?", [(f"{c['flights'].split(' + ')[0]} {c['currency'].replace('EUR', '€')}{c['amount']}"[:20], f"pick:{nonce}:{i}")
+                           for i, c in enumerate(got["cards"])])
     ctx["st"]["pending"] = {"kind": "flight_cards", "at": ctx["now"].isoformat(), "nonce": nonce, "cards": got["cards"], "adults": adults}
 
 

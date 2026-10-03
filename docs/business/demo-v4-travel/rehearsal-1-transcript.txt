@@ -1,0 +1,156 @@
+reset: 200 Demo reset: test-venue, demo-spa and TEST-flight bookings cancelled (their calendar events go within a minute); real bookings untouched.
+  >>> 'flights from Madrid to Hanoi on 12 November'
+
+### V1 phone: 'flights from Madrid to Hanoi on 12 November' → TEST cards — 6.1s 
+  [text] Flights Madrid → Hanoi, Thursday 12 November, 1 adult — from Duffel in TEST mode (a test booking issues no ticket and charges nothing). The three cheapest:
+  [text] 1. British Airways BA 0117 · Thu 12 Nov 08:30 MAD → 04:25+1 HAN · direct · 13h 55m · EUR 363.74 (TEST)
+  [text] 2. Iberia IB 3177 · Thu 12 Nov 08:30 MAD → 04:25+1 HAN · direct · 13h 55m · EUR 368.14 (TEST)
+  [text] 3. Duffel Airways ZZ 3551 · Thu 12 Nov 08:30 MAD → 04:25+1 HAN · direct · 13h 55m · EUR 379.73 (TEST)
+  [ask] Which one?  ['British Airways 363.', 'Iberia 368.14', 'Duffel Airways 379.7']
+  >>> '1' [tap 0]
+
+### V2 phone: pick → read-back (TEST twice, placeholders said) → 'Book it?' — 3.0s 
+  [text] Exactly what I'll do:
+• I'll book British Airways BA 0117 · Thu 12 Nov 08:30 MAD → 04:25+1 HAN · direct · 13h 55m · EUR 363.74 (TEST) for Tyler Warren.
+• ⚠ TEST booking — Duffel test mode: no real ticket, nothing charged.
+• Payment: one touch on Stripe's TEST page — Apple Pay or your phone's saved card; nothing is charged. I never see your card.
+• Duffel's test mode needs a birth date, title and gender: I'll use placeholders (1 Jan 1980, Mr, M) — test only.
+• The test order's confirmation goes to guest@example.com; it goes in your itinerary and calendar.
+  [ask] Book it? British Airways BA 0117, EUR 363.74 — TEST booking.  ['Yes, book it', 'No']
+  >>> 'Yes, book it' [tap 0]
+
+### V3 phone: yes → the one-touch test payment page — 1.8s 
+  [text] I can't take the test payment yet — no Stripe TEST key is set (STRIPE_TEST_SECRET_KEY, sk_test_…) — the founder sets it on Railway. Nothing was booked.
+
+### V4 the Duffel TEST order → itinerary — 4.3s · in the desktop's bookings list after 0.9s (the page polls every 8 s)
+  [text] [STOOD IN for the payment] Duffel TEST order: {'booking_reference': 'C2ATO3', 'order_id': 'ord_0000BB2s1kmjKE2OsA8crK'}
+
+### V5 the calendar — 17.5s event appeared
+  >>> 'a hotel in Hoi An, Vietnam from 14 to 16 November for 2'
+
+### V6 phone: 'a hotel in Hoi An from 14 to 16 November for 2' → photo cards — 4.6s 
+  [text] Hotels can't be booked instantly here yet, so I'll find them and ask the one you pick for a room — 2 nights from Saturday 14 November, 2 people.
+  [text] Hotel in Hoi An, Vietnam — 20 places found. From Google Maps; nobody has been contacted.
+  [text] Sasha's pick · Tohe Riverside Lodge Hoi An · ★ 5.0 (72 Google reviews)
+  [text] Phước linh homestay · ★ 5.0 (21 Google reviews)
+  [text] Sasha Test Venue (ours — rehearsal, not a real restaurant) · no rating
+  [ask] Which one?  ['Tohe Riverside Lodge Hoi An', 'Phước linh homestay', 'Sasha Test Venue (ours — rehearsal, not a real restaurant)']
+  >>> '1' [tap 0]
+
+### V7 phone: pick a real hotel → the reason → the read-back (STOPPED before the yes) — 3.3s 
+  [text] They have no booking form. I found phone, but I can't reach them myself: phone calls are off on this server (SASHA_CALLS_ENABLED is not 1). Nothing was sent.
+  >>> 'dinner for 2 in Hoi An, Vietnam on 14 November at 7pm'
+
+### V8 phone: restaurants in Hoi An → cards — 5.6s 
+  [text] Dinner in Hoi An — 19 of 20 open at 19:00 by their listed hours. From Google Maps; nobody has been contacted.
+  [text] Sasha's pick · Red Bean Hoi An Restaurant · ★ 5.0 (1731 Google reviews)
+  [text] Firefly Restaurant & Bar · ★ 4.9 (2883 Google reviews)
+  [text] Rehearsal · Sasha Test Venue — ours, not a real restaurant: booking it contacts no one
+  [ask] Which one?  ['Red Bean Hoi An Restaurant', 'Firefly Restaurant & Bar', 'Sasha Test Venue']
+  >>> 'Sasha Test Venue' [tap 2]
+  >>> 'Yes, book it' [tap 0]
+
+### V9 phone: the test venue (standing in) → booked by its form — 26.5s 
+  [text] They take bookings on their own website's form — I'll fill it in after your yes.
+  [text] Exactly what I'll send:
+• I'll send the booking form on Sasha Test Venue's own website (https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain), to https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain, with exactly these fields:
+• I'll use your saved Kanoe Test Club number (fictional) from your vault.
+• Día: 2026-11-14
+• Hora: 19:00
+• Personas: 2
+• Nombre: Tyler Warren
+• Email: guest@example.com
+• Teléfono: +34600000000
+• Comentarios: Por favor, envíen también una copia de la confirmación a sasha@booking.kanoe.ai. · Kanoe Test Club: ⟨your number, added 
+  [ask] Book Sasha Test Venue for 2, Saturday 14 November at 19:00, under Warren?  ['Yes, book it', 'No']
+  [text] [receipt email for Sasha Test Venue — captured]
+  [text] ✅ Booked: Sasha Test Venue, Saturday 14 November at 19:00, 2 people. Their reference: TV-7BF57B-74.
+  [text] Their page said: “Reserva confirmada Confirmado: mesa para 2 personas el sábado 14 de noviembre a las 19:00, a nombre de Tyler Warren. Localizador: TV-7BF57B-74 Para cancelar: https://sasha-travel-production.up.railway.app/api/booking/test-venue/cancel/TV-7BF57B-74”
+  [text] Your receipt is in your email.
+  >>> 'Book a restaurant and a spa in Madrid when I arrive next week'
+  >>> 'Tuesday — spa at 18:00, dinner at 21:00'
+  >>> 'Sasha Test Venue' [tap 2]
+  >>> 'Kanoe Demo Spa' [tap 2]
+  >>> 'Yes, book both' [tap 0]
+
+### M phone: 'restaurant + spa in Madrid next week' → two bookings on one yes — 58.8s 
+  [text] Two bookings — a restaurant and a spa. Which day, and what time for each? For example: “Tuesday — spa at 18:00, dinner at 21:00”.
+  [text] First, the restaurant — Tuesday 6 October at 21:00, 2 people:
+  [text] Dinner in Madrid — 20 of 20 open at 21:00 by their listed hours. From Google Maps; nobody has been contacted.
+  [text] Sasha's pick · D-Sunset Madrid · ★ 4.9 (2153 Google reviews)
+  [photo] Ástor gastro-place · ★ 4.9 (2815 Google reviews)
+  [text] Rehearsal · Sasha Test Venue — ours, not a real restaurant: booking it contacts no one
+  [ask] Which one?  ['D-Sunset Madrid', 'Ástor gastro-place', 'Sasha Test Venue']
+  [text] Then the spa — Tuesday 6 October at 18:00:
+  [text] Spa in Madrid — 19 of 20 open at 18:00 by their listed hours. From Google Maps; nobody has been contacted.
+  [photo] Sasha's pick · Bruma Head Spa Madrid | Masaje capilar · ★ 5.0 (157 Google reviews)
+  [text] Wellness Boutique Experience · ★ 4.9 (1057 Google reviews)
+  [text] Kanoe Demo Spa — ours, a demo member portal: Sasha books it with your saved membership
+  [ask] Which one?  ['Bruma Head Spa Madrid | Masaje capilar', 'Wellness Boutique Experience', 'Kanoe Demo Spa']
+  [text] Exactly what I'll do — both, on one yes:
+1) Sasha Test Venue:
+• I'll send the booking form on Sasha Test Venue's own website (https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain), to https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain, with exactly these fields:
+• Día: 2026-10-06
+• Hora: 21:00
+• Personas: 2
+• Nombre: Tyler Warren
+• Email: guest@example.com
+• Teléfono: +34600000000
+• Comentarios: Por favor, envíen también una copia de la confirmación a sasha@booking.kanoe.ai.
+• plus the page's own hidden fields, sent with the page's values: token.
+• 
+  [ask] Book both? Sasha Test Venue, Tuesday 6 October at 21:00, 2 people; and a 60-minute relaxing massage at Kanoe Demo Spa, Tuesday 6 October at 18:00, with your saved membership.  ['Yes, book both', 'No']
+  [text] [receipt email for Sasha Test Venue — captured]
+  [text] [receipt email for Kanoe Demo Spa — captured]
+  [text] ✅ 1) Booked: Sasha Test Venue, Tuesday 6 October at 21:00, 2 people. Their reference: TV-A4A62A-63.
+  [text] ✅ 2) Booked: a 60-minute relaxing massage at Kanoe Demo Spa, Tuesday 6 October at 18:00. Ref KDS-C616A6. I used your saved membership once, for this booking — it's in your vault's log.
+  [text] Both receipts are in your email; both bookings go on your calendar.
+  >>> 'where am I on 13 November?'
+
+### Q phone: 'where am I on 13 November?' — 2.8s 
+  [text] Friday 13 November:
+  [text] • Nothing booked that day.
+  [text] Your last flight before then goes to Hanoi — that's where your bookings put you.
+  >>> 'what do I have on 14 November?'
+
+### Q phone: 'what do I have on 14 November?' — 3.2s 
+  [text] Saturday 14 November:
+  [text] • 19:00 Sasha Test Venue, 2 people
+  [text] Your last flight before then goes to Hanoi — that's where your bookings put you.
+  >>> 'do I have time to drive to Toledo between 13:00 and 18:00 tomorrow?'
+
+### Q phone: 'do I have time to drive to Toledo between 13:00 and 18:00 tomorrow?' — 3.5s 
+  [text] From where? Save a starting point in You → WhatsApp, or say “from …”.
+  >>> 'do I have time to fly from Madrid to Lisbon between 9 and 14 on 12 November?'
+
+### Q phone: 'do I have time to fly from Madrid to Lisbon between 9 and 14 on 12 November?' — 3.3s 
+  [text] I can't search flights right now — I couldn't find where you fly to as a city or airport. Nothing was booked.
+
+### Q web: the same question in the desktop chat — 0.8s 
+  [text] [web chat] Friday 13 November:
+• Nothing booked that day.
+Your last flight before then goes to Hanoi — that's where your bookings put you.
+
+### W web: 'Book it (TEST)' on a Duffel card — 3.7s 
+  [text] [web prepare] HTTP 200: British Airways BA 0117 · Thu 12 Nov 08:30 MAD → 04:25+1 HAN · direct · 13h 55m · EUR 363.74 (TEST) · 5 read-back lines
+  [text] [web pay] HTTP 422: no Stripe TEST key is set (STRIPE_TEST_SECRET_KEY, sk_test_…) — the founder sets it on Railway
+
+reset: 200 {'ok': True, 'test_venue_bookings_cancelled': 4, 'gmail_finds_withdrawn': 0, 'reminder_ledger_cleared': 0, 'demo_shop_orders_cleared': 0, 'demo_spa_bookings_cleared': 0, 'say': 'Demo reset: test-venue, demo-spa and TEST-flight bookings cancelled (their calendar events go within a minute); real bookings untouched.'}
+
+TIMINGS:
+     6.1s  V1 phone: 'flights from Madrid to Hanoi on 12 November' → TEST cards 
+     3.0s  V2 phone: pick → read-back (TEST twice, placeholders said) → 'Book it?' 
+     1.8s  V3 phone: yes → the one-touch test payment page 
+     4.3s  V4 the Duffel TEST order → itinerary · in the desktop's bookings list after 0.9s (the page polls every 8 s)
+    17.5s  V5 the calendar event appeared
+     4.6s  V6 phone: 'a hotel in Hoi An from 14 to 16 November for 2' → photo cards 
+     3.3s  V7 phone: pick a real hotel → the reason → the read-back (STOPPED before the yes) 
+     5.6s  V8 phone: restaurants in Hoi An → cards 
+    26.5s  V9 phone: the test venue (standing in) → booked by its form 
+    58.8s  M phone: 'restaurant + spa in Madrid next week' → two bookings on one yes 
+     2.8s  Q phone: 'where am I on 13 November?' 
+     3.2s  Q phone: 'what do I have on 14 November?' 
+     3.5s  Q phone: 'do I have time to drive to Toledo between 13:00 and 18:00 tomorrow?' 
+     3.3s  Q phone: 'do I have time to fly from Madrid to Lisbon between 9 and 14 on 12 November?' 
+     0.8s  Q web: the same question in the desktop chat 
+     3.7s  W web: 'Book it (TEST)' on a Duffel card 

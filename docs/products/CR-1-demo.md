@@ -107,6 +107,10 @@ Register on the school's page.
 
 **Never:** sign in on SERMAS, submit, look for free slots, call a public health centre, ask why.
 
+**Timings (rehearsals 6 and 7, on the founder's account, Bland faked in-process):** consent + choose 6 s · private →
+read-back 19 s (call prepare ≈ 13 s) · yes → "📞 Calling" 9 s · SERMAS page 11 s, DEMO 7 s · new in Madrid 7 s + reminders 4 s.
+Whole health part ≈ 1 min 45 s, plus talking. **All three parts: ≈ 4 min 45 s, plus talking.**
+
 ## Not shown, and why
 - A real registration or a real filing: by design, until the founder decides.
 - Relocation sections 2 and 3 (a family member's resources, a representative): not built. The file marks them "not

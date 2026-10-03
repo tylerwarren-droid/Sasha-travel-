@@ -299,7 +299,14 @@ async def rehearse(n: int, account_name: str = "demo") -> pathlib.Path:
     lines += ["", "## What WhatsApp would have shown", ""]
     for r in rows:
         lines += [f"### {r['beat']}", f"> {r['sent']}", "", "```", r["said"], "```", ""]
-    f.write_text("\n".join(lines))
+    # the account's own mobile (Sasha's read-back names it: "If they ask for a contact number, I'll give yours") never
+    # lands in a transcript that goes into the repo
+    st, cj = await GW.api(account, "GET", "/api/booking/contact")
+    mobile = ((cj or {}).get("contact") or {}).get("mobile_e164")
+    text = "\n".join(lines)
+    if mobile:
+        text = text.replace(mobile, "[the account's mobile]")
+    f.write_text(text)
     print(f"\n{sum(r['ok'] for r in rows)}/{len(rows)} beats ok · room {room:.0f}s · transcript {f.relative_to(ROOT)}")
     return f
 
@@ -348,8 +355,8 @@ async def reset(what: str, account_name: str, vault: bool) -> None:
         got["CampusMe vault items revoked"] = n
     linked = await BR.STORE._run(lambda c: c.fetchval(
         "select count(*) from guest_channels where account_id = $1 and channel = 'whatsapp'", acct))
-    note = (" — the FOUNDER_ACCOUNT_ID isn't set, so the founder acts as the demo account" if account_name == "founder"
-            and account == DEMO else "")
+    note = (" — FOUNDER_ACCOUNT_ID isn't set: the founder falls back to the demo account" if account_name == "founder"
+            and not os.getenv("FOUNDER_ACCOUNT_ID", "").strip() else "")
     print(f"reset {what} for the {account_name} account ({account[:8]}…, {linked} WhatsApp linked{note}): "
           + ", ".join(f"{k} {v}" for k, v in got.items()))
 

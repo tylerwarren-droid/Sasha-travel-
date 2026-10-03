@@ -7,6 +7,7 @@ unknown id is a plain 404 that says so.
   GET /api/booking/products/campus/{id}/visit.ics        the visit, for any calendar
   GET /api/booking/products/relocation/{id}              the reviewer's screen: every EX-01 widget, its state, its checks
   GET /api/booking/products/relocation/{id}/EX-01-prepared.pdf   the official PDF, prepared — not signed, not filed
+  GET /api/booking/products/reminders                    CR 10 · the account's dated reminders (not bookings), for "You"
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ import asyncio
 import os
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
 from . import store as ST
@@ -61,6 +62,29 @@ async def health() -> dict:
                        "configured_unproven": [s["name"] for s in SC.SCHOOLS.values() if not s.get("proven")],
                        "submits": False, "watch_loop": watch.running()},
             "relocation": {"ex01_pdf": ex01.pdf_status(), "submits": False}}
+
+
+@router.get("/reminders")
+async def reminders(request: Request) -> dict:
+    """CR 10 · dated reminders the products keep — relocation's apply-from/certificates/TIE, health's padrón follow-ups.
+    NOT trip items (the Sasha tab's rule): "You" lists them in their own block. Only the gate's own account; only
+    reminders still to come; the source of each date said with it."""
+    from booking_signer.account import account_for
+    from datetime import date
+    account = account_for(request)
+    today = date.today().isoformat()
+    out = []
+    for product, label, get in (("relocation", "Relocation · EX-01", lambda st: (st.get("after") or {}).get("reminders")),
+                                ("health", "Health · new in Madrid", lambda st: st.get("reminders"))):
+        for c in await ST.STORE.of_account(account, product):
+            st = c["state"]
+            if st.get("kind") == "conversation" or st.get("showcase"):
+                continue
+            for r in get(st) or []:
+                if r.get("on") and r["on"] >= today:
+                    out.append({"on": r["on"], "text": r["text"], "product": product, "label": label, "sent": bool(r.get("sent"))})
+    out.sort(key=lambda r: r["on"])
+    return {"reminders": out}
 
 
 async def _case(cid: str, product: str) -> dict:

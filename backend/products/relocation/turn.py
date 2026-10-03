@@ -145,7 +145,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         from . import after
         await after.signed(ctx)
         return
-    if step in ("prepared", "signed", "residence", "entry", "done"):
+    if step in ("prepared", "signed", "residence", "entry", "appointments", "done"):
         from . import after
         if await after.on_message(ctx, t, payload):
             return
@@ -232,6 +232,11 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
         return 0 < len(t.split()) <= 4 and not re.search(r"\d", t)
     if step == "entry":
         return bool(F.parse_date(t)) or bool(re.match(r"(?i)^\s*skip\b", t))
+    if step == "appointments":
+        from .. import itinerary as IT
+        from datetime import date as _date
+        return bool(re.search(r"(?i)\b(booked|appointment|cita|consulate|consulado|tie|huellas?)\b", t)) and \
+            IT.parse_day_time(t, _date.today()) is not None
     return False
 
 

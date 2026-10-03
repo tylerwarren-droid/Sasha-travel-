@@ -82,3 +82,23 @@ class CasesOnPostgres(unittest.TestCase):
                 await c.close()
         r = run(status())
         self.assertEqual((r["status"], r["type"], r["party_size"], str(r["t"])), ("confirmed", "experience", 2, "11:30:00"))
+
+    def test_cr10_a_self_booked_appointment_is_guest_booked_in_sasha_bookings(self):
+        from datetime import date as _d
+        from products import itinerary as IT
+
+        async def body():
+            return await IT.guest_booked(ACCOUNT, type_="visa", provider_name=IT.CONSULATE, on=_d(2026, 11, 12), at="10:00",
+                                         tz="Europe/London", location="Spanish Consulate General, London")
+        item = run(self._with_store(body))
+
+        async def row():
+            import asyncpg
+            c = await asyncpg.connect(TBL.PG_URL)
+            try:
+                return await c.fetchrow("select ti.status, ti.type, t.title, (ti.date_time at time zone ti.local_timezone)::time as t "
+                                        "from trip_items ti join trips t on t.id = ti.trip_id where ti.id = $1", uuid.UUID(item))
+            finally:
+                await c.close()
+        r = run(row())
+        self.assertEqual((r["status"], r["type"], r["title"], str(r["t"])), ("guest_booked", "visa", "Sasha bookings", "10:00:00"))

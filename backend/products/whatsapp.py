@@ -4,9 +4,9 @@ Who answers a message (product_turn; True = a product answered, False = Sasha's 
   1. a product's own BUTTON (cm…, rx:, hx…) or its KEYWORD at the start ("campus…", "relocation…", "salud…") → that
      product — started, or RESUMED where it was;
   2. the product ASKED LAST (Sasha's `pending` holds the product marker): an answer to its own question (its claims())
-     → the product; a request Sasha's own detectors claim (a booking, a cancel, receipts, flights, a hotel…) → SASHA,
-     with the product's context added to her history in ONE line (minimum necessary: where, when, who — never a passport
-     fact, never a health reason); anything else → the product re-asks, plainly — never a wall;
+     → the product; a request Sasha's own detectors claim (a booking, a cancel, receipts, flights, a hotel…) → SASHA;
+     her parsers may read context(wa_key) (minimum necessary: where, when, who — never a passport fact, never a health
+     reason; nothing is written into her history); anything else → the product re-asks, plainly — never a wall;
   3. SASHA asked last (her own `pending`) → Sasha;
   4. nobody is waiting: a product set aside within MODE_IDLE resumes only if the message answers its question.
 A product's state lives in product_cases ("conversation" rows), so Sasha's flow may use `pending` freely and the product
@@ -75,10 +75,8 @@ async def _set_aside(st: dict, ch: dict) -> Optional[dict]:
     if not product:
         return None
     await ST.STORE.put_conversation(ch["wa_id_sha256"], ch["account_id"], product, pend)
-    c = _module(product).context(pend)
-    st["history"] = ((st.get("history") or []) + [{"role": "assistant", "content": c["line"]}])[-20:]
-    st["pending"] = None
-    return c
+    st["pending"] = None          # Sasha's again; her history is NOT written to (Sasha tab, CR 10: context() only)
+    return _module(product).context(pend)
 
 
 async def _resume(ch: dict, product: str) -> Optional[dict]:
@@ -104,10 +102,16 @@ async def _waiting(ch: dict, now) -> list:
     return out
 
 
-def context(st_or_pend) -> Optional[dict]:
-    """For Sasha's parsers: the product context of the conversation that asked last (or None)."""
-    pend = (st_or_pend or {}).get("pending", st_or_pend) or {}
-    return _module(pend["product"]).context(pend) if pend.get("kind") == "product" and pend.get("product") else None
+async def context(wa_key: str) -> Optional[dict]:
+    """For Sasha's parsers (e.g. a default city): the most recently touched product conversation's context, or None.
+    Minimum necessary — where, when, who; never a passport fact, never a health reason. Read-only."""
+    from . import store as ST
+    rows = await ST.STORE.conversations(wa_key)
+    best = max(rows, key=lambda r: (r["state"].get("pending") or {}).get("touched") or "", default=None)
+    if not best:
+        return None
+    c = _module(best["product"]).context(best["state"].get("pending") or {})
+    return {k: v for k, v in c.items() if k != "line"}
 
 
 async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now, early=None) -> bool:

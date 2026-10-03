@@ -1,8 +1,8 @@
 """CR 1 · a registered visit in the family's bookings and calendar.
 
-`record` adds a trip item (type 'experience', status 'pending') to the account's bookings — the same row every Sasha
+`record` adds a trip item (type 'experience', status 'guest_booked' — CR 10: the family pressed Register themselves) to the account's bookings — the same row every Sasha
 booking is, so "You → My bookings", the S-83 reminders and the S-79 calendar outbox see it with no new code. It stays
-`pending` ("registered on your word") until the school's own confirmation is pasted; `confirm` then sets 'confirmed',
+guest_booked ("booked by you") until the school's own confirmation is pasted; `confirm` then sets 'confirmed',
 which the calendar trigger (sql/022) picks up. Without a database it returns None and the chat says so plainly.
 """
 from __future__ import annotations
@@ -49,7 +49,7 @@ async def record(account: str, s: dict, x: dict, party: int) -> Optional[str]:
                 tid = await conn.fetchval("insert into trips (owner_id, title) values ($1, $2) returning id", acct, title)
             return await conn.fetchval(
                 "insert into trip_items (trip_id, type, status, provider_name, date_time, local_timezone, party_size, "
-                "duration_minutes, location_name) values ($1, 'experience', 'pending', $2, ($3::date + $4::time) at time zone $5, "
+                "duration_minutes, location_name) values ($1, 'experience', 'guest_booked', $2, ($3::date + $4::time) at time zone $5, "
                 "$5, $6, $7, $8) returning id",
                 tid, name_of(s, x), date.fromisoformat(x["day"]), datetime.strptime(x["start"], "%H:%M").time(), s["tz"],
                 party, _minutes(x), x.get("location") or s["full_name"])

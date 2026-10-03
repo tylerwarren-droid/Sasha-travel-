@@ -158,8 +158,9 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
         return True
     if step == "entry":
         if re.match(r"(?i)^\s*skip\b", body):
-            pend["step"] = "done"
+            pend["step"] = "appointments"
             out.text("OK — no reminders. Your file page has everything.")
+            out.text('When you\'ve booked your consulate appointment — and later, in Spain, your TIE one — tell me the day and time (e.g. "consulate booked 12 November 10:00") and I\'ll put it in your itinerary.')
             return True
         d = F.parse_date(body)
         if not d or d <= now.date().isoformat():
@@ -171,12 +172,15 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
         after = (case or {}).get("state", {}).get("after") or {}
         await _save(ctx, {"after": {**after, "entry_date": d, "reminders": rs,
                                     "wa": ctx["ch"]["wa_id_sha256"], "number_from": ctx["frm"]}})
-        pend["step"] = "done"
+        pend["step"] = "appointments"
         lines = "\n".join(f"• {date.fromisoformat(r['on']).strftime('%-d %b %Y')}: {r['text'].split(' — ')[0].split(': ')[0]}"
                           for r in rs)
         out.text(f"I'll remind you here:\n{lines}\n(WhatsApp lets me write first only within 24 hours of your last message; "
                  "otherwise the reminder waits for your next message, and it's always on your file page.)")
+        out.text('When you\'ve booked your consulate appointment — and later, in Spain, your TIE one — tell me the day and time (e.g. "consulate booked 12 November 10:00") and I\'ll put it in your itinerary.')
         return True
+    if step == "appointments":
+        return await _appointment(ctx, body)
     return False   # CR 10 · not relocation's: Sasha answers it, in the same chat
 
 
@@ -200,3 +204,29 @@ async def due(now: Optional[datetime] = None) -> int:
                 sent += 1
         await ST.STORE.update(c["id"], c["state"])
     return sent
+
+
+_TIE = re.compile(r"(?i)\b(tie|huellas?|fingerprints?|extranjer[ií]a|polic[ií]a|police)\b")
+
+
+async def _appointment(ctx: dict, body: str) -> bool:
+    """CR 10 · an appointment the person booked THEMSELVES, into their itinerary: guest_booked, type 'visa' (Sasha tab's
+    rules). Confirmed only on the office's own words — forwarded."""
+    from .. import itinerary as IT
+    out, now = ctx["out"], ctx["now"]
+    when = IT.parse_day_time(body, now.date())
+    if not when:
+        out.text("The day and the time, please — e.g. \"consulate booked 12 November 10:00\".")
+        return True
+    on, at = when
+    tie = bool(_TIE.search(body))
+    name, tz = (IT.TIE, "Europe/Madrid") if tie else (IT.CONSULATE, "Europe/London")
+    item = await IT.guest_booked(ctx["account"], type_="visa", provider_name=name, on=on, at=at, tz=tz,
+                                 location=None if tie else "Spanish Consulate General, London")
+    what = "your TIE appointment" if tie else "your consulate appointment"
+    if item:
+        out.text(f"Added to your itinerary: {what}, {on.strftime('%A %-d %B %Y')} at {at} — booked by you. I'll remind you the "
+                 "day before. Forward their confirmation email to me to add the reference.")
+    else:
+        out.text(f"Noted: {what}, {on.strftime('%A %-d %B %Y')} at {at}. I couldn't add it to your itinerary just now.")
+    return True

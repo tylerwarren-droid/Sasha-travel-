@@ -480,7 +480,7 @@ async def _registered(ctx: dict) -> None:
     st.update(status="registered_on_your_word", registered_at=ctx["now"].isoformat(), trip_item_id=item)
     await ST.STORE.update(cid, st)
     out.text(f"Noted — registered on your word: {s['name']}, {date.fromisoformat(x['day']).strftime('%A %-d %B')} at "
-             f"{time_words(x['start'])}. {'It’s in your bookings (You → My bookings). ' if item else ''}"
+             f"{time_words(x['start'])}. {'It’s in your bookings (You → My bookings), and I’ll remind you the day before. ' if item else ''}"
              f"I'll call it confirmed when {s['name']}'s own confirmation email says so — paste it here when it arrives.")
     out.text(f"📅 Add it to your calendar: {VS.google_link(s, x)}\nor download it: {web()}/api/products/campus/{cid}/visit.ics")
     pend["step"] = "registered"

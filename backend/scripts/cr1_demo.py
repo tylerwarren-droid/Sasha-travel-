@@ -75,6 +75,7 @@ async def _snapshot(account: str) -> dict:
     """What CR 1 rows the account has BEFORE a rehearsal — so the rehearsal removes only what IT made."""
     from booking_signer import routes as BR
     from booking_signer.vault import crypto as VC
+    from products import itinerary as IT
     acct = uuid.UUID(account)
 
     async def q(c):
@@ -85,6 +86,9 @@ async def _snapshot(account: str) -> dict:
         clinic = {str(r["id"]) for r in await c.fetch(
             "select ti.id from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 and ti.provider_name = $2",
             acct, "Kanoe Test Clinic")}
+        clinic |= {str(r["id"]) for r in await c.fetch(   # CR 10 · the self-booked appointments the products add
+            "select ti.id from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 and ti.provider_name = any($2::text[])",
+            acct, list(IT.OURS))}
         reads = {str(r["read_id"]) for r in await c.fetch(
             "select read_id from venue_reads where account_id = $1 and venue_name = 'Kanoe Test Clinic'", acct)}
         return cases, visits, clinic, reads
@@ -98,6 +102,7 @@ async def _clean_own(account: str, before: dict) -> dict:
     (never a booking, a Google link or a vault item that was there before)."""
     from booking_signer import routes as BR
     from booking_signer.vault import crypto as VC
+    from products import itinerary as IT
     from products.campus.turn import is_profile
     after = await _snapshot(account)
     new_cases, new_visits = after["cases"] - before["cases"], after["visits"] - before["visits"]
@@ -113,7 +118,8 @@ async def _clean_own(account: str, before: dict) -> dict:
             # CR 4 · the test clinic's call: its rows go, so a rehearsal never counts against the real daily call cap
             await c.execute("delete from booking_attempts where trip_item_id = any($1::uuid[])", new_clinic)
             calls = await c.execute("delete from booking_calls where trip_item_id = any($1::uuid[])", new_clinic)
-            d = await c.execute("delete from trip_items where id = any($1::uuid[]) and provider_name = 'Kanoe Test Clinic'", new_clinic)
+            d = await c.execute("delete from trip_items where id = any($1::uuid[]) and provider_name = any($2::text[])", new_clinic,
+                                ["Kanoe Test Clinic", *IT.OURS])
             await c.execute("delete from venue_reads where read_id = any($1::uuid[]) and venue_name = 'Kanoe Test Clinic'", new_reads)
             return int(a.split()[-1]), int(b.split()[-1]) + int(d.split()[-1]), int(calls.split()[-1])
     n_cases, n_visits, n_calls = await BR.STORE._run(go)
@@ -124,7 +130,7 @@ async def _clean_own(account: str, before: dict) -> dict:
             if await VC.STORE.revoke(account, m["id"], now):
                 await VC.STORE.event(account, m["id"], "revoked", {"by": "cr1_demo rehearse — its own item"}, now)
                 n_vault += 1
-    return {"cases": n_cases, "bookings (campus visits, the clinic)": n_visits, "call rows": n_calls,
+    return {"cases": n_cases, "bookings (campus visits, the clinic, CR 10 appointments)": n_visits, "call rows": n_calls,
             "vault items it created": n_vault}
 
 
@@ -241,12 +247,14 @@ async def rehearse(n: int, account_name: str = "demo") -> pathlib.Path:
     await beat("C7 REGISTERED", "REGISTERED", expect="registered on your word")
     await beat("C8 vague confirmation stays", "Thank you for registering for a campus visit. We look forward to seeing you soon!",
                expect="doesn't name")
-    await beat("C9 exit", "exit", expect="Back to Sasha")
     # ── Part 2 · relocation ──
     await beat("R1 relocation", "relocation", expect="I never file anything")
     await beat("R2 first", "first", expect="economic resources")
     await beat("R3 me", "me", expect="present the application")
     await beat("R4 myself", "myself", expect="Your passport number?")
+    # CR 10 · one Sasha: a flight request mid-relocation goes to her own flow, in the same chat; then back where we were
+    await beat("RF1 flights → Sasha's own answer", "book me flights to Madrid on 1 March", expect=GW.ASK_ONE[:30])
+    await beat("RF2 relocation → where we were", "relocation", expect="Back to your EX-01. Your passport number?")
     await beat("R5 specimen photo → read", media=True, expect="check digit agrees")
     await beat("R6 yes, all right", payload="rx:doc:yes", expect="Kept")
     await beat("R7 surname", "De Bruijn")
@@ -257,28 +265,27 @@ async def rehearse(n: int, account_name: str = "demo") -> pathlib.Path:
     await beat("R11 SIGNED", "SIGNED", expect="Which country do you live in now?")
     await beat("R12 UK → consulate + checklist", "UK", expect="Consulado General de España en Londres")
     await beat("R13 entry date → reminders", "1 March 2027", expect="I'll remind you here")
-    await beat("R14 exit", "exit", expect="Back to Sasha")
+    await beat("R14 consulate booked → itinerary", "consulate booked 12 November 10:00", expect="booked by you")   # CR 10
     # ── Part 3 · health (CR 4) ──
     await beat("H1 health → consent", "health I need a doctor this week", expect="never why you need a doctor")
     await beat("H2 consent yes → choose", payload="hx:consent:yes", expect="A private clinic")
     await beat("H3 private", payload="hx:priv", expect="Which day and time")
     await beat("H4 Tuesday 10:00 → read-back", "Tuesday 10:00", expect="una cita con el médico general")
     await beat("H5 yes → the call", payload=_button(GW, 0), expect="📞")
-    await beat("H6 exit", "exit", expect="Back to Sasha")
     await beat("H7 health again → consent", "salud", expect="never why you need a doctor")
     await beat("H8 consent → choose", payload="hx:consent:yes", expect="A private clinic")
     said = await beat("H9 public (SERMAS) → hand-over", payload="hx:pub", expect="health-handover/")
     await beat("H10 DEMO → fictional patient", "DEMO", expect="health-handover/")
     hid = said.split("/health-handover/")[1][:22] if "/health-handover/" in said else ""
     page("H11 SERMAS hand-over page", f"/health-handover/{hid}", "Open SERMAS")
-    await beat("H12 exit", "exit", expect="Back to Sasha")
+    await beat("H12 booked it → add?", "I booked it for 13 October at 10:00", expect="kept with your bookings")   # CR 10
+    await beat("H12b yes → itinerary", payload="hx:sermas:yes", expect="Added to your itinerary")
     await beat("H13 health → consent", "health", expect="never why you need a doctor")
     await beat("H14 consent → choose", payload="hx:consent:yes", expect="A private clinic")
     said = await beat("H15 new in Madrid → checklist", payload="hx:new", expect="Padrón (town hall)")
     nid = said.split("/health-handover/")[1][:22] if "/health-handover/" in said else ""
     page("H16 checklist page", f"/health-handover/{nid}", "Your health card and your family doctor")
     await beat("H17 padrón date → reminders", "20 October 2026", expect="I'll remind you here")
-    await beat("H18 exit", "exit", expect="Back to Sasha")
 
     # ── Part 4 · the case officer (CR 8): the page, one return, the mark — then the queue put back as it was ──
     ocid = await _officer_id(create=True)
@@ -363,6 +370,12 @@ async def reset(what: str, account_name: str, vault: bool) -> None:
                 out["test-clinic bookings"] = int((await conn.execute(
                     "delete from trip_items where id = any($1::uuid[])", ids)).split()[-1])
                 await conn.execute("delete from venue_reads where account_id = $1 and venue_name = 'Kanoe Test Clinic'", acct)
+            from products import itinerary as IT   # CR 10 · consulate/TIE (relocation), SERMAS (health): by their own names only
+            ours = ([IT.CONSULATE, IT.TIE] if "relocation" in products else []) + ([IT.SERMAS] if "health" in products else [])
+            if ours:
+                out["self-booked appointments in bookings"] = int((await conn.execute(
+                    "delete from trip_items where id in (select ti.id from trip_items ti join trips t on t.id = ti.trip_id "
+                    "where t.owner_id = $1 and ti.provider_name = any($2::text[]))", acct, ours)).split()[-1])
             out["open product mode on WhatsApp"] = int((await conn.execute(
                 "update guest_wa_state set pending = null where pending->>'kind' = 'product' and pending->>'product' = any($2::text[]) "
                 "and wa_id_sha256 in (select wa_id_sha256 from guest_channels where account_id = $1)", acct, products)).split()[-1])

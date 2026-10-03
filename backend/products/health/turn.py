@@ -138,6 +138,12 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
     if step == "padron_date":
         await _new_reminders(ctx, t)
         return
+    if step in ("pub_offer", "sermas_wait") and _BOOKED.search(t) and _when_booked(t, ctx):
+        await _sermas_offer(ctx, t)
+        return
+    if step == "sermas_add":
+        await _sermas_add(ctx, t, payload)
+        return
     if re.fullmatch(r"(?i)demo", t) and step == "pub_offer":
         await _public_handover(ctx, dict(FICTIONAL), "a fictional demo patient (not a real person)", fictional=True)
         return
@@ -270,7 +276,7 @@ async def _public(ctx: dict, t: str) -> None:
         out.text("To have your card details ready to copy, add them in You → My accounts (health items need your explicit "
                  "consent there), then ask me again. For now your page lists what to have ready.")
     await _public_handover(ctx, None, None, fictional=False)
-    if ctx["st"]["pending"].get("step") == "done":
+    if ctx["st"]["pending"].get("step") == "sermas_wait":
         ctx["st"]["pending"]["step"] = "pub_offer"                 # DEMO still answers after the page
 
 
@@ -308,11 +314,45 @@ async def _public_handover(ctx: dict, values: Optional[dict], source: Optional[s
         log.error("[health] case not kept: %s", type(e).__name__)
         out.text("Health isn't switched on on this server yet (its storage isn't ready). Nothing was kept.")
         return
-    pend.update(step="done", case_id=cid)
+    pend.update(step="sermas_wait", case_id=cid)
     out.text(f"Your SERMAS appointment, prepared — the official page, what it asks for{' (ready to copy)' if keep else ''}, "
              f"and the appointment type:\n{web()}/health-handover/{cid}")
     out.text("You open SERMAS's own page and press. I never sign in, book or press on a public health website — and I "
-             "never look for free slots for you.")
+             "never look for free slots for you. Once you've booked, tell me the day and time if you'd like it in your itinerary.")
+
+
+# ── CR 10 · the SERMAS appointment the person booked, into their itinerary — only on an explicit yes ─────────────────
+
+_BOOKED = re.compile(r"(?i)\b(booked|reserv|cita|appointment|tengo)\b")
+
+
+def _when_booked(t: str, ctx: dict):
+    from .. import itinerary as IT
+    return IT.parse_day_time(t, ctx["now"].astimezone(MADRID).date())
+
+
+async def _sermas_offer(ctx: dict, t: str) -> None:
+    pend, out = ctx["st"]["pending"], ctx["out"]
+    on, at = _when_booked(t, ctx)
+    pend.update(step="sermas_add", sermas_on=on.isoformat(), sermas_at=at)
+    out.ask(f"Add “doctor's appointment (SERMAS), {on.strftime('%A %-d %B')} at {at}” to your itinerary? It's then kept "
+            "with your bookings like any other — not just 30 days — and I'll remind you the day before. Only the day and "
+            "time: never why.", [("Yes, add it", "hx:sermas:yes"), ("No", "hx:sermas:no")])
+
+
+async def _sermas_add(ctx: dict, t: str, payload: str) -> None:
+    from .. import itinerary as IT
+    pend, out = ctx["st"]["pending"], ctx["out"]
+    if payload == "hx:sermas:yes" or (not payload and YS.is_yes(t)):
+        item = await IT.guest_booked(ctx["account"], type_="doctor", provider_name=IT.SERMAS,
+                                     on=date.fromisoformat(pend["sermas_on"]), at=pend["sermas_at"], tz="Europe/Madrid")
+        out.text("Added to your itinerary — booked by you. I'll remind you the day before." if item else
+                 "I couldn't add it to your itinerary just now — nothing was kept.")
+    else:
+        out.text("OK — not added. Nothing was kept.")
+    for k in ("sermas_on", "sermas_at"):
+        pend.pop(k, None)
+    pend["step"] = "done"
 
 
 # ── (c) new in Madrid: the sourced checklist, then reminders ──────────────────────────────────────────────────────
@@ -409,7 +449,7 @@ async def due(now: Optional[datetime] = None) -> int:
 
 def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     step, t = pend.get("step"), (body or "").strip()
-    if payload.startswith(("hx:", "hxyes:", "hxno:", "hxv:", "hxvno:")):
+    if payload.startswith(("hx:", "hxyes:", "hxno:", "hxv:", "hxvno:")):   # incl. hx:sermas:…
         return True
     if step in ("consent", "call_confirm", "pub_vault_confirm"):
         return YS.is_yes(t) or bool(re.match(r"(?i)^\s*no\b", t))
@@ -417,8 +457,12 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
         return bool(re.match(r"^\s*[123]\b", t) or re.search(r"(?i)\bprivate|privad|public|sermas|p[uú]blic|new|nuev|tarjeta", t))
     if step == "when":
         return parse_when(t, datetime.now(MADRID)) is not None
-    if step == "pub_offer":
-        return bool(re.fullmatch(r"(?i)demo", t))
+    if step in ("pub_offer", "sermas_wait"):
+        from .. import itinerary as IT
+        return (step == "pub_offer" and bool(re.fullmatch(r"(?i)demo", t))) or \
+            (bool(_BOOKED.search(t)) and IT.parse_day_time(t, datetime.now(MADRID).date()) is not None)
+    if step == "sermas_add":
+        return YS.is_yes(t) or bool(re.match(r"(?i)^\s*no\b", t))
     if step == "padron_date":
         from ..relocation import facts as F
         return bool(F.parse_date(t)) or bool(re.match(r"(?i)^\s*skip\b", t))

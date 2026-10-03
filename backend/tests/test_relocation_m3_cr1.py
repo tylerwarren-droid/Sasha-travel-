@@ -157,7 +157,8 @@ class Flow(TG.Base):
         self.say("1 March 2027")
         rs = run(ST.STORE.get(cid))["state"]["after"]["reminders"]
         self.assertEqual([r["on"] for r in rs], ["2026-10-02", "2026-12-01", "2027-03-22"])   # in date order, from today
-        self.assertIn("I'll remind you here", self.bodies()[-1])
+        self.assertIn("I'll remind you here", self.bodies()[-2])
+        self.assertIn("tell me the day and time", self.bodies()[-1])                 # CR 10 · their own appointments next
 
     def test_a_consulate_whose_page_we_havent_read_gets_no_link(self):
         self.say("relocation")

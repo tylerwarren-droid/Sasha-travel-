@@ -1907,7 +1907,12 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
                                    "name": contact["name"], "email": mine or "", **({"plan_line": plan} if plan else {}),
                                    **({"nights": d["nights"]} if d.get("nights") else {})})   # Sasha 132 · a hotel room
             if status == 200:
-                await _ask_yes(ctx, "email", j["email_id"], j["read_back"], SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
+                sentence = SN.confirm_sentence(reservation, rd["venue"])
+                if d.get("nights"):   # Sasha 135 · a hotel: a REQUEST for a room, said as one — never "book … at 15:00"
+                    n = int(d["nights"])
+                    sentence = (f"Email {rd['venue']} to ask for a room for {reservation['how_many']['count']}, {SN.day_words(at[:10])} for "
+                                f"{n} night{'s' if n != 1 else ''}? It's a request — nothing is booked until they reply.")
+                await _ask_yes(ctx, "email", j["email_id"], j["read_back"], sentence, rd["venue"],
                                extra={"summary": summary(reservation), **keep})
                 return
             why = refusal_words(j, status)

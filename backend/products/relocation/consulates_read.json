@@ -1,0 +1,933 @@
+{
+ "read": "3 Oct 2026",
+ "codes_checked": 5,
+ "network": {
+  "from": "Consulado General de España en Boston",
+  "url": "https://www.exteriores.gob.es/Consulados/boston/es/Consulado/Paginas/Demarcaci%c3%b3n.aspx",
+  "sha256": "0764240c66dc89c8bcad792d51ca318f8f7cf4628796450bdb9c2de5da34485b",
+  "file": "2026-10-03-boston-demarcacion.html",
+  "offices": {
+   "boston": {
+    "office": "Consulado General de España en Boston",
+    "text": "Maine, Massachusetts, New Hampshire, Rhode Island y Vermont"
+   },
+   "chicago": {
+    "office": "Consulado General de España en Chicago",
+    "text": "Illinois, Indiana, Iowa, Kansas, Nebraska, North Dakota, South Dakota, Ohio, Kentucky, Michigan, Minnesota, Missouri y Wisconsin"
+   },
+   "houston": {
+    "office": "Consulado General de España en Houston",
+    "text": "Nuevo México, Oklahoma, Texas, Alabama, Arkansas, Luisiana, Mississippi y Tennessee"
+   },
+   "losangeles": {
+    "office": "Consulado General de España en Los Ángeles",
+    "text": "California (condados de Imperial, Inyo, Kern, Los Ángeles, Orange, Riverside, San Bernardino, San Diego, San Luis Obispo, Santa Bárbara y Ventura), Arizona, Colorado y Utah"
+   },
+   "miami": {
+    "office": "Consulado General de España en Miami",
+    "text": "Florida, South Carolina y Georgia"
+   },
+   "newyork": {
+    "office": "Consulado General de España en Nueva York",
+    "text": "New York, Connecticut, Delaware, Pennsylvania y New Jersey"
+   },
+   "sanfrancisco": {
+    "office": "Consulado General de España en San Francisco",
+    "text": "Alaska, California (salvo parte sur), Hawaii, Idaho, Montana, Nevada, Oregón, Washington, Wyoming y territorios de EE.UU en el Pacífico"
+   },
+   "washington": {
+    "office": "Consulado General de España en Washington DC",
+    "text": "Maryland, Virginia, West Virgina, District of Columbia y North Carolina"
+   }
+  }
+ },
+ "consulates": {
+  "newyork": {
+   "office": "Consulado General de España en Nueva York",
+   "read": "3 Oct 2026",
+   "items": [
+    {
+     "n": 1,
+     "title": "Formulario de solicitud de visado nacional",
+     "text": "Formulario de solicitud de visado nacional. ( Formulario) Cada solicitante completará en todos sus apartados y firmará una solicitud de visado.Si el solicitante es menor de edad, firmará la solicitud uno de sus progenitores o tutores o un representante debidamente acreditado.",
+     "links": [
+      [
+       "Formulario",
+       "https://www.exteriores.gob.es/DocumentosAuxiliaresSC/Estados%20Unidos/NUEVA%20YORK%20(C)/1.2%20Tasas%20Consulares%20NY%2001.01.2026.pdf"
+      ]
+     ]
+    },
+    {
+     "n": 2,
+     "title": null,
+     "text": "Impreso de solicitud de autorización de residencia no lucrativa. Cada solicitante debe completar en todos sus apartados y firmar un ejemplar del impreso EX - 01.",
+     "links": [
+      [
+       "EX - 01",
+       "https://www.inclusion.gob.es/documents/d/migraciones/ex01-formulario-autorizacion-de-residencia-temporal-no-lucrativa-1"
+      ]
+     ]
+    },
+    {
+     "n": 3,
+     "title": "Fotografía",
+     "text": "Fotografía. Una fotografía reciente, tamaño carné, a color, con fondo claro, tomada de frente, sin gafas oscuras, ni reflejos, ni prendas que oculten el óvalo de la cara.",
+     "links": []
+    },
+    {
+     "n": 4,
+     "title": "Pasaporte válido y en vigor",
+     "text": "Pasaporte válido y en vigor. Se presentará el original y una fotocopia de la página o páginas con datos biométricos del pasaporte. El pasaporte deberá tener una validez mínima de 1 año y dos páginas en blanco. No se admiten pasaportes expedidos hace más 10 años.",
+     "links": []
+    },
+    {
+     "n": 5,
+     "title": "Prueba de la disponibilidad de medios económicos",
+     "text": "Prueba de la disponibilidad de medios económicos. Se presentará original y copia de los documentos que prueben que el solicitante dispone de medios económicos suficientes para cubrir los gastos de residencia en España durante el año inicial de autorización de residencia o que acrediten que dispone de una fuente de percepción periódica de ingresos, para sí mismo y, en su caso, para los familiares que le acompañen. La cantidad mínima exigida equivale al 400% del IPREM. A esta cantidad hay que añadir el 100% el IPREM por cada familiar a cargo del solicitante. \nLa información relativa a cuentas o instrumentos financieros en el extranjero, deben incluir la siguiente información:\n- La razón social o denominación completa de la entidad bancaria o de crédito, asi como su domicilio \n- La identificación completa de las cuentas \n- La fecha de apertura o cancelación o, en su caso, las fechas de concesión y revocación de la autorización \n- Los saldos de las cuentas a 31 de diciembre del año anterior al de presentación de la solicitud y el saldo medio correspondiente al último año.",
+     "links": []
+    },
+    {
+     "n": 6,
+     "title": "Seguro de enfermedad",
+     "text": "Seguro de enfermedad. Original y una copia del certificado de seguro de enfermedad público o privado contratado con una entidad aseguradora autorizada a operar en España. El seguro debe cubrir todos los riesgos asegurados por el sistema público de salud en España.",
+     "links": []
+    },
+    {
+     "n": 7,
+     "title": "Certificado de antecedentes penales",
+     "text": "Certificado de antecedentes penales. Los solicitantes mayores de edad penal presentarán original y una copia del certificado de antecedentes penales expedido por el país o países de residencia en los últimos 5 años. Los documentos extranjeros deben estar legalizados o apostillados y, en su caso, deben presentarse junto con una traducción oficial al español. Para Estados Unidos, son válidos los registros emitidos por el FBI. No se aceptarán verificaciones de antecedentes de la policía local ni de la policía estatal. \n- Certificado de antecedentes penales del FBI \n- Apostilla",
+     "links": [
+      [
+       "- Certificado de antecedentes penales del FBI",
+       "https://www.fbi.gov/services/cjis/identity-history-summary-checks"
+      ],
+      [
+       "- Apostilla",
+       "https://travel.state.gov/content/travel/en/replace-certify-docs/authenticate-your-document/apostille-requirements.html"
+      ]
+     ]
+    },
+    {
+     "n": 8,
+     "title": "Certificado médico",
+     "text": "Certificado médico. Original y una copia de un certificado médico que acredite que el solicitante no padece enfermedades que puedan tener repercusiones graves para la salud pública de conformidad con el Reglamento Sanitario Internacional de 2005.",
+     "links": []
+    },
+    {
+     "n": 9,
+     "title": "Prueba de la residencia en la demarcación consular",
+     "text": "Prueba de la residencia en la demarcación consular: Se acreditará con original y fotocopia del documento que acredite la residencia en la demarcación consular. Deberá aportar: \n- ID/Licencia de conducir (no válidas las provisionales). \n- Para solicitantes no estadounidenses, además: prueba de estatus migratorio en EEUU, es decir, Alien Registration Card (Green Card) o US Visa (excepto B-1/B-2).",
+     "links": []
+    },
+    {
+     "n": 10,
+     "title": "Abono de las tasas",
+     "text": "Abono de las tasas. Para abonar la tasa de autorización de residencia en la Oficina Consular, se deberá completar en todos sus campos y firmar dos ejemplares del modelo 790 código 052, epígrafe 2.1 (autorización inicial de residencia temporal) \nPuede consultar las tasas consulares e instrucciones de pago en el siguiente enlace: Tasas Consulares Nueva York \nInformación adicional sobre la tasa de autorización de residencia :\nEsta tasa también se puede abonar por internet, a través del enlace al modelo 790-052. En ese caso, se adjuntará justificante del pago obtenido a través de la misma página web.\nEn el caso de que no se abone por internet, puede abonarlo junto con la tasa consular el día de su cita.",
+     "links": [
+      [
+       "autorización inicial de residencia temporal",
+       "https://sede.administracionespublicas.gob.es/pagina/index/directorio/tasa052"
+      ],
+      [
+       "Tasas Consulares Nueva York",
+       "https://www.exteriores.gob.es/DocumentosAuxiliaresSC/Estados%20Unidos/NUEVA%20YORK%20(C)/1.2.1%20Tasas%20Consulares%20NY%2001.01.2026.pdf"
+      ]
+     ]
+    }
+   ],
+   "route": {
+    "text": "Deberá concertar una cita previa para este tipo de visado a través del correo electrónico cog.nuevayork.visnac@maec.es . \nEn el correo electrónico de solicitud de cita deberá facilitar la siguiente información de cada solicitante (todo en un único email) :\nA) Nombre completo \nB) Dirección de correo electrónico y número de teléfono \nC) Número de pasaporte y nacionalidad \nD) Tipo de visado solicitado \nE) Copia escaneada, en formato PDF, del ID/Carnet de conducir (No son válidos los provisionales) \nF) Copia escaneada, en formato PDF, de la página de identidad de su pasaporte (si no es ciudadano americano, deberá adjuntar también una copia de su visado de residencia estadounidense o Green Card).",
+    "links": [
+     [
+      "cog.nuevayork.visnac@maec.es",
+      "mailto:%20cog.nuevayork.visnac@maec.es"
+     ]
+    ]
+   },
+   "territory": {
+    "url": "https://www.exteriores.gob.es/Consulados/nuevayork/es/Consulado/Paginas/Demarcacion.aspx",
+    "sha256": "3ea888e43081349ea12c95794009f7185a49c426bc19246bbeee611a433e1a0b",
+    "dated": "23 de marzo de 2022",
+    "text": "Bajo la jurisdicción de este Consulado General se encuentran los estados de Connecticut, Delaware, New Jersey, New York y Pennsylvania."
+   },
+   "visa_page": {
+    "url": "https://www.exteriores.gob.es/Consulados/nuevayork/es/ServiciosConsulares/Paginas/index.aspx?scco=Estados+Unidos&scd=215&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+no+lucrativa",
+    "status": 200,
+    "sha256": "16c0beafa9d629925aca88479d7e14e6690e579d267dcfb6523b53c69a356e03",
+    "file": "2026-10-03-newyork-no-lucrativa.html"
+   },
+   "pages": [
+    {
+     "what": "home",
+     "url": "https://www.exteriores.gob.es/Consulados/nuevayork/es/Paginas/index.aspx",
+     "sha256": "9139ceef4d718cb314191fa325804b98e2381d7aa5ea9bfe876fbe4753be3742",
+     "file": "2026-10-03-newyork-home.html"
+    },
+    {
+     "what": "demarcacion",
+     "url": "https://www.exteriores.gob.es/Consulados/nuevayork/es/Consulado/Paginas/Demarcacion.aspx",
+     "sha256": "3ea888e43081349ea12c95794009f7185a49c426bc19246bbeee611a433e1a0b",
+     "file": "2026-10-03-newyork-demarcacion.html"
+    }
+   ],
+   "code": {
+    "scd": "215",
+    "from": "its own links",
+    "directory_id": "215",
+    "agrees": true
+   },
+   "dated": null,
+   "general": "Todos los documentos extranjeros deben presentarse legalizados o apostillados, y en caso de estar confeccionados en idioma distinto al español, acompañados de la correspondiente traducción.",
+   "route_asks_raw": [
+    [
+     "A",
+     "Nombre completo "
+    ],
+    [
+     "B",
+     "Dirección de correo electrónico y número de teléfono "
+    ],
+    [
+     "C",
+     "Número de pasaporte y nacionalidad "
+    ],
+    [
+     "D",
+     "Tipo de visado solicitado "
+    ],
+    [
+     "E",
+     "Copia escaneada, en formato PDF, del ID/Carnet de conducir (No son válidos los provisionales) "
+    ],
+    [
+     "F",
+     "Copia escaneada, en formato PDF, de la página de identidad de su pasaporte (si no es ciudadano americano, deberá adjuntar también una copia de su visado de residencia estadounidense o Green Card)."
+    ]
+   ],
+   "validity": "Validez del visado: El visado será válido para 365 días. Una vez en España, se deberá solicitar la Tarjeta de Identidad de Extranjero en el plazo de 1 mes desde la entrada en España, ante la Oficina de Extranjeros o la Comisaría de Policía correspondiente if(typeof(MSOLayout_MakeInvisibleIfEmpty)==\"function\"){MSOLayout_MakeInvisibleIfEmpty();} Más información Elecciones al Consejo de Residentes Españoles en la demarcación del Consulado General en Nueva York Pago de multas de tráfico de la DGT desde el extranjero. Mundial de Fútbol FIFA 2026 Abierto plazo de matrícula de ALCE VIVESS, la aplicación móvil para acreditar tu vivencia. Banners Cooperación Española Instituto Cervantes Participación",
+   "tie_within_months": 1,
+   "family": "Documentos necesarios para los familiares Para cada familiar será necesario presentar: \nTodos los requisitos mencionados en los apartados 1, 2, 3, 4, 6, 7, 8, 9 y 10. Para los menores de edad, la solicitud de visado y la solicitud de autorización de residencia serán firmadas por uno de sus progenitores.\nDocumentos que prueben la relación de parentesco con la persona titular: certificados de nacimiento o matrimonio expedidos por el registro civil, certificado de registro como pareja de hecho o cualquier otro documento que pruebe la relación como pareja no registrada. \nCuando sea necesario para valorar la solicitud, la Oficina Consular podrá solicitar documento o datos adicionales y también podrá convocar al solicitante a una entrevista personal.\nProcedimiento Esta Oficina Consular es competente para admitir las solicitudes de visado de las personas que residan en la demarcación consular. \nTodos los visados de residencia no lucrativa requieren la obtención de una autorización de permiso de residencia inicial, que se tramita al mismo tiempo que la solicitud de visado."
+  },
+  "washington": {
+   "office": "Sección Consular de la Embajada de España en Washington",
+   "read": "3 Oct 2026",
+   "items": [
+    {
+     "n": 1,
+     "title": "Formulario de solicitud de visado nacional",
+     "text": "Formulario de solicitud de visado nacional. () Cada solicitante completará en todos sus apartados y firmará una solicitud de visado.Si el solicitante es menor de edad, firmará la solicitud uno de sus progenitores o tutores o un representante debidamente acreditado.",
+     "links": []
+    },
+    {
+     "n": 2,
+     "title": null,
+     "text": "Impreso de solicitud de autorización de residencia no lucrativa. Cada solicitante debe completar en todos sus apartados y firmar un ejemplar del impreso EX - 01.",
+     "links": [
+      [
+       "EX - 01",
+       "https://www.inclusion.gob.es/documents/d/migraciones/ex01-formulario-autorizacion-de-residencia-temporal-no-lucrativa-1"
+      ]
+     ]
+    },
+    {
+     "n": 3,
+     "title": "Fotografía",
+     "text": "Fotografía. Una fotografía reciente, tamaño carné, a color, con fondo claro, tomada de frente, sin gafas oscuras, ni reflejos, ni prendas que oculten el óvalo de la cara.",
+     "links": []
+    },
+    {
+     "n": 4,
+     "title": "Pasaporte válido y en vigor",
+     "text": "Pasaporte válido y en vigor. Se presentará el original y una fotocopia de la página o páginas con datos biométricos del pasaporte. El pasaporte deberá tener una validez mínima de 1 año y dos páginas en blanco. No se admiten pasaportes expedidos hace más 10 años.",
+     "links": []
+    },
+    {
+     "n": 5,
+     "title": "Prueba de la disponibilidad de medios económicos",
+     "text": "Prueba de la disponibilidad de medios económicos. Se presentará original y copia de los documentos que prueben que el solicitante dispone de medios económicos suficientes para cubrir los gastos de residencia en España durante el año inicial de autorización de residencia o que acrediten que dispone de una fuente de percepción periódica de ingresos, para sí mismo y, en su caso, para los familiares que le acompañen. La cantidad mínima exigida equivale al 400% del IPREM. A esta cantidad hay que añadir el 100% el IPREM por cada familiar a cargo del solicitante.",
+     "links": []
+    },
+    {
+     "n": 6,
+     "title": "Seguro de enfermedad",
+     "text": "Seguro de enfermedad. Original y una copia del certificado de seguro de enfermedad público o privado contratado con una entidad aseguradora autorizada a operar en España. El seguro debe cubrir todos los riesgos asegurados por el sistema público de salud en España.",
+     "links": []
+    },
+    {
+     "n": 7,
+     "title": "Certificado de antecedentes penales",
+     "text": "Certificado de antecedentes penales. Los solicitantes mayores de edad penal presentarán original y una copia del certificado de antecedentes penales expedido por el país o países de residencia en los últimos 5 años.",
+     "links": []
+    },
+    {
+     "n": 8,
+     "title": "Certificado médico",
+     "text": "Certificado médico. Original y una copia de un certificado médico que acredite que el solicitante no padece enfermedades que puedan tener repercusiones graves para la salud pública de conformidad con el Reglamento Sanitario Internacional de 2005.",
+     "links": []
+    },
+    {
+     "n": 9,
+     "title": "Prueba de la residencia en la demarcación consular",
+     "text": "Prueba de la residencia en la demarcación consular: Se acreditará con original y fotocopia del documento que acredite la residencia en la demarcación consular.",
+     "links": []
+    },
+    {
+     "n": 10,
+     "title": "Abono de las tasas",
+     "text": "Abono de las tasas. Para abonar la tasa de autorización de residencia en la Oficina Consular, se deberá completar en todos sus campos y firmar dos ejemplares del modelo 790 código 052, epígrafe 2.1 (autorización inicial de residencia temporal) \nEsta tasa también se puede abonar por internet, a través del enlace al modelo 790-052. En ese caso, se adjuntará justificante del pago obtenido a través de la misma página web.\nCampo para informar sobre el importe de la tasa de visado.",
+     "links": [
+      [
+       "autorización inicial de residencia temporal",
+       "https://sede.administracionespublicas.gob.es/pagina/index/directorio/tasa052"
+      ]
+     ]
+    }
+   ],
+   "route": {
+    "text": null,
+    "links": []
+   },
+   "territory": {
+    "url": null,
+    "dated": null,
+    "text": null,
+    "why": "its home page links no Demarcación page"
+   },
+   "visa_page": {
+    "url": "https://www.exteriores.gob.es/Consulados/washington/es/ServiciosConsulares/Paginas/index.aspx?scco=Estados+Unidos&scd=288&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+no+lucrativa",
+    "status": 200,
+    "sha256": "29ac180b6f6d4746ce351f3db55991863adc6879ff41f32d8191eac3606ae61f",
+    "file": "2026-10-03-washington-no-lucrativa.html"
+   },
+   "pages": [
+    {
+     "what": "home",
+     "url": "https://www.exteriores.gob.es/Consulados/washington/es/Paginas/index.aspx",
+     "sha256": "d8ce1945adedc52afca6ad96d20b56358e28ff818acc71bfdb56927af165fbc8",
+     "file": "2026-10-03-washington-home.html"
+    }
+   ],
+   "code": {
+    "scd": "288",
+    "from": "its own links",
+    "directory_id": "288",
+    "agrees": true
+   },
+   "dated": null,
+   "general": "Todos los documentos extranjeros deben presentarse legalizados o apostillados, y en caso de estar confeccionados en idioma distinto al español, acompañados de la correspondiente traducción.",
+   "route_missing": "its page has the heading 'Lugar de presentación' with nothing under it",
+   "route_asks_raw": [],
+   "validity": "Validez del visado: El visado será válido para 365 días. Una vez en España, se deberá solicitar la Tarjeta de Identidad de Extranjero en el plazo de 1 mes desde la entrada en España, ante la Oficina de Extranjeros o la Comisaría de Policía correspondiente Campo libre para añadir alguna información relevante en la demarcación consular no incluida en los apartados anteriores (añadir título). if(typeof(MSOLayout_MakeInvisibleIfEmpty)==\"function\"){MSOLayout_MakeInvisibleIfEmpty();} Más información La Sección Consular de esta Embajada de España en Washington permanecerá cerrada el jueves 20 y viernes 21 de agosto Elecciones al Parlamento de Andalucía de 17 de mayo de 2026 Convocatoria del proceso electoral al Consejo de Residentes Españoles en la demarcación de la sección consular de la Embajada de España en Washington DC Elecciones al Parlamento Europeo de 9 de junio de 2024 Nueva ley que suprime el voto rogado Banners Cooperación Española <li class=\"col-1",
+   "tie_within_months": 1,
+   "family": "Documentos necesarios para los familiares Para cada familiar será necesario presentar: \nTodos los requisitos mencionados en los apartados 1, 2, 3, 4, 6, 7, 8, 9 y 10. Para los menores de edad, la solicitud de visado y la solicitud de autorización de residencia serán firmadas por uno de sus progenitores.\nDocumentos que prueben la relación de parentesco con la persona titular: certificados de nacimiento o matrimonio expedidos por el registro civil, certificado de registro como pareja de hecho o cualquier otro documento que pruebe la relación como pareja no registrada. \nCuando sea necesario para valorar la solicitud, la Oficina Consular podrá solicitar documento o datos adicionales y también podrá convocar al solicitante a una entrevista personal.\nProcedimiento Esta Oficina Consular es competente para admitir las solicitudes de visado de las personas que residan en la demarcación consular. \nTodos los visados de residencia no lucrativa requieren la obtención de una autorización de permiso de residencia inicial, que se tramita al mismo tiempo que la solicitud de visado."
+  },
+  "losangeles": {
+   "office": "Consulado General de España en Los Ángeles",
+   "read": "3 Oct 2026",
+   "items": [
+    {
+     "n": 1,
+     "title": "Formulario de solicitud de visado nacional",
+     "text": "Formulario de solicitud de visado nacional. () Cada solicitante completará en todos sus apartados y firmará una solicitud de visado.Si el solicitante es menor de edad, firmará la solicitud uno de sus progenitores o tutores o un representante debidamente acreditado.",
+     "links": []
+    },
+    {
+     "n": 2,
+     "title": null,
+     "text": "Impreso de solicitud de autorización de residencia no lucrativa. Cada solicitante debe completar en todos sus apartados y firmar un ejemplar del impreso EX - 01.",
+     "links": [
+      [
+       "EX - 01",
+       "https://www.inclusion.gob.es/documents/d/migraciones/ex01-formulario-autorizacion-de-residencia-temporal-no-lucrativa-1"
+      ]
+     ]
+    },
+    {
+     "n": 3,
+     "title": "Fotografía",
+     "text": "Fotografía. Una fotografía reciente, tamaño carné, a color, con fondo claro, tomada de frente, sin gafas oscuras, ni reflejos, ni prendas que oculten el óvalo de la cara.",
+     "links": []
+    },
+    {
+     "n": 4,
+     "title": "Pasaporte válido y en vigor",
+     "text": "Pasaporte válido y en vigor. Se presentará el original y una fotocopia de la página o páginas con datos biométricos del pasaporte. El pasaporte deberá tener una validez mínima de 1 año y dos páginas en blanco. No se admiten pasaportes expedidos hace más 10 años.",
+     "links": []
+    },
+    {
+     "n": 5,
+     "title": "Prueba de la disponibilidad de medios económicos",
+     "text": "Prueba de la disponibilidad de medios económicos. Se presentará original y copia de los documentos que prueben que el solicitante dispone de medios económicos suficientes para cubrir los gastos de residencia en España durante el año inicial de autorización de residencia o que acrediten que dispone de una fuente de percepción periódica de ingresos, para sí mismo y, en su caso, para los familiares que le acompañen. La cantidad mínima exigida equivale al 400% del IPREM. A esta cantidad hay que añadir el 100% el IPREM por cada familiar a cargo del solicitante.",
+     "links": []
+    },
+    {
+     "n": 6,
+     "title": "Seguro de enfermedad",
+     "text": "Seguro de enfermedad. Original y una copia del certificado de seguro de enfermedad público o privado contratado con una entidad aseguradora autorizada a operar en España. El seguro debe cubrir todos los riesgos asegurados por el sistema público de salud en España.",
+     "links": []
+    },
+    {
+     "n": 7,
+     "title": "Certificado de antecedentes penales",
+     "text": "Certificado de antecedentes penales. Los solicitantes mayores de edad penal presentarán original y una copia del certificado de antecedentes penales expedido por el país o países de residencia en los últimos 5 años.",
+     "links": []
+    },
+    {
+     "n": 8,
+     "title": "Certificado médico",
+     "text": "Certificado médico. Original y una copia de un certificado médico que acredite que el solicitante no padece enfermedades que puedan tener repercusiones graves para la salud pública de conformidad con el Reglamento Sanitario Internacional de 2005.",
+     "links": []
+    },
+    {
+     "n": 9,
+     "title": "Prueba de la residencia en la demarcación consular",
+     "text": "Prueba de la residencia en la demarcación consular: Se acreditará con original y fotocopia del documento que acredite la residencia en la demarcación consular.",
+     "links": []
+    },
+    {
+     "n": 10,
+     "title": "Abono de las tasas",
+     "text": "Abono de las tasas. Para abonar la tasa de autorización de residencia en la Oficina Consular, se deberá completar en todos sus campos y firmar dos ejemplares del modelo 790 código 052, epígrafe 2.1 (autorización inicial de residencia temporal) \nEsta tasa también se puede abonar por internet, a través del enlace al modelo 790-052. En ese caso, se adjuntará justificante del pago obtenido a través de la misma página web.\nCampo para informar sobre el importe de la tasa de visado.",
+     "links": [
+      [
+       "autorización inicial de residencia temporal",
+       "https://sede.administracionespublicas.gob.es/pagina/index/directorio/tasa052"
+      ]
+     ]
+    }
+   ],
+   "route": {
+    "text": null,
+    "links": []
+   },
+   "territory": {
+    "url": "https://www.exteriores.gob.es/Consulados/losangeles/es/Consulado/Paginas/Demarcacion.aspx",
+    "sha256": "20e3beeadfd38ad0a26dc369f91616e283d650cc2a4891d179b43eede494f71a",
+    "dated": null,
+    "text": "El Consulado General de España en Los Ángeles cubre las siguientes demarcaciones: Sur de California: Condados de Imperial, Inyo, Kern, Los Ángeles, Orange, Riverside, San Bernardino, San Diego, San Luis Obispo, Santa Bárbara y Ventura. Estado de Arizona Estado de Colorado Estado de Utah"
+   },
+   "visa_page": {
+    "url": "https://www.exteriores.gob.es/Consulados/losangeles/es/ServiciosConsulares/Paginas/index.aspx?scco=Estados+Unidos&scd=180&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+no+lucrativa",
+    "status": 200,
+    "sha256": "1a40f2a86b8c08ce8c87dbba191e7c4ce6bbb9e3a40c1ee53cf8d78d477d88de",
+    "file": "2026-10-03-losangeles-no-lucrativa.html"
+   },
+   "pages": [
+    {
+     "what": "home",
+     "url": "https://www.exteriores.gob.es/Consulados/losangeles/es/Paginas/index.aspx",
+     "sha256": "05fb0fd79b2a23633d5a1090afb2eedd84648a8ddc596a846b9fcfa40d4a428e",
+     "file": "2026-10-03-losangeles-home.html"
+    },
+    {
+     "what": "demarcacion",
+     "url": "https://www.exteriores.gob.es/Consulados/losangeles/es/Consulado/Paginas/Demarcacion.aspx",
+     "sha256": "20e3beeadfd38ad0a26dc369f91616e283d650cc2a4891d179b43eede494f71a",
+     "file": "2026-10-03-losangeles-demarcacion.html"
+    }
+   ],
+   "code": {
+    "scd": "180",
+    "from": "its own links",
+    "directory_id": "180",
+    "agrees": true
+   },
+   "dated": null,
+   "general": "Todos los documentos extranjeros deben presentarse legalizados o apostillados, y en caso de estar confeccionados en idioma distinto al español, acompañados de la correspondiente traducción.",
+   "route_missing": "its page has the heading 'Lugar de presentación' with nothing under it",
+   "route_asks_raw": [],
+   "validity": "Validez del visado: El visado será válido para 365 días. Una vez en España, se deberá solicitar la Tarjeta de Identidad de Extranjero en el plazo de 1 mes desde la entrada en España, ante la Oficina de Extranjeros o la Comisaría de Policía correspondiente Campo libre para añadir alguna información relevante en la demarcación consular no incluida en los apartados anteriores (añadir título). if(typeof(MSOLayout_MakeInvisibleIfEmpty)==\"function\"){MSOLayout_MakeInvisibleIfEmpty();} Más información Familia - Inscripción de Nacimiento Familia - Inscripción de Matrimonio Familia - Inscripción de Divorcio Familia - Inscripción de Defunción Cambio de Sexo Ley 4/2023 Banners Cooperación Española Instituto Cervantes",
+   "tie_within_months": 1,
+   "family": "Documentos necesarios para los familiares Para cada familiar será necesario presentar: \nTodos los requisitos mencionados en los apartados 1, 2, 3, 4, 6, 7, 8, 9 y 10. Para los menores de edad, la solicitud de visado y la solicitud de autorización de residencia serán firmadas por uno de sus progenitores.\nDocumentos que prueben la relación de parentesco con la persona titular: certificados de nacimiento o matrimonio expedidos por el registro civil, certificado de registro como pareja de hecho o cualquier otro documento que pruebe la relación como pareja no registrada. \nCuando sea necesario para valorar la solicitud, la Oficina Consular podrá solicitar documento o datos adicionales y también podrá convocar al solicitante a una entrevista personal.\nProcedimiento Esta Oficina Consular es competente para admitir las solicitudes de visado de las personas que residan en la demarcación consular. \nTodos los visados de residencia no lucrativa requieren la obtención de una autorización de permiso de residencia inicial, que se tramita al mismo tiempo que la solicitud de visado."
+  },
+  "miami": {
+   "office": "Consulado General de España en Miami",
+   "read": "3 Oct 2026",
+   "items": [
+    {
+     "n": 1,
+     "title": "Formulario de solicitud de visado nacional",
+     "text": "Formulario de solicitud de visado nacional. () Cada solicitante completará en todos sus apartados y firmará una solicitud de visado.Si el solicitante es menor de edad, firmará la solicitud uno de sus progenitores o tutores o un representante debidamente acreditado.",
+     "links": []
+    },
+    {
+     "n": 2,
+     "title": null,
+     "text": "Impreso de solicitud de autorización de residencia no lucrativa. Cada solicitante debe completar en todos sus apartados y firmar un ejemplar del impreso EX - 01.",
+     "links": [
+      [
+       "EX - 01",
+       "https://www.inclusion.gob.es/documents/d/migraciones/ex01-formulario-autorizacion-de-residencia-temporal-no-lucrativa-1"
+      ]
+     ]
+    },
+    {
+     "n": 3,
+     "title": "Fotografía",
+     "text": "Fotografía. Una fotografía reciente, tamaño carné, a color, con fondo claro, tomada de frente, sin gafas oscuras, ni reflejos, ni prendas que oculten el óvalo de la cara.",
+     "links": []
+    },
+    {
+     "n": 4,
+     "title": "Pasaporte válido y en vigor",
+     "text": "Pasaporte válido y en vigor. Se presentará el original y una fotocopia de la página o páginas con datos biométricos del pasaporte. El pasaporte deberá tener una validez mínima de 1 año y dos páginas en blanco. No se admiten pasaportes expedidos hace más 10 años.",
+     "links": []
+    },
+    {
+     "n": 5,
+     "title": "Prueba de la disponibilidad de medios económicos",
+     "text": "Prueba de la disponibilidad de medios económicos. Se presentará original y copia de los documentos que prueben que el solicitante dispone de medios económicos suficientes para cubrir los gastos de residencia en España durante el año inicial de autorización de residencia o que acrediten que dispone de una fuente de percepción periódica de ingresos, para sí mismo y, en su caso, para los familiares que le acompañen. La cantidad mínima exigida equivale al 400% del IPREM. A esta cantidad hay que añadir el 100% el IPREM por cada familiar a cargo del solicitante.",
+     "links": []
+    },
+    {
+     "n": 6,
+     "title": "Seguro de enfermedad",
+     "text": "Seguro de enfermedad. Original y una copia del certificado de seguro de enfermedad público o privado contratado con una entidad aseguradora autorizada a operar en España. El seguro debe cubrir todos los riesgos asegurados por el sistema público de salud en España.",
+     "links": []
+    },
+    {
+     "n": 7,
+     "title": "Certificado de antecedentes penales",
+     "text": "Certificado de antecedentes penales. Los solicitantes mayores de edad penal presentarán original y una copia del certificado de antecedentes penales expedido por el país o países de residencia en los últimos 5 años.",
+     "links": []
+    },
+    {
+     "n": 8,
+     "title": "Certificado médico",
+     "text": "Certificado médico. Original y una copia de un certificado médico que acredite que el solicitante no padece enfermedades que puedan tener repercusiones graves para la salud pública de conformidad con el Reglamento Sanitario Internacional de 2005.",
+     "links": []
+    },
+    {
+     "n": 9,
+     "title": "Prueba de la residencia en la demarcación consular",
+     "text": "Prueba de la residencia en la demarcación consular: Se acreditará con original y fotocopia del documento que acredite la residencia en la demarcación consular.",
+     "links": []
+    },
+    {
+     "n": 10,
+     "title": "Abono de las tasas",
+     "text": "Abono de las tasas. Para abonar la tasa de autorización de residencia en la Oficina Consular, se deberá completar en todos sus campos y firmar dos ejemplares del modelo 790 código 052, epígrafe 2.1 (autorización inicial de residencia temporal) \nEsta tasa también se puede abonar por internet, a través del enlace al modelo 790-052. En ese caso, se adjuntará justificante del pago obtenido a través de la misma página web.\nCampo para informar sobre el importe de la tasa de visado.",
+     "links": [
+      [
+       "autorización inicial de residencia temporal",
+       "https://sede.administracionespublicas.gob.es/pagina/index/directorio/tasa052"
+      ]
+     ]
+    }
+   ],
+   "route": {
+    "text": null,
+    "links": []
+   },
+   "territory": {
+    "url": "https://www.exteriores.gob.es/Consulados/miami/es/Consulado/Paginas/Demarcacion.aspx",
+    "sha256": "1533d07217eefcc828334e38072815c1eef41b7621d925807935e32c7f9bbfd9",
+    "dated": null,
+    "text": "La demarcación de este Consulado General abarca los Estados de Florida, Georgia y Carolina del Sur."
+   },
+   "visa_page": {
+    "url": "https://www.exteriores.gob.es/Consulados/miami/es/ServiciosConsulares/Paginas/index.aspx?scco=Estados+Unidos&scd=196&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+no+lucrativa",
+    "status": 200,
+    "sha256": "a1b0a5991c7563b279dcab2ce3b788f8e5ea75ede1ac9d82391fe53175e86ecc",
+    "file": "2026-10-03-miami-no-lucrativa.html"
+   },
+   "pages": [
+    {
+     "what": "home",
+     "url": "https://www.exteriores.gob.es/Consulados/miami/es/Paginas/index.aspx",
+     "sha256": "3a9277dc171629221519647cb86da0c3478b3c0c22f8ae76449ce34cd44706c9",
+     "file": "2026-10-03-miami-home.html"
+    },
+    {
+     "what": "demarcacion",
+     "url": "https://www.exteriores.gob.es/Consulados/miami/es/Consulado/Paginas/Demarcacion.aspx",
+     "sha256": "1533d07217eefcc828334e38072815c1eef41b7621d925807935e32c7f9bbfd9",
+     "file": "2026-10-03-miami-demarcacion.html"
+    }
+   ],
+   "code": {
+    "scd": "196",
+    "from": "its own links",
+    "directory_id": "196",
+    "agrees": true
+   },
+   "dated": null,
+   "general": "Todos los documentos extranjeros deben presentarse legalizados o apostillados, y en caso de estar confeccionados en idioma distinto al español, acompañados de la correspondiente traducción.",
+   "route_missing": "its page has the heading 'Lugar de presentación' with nothing under it",
+   "route_asks_raw": [],
+   "validity": "Validez del visado: El visado será válido para 365 días. Una vez en España, se deberá solicitar la Tarjeta de Identidad de Extranjero en el plazo de 1 mes desde la entrada en España, ante la Oficina de Extranjeros o la Comisaría de Policía correspondiente Campo libre para añadir alguna información relevante en la demarcación consular no incluida en los apartados anteriores (añadir título). if(typeof(MSOLayout_MakeInvisibleIfEmpty)==\"function\"){MSOLayout_MakeInvisibleIfEmpty();} Más información FIFA 2026-Recomendaciones de viaje para ciudadanos españoles Convocatoria del proceso electoral al Consejo de Residentes Españoles en la demarcación del Consulado General en Miami Noticias del Consulado Cómo conseguir una cita para solicitar la nacionalidad por la Ley de Memoria Democrática RECONOCIMIENTO/CONSENTIMIENTO PATERNO/MATERNO PARA NACIONALIDAD DE UN HIJO/A Banners Cooperación Española <a href=https://www.cervantes.es title=\"Se abre en ventana nueva",
+   "tie_within_months": 1,
+   "family": "Documentos necesarios para los familiares Para cada familiar será necesario presentar: \nTodos los requisitos mencionados en los apartados 1, 2, 3, 4, 6, 7, 8, 9 y 10. Para los menores de edad, la solicitud de visado y la solicitud de autorización de residencia serán firmadas por uno de sus progenitores.\nDocumentos que prueben la relación de parentesco con la persona titular: certificados de nacimiento o matrimonio expedidos por el registro civil, certificado de registro como pareja de hecho o cualquier otro documento que pruebe la relación como pareja no registrada. \nCuando sea necesario para valorar la solicitud, la Oficina Consular podrá solicitar documento o datos adicionales y también podrá convocar al solicitante a una entrevista personal.\nProcedimiento Esta Oficina Consular es competente para admitir las solicitudes de visado de las personas que residan en la demarcación consular. \nTodos los visados de residencia no lucrativa requieren la obtención de una autorización de permiso de residencia inicial, que se tramita al mismo tiempo que la solicitud de visado."
+  },
+  "chicago": {
+   "office": "Consulado General de España en Chicago",
+   "read": "3 Oct 2026",
+   "items": [
+    {
+     "n": 1,
+     "title": "Formulario de solicitud de visado nacional",
+     "text": "Formulario de solicitud de visado nacional. () Cada solicitante completará en todos sus apartados y firmará una solicitud de visado.Si el solicitante es menor de edad, firmará la solicitud uno de sus progenitores o tutores o un representante debidamente acreditado.",
+     "links": []
+    },
+    {
+     "n": 2,
+     "title": null,
+     "text": "Impreso de solicitud de autorización de residencia no lucrativa. Cada solicitante debe completar en todos sus apartados y firmar un ejemplar del impreso EX - 01.",
+     "links": [
+      [
+       "EX - 01",
+       "https://www.inclusion.gob.es/documents/d/migraciones/ex01-formulario-autorizacion-de-residencia-temporal-no-lucrativa-1"
+      ]
+     ]
+    },
+    {
+     "n": 3,
+     "title": "Fotografía",
+     "text": "Fotografía. Una fotografía reciente, tamaño carné, a color, con fondo claro, tomada de frente, sin gafas oscuras, ni reflejos, ni prendas que oculten el óvalo de la cara.",
+     "links": []
+    },
+    {
+     "n": 4,
+     "title": "Pasaporte válido y en vigor",
+     "text": "Pasaporte válido y en vigor. Se presentará el original y una fotocopia de la página o páginas con datos biométricos del pasaporte. El pasaporte deberá tener una validez mínima de 1 año y dos páginas en blanco. No se admiten pasaportes expedidos hace más 10 años.",
+     "links": []
+    },
+    {
+     "n": 5,
+     "title": "Prueba de la disponibilidad de medios económicos",
+     "text": "Prueba de la disponibilidad de medios económicos. Se presentará original y copia de los documentos que prueben que el solicitante dispone de medios económicos suficientes para cubrir los gastos de residencia en España durante el año inicial de autorización de residencia o que acrediten que dispone de una fuente de percepción periódica de ingresos, para sí mismo y, en su caso, para los familiares que le acompañen. La cantidad mínima exigida equivale al 400% del IPREM. A esta cantidad hay que añadir el 100% el IPREM por cada familiar a cargo del solicitante.",
+     "links": []
+    },
+    {
+     "n": 6,
+     "title": "Seguro de enfermedad",
+     "text": "Seguro de enfermedad. Original y una copia del certificado de seguro de enfermedad público o privado contratado con una entidad aseguradora autorizada a operar en España. El seguro debe cubrir todos los riesgos asegurados por el sistema público de salud en España.",
+     "links": []
+    },
+    {
+     "n": 7,
+     "title": "Certificado de antecedentes penales",
+     "text": "Certificado de antecedentes penales. Los solicitantes mayores de edad penal presentarán original y una copia del certificado de antecedentes penales expedido por el país o países de residencia en los últimos 5 años.",
+     "links": []
+    },
+    {
+     "n": 8,
+     "title": "Certificado médico",
+     "text": "Certificado médico. Original y una copia de un certificado médico que acredite que el solicitante no padece enfermedades que puedan tener repercusiones graves para la salud pública de conformidad con el Reglamento Sanitario Internacional de 2005.",
+     "links": []
+    },
+    {
+     "n": 9,
+     "title": "Prueba de la residencia en la demarcación consular",
+     "text": "Prueba de la residencia en la demarcación consular: Se acreditará con original y fotocopia del documento que acredite la residencia en la demarcación consular.",
+     "links": []
+    },
+    {
+     "n": 10,
+     "title": "Abono de las tasas",
+     "text": "Abono de las tasas. Para abonar la tasa de autorización de residencia en la Oficina Consular, se deberá completar en todos sus campos y firmar dos ejemplares del modelo 790 código 052, epígrafe 2.1 (autorización inicial de residencia temporal) \nEsta tasa también se puede abonar por internet, a través del enlace al modelo 790-052. En ese caso, se adjuntará justificante del pago obtenido a través de la misma página web.\nCampo para informar sobre el importe de la tasa de visado.",
+     "links": [
+      [
+       "autorización inicial de residencia temporal",
+       "https://sede.administracionespublicas.gob.es/pagina/index/directorio/tasa052"
+      ]
+     ]
+    }
+   ],
+   "route": {
+    "text": null,
+    "links": []
+   },
+   "territory": {
+    "url": "https://www.exteriores.gob.es/Consulados/chicago/es/Consulado/Paginas/Demarcaci%c3%b3n.aspx",
+    "sha256": "9218ce8377613f0e462bd3c0e758ae30c8a9d8f16ea055b99cd138e90ce66612",
+    "dated": null,
+    "text": "Estados que pertenecen a la demarcación de este Consulado General:Illinois Indiana Iowa Kansas Nebraska North Dakota South Dakota Ohio Kentucky Michigan Minnesota Missouri Wisconsin"
+   },
+   "visa_page": {
+    "url": "https://www.exteriores.gob.es/Consulados/chicago/es/ServiciosConsulares/Paginas/index.aspx?scco=Estados+Unidos&scd=48&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+no+lucrativa",
+    "status": 200,
+    "sha256": "fe967306d25536d3e72f75f8d4ef29d9a46221348731971036dd827acb97fe0d",
+    "file": "2026-10-03-chicago-no-lucrativa.html"
+   },
+   "pages": [
+    {
+     "what": "home",
+     "url": "https://www.exteriores.gob.es/Consulados/chicago/es/Paginas/index.aspx",
+     "sha256": "4d7c3c592e143c13e3e5b0819b5e4ef0e7682540fc6ee5bd20135310cd529e49",
+     "file": "2026-10-03-chicago-home.html"
+    },
+    {
+     "what": "demarcacion",
+     "url": "https://www.exteriores.gob.es/Consulados/chicago/es/Consulado/Paginas/Demarcaci%c3%b3n.aspx",
+     "sha256": "9218ce8377613f0e462bd3c0e758ae30c8a9d8f16ea055b99cd138e90ce66612",
+     "file": "2026-10-03-chicago-demarcacion.html"
+    }
+   ],
+   "code": {
+    "scd": "48",
+    "from": "the ministry's directory (ListItemID) — its own pages carry no code"
+   },
+   "dated": null,
+   "general": "Todos los documentos extranjeros deben presentarse legalizados o apostillados, y en caso de estar confeccionados en idioma distinto al español, acompañados de la correspondiente traducción.",
+   "route_missing": "its page has the heading 'Lugar de presentación' with nothing under it",
+   "route_asks_raw": [],
+   "validity": "Validez del visado: El visado será válido para 365 días. Una vez en España, se deberá solicitar la Tarjeta de Identidad de Extranjero en el plazo de 1 mes desde la entrada en España, ante la Oficina de Extranjeros o la Comisaría de Policía correspondiente Campo libre para añadir alguna información relevante en la demarcación consular no incluida en los apartados anteriores (añadir título). if(typeof(MSOLayout_MakeInvisibleIfEmpty)==\"function\"){MSOLayout_MakeInvisibleIfEmpty();} Más información Convocatoria de elecciones al Consejo de Residentes Españoles - CRE Designación de la Comisión Electoral para la renovación del CRE Convocatoria de elecciones al Consejo de Residentes Permanentes CRE julio 2026 Anulación de la primera convocatoria de elecciones para la renovación del CRE de la circunscripción consular de Chicago Convocatoria de elecciones al Consejo de Residentes Españoles (CRE) Banners Cooperación Española <li class=\"col-12 col-sm-6 col-md-4 col-lg-3 col",
+   "tie_within_months": 1,
+   "family": "Documentos necesarios para los familiares Para cada familiar será necesario presentar: \nTodos los requisitos mencionados en los apartados 1, 2, 3, 4, 6, 7, 8, 9 y 10. Para los menores de edad, la solicitud de visado y la solicitud de autorización de residencia serán firmadas por uno de sus progenitores.\nDocumentos que prueben la relación de parentesco con la persona titular: certificados de nacimiento o matrimonio expedidos por el registro civil, certificado de registro como pareja de hecho o cualquier otro documento que pruebe la relación como pareja no registrada. \nCuando sea necesario para valorar la solicitud, la Oficina Consular podrá solicitar documento o datos adicionales y también podrá convocar al solicitante a una entrevista personal.\nProcedimiento Esta Oficina Consular es competente para admitir las solicitudes de visado de las personas que residan en la demarcación consular. \nTodos los visados de residencia no lucrativa requieren la obtención de una autorización de permiso de residencia inicial, que se tramita al mismo tiempo que la solicitud de visado."
+  },
+  "houston": {
+   "office": "Consulado General de España en Houston",
+   "read": "3 Oct 2026",
+   "items": [],
+   "route": null,
+   "territory": null,
+   "visa_page": null,
+   "pages": [
+    {
+     "what": "home",
+     "url": "https://www.exteriores.gob.es/Consulados/Houston",
+     "sha256": "11114633091148e7fd6db6b88d9b9bf500d9a5bf5fadeeb776a4e03777fe4d6e",
+     "file": "2026-10-03-houston-home.html"
+    }
+   ],
+   "error": "its home page answered HTTP 503 (asked twice, 10 s+ apart)"
+  },
+  "boston": {
+   "office": "Consulado General de España en Boston",
+   "read": "3 Oct 2026",
+   "items": [
+    {
+     "n": 1,
+     "title": "Formulario de solicitud de visado nacional",
+     "text": "Formulario de solicitud de visado nacional. () Cada solicitante completará en todos sus apartados y firmará una solicitud de visado.Si el solicitante es menor de edad, firmará la solicitud uno de sus progenitores o tutores o un representante debidamente acreditado.",
+     "links": []
+    },
+    {
+     "n": 2,
+     "title": null,
+     "text": "Impreso de solicitud de autorización de residencia no lucrativa. Cada solicitante debe completar en todos sus apartados y firmar un ejemplar del impreso EX - 01.",
+     "links": [
+      [
+       "EX - 01",
+       "https://www.inclusion.gob.es/documents/d/migraciones/ex01-formulario-autorizacion-de-residencia-temporal-no-lucrativa-1"
+      ]
+     ]
+    },
+    {
+     "n": 3,
+     "title": "Fotografía",
+     "text": "Fotografía. Una fotografía reciente, tamaño carné, a color, con fondo claro, tomada de frente, sin gafas oscuras, ni reflejos, ni prendas que oculten el óvalo de la cara.",
+     "links": []
+    },
+    {
+     "n": 4,
+     "title": "Pasaporte válido y en vigor",
+     "text": "Pasaporte válido y en vigor. Se presentará el original y una fotocopia de la página o páginas con datos biométricos del pasaporte. El pasaporte deberá tener una validez mínima de 1 año y dos páginas en blanco. No se admiten pasaportes expedidos hace más 10 años.",
+     "links": []
+    },
+    {
+     "n": 5,
+     "title": "Prueba de la disponibilidad de medios económicos",
+     "text": "Prueba de la disponibilidad de medios económicos. Se presentará original y copia de los documentos que prueben que el solicitante dispone de medios económicos suficientes para cubrir los gastos de residencia en España durante el año inicial de autorización de residencia o que acrediten que dispone de una fuente de percepción periódica de ingresos, para sí mismo y, en su caso, para los familiares que le acompañen. La cantidad mínima exigida equivale al 400% del IPREM. A esta cantidad hay que añadir el 100% el IPREM por cada familiar a cargo del solicitante.",
+     "links": []
+    },
+    {
+     "n": 6,
+     "title": "Seguro de enfermedad",
+     "text": "Seguro de enfermedad. Original y una copia del certificado de seguro de enfermedad público o privado contratado con una entidad aseguradora autorizada a operar en España. El seguro debe cubrir todos los riesgos asegurados por el sistema público de salud en España.",
+     "links": []
+    },
+    {
+     "n": 7,
+     "title": "Certificado de antecedentes penales",
+     "text": "Certificado de antecedentes penales. Los solicitantes mayores de edad penal presentarán original y una copia del certificado de antecedentes penales expedido por el país o países de residencia en los últimos 5 años.",
+     "links": []
+    },
+    {
+     "n": 8,
+     "title": "Certificado médico",
+     "text": "Certificado médico. Original y una copia de un certificado médico que acredite que el solicitante no padece enfermedades que puedan tener repercusiones graves para la salud pública de conformidad con el Reglamento Sanitario Internacional de 2005.",
+     "links": []
+    },
+    {
+     "n": 9,
+     "title": "Prueba de la residencia en la demarcación consular",
+     "text": "Prueba de la residencia en la demarcación consular: Se acreditará con original y fotocopia del documento que acredite la residencia en la demarcación consular.",
+     "links": []
+    },
+    {
+     "n": 10,
+     "title": "Abono de las tasas",
+     "text": "Abono de las tasas. Para abonar la tasa de autorización de residencia en la Oficina Consular, se deberá completar en todos sus campos y firmar dos ejemplares del modelo 790 código 052, epígrafe 2.1 (autorización inicial de residencia temporal) \nEsta tasa también se puede abonar por internet, a través del enlace al modelo 790-052. En ese caso, se adjuntará justificante del pago obtenido a través de la misma página web.",
+     "links": [
+      [
+       "autorización inicial de residencia temporal",
+       "https://sede.administracionespublicas.gob.es/pagina/index/directorio/tasa052"
+      ]
+     ]
+    }
+   ],
+   "route": {
+    "text": null,
+    "links": []
+   },
+   "territory": {
+    "url": "https://www.exteriores.gob.es/Consulados/boston/es/Consulado/Paginas/Demarcaci%c3%b3n.aspx",
+    "sha256": "0764240c66dc89c8bcad792d51ca318f8f7cf4628796450bdb9c2de5da34485b",
+    "dated": null,
+    "text": null
+   },
+   "visa_page": {
+    "url": "https://www.exteriores.gob.es/Consulados/boston/es/ServiciosConsulares/Paginas/index.aspx?scco=Estados+Unidos&scd=32&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+no+lucrativa",
+    "status": 200,
+    "sha256": "34afe7bb5bfcddae04a850522d7eec8106bc7a379d42c4eb19fff3ae7d393bd7",
+    "file": "2026-10-03-boston-no-lucrativa.html"
+   },
+   "pages": [
+    {
+     "what": "home",
+     "url": "https://www.exteriores.gob.es/Consulados/boston/es/Paginas/index.aspx",
+     "sha256": "b1267266938590c4332160cc77af2083b4adef6fcff9e70563fbc9462997eabd",
+     "file": "2026-10-03-boston-home.html"
+    },
+    {
+     "what": "demarcacion",
+     "url": "https://www.exteriores.gob.es/Consulados/boston/es/Consulado/Paginas/Demarcaci%c3%b3n.aspx",
+     "sha256": "0764240c66dc89c8bcad792d51ca318f8f7cf4628796450bdb9c2de5da34485b",
+     "file": "2026-10-03-boston-demarcacion.html"
+    }
+   ],
+   "code": {
+    "scd": "32",
+    "from": "its own links",
+    "directory_id": "32",
+    "agrees": true
+   },
+   "dated": null,
+   "general": "Todos los documentos extranjeros deben presentarse legalizados o apostillados, y en caso de estar confeccionados en idioma distinto al español, acompañados de la correspondiente traducción.",
+   "route_missing": "its page has the heading 'Lugar de presentación' with nothing under it",
+   "route_asks_raw": [],
+   "validity": "Validez del visado: El visado será válido para 365 días. Una vez en España, se deberá solicitar la Tarjeta de Identidad de Extranjero en el plazo de 1 mes desde la entrada en España, ante la Oficina de Extranjeros o la Comisaría de Policía correspondiente if(typeof(MSOLayout_MakeInvisibleIfEmpty)==\"function\"){MSOLayout_MakeInvisibleIfEmpty();} Más información Convocatoria de Elecciones al Consejo de Residentes Españoles (CRE) AVISO IMPORTANTE – Nueva Sede Consular TASAS CONSULARES AVISO IMPORTANTE: Conservación de la nacionalidad española SALVOCONDUCTOS - INFORMACION IMPORTANTE Banners Cooperación Española Instituto Cervantes <a href=/es/ServiciosAlCiudada",
+   "tie_within_months": 1,
+   "family": "Documentos necesarios para los familiares Para cada familiar será necesario presentar: \nTodos los requisitos mencionados en los apartados 1, 2, 3, 4, 6, 7, 8, 9 y 10. Para los menores de edad, la solicitud de visado y la solicitud de autorización de residencia serán firmadas por uno de sus progenitores.\nDocumentos que prueben la relación de parentesco con la persona titular: certificados de nacimiento o matrimonio expedidos por el registro civil, certificado de registro como pareja de hecho o cualquier otro documento que pruebe la relación como pareja no registrada. \nCuando sea necesario para valorar la solicitud, la Oficina Consular podrá solicitar documento o datos adicionales y también podrá convocar al solicitante a una entrevista personal.\nProcedimiento Esta Oficina Consular es competente para admitir las solicitudes de visado de las personas que residan en la demarcación consular. \nTodos los visados de residencia no lucrativa requieren la obtención de una autorización de permiso de residencia inicial, que se tramita al mismo tiempo que la solicitud de visado."
+  },
+  "sanfrancisco": {
+   "office": "Consulado General de España en San Francisco",
+   "read": "3 Oct 2026",
+   "items": [
+    {
+     "n": 1,
+     "title": "Formulario de solicitud de visado nacional",
+     "text": "Formulario de solicitud de visado nacional. () Cada solicitante completará en todos sus apartados y firmará una solicitud de visado.Si el solicitante es menor de edad, firmará la solicitud uno de sus progenitores o tutores o un representante debidamente acreditado.",
+     "links": []
+    },
+    {
+     "n": 2,
+     "title": null,
+     "text": "Impreso de solicitud de autorización de residencia no lucrativa. Cada solicitante debe completar en todos sus apartados y firmar un ejemplar del impreso EX - 01.",
+     "links": [
+      [
+       "EX - 01",
+       "https://www.inclusion.gob.es/documents/d/migraciones/ex01-formulario-autorizacion-de-residencia-temporal-no-lucrativa-1"
+      ]
+     ]
+    },
+    {
+     "n": 3,
+     "title": "Fotografía",
+     "text": "Fotografía. Una fotografía reciente, tamaño carné, a color, con fondo claro, tomada de frente, sin gafas oscuras, ni reflejos, ni prendas que oculten el óvalo de la cara.",
+     "links": []
+    },
+    {
+     "n": 4,
+     "title": "Pasaporte válido y en vigor",
+     "text": "Pasaporte válido y en vigor. Se presentará el original y una fotocopia de la página o páginas con datos biométricos del pasaporte. El pasaporte deberá tener una validez mínima de 1 año y dos páginas en blanco. No se admiten pasaportes expedidos hace más 10 años.",
+     "links": []
+    },
+    {
+     "n": 5,
+     "title": "Prueba de la disponibilidad de medios económicos",
+     "text": "Prueba de la disponibilidad de medios económicos. Se presentará original y copia de los documentos que prueben que el solicitante dispone de medios económicos suficientes para cubrir los gastos de residencia en España durante el año inicial de autorización de residencia o que acrediten que dispone de una fuente de percepción periódica de ingresos, para sí mismo y, en su caso, para los familiares que le acompañen. La cantidad mínima exigida equivale al 400% del IPREM. A esta cantidad hay que añadir el 100% el IPREM por cada familiar a cargo del solicitante.",
+     "links": []
+    },
+    {
+     "n": 6,
+     "title": "Seguro de enfermedad",
+     "text": "Seguro de enfermedad. Original y una copia del certificado de seguro de enfermedad público o privado contratado con una entidad aseguradora autorizada a operar en España. El seguro debe cubrir todos los riesgos asegurados por el sistema público de salud en España.",
+     "links": []
+    },
+    {
+     "n": 7,
+     "title": "Certificado de antecedentes penales",
+     "text": "Certificado de antecedentes penales. Los solicitantes mayores de edad penal presentarán original y una copia del certificado de antecedentes penales expedido por el país o países de residencia en los últimos 5 años.",
+     "links": []
+    },
+    {
+     "n": 8,
+     "title": "Certificado médico",
+     "text": "Certificado médico. Original y una copia de un certificado médico que acredite que el solicitante no padece enfermedades que puedan tener repercusiones graves para la salud pública de conformidad con el Reglamento Sanitario Internacional de 2005.",
+     "links": []
+    },
+    {
+     "n": 9,
+     "title": "Prueba de la residencia en la demarcación consular",
+     "text": "Prueba de la residencia en la demarcación consular: Se acreditará con original y fotocopia del documento que acredite la residencia en la demarcación consular.",
+     "links": []
+    },
+    {
+     "n": 10,
+     "title": "Abono de las tasas",
+     "text": "Abono de las tasas. Para abonar la tasa de autorización de residencia en la Oficina Consular, se deberá completar en todos sus campos y firmar dos ejemplares del modelo 790 código 052, epígrafe 2.1 (autorización inicial de residencia temporal) \nEsta tasa también se puede abonar por internet, a través del enlace al modelo 790-052. En ese caso, se adjuntará justificante del pago obtenido a través de la misma página web.\nCampo para informar sobre el importe de la tasa de visado.",
+     "links": [
+      [
+       "autorización inicial de residencia temporal",
+       "https://sede.administracionespublicas.gob.es/pagina/index/directorio/tasa052"
+      ]
+     ]
+    }
+   ],
+   "route": {
+    "text": null,
+    "links": []
+   },
+   "territory": {
+    "url": "https://www.exteriores.gob.es/Consulados/sanfrancisco/es/Consulado/Paginas/Demarcacion.aspx",
+    "sha256": "d94ecbe5080f94c5112bf870d7eef69ed684bea9aecd4ddb774841d234142216",
+    "dated": null,
+    "text": null
+   },
+   "visa_page": {
+    "url": "https://www.exteriores.gob.es/Consulados/sanfrancisco/es/ServiciosConsulares/Paginas/index.aspx?scco=Estados+Unidos&scd=251&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+no+lucrativa",
+    "status": 200,
+    "sha256": "cbf23c29fee98d4d6698482c1619571cba6b31df5790f109cc31ccb36fb41c66",
+    "file": "2026-10-03-sanfrancisco-no-lucrativa.html"
+   },
+   "pages": [
+    {
+     "what": "home",
+     "url": "https://www.exteriores.gob.es/Consulados/sanfrancisco/es/Paginas/index.aspx",
+     "sha256": "3a40b146fb403ff292205e54ed5271e0e74cc7ff0c74d86218fa40dbe5d270c0",
+     "file": "2026-10-03-sanfrancisco-home.html"
+    },
+    {
+     "what": "demarcacion",
+     "url": "https://www.exteriores.gob.es/Consulados/sanfrancisco/es/Consulado/Paginas/Demarcacion.aspx",
+     "sha256": "d94ecbe5080f94c5112bf870d7eef69ed684bea9aecd4ddb774841d234142216",
+     "file": "2026-10-03-sanfrancisco-demarcacion.html"
+    }
+   ],
+   "code": {
+    "scd": "251",
+    "from": "the ministry's directory (ListItemID) — its own pages carry no code"
+   },
+   "dated": null,
+   "general": "Todos los documentos extranjeros deben presentarse legalizados o apostillados, y en caso de estar confeccionados en idioma distinto al español, acompañados de la correspondiente traducción.",
+   "route_missing": "its page has the heading 'Lugar de presentación' with nothing under it",
+   "route_asks_raw": [],
+   "validity": "Validez del visado: El visado será válido para 365 días. Una vez en España, se deberá solicitar la Tarjeta de Identidad de Extranjero en el plazo de 1 mes desde la entrada en España, ante la Oficina de Extranjeros o la Comisaría de Policía correspondiente Campo libre para añadir alguna información relevante en la demarcación consular no incluida en los apartados anteriores (añadir título). if(typeof(MSOLayout_MakeInvisibleIfEmpty)==\"function\"){MSOLayout_MakeInvisibleIfEmpty();} Más información Ofertas de empleo Consejo de Residentes Españoles (CRE ) para la demarcación consular de San Francisco Elecciones al Parlamento de Andalucía de 17 de mayo de 2026 Convocatoria Elecciones CRE 2026 VIVESS, la aplicación móvil para acreditar tu vivencia. Banners Cooperación Española Instituto Cervantes <img class=\"list__img lazy\" src=\"\" alt=\"\" width=180 data-src=/Publishi",
+   "tie_within_months": 1,
+   "family": "Documentos necesarios para los familiares Para cada familiar será necesario presentar: \nTodos los requisitos mencionados en los apartados 1, 2, 3, 4, 6, 7, 8, 9 y 10. Para los menores de edad, la solicitud de visado y la solicitud de autorización de residencia serán firmadas por uno de sus progenitores.\nDocumentos que prueben la relación de parentesco con la persona titular: certificados de nacimiento o matrimonio expedidos por el registro civil, certificado de registro como pareja de hecho o cualquier otro documento que pruebe la relación como pareja no registrada. \nCuando sea necesario para valorar la solicitud, la Oficina Consular podrá solicitar documento o datos adicionales y también podrá convocar al solicitante a una entrevista personal.\nProcedimiento Esta Oficina Consular es competente para admitir las solicitudes de visado de las personas que residan en la demarcación consular. \nTodos los visados de residencia no lucrativa requieren la obtención de una autorización de permiso de residencia inicial, que se tramita al mismo tiempo que la solicitud de visado."
+  }
+ }
+}

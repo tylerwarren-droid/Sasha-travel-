@@ -120,7 +120,7 @@ class OneItinerary(TG.Base):
         super().tearDown()
 
     def test_the_consulate_and_tie_appointments(self):
-        for t in ("relocation", "DEMO", "SIGNED", "UK", "1 March 2027"):
+        for t in ("relocation", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"):
             self.say(t)
         self.say("book me flights")                                            # Sasha in between…
         self.say("consulate booked 12 November 10:00")                         # …and relocation picks it up

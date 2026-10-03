@@ -145,7 +145,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         from . import after
         await after.signed(ctx)
         return
-    if step in ("prepared", "signed", "residence", "entry", "appointments", "done"):
+    if step in ("prepared", "signed", "residence", "us_state", "us_county", "pack", "entry", "appointments", "done"):
         from . import after
         if await after.on_message(ctx, t, payload):
             return
@@ -211,7 +211,7 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     step, t = pend.get("step"), (body or "").strip()
     if payload.startswith("rx:") or (media and step not in (None, "done")):
         return True
-    if re.fullmatch(r"(?i)demo", t) and step not in (None, "prepared", "signed", "residence", "entry", "done"):
+    if re.fullmatch(r"(?i)demo", t) and step not in (None, "prepared", "signed", "residence", "us_state", "us_county", "pack", "entry", "done"):
         return True
     if step == "route":
         return bool(re.search(r"(?i)\bfirst|initial|inicial|new\b|renew|renovaci", t))
@@ -230,6 +230,11 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
         return bool(re.match(r"(?i)^\s*(signed|i signed|firmado)\b", t))
     if step == "residence":
         return 0 < len(t.split()) <= 4 and not re.search(r"\d", t)
+    if step in ("us_state", "us_county"):          # CR 12
+        return 0 < len(t.split()) <= 4 and not re.search(r"\d", t)
+    if step == "pack" or re.match(r"(?i)^\s*pack\b", t) and step in ("entry", "appointments", "done"):
+        from . import consulates as CS
+        return bool(re.match(r"(?i)^\s*(pack\b|skip\b)", t)) or CS.numbers_in(t, 30) is not None
     if step == "entry":
         return bool(F.parse_date(t)) or bool(re.match(r"(?i)^\s*skip\b", t))
     if step == "appointments":

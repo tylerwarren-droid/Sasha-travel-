@@ -22,8 +22,17 @@ type File = {
   fictional: boolean; prepared_at: string; signed_at: string | null; expires_at: string
   after: null | {
     residence?: string; entry_date?: string
-    consulate?: null | { office: string; appointment_url: string; appointment_words: string; one_per_person: string; source: { name: string; url: string; dated: string; read: string } }
-    checklist?: { key: string; words: string; source: string; status: 'yours' | 'ok' | 'problem' | 'prepared' | 'not_needed'; why: string | null }[]
+    state?: string; county?: string
+    consulate?: null | {
+      id?: string; office: string; appointment_url: string | null; appointment_words: string; one_per_person: string
+      appointment_email?: string | null; general?: string | null
+      territory?: { from?: string; dated?: string | null; url?: string | null; states?: string[] }
+      source: { name: string; url: string; dated: string; read: string }
+    }
+    consulate_unreadable?: { office: string; why: string }
+    checklist?: { key: string; n?: number; label?: string | null; words: string; source: string; copies?: string | null; placeholder?: string | null; status: 'yours' | 'ok' | 'problem' | 'prepared' | 'not_needed'; why: string | null }[]
+    email_draft?: { to: string; subject: string; body: string; attach: string[]; mailto: string } | null
+    pack?: { n: number; name: string; title: string; status: 'gathered' | 'missing' | 'prepared'; copies: string | null }[]
     reminders?: { on: string; text: string; sent: boolean }[]
   }
   form: { name: string; title: string; pages: number; widgets: number; pdf_sha256: string }
@@ -116,7 +125,8 @@ export default async function RelocationFile({ params }: { params: Promise<{ id:
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>fills the official EX-01’s boxes from your answers, each naming where it came from;</li>
             <li>checks every field (postcode and province, the NIE’s control letter, text that won’t fit a box, your passport’s validity);</li>
-            <li>finds your consulate’s own appointment page and the document checklist;</li>
+            <li>finds your consulate’s own appointment route and document list — or says plainly when its page publishes none;</li>
+            <li>drafts the appointment email where the consulate asks for one, and orders your document pack the way it lists them;</li>
             <li>reminds you of the dates that matter.</li>
           </ul>
         </div>
@@ -126,23 +136,42 @@ export default async function RelocationFile({ params }: { params: Promise<{ id:
             <li>section 5 (first application or renewal; holder or family member);</li>
             <li>the Dehú consent — yours to decide;</li>
             <li>the signature, by hand, and the place and date;</li>
-            <li>booking the consulate’s appointment, and lodging the application in person.</li>
+            <li>sending the appointment email (or booking), and lodging the application in person.</li>
           </ul>
           <p className="mt-2 text-xs text-slate-600">Sasha never signs, ticks a consent, books a government appointment or files anything for you.</p>
         </div>
       </section>
-      <p className="mt-3 text-xs text-slate-600">The document checklist comes from the Spanish Consulate General in London’s own requirements sheet for this visa, dated 11 February 2022 (read 3 October 2026). It may be out of date — the consulate’s current page decides. Other consulates’ pages haven’t been read yet.</p>
+      {f.after?.consulate?.id ? (
+        <p className="mt-3 text-xs text-slate-600">The document checklist comes from the {f.after.consulate.office}’s own page for this visa, read {f.after.consulate.source.read} ({f.after.consulate.source.dated}). It may change — the consulate’s current page decides.</p>
+      ) : (
+        <p className="mt-3 text-xs text-slate-600">The document checklist comes from the Spanish Consulate General in London’s own requirements sheet for this visa, dated 11 February 2022 (read 3 October 2026), or — for New York, Washington, Los Angeles, Miami and Boston — each consulate’s own page (read 3 October 2026). It may be out of date — the consulate’s current page decides.</p>
+      )}
 
       {f.after && (
         <section className="mt-6 rounded-lg border border-sky-300 bg-sky-50 p-4 text-sm">
           <h2 className="text-base font-semibold">After you sign: you lodge it</h2>
-          {f.after.consulate ? (
+          {f.after.consulate?.id ? (
+            <>
+              <p className="mt-2">Your consulate: <b>{f.after.consulate.office}</b>{f.after.state ? <> — {f.after.consulate.territory?.from ?? 'its page'}{f.after.consulate.territory?.dated ? ` (dated ${f.after.consulate.territory.dated})` : ''} names {f.after.county ? `${f.after.county}, ` : ''}{f.after.state}</> : null}.</p>
+              {f.after.consulate.appointment_email ? (
+                <p className="mt-1">How it takes appointments — its page, in its words: “{f.after.consulate.appointment_words.split('\n')[0]}”</p>
+              ) : f.after.consulate.appointment_url ? (
+                <p className="mt-1">Its appointment page: <a className="underline" href={f.after.consulate.appointment_url} target="_blank" rel="noopener noreferrer">{f.after.consulate.appointment_url}</a>. You book it; Kanoe doesn’t.</p>
+              ) : (
+                <p className="mt-1">Its page has the heading “Lugar de presentación” with nothing under it, so we can’t say how it takes appointments — and we don’t guess. Ask the consulate directly.</p>
+              )}
+              <p className="mt-1 text-xs text-slate-600">Source: <a className="underline" href={f.after.consulate.source.url} target="_blank" rel="noopener noreferrer">{f.after.consulate.source.name}</a> — {f.after.consulate.source.dated}, read {f.after.consulate.source.read}.</p>
+              {f.after.consulate.general && <p className="mt-1 text-xs">Its page, on every foreign document: “{f.after.consulate.general}”</p>}
+            </>
+          ) : f.after.consulate ? (
             <>
               <p className="mt-2">Your consulate: <b>{f.after.consulate.office}</b>. Its own sheet: “{f.after.consulate.appointment_words}”:{' '}
-                <a className="underline" href={f.after.consulate.appointment_url} target="_blank" rel="noopener noreferrer">{f.after.consulate.appointment_url}</a>.
+                <a className="underline" href={f.after.consulate.appointment_url ?? '#'} target="_blank" rel="noopener noreferrer">{f.after.consulate.appointment_url}</a>.
                 {' '}You book it and go in person; {f.after.consulate.one_per_person}. Kanoe doesn’t book or press anything.</p>
               <p className="mt-1 text-xs text-slate-600">Source: <a className="underline" href={f.after.consulate.source.url} target="_blank" rel="noopener noreferrer">{f.after.consulate.source.name}</a>, dated {f.after.consulate.source.dated}, read {f.after.consulate.source.read}. It may be out of date — the consulate’s current page decides.</p>
             </>
+          ) : f.after.consulate_unreadable ? (
+            <p className="mt-2">Your consulate is the <b>{f.after.consulate_unreadable.office}</b>, but {f.after.consulate_unreadable.why} — so there’s no checklist from it here, and we don’t make one up.</p>
           ) : (
             <p className="mt-2">We haven’t read the Spanish consulate’s own page for where you live, so we give no link we haven’t checked.</p>
           )}
@@ -150,12 +179,36 @@ export default async function RelocationFile({ params }: { params: Promise<{ id:
             <ol className="mt-3 space-y-1">
               {f.after.checklist.map((c) => (
                 <li key={c.key} className={c.status === 'problem' ? 'text-rose-700 font-semibold' : c.status === 'ok' || c.status === 'prepared' ? 'text-emerald-800' : c.status === 'not_needed' ? 'text-slate-500' : ''}>
-                  {c.status === 'ok' || c.status === 'prepared' ? '✓' : c.status === 'problem' ? '✗' : c.status === 'not_needed' ? '—' : '☐'} {c.words}{c.why ? ` — ${c.why}` : ''}
+                  {c.status === 'ok' || c.status === 'prepared' ? '✓' : c.status === 'problem' ? '✗' : c.status === 'not_needed' ? '—' : '☐'}{' '}
+                  {c.n && c.label !== undefined ? <><b>{c.n}. {c.label ?? ''}</b> <span className="text-xs text-slate-500">(our label)</span> — <span lang="es">{c.words}</span></> : c.words}{c.why ? ` — ${c.why}` : ''}
+                  {c.placeholder && <span className="ml-1 text-xs text-amber-800">(“{c.placeholder}” is the ministry template’s unfilled field, left on its page — not a requirement.)</span>}
                 </li>
               ))}
             </ol>
           )}
-          <p className="mt-3">After you enter Spain, the sheet gives you one month to request your TIE at an Oficina de Extranjería or police station. The official appointment page: <a className="underline" href="https://sede.administracionespublicas.gob.es/pagina/index/directorio/icpplus" target="_blank" rel="noopener noreferrer">Cita previa de extranjería</a>. You choose the office and press; we never book it.</p>
+          {f.after.email_draft && (
+            <div className="mt-4 rounded border border-sky-400 bg-white p-3">
+              <h3 className="font-semibold">The appointment email — drafted, for you to send</h3>
+              <p className="mt-1 text-xs text-slate-600">Its page asks for an email with these details. Kanoe drafted it; you send it from your own address and attach the files yourself. Kanoe never sends it.</p>
+              <p className="mt-2 text-xs">To: {f.after.email_draft.to} · Subject: {f.after.email_draft.subject}</p>
+              <pre className="mt-1 whitespace-pre-wrap text-xs" lang="es">{f.after.email_draft.body}</pre>
+              <a className="mt-2 inline-block rounded bg-sky-700 px-3 py-1.5 text-white" href={f.after.email_draft.mailto}>Open it in your email app — you press Send</a>
+            </div>
+          )}
+          {f.after.pack && f.after.pack.length > 0 && (
+            <div className="mt-4 rounded border border-emerald-400 bg-white p-3">
+              <h3 className="font-semibold">Your document pack — in the consulate’s own order</h3>
+              <p className="mt-1 text-xs text-slate-600">Name your files like this and they sort the way the consulate lists them. “Gathered” is on your word; Kanoe hasn’t seen the documents.</p>
+              <ol className="mt-2 space-y-0.5 font-mono text-xs">
+                {f.after.pack.map((x) => (
+                  <li key={x.n} className={x.status === 'missing' ? 'text-slate-500' : 'text-emerald-800'}>
+                    {x.status === 'missing' ? '☐' : '✓'} {x.name}{x.copies && x.status !== 'missing' ? ` — ${x.copies}` : ''}{x.status === 'missing' ? ' — still to gather' : ''}{x.status === 'prepared' ? ' — prepared by Kanoe; you sign it' : ''}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+          <p className="mt-3">After you enter Spain, {f.after.consulate?.id ? 'the consulate’s page gives you' : 'the sheet gives you'} one month to request your TIE at an Oficina de Extranjería or police station. The official appointment page: <a className="underline" href="https://sede.administracionespublicas.gob.es/pagina/index/directorio/icpplus" target="_blank" rel="noopener noreferrer">Cita previa de extranjería</a>. You choose the office and press; we never book it.</p>
           {f.after.reminders && f.after.reminders.length > 0 && (
             <ul className="mt-3 space-y-0.5 text-xs text-slate-700">
               {f.after.reminders.map((r) => <li key={r.on}>⏰ {new Date(`${r.on}T12:00:00Z`).toUTCString().slice(5, 16)}: {r.text}{r.sent ? ' (sent)' : ''}</li>)}

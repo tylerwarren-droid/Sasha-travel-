@@ -154,6 +154,8 @@ class Flow(TG.Base):
         items = {i["key"]: i for i in run(ST.STORE.get(cid))["state"]["after"]["checklist"]}
         self.assertEqual(items["passport"]["status"], "ok")               # the demo passport runs to 2031
         self.assertEqual(items["ex01"]["status"], "prepared")
+        self.assertIn("Your *document pack*", self.bodies()[-1])                    # CR 12 · the pack, then the date
+        self.say("SKIP")
         self.say("1 March 2027")
         rs = run(ST.STORE.get(cid))["state"]["after"]["reminders"]
         self.assertEqual([r["on"] for r in rs], ["2026-10-02", "2026-12-01", "2027-03-22"])   # in date order, from today

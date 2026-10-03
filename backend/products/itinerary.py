@@ -23,7 +23,22 @@ log = logging.getLogger("products.itinerary")
 CONSULATE = "Consulado General de España en Londres — visa appointment"
 TIE = "TIE appointment — Oficina de Extranjería / Policía"
 SERMAS = "Centro de salud (SERMAS) — doctor's appointment"
-OURS = (CONSULATE, TIE, SERMAS)
+
+
+def consulate_name(office: str) -> str:
+    """CR 12 · a US consulate's appointment, by the office's own name (the reset finds it by this suffix's names below)."""
+    return f"{office} — visa appointment"
+
+
+def _us_names() -> tuple:
+    try:
+        from .relocation import consulates as CS
+        return tuple(consulate_name(r["office"]) for r in CS.READ.values() if r.get("office"))
+    except Exception:
+        return ()
+
+
+OURS = (CONSULATE, TIE, SERMAS) + _us_names()
 
 _MONTHS = {m: i for i, m in enumerate(("january", "february", "march", "april", "may", "june", "july", "august",
                                         "september", "october", "november", "december"), 1)}

@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional
 
 from .. import store as ST
+from . import consulates as CS
 from . import facts as F
 
 LONDON_SHEET = {
@@ -58,6 +59,27 @@ CHECKLIST = [
 ]
 
 
+def london_items(items: List[dict]) -> List[dict]:
+    """London's checklist rows in the shape the pack uses: the sheet's own item number, our label, its words."""
+    out = []
+    for it in items:
+        m = re.search(r"\(item (\d+)\)", it["words"])
+        out.append({**it, "n": int(m.group(1)) if m else len(out) + 1, "label": it["words"].split(" — ")[0].split(" (item")[0].split(",")[0],
+                    "copies": None})
+    return out
+
+
+US_STATE_Q = ("Which US state do you live in? Each Spanish consulate in the US covers its own states — I match yours from the "
+              "consulate's own page, never a guess.")
+
+
+def pack_q(items: List[dict]) -> str:
+    lines = "\n".join(f"{it['n']}. {it.get('label') or it['words'][:60]}" + (" — prepared by me, signed by you" if it["key"] == "ex01" else "")
+                      for it in items)
+    return ("Your *document pack* — which of these have you gathered? Reply with the numbers (e.g. 1 3 4-6), ALL, or "
+            f"SKIP:\n{lines}")
+
+
 def web() -> str:
     import os
     return os.getenv("SASHA_WEB_URL", "https://project.kanoe.ai").rstrip("/")
@@ -86,11 +108,25 @@ def checklist(f: dict, today: date, residence: Optional[str]) -> List[dict]:
     return out
 
 
-def reminders(entry: Optional[str], today: date) -> List[dict]:
+ENTRY_Q = "When do you plan to enter Spain? (a date, e.g. 1 March 2027 — or SKIP)"
+
+
+def reminders(entry: Optional[str], today: date, consulate: Optional[dict] = None) -> List[dict]:
     """From the sheet's own dates: apply from 90 days before entry; the two certificates no older than 3 months when you
-    apply; the TIE within a month of entering Spain."""
+    apply; the TIE within a month of entering Spain. CR 12 · a US consulate: ONLY what its own page says — the TIE
+    within its stated months of entry (no 90-day window: none of their pages states one)."""
     if not entry:
         return []
+    if consulate and consulate.get("id"):
+        r = CS.READ.get(consulate["id"]) or {}
+        n = r.get("tie_within_months")
+        if not n:
+            return []
+        d = date.fromisoformat(entry) + timedelta(days=21 if n == 1 else 30 * n - 9)
+        words = (f"You entered Spain about {'three weeks' if n == 1 else f'{n} months'} ago: {consulate['office']}'s own page "
+                 f"gives you {n} month{'s' if n > 1 else ''} from entry to request your TIE at the Oficina de Extranjeros or "
+                 f"the police station. Book it on the official cita previa page: {CITA_EXTRANJERIA['url']}")
+        return [{"on": d.isoformat(), "text": words, "sent": False}] if d >= today else []
     e = date.fromisoformat(entry)
     rs = [(e - timedelta(days=90), "You can apply for your visa from today — up to 90 days before your entry date "
                                    "(London consulate sheet)."),
@@ -131,6 +167,30 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
     pend, out, now = ctx["st"]["pending"], ctx["out"], ctx["now"]
     step = pend.get("step")
     f = pend.get("facts") or {}
+    if step == "residence" and (CS.is_us(body) or CS.state_from(body)):
+        state = CS.state_from(body)
+        f.setdefault("choices", {})["residence"] = F.fact("united states", "said on WhatsApp", now.strftime("%-d %b %Y"))
+        if not state:
+            pend["step"] = "us_state"
+            out.text(US_STATE_Q)
+            return True
+        return await _us(ctx, state)
+    if step == "us_county":
+        sp = CS.split(pend.get("us_state") or "")
+        county = CS.county_in(body, sp["counties"]) if sp else None
+        if not sp:
+            pend["step"] = "us_state"
+            out.text(US_STATE_Q)
+            return True
+        return await _us(ctx, pend["us_state"], cid=sp["named"] if county else sp["rest"], county=county or body.strip())
+    if step == "us_state":
+        state = CS.state_from(body)
+        if not state:
+            out.text("The state, please — e.g. New York, NJ, Florida.")
+            return True
+        return await _us(ctx, state)
+    if step == "pack" or (step in ("entry", "appointments", "done") and re.match(r"(?i)^\s*pack\b", body)):
+        return await _pack(ctx, re.sub(r"(?i)^\s*pack\b[:\s]*", "", body))
     if step == "residence":
         residence = "united kingdom" if _UK.search(body) else F.fold(body).strip(" .")
         c = CONSULATES.get(residence)
@@ -153,8 +213,11 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
             if flag:
                 out.text(f"⚠ {flag['why']}.")
             await _save(ctx, {"after": {"residence": residence, "consulate": c, "checklist": items}})
+            pend["step"] = "pack"
+            out.text(pack_q(london_items(items)))
+            return True
         pend["step"] = "entry"
-        out.text("When do you plan to enter Spain? (a date, e.g. 1 March 2027 — or SKIP)")
+        out.text(ENTRY_Q)
         return True
     if step == "entry":
         if re.match(r"(?i)^\s*skip\b", body):
@@ -167,14 +230,14 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
             out.text("A future date please, like 1 March 2027 — or SKIP.")
             return True
         pend["entry_date"] = d   # CR 10 · context for Sasha's other skills (e.g. flights)
-        rs = reminders(d, now.date())
         case = await ST.STORE.get(pend.get("case_id") or "")
         after = (case or {}).get("state", {}).get("after") or {}
+        rs = reminders(d, now.date(), after.get("consulate"))
         await _save(ctx, {"after": {**after, "entry_date": d, "reminders": rs,
                                     "wa": ctx["ch"]["wa_id_sha256"], "number_from": ctx["frm"]}})
         pend["step"] = "appointments"
         lines = "\n".join(f"• {date.fromisoformat(r['on']).strftime('%-d %b %Y')}: {r['text'].split(' — ')[0].split(': ')[0]}"
-                          for r in rs)
+                          for r in rs) or "(none — the dates your consulate's page gives have passed or aren't stated)"
         out.text(f"I'll remind you here:\n{lines}\n(WhatsApp lets me write first only within 24 hours of your last message; "
                  "otherwise the reminder waits for your next message, and it's always on your file page.)")
         out.text('When you\'ve booked your consulate appointment — and later, in Spain, your TIE one — tell me the day and time (e.g. "consulate booked 12 November 10:00") and I\'ll put it in your itinerary.')
@@ -220,13 +283,140 @@ async def _appointment(ctx: dict, body: str) -> bool:
         return True
     on, at = when
     tie = bool(_TIE.search(body))
-    name, tz = (IT.TIE, "Europe/Madrid") if tie else (IT.CONSULATE, "Europe/London")
-    item = await IT.guest_booked(ctx["account"], type_="visa", provider_name=name, on=on, at=at, tz=tz,
-                                 location=None if tie else "Spanish Consulate General, London")
+    case = await ST.STORE.get(ctx["st"]["pending"].get("case_id") or "")
+    cons = ((case or {}).get("state", {}).get("after") or {}).get("consulate") or {}
+    if tie:
+        name, tz, where = IT.TIE, "Europe/Madrid", None
+    elif cons.get("id"):                                     # CR 12 · a US consulate: its own name, its own clock
+        name, tz, where = IT.consulate_name(cons["office"]), CS.TZ[cons["id"]], cons["office"]
+    else:
+        name, tz, where = IT.CONSULATE, "Europe/London", "Spanish Consulate General, London"
+    item = await IT.guest_booked(ctx["account"], type_="visa", provider_name=name, on=on, at=at, tz=tz, location=where)
     what = "your TIE appointment" if tie else "your consulate appointment"
     if item:
         out.text(f"Added to your itinerary: {what}, {on.strftime('%A %-d %B %Y')} at {at} — booked by you. I'll remind you the "
                  "day before. Forward their confirmation email to me to add the reference.")
     else:
         out.text(f"Noted: {what}, {on.strftime('%A %-d %B %Y')} at {at}. I couldn't add it to your itinerary just now.")
+    return True
+
+
+async def _us(ctx: dict, state: str, cid: Optional[str] = None, county: Optional[str] = None) -> bool:
+    """CR 12 · the US: the consulate whose OWN territory page names the state; its own list and its own route — or, where
+    its page can't be read or publishes nothing, that said plainly."""
+    pend, out, now = ctx["st"]["pending"], ctx["out"], ctx["now"]
+    f = pend.get("facts") or {}
+    f.setdefault("choices", {})["state"] = F.fact(state, "said on WhatsApp", now.strftime("%-d %b %Y"))
+    sp = CS.split(state) if not cid else None
+    if sp:                                           # California: the published list splits it by county
+        pend["us_state"], pend["step"] = state, "us_county"
+        out.text(f"{state} is split between two consulates by county. Which county do you live in?")
+        return True
+    cid = cid or CS.for_state(state)
+    base = {"residence": "united states", "state": state, **({"county": county} if county else {})}
+    if not cid:
+        out.text(f"None of the US consulate pages I could read names {state} in its territory, so I won't guess which "
+                 "consulate is yours. It's the Consulado General de España that covers your state, on exteriores.gob.es.")
+        await _save(ctx, {"after": {**base, "consulate": None, "unread": CS.unread_offices()}})
+        pend["step"] = "entry"
+        out.text(ENTRY_Q)
+        return True
+    c = CS.consulate(cid)
+    r = CS.READ[cid]
+    terr = CS.territory(cid)
+    named = f"{county} County, {state}" if county and county in " ".join(CS.split(state)["counties"] if CS.split(state) else []) else \
+        (f"{state} (outside the southern counties the other consulate covers)" if county else state)
+    where = f"{terr.get('from', 'its page')}{' (dated ' + terr['dated'] + ')' if terr.get('dated') else ''} names {named}"
+    if not c:
+        out.text(f"Your consulate is the *{r['office']}* — {where}. But {r['error']}, so I have no checklist from it, and I "
+                 f"won't make one up. Its own website: {r['pages'][0]['url'] if r.get('pages') else 'exteriores.gob.es'}")
+        await _save(ctx, {"after": {**base, "consulate": None, "consulate_unreadable": {"office": r["office"], "why": r["error"]}}})
+        pend["step"] = "entry"
+        out.text(ENTRY_Q)
+        return True
+    items = us_checklist(f, now.date(), cid)
+    a = f.get("applicant") or {}
+    draft = CS.email_draft(c, {"name": " ".join(x for x in ((a.get("given_names") or {}).get("value"),
+                                                               (a.get("surname_1") or {}).get("value"),
+                                                               (a.get("surname_2") or {}).get("value")) if x) or None,
+                               "contact": " / ".join(x for x in ((a.get("email") or {}).get("value"),
+                                                                 (a.get("mobile") or {}).get("value")) if x) or None,
+                               "passport": None,   # never put in an email by us: theirs to type
+                               "visa": "Visado de residencia no lucrativa"})
+    out.text(f"Your consulate: *{c['office']}* — {where}. Its non-lucrative visa page, read {c['source']['read']} "
+             f"({c['source']['dated']}).")
+    if c["appointment_email"]:
+        first = re.split(r"(?<=\.)\s", c["appointment_words"])[0]
+        out.text(f"How it takes appointments — its page: “{first}”\nI've drafted that email in Spanish with the details it asks "
+                 f"for; you send it from your own address and attach the two PDFs it asks for. I never send it.")
+    elif c["appointment_url"]:
+        out.text(f"How it takes appointments — its page: “{c['appointment_words'][:300]}”\n{c['appointment_url']}\nYou book it; I don't.")
+    else:
+        out.text("Its page has the heading “Lugar de presentación” with nothing under it, so I can't tell you how it takes "
+                 f"appointments — and I won't guess. Ask the consulate directly: {r['pages'][0]['url']}")
+    if not c["localised"]:
+        out.text("Its page is the ministry's standard text for this visa, with nothing of its own added — so local details "
+                 "(how it books, what it accepts as proof you live there) are the consulate's to tell you.")
+    flag = next((i for i in items if i["status"] == "problem"), None)
+    out.text(f"Its own list: {len(items)} documents, in its order — its words in Spanish, my short English label beside "
+             f"each. On your file page:\n{web()}/relocation-file/{pend.get('case_id')}")
+    if flag:
+        out.text(f"⚠ {flag['why']}.")
+    await _save(ctx, {"after": {**base, "consulate": c, "checklist": items, "email_draft": draft}})
+    pend["step"] = "pack"
+    out.text(pack_q(items))
+    return True
+
+
+def us_checklist(f: dict, today: date, cid: str) -> List[dict]:
+    """The consulate's own items, with the two statuses we can compute: the EX-01 (prepared) and the passport's validity
+    against the year ITS page asks for."""
+    a = f.get("applicant") or {}
+    out = []
+    for it in CS.checklist(cid):
+        it = {**it, "status": "yours", "why": None}
+        if it["key"] == "ex01":
+            it.update(status="prepared", why="prepared by Kanoe from your answers — you sign it")
+        if it["key"] == "passport" and re.search(r"validez m[ií]nima de 1 año", it["words"]):
+            exp = (a.get("passport_expiry") or {}).get("value")
+            if exp:
+                ok = exp >= (today + timedelta(days=365)).isoformat()
+                it.update(status="ok" if ok else "problem",
+                          why=f"your passport is valid until {exp}: " + ("at least a year from today" if ok else
+                              "LESS than a year from today — the consulate's page asks for at least one year"))
+        out.append(it)
+    return out
+
+
+async def _pack(ctx: dict, body: str) -> bool:
+    """CR 12 · the document pack: what the applicant has gathered, numbered and named in the consulate's own order."""
+    pend, out = ctx["st"]["pending"], ctx["out"]
+    case = await ST.STORE.get(pend.get("case_id") or "")
+    after = ((case or {}).get("state") or {}).get("after") or {}
+    cons = after.get("consulate") or {}
+    items = after.get("checklist") or []
+    items = items if cons.get("id") else london_items(items)
+    if not items:
+        out.text("There's no consulate list on your file to build a pack from.")
+        return True
+    skip = bool(re.match(r"(?i)^\s*skip\b", body))
+    have = set() if skip else CS.numbers_in(body, max(i["n"] for i in items))
+    if have is None:
+        out.text("The numbers of what you've gathered, please — e.g. 1 3 4-6 — or ALL, or SKIP.")
+        return True
+    pk = CS.pack(items, have)
+    after["pack"] = pk
+    await _save(ctx, {"after": after})
+    office = cons.get("office", "the consulate")
+    mark = {"gathered": "✓", "prepared": "✓", "missing": "☐"}
+    lines = "\n".join(f"{mark[x['status']]} {x['name']}" + (f" — {x['copies']}" if x["copies"] and x["status"] != "missing" else "")
+                      + (" — still to gather" if x["status"] == "missing" else "") + (" (prepared; you sign it)" if x["status"] == "prepared" else "")
+                      for x in pk)
+    missing = sum(1 for x in pk if x["status"] == "missing")
+    out.text(f"Your document pack, in {office}'s own order — name your files like this and they sort the way it asks:\n{lines}\n"
+             + (f"{missing} still to gather. Say PACK and the numbers any time to update it." if missing else "Everything it lists is gathered.")
+             + (f"\nIts page, on every foreign document: “{cons['general']}”" if cons.get("general") else ""))
+    if pend.get("step") == "pack":
+        pend["step"] = "entry"
+        out.text(ENTRY_Q)
     return True

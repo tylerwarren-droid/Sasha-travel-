@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import copy
 import hashlib
 import json
 import logging
@@ -171,7 +172,8 @@ class MemoryGuestStore:
         return dict(self.state.get(key) or {"history": [], "pending": None, "last_inbound_at": None, "link_tries": []})
 
     async def put_state(self, key: str, st: dict) -> None:
-        self.state[key] = dict(st)
+        # only what guest_wa_state's columns hold: anything else is lost in production, so it is lost here too
+        self.state[key] = copy.deepcopy({k: st.get(k) for k in ("history", "pending", "last_inbound_at", "link_tries")})
 
     async def delete_account(self, account: str) -> Dict[str, int]:
         keys = [k for k, c in self.channels.items() if c["account_id"] == account]
@@ -582,6 +584,9 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         await STORE.put_state(key, st)
         await deliver(ch, frm, out, now)
         return out
+    # Sasha 126 · the two-booking plan rides INSIDE the open question (guest_wa_state stores only its four columns):
+    # it lives exactly as long as a question is open, and goes with it
+    st["combo"] = (st.get("pending") or {}).pop("combo", None)
     ctx = {"account": account, "ch": ch, "frm": frm, "st": st, "now": now, "out": out, "button_text": (p.get("ButtonText") or "").strip()}
     handled = await _answer_pending(ctx, body, payload)
     if not handled:
@@ -592,6 +597,9 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     st["history"] = (st.get("history") or []) + [{"role": "user", "content": body}] + \
                     ([{"role": "assistant", "content": out.said()}] if out.items else [])
     st["history"] = st["history"][-HISTORY_KEEP:]
+    combo = st.pop("combo", None)
+    if combo and st.get("pending"):
+        st["pending"]["combo"] = combo
     await STORE.put_state(key, st)
     await deliver(ch, frm, out, now)
     return out

@@ -12,9 +12,11 @@ import { GatedButton } from './GatedButton'
 
 type Result = { status: string; say: string; their_page?: string; booking_reference?: string | null }
 
-export function FormSend({ readId, venueLabel, defaults }: { readId: string; venueLabel: string
-  defaults: { name: string; email: string; phone: string } }) {
-  const [d, setD] = useState({ date: '', time: '21:00', party: 2, name: defaults.name, email: defaults.email, phone: defaults.phone })
+export function FormSend({ readId, venueLabel, defaults, at, party }: { readId: string; venueLabel: string
+  defaults: { name: string; email: string; phone: string }; at?: string | null; party?: number | null }) {
+  // Sasha 121 · from the chat: the day, time and party already asked for; the email may be left to the server (your account's)
+  const [d, setD] = useState({ date: at ? at.slice(0, 10) : '', time: at ? at.slice(11, 16) : '21:00', party: party ?? 2,
+    name: defaults.name, email: defaults.email, phone: defaults.phone })
   const [phase, setPhase] = useState<'details' | 'preparing' | 'read_back' | 'sending' | 'done' | 'stopped'>('details')
   const [rb, setRb] = useState<{ form_id: string; lines: string[]; sha256: string } | null>(null)
   const [note, setNote] = useState<string | null>(null)
@@ -23,7 +25,7 @@ export function FormSend({ readId, venueLabel, defaults }: { readId: string; ven
   async function prepare() {
     setPhase('preparing'); setNote(null)
     const reservation = { schema: 'reservation/1', flow: 'book', where: {},
-      who: { name: d.name.trim(), contact: { email: d.email.trim(), mobile_e164: d.phone.replace(/[\s().-]/g, '') } },
+      who: { name: d.name.trim(), contact: { ...(d.email.trim() ? { email: d.email.trim() } : {}), mobile_e164: d.phone.replace(/[\s().-]/g, '') } },
       what: { activity: 'a table', activity_venue_lang: 'una mesa', category: 'restaurant' },
       when: { mode: 'at', at: `${d.date}T${d.time}` }, how_many: { count: d.party, unit: 'people' } }
     const r = await bookingReq('/api/booking/forms', { read_id: readId, reservation })
@@ -49,12 +51,12 @@ export function FormSend({ readId, venueLabel, defaults }: { readId: string; ven
         <label>Time <input className="w-full rounded border px-2 py-1" type="time" value={d.time} onChange={(e) => setD({ ...d, time: e.target.value })} /></label>
         <label>People <input className="w-full rounded border px-2 py-1" type="number" min={1} max={20} value={d.party} onChange={(e) => setD({ ...d, party: Number(e.target.value) })} /></label>
         <label>Name <input className="w-full rounded border px-2 py-1" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} /></label>
-        <label>Email <input className="w-full rounded border px-2 py-1" value={d.email} onChange={(e) => setD({ ...d, email: e.target.value })} /></label>
+        <label>Email (blank: your account&rsquo;s) <input className="w-full rounded border px-2 py-1" value={d.email} onChange={(e) => setD({ ...d, email: e.target.value })} /></label>
         <label>Phone <input className="w-full rounded border px-2 py-1" value={d.phone} onChange={(e) => setD({ ...d, phone: e.target.value })} /></label>
       </div>
       <div className="mt-2">
         <GatedButton label="Fill the form (nothing is sent yet)" onClick={run(prepare)}
-          needs={[!d.date && 'a date', !d.time && 'a time', d.name.trim().length < 2 && 'a name', !d.email.includes('@') && 'an email',
+          needs={[!d.date && 'a date', !d.time && 'a time', d.name.trim().length < 2 && 'a name', !!d.email.trim() && !d.email.includes('@') && 'a valid email',
             phase === 'preparing' && 'the form to be read', (phase === 'sending' || phase === 'done') && 'nothing — it has been sent']} />
       </div>
       {rb && (

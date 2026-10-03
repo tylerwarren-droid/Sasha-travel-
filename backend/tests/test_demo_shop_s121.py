@@ -101,6 +101,44 @@ class Reorder(TG.Base):
         self.assertNotIn("wrong", self.bodies()[-1])
 
 
+
+import unittest  # noqa: E402
+
+
+class RehearsalCard(unittest.TestCase):
+    """Sasha 121 (A) · rehearsing, our test venue is the third card on the WEB chat too, and its pick reads its own page."""
+
+    def test_third_card_founder_only(self):
+        from booking_signer import ladder_routes as LR
+        out = {"candidates": [{"place_id": "a"}, {"place_id": "b"}, {"place_id": "c"}],
+               "ranking": {"orders": {"rated": ["a", "b", "c"]}, "picks": {"rated": "a"}}}
+        founder, guest = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
+        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "1", "FOUNDER_ACCOUNT_ID": ""}):
+            got = LR._with_rehearsal(founder, out)
+            self.assertEqual(got["ranking"]["orders"]["rated"], ["a", "b", "sasha-test-venue", "c"])
+            self.assertIn("ours — rehearsal, not a real restaurant", got["candidates"][-1]["name"])
+            self.assertEqual(LR._with_rehearsal(guest, out), out)                       # never a guest's
+        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "", "FOUNDER_ACCOUNT_ID": ""}):
+            self.assertEqual(LR._with_rehearsal(founder, out), out)                     # off unless rehearsing
+
+
+class DemoControlsAreFounderOnly(unittest.TestCase):
+    def test_each_control_refuses_a_guest(self):
+        from booking_signer import demo_ops as DO, demo_shop as DSH
+        app = FastAPI()
+
+        @app.middleware("http")
+        async def who(request, call_next):
+            request.state.account = "22222222-2222-4222-8222-222222222222"
+            return await call_next(request)
+        app.include_router(DO.router)
+        app.include_router(DSH.ops)
+        c = TestClient(app)
+        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": ""}):
+            for path in ("/ops/demo/leave-now", "/ops/demo/gmail-seed", "/ops/demo/reset"):
+                self.assertEqual(c.post(path).json()["rule"], "founder_only", path)
+            self.assertEqual(c.get("/ops/demo-shop-login").json()["rule"], "founder_only")
+
+
 if __name__ == "__main__":
-    import unittest
     unittest.main()

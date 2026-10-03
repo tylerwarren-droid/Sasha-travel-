@@ -505,6 +505,14 @@ async def prepare(request: Request):
         return _refuse(422, "venue_country_unknown", "the venue's country is not known, so neither its day nor its time can be")
     tz = V.COUNTRIES[country][3]
     obj = body["reservation"]
+    # Sasha 121 · a form wants an email: none given → the account's own address (the one receipts go to), and the
+    # read-back the yes binds to shows it — as on WhatsApp (Sasha 117)
+    who0 = obj.get("who") or {}
+    if isinstance(who0, dict) and not ((who0.get("contact") or {}).get("email")):
+        from . import guest_receipt as GR
+        mine = await GR.address_of(account)
+        if mine:
+            obj = {**obj, "who": {**who0, "contact": {**(who0.get("contact") or {}), "email": mine}}}
     # the account is the caller's own, never the object's; the venue is the one READ (as for a call)
     obj = {**obj, "who": {**(obj.get("who") or {}), "account_id": account},
            "where": {**(obj.get("where") or {}), "read_id": str(row["read_id"]), "venue_name": read["name"], "timezone": tz}}

@@ -111,6 +111,9 @@ async def read_venue(request: Request):
     if over:
         return over
     body = await _json(request)
+    if isinstance(body, dict) and body.get("place_id") == REHEARSAL_ID:   # Sasha 121 · the rehearsal card: OUR test venue's own page
+        from .form_rung import test_venue_url
+        body = {"name": "Sasha Test Venue", "city": body.get("city") or "Madrid", "country": "ES", "website": test_venue_url()}
     if body is None:
         return _refuse(400, "read_malformed", "send {name, city, country?, website?} as a JSON object")
     if any(k in body for k in ("phone", "number", "phone_number", "email", "to")):
@@ -149,6 +152,23 @@ async def draft_route(request: Request):
     return draft(str(body.get("text") or "")[:500], NOW(), lang)
 
 
+REHEARSAL_ID = "sasha-test-venue"
+
+
+def _with_rehearsal(account: str, out: dict) -> dict:
+    """Sasha 121 · rehearsing (SASHA_REHEARSAL=1, the founder's account only): our test venue is the THIRD card on every
+    surface (the web chat as WhatsApp), named as what it is — booking it contacts no one."""
+    from .guest_whatsapp import rehearsal
+    from .form_rung import test_venue_url
+    if not rehearsal(account) or not isinstance(out, dict):
+        return out
+    card = {"place_id": REHEARSAL_ID, "name": "Sasha Test Venue (ours — rehearsal, not a real restaurant)", "country": "ES",
+            "website": test_venue_url(), "rating": None, "rating_count": None, "distance_m": None}
+    rk = dict(out.get("ranking") or {})
+    rk["orders"] = {k: list(v)[:2] + [REHEARSAL_ID] + list(v)[2:] for k, v in (rk.get("orders") or {}).items()}
+    return {**out, "candidates": list(out.get("candidates") or []) + [card], "ranking": rk}
+
+
 @router.post("/venues/find")
 async def find_venues(request: Request):
     """S-65 · "Find venues": {what, where, country?} → up to twenty Google listings (S-68), not stored. Search only — nothing is contacted."""
@@ -160,8 +180,8 @@ async def find_venues(request: Request):
     if body is None:
         return _refuse(400, "find_malformed", "send {what, where, country?} as a JSON object")
     try:
-        return await V.find_venues(HTTP, what=body.get("what"), where=body.get("where"), country=body.get("country"), now=NOW(),
-                                   near=body.get("near"), open_at=body.get("open_at"))   # S-68 steps 3–4
+        return _with_rehearsal(account_for(request), await V.find_venues(HTTP, what=body.get("what"), where=body.get("where"),
+                               country=body.get("country"), now=NOW(), near=body.get("near"), open_at=body.get("open_at")))   # S-68 steps 3–4
     except V.ReadRefused as e:
         return _refuse(503 if e.rule in ("places_not_configured", "places_unreachable", "places_refused") else 422, e.rule, str(e))
 

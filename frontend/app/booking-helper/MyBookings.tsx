@@ -14,12 +14,14 @@ export function MyBookings() {
   const [words, setWords] = useState<string | null>(null)
   useEffect(() => {
     let off = false
-    bookingReq('/api/booking/reservations').then((r) => {
+    const load = () => bookingReq('/api/booking/reservations').then((r) => {
       if (off) return
-      if (r.ok) setRows(((r.json.reservations as R[]) ?? []).filter((x) => x.status !== 'pending'))
+      if (r.ok) { setRows(((r.json.reservations as R[]) ?? []).filter((x) => x.status !== 'pending')); setWords(null) }
       else setWords(refusal(r.json, r.status))
     }).catch((e) => { if (!off) setWords((e as Error).message) })
-    return () => { off = true }
+    load()
+    const t = setInterval(load, 8000)   // Sasha 121 · live: a booking made on the phone appears here within seconds
+    return () => { off = true; clearInterval(t) }
   }, [])
   return (
     <section id="bookings" className="space-y-2 rounded border p-3">

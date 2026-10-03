@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from 'react'
 import { findVenues, readVenue, refusal, styleVenues, type Candidate, type Ranking, type Rung, type Style } from '@/lib/booking-client'
 import { setChatBookingHandler, takeTypedYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
+import { ChatBookingForm } from './ChatBookingForm'
 import ChatBookingCall from './ChatBookingCall'
 import ChatBookingLink from './ChatBookingLink'
 import { SignInToBook, WhoIsBooking } from './SignedInLine'
@@ -260,8 +261,14 @@ export default function ChatBooking({ find }: { find: Find }) {
             ))}
           </ul>
           {(() => {
+            const fm = state.read.rungs.find((r) => r.rung === 'form' && r.available)
             const ln = state.read.rungs.find((r) => r.rung === 'link' && r.available)
             const ph = state.read.rungs.find((r) => r.rung === 'phone' && r.available)
+            // Sasha 121 · their own form first, as the ladder orders it (our test venue is one)
+            if (fm && !callInstead) {
+              const party = ((find.draft as { how_many?: { count?: number } } | null)?.how_many?.count) ?? null
+              return <ChatBookingForm key={state.read.read_id} readId={state.read.read_id} venue={state.read.venue} at={find.open_at ?? null} party={party} />
+            }
             if (ln && !callInstead) {
               return <>
                 <ChatBookingLink key={state.read.read_id} readId={state.read.read_id} platform={ln.value} draft={(find.draft ?? null) as never} openAt={find.open_at ?? null} />

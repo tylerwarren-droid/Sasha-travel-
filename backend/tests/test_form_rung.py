@@ -132,6 +132,14 @@ class FormRung(unittest.TestCase):   # LadderRoutes' set-up, not its tests
         data = self.posts[0][1]
         self.assertEqual((data["email"], data["comentarios"]), ("tyler@kanoe.test", "Por favor, envíen también una copia de la confirmación a sasha@booking.kanoe.ai."))
 
+    def test_sasha121_no_email_given_the_accounts_own_is_used_and_shown(self):
+        v = self.read()
+        with mock.patch.dict(os.environ, {"SASHA_FOUNDER_EMAIL": "founder@kanoe.test"}):
+            r = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation(who={"name": "Tyler Warren",
+                                                                                                            "contact": {"mobile_e164": "+34608445715"}})})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(any("founder@kanoe.test" in ln for ln in r.json()["read_back"]["lines"]), r.json()["read_back"]["lines"])
+
     def test_the_guest_gets_a_receipt_after_the_form_too(self):
         # Sasha 99 · a receipt after EVERY route, not only a call
         env = {"SASHA_EMAILS_ENABLED": "1", "SASHA_RESEND_API_KEY": "k", "SASHA_EMAIL_FROM": "Sasha <sasha@booking.kanoe.ai>",

@@ -166,9 +166,12 @@ class Script(unittest.TestCase):
     def test_the_spanish_cancellation_la_contra_would_hear(self):
         p = C.parse_call_particulars({"date": "2026-10-02", "time": "21:00", "party": 2, "name": "Tyler Warren"})
         today = datetime(2026, 9, 30).date()
-        self.assertEqual(C.opening_sentence(C.LANGUAGES["es"], p, today, "cancel"),
-                         "Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL, y llamo de parte de la familia Warren para cancelar la reserva de una mesa "
-                         "para 2 personas el viernes a las 21:00. ¿Podrían cancelarla, por favor?")
+        self.assertEqual(C.opening_sentence(C.LANGUAGES["es"], p, today, "cancel"),   # Sasha 119 · the founder's words
+                         "Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL. Llamo para cancelar la reserva del viernes "
+                         "a nombre de Warren.")
+        self.assertEqual(C.opening_sentence(C.LANGUAGES["es"], p, datetime(2026, 10, 2).date(), "cancel"),
+                         "Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL. Llamo para cancelar la reserva de esta noche "
+                         "a nombre de Warren.")
         self.assertEqual(C.opening_sentence(C.LANGUAGES["es"], p, today),
                          "Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL, y llamo de parte de la familia Warren para reservar una mesa "
                          "para 2 personas el viernes a las 21:00. ¿Sería posible?")
@@ -629,7 +632,7 @@ class CallRoutes:
         c = self.c.post("/api/booking/calls", json={"cancels_call_id": booking["call_id"]})
         self.assertEqual(c.status_code, 200, c.text)
         lines = c.json()["read_back"]["lines"]
-        self.assertIn("to cancel their table for four on Thursday at eight in the evening", lines[1])
+        self.assertIn("I'm calling to cancel the booking for Thursday under the name Johnson.", lines[1])
         self.assertTrue(lines[2].startswith("This cancels your table for 4 on 2026-10-08 at 20:00, under Anna Johnson"))
         self.assertEqual(c.json()["trip_item_id"], booking["trip_item_id"])
         self.bland.details = {"completed": False, "queue_status": "started"}
@@ -638,7 +641,9 @@ class CallRoutes:
         self.assertEqual(r.json().get("status"), "placed", r.text)
         sent = [b for m, u, h, b in self.bland.requests if m == "POST"][-1]
         self.assertIn("CANCEL an existing table booking", sent["task"])
-        self.bland.details = done(("user", "Yes, that's fine."))
+        recap = sent["task"].split('say at once: "', 1)[1].split('"', 1)[0]           # Sasha 119 · the cancellation's own recap
+        self.assertTrue(recap.endswith("Is that confirmed?"), recap)
+        self.bland.details = done(("user", "Yes, that's fine."), ("assistant", recap), ("user", "Yes, confirmed."))
         g = self.c.get(f"/api/booking/calls/{c.json()['call_id']}").json()
         self.assertEqual(g["outcome"], "yes")
         self.assertIn("confirmed the cancellation", g["say"])

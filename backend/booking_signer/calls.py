@@ -245,7 +245,7 @@ LANGUAGES = {
         at=_en_at,
         opening="Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling {party} to book a table {what} {when} {at}. Is that possible?",
         check="I'll need to check that with {who}.",
-        cancel_opening="Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling {party} to cancel their table {what} {when} {at}. Could you cancel it, please?",
+        cancel_opening="Hello, this is Sasha, an AI concierge from Kanoe Technologies SL. I'm calling to cancel {cancel_when} under the name {surname}.",
     ),
     "pt": Lang(
         code="pt-BR", label="Portuguese",
@@ -272,7 +272,7 @@ LANGUAGES = {
         at=lambda t: ("a la " if t.hour in (1, 13) else "a las ") + _hm(t),
         opening="Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL, y llamo {party} para reservar una mesa {what} {when} {at}. ¿Sería posible?",
         check="Tendré que consultarlo con {who}.",
-        cancel_opening="Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL, y llamo {party} para cancelar la reserva de una mesa {what} {when} {at}. ¿Podrían cancelarla, por favor?",
+        cancel_opening="Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL. Llamo para cancelar {cancel_when} a nombre de {surname}.",
     ),
     "fr": Lang(
         code="fr", label="French",
@@ -337,8 +337,33 @@ def when_phrase(lang: Lang, on: date, today: date) -> str:
     return lang.on_day(wd) if days <= 6 else lang.on_date(wd, on.day, lang.months[on.month - 1])
 
 
+#: Sasha 119 · the founder's cancel opening: "llamo para cancelar la reserva de esta noche a nombre de Warren"
+_CANCEL_WHEN = {"es": ("la reserva de esta noche", "la reserva de hoy", "la reserva del {wd}", "la reserva del {wd} {d} de {mo}"),
+                "en": ("tonight's booking", "today's booking", "the booking for {wd}", "the booking for {wd} {d} {mo}")}
+
+
+def cancel_when(lang: Lang, on: date, at: time, today: date) -> str:
+    tonight, today_, near, far = _CANCEL_WHEN.get(lang.code, _CANCEL_WHEN["en"])
+    days = (on - today).days
+    if days == 0:
+        return tonight if at.hour >= 19 else today_
+    return (near if days <= 6 else far).format(wd=lang.weekdays[on.weekday()], d=on.day, mo=lang.months[on.month - 1])
+
+
+def cancel_recap(lang: Lang, p: CallParticulars) -> str:
+    """Sasha 119 · the cancellation's own recap, ending "¿Confirmado?" — the whole booking, said back before it counts."""
+    s = recap_sentence(lang, p)
+    if lang.code == "es":
+        return s.replace("Para confirmar: ", "Para confirmar, cancelamos la reserva del ", 1).replace("¿Correcto?", "¿Confirmado?")
+    if lang.code == "en":
+        return s.replace("To confirm: ", "To confirm, we're cancelling the booking for ", 1).replace("Is that right?", "Is that confirmed?")
+    return s
+
+
 def opening_sentence(lang: Lang, p: CallParticulars, today: date, purpose: str = "book") -> str:
-    s = (lang.cancel_opening if purpose == "cancel" else lang.opening).format(party=party_phrase(lang, p), what=lang.for_n(p.party), when=when_phrase(lang, p.on, today), at=lang.at(p.at))
+    s = (lang.cancel_opening if purpose == "cancel" else lang.opening).format(
+        party=party_phrase(lang, p), what=lang.for_n(p.party), when=when_phrase(lang, p.on, today), at=lang.at(p.at),
+        cancel_when=cancel_when(lang, p.on, p.at, today), surname=surname_of(p.name))
     return re.sub(r"\s+", " ", s).strip()
 
 
@@ -472,7 +497,10 @@ def cancel_instructions(lang: Lang, p: CallParticulars, opening: str, check: str
         "Never agree to a cancellation fee, a charge, or to give a card. You have no card and no payment details. "
         f"If they ask for ANY payment, say exactly: \"{check}\" — then thank them and end the call. "
         "Do not move the booking to another day or time; only cancel it. Do not give any email address or personal detail. "
-        "If they confirm it is cancelled, repeat it back once (the day, the time, the name), thank them, and end the call. "
+        # Sasha 119 · cancelled only on their explicit yes to the recap
+        f"When they say they'll cancel it, say at once: \"{cancel_recap(lang, p)}\" and wait silently for the answer. "
+        f"Only a clear yes confirms; to just \"ok\", ask once: \"{'¿Confirmado?' if lang.code == 'es' else 'Is that confirmed?' if lang.code == 'en' else cancel_recap(lang, p).split('. ')[-1]}\" "
+        "Then thank them and end the call. "
         "If they cannot find the booking, or say to call back, thank them and end the call. "
         f"If they ask not to be called or contacted again, say exactly: \"{_ack(lang)}\" — then end the call. "
         "Keep it short and polite. Do not leave a voicemail."
@@ -510,7 +538,7 @@ def build_call(venue: CallVenue, p: CallParticulars, now: datetime, purpose: str
         "purpose": purpose, "timezone": venue.timezone, "reference": reference,
         **({"own_reference": own_ref} if own_ref else {}),   # Sasha 88 · K-XXXX, said to the venue, on the receipt
         "venue_key": venue.key, "number": number, "language": lang.code,
-        "recap": recap_sentence(lang, p) if purpose == "book" else None,
+        "recap": recap_sentence(lang, p) if purpose == "book" else cancel_recap(lang, p) if purpose == "cancel" else None,
         "first_sentence": opening, "task": task, "check_sentence": check,
         "party": p.party, "date": p.on.isoformat(), "time": p.at.strftime("%H:%M"), "name": p.name, "phone": p.phone,
         "from": caller_id(), "number_source": venue.source, "venue_name": venue.name,
@@ -796,14 +824,16 @@ async def read_call(details: Mapping[str, Any], reader: Reader, purpose: str = "
         return CallReading(state="answered", outcome="unclear", venue_words=words, quote=quote, raised=raised, read_by=READ_BY,
                            why="they agreed, but with something attached she may not accept for you: "
                                + "; ".join(f"{r['what']}: \"{r['quote']}\"" for r in raised), **base)
-    if reading == "yes" and asked and asked.get("recap") and purpose == "book":
+    if reading == "yes" and asked and asked.get("recap") and purpose in ("book", "cancel"):
         # S-60 · a booking is confirmed ONLY on an explicit yes to Sasha's closing recap; a conflict before it may have
         # been resolved on the call, so only what the venue said from the recap on is held against it
-        ans = RC.recap_answer(list(details.get("transcripts") or []), asked["recap"], asked)
-        if not ans["confirmed"]:
+        ans = RC.recap_answer(list(details.get("transcripts") or []), asked["recap"], asked,
+                              RC.CANCEL_YES if purpose == "cancel" else None)
+        if not ans["confirmed"]:   # Sasha 119 · a cancellation too: "cancelled" only on their yes to her recap
+            what = "not cancelled" if purpose == "cancel" else "not confirmed"
             return CallReading(state="answered", outcome="unclear", venue_words=words, quote=quote, read_by=READ_BY,
-                               raised=raised + [{"what": "not confirmed", "quote": q} for q in ans["quotes"]],
-                               why=f"not confirmed — {ans['why']}. Check with them before relying on it.", **base)
+                               raised=raised + [{"what": what, "quote": q} for q in ans["quotes"]],
+                               why=f"{what} — {ans['why']}. Check with them before relying on it.", **base)
     elif reading == "yes" and asked:
         off = heard.mismatches(turns, asked)
         if off:

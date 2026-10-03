@@ -116,8 +116,8 @@ class CancelAnActivity(unittest.TestCase):
         return R.call_for(o, v, NOW, "+34919891916")["brief"], v
 
     def test_the_cancellation_names_the_massage_in_every_language(self):
-        want = {"es": "para cancelar la reserva de un masaje relajante de 60 minutos para una persona",
-                "en": "to cancel the booking of a 60-minute relaxing massage for one",
+        want = {"es": "Llamo para cancelar la reserva del lunes, un masaje relajante de 60 minutos, a nombre de",   # Sasha 119
+                "en": "I'm calling to cancel the booking for Monday (a 60-minute relaxing massage) under the name",
                 "pt": "para cancelar a reserva de uma massagem relaxante de 60 minutos",
                 "fr": "pour annuler la réservation d'un massage relaxant de 60 minutes",
                 "de": "um die Reservierung für eine Entspannungsmassage von 60 Minuten",

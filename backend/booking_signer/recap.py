@@ -107,7 +107,7 @@ def _f(s: str) -> str:
     return " ".join(re.sub(r"[^\w\s]", " ", s).split())
 
 
-_YES = re.compile(r"\b(si|sí|correcto|exacto|eso es|asi es|vale|perfecto|de acuerdo|yes|yeah|yep|correct|right|that s right|"
+_YES = re.compile(r"\b(si|sí|correcto|confirmad[oa]|confirmed|exacto|eso es|asi es|vale|perfecto|de acuerdo|yes|yeah|yep|correct|right|that s right|"
                   r"exactly|sim|certo|exato|isso|oui|exact|c est ca|c est bien ca|ja|richtig|genau|stimmt|esatto|giusto|certo)\b")
 _NO = re.compile(r"\b(no|nao|non|nein|not|incorrect|incorrecto|errado|falsch|sbagliato|wrong)\b")
 
@@ -119,7 +119,11 @@ def _numbers(s: str) -> str:
     return " ".join(str(words[w]) if w in words else w for w in s.split())
 
 
-def recap_answer(transcripts: List[Mapping], recap: str, asked: Mapping) -> dict:
+#: Sasha 119 · for a CANCELLATION's recap only, "cancelada" / "anulada" is a yes too (never for a booking's)
+CANCEL_YES = re.compile(r"\b(cancelad[oa]|anulad[oa]|cancell?ed)\b")
+
+
+def recap_answer(transcripts: List[Mapping], recap: str, asked: Mapping, extra_yes=None) -> dict:
     """{confirmed: bool, why: str, quotes: [str]} — confirmed ONLY when Sasha's whole recap was spoken and the venue's
     next words are an explicit yes, with no "no" and nothing after it contradicting the request."""
     target = _numbers(_f(recap))
@@ -139,7 +143,7 @@ def recap_answer(transcripts: List[Mapping], recap: str, asked: Mapping) -> dict
         f = _f(said)
         if _NO.search(f):
             return {"confirmed": False, "quotes": [said], "why": f"the venue's answer to the recap was not an explicit yes: \"{said}\""}
-        if _YES.search(f):
+        if _YES.search(f) or (extra_yes is not None and extra_yes.search(f)):
             first = said
             break
     else:

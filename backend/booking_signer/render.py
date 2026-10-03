@@ -447,8 +447,8 @@ def call_for(o: Mapping[str, Any], venue: C.CallVenue, now: datetime, number: st
 # ── S-64 · cancelling a booking made from the object (S-47's pattern, the activity instead of "a table") ────────────
 
 _CANCEL_SWAP = {  # the table phrase in each language's cancel opening → the activity
-    "en": ("cancel their table", "cancel the booking of {activity}"),
-    "es": ("de una mesa", "de {activity}"),
+    "en": ("{cancel_when} under", "{cancel_when} ({activity}) under"),     # Sasha 119 · the founder's opening, naming the activity
+    "es": ("{cancel_when} a nombre", "{cancel_when}, {activity}, a nombre"),
     "pt": ("de uma mesa", "de {activity}"),
     "fr": ("d'une table", "{de} {activity}"),
     "de": ("eines Tisches", "für {activity}"),
@@ -464,7 +464,9 @@ def cancel_opening(lang: C.Lang, o: Mapping[str, Any], today: date) -> str:
     template = lang.cancel_opening.replace(old, new.replace("{activity}", "\x00").replace("{de}", de), 1)
     when, at = spoken_when(lang, o, today)
     s = template.replace("\x00", act.replace("{", "{{").replace("}", "}}")).replace("d' ", "d'")
-    s = s.format(party=party_of(lang, o), what=spoken_count(lang, o), when=when, at=at)
+    on, t = date.fromisoformat(o["when"]["at"][:10]), time.fromisoformat(o["when"]["at"][11:16])
+    s = s.format(party=party_of(lang, o), what=spoken_count(lang, o), when=when, at=at,
+                 cancel_when=C.cancel_when(lang, on, t, today), surname=C.surname_of((o.get("who") or {}).get("name") or ""))
     return " ".join(s.split())
 
 

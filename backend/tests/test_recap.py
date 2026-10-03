@@ -40,7 +40,7 @@ class Sentence(unittest.TestCase):
     def test_it_is_in_the_brief_the_guest_approves_and_in_the_agents_instructions(self):
         self.assertIn(RECAP, BRIEF["task"])
         self.assertIn("Only a clear yes confirms", BRIEF["task"])
-        self.assertIsNone(C.build_call(VENUE, P, NOW, purpose="cancel", reference=None)["brief"]["recap"])
+        self.assertTrue(C.build_call(VENUE, P, NOW, purpose="cancel", reference=None)["brief"]["recap"].endswith("¿Confirmado?"))   # Sasha 119
 
     def test_every_language_stays_under_blands_limit(self):
         p = C.parse_call_particulars({"date": "2026-10-12", "time": "21:30", "party": 12,
@@ -115,6 +115,25 @@ class OkThenCorrecto(unittest.TestCase):
     def test_ok_alone_is_not(self):
         self.assertFalse(self.answer("Ok.")["confirmed"])
         self.assertFalse(self.answer("Ok.", "Mm.", "Ya.", "Sí.")["confirmed"])            # three turns, then it stops
+
+
+class CancelRecap(unittest.TestCase):
+    """Sasha 119 · a cancelling call: "cancelled" only on their yes to "Para confirmar, cancelamos … ¿Confirmado?"."""
+    RECAP = "Para confirmar, cancelamos la reserva del sábado 3 de octubre, a las nueve de la noche, dos personas, a nombre de Warren. ¿Confirmado?"
+    ASKED = {"date": "2026-10-03", "time": "21:00", "party": 2, "name": "Warren", "recap": RECAP}
+
+    def answer(self, *venue, cancel=True):
+        return RC.recap_answer([{"user": "assistant", "text": self.RECAP}] + [{"user": "user", "text": v} for v in venue], self.RECAP,
+                               self.ASKED, RC.CANCEL_YES if cancel else None)
+
+    def test_confirmado_or_cancelada_is_a_yes_ok_alone_is_not(self):
+        self.assertTrue(self.answer("Confirmado.")["confirmed"])
+        self.assertTrue(self.answer("Ok.", "Sí, cancelada.")["confirmed"])
+        self.assertFalse(self.answer("Ok.")["confirmed"])
+        self.assertFalse(self.answer("No, no la encuentro.")["confirmed"])
+
+    def test_cancelada_never_confirms_a_booking(self):
+        self.assertFalse(self.answer("Cancelada.", cancel=False)["confirmed"])
 
 
 class Written(unittest.TestCase):

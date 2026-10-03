@@ -66,18 +66,31 @@ def status_words(status: str) -> str:
     return STATUS_WORDS.get(status, status)
 
 
-def render(kind: str, b: dict, extra: Optional[dict] = None) -> str:
+def day_word(b: dict, now: Optional[datetime]) -> str:
+    """Sasha 119 · "Tomorrow" only when it IS tomorrow: a day-before held by the quiet hours goes out at 08:00 on the day
+    itself (live, 3 Oct 08:38: "Tomorrow, 21:00 at Hanakura" about that same evening) — then it is "Tonight" / "Today"."""
+    start = starts_at(b) if now is not None else None
+    if start is None:
+        return "Tomorrow"
+    days = (start.date() - now.astimezone(start.tzinfo).date()).days
+    if days <= 0:
+        return "Tonight" if start.hour >= 19 else "Today"
+    return "Tomorrow" if days == 1 else SN.day_words(start.date().isoformat())
+
+
+def render(kind: str, b: dict, extra: Optional[dict] = None, now: Optional[datetime] = None) -> str:
     """The in-session text. day_before for a booking that isn't confirmed is ALWAYS the honest status instead."""
     extra = extra or {}
     venue, hhmm = b.get("venue") or "the venue", b.get("time") or "—"
+    day = day_word(b, now)
     if kind == "day_before" and b.get("status") not in CONFIRMED:
         kind = "not_confirmed"
     if kind == "day_before":
-        return f"Tomorrow: {venue}, {hhmm}, {_party(b)}, ref {_ref(b)}. Reply CANCEL {venue.split()[0]} to cancel."
+        return f"{day}: {venue}, {hhmm}, {_party(b)}, ref {_ref(b)}. Reply CANCEL {venue.split()[0]} to cancel."
     if kind == "not_confirmed":
         if b.get("status") == "proposed":
-            return f"Tomorrow, {hhmm} at {venue}: not confirmed yet. They offered another time; it's not booked until you say yes."
-        return f"Tomorrow, {hhmm} at {venue}: not confirmed yet. {status_words(b.get('status') or '')}. I'll tell you as soon as they answer."
+            return f"{day}, {hhmm} at {venue}: not confirmed yet. They offered another time; it's not booked until you say yes."
+        return f"{day}, {hhmm} at {venue}: not confirmed yet. {status_words(b.get('status') or '')}. I'll tell you as soon as they answer."
     if kind == "leave_now":
         return (f"Time to leave for {venue}: {extra['minutes']} min {extra['mode_words']} from {extra['label']}, for {hhmm}.")
     if kind == "written_confirmation":
@@ -417,7 +430,7 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
                 continue
             if kind in ("day_before", "not_confirmed"):
                 kind = "day_before" if fresh.get("status") in CONFIRMED else "not_confirmed"
-            text = render(kind, fresh, extra)
+            text = render(kind, fresh, extra, now)
             outcome = await _send(ch, kind, fresh, text, template_vars(kind, fresh, extra), local_day, fresh.get("status"))
             done.append({"kind": kind, "booking": fresh.get("id"), "outcome": outcome, "text": text})
     return done

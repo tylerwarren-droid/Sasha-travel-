@@ -215,6 +215,18 @@ class ConsentGate(Base):
         self.assertEqual(run(PR.STORE.get_prefs(ACCOUNT))["all_off"], True)   # asked, not answered: off
 
 
+class DayWord(unittest.TestCase):
+    """Sasha 119 · live, Sat 3 Oct 08:38: "Tomorrow, 21:00 at Hanakura: not confirmed yet" — about that same evening."""
+
+    def test_held_by_the_quiet_hours_it_says_tonight(self):
+        b = {"venue": "Hanakura", "date": "2026-10-03", "time": "21:00", "timezone": "Europe/Madrid", "status": "requested", "party": 2}
+        sat_morning = datetime(2026, 10, 3, 6, 38, tzinfo=timezone.utc)
+        self.assertTrue(PR.render("day_before", b, None, sat_morning).startswith("Tonight, 21:00 at Hanakura: not confirmed yet."))
+        fri_evening = datetime(2026, 10, 2, 16, 0, tzinfo=timezone.utc)
+        self.assertTrue(PR.render("day_before", b, None, fri_evening).startswith("Tomorrow, 21:00 at Hanakura"))
+        self.assertTrue(PR.render("day_before", {**b, "time": "13:00"}, None, sat_morning).startswith("Today, 13:00"))
+
+
 class OnPostgresPrefs(unittest.TestCase):
     """Sasha 117 · live, 2 Oct: set_prefs(all_off=True) with no off_kinds failed in Postgres ("off_kinds is of type text[]
     but expression is of type text"), and with it every WhatsApp turn of a v2 guest. The memory store hid it."""

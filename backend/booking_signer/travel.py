@@ -90,7 +90,7 @@ def card_line(c: dict) -> str:
             f"{stops} · {c['minutes'] // 60}h {c['minutes'] % 60:02d}m · {c['currency']} {c['amount']} (TEST)")
 
 
-async def search(origin: str, dest: str, day: str, adults: int = 1) -> Dict[str, Any]:
+async def search(origin: str, dest: str, day: str, adults: int = 1, limit: int = 3) -> Dict[str, Any]:
     """{cards: [...3 cheapest...]} or {why}. TEST mode only."""
     if not token():
         return {"why": "flights need a Duffel TEST token (duffel_test_…), and none is set"}
@@ -107,7 +107,7 @@ async def search(origin: str, dest: str, day: str, adults: int = 1) -> Dict[str,
     offers = sorted((j.get("data") or {}).get("offers") or [], key=lambda o: float(o["total_amount"]))
     if not offers:
         return {"why": f"no flights found from {a['name']} to {b['name']} on {day}"}
-    return {"cards": [card_of(o) for o in offers[:3]], "from": a, "to": b}
+    return {"cards": [card_of(o) for o in offers[:limit]], "from": a, "to": b}
 
 
 def read_back(c: dict, name: str, email: str) -> List[str]:

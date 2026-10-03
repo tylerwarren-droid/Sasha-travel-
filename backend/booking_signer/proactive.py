@@ -171,6 +171,8 @@ async def travel(origin: str, destination: str, depart: datetime, mode: str) -> 
     body = {"origin": {"address": origin}, "destination": {"address": destination}, "travelMode": mode}
     if mode == "TRANSIT" or mode == "DRIVE":
         body["departureTime"] = depart.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    if mode == "DRIVE":   # Sasha 132 · Routes refuses a departure time for driving unless routing is traffic-aware (400, 3 Oct)
+        body["routingPreference"] = "TRAFFIC_AWARE"
     try:
         status, j = await ROUTES_HTTP("https://routes.googleapis.com/directions/v2:computeRoutes",
                                       {"X-Goog-Api-Key": key, "X-Goog-FieldMask": "routes.duration,routes.distanceMeters"}, body)

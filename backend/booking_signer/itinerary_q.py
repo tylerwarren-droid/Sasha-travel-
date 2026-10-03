@@ -22,6 +22,21 @@ _TO = re.compile(r"\b(?:drive|fly|go|get)\b.*?\bto\s+(?P<x>[A-ZÁÉÍÓÚ][\wá�
 _FROM = re.compile(r"\bfrom\s+(?P<x>[A-ZÁÉÍÓÚ][\wáéíóúñ .'-]*?)(?=\s+(?:between|and|on|to)\b|[,.?!]|$)")
 
 
+_COUNTRY = {"ES": "Spain", "PT": "Portugal", "FR": "France", "IT": "Italy", "DE": "Germany", "AT": "Austria", "GB": "United Kingdom",
+            "IE": "Ireland", "VN": "Vietnam", "KE": "Kenya"}
+
+
+def qualified(place: str, hint: Optional[str] = None) -> str:
+    """'Toledo' alone is Ohio to Google: a bare name gets its country — its own if known, else the other end's (Spain by
+    default). An address with a comma is used as said."""
+    if "," in place:
+        return place
+    kp = HO.known_place(place)
+    cc = (kp[2] if kp else None) or hint or "ES"
+    city = f"{kp[0]}, {kp[1]}" if kp and kp[1] else place
+    return f"{city}, {_COUNTRY.get(cc, cc)}"
+
+
 def day_of(text: str, now: datetime) -> Optional[date]:
     d = HO.plain_date(text or "", now)
     if d:
@@ -110,7 +125,7 @@ async def time_for(account: str, text: str, rows: List[dict], now: datetime) -> 
         origin = fm["x"].strip() if fm else None
         if not origin:
             return ["From where? e.g. “… fly from Madrid to Lisbon between 9 and 14 on 12 November”."]
-        got = await TR.search(origin, dest, d.isoformat(), 1)
+        got = await TR.search(origin, dest, d.isoformat(), 1, limit=50)   # the whole schedule, not only the cheapest
         if "why" in got:
             return [f"I can't check flights right now — {got['why']}."]
         fits = []
@@ -120,8 +135,10 @@ async def time_for(account: str, text: str, rows: List[dict], now: datetime) -> 
                 fits.append(c)
         if not fits:
             return [f"No flight from {origin} to {dest} leaves after {bw['a'].strip()} and lands by {bw['b'].strip()} on "
-                    f"{SN.day_words(d.isoformat())} (Duffel's TEST schedules, the 3 cheapest)."] + note
-        return [f"Yes — {TR.card_line(fits[0])}, within your {window // 60}h {window % 60:02d}m window (Duffel TEST schedules)."] + note
+                    f"{SN.day_words(d.isoformat())} (Duffel's TEST schedules)."] + note
+        best = min(fits, key=lambda c: datetime.fromisoformat(c["arrives"]))
+        return [f"Yes — {TR.card_line(best)}, within your {window // 60}h {window % 60:02d}m window (Duffel TEST schedules"
+                f"{f'; {len(fits)} flights fit' if len(fits) > 1 else ''})."] + note
     fm = _FROM.search(text or "")
     origin = fm["x"].strip() if fm else None   # "… drive from Madrid to Toledo …": said, it wins
     prior = [r for r in rows if r.get("date") == d.isoformat() and r.get("time") and tuple(int(x) for x in r["time"].split(":")) <= a]
@@ -132,7 +149,8 @@ async def time_for(account: str, text: str, rows: List[dict], now: datetime) -> 
         origin = (place or {}).get("address")
     if not origin:
         return ["From where? Save a starting point in You → WhatsApp, or say “from …”."]
-    secs = await PR.travel(origin, dest, start, "DRIVE")
+    hint = (HO.known_place(origin) or (None, None, None))[2] if "," not in origin else None
+    secs = await PR.travel(qualified(origin, hint), qualified(dest, hint), start, "DRIVE")
     if secs is None:
         return [f"The Routes API couldn't give a driving time to {dest}."]
     mins = secs // 60

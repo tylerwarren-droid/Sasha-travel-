@@ -696,16 +696,16 @@ async def _new_request(ctx: dict, body: str) -> None:
     if await _forwarded_confirmation(ctx, body):   # Sasha 118 · the venue's confirmation, forwarded by the guest
         return
     from . import demo_spa as DSP
+    if ITINERARY_Q.search(body or ""):   # Sasha 132 · ask your itinerary — first: "do I have time to fly…" is a question, not a search
+        from . import itinerary_q as IQ
+        for line in await IQ.answer(ctx["account"], body, ctx["now"]):
+            ctx["out"].text(line)
+        return
     if FLIGHT.search(body or ""):   # Sasha 132 · flights, Duffel TEST mode
         await _flights(ctx, body)
         return
     if HOTEL.search(body or ""):   # Sasha 132 · a hotel: found as cards, requested from the hotel itself
         await _hotels(ctx, body)
-        return
-    if ITINERARY_Q.search(body or ""):   # Sasha 132 · ask your itinerary
-        from . import itinerary_q as IQ
-        for line in await IQ.answer(ctx["account"], body, ctx["now"]):
-            ctx["out"].text(line)
         return
     if COMBO.search(body or ""):   # Sasha 126 (2) · two bookings from one sentence
         await _combo_start(ctx, body)

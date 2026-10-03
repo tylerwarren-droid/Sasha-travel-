@@ -206,7 +206,7 @@ class Rehearsal2Fixes(unittest.TestCase):
         with mock.patch.object(PR, "travel", travel), mock.patch.object(PR, "STORE", None):
             asyncio.run(IQ.time_for("a", "do I have time to drive from Madrid to Toledo between 13:00 and 18:00 on 5 November?", [],
                                     datetime(2026, 10, 3, tzinfo=timezone.utc)))
-        self.assertEqual(seen, ["Madrid"])
+        self.assertEqual(seen, ["Madrid, Spain"])                                      # never a bare name Google reads as Ohio
 
 
 class FindRoute(unittest.TestCase):
@@ -229,3 +229,38 @@ class FindRoute(unittest.TestCase):
             hotel = c.post("/api/booking/venues/find", json={"what": "hotel", "where": "Hoi An"}).json()
         self.assertIn("sasha-test-venue", [x["place_id"] for x in dinner["candidates"]])
         self.assertNotIn("sasha-test-venue", [x["place_id"] for x in hotel["candidates"]])
+
+
+class Rehearsal2(TG.Base):
+    """Rehearsal 2 (3 Oct): 'do I have time to fly…' was taken as a flight search; driving sent a departure time that Routes
+    refuses unless routing is traffic-aware."""
+
+    def test_a_time_question_is_a_question(self):
+        self.link()
+        called = []
+
+        async def answer(account, text, now):
+            called.append(text)
+            return ["answered"]
+        with mock.patch.object(IQ, "answer", answer):
+            self.say("do I have time to fly from Madrid to Lisbon between 9 and 14 on 12 November?")
+        self.assertEqual(self.bodies()[-1], "answered")
+
+    def test_driving_asks_routes_for_traffic_aware_routing(self):
+        from booking_signer import proactive as PR
+        seen = []
+
+        async def http(url, headers, body):
+            seen.append(body)
+            return 200, {"routes": [{"duration": "3600s"}]}
+        with mock.patch.object(PR, "ROUTES_HTTP", http), mock.patch.dict(os.environ, {"GOOGLE_PLACES_API_KEY": "k"}):
+            self.assertEqual(asyncio.run(PR.travel("Madrid", "Toledo", datetime(2026, 11, 5, 12, tzinfo=timezone.utc), "DRIVE")), 3600)
+        self.assertEqual(seen[0]["routingPreference"], "TRAFFIC_AWARE")
+
+
+class Qualified(unittest.TestCase):
+    def test_a_bare_name_gets_its_country(self):
+        self.assertEqual(IQ.qualified("Toledo", "ES"), "Toledo, Spain")
+        self.assertEqual(IQ.qualified("Madrid"), "Madrid, Spain")
+        self.assertEqual(IQ.qualified("Chamberí"), "Chamberí, Madrid, Spain")
+        self.assertEqual(IQ.qualified("Calle de Velázquez 8, Madrid"), "Calle de Velázquez 8, Madrid")

@@ -88,12 +88,22 @@ class Flow(TG.Base):
         self.assertIn("It goes to Anthropic's AI model to be read, once; I don't keep the photo.", said)
         self.assertIn("• Passport number: AB1234567 ✓ (the passport's own check digit agrees)", said)
         self.assertIn("• First surname: EJEMPLO PRUEBA", said)
+        self.assertIn("• Sex: female — M (mujer) on the Spanish form ✓ (matches the machine-readable zone)", said)
+        self.assertIn("• Date of birth: 14 March 1985 ✓", said)
+        self.assertNotIn("EXPIRED", said)
         self.assertEqual(self.pend()["facts"]["applicant"], {})           # nothing kept before the yes
         self.say("", payload="rx:doc:yes")
         a = self.pend()["facts"]["applicant"]
         self.assertEqual(a["passport_number"]["value"], "AB1234567")
         self.assertEqual(a["passport_number"]["source"], "passport photo page, read by Kanoe's AI and confirmed by you")
         self.assertIn("Your second surname?", self.bodies()[-1])         # the next question nobody has answered yet
+
+    def test_an_expired_passport_is_said_at_once(self):
+        self.start()
+        self.next_read = {**GOOD, "expiry_date": "2024-03-09", "mrz_line_2": line2("AB1234567", "850314", "F", "240309")}
+        self.photo()
+        self.assertIn("• Expires: 9 March 2024 ✓ (the passport's own check digit agrees) ⚠ this passport has EXPIRED",
+                      "\n".join(self.bodies()))
 
     def test_no_keeps_nothing(self):
         self.start()

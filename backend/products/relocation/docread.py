@@ -199,7 +199,10 @@ async def on_media(ctx: dict, facts: dict) -> bool:
     for k, label in LABELS:
         if k in vals:
             c = checks.get(k)
-            mark = " ✓ (the passport's own check digit agrees)" if c == "ok" else (f" ⚠ {c}" if c else "")
+            agree = "matches the machine-readable zone" if k == "sex" else "the passport's own check digit agrees"
+            mark = f" ✓ ({agree})" if c == "ok" else (f" ⚠ {c}" if c else "")
+            if k == "passport_expiry" and vals[k] <= ctx["now"].date().isoformat():
+                mark += " ⚠ this passport has EXPIRED"
             lines.append(f"• {label}: {_show(k, vals[k])}{mark}")
     if checks.get("_mrz"):
         lines.append(f"⚠ {checks['_mrz']}.")

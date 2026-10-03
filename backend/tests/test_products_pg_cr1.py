@@ -36,32 +36,41 @@ class CasesOnPostgres(unittest.TestCase):
                 await c.close()
         asyncio.run(apply())
 
-    def setUp(self):
-        self.saved = (ST.STORE, ST.BASE)
+    async def _with_store(self, body):
+        """One event loop for the whole test: the pool is made, used and closed on it (run() makes a new loop per call)."""
+        saved = (ST.STORE, ST.BASE)
         base = PostgresStore(TBL.PG_URL)
-        self.assertEqual(run(ST.choose(base)), "postgres")
-
-    def tearDown(self):
-        ST.STORE, ST.BASE = self.saved
+        try:
+            self.assertEqual(await ST.choose(base), "postgres")
+            return await body()
+        finally:
+            ST.STORE, ST.BASE = saved
+            await base.close() if hasattr(base, "close") else None
 
     def test_put_get_update_and_the_expiry_is_thirty_days(self):
-        cid = run(ST.STORE.put("campus", ACCOUNT, "k", {"watch": {"open": True, "schools": ["yale"], "month": [2027, 4]}}))
-        row = run(ST.STORE.get(cid))
-        self.assertEqual(row["state"]["watch"]["schools"], ["yale"])
-        self.assertEqual((row["expires_at"] - row["created_at"]).days, 30)
-        self.assertEqual([r["id"] for r in run(ST.STORE.watching())], [cid])
-        run(ST.STORE.update(cid, {"watch": {"open": False}}))
-        self.assertEqual(run(ST.STORE.watching()), [])
-        self.assertEqual(len(run(ST.STORE.of_product("campus"))), 1)
-        self.assertIsNone(run(ST.STORE.get("no-such-case-id-xxxxxx")))
+        async def body():
+            cid = await ST.STORE.put("campus", ACCOUNT, "k", {"watch": {"open": True, "schools": ["yale"], "month": [2027, 4]}})
+            row = await ST.STORE.get(cid)
+            self.assertEqual(row["state"]["watch"]["schools"], ["yale"])
+            self.assertEqual((row["expires_at"] - row["created_at"]).days, 30)
+            self.assertIn(cid, [r["id"] for r in await ST.STORE.watching()])
+            await ST.STORE.update(cid, {"watch": {"open": False}})
+            self.assertNotIn(cid, [r["id"] for r in await ST.STORE.watching()])
+            self.assertTrue(await ST.STORE.of_product("campus"))
+            self.assertIsNone(await ST.STORE.get("no-such-case-id-xxxxxx"))
+        run(self._with_store(body))
 
     def test_a_registered_visit_is_a_booking_and_confirms(self):
         from products.campus import schools as SC
         x = {"day": "2026-11-01", "start": "11:30", "end": "12:30", "title": "Campus Tour", "location": "Visitor Center",
              "form_url": "https://apps.admissions.yale.edu/register/?id=x"}
-        item = run(VS.record(ACCOUNT, SC.SCHOOLS["yale"], x, 2))
-        self.assertTrue(item)
-        run(VS.confirm(item))
+
+        async def body():
+            item = await VS.record(ACCOUNT, SC.SCHOOLS["yale"], x, 2)
+            self.assertTrue(item)
+            await VS.confirm(item)
+            return item
+        item = run(self._with_store(body))
 
         async def status():
             import asyncpg

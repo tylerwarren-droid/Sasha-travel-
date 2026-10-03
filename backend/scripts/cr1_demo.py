@@ -225,7 +225,12 @@ async def reset(what: str, account_name: str, vault: bool) -> None:
                     await VC.STORE.event(account, m["id"], "revoked", {"by": "cr1_demo reset"}, datetime.now(timezone.utc))
                     n += 1
         got["CampusMe vault items revoked"] = n
-    print(f"reset {what} for the {account_name} account: " + ", ".join(f"{k} {v}" for k, v in got.items()))
+    linked = await BR.STORE._run(lambda c: c.fetchval(
+        "select count(*) from guest_channels where account_id = $1 and channel = 'whatsapp'", acct))
+    note = (" — the FOUNDER_ACCOUNT_ID isn't set, so the founder acts as the demo account" if account_name == "founder"
+            and account == DEMO else "")
+    print(f"reset {what} for the {account_name} account ({account[:8]}…, {linked} WhatsApp linked{note}): "
+          + ", ".join(f"{k} {v}" for k, v in got.items()))
 
 
 SHOWCASE_UNTIL = "2026-12-31"

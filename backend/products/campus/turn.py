@@ -351,7 +351,7 @@ async def _save_answer(ctx: dict, body: str, payload: str) -> None:
     await _read_back(ctx)
 
 
-def read_back_lines(x: dict, ask: dict, profile: Optional[dict], vault: Optional[dict]) -> List[str]:
+def read_back_lines(x: dict, ask: dict, profile: Optional[dict], vault: Optional[dict], ref: str = "") -> List[str]:
     from booking_signer.vault.crypto import access_line
     s = SC.SCHOOLS[x["school"]]
     guests = int((ask or {}).get("guests", 1))
@@ -371,13 +371,16 @@ def read_back_lines(x: dict, ask: dict, profile: Optional[dict], vault: Optional
         f"I send nothing to {s['name']}.",
         f"Registering creates a record for the student in {s['name']}'s admissions system, and the school will email them.",
     ]
+    if ref:   # CR 2 · one vault use per yes is keyed by this read-back's hash: the same session asked twice must be two yeses
+        lines.append(f"Ref {ref}.")
     return lines
 
 
 async def _read_back(ctx: dict) -> None:
     pend, out = ctx["st"]["pending"], ctx["out"]
     profile = None if pend.get("profile_saved") else (pend.get("profile") or None)
-    lines = read_back_lines(pend["chosen"], pend.get("ask"), profile, pend.get("vault"))
+    ref = "CM-" + hashlib.sha256(f"{ctx['account']}|{ctx['now'].isoformat()}".encode()).hexdigest()[:6].upper()
+    lines = read_back_lines(pend["chosen"], pend.get("ask"), profile, pend.get("vault"), ref)
     sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
     out.text("Exactly what I'll do:\n" + "\n".join("• " + ln for ln in lines))
     out.ask("Prepare it?", [("Yes, prepare it", f"cmyes:{sha[:16]}"), ("No", f"cmno:{sha[:16]}")])

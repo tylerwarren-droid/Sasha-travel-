@@ -1,0 +1,113 @@
+reset: 200 Demo reset: test-venue bookings cancelled (their calendar events go within a minute); real bookings untouched.
+  >>> 'dinner for 2 in Hoi An, Vietnam tomorrow at 7pm'
+
+### V Hoi An: one sentence → photo cards — 9.0s 
+  [text] Vietnam dinner in Hoi An — 20 of 20 open at 19:00 by their listed hours. From Google Maps; nobody has been contacted.
+  [text] Sasha's pick · An thoi · ★ 5.0 (4566 Google reviews)
+  [text] Red Bean Hoi An Restaurant · ★ 5.0 (1731 Google reviews)
+  [text] Rehearsal · Sasha Test Venue — ours, not a real restaurant: booking it contacts no one
+  [ask] Which one?  ['An thoi', 'Red Bean Hoi An Restaurant', 'Sasha Test Venue']
+  >>> 'dinner for 2 in Hanoi, Vietnam tomorrow at 7pm'
+
+### V Hanoi: one sentence → photo cards — 9.8s 
+  [text] Vietnam dinner in Hanoi — 20 of 20 open at 19:00 by their listed hours. From Google Maps; nobody has been contacted.
+  [text] Sasha's pick · L'essence De Cuisine · ★ 5.0 (4171 Google reviews)
+  [text] Hoang's Restaurant - Vietnamese Restaurant & Vegan Food · ★ 4.9 (33612 Google reviews)
+  [text] Rehearsal · Sasha Test Venue — ours, not a real restaurant: booking it contacts no one
+  [ask] Which one?  ["L'essence De Cuisine", "Hoang's Restaurant - Vietnamese Restaurant & Vegan Food", 'Sasha Test Venue']
+  >>> 'Sasha Test Venue' [tap 2]
+
+### V Hanoi: pick (the test venue stands in) → read-back — 8.6s 
+  [text] Exactly what I'll send:
+• I'll send the booking form on Sasha Test Venue's own website (https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain), to https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain, with exactly these fields:
+• Día: 2026-10-04
+• Hora: 19:00
+• Personas: 2
+• Nombre: Tyler Warren
+• Email: guest@example.com
+• Teléfono: +34600000000
+• Comenta
+  [ask] Book Sasha Test Venue for 2, Sunday 4 October at 19:00, under Warren?  ['Yes, book it', 'No']
+  >>> 'Yes, book it' [tap 0]
+
+### V Hanoi: yes → booked (the test venue) — 8.5s 
+  [text] [receipt email for Sasha Test Venue — captured in rehearsal]
+  [text] ✅ Booked: Sasha Test Venue, Sunday 4 October at 19:00, 2 people. Their reference: TV-A5F579-5B.
+  [text] Their page said: “Reserva confirmada Confirmado: mesa para 2 personas el domingo 4 de octubre a las 19:00, a nombre de Tyler Warren. Localizador: TV-A5F579-5B Para cancelar: https://sasha-travel-production.up.railway.app/api/booking/test-venue/cancel/TV-A5F579-5B”
+  [text] Your receipt is in your email.
+
+### V email (NOT sent) to contact@materes.com — subject: Table request — 2 on 2026-10-04 at 19:00
+Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, writing on behalf of the Warren family to ask for a table for 2 on 2026-10-04 at 19:00.
+
+Could you reply to this email to confirm, or to tell us if that isn't possible?
+
+We can't agree to a deposit or a different time by email on Tyler Warren's behalf — if either is needed, please say so and they will decide.
+
+Thank you,
+Sasha (AI concierge, Kanoe Technologies SL), for Tyler Warren
+  >>> 'Book a restaurant and a spa in Madrid when I arrive next week'
+
+### M phone: one sentence → 'which day and times?' — 1.9s 
+  [text] Two bookings — a restaurant and a spa. Which day, and what time for each? For example: “Tuesday — spa at 18:00, dinner at 21:00”.
+  >>> 'Tuesday — spa at 18:00, dinner at 21:00'
+
+### M phone: day and times → restaurant photo cards — 5.2s 
+  [text] First, the restaurant — Tuesday 6 October at 21:00, 2 people:
+  [text] Dinner in Madrid — 19 of 20 open at 21:00 by their listed hours. From Google Maps; nobody has been contacted.
+  [text] Sasha's pick · D-Sunset Madrid · ★ 4.9 (2145 Google reviews)
+  [photo] Los Montes de Galicia · ★ 4.8 (14108 Google reviews)  <https://losmontesdegalicia.es/wp-content/uploads/2023/05/mon>
+  [text] Rehearsal · Sasha Test Venue — ours, not a real restaurant: booking it contacts no one
+  [ask] Which one?  ['D-Sunset Madrid', 'Los Montes de Galicia', 'Sasha Test Venue']
+  >>> 'Sasha Test Venue' [tap 2]
+
+### M phone: pick the restaurant → spa cards — 25.8s 
+  [text] Then the spa — Tuesday 6 October at 18:00:
+  [text] Spa in Madrid — 19 of 20 open at 18:00 by their listed hours. From Google Maps; nobody has been contacted.
+  [photo] Sasha's pick · Bruma Head Spa Madrid | Masaje capilar · ★ 5.0 (157 Google reviews)  <https://brumaheadspa.com/wp-content/uploads/2025/11/BRUMA_HO>
+  [text] Wellness Boutique Experience · ★ 4.9 (1057 Google reviews)
+  [text] Kanoe Demo Spa — ours, a demo member portal: Sasha books it with your saved membership
+  [ask] Which one?  ['Bruma Head Spa Madrid | Masaje capilar', 'Wellness Boutique Experience', 'Kanoe Demo Spa']
+  >>> 'Kanoe Demo Spa' [tap 2]
+
+### M phone: pick the spa → ONE combined read-back + sentence — 1.8s 
+  [text] Exactly what I'll do — both, on one yes:
+1) Sasha Test Venue:
+• I'll send the booking form on Sasha Test Venue's own website (https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain), to https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain, with exactly these fields:
+• Día: 2026-10-06
+• Hora: 21:00
+• Personas: 2
+• Nombre: Tyler Warren
+• Email: guest@example
+  [ask] Book both? Sasha Test Venue, Tuesday 6 October at 21:00, 2 people; and a 60-minute relaxing massage at Kanoe Demo Spa, Tuesday 6 October at 18:00, with your saved membership.  ['Yes, book both', 'No']
+  >>> 'Yes, book both' [tap 0]
+
+### M phone: one yes → two bookings — 11.3s · vault log: [('demo_spa_booking', 'done')]
+  [text] [receipt email for Sasha Test Venue — captured in rehearsal]
+  [text] [receipt email for Kanoe Demo Spa — captured in rehearsal]
+  [text] ✅ 1) Booked: Sasha Test Venue, Tuesday 6 October at 21:00, 2 people. Their reference: TV-6485BB-4E.
+  [text] ✅ 2) Booked: a 60-minute relaxing massage at Kanoe Demo Spa, Tuesday 6 October at 18:00. Ref KDS-965B17. I used your saved membership once, for this booking — it's in your vault's log.
+  [text] Both receipts are in your email; both bookings go on your calendar.
+  one-tap revoke → item revoked: True
+  confirmed this run: [('Sasha Test Venue', 'TV-A5F579-5B', 'Sun 04 19:00'), ('Sasha Test Venue', 'TV-6485BB-4E', 'Tue 06 21:00'), ('Kanoe Demo Spa', 'KDS-965B17', 'Tue 06 18:00')]
+
+### M calendar: Sasha Test Venue TV-A5F579-5B — 0.6s appeared
+
+### M calendar: Sasha Test Venue TV-6485BB-4E — 0.6s appeared
+
+### M calendar: Kanoe Demo Spa KDS-965B17 — 28.7s appeared
+
+reset: 200 {'ok': True, 'test_venue_bookings_cancelled': 3, 'gmail_finds_withdrawn': 0, 'reminder_ledger_cleared': 0, 'demo_shop_orders_cleared': 0, 'demo_spa_bookings_cleared': 0, 'say': 'Demo reset: test-venue bookings cancelled (their calendar events go within a minute); real bookings untouched.'}
+
+TIMINGS (rehearsal 1):
+     9.0s  V Hoi An: one sentence → photo cards 
+     9.8s  V Hanoi: one sentence → photo cards 
+     8.6s  V Hanoi: pick (the test venue stands in) → read-back 
+     8.5s  V Hanoi: yes → booked (the test venue) 
+     1.9s  M phone: one sentence → 'which day and times?' 
+     5.2s  M phone: day and times → restaurant photo cards 
+    25.8s  M phone: pick the restaurant → spa cards 
+     1.8s  M phone: pick the spa → ONE combined read-back + sentence 
+    11.3s  M phone: one yes → two bookings · vault log: [('demo_spa_booking', 'done')]
+     0.6s  M calendar: Sasha Test Venue TV-A5F579-5B appeared
+     0.6s  M calendar: Sasha Test Venue TV-6485BB-4E appeared
+    28.7s  M calendar: Kanoe Demo Spa KDS-965B17 appeared

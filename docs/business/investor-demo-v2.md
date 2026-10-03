@@ -8,6 +8,121 @@ venue and Kanoe Demo Market are **ours**, and say so on screen.
 
 ---
 
+## v3 · Vietnam → "and Madrid next week" (Sasha 126, 3 Oct)
+
+The storyline for Wednesday. It sits **before** beats A–G (§1), which stay as the Madrid follow-on if there is time.
+
+### v3.0 Extra setup the night before
+
+- **You → My accounts:** save the **Kanoe Demo Spa** membership.
+  - Get it from the ops page (*Spa · Demo spa membership*) or `demo.py spa-login`.
+  - Site "Kanoe Demo Spa", kind "Password".
+  - `demo.py status` now reports both saved logins.
+- **Changed from the brief:** the storyline said "use my **Calma** membership". Calma Madrid is a real spa, and a portal
+  in its name would impersonate it. The member portal is therefore **Kanoe Demo Spa**: ours, labelled as ours, it charges
+  nothing. The real Calma is asked separately (§v3.4).
+
+### v3.1 Run of show (phone, WhatsApp)
+
+Timings are the wait after each message, from rehearsal 1 · rehearsal 2 (both 3 Oct).
+
+| # | Say / tap | What appears | R1 · R2 (s) |
+|---|---|---|---|
+| V1 | "dinner for 2 in Hoi An, Vietnam tomorrow at 7pm" | Cards: Red Bean Hoi An · Nhan's kitchen · test venue (rehearsal card) | 9.0 · 5.2 |
+| V2 | "dinner for 2 in Hanoi, Vietnam tomorrow at 7pm" | Cards: L'essence de Cuisine · Hoang's · test venue | 9.8 · 9.4 |
+| V3 | Tap **Sasha Test Venue** → **Yes, book it** | Read-back of the form → "✅ Booked … Their reference: TV-…" | 8.6 + 8.5 · 8.9 + 8.7 |
+| M1 | "Book a restaurant and a spa in Madrid when I arrive next week" | "Which day, and what time for each?" | 1.9 · 2.0 |
+| M2 | "Tuesday — spa at 18:00, dinner at 21:00" | Restaurant cards with photos (D-Sunset · Los Montes de Galicia · test venue) | 5.2 · 4.7 |
+| M3 | Tap **Sasha Test Venue** | The form is prepared and held, then spa cards (Bruma Head Spa · Wellness Boutique · **Kanoe Demo Spa**) | 25.8 · 14.3 |
+| M4 | Tap **Kanoe Demo Spa** | **One** read-back of both, including "I'll sign in to Kanoe Demo Spa with your saved … membership", then **one** sentence: "Book both? …" | 1.8 · 1.9 |
+| M5 | **Yes, book both** | "✅ 1) Booked: Sasha Test Venue … TV-…" and "✅ 2) Booked: a 60-minute relaxing massage at Kanoe Demo Spa … Ref KDS-… I used your saved membership once" | 11.3 · 11.8 |
+| M6 | Laptop: Google Calendar | Two events on "Sasha bookings" | ≤ 29 · ≤ 12 |
+| M7 | Laptop: **/vault** | One use of the spa login listed → **Revoke** (one tap) | — |
+
+- **Two receipts:** both are sent by email. In rehearsal they were captured, not sent.
+- **One sentence still works on its own:** "use my spa membership to book a massage on Tuesday at 18:00" gives the same
+  read-back, yes and booking for the spa alone.
+- **Combining only works with our spa today:** a real spa card can't be booked together with the restaurant. Sasha says
+  so and sends nothing.
+- **After the demo:** *Reset the demo* now also cancels the Kanoe Demo Spa bookings and their calendar events.
+
+### v3.2 Vietnam: what truthfully works today
+
+| | Works? | Detail |
+|---|---|---|
+| Discovery cards (Hoi An, Hanoi) | **Yes** | From Google Maps, ranked. 19–20 of 20 were open at 19:00. |
+| Photos on those cards | **Partly** | A photo is the venue's own share image from its own site. **About 1 in 3** of the top Vietnamese venues publish one (e.g. MẸT, The Soul, MIAs, VIET Restaurant). The first two cards in rehearsal had none, so they show as text. Madrid's cards had photos. |
+| Booking by the venue's own form | **Via the test venue only** | The forms found at real VN venues aren't mapped or approved. Our test venue stood in, and the booking was confirmed. |
+| Booking by email, in English | **Built, not sent** | The email rung is available at, for example, Mate (contact@materes.com), L'essence de Cuisine and MIAs. There is no Vietnamese template, so it writes in English (below). It was not sent to any venue: none has agreed. |
+| An English **call** to Vietnam | **No, not today** | See below. |
+
+**The English email Sasha would send to Mate** (composed in rehearsal, not sent):
+> Hello, this is Sasha, an AI concierge operated by Kanoe Technologies SL, writing on behalf of the Warren family to ask
+> for a table for 2 on 2026-10-04 at 19:00. Could you reply to this email to confirm, or to tell us if that isn't
+> possible? …
+
+**Why an English call to Vietnam is not feasible on Wednesday:**
+1. **Code:** Vietnam is mapped to Vietnamese ('vi'), and the call engine has no 'vi' and no "call in English abroad"
+   option. It refuses rather than guess. This is a small change, but it is untested.
+2. **Time zone:** Vietnam is UTC+7, Madrid + 5 h. Most restaurants open about 10:00–22:00 local, which is 05:00–17:00 in
+   Madrid. A morning demo works; an evening one reaches closed venues.
+3. **Language at the venue:** English is likely at tourist-area restaurants in Hoi An and Hanoi, but nothing we read
+   confirms it.
+4. **Calling +84:** international dialling through Bland is untested, and its cost is unknown.
+
+**Verdict:** say "in Vietnam Sasha books by the venue's form or email today"; calls there come later.
+
+### v3.3 Bugs the rehearsals found, fixed the same morning
+
+| Found | Fix |
+|---|---|
+| R1: the two-booking plan was lost between messages, because the live store keeps only four columns | The plan now travels inside the open question. The test store now behaves like production. |
+| R1: "in Hoi An, Vietnam" searched for "Vietnam dinner" | A country named after the place is the country. |
+| R2: Hanoi, said while Hoi An's cards were open, searched for "Hanoi Vietnam tomorrow at dinner" | A whole new request names its own kind. |
+
+Rehearsal 2 was re-run clean after the last fix; its timings are in v3.1. Commits: c43b1b9, 11237f8, d81573c, eb19fc9.
+
+### v3.4 The friendly spa: a Spanish request to Calma Madrid
+
+**Calma Madrid Masajes** ("SPA Calma"), C. de Domenico Scarlatti 5, Chamberí. Read on 3 Oct:
+- **Phones:** +34 91 989 19 16 and +34 660 39 09 10, both from their website (calmadrid.com).
+- **No email and no booking form** on their homepage.
+
+So the founder calls, or sends a WhatsApp to the mobile if it takes WhatsApp (not verified). He already has a booking
+with them on 5 Oct, which is a natural moment to ask in person.
+
+> Hola, soy Tyler Warren, fundador de Kanoe Technologies, en Madrid (y cliente vuestro). Hemos creado Sasha, una
+> concierge de inteligencia artificial que reserva por teléfono y que siempre dice, en la primera frase, que es una IA.
+>
+> El [día] a las [hora] la presentamos a inversores y nos encantaría hacerlo con vosotros:
+> - Sasha os llamaría al 91 989 19 16 para reservar un masaje relajante de 60 minutos a nombre de Warren.
+> - La cancelaríamos enseguida, el mismo día.
+> - La llamada se escucharía en directo en la sala, sin grabarla ni difundirla.
+> - En pantalla solo aparecería vuestra ficha pública de Google Maps.
+> - No usaríamos vuestro nombre para nada más.
+> - Sin ningún coste para vosotros.
+>
+> ¿Nos dais permiso por escrito? Un "sí" por WhatsApp o por email basta.
+>
+> ¡Muchas gracias! Tyler Warren — Kanoe Technologies SL — +34 608 44 57 15
+
+**Rules:**
+- Calma's written yes must be in hand before calls are switched on.
+- The vault beat stays on Kanoe Demo Spa either way: we have no access to any real member portal.
+
+### v3.5 Fallback recordings
+
+- **Phone beats:** these are WhatsApp, and I can't screen-record a phone from here. The fallback is the word-for-word
+  transcript of each rehearsal, which can be read out or shown:
+  - `docs/business/demo-v3-fallback/rehearsal-1-transcript.txt`
+  - `docs/business/demo-v3-fallback/rehearsal-2-transcript.txt`
+  - The founder's email and mobile are redacted in both.
+- **Browser beats (Calendar, /vault):** not recorded. A GIF from the browser means a file download, and I didn't take
+  one without asking. **Recommended:** the founder screen-records one run on his phone (iOS: Control Centre → Screen
+  Recording) during the dress rehearsal the evening before. That also captures WhatsApp exactly as investors will see it.
+
+---
+
 ## 0. The night before (founder)
 
 1. **WhatsApp sandbox:** re-join it (the join expires after 3 days). Then **message Sasha once the morning of the

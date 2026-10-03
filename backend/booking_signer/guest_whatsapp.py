@@ -714,7 +714,7 @@ async def _invite(ctx: dict, req: dict) -> None:
     if not first:
         out.text(NO_CONTACT.format(web=web_url()))
         return
-    inv = await IV.create(ctx["account"], first.title(), req, ctx["now"])
+    inv = await IV.create(ctx["account"], first, req, ctx["now"])   # Sasha 118 · as typed
     if not inv["slots"]:
         out.text(f"I couldn't find a time you're free for {req['activity']} then. Tell me other days.")
         return
@@ -722,7 +722,7 @@ async def _invite(ctx: dict, req: dict) -> None:
     seen = "I can't see your calendar, so these are suggestions:" if inv["unseen"] else "Times you're free:"
     out.text(f"{seen}\n{lines}")
     out.text(f"Send {req['invitee']} this invitation from your own WhatsApp — it opens a page where they pick a time; I don't "
-             f"message them unless they ask me to:\n{IV.share_link(first.title(), req['activity'], inv['code'])}")
+             f"message them unless they ask me to:\n{IV.share_link(first, req['activity'], inv['code'])}")
     out.text("When they pick, I'll tell you here — and the booking stays yours: nothing is booked until your yes.")
 
 

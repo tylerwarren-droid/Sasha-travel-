@@ -34,6 +34,15 @@ def consent(version: str = CURRENT) -> dict:
     return {"version": version, "text": text, "sha256": hashlib.sha256(text.encode()).hexdigest(), "privacy": "/sasha-privacy"}
 
 
+def name_case(name: str) -> str:
+    """Sasha 118 · a name is kept AS TYPED ("Warren", "McDonald", "de la Vega") — never upper-cased, never title-cased.
+    The one exception: a name typed ENTIRELY in capitals (caps lock, an autofill: "TYLER WARREN", saved 2 Oct) is put in
+    name case, since a venue would otherwise read "a nombre de WARREN"."""
+    if any(ch.isalpha() for ch in name) and name == name.upper():
+        return re.sub(r"[^\W\d_]+", lambda m: m[0][:1] + m[0][1:].lower(), name)   # each word: its first letter, then lower
+    return name
+
+
 def e164(raw: Any) -> Optional[str]:
     s = re.sub(r"[\s().-]", "", str(raw or ""))
     if s.startswith("00"):
@@ -120,7 +129,7 @@ async def put_contact(request: Request):
         body = None
     if not isinstance(body, dict):
         return _refuse(400, "contact_malformed", "send {name, mobile, consent_version, consent_sha256} as a JSON object")
-    name = " ".join(str(body.get("name") or "").split())
+    name = name_case(" ".join(str(body.get("name") or "").split()))
     if not 1 <= len(name) <= 80:
         return _refuse(422, "name_invalid", "a name is 1–80 characters")
     mobile = e164(body.get("mobile"))

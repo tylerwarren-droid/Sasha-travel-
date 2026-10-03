@@ -61,6 +61,14 @@ class Contacts:
         got = self.c.get("/api/booking/contact").json()["contact"]
         self.assertEqual((got["name"], got["mobile_e164"], got["consent_version"]), ("Anna Johnson", "+447700900123", "v1"))
 
+    def test_sasha118_the_name_as_typed_never_upper_cased(self):
+        """2 Oct: "TYLER WARREN" was saved, and venues read "a nombre de WARREN"."""
+        for typed, kept in (("TYLER WARREN", "Tyler Warren"), ("Tyler McDonald", "Tyler McDonald"), ("ana de la Vega", "ana de la Vega"),
+                            ("JOSÉ-MARÍA O'NEILL", "José-María O'Neill")):
+            self.assertEqual(self.c.put("/api/booking/contact", json={**self.ok, "name": typed}).status_code, 200)
+            self.assertEqual(self.c.get("/api/booking/contact").json()["contact"]["name"], kept, typed)
+        self.c.delete("/api/booking/contact")                                    # the next test starts with none
+
     def test_a_stale_or_altered_consent_saves_nothing(self):
         for bad in ({"consent_sha256": "0" * 64}, {"consent_version": "v0"}, {"consent_sha256": None}):
             r = self.c.put("/api/booking/contact", json={**self.ok, **bad})

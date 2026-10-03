@@ -134,6 +134,12 @@ class Private(Base):
 
 
 class Public(Base):
+    def setUp(self):
+        super().setUp()
+        # the hand-over's 24-hour expiry is checked by the page route on the REAL clock: the turn must run on it too, or the
+        # frozen test clock (2 Oct 12:00) ages the values out as soon as real time passes 3 Oct 12:00 (it did, 3 Oct 2026)
+        self.now = datetime.now(timezone.utc)
+
     def page(self, cid):
         app = FastAPI(); app.include_router(PR.router)
         return TestClient(app).get(f"/products/health/{cid}").json()

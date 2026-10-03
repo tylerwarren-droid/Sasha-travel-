@@ -32,7 +32,8 @@ _EXIT = re.compile(r"^\s*(exit|sasha|back|back to sasha|quit|salir)\s*[.!]?\s*$"
 
 
 
-PREFIX = {"campus": ("cm:", "cmyes:", "cmno:"), "relocation": ("rx:",), "health": ("hx:", "hxyes:", "hxno:", "hxv:", "hxvno:")}
+PREFIX = {"campus": ("cm:", "cmyes:", "cmno:"), "relocation": ("rx:",), "health": ("hx:", "hxyes:", "hxno:", "hxv:", "hxvno:"),
+          "trip": ("tp:",)}
 _FLIGHT = re.compile(r"\b(flights?|fly(?:ing)? (?:to|from)|plane|airfare|vuelos?|volar|avi[oó]n|hotel|hostel|apartment|car hire|rent a car)\b", re.I)
 
 
@@ -41,6 +42,8 @@ def _module(product: str):
         from .campus import turn as M
     elif product == "health":
         from .health import turn as M
+    elif product == "trip":                 # CR 13 · the plan that hands bookings to Sasha's travel flow
+        from . import trip as M
     else:
         from .relocation import turn as M
     return M
@@ -111,6 +114,17 @@ async def context(wa_key: str) -> Optional[dict]:
     if not best:
         return None
     c = _module(best["product"]).context(best["state"].get("pending") or {})
+    if best["product"] == "campus":                       # CR 13 · every visit of the account, not just the one chosen
+        from . import trip as TP
+        vs = await TP._visits(best["account_id"])
+        first_names = [r["state"].get("student_first") for r in await ST.STORE.of_account(best["account_id"], "campus")
+                       if r["state"].get("student_first")]
+        c.update(visits=[{k: v[k] for k in ("name", "day", "start", "location", "city")} | {"school": v["name"]} for v in vs],
+                 student=first_names[0] if first_names else None,
+                 trip_hint={"to_city": vs[0]["city"].split(",")[0] if vs else None,
+                            "around_date": vs[0]["day"] if vs else None,
+                            "nights_near": [{"place": f"{v['full_name']}, {v['city']}, United States",
+                                             "night_before": v["day"]} for v in vs]})
     return {k: v for k, v in c.items() if k != "line"}
 
 
@@ -141,6 +155,22 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         st["pending"] = None
         out.text("OK.")
         return True
+    plan_for = None
+    if not target and not payload:
+        # CR 13 · "book my flights" / "plan the trip around the visits": the products' context, acted on by Sasha's travel
+        from . import trip as TP
+        waiting = [w for w, _ in await _waiting(ch, now)]
+        if TP.wants_plan(body):
+            plan_for = await TP.which(ch["account_id"], body, asked_last, waiting)
+            if plan_for:
+                target, entering = "trip", True
+                if asked_last != "trip":
+                    from . import store as ST
+                    await ST.STORE.drop_conversation(ch["wa_id_sha256"], "trip")   # a new plan starts afresh
+        elif "trip" in waiting and asked_last != "trip":
+            saved = await _resume(ch, "trip")
+            if saved and TP.claims(saved, body, payload, media):
+                target = "trip"                                   # "NEXT" — even after Sasha's own flow asked last
     if not target and asked_last:
         # 2 · the product asked last: its answer, Sasha's request, or a plain re-ask
         if _module(asked_last).claims(pend, body, payload, media):
@@ -168,8 +198,8 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         saved = await _resume(ch, target)
         if saved:
             st["pending"] = {**saved, "kind": "product", "product": target}
-            words = {"campus": _CAMPUS, "relocation": _RELOC, "health": _HEALTH}[target].sub("", body, count=1).strip(" :,-")
-            if entering and not words and not payload:          # "relocation" alone: where we were, said again
+            words = {"campus": _CAMPUS, "relocation": _RELOC, "health": _HEALTH}.get(target, re.compile("$^")).sub("", body, count=1).strip(" :,-")
+            if entering and not words and not payload and target != "trip":          # "relocation" alone: where we were, said again
                 st["pending"]["touched"] = now.isoformat()
                 out.text(_welcome_back(target, saved))
                 return True
@@ -179,11 +209,21 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
     st["pending"]["touched"] = now.isoformat()
     rest = body
     if entering:
-        rest = {"campus": _CAMPUS, "relocation": _RELOC, "health": _HEALTH}[target].sub("", body, count=1).strip(" :,-")
+        rx = {"campus": _CAMPUS, "relocation": _RELOC, "health": _HEALTH}.get(target)
+        rest = rx.sub("", body, count=1).strip(" :,-") if rx else body
         rest = body if rest and not re.match(r"^(me|mode)\b", rest, re.I) else rest   # "campus visits at Yale…": all of it
     ctx = {"account": ch["account_id"], "ch": ch, "frm": frm, "st": st, "now": now, "out": out, "media": media,
-           "early": early or _no_early}
+           "early": early or _no_early, "plan_for": plan_for}
     handled = await _module(target).turn(ctx, rest, payload, entering=entering)
+    if ctx.get("handoff"):
+        # CR 13 · a booking step: Sasha's own flow answers this sentence as if typed (her hand-off line, marked "CR 13
+        # products"); the plan is kept, set aside, and resumes on "NEXT"
+        from . import store as ST
+        st["pending"]["touched"] = now.isoformat()
+        await ST.STORE.put_conversation(ch["wa_id_sha256"], ch["account_id"], target, st["pending"])
+        st["pending"] = None
+        p["KanoeSaid"], p["Body"] = body, ctx["handoff"]
+        return False
     if handled is False and not out.items:                      # the product says it isn't its message: Sasha's
         await _set_aside(st, ch)
         return False

@@ -245,6 +245,33 @@ async def rehearse(n: int, account_name: str = "demo", only: Optional[str] = Non
         page("U11 file page: the pack", f"/relocation-file/{rid}", "05_Proof-of-economic-means")
         await beat("U12 entry date → the TIE, from its page", "1 March 2027", expect="I'll remind you here")
         await beat("U13 consulate booked → itinerary", "consulate booked 12 November 10:00", expect="booked by you")
+    elif only == "trip":   # CR 13 · the products and Sasha's travel together — relocation, then campus
+        for i, t in enumerate(("relocation", "first", "me", "myself", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"), 1):
+            await beat(f"T{i} {t}", t)
+        await beat("TR1 book my flights → origin, once", "book my flights", expect="Which city will you fly from?")
+        await beat("TR2 London → plan + Sasha's TEST flights", "London", expect="from Duffel in TEST mode")
+        await beat("TR3 pick 1 → her read-back", payload=_button(GW, 0), expect="TEST")
+        await beat("TR4 her one yes → TEST checkout", payload=_button(GW, 0), expect="checkout.stripe.com")
+        await beat("TR5 NEXT → the hotel near the new address", "NEXT", expect="Hotels for 3 nights")
+        await beat("TR6 NEXT → one itinerary", "NEXT", expect="You can apply for your visa")
+
+        async def visit(words, tag):
+            said = await beat(f"{tag} cards", f"campus {words} in November for my son", expect="Read just now from")
+            said = await beat(f"{tag} pick 1", "1")
+            if "full name" in said:
+                for a in ("Sam Ejemplo", "sam.ejemplo@example.com", "14 March 2009", "Example High School"):
+                    await beat(f"{tag} · {a}", a)
+                await beat(f"{tag} · 2028", "2028", expect="Keep Sam's details in your vault")
+                await beat(f"{tag} keep → read-back", payload="cm:save:yes", expect="Exactly what I'll do")
+            await beat(f"{tag} yes → prepared", payload=_button(GW, 0), expect="✅ Prepared.")
+            await beat(f"{tag} REGISTERED", "REGISTERED", expect="registered on your word")
+        await visit("Yale", "TC-Yale")
+        await visit("Penn", "TC-Penn")
+        await beat("TC1 plan the trip around the visits", "plan the trip around the visits", expect="Which city will you fly from?")
+        await beat("TC2 Chicago → plan, drive check, TEST flights", "Chicago", expect="by car")
+        await beat("TC3 NEXT → hotel near the first campus", "NEXT", expect="Hotels for 1 night")
+        await beat("TC4 NEXT → hotel near the second campus", "NEXT", expect="Hotels for 1 night")
+        await beat("TC5 NEXT → one itinerary", "NEXT", expect="Your itinerary")
     else:
         # ── Part 1 · CampusMe ──
         await beat("C1 April (not published)", "campus visits at Yale and Penn in April for my son", expect="hasn't published April 2027 yet")
@@ -516,13 +543,13 @@ async def health() -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["rehearse", "reset", "health", "showcase", "officer"])
-    ap.add_argument("what", nargs="?", default="all", choices=["all", "campus", "relocation", "health", "officer", "us"])
+    ap.add_argument("what", nargs="?", default="all", choices=["all", "campus", "relocation", "health", "officer", "us", "trip"])
     ap.add_argument("--account", default="founder", choices=["founder", "demo"])
     ap.add_argument("--vault", action="store_true")
     ap.add_argument("--n", type=int, default=1)
     a = ap.parse_args()
     if a.cmd == "rehearse":
-        asyncio.run(rehearse(a.n, a.account if "--account" in sys.argv else "demo", "us" if a.what == "us" else None))
+        asyncio.run(rehearse(a.n, a.account if "--account" in sys.argv else "demo", a.what if a.what in ("us", "trip") else None))
     elif a.cmd == "officer":
         asyncio.run(officer())
     elif a.cmd == "showcase":

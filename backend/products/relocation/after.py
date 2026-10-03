@@ -212,6 +212,7 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
                      f"It's on your file page:\n{web()}/relocation-file/{pend.get('case_id')}")
             if flag:
                 out.text(f"⚠ {flag['why']}.")
+            pend["consulate_office"] = c["office"]   # CR 13 · context for Sasha's travel
             await _save(ctx, {"after": {"residence": residence, "consulate": c, "checklist": items}})
             pend["step"] = "pack"
             out.text(pack_q(london_items(items)))
@@ -362,6 +363,7 @@ async def _us(ctx: dict, state: str, cid: Optional[str] = None, county: Optional
              f"each. On your file page:\n{web()}/relocation-file/{pend.get('case_id')}")
     if flag:
         out.text(f"⚠ {flag['why']}.")
+    pend["consulate_office"] = c["office"]   # CR 13 · context for Sasha's travel
     await _save(ctx, {"after": {**base, "consulate": c, "checklist": items, "email_draft": draft}})
     pend["step"] = "pack"
     out.text(pack_q(items))

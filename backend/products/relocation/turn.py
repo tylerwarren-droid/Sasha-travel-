@@ -251,7 +251,13 @@ def context(pend: dict) -> dict:
     a = f.get("applicant") or {}
     town = (a.get("address_town") or {}).get("value") or "Madrid"
     name = " ".join(x for x in ((a.get("given_names") or {}).get("value"), (a.get("surname_1") or {}).get("value")) if x)
-    return {"product": "relocation", "city": town, "country": "Spain", "dates": [d for d in [pend.get("entry_date")] if d],
-            "name": name or None, "line": f"[Relocation: moving to {town}, Spain"
+    street = " ".join(x for x in ((a.get("address_street") or {}).get("value"), (a.get("address_number") or {}).get("value")) if x)
+    address = f"{street}, {town}, Spain" if street else None
+    entry = pend.get("entry_date")
+    return {"product": "relocation", "city": town, "country": "Spain", "dates": [d for d in [entry] if d],
+            "name": name or None, "applicant": name or None, "entry_date": entry, "address": address,   # CR 13
+            "consulate": pend.get("consulate_office"),
+            "trip_hint": {"to_city": town, "around_date": entry,
+                          "nights_near": [{"place": address or f"{town}, Spain", "night_before": None, "from": entry}] if entry else []}, "line": f"[Relocation: moving to {town}, Spain"
             + (f"; planned entry {pend['entry_date']}" if pend.get("entry_date") else "")
             + (f"; applicant {name}" if name else "") + "]"}

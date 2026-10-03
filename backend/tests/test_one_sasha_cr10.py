@@ -122,7 +122,7 @@ class OneItinerary(TG.Base):
     def test_the_consulate_and_tie_appointments(self):
         for t in ("relocation", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"):
             self.say(t)
-        self.say("book me flights")                                            # Sasha in between…
+        self.say("show my receipts")                                           # Sasha in between… (CR 13: "book me flights" is a plan now)
         self.say("consulate booked 12 November 10:00")                         # …and relocation picks it up
         self.say("TIE appointment booked 20 March 2027 at 9:30")
         a, b = self.added

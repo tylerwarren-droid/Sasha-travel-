@@ -71,13 +71,16 @@ Register on the school's page.
 |---|---|
 | `relocation` | "…*You* sign it and *you* lodge it: I never file anything…" → "first application or renewal?" |
 | `first` · `me` · `myself` | the questions start: "Your passport number?" |
+| `book me flights to Madrid on 1 March` | **CR 10 · one Sasha, not rooms:** Sasha's own flight answer, in the same chat (no "say EXIT" — there's no wall) |
+| `relocation` | "Back to your EX-01. Your passport number?" — exactly where it was |
 | a **SPECIMEN** passport photo | "Reading your passport photo page… It goes to Anthropic's AI model to be read, once; I don't keep the photo." → **"I read: • Passport number: … ✓ (the passport's own check digit agrees)"** → Yes → "Kept 8 values…" |
 | *(or)* `DEMO` | the rest filled with the **fictional** Ana Ejemplo Prueba, marked as such everywhere |
 | answers… | "✅ Your EX-01 is prepared: 31 boxes filled… 8 left for you" → reviewer link + **the official PDF in the chat** |
 | open the link | the reviewer screen: 96 fields, every value "from: …". The reviewer agent: e.g. **"postcode 08010 is in Barcelona, but the province written is Madrid"**, **"“3º B” may not fit this box on paper"**. The signature box reads **"LEFT FOR THE APPLICANT — NOT SIGNED"** |
 | `SIGNED` | "signed by you, on your word. I didn't sign or tick anything" → "Which country do you live in?" |
 | `UK` | "*Consulado General de España en Londres*. Its own sheet says: 'Applicants must request their appointment following the instructions on the Consulate's website' → link. You book it and go in person." + the checklist (11 items from the consulate's sheet, **dated 11 Feb 2022**, said as such; the passport's ≥ 1 year **computed**) |
-| `1 March 2027` | reminders: apply from 1 Dec (the 90-day window); the TIE within a month of entry, with the official *cita previa de extranjería* page |
+| `1 March 2027` | reminders: apply from 1 Dec (the 90-day window); the TIE within a month of entry, with the official *cita previa de extranjería* page. The reminders are listed in "You → Reminders" |
+| `consulate booked 12 November 10:00` | "Added to your itinerary: your consulate appointment … — booked by you. I'll remind you the day before". It shows in "You → My bookings", like any booking |
 
 **The honest lines, if asked:**
 - *"Do you file it?"* — No. Never, by design. The fill refuses to touch the signature, consent or intent boxes.
@@ -100,9 +103,10 @@ Register on the school's page.
 | `health I need a doctor this week` | the consent: "only what the appointment needs — never why you need a doctor — at most 30 days; I never sign in, book or press on a public health website" → Yes | health data: Art. 9, minimum necessary |
 | **1. Private clinic** → `Tuesday 10:00` | "Exactly what I'll say: … para reservar **una cita con el médico general** para una persona…" → **Yes, call them** | Sasha's own call path, one yes; the test clinic is the test line |
 | — | "📞 Calling Kanoe Test Clinic now" → the phone rings, in Spanish (live only with calls on) | |
-| `exit` · `salud` → Yes → **2. Public (SERMAS)** | "I don't keep health card details yet — that needs Kanoe's data-protection assessment first" + the page | ⚠ honest: no DPIA, so no stored identifiers |
+| `salud` → Yes → **2. Public (SERMAS)** | "I don't keep health card details yet — that needs Kanoe's data-protection assessment first" + the page | ⚠ honest: no DPIA, so no stored identifiers |
 | `DEMO` | the hand-over with a **fictional** patient: the official SERMAS link, card code, date of birth, DNI/NIE ready to copy, "you press" | values come from the vault when the DPIA exists; gone after 24 h |
-| `exit` · `health` → Yes → **3. New in Madrid** | padrón → INSS (DAD) → tarjeta sanitaria → family doctor, each step from its official page; "I never hunt for padrón appointments" | |
+| `I booked it for 13 October at 10:00` → **Yes** | "Add … to your itinerary? It's then kept with your bookings like any other — not just 30 days" → "Added — booked by you" | added only on an explicit yes |
+| `health` → Yes → **3. New in Madrid** | padrón → INSS (DAD) → tarjeta sanitaria → family doctor, each step from its official page; "I never hunt for padrón appointments" | |
 | `20 October 2026` | reminders: the volante is valid 90 days | |
 
 **Never:** sign in on SERMAS, submit, look for free slots, call a public health centre, ask why.

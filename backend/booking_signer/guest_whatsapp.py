@@ -663,6 +663,10 @@ async def _new_request(ctx: dict, body: str) -> None:
         return
     if await _forwarded_confirmation(ctx, body):   # Sasha 118 · the venue's confirmation, forwarded by the guest
         return
+    from . import demo_shop as DS
+    if DS.REORDER.search(body or ""):   # Sasha 121 (F) · the vault, used inside ONE yes
+        await _reorder(ctx)
+        return
     from . import invitations as IV   # S-80 · "book dinner with Jon this week"
     inv_req = IV.invite_request(body, ctx["now"])
     if inv_req is not None and IV.STORE is not None:
@@ -687,6 +691,42 @@ async def _new_request(ctx: dict, body: str) -> None:
         out.text(ASK_ONE)
         return
     out.text(OUT_OF_SCOPE.format(web=web_url()))
+
+
+async def _reorder(ctx: dict) -> None:
+    """Sasha 121 (F) · "reorder my usual from Kanoe Demo Market": the read-back names the saved login and the basket."""
+    from . import demo_shop as DS
+    out = ctx["out"]
+    item = await DS.find_item(ctx["account"])
+    if item is None:
+        out.text(f"I don't have a saved login for {DS.PROVIDER} in your vault. Add it in You → My accounts, then ask me again.")
+        return
+    lines = DS.read_back(item["label"])
+    sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
+    out.text("Exactly what I'll do:\n" + "\n".join("• " + ln for ln in lines))
+    rid = str(item["id"])
+    out.ask(f"Reorder your usual from {DS.PROVIDER}?", [("Yes, order it", f"yes:{rid[:8]}:{sha[:16]}"), ("No", f"no:{rid[:8]}:{sha[:16]}")])
+    ctx["st"]["pending"] = {"kind": "vault_order", "at": ctx["now"].isoformat(), "id": rid, "sha": sha, "lines": lines}
+
+
+async def _reorder_approve(ctx: dict, pend: dict) -> None:
+    from . import demo_shop as DS
+    from .vault.crypto import UseRefused
+    out = ctx["out"]
+    try:
+        got = await DS.place(ctx["account"], pend["id"], pend["lines"], pend["sha"], ctx["now"].isoformat(), f"wa-{pend['sha'][:12]}")
+    except UseRefused as e:
+        out.text(f"❌ Not ordered: {e}.")
+        return
+    except Exception as e:
+        out.text(f"❌ Not ordered — {DS.PROVIDER} didn't take it ({type(e).__name__}). Your login was used once and is logged in your vault.")
+        return
+    if got["status"] == "ordered":
+        out.text(f"✅ Ordered from {DS.PROVIDER}: order {got['ref']}. I used your saved login once, for this order — it's in your vault's log.")
+    else:
+        out.text(f"⚠ Not confirmed: {DS.PROVIDER}'s page didn't say the order went through.")
+    if got.get("their_page"):
+        out.text(f"Their page said: “{got['their_page'][:400]}”")
 
 
 async def _forwarded_confirmation(ctx: dict, body: str) -> bool:
@@ -922,6 +962,20 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             out.text(str(j.get("say")) if status == 200 else f"Not asked — {refusal_words(j, status)}.")
             return True
         return False
+    if kind == "vault_order":   # Sasha 121 (F) · one yes, one use of the saved login
+        if payload.startswith("no:") or (not payload and _NO.match(body)):
+            st["pending"] = None
+            out.text("OK — nothing was ordered, and your login wasn't opened.")
+            return True
+        if payload.startswith("yes:") or YS.is_yes(body):
+            st["pending"] = None
+            if now - at > APPROVAL_WINDOW:
+                out.text("That question has expired (15 minutes) — nothing was ordered. Ask me again.")
+                return True
+            await _reorder_approve(ctx, pend)
+            return True
+        out.text("Tap Yes or No — nothing is ordered until you do.")
+        return True
     if kind in ("confirm", "cancel_confirm"):
         fresh = now - at <= APPROVAL_WINDOW
         if payload.startswith("no:") or (not payload and _NO.match(body)):

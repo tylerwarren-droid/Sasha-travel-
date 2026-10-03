@@ -537,6 +537,9 @@ router.include_router(payments_t0.router)   # S-81 · /api/booking/payments/{id}
 router.include_router(mailbox.router)   # S-82 · /api/booking/mailbox
 from . import ops as _ops  # noqa: E402
 router.include_router(_ops.router)   # Sasha 121 · /api/booking/ops (founder only)
+from . import demo_shop as _demo_shop  # noqa: E402
+router.include_router(_demo_shop.router)   # Sasha 121 (F) · Kanoe Demo Market (ours; sells nothing)
+router.include_router(_demo_shop.ops)
 # Sasha 99 · cancelling by the best route there is (link, email, text, call)
 router.include_router(cancel_routes.router)
 # S-55 · the Work-with-Sasha page's server half (reached through the frontend's own route, which adds the key)

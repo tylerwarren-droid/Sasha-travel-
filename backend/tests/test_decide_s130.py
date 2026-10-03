@@ -22,13 +22,14 @@ class Decide(unittest.TestCase):
         self.assertEqual(d.route, "one_tap")
         self.assertIn("They book through CoverManager", d.reason)
         self.assertIn("you press confirm (I can't press it for you)", d.reason)
-        self.assertEqual(d.then, "If it isn't booked there within 30 minutes, I'll ask you here whether to email them.")
+        self.assertEqual(d.then, "If you haven't booked on their page within 30 minutes, I'll email them; if they don't reply within 24 hours, "
+                                 "I'll call them. Your yes covers these steps — I'll ask you again only if something changes (a new time, a deposit, a cost).")
         self.assertEqual(d.alternatives, ["call_email", "call", "email"])
 
     def test_calls_are_no_longer_the_default_for_an_open_venue(self):
         d = decide(Venue(phone=True, email=True, open_now=True, hours_until=72))
         self.assertEqual(d.route, "email")
-        self.assertEqual(d.then, "If they haven't replied within 24 hours, I'll ask you here whether to call them.")
+        self.assertTrue(d.then.startswith("If they don't reply within 24 hours, I'll call them. Your yes covers these steps"))
 
     def test_urgent_is_call_and_email_at_once_on_one_yes(self):
         d = decide(Venue(platform="CoverManager", phone=True, email=True, open_now=True, hours_until=5))
@@ -48,7 +49,7 @@ class Decide(unittest.TestCase):
     def test_unscripted_language_email_then_an_english_call(self):
         d = decide(Venue(phone=True, email=True, scripted=False, language_label="Vietnamese", hours_until=48))
         self.assertEqual(d.route, "email")
-        self.assertIn("whether to call them, in English", d.then)
+        self.assertIn("I'll call them (in English). Your yes covers these steps", d.then)
         d = decide(Venue(phone=True, email=True, scripted=False, language_label="Vietnamese", hours_until=3))
         self.assertIn("I can't speak Vietnamese, so the call is in English.", d.reason)
 

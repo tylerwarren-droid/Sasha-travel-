@@ -709,8 +709,14 @@ async def place(call_id: str, request: Request):
     if body.get("read_back_sha256") != call["read_back_sha256"]:
         return _refuse(422, "approval_void", "the approval was given to different words from this call's read-back")
     a = body.get("approval") if isinstance(body.get("approval"), dict) else {}
+    if a.get("how") == "escalation_plan":   # Sasha 132 · under the guest's ONE yes to the whole plan — verified from our records
+        from . import escalation as ESC
+        vk = str((call.get("brief") or {}).get("venue_key") or "")
+        why_not = await ESC.verify(account, a, vk[5:] if vk.startswith("read:") else None)
+        if why_not:
+            return _refuse(422, "approval_void", why_not)
     # S-66 (EU) step 6 · a yes TYPED in the chat counts too — with the guest's exact words, kept with the approval
-    if not YS.approval_ok(a):   # S-75 step 2 · WhatsApp's button and typed yes too (yes.py)
+    elif not YS.approval_ok(a):   # S-75 step 2 · WhatsApp's button and typed yes too (yes.py)
         return _refuse(422, "approval_void", YS.APPROVAL_VOID)
     brief = call["brief"]
     if C._sha256hex(C._canonical(brief)) != call["brief_sha256"]:
@@ -742,7 +748,7 @@ async def place(call_id: str, request: Request):
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
     now = NOW()
-    approval = {"by": account, "how": a["how"], "said": a.get("said"), "at": now.isoformat(),
+    approval = {"by": account, "how": a["how"], "said": a.get("said"), **({"from": a.get("from")} if a.get("how") == "escalation_plan" else {}), "at": now.isoformat(),
                 "read_back_sha256": call["read_back_sha256"], "brief_sha256": call["brief_sha256"]}
     try:
         claimed = await CALL_STORE.claim(account, call_id, approval, now, now - APPROVAL_WINDOW, cap(), cap_window(now), account_cap())

@@ -481,7 +481,12 @@ async def no_reply_offers(now: datetime) -> List[dict]:
                                      "local_day": now.astimezone(ZoneInfo(tz)).date(), "status_at_send": b.get("status")})
             if sid is None:
                 continue
-            outcome = await GW.offer_no_reply_call(ch, b, row)
+            from . import escalation as ESC
+            email = await LR.LADDER_STORE.get_email(account, str(b.get("intent_id") or "")) if b.get("intent_id") else None
+            if email and ESC.has_plan(email.get("read_back_lines")):   # Sasha 132 · the guest's one yes covered this call
+                outcome = await GW.auto_call_from_email(ch, b, str(email["email_id"]))
+            else:
+                outcome = await GW.offer_no_reply_call(ch, b, row)
             await STORE.finish(sid, "whatsapp_session" if outcome == "sent" else "skipped", outcome)
             done.append({"kind": "no_reply_call", "booking": b["id"], "outcome": outcome})
     return done
@@ -510,6 +515,12 @@ async def tap_offers(now: datetime) -> List[dict]:
         sid = await STORE.claim({"account_id": l["account_id"], "trip_item_id": l["trip_item_id"], "kind": "tap_expired",
                                  "local_day": now.astimezone(ZoneInfo(tz)).date(), "status_at_send": "link_sent"})
         if sid is None:
+            continue
+        from . import escalation as ESC
+        if ESC.has_plan(l.get("read_back_lines")) and "email" in kinds:   # Sasha 132 · the guest's one yes covered this email
+            outcome = await GW.auto_email_from_link(ch, l, row)
+            await STORE.finish(sid, "whatsapp_session" if outcome == "sent" else "skipped", f"auto: {outcome}")
+            done.append({"kind": "tap_expired", "booking": l["trip_item_id"], "outcome": f"auto: {outcome}"})
             continue
         b = {"id": l["trip_item_id"], "venue": l["venue"], "date": l["local_date"].isoformat(), "time": l["local_time"].strftime("%H:%M"),
              "party": l.get("party_size"), "read_id": l["read_id"]}

@@ -140,13 +140,18 @@ def _h(hours: float) -> str:
 
 
 def _then(v: Venue, route: str) -> Optional[str]:
-    """The next step, said now — only promised by the caller when that escalation is switched on."""
-    lang = "" if v.scripted else ", in English"
-    if route == "one_tap" and (v.email or (v.phone and v.calls_on)):
-        nxt = "email them" if v.email else f"call them{lang}"
-        return f"If it isn't booked there within {int(tap_window_min())} minutes, I'll ask you here whether to {nxt}."
+    """Sasha 132 · THE PLAN the guest's one yes covers, in plain words (escalation.plan_line) — or None when there is no
+    further step. The caller puts it in the read-back, so the yes is given to it."""
+    from .escalation import plan_line
+    lang = "" if v.scripted else " (in English)"
+    call = f"if they don't reply within {_h(reply_hours())}, I'll call them{lang}"
+    if route == "one_tap" and v.email:
+        return plan_line(f"If you haven't booked on their page within {int(tap_window_min())} minutes, I'll email them",
+                         call if v.phone and v.calls_on else None)
+    if route == "one_tap" and v.phone and v.calls_on:
+        return plan_line(f"If you haven't booked on their page within {int(tap_window_min())} minutes, I'll call them{lang}", None)
     if route == "email" and v.phone and v.calls_on:
-        return f"If they haven't replied within {_h(reply_hours())}, I'll ask you here whether to call them{lang}."
+        return plan_line(call[0].upper() + call[1:], None)
     return None
 
 

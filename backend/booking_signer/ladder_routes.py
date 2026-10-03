@@ -248,6 +248,13 @@ async def call_venue_from_read(account: str, read_id: Any, fact_index: Any = Non
                        number_kind=f.get("source_kind"), place_id=PT.place_id_of(read), language_why=why)
 
 
+def _plan_of(body: Any) -> Optional[str]:
+    """Sasha 132 · a plan line, only in the shape escalation.plan_line makes (it names that it is covered by the yes)."""
+    from . import escalation as ESC
+    p = body.get("plan_line") if isinstance(body, dict) else None
+    return p.strip() if isinstance(p, str) and ESC.MARK in p and len(p) <= 400 else None
+
+
 # ── the email rung ────────────────────────────────────────────────────────────────────────────
 
 @router.post("/emails")
@@ -282,6 +289,9 @@ async def prepare_email(request: Request):
     f = chosen[1]
     email = E.compose(lang, read["name"], f["value"], p, email_id)
     lines = E.read_back(email, read["name"], f["source_label"])
+    plan = _plan_of(body)   # Sasha 132 · the escalation the guest's ONE yes covers, said before the yes, in its hash
+    if plan:
+        lines.insert(len(lines) - 1, plan)
     if lang not in E.TEMPLATE_LANGS:   # Sasha 130 · e.g. Vietnam: written in English, and said so before the yes
         from .i18n import emails as I18N   # CR 7 i18n · …unless an i18n template is usable: then it says THAT
         lines.insert(1, I18N.read_back_line(lang, f["value"])
@@ -319,8 +329,13 @@ async def send_email(email_id: str, request: Request):
     if body.get("read_back_sha256") != e["read_back_sha256"]:
         return _refuse(422, "approval_void", "the approval was given to different words from this email's read-back")
     a = body.get("approval") if isinstance(body.get("approval"), dict) else {}
+    if a.get("how") == "escalation_plan":   # Sasha 132 · under the guest's ONE yes to the whole plan — verified from our records
+        from . import escalation as ESC
+        why_not = await ESC.verify(account, a, str(e.get("read_id")))
+        if why_not:
+            return _refuse(422, "approval_void", why_not)
     # S-66 (EU) step 6 · a yes TYPED in the chat counts too — with the guest's exact words, kept with the approval
-    if not YS.approval_ok(a):   # S-75 step 2 · WhatsApp's button and typed yes too (yes.py)
+    elif not YS.approval_ok(a):   # S-75 step 2 · WhatsApp's button and typed yes too (yes.py)
         return _refuse(422, "approval_void", YS.APPROVAL_VOID)
     if E.email_sha256(e["email"]) != e["email_sha256"]:
         return _refuse(409, "email_changed", "the stored email no longer matches what was read back; nothing was sent")
@@ -334,7 +349,8 @@ async def send_email(email_id: str, request: Request):
         return refused
     now = NOW()
     approval = {"by": account, "how": a["how"], "said": a.get("said"), "at": now.isoformat(),
-                "read_back_sha256": e["read_back_sha256"], "email_sha256": e["email_sha256"]}
+                "read_back_sha256": e["read_back_sha256"], "email_sha256": e["email_sha256"],
+                **({"from": a.get("from")} if a.get("how") == "escalation_plan" else {})}   # Sasha 132 · which yes covered it
     try:
         claimed = await LADDER_STORE.claim_email(account, email_id, approval, now, now - APPROVAL_WINDOW, email_cap(), cap_window(now),
                                                  account_email_cap())
@@ -550,6 +566,9 @@ async def prepare_link(request: Request):
     link_id = str(uuid.uuid4())
     forward_to = E.act_address(link_id) if inbound_ready() else None
     lines = SL.read_back(read["name"], link, p.on, p.at, p.party, forward_to)
+    plan = _plan_of(body)   # Sasha 132 · the escalation the guest's ONE yes covers — this link is made only after that yes
+    if plan:
+        lines.append(plan)
     country = read.get("country")
     tz = V.COUNTRIES[country][3] if country in V.COUNTRIES else "UTC"
     lang = V.COUNTRIES[country][2] if country in V.COUNTRIES else "en"

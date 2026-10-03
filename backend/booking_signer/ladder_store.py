@@ -61,8 +61,12 @@ class MemoryLinks:
         """Sasha 131 · one-tap pages the guest hasn't pressed on (offered / opened) since before `before`."""
         return [{"link_id": k, "account_id": l["account_id"], "trip_item_id": l["trip_item_id"], "read_id": str(l["read_id"]),
                  "created_at": l["created_at"], "venue": l["venue_name"], "local_date": l.get("local_date"), "local_time": l.get("local_time"),
-                 "local_timezone": l.get("local_timezone"), "party_size": l.get("party_size")}
-                for k, l in self.links.items() if l["status"] in ("offered", "link_sent") and l["created_at"] < before]
+                 "local_timezone": l.get("local_timezone"), "party_size": l.get("party_size"), "read_back_lines": l.get("read_back_lines")}
+                for k, l in self.links.items() if l["status"] in ("offered", "link_sent") and l["created_at"] < before
+                and self.trip_items.get(l["trip_item_id"], {}).get("status") != "cancelled"
+                # Sasha 132 · already followed by an email for the same venue: the escalation happened once
+                and not any(e.get("account_id") == l["account_id"] and str(e.get("read_id")) == str(l["read_id"])
+                            and e.get("created_at") and e["created_at"] > l["created_at"] for e in self.emails.values())]
 
     async def guest_booked(self, account_id, link_id, said, now):
         l = self.links.get(link_id)
@@ -160,8 +164,11 @@ class PostgresLinks:
         rows = await self._run_links(lambda c: c.fetch(
             "select l.link_id, l.account_id, l.trip_item_id, l.read_id, l.created_at, t.provider_name as venue, "
             "(t.date_time at time zone t.local_timezone)::date as local_date, (t.date_time at time zone t.local_timezone)::time as local_time, "
-            "t.local_timezone, t.party_size from booking_links l join trip_items t on t.id = l.trip_item_id "
-            "where l.status in ('offered','link_sent') and l.created_at < $1 and t.status <> 'cancelled' and t.date_time > now()", before))
+            "t.local_timezone, t.party_size, l.read_back_lines from booking_links l join trip_items t on t.id = l.trip_item_id "
+            "where l.status in ('offered','link_sent') and l.created_at < $1 and t.status <> 'cancelled' and t.date_time > now() "
+            # Sasha 132 · already followed by an email for the same venue: the escalation happened once
+            "and not exists (select 1 from booking_emails e where e.account_id = l.account_id and e.read_id = l.read_id "
+            "and e.created_at > l.created_at)", before))
         return [{k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in dict(r).items()} for r in rows]
 
     async def guest_booked(self, account_id, link_id, said, now):

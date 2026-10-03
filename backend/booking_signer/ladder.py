@@ -89,9 +89,9 @@ def choose(read: dict, host_of=lambda u: None, account: Optional[str] = None) ->
 
     i, phone = first("phone")
     if phone:
-        lang = COUNTRIES.get(read.get("country") or "", (None, None, None, None))[2]
-        why = calls_ready(account) or (None if lang in C.LANGUAGES else
-                                f"I can't yet make a call in the language spoken there ({lang or 'unknown country'})")
+        # Sasha 130 · a language with no call script is called in English (English abroad, Sasha 128 — said in the
+        # read-back), so the language no longer closes the rung; only calls being off does
+        why = calls_ready(account)
         rungs.append(Rung("phone", why is None, i, phone["value"], phone["source_label"], why))
 
     i, email = best_email(facts) or (None, None)

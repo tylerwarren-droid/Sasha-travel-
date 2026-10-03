@@ -1461,8 +1461,9 @@ def decision_of(rd: dict, prefer: Optional[str] = None):
     from . import calls as C, decide as D, venue_read as V
     rungs = rd.get("rungs") or {}
     lang = (V.COUNTRIES.get(rd.get("country") or "") or (None, None, "en"))[2]
-    link = (rungs.get("link") or {}).get("value") or ""
-    return D.decide(D.Venue(form="form" in rungs, platform=(V.platform_of(link) or "their booking page") if "link" in rungs else None,
+    link = (rungs.get("link") or {}).get("value") or ""   # the link rung's value is the platform's NAME ("CoverManager")
+    name = (V.platform_of(link) if link.startswith("http") else link) or "an online booking platform"
+    return D.decide(D.Venue(form="form" in rungs, platform=name if "link" in rungs else None,
                             phone="phone" in rungs, email="email" in rungs, open_now=rd.get("open_now"), opens_at=rd.get("opens_at"),
                             scripted=lang in C.LANGUAGES, calls_on=True, language_label=C.LANGUAGE_NAMES.get(lang, "")), prefer)
 

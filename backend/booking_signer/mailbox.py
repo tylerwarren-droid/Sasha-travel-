@@ -230,7 +230,8 @@ def offer(kind: str, facts: dict, row: Optional[dict], now: Optional[datetime] =
     when = (f"{SN.day_words(at[:10])} {at[11:16]}".strip() if at else "") or "the date shown"
     party = f" for {facts['party']}" if facts.get("party") else ""
     ref = f" (ref {facts['reference']})" if facts.get("reference") else ""
-    if row and kind == "confirmation" and row.get("status") in ("requested", "unclear", "attempting", "pending", "link_sent", "proposed"):
+    if row and kind == "confirmation" and row.get("status") in ("requested", "unclear", "attempting", "pending", "link_sent", "proposed",
+                                                                      "guest_booked"):   # Sasha 130 · one-tap: the guest pressed; the venue's email confirms
         return "confirm", f"{venue}'s email confirms {when}{party}{ref}. Mark it confirmed?"
     if row and kind == "cancellation" and row.get("status") not in ("cancelled",):
         return "cancel", f"{venue}'s email says your {when} booking is cancelled. Update it?"

@@ -240,10 +240,12 @@ class Chooser(unittest.TestCase):
             self.assertIsNone(L.emails_ready())
         self.assertEqual(E.KEY_VAR, "SASHA_RESEND_API_KEY")
 
-    def test_a_country_whose_language_she_cannot_speak_is_not_a_phone_rung(self):
+    def test_a_country_whose_language_she_cannot_speak_is_still_a_phone_rung_in_english(self):
+        """Sasha 130 (supersedes the old language gate) · Vietnam has no call script: the call is in English (English abroad,
+        Sasha 128 — said in the read-back before the yes), so the rung is open whenever calls are."""
         phone = L.choose(a_read("phone", country="VN"))["rungs"][0]
-        self.assertFalse(phone["available"])
-        self.assertIn("vi", phone["why_not"])
+        self.assertTrue(phone["available"])
+        self.assertIsNone(phone["why_not"])
 
 
 # ── 3 · the email: exact words, hashed, Resend's answer READ, replies by address ─────────────

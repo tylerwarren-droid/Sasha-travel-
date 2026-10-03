@@ -204,3 +204,17 @@ class NoReplyCall(TG.Base):
             self.now = datetime(2026, 10, 3, *hhmm, tzinfo=timezone.utc)
             TG.run(GW.STORE.put_state(GW.wa_key(TG.GUEST), {"history": [], "pending": None, "last_inbound_at": self.now, "link_tries": []}))
             self.assertEqual(TG.run(PR.no_reply_offers(self.now)), [])
+
+
+class OneTapFiling(unittest.TestCase):
+    def test_a_one_tap_booking_the_guest_pressed_is_confirmed_by_the_venues_email(self):
+        """Rehearsal, 3 Oct: matched by venue and time, but 'guest_booked' wasn't offered — the confirmation was never filed."""
+        from booking_signer import mailbox as MB
+        off = MB.offer("confirmation", {"venue": "Sasha Test Venue", "at": "2026-10-07T21:00", "party": 2, "reference": "TV-30D27C"},
+                       {"venue": "Sasha Test Venue", "status": "guest_booked"})
+        self.assertEqual(off[0], "confirm")
+        self.assertIn("(ref TV-30D27C). Mark it confirmed?", off[1])
+
+    def test_the_platform_is_named(self):
+        d = GW.decision_of({"rungs": {"link": {"fact_index": 1, "value": "CoverManager"}}, "country": "ES"})
+        self.assertIn("They book only through CoverManager.", d.reason)

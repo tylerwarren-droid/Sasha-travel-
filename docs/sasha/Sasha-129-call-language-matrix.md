@@ -20,12 +20,12 @@ Bland's docs:
 
 | Code | Language | Bland V2 | Our script | Test call | Venue calls today |
 |---|---|---|---|---|---|
-| en | English | ✅ | ✅ | ⏳ pending (§2) | ✅ (and English abroad) |
-| es | Spanish | ✅ | ✅ (S-33, used live in Madrid) | ⏳ | ✅ |
-| pt | Portuguese | ✅ (Bland: pt-BR voice) | ✅ | ⏳ | ✅ |
-| fr | French | ✅ | ✅ | ⏳ | ✅ |
-| de | German | ✅ | ✅ | ⏳ | ✅ |
-| it | Italian | ✅ | ✅ | ⏳ | ✅ |
+| en | English | ✅ | ✅ | ✅ connected, answered, ~1 min; Bland heard the reply (f4ec1671). Voice: founder's verdict | ✅ (and English abroad) |
+| es | Spanish | ✅ | ✅ (S-33, used live in Madrid) | ✅ connected, answered, ~1 min; Bland heard the reply (bf660be8). Voice: founder's verdict | ✅ |
+| pt | Portuguese | ✅ (Bland: pt-BR voice) | ✅ | ✅ connected, answered, ~1 min; Bland heard the reply (e5e4c099). Voice: founder's verdict | ✅ |
+| fr | French | ✅ | ✅ | ✅ connected, answered, ~1 min; Bland heard the reply (0724b62e). Voice: founder's verdict | ✅ |
+| de | German | ✅ | ✅ | ✅ connected, answered, ~1 min; Bland heard the reply (fff578fc). Voice: founder's verdict | ✅ |
+| it | Italian | ✅ | ✅ | ✅ connected, answered, ~1 min; Bland heard the reply (3b2ce33d). Voice: founder's verdict | ✅ |
 | hi | Hindi | ✅ | ❌ | ⏳ | ❌, English abroad instead |
 | ja | Japanese | ✅ | ❌ | ⏳ | ❌, English abroad instead |
 | ko | Korean | ✅ | ❌ | ⏳ | ❌, English abroad instead |
@@ -64,23 +64,29 @@ The candidates below are named from their **public documentation**:
 **The other half:** recognising a Vietnamese "yes" also needs **speech-to-text in Vietnamese**, and the recap and yes
 words (`recap.py`) in Vietnamese. Speaking it is half the work.
 
-## 2. The 17-language test calls: not placed. Why, and what's needed
+## 2. The test calls
 
-**Blocked: there is no "own line" to call.**
-- `SASHA_TEST_CALL_NUMBER` is **not set** on Railway, so the test line doesn't exist on the server today.
-- Sasha's own Twilio number (`SASHA_CALLER_ID`, +44) is the number calls go **out** from. It has no answering setup to
-  receive and listen to a test call.
+### 2.1 The 6 scripted languages: placed on 3 Oct, 13:08–13:17 (Sasha 130)
 
-**Needed to run it**
-1. **The founder sets the test line** in Railway as `SASHA_TEST_CALL_NUMBER`. It is a phone he controls, and he sets
-   the value himself; it is not given in chat.
-2. **Someone answers and listens.** It's 17 short calls, about 30 s each. The test is whether the voice speaks the
-   language intelligibly. A transcript can't prove that: Bland's transcript of Sasha's side is the text we sent, not
-   what was heard.
-3. **A fixed test sentence per language.** It is the AI disclosure plus one line. For the 11 languages without a script
-   I would write it myself, marked unreviewed. It is used **only** on our own line, never at a venue.
+- **Line:** the founder's own mobile, set as `SASHA_TEST_CALL_NUMBER` on 3 Oct, with his approval.
+- **Each call:** one call per language, with the script's real opening sentence (AI disclosure first) and a 1-minute
+  cap. Nothing was recorded or booked.
+- **Outcome:** all 6 were placed by Bland, answered and completed, at about 1 minute each.
+- **What Bland heard:** Bland transcribed the founder's replies in each language: "Sí. Correcto." / "É possível.
+  Correto." / "Oui." / "Ja, ja." / "è corretto".
+- **What this does not show:** the transcript proves the call connected and Bland understood the replies. It doesn't
+  show how the voice sounded. **The founder's ear is the verdict** for each language: ✅ / ⚠ / ❌.
 
-**Proposed run:** one sitting. The calls go to our line in sequence, with a pause between them. The listener marks each
-language ✅ / ⚠ / ❌ in this matrix, and each call's Bland id is recorded.
+Bland call ids: en f4ec1671 · es bf660be8 · pt e5e4c099 · fr 0724b62e · de fff578fc · it 3b2ce33d.
 
-**Cost:** Bland bills per minute; 17 calls of about 30 s is roughly 9 minutes in total.
+### 2.2 The other 11: later
+
+**The line exists now** (§2.1).
+
+**Still needed**
+1. **A fixed test sentence per language.** It is the AI disclosure plus one line, in hi, ja, ko, nl, pl, ru, tr, zh,
+   ar, id and sv. CR 7 is drafting the disclosures in `wordings.DISCLOSURE`, and the calls will use them verbatim, so a
+   venue never hears one disclosure and reads another. They are marked unreviewed and used **only** on our own line.
+2. **A sitting with the founder:** 11 calls of about 1 minute each. He marks each ✅ / ⚠ / ❌ here.
+
+**Cost:** Bland bills per minute; about 11 minutes in total.

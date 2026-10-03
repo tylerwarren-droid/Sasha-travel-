@@ -1,0 +1,119 @@
+reset: 200 Demo reset: test-venue, demo-spa and TEST flight and hotel bookings cancelled (their calendar events go within a minute); real bookings untouched.
+  >>> 'a hotel in Hoi An, Vietnam from 14 to 16 November for 2'
+
+### H1 Hoi An WhatsApp: 'a hotel in Hoi An, Vietnam from 14 to 16 November for 2' → photo cards — 7.1s 
+  [text] Hotels for 2 nights from Saturday 14 November, 2 people. For the one you pick: a TEST booking (no hotel contacted), or a real request to the hotel.
+  [text] Hotel in Hoi An, Vietnam — 20 places found. From Google Maps; nobody has been contacted.
+  [text] Sasha's pick · Tohe Riverside Lodge Hoi An · ★ 5.0 (72 Google reviews)
+  [text] Phước linh homestay · ★ 5.0 (21 Google reviews)
+  [photo] THE SAGA HOTEL HOI AN · ★ 4.9 (4026 Google reviews)
+  [ask] Which one?  ['Tohe Riverside Lodge Hoi An', 'Phước linh homestay', 'THE SAGA HOTEL HOI AN']
+  >>> '1'
+
+### H1 Hoi An pick → the two honest choices — 1.2s 
+  [ask] Tohe Riverside Lodge Hoi An: make a TEST booking (test booking: no hotel contacted; nothing reserved or charged), or ask the hotel for a real room?  ['Test booking', 'Request from hotel']
+  >>> 'Test booking'
+
+### H1 Hoi An 'Test booking' → the read-back — 1.2s 
+  [text] Exactly what I'll do:
+• ⚠ Test booking: no hotel contacted — nothing is reserved at Tohe Riverside Lodge Hoi An, and nothing is charged.
+• Tohe Riverside Lodge Hoi An, Hoi An, Vietnam: check-in 2026-11-14, check-out 2026-11-16 — 2 nights, 2 people.
+• Test price €240.00 (2 × €120) — a placeholder, not the hotel's rate.
+• Payment: one touch on Stripe's TEST page — Apple Pay or your phone's saved card; nothing is charge
+  [ask] Make the TEST booking at Tohe Riverside Lodge Hoi An? (No hotel contacted.)  ['Yes, test-book it', 'No']
+  >>> 'Yes, test-book it'
+
+### H1 Hoi An yes → the one-touch TEST payment page (real Stripe test session) — 2.1s 
+  [text] One touch: pay the TEST price (€240.00) on Stripe's test page — Apple Pay or your phone's saved card; nothing is charged and no hotel is contacted.
+https://checkout.stripe.com/c/pay/cs_test_…
+
+### H1 Hoi An the TEST booking → itinerary — 2.6s · on the desktop list after 0.8s
+  [text] [STOOD IN for the payment] recorded TEST-5E40DD · bookings list shows: 'Tohe Riverside Lodge Hoi An (TEST booking — no hotel contacted)' — “Test booking: no hotel contacted”
+
+### H1 Hoi An the calendar — 17.4s event appeared
+  >>> 'a hotel in Madrid from 20 to 22 October for 2'
+
+### H2 Madrid WhatsApp: 'a hotel in Madrid from 20 to 22 October for 2' → photo cards — 5.1s 
+  [text] Hotels for 2 nights from Tuesday 20 October, 2 people. For the one you pick: a TEST booking (no hotel contacted), or a real request to the hotel.
+  [text] Hotel in Madrid — 20 places found. From Google Maps; nobody has been contacted.
+  [text] Sasha's pick · ARTIEM Madrid · ★ 4.8 (1840 Google reviews)
+  [photo] Dear Hotel Madrid · ★ 4.7 (7780 Google reviews)
+  [text] UMusic Hotel Madrid · ★ 4.6 (1454 Google reviews)
+  [ask] Which one?  ['ARTIEM Madrid', 'Dear Hotel Madrid', 'UMusic Hotel Madrid']
+  >>> '1'
+
+### H2 Madrid pick → the two honest choices — 1.2s 
+  [ask] ARTIEM Madrid: make a TEST booking (test booking: no hotel contacted; nothing reserved or charged), or ask the hotel for a real room?  ['Test booking', 'Request from hotel']
+  >>> 'Test booking'
+
+### H2 Madrid 'Test booking' → the read-back — 1.3s 
+  [text] Exactly what I'll do:
+• ⚠ Test booking: no hotel contacted — nothing is reserved at ARTIEM Madrid, and nothing is charged.
+• ARTIEM Madrid, Madrid: check-in 2026-10-20, check-out 2026-10-22 — 2 nights, 2 people.
+• Test price €240.00 (2 × €120) — a placeholder, not the hotel's rate.
+• Payment: one touch on Stripe's TEST page — Apple Pay or your phone's saved card; nothing is charged. I never see your card.
+• It goes i
+  [ask] Make the TEST booking at ARTIEM Madrid? (No hotel contacted.)  ['Yes, test-book it', 'No']
+  >>> 'Yes, test-book it'
+
+### H2 Madrid yes → the one-touch TEST payment page (real Stripe test session) — 1.9s 
+  [text] One touch: pay the TEST price (€240.00) on Stripe's test page — Apple Pay or your phone's saved card; nothing is charged and no hotel is contacted.
+https://checkout.stripe.com/c/pay/cs_test_…
+
+### H2 Madrid the TEST booking → itinerary — 2.7s · on the desktop list after 0.9s
+  [text] [STOOD IN for the payment] recorded TEST-902B53 · bookings list shows: 'ARTIEM Madrid (TEST booking — no hotel contacted)' — “Test booking: no hotel contacted”
+
+### H2 Madrid the calendar — 28.6s event appeared
+  >>> 'a hotel in Madrid from 20 to 22 October for 2'
+
+### H3 Madrid WhatsApp: 'a hotel in Madrid from 20 to 22 October for 2' → photo cards — 5.6s 
+  [text] Hotels for 2 nights from Tuesday 20 October, 2 people. For the one you pick: a TEST booking (no hotel contacted), or a real request to the hotel.
+  [text] Hotel in Madrid — 20 places found. From Google Maps; nobody has been contacted.
+  [text] Sasha's pick · ARTIEM Madrid · ★ 4.8 (1840 Google reviews)
+  [photo] Dear Hotel Madrid · ★ 4.7 (7780 Google reviews)
+  [text] UMusic Hotel Madrid · ★ 4.6 (1454 Google reviews)
+  [ask] Which one?  ['ARTIEM Madrid', 'Dear Hotel Madrid', 'UMusic Hotel Madrid']
+  >>> '1'
+
+### H3 Madrid pick → the two honest choices — 1.2s 
+  [ask] ARTIEM Madrid: make a TEST booking (test booking: no hotel contacted; nothing reserved or charged), or ask the hotel for a real room?  ['Test booking', 'Request from hotel']
+  >>> 'Request from hotel'
+
+### H3 Madrid 'Request from hotel' → the real path (stopped before any yes) — 13.1s 
+  [text] I'll email them — email is the only way they publish.
+  [text] Exactly what I'll send:
+• I'll email ARTIEM Madrid Hotel at madrid.recepcion@artiemhotels.com — the address on their website, artiemhotels.com — from Sasha (Kanoe) <sasha@booking.kanoe.ai>.
+• You're copied privately (BCC) at guest@example.com: you'll get a copy of what I send, and they won't see your address — they'll only have mine.
+• Their reply comes to me at act-…@booking.kanoe.ai;
+  [ask] Book ARTIEM Madrid for 2, Tuesday 20 October at 15:00, under Warren?  ['Yes, book it', 'No']
+
+### W web 'Reserve (TEST)': Tohe Riverside Lodge Hoi An — 1.5s 
+  [text] [web prepare] HTTP 200: ⚠ Test booking: no hotel contacted — nothing is reserved at Tohe Riverside Lodge Hoi An, and nothing is charged. | Tohe Riverside Lodge Hoi An, Hoi An: check-in 2026-11-14, check-out 2026-11-16 — 2 nights, 2 people. | Test price €240.00 (2 × €120) — a placeholder, not the hotel's rate. | Payment: one touch on Stripe's TEST page — Apple Pay or your phone's saved card; nothing is charged. I neve
+  [text] [web pay] HTTP 200: a Stripe TEST checkout page was made
+  [text] [web status, unpaid] HTTP 200: awaiting_payment
+
+### W web 'Reserve (TEST)': Hotel Urban — 1.4s 
+  [text] [web prepare] HTTP 200: ⚠ Test booking: no hotel contacted — nothing is reserved at Hotel Urban, and nothing is charged. | Hotel Urban, Madrid: check-in 2026-10-20, check-out 2026-10-22 — 2 nights, 2 people. | Test price €240.00 (2 × €120) — a placeholder, not the hotel's rate. | Payment: one touch on Stripe's TEST page — Apple Pay or your phone's saved card; nothing is charged. I never see your card. | It goes in yo
+  [text] [web pay] HTTP 200: a Stripe TEST checkout page was made
+  [text] [web status, unpaid] HTTP 200: awaiting_payment
+
+reset: 200 {'ok': True, 'test_venue_bookings_cancelled': 2, 'gmail_finds_withdrawn': 0, 'reminder_ledger_cleared': 0, 'demo_shop_orders_cleared': 0, 'demo_spa_bookings_cleared': 0, 'say': 'Demo reset: test-venue, demo-spa and TEST flight and hotel bookings cancelled (their calendar events go within a minute); real bookings untouched.'}
+
+TIMINGS:
+     7.1s  H1 Hoi An WhatsApp: 'a hotel in Hoi An, Vietnam from 14 to 16 November for 2' → photo cards 
+     1.2s  H1 Hoi An pick → the two honest choices 
+     1.2s  H1 Hoi An 'Test booking' → the read-back 
+     2.1s  H1 Hoi An yes → the one-touch TEST payment page (real Stripe test session) 
+     2.6s  H1 Hoi An the TEST booking → itinerary · on the desktop list after 0.8s
+    17.4s  H1 Hoi An the calendar event appeared
+     5.1s  H2 Madrid WhatsApp: 'a hotel in Madrid from 20 to 22 October for 2' → photo cards 
+     1.2s  H2 Madrid pick → the two honest choices 
+     1.3s  H2 Madrid 'Test booking' → the read-back 
+     1.9s  H2 Madrid yes → the one-touch TEST payment page (real Stripe test session) 
+     2.7s  H2 Madrid the TEST booking → itinerary · on the desktop list after 0.9s
+    28.6s  H2 Madrid the calendar event appeared
+     5.6s  H3 Madrid WhatsApp: 'a hotel in Madrid from 20 to 22 October for 2' → photo cards 
+     1.2s  H3 Madrid pick → the two honest choices 
+    13.1s  H3 Madrid 'Request from hotel' → the real path (stopped before any yes) 
+     1.5s  W web 'Reserve (TEST)': Tohe Riverside Lodge Hoi An 
+     1.4s  W web 'Reserve (TEST)': Hotel Urban 

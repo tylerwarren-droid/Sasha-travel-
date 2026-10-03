@@ -256,6 +256,9 @@ class MemoryLadderStore(MemoryLinks):
     async def account_email(self, account_id: str) -> Optional[str]:
         return self.account_emails.get(account_id)
 
+    async def account_by_email(self, email: str) -> Optional[str]:
+        return next((a for a, e in self.account_emails.items() if e.lower() == (email or "").lower()), None)
+
     # ── Sasha 74 · the follow-up after a call, and the replies that move a reservation ──
     async def put_followup_email(self, row: dict, trip_item_id: str) -> None:
         if row["email_id"] in self.emails:
@@ -420,6 +423,11 @@ class PostgresLadderStore(PostgresLinks):
             "read_back_sha256, status, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8,'awaiting_approval',$9)",
             uuid.UUID(row["email_id"]), uuid.UUID(row["account_id"]), uuid.UUID(trip_item_id), uuid.UUID(row["read_id"]), row["email"],
             row["email_sha256"], row["read_back_lines"], row["read_back_sha256"], row["created_at"]))
+
+    async def account_by_email(self, email):
+        """Sasha 118 · the account whose verified sign-in address this is (a guest forwarding a confirmation)."""
+        r = await self._run(lambda c: c.fetchval("select id from auth.users where lower(email) = lower($1) and email_confirmed_at is not null", email))
+        return str(r) if r else None
 
     async def account_email(self, account_id):
         """The account's own address in Supabase Auth — verified by its magic link. None for the demo account."""

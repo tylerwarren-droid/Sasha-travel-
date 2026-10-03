@@ -388,15 +388,20 @@ async def inbound(request: Request):
         if act is not None and not await LADDER_STORE.email_exists(act) and await LADDER_STORE.link_exists(act):
             return await _link_confirmation(act, pid, data, now)
         if act is None:
-            # Sasha 90 (a) · a written confirmation she asked for on the call, sent to her own address: onto its booking
-            from . import inbound_phone as _IP
+            # Sasha 90 (a) · a written confirmation sent to her own address: onto its booking. Sasha 118 · any booking she made
+            # (call, form, email) — and a GUEST forwarding the venue's confirmation from their account's own address (written.py)
+            from . import inbound_phone as _IP, written as W
             if _IP.STORE is not None:
                 text, _ = await _reply_text(pid)
                 try:
-                    if await _IP.on_written_email(pid, sender, data.get("subject"), text, now):
-                        return {"ok": True, "matched": True, "as": "written confirmation after a call"}
+                    guest = await W.account_of_email(sender)
+                    got = await W.file(pid, "email", sender, data.get("subject"), text, now, account=guest, forwarded=bool(guest))
+                    if got:
+                        return {"ok": True, "matched": True, "as": "a confirmation the guest forwarded" if guest else "written confirmation"}
                 except StorageUnavailable as ex:   # it is still kept: quarantined below, and the reason logged
-                    log.error("[inbound] %s could not be matched to a call (%s); quarantined instead", pid, ex.detail)
+                    log.error("[inbound] %s could not be matched to a booking (%s); quarantined instead", pid, ex.detail)
+                except Exception as ex:   # e.g. sql/027 not yet applied: booking_inbound refuses 'email' — kept, quarantined
+                    log.error("[inbound] %s matched but not filed (%s: %s); quarantined instead", pid, type(ex).__name__, ex)
         if act is None or not await LADDER_STORE.email_exists(act):
             await LADDER_STORE.quarantine({"provider_id": pid, "to_addrs": data.get("to"), "from_addr": data.get("from"),
                                            "subject": data.get("subject"), "received_at": now,

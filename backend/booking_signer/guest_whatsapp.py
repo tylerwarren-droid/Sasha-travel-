@@ -661,6 +661,8 @@ async def _new_request(ctx: dict, body: str) -> None:
     if _RECEIPTS.search(body):
         await _receipts(ctx)
         return
+    if await _forwarded_confirmation(ctx, body):   # Sasha 118 · the venue's confirmation, forwarded by the guest
+        return
     from . import invitations as IV   # S-80 · "book dinner with Jon this week"
     inv_req = IV.invite_request(body, ctx["now"])
     if inv_req is not None and IV.STORE is not None:
@@ -685,6 +687,38 @@ async def _new_request(ctx: dict, body: str) -> None:
         out.text(ASK_ONE)
         return
     out.text(OUT_OF_SCOPE.format(web=web_url()))
+
+
+async def _forwarded_confirmation(ctx: dict, body: str) -> bool:
+    """Sasha 118 (3) · a guest forwards (or pastes) a venue's confirmation: filed on the ONE booking it names (written.py),
+    read with the field checks, and answered here. Not a confirmation → False (the turn goes on)."""
+    from . import mailbox as MB, written as W
+    if len(body or "") < 40 or not MB._CONFIRM.search(body or "") or not MB._when(body, ctx["now"]):
+        return False
+    if HO.booking_handoff(body, []) is not None:   # a new request that happens to say "your booking" is a request
+        return False
+    now, out = ctx["now"], ctx["out"]
+    sid = "wa-fwd-" + hashlib.sha256(f"{ctx['account']}|{body}".encode()).hexdigest()[:24]
+    try:
+        got = await W.file(sid, "whatsapp", ctx["ch"].get("number_e164"), None, body, now, account=ctx["account"], forwarded=True)
+    except Exception as e:
+        log.error("[guest_whatsapp] a forwarded confirmation was not filed: %s: %s", type(e).__name__, e)
+        got = None
+    if got is None:
+        out.text("That reads like a booking confirmation, but I can't tell which of your bookings it's for — it needs their "
+                 "reference, or the venue's name and the day. Nothing was changed.")
+        return True
+    when = SN.day_words(got.get("day")) if got.get("day") else ""
+    if got["result"] == "confirmed":
+        out.text(f"✅ Confirmed in writing: {got['venue']}{', ' + when if when else ''}. I've filed their confirmation on it (forwarded by you).")
+    elif got["result"] == "already filed":
+        out.text(f"I already have that confirmation on {got['venue']}.")
+    elif got["result"] == "proposed":
+        out.text(f"⚠ {got['venue']}'s message offers something different — {got['why']}. I've filed it on the booking; nothing else changed.")
+    else:
+        out.text(f"I've filed it on {got['venue']}{', ' + when if when else ''}, but it doesn't confirm the day, time and number "
+                 f"together, so I haven't marked it confirmed.")
+    return True
 
 
 ASK_ONE = ("Shall I book that? Tell me in one message — the kind of place, the area, the day, the time and how many, e.g. "

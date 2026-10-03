@@ -125,6 +125,12 @@ class MemoryInboundStore:
         atts = [a for a in self.calls.attempts if a.get("trip_item_id") == trip_item_id]
         return bool(atts) and str(atts[-1].get("observed_by") or "").startswith(CANCEL_REQUESTED)
 
+    candidates: List[dict] = []
+
+    async def written_candidates(self, since: datetime, account: Optional[str] = None) -> List[dict]:
+        """Sasha 118 · (tests set them) the bookings a written confirmation may belong to."""
+        return [dict(c) for c in self.candidates if account is None or c.get("account_id") == account]
+
     async def booking_calls_since(self, since: datetime) -> List[dict]:
         return [dict(c) for c in self.calls.calls.values() if c.get("created_at") and c["created_at"] >= since
                 and (c.get("brief") or {}).get("purpose", "book") == "book" and c.get("status") in ("answered", "placed")]
@@ -185,6 +191,25 @@ class PostgresInboundStore:
                                                     "order by attempted_at desc limit 1", uuid_(trip_item_id)))
         return str(last or "").startswith(CANCEL_REQUESTED)
 
+    async def written_candidates(self, since, account=None):
+        """Sasha 118 · the bookings a written confirmation may belong to: still ahead (or today), not cancelled; with no
+        account (a venue writing), only bookings SASHA made — a call, a form or an email; with one (the guest forwarding),
+        any of theirs."""
+        rows = await self._run(lambda c: c.fetch(
+            "select t.id as trip_item_id, p.owner_id as account_id, t.provider_name as venue, t.date_time, t.local_timezone, "
+            "t.party_size as party, t.status, t.booking_reference, t.request, k.call_id, k.brief->>'own_reference' as own_reference, "
+            "k.brief->>'name' as guest_name "
+            "from trip_items t join trips p on p.id = t.trip_id "
+            "left join lateral (select call_id, brief from booking_calls z where z.trip_item_id = t.id "
+            "  and coalesce(z.brief->>'purpose', 'book') = 'book' order by z.created_at desc limit 1) k on true "
+            "where t.status not in ('cancelled', 'declined', 'failed') and t.created_at >= $1 "
+            "and (t.date_time is null or t.date_time >= now() - interval '1 day') "
+            "and (($2::uuid is not null and p.owner_id = $2::uuid) or ($2::uuid is null and (k.call_id is not null "
+            "  or exists (select 1 from booking_forms f where f.trip_item_id = t.id) "
+            "  or exists (select 1 from booking_emails e where e.trip_item_id = t.id))))", since, uuid_(account) if account else None))
+        return [{**dict(r), "trip_item_id": str(r["trip_item_id"]), "account_id": str(r["account_id"]),
+                 "call_id": str(r["call_id"]) if r["call_id"] else None} for r in rows]
+
     async def booking_calls_since(self, since):
         return [_row(r) for r in await self._run(lambda c: c.fetch(
             "select call_id, trip_item_id, brief, status, created_at from booking_calls where created_at >= $1 "
@@ -224,6 +249,11 @@ async def sms(request: Request):
     now = NOW()
     try:
         call = await STORE.call_for_number(sender, now - MATCH_WINDOW) if sender else None
+        if call is None and channel == "sms" and body:
+            # Sasha 118 · a venue texting from a number Sasha did not call (the manager's mobile): matched by what it says
+            from . import written as W
+            if await W.file(sid, "sms", sender, None, body, now):
+                return _twiml()
         row = {"provider_id": sid, "channel": channel, "from_key": PT.number_key(sender) if sender else "unknown",
                "to_number": _channel_and_number(p.get("To", ""))[1] or None,
                "body_text": body, "call_id": str(call["call_id"]) if call else None,

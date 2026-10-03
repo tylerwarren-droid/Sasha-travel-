@@ -295,7 +295,9 @@ class PostgresProactiveStore:
             "select i.trip_item_id, i.channel, i.reading->>'result' as result, i.received_at, t.owner_id as account_id "
             "from booking_inbound i join trip_items ti on ti.id = i.trip_item_id join trips t on t.id = ti.trip_id "
             "where i.trip_item_id is not null and i.channel in ('email','sms','whatsapp') "
-            "and i.reading->>'result' in ('confirmed','proposed') and i.received_at > $1 order by i.received_at", since))
+            "and i.reading->>'result' in ('confirmed','proposed') and i.received_at > $1 "
+            # Sasha 118 · a confirmation the guest forwarded on WhatsApp was answered there and then — not told twice
+            "and not (i.channel = 'whatsapp' and coalesce(i.reading->>'forwarded_by', '') = 'guest') order by i.received_at", since))
         return [{**dict(r), "trip_item_id": str(r["trip_item_id"]), "account_id": str(r["account_id"])} for r in rows]
 
     async def delete_account(self, account):

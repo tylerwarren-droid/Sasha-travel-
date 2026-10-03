@@ -38,3 +38,12 @@ class Costs(unittest.TestCase):
         with mock.patch.dict(os.environ, {"SASHA_COST_EMAIL_EUR": "0.001", "SASHA_USD_EUR": "0.9"}):
             s = RC.summary(self.ROWS[:1])
         self.assertIsNone(s["eur_per_confirmed"])
+
+    def test_unknown_costs_never_show_as_zero(self):
+        with mock.patch.dict(os.environ, {"SASHA_COST_EMAIL_EUR": "", "SASHA_COST_WHATSAPP_EUR": "", "SASHA_COST_FORM_EUR": "", "SASHA_USD_EUR": ""}):
+            s = RC.summary(self.ROWS)
+        self.assertIsNone(s["eur_total"])
+        self.assertIsNone(s["eur_per_confirmed"])
+        self.assertIsNone(s["by_route"]["call"]["eur"])
+        self.assertEqual(s["by_route"]["call"]["usd"], 0.056)                      # Bland's own price is still shown, in USD
+        self.assertIn("isn't known", s["note"])

@@ -65,12 +65,14 @@ def summary(rows: List[dict]) -> dict:
     by_route: Dict[str, dict] = {}
     for p in per:
         for r in p["routes"]:
-            x = by_route.setdefault(r["route"], {"count": 0, "eur": 0.0, "confirmed_bookings": 0})
+            x = by_route.setdefault(r["route"], {"count": 0, "eur": 0.0, "confirmed_bookings": 0, "usd": 0.0})
             x["count"] += r["count"]
-            x["eur"] = round(x["eur"] + (r["eur"] or 0), 4)
+            x["eur"] = None if (x["eur"] is None or r["eur"] is None) else round(x["eur"] + r["eur"], 4)   # unknown stays unknown
+            x["usd"] = round(x["usd"] + (r.get("usd") or 0), 4)
             x["confirmed_bookings"] += 1 if p["confirmed"] else 0
-    return {"bookings": len(per), "confirmed": confirmed, "eur_total": total,
-            "eur_per_confirmed": round(total / confirmed, 4) if confirmed else None,
+    # an unknown cost is never counted as zero: with any unknown, the totals are not stated (the parts that are known are)
+    return {"bookings": len(per), "confirmed": confirmed, "eur_total": total if not unknown else None, "eur_known_part": total,
+            "eur_per_confirmed": round(total / confirmed, 4) if confirmed and not unknown else None,
             "incomplete": unknown, "note": (f"{unknown} booking(s) have a route whose cost isn't known (a rate setting not set, or no "
                                             f"EUR rate for Bland's USD) — the totals leave them out" if unknown else None),
             "by_route": by_route, "rows": per}

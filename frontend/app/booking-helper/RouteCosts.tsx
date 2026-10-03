@@ -12,8 +12,8 @@ import { GatedButton } from './GatedButton'
 
 type Route = { route: string; count: number; eur: number | null; usd?: number; source: string }
 type Row = { id: string; venue: string | null; status: string; confirmed: boolean; routes: Route[]; eur: number | null }
-type Out = { bookings: number; confirmed: number; eur_total: number; eur_per_confirmed: number | null; note: string | null;
-  by_route: Record<string, { count: number; eur: number; confirmed_bookings: number }>; rows: Row[] }
+type Out = { bookings: number; confirmed: number; eur_total: number | null; eur_known_part: number; eur_per_confirmed: number | null; note: string | null;
+  by_route: Record<string, { count: number; eur: number | null; usd: number; confirmed_bookings: number }>; rows: Row[] }
 
 const eur = (v: number | null | undefined) => (v === null || v === undefined ? 'unknown' : `€${v.toFixed(3)}`)
 
@@ -32,10 +32,10 @@ export function RouteCosts() {
       {words && <p>{words}</p>}
       {out && (
         <div className="space-y-2 text-sm">
-          <p><strong>{eur(out.eur_per_confirmed)}</strong> per confirmed booking · {out.confirmed} confirmed of {out.bookings} · total {eur(out.eur_total)}</p>
+          <p><strong>{eur(out.eur_per_confirmed)}</strong> per confirmed booking · {out.confirmed} confirmed of {out.bookings} · total {eur(out.eur_total)} (known part {eur(out.eur_known_part)})</p>
           {out.note && <p className="text-xs">{out.note}</p>}
           <ul className="text-xs">
-            {Object.entries(out.by_route).map(([k, v]) => <li key={k}>{k}: {v.count} used · {eur(v.eur)} · in {v.confirmed_bookings} confirmed booking(s)</li>)}
+            {Object.entries(out.by_route).map(([k, v]) => <li key={k}>{k}: {v.count} used · {eur(v.eur)}{v.usd ? ` (Bland: $${v.usd.toFixed(3)})` : ''} · in {v.confirmed_bookings} confirmed booking(s)</li>)}
           </ul>
           <table className="text-xs">
             <thead><tr><th className="text-left">Venue</th><th className="text-left">Outcome</th><th className="text-left">Routes</th><th className="text-left">Cost</th></tr></thead>

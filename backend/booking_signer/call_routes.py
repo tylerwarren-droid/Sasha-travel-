@@ -367,7 +367,7 @@ async def prepare(request: Request):
     if body.get("read_id"):
         # S-36 · the number Magellan READ at the venue — never one in the request
         try:
-            venue = await ladder_routes.call_venue_from_read(account, body["read_id"], body.get("fact_index"))
+            venue = await ladder_routes.call_venue_from_read(account, body["read_id"], body.get("fact_index"), body.get("speak"))
         except C.CallRefused as e:
             return _refuse(422, e.rule, str(e))
         except StorageUnavailable as e:
@@ -384,7 +384,7 @@ async def prepare(request: Request):
         return await _prepare_from_object(account, venue, body, now)
     try:
         p = C.parse_call_particulars(body)
-        built = C.build_call(venue, p, now)
+        built = C.with_language_note(C.build_call(venue, p, now), venue)
     except C.CallRefused as e:
         return _refuse(422, e.rule, str(e))
     if len(built["brief"]["task"]) > 2000:   # Bland's limit; a truncated brief would drop a rule
@@ -558,7 +558,7 @@ async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now
     account is the caller's own, never the object's."""
     if not body.get("read_id"):
         return _refuse(422, "read_required", "a call from a reservation needs the venue read (read_id) its number comes from")
-    extra = set(body) - {"reservation", "read_id", "fact_index", "trip_id"}
+    extra = set(body) - {"reservation", "read_id", "fact_index", "trip_id", "speak"}
     if extra:
         return _refuse(422, "call_malformed", f"a call from a reservation takes only the object and the read; not {sorted(extra)}")
     obj = body["reservation"] if isinstance(body["reservation"], dict) else {}
@@ -567,7 +567,7 @@ async def _prepare_from_object(account: str, venue: C.CallVenue, body: dict, now
                      "venue_name": venue.name, "timezone": venue.timezone}}
     try:
         o = RS.validate(obj)
-        built = R.call_for(o, venue, now, C.number_of(venue))
+        built = C.with_language_note(R.call_for(o, venue, now, C.number_of(venue)), venue)
     except RS.ReservationRefused as e:
         return _refuse(422, e.rule, str(e).split(": ", 1)[-1])
     except C.CallRefused as e:

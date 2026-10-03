@@ -29,7 +29,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
-from typing import Any, Awaitable, Callable, List, Mapping, Optional
+from typing import Any, Awaitable, Callable, List, Mapping, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from . import heard
@@ -65,6 +65,34 @@ class CallVenue:
     venue_ids: Optional[tuple] = None  #: S-54/55 · every id its opt-in records may use (optins.venue_ids_of); None = the test line
     number_kind: Optional[str] = None  #: Sasha 64 · "site" | "places" — a listing number is dialled, never stored (places_terms)
     place_id: Optional[str] = None     #: the listing it was read from, to re-read it at the dial
+    language_why: Optional[str] = None  #: Sasha 128 · set when Sasha speaks other than the country's language, and why
+
+
+#: Sasha 128 · the countries' languages Sasha has no voice script in, by name — for the read-back's reason
+LANGUAGE_NAMES = {"vi": "Vietnamese", "sw": "Swahili", "th": "Thai", "ja": "Japanese", "zh": "Chinese", "ko": "Korean"}
+
+
+def spoken_language(country_lang: str, chosen: Optional[str] = None) -> Tuple[str, Optional[str]]:
+    """Sasha 128 · ENGLISH ABROAD: the language a call is made in, and why when it isn't the country's.
+    · the guest chose one Sasha has a script in → that one ("as you asked");
+    · the country's language has a script → that one;
+    · otherwise → English, the guest's language — the AI disclosure is in English, first, as always.
+    Never a model's translation into a language without a reviewed script."""
+    if chosen and chosen in LANGUAGES and chosen != country_lang:
+        return chosen, f"{LANGUAGES[chosen].label}, as you asked"
+    if country_lang in LANGUAGES:
+        return country_lang, None
+    name = LANGUAGE_NAMES.get(country_lang, f"'{country_lang}'")
+    return "en", f"English: I have no {name} voice, so I'll speak your language — they may not speak English"
+
+
+def with_language_note(built: dict, venue: "CallVenue") -> dict:
+    """The read-back says which language, and why, right after what Sasha will say — before the yes, in the hash."""
+    if not venue.language_why:
+        return built
+    lines = list(built["read_back_lines"])
+    lines.insert(2, f"I'll speak {venue.language_why}.")
+    return {**built, "read_back_lines": lines, "read_back_sha256": _sha256hex("\n".join(lines))}
 
 
 def _env(name: str, default: str = "") -> str:

@@ -225,7 +225,7 @@ async def _optin_refusal(venue_ids, channel: str, scope: Optional[str] = None):
 
 # ── the phone rung's venue, from a read (used by call_routes) ─────────────────────────────────
 
-async def call_venue_from_read(account: str, read_id: Any, fact_index: Any = None) -> C.CallVenue:
+async def call_venue_from_read(account: str, read_id: Any, fact_index: Any = None, speak: Any = None) -> C.CallVenue:
     row = await LADDER_STORE.get_read(account, str(read_id))
     if row is None:
         raise C.CallRefused("read_unknown", "no venue read with that id for this account")
@@ -241,10 +241,11 @@ async def call_venue_from_read(account: str, read_id: Any, fact_index: Any = Non
     country = read.get("country")
     if country not in V.COUNTRIES:
         raise C.CallRefused("venue_country_unknown", "the venue's country is not known, so neither its language nor its day can be")
-    _, _, lang, tz = V.COUNTRIES[country]
+    _, _, country_lang, tz = V.COUNTRIES[country]
+    lang, why = C.spoken_language(country_lang, speak if isinstance(speak, str) else None)   # Sasha 128 · English abroad
     return C.CallVenue(key=f"read:{row['read_id']}", name=read["name"], number_env="", language=lang, timezone=tz,
                        number=f["value"], source=f["source_label"], venue_ids=tuple(O.venue_ids_of(read)),
-                       number_kind=f.get("source_kind"), place_id=PT.place_id_of(read))
+                       number_kind=f.get("source_kind"), place_id=PT.place_id_of(read), language_why=why)
 
 
 # ── the email rung ────────────────────────────────────────────────────────────────────────────

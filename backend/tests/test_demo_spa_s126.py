@@ -174,3 +174,15 @@ class Spa(TG.Base):
         self.assertEqual(GW.combo_times("dinner at 9pm and a massage at 6pm"), {"spa": "18:00", "dinner": "21:00"})
         self.assertTrue(GW.COMBO.search("book a restaurant and a spa in Madrid when I arrive next week"))
         self.assertFalse(GW.COMBO.search("dinner for 2 in Chamberí on Saturday at 9"))
+
+
+import unittest  # noqa: E402
+
+
+class Vietnam(unittest.TestCase):
+    def test_a_country_named_after_the_place_is_the_country(self):
+        """Rehearsal 1: "dinner for 2 in Hoi An, Vietnam" searched for "Vietnam dinner"."""
+        from booking_signer import handoff as HO
+        f = HO.booking_handoff("dinner for 2 in Hoi An, Vietnam tomorrow at 7pm", [])["booking_find"]
+        self.assertEqual((f["what"], f["where"], f["country"]), ("dinner", "Hoi An", "VN"))
+        self.assertEqual(HO.booking_handoff("dinner in Chamberí, somewhere romantic", [])["booking_find"]["what"], "romantic dinner")

@@ -198,6 +198,11 @@ _WHERE_END = re.compile(r"(?:\s+|\s*,\s*)(?:for|on|at|tomorrow|today|tonight|thi
                         r"monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b.*$", re.I)
 
 
+#: Sasha 126 · a country said by name after the place (only the countries venue_read knows)
+COUNTRY_NAMES = {"spain": "ES", "españa": "ES", "portugal": "PT", "france": "FR", "italy": "IT", "italia": "IT", "germany": "DE",
+                 "austria": "AT", "uk": "GB", "united kingdom": "GB", "england": "GB", "ireland": "IE", "vietnam": "VN",
+                 "viet nam": "VN", "kenya": "KE"}
+
 _WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 
@@ -308,8 +313,11 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
     where = _WHERE_END.sub("", raw).strip(" ,")
     country = None
     cm = re.fullmatch(r"(.+?),\s*([A-Za-z]{2})", where)
+    cn = re.fullmatch(r"(.+?),\s*([^,]+)", where)
     if cm:
         where, country = cm[1].strip(), cm[2].upper()
+    elif cn and cn[2].strip().lower() in COUNTRY_NAMES:   # Sasha 126 · "in Hoi An, Vietnam": the country, not a qualifier
+        where, country = cn[1].strip(), COUNTRY_NAMES[cn[2].strip().lower()]
     elif "," in where:
         # Sasha 104 · "in Chamberí, somewhere romantic": the place, then a qualifier — kept with what is searched for
         head, tail = where.split(",", 1)

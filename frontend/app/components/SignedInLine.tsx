@@ -5,7 +5,6 @@
  * CTO's SashaChat.tsx needs no change. Every line comes from /api/auth/whoami; nothing is assumed.
  */
 import { useEffect, useState } from 'react'
-import { FOUNDER_ONLY } from '@/lib/booking-client'
 
 type Who = { who: 'founder' | 'guest' | null; email?: string | null; guest_sign_in_open: boolean }
 
@@ -30,9 +29,9 @@ function useWho(): Who | null | 'unknown' {
 export function SignInToBook() {
   const who = useWho()
   if (who === null) return <span>Checking who&rsquo;s signed in…</span>
-  if (who === 'unknown' || !who.guest_sign_in_open) return <span>{FOUNDER_ONLY}</span>
+  // Sasha 120 · signed out, ALWAYS "Sign in to book" with the link — never whose account booking is open to
   const next = typeof window !== 'undefined' ? window.location.pathname : '/demo'
-  return <span>Sign in to book with Sasha — <a href={`/sign-in?next=${encodeURIComponent(next)}`}>I&rsquo;ll email you a link</a>.</span>
+  return <span><a href={`/sign-in?next=${encodeURIComponent(next)}`}>Sign in to book</a> — Sasha emails you a link.</span>
 }
 
 export function WhoIsBooking() {
@@ -51,6 +50,7 @@ export function WhoIsBooking() {
   return (
     <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
       {who.who === 'founder' ? 'Booking as the founder.' : <>Booking as {who.email ?? 'your account'}. <button type="button" onClick={signOut} style={{ textDecoration: 'underline' }}>Sign out</button></>}
+      {' · '}<a href="/you" style={{ textDecoration: 'underline' }}>You</a>
       {out && <> {out}</>}
     </div>
   )

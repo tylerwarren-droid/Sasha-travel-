@@ -59,7 +59,7 @@ def configured() -> bool:
 
 
 def web_url(q: str = "") -> str:
-    return os.getenv("SASHA_WEB_URL", "https://project.kanoe.ai").rstrip("/") + "/booking-helper" + (f"?{q}" if q else "") + "#calendar"
+    return os.getenv("SASHA_WEB_URL", "https://project.kanoe.ai").rstrip("/") + "/you" + (f"?{q}" if q else "") + "#calendar"
 
 
 # ── the signed state: which account, which consent, for ten minutes ────────────────────────────────────────────────

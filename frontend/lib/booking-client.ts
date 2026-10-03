@@ -10,8 +10,8 @@ import { bookingUrl, bookingHeaders } from '@/lib/booking-api'
 
 export type Res = { ok: boolean; status: number; json: Record<string, unknown> }
 
-/** The sentence a surface shows when there is no founder session (401): no booking buttons, only this. */
-export const FOUNDER_ONLY = "Booking is only open to the founder's account for now."
+/** Sasha 120 · what a surface shows when nobody is signed in (401): no booking buttons, only this — with the link. */
+export const SIGN_IN_TO_BOOK = 'Sign in to book.'
 
 export async function bookingReq(path: string, body?: unknown, timeoutMs = 30000): Promise<Res> {
   const ctl = new AbortController()

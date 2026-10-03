@@ -71,7 +71,7 @@ WATCH_CANCEL = (30, 60)                       # every 30 s, up to 30 minutes, fo
 
 
 def web_url() -> str:
-    return os.getenv("SASHA_WEB_URL", "https://project.kanoe.ai").rstrip("/") + "/booking-helper#whatsapp"
+    return os.getenv("SASHA_WEB_URL", "https://project.kanoe.ai").rstrip("/") + "/you#whatsapp"   # Sasha 120 · the guest's own page
 
 
 OUT_OF_SCOPE = "On WhatsApp I can book, change or cancel things for you, and send your receipts. For anything else, open Sasha at {web}."

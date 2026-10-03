@@ -1,39 +1,36 @@
 'use client'
 
 /**
- * The booking page — founder only. The live rungs: read a venue and book it by phone or email (Ladder), and a call to
- * a venue on the server's list (PhoneCall). Bookings are normally made in Sasha's chat; this page is the long form.
+ * Sasha 120 · OPS — the founder's page, not a guest's. Guests book in the chat or on WhatsApp, and manage what Sasha may
+ * use for them on "You" (/you); no guest surface links here. What stays: the long-form rungs for checking a venue by
+ * hand (Ladder, PhoneCall — a call goes only to a venue on the server's list), and where the rest of the ops live.
  *
- * Sasha 88 · the Restaurante Psi form-helper block (S-25: a dry run through a Chrome extension, steps 1–4, the Psi
- * reservation and the helper's log) is REMOVED. It promised a booking it never made — a dry run stops before sending —
- * and it sat above the real rungs. The server's form routes are unchanged; only this page no longer offers them.
+ * Sasha 88 · the Restaurante Psi form-helper block is REMOVED (it promised a booking it never made).
  */
 import { PhoneCall } from './PhoneCall'
 import { Ladder } from './Ladder'
 import { FounderGate } from './FounderGate'
-import { WhatsAppLink } from './WhatsAppLink'
-import { CalendarConnect } from './CalendarConnect'
-import { MailboxConnect } from './MailboxConnect'
 
 /** The details pre-filled while testing; every field stays editable. */
 const DEMO_PROFILE = { name: 'Jon Peters', email: 'jon@kanoe.ai', phone: '+44 20 7946 0123' }
 
-export default function BookingHelperPage() {
+export default function OpsPage() {
   return (
     // S-41 · founder only: signed out, the page is a passphrase field and nothing else
     <FounderGate>
-    {/* ⚠ The site's global style is DARK and inputs inherit that text colour onto the browser's white field — this page
-        carries its own light surface so every field is legible whatever the site's theme. */}
+    {/* ⚠ The site's global style is DARK — this page carries its own light surface so every field is legible. */}
     <main className="mx-auto my-6 max-w-2xl space-y-6 rounded-lg bg-white p-6 text-sm text-neutral-900 [color-scheme:light]">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold">Book with Sasha</h1>
-        <p className="opacity-75">The usual way is to ask Sasha in the chat. Here: read a venue, then book it by phone or email — every call and email is read back to you before anything is sent.</p>
+        <h1 className="text-xl font-semibold">Ops — founder only</h1>
+        <p className="opacity-75">Guests never see this page. Your own connections (WhatsApp, Calendar, Gmail, reminders, the vault) are on <a className="underline" href="/you">You</a>.</p>
+        <ul className="list-disc pl-5">
+          <li><a className="underline" href="https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain" target="_blank" rel="noopener noreferrer">The test venue</a> — ours, not a real restaurant: its form takes Sasha&rsquo;s test bookings.</li>
+          <li><a className="underline" href="https://sasha-travel-production.up.railway.app/api/booking/health" target="_blank" rel="noopener noreferrer">Server health</a> — calls on or off, the caps, the vault, Calendar, Gmail and reminder loops.</li>
+          <li>Calls: the call panel below; a guest&rsquo;s calls are off until you list their account in SASHA_CALLS_ACCOUNTS.</li>
+        </ul>
       </header>
       <Ladder defaults={DEMO_PROFILE} />
       <PhoneCall defaults={DEMO_PROFILE} />
-      <WhatsAppLink />
-      <CalendarConnect />
-      <MailboxConnect />
     </main>
     </FounderGate>
   )

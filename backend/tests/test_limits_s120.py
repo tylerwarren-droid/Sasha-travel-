@@ -53,5 +53,20 @@ class Limits(unittest.TestCase):
         self.assertTrue(next(r for r in L.choose(read, account=FOUNDER)["rungs"] if r["rung"] == "phone")["available"])
 
 
+
+class GmailByInvitation(unittest.TestCase):
+    def test_only_the_founder_and_listed_accounts(self):
+        from booking_signer import mailbox as MB
+        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": "", "SASHA_GMAIL_ACCOUNTS": OTHER}):
+            self.assertTrue(MB.invited(FOUNDER))
+            self.assertTrue(MB.invited(OTHER))
+            self.assertFalse(MB.invited(GUEST))
+
+    def test_the_connections_come_back_to_you_not_the_ops_page(self):
+        from booking_signer import calendar_sync as CS, guest_whatsapp as GW
+        with mock.patch.dict(os.environ, {"SASHA_WEB_URL": "https://project.kanoe.ai"}):
+            self.assertEqual(CS.web_url("google=connected"), "https://project.kanoe.ai/you?google=connected#calendar")
+            self.assertEqual(GW.web_url(), "https://project.kanoe.ai/you#whatsapp")
+
 if __name__ == "__main__":
     unittest.main()

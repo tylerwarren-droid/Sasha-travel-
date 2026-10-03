@@ -543,6 +543,14 @@ def _refuse(status: int, rule: str, message: str) -> JSONResponse:
     return JSONResponse({"ok": False, "rule": rule, "message": message}, status_code=status)
 
 
+def invited(account: str) -> bool:
+    """Sasha 120 · Gmail is a beta BY INVITATION (Google's testing mode admits only its listed test users): the founder,
+    and the accounts he lists in SASHA_GMAIL_ACCOUNTS."""
+    from .identity import founder_account
+    listed = {a.strip().lower() for a in os.getenv("SASHA_GMAIL_ACCOUNTS", "").split(",") if a.strip()}
+    return account == founder_account() or account.lower() in listed
+
+
 def status() -> dict:
     return {"loop": _task is not None, "model": os.getenv("SASHA_MAILBOX_MODEL", "") == "1"}
 
@@ -557,7 +565,7 @@ async def mailbox_view(request: Request):
         finds = await STORE.list_finds(account) if (STORE and link) else []
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
-    return {"configured": configured(), "connected": bool(link and not link.get("needs_reconnect_at")),
+    return {"configured": configured(), "invited": invited(account), "connected": bool(link and not link.get("needs_reconnect_at")),
             "expired": bool(link and link.get("needs_reconnect_at")), "consent": consent(),
             "finds": [{"id": f["id"], "kind": f["kind"], "facts": {k: v for k, v in f["facts"].items() if k != "sasha_ref"},
                        "action": f.get("offered_action"), "status": f["action_status"],
@@ -575,6 +583,8 @@ async def mailbox_connect(request: Request):
         body = await request.json()
     except Exception:
         body = {}
+    if not invited(account):
+        return _refuse(403, "gmail_by_invitation", "Gmail is a beta by invitation, and it isn't open for your account yet")
     c = consent()
     if body.get("consent_version") != c["version"] or body.get("consent_sha256") != c["sha256"]:
         return _refuse(422, "consent_stale", "tick the sentence shown — it must be the current one")

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
-import { FounderGate } from '../booking-helper/FounderGate'
+import { SignedInGate } from '../components/SignedInGate'
 import { GatedButton } from '../booking-helper/GatedButton'
 
 type Use = { action_kind: string; action_ref: string; status: string; started_at: string; ended_at: string | null }
@@ -170,5 +170,5 @@ function Vault() {
 }
 
 export default function VaultPage() {
-  return <FounderGate><Vault /></FounderGate>
+  return <SignedInGate><Vault /></SignedInGate>   // Sasha 120 · each guest's own vault
 }

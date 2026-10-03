@@ -12,7 +12,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   const q = await searchParams
   const box = { maxWidth: 420, margin: '10vh auto', padding: 24, fontFamily: 'system-ui, sans-serif', lineHeight: 1.5 } as const
   if (!guestSignInOpen()) {
-    return <main style={box}><h1>Sign in</h1><p>Guest sign-in isn&rsquo;t open yet. Booking through Sasha is only open to the founder&rsquo;s account for now.</p></main>
+    return <main style={box}><h1>Sign in</h1><p>Sign-in isn&rsquo;t open yet — it opens soon.</p></main>
   }
   if (!supabaseConfigured()) {
     return <main style={box}><h1>Sign in</h1><p>Sign-in isn&rsquo;t configured on this deployment, so no link can be sent.</p></main>

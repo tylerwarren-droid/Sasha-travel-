@@ -174,7 +174,6 @@ export default function ChatBooking({ find }: { find: Find }) {
   if (state.phase === 'finding') return <div style={box}>Looking for {find.what} in {find.where}…</div>
   if (state.phase === 'refused') return <div style={box}>{state.words}</div>
   const cards = state.cards
-  const lookup = state.phase === 'read' ? state.pick : null
   return (
     <div style={box}>
       <WhoIsBooking />
@@ -273,8 +272,7 @@ export default function ChatBooking({ find }: { find: Find }) {
               venue={state.pick.name ?? state.read.venue} draft={(find.draft ?? null) as never} whatText={find.what} openAt={find.open_at ?? null}
               onContacted={setContacted} /> : null
           })()}
-          {lookup && <a href={`/booking-helper?book=phone&lookup=${encodeURIComponent(lookup.name ?? '')}&city=${encodeURIComponent(find.where)}&country=${encodeURIComponent(lookup.country ?? find.country ?? '')}`}
-            target="_blank" rel="noopener noreferrer">Book it on the booking page ↗</a>}
+          {/* Sasha 120 · no link to /booking-helper: it is the founder's ops page; a guest books here or on WhatsApp */}
           <div style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>{contacted === 'calling' ? `Sasha has phoned ${state.pick.name ?? 'them'} — the result is above.`
             : contacted === 'scheduled' ? 'A call is scheduled for when they open; nothing has been said to them yet.' : 'Nothing has been contacted yet.'}</div>
         </div>

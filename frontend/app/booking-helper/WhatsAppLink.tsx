@@ -75,7 +75,7 @@ export function WhatsAppLink() {
 
   return (
     <section id="whatsapp" className="space-y-2 rounded border p-3">
-      <h2 className="font-semibold">Use Sasha on WhatsApp</h2>
+      <h2 className="font-semibold">WhatsApp — link my number</h2>
       {words && <p>{words}</p>}
       {view && !view.number && <p className="opacity-75">Sasha isn&rsquo;t on WhatsApp for guests on this server yet.</p>}
       {view && view.number && view.linked && (

@@ -12,7 +12,7 @@ import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
 
 type Find = { id: string; kind: string; action: string | null; status: string; offer_sha256: string | null; sentence: string | null }
-type View = { configured: boolean; connected: boolean; expired: boolean; consent: { version: string; text: string; sha256: string }; finds: Find[] }
+type View = { configured: boolean; invited?: boolean; connected: boolean; expired: boolean; consent: { version: string; text: string; sha256: string }; finds: Find[] }
 
 export function MailboxConnect() {
   const [view, setView] = useState<View | null>(null)
@@ -75,8 +75,9 @@ export function MailboxConnect() {
   const offered = view?.finds.filter((f) => f.status === 'offered' && f.sentence) ?? []
   return (
     <section id="gmail" className="space-y-2 rounded border p-3">
-      <h2 className="font-semibold">Gmail (read-only, beta)</h2>
+      <h2 className="font-semibold">Gmail (read-only, beta, by invitation)</h2>
       {words && <p>{words}</p>}
+      {view && view.invited === false && <p className="opacity-75">Gmail is a beta by invitation, and it isn&rsquo;t open for your account yet.</p>}
       {view && !view.configured && <p className="opacity-75">Google sign-in isn&rsquo;t set up on this server yet.</p>}
       {view && view.configured && view.connected && (
         <div className="space-y-2">
@@ -95,7 +96,7 @@ export function MailboxConnect() {
           </div>
         </div>
       )}
-      {view && view.configured && !view.connected && (
+      {view && view.configured && view.invited !== false && !view.connected && (
         <div className="space-y-2">
           {view.expired && <p><strong>Expired, reconnect.</strong> In Google&rsquo;s testing mode a connection lasts 7 days.</p>}
           <label className="flex items-start gap-2"><input type="checkbox" checked={ticked} onChange={(e) => setTicked(e.target.checked)} /><span>{view.consent.text}</span></label>

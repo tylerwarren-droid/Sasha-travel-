@@ -52,6 +52,7 @@ export function Reminders() {
         onClick={() => { put('/api/booking/proactive/prefs', 'PUT', { all_off: !view.prefs.all_off, off_kinds: view.prefs.off_kinds }).catch((e) => setWords((e as Error).message)) }}
         needs={[busy && 'the last step to finish']} />
       <p className="text-xs opacity-75">On WhatsApp: STOP REMINDERS turns them off, YES REMINDERS turns them on.</p>
+      <p className="pt-1"><strong>My starting point</strong></p>
       {view.place ? (
         <p>Time to leave is measured from <strong>{view.place.label}</strong> ({view.place.address}).{' '}
           <button type="button" className="underline" onClick={() => { put('/api/booking/proactive/place', 'DELETE').catch((e) => setWords((e as Error).message)) }}>Remove</button></p>

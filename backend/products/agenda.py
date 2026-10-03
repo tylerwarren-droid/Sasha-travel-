@@ -52,4 +52,10 @@ async def agenda(account: str, start: date, end: date) -> List[dict]:
         out.append({"on": x["day"], "time": x.get("start"), "text": f"{VS.name_of(s, x)} ({status})", "product": "campus",
                     "kind": "visit", "source": f"{s['name']}'s own visit calendar"})
     out.sort(key=lambda r: (r["on"], r["time"] or "99:99"))
-    return out
+    seen, uniq = set(), []
+    for r in out:   # two files setting the same reminder (e.g. a first try and a redo) are one thing to do, said once
+        k = (r["on"], r["time"], r["text"])
+        if k not in seen:
+            seen.add(k)
+            uniq.append(r)
+    return uniq

@@ -221,6 +221,8 @@ async def rehearse(n: int, account_name: str = "demo", only: Optional[str] = Non
                      "msgs": len(new), "room_s": round(took + SANDBOX_GAP * len(new), 1), "ok": ok, "said": said,
                      "expect": expect})
         print(f"{'✓' if ok else '✗'} {label:<34} {took:5.1f}s + {len(new)} msg → {rows[-1]['room_s']:5.1f}s", flush=True)
+        if not ok:
+            print("    said: " + said.replace("\n", " | ")[:400], flush=True)
         return said
 
     def page(label, path, expect):
@@ -230,123 +232,156 @@ async def rehearse(n: int, account_name: str = "demo", only: Optional[str] = Non
                      "ok": ok, "said": f"HTTP {status}, {len(body)} bytes", "expect": expect})
         print(f"{'✓' if ok else '✗'} {label:<34} {took:5.1f}s (HTTP {status})", flush=True)
 
-    if only == "us":   # CR 12 · one US consulate, end to end: New Jersey → New York's own page, its email, the pack
-        await beat("U1 relocation", "relocation", expect="I never file anything")
-        await beat("U2 first", "first", expect="economic resources")
-        await beat("U3 me", "me", expect="present the application")
-        await beat("U4 myself", "myself", expect="Your passport number?")
-        said = await beat("U5 DEMO → prepared", "DEMO", expect="Your EX-01 is prepared")
-        rid = said.split("/relocation-file/")[1][:22] if "/relocation-file/" in said else ""
-        await beat("U6 SIGNED", "SIGNED", expect="Which country do you live in now?")
-        await beat("U7 USA → which state", "USA", expect="Which US state")
-        await beat("U8 New Jersey → New York's own page", "New Jersey", expect="Consulado General de España en Nueva York")
-        await beat("U9 pack 1 3 4 6-8", "1 3 4 6-8", expect="Your document pack, in Consulado General de España en Nueva York")
-        page("U10 file page: email + pack", f"/relocation-file/{rid}", "The appointment email")
-        page("U11 file page: the pack", f"/relocation-file/{rid}", "05_Proof-of-economic-means")
-        await beat("U12 entry date → the TIE, from its page", "1 March 2027", expect="I'll remind you here")
-        await beat("U13 consulate booked → itinerary", "consulate booked 12 November 10:00", expect="booked by you")
-    elif only == "trip":   # CR 13 · the products and Sasha's travel together — relocation, then campus
-        for i, t in enumerate(("relocation", "first", "me", "myself", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"), 1):
-            await beat(f"T{i} {t}", t)
-        await beat("TR1 book my flights → origin, once", "book my flights", expect="Which city will you fly from?")
-        await beat("TR2 London → plan + Sasha's TEST flights", "London", expect="from Duffel in TEST mode")
-        await beat("TR3 pick 1 → her read-back", payload=_button(GW, 0), expect="TEST")
-        await beat("TR4 her one yes → TEST checkout", payload=_button(GW, 0), expect="checkout.stripe.com")
-        await beat("TR5 NEXT → the hotel near the new address", "NEXT", expect="Hotels for 3 nights")
-        await beat("TR6 NEXT → one itinerary", "NEXT", expect="You can apply for your visa")
+    try:   # a crash still cleans up what this rehearsal made, and says where it stopped
+        if only == "us":   # CR 12 · one US consulate, end to end: New Jersey → New York's own page, its email, the pack
+            await beat("U1 relocation", "relocation", expect="I never file anything")
+            await beat("U2 first", "first", expect="economic resources")
+            await beat("U3 me", "me", expect="present the application")
+            await beat("U4 myself", "myself", expect="Your passport number?")
+            said = await beat("U5 DEMO → prepared", "DEMO", expect="Your EX-01 is prepared")
+            rid = said.split("/relocation-file/")[1][:22] if "/relocation-file/" in said else ""
+            await beat("U6 SIGNED", "SIGNED", expect="Which country do you live in now?")
+            await beat("U7 USA → which state", "USA", expect="Which US state")
+            await beat("U8 New Jersey → New York's own page", "New Jersey", expect="Consulado General de España en Nueva York")
+            await beat("U9 pack 1 3 4 6-8", "1 3 4 6-8", expect="Your document pack, in Consulado General de España en Nueva York")
+            page("U10 file page: email + pack", f"/relocation-file/{rid}", "The appointment email")
+            page("U11 file page: the pack", f"/relocation-file/{rid}", "05_Proof-of-economic-means")
+            await beat("U12 entry date → the TIE, from its page", "1 March 2027", expect="I'll remind you here")
+            await beat("U13 consulate booked → itinerary", "consulate booked 12 November 10:00", expect="booked by you")
+        elif only == "trip":   # CR 13 · the products and Sasha's travel together — relocation, then campus
+            for i, t in enumerate(("relocation", "first", "me", "myself", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"), 1):
+                await beat(f"T{i} {t}", t)
+            await beat("TR1 book my flights → origin, once", "book my flights", expect="Which city will you fly from?")
+            await beat("TR2 London → plan + Sasha's TEST flights", "London", expect="from Duffel in TEST mode")
+            await beat("TR3 pick 1 → her read-back", payload=_button(GW, 0), expect="TEST")
+            await beat("TR4 her one yes → TEST checkout", payload=_button(GW, 0), expect="checkout.stripe.com")
+            await beat("TR5 NEXT → the hotel near the new address", "NEXT", expect="Hotels for 3 nights")
+            await beat("TR6 NEXT → one itinerary", "NEXT", expect="You can apply for your visa")
 
-        async def visit(words, tag):
-            said = await beat(f"{tag} cards", f"campus {words} in November for my son", expect="Read just now from")
-            said = await beat(f"{tag} pick 1", "1")
-            if "full name" in said:
-                for a in ("Sam Ejemplo", "sam.ejemplo@example.com", "14 March 2009", "Example High School"):
-                    await beat(f"{tag} · {a}", a)
-                await beat(f"{tag} · 2028", "2028", expect="Keep Sam's details in your vault")
-                await beat(f"{tag} keep → read-back", payload="cm:save:yes", expect="Exactly what I'll do")
-            await beat(f"{tag} yes → prepared", payload=_button(GW, 0), expect="✅ Prepared.")
-            await beat(f"{tag} REGISTERED", "REGISTERED", expect="registered on your word")
-        await visit("Yale", "TC-Yale")
-        await visit("Penn", "TC-Penn")
-        await beat("TC1 plan the trip around the visits", "plan the trip around the visits", expect="Which city will you fly from?")
-        await beat("TC2 Chicago → plan, drive check, TEST flights", "Chicago", expect="by car")
-        await beat("TC3 NEXT → hotel near the first campus", "NEXT", expect="Hotels for 1 night")
-        await beat("TC4 NEXT → hotel near the second campus", "NEXT", expect="Hotels for 1 night")
-        await beat("TC5 NEXT → one itinerary", "NEXT", expect="Your itinerary")
-    else:
-        # ── Part 1 · CampusMe ──
-        await beat("C1 April (not published)", "campus visits at Yale and Penn in April for my son", expect="hasn't published April 2027 yet")
-        await beat("C2 November cards", "campus Yale and Penn in November for my son", expect="Read just now from")
-        if has_vault:
-            await beat("C3 pick 1 → vault read-back", "1", expect="CampusMe student details (Sam) from your vault")
+            async def visit(words, tag):
+                said = await beat(f"{tag} cards", f"campus {words} in November for my son", expect="Read just now from")
+                said = await beat(f"{tag} pick 1", "1")
+                if "full name" in said:
+                    for a in ("Sam Ejemplo", "sam.ejemplo@example.com", "14 March 2009", "Example High School"):
+                        await beat(f"{tag} · {a}", a)
+                    await beat(f"{tag} · 2028", "2028", expect="Keep Sam's details in your vault")
+                    await beat(f"{tag} keep → read-back", payload="cm:save:yes", expect="Exactly what I'll do")
+                await beat(f"{tag} yes → prepared", payload=_button(GW, 0), expect="✅ Prepared.")
+                await beat(f"{tag} REGISTERED", "REGISTERED", expect="registered on your word")
+            await visit("Yale", "TC-Yale")
+            await visit("Penn", "TC-Penn")
+            await beat("TC1 plan the trip around the visits", "plan the trip around the visits", expect="Which city will you fly from?")
+            await beat("TC2 Chicago → plan, drive check, TEST flights", "Chicago", expect="by car")
+            await beat("TC3 NEXT → hotel near the first campus", "NEXT", expect="Hotels for 1 night")
+            await beat("TC4 NEXT → hotel near the second campus", "NEXT", expect="Hotels for 1 night")
+            await beat("TC5 NEXT → one itinerary", "NEXT", expect="Your itinerary")
+            # ── the same journeys on the WEB chat: Sasha's own conduct(), as this account (the Sasha tab wired web_turn, 7b3c1ed) ──
+            from app.services.conductor import conduct
+            hist, sid = [], f"rehearsal-{uuid.uuid4().hex[:8]}"
+
+            async def wbeat(label, msg, expect):
+                t = time.monotonic()
+                try:
+                    r = await conduct(msg, list(hist), user_id=account, session_id=sid)
+                    said = (r.get("response") or "") + "".join(
+                        f"\n[card: {(b.get('title') or b.get('type') or '')} · {len(b.get('options') or [])} options]" for b in (r.get("bookings") or [])
+                        if isinstance(b, dict))
+                    hist[:] = r.get("conversation_history") or hist + [{"role": "user", "content": msg}, {"role": "assistant", "content": said}]
+                except Exception as e:
+                    said = f"{type(e).__name__}: {e}"
+                took = time.monotonic() - t
+                ok = expect in said
+                rows.append({"beat": label, "sent": f"web: {msg}", "compute_s": round(took, 1), "msgs": 1, "room_s": round(took, 1),
+                             "ok": ok, "said": said, "expect": expect})
+                print(f"{'✓' if ok else '✗'} {label:<34} {took:5.1f}s (web)", flush=True)
+                if not ok:
+                    print("    said: " + said.replace("\n", " | ")[:400], flush=True)
+            await wbeat("W1 web: book my flights", "book my flights", "Which city will you fly from?")
+            await wbeat("W2 web: London → plan + flights", "London", "Flights London")
+            await wbeat("W3 web: next → hotel", "next", "A hotel near your new address")
+            await wbeat("W4 web: next → one itinerary", "next", "Your itinerary")
+            await wbeat("W5 web: plan the trip around the visits", "plan the trip around the visits", "Which city will you fly from?")
+            await wbeat("W6 web: Chicago → plan + drive check", "Chicago", "by car")
+            await wbeat("W7 web: what do I need to do this week?", "what do I need to do this week?", "")
         else:
-            await beat("C3 pick 1 → five questions", "1", expect="full name")
-            for a in ("Sam Ejemplo", "sam.ejemplo@example.com", "14 March 2009", "Example High School"):
-                await beat(f"C3 · {a}", a)
-            await beat("C3 · 2028 → keep in vault?", "2028", expect="Keep Sam's details in your vault")
-            await beat("C4 keep → read-back", payload="cm:save:yes", expect="Exactly what I'll do")
-        said = await beat("C5 yes → prepared", payload=_button(GW, 0), expect="✅ Prepared.")
-        cid = said.split("/campus-handover/")[1][:22] if "/campus-handover/" in said else ""
-        page("C6 hand-over page", f"/campus-handover/{cid}", "prepared, not sent")
-        await beat("C7 REGISTERED", "REGISTERED", expect="registered on your word")
-        await beat("C8 vague confirmation stays", "Thank you for registering for a campus visit. We look forward to seeing you soon!",
-                   expect="doesn't name")
-        # ── Part 2 · relocation ──
-        await beat("R1 relocation", "relocation", expect="I never file anything")
-        await beat("R2 first", "first", expect="economic resources")
-        await beat("R3 me", "me", expect="present the application")
-        await beat("R4 myself", "myself", expect="Your passport number?")
-        # CR 10 · one Sasha: a flight request mid-relocation goes to her own flow, in the same chat; then back where we were
-        await beat("RF1 flights → Sasha's own answer", "book me flights to Madrid on 1 March", expect=GW.ASK_ONE[:30])
-        await beat("RF2 relocation → where we were", "relocation", expect="Back to your EX-01. Your passport number?")
-        await beat("R5 specimen photo → read", media=True, expect="check digit agrees")
-        await beat("R6 yes, all right", payload="rx:doc:yes", expect="Kept")
-        await beat("R7 surname", "De Bruijn")
-        said = await beat("R8 DEMO → prepared", "DEMO", expect="Your EX-01 is prepared")
-        rid = said.split("/relocation-file/")[1][:22] if "/relocation-file/" in said else ""
-        page("R9 reviewer page", f"/relocation-file/{rid}", "LEFT FOR THE APPLICANT")
-        page("R10 the PDF", f"/api/products/relocation/{rid}/EX-01-prepared.pdf", "%PDF")
-        await beat("R11 SIGNED", "SIGNED", expect="Which country do you live in now?")
-        await beat("R12 UK → consulate + checklist", "UK", expect="Consulado General de España en Londres")
-        await beat("R13a pack 1 2 3 → in the sheet's order", "1 2 3", expect="Your document pack")   # CR 12
-        await beat("R13 entry date → reminders", "1 March 2027", expect="I'll remind you here")
-        await beat("R14 consulate booked → itinerary", "consulate booked 12 November 10:00", expect="booked by you")   # CR 10
-        # ── Part 3 · health (CR 4) ──
-        await beat("H1 health → consent", "health I need a doctor this week", expect="never why you need a doctor")
-        await beat("H2 consent yes → choose", payload="hx:consent:yes", expect="A private clinic")
-        await beat("H3 private", payload="hx:priv", expect="Which day and time")
-        await beat("H4 Tuesday 10:00 → read-back", "Tuesday 10:00", expect="una cita con el médico general")
-        await beat("H5 yes → the call", payload=_button(GW, 0), expect="📞")
-        await beat("H7 health again → consent", "salud", expect="never why you need a doctor")
-        await beat("H8 consent → choose", payload="hx:consent:yes", expect="A private clinic")
-        said = await beat("H9 public (SERMAS) → hand-over", payload="hx:pub", expect="health-handover/")
-        await beat("H10 DEMO → fictional patient", "DEMO", expect="health-handover/")
-        hid = said.split("/health-handover/")[1][:22] if "/health-handover/" in said else ""
-        page("H11 SERMAS hand-over page", f"/health-handover/{hid}", "Open SERMAS")
-        await beat("H12 booked it → add?", "I booked it for 13 October at 10:00", expect="kept with your bookings")   # CR 10
-        await beat("H12b yes → itinerary", payload="hx:sermas:yes", expect="Added to your itinerary")
-        await beat("H13 health → consent", "health", expect="never why you need a doctor")
-        await beat("H14 consent → choose", payload="hx:consent:yes", expect="A private clinic")
-        said = await beat("H15 new in Madrid → checklist", payload="hx:new", expect="Padrón (town hall)")
-        nid = said.split("/health-handover/")[1][:22] if "/health-handover/" in said else ""
-        page("H16 checklist page", f"/health-handover/{nid}", "Your health card and your family doctor")
-        await beat("H17 padrón date → reminders", "20 October 2026", expect="I'll remind you here")
+            # ── Part 1 · CampusMe ──
+            await beat("C1 April (not published)", "campus visits at Yale and Penn in April for my son", expect="hasn't published April 2027 yet")
+            await beat("C2 November cards", "campus Yale and Penn in November for my son", expect="Read just now from")
+            if has_vault:
+                await beat("C3 pick 1 → vault read-back", "1", expect="CampusMe student details (Sam) from your vault")
+            else:
+                await beat("C3 pick 1 → five questions", "1", expect="full name")
+                for a in ("Sam Ejemplo", "sam.ejemplo@example.com", "14 March 2009", "Example High School"):
+                    await beat(f"C3 · {a}", a)
+                await beat("C3 · 2028 → keep in vault?", "2028", expect="Keep Sam's details in your vault")
+                await beat("C4 keep → read-back", payload="cm:save:yes", expect="Exactly what I'll do")
+            said = await beat("C5 yes → prepared", payload=_button(GW, 0), expect="✅ Prepared.")
+            cid = said.split("/campus-handover/")[1][:22] if "/campus-handover/" in said else ""
+            page("C6 hand-over page", f"/campus-handover/{cid}", "prepared, not sent")
+            await beat("C7 REGISTERED", "REGISTERED", expect="registered on your word")
+            await beat("C8 vague confirmation stays", "Thank you for registering for a campus visit. We look forward to seeing you soon!",
+                       expect="doesn't name")
+            # ── Part 2 · relocation ──
+            await beat("R1 relocation", "relocation", expect="I never file anything")
+            await beat("R2 first", "first", expect="economic resources")
+            await beat("R3 me", "me", expect="present the application")
+            await beat("R4 myself", "myself", expect="Your passport number?")
+            # CR 10 · one Sasha: a flight request mid-relocation goes to her own flow, in the same chat; then back where we were
+            await beat("RF1 flights → Sasha's own answer", "book me flights to Madrid on 1 March", expect=GW.ASK_ONE[:30])
+            await beat("RF2 relocation → where we were", "relocation", expect="Back to your EX-01. Your passport number?")
+            await beat("R5 specimen photo → read", media=True, expect="check digit agrees")
+            await beat("R6 yes, all right", payload="rx:doc:yes", expect="Kept")
+            await beat("R7 surname", "De Bruijn")
+            said = await beat("R8 DEMO → prepared", "DEMO", expect="Your EX-01 is prepared")
+            rid = said.split("/relocation-file/")[1][:22] if "/relocation-file/" in said else ""
+            page("R9 reviewer page", f"/relocation-file/{rid}", "LEFT FOR THE APPLICANT")
+            page("R10 the PDF", f"/api/products/relocation/{rid}/EX-01-prepared.pdf", "%PDF")
+            await beat("R11 SIGNED", "SIGNED", expect="Which country do you live in now?")
+            await beat("R12 UK → consulate + checklist", "UK", expect="Consulado General de España en Londres")
+            await beat("R13a pack 1 2 3 → in the sheet's order", "1 2 3", expect="Your document pack")   # CR 12
+            await beat("R13 entry date → reminders", "1 March 2027", expect="I'll remind you here")
+            await beat("R14 consulate booked → itinerary", "consulate booked 12 November 10:00", expect="booked by you")   # CR 10
+            # ── Part 3 · health (CR 4) ──
+            await beat("H1 health → consent", "health I need a doctor this week", expect="never why you need a doctor")
+            await beat("H2 consent yes → choose", payload="hx:consent:yes", expect="A private clinic")
+            await beat("H3 private", payload="hx:priv", expect="Which day and time")
+            await beat("H4 Tuesday 10:00 → read-back", "Tuesday 10:00", expect="una cita con el médico general")
+            await beat("H5 yes → the call", payload=_button(GW, 0), expect="📞")
+            await beat("H7 health again → consent", "salud", expect="never why you need a doctor")
+            await beat("H8 consent → choose", payload="hx:consent:yes", expect="A private clinic")
+            said = await beat("H9 public (SERMAS) → hand-over", payload="hx:pub", expect="health-handover/")
+            await beat("H10 DEMO → fictional patient", "DEMO", expect="health-handover/")
+            hid = said.split("/health-handover/")[1][:22] if "/health-handover/" in said else ""
+            page("H11 SERMAS hand-over page", f"/health-handover/{hid}", "Open SERMAS")
+            await beat("H12 booked it → add?", "I booked it for 13 October at 10:00", expect="kept with your bookings")   # CR 10
+            await beat("H12b yes → itinerary", payload="hx:sermas:yes", expect="Added to your itinerary")
+            await beat("H13 health → consent", "health", expect="never why you need a doctor")
+            await beat("H14 consent → choose", payload="hx:consent:yes", expect="A private clinic")
+            said = await beat("H15 new in Madrid → checklist", payload="hx:new", expect="Padrón (town hall)")
+            nid = said.split("/health-handover/")[1][:22] if "/health-handover/" in said else ""
+            page("H16 checklist page", f"/health-handover/{nid}", "Your health card and your family doctor")
+            await beat("H17 padrón date → reminders", "20 October 2026", expect="I'll remind you here")
 
-        # ── Part 4 · the case officer (CR 8): the page, one return, the mark — then the queue put back as it was ──
-        ocid = await _officer_id(create=True)
-        kept = await _officer_returned(ocid)
-        page("O1 officer queue", f"/officer/{ocid}", "need attention before they")
-        t = time.monotonic()
-        req = urllib.request.Request(f"{web()}/api/products/relocation/officer/{ocid}/return/A-1042", method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                ok, said = r.status == 200 and b'"sent":false' in r.read().replace(b" ", b""), f"HTTP {r.status}"
-        except Exception as e:
-            ok, said = False, f"{type(e).__name__}: {e}"
-        rows.append({"beat": "O2 return A-1042", "sent": "POST return/A-1042", "compute_s": round(time.monotonic() - t, 1), "msgs": 0,
-                     "room_s": round(time.monotonic() - t, 1), "ok": ok, "said": said, "expect": "recorded, sent:false"})
-        print(f"{'✓' if ok else '✗'} {'O2 return A-1042':<34} {rows[-1]['room_s']:5.1f}s ({said})", flush=True)
-        page("O3 the mark on the page", f"/officer/{ocid}", "Returned to the applicant")
-        await _officer_returned(ocid, kept)          # the queue as it was before the rehearsal
+            # ── Part 4 · the case officer (CR 8): the page, one return, the mark — then the queue put back as it was ──
+            ocid = await _officer_id(create=True)
+            kept = await _officer_returned(ocid)
+            page("O1 officer queue", f"/officer/{ocid}", "need attention before they")
+            t = time.monotonic()
+            req = urllib.request.Request(f"{web()}/api/products/relocation/officer/{ocid}/return/A-1042", method="POST")
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    ok, said = r.status == 200 and b'"sent":false' in r.read().replace(b" ", b""), f"HTTP {r.status}"
+            except Exception as e:
+                ok, said = False, f"{type(e).__name__}: {e}"
+            rows.append({"beat": "O2 return A-1042", "sent": "POST return/A-1042", "compute_s": round(time.monotonic() - t, 1), "msgs": 0,
+                         "room_s": round(time.monotonic() - t, 1), "ok": ok, "said": said, "expect": "recorded, sent:false"})
+            print(f"{'✓' if ok else '✗'} {'O2 return A-1042':<34} {rows[-1]['room_s']:5.1f}s ({said})", flush=True)
+            page("O3 the mark on the page", f"/officer/{ocid}", "Returned to the applicant")
+            await _officer_returned(ocid, kept)          # the queue as it was before the rehearsal
+    except Exception as e:
+        rows.append({"beat": "⛔ stopped", "sent": "", "compute_s": 0, "msgs": 0, "room_s": 0, "ok": False,
+                     "said": f"{type(e).__name__}: {e}", "expect": "no crash"})
+        print(f"⛔ stopped: {type(e).__name__}: {e}", flush=True)
     total = time.monotonic() - t0
     cleaned = await _clean_own(account, before)
     print("cleaned up its own rows: " + ", ".join(f"{k} {v}" for k, v in cleaned.items()), flush=True)

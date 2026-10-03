@@ -105,6 +105,20 @@ ministry's text; Washington, Los Angeles, Miami, Chicago, Boston and San Francis
 presentación" empty — Sasha says so and gives no route. Houston's site answered 503 twice: no list from it. California is
 split by county exactly as Los Angeles's page lists them. (docs/products/reads/us/READS.md)
 
+### Part 2c — The products and Sasha's travel, together (CR 13, ≈3 min; rehearse with `cr1_demo.sh rehearse trip --account founder`)
+
+| Send (after the relocation file is signed, the entry date given) | What comes back |
+|---|---|
+| `book my flights` | "Which city will you fly from? (asked once …)" |
+| `London` | the plan: ✈ flights London → Madrid on the entry date · 🏨 3 first nights near the new address · 📋 one itinerary — then **Sasha's own** Duffel TEST cards; her read-back and her one yes as always (TEST checkout) |
+| `NEXT` | Sasha's hotel search near the new address, 3 nights — TEST booking or a real request, her choice buttons |
+| `NEXT` | 📋 one itinerary: every booking (flights, hotels, appointments, visits) and every document deadline, by day |
+| (two campus visits registered) `plan the trip around the visits` → `Chicago` | ✈ into New Haven the day before Yale · 🏨 near each campus the night before · 🚗 "Yale Sun 11:30 → Penn Mon 09:30: yes, 3 h 36 by car" (Google Routes, traffic-aware; rail not checked) |
+| `what do I need to do this week?` | Sasha's week: her bookings and the products' deadlines together |
+
+The same plan works in the web chat (same words; the Book it (TEST) buttons are the web's). Nothing is booked by the
+products: each booking is Sasha's own flow, one yes each, TEST labels unchanged.
+
 ## Part 3 — Health, inside S-77's line (≈3 min)
 
 **Before:**

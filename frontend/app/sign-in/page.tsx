@@ -20,6 +20,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   return (
     <main style={box}>
       <h1>Sign in to book with Sasha</h1>
+      <p style={{ fontSize: 13, opacity: 0.75 }}>Sasha is invite-only for now: use the address your invitation came to.</p>
       {q.error && <p role="alert" style={{ color: '#9a1c1c' }}>That sign-in link didn&rsquo;t work: {q.error}. Ask for a new one below.</p>}
       <SignInForm next={safeNext(q.next)} />
       <p style={{ fontSize: 13, opacity: 0.75 }}>

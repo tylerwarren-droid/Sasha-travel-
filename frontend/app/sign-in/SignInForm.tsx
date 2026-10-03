@@ -18,7 +18,8 @@ export default function SignInForm({ next }: { next: string }) {
       const { error } = await supabase.auth.signInWithOtp({
         email: to, options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`, shouldCreateUser: true },
       })
-      setState(error ? { phase: 'failed', why: error.message } : { phase: 'sent', to })
+      // Sasha 121 · invite-only: an address nobody invited gets that, plainly — never Supabase's internal words
+      setState(error ? { phase: 'failed', why: /signups? not allowed/i.test(error.message) ? 'Sasha is invite-only for now — this address hasn\u2019t been invited' : error.message } : { phase: 'sent', to })
     } catch (err) {
       setState({ phase: 'failed', why: (err as Error).message })
     }

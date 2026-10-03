@@ -1306,8 +1306,10 @@ export default function VietnamPage() {
               <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 14px', display: 'grid', placeItems: 'center', background: 'rgba(52,211,153,0.14)', border: '1px solid rgba(52,211,153,0.4)', fontSize: 26, color: '#34d399' }}>✓</div>
               <div style={{ fontSize: 21, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>
                 {(() => {
-                  const w = itemBooked.paidWith ? 'booked' : 'reserved'
-                  return itemBooked.kind === 'hotel' ? `Stay ${w}!` : itemBooked.kind === 'flight' ? `Flight ${w}!` : itemBooked.kind === 'cab' ? `Transfer ${w}!` : itemBooked.kind === 'restaurant' ? `Table ${w}!` : itemBooked.paidWith ? 'Booked!' : 'Reserved!'
+                  // Sasha 133 · this path contacts NO hotel, airline or venue (payments.py /reserve only records a row):
+                  // it is "saved", never "reserved" or "booked" — a success state must match what happened
+                  const w = itemBooked.paidWith ? 'paid — not booked yet' : 'saved to your trip'
+                  return itemBooked.kind === 'hotel' ? `Stay ${w}` : itemBooked.kind === 'flight' ? `Flight ${w}` : itemBooked.kind === 'cab' ? `Transfer ${w}` : itemBooked.kind === 'restaurant' ? `Table ${w}` : itemBooked.paidWith ? 'Paid — not booked yet' : 'Saved to your trip'
                 })()}
               </div>
               <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,.6)', marginTop: 8 }}>
@@ -1317,10 +1319,12 @@ export default function VietnamPage() {
                 <div style={{ fontSize: 15, fontWeight: 700, color: '#E8B923', marginTop: 6 }}>${itemBooked.amount.toLocaleString()}{(PAYMENTS_ENABLED || itemBooked.paidWith) ? ' paid' : ''}</div>
               )}
               <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.45)', marginTop: 8 }}>
-                {itemBooked.paidWith ? (itemBooked.paidWith.last4 ? `Booking confirmed · paid with your card ending ${itemBooked.paidWith.last4}.` : 'Booking confirmed and paid.') : 'Your reservation is confirmed.'}{itemBooked.emailSent ? ' A confirmation is on its way to your email.' : ''}
+                {itemBooked.paidWith
+                  ? `Payment received${itemBooked.paidWith.last4 ? ` (card ending ${itemBooked.paidWith.last4})` : ''}, but nobody has been contacted to book it yet.`
+                  : 'Not booked: no hotel, airline or venue has been contacted. Ask Sasha to book it, and she will tell you how.'}{itemBooked.emailSent ? ' A confirmation is on its way to your email.' : ''}
               </div>
               {itemBooked.ref && (
-                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>{itemBooked.paidWith ? 'Booking' : 'Reservation'} · {itemBooked.ref}</div>
+                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>{itemBooked.paidWith ? 'Payment' : 'Saved'} · {itemBooked.ref}</div>
               )}
               <div style={{ marginTop: 20 }}>
                 <button onClick={() => setItemBooked(null)} style={{ padding: '11px 28px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done</button>
@@ -1336,17 +1340,17 @@ export default function VietnamPage() {
           <div className="relative flex flex-col overflow-hidden" style={{ width: 'min(680px, 96vw)', maxHeight: '92vh', borderRadius: 24, border: '1px solid rgba(218,165,32,0.3)', background: 'linear-gradient(180deg, rgba(218,165,32,0.06), rgba(0,0,0,0.25)), #0e0e16', boxShadow: '0 40px 100px -30px rgba(0,0,0,.9)' }}>
             <div className="flex-shrink-0 text-center" style={{ padding: '26px 24px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 14px', display: 'grid', placeItems: 'center', background: 'rgba(52,211,153,0.14)', border: '1px solid rgba(52,211,153,0.4)', fontSize: 26, color: '#34d399' }}>✓</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>{booked.paidWith ? 'Trip booked!' : 'Trip reserved!'}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>{booked.paidWith ? 'Trip paid — not booked yet' : 'Trip saved'}</div>
               {/* Only promise an email when one actually went out — the send is best-effort
                   and silently no-ops without RESEND_API_KEY. */}
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,.5)', marginTop: 5 }}>
                 {booked.paidWith
-                  ? `Your booking is confirmed and paid${booked.paidWith.last4 ? ` with your card ending ${booked.paidWith.last4}` : ''} — your full itinerary is below.`
-                  : 'Your reservation is confirmed — your full itinerary is below.'}
+                  ? `Payment received${booked.paidWith.last4 ? ` (card ending ${booked.paidWith.last4})` : ''}, but no hotel, airline or venue has been contacted to book it yet — your plan is below.`
+                  : 'Saved — not booked: no hotel, airline or venue has been contacted. Your plan is below; ask Sasha to book each part.'}
                 {booked.emailSent ? ' A confirmation is on its way to your email.' : ''}
               </div>
               {booked.ref && (
-                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>{booked.paidWith ? 'Booking' : 'Reservation'} · {booked.ref}</div>
+                <div style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 600, color: '#E8B923', background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', borderRadius: 8, padding: '6px 12px' }}>{booked.paidWith ? 'Payment' : 'Saved'} · {booked.ref}</div>
               )}
             </div>
 

@@ -37,7 +37,7 @@ export default function TripPanel({
 }: TripPanelProps) {
   const isBooked = Boolean(bookingRef)
   const isPaid = isBooked && Boolean(paidWith)
-  const doneWord = isPaid ? 'Booked' : 'Reserved'
+  const doneWord = isPaid ? 'Paid' : 'Saved'   // Sasha 133 · nobody was contacted on this path: never "Booked"/"Reserved"
   if (!richItinerary) {
     return (
       <div className="lw-stream">
@@ -120,7 +120,7 @@ export default function TripPanel({
             )}
             {isBooked ? (
               <>
-                <div className="lw-bookedBanner">✓ {doneWord}{isPaid ? (paidWith!.last4 ? ` · Paid with card ending ${paidWith!.last4}` : ' · Paid') : ''} · Ref {bookingRef}</div>
+                <div className="lw-bookedBanner">✓ {doneWord}{isPaid && paidWith!.last4 ? ` with card ending ${paidWith!.last4}` : ''} · not booked yet · Ref {bookingRef}</div>
                 <div className="lw-booknote">{isPaid ? 'Everything above is booked and paid.' : 'Everything above is reserved.'} Keep your reference for your records.</div>
               </>
             ) : (

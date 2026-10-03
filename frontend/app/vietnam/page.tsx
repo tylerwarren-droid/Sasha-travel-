@@ -48,7 +48,7 @@ const WELCOME_OPENERS: { location: string; blurb: string; ask: string; url: stri
 
 const DEMO_USER: User = {
   display_name: 'Jon Peters',
-  email: 'jon@kanoe.ai',
+  email: 'guest@example.com',
   default_currency: 'USD',
   sasha_context: 'Jon loves cultural immersion, authentic food experiences, and luxury travel across Asia.',
   travellers: [

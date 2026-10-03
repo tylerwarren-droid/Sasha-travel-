@@ -14,7 +14,7 @@ import { InviteGuest } from './InviteGuest'
 import { DemoControls } from './DemoControls'
 
 /** The details pre-filled while testing; every field stays editable. */
-const DEMO_PROFILE = { name: 'Jon Peters', email: 'jon@kanoe.ai', phone: '+44 20 7946 0123' }
+const DEMO_PROFILE = { name: 'Jon Peters', email: 'guest@example.com', phone: '+44 20 7946 0123' }
 
 export default function OpsPage() {
   return (

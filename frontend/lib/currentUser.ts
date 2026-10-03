@@ -5,5 +5,5 @@ export const CURRENT_USER = {
   id: '11111111-1111-4111-8111-111111111111',
   firstName: 'Jon',
   displayName: 'Jon Peters',
-  email: 'jon@kanoe.ai',
+  email: 'guest@example.com',
 }

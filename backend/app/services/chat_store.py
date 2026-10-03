@@ -26,7 +26,7 @@ DB_PATH = os.getenv("CHAT_DB_PATH", os.path.join(_BACKEND_ROOT, "sasha_chats.db"
 
 # The one hardcoded demo user (no auth flow yet).
 DEMO_USER_ID = "11111111-1111-4111-8111-111111111111"
-DEMO_USER_EMAIL = "jon@kanoe.ai"
+DEMO_USER_EMAIL = "guest@example.com"
 DEMO_USER_NAME = "Jon Peters"
 
 _inited = False

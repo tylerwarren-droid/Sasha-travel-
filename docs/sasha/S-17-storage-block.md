@@ -116,7 +116,7 @@ cd ~/Developer/Sasha-travel- && pbcopy < backend/booking_signer/sql/001_booking_
 - **Live, read-only, before drafting:**
   - `auth.users` columns and unique indexes;
   - the three existing users' conventions (counts only);
-  - that `jon@kanoe.ai` is not taken (though the block uses no email);
+  - that `guest@example.com` is not taken (though the block uses no email);
   - that the demo id is not an auth user;
   - the exact constraint names being replaced.
 

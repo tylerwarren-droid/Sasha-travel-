@@ -29,7 +29,7 @@ import secrets
 import time
 import unicodedata
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from xml.sax.saxutils import escape
 
@@ -696,6 +696,17 @@ async def _new_request(ctx: dict, body: str) -> None:
     if await _forwarded_confirmation(ctx, body):   # Sasha 118 · the venue's confirmation, forwarded by the guest
         return
     from . import demo_spa as DSP
+    if FLIGHT.search(body or ""):   # Sasha 132 · flights, Duffel TEST mode
+        await _flights(ctx, body)
+        return
+    if HOTEL.search(body or ""):   # Sasha 132 · a hotel: found as cards, requested from the hotel itself
+        await _hotels(ctx, body)
+        return
+    if ITINERARY_Q.search(body or ""):   # Sasha 132 · ask your itinerary
+        from . import itinerary_q as IQ
+        for line in await IQ.answer(ctx["account"], body, ctx["now"]):
+            ctx["out"].text(line)
+        return
     if COMBO.search(body or ""):   # Sasha 126 (2) · two bookings from one sentence
         await _combo_start(ctx, body)
         return
@@ -730,6 +741,123 @@ async def _new_request(ctx: dict, body: str) -> None:
         out.text(ASK_ONE)
         return
     out.text(OUT_OF_SCOPE.format(web=web_url()))
+
+
+# ── Sasha 132 · flights in Duffel TEST mode: cards → Book it → one-touch test payment → the test order → the itinerary ──
+
+FLIGHT = re.compile(r"\b(flights?|fly|vuelos?|volar)\b.*\bfrom\s+\S.*\bto\s+\S|\b(flights?|vuelos?)\s+(?:from\s+)?[A-Z][\w .'-]+\s+to\s+[A-Z]", re.I)
+_FROM_TO = re.compile(r"\b(?:from\s+)?(?P<o>[A-ZÁÉÍÓÚ][\wáéíóúñ .'-]*?)\s+to\s+(?P<d>[A-ZÁÉÍÓÚ][\wáéíóúñ .'-]*?)"
+                      r"(?=\s+(?:on|for|next|this|tomorrow|today|el|para)\b|\s*[,.?!]|\s*$)")
+from .itinerary_q import QUESTION as ITINERARY_Q   # noqa: E402 — the same question, on the web and WhatsApp
+
+
+HOTEL = re.compile(r"\b(hotel|room|stay|alojamiento|habitaci[oó]n)\b.*\bin\s+[A-ZÁÉÍÓÚ]", re.I)
+_DATES = re.compile(r"\bfrom\s+(?P<a>.+?)\s+(?:to|until|till)\s+(?P<b>[^,.?!]+)", re.I)
+_NIGHTS = re.compile(r"\b(\d{1,2})\s+nights?\b", re.I)
+
+
+async def _hotels(ctx: dict, body: str) -> None:
+    """Duffel Stays isn't enabled on this account and RateHawk has no credentials, so a hotel is NOT booked instantly: it is
+    found (Google, with its own photo), and the room is requested from the hotel itself — its form, page or email — said so."""
+    out = ctx["out"]
+    m = re.search(r"\bin\s+(?P<w>[A-ZÁÉÍÓÚ][\wáéíóúñ ,'-]*?)(?=\s+(?:from|for|on|next|this)\b|[.?!]|$)", body or "")
+    dm, nm = _DATES.search(body or ""), _NIGHTS.search(body or "")
+    a = HO.plain_date(dm["a"], ctx["now"]) if dm else HO.plain_date(body or "", ctx["now"])
+    b = HO.plain_date(dm["b"], ctx["now"]) if dm else None
+    if dm and a and not b and re.fullmatch(r"\s*\d{1,2}\s*", dm["a"] or ""):   # "from 14 to 16 November": the month is said once
+        b = HO.plain_date(dm["b"], ctx["now"])
+    if dm and not a and b and re.fullmatch(r"\s*\d{1,2}(?:st|nd|rd|th)?\s*", dm["a"]):
+        a = b[:8] + "%02d" % int(re.sub(r"\D", "", dm["a"]))
+    nights = (date.fromisoformat(b) - date.fromisoformat(a)).days if a and b else (int(nm[1]) if nm else 0)
+    if not m or not a or not 1 <= nights <= 30:
+        out.text("Tell me where and the dates, e.g. “a hotel in Hoi An from 14 to 16 November for 2”.")
+        return
+    f = HO.find_request(f"hotel in {m['w'].strip()}", ctx["now"]) or {"what": "hotel", "where": m["w"].strip()}
+    party = HO.plain_party(body or "") or 2
+    out.text(f"Hotels can't be booked instantly here yet, so I'll find them and ask the one you pick for a room — {nights} night"
+             f"{'s' if nights != 1 else ''} from {SN.day_words(a)}, {party} {'person' if party == 1 else 'people'}.")
+    ctx["no_test_card"] = True
+    await _find(ctx, {"what": "hotel", "where": f.get("where") or m["w"].strip(), "country": f.get("country")},
+                {"parts": {"what": {"activity": "a room", "activity_venue_lang": "a room", "category": "other"},
+                           "when": {"mode": "at", "at": f"{a}T15:00"}, "how_many": {"count": party, "unit": "people"}, "nights": nights}})
+
+
+async def _flights(ctx: dict, body: str) -> None:
+    from . import travel as TR
+    out = ctx["out"]
+    m = _FROM_TO.search(re.sub(r"^.*?\b(?:flights?|fly|vuelos?|volar)\b\s*(?:me\s+)?(?:for\s+\w+\s+)?", "", body or "", flags=re.I))
+    day = HO.plain_date(body or "", ctx["now"])
+    if not m or not day:
+        out.text("Tell me from where, to where and the day, e.g. “flights from Madrid to Hanoi on 12 November for 2”.")
+        return
+    adults = HO.plain_party(body or "") or 1
+    got = await TR.search(m["o"].strip(), m["d"].strip(), day, adults)
+    if "why" in got:
+        out.text(f"I can't search flights right now — {got['why']}. Nothing was booked.")
+        return
+    out.text(f"Flights {got['from']['name']} → {got['to']['name']}, {SN.day_words(day)}, {adults} {'adult' if adults == 1 else 'adults'} — "
+             f"from Duffel in TEST mode (a test booking issues no ticket and charges nothing). The three cheapest:")
+    for i, c in enumerate(got["cards"]):
+        out.text(f"{i + 1}. {TR.card_line(c)}")
+    nonce = secrets.token_hex(3)
+    out.ask("Which one?", [(f"{c['owner']} {c['amount']}"[:20], f"pick:{nonce}:{i}") for i, c in enumerate(got["cards"])])
+    ctx["st"]["pending"] = {"kind": "flight_cards", "at": ctx["now"].isoformat(), "nonce": nonce, "cards": got["cards"], "adults": adults}
+
+
+async def _flight_pick(ctx: dict, pend: dict, card: dict) -> None:
+    from . import travel as TR, guest_receipt as GR
+    _s, cj = await api(ctx["account"], "GET", "/api/booking/contact")
+    contact = (cj or {}).get("contact") or {}
+    try:
+        email = await GR.address_of(ctx["account"])
+    except Exception as e:   # the read-back then says "your account email" — never a guessed address
+        log.info("[guest_whatsapp] no account email for the flight: %s", type(e).__name__)
+        email = None
+    lines = TR.read_back(card, contact.get("name") or "you", email or "")
+    sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
+    ctx["out"].text("Exactly what I'll do:\n" + "\n".join("• " + ln for ln in lines))
+    rid = card["id"][-8:]
+    ctx["out"].ask(f"Book it? {card['owner']} {card['flights']}, {card['currency']} {card['amount']} — TEST booking.",
+                   [("Yes, book it", f"yes:{rid}:{sha[:16]}"), ("No", f"no:{rid}:{sha[:16]}")])
+    ctx["st"]["pending"] = {"kind": "flight_confirm", "at": ctx["now"].isoformat(), "id": rid, "sha": sha, "card": card,
+                            "name": contact.get("name") or "", "phone": contact.get("mobile_e164"), "email": email or ""}
+
+
+async def _flight_approve(ctx: dict, pend: dict) -> None:
+    from . import test_deposit as TD
+    c = pend["card"]
+    got = await TD.checkout(c["amount"], c["currency"], f"{c['owner']} {c['flights']} {c['from']}→{c['to']}", pend["sha"][:16])
+    if "why" in got:
+        ctx["out"].text(f"I can't take the test payment yet — {got['why']}. Nothing was booked.")
+        return
+    ctx["out"].text(f"One touch: pay the TEST fare ({c['currency']} {c['amount']}) on Stripe's test page — Apple Pay or your phone's saved card; "
+                    f"nothing is charged, and I never see your card.\n{got['url']}\nI'll book the test flight the moment it's paid, and tell you here.")
+    _spawn(watch_flight_payment(ctx["ch"], ctx["frm"], ctx["account"], c, got["id"], pend["name"], pend["email"], pend.get("phone")))
+
+
+WATCH_PAY = (10, 60)   # every 10 s for 10 minutes
+
+
+async def watch_flight_payment(ch: dict, frm: str, account: str, c: dict, session_id: str, name: str, email: str, phone: Optional[str]) -> None:
+    from . import test_deposit as TD, travel as TR
+    every, times = WATCH_PAY
+    for _ in range(times):
+        await asyncio.sleep(every)
+        paid = await TD.session_paid(session_id)
+        if not paid:
+            continue
+        o = await TR.order(c, name, email, phone)
+        st = await STORE.get_state(ch["wa_id_sha256"])
+        if "why" in o:
+            await deliver(ch, frm, Out().text(f"Your test payment went through, but the test flight wasn't booked: {o['why']}."), st.get("last_inbound_at"))
+            return
+        await TR.RECORD(account, c, o["booking_reference"] or "")
+        await deliver(ch, frm, Out().text(f"✅ Booked (TEST): {TR.card_line(c)}. Reference {o['booking_reference']}. "
+                                          f"It's in your itinerary and on your calendar — {TR.LABEL}."), st.get("last_inbound_at"))
+        return
+    st = await STORE.get_state(ch["wa_id_sha256"])
+    await deliver(ch, frm, Out().text("The test payment wasn't completed within 10 minutes, so nothing was booked. Ask me again any time."),
+                  st.get("last_inbound_at"))
 
 
 # ── Sasha 126 · the spa membership (Kanoe Demo Spa, ours) and two bookings from one sentence ───────────────────────
@@ -1065,7 +1193,7 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
     photos = await _photos(account, f.get("what") or "", shown)
     if ctx.get("third_card"):   # Sasha 126 · the combo's spa set: OUR demo spa as the third card
         shown = shown[:2] + [ctx["third_card"]]
-    elif rehearsal(account):   # Sasha 117 · the dress rehearsal books OUR test venue, never a real one; the card says so
+    elif rehearsal(account) and not ctx.get("no_test_card"):   # Sasha 117 · the dress rehearsal books OUR test venue; the card says so
         shown = shown[:2] + [TEST_CARD]                   # still three: WhatsApp shows at most three reply buttons
     what = f.get("what") or ""
     out.text(f"{what[:1].upper() + what[1:]} in {f.get('where')} — {ranking.get('count') or f'{len(cands)} found'}"
@@ -1204,6 +1332,29 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             out.text(str(j.get("say")) if status == 200 else f"Not asked — {refusal_words(j, status)}.")
             return True
         return False
+    if kind == "flight_cards":   # Sasha 132
+        i = _picked(pend, body, payload)
+        if i is None and re.fullmatch(r"\s*[123]\s*", body or ""):
+            i = int(body.strip()) - 1
+        if i is None or i >= len(pend["cards"]):
+            st["pending"] = None
+            return False
+        await _flight_pick(ctx, pend, pend["cards"][i])
+        return True
+    if kind == "flight_confirm":
+        if payload.startswith("no:") or (not payload and _NO.match(body)):
+            st["pending"] = None
+            out.text("OK — nothing booked.")
+            return True
+        if payload.startswith("yes:") or YS.is_yes(body):
+            st["pending"] = None
+            if now - at > APPROVAL_WINDOW:
+                out.text("That question has expired (15 minutes) — nothing was booked. Ask me again.")
+                return True
+            await _flight_approve(ctx, pend)
+            return True
+        out.text("Tap Yes or No — nothing is booked until you do.")
+        return True
     if kind == "plan_link":   # Sasha 132 · the one yes to the whole plan → the page, made with the plan in its read-back
         if payload.startswith("no:") or (not payload and _NO.match(body)):
             st["pending"] = None
@@ -1378,7 +1529,7 @@ def refine(pend: dict, body: str, now) -> Optional[tuple]:
 
 def _payload_ok(pend: dict, payload: str) -> bool:
     """A button answers ONLY the question it was sent with: its id names this card set, or this call and its hash."""
-    if pend["kind"] == "cards":
+    if pend["kind"] in ("cards", "flight_cards"):
         return payload.startswith(f"pick:{pend['nonce']}:")
     tag = f"{str(pend.get('id', ''))[:8]}:{str(pend.get('sha', ''))[:16]}"
     return payload in (f"yes:{tag}", f"no:{tag}")
@@ -1668,7 +1819,8 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
             plan = dv.then if dv.route == "email" and PR.no_reply_call_on() else None   # Sasha 132 · in the email's own read-back
             status, j = await api(ctx["account"], "POST", "/api/booking/emails",
                                   {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": reservation["how_many"]["count"],
-                                   "name": contact["name"], "email": mine or "", **({"plan_line": plan} if plan else {})})
+                                   "name": contact["name"], "email": mine or "", **({"plan_line": plan} if plan else {}),
+                                   **({"nights": d["nights"]} if d.get("nights") else {})})   # Sasha 132 · a hotel room
             if status == 200:
                 await _ask_yes(ctx, "email", j["email_id"], j["read_back"], SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
                                extra={"summary": summary(reservation), **keep})

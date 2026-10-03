@@ -1,4 +1,5 @@
 'use client'
+import { FlightBookTest } from './FlightBookTest'  // Sasha 132
 import { useState, useRef, useEffect, MutableRefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2 } from 'lucide-react'
@@ -190,7 +191,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
   // options without one (activities, restaurants, fallbacks) keep the external deep-link.
   const [bookingFind, setBookingFind] = useState<{ what: string; where: string; country?: string; draft?: unknown } | null>(null)  // S-66 chat booking
   const [bookingCancel, setBookingCancel] = useState<{ venue: string; n: number } | null>(null)  // Sasha 96 chat cancel (Stage B)
-  const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number }[] }[]>([])
+  const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number; provider?: string; provider_offer_id?: string; live_mode?: boolean }[] }[]>([])
   // Photos Sasha surfaced, keyed by the index of the assistant message that produced them.
   const [photosByMsg, setPhotosByMsg] = useState<Record<number, Photo[]>>({})
   // Opening state: real Vietnam destinations, each with its own live photo. Before this the
@@ -762,7 +763,10 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
                           <div className="o1">{o.name}</div>
                           <div className="o2">{[o.detail, o.price].filter(Boolean).join(' · ')}</div>
                         </div>
-                        {o.offer_id && (o.amount_usd ?? 0) > 0 ? (
+                        {o.provider === 'duffel' && o.provider_offer_id && o.live_mode === false ? (
+                          /* Sasha 132 · a Duffel TEST offer: booked as a TEST booking, end to end */
+                          <FlightBookTest offerId={o.provider_offer_id} />
+                        ) : o.offer_id && (o.amount_usd ?? 0) > 0 ? (
                           <button className="price" onClick={() => onBookItem?.({ offer_id: o.offer_id!, label: `${b.title} · ${o.name}`, amount_usd: o.amount_usd!, kind: b.type, name: o.name })}>
                             Reserve · ${o.amount_usd!.toLocaleString()}
                           </button>

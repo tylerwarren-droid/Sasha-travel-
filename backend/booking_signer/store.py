@@ -167,7 +167,9 @@ class MemoryStore:
                         "venue": item["provider_name"], "local_date": item["local_date"], "local_time": item["local_time"],
                         "local_timezone": item["local_timezone"], "party_size": item["party_size"], "status": item["status"],
                         "booking_reference": item["booking_reference"], "venue_words": att.get("venue_words"),
-                        "observed_by": att.get("observed_by"), "request": item.get("request"),
+                        "observed_by": att.get("observed_by"), "request": item.get("request"), "type": item.get("type") or "restaurant",
+                        "location_name": item.get("location_name"), "location_address": item.get("location_address"),
+                        "duration_minutes": item.get("duration_minutes"),
                         "task_digest": self.tasks.get(intent["intent_id"], {}).get("task_digest")})
         return sorted(out, key=lambda r: (r["local_date"], r["local_time"]))
 
@@ -385,6 +387,7 @@ class PostgresStore:
             "t.booking_reference, coalesce(a.response_received, c.venue_words) as venue_words, a.observed_by, k.task_digest, "
             "c.own_reference, "   # Sasha 88 · her K-XXXX (written channels only since Sasha 131)
             "e.sent_at as requested_at, "   # Sasha 131 · when Sasha's email went: the reply clock
+            "t.type, t.location_name, t.location_address, t.duration_minutes, "   # Sasha 132 · flights and the itinerary questions
             "t.request "   # S-64 step 14 · the activity, its length and its unit, for the screen
             "from trip_items t join trips p on p.id = t.trip_id "
             "left join lateral (select * from booking_intents y where y.trip_item_id = t.id order by y.created_at desc limit 1) i on true "

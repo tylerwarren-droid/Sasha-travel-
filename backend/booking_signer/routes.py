@@ -521,6 +521,9 @@ async def reservations(request: Request):
         # followed by an offer to call at their opening
         "read_id": _read_id_of(r.get("request")),
         "requested_at": r["requested_at"].isoformat() if r.get("requested_at") else None,   # Sasha 131 · the email's send time
+        # Sasha 132 · a flight is not a table: what kind of booking, where, and how long (the itinerary and its questions)
+        "type": r.get("type") or "restaurant", "location": r.get("location_name"), "address": r.get("location_address"),
+        "duration_minutes": r.get("duration_minutes"),
     } for r in rows]}
 
 
@@ -549,6 +552,8 @@ router.include_router(_ops.router)   # Sasha 121 · /api/booking/ops (founder on
 from . import demo_shop as _demo_shop  # noqa: E402
 router.include_router(_demo_shop.router)   # Sasha 121 (F) · Kanoe Demo Market (ours; sells nothing)
 router.include_router(_demo_shop.ops)
+from . import travel as _travel  # noqa: E402
+router.include_router(_travel.router)   # Sasha 132 · /api/booking/travel/flight/* (Duffel TEST mode)
 from . import test_deposit as _test_deposit  # noqa: E402
 router.include_router(_test_deposit.ops)   # Sasha 131 · /api/booking/ops/test-deposit/* (founder only; Stripe TEST mode)
 from . import route_costs as _route_costs  # noqa: E402

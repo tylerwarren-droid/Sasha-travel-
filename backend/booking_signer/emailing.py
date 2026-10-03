@@ -113,6 +113,22 @@ class EmailParticulars:
     party: int
     name: str
     guest_email: str
+    nights: int = 0   # Sasha 132 · > 0: a hotel ROOM request (check-in `on`, for `nights`), not a table
+
+
+#: Sasha 132 · a ROOM request — same rules as a table: AI disclosure first, nothing agreed by email, the guest decides
+_ROOM = {
+    "en": ("Room request — {n}, {d} for {k} night{s}",
+           "Hello, this is {disclosure}, writing on behalf of {who} to ask whether you have a room for {n} from {d} for {k} night{s} "
+           "(check-in {d}, check-out {out}).\n\nCould you reply to this email with availability and the price, or to tell us if it isn't "
+           "possible?\n\nWe can't agree to a price, a deposit or different dates by email on {guest_short}'s behalf — please say what you "
+           "need and they will decide.\n\nThank you,\nSasha (AI concierge, Kanoe Technologies SL), for {guest_short}"),
+    "es": ("Solicitud de habitación — {n}, {d}, {k} noche{s}",
+           "Hola, soy {disclosure}, y le escribo de parte de {who} para preguntar si tienen una habitación para {n} desde el {d}, {k} "
+           "noche{s} (entrada el {d}, salida el {out}).\n\n¿Podrían responder a este correo con la disponibilidad y el precio, o decirnos "
+           "si no es posible?\n\nNo podemos aceptar un precio, un depósito ni otras fechas por correo en nombre de {guest_short}: "
+           "indíquennos lo que necesiten y lo decidirá.\n\nGracias,\nSasha (concierge de IA, Kanoe Technologies SL), para {guest_short}"),
+}
 
 
 def parse_email_particulars(body: Mapping[str, Any], parse_call) -> EmailParticulars:
@@ -122,7 +138,10 @@ def parse_email_particulars(body: Mapping[str, Any], parse_call) -> EmailParticu
         raise EmailRefused("guest_email_invalid", "the guest's email address is required: they are BCC'd, so they hold what was sent")
     if any(k in body for k in ("to", "venue_email", "recipient")):
         raise EmailRefused("recipient_from_request", "the venue's address is never taken from the request — it comes from what was read")
-    return EmailParticulars(on=p.on, at=p.at, party=p.party, name=p.name, guest_email=g.strip().lower())
+    nights = body.get("nights")
+    if nights is not None and (not isinstance(nights, int) or not 1 <= nights <= 30):
+        raise EmailRefused("nights_invalid", "a room request is for 1 to 30 nights")
+    return EmailParticulars(on=p.on, at=p.at, party=p.party, name=p.name, guest_email=g.strip().lower(), nights=nights or 0)
 
 
 #: Sasha 130 · the languages Sasha writes booking emails in; any other country's venue is written to in English (said)
@@ -131,6 +150,8 @@ TEMPLATE_LANGS = frozenset(_T)
 
 def compose(lang: str, venue_name: str, venue_email: str, p: EmailParticulars, email_id: str) -> dict:
     from .i18n import emails as I18N   # CR 7 i18n · 12 more languages; unreviewed ones go only to our test addresses
+    if p.nights:   # Sasha 132 · a hotel room (English or Spanish; any other language in English, as a table is)
+        return _room(lang, venue_email, p, email_id)
     if lang in I18N.LANGS and I18N.usable(lang, venue_email):
         return I18N.table_email(lang, venue_email, p, email_id)
     lang = lang if lang in _T else "en"
@@ -151,6 +172,20 @@ def compose(lang: str, venue_name: str, venue_email: str, p: EmailParticulars, e
         "text": body_t.format(disclosure=DISCLOSURE.get(lang, DISCLOSURE["en"]), who=who, n=n, d=d, t=t, guest_short=p.name),
     }
     return email
+
+
+def _room(lang: str, venue_email: str, p: EmailParticulars, email_id: str) -> dict:
+    from datetime import timedelta
+    lang = lang if lang in _ROOM else "en"
+    subj_t, body_t = _ROOM[lang]
+    surname = p.name.split()[-1]
+    who = _WHO.get(lang, _WHO["en"]).format(s=surname) if p.party > 1 else p.name
+    n = (_PERSON if p.party == 1 else _PEOPLE)[lang].format(n=p.party)
+    v = {"n": n, "d": p.on.isoformat(), "k": p.nights, "s": "" if p.nights == 1 else ("s" if lang == "en" else "s"),
+         "out": (p.on + timedelta(days=p.nights)).isoformat()}
+    return {"from": _env("SASHA_EMAIL_FROM"), "to": venue_email, "bcc": p.guest_email, "reply_to": act_address(email_id),
+            "subject": subj_t.format(**v),
+            "text": body_t.format(disclosure=DISCLOSURE.get(lang, DISCLOSURE["en"]), who=who, guest_short=p.name, **v)}
 
 
 def email_sha256(email: Mapping[str, Any]) -> str:

@@ -1768,6 +1768,11 @@ async def conduct(
     _draft_turn = booking_turn(user_message, conversation_history)
     if _draft_turn is not None:
         return _draft_turn
+    # Sasha 132 · ask your itinerary: backend/booking_signer/itinerary_q.py — from the guest's own bookings, no model.
+    from booking_signer.itinerary_q import web_turn  # noqa: E402
+    _itinerary = await web_turn(user_message, user_id, conversation_history)
+    if _itinerary is not None:
+        return _itinerary
 
 
     # Recent conversation text — used so booking links/hotels keep the destination in mind

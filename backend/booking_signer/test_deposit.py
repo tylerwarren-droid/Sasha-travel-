@@ -85,6 +85,34 @@ async def paid_since(link_id: str, since: float) -> Optional[dict]:
     return None
 
 
+async def checkout(amount: str, currency: str, label: str, ref: str) -> Dict[str, str]:
+    """Sasha 132 · one touch for ANY test amount (a flight's fare): a Stripe TEST Checkout session. {id, url} or {why}."""
+    if not key():
+        return {"why": "no Stripe TEST key is set (STRIPE_TEST_SECRET_KEY, sk_test_…) — the founder sets it on Railway"}
+    try:
+        cents = int(round(float(amount) * 100))
+    except ValueError:
+        return {"why": f"not an amount: {amount!r}"}
+    you = os.getenv("SASHA_WEB_URL", "https://project.kanoe.ai").rstrip("/") + "/you"   # after paying: their bookings, where it appears
+    s, j = await HTTP("POST", "/checkout/sessions", {
+        "mode": "payment", "success_url": you, "cancel_url": you,
+        "line_items[0][quantity]": 1, "line_items[0][price_data][currency]": currency.lower(),
+        "line_items[0][price_data][unit_amount]": cents, "line_items[0][price_data][product_data][name]": f"TEST payment — {label}"[:250],
+        "metadata[test_payment]": "true", "metadata[sasha_ref]": ref[:100]})
+    if s != 200:
+        return {"why": f"Stripe refused the test page: {j.get('error', {}).get('message', s)}"}
+    if j.get("livemode"):
+        return {"why": "Stripe answered in LIVE mode — refused"}
+    return {"id": j["id"], "url": j["url"]}
+
+
+async def session_paid(session_id: str) -> Optional[dict]:
+    s, cs = await HTTP("GET", f"/checkout/sessions/{session_id}", {})
+    if s != 200 or cs.get("livemode") or cs.get("status") != "complete" or cs.get("payment_status") != "paid":
+        return None
+    return {"amount": (cs.get("amount_total") or 0) / 100, "currency": (cs.get("currency") or "eur").upper(), "payment": cs.get("payment_intent")}
+
+
 def message(url: str) -> str:
     eur = amount_cents() / 100
     return (f"Sasha Test Venue asks a €{eur:.2f} deposit to hold the table. ⚠ TEST payment — nothing is charged. "
@@ -117,4 +145,4 @@ async def status(request: Request):
     return {"ok": True, "paid": got, "say": (f"Paid (TEST): €{got['amount']:.2f} — Stripe test payment {got['payment']}" if got else "not paid yet")}
 
 
-__all__ = ["ops", "link", "paid_since", "message", "key", "LABEL"]
+__all__ = ["ops", "link", "paid_since", "message", "key", "LABEL", "checkout", "session_paid"]

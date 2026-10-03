@@ -65,7 +65,7 @@ def access_line(provider: str, label: str, kind: Optional[str] = None) -> str:
     """The read-back line that names the access — the approval must contain it, so its hash covers it.
     CR 1 · an `identifier` signs nobody in (a membership number, a student's details): its line says it is USED."""
     if kind == "identifier":
-        return f"I'll use your saved {label} from your vault, for {provider} only."
+        return f"I'll use your saved {label} from your vault."
     return f"I'll sign in to {provider} with your saved {label}."
 
 

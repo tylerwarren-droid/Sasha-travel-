@@ -192,7 +192,7 @@ class OnWhatsApp(Fixtures):
         item = str(uuid.uuid4())
         sealed = run(VC.seal(TG.ACCOUNT, item, "identifier", json.dumps({"value": json.dumps(profile)}).encode()))
         now = datetime.now(timezone.utc)
-        run(VC.STORE.create({"id": item, "account_id": TG.ACCOUNT, "provider": "CampusMe", "label": "student details (Sam)",
+        run(VC.STORE.create({"id": item, "account_id": TG.ACCOUNT, "provider": "kanoe.ai", "label": "CampusMe student details (Sam)",
                              "kind": "identifier", **sealed, "special_category": False, "created_at": now, "updated_at": now}))
         return item
 
@@ -205,7 +205,7 @@ class OnWhatsApp(Fixtures):
         self.assertIn("apps.admissions.yale.edu — the schools' own calendars", said)
         self.say("", payload=self.last_buttons()[0][1])
         rb = self.said()
-        self.assertIn("• I'll use your saved student details (Sam) from your vault, for CampusMe only.", rb)
+        self.assertIn("• I'll use your saved CampusMe student details (Sam) from your vault.", rb)
         self.assertIn("stop before its Register button: you press it. I send nothing to Yale.", rb)
         self.assertIn("creates a record for the student in Yale's admissions system", rb)
         self.assertNotIn("sam@example.com", rb)                        # the vault opens only under the yes
@@ -233,12 +233,32 @@ class OnWhatsApp(Fixtures):
         self.say("yes")
         self.assertIn("filled from what you told me on WhatsApp", self.said())
 
+    def test_keep_in_vault_goes_through_the_real_vault_route(self):
+        """CR 2 · the rehearsal found "I couldn't keep them in your vault": the vault names a provider by its ADDRESS.
+        Here the turn reaches the real POST /api/booking/vault (in process, as the guest), not a fake."""
+        GW.api = self.gw_saved[2]
+        self.venv2 = mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k"}); self.venv2.start()
+        try:
+            self.say("campus Yale October 14 for my son")
+            self.say("1")
+            for a in ("Sam Ejemplo", "sam@example.com", "14 March 2009", "Hopkins School", "2028"):
+                self.say(a)
+            self.say("", payload="cm:save:yes")
+            self.assertIn("Kept in your vault as “CampusMe student details (Sam)”", self.said())
+            items = run(VC.STORE.list(TG.ACCOUNT))
+            self.assertEqual([(i["provider"], i["kind"]) for i in items], [("kanoe.ai", "identifier")])
+            self.assertIn("• I'll use your saved CampusMe student details (Sam) from your vault.", self.said())
+            self.say("", payload=self.last_buttons()[0][1])
+            self.assertIn("filled from your vault", self.said())
+        finally:
+            self.venv2.stop()
+
     def test_april_not_published_is_said_and_watched(self):
         self.say("campus visits at Yale and Penn in April for my son")
         said = self.said()
         self.assertIn("*Yale* hasn't published April 2027 yet", said)
         self.assertIn("*Penn* hasn't published April 2027 yet", said)
-        self.assertIn("I'll check it daily and message you the day April opens", said)
+        self.assertIn("I'll check daily and message you the day April opens", said)
         watching = run(ST.STORE.watching())
         self.assertEqual(watching[0]["state"]["watch"]["schools"], ["yale", "penn"])
         self.web.yale_list = self.web.yale_list   # April opens at Yale:

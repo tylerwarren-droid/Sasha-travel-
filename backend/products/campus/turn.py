@@ -28,7 +28,8 @@ from .slate import Session
 
 log = logging.getLogger("products.campus")
 
-PROVIDER = "CampusMe"
+PROVIDER = "kanoe.ai"            # the vault names a provider by its address; the label says CampusMe
+LABEL = "CampusMe student details"
 APPROVAL_WINDOW = timedelta(minutes=15)
 CARDS_PER_SCHOOL = (3, 2, 1)      # by how many schools were asked for
 DAYS_READ_MAX = 4                 # days read per school per ask (each a request or three)
@@ -84,10 +85,10 @@ async def find(ask: RQ.Ask, today: date, reader: Optional[SL.Reader] = None) -> 
             res["published_until"] = max((d for d, _ in ds), default=None)
             avail = [d for d, ok in ds if ok and start.isoformat() <= d <= end.isoformat()]
             res["opened"] = any(start.isoformat() <= d <= end.isoformat() for d, _ in ds)
+            # the first open day's sessions first: every extra day is another paced read (three at Penn), and the room waits
             for d in avail[:DAYS_READ_MAX]:
                 for x in await SL.sessions(s, d, attendees, reader):
-                    if x.status == "open" and len(res["sessions"]) < per and \
-                            not any(y["day"] == x.day for y in res["sessions"]):   # one per day: spread the choice
+                    if x.status == "open" and len(res["sessions"]) < per:
                         res["sessions"].append(x.as_dict())
                 if len(res["sessions"]) >= per:
                     break
@@ -164,37 +165,41 @@ async def _new_ask(ctx: dict, body: str) -> None:
     await ctx["early"](f"Reading {names}'s own visit calendar{'s' if len(a.schools) > 1 else ''} for {a.when_words()}…")
     found = await find(a, today, ctx.get("reader"))
     cards: List[dict] = []
+    notes: List[str] = []          # one message for every school without cards: the sandbox sends one every 3.1 s
     for f in found:
         s = SC.SCHOOLS[f["school"]]
         if not f["sessions"]:
             start, _ = a.span(today)
             if f["published_until"] and f["published_until"] < start.isoformat():
-                out.text(f"⏳ *{s['name']}* hasn't published {a.when_words()} yet — its calendar runs to "
-                         f"{date.fromisoformat(f['published_until']).strftime('%-d %B %Y')}. I'll check it daily and message "
-                         f"you the day {a.when_words().split()[0]} opens.")
+                notes.append(f"⏳ *{s['name']}* hasn't published {a.when_words()} yet — its calendar runs to "
+                             f"{date.fromisoformat(f['published_until']).strftime('%-d %B %Y')}.")
                 pend.setdefault("watch", []).append({"school": s["key"], "month": list(a.month) if a.month else None,
                                                      "since": now.isoformat()})
             else:
-                out.text(f"⚠ *{s['name']}*: {f['why'] or 'no open session in ' + a.when_words()}.")
+                notes.append(f"⚠ *{s['name']}*: {f['why'] or 'no open session in ' + a.when_words()}.")
             continue
         cards.extend(f["sessions"])
+    if pend.get("watch"):
+        notes.append(f"I'll check daily and message you the day {a.when_words().split()[0]} opens.")
+    if notes:
+        out.text("\n".join(notes))
     if pend.get("watch"):
         await _keep_watch(ctx, a)
     if not cards:
         pend["step"] = "ask"
         out.text("Want me to look at another month? Just name it, e.g. \"November\".")
         return
-    for i, x in enumerate(cards, 1):
-        out.text(card_line(i, x))
     srcs = sorted({SC.SCHOOLS[x['school']]['host'] for x in cards})
-    out.text(f"Read just now from {', '.join(srcs)} — the schools' own calendars. Spaces change; I re-check before you register.")
     n = len(cards)
+    body = "\n\n".join(card_line(i, x) for i, x in enumerate(cards, 1)) + \
+        f"\n\nRead just now from {', '.join(srcs)} — the schools' own calendars. Spaces change; I re-check before you register."
     nonce = hashlib.sha256(json.dumps(cards, sort_keys=True).encode()).hexdigest()[:8]
     if n <= 3:
+        out.text(body)
         out.ask("Which one?", [(f"{i}. {SC.SCHOOLS[x['school']]['name']} {day_words(x['day']).split(' ', 1)[1]}", f"cm:{nonce}:{i - 1}")
                                for i, x in enumerate(cards, 1)])
     else:
-        out.text(f"Reply with a number, 1–{n}.")
+        out.text(body + f"\n\nWhich one? Reply with a number, 1–{n}.")
     pend.update(step="cards", cards=cards, nonce=nonce, cards_at=now.isoformat())
 
 
@@ -218,8 +223,12 @@ async def _vault_item(account: str) -> Optional[dict]:
     except Exception as e:
         log.info("[campus] vault not readable: %s", type(e).__name__)
         return None
-    return next((r for r in rows if not r.get("revoked_at") and str(r.get("provider") or "").strip().lower() == PROVIDER.lower()
-                 and r.get("kind") == "identifier"), None)
+    return next((r for r in rows if is_profile(r)), None)
+
+
+def is_profile(r: dict) -> bool:
+    return (not r.get("revoked_at") and r.get("kind") == "identifier" and str(r.get("provider") or "").lower() == PROVIDER
+            and str(r.get("label") or "").startswith(LABEL))
 
 
 PROFILE_ASKS = [
@@ -323,7 +332,7 @@ async def _save_answer(ctx: dict, body: str, payload: str) -> None:
     pend, out = ctx["st"]["pending"], ctx["out"]
     keep = payload == "cm:save:yes" or (not payload and YS.is_yes(body))
     if keep:
-        label = f"student details ({pend['profile']['first']})"
+        label = f"{LABEL} ({pend['profile']['first']})"
         try:
             from booking_signer.guest_whatsapp import api
             status, j = await api(ctx["account"], "POST", "/api/booking/vault",

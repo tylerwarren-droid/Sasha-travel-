@@ -97,6 +97,14 @@ def verify(read: Dict[str, Any]) -> Dict[str, str]:
                               "the expiry's check digit fails" if not m["expiry_ok"] else
                               "the printed expiry and the machine-readable one differ")
     out["sex"] = "ok" if (read.get("sex") or "X") == m["sex"] else "the printed sex and the machine-readable one differ"
+    # line 1 carries the surname the passport itself treats as the surname (no check digit — compared, not "verified")
+    l1 = re.sub(r"\s", "", read.get("mrz_line_1", "") or "").upper()
+    if l1.startswith("P") and "<<" in l1[5:]:
+        mrz_sur = l1[5:].split("<<", 1)[0].replace("<", " ").strip()
+        printed = re.sub(r"[^A-Z ]", " ", F.fold(read.get("surnames", "")).upper()).split()
+        if mrz_sur and " ".join(printed) != mrz_sur:
+            out["surname_1"] = (f"the machine-readable zone gives the surname as {mrz_sur}; the printed field reads "
+                                f"“{read.get('surnames')}” — tell me which belongs on the form")
     return out
 
 
@@ -153,8 +161,12 @@ def to_facts(read: Dict[str, Any]) -> Dict[str, str]:
 
 
 def _show(k: str, v: str) -> str:
-    if k == "sex":
-        return F.SEX_WORDS.get(v, v)
+    if k == "sex":   # the Spanish form's letters differ from the passport's: F on a passport is M (mujer) on the EX-01
+        return {"M": "female — M (mujer) on the Spanish form", "H": "male — H (hombre) on the Spanish form",
+                "X": "X"}.get(v, v)
+    if k in ("birth_date", "passport_expiry") and re.fullmatch(r"\d{4}-\d{2}-\d{2}", v or ""):
+        from datetime import date
+        return date.fromisoformat(v).strftime("%-d %B %Y")
     return v
 
 
@@ -208,7 +220,7 @@ async def on_confirm(ctx: dict, facts: dict, body: str, payload: str) -> None:
         a, docs = facts.setdefault("applicant", {}), facts.setdefault("documents", {})
         for k, v in vals.items():
             if checks.get(k) not in (None, "ok"):
-                continue          # a value its own check digit contradicts is never kept: they type it instead
+                continue          # a value its own passport contradicts is never kept: they type it instead
             prior = a.get(k)
             if prior and F.fold(str(prior["value"])) != F.fold(v):
                 docs.setdefault(f"applicant.{k}", []).append(prior)    # what they typed stays, as a second source

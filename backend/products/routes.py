@@ -81,6 +81,7 @@ async def campus_case(cid: str) -> dict:
             "form_pages": st.get("form_pages", 1), "challenge_seen": st.get("challenge_seen", False),
             "rows": st["rows"], "counts": HV.counts(st["rows"]), "status": st.get("status"),
             "confirmation_quote": st.get("confirmation_quote"), "prepared_at": str(c["created_at"]),
+            "fictional": bool(st.get("fictional")), "showcase": bool(st.get("showcase")),
             "expires_at": str(c["expires_at"]), "submits": False}
 
 
@@ -101,7 +102,8 @@ async def relocation_case(cid: str) -> dict:
     c = await _case(cid, "relocation")
     st = c["state"]
     return {"ok": True, "rows": st["rows"], "counts": st["counts"], "checks": st["checks"], "status": st.get("status"),
-            "route": st.get("route"), "fictional": st.get("fictional", False), "prepared_at": st.get("prepared_at"),
+            "route": st.get("route"), "fictional": st.get("fictional", False), "showcase": bool(st.get("showcase")),
+            "prepared_at": st.get("prepared_at"),
             "signed_at": st.get("signed_at"), "after": st.get("after"), "expires_at": str(c["expires_at"]),
             "form": {"name": "EX-01", "title": "Autorización de residencia temporal no lucrativa", "pages": 3,
                      "widgets": len(st["rows"]), "pdf_sha256": E.PDF_SHA256}, "submits": False}

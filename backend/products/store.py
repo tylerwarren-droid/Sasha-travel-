@@ -89,7 +89,7 @@ class PostgresCaseStore:
         await self._run(lambda c: c.execute(
             "insert into product_cases (id, product, account_id, wa_id_sha256, state, expires_at) "
             "values ($1, $2, $3, $4, $5::jsonb, now() + $6::interval)",
-            cid, product, uuid.UUID(account), wa_key, state, f"{EXPIRES.days} days"))
+            cid, product, uuid.UUID(account), wa_key, state, EXPIRES))   # asyncpg encodes an interval from a timedelta only
         return cid
 
     async def get(self, cid):

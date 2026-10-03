@@ -16,6 +16,7 @@ type Case = {
   session: { day: string; start: string; end: string | null; title: string; location: string | null; spaces: number | null; read: { at: string; sha256: string } }
   form_url: string; form_read: { at: string; sha256: string } | null; form_pages: number; challenge_seen: boolean
   rows: Row[]; counts: Record<string, number>; status: string; confirmation_quote: string | null; expires_at: string
+  fictional: boolean
 }
 
 const STYLE: Record<Row['action'], { box: string; tag: string }> = {
@@ -50,6 +51,9 @@ export default async function CampusHandover({ params }: { params: Promise<{ id:
   const yours = c.counts.you ?? 0
   return (
     <main className="min-h-screen bg-white"><div className="mx-auto max-w-2xl px-4 py-8 text-slate-800">
+      {c.fictional && (
+        <p className="mb-4 rounded border border-violet-300 bg-violet-50 p-3 text-sm">Illustration: the student shown here is fictional. The session and the form are the school’s real ones, read live; nothing was sent to the school.</p>
+      )}
       <p className="text-sm font-medium uppercase tracking-wide text-slate-500">CampusMe · prepared, not sent</p>
       <h1 className="mt-1 text-2xl font-semibold">{c.school.full_name}: {s.title.split(' · ')[0]}</h1>
       <p className="mt-1 text-slate-600">{when(s.day, s.start)} ({c.school.city} time){s.location ? ` · ${s.location}` : ''}</p>

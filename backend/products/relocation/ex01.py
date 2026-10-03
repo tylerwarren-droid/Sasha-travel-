@@ -163,6 +163,8 @@ def fill(rs: List[dict]) -> bytes:
     w = PdfWriter(clone_from=PdfReader(str(PDF)))
     w.set_need_appearances_writer(True)
     for page in w.pages:
+        if not page.get("/Annots"):
+            continue                               # page 3 carries no fields
         w.update_page_form_field_values(page, values, auto_regenerate=False)
         for a in page.get("/Annots") or []:
             a = a.get_object()

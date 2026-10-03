@@ -359,6 +359,8 @@ async def prepare(request: Request):
     account = account_for(request)
     if body.get("cancels_call_id"):
         return await _prepare_cancel(account, str(body["cancels_call_id"]), body)
+    if body.get("cancels_trip_item_id"):   # Sasha 119 · a booking made by FORM, cancelled by phone
+        return await _prepare_cancel_unphoned(account, str(body["cancels_trip_item_id"]), body)
     if body.get("read_id"):
         # S-36 · the number Magellan READ at the venue — never one in the request
         try:
@@ -466,6 +468,58 @@ def _named(built: dict, read: Optional[dict], stored_name: str) -> Tuple[dict, L
     shown = [ln.replace(stored_name, name) for ln in lines]
     kept = [ln.replace(stored_name, LISTING_NAME_STORED) for ln in lines]
     return {**built, "read_back_lines": kept, "read_back_sha256": C._sha256hex("\n".join(shown))}, shown
+
+
+async def _prepare_cancel_unphoned(account: str, trip_item_id: str, body: dict):
+    """Sasha 119 · the call that cancels a booking Sasha made WITHOUT a call — by their own form. Everything is read from
+    that booking: its request (who, what, day, time, party) and the venue read it was sent from — the number dialled is
+    the one they publish on their OWN site, never one from the request."""
+    from . import form_rung as FR
+    extra = set(body) - {"cancels_trip_item_id"}
+    if extra:
+        return _refuse(422, "cancel_takes_nothing_else", f"a cancellation is prepared from the booking alone; not {sorted(extra)}")
+    try:
+        form = await FR.STORE.for_item(account, trip_item_id) if hasattr(FR.STORE, "for_item") else None
+        o = (await FR._request_of(form)) if form else None
+        read_row = await ladder_routes.LADDER_STORE.get_read(account, str(form["read_id"])) if form and form.get("read_id") else None
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    if not form or not isinstance(o, dict) or read_row is None:
+        return _refuse(404, "nothing_to_cancel", "no booking of yours made by a venue's form with that id")
+    facts = (read_row.get("read") or {}).get("facts") or []
+    phone = next((f for f in facts if f.get("kind") == "phone" and f.get("value") and f.get("source_kind") == "site"), None) or \
+        next((f for f in facts if f.get("kind") == "phone" and f.get("value")), None)
+    lang_key = _LANG_BY_CODE.get({"ES": "es", "PT": "pt", "FR": "fr", "IT": "it", "DE": "de"}.get(read_row.get("country") or "", "en"))
+    if phone is None or lang_key is None:
+        return _refuse(422, "no_number", "they publish no phone number Sasha has read, so she can't call them to cancel")
+    venue = C.CallVenue(key=f"read:{read_row['read_id']}", name=read_row.get("venue_name") or "the venue", number_env="", language=lang_key,
+                        timezone=(o.get("where") or {}).get("timezone") or "Europe/Madrid", number=phone["value"],
+                        source=phone.get("source_label"), number_kind="site")
+    who, what, n = o.get("who") or {}, o.get("what") or {}, o.get("how_many") or {}
+    at = (o.get("when") or {}).get("at") or ""
+    b = {"name": who.get("name") or "", "activity": what.get("activity") or "a table", "activity_venue_lang": what.get("activity_venue_lang") or "una mesa",
+         "category": what.get("category") or "restaurant", "date": at[:10], "time": at[11:16], "party": n.get("count"), "unit": n.get("unit") or "people",
+         "phone": (who.get("contact") or {}).get("mobile_e164"), "number": phone["value"], "language": lang_key}
+    refused = await ladder_routes._optin_refusal(venue.venue_ids, "phone")
+    if refused:
+        return refused
+    now = NOW()
+    try:
+        built = R.cancel_for(b, venue, now, None)
+    except (RS.ReservationRefused, C.CallRefused) as e:
+        return _refuse(422, getattr(e, "rule", "cancel_invalid"), str(e))
+    built["brief"]["cancels_trip_item_id"] = trip_item_id
+    built = PT.seal_call(built, venue)
+    row = {"call_id": str(uuid.uuid4()), "account_id": account, "venue_key": venue.key, "dialled_number": built["dialled_number"],
+           "language": lang_key, "guest_name": b["name"], "guest_phone": b.get("phone"), "brief": built["brief"],
+           "brief_sha256": built["brief_sha256"], "read_back_lines": built["read_back_lines"],
+           "read_back_sha256": built["read_back_sha256"], "created_at": now}
+    try:
+        item = await CALL_STORE.put_cancel_call(row, trip_item_id)
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    return {"call_id": row["call_id"], "trip_item_id": item, "purpose": "cancel",
+            "read_back": {"lines": built["read_back_lines"], "sha256": row["read_back_sha256"]}}
 
 
 async def _cancel_from_object(account: str, booking: dict, b: dict, venue: C.CallVenue):

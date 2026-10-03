@@ -363,6 +363,33 @@ class CancelRoutes(unittest.TestCase):
         ref = plan["url"].rsplit("/", 1)[1]
         self.assertEqual(self.c.get(f"/api/booking/test-venue/cancel/{ref[:-1]}{'0' if ref[-1] != '0' else '1'}").status_code, 404)   # not a forged one
 
+    def test_sasha119_a_form_booking_can_be_cancelled_by_phone_on_their_own_number(self):
+        """Hanakura, 3 Oct: booked by their form, no call — if the email gets no answer, a call cancels it."""
+        from booking_signer import ladder_routes as LR
+        item = self.booked()
+        self.assertEqual(self.c.post("/api/booking/calls", json={"cancels_trip_item_id": item}).json()["rule"], "no_number")   # none published
+        real = LR.LADDER_STORE.get_read
+
+        async def with_phone(account, read_id):
+            r = await real(account, read_id)
+            if r:
+                r = {**r, "country": "ES", "read": {**r["read"], "facts": r["read"]["facts"] + [
+                    {"kind": "phone", "value": "+34914454691", "source_label": "their website, venue.sasha.test", "source_kind": "site"}]}}
+            return r
+        with mock.patch.object(LR.LADDER_STORE, "get_read", with_phone):
+            c = self.c.post("/api/booking/calls", json={"cancels_trip_item_id": item})
+        self.assertEqual(c.status_code, 200, c.text)
+        j = c.json()
+        self.assertEqual((j["trip_item_id"], j["purpose"]), (item, "cancel"))
+        lines = "\n".join(j["read_back"]["lines"])
+        self.assertIn("+34914454691 — the number on their website, venue.sasha.test", lines)
+        self.assertIn("Llamo para cancelar la reserva del sábado a nombre de Warren", lines)   # a table needs no naming
+        call = self.calls.calls[j["call_id"]]
+        self.assertTrue(call["brief"]["recap"].endswith("¿Confirmado?"))
+        self.assertEqual(call["brief"]["cancels_trip_item_id"], item)
+        self.assertEqual(self.c.post("/api/booking/calls", json={"cancels_trip_item_id": item, "phone": "+1"}).json()["rule"],
+                         "cancel_takes_nothing_else")
+
     def test_a_platforms_cancel_link_is_pressed_by_the_guest_never_opened(self):
         from booking_signer import cancel_routes as CX
         p = CX.plan({"texts": ["Gestiona tu reserva: https://www.covermanager.com/cancel/abc123?lang=es"], "read": {"facts": []}, "call": None})

@@ -459,6 +459,8 @@ _CANCEL_SWAP = {  # the table phrase in each language's cancel opening → the a
 def cancel_opening(lang: C.Lang, o: Mapping[str, Any], today: date) -> str:
     code = _code(lang)
     old, new = _CANCEL_SWAP[code]
+    if (o.get("what") or {}).get("activity") in ("a table", "table"):   # a table needs no naming: the founder's sentence as it is
+        old = new = ""
     act = activity_phrase(lang, o)
     de = "d'" if code == "fr" and act[:1].lower() in "aeiouhéè" else "de"
     template = lang.cancel_opening.replace(old, new.replace("{activity}", "\x00").replace("{de}", de), 1)
@@ -486,6 +488,8 @@ def cancel_for(booking_brief: Mapping[str, Any], venue: C.CallVenue, now: dateti
     first = cancel_opening(lang, o, today)
     check = C.check_sentence(lang, C.CallParticulars(on=today, at=time(12), party=1, name=b["name"], phone=None))
     held = f'It is held under "{reference}". ' if reference else ""
+    recap = C.cancel_recap(lang, C.CallParticulars(on=date.fromisoformat(b["date"]), at=time.fromisoformat(b["time"]),
+                                                   party=int(b["party"]), name=b["name"], phone=None))
     task = (
         f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning a venue to CANCEL an existing booking on behalf of a guest. Speak {lang.label} only. "
         f"{C.already_said(lang.code, first)}"
@@ -495,14 +499,16 @@ def cancel_for(booking_brief: Mapping[str, Any], venue: C.CallVenue, now: dateti
         "Never agree to a cancellation fee, a charge, or to give a card. You have no card and no payment details. "
         f"If they ask for ANY payment, say exactly: \"{check}\" — then thank them and end the call. "
         "Do not move the booking to another day or time; only cancel it. Do not give any email address or personal detail. "
-        "If they confirm it is cancelled, repeat it back once (what, the day, the time, the name), thank them, and end the call. "
+        # Sasha 119 · cancelled only on their explicit yes to this recap
+        f"When they say they'll cancel it, say at once: \"{recap}\" and wait silently for the answer. "
+        f"Only a clear yes confirms; to just \"ok\", ask once: \"{recap.split('. ')[-1]}\" Then thank them and end the call. "
         "If they cannot find the booking, or say to call back, thank them and end the call. "
         f"If they ask not to be contacted again, say exactly \"{C._ack(lang)}\" and end the call. "
         "Keep it short and polite. Do not leave a voicemail."
     )
     number = b["number"]
     brief = {"purpose": "cancel", "timezone": venue.timezone, "reference": reference, "venue_key": venue.key, "number": number,
-             "language": lang.code, "recap": None, "first_sentence": first, "task": task, "check_sentence": check,
+             "language": lang.code, "recap": recap, "first_sentence": first, "task": task, "check_sentence": check,
              "party": b["party"], "date": b["date"], "time": b["time"], "name": b["name"], "phone": b.get("phone"),
              "from": C.caller_id(), "number_source": venue.source, "venue_name": venue.name,
              "venue_ids": list(venue.venue_ids) if venue.venue_ids else None,

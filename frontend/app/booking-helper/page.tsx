@@ -11,6 +11,7 @@ import { PhoneCall } from './PhoneCall'
 import { Ladder } from './Ladder'
 import { FounderGate } from './FounderGate'
 import { InviteGuest } from './InviteGuest'
+import { DemoControls } from './DemoControls'
 
 /** The details pre-filled while testing; every field stays editable. */
 const DEMO_PROFILE = { name: 'Jon Peters', email: 'jon@kanoe.ai', phone: '+44 20 7946 0123' }
@@ -30,6 +31,7 @@ export default function OpsPage() {
           <li>Calls: the call panel below; a guest&rsquo;s calls are off until you list their account in SASHA_CALLS_ACCOUNTS.</li>
         </ul>
       </header>
+      <DemoControls />
       <InviteGuest />
       <Ladder defaults={DEMO_PROFILE} />
       <PhoneCall defaults={DEMO_PROFILE} />

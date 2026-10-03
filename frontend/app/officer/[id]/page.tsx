@@ -38,7 +38,7 @@ export default async function Officer({ params }: { params: Promise<{ id: string
         <p className="mb-4 rounded border border-violet-300 bg-violet-50 p-3 text-sm"><b>CLICK-THROUGH.</b> Illustration: a scripted walk through a real flow. Names and data are fictional. The form, its checks and the consulate’s checklist are the real ones; “return” records the message and sends nothing.</p>
         <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Case officer · EX-01 · residencia no lucrativa</p>
         <h1 className="mt-1 text-2xl font-semibold">{apps.length} applications — {open} need attention before they’re assessed</h1>
-        <p className="mt-1 text-sm text-slate-600">Most attention first: problems, then missing documents, then points to check. Each line is the check’s own words.</p>
+        <p className="mt-1 text-sm text-slate-600">Most attention first: problems, then missing documents, then points to check. Each line is the check’s own words. All five apply at the Spanish Consulate General in London, whose own checklist (dated 11 Feb 2022) the documents are checked against.</p>
         <ol className="mt-6 space-y-4">
           {apps.map((a) => (
             <li key={a.id} className={`rounded-lg border p-4 ${STATUS[a.status].cls}`}>

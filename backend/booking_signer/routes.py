@@ -540,6 +540,9 @@ router.include_router(_ops.router)   # Sasha 121 · /api/booking/ops (founder on
 from . import demo_shop as _demo_shop  # noqa: E402
 router.include_router(_demo_shop.router)   # Sasha 121 (F) · Kanoe Demo Market (ours; sells nothing)
 router.include_router(_demo_shop.ops)
+from . import demo_spa as _demo_spa  # noqa: E402
+router.include_router(_demo_spa.router)   # Sasha 126 (3) · Kanoe Demo Spa (ours; books nothing real)
+router.include_router(_demo_spa.ops)
 from . import demo_ops as _demo_ops  # noqa: E402
 router.include_router(_demo_ops.router)   # Sasha 121 · the investor demo's controls (founder only)
 # Sasha 99 · cancelling by the best route there is (link, email, text, call)

@@ -13,7 +13,7 @@ import { GatedButton } from './GatedButton'
 export function DemoControls() {
   const [words, setWords] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [login, setLogin] = useState<{ username: string; password: string; shop: string } | null>(null)
+  const [login, setLogin] = useState<{ username: string; password: string; site: string } | null>(null)
   async function run(path: string, label: string) {
     setBusy(true); setWords(`${label}…`)
     try {
@@ -22,10 +22,10 @@ export function DemoControls() {
       setWords(r.ok ? `${label}: ${String(j.say ?? j.text ?? j.offered ?? 'done')}` : `${label} — ${refusal(j, r.status)}.`)
     } catch (e) { setWords((e as Error).message) } finally { setBusy(false) }
   }
-  async function showLogin() {
-    const r = await fetch(bookingUrl('/api/booking/ops/demo-shop-login'), { headers: bookingHeaders() })
+  async function showLogin(path: string, site: string) {
+    const r = await fetch(bookingUrl(path), { headers: bookingHeaders() })
     const j = await r.json().catch(() => ({}))
-    if (r.ok) setLogin(j as { username: string; password: string; shop: string }); else setWords(`Demo shop login — ${refusal(j, r.status)}.`)
+    if (r.ok) setLogin({ ...(j as { username: string; password: string }), site }); else setWords(`${site} login — ${refusal(j, r.status)}.`)
   }
   const needs = [busy && 'the last step to finish']
   return (
@@ -35,11 +35,12 @@ export function DemoControls() {
         <GatedButton label="Reset the demo" onClick={() => { run('/api/booking/ops/demo/reset', 'Reset') }} needs={needs} />
         <GatedButton label="E · Send “time to leave” now" onClick={() => { run('/api/booking/ops/demo/leave-now', 'Time to leave') }} needs={needs} />
         <GatedButton label="G · Gmail find (≈1 min)" onClick={() => { run('/api/booking/ops/demo/gmail-seed', 'Gmail find') }} needs={needs} />
-        <GatedButton label="F · Demo shop login" onClick={() => { showLogin() }} needs={needs} />
+        <GatedButton label="F · Demo shop login" onClick={() => { showLogin('/api/booking/ops/demo-shop-login', 'Kanoe Demo Market') }} needs={needs} />
+        <GatedButton label="Spa · Demo spa membership" onClick={() => { showLogin('/api/booking/ops/demo-spa-login', 'Kanoe Demo Spa') }} needs={needs} />
       </div>
       {words && <p>{words}</p>}
-      {login && <p className="text-xs">Kanoe Demo Market (ours — sells nothing): <strong>{login.username}</strong> / <code>{login.password}</code> — save it in
-        {' '}<a className="underline" href="/vault">My accounts</a> as site &ldquo;Kanoe Demo Market&rdquo;, kind &ldquo;Password&rdquo;.</p>}
+      {login && <p className="text-xs">{login.site} (ours — a demo, nothing real): <strong>{login.username}</strong> / <code>{login.password}</code> — save it in
+        {' '}<a className="underline" href="/vault">My accounts</a> as site &ldquo;{login.site}&rdquo;, kind &ldquo;Password&rdquo;.</p>}
     </section>
   )
 }

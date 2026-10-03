@@ -128,8 +128,8 @@ async def reset(request: Request):
     async def go(c):
         async with c.transaction():
             items = [r["id"] for r in await c.fetch(
-                "select ti.id from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 and ti.provider_name = $2 "
-                "and ti.status <> 'cancelled'", a, TEST_VENUE)]
+                "select ti.id from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 and ti.provider_name = any($2::text[]) "
+                "and ti.status <> 'cancelled'", a, [TEST_VENUE, "Kanoe Demo Spa"])]   # Sasha 126 · and the demo spa's
             n_items = await c.execute("update trip_items set status = 'cancelled', updated_at = now() where id = any($1)", items)
             # withdrawn, NOT deleted: a deleted find is unseen again, and the next check re-offers the old email (rehearsal 2)
             n_finds = await c.execute("update mailbox_finds set action_status = 'none' where account_id = $1 and facts->>'venue' = $2 "
@@ -146,9 +146,13 @@ async def reset(request: Request):
     if ch:
         st = await GW.STORE.get_state(ch["wa_id_sha256"])
         st["pending"] = None
+        st.pop("combo", None)
         await GW.STORE.put_state(ch["wa_id_sha256"], st)
     out["demo_shop_orders_cleared"] = len(DS.ORDERS)
     DS.ORDERS.clear()
+    from . import demo_spa as DSP
+    out["demo_spa_bookings_cleared"] = len(DSP.BOOKINGS)
+    DSP.BOOKINGS.clear()
     return {"ok": True, **out, "say": "Demo reset: test-venue bookings cancelled (their calendar events go within a minute); real bookings untouched."}
 
 

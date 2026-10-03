@@ -687,6 +687,13 @@ async def _new_request(ctx: dict, body: str) -> None:
         return
     if await _forwarded_confirmation(ctx, body):   # Sasha 118 · the venue's confirmation, forwarded by the guest
         return
+    from . import demo_spa as DSP
+    if COMBO.search(body or ""):   # Sasha 126 (2) · two bookings from one sentence
+        await _combo_start(ctx, body)
+        return
+    if DSP.INTENT.search(body or ""):   # Sasha 126 (3) · the spa membership, used inside ONE yes
+        await _spa_start(ctx, body)
+        return
     from . import demo_shop as DS
     if DS.REORDER.search(body or ""):   # Sasha 121 (F) · the vault, used inside ONE yes
         await _reorder(ctx)
@@ -715,6 +722,205 @@ async def _new_request(ctx: dict, body: str) -> None:
         out.text(ASK_ONE)
         return
     out.text(OUT_OF_SCOPE.format(web=web_url()))
+
+
+# ── Sasha 126 · the spa membership (Kanoe Demo Spa, ours) and two bookings from one sentence ───────────────────────
+
+SPA_CARD = {"place_id": "kanoe-demo-spa", "name": "Kanoe Demo Spa", "country": "ES"}
+COMBO = re.compile(r"\b(restaurant|dinner|lunch|table|cena|comida|restaurante|mesa)\b.*\b(and|y)\b.*\b(spa|massage|masaje)\b"
+                   r"|\b(spa|massage|masaje)\b.*\b(and|y)\b.*\b(restaurant|dinner|lunch|table|cena|restaurante|mesa)\b", re.I)
+_SPA_T = re.compile(r"\b(?:spa|massage|masaje)\b\D{0,20}?(\d{1,2}(?:[:.h]\d{2})?\s*(?:am|pm|h)?)", re.I)
+_EAT_T = re.compile(r"\b(?:dinner|lunch|restaurant|table|cena|comida|restaurante|mesa)\b\D{0,20}?(\d{1,2}(?:[:.h]\d{2})?\s*(?:am|pm|h)?)", re.I)
+
+
+def _hhmm(s: str) -> Optional[str]:
+    from .chat_request import _time
+    s = (s or "").strip().lower()
+    return _time(s) or HO.plain_time(f"at {s}") or (f"{int(s):02d}:00" if re.fullmatch(r"\d{1,2}", s) and 0 <= int(s) <= 23 else None)
+
+
+def _at_time(text: str) -> Optional[str]:
+    """"on Tuesday at 18:00", "at 6pm": the time said after "at"/"a las"."""
+    m = re.search(r"\b(?:at|a las|a la)\s+(\d{1,2}(?:[:.h]\d{2})?\s*(?:am|pm|h)?)", text or "", re.I)
+    return HO.context_time(text or "") or HO.plain_time(text or "") or (_hhmm(m[1]) if m else None)
+
+
+def combo_times(text: str) -> dict:
+    """{"spa": "18:00", "dinner": "21:00"} — each time said next to its own kind."""
+    out = {}
+    m = _SPA_T.search(text or "")
+    if m and _hhmm(m[1]):
+        out["spa"] = _hhmm(m[1])
+    m = _EAT_T.search(text or "")
+    if m and _hhmm(m[1]):
+        out["dinner"] = _hhmm(m[1])
+    return out
+
+
+async def _combo_start(ctx: dict, body: str) -> None:
+    from .chat_request import plain_day
+    m = re.search(r"\bin ([A-ZÁÉÍÓÚ][\wáéíóúñ]+(?: [A-ZÁÉÍÓÚ][\wáéíóúñ]+)?)", body or "")
+    combo = {"stage": "when", "where": f"{m[1]}" if m else "Madrid", "party": HO.plain_party(body or "") or 2,
+             "day": plain_day(body or "", ctx["now"]), "times": combo_times(body or "")}
+    ctx["st"]["combo"] = combo
+    if combo["day"] and len(combo["times"]) == 2:
+        await _combo_restaurant(ctx)
+        return
+    ctx["out"].text("Two bookings — a restaurant and a spa. Which day, and what time for each? For example: "
+                    "“Tuesday — spa at 18:00, dinner at 21:00”.")
+    ctx["st"]["pending"] = {"kind": "combo_when", "at": ctx["now"].isoformat()}
+
+
+async def _combo_when(ctx: dict, pend: dict, body: str) -> bool:
+    from .chat_request import plain_day
+    combo = ctx["st"].get("combo") or {}
+    combo["day"] = plain_day(body, ctx["now"]) or combo.get("day")
+    combo["times"] = {**(combo.get("times") or {}), **combo_times(body)}
+    ctx["st"]["combo"] = combo
+    if combo.get("day") and len(combo["times"]) == 2:
+        ctx["st"]["pending"] = None
+        await _combo_restaurant(ctx)
+        return True
+    ctx["out"].text("I need the day and both times, e.g. “Tuesday — spa at 18:00, dinner at 21:00”.")
+    return True
+
+
+async def _combo_restaurant(ctx: dict) -> None:
+    c = ctx["st"]["combo"]
+    c["stage"] = "restaurant"
+    at = f"{c['day']}T{c['times']['dinner']}"
+    ctx["out"].text(f"First, the restaurant — {SN.day_words(c['day'])} at {c['times']['dinner']}, {c['party']} people:")
+    await _find(ctx, {"what": "dinner", "where": c["where"], "country": "ES", "open_at": at},
+                {"parts": {"what": {"activity": "a table", "activity_venue_lang": "una mesa", "category": "restaurant"},
+                           "when": {"mode": "at", "at": at}, "how_many": {"count": c["party"], "unit": "people"}}})
+
+
+async def _combo_spa(ctx: dict) -> None:
+    from . import demo_spa as DSP
+    c = ctx["st"]["combo"]
+    c["stage"] = "spa"
+    at = f"{c['day']}T{c['times']['spa']}"
+    ctx["out"].text(f"Then the spa — {SN.day_words(c['day'])} at {c['times']['spa']}:")
+    if await DSP.find_item(ctx["account"]):
+        ctx["third_card"] = SPA_CARD
+    await _find(ctx, {"what": "spa", "where": c["where"], "country": "ES", "open_at": at}, {"parts": {}})
+    ctx.pop("third_card", None)
+
+
+async def _combo_final(ctx: dict) -> None:
+    from . import demo_spa as DSP
+    c, out = ctx["st"]["combo"], ctx["out"]
+    item = await DSP.find_item(ctx["account"])
+    r = c.get("restaurant")
+    if not item or not r:
+        ctx["st"]["combo"] = None
+        out.text("I don't have a saved Kanoe Demo Spa login in your vault. Add it in You → My accounts. Nothing was sent.")
+        return
+    spa_at = f"{c['day']}T{c['times']['spa']}"
+    spa_lines = DSP.read_back(item["label"], spa_at)
+    spa_sha = hashlib.sha256("\n".join(spa_lines).encode()).hexdigest()
+    c.update({"stage": "confirm", "spa": {"id": str(item["id"]), "lines": spa_lines, "sha": spa_sha, "at": spa_at}})
+    out.text("Exactly what I'll do — both, on one yes:\n1) " + r["venue"] + ":\n" + "\n".join("• " + _BULLET.sub("", ln) for ln in r["lines"])
+             + "\n2) Kanoe Demo Spa:\n" + "\n".join("• " + ln for ln in spa_lines))
+    both = hashlib.sha256(f"{r['sha']}|{spa_sha}".encode()).hexdigest()
+    tag = f"{r['id'][:8]}:{both[:16]}"
+    out.ask(f"Book both? {r['venue']}, {r['summary']}; and {DSP.TREATMENT[2]} at Kanoe Demo Spa, {SN.day_words(c['day'])} at "
+            f"{c['times']['spa']}, with your saved membership.", [("Yes, book both", f"yes:{tag}"), ("No", f"no:{tag}")])
+    ctx["st"]["pending"] = {"kind": "combo_confirm", "at": ctx["now"].isoformat(), "id": r["id"], "sha": both}
+
+
+async def _combo_approve(ctx: dict, pend: dict, how: dict) -> None:
+    from . import demo_spa as DSP, guest_receipt as GR
+    from .vault.crypto import UseRefused
+    c, out, account = ctx["st"].get("combo") or {}, ctx["out"], ctx["account"]
+    ctx["st"]["combo"] = None
+    r, spa = c.get("restaurant") or {}, c.get("spa") or {}
+    s, j = await api(account, "POST", f"/api/booking/forms/{r['id']}/send", {"read_back_sha256": r["sha"], "approval": how}, timeout=120)
+    result = (j.get("reading") or {}).get("result") if s == 200 and j.get("status") == "sent" else None
+    ref = f" Their reference: {j['booking_reference']}." if result == "confirmed" and j.get("booking_reference") else ""
+    out.text(f"✅ 1) Booked: {r['venue']}, {r['summary']}.{ref}" if result == "confirmed" else
+             f"⚠ 1) Not confirmed yet: {r['venue']} — {j.get('say') or refusal_words(j, s)}")
+    try:
+        got = await DSP.place(account, spa["id"], spa["lines"], spa["sha"], ctx["now"].isoformat(), spa["at"], f"wa-{spa['sha'][:12]}")
+    except UseRefused as e:
+        out.text(f"❌ 2) Not booked at Kanoe Demo Spa: {e}.")
+        return
+    except Exception as e:
+        out.text(f"❌ 2) Not booked at Kanoe Demo Spa — the portal didn't take it ({type(e).__name__}). Your login was used once and is logged.")
+        return
+    if got["status"] == "booked":
+        out.text(f"✅ 2) Booked: {DSP.TREATMENT[2]} at Kanoe Demo Spa, {SN.day_words(spa['at'][:10])} at {spa['at'][11:16]}. "
+                 f"Ref {got['ref']}. I used your saved membership once, for this booking — it's in your vault's log.")
+        await GR.send_for_route(account, DSP.PROVIDER, "its own member portal, signed in with your saved login after your yes",
+                                "Confirmed by the venue", {"what": DSP.TREATMENT[2], "when": spa["at"].replace("T", " at "), "party": 1,
+                                                           "venue_reference": got["ref"], "their_words": got["their_page"]})
+    else:
+        out.text("⚠ 2) Not confirmed: Kanoe Demo Spa's page didn't say it's booked.")
+    if _receipt_note():
+        out.text("Both receipts are in your email; both bookings go on your calendar.")
+
+
+async def _spa_start(ctx: dict, body: str) -> None:
+    from . import demo_spa as DSP
+    from .chat_request import plain_day
+    item = await DSP.find_item(ctx["account"])
+    if item is None:
+        ctx["out"].text(f"I don't have a saved {DSP.PROVIDER} login in your vault. Add it in You → My accounts, then ask me again.")
+        return
+    day = plain_day(body or "", ctx["now"])
+    t = _at_time(body)
+    if not (day and t):
+        ctx["out"].text("Which day and time for the massage?")
+        ctx["st"]["pending"] = {"kind": "spa_when", "at": ctx["now"].isoformat(), "day": day, "t": t}
+        return
+    await _spa_ask(ctx, item, f"{day}T{t}")
+
+
+async def _spa_when(ctx: dict, pend: dict, body: str) -> bool:
+    from . import demo_spa as DSP
+    from .chat_request import plain_day
+    day = plain_day(body, ctx["now"]) or pend.get("day")
+    t = _at_time(body) or _hhmm(body) or pend.get("t")
+    if not (day and t):
+        ctx["out"].text("I need the day and the time, e.g. “Tuesday at 18:00”.")
+        return True
+    ctx["st"]["pending"] = None
+    await _spa_ask(ctx, await DSP.find_item(ctx["account"]), f"{day}T{t}")
+    return True
+
+
+async def _spa_ask(ctx: dict, item: dict, at: str) -> None:
+    from . import demo_spa as DSP
+    lines = DSP.read_back(item["label"], at)
+    sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
+    ctx["out"].text("Exactly what I'll do:\n" + "\n".join("• " + ln for ln in lines))
+    rid = str(item["id"])
+    ctx["out"].ask(f"Book {DSP.TREATMENT[2]} at {DSP.PROVIDER}, {SN.day_words(at[:10])} at {at[11:16]}, with your saved membership?",
+                   [("Yes, book it", f"yes:{rid[:8]}:{sha[:16]}"), ("No", f"no:{rid[:8]}:{sha[:16]}")])
+    ctx["st"]["pending"] = {"kind": "vault_spa", "at": ctx["now"].isoformat(), "id": rid, "sha": sha, "lines": lines, "when": at}
+
+
+async def _spa_approve(ctx: dict, pend: dict) -> None:
+    from . import demo_spa as DSP, guest_receipt as GR
+    from .vault.crypto import UseRefused
+    out = ctx["out"]
+    try:
+        got = await DSP.place(ctx["account"], pend["id"], pend["lines"], pend["sha"], ctx["now"].isoformat(), pend["when"], f"wa-{pend['sha'][:12]}")
+    except UseRefused as e:
+        out.text(f"❌ Not booked: {e}.")
+        return
+    except Exception as e:
+        out.text(f"❌ Not booked — {DSP.PROVIDER} didn't take it ({type(e).__name__}). Your login was used once and is logged in your vault.")
+        return
+    if got["status"] != "booked":
+        out.text(f"⚠ Not confirmed: {DSP.PROVIDER}'s page didn't say it's booked.")
+        return
+    out.text(f"✅ Booked: {DSP.TREATMENT[2]} at {DSP.PROVIDER}, {SN.day_words(pend['when'][:10])} at {pend['when'][11:16]}. Ref {got['ref']}. "
+             f"I used your saved membership once, for this booking — it's in your vault's log.")
+    out.text(f"Their page said: “{got['their_page'][:300]}”")
+    await GR.send_for_route(ctx["account"], DSP.PROVIDER, "its own member portal, signed in with your saved login after your yes",
+                            "Confirmed by the venue", {"what": DSP.TREATMENT[2], "when": pend["when"].replace("T", " at "), "party": 1,
+                                                       "venue_reference": got["ref"], "their_words": got["their_page"]})
 
 
 async def _reorder(ctx: dict) -> None:
@@ -849,7 +1055,9 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
         return
     pick = shown[0]["place_id"] if luxe else (ranking.get("picks") or {}).get(chip)
     photos = await _photos(account, f.get("what") or "", shown)
-    if rehearsal(account):   # Sasha 117 · the dress rehearsal books OUR test venue, never a real one; the card says so
+    if ctx.get("third_card"):   # Sasha 126 · the combo's spa set: OUR demo spa as the third card
+        shown = shown[:2] + [ctx["third_card"]]
+    elif rehearsal(account):   # Sasha 117 · the dress rehearsal books OUR test venue, never a real one; the card says so
         shown = shown[:2] + [TEST_CARD]                   # still three: WhatsApp shows at most three reply buttons
     what = f.get("what") or ""
     out.text(f"{what[:1].upper() + what[1:]} in {f.get('where')} — {ranking.get('count') or f'{len(cands)} found'}"
@@ -859,6 +1067,8 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
                                        distance_words(c["distance_m"]) if c.get("distance_m") is not None else None) if x)
         if c is TEST_CARD:
             line = "Rehearsal · Sasha Test Venue — ours, not a real restaurant: booking it contacts no one"
+        elif c is SPA_CARD:
+            line = "Kanoe Demo Spa — ours, a demo member portal: Sasha books it with your saved membership"
         out.media(("Sasha's pick · " if c["place_id"] == pick else "") + line, photos.get(c["place_id"]))
     nonce = secrets.token_hex(3)
     out.ask("Which one?", [(c.get("name") or f"Option {i + 1}", f"pick:{nonce}:{i}") for i, c in enumerate(shown)])
@@ -986,6 +1196,26 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             out.text(str(j.get("say")) if status == 200 else f"Not asked — {refusal_words(j, status)}.")
             return True
         return False
+    if kind in ("combo_when", "spa_when"):   # Sasha 126 · the day and the time(s), asked once
+        if kind == "combo_when":
+            return await _combo_when(ctx, pend, body)
+        return await _spa_when(ctx, pend, body)
+    if kind in ("vault_spa", "combo_confirm"):   # Sasha 126 · one yes
+        if payload.startswith("no:") or (not payload and _NO.match(body)):
+            st["pending"] = None
+            st.pop("combo", None)
+            out.text("OK — nothing was booked, and your membership login wasn't opened.")
+            return True
+        if payload.startswith("yes:") or YS.is_yes(body):
+            st["pending"] = None
+            if now - at > APPROVAL_WINDOW:
+                out.text("That question has expired (15 minutes) — nothing was booked. Ask me again.")
+                return True
+            how = {"how": "whatsapp_button", "said": ctx.get("button_text") or None} if payload else {"how": "whatsapp_text", "said": body}
+            await (_spa_approve(ctx, pend) if kind == "vault_spa" else _combo_approve(ctx, pend, how))
+            return True
+        out.text("Tap Yes or No — nothing is booked until you do.")
+        return True
     if kind == "vault_order":   # Sasha 121 (F) · one yes, one use of the saved login
         if payload.startswith("no:") or (not payload and _NO.match(body)):
             st["pending"] = None
@@ -1124,6 +1354,14 @@ CUISINE = re.compile(r"\b(japanese|japon[eé]s[a]?|sushi|ramen|indian|indi[oa]|i
 
 async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
     out, account, f = ctx["out"], ctx["account"], pend["find"]
+    if (ctx["st"].get("combo") or {}).get("stage") == "spa":   # Sasha 126 · the combo's second pick
+        if card.get("place_id") == SPA_CARD["place_id"]:
+            await _combo_final(ctx)
+        else:
+            out.text(f"Together with the restaurant, I can book only Kanoe Demo Spa today. Tap it, or ask me for "
+                     f"{card.get('name') or 'that spa'} on its own. Nothing was sent.")
+            ctx["st"]["pending"] = pend
+        return
     if card.get("place_id") == TEST_CARD["place_id"]:
         from .form_rung import test_venue_url
         status, read = await api(account, "POST", "/api/booking/venues/read",
@@ -1233,11 +1471,22 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
         res_form = {**reservation, "who": {**reservation["who"], "contact": {**reservation["who"]["contact"], **({"email": email} if email else {})}}}
         status, j = await api(ctx["account"], "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": res_form})
         if status == 200:
+            if (st.get("combo") or {}).get("stage") == "restaurant":   # Sasha 126 · held for the ONE combined yes
+                st["combo"]["restaurant"] = {"id": j["form_id"], "sha": j["read_back"]["sha256"], "lines": j["read_back"]["lines"],
+                                             "venue": rd["venue"], "summary": summary(reservation)}
+                st["pending"] = None
+                await _combo_spa(ctx)
+                return
             await _ask_yes(ctx, "form", j["form_id"], j["read_back"], SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
                            extra={"summary": summary(reservation)})
             return
         why = refusal_words(j, status)
         log.warning("[guest_whatsapp] form rung refused (%s: %s); trying the next rung", status, j.get("rule"))
+    if (st.get("combo") or {}).get("stage") == "restaurant":   # Sasha 126 · together, only through their own form today
+        st["combo"], st["pending"] = None, None
+        out.text(f"I can't book {rd['venue']} together with the spa from here (no form I may send{', and calls are off' if 'phone' in rungs else ''}). "
+                 f"Nothing was sent. Pick a place I can book by its form, or ask for each one separately.")
+        return
     if "link" in rungs and reservation["when"]["mode"] == "at":
         at = reservation["when"]["at"]
         status, j = await api(ctx["account"], "POST", "/api/booking/links", {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16],

@@ -30,6 +30,7 @@ EXEMPT |= {("GET", "/api/booking/test-venue/wizard"), ("POST", "/api/booking/tes
            ("POST", "/api/booking/test-venue/wizard/confirm")}   # Sasha 94 · the two-step variant
 # Sasha 121 (F) · Kanoe Demo Market — ours, a public shop page with a login (it sells and charges nothing)
 EXEMPT |= {("GET", "/api/booking/demo-shop"), ("POST", "/api/booking/demo-shop/login"), ("POST", "/api/booking/demo-shop/order")}
+EXEMPT |= {("GET", "/api/booking/demo-spa"), ("POST", "/api/booking/demo-spa/login"), ("POST", "/api/booking/demo-spa/book")}   # Sasha 126
 # S-79 · Google's OAuth redirect: no key can ride on it; its signed, 10-minute `state` names the account (calendar_sync)
 EXEMPT |= {("GET", "/api/booking/google/callback")}
 

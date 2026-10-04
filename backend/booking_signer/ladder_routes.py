@@ -569,7 +569,8 @@ async def prepare_link(request: Request):
         return _refuse(422, e.rule, str(e))
     link_id = str(uuid.uuid4())
     forward_to = E.act_address(link_id) if inbound_ready() else None
-    lines = (SL.hotel_read_back(read["name"], link, p.on, nights, p.party, forward_to) if nights
+    # Sasha 138 · the hotel's NAME (its listing), never its web page's title ("Contacto UMusic Hotels")
+    lines = (SL.hotel_read_back((read.get("listing") or {}).get("name") or read["name"], link, p.on, nights, p.party, forward_to) if nights
              else SL.read_back(read["name"], link, p.on, p.at, p.party, forward_to))
     plan = _plan_of(body)   # Sasha 132 · the escalation the guest's ONE yes covers — this link is made only after that yes
     if plan:

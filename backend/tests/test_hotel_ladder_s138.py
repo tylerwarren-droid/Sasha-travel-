@@ -61,10 +61,11 @@ class Rehearsal1(unittest.TestCase):
 
     def test_an_embedded_engine_sends_the_hotels_own_page(self):
         read = {"name": "The Hat", "facts": [{"kind": "platform", "value": "Mews", "source_label": "their website, thehatmadrid.com",
-                                              "source_url": "https://thehatmadrid.com/contacto/", "detail": {"embed": "https://app.mews.com"}}]}
+                                              "source_url": "https://thehatmadrid.com/contacto/?utm_source=google&lang=es",
+                                              "detail": {"embed": "https://app.mews.com"}}]}
         link = SL.build_hotel(read, date(2026, 10, 20), 2, 2)
-        self.assertEqual(link.url, "https://thehatmadrid.com/contacto/")
-        self.assertIn("their Mews booking widget", link.source_label)
+        self.assertEqual(link.url, "https://thehatmadrid.com/contacto/?lang=es")   # Google's tracking dropped, nothing added
+        self.assertIn("booking through Mews on their own site", link.source_label)
 
 
 class OnWhatsApp(TG.Base):

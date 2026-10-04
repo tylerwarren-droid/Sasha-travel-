@@ -127,7 +127,9 @@ def platform_page(read: dict) -> Optional[tuple]:
         # Sasha 138 · a hotel engine only EMBEDDED (a widget on the hotel's own page, e.g. Mews): the one-tap page is the hotel's
         # own page that carries it — never a guessed engine URL
         if hotel and any(how == "embed" for _l, how in _candidates(f)) and str(f.get("source_url") or "").startswith("https://"):
-            return f["value"], f["source_url"], f"{f['source_label']} (their {f['value']} booking widget)"
+            u = urlsplit(f["source_url"])   # their page, without Google's tracking parameters
+            clean = urlunsplit((u.scheme, u.netloc, u.path, urlencode([(k, v) for k, v in parse_qsl(u.query) if not k.startswith("utm_")]), ""))
+            return f["value"], clean, f"{f['source_label']} (booking through {f['value']} on their own site)"
     return None
 
 
@@ -185,7 +187,7 @@ def build_hotel(read: dict, checkin: date, nights: int, adults: int) -> SlotLink
         raise LinkRefused("no_platform", "no booking engine was found linked from the hotel's own site")
     platform, page, label = found
     out = (checkin + timedelta(days=nights)).isoformat()
-    widget = label.endswith("booking widget)")   # the hotel's own page: its URL isn't the engine's, so nothing is added to it
+    widget = label.endswith("on their own site)")   # the hotel's own page: its URL isn't the engine's, so nothing is added to it
     fill = HOTEL_PREFILL.get(platform) if platform in HOTEL_ENGINES and not widget else None
     if fill is None:
         return SlotLink(platform, page, False, label)

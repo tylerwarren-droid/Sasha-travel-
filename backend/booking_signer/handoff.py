@@ -357,6 +357,12 @@ def cancel_request(message: str) -> Optional[dict]:
     return {"venue": venue} if len(venue) >= 2 else None
 
 
+#: Sasha 140 · a bare "<kind of place> in <place>" is a search (never the model's): the kinds Sasha finds and books
+_BARE_KIND = re.compile(r"^\s*(?:an?\s+|some\s+)?(?:[a-záéíóúñ]+\s+){0,2}(?:spa|massage|tattoo(?:\s+(?:studio|parlou?r|shop))?|"
+                        r"(?:hair|nail|beauty)\s+salon|hairdresser|barber(?:shop)?|gym|yoga(?:\s+studio)?|pilates|restaurant|dinner|lunch|"
+                        r"brunch|bar|caf[eé]|wine\s+bar|sushi|tapas)\s+(?:in|near|around)\s+[A-ZÁÉÍÓÚa-z]", re.I)
+
+
 def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Optional[datetime] = None) -> Optional[dict]:
     """S-66 (EU) step 5 · a full conductor turn that starts a booking IN THE CHAT — `booking_find` for the chat to run
     Find venues with (S-65) — or None, and the conductor carries on. ⛔ It no longer opens /booking-helper: the Psi-only
@@ -376,6 +382,8 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
             not re.search(r"\b(dinner|lunch|table|restaurant|cena|mesa)\b", message or "", re.I):
         return None   # Sasha 137 · a stay is the hotel flow's (cards with Reserve (TEST), or a real request) — never a table search
     f = find_request(message, now)
+    if f is None and _BARE_KIND.match(message or ""):   # Sasha 140 · "spa in Madrid" — a place kind and a place: a search, no model
+        f = find_request("find " + message.strip(), now)
     if f is None:
         # Sasha 101 · a spoken request often arrives in pieces (a pause ends the turn): "Book a luxury dinner for two" /
         # "in Chamberí on Saturday at nine". The guest's last lines and this one, read together, as one request.

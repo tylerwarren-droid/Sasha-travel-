@@ -79,3 +79,14 @@ class ReadReuse(unittest.TestCase):
         self.assertEqual(asyncio.run(s.recent_read("a", "P", now - timedelta(hours=6)))["read_id"], "r1")
         self.assertIsNone(asyncio.run(s.recent_read("b", "P", now - timedelta(hours=6))))   # never another account's
         self.assertIsNone(asyncio.run(s.recent_read("a", "P", now - timedelta(minutes=30))))
+
+
+class BareSearch(unittest.TestCase):
+    """Baseline (4 Oct): "spa in Madrid" / "tattoo studio in Hanoi" went to the model on the web and to help on WhatsApp."""
+
+    def test_a_kind_and_a_place_is_a_search(self):
+        from booking_signer.handoff import booking_handoff
+        self.assertEqual(booking_handoff("spa in Madrid", [])["booking_find"]["what"], "spa")
+        self.assertEqual(booking_handoff("tattoo studio in Hanoi", [])["booking_find"]["where"], "Hanoi")
+        self.assertIsNone(booking_handoff("hotel in Madrid", []))           # a stay is the hotel flow's
+        self.assertIsNone(booking_handoff("what is in Madrid", []))

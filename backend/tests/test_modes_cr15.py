@@ -80,7 +80,7 @@ class Words(Base):
         self.assertIn("*You press:* booking the appointment and going in person.", said)
         self.say("5")
         self.assertIn("DGT — exchanging a foreign driving licence* — CONCEPT", self.said())
-        self.assertIn("I haven't read its official page yet", self.bodies()[-2] + self.said()[-600:])   # unreadable: no route
+        self.assertIn("the UK is on it; the US is not", self.said())             # dgt.es read at source (CR 19)
         self.say("4")
         self.assertIn("Modelo 030", self.said())                                  # read at source, 4 Oct
         self.say("6")
@@ -267,7 +267,18 @@ class EspanaAreasRoute(TG.unittest.TestCase):
         self.assertEqual([(a["key"], a["live"]) for a in j["areas"]],
                          [("salud", True), ("padron", False), ("identity", False), ("social", False), ("dgt", False), ("education", False)])
         dgt = next(a for a in j["areas"] if a["key"] == "dgt")
-        self.assertEqual((dgt["read"], dgt["route"], dgt["route_url"]), (False, None, None))   # nothing from memory
+        self.assertTrue(dgt["read"])                                               # CR 19: dgt.es, not the sede
+        self.assertEqual(dgt["route_url"], "https://www.dgt.es/.galleries/enlaces/sede/permisos/canjes-extranjeros.html")
+
+    def test_the_dgt_pages_kept_match_their_hashes(self):
+        import hashlib, json
+        from pathlib import Path
+        from products.health import espana as ES
+        reads = Path(ES.__file__).resolve().parents[3] / "docs" / "products" / "reads" / "espana"
+        f = ES._READ["topics"]["F"]["sha256"]
+        for name, sha in (("2026-10-04-dgt-canje-paises-extracomunitarios.html", f["canje-paises-extracomunitarios"]),
+                          ("2026-10-04-dgt-paises-con-convenio.html", f["paises-con-convenio"])):
+            self.assertEqual(hashlib.sha256((reads / name).read_bytes()).hexdigest(), sha, name)
 
 
 class Truncated(Base):

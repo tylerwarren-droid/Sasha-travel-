@@ -1,25 +1,106 @@
-{"read_on": "4 Oct 2026",
+{
+ "read_on": "4 Oct 2026",
  "how": "● tool — read through the fetch tool after its robots.txt (4 Oct 2026); each page found by search, never composed from memory; an unreadable host is recorded, never substituted",
  "topics": {
-  "B": {"name": "Cl@ve — how to register", "page": "https://clave.gob.es/en/registro/como-puedo-registrarme", "host": "clave.gob.es", "robots": "allowed", "read": true, "why_not": null, "need": [],
-        "route": "online (automatic video identification, or an invitation letter), with an electronic certificate or DNIe, or in person at a registration office; then a welcome SMS to your registered mobile",
-        "route_url": "https://clave.gob.es/en/registro/como-puedo-registrarme", "quote": "To use Cl@ve, prior registration is required."},
-  "C": {"name": "FNMT digital certificate for an individual", "page": "https://www.sede.fnmt.gob.es/certificados/persona-fisica/obtener-certificado-software", "host": "www.sede.fnmt.gob.es", "robots": "allowed", "read": true, "why_not": null,
-        "need": ["the software its 'Configuración previa' lists", "the Código de Solicitud emailed after the online request", "proving your identity in person at an Oficina de Acreditación de Identidad"],
-        "route": "set up, request online, prove your identity in person (an appointment is needed at AEAT, Seguridad Social and other offices), then download about an hour later",
-        "route_url": "https://www.sede.fnmt.gob.es/certificados/persona-fisica/obtener-certificado-software/solicitar-certificado", "quote": "En las oficinas de la AEAT, Seguridad Social y en otras oficinas se requiere de cita previa"},
-  "D": {"name": "Your social-security number (NUSS) — Import@ss", "page": "https://portal.seg-social.gob.es/wps/portal/importass/importass/Categorias/Altas,+bajas+y+modificaciones/Altas+y+afiliacion+de+trabajadores/Solicitar+el+numero+de+la+Seguridad+Social", "host": "portal.seg-social.gob.es", "robots": "allowed", "read": true, "why_not": null,
-        "need": ["your DNI or NIE details", "your mobile and email", "your address", "without Cl@ve or a certificate: both sides of your DNI/NIE and a selfie with its front"],
-        "route": "online with its 'Solicitar NUSS' button — signed in with Cl@ve, DNIe, a certificate or SMS, or with a selfie and a photo of your ID",
-        "route_url": "https://portal.seg-social.gob.es/wps/portal/importass/importass/Categorias/Altas,+bajas+y+modificaciones/Altas+y+afiliacion+de+trabajadores/Solicitar+el+numero+de+la+Seguridad+Social", "quote": "Si no dispones de Cl@ve o Certificado electrónico, podrás realizar el trámite presentando copia de ambas caras del DNI/NIE"},
-  "E": {"name": "Agencia Tributaria — your NIF", "page": "https://sede.agenciatributaria.gob.es/Sede/censos-nif-domicilio-fiscal/solicitar-nif/nif-persona-fisica.html", "host": "sede.agenciatributaria.gob.es", "robots": "allowed", "read": true, "why_not": null,
-        "need": ["a NIF if you do anything with tax significance — it generally matches your DNI or NIE", "without a NIE, a NIF assigned by the tax administration"],
-        "route": "online, no visit: Modelo 030 (NIF for an individual without DNI/NIE)",
-        "route_url": "https://sede.agenciatributaria.gob.es/Sede/censos-nif-domicilio-fiscal/solicitar-nif/nif-persona-fisica.html", "quote": "Modelo 030. Solicitud de NIF de persona física - sin DNI/NIE - no presencial"},
-  "F": {"name": "DGT — exchanging a foreign licence", "page": "https://sede.dgt.gob.es/es/permisos-de-conducir/canjes-de-permisos/canjes-de-permisos-extranjeros/", "host": "sede.dgt.gob.es", "robots": "unreadable", "read": false,
-        "why_not": "its site refused automated connections (robots.txt and the page both failed to connect, 4 Oct 2026)", "need": null, "route": null, "route_url": null, "quote": null},
-  "G": {"name": "Comunidad de Madrid — school admission, 2026-2027", "page": "https://www.comunidad.madrid/educacion/solicita-tu-admision-educacion-infantil-obligatoria-bachillerato", "host": "www.comunidad.madrid", "robots": "allowed", "read": true, "why_not": null,
-        "need": ["the admission application, signed by both parents/guardians", "its sworn statement if only one can sign", "to file online: Cl@ve, an @SCV registration, or Roble/Raíces credentials", "optional: proof of the school's extra criterion if you claim it"],
-        "route": "preferably online (Secretaría Virtual), else on paper at the first school on the application; the ordinary period was 11–25 March 2026 — newcomers after that use the extraordinary process (from 25 June / 3 July 2026), online, at a school with places, or at the Servicio de Apoyo a la Escolarización",
-        "route_url": "https://www.comunidad.madrid/educacion/solicita-tu-admision-educacion-infantil-obligatoria-bachillerato", "quote": "Las solicitudes se presentarán preferentemente de forma telemática."}
- }}
+  "B": {
+   "name": "Cl@ve — how to register",
+   "page": "https://clave.gob.es/en/registro/como-puedo-registrarme",
+   "host": "clave.gob.es",
+   "robots": "allowed",
+   "read": true,
+   "why_not": null,
+   "need": [],
+   "route": "online (automatic video identification, or an invitation letter), with an electronic certificate or DNIe, or in person at a registration office; then a welcome SMS to your registered mobile",
+   "route_url": "https://clave.gob.es/en/registro/como-puedo-registrarme",
+   "quote": "To use Cl@ve, prior registration is required."
+  },
+  "C": {
+   "name": "FNMT digital certificate for an individual",
+   "page": "https://www.sede.fnmt.gob.es/certificados/persona-fisica/obtener-certificado-software",
+   "host": "www.sede.fnmt.gob.es",
+   "robots": "allowed",
+   "read": true,
+   "why_not": null,
+   "need": [
+    "the software its 'Configuración previa' lists",
+    "the Código de Solicitud emailed after the online request",
+    "proving your identity in person at an Oficina de Acreditación de Identidad"
+   ],
+   "route": "set up, request online, prove your identity in person (an appointment is needed at AEAT, Seguridad Social and other offices), then download about an hour later",
+   "route_url": "https://www.sede.fnmt.gob.es/certificados/persona-fisica/obtener-certificado-software/solicitar-certificado",
+   "quote": "En las oficinas de la AEAT, Seguridad Social y en otras oficinas se requiere de cita previa"
+  },
+  "D": {
+   "name": "Your social-security number (NUSS) — Import@ss",
+   "page": "https://portal.seg-social.gob.es/wps/portal/importass/importass/Categorias/Altas,+bajas+y+modificaciones/Altas+y+afiliacion+de+trabajadores/Solicitar+el+numero+de+la+Seguridad+Social",
+   "host": "portal.seg-social.gob.es",
+   "robots": "allowed",
+   "read": true,
+   "why_not": null,
+   "need": [
+    "your DNI or NIE details",
+    "your mobile and email",
+    "your address",
+    "without Cl@ve or a certificate: both sides of your DNI/NIE and a selfie with its front"
+   ],
+   "route": "online with its 'Solicitar NUSS' button — signed in with Cl@ve, DNIe, a certificate or SMS, or with a selfie and a photo of your ID",
+   "route_url": "https://portal.seg-social.gob.es/wps/portal/importass/importass/Categorias/Altas,+bajas+y+modificaciones/Altas+y+afiliacion+de+trabajadores/Solicitar+el+numero+de+la+Seguridad+Social",
+   "quote": "Si no dispones de Cl@ve o Certificado electrónico, podrás realizar el trámite presentando copia de ambas caras del DNI/NIE"
+  },
+  "E": {
+   "name": "Agencia Tributaria — your NIF",
+   "page": "https://sede.agenciatributaria.gob.es/Sede/censos-nif-domicilio-fiscal/solicitar-nif/nif-persona-fisica.html",
+   "host": "sede.agenciatributaria.gob.es",
+   "robots": "allowed",
+   "read": true,
+   "why_not": null,
+   "need": [
+    "a NIF if you do anything with tax significance — it generally matches your DNI or NIE",
+    "without a NIE, a NIF assigned by the tax administration"
+   ],
+   "route": "online, no visit: Modelo 030 (NIF for an individual without DNI/NIE)",
+   "route_url": "https://sede.agenciatributaria.gob.es/Sede/censos-nif-domicilio-fiscal/solicitar-nif/nif-persona-fisica.html",
+   "quote": "Modelo 030. Solicitud de NIF de persona física - sin DNI/NIE - no presencial"
+  },
+  "F": {
+   "name": "DGT — exchanging a foreign licence (dgt.es)",
+   "page": "https://www.dgt.es/nuestros-servicios/permisos-de-conducir/permisos-extranjeros-y-de-fuerzas-y-cuerpos-de-seguridad/canjes-de-permisos/canjes-de-permisos-extranjeros/canje-de-permisos-de-otros-paises/",
+   "host": "www.dgt.es",
+   "robots": "allowed",
+   "read": true,
+   "why_not": null,
+   "how": "● raw — www.dgt.es/robots.txt read first (public paths allowed); both pages fetched from this machine 4 Oct 2026, kept in docs/products/reads/espana/ (the sede, sede.dgt.gob.es, still refuses automated connections)",
+   "sha256": {
+    "canje-paises-extracomunitarios": "a7facedf2c447ef1d2d6e8b9dc06810031cd3090a346a9bf776c2203a44decb8",
+    "paises-con-convenio": "a68795c75c574bfd199d87d8d159dcb331ec554e9dc8ada2df798a8eb0595a42"
+   },
+   "page_dated": "updated 28/04/2025 (the exchange page) and 26/06/2026 (the list of countries)",
+   "need": [
+    "your residence card (tarjeta de residencia) in force",
+    "proof you didn't live in Spain when you got the licence — e.g. your residence or student card, or the foreigners' register certificate",
+    "a medical fitness report (informe de aptitud psicofísica) from an authorised Centro de Reconocimiento de Conductores — valid 90 days",
+    "a licence from a country on the DGT's list of exchange agreements — the UK is on it; the US is not (without an agreement you get a new Spanish licence instead)"
+   ],
+   "route": "your foreign licence is valid for at most six months after you become resident; if your country has an agreement and you got the licence before living here, get the medical report, then request the exchange — online or in person — from the DGT's own link; you get a provisional licence then, the definitive one in about six weeks (a car or motorbike licence: no tests, fee II.3, 28,87 € in the DGT's own table)",
+   "route_url": "https://www.dgt.es/.galleries/enlaces/sede/permisos/canjes-extranjeros.html",
+   "quote": "Tu permiso extranjero es solo valido durante el plazo de seis meses, como máximo, contados desde que hayas adquirido la residencia normal en España."
+  },
+  "G": {
+   "name": "Comunidad de Madrid — school admission, 2026-2027",
+   "page": "https://www.comunidad.madrid/educacion/solicita-tu-admision-educacion-infantil-obligatoria-bachillerato",
+   "host": "www.comunidad.madrid",
+   "robots": "allowed",
+   "read": true,
+   "why_not": null,
+   "need": [
+    "the admission application, signed by both parents/guardians",
+    "its sworn statement if only one can sign",
+    "to file online: Cl@ve, an @SCV registration, or Roble/Raíces credentials",
+    "optional: proof of the school's extra criterion if you claim it"
+   ],
+   "route": "preferably online (Secretaría Virtual), else on paper at the first school on the application; the ordinary period was 11–25 March 2026 — newcomers after that use the extraordinary process (from 25 June / 3 July 2026), online, at a school with places, or at the Servicio de Apoyo a la Escolarización",
+   "route_url": "https://www.comunidad.madrid/educacion/solicita-tu-admision-educacion-infantil-obligatoria-bachillerato",
+   "quote": "Las solicitudes se presentarán preferentemente de forma telemática."
+  }
+ }
+}

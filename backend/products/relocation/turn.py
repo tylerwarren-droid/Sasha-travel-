@@ -50,8 +50,21 @@ def _said(ctx) -> str:
     return "said on WhatsApp"
 
 
+# EU 153 (founder, 4 Oct): phone line and utilities belong to RelocateMe — a CONCEPT, said as one, the file untouched
+UTILITIES = re.compile(r"(?i)\b(movistar|phone line|mobile line|internet at home|home internet|fibre|fiber|utilities|electricity|"
+                       r"gas and water|water bill)\b")
+UTILITIES_CONCEPT = ("📶 *Your phone line and utilities, set up before you arrive* — CONCEPT, not built yet, and no provider's pages "
+                     "have been read (Movistar or anyone else), so no plans or prices here. The idea: I read each provider's own "
+                     "offer page, show you what each one asks for, and prepare the sign-up for you to press.")
+
+
 async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
     pend, out = ctx["st"]["pending"], ctx["out"]
+    if body and UTILITIES.search(body) and not payload:
+        out.text(UTILITIES_CONCEPT)
+        if pend.get("last_said"):
+            out.text(pend["last_said"])            # and where the file was, asked again
+        return
     f = pend.setdefault("facts", {"applicant": {}, "choices": {}})
     if entering and not pend.get("step"):
         out.text(INTRO)
@@ -209,6 +222,8 @@ async def _prepare(ctx: dict) -> None:
 
 def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     step, t = pend.get("step"), (body or "").strip()
+    if UTILITIES.search(t):
+        return True
     if payload.startswith("rx:") or (media and step not in (None, "done")):
         return True
     if re.fullmatch(r"(?i)demo", t) and step not in (None, "prepared", "signed", "residence", "us_state", "us_county", "pack", "entry", "done"):

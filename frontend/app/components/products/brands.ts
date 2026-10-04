@@ -17,7 +17,7 @@ export type Brand = {
   kind: DemoKind                // the tab's overall label
   badge?: string                // EspañaMe: the CONCEPT badge at the TOP of the tab
   hero: string
-  lines: [Line, Line, Line]
+  lines: Line[]                 // three, or four where EU added a concept line (EU 153)
   statusLine: string
   prompts: string[]             // "Try saying" — this product's, never another's
   skin: { primary: string; accent: string; bg: string; ink: string; soft: string }
@@ -34,6 +34,8 @@ export const BRANDS: Record<ProductKey, Brand> = {
         text: 'I prepare Spain’s official EX-01 from your own words, check it field by field, and hand it to you to sign. I never sign it and never file it.' },
       { mark: 'built', cite: 'CR 13: the trip, rehearsed 41/41',
         text: 'Then the trip: your flights, your first nights near your new address, and one itinerary with every booking and every deadline.' },
+      { mark: 'concept', cite: 'EU 153: moved here from EspañaMe; no provider\u2019s pages read',
+        text: 'Next: your phone line and utilities set up before you arrive.' },
     ],
     statusLine: 'Working today on WhatsApp in our test setup, for a first application lodged from the UK or the US. Flights and hotels shown here are test bookings. Renewals and family applications aren’t built yet.',
     prompts: ['I’m moving to Madrid from London in March', 'book my flights', 'Here’s my passport'],
@@ -63,8 +65,8 @@ export const BRANDS: Record<ProductKey, Brand> = {
         text: 'New in Madrid? I walk you through it in order — padrón, social security, health card, family doctor — each step from its official page.' },
       { mark: 'built', cite: 'S-77’s line; CR 4',
         text: 'I get everything ready for your appointment — the official page, the details to copy — and you press. I never sign in to a public service for you, and never book it for you.' },
-      { mark: 'concept', cite: 'the padrón, utilities and Movistar are unstudied',
-        text: 'Next: the padrón, your phone line and utilities, studied the same way before anything is built.' },
+      { mark: 'concept', cite: 'EU 153: the padrón, Cl@ve / digital certificate, social security and tax, the DGT and education are concepts, unstudied',
+        text: 'Next: the padrón, Cl@ve and your digital certificate, social security and tax, the DGT, and schools — each studied at its official source before anything is built.' },
     ],
     statusLine: 'A concept. The health steps work today in our test setup: a private clinic booked by phone, and public appointments prepared for you to press. Nothing stores your health details until our data-protection assessment is done. Everything else here is designed, not built.',
     prompts: ['I need a doctor this week', 'I’ve just moved to Madrid — what do I do first?', 'how do I get my health card?'],

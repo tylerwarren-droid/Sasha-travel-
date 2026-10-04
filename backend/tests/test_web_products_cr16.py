@@ -35,7 +35,7 @@ class Web(TG.Base):
         self.assertIn("I'll read their own visit calendars", r["response"])
         r = self.turn(mode="espana")
         self.assertIn("One rule first: I prepare everything, and you sign in and press", r["response"])
-        self.assertEqual([q["payload"] for q in r["quick_replies"]], ["hx:es:health", "hx:es:padron", "hx:es:movistar"])
+        self.assertEqual([q["payload"] for q in r["quick_replies"]], ["hx:es:health", "hx:es:padron", "hx:es:more"])
 
     def test_a_pressed_button_is_answered(self):
         self.turn(mode="espana")

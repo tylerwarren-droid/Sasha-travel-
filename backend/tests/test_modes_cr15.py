@@ -67,14 +67,16 @@ class Words(Base):
             menu, buttons = GW.SENDER.contents[-1]
             self.assertIn("EspañaMe 🇪🇸", menu)
             self.assertIn("2. *Padrón* — registering at the town hall. (CONCEPT — not built yet)", menu)
-            self.assertEqual([b[1] for b in buttons], ["hx:es:health", "hx:es:padron", "hx:es:movistar"])
+            self.assertEqual([b[1] for b in buttons], ["hx:es:health", "hx:es:padron", "hx:es:more"])
             self.say("sasha")
         self.say("españa")
         self.say("2")
         self.assertIn("🏛 *Padrón* — CONCEPT, not built yet", self.said())
         self.assertIn("servpub.madrid.es", self.said())                      # the page actually read, nothing composed
-        self.say("", payload="hx:es:movistar")
-        self.assertIn("I haven't read Movistar's pages, so no plans or prices here", self.said())
+        self.say("", payload="hx:es:more")
+        self.assertIn("Cl@ve and your digital certificate, social security and tax, the DGT, schools* — CONCEPTS", self.said())
+        self.say("", payload="hx:es:movistar")                                   # an old button: it moved (EU 153)
+        self.assertIn("now part of RelocateMe", self.said())
         self.say("1")
         self.assertIn("never why you need a doctor", self.said())             # the working health demo, consent first
 
@@ -230,3 +232,14 @@ class NotAttributable(Base):
         r = self.bodies()[-1]
         self.assertIn("didn't say when its information was last updated", r)
         self.assertNotIn("hasn't established that its licence", r)
+
+
+class UtilitiesInRelocateMe(Base):
+    def test_phone_line_and_utilities_are_a_relocateme_concept(self):
+        for t in ("relocation", "first", "me", "myself"):
+            self.say(t)
+        self.say("what about my phone line and utilities?")
+        said = "\n".join(self.bodies()[-2:])
+        self.assertIn("Your phone line and utilities, set up before you arrive* — CONCEPT", said)
+        self.assertIn("no provider's pages have been read (Movistar or anyone else)", said)
+        self.assertIn("Your passport number?", self.bodies()[-1])                  # the file exactly where it was

@@ -35,11 +35,16 @@ FICTIONAL = {"card": "EJEMPLO-0000-0000", "birth": "1985-03-14", "dni_nie": "X00
 
 
 # CR 15 · "españa" — EspañaMe: Spain's public services. Health is the working demo; the rest are CONCEPTS, labelled so.
-ES_MENU = ("EspañaMe 🇪🇸 — Spain's public services, done with you. Pick one:\n"
+ES_MENU = ("EspañaMe 🇪🇸 — Spain's public processes, done with you. Pick one:\n"
            "1. *Health* — a doctor: a private clinic, the public service (SERMAS), or new in Madrid. (working demo)\n"
            "2. *Padrón* — registering at the town hall. (CONCEPT — not built yet)\n"
-           "3. *Movistar* — phone and internet at home. (CONCEPT — not built yet)")
-ES_BUTTONS = [("1. Health", "hx:es:health"), ("2. Padrón (concept)", "hx:es:padron"), ("3. Movistar (concept)", "hx:es:movistar")]
+           "3. *More* — Cl@ve and your digital certificate, social security and tax, the DGT, schools. (CONCEPTS — not built yet)")
+ES_BUTTONS = [("1. Health", "hx:es:health"), ("2. Padrón (concept)", "hx:es:padron"), ("3. More (concepts)", "hx:es:more")]
+# EU 153 (founder, 4 Oct): EspañaMe = Spain's public processes; phone line and utilities moved to RelocateMe
+MORE_CONCEPT = ("🏛 *Cl@ve and your digital certificate, social security and tax, the DGT, schools* — CONCEPTS, not built yet and "
+                "not yet studied: each will be read at its official source before anything is built. The rule stays the same: "
+                "I prepare everything; you sign in and press.")
+MOVED = "Phone line and utilities are now part of RelocateMe (a concept there) — say “relocate”."
 
 
 def padron_concept() -> str:
@@ -50,10 +55,6 @@ def padron_concept() -> str:
             f"yourself (I never hunt for appointments): {p['appointment_url']}\nThen a reminder to ask for your volante. "
             "Today the padrón step is part of Health → New in Madrid, which works.")
 
-
-MOVISTAR_CONCEPT = ("📶 *Movistar* — CONCEPT, not built yet, and I haven't read Movistar's pages, so no plans or prices here. "
-                    "The idea: Sasha reads the providers' own offer pages, shows what each one asks for, and prepares the "
-                    "sign-up for you to press — nothing signed or ordered for you.")
 
 
 def web() -> str:
@@ -120,13 +121,18 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         pick = payload[6:] if payload.startswith("hx:es:") else (
             "health" if re.match(r"(?i)^\s*(1\b|health|salud|doctor|m[eé]dico)", t) else
             "padron" if re.match(r"(?i)^\s*(2\b|padr[oó]n)", t) else
-            "movistar" if re.match(r"(?i)^\s*(3\b|movistar|internet|phone)", t) else "")
+            "more" if re.match(r"(?i)^\s*(3\b|more|cl@?ve|certificad|digital certificate|social security|seguridad social|tax|hacienda|dgt|driving|school|educaci)", t) else
+            "movistar" if re.match(r"(?i)^\s*(movistar|internet|phone|utilit)", t) else "")
         if pick == "padron":
             out.text(padron_concept())
             out.ask("Anything else from the menu?", ES_BUTTONS)
             pend["step"] = "es_menu"
-        elif pick == "movistar":
-            out.text(MOVISTAR_CONCEPT)
+        elif pick == "more":
+            out.text(MORE_CONCEPT)
+            out.ask("Anything else from the menu?", ES_BUTTONS)
+            pend["step"] = "es_menu"
+        elif pick == "movistar":                    # an old button, or the words: it lives in RelocateMe now
+            out.text(MOVED)
             out.ask("Anything else from the menu?", ES_BUTTONS)
             pend["step"] = "es_menu"
         elif pick == "health":
@@ -499,7 +505,7 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     if step in ("consent", "call_confirm", "pub_vault_confirm"):
         return YS.is_yes(t) or bool(re.match(r"(?i)^\s*no\b", t))
     if step == "es_menu":
-        return bool(re.match(r"(?i)^\s*([123]\b|health|salud|doctor|m[eé]dico|padr[oó]n|movistar|internet|phone)", t))
+        return bool(re.match(r"(?i)^\s*([123]\b|health|salud|doctor|m[eé]dico|padr[oó]n|more|cl@?ve|dgt|movistar|internet|phone)", t))
     if step == "choose":
         return bool(re.match(r"^\s*[123]\b", t) or re.search(r"(?i)\bprivate|privad|public|sermas|p[uú]blic|new|nuev|tarjeta", t))
     if step == "when":

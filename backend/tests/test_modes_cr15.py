@@ -221,3 +221,12 @@ class SireneInconsistent(Base):
         r = self.bodies()[-1]
         self.assertIn("Standing: not shown — the register's capability could not be established for this answer.", r)
         self.assertNotIn("Standing: active", r)
+
+
+class NotAttributable(Base):
+    def test_a_record_without_its_attribution_date_is_not_shown(self):
+        self.answer = (200, {**LIVE, "status": "not_attributable", "entity": None})
+        self.say("ad check TotalEnergies in France")
+        r = self.bodies()[-1]
+        self.assertIn("didn't say when its information was last updated", r)
+        self.assertNotIn("hasn't established that its licence", r)

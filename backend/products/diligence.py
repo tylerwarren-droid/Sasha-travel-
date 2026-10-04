@@ -148,6 +148,8 @@ def render(j: dict, asked: str, label: str = "PREVIEW") -> str:
         return head + f"\nThe register's own answer: no company matching “{asked}”." + foot
     if st == "uncovered_preview":
         return head + "\nThis country's register can be reached, but the check isn't certified for sale — so no result is shown here."
+    if st == "not_attributable":   # the licence allows it, but THIS record can't be attributed (no last-update date given)
+        return head + "\nThe register didn't say when its information was last updated, and that date is required before its records can be passed on — so nothing is shown."
     if st == "not_in_preview":   # AD covers it, certified — but the register's LICENCE forbids passing records on
         return head + "\nApplied Diligence covers that country's register, but hasn't established that its licence allows passing its records on — so they're not shown here."
     if st in ("not_covered", "unsupported_country"):

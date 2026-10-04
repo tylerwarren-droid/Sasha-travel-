@@ -563,12 +563,14 @@ async def prepare_link(request: Request):
     read = row["read"]
     try:
         p = C.parse_call_particulars(body)
-        link = SL.build(read, p.on, p.at, p.party)
+        nights = body.get("nights") if isinstance(body.get("nights"), int) and 1 <= body.get("nights") <= 30 else None
+        link = SL.build_hotel(read, p.on, nights, p.party) if nights else SL.build(read, p.on, p.at, p.party)   # Sasha 138 · a stay
     except (C.CallRefused, SL.LinkRefused) as e:
         return _refuse(422, e.rule, str(e))
     link_id = str(uuid.uuid4())
     forward_to = E.act_address(link_id) if inbound_ready() else None
-    lines = SL.read_back(read["name"], link, p.on, p.at, p.party, forward_to)
+    lines = (SL.hotel_read_back(read["name"], link, p.on, nights, p.party, forward_to) if nights
+             else SL.read_back(read["name"], link, p.on, p.at, p.party, forward_to))
     plan = _plan_of(body)   # Sasha 132 · the escalation the guest's ONE yes covers — this link is made only after that yes
     if plan:
         lines.append(plan)
@@ -586,6 +588,7 @@ async def prepare_link(request: Request):
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
     return {"link_id": link_id, "trip_item_id": item, "platform": link.platform, "slot_filled": link.slot_filled, "url": link.url,
+            "prefill_tried": link.prefill_tried, "read_back": {"lines": lines},   # Sasha 138
             "forward_to": forward_to, "read_back": {"lines": lines, "sha256": rec["read_back_sha256"]}}
 
 

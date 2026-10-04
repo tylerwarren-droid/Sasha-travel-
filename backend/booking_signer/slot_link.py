@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date, time
-from typing import Dict, List, Optional
+from datetime import date, time, timedelta
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
 from .venue_read import platform_of
@@ -47,6 +47,7 @@ class SlotLink:
     url: str
     slot_filled: bool          #: True only with a VERIFIED recipe
     source_label: str          #: where the venue's platform page was read: "their website, lacontra.es"
+    prefill_tried: bool = False   #: Sasha 138 · a hotel engine's usual URL parameters were added — NOT verified, and said so
 
 
 class LinkRefused(Exception):
@@ -145,6 +146,54 @@ def build(read: dict, on: date, at: time, party: int, recipes: Optional[Dict[str
 def _when(on: date, at: time) -> str:
     h = at.hour % 12 or 12
     return f"{on.strftime('%A')} {on.day} {on.strftime('%B')} at {h}{':' + format(at.minute, '02d') if at.minute else ''} {'pm' if at.hour >= 12 else 'am'}"
+
+
+# ── Sasha 138 · HOTEL booking engines: the hotel's own engine, its dates in the link where the engine's usual URL takes them ─
+#
+# ⚠ UNVERIFIED: these are each engine's commonly published booking-URL parameters. Nobody here has opened a built link (the
+# engines are platforms: never fetched from this machine), so the read-back says "check the dates on their page" — never
+# "filled in". When the founder opens one and sees the dates filled, it can become a verified recipe.
+
+def _with(url: str, add: Dict[str, Any]) -> str:
+    u = urlsplit(url)
+    keep = [(k, v) for k, v in parse_qsl(u.query, keep_blank_values=True) if k not in add]
+    return urlunsplit((u.scheme, u.netloc, u.path, urlencode(keep + [(k, str(v)) for k, v in add.items()]), u.fragment))
+
+
+HOTEL_PREFILL = {
+    "SynXis": lambda u, i, o, a: _with(u, {"arrive": i, "depart": o, "adult": a, "rooms": 1}),
+    "Cloudbeds": lambda u, i, o, a: _with(u, {"checkin": i, "checkout": o, "adults": a}),
+    "Mews": lambda u, i, o, a: _with(u, {"mewsStart": i, "mewsEnd": o, "mewsAdultCount": a}),
+    "SiteMinder": lambda u, i, o, a: _with(u, {"checkInDate": i, "checkOutDate": o, "items[0][adults]": a, "items[0][children]": 0}),
+    "Little Hotelier": lambda u, i, o, a: _with(u, {"check_in_date": i, "check_out_date": o, "number_adults": a}),
+}
+
+
+def build_hotel(read: dict, checkin: date, nights: int, adults: int) -> SlotLink:
+    from .venue_read import HOTEL_ENGINES
+    found = platform_page(read)
+    if found is None:
+        raise LinkRefused("no_platform", "no booking engine was found linked from the hotel's own site")
+    platform, page, label = found
+    out = (checkin + timedelta(days=nights)).isoformat()
+    fill = HOTEL_PREFILL.get(platform) if platform in HOTEL_ENGINES else None
+    if fill is None:
+        return SlotLink(platform, page, False, label)
+    return SlotLink(platform, fill(page, checkin.isoformat(), out, adults), False, label, prefill_tried=True)
+
+
+def hotel_read_back(venue: str, link: SlotLink, checkin: date, nights: int, adults: int, forward_to: Optional[str]) -> list:
+    out = checkin + timedelta(days=nights)
+    stay = f"check-in {checkin.strftime('%a %d %b')}, check-out {out.strftime('%a %d %b')} ({nights} night{'s' if nights != 1 else ''}), {adults} adult{'s' if adults != 1 else ''}"
+    lines = [f"{venue} books rooms through its own booking engine ({link.platform}). The last step is yours: one tap on your phone, "
+             f"where their page takes Apple Pay or your card — I never see or pay with it."]
+    lines.append(f"I've put your dates into the link ({stay}) using {link.platform}'s usual web address — not yet verified, so check "
+                 f"them on their page before you pay." if link.prefill_tried else f"On their page, choose: {stay}.")
+    lines.append(f"I found their booking engine on {link.source_label}. Nothing is reserved until you pay there; {link.platform} sends "
+                 f"the confirmation to you.")
+    lines.append(f"Forward it to {forward_to}, or I'll find it in your Gmail and file it." if forward_to
+                 else "Reply BOOKED when it's done and I'll find their confirmation in your Gmail and file it.")
+    return lines
 
 
 def read_back(venue: str, link: SlotLink, on: date, at: time, party: int, forward_to: Optional[str]) -> list:

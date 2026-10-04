@@ -68,7 +68,7 @@ class OnWhatsApp(TG.Base):
     def test_test_booking_paid_then_a_test_reference(self):
         body, choice = self.pick_hotel()
         self.assertIn("make a TEST booking", body)
-        self.assertEqual([t for t, _ in choice], ["Test booking", "Request from hotel"])
+        self.assertEqual([t for t, _ in choice], ["Test booking", "Book with hotel"])
         self.say("Test booking", payload=choice[0][1])
         said = "\n".join(self.bodies())
         self.assertIn("• ⚠ Test booking: no hotel contacted", said)

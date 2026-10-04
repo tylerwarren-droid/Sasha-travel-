@@ -727,7 +727,7 @@ async def _new_request(ctx: dict, body: str) -> None:
     if inv_req is not None and IV.STORE is not None:
         await _invite(ctx, inv_req)
         return
-    h = HO.booking_handoff(body, history)
+    h = HO.booking_handoff(body, history, ctx["now"])   # Sasha 138 · the turn's own clock: "Saturday" and urgency agree
     if h is not None:
         if h.get("booking_cancel"):
             await _cancel_find(ctx, h["booking_cancel"]["venue"])
@@ -778,12 +778,19 @@ async def _hotels(ctx: dict, body: str) -> None:
         out.text("Tell me where and the dates, e.g. “a hotel in Hoi An from 14 to 16 November for 2”.")
         return
     f = HO.find_request(f"hotel in {m['w'].strip()}", ctx["now"]) or {"what": "hotel", "where": m["w"].strip()}
+    if not f.get("country"):   # Sasha 138 · "Madrid" is Spain: the country decides the call's language and the hotel's time zone
+        w = m["w"].strip()
+        cn = re.fullmatch(r"(.+?),\s*([^,]+)", w)
+        f["country"] = (HO.COUNTRY_NAMES.get(cn[2].strip().lower()) if cn else None) or (HO.known_place(w) or (None, None, None))[2]
     party = HO.plain_party(body or "") or 2
     out.text(f"Hotels for {nights} night{'s' if nights != 1 else ''} from {SN.day_words(a)}, {party} {'person' if party == 1 else 'people'}. "
              f"For the one you pick: a TEST booking (no hotel contacted), or a real request to the hotel.")
     ctx["no_test_card"] = True
+    out_day = (date.fromisoformat(a) + timedelta(days=nights)).isoformat()
+    en = f"a room for {nights} night{'s' if nights != 1 else ''} (check-out {out_day})"   # Sasha 138 · a call or a form says the stay
+    es = f"una habitación para {nights} noche{'s' if nights != 1 else ''} (salida el {out_day})"
     await _find(ctx, {"what": "hotel", "where": f.get("where") or m["w"].strip(), "country": f.get("country")},
-                {"parts": {"what": {"activity": "a room", "activity_venue_lang": "a room", "category": "other"},
+                {"parts": {"what": {"activity": en, "activity_venue_lang": es if (f.get("country") or "") == "ES" else en, "category": "other"},
                            "when": {"mode": "at", "at": f"{a}T15:00"}, "how_many": {"count": party, "unit": "people"}, "nights": nights}})
 
 
@@ -793,8 +800,9 @@ async def _hotel_choice(ctx: dict, pend: dict, card: dict) -> None:
     name = card.get("name") or "this hotel"
     tag_id = hashlib.sha256((card.get("place_id") or name).encode()).hexdigest()[:8]
     sha = hashlib.sha256(f"{tag_id}|{pend.get('at')}".encode()).hexdigest()
-    ctx["out"].ask(f"{name}: make a TEST booking ({HT.LABEL.lower()}; nothing reserved or charged), or ask the hotel for a real room?",
-                   [("Test booking", f"test:{tag_id}:{sha[:16]}"), ("Request from hotel", f"req:{tag_id}:{sha[:16]}")])
+    ctx["out"].ask(f"{name}: make a TEST booking ({HT.LABEL.lower()}; nothing reserved or charged), or book with the hotel for real "
+                   f"(their own booking page, or a request to them)?",
+                   [("Test booking", f"test:{tag_id}:{sha[:16]}"), ("Book with hotel", f"req:{tag_id}:{sha[:16]}")])
     ctx["st"]["pending"] = {"kind": "hotel_choice", "at": ctx["now"].isoformat(), "id": tag_id, "sha": sha, "card": card,
                             "cards_pend": {k: v for k, v in pend.items() if k != "kind"} | {"kind": "cards"}}
 
@@ -1404,7 +1412,7 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         if payload.startswith("test:") or re.search(r"\btest\b", body or "", re.I):
             await _hotel_test_ask(ctx, pend)
             return True
-        if payload.startswith("req:") or re.search(r"\b(request|ask|real)\b", body or "", re.I):
+        if payload.startswith("req:") or re.search(r"\b(request|ask|real|book with)\b", body or "", re.I):
             await _picked_card(ctx, {**pend["cards_pend"], "real": True}, pend["card"])
             return True
         out.text("Tap “Test booking” or “Request from hotel”.")
@@ -1709,14 +1717,22 @@ def dv_platform(rd: dict) -> str:
 
 
 async def _send_link(ctx: dict, rd: dict, reservation: dict, name: str, plan: Optional[str], keep: dict) -> bool:
-    """The one-tap page, made (with the approved plan in its read-back, Sasha 132) and sent."""
+    """The one-tap page, made (with the approved plan in its read-back, Sasha 132) and sent. Sasha 138 · a hotel stay: its own
+    booking engine, the dates in the link where the engine takes them — the guest pays there, in one tap."""
     at = reservation["when"]["at"]
+    nights = (keep.get("draft") or {}).get("nights")
     status, j = await api(ctx["account"], "POST", "/api/booking/links", {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16],
                                                                           "party": reservation["how_many"]["count"], "name": name,
-                                                                          **({"plan_line": plan} if plan else {})})
+                                                                          **({"plan_line": plan} if plan else {}),
+                                                                          **({"nights": int(nights)} if nights else {})})
     if status != 200:
         return False
     ctx["st"]["pending"] = {"kind": "link", "at": ctx["now"].isoformat(), "link_id": j["link_id"], "venue": rd["venue"], "when": at, **keep}
+    if nights:
+        lines = (j.get("read_back") or {}).get("lines") or []
+        ctx["out"].text(f"One tap: {rd['venue']}'s own booking engine ({j.get('platform') or 'their booking page'}).\n"
+                        + "\n".join("• " + ln for ln in lines) + f"\n{j['url']}")
+        return True
     ctx["out"].text(f"One tap: {rd['venue']}'s booking page on {j.get('platform') or 'their platform'} — "
                     f"{'the day, time and party are filled in' if j.get('slot_filled') else 'choose the day, time and party there'}. "
                     f"Press their confirm button; I can't press it for you.\n{j['url']}\n"

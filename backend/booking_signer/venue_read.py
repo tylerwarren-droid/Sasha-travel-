@@ -53,7 +53,17 @@ PLATFORMS = {
     "covermanager": "CoverManager", "sevenrooms": "SevenRooms", "resy.com": "Resy", "quandoo": "Quandoo",
     "tablein": "Tablein", "bookatable": "Bookatable", "resdiary": "ResDiary", "zenchef": "Zenchef",
     "guestonline": "Guestonline", "restoo": "Restoo", "booksy": "Booksy", "fresha": "Fresha",
+    # Sasha 138 · HOTEL booking engines — recognised from the link or widget on the hotel's OWN site; like every platform here,
+    # their pages are never fetched (the guest opens them, with one tap)
+    "direct-book.com": "SiteMinder", "book-directonline.com": "SiteMinder", "thebookingbutton": "SiteMinder",
+    "littlehotelier.com": "Little Hotelier", "cloudbeds.com": "Cloudbeds", "mews.com": "Mews", "mews.li": "Mews",
+    "synxis.com": "SynXis", "secure-hotel-booking.com": "D-Edge", "d-edge.com": "D-Edge", "availpro.com": "D-Edge",
+    "roiback.com": "Roiback", "neobookings.com": "Neobookings", "bookassist": "Bookassist", "guestcentric": "GuestCentric",
+    "omnibees.com": "Omnibees", "simplebooking.it": "Simple Booking", "webhotelier.net": "WebHotelier", "ihotelier.com": "iHotelier",
+    "hotetec.com": "Hotetec",
 }
+HOTEL_ENGINES = frozenset(("SiteMinder", "Little Hotelier", "Cloudbeds", "Mews", "SynXis", "D-Edge", "Roiback", "Neobookings",
+                           "Bookassist", "GuestCentric", "Omnibees", "Simple Booking", "WebHotelier", "iHotelier", "Hotetec"))
 
 _E164 = re.compile(r"\+[1-9]\d{7,14}")
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")

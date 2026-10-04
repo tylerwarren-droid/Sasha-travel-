@@ -99,7 +99,7 @@ def _when(iso: Optional[str]) -> str:
 
 
 def truncated_line(j: dict) -> str:
-    """AD's candidatesTruncatedLine (lib/preview-register.ts, US tab ce1a930), in its words: a short list is never read as
+    """AD's candidatesTruncatedLine (lib/preview-register.ts, US tab ce1a930), BYTE-IDENTICAL to it: a short list is never read as
     the whole register — "a name that does not appear here has not been ruled out"."""
     count, shown = j.get("candidate_count"), j.get("candidates_shown")
     if shown is None:
@@ -107,8 +107,11 @@ def truncated_line(j: dict) -> str:
     if count is None:
         if "candidate_count" not in j:
             return ""                               # an older answer that carries neither field: nothing to claim
-        return (f"\nShowing {shown} names; the register didn't say how many it matched. This list may not be complete, and a "
-                "name that does not appear here has not been ruled out — narrow the search or give a registration number.")
+        if not shown:
+            return ""                               # zero candidates and no count: nothing truncated (AD returns null too)
+        return (f"\nShowing {shown} name{'' if shown == 1 else 's'}; the register did not say how many it matched. This list may "
+                "not be complete, and a name that does not appear here has not been ruled out — narrow the search or give a "
+                "registration number.")
     if count > shown:
         return (f"\nShowing {shown} of {count} names the register matched. This list is not complete, and a name that does not "
                 "appear here has not been ruled out — narrow the search or give a registration number.")

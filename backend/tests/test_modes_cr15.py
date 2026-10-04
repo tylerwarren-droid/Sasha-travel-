@@ -280,8 +280,16 @@ class Truncated(Base):
         self.answer = (200, {**LIVE, "status": "ambiguous", "entity": None, "candidate_count": None, "candidates_shown": 2,
                              "candidates": [{"legal_name": "A", "registration_number": "1"}, {"legal_name": "B", "registration_number": "2"}]})
         self.say("check Foo in France")
-        self.assertIn("the register didn't say how many it matched", self.bodies()[-1])
+        self.assertIn("Showing 2 names; the register did not say how many it matched. This list may not be complete, and a name "
+                      "that does not appear here has not been ruled out — narrow the search or give a registration number.",
+                      self.bodies()[-1])                                          # byte-identical to AD's own sentence
         self.answer = (200, {**LIVE, "status": "ambiguous", "entity": None, "candidate_count": 2, "candidates_shown": 2,
                              "candidates": [{"legal_name": "A", "registration_number": "1"}, {"legal_name": "B", "registration_number": "2"}]})
         self.say("check Bar in France")
         self.assertNotIn("Showing", self.bodies()[-1])
+
+    def test_one_name_and_none(self):
+        from products import diligence as DG
+        self.assertIn("Showing 1 name; the register did not say", DG.truncated_line({"candidate_count": None, "candidates_shown": 1}))
+        self.assertEqual(DG.truncated_line({"candidate_count": None, "candidates_shown": 0}), "")
+        self.assertEqual(DG.truncated_line({"candidate_count": 5, "candidates_shown": 5}), "")

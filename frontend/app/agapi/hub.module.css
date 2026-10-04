@@ -2,7 +2,7 @@
 .top { margin: 0 0 32px; }
 .kicker { margin: 0 0 6px; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: #8a6d3b; font-weight: 700; }
 .headline { font-family: var(--site-head), serif; font-size: clamp(28px, 5vw, 40px); line-height: 1.15; color: #0d2b3e; margin: 0 0 24px; font-weight: 400; }
-.agentGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 0 0 22px; }
+.agentGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 22px; }
 .agentCard { background: #fff; border: 1px solid #e6e2d8; border-radius: 12px; padding: 14px; }
 .agentName { margin: 0 0 6px; font-weight: 700; color: #0d2b3e; }
 .agentRole { font-weight: 400; color: #5c6a74; }
@@ -40,5 +40,6 @@
 .legend { font-size: 13px; color: #5c6a74; margin: 22px 0 0; line-height: 1.5; }
 @media (max-width: 520px) {
   .agentRow { grid-template-columns: 1fr; gap: 2px; }
+  .agentGrid { grid-template-columns: 1fr; }
   .pitch { padding: 18px 14px; }
 }

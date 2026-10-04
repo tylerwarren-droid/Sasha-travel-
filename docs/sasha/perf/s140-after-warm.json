@@ -1,0 +1,182 @@
+{
+ "booking\u00b7form read-back": {
+  "n": 2,
+  "p50": 4.06,
+  "p95": 4.1
+ },
+ "booking\u00b7form sent + their page read": {
+  "n": 2,
+  "p50": 8.13,
+  "p95": 8.27
+ },
+ "booking\u00b7venue read (test venue)": {
+  "n": 2,
+  "p50": 1.75,
+  "p95": 1.78
+ },
+ "hotel\u00b7cards shown": {
+  "n": 6,
+  "p50": 1.18,
+  "p95": 2.47
+ },
+ "hotel\u00b7intent": {
+  "n": 6,
+  "p50": 0.0,
+  "p95": 0.0
+ },
+ "hotel\u00b7photo hit rate": {
+  "n": 6,
+  "p50": 0.0,
+  "p95": 0.33
+ },
+ "hotel\u00b7photos (within the budget)": {
+  "n": 6,
+  "p50": 0.0,
+  "p95": 1.0
+ },
+ "hotel\u00b7read-back (venue read)": {
+  "n": 6,
+  "p50": 1.32,
+  "p95": 1.35
+ },
+ "hotel\u00b7search": {
+  "n": 6,
+  "p50": 1.18,
+  "p95": 1.47
+ },
+ "payment\u00b7Stripe TEST page made": {
+  "n": 2,
+  "p50": 0.86,
+  "p95": 0.86
+ },
+ "restaurant\u00b7cards shown": {
+  "n": 6,
+  "p50": 0.86,
+  "p95": 1.8
+ },
+ "restaurant\u00b7intent": {
+  "n": 6,
+  "p50": 0.0,
+  "p95": 0.01
+ },
+ "restaurant\u00b7photo hit rate": {
+  "n": 6,
+  "p50": 0.17,
+  "p95": 0.33
+ },
+ "restaurant\u00b7photos (within the budget)": {
+  "n": 6,
+  "p50": 0.0,
+  "p95": 1.01
+ },
+ "restaurant\u00b7read-back (venue read)": {
+  "n": 6,
+  "p50": 1.34,
+  "p95": 1.38
+ },
+ "restaurant\u00b7search": {
+  "n": 6,
+  "p50": 0.83,
+  "p95": 0.96
+ },
+ "spa\u00b7cards shown": {
+  "n": 6,
+  "p50": 0.87,
+  "p95": 1.87
+ },
+ "spa\u00b7intent": {
+  "n": 6,
+  "p50": 0.0,
+  "p95": 0.0
+ },
+ "spa\u00b7photo hit rate": {
+  "n": 6,
+  "p50": 0.67,
+  "p95": 0.67
+ },
+ "spa\u00b7photos (within the budget)": {
+  "n": 6,
+  "p50": 0.0,
+  "p95": 1.0
+ },
+ "spa\u00b7read-back (venue read)": {
+  "n": 6,
+  "p50": 1.33,
+  "p95": 1.39
+ },
+ "spa\u00b7search": {
+  "n": 6,
+  "p50": 0.86,
+  "p95": 0.88
+ },
+ "tattoo\u00b7cards shown": {
+  "n": 6,
+  "p50": 0.82,
+  "p95": 0.86
+ },
+ "tattoo\u00b7intent": {
+  "n": 6,
+  "p50": 0.0,
+  "p95": 0.0
+ },
+ "tattoo\u00b7photo hit rate": {
+  "n": 6,
+  "p50": 0.67,
+  "p95": 0.67
+ },
+ "tattoo\u00b7photos (within the budget)": {
+  "n": 6,
+  "p50": 0.0,
+  "p95": 0.0
+ },
+ "tattoo\u00b7read-back (venue read)": {
+  "n": 6,
+  "p50": 1.32,
+  "p95": 1.34
+ },
+ "tattoo\u00b7search": {
+  "n": 6,
+  "p50": 0.82,
+  "p95": 0.86
+ },
+ "web\u00b7hotel\u00b7conduct": {
+  "n": 2,
+  "p50": 0.97,
+  "p95": 1.32
+ },
+ "web\u00b7hotel\u00b7path": {
+  "n": 2,
+  "p50": 1.0,
+  "p95": 1
+ },
+ "web\u00b7restaurant\u00b7conduct": {
+  "n": 2,
+  "p50": 0.0,
+  "p95": 0.0
+ },
+ "web\u00b7restaurant\u00b7path": {
+  "n": 2,
+  "p50": 0.0,
+  "p95": 0
+ },
+ "web\u00b7spa\u00b7conduct": {
+  "n": 2,
+  "p50": 0.0,
+  "p95": 0.0
+ },
+ "web\u00b7spa\u00b7path": {
+  "n": 2,
+  "p50": 1.0,
+  "p95": 1
+ },
+ "web\u00b7tattoo\u00b7conduct": {
+  "n": 2,
+  "p50": 0.89,
+  "p95": 0.93
+ },
+ "web\u00b7tattoo\u00b7path": {
+  "n": 2,
+  "p50": 1.0,
+  "p95": 1
+ }
+}

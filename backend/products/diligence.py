@@ -98,6 +98,23 @@ def _when(iso: Optional[str]) -> str:
         return iso or "not given"
 
 
+def truncated_line(j: dict) -> str:
+    """AD's candidatesTruncatedLine (lib/preview-register.ts, US tab ce1a930), in its words: a short list is never read as
+    the whole register — "a name that does not appear here has not been ruled out"."""
+    count, shown = j.get("candidate_count"), j.get("candidates_shown")
+    if shown is None:
+        shown = len(j.get("candidates") or [])
+    if count is None:
+        if "candidate_count" not in j:
+            return ""                               # an older answer that carries neither field: nothing to claim
+        return (f"\nShowing {shown} names; the register didn't say how many it matched. This list may not be complete, and a "
+                "name that does not appear here has not been ruled out — narrow the search or give a registration number.")
+    if count > shown:
+        return (f"\nShowing {shown} of {count} names the register matched. This list is not complete, and a name that does not "
+                "appear here has not been ruled out — narrow the search or give a registration number.")
+    return ""
+
+
 def _natural_person(e: dict) -> bool:
     cat = str(e.get("legal_category") or e.get("categorie_juridique") or "")
     return bool(e.get("natural_person")) or cat == "1000"
@@ -143,7 +160,8 @@ def render(j: dict, asked: str, label: str = "PREVIEW") -> str:
         return head + "\n" + "\n".join(lines) + foot
     if st == "ambiguous":
         c = "\n".join(f"• {x.get('legal_name')} — {x.get('registration_number')}" for x in (j.get("candidates") or [])[:5])
-        return head + f"\nNames that resemble “{asked}” — possible matches, not confirmed:\n{c}\nSend the registration number to check one." + foot
+        return head + f"\nNames that resemble “{asked}” — possible matches, not confirmed:\n{c}" + truncated_line(j) + \
+            "\nSend the registration number to check one." + foot
     if st == "not_found":
         return head + f"\nThe register's own answer: no company matching “{asked}”." + foot
     if st == "uncovered_preview":

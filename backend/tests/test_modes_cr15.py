@@ -268,3 +268,20 @@ class EspanaAreasRoute(TG.unittest.TestCase):
                          [("salud", True), ("padron", False), ("identity", False), ("social", False), ("dgt", False), ("education", False)])
         dgt = next(a for a in j["areas"] if a["key"] == "dgt")
         self.assertEqual((dgt["read"], dgt["route"], dgt["route_url"]), (False, None, None))   # nothing from memory
+
+
+class Truncated(Base):
+    def test_a_short_list_is_never_the_whole_register(self):
+        self.answer = (200, {**LIVE, "status": "ambiguous", "entity": None, "candidate_count": 221, "candidates_shown": 5,
+                             "candidates": [{"legal_name": f"TOTALENERGIES {i}", "registration_number": str(i)} for i in range(5)]})
+        self.say("ad check TotalEnergies in France")
+        self.assertIn("Showing 5 of 221 names the register matched. This list is not complete, and a name that does not "
+                      "appear here has not been ruled out", self.bodies()[-1])
+        self.answer = (200, {**LIVE, "status": "ambiguous", "entity": None, "candidate_count": None, "candidates_shown": 2,
+                             "candidates": [{"legal_name": "A", "registration_number": "1"}, {"legal_name": "B", "registration_number": "2"}]})
+        self.say("check Foo in France")
+        self.assertIn("the register didn't say how many it matched", self.bodies()[-1])
+        self.answer = (200, {**LIVE, "status": "ambiguous", "entity": None, "candidate_count": 2, "candidates_shown": 2,
+                             "candidates": [{"legal_name": "A", "registration_number": "1"}, {"legal_name": "B", "registration_number": "2"}]})
+        self.say("check Bar in France")
+        self.assertNotIn("Showing", self.bodies()[-1])

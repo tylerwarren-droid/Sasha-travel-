@@ -283,8 +283,11 @@ async def rehearse(n: int, account_name: str = "demo", only: Optional[str] = Non
                     ("M15 ad + a person → refused", "ad check Mr Patrick Pouyanné in France", "companies only"),
                     ("M16 sasha → back", "sasha", "Back to Sasha")):
                 await beat(label, msg, expect=expect)
-            res = await _live_one(account, "🧪 Kanoe — one live check from today's rehearsal. The mode words for Wednesday: "
-                                           "relocate · campus · españa · diligence · sasha (back to Sasha).")
+            if os.getenv("KANOE_LIVE_ONE", "1") == "0":   # a re-run: the one live message was already sent
+                res = ["skipped: KANOE_LIVE_ONE=0 (already sent once)"]
+            else:
+                res = await _live_one(account, "🧪 Kanoe — one live check from today's rehearsal. The mode words for Wednesday: "
+                                               "relocate · campus · españa · diligence · sasha (back to Sasha).")
             rows.append({"beat": "LIVE one real message to the account's own WhatsApp", "sent": "(live)", "compute_s": 0,
                          "msgs": 1, "room_s": 0, "ok": res == ["sent"] or all(str(x).startswith("SM") or x == "sent" for x in res),
                          "said": "; ".join(map(str, res)), "expect": "sent"})

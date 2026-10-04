@@ -112,6 +112,7 @@ class Diligence(Base):
         self.say("ad check Shell in the Netherlands")
         self.assertEqual(self.calls, [])
         self.assertIn("the Dutch company register's terms don't allow passing on its records", self.bodies()[-1])
+        self.assertNotIn("Checking", self.said())                              # never "checking" before a refusal
 
     def test_people_are_never_looked_up(self):
         self.say("ad check Mr Patrick Pouyanné in France")

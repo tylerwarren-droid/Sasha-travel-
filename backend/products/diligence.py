@@ -169,6 +169,12 @@ SAMPLE = {
 _PERSON = re.compile(r"(?i)^\s*(mr|mrs|ms|miss|dr|sr|sra|m\.|mme|herr|frau)\.?\s|\b(person|individual|director named|ceo named)\b")
 
 
+def will_query(country: str, name: Optional[str]) -> bool:
+    """True only when a real call goes out — so "Checking … in the register" is never said before a refusal."""
+    return country not in REFUSED and not (name and _PERSON.search(name)) and \
+        bool(os.getenv("AD_PREVIEW_URL", "").strip() and os.getenv("AD_PREVIEW_KEY", "").strip())
+
+
 async def lookup(country: str, name: Optional[str], number: Optional[str]) -> str:
     url, key = os.getenv("AD_PREVIEW_URL", "").strip(), os.getenv("AD_PREVIEW_KEY", "").strip()
     asked = name or number or ""
@@ -211,7 +217,8 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> Optiona
             return True
         return False                               # not a lookup: Sasha answers it, in the same chat
     country, name, number = got
-    await ctx["early"](f"Checking {name or number} in the register ({country})…")
+    if will_query(country, name):
+        await ctx["early"](f"Checking {name or number} in the register ({country})…")
     out.text(await lookup(country, name, number))
     pend["step"] = "ask"                           # another company? same mode; "sasha" goes back
     return True

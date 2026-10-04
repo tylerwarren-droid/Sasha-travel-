@@ -256,7 +256,7 @@ async def cancel_go(trip_item_id: str, request: Request):
         await _record(account, trip_item_id, "web_form", reading, text, "their cancel link, opened by Sasha after your yes", now)
         done = reading["result"] == "cancelled"
         await GR.send_for_route(account, b["venue"], "their own cancel link", "Cancelled by the venue" if done else "Not cancelled yet",
-                                {"their_words": text[:1500]})
+                                {"their_words": text[:1500], "trip_item_id": b.get("id")})
         return {"status": "cancelled" if done else "not_confirmed", "say": "Reservation cancelled." if done else
                 "Their page doesn't say it's cancelled — their words are below.", "their_words": text, "reading": reading}
     if p["route"] == "email":
@@ -276,7 +276,7 @@ async def cancel_go(trip_item_id: str, request: Request):
         if not sent.sent:
             return {"status": "not_done", "say": f"I couldn't send it: {sent.why}"}
         await GR.send_for_route(account, b["venue"], f"an email from Sasha to {p['to']}", "Cancellation requested — waiting for their reply",
-                                {"their_words": None})
+                                {"their_words": None, "trip_item_id": b.get("id")})
         return {"status": "requested", "say": f"Sent to {p['to']}. It's cancelled once their reply says so — I'll show it the moment it arrives."}
     if p["route"] == "sms":
         sent = await GR.send_sms(p["to"], w["sms"], switch="SASHA_SMS_TO_VENUES")

@@ -49,6 +49,15 @@ class MemoryCallStore:
         self.trip_items: Dict[str, dict] = {}
         self.calls: Dict[str, dict] = {}
         self.attempts: list = []
+        self.receipts: list = []   # Sasha 144 · booking_receipts_sent
+
+    async def put_test_call(self, row: dict, approval: dict, now: datetime) -> None:
+        """Sasha 144 · a call to the TEST LINE: in the call log like every call, marked is_test, with no reservation."""
+        self.calls[row["call_id"]] = {**{k: v for k, v in row.items() if k not in _TRIP and k != "request"}, "trip_item_id": None,
+                                      "is_test": True, "status": "placing", "approval": dict(approval), "approved_at": now}
+
+    async def record_receipt(self, row: dict) -> None:
+        self.receipts.append(dict(row))
 
     async def put_call(self, row: dict, trip_id: Optional[str]) -> str:
         if trip_id is not None:
@@ -181,7 +190,7 @@ class MemoryCallStore:
             return False
         r.update(status=reading.state, bland_details=details, outcome=reading.outcome, venue_words=reading.venue_words,
                  reading=reading_json(reading), read_at=now)
-        if reading.state == "answered":
+        if reading.state == "answered" and r.get("trip_item_id"):   # Sasha 144 · a test call has no reservation to move
             purpose = (r.get("brief") or {}).get("purpose", "book")
             attempt, trip = outcome_effect(purpose, reading.outcome, getattr(reading, "offer", None))
             self.attempts.append({"trip_item_id": r["trip_item_id"], "method": "phone", "status": attempt,
@@ -257,6 +266,39 @@ class PostgresCallStore:
                 await write_request(conn, item_id, "booking_calls", "call_id", uuid.UUID(row["call_id"]), row.get("request"))
                 return str(item_id)
         return await self._run(fn)
+
+    async def put_test_call(self, row: dict, approval: dict, now: datetime) -> None:
+        """Sasha 144 · a TEST-LINE call, written as every call is (sql/032: is_test, no reservation), already approved by the
+        founder's ops press and so straight to 'placing' — mark_placed then records Bland's answer the usual way."""
+        import asyncpg
+
+        async def fn(conn):
+            await conn.execute(
+                "insert into booking_calls (call_id, account_id, trip_item_id, is_test, venue_key, dialled_number, language, "
+                "guest_name, guest_phone, brief, brief_sha256, read_back_lines, read_back_sha256, status, created_at, approval, approved_at) "
+                "values ($1,$2,null,true,$3,$4,$5,$6,$7,$8,$9,$10,$11,'placing',$12,$13,$12)",
+                uuid.UUID(row["call_id"]), uuid.UUID(row["account_id"]), row["venue_key"], row["dialled_number"], row["language"],
+                row["guest_name"], row["guest_phone"], row["brief"], row["brief_sha256"], row["read_back_lines"], row["read_back_sha256"],
+                now, approval)
+        try:
+            await self._base._run(fn)
+        except (asyncpg.exceptions.UndefinedColumnError, asyncpg.exceptions.NotNullViolationError) as e:
+            raise StorageUnavailable("storage_not_provisioned", f"{e} — run backend/booking_signer/sql/032_call_log.sql") from None
+
+    async def record_receipt(self, row: dict) -> None:
+        """Sasha 144 · one guest receipt, sent or not (sql/032)."""
+        import asyncpg
+
+        async def fn(conn):
+            await conn.execute(
+                "insert into booking_receipts_sent (account_id, trip_item_id, call_id, kind, venue, route, status_words, outcome, provider_id) "
+                "values ($1,$2,$3,$4,$5,$6,$7,$8,$9)", uuid.UUID(row["account_id"]), _uuid_or_none(row.get("trip_item_id")),
+                _uuid_or_none(row.get("call_id")), row["kind"], row["venue"], row["route"], row.get("status_words"), row["outcome"],
+                row.get("provider_id"))
+        try:
+            await self._base._run(fn)
+        except asyncpg.exceptions.UndefinedTableError as e:
+            raise StorageUnavailable("storage_not_provisioned", f"{e} — run backend/booking_signer/sql/032_call_log.sql") from None
 
     async def confirmations(self, call_id: str, field: str = "confirms_call_id") -> list:
         """Sasha 108 · every confirmation call of this booking call (or, field="cancels_call_id", every cancelling call),
@@ -456,7 +498,7 @@ class PostgresCallStore:
                     uuid.UUID(call_id), reading.state, details, reading.outcome, reading.venue_words, reading_json(reading), now)
                 if row is None:
                     return False   # already read by another poll: never recorded twice
-                if reading.state == "answered":
+                if reading.state == "answered" and row["trip_item_id"] is not None:   # Sasha 144 · a test call moves no reservation
                     purpose = (row["brief"] or {}).get("purpose", "book")
                     attempt, trip = outcome_effect(purpose, reading.outcome, getattr(reading, "offer", None))
                     await conn.execute(

@@ -230,6 +230,9 @@ async def retry_confirmation(conf: dict) -> str:
 
 async def _follow_up(call: dict, reading) -> None:
     """Sasha 74 · rules 2–3 — awaited here, never fire-and-forget; its failure is logged and never undoes the reading."""
+    if call.get("is_test"):   # Sasha 144 · a test-line call: logged and read like any call, but no venue to follow up, no receipt
+        log.info("[booking_calls] test call %s read: %s", call.get("call_id"), reading.outcome or reading.state)
+        return
     if (call.get("brief") or {}).get("confirms_call_id") or (call.get("approval") or {}).get("scheduled_for") \
             or ((call.get("brief") or {}).get("purpose") == "cancel" and reading.state == "not_reached"):
         # Sasha 108 · a confirmation call's own result: retried once if nobody answered, and told to the guest on

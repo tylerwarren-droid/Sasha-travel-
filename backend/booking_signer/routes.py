@@ -562,6 +562,8 @@ router.include_router(_test_deposit.ops)
 router.include_router(_test_deposit.public)   # Sasha 136 · /api/booking/test-pay/{done,back} — Stripe's return page, public   # Sasha 131 · /api/booking/ops/test-deposit/* (founder only; Stripe TEST mode)
 from . import route_costs as _route_costs  # noqa: E402
 router.include_router(_route_costs.router)   # Sasha 131 · /api/booking/ops/route-costs (founder only)
+from . import ops_log as _ops_log  # noqa: E402
+router.include_router(_ops_log.router)   # Sasha 144 · /api/booking/ops/log, /ops/calls/test, /ops/calls/import-bland (founder only)
 from . import demo_spa as _demo_spa  # noqa: E402
 router.include_router(_demo_spa.router)   # Sasha 126 (3) · Kanoe Demo Spa (ours; books nothing real)
 router.include_router(_demo_spa.ops)

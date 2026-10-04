@@ -148,6 +148,18 @@ def platform_of(sender: str) -> Optional[str]:
     return next((v for k, v in PLATFORM_NAMES.items() if k in name.replace(" ", "")), None)
 
 
+#: Sasha 144 · words a sentence puts where a name could go: "cancela tu reserva en cualquier momento" is not a venue
+_NOT_A_NAME = re.compile(r"(?:cualquier|todo|toda|todos|cualquiera|nuestr[ao]s?|vuestr[ao]s?|línea|linea|online|any|anytime|"
+                         r"every|all|our|the\s+app|la\s+app|el\s+app|nuestra\s+web|la\s+web|tu\s+cuenta|your\s+account)\b", re.I)
+
+
+def _proper(v: str) -> bool:
+    """A venue's name is written as a name: it starts with a capital or a digit ("Casa Lucio", "100 Montaditos"), and it
+    isn't one of the phrases a confirmation email's small print puts after "reserva en" — "cualquier momento" (Sasha 144:
+    a founder's itinerary item was named that)."""
+    return bool(v) and (v[0].isupper() or v[0].isdigit()) and not _NOT_A_NAME.match(v)
+
+
 def venue_in(subject: str, body: str) -> Optional[str]:
     """The venue's own name, from a platform's email: "Tu reserva en Casa Lucio está confirmada", "Your booking at X …",
     "Reserva confirmada - X". Subject first. None rather than a guess — never the platform's name."""
@@ -155,7 +167,7 @@ def venue_in(subject: str, body: str) -> Optional[str]:
         for rx in (_VENUE_AT, _VENUE_DASH):
             for m in rx.finditer(text):
                 v = m[1].strip(" -–—'\"")
-                if v and platform_of(v) is None and not re.fullmatch(r"\d+|(?:tu|su|your|our)\b.*", v, re.I):
+                if v and platform_of(v) is None and not re.fullmatch(r"\d+|(?:tu|su|your|our)\b.*", v, re.I) and _proper(v):
                     return v
     return None
 

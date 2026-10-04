@@ -398,7 +398,7 @@ async def send_email(email_id: str, request: Request):
     read = await LADDER_STORE.get_read(account, str(e.get("read_id"))) if e.get("read_id") else None
     log.info("[booking_ladder] email %s guest receipt: %s", email_id, await GR.send_for_route(
         account, (read or {}).get("venue_name") or e["email"]["to"], f"an email from Sasha to {e['email']['to']}",
-        "Requested — waiting for their reply", {"their_words": None}))
+        "Requested — waiting for their reply", {"their_words": None, "trip_item_id": e.get("trip_item_id")}))
     return {"ok": True, "status": "sent",
             "say": f"Sent to {e['email']['to']} — our mail service accepted it. I'll show you their reply the moment it arrives."}
 
@@ -648,7 +648,8 @@ async def link_booked(link_id: str, request: Request):
         log.info("[booking_ladder] link %s guest receipt: %s", link_id, await GR.send_for_route(
             account, l.get("venue_name") or "the venue", f"their {l.get('platform')} page — you made the final press",
             "Booked by you, on your word — not confirmed until the platform's confirmation arrives",
-            {"when": f"{l.get('local_date')} at {str(l.get('local_time'))[:5]}" if l.get("local_date") else None, "party": l.get("party_size")}))
+            {"when": f"{l.get('local_date')} at {str(l.get('local_time'))[:5]}" if l.get("local_date") else None, "party": l.get("party_size"),
+             "trip_item_id": l.get("trip_item_id")}))
     return await get_link(link_id, request)
 
 

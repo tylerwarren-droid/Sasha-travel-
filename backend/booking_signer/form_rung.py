@@ -728,7 +728,8 @@ async def send(form_id: str, request: Request):
         {"confirmed": "Confirmed by the venue", "proposed": "They offered something else", "declined": "They said no"}.get(
             reading.get("result"), "Requested — not confirmed until they confirm"),
         {"what": (o.get("what") or {}).get("activity"), "when": when, "party": (o.get("how_many") or {}).get("count"),
-         "name": (o.get("who") or {}).get("name"), "venue_reference": outcome.get("booking_reference"), "their_words": text}))
+         "name": (o.get("who") or {}).get("name"), "venue_reference": outcome.get("booking_reference"), "their_words": text,
+         "trip_item_id": f.get("trip_item_id")}))   # Sasha 144 · the receipt is recorded against its booking
     say = {"confirmed": "Sent. Their page confirms it, word for word below.",
            "proposed": "Sent. Their page offers something different — read it below before relying on anything.",
            "declined": "Sent. Their page says no — their words are below."}.get(reading.get("result"),

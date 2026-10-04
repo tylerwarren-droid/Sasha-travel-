@@ -408,7 +408,7 @@ async def on_reply(email_id: str, text: Optional[str], now: datetime) -> Optiona
         if r["result"] == "cancelled":
             from . import guest_receipt as GR
             await GR.send_for_route(str(e["account_id"]), (e.get("email") or {}).get("to") or "the venue", "their reply to Sasha's email",
-                                    "Cancelled by the venue", {"their_words": text})
+                                    "Cancelled by the venue", {"their_words": text, "trip_item_id": e.get("trip_item_id")})
         return r
     after = (e.get("approval") or {}).get("after_call")
     if after:

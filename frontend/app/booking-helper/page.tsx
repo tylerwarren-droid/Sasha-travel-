@@ -30,6 +30,7 @@ export default function OpsPage() {
           <li><a className="underline" href="https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain" target="_blank" rel="noopener noreferrer">The test venue</a> — ours, not a real restaurant: its form takes Sasha&rsquo;s test bookings.</li>
           <li><a className="underline" href="https://sasha-travel-production.up.railway.app/api/booking/health" target="_blank" rel="noopener noreferrer">Server health</a> — calls on or off, the caps, the vault, Calendar, Gmail and reminder loops.</li>
           <li>Calls: the call panel below; a guest&rsquo;s calls are off until you list their account in SASHA_CALLS_ACCOUNTS.</li>
+          <li><a className="underline" href="/booking-helper/log">Call and booking log</a> — every call and booking in one place, for a venue&rsquo;s dispute (Sasha 144).</li>
         </ul>
       </header>
       <DemoControls />

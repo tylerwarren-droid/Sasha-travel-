@@ -107,25 +107,54 @@ async def send_sms(to: Optional[str], body: str, switch: str = "SASHA_SMS_TO_GUE
         return f"sms not sent: {type(e).__name__}"
 
 
+async def record(account: str, kind: str, venue: str, route: str, outcome: str, *, status_words: Optional[str] = None,
+                 provider_id: Optional[str] = None, trip_item_id: Any = None, call_id: Any = None) -> None:
+    """Sasha 144 · every receipt attempt into booking_receipts_sent (sql/032): the ops log says whether the guest got it.
+    Awaited; a failure to record is LOGGED, never fatal to the receipt or the booking step."""
+    from . import call_routes as CRT
+    from .store import StorageUnavailable
+    if CRT.CALL_STORE is None or not hasattr(CRT.CALL_STORE, "record_receipt"):
+        return
+    try:
+        await CRT.CALL_STORE.record_receipt({"account_id": account, "trip_item_id": str(trip_item_id) if trip_item_id else None,
+                                             "call_id": str(call_id) if call_id else None, "kind": kind, "venue": venue or "the venue",
+                                             "route": route, "status_words": status_words, "outcome": outcome, "provider_id": provider_id})
+    except StorageUnavailable as e:
+        log.warning("[guest_receipt] receipt not recorded (%s): %s", e.rule, e.detail)
+    except Exception as e:
+        log.error("[guest_receipt] receipt not recorded: %s: %s", type(e).__name__, e)
+
+
 async def send_after_call(call: Mapping[str, Any]) -> str:
-    """Once a booking call's reading is recorded. Returns what happened, in words (logged; the tests read it)."""
+    """Once a booking call's reading is recorded. Returns what happened, in words (logged; the tests read it). Sasha 144:
+    and recorded, sent or not."""
+    out, sent_id = await _send_after_call(call)
+    brief = call.get("brief") or {}
+    if out not in ("not a booking call",):
+        await record(str(call["account_id"]), "cancel" if brief.get("purpose") == "cancel" else "booking",
+                     brief.get("venue_name") or "the venue", "after Sasha's phone call", out, provider_id=sent_id,
+                     trip_item_id=call.get("trip_item_id"), call_id=call.get("call_id"))
+    return out
+
+
+async def _send_after_call(call: Mapping[str, Any]):
     from . import call_routes as CRT, ladder_routes as LR, receipt as RC
     from .ladder import emails_ready
     brief = call.get("brief") or {}
     if (brief.get("purpose") or "book") == "cancel":
-        return await send_after_cancel(call)
+        return await send_after_cancel(call), None
     if (brief.get("purpose") or "book") != "book":
-        return "not a booking call"
+        return "not a booking call", None
     why = emails_ready()
     if why:
-        return f"not sent: {why}"
+        return f"not sent: {why}", None
     account = str(call["account_id"])
     to = await address_of(account)
     if not to:
-        return "not sent: the guest has no email address on their account"
+        return "not sent: the guest has no email address on their account", None
     rows = await CRT.CALL_STORE.receipt_rows(account, str(call["trip_item_id"]))
     if rows is None:
-        return "not sent: no receipt for that reservation"
+        return "not sent: no receipt for that reservation", None
     read = await CRT._read_of(account, rows["call"].get("brief") or {})
     listed = (((read or {}).get("listing") or {}).get("name") or "").strip()
     stored = (rows["call"].get("brief") or {}).get("venue_name") or rows["item"].get("provider_name") or "the venue"
@@ -133,14 +162,14 @@ async def send_after_call(call: Mapping[str, Any]) -> str:
     sent = await E.send(LR.HTTP, compose(rc, to))
     if not sent.sent:
         log.error("[guest_receipt] call %s: the receipt email was not sent: %s", call.get("call_id"), sent.why)
-        return f"not sent: {sent.why}"
+        return f"not sent: {sent.why}", None
     log.info("[guest_receipt] call %s: receipt sent to the guest (%s)", call.get("call_id"), sent.provider_id)
     refs = rc.get("references") or {}
     sms = await send_sms(rc.get("phone_given_if_asked"),
                          f"Sasha: {rc['venue']['name']}, {rc.get('date')} {rc.get('time') or ''}, {rc.get('count') or ''} — "
                          f"{rc.get('status_words')}." + (f" Ref. {refs['sasha']}." if refs.get("sasha") else "") + " Receipt in your email.")
     log.info("[guest_receipt] call %s: %s", call.get("call_id"), sms)
-    return "sent"
+    return "sent", sent.provider_id
 
 
 async def send_after_cancel(call: Mapping[str, Any]) -> str:
@@ -186,25 +215,33 @@ def compose_route(venue: str, route: str, status: str, details: Mapping[str, Any
 
 
 async def send_for_route(account: str, venue: str, route: str, status: str, details: Mapping[str, Any]) -> str:
-    """Sasha 99 · the guest's receipt after a form, an email or a slot link — awaited by the route; never fatal to it."""
+    """Sasha 99 · the guest's receipt after a form, an email or a slot link — awaited by the route; never fatal to it.
+    Sasha 144: recorded, sent or not (`details["trip_item_id"]` ties it to the booking where the caller has it)."""
+    out, sent_id = await _send_for_route(account, venue, route, status, details)
+    await record(account, "cancel" if "ancel" in (status or "") else "booking", venue, route, out, status_words=status,
+                 provider_id=sent_id, trip_item_id=(details or {}).get("trip_item_id"))
+    return out
+
+
+async def _send_for_route(account: str, venue: str, route: str, status: str, details: Mapping[str, Any]):
     from . import ladder_routes as LR
     from .ladder import emails_ready
     try:
         why = emails_ready()
         if why:
-            return f"not sent: {why}"
+            return f"not sent: {why}", None
         to = await address_of(account)
         if not to:
-            return "not sent: the guest has no email address on their account"
+            return "not sent: the guest has no email address on their account", None
         sent = await E.send(LR.HTTP, compose_route(venue, route, status, details, to))
         if not sent.sent:
             log.error("[guest_receipt] %s receipt not sent: %s", route, sent.why)
-            return f"not sent: {sent.why}"
+            return f"not sent: {sent.why}", None
         log.info("[guest_receipt] %s receipt sent to the guest", route)
-        return "sent"
+        return "sent", sent.provider_id
     except Exception as e:   # a receipt failure is logged, never undoes the booking step it follows
         log.error("[guest_receipt] %s receipt failed: %s: %s", route, type(e).__name__, e)
-        return f"not sent: {type(e).__name__}"
+        return f"not sent: {type(e).__name__}", None
 
 
-__all__ = ["compose_route", "send_for_route", "compose", "compose_cancel", "send_after_call", "send_after_cancel", "send_sms", "address_of"]
+__all__ = ["record", "compose_route", "send_for_route", "compose", "compose_cancel", "send_after_call", "send_after_cancel", "send_sms", "address_of"]

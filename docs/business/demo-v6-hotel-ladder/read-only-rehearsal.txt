@@ -1,0 +1,64 @@
+
+== Madrid: hotels, 2026-10-20 for 2 nights (looking for 2 with an engine) ==
+  · UMusic Hotel Madrid                              engines ['Neobookings'] · also ['booking_form', 'email', 'phone'] · rungs ['email', 'link']
+
+### UMusic Hotel Madrid — Neobookings
+  decision: one_tap · They book through Neobookings. I'll send you their booking page, filled in where Neobookings allows — you press confirm (I can't press it for you), and I'll file their confirmation email from your Gmail.
+  plan (the one yes covers it): If you haven't booked on their page within 30 minutes, I'll email them. Your yes covers these steps — I'll ask you again only if something changes (a new time, a deposit, a cost).
+  one-tap link (built, NOT opened): https://www.umusic-hotels.com/es/umusic-hotel-madrid?utm_source=google&utm_medium=organic&utm_campaign=madrid-google-my-business | dates added: False
+   • Contacto UMusic Hotels books rooms through its own booking engine (Neobookings). The last step is yours: one tap on your phone, where their page takes Apple Pay or your card — I never see or pay with it.
+   • On their page, choose: check-in Tue 20 Oct, check-out Thu 22 Oct (2 nights), 2 adults.
+   • I found their booking engine on their website, umusic-hotels.com (booking through Neobookings on their own site). Nothing is reserved until you pay there; Neobookings sends the confirmation to you.
+   • Reply BOOKED when it's done and I'll find their confirmation in your Gmail and file it.
+  · Catalonia Plaza España Hotel & Spa               engines — · also ['email', 'phone'] · rungs ['email']
+  · The Hat Madrid                                   engines ['Mews'] · also ['booking_form', 'email', 'phone'] · rungs ['email', 'link', 'whatsapp']
+
+### The Hat Madrid — Mews
+  decision: one_tap · They book through Mews. I'll send you their booking page, filled in where Mews allows — you press confirm (I can't press it for you), and I'll file their confirmation email from your Gmail.
+  plan (the one yes covers it): If you haven't booked on their page within 30 minutes, I'll email them. Your yes covers these steps — I'll ask you again only if something changes (a new time, a deposit, a cost).
+  one-tap link (built, NOT opened): https://thehatmadrid.com/contacto/ | dates added: False
+   • Hostel en Madrid para viajeros inteligentes - The Hat books rooms through its own booking engine (Mews). The last step is yours: one tap on your phone, where their page takes Apple Pay or your card — I never see or pay with it.
+   • On their page, choose: check-in Tue 20 Oct, check-out Thu 22 Oct (2 nights), 2 adults.
+   • I found their booking engine on their website, thehatmadrid.com (booking through Mews on their own site). Nothing is reserved until you pay there; Mews sends the confirmation to you.
+   • Reply BOOKED when it's done and I'll find their confirmation in your Gmail and file it.
+  · Madrid Downtown Hostel                           engines — · also ['phone'] · rungs []
+  · hotel madrid                                     engines — · also — · rungs []
+  · ibis Madrid Centro las Ventas                    engines — · also ['booking_form', 'email', 'phone'] · rungs ['email']
+  · Hyatt Centric Gran Via Madrid                    engines — · also ['phone'] · rungs []
+  · B&B HOTEL MADRID Carabanchel                     engines — · also ['phone'] · rungs []
+  · Hotel Estudios Nuevos Madrid Centro              engines — · also ['phone'] · rungs []
+  · ibis budget Madrid Getafe                        engines — · also ['booking_form', 'email', 'phone'] · rungs ['email']
+  · Hotel Moderno                                    engines — · also ['phone'] · rungs []
+  · Hostal Madrid Paradise                           engines — · also ['email', 'phone'] · rungs ['email']
+  · Hotel 4C Bravo Murillo                           engines — · also ['email', 'phone'] · rungs ['email']
+  · Holiday Inn Express Madrid - Airport by IHG      engines — · also ['phone'] · rungs []
+  → 2 of 2 found with an engine
+
+== Hoi An: hotels, 2026-11-14 for 2 nights (looking for 1 with an engine) ==
+  · Hoi An Historic Hotel                            engines ['D-Edge'] · also ['phone'] · rungs []
+    (engine named, but its page isn't linked: no_platform: no booking engine was found linked from the hotel's own site )
+  · Rêu Boutique Hotel                               engines — · also ['booking_form', 'email', 'phone'] · rungs ['email']
+  · Little Hoi An Boutique Hotel & Spa               engines — · also ['booking_form', 'email', 'phone'] · rungs ['email']
+  · RiverTown Hoi An Resort & Spa                    engines ['D-Edge'] · also ['email', 'phone'] · rungs ['email']
+    (engine named, but its page isn't linked: no_platform: no booking engine was found linked from the hotel's own site )
+  · Silk River Hoi An Retreat                        engines — · also ['email', 'phone'] · rungs ['email', 'whatsapp']
+  · The Signature Hoi An                             engines ['D-Edge'] · also ['phone'] · rungs ['link']
+
+### The Signature Hoi An — D-Edge
+  decision: one_tap · They book through D-Edge. I'll send you their booking page, filled in where D-Edge allows — you press confirm (I can't press it for you), and I'll file their confirmation email from your Gmail.
+  one-tap link (built, NOT opened): https://www.secure-hotel-booking.com/d-edge/The-Signature-Hoi-An/J6S6/en-US?hotelId=32001&RateId=765872 | dates added: False
+   • The Signature Hoi An books rooms through its own booking engine (D-Edge). The last step is yours: one tap on your phone, where their page takes Apple Pay or your card — I never see or pay with it.
+   • On their page, choose: check-in Sat 14 Nov, check-out Mon 16 Nov (2 nights), 2 adults.
+   • I found their booking engine on their website, thesignaturehoian.com. Nothing is reserved until you pay there; D-Edge sends the confirmation to you.
+   • Reply BOOKED when it's done and I'll find their confirmation in your Gmail and file it.
+  · Wyndham Garden Hoi An Cua Dai Beach              engines — · also ['email', 'phone'] · rungs ['email']
+  · Hoi An Beach Resort                              engines ['D-Edge'] · also ['email', 'phone'] · rungs ['email']
+  · Ahoy Hoi An Boutique Resort & Spa                engines — · also ['email', 'phone'] · rungs ['email']
+  · De An Hotel                                      engines — · also ['email', 'phone'] · rungs ['email', 'whatsapp']
+  · Hoi An Ancient House Resort & Spa                engines — · also ['phone'] · rungs []
+  · The D Casino & Hotel                             engines — · also ['phone'] · rungs []
+  · Stockyards Hotel                                 engines — · also ['phone'] · rungs []
+  → 1 of 1 found with an engine
+
+ENGINES SEEN on the hotels' own sites: {'Neobookings': 1, 'Mews': 1, 'D-Edge': 4}
+HANDLED end to end (read-only): [('Madrid', 'UMusic Hotel Madrid', 'Neobookings'), ('Madrid', 'The Hat Madrid', 'Mews'), ('Hoi An', 'The Signature Hoi An', 'D-Edge')]

@@ -27,13 +27,16 @@ MODE_IDLE = timedelta(hours=6)
 
 _CAMPUS = re.compile(r"^\s*(campus\s*me|campusme|campus)\b", re.I)
 _RELOC = re.compile(r"^\s*(relocation|relocate|relocating|reloc|ex-?01|residencia)\b", re.I)
-_HEALTH = re.compile(r"^\s*(salud|health|sanidad|m[eé]dico\s+en\s+madrid)\b", re.I)
+_HEALTH = re.compile(r"^\s*(salud|health|sanidad|m[eé]dico\s+en\s+madrid|espa[nñ]a\s*me|espa[nñ]ame|espa[nñ]a)\b", re.I)
+_DILIGENCE = re.compile(r"^\s*(applied\s+diligence|diligence|ad)\b", re.I)   # CR 15 · the AD preview mode
+_ESPANA = re.compile(r"^\s*(espa[nñ]a\s*me|espa[nñ]ame|espa[nñ]a)\b", re.I)   # CR 15 · EspañaMe: the health demo + concepts
 _EXIT = re.compile(r"^\s*(exit|sasha|back|back to sasha|quit|salir)\s*[.!]?\s*$", re.I)
 
 
 
+_KEYWORD = {"campus": _CAMPUS, "relocation": _RELOC, "health": _HEALTH, "diligence": _DILIGENCE}
 PREFIX = {"campus": ("cm:", "cmyes:", "cmno:"), "relocation": ("rx:",), "health": ("hx:", "hxyes:", "hxno:", "hxv:", "hxvno:"),
-          "trip": ("tp:",)}
+          "trip": ("tp:",), "diligence": ("ad:",)}
 _FLIGHT = re.compile(r"\b(flights?|fly(?:ing)? (?:to|from)|plane|airfare|vuelos?|volar|avi[oó]n|hotel|hostel|apartment|car hire|rent a car)\b", re.I)
 
 
@@ -44,6 +47,8 @@ def _module(product: str):
         from .health import turn as M
     elif product == "trip":                 # CR 13 · the plan that hands bookings to Sasha's travel flow
         from . import trip as M
+    elif product == "diligence":            # CR 15 · the AD preview
+        from . import diligence as M
     else:
         from .relocation import turn as M
     return M
@@ -146,14 +151,14 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
     for prod, prefixes in PREFIX.items():
         if payload.startswith(prefixes):
             target = prod
-    for prod, rx in (("campus", _CAMPUS), ("relocation", _RELOC), ("health", _HEALTH)):
+    for prod, rx in (("campus", _CAMPUS), ("relocation", _RELOC), ("health", _HEALTH), ("diligence", _DILIGENCE)):
         if not target and rx.match(body):
             target, entering = prod, True
     if asked_last and _EXIT.match(body) and not payload:
         from . import store as ST
         await ST.STORE.drop_conversation(ch["wa_id_sha256"], asked_last)
         st["pending"] = None
-        out.text("OK.")
+        out.text("Back to Sasha — ask me anything: a booking, a flight, your plans.")   # CR 15 · "sasha" returns
         return True
     plan_for = None
     if not target and not payload:
@@ -198,7 +203,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         saved = await _resume(ch, target)
         if saved:
             st["pending"] = {**saved, "kind": "product", "product": target}
-            words = {"campus": _CAMPUS, "relocation": _RELOC, "health": _HEALTH}.get(target, re.compile("$^")).sub("", body, count=1).strip(" :,-")
+            words = _KEYWORD.get(target, re.compile("$^")).sub("", body, count=1).strip(" :,-")
             if entering and not words and not payload and target != "trip":          # "relocation" alone: where we were, said again
                 st["pending"]["touched"] = now.isoformat()
                 out.text(_welcome_back(target, saved))
@@ -209,11 +214,11 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
     st["pending"]["touched"] = now.isoformat()
     rest = body
     if entering:
-        rx = {"campus": _CAMPUS, "relocation": _RELOC, "health": _HEALTH}.get(target)
+        rx = _KEYWORD.get(target)
         rest = rx.sub("", body, count=1).strip(" :,-") if rx else body
         rest = body if rest and not re.match(r"^(me|mode)\b", rest, re.I) else rest   # "campus visits at Yale…": all of it
     ctx = {"account": ch["account_id"], "ch": ch, "frm": frm, "st": st, "now": now, "out": out, "media": media,
-           "early": early or _no_early, "plan_for": plan_for}
+           "early": early or _no_early, "plan_for": plan_for, "espana": bool(entering and _ESPANA.match(body))}
     handled = await _module(target).turn(ctx, rest, payload, entering=entering)
     if ctx.get("handoff"):
         # CR 13 · a booking step: Sasha's own flow answers this sentence as if typed (her hand-off line, marked "CR 13

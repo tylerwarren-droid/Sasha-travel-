@@ -177,6 +177,22 @@ async def _setup(account: str):
     return GW, key
 
 
+async def _live_one(account: str, text: str) -> list:
+    """CR 15 · ONE real WhatsApp message to the account's own linked number, through the same deliver() every turn uses —
+    so the 24-hour window and STOP still decide (sandbox: no templates)."""
+    from booking_signer import guest_whatsapp as GW, routes as BR
+    store = GW.PostgresGuestStore(BR.STORE)
+    ch = await store.channel_of_account(account)
+    if not ch:
+        return ["not sent: this account has no linked WhatsApp"]
+    st = await store.get_state(ch["wa_id_sha256"])
+    captured, GW.SENDER = GW.SENDER, GW.Sender()
+    try:
+        return await GW.deliver(ch, "+14155238886", GW.Out().text(text), st.get("last_inbound_at"))
+    finally:
+        GW.SENDER = captured
+
+
 async def _say(GW, key, body="", payload="", media=False):
     ch = await GW.STORE.channel_for(key)
     p = {"From": f"whatsapp:{NUMBER}", "To": "whatsapp:+14155238886", "Body": body, "ButtonPayload": payload}
@@ -248,6 +264,31 @@ async def rehearse(n: int, account_name: str = "demo", only: Optional[str] = Non
             page("U11 file page: the pack", f"/relocation-file/{rid}", "05_Proof-of-economic-means")
             await beat("U12 entry date → the TIE, from its page", "1 March 2027", expect="I'll remind you here")
             await beat("U13 consulate booked → itinerary", "consulate booked 12 November 10:00", expect="booked by you")
+        elif only == "modes":   # CR 15 · the mode words exactly as the founder types them; then ONE live message
+            for label, msg, expect in (
+                    ("M1 relocate", "relocate", "I never file anything"),
+                    ("M2 sasha → back", "sasha", "Back to Sasha"),
+                    ("M3 campus", "campus", "CampusMe here"),
+                    ("M4 sasha → back", "sasha", "Back to Sasha"),
+                    ("M5 españa → the menu", "españa", "EspañaMe"),
+                    ("M6 2 → padrón (CONCEPT)", "2", "CONCEPT, not built yet"),
+                    ("M7 3 → Movistar (CONCEPT)", "3", "I haven't read Movistar's pages"),
+                    ("M8 1 → the health demo", "1", "never why you need a doctor"),
+                    ("M9 sasha → back", "sasha", "Back to Sasha"),
+                    ("M10 espana (no ñ)", "espana", "EspañaMe"),
+                    ("M11 sasha → back", "sasha", "Back to Sasha"),
+                    ("M12 diligence", "diligence", "Applied Diligence — PREVIEW"),
+                    ("M13 check TotalEnergies in France", "check TotalEnergies in France", "Applied Diligence"),
+                    ("M14 the Netherlands → refused", "check Shell in the Netherlands", "terms don't allow passing on its records"),
+                    ("M15 ad + a person → refused", "ad check Mr Patrick Pouyanné in France", "companies only"),
+                    ("M16 sasha → back", "sasha", "Back to Sasha")):
+                await beat(label, msg, expect=expect)
+            res = await _live_one(account, "🧪 Kanoe — one live check from today's rehearsal. The mode words for Wednesday: "
+                                           "relocate · campus · españa · diligence · sasha (back to Sasha).")
+            rows.append({"beat": "LIVE one real message to the account's own WhatsApp", "sent": "(live)", "compute_s": 0,
+                         "msgs": 1, "room_s": 0, "ok": res == ["sent"] or all(str(x).startswith("SM") or x == "sent" for x in res),
+                         "said": "; ".join(map(str, res)), "expect": "sent"})
+            print(f"{'✓' if rows[-1]['ok'] else '✗'} LIVE message → {rows[-1]['said']}", flush=True)
         elif only == "trip":   # CR 13 · the products and Sasha's travel together — relocation, then campus
             for i, t in enumerate(("relocation", "first", "me", "myself", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"), 1):
                 await beat(f"T{i} {t}", t)
@@ -578,13 +619,13 @@ async def health() -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["rehearse", "reset", "health", "showcase", "officer"])
-    ap.add_argument("what", nargs="?", default="all", choices=["all", "campus", "relocation", "health", "officer", "us", "trip"])
+    ap.add_argument("what", nargs="?", default="all", choices=["all", "campus", "relocation", "health", "officer", "us", "trip", "modes"])
     ap.add_argument("--account", default="founder", choices=["founder", "demo"])
     ap.add_argument("--vault", action="store_true")
     ap.add_argument("--n", type=int, default=1)
     a = ap.parse_args()
     if a.cmd == "rehearse":
-        asyncio.run(rehearse(a.n, a.account if "--account" in sys.argv else "demo", a.what if a.what in ("us", "trip") else None))
+        asyncio.run(rehearse(a.n, a.account if "--account" in sys.argv else "demo", a.what if a.what in ("us", "trip", "modes") else None))
     elif a.cmd == "officer":
         asyncio.run(officer())
     elif a.cmd == "showcase":

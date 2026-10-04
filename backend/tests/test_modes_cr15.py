@@ -1,0 +1,182 @@
+"""CR 15 · the WhatsApp mode words exactly as the founder types them — "relocate", "campus", "espana"/"españa", "sasha" —
+and the Applied Diligence PREVIEW ("diligence"/"ad"): AD's answer with its source, both dates, its scope line first, its
+standing said with a reason, the Netherlands never asked, people never looked up. Offline; the real WhatsApp turn.
+
+    cd backend && python -m unittest tests.test_modes_cr15 -v
+"""
+from __future__ import annotations
+
+import copy
+import os
+from unittest import mock
+
+from booking_signer import guest_whatsapp as GW
+from products import diligence as DG, store as ST
+from tests import test_guest_whatsapp_s75 as TG
+
+run = TG.run
+LIVE = copy.deepcopy(DG.SAMPLE["response"])
+LIVE.update(retrieved_at="2026-10-07T09:14:22Z", source_as_of=None)
+# the US tab's v2 shape (4 Oct): status_raw + normalised status + standing_expressible on the entity, no standing object
+V2 = {"status": "identified", "entity": {"legal_name": "TOTALENERGIES SE", "registration_number": "542051180", "register": "INSEE SIRENE",
+      "status_raw": "Active", "status": "active", "standing_expressible": False,
+      "address": "2 PLACE JEAN MILLIER, 92400 COURBEVOIE, FRANCE", "incorporated": "1924-03-28"},
+      "candidates": [], "source": {"name": "INSEE SIRENE", "url": "https://api.insee.fr/entreprises/sirene"},
+      "retrieved_at": "2026-10-07T09:14:22Z", "source_as_of": "2026-10-01", "scope": "SIRENE scope.", "preview": True}
+
+
+class Base(TG.Base):
+    def setUp(self):
+        super().setUp()
+        self.saved = (ST.STORE, DG.HTTP)
+        ST.STORE = ST.MemoryCaseStore()
+        self.calls, self.answer = [], (200, LIVE)
+
+        async def http(url, key, body):
+            self.calls.append((url, body))
+            if isinstance(self.answer, Exception):
+                raise self.answer
+            return self.answer
+        DG.HTTP = http
+        self.env = mock.patch.dict(os.environ, {"AD_PREVIEW_URL": "https://ad.test", "AD_PREVIEW_KEY": "k", "AD_PREVIEW_SAMPLE": ""})
+        self.env.start()
+        self.link()
+
+    def tearDown(self):
+        ST.STORE, DG.HTTP = self.saved
+        self.env.stop()
+        super().tearDown()
+
+    def said(self):
+        return "\n".join(self.bodies() + [b for b, _ in GW.SENDER.contents])
+
+
+class Words(Base):
+    def test_relocate_campus_and_sasha(self):
+        self.say("relocate")
+        self.assertIn("I never file anything", self.said())
+        self.say("sasha")
+        self.assertEqual(self.bodies()[-1], "Back to Sasha — ask me anything: a booking, a flight, your plans.")
+        self.say("campus")
+        self.assertIn("CampusMe here", self.said())
+
+    def test_espana_menu_health_and_two_labelled_concepts(self):
+        for word in ("espana", "españa"):
+            GW.SENDER.contents.clear()
+            self.say(word)
+            menu, buttons = GW.SENDER.contents[-1]
+            self.assertIn("EspañaMe 🇪🇸", menu)
+            self.assertIn("2. *Padrón* — registering at the town hall. (CONCEPT — not built yet)", menu)
+            self.assertEqual([b[1] for b in buttons], ["hx:es:health", "hx:es:padron", "hx:es:movistar"])
+            self.say("sasha")
+        self.say("españa")
+        self.say("2")
+        self.assertIn("🏛 *Padrón* — CONCEPT, not built yet", self.said())
+        self.assertIn("servpub.madrid.es", self.said())                      # the page actually read, nothing composed
+        self.say("", payload="hx:es:movistar")
+        self.assertIn("I haven't read Movistar's pages, so no plans or prices here", self.said())
+        self.say("1")
+        self.assertIn("never why you need a doctor", self.said())             # the working health demo, consent first
+
+    def test_no_walls(self):
+        self.say("españa")
+        self.say("diligence")
+        self.assertNotRegex(self.said(), r"(?i)say exit|go back to sasha")
+
+
+class Diligence(Base):
+    def test_check_totalenergies_in_france(self):
+        self.say("diligence")
+        self.assertIn("Applied Diligence — PREVIEW 🔎", self.bodies()[-1])
+        self.say("check TotalEnergies in France")
+        (url, body), = self.calls
+        self.assertEqual((url, body), ("https://ad.test/api/preview/register",
+                                       {"country": "FR", "name": "TotalEnergies", "registration_number": None}))
+        r = self.bodies()[-1]
+        lines = r.split("\n")
+        self.assertEqual(lines[0], "🔎 *Applied Diligence — PREVIEW*")
+        self.assertTrue(lines[1].startswith("Scope: This preview identifies the company"))   # never the casualty of a cut
+        self.assertIn("*TOTALENERGIES SE*", r)
+        self.assertIn("Registration no.: 542051180", r)
+        self.assertIn("Standing: not shown — SIRENE publishes establishment and activity data", r)
+        self.assertIn("Source: INSEE SIRENE — https://api.insee.fr/entreprises/sirene", r)
+        self.assertIn("Read from the register: 7 Oct 2026, 09:14 UTC", r)
+        self.say("check BNP Paribas in France")                               # same mode, another company
+        self.assertEqual(len(self.calls), 2)
+
+    def test_ad_one_shot_and_a_registration_number(self):
+        self.say("ad SIREN 542051180 in France")
+        self.assertEqual(self.calls[0][1], {"country": "FR", "name": None, "registration_number": "542051180"})
+
+    def test_the_netherlands_is_never_asked(self):
+        self.say("ad check Shell in the Netherlands")
+        self.assertEqual(self.calls, [])
+        self.assertIn("the Dutch company register's terms don't allow passing on its records", self.bodies()[-1])
+
+    def test_people_are_never_looked_up(self):
+        self.say("ad check Mr Patrick Pouyanné in France")
+        self.assertEqual(self.calls, [])
+        self.assertIn("companies only — not people", self.bodies()[-1])
+
+    def test_ambiguous_unreachable_not_found_are_three_different_things(self):
+        self.answer = (200, {**LIVE, "status": "ambiguous", "entity": None,
+                             "candidates": [{"legal_name": "TOTAL SA", "registration_number": "1"}]})
+        self.say("ad check Total in France")
+        self.assertIn("possible matches, not confirmed", self.bodies()[-1])
+        self.answer = (200, {**LIVE, "status": "not_found", "entity": None})
+        self.say("check Nowhere Ltd in France")
+        self.assertIn("The register's own answer: no company matching", self.bodies()[-1])
+        self.answer = TimeoutError()
+        self.say("check TotalEnergies in France")
+        self.assertIn("couldn't be reached just now — nothing was checked", self.bodies()[-1])
+        self.answer = (200, {**LIVE, "status": "uncovered_preview", "entity": None})
+        self.say("check Foo in France")
+        self.assertIn("isn't certified for sale — so no result is shown", self.bodies()[-1])
+
+    def test_a_dinner_while_diligence_is_open_is_sashas(self):
+        self.say("diligence")
+        self.say("dinner in Spain for 2 tomorrow at 21:00")
+        self.assertEqual(self.calls, [])
+
+    def test_not_connected_says_so_and_the_sample_is_labelled(self):
+        os.environ["AD_PREVIEW_URL"] = ""
+        self.say("ad check TotalEnergies in France")
+        self.assertIn("isn't connected here yet, so nothing was checked", self.bodies()[-1])
+        os.environ["AD_PREVIEW_SAMPLE"] = "1"
+        self.say("check TotalEnergies in France")
+        r = self.bodies()[-1]
+        self.assertIn("SAMPLE (a fixed example response, not a live register lookup)", r)
+        self.assertIn("Read from the register: — (sample, not read live)", r)
+        self.say("check BNP Paribas in France")                               # the sample is about ONE company only
+        self.assertIn("isn't connected here yet", self.bodies()[-1])
+        self.assertEqual(self.calls, [])
+
+
+class V2Shape(Base):
+    def test_active_is_the_registers_word_never_a_standing(self):
+        self.answer = (200, V2)
+        self.say("ad check TotalEnergies in France")
+        r = self.bodies()[-1]
+        self.assertIn("Register status (its own words): Active", r)
+        self.assertIn("Standing: not shown — this register doesn't publish insolvency or winding-up", r)
+        self.assertNotIn("Standing: active", r)
+        self.assertIn("The source's own data as of: 2026-10-01", r)                # both dates
+
+    def test_a_sole_trader_is_a_person_never_shown(self):
+        self.answer = (200, {**V2, "entity": {**V2["entity"], "legal_category": "1000", "legal_name": "JEAN DUPONT"}})
+        self.say("ad check Dupont Plomberie in France")
+        self.assertIn("a sole trader — a person, not a company", self.bodies()[-1])
+        self.assertNotIn("JEAN DUPONT", self.bodies()[-1])
+
+    def test_malta_and_austria_refused_locally_too(self):
+        self.say("ad check Foo Ltd in Malta")
+        self.say("check Bar GmbH in Austria")
+        self.assertEqual(self.calls, [])
+
+    def test_three_coverage_statuses_three_sentences(self):
+        for st, words in (("not_covered", "doesn't cover that country's register"),
+                          ("uncovered_preview", "isn't certified for sale"),
+                          ("not_in_preview", "covers that country's register, but its licence doesn't allow passing its records on")):
+            self.answer = (200, {**V2, "status": st, "entity": None})
+            self.say("ad check Foo in France")
+            self.assertIn(words, self.bodies()[-1], st)

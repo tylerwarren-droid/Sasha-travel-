@@ -34,6 +34,28 @@ CHOOSE = ("What would help?\n1. *A private clinic* — I call them and book for 
 FICTIONAL = {"card": "EJEMPLO-0000-0000", "birth": "1985-03-14", "dni_nie": "X0000000T", "name": "Lucía Ejemplo (fictional)"}
 
 
+# CR 15 · "españa" — EspañaMe: Spain's public services. Health is the working demo; the rest are CONCEPTS, labelled so.
+ES_MENU = ("EspañaMe 🇪🇸 — Spain's public services, done with you. Pick one:\n"
+           "1. *Health* — a doctor: a private clinic, the public service (SERMAS), or new in Madrid. (working demo)\n"
+           "2. *Padrón* — registering at the town hall. (CONCEPT — not built yet)\n"
+           "3. *Movistar* — phone and internet at home. (CONCEPT — not built yet)")
+ES_BUTTONS = [("1. Health", "hx:es:health"), ("2. Padrón (concept)", "hx:es:padron"), ("3. Movistar (concept)", "hx:es:movistar")]
+
+
+def padron_concept() -> str:
+    from . import sources as SRC
+    p = SRC.PADRON
+    return ("🏛 *Padrón* — CONCEPT, not built yet. What it would be, from the town hall's own page (read "
+            f"{SRC.READ_ON}): what to bring — {'; '.join(p['bring'])} — and its own appointment page, which you book "
+            f"yourself (I never hunt for appointments): {p['appointment_url']}\nThen a reminder to ask for your volante. "
+            "Today the padrón step is part of Health → New in Madrid, which works.")
+
+
+MOVISTAR_CONCEPT = ("📶 *Movistar* — CONCEPT, not built yet, and I haven't read Movistar's pages, so no plans or prices here. "
+                    "The idea: Sasha reads the providers' own offer pages, shows what each one asks for, and prepares the "
+                    "sign-up for you to press — nothing signed or ordered for you.")
+
+
 def web() -> str:
     return os.getenv("SASHA_WEB_URL", "https://project.kanoe.ai").rstrip("/")
 
@@ -90,6 +112,29 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
     pend, out = ctx["st"]["pending"], ctx["out"]
     step = pend.get("step")
     t = (body or "").strip()
+    if entering and not step and ctx.get("espana"):            # CR 15 · "españa": the menu first
+        pend["step"] = "es_menu"
+        out.ask(ES_MENU, ES_BUTTONS)
+        return
+    if step == "es_menu" or payload.startswith("hx:es:"):
+        pick = payload[6:] if payload.startswith("hx:es:") else (
+            "health" if re.match(r"(?i)^\s*(1\b|health|salud|doctor|m[eé]dico)", t) else
+            "padron" if re.match(r"(?i)^\s*(2\b|padr[oó]n)", t) else
+            "movistar" if re.match(r"(?i)^\s*(3\b|movistar|internet|phone)", t) else "")
+        if pick == "padron":
+            out.text(padron_concept())
+            out.ask("Anything else from the menu?", ES_BUTTONS)
+            pend["step"] = "es_menu"
+        elif pick == "movistar":
+            out.text(MOVISTAR_CONCEPT)
+            out.ask("Anything else from the menu?", ES_BUTTONS)
+            pend["step"] = "es_menu"
+        elif pick == "health":
+            pend["step"] = "consent"
+            out.ask(CONSENT[CONSENT_CURRENT], [("Yes, continue", "hx:consent:yes"), ("No", "hx:consent:no")])
+        else:
+            out.ask(ES_MENU, ES_BUTTONS)
+        return
     if entering and not step:
         pend["step"] = "consent"
         out.ask(CONSENT[CONSENT_CURRENT], [("Yes, continue", "hx:consent:yes"), ("No", "hx:consent:no")])
@@ -453,6 +498,8 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
         return True
     if step in ("consent", "call_confirm", "pub_vault_confirm"):
         return YS.is_yes(t) or bool(re.match(r"(?i)^\s*no\b", t))
+    if step == "es_menu":
+        return bool(re.match(r"(?i)^\s*([123]\b|health|salud|doctor|m[eé]dico|padr[oó]n|movistar|internet|phone)", t))
     if step == "choose":
         return bool(re.match(r"^\s*[123]\b", t) or re.search(r"(?i)\bprivate|privad|public|sermas|p[uú]blic|new|nuev|tarjeta", t))
     if step == "when":

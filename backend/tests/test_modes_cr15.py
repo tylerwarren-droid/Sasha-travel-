@@ -161,7 +161,7 @@ class V2Shape(Base):
         self.assertIn("Register status (its own words): Active", r)
         self.assertIn("Standing: not shown — this register doesn't publish insolvency or winding-up", r)
         self.assertNotIn("Standing: active", r)
-        self.assertIn("The source's own data as of: 2026-10-01", r)                # both dates
+        self.assertIn("The source's own data last updated: 2026-10-01", r)         # both dates (Etalab: a licence condition)
 
     def test_a_sole_trader_is_a_person_never_shown(self):
         self.answer = (200, {**V2, "entity": {**V2["entity"], "legal_category": "1000", "legal_name": "JEAN DUPONT"}})
@@ -177,7 +177,7 @@ class V2Shape(Base):
     def test_three_coverage_statuses_three_sentences(self):
         for st, words in (("not_covered", "doesn't cover that country's register"),
                           ("uncovered_preview", "isn't certified for sale"),
-                          ("not_in_preview", "covers that country's register, but its licence doesn't allow passing its records on")):
+                          ("not_in_preview", "hasn't established that its licence allows passing its records on")):
             self.answer = (200, {**V2, "status": st, "entity": None})
             self.say("ad check Foo in France")
             self.assertIn(words, self.bodies()[-1], st)
@@ -201,3 +201,14 @@ class AdIsOnlyAWholeWord(Base):
         self.assertEqual(self.calls, [])                                     # not the AD mode while she asks
         self.say("diligence")                                                # the full word still switches, as every mode word does
         self.assertIn("Applied Diligence — PREVIEW 🔎", self.bodies()[-1])
+
+
+class CapAndPerson(Base):
+    def test_the_daily_cap_and_a_person_refused_by_ad(self):
+        self.answer = (429, {"error": "rate_limited"})
+        self.say("ad check TotalEnergies in France")
+        self.assertIn("today's preview limit is reached", self.bodies()[-1])
+        self.answer = (400, {"error": "person_not_supported", "message": "companies only"})
+        self.say("check Jean Dupont Plomberie in France")
+        self.assertIn("checks companies only — not people", self.bodies()[-1])
+        self.assertNotIn("no company matching", self.bodies()[-1])

@@ -110,8 +110,10 @@ def render(j: dict, asked: str, label: str = "PREVIEW") -> str:
     st = j.get("status")
     src = j.get("source") or {}
     head = f"🔎 *Applied Diligence — {label}*" + (f"\nScope: {j['scope']}" if j.get("scope") else "")
-    dates = f"\nRead from the register: {_when(j.get('retrieved_at'))}" + \
-        (f"\nThe source's own data as of: {j['source_as_of']}" if j.get("source_as_of") else "")
+    # Etalab Licence Ouverte 2.0 (France): attribution must give the source AND the date the information was last
+    # updated (dateDernierTraitementUniteLegale) — a licence condition, not a nicety (US tab, 4 Oct). Always shown.
+    dates = f"\nThe source's own data last updated: {j.get('source_as_of') or 'not given'}" + \
+        f"\nRead from the register: {_when(j.get('retrieved_at'))}"
     foot = f"\nSource: {src.get('name') or 'not given'}" + (f" — {src['url']}" if src.get("url") else "") + dates
     if st == "identified" and j.get("entity") and _natural_person(j["entity"]):
         # e.g. SIRENE catégorie juridique 1000 = entrepreneur individuel: a PERSON, not a company (EU tab) — never shown
@@ -126,6 +128,9 @@ def render(j: dict, asked: str, label: str = "PREVIEW") -> str:
             lines.append(f"Register status (its own words): {e['status_raw']}")
         sd = j.get("standing") or {}
         expressible = sd.get("expressible") if "expressible" in sd else e.get("standing_expressible")
+        if expressible and "SIRENE" in str(e.get("register") or "").upper():
+            log.error("[diligence] AD says SIRENE standing is expressible — it publishes no proceedings; not rendered")
+            expressible = False                     # US tab: "if that ever comes back true for SIRENE, something is wrong"
         if expressible and (sd.get("value") or e.get("status")):
             lines.append(f"Standing: {sd.get('value') or e.get('status')}")
         else:                                       # never silent: a missing status would read as "nothing adverse"
@@ -143,7 +148,7 @@ def render(j: dict, asked: str, label: str = "PREVIEW") -> str:
     if st == "uncovered_preview":
         return head + "\nThis country's register can be reached, but the check isn't certified for sale — so no result is shown here."
     if st == "not_in_preview":   # AD covers it, certified — but the register's LICENCE forbids passing records on
-        return head + "\nApplied Diligence covers that country's register, but its licence doesn't allow passing its records on — so this preview doesn't show them."
+        return head + "\nApplied Diligence covers that country's register, but hasn't established that its licence allows passing its records on — so they're not shown here."
     if st in ("not_covered", "unsupported_country"):
         return head + "\nThis preview doesn't cover that country's register."
     return head + "\nThe service's answer wasn't in a form I can show — nothing claimed."
@@ -194,6 +199,10 @@ async def lookup(country: str, name: Optional[str], number: Optional[str]) -> st
     except Exception as e:
         log.error("[diligence] AD unreachable: %s", type(e).__name__)
         return "🔎 Applied Diligence — PREVIEW: the register couldn't be reached just now — nothing was checked."
+    if status == 429:
+        return "🔎 Applied Diligence — PREVIEW: today's preview limit is reached (it resets at 00:00 UTC) — nothing was checked."
+    if status == 400 and isinstance(j, dict) and j.get("error") == "person_not_supported":
+        return "🔎 Applied Diligence — PREVIEW checks companies only — not people. Nothing was looked up."
     if status != 200 or not isinstance(j, dict):
         msg = (j or {}).get("message") if isinstance(j, dict) else None
         return f"🔎 Applied Diligence — PREVIEW: the lookup was refused or failed ({status}{': ' + msg if msg else ''}) — nothing claimed."

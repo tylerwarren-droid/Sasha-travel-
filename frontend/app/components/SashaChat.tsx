@@ -36,6 +36,10 @@ const TABS: { id: WorkspaceTab; label: string }[] = [
 
 interface SashaChatProps {
   user: User
+  /** CR 16 · the product tab this chat opens in ("relocation" | "campus" | "espana"): sent as product_mode on the opening turn */
+  productMode?: string
+  /** CR 16 · the product's brand skin, a class on the root */
+  skinClassName?: string
   // NOTE: the old `itinerary` / `onItineraryUpdate` pair is gone. Neither was ever read here,
   // so the page's `itinerary` state could never leave its initial value — which made the
   // checkout fallback `itinerary.total_fiat` a permanent 0 masquerading as a real amount.
@@ -154,7 +158,7 @@ function interimLineFor(intents: string[], variant: number): string {
 }
 
 
-export default function SashaChat({ user, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onMicDevices, onBooked, onAwaitPayment, onBookItem, onConfirmCard, onPaySavedCard, onPayNewCard, paidWith, onItineraryId, bookingRef, hideTabs = false, chatHero = null, panelPortal = null, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache }: SashaChatProps) {
+export default function SashaChat({ user, productMode, skinClassName, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onMicDevices, onBooked, onAwaitPayment, onBookItem, onConfirmCard, onPaySavedCard, onPayNewCard, paidWith, onItineraryId, bookingRef, hideTabs = false, chatHero = null, panelPortal = null, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache }: SashaChatProps) {
   const tab = activeTab
   const [localMessages, setLocalMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
@@ -192,6 +196,10 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
   // options without one (activities, restaurants, fallbacks) keep the external deep-link.
   const [bookingFind, setBookingFind] = useState<{ what: string; where: string; country?: string; draft?: unknown } | null>(null)  // S-66 chat booking
   const [bookingCancel, setBookingCancel] = useState<{ venue: string; n: number } | null>(null)  // Sasha 96 chat cancel (Stage B)
+  // CR 16 · a product's buttons and pictures for the current turn
+  const [quickReplies, setQuickReplies] = useState<{ title: string; payload: string }[]>([])
+  const [productMedia, setProductMedia] = useState<{ caption: string; url: string }[]>([])
+  const openedRef = useRef(false)
   const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number; provider?: string; provider_offer_id?: string; live_mode?: boolean }[] }[]>([])
   // Photos Sasha surfaced, keyed by the index of the assistant message that produced them.
   const [photosByMsg, setPhotosByMsg] = useState<Record<number, Photo[]>>({})
@@ -268,10 +276,11 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
    * most of the time, so the Ideas buttons looked broken). A deliberate action interrupts
    * her instead, which is what a person expects: you pressed it, she stops and does it.
    */
-  const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string }) => {
-    if (takeChatText(content)) { setMessages(prev => [...prev, { role: 'user', content }]); return }  // S-66 chat booking
+  const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string; payload?: string; opening?: boolean }) => {
+    if (!opts?.opening && !opts?.payload && takeChatText(content)) { setMessages(prev => [...prev, { role: 'user', content }]); return }  // S-66 chat booking
     await refreshGuestAuth()  // S-62 step 7 · a signed-in guest's chat is filed under their own account
-    if (!content.trim()) return
+    if (!content.trim() && !opts?.opening) return   // CR 16 · a product tab's opening turn is empty on purpose
+    setQuickReplies([])   // CR 16 · a product's buttons answer only the turn they came with
     // Verbal stop — "Sasha, stop", "stop stop stop", "be quiet", a bare "wait"/"hold on".
     // In the live demo the guest said "stop" FIVE times in a row while Sasha narrated on;
     // barge-in opens the mic, but the transcript then went to the conductor as a message
@@ -305,7 +314,7 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
     }
     inFlightRef.current = true
     const historyBeforeMessage = messages  // snapshot before appending
-    setMessages(prev => [...prev, { role: 'user', content }])
+    if (!opts?.opening) setMessages(prev => [...prev, { role: 'user', content }])   // CR 16 · the opening turn shows no line of the guest's
     setInput('')
     setIsLoading(true)
     // Predicted itinerary build → take the guest to the Trip tab and show progress there, so
@@ -378,9 +387,13 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
         // No user_name: Sasha ASKS for the guest's name in her first reply (client feedback
         // 2026-08-11 — never assume the hardcoded demo profile is who's talking).
         force_intent: opts?.intent,              // set when the UI knows the intent (idea build)
+        ...(productMode && (opts?.opening || historyBeforeMessage.length === 0) ? { product_mode: productMode } : {}),   // CR 16
+        ...(opts?.payload ? { payload: opts.payload } : {}),   // CR 16 · a product quick-reply
       }, { timeout: 60000, headers: apiHeaders(guestAuth()) })  // bound the call so a hung backend can't stall the turn · S-62 step 7
       const { response: sashaResponse, conversation_history, photos: respPhotos, links, hotels: hotelRecs, bookings: bookingCards, itinerary, action, booking_ref, itinerary_id, payment_item, saved_card } = response.data
       if (response.data.session_id && response.data.session_id !== chatSessionIdRef.current) chatSessionIdRef.current = response.data.session_id  // S-62 step 7 · a session not ours is never continued
+      setQuickReplies(Array.isArray(response.data.quick_replies) ? response.data.quick_replies : [])   // CR 16
+      setProductMedia(Array.isArray(response.data.media) ? response.data.media : [])
       if (response.data.booking_find) setBookingFind({ ...response.data.booking_find, draft: response.data.reservation_draft ?? null })  // S-66 chat booking
       if (response.data.booking_cancel) setBookingCancel({ ...response.data.booking_cancel, n: Date.now() })  // Sasha 96 chat cancel (Stage B)
       // Replace local messages with server-authoritative history
@@ -576,8 +589,17 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
     return `${cities[0]}, ${cities[1]} and ${cities.length - 2} more`
   })()
 
+  // CR 16 · a product tab opens in its product's mode: one empty opening turn, once, before the guest has said anything
+  useEffect(() => {
+    if (productMode && !openedRef.current && messages.length === 0) {
+      openedRef.current = true
+      sendMessage('', { opening: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productMode])
+
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className={`flex flex-col h-full overflow-hidden${skinClassName ? ` ${skinClassName}` : ''}`}>
 
       {/* ── Workspace tabs — one job per tab. Chat leads: this is a voice call, so the
            transcript is the thing the guest follows; the rest is theirs to pull, not ours
@@ -734,6 +756,24 @@ export default function SashaChat({ user, onSashaResponse, onListeningChange, on
              These belong with the conversation: they're what Sasha just found in answer to
              what was said, so they sit under the newest message rather than in a tab. ── */}
         {/* S-66 chat booking: repo-only component. CTO zips drop this; Stage B re-applies it. */}
+        {productMedia.length > 0 && (   /* CR 16 · a product's pictures, from where the product says they come */
+          <div className="space-y-2">
+            {productMedia.map((m, i) => (
+              <figure key={i}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- a product's own image, shown as given */}
+                <img src={m.url} alt={m.caption} loading="lazy" referrerPolicy="no-referrer" style={{ maxWidth: '100%', borderRadius: 8 }} />
+                <figcaption className="text-xs opacity-70">{m.caption}</figcaption>
+              </figure>
+            ))}
+          </div>
+        )}
+        {quickReplies.length > 0 && (   /* CR 16 · a product's buttons: the title is shown as the guest's line, the payload is sent */
+          <div className="flex flex-wrap gap-2">
+            {quickReplies.map((q, i) => (
+              <button key={i} className="lw-chip" onClick={() => { sendMessage(q.title, { payload: q.payload, force: true }) }}>{q.title}</button>
+            ))}
+          </div>
+        )}
         {bookingFind && <ChatBooking key={`${bookingFind.what}|${bookingFind.where}`} find={bookingFind} />}
         {bookingCancel && <ChatCancel key={bookingCancel.n} venue={bookingCancel.venue} />}{/* Sasha 96 chat cancel (Stage B) */}
         {(hotels.length > 0 || bookings.length > 0 || bookingLinks.length > 0) && (

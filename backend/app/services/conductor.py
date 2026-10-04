@@ -1728,6 +1728,8 @@ async def conduct(
     force_intent: Optional[str] = None,
     session_id: Optional[str] = None,
     user_id: Optional[str] = None,
+    product_mode: Optional[str] = None,   # CR 16 · the product tab's mode, on its first turn
+    payload: Optional[str] = None,        # CR 16 · a product quick-reply
 ) -> dict:
     """
     The Conductor — main entry point.
@@ -1745,7 +1747,7 @@ async def conduct(
     # An empty/whitespace transcript (a mic blip) must never reach the LLM — Anthropic 400s
     # on empty content, both run_general calls fail, and the guest heard "I'm having a brief
     # connection issue" for saying nothing.
-    if not (user_message or "").strip():
+    if not (user_message or "").strip() and not ((product_mode or payload) and user_id):   # CR 16 · a product tab opens on an empty turn
         return {"response": "Sorry, I didn't catch that — could you say it again?",
                 "intents": ["general"], "photos": [], "tools_used": [], "links": [],
                 "hotels": [], "bookings": [], "itinerary": None, "action": None,
@@ -1774,11 +1776,12 @@ async def conduct(
     _itinerary = await web_turn(user_message, user_id, conversation_history)
     if _itinerary is not None:
         return _itinerary
-    # CR 13 · the products' trip plan (backend/products/trip.py, CR's): its words first; a hand-off sentence is answered by
-    # Sasha's own flow (its read-back, its one yes, its TEST labels) and shown under them. Wired here by the Sasha tab.
+    # CR 13/16 · the products on the web (backend/products/web.py, CR's — the same router as WhatsApp, the trip plan included):
+    # its words first; a hand-off sentence is answered by Sasha's own flow (her read-back, one yes, TEST labels) under them.
+    # Wired here by the Sasha tab.
     try:
-        from products.trip import web_turn as _trip_web  # noqa: E402
-        _trip = await _trip_web(user_id, user_message) if user_id else None
+        from products.web import web_turn as _products_web  # noqa: E402
+        _trip = await _products_web(user_id, user_message, mode=product_mode, payload=payload) if user_id else None
     except Exception as e:   # a product's failure never stops the chat — and is never a silent one
         print(f"[Conductor] trip plan failed: {type(e).__name__}: {e}")   # the conductor's own logging
         _trip = None
@@ -1786,13 +1789,19 @@ async def conduct(
         if _trip.get("handoff"):
             inner = dict(await conduct(_trip["handoff"], conversation_history, client_config, language, user_name, None, session_id, user_id))
             inner["response"] = _trip["response"] + (f"\n\n{inner['response']}" if inner.get("response") else "")
+            inner["quick_replies"], inner["media"] = _trip.get("quick_replies") or [], _trip.get("media") or []
             inner["messages"] = list(conversation_history) + [{"role": "user", "content": user_message},
                                                               {"role": "assistant", "content": inner["response"]}]
             return inner
-        return {"response": _trip["response"], "intents": ["trip_plan"], "photos": [], "tools_used": [], "links": [], "hotels": [],
+        return {"response": _trip["response"], "intents": ["products"], "quick_replies": _trip.get("quick_replies") or [],
+                "media": _trip.get("media") or [], "photos": [], "tools_used": [], "links": [], "hotels": [],
                 "bookings": [], "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None,
                 "saved_card": None, "messages": list(conversation_history) + [{"role": "user", "content": user_message},
                                                                               {"role": "assistant", "content": _trip["response"]}]}
+    if not (user_message or "").strip():   # CR 16 · an empty product-tab turn the products didn't take: nothing to answer
+        return {"response": "Ask me anything — a booking, a flight, your plans.", "intents": [], "photos": [], "tools_used": [],
+                "links": [], "hotels": [], "bookings": [], "itinerary": None, "action": None, "booking_ref": None,
+                "itinerary_id": None, "payment_item": None, "saved_card": None, "messages": list(conversation_history)}
 
 
     # Recent conversation text — used so booking links/hotels keep the destination in mind

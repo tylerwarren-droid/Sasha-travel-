@@ -316,27 +316,29 @@ class TripPlanOnTheWeb(unittest.TestCase):
         from app.services import conductor as CD
         calls = []
 
-        async def trip(account, message, now=None):
+        async def trip(account, message, mode=None, payload=None, now=None):
             calls.append(message)
             if message == "plan the trip":
-                return {"agent": "products_trip", "response": "Your plan: dinner first.", "handoff": "dinner for 2 in Chamberí on Saturday at 9"}
+                return {"agent": "products", "response": "Your plan: dinner first.", "handoff": "dinner for 2 in Chamberí on Saturday at 9",
+                        "quick_replies": [{"title": "Next", "payload": "next"}]}
             return None
         import types, sys
-        mod = types.ModuleType("products.trip"); mod.web_turn = trip
-        with mock.patch.dict(sys.modules, {"products.trip": mod}):
+        mod = types.ModuleType("products.web"); mod.web_turn = trip
+        with mock.patch.dict(sys.modules, {"products.web": mod}):
             out = asyncio.run(CD.conduct("plan the trip", [], user_id="11111111-1111-4111-8111-111111111111"))
         self.assertTrue(out["response"].startswith("Your plan: dinner first.\n\n"))
         self.assertIn("booking_find", out)                                            # Sasha's own find turn, under the plan
         self.assertEqual(out["messages"][-2], {"role": "user", "content": "plan the trip"})
+        self.assertEqual(out["quick_replies"], [{"title": "Next", "payload": "next"}])   # CR 16 · the product's buttons pass through
 
     def test_no_plan_no_change(self):
         from app.services import conductor as CD
         import types, sys
 
-        async def trip(account, message, now=None):
+        async def trip(account, message, mode=None, payload=None, now=None):
             return None
-        mod = types.ModuleType("products.trip"); mod.web_turn = trip
-        with mock.patch.dict(sys.modules, {"products.trip": mod}):
+        mod = types.ModuleType("products.web"); mod.web_turn = trip
+        with mock.patch.dict(sys.modules, {"products.web": mod}):
             out = asyncio.run(CD.conduct("dinner for 2 in Chamberí on Saturday at 9", [], user_id="u"))
         self.assertIn("booking_find", out)
 
@@ -358,3 +360,22 @@ class WebWording(unittest.TestCase):
             return [{"type": "airport", "iata_code": "BQH", "iata_city_code": "LON", "name": "Biggin Hill"}]
         with mock.patch.object(D, "_request", req):
             self.assertEqual(asyncio.run(D._resolve_place("London")), "LON")
+
+
+class ProductModeOnTheWeb(unittest.TestCase):
+    """CR 16 · the product tab's mode and a quick-reply's payload reach the products' web turn."""
+
+    def test_mode_and_payload_pass_through(self):
+        from app.services import conductor as CD
+        seen = []
+
+        async def web(account, message, mode=None, payload=None, now=None):
+            seen.append((message, mode, payload))
+            return {"agent": "products", "response": "Welcome to RelocateMe.", "handoff": None, "quick_replies": [], "media": []}
+        import types, sys
+        mod = types.ModuleType("products.web"); mod.web_turn = web
+        with mock.patch.dict(sys.modules, {"products.web": mod}):
+            out = asyncio.run(CD.conduct("", [], user_id="u", product_mode="relocation"))
+            asyncio.run(CD.conduct("x", [], user_id="u", payload="pick:1"))
+        self.assertEqual(seen, [("", "relocation", None), ("x", None, "pick:1")])
+        self.assertEqual(out["response"], "Welcome to RelocateMe.")

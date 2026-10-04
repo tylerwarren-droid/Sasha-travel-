@@ -78,6 +78,8 @@ class ConductorRequest(BaseModel):
     # Set when the UI already knows the intent (e.g. the guest tapped "Build this" on an idea),
     # so the conductor doesn't have to infer it from the wording and get it wrong.
     force_intent: Optional[str] = None
+    product_mode: Optional[str] = Field(default=None, max_length=20)   # CR 16 · the product tab the chat opened in (first turn)
+    payload: Optional[str] = Field(default=None, max_length=200)       # CR 16 · a product quick-reply's payload
 
 
 class ConductorResponse(BaseModel):
@@ -103,6 +105,8 @@ class ConductorResponse(BaseModel):
     booking_find: Optional[dict] = None  # S-66 chat booking (Stage B)
     booking_cancel: Optional[dict] = None  # Sasha 96 chat cancel (Stage B)
     reservation_draft: Optional[dict] = None  # S-66 chat booking (Stage B)
+    quick_replies: list = []   # CR 16 · a product's buttons [{title, payload}]
+    media: list = []           # CR 16 · a product's pictures [{caption, url}]
     conversation_history: list
 
 
@@ -125,6 +129,8 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             force_intent=body.force_intent,
             session_id=session_id,
             user_id=account,
+            product_mode=body.product_mode,   # CR 16
+            payload=body.payload,
         )
         # Persist this turn (best-effort; a DB hiccup must never break the conversation).
         await chat_store.save_turn(
@@ -154,6 +160,8 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             booking_find=result.get("booking_find"),  # S-66 chat booking (Stage B)
             booking_cancel=result.get("booking_cancel"),  # Sasha 96 chat cancel (Stage B)
             reservation_draft=result.get("reservation_draft"),  # S-66 chat booking (Stage B)
+            quick_replies=result.get("quick_replies") or [],   # CR 16
+            media=result.get("media") or [],
             session_id=session_id,
             conversation_history=result["messages"],
         )

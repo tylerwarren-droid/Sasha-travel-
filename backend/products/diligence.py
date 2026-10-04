@@ -223,6 +223,9 @@ async def lookup(country: str, name: Optional[str], number: Optional[str]) -> st
     except Exception as e:
         log.error("[diligence] AD unreachable: %s", type(e).__name__)
         return "🔎 Applied Diligence — PREVIEW: the register couldn't be reached just now — nothing was checked."
+    if status >= 500:   # AD's machinery (e.g. 503 "unrecorded": a call the cap can't count) — never an answer about a company
+        log.error("[diligence] AD answered %s %s", status, (j or {}).get("error") if isinstance(j, dict) else "")
+        return "🔎 Applied Diligence — PREVIEW: the check could not be run right now — nothing was checked. Try again later."
     if status == 429:
         return "🔎 Applied Diligence — PREVIEW: today's preview limit is reached (it resets at 00:00 UTC) — nothing was checked."
     if status == 400 and isinstance(j, dict) and j.get("error") == "person_not_supported":

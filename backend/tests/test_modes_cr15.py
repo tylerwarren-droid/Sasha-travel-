@@ -304,3 +304,12 @@ class Truncated(Base):
         self.assertIn("Showing 1 name; the register did not say", DG.truncated_line({"candidate_count": None, "candidates_shown": 1}))
         self.assertEqual(DG.truncated_line({"candidate_count": None, "candidates_shown": 0}), "")
         self.assertEqual(DG.truncated_line({"candidate_count": 5, "candidates_shown": 5}), "")
+
+
+class MachineryFailure(Base):
+    def test_unrecorded_is_never_a_finding(self):
+        self.answer = (503, {"error": "unrecorded", "message": "the dispatch decision was not recorded"})
+        self.say("ad check TotalEnergies in France")
+        r = self.bodies()[-1]
+        self.assertIn("the check could not be run right now — nothing was checked", r)
+        self.assertNotRegex(r, r"(?i)no company|not found|matches|identified|unrecorded")

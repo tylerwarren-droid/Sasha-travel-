@@ -23,4 +23,9 @@
   .hero { padding: 20px 16px; }
   .headline { font-size: 28px; }
   .chatWrap { height: 78vh; border-radius: 0; margin: 0 -16px; border-left: 0; border-right: 0; }
+  /* the chat's composer row (input · two chips · send) is too wide for a phone: on these tabs only, the chips take a
+     second row and the input and send button keep the first */
+  .chatBody :global(.lw-composer .field) { flex-wrap: wrap; row-gap: 8px; }
+  .chatBody :global(.lw-composer .field input) { flex: 1 1 0; min-width: 0; }
+  .chatBody :global(.lw-composer .field .lw-chip) { order: 3; flex: 1 1 40%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }

@@ -9,16 +9,18 @@
 .features { list-style: none; padding: 0; margin: 0 0 24px; display: grid; gap: 10px; }
 .feature { display: flex; gap: 10px; align-items: baseline; font-size: 16px; line-height: 1.45; }
 .note { color: #5c6a74; font-size: 14px; }
-.chatWrap { border: 1px solid var(--brand-soft); border-radius: 12px; overflow: hidden; background: #fff; min-height: 560px;
+/* Sasha's chat is designed for a dark stage (light text, translucent controls): the tab gives it one, under the brand's bar */
+.chatWrap { border: 1px solid var(--brand-soft); border-radius: 12px; overflow: hidden; background: #15161d; height: 640px;
             display: flex; flex-direction: column; }
 .chatHead { background: var(--brand-primary); color: #fff; padding: 10px 14px; font-weight: 600; font-size: 15px;
             display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .chatHead small { font-weight: 400; opacity: 0.9; }
-.chatBody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.empty { padding: 20px; color: var(--brand-ink); }
-.empty b { color: var(--brand-primary); }
+.chatBody { flex: 1; min-height: 0; display: flex; flex-direction: column; color: #f2efe8; }
+.chatBody > * { flex: 1; min-height: 0; }
+.empty { padding: 20px; color: #e9e4da; font-size: 16px; line-height: 1.5; }
+.empty b { color: var(--brand-accent); }
 @media (max-width: 640px) {
   .hero { padding: 20px 16px; }
   .headline { font-size: 28px; }
-  .chatWrap { min-height: 70vh; border-radius: 0; margin: 0 -16px; border-left: 0; border-right: 0; }
+  .chatWrap { height: 78vh; border-radius: 0; margin: 0 -16px; border-left: 0; border-right: 0; }
 }

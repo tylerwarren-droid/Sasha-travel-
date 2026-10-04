@@ -94,6 +94,8 @@ class WatchersDoNotReadListings(unittest.TestCase):
         sent = []
 
         async def fake_send(ch, kind, b, text, variables, local_day, status):
+            if callable(text):
+                text, variables = await text()
             sent.append((kind, text))
             return "sent"
         with mock.patch.object(PR, "_send", fake_send):
@@ -105,6 +107,37 @@ class WatchersDoNotReadListings(unittest.TestCase):
             self.assertIn("Casa Lucio", briefs[0])
             self.assertNotIn("⟨marker⟩", briefs[0])
         self.assertLessEqual(len(self.receipts()), 2 * len(sent) + 1)
+
+
+class AlreadySentCostsNothing(WatchersDoNotReadListings):
+    """Sasha 142 · a day-before reminder is 'due' from the evening before until the booking starts; once sent, each
+    minute's tick found it 'already sent' only AFTER re-reading every phone booking's listing (≈ 1 call a minute)."""
+
+    def test_a_due_reminder_already_sent_reads_no_listing(self):
+        tomorrow = (self.now + timedelta(days=1)).date().isoformat()
+
+        async def api(account, method, path, body=None, timeout=None):
+            self.calls.append(path)
+            if path == "/api/booking/reservations":
+                return 200, {"reservations": [{"id": "t-1", "venue": "⟨marker⟩", "date": tomorrow, "time": "21:00", "timezone": "Europe/Madrid",
+                                               "party": 2, "status": "confirmed", "channel": "phone",
+                                               "receipt": "/api/booking/reservations/t-1/receipt"}]}
+            if path.endswith("/receipt"):
+                return 200, {"venue": {"name": "Casa Lucio"}}
+            return 404, {}
+        GW.api = api
+        claimed = []
+
+        async def claim(row):
+            claimed.append(row["kind"])
+            return None   # already sent
+
+        with mock.patch.object(PR.STORE, "claim", claim):
+            for m in range(30):
+                self.now = datetime(2026, 10, 4, 19, m, tzinfo=MAD)
+                run(PR.tick(self.now))
+        self.assertTrue(claimed)                 # it was due, and the dedupe was asked
+        self.assertEqual(self.receipts(), [])    # and no listing was re-read for it
 
 
 if __name__ == "__main__":

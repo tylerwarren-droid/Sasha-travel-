@@ -349,12 +349,16 @@ def _due(kind: str, b: dict, now: datetime, extra: Optional[dict] = None) -> boo
     return False
 
 
-async def _send(ch: dict, kind: str, b: Optional[dict], text: str, variables: dict, local_day: date, status: Optional[str]) -> str:
+async def _send(ch: dict, kind: str, b: Optional[dict], text, variables: Optional[dict], local_day: date, status: Optional[str]) -> str:
+    """`text` may be an async `compose()` → (text, variables), run only AFTER the claim (Sasha 142): a message already sent
+    costs no Google listing re-read for its name — every minute until the booking starts, that was ≈ 1 call a minute."""
     from . import guest_whatsapp as GW
     sid = await STORE.claim({"account_id": ch["account_id"], "trip_item_id": (b or {}).get("id") if kind != "morning_brief" else None,
                              "kind": kind, "local_day": local_day, "status_at_send": status})
     if sid is None:
         return "already sent"
+    if callable(text):
+        text, variables = await text()
     st = await GW.STORE.get_state(ch["wa_id_sha256"])
     last = st.get("last_inbound_at")
     frm = sorted(GW.guest_numbers())[0] if GW.guest_numbers() else None
@@ -431,17 +435,23 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
                 done.append({"kind": kind, "booking": b.get("id"), "outcome": "dropped: the daily cap"})
                 continue
             # rule 1 · the status re-read at the send: cancelled at 17:59 never gets an 18:00 message
-            fresh = next((r for r in await GW._upcoming(account) if r["id"] == b["id"]), None) if kind != "morning_brief" else b
+            fresh = next((r for r in await GW._upcoming(account, names=False) if r["id"] == b["id"]), None) if kind != "morning_brief" else b
             if fresh is None:
                 done.append({"kind": kind, "booking": b["id"], "outcome": "skipped: no longer an active booking"})
                 continue
-            if kind == "morning_brief":
-                extra = {**extra, "items": await GW._with_names(account, [dict(x) for x in extra["items"]])}
             if kind in ("day_before", "not_confirmed"):
                 kind = "day_before" if fresh.get("status") in CONFIRMED else "not_confirmed"
-            text = render(kind, fresh, extra, now)
-            outcome = await _send(ch, kind, fresh, text, template_vars(kind, fresh, extra), local_day, fresh.get("status"))
-            done.append({"kind": kind, "booking": fresh.get("id"), "outcome": outcome, "text": text})
+            said: Dict[str, Any] = {}
+
+            async def compose(kind=kind, fresh=fresh, extra=extra):   # Sasha 141/142 · names re-read only for a message sent
+                if kind == "morning_brief":
+                    extra = {**extra, "items": await GW._with_names(account, [dict(x) for x in extra["items"]])}
+                else:
+                    fresh = (await GW._with_names(account, [dict(fresh)]))[0]
+                said["text"] = render(kind, fresh, extra, now)
+                return said["text"], template_vars(kind, fresh, extra)
+            outcome = await _send(ch, kind, fresh, compose, None, local_day, fresh.get("status"))
+            done.append({"kind": kind, "booking": fresh.get("id"), "outcome": outcome, "text": said.get("text")})
     return done
 
 

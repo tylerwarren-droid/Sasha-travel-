@@ -271,7 +271,7 @@ async def rehearse(n: int, account_name: str = "demo", only: Optional[str] = Non
                     ("M3 campus", "campus", "CampusMe here"),
                     ("M4 sasha → back", "sasha", "Back to Sasha"),
                     ("M5 españa → the menu", "españa", "EspañaMe"),
-                    ("M6 2 → padrón (CONCEPT)", "2", "*What you need* (its official page)"),
+                    ("M6 2 → padrón (CONCEPT)", "2", "*What you need* (from the official page)"),
                     ("M7 5 → DGT (CONCEPT)", "5", "DGT — exchanging a foreign driving licence"),
                     ("M7b 3 → identity and access (CONCEPT)", "3", "Cl@ve"),
                     ("M7c 4 → social security and tax (CONCEPT)", "4", "Modelo 030"),

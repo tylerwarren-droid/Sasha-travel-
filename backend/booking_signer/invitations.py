@@ -432,7 +432,7 @@ async def tick() -> List[str]:
         return []
     done = []
     for inv in await STORE.watching():
-        rows = await GW._upcoming(inv["inviter_account"]) if GW.STORE else []
+        rows = await GW._upcoming(inv["inviter_account"], names=False) if GW.STORE else []   # status only (Sasha 141)
         row = next((r for r in rows if r["id"] == inv["trip_item_id"]), None)
         status = row["status"] if row else "cancelled"
         if status == inv.get("told_status"):

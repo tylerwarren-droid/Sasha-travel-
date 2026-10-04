@@ -175,7 +175,7 @@ class NoReplyCall(TG.Base):
                                              {"kind": "hours", "source_kind": "site", "source_label": "their website", "evidence": {"week": week}}]}}))
         self.row = {"id": "t-77777777", "venue": "Botavara Chamberí", "date": "2026-10-03", "time": "21:30", "timezone": "Europe/Madrid",
                     "status": "requested", "channel": "email", "read_id": "r-9", "requested_at": "2026-10-02T12:00:00+00:00", "what": "a table", "category": "restaurant", "count": 2}
-        self.p = [mock.patch.object(GW, "_upcoming", side_effect=lambda a: [self.row]), mock.patch.dict(os.environ, {"SASHA_NO_REPLY_CALL": "1"})]
+        self.p = [mock.patch.object(GW, "_upcoming", side_effect=lambda a, **kw: [self.row]), mock.patch.dict(os.environ, {"SASHA_NO_REPLY_CALL": "1"})]
         for x in self.p:
             x.start()
             self.addCleanup(x.stop)

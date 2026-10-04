@@ -58,7 +58,7 @@ class Base(unittest.TestCase):
         self.rows = [booking()]
         self.reread = None
 
-        async def upcoming(account):
+        async def upcoming(account, names=True):
             return [dict(r) for r in (self.reread if self.reread is not None else self.rows)]
         GW._upcoming = upcoming
         self.now = at(2026, 10, 2, 18, 1)
@@ -133,7 +133,7 @@ class Rules(Base):
     def test_6_cancelled_between_the_selection_and_the_send(self):
         self.reread = None
 
-        async def upcoming(account, _n=[0]):
+        async def upcoming(account, names=True, _n=[0]):
             _n[0] += 1
             return [booking()] if _n[0] == 1 else []                    # cancelled by the time it is re-read
         GW._upcoming = upcoming

@@ -393,7 +393,7 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
             continue
         prefs = await STORE.get_prefs(account) or {"all_off": False, "off_kinds": []}
         reminders_ok = GW.consent_at_least(ch.get("consent_wording_version") or "v0", 3) and not prefs.get("all_off")
-        rows = await GW._upcoming(account)
+        rows = await GW._upcoming(account, names=False)   # Sasha 141 · names are re-read only for a message sent
         due: List[Tuple[int, str, Optional[dict], dict]] = []
         for b in rows:
             start = starts_at(b)
@@ -410,7 +410,10 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
                 place = await STORE.default_place(account)
                 if place:
                     mode = os.getenv("SASHA_PROACTIVE_MODE", "TRANSIT")
-                    secs = await travel(place["address"], f"{b.get('venue')}, {b.get('address') or ''}".strip(" ,"), start, mode)
+                    dest = ", ".join(x for x in ((None if b.get("receipt") else b.get("venue")), b.get("address")) if x)
+                    if not dest:   # a phone booking with no address: its name, re-read for this one booking
+                        dest = (await GW._with_names(account, [dict(b)]))[0].get("venue") or ""
+                    secs = await travel(place["address"], dest, start, mode)
                     if secs and _due("leave_now", b, now, {"seconds": secs}):
                         due.append((PRIORITY["leave_now"], "leave_now", b, {"minutes": round(secs / 60), "mode_words": MODE_WORDS.get(mode, ""),
                                                                             "label": place["label"]}))
@@ -432,6 +435,8 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
             if fresh is None:
                 done.append({"kind": kind, "booking": b["id"], "outcome": "skipped: no longer an active booking"})
                 continue
+            if kind == "morning_brief":
+                extra = {**extra, "items": await GW._with_names(account, [dict(x) for x in extra["items"]])}
             if kind in ("day_before", "not_confirmed"):
                 kind = "day_before" if fresh.get("status") in CONFIRMED else "not_confirmed"
             text = render(kind, fresh, extra, now)
@@ -465,7 +470,7 @@ async def no_reply_offers(now: datetime) -> List[dict]:
     done: List[dict] = []
     for ch in await GW.STORE.all_channels():
         account = ch["account_id"]
-        for b in await GW._upcoming(account):
+        for b in await GW._upcoming(account, names=False):   # email bookings: no receipt name to re-read
             if b.get("channel") != "email" or b.get("status") not in ("requested", "attempting") or not b.get("read_id") or not b.get("requested_at"):
                 continue
             if now - datetime.fromisoformat(b["requested_at"]) < timedelta(hours=D.reply_hours()):

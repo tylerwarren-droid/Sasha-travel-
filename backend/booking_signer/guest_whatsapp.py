@@ -2372,7 +2372,9 @@ async def push_payment_question(call: dict, pr: dict) -> str:
 
 # ── receipts and cancelling ─────────────────────────────────────────────────────────────────────────────────────────
 
-async def _upcoming(account: str) -> List[dict]:
+async def _upcoming(account: str, names: bool = True) -> List[dict]:
+    """`names=False` (Sasha 141) · the minute-by-minute watchers read status and times only: a phone booking's name is a
+    Google listing re-read (an Enterprise Place Details call), so they ask for it only for a message actually sent."""
     status, j = await api(account, "GET", "/api/booking/reservations")
     if status != 200:
         return []
@@ -2387,6 +2389,10 @@ async def _upcoming(account: str) -> List[dict]:
             local = NOW()
         return r["date"] > local.date().isoformat() or (r["date"] == local.date().isoformat() and (r.get("time") or "23:59") >= local.strftime("%H:%M"))
     rows = [r for r in j.get("reservations") or [] if r.get("status") not in ("cancelled", "declined", "failed") and ahead(r)]
+    return await _with_names(account, rows) if names else rows
+
+
+async def _with_names(account: str, rows: List[dict]) -> List[dict]:
     for r in rows:   # a phone booking's real name is on its receipt (the stored row keeps a marker, Sasha 64)
         if r.get("receipt"):
             s, rc = await api(account, "GET", r["receipt"])

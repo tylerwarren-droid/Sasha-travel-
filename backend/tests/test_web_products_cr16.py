@@ -25,7 +25,7 @@ class Web(TG.Base):
         super().tearDown()
 
     def turn(self, message="", mode=None, payload=None):
-        return run(PWEB.web_turn(U, message, mode=mode, payload=payload, now=self.now))
+        return run(PWEB.web_turn(U, message, mode=mode, payload=payload, now=self.now, signed_in=True))
 
     def test_each_tab_opens_its_mode(self):
         r = self.turn(mode="relocation")
@@ -60,7 +60,7 @@ class Web(TG.Base):
 
     def test_not_the_products_message_is_none(self):
         self.assertIsNone(self.turn("dinner for 2 tonight in Chamberí"))
-        self.assertIsNone(run(PWEB.web_turn(None, "", mode="campus")))          # signed out: no product state at all
+        self.assertIsNone(run(PWEB.web_turn(None, "", mode="campus")))          # no account: no product state at all
         self.assertIsNone(self.turn(mode="vietnam"))
 
     def test_web_and_whatsapp_keep_separate_conversations(self):
@@ -81,3 +81,16 @@ class Web(TG.Base):
         r = self.turn(mode="campus")                                             # relocation set aside mid-way
         r = self.turn(mode="relocation")
         self.assertIn("Back to your EX-01.", r["response"])
+
+
+class SignedOut(Web):
+    def test_a_visitor_without_a_verified_token_never_reaches_the_products(self):
+        """The public demo account IS the founder's real account (CR 3): an anonymous visitor must never act on it."""
+        self.turn(mode="relocation")                                             # the founder's own file, under way
+        self.turn("first")
+        r = run(PWEB.web_turn(U, "", mode="relocation", now=self.now))          # the same account, but no signed_in
+        self.assertEqual(r["response"], "Sign in to use RelocateMe — it works on your own account: your own file, "
+                                        "your own visits, your own itinerary.")
+        self.assertIsNone(run(PWEB.web_turn(U, "me", now=self.now)))             # never an answer to his file's question
+        self.assertIsNone(run(PWEB.web_turn(U, "book my flights", now=self.now)))   # never his itinerary
+        self.assertIsNone(run(PWEB.web_turn(U, "", payload="hx:es:health", now=self.now)))

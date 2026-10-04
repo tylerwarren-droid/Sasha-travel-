@@ -49,9 +49,22 @@ async def _save(key: str, account: str, st: dict) -> None:
         await ST.STORE.drop_conversation(key, "webstate")
 
 
+SIGN_IN = {"relocation": "RelocateMe", "relocate": "RelocateMe", "campus": "CampusMe", "campusme": "CampusMe",
+           "espana": "EspañaMe", "españa": "EspañaMe", "espaname": "EspañaMe"}
+
+
 async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = None, payload: Optional[str] = None,
-                   now: Optional[datetime] = None) -> Optional[dict]:
+                   now: Optional[datetime] = None, signed_in: Optional[bool] = None) -> Optional[dict]:
+    """⛔ Only for a SIGNED-IN visitor (`signed_in=True`, from the conductor's verified token). A visitor with no token is
+    the public demo account — which, since CR 3, IS the founder's real account: the products must never act on it for a
+    stranger (his files, his visits, his itinerary). Until the caller says signed_in, nothing here runs (4 Oct 2026)."""
     if not user_id:
+        return None
+    if signed_in is not True:
+        if mode and not (message or "").strip() and not payload:
+            name = SIGN_IN.get(mode.lower(), "This product")
+            return {"agent": "products", "response": f"Sign in to use {name} — it works on your own account: your own file, "
+                    "your own visits, your own itinerary.", "quick_replies": [], "media": [], "handoff": None}
         return None
     from booking_signer import guest_whatsapp as GW
     from . import whatsapp as PW

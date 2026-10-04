@@ -11,6 +11,7 @@ import VnFlag from '../components/VnFlag'
 import LogoMark from '../components/portal/LogoMark'
 import { stripMarkdown } from '@/lib/markdown'
 import { apiUrl, apiHeaders } from '@/lib/api'
+import { accountUrl, guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // Sasha 142
 import { PAYMENTS_ENABLED, SAVED_CARD_LAST4 } from '@/lib/flags'
 import { buildItineraryHtml, buildItineraryText } from '@/lib/itineraryDoc'
 import { User, Itinerary } from '@/types'
@@ -400,7 +401,7 @@ export default function VietnamPage() {
     }
 
     setVerifying(true)
-    fetch(apiUrl(`/api/payments/verify?session_id=${encodeURIComponent(sessionId)}`), { headers: apiHeaders() })
+    refreshGuestAuth().then(() => fetch(accountUrl(`/api/payments/verify?session_id=${encodeURIComponent(sessionId)}`), { headers: apiHeaders(guestAuth()) }))  // Sasha 142
       .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
       .then(data => {
         if (data?.paid && data?.booking_ref) {
@@ -435,9 +436,10 @@ export default function VietnamPage() {
   const reserveItem = useCallback(async (offer: { offer_id: string; label: string; amount_usd: number; kind: string; name: string }, paidWith?: { last4: string } | null) => {
     setReserveError(null)
     try {
-      const res = await fetch(apiUrl('/api/payments/reserve'), {
+      await refreshGuestAuth()   // Sasha 142 · paid for on the account that holds the offer
+      const res = await fetch(accountUrl('/api/payments/reserve'), {
         method: 'POST',
-        headers: apiHeaders(),
+        headers: apiHeaders(guestAuth()),
         body: JSON.stringify({
           offer_id: offer.offer_id,
           ...(paidWith ? { payment_method: 'saved_card', card_last4: paidWith.last4 } : {}),
@@ -465,9 +467,10 @@ export default function VietnamPage() {
     setCheckoutLoading(true)
     let navigated = false
     try {
-      const res = await fetch(apiUrl('/api/payments/create-checkout'), {
+      await refreshGuestAuth()   // Sasha 142
+      const res = await fetch(accountUrl('/api/payments/create-checkout'), {
         method: 'POST',
-        headers: apiHeaders(),
+        headers: apiHeaders(guestAuth()),
         body: JSON.stringify({
           ...(isItem ? { offer_id: pendingOffer!.offer_id } : { itinerary_id: itineraryId }),
           currency: 'usd',
@@ -640,9 +643,10 @@ export default function VietnamPage() {
       return
     }
     try {
-      const res = await fetch(apiUrl('/api/payments/reserve'), {
+      await refreshGuestAuth()   // Sasha 142 · paid for on the account that holds the offer
+      const res = await fetch(accountUrl('/api/payments/reserve'), {
         method: 'POST',
-        headers: apiHeaders(),
+        headers: apiHeaders(guestAuth()),
         body: JSON.stringify({
           itinerary_id: tripId,
           ...(paidWith ? { payment_method: 'saved_card', card_last4: paidWith.last4 } : {}),

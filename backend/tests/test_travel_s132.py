@@ -316,7 +316,7 @@ class TripPlanOnTheWeb(unittest.TestCase):
         from app.services import conductor as CD
         calls = []
 
-        async def trip(account, message, mode=None, payload=None, now=None):
+        async def trip(account, message, mode=None, payload=None, now=None, signed_in=None):
             calls.append(message)
             if message == "plan the trip":
                 return {"agent": "products", "response": "Your plan: dinner first.", "handoff": "dinner for 2 in Chamberí on Saturday at 9",
@@ -335,7 +335,7 @@ class TripPlanOnTheWeb(unittest.TestCase):
         from app.services import conductor as CD
         import types, sys
 
-        async def trip(account, message, mode=None, payload=None, now=None):
+        async def trip(account, message, mode=None, payload=None, now=None, signed_in=None):
             return None
         mod = types.ModuleType("products.web"); mod.web_turn = trip
         with mock.patch.dict(sys.modules, {"products.web": mod}):
@@ -369,7 +369,7 @@ class ProductModeOnTheWeb(unittest.TestCase):
         from app.services import conductor as CD
         seen = []
 
-        async def web(account, message, mode=None, payload=None, now=None):
+        async def web(account, message, mode=None, payload=None, now=None, signed_in=None):
             seen.append((message, mode, payload))
             return {"agent": "products", "response": "Welcome to RelocateMe.", "handoff": None, "quick_replies": [], "media": []}
         import types, sys

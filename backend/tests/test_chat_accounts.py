@@ -51,8 +51,14 @@ class ChatAccounts(unittest.TestCase):
     def test_each_sees_only_their_own_chats(self):
         mine = self.c.get("/api/chats", headers=self.guest).json()
         self.assertEqual(([s["id"] for s in mine["sessions"]], mine["user"]["id"]), (["guest-sess"], GUEST))
-        demo = self.c.get("/api/chats").json()
-        self.assertEqual([s["id"] for s in demo["sessions"]], ["demo-sess"])
+        # Sasha 142 · an anonymous visitor is the PUBLIC demo: none of the founder's chats; his proxied session sees them
+        public = self.c.get("/api/chats").json()
+        self.assertEqual([s["id"] for s in public["sessions"]], [])
+        with mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-s142", "FOUNDER_ACCOUNT_ID": ""}):
+            founder = self.c.get("/api/chats", headers={"x-sasha-session": "founder", "x-sasha-booking-key": "k-s142"}).json()
+            forged = self.c.get("/api/chats", headers={"x-sasha-session": "founder"}).json()
+        self.assertEqual([s["id"] for s in founder["sessions"]], ["demo-sess"])
+        self.assertEqual([s["id"] for s in forged["sessions"]], [])
 
     def test_someone_elses_chat_answers_as_one_that_does_not_exist(self):
         self.assertEqual(self.c.get("/api/chats/guest-sess", headers=self.guest).status_code, 200)

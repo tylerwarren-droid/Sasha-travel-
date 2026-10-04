@@ -1,5 +1,5 @@
 'use client'
-import { guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // S-62 step 7
+import { accountUrl, guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // S-62 step 7
 import { useState, useEffect } from 'react'
 import { User } from '@/types'
 import { CURRENT_USER } from '@/lib/currentUser'
@@ -57,7 +57,7 @@ export default function YouPanel({ user, plannedThisSession = 0, language = 'en'
   const [tripsFailed, setTripsFailed] = useState(false)
   useEffect(() => {
     let cancelled = false
-    refreshGuestAuth().then(() => fetch(apiUrl('/api/trips'), { headers: apiHeaders(guestAuth()) }))  // S-62 step 7 · their own trips
+    refreshGuestAuth().then(() => fetch(accountUrl('/api/trips'), { headers: apiHeaders(guestAuth()) }))  // S-62 step 7 · their own trips
       .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
       .then(d => { if (!cancelled) setBooked(Array.isArray(d.trips) ? d.trips : []) })
       .catch(() => { if (!cancelled) { setBooked([]); setTripsFailed(true) } })

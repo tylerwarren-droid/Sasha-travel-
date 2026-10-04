@@ -15,7 +15,7 @@ import YouPanel from './workspace/YouPanel'
 import ChatBooking from './ChatBooking'  // S-66 chat booking, Stage B re-applies
 import ChatCancel from './ChatCancel'  // Sasha 96 chat cancel, Stage B re-applies
 import { takeChatText } from '@/lib/chat-booking-bus'
-import { guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // S-62 step 7
+import { accountUrl, guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // S-62 step 7
 import axios from 'axios'
 
 // `description` is the photographer's free-text Unsplash caption ("Colors", "4:51pm") — never
@@ -343,7 +343,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
       // Ask the backend what this turn will actually do, in PARALLEL with the real call so it
       // costs the turn nothing. ~8ms: pure keyword matching, no LLM, no agents. Doubles as the
       // source for the context-driven interim line.
-      fetch(apiUrl('/api/agents/classify'), {
+      fetch(accountUrl('/api/agents/classify'), {
         method: 'POST',
         headers: apiHeaders(guestAuth()),  // S-62 step 7
         body: JSON.stringify({
@@ -379,7 +379,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
       }
     }, 5000)
     try {
-      const response = await axios.post(apiUrl('/api/agents/conductor'), {
+      const response = await axios.post(accountUrl('/api/agents/conductor'), {
         message: content,
         conversation_history: historyBeforeMessage,
         language,

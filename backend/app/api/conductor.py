@@ -6,7 +6,7 @@ from app.services.conductor import conduct, classify_intents
 from app.services.llm import client, FAST_MODEL
 from app.services.prompts import get_prompt_async
 from app.services import chat_store
-from app.services.chat_account import chat_account, own_session
+from app.services.chat_account import chat_account, own_session, signed_in
 
 router = APIRouter()
 
@@ -131,6 +131,7 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             user_id=account,
             product_mode=body.product_mode,   # CR 16
             payload=body.payload,
+            signed_in=signed_in(account),     # Sasha 142 · the products act only for a real account
         )
         # Persist this turn (best-effort; a DB hiccup must never break the conversation).
         await chat_store.save_turn(

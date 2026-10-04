@@ -677,6 +677,8 @@ CAPABILITY_FACTS = (
 )
 # Sasha 88 abilities: backend/booking_signer/abilities.py. CTO zips drop this; Stage B re-applies it.
 from booking_signer.abilities import ABILITIES as _SASHA_ABILITIES  # noqa: E402
+# Sasha 142 · no account given (the voice page) is the PUBLIC demo, never the founder's
+from app.services.chat_account import PUBLIC_DEMO_ID  # noqa: E402
 CAPABILITY_FACTS += _SASHA_ABILITIES
 
 
@@ -1729,6 +1731,7 @@ async def conduct(
     session_id: Optional[str] = None,
     user_id: Optional[str] = None,
     product_mode: Optional[str] = None,   # CR 16 · the product tab's mode, on its first turn
+    signed_in: Optional[bool] = None,     # Sasha 142 · a real account (verified guest or founder), not the public demo
     payload: Optional[str] = None,        # CR 16 · a product quick-reply
 ) -> dict:
     """
@@ -1773,7 +1776,7 @@ async def conduct(
         return _draft_turn
     # Sasha 132 · ask your itinerary: backend/booking_signer/itinerary_q.py — from the guest's own bookings, no model.
     from booking_signer.itinerary_q import web_turn  # noqa: E402
-    _itinerary = await web_turn(user_message, user_id, conversation_history)
+    _itinerary = await web_turn(user_message, user_id, conversation_history) if signed_in is not False else None   # Sasha 142 · not the public demo's
     if _itinerary is not None:
         return _itinerary
     # CR 13/16 · the products on the web (backend/products/web.py, CR's — the same router as WhatsApp, the trip plan included):
@@ -1781,7 +1784,7 @@ async def conduct(
     # Wired here by the Sasha tab.
     try:
         from products.web import web_turn as _products_web  # noqa: E402
-        _trip = await _products_web(user_id, user_message, mode=product_mode, payload=payload) if user_id else None
+        _trip = await _products_web(user_id, user_message, mode=product_mode, payload=payload, signed_in=signed_in) if user_id else None
     except Exception as e:   # a product's failure never stops the chat — and is never a silent one
         print(f"[Conductor] trip plan failed: {type(e).__name__}: {e}")   # the conductor's own logging
         _trip = None
@@ -2140,7 +2143,7 @@ async def conduct(
         await chat_store.save_itinerary(
             itinerary_id=itinerary_id,
             session_id=session_id or "",
-            user_id=user_id or chat_store.DEMO_USER_ID,
+            user_id=user_id or PUBLIC_DEMO_ID,
             title=itinerary.get("title") or "",
             total_usd=itinerary.get("estimated_total_usd") or 0,
             payload=itinerary,
@@ -2339,7 +2342,7 @@ async def conduct(
             _party = int(_party)
         except (TypeError, ValueError):
             _party = 2
-        _uid = user_id or chat_store.DEMO_USER_ID
+        _uid = user_id or PUBLIC_DEMO_ID
         for h in hotels:
             try:
                 per_night = int(h.get("price_from") or 0)

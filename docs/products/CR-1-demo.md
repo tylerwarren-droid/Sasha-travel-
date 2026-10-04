@@ -111,7 +111,7 @@ split by county exactly as Los Angeles's page lists them. (docs/products/reads/u
 |---|---|
 | `book my flights` | "Which city will you fly from? (asked once …)" |
 | `London` | the plan: ✈ flights London → Madrid on the entry date · 🏨 3 first nights near the new address · 📋 one itinerary — then **Sasha's own** Duffel TEST cards; her read-back and her one yes as always (TEST checkout) |
-| `NEXT` | Sasha's hotel search near the new address, 3 nights — TEST booking or a real request, her choice buttons |
+| `NEXT` | Sasha's hotel search near the new address, 3 nights — her buttons on the one picked: "Test booking" or "Book with hotel" (its own booking engine when its site links one, else an email room request) |
 | `NEXT` | 📋 one itinerary: every booking (flights, hotels, appointments, visits) and every document deadline, by day |
 | (two campus visits registered) `plan the trip around the visits` → `Chicago` | ✈ into New Haven the day before Yale · 🏨 near each campus the night before · 🚗 "Yale Sun 11:30 → Penn Mon 09:30: yes, 3 h 36 by car" (Google Routes, traffic-aware; rail not checked) |
 | `what do I need to do this week?` | Sasha's week: her bookings and the products' deadlines together |

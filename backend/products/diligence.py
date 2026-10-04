@@ -128,10 +128,11 @@ def render(j: dict, asked: str, label: str = "PREVIEW") -> str:
             lines.append(f"Register status (its own words): {e['status_raw']}")
         sd = j.get("standing") or {}
         expressible = sd.get("expressible") if "expressible" in sd else e.get("standing_expressible")
-        if expressible and "SIRENE" in str(e.get("register") or "").upper():
-            log.error("[diligence] AD says SIRENE standing is expressible — it publishes no proceedings; not rendered")
-            expressible = False                     # US tab: "if that ever comes back true for SIRENE, something is wrong"
-        if expressible and (sd.get("value") or e.get("status")):
+        inconsistent = bool(expressible) and "SIRENE" in str(e.get("register") or "").upper()
+        if inconsistent:   # a defect on AD's side, made visible, never quietly corrected here (US tab, 4 Oct)
+            log.error("[diligence] AD says SIRENE standing is expressible — SIRENE publishes no proceedings: NOT rendered")
+            lines.append("Standing: not shown — the register's capability could not be established for this answer.")
+        elif expressible and (sd.get("value") or e.get("status")):
             lines.append(f"Standing: {sd.get('value') or e.get('status')}")
         else:                                       # never silent: a missing status would read as "nothing adverse"
             lines.append("Standing: not shown — " + (sd.get("because") or "this register doesn't publish insolvency or "

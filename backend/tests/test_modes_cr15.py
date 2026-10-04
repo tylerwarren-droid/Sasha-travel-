@@ -212,3 +212,12 @@ class CapAndPerson(Base):
         self.say("check Jean Dupont Plomberie in France")
         self.assertIn("checks companies only — not people", self.bodies()[-1])
         self.assertNotIn("no company matching", self.bodies()[-1])
+
+
+class SireneInconsistent(Base):
+    def test_sirene_standing_claimed_expressible_is_said_inconsistent_not_corrected(self):
+        self.answer = (200, {**LIVE, "standing": {"value": "active", "expressible": True, "because": "x"}})
+        self.say("ad check TotalEnergies in France")
+        r = self.bodies()[-1]
+        self.assertIn("Standing: not shown — the register's capability could not be established for this answer.", r)
+        self.assertNotIn("Standing: active", r)

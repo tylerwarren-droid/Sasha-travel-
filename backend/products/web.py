@@ -18,6 +18,18 @@ from typing import Optional
 from . import store as ST
 
 log = logging.getLogger("products.web")
+# Sasha's first message when a tab opens its product FRESH (EU 150, docs/business/product-tabs-copy.md, verbatim). It
+# replaces the product's own opening words on the web only (the WhatsApp line keeps its own); a product already under way
+# answers as it always does ("Back to your EX-01. …"). The product's buttons are kept.
+OPENING = {
+    "relocation": "Let's get your Spanish residence file ready. You sign it and you lodge it — I never file anything for you. "
+                  "Is this your first application, or a renewal?",
+    "campus": "Tell me which universities and roughly when. I'll read their own visit calendars and show you what's really "
+              "open — and I'll never press Register for you.",
+    "health": "I can help you get things done with Spain's public services. One rule first: I prepare everything, and you "
+              "sign in and press — I never do that part for you. What do you need?",
+}
+PRODUCT_OF = {"relocation": "relocation", "campus": "campus", "españa": "health"}
 OPEN = {"relocation": "relocation", "relocate": "relocation", "campus": "campus", "campusme": "campus",
         "espana": "españa", "españa": "españa", "espaname": "españa"}
 
@@ -52,6 +64,10 @@ async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = N
             return None
         body = word                                    # the tab opens its product exactly as its word would
     st = await _state(key)
+    ch_ = {"wa_id_sha256": key, "account_id": user_id}
+    opening = PRODUCT_OF.get(body) if (mode and not (message or "").strip() and not payload) else None
+    if opening and await PW._resume(ch_, opening):
+        opening = None                                 # under way already: the product says where it was
     p = {"Body": body, "ButtonPayload": (payload or "").strip()}
     out, early = GW.Out(), []
 
@@ -75,6 +91,8 @@ async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = N
         elif it[0] == "ask":
             texts.append(it[1])
             replies = [{"title": t, "payload": pl} for t, pl in it[2]]   # the last question's buttons
+    if opening and handled:
+        texts = [OPENING[opening]]
     handoff = p["Body"] if not handled and p["Body"] != body else None
     if not handled and not handoff:
         return None                                    # not the products' message: Sasha's own web flow answers it

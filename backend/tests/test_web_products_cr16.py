@@ -29,11 +29,12 @@ class Web(TG.Base):
 
     def test_each_tab_opens_its_mode(self):
         r = self.turn(mode="relocation")
-        self.assertIn("I never file anything", r["response"])
+        self.assertEqual(r["response"], "Let's get your Spanish residence file ready. You sign it and you lodge it — I never "
+                                        "file anything for you. Is this your first application, or a renewal?")   # EU 150
         r = self.turn(mode="campus")
-        self.assertIn("CampusMe here", r["response"])
+        self.assertIn("I'll read their own visit calendars", r["response"])
         r = self.turn(mode="espana")
-        self.assertIn("EspañaMe 🇪🇸", r["response"])
+        self.assertIn("One rule first: I prepare everything, and you sign in and press", r["response"])
         self.assertEqual([q["payload"] for q in r["quick_replies"]], ["hx:es:health", "hx:es:padron", "hx:es:movistar"])
 
     def test_a_pressed_button_is_answered(self):
@@ -69,3 +70,14 @@ class Web(TG.Base):
         self.assertIn("I never file anything", "\n".join(self.bodies()))
         r = self.turn("sasha")
         self.assertIn("Back to Sasha", r["response"])
+
+    def test_a_product_under_way_says_where_it_was(self):
+        self.turn(mode="relocation")
+        self.turn("first")
+        self.turn("me")
+        self.turn("sasha")                                                       # set aside? no — exit drops it; resume via mode
+        self.turn(mode="relocation")
+        self.turn("first")
+        r = self.turn(mode="campus")                                             # relocation set aside mid-way
+        r = self.turn(mode="relocation")
+        self.assertIn("Back to your EX-01.", r["response"])

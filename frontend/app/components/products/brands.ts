@@ -1,60 +1,73 @@
 /**
  * CR 16 · the PRODUCT TABS on project.kanoe.ai — RelocateMe, CampusMe, EspañaMe. Each is a brand (skin + opening mode)
- * over the SAME Sasha web chat: same account, same itinerary. Copy marked "[COPY: EU 150]" is a placeholder until EU 150's
- * copy lands in docs/business/. Every feature carries an honest label: live · click-through · concept.
- * ⛔ No Vietnam anywhere: these tabs pass their own presets and empty state.
+ * over the SAME Sasha web chat: same account, same itinerary. Copy: EU 150, docs/business/product-tabs-copy.md (4 Oct
+ * 2026), verbatim. Marks: ✅ built and rehearsed (cited) · ○ concept. The status line is always shown, in the tab's colours.
+ * ⛔ No Vietnam anywhere. ⛔ No flags, crests, university colours or government styling (EU's colour notes).
+ * The opening line Sasha says in each mode is in backend/products/web.py (OPENING), from the same copy.
  */
 import type { DemoKind } from '../../(site)/content/types'
 
 export type ProductKey = 'relocation' | 'campus' | 'espana'
-export type Feature = { name: string; kind: DemoKind; note: string }
+export type Line = { mark: 'built' | 'concept'; text: string; cite: string }
 export type Brand = {
   key: ProductKey
   name: string                  // the brand, as the tab shows it
   mode: ProductKey              // the chat opens in this product's mode (products.web.web_turn)
   route: string                 // where the Sasha tab will mount it (the existing page, once the site hold lifts)
-  hero: { kicker: string; headline: string; sub: string }
-  features: Feature[]
-  prompts: string[]             // the chat's preset prompts: this product's, never another's
+  kind: DemoKind                // the tab's overall label
+  badge?: string                // EspañaMe: the CONCEPT badge at the TOP of the tab
+  hero: string
+  lines: [Line, Line, Line]
+  statusLine: string
+  prompts: string[]             // "Try saying" — this product's, never another's
   skin: { primary: string; accent: string; bg: string; ink: string; soft: string }
 }
 
 export const BRANDS: Record<ProductKey, Brand> = {
   relocation: {
-    key: 'relocation', name: 'RelocateMe', mode: 'relocation', route: '/relocation',
-    hero: { kicker: 'RelocateMe · Spain', headline: '[COPY: EU 150 — RelocateMe headline]',
-            sub: '[COPY: EU 150 — one line: your residence file prepared and checked; you sign and lodge it]' },
-    features: [
-      { name: 'Your EX-01, filled and checked', kind: 'live', note: 'the real flow; the demo applicant is fictional' },
-      { name: 'Your consulate’s own list and route (London and seven US consulates)', kind: 'live', note: 'read at source, dated' },
-      { name: 'Flights, first nights and every deadline in one itinerary', kind: 'live', note: 'bookings are TEST bookings' },
+    key: 'relocation', name: 'RelocateMe', mode: 'relocation', route: '/relocation', kind: 'live',
+    hero: 'Moving to Spain? I’ll handle the paperwork and the trip.',
+    lines: [
+      { mark: 'built', cite: 'CR 1–2: 30cabe1, d632f90',
+        text: 'Send a photo of your passport. I read it, check it against its own check digits, and read every value back for your yes.' },
+      { mark: 'built', cite: 'CR 1–2; CR 12: US consulates, 7 of 8 read (a22fcad)',
+        text: 'I prepare Spain’s official EX-01 from your own words, check it field by field, and hand it to you to sign. I never sign it and never file it.' },
+      { mark: 'built', cite: 'CR 13: the trip, rehearsed 41/41',
+        text: 'Then the trip: your flights, your first nights near your new address, and one itinerary with every booking and every deadline.' },
     ],
-    prompts: ['Start my residence application', 'Book my flights', 'What do I need to do this week?'],
-    skin: { primary: '#b5442c', accent: '#e8a33d', bg: '#fbf4ec', ink: '#3a1c12', soft: '#f3e2d2' },
+    statusLine: 'Working today on WhatsApp in our test setup, for a first application lodged from the UK or the US. Flights and hotels shown here are test bookings. Renewals and family applications aren’t built yet.',
+    prompts: ['I’m moving to Madrid from London in March', 'book my flights', 'Here’s my passport'],
+    skin: { primary: '#1E4E8C', accent: '#5B9BD5', bg: '#F3F7FC', ink: '#13263f', soft: '#d9e4f2' },
   },
   campus: {
-    key: 'campus', name: 'CampusMe', mode: 'campus', route: '/campusme',
-    hero: { kicker: 'CampusMe · US campus visits', headline: '[COPY: EU 150 — CampusMe headline]',
-            sub: '[COPY: EU 150 — one line: real sessions from each school’s own calendar; you press Register]' },
-    features: [
-      { name: 'Real visit sessions from each school’s own calendar', kind: 'live', note: 'Yale and Penn, read live' },
-      { name: 'The school’s form prepared; you press Register', kind: 'live', note: 'we never submit' },
-      { name: 'The trip around the visits: flights, hotels, drive times', kind: 'live', note: 'bookings are TEST bookings' },
+    key: 'campus', name: 'CampusMe', mode: 'campus', route: '/campusme', kind: 'live',
+    hero: 'Plan the campus tour: visits, flights, hotels.',
+    lines: [
+      { mark: 'built', cite: 'CR 1, 8106303',
+        text: 'I read each university’s own visit calendar, live, and show you the real sessions and spaces left, or tell you plainly when a month isn’t published yet.' },
+      { mark: 'built', cite: 'CR 1, 8106303',
+        text: 'One yes and I prepare the school’s own registration from your saved details. I stop before the Register button: you press it.' },
+      { mark: 'built', cite: 'CR 13',
+        text: 'Then the trip around the visits: flights, a hotel near each campus, and the drive between them checked.' },
     ],
-    prompts: ['Yale and Penn in November for my son', 'Plan the trip around the visits', 'What do I need to do this week?'],
-    skin: { primary: '#1f3a6b', accent: '#c9a227', bg: '#f3f5fa', ink: '#0f1d36', soft: '#dfe6f3' },
+    statusLine: 'Working today on WhatsApp in our test setup, read-only on the universities’ sites (Yale and Penn proven). Nothing is ever submitted to a university for you. Flights and hotels shown here are test bookings. Drive times are checked; train times aren’t yet.',
+    prompts: ['campus visits at Yale and Penn in November for my son', 'plan the trip around the visits', 'what about April?'],
+    skin: { primary: '#7A1F2B', accent: '#C9A227', bg: '#FAF7F0', ink: '#1F2F4A', soft: '#eadfcb' },
   },
   espana: {
-    key: 'espana', name: 'EspañaMe', mode: 'espana', route: '/spain-services',
-    hero: { kicker: 'EspañaMe · Spain’s public services', headline: '[COPY: EU 150 — EspañaMe headline]',
-            sub: '[COPY: EU 150 — one line: prepared for you; you press the button]' },
-    features: [
-      { name: 'A doctor: private clinic, the public service (SERMAS), or new in Madrid', kind: 'live',
-        note: 'the SERMAS hand-over uses a fictional patient; no real health identifiers are kept' },
-      { name: 'Padrón — registering at the town hall', kind: 'concept', note: 'designed, not built' },
-      { name: 'Movistar — phone and internet at home', kind: 'concept', note: 'designed, not built; Movistar’s pages not read' },
+    key: 'espana', name: 'EspañaMe', mode: 'espana', route: '/spain-services', kind: 'concept',
+    badge: 'CONCEPT: designed, with one part working in our test setup.',
+    hero: 'Spain’s public services, made simple.',
+    lines: [
+      { mark: 'built', cite: 'CR 4: e621e03, rehearsals 46/46',
+        text: 'New in Madrid? I walk you through it in order — padrón, social security, health card, family doctor — each step from its official page.' },
+      { mark: 'built', cite: 'S-77’s line; CR 4',
+        text: 'I get everything ready for your appointment — the official page, the details to copy — and you press. I never sign in to a public service for you, and never book it for you.' },
+      { mark: 'concept', cite: 'the padrón, utilities and Movistar are unstudied',
+        text: 'Next: the padrón, your phone line and utilities, studied the same way before anything is built.' },
     ],
-    prompts: ['I need a doctor this week', 'I’m new in Madrid — my health card', 'Padrón'],
-    skin: { primary: '#aa151b', accent: '#f1bf00', bg: '#fdf8ec', ink: '#3a0b0d', soft: '#f6e7c4' },
+    statusLine: 'A concept. The health steps work today in our test setup: a private clinic booked by phone, and public appointments prepared for you to press. Nothing stores your health details until our data-protection assessment is done. Everything else here is designed, not built.',
+    prompts: ['I need a doctor this week', 'I’ve just moved to Madrid — what do I do first?', 'how do I get my health card?'],
+    skin: { primary: '#B5121B', accent: '#E8B321', bg: '#FFF8EC', ink: '#2A1A12', soft: '#f3e2c4' },
   },
 }

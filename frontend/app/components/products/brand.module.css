@@ -3,12 +3,13 @@
 .hero { background: var(--brand-bg); border: 1px solid var(--brand-soft); border-top: 6px solid var(--brand-primary);
         border-radius: 12px; padding: 28px 24px; margin: 0 0 24px; color: var(--brand-ink); }
 .kicker { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brand-primary); margin: 0 0 10px; }
-.headline { font-family: var(--site-head), serif; font-size: 38px; line-height: 1.15; margin: 0 0 10px; }
-.sub { font-size: 18px; line-height: 1.5; margin: 0; }
-.placeholder { outline: 2px dashed var(--brand-accent); outline-offset: 3px; }
-.features { list-style: none; padding: 0; margin: 0 0 24px; display: grid; gap: 10px; }
-.feature { display: flex; gap: 10px; align-items: baseline; font-size: 16px; line-height: 1.45; }
-.note { color: #5c6a74; font-size: 14px; }
+.headline { font-family: var(--site-head), serif; font-size: 38px; line-height: 1.15; margin: 0; }
+.badge { margin: 0 0 14px; }
+/* the status line, always shown, in the tab's own colours (EU 150) */
+.status { border-left: 4px solid var(--brand-primary); background: var(--brand-bg); padding: 12px 14px; margin: 0 0 24px;
+          font-size: 15px; line-height: 1.5; color: var(--brand-ink); }
+.statusLabel { font-weight: 700; color: var(--brand-primary); }
+.chatSkin { min-height: 0; }
 /* Sasha's chat is designed for a dark stage (light text, translucent controls): the tab gives it one, under the brand's bar */
 .chatWrap { border: 1px solid var(--brand-soft); border-radius: 12px; overflow: hidden; background: #15161d; height: 640px;
             display: flex; flex-direction: column; }

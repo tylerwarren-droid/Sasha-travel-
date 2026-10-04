@@ -5,8 +5,8 @@
  * this product's mode: `productMode` goes to the conductor on the first turn (products.web.web_turn), the product's
  * buttons come back as quick replies. The brand changes only the skin and the opening mode.
  *
- * `productMode` / `skinClassName` are the Sasha tab's props (CR 16 a–c, agreed 4 Oct); until they land in SashaChat
- * they are passed through untyped, so this file builds today and works the moment they exist.
+ * `productMode` / `skinClassName` are the Sasha tab's props (CR 16 a–c, 621c30e): the chat opens with ONE empty turn in
+ * this mode, and the product's buttons come back as quick replies.
  */
 import SashaChat from '../SashaChat'
 import type { User } from '@/types'
@@ -17,7 +17,6 @@ import b from './brand.module.css'
 const NEUTRAL_USER: User = { display_name: '', default_currency: 'EUR', travellers: [], preferences: [] }
 
 export default function ProductChat({ brand }: { brand: Brand }) {
-  const cr16 = { productMode: brand.mode, skinClassName: b.chatBody } as Record<string, unknown>   // CR 16 a–c props
   return (
     <section className={b.chatWrap} aria-label={`Sasha — ${brand.name}`}>
       <div className={b.chatHead}>
@@ -29,8 +28,9 @@ export default function ProductChat({ brand }: { brand: Brand }) {
           user={NEUTRAL_USER}
           hideTabs
           presetPrompts={brand.prompts}
-          emptyState={<div className={b.empty}><b>{brand.name}</b> — opening in its own mode. Ask anything else at any time: a booking, a flight, your plans.</div>}
-          {...cr16}
+          productMode={brand.mode}
+          skinClassName={b.chatSkin}
+          emptyState={<div className={b.empty}><b>{brand.name}</b> — Sasha is opening in this mode…</div>}
         />
       </div>
     </section>

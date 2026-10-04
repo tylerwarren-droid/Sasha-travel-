@@ -113,12 +113,21 @@ def platform_page(read: dict) -> Optional[tuple]:
                 if len(slugs) > 1:
                     return None    # a group's restaurants: which one is THIS venue is the guest's to say
             continue
+        from .venue_read import HOTEL_ENGINES
+        hotel = f["value"] in HOTEL_ENGINES
         for link, how in _candidates(f):
             if how != "link":
                 continue
             u = urlsplit(link)
+            # Sasha 138 · a hotel engine's VENDOR homepage ("powered by D-Edge" → www.d-edge.com/) is never a booking page
+            if hotel and (u.path or "/") == "/" and not u.query:
+                continue
             if u.scheme == "https" and u.hostname and platform_of(link) == f["value"]:
                 return f["value"], link, f["source_label"]
+        # Sasha 138 · a hotel engine only EMBEDDED (a widget on the hotel's own page, e.g. Mews): the one-tap page is the hotel's
+        # own page that carries it — never a guessed engine URL
+        if hotel and any(how == "embed" for _l, how in _candidates(f)) and str(f.get("source_url") or "").startswith("https://"):
+            return f["value"], f["source_url"], f"{f['source_label']} (their {f['value']} booking widget)"
     return None
 
 
@@ -176,7 +185,8 @@ def build_hotel(read: dict, checkin: date, nights: int, adults: int) -> SlotLink
         raise LinkRefused("no_platform", "no booking engine was found linked from the hotel's own site")
     platform, page, label = found
     out = (checkin + timedelta(days=nights)).isoformat()
-    fill = HOTEL_PREFILL.get(platform) if platform in HOTEL_ENGINES else None
+    widget = label.endswith("booking widget)")   # the hotel's own page: its URL isn't the engine's, so nothing is added to it
+    fill = HOTEL_PREFILL.get(platform) if platform in HOTEL_ENGINES and not widget else None
     if fill is None:
         return SlotLink(platform, page, False, label)
     return SlotLink(platform, fill(page, checkin.isoformat(), out, adults), False, label, prefill_tried=True)

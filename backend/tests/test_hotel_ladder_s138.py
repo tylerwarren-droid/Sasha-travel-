@@ -48,6 +48,25 @@ class Engines(unittest.TestCase):
         self.assertTrue(V.platform_of("https://be.synxis.com/?hotel=1"))   # venue_read never fetches a URL platform_of names (S-37)
 
 
+class Rehearsal1(unittest.TestCase):
+    """The read-only rehearsal (4 Oct): three Hoi An hotels' only D-Edge link was the vendor's homepage (a 'powered by' footer);
+    Mews and Neobookings were widgets on the hotel's own page."""
+
+    def test_a_vendor_homepage_is_never_the_booking_page(self):
+        with self.assertRaises(SL.LinkRefused):
+            SL.build_hotel(read_with("https://www.d-edge.com/"), date(2026, 11, 14), 2, 2)
+        ok = SL.build_hotel(read_with("https://www.secure-hotel-booking.com/d-edge/The-Signature-Hoi-An/J6S6/en-US?hotelId=32001"),
+                            date(2026, 11, 14), 2, 2)
+        self.assertTrue(ok.url.startswith("https://www.secure-hotel-booking.com/d-edge/The-Signature-Hoi-An/"))
+
+    def test_an_embedded_engine_sends_the_hotels_own_page(self):
+        read = {"name": "The Hat", "facts": [{"kind": "platform", "value": "Mews", "source_label": "their website, thehatmadrid.com",
+                                              "source_url": "https://thehatmadrid.com/contacto/", "detail": {"embed": "https://app.mews.com"}}]}
+        link = SL.build_hotel(read, date(2026, 10, 20), 2, 2)
+        self.assertEqual(link.url, "https://thehatmadrid.com/contacto/")
+        self.assertIn("their Mews booking widget", link.source_label)
+
+
 class OnWhatsApp(TG.Base):
     def setUp(self):
         super().setUp()

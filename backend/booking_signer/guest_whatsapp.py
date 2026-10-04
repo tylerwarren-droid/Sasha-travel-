@@ -1265,7 +1265,8 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
         out.text(f"I found no {f.get('what')} in {f.get('where')}. Try another area or kind of place.")
         return
     pick = shown[0]["place_id"] if luxe else (ranking.get("picks") or {}).get(chip)
-    photos = await _photos(account, f.get("what") or "", shown)
+    # Sasha 140 · never block on photos: the cards go with what's ready within the budget; the rest follow on their own
+    photos, late = await _photos_within(shown, photo_wait())
     if ctx.get("third_card"):   # Sasha 126 · the combo's spa set: OUR demo spa as the third card
         shown = shown[:2] + [ctx["third_card"]]
     elif rehearsal(account) and not ctx.get("no_test_card"):   # Sasha 117 · the dress rehearsal books OUR test venue; the card says so
@@ -1283,6 +1284,8 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
         out.media(("Sasha's pick · " if c["place_id"] == pick else "") + line, photos.get(c["place_id"]))
     nonce = secrets.token_hex(3)
     out.ask("Which one?", [(c.get("name") or f"Option {i + 1}", f"pick:{nonce}:{i}") for i, c in enumerate(shown)])
+    if late and ctx.get("ch"):
+        _spawn(_late_photos(ctx["ch"], ctx["frm"], {c["place_id"]: c.get("name") or "" for c in shown}, late))
     ctx["st"]["pending"] = {"kind": "cards", "at": ctx["now"].isoformat(), "nonce": nonce, "find": f,
                             "draft": draft.get("parts") or {},
                             "cards": [{"place_id": c["place_id"], "name": c.get("name"), "country": c.get("country")} for c in shown]}
@@ -1297,20 +1300,63 @@ def rehearsal(account: str) -> bool:
     return os.getenv("SASHA_REHEARSAL", "") == "1" and account == founder_account()
 
 
+#: Sasha 140 · each venue's OWN share-picture URL, by its website (not Google content: cacheable), with "none" remembered too
+PHOTO_CACHE: Dict[str, Tuple[float, Optional[str]]] = {}
+PHOTO_TTL = 24 * 3600
+
+
+def photo_wait() -> float:
+    """How long the cards wait for photos before going out without the late ones (they follow on their own)."""
+    try:
+        return float(os.getenv("SASHA_PHOTO_WAIT_S", "") or 1.0)
+    except ValueError:
+        return 1.0
+
+
+async def _photo_of(c: dict) -> Tuple[str, Optional[str]]:
+    from . import ladder_routes as LR, style as ST
+    site = c.get("website")
+    hit = PHOTO_CACHE.get(site)
+    if hit and time.time() - hit[0] < PHOTO_TTL:
+        return c["place_id"], hit[1]
+    try:
+        page = await ST.page_text(LR.HTTP, site, LR.RESOLVE)
+        img = page.get("image")
+    except Exception as e:
+        log.info("[guest_whatsapp] no photo: %s", type(e).__name__)
+        return c["place_id"], None   # a failure isn't cached: the next ask tries again
+    PHOTO_CACHE[site] = (time.time(), img)
+    return c["place_id"], img
+
+
 async def _photos(account: str, what: str, shown: List[dict]) -> Dict[str, str]:
     """The venue's OWN share picture from its own site (og:image, robots first — style.page_text), never a Google one.
-    Read WITHOUT the style summary: that is a model call, and on WhatsApp the model is never called."""
-    from . import ladder_routes as LR, style as ST
-
-    async def one(c):
-        try:
-            page = await ST.page_text(LR.HTTP, c["website"], LR.RESOLVE)
-            return c["place_id"], page.get("image")
-        except Exception as e:
-            log.info("[guest_whatsapp] no photo: %s", type(e).__name__)
-            return c["place_id"], None
-    got = await asyncio.gather(*(one(c) for c in shown if c.get("website")))
+    Read WITHOUT the style summary: that is a model call, and on WhatsApp the model is never called. In parallel, cached."""
+    got = await asyncio.gather(*(_photo_of(c) for c in shown if c.get("website")))
     return {pid: url for pid, url in got if url}
+
+
+async def _photos_within(shown: List[dict], budget: float) -> Tuple[Dict[str, str], List[asyncio.Task]]:
+    """Sasha 140 · the photos ready within `budget` seconds (all of them on a warm cache), and the fetches still running."""
+    tasks = [asyncio.ensure_future(_photo_of(c)) for c in shown if c.get("website")]
+    if not tasks:
+        return {}, []
+    done, pending = await asyncio.wait(tasks, timeout=budget)
+    ready = {pid: url for pid, url in (t.result() for t in done) if url}
+    return ready, list(pending)
+
+
+async def _late_photos(ch: dict, frm: str, names: Dict[str, str], pending: List[asyncio.Task]) -> None:
+    """The photos that came after the cards: each its own message, named — the cards never waited for them."""
+    await asyncio.sleep(2)   # the cards (the turn's own reply) go first
+    for t in asyncio.as_completed(pending, timeout=20):
+        try:
+            pid, url = await t
+        except Exception:
+            continue
+        if url and pid in names:
+            st = await STORE.get_state(ch["wa_id_sha256"])
+            await deliver(ch, frm, Out().media(f"📷 {names[pid]}", url), st.get("last_inbound_at"))
 
 
 # ── pending questions ───────────────────────────────────────────────────────────────────────────────────────────────

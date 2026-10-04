@@ -7,6 +7,7 @@ action goes through the live server's founder-only ops routes, exactly as the op
     railway run -- python backend/scripts/demo.py gmail        # beat G: our test venue emails his Gmail; Sasha offers it
     railway run -- python backend/scripts/demo.py shop-login   # beat F setup: the demo shop's login, to save in his vault
     railway run -- python backend/scripts/demo.py spa-login    # Sasha 126 setup: the demo spa's membership, to save in his vault
+    railway run -- python backend/scripts/demo.py prewarm      # Sasha 140 · the night before: venues' photos and reads warmed
 
 Needs SASHA_BOOKING_KEY (railway run provides it). Prints no secret but the demo shop's own demo password.
 """
@@ -60,7 +61,7 @@ def main(cmd: str) -> None:
         return status()
     path = {"reset": ("POST", "/api/booking/ops/demo/reset"), "leave-now": ("POST", "/api/booking/ops/demo/leave-now"),
             "gmail": ("POST", "/api/booking/ops/demo/gmail-seed"), "shop-login": ("GET", "/api/booking/ops/demo-shop-login"),
-            "spa-login": ("GET", "/api/booking/ops/demo-spa-login")}.get(cmd)
+            "spa-login": ("GET", "/api/booking/ops/demo-spa-login"), "prewarm": ("POST", "/api/booking/ops/demo/prewarm")}.get(cmd)
     if path is None:
         sys.exit(__doc__)
     secs, out = call(*path)

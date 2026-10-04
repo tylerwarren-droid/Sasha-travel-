@@ -93,6 +93,13 @@ def status() -> dict:
             "emails_per_day": email_cap(), "emails_per_account_per_day": account_email_cap()}
 
 
+def read_reuse_hours() -> float:
+    try:
+        return float(os.getenv("SASHA_READ_REUSE_H", "") or 6)
+    except ValueError:
+        return 6.0
+
+
 def _read_view(row: dict, read: Optional[dict] = None) -> dict:
     """`read`: the read with its listing re-read (places_terms.hydrate_read) — shown, never stored."""
     read = read if read is not None else row["read"]
@@ -120,6 +127,15 @@ async def read_venue(request: Request):
     if any(k in body for k in ("phone", "number", "phone_number", "email", "to")):
         return _refuse(422, "contact_from_request", "a venue's contact details are READ from what it publishes, never taken from the request")
     now = NOW()
+    # Sasha 140 · this account read this listing's site recently: reuse OUR read (the venue's own site's facts), with the
+    # listing's facts re-read from Google now (places_terms) — a read is seconds of fetching; a reuse is one listing call
+    if body.get("place_id") and hasattr(LADDER_STORE, "recent_read") and read_reuse_hours() > 0:
+        try:
+            row = await LADDER_STORE.recent_read(account_for(request), str(body["place_id"]), now - timedelta(hours=read_reuse_hours()))
+        except StorageUnavailable:
+            row = None
+        if row:
+            return _read_view(row, await PT.hydrate_read(HTTP, row["read"], now))
     try:
         read = await V.read_venue(HTTP, name=body.get("name"), city=body.get("city"), country=body.get("country"),
                                   website=body.get("website") or None, now=now, resolve=RESOLVE,

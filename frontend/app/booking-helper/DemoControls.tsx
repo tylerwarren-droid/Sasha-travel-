@@ -34,6 +34,7 @@ export function DemoControls() {
       <h2 className="font-semibold">Investor demo</h2>
       <div className="flex flex-wrap gap-2">
         <GatedButton label="Reset the demo" onClick={() => { run('/api/booking/ops/demo/reset', 'Reset') }} needs={needs} />
+        <GatedButton label="Pre-warm (night before, ≈1 min)" onClick={() => { run('/api/booking/ops/demo/prewarm', 'Pre-warm') }} needs={needs} />
         <GatedButton label="E · Send “time to leave” now" onClick={() => { run('/api/booking/ops/demo/leave-now', 'Time to leave') }} needs={needs} />
         <GatedButton label="G · Gmail find (≈1 min)" onClick={() => { run('/api/booking/ops/demo/gmail-seed', 'Gmail find') }} needs={needs} />
         <GatedButton label="F · Demo shop login" onClick={() => { showLogin('/api/booking/ops/demo-shop-login', 'Kanoe Demo Market') }} needs={needs} />

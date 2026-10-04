@@ -227,6 +227,12 @@ class MemoryLadderStore(MemoryLinks):
         r = self.reads.get(read_id)
         return dict(r) if r and r["account_id"] == account_id else None
 
+    async def recent_read(self, account_id: str, place_id: str, since) -> Optional[dict]:
+        """Sasha 140 · this account's newest read of this listing since `since` (our own read of the venue's site)."""
+        rows = [r for r in self.reads.values() if r["account_id"] == account_id and (r.get("query") or {}).get("place_id") == place_id
+                and r["created_at"] >= since]
+        return dict(max(rows, key=lambda r: r["created_at"])) if rows else None
+
     async def put_email(self, row: dict, trip_id: Optional[str]) -> str:
         if trip_id is not None and self.trips.get(trip_id, {}).get("owner_id") != row["account_id"]:
             raise UnknownTrip(trip_id)
@@ -348,6 +354,11 @@ class PostgresLadderStore(PostgresLinks):
         await self._run(lambda c: c.execute(
             "insert into venue_reads (read_id, account_id, query, venue_name, country, read, created_at) values ($1,$2,$3,$4,$5,$6,$7)",
             uuid.UUID(row["read_id"]), uuid.UUID(row["account_id"]), row["query"], row["venue_name"], row["country"], row["read"], row["created_at"]))
+
+    async def recent_read(self, account_id, place_id, since):
+        return _row(await self._run(lambda c: c.fetchrow(
+            "select * from venue_reads where account_id = $1 and query->>'place_id' = $2 and created_at >= $3 order by created_at desc limit 1",
+            uuid.UUID(account_id), place_id, since)))
 
     async def get_read(self, account_id, read_id):
         rid = _uuid_or_none(read_id)

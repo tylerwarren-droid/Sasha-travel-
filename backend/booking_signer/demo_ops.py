@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import logging
 import os
 import uuid
@@ -112,6 +113,51 @@ async def gmail_seed(request: Request):
             return {"ok": True, "to": to, "reference": ref, "offered": hit.get("offered_sentence")}
     return {"ok": True, "to": to, "reference": ref, "offered": None,
             "say": "sent; Gmail hadn't filed it within 30 seconds — press 'Check my email now' in You"}
+
+
+#: Sasha 140 · the demo's queries, warmed the night before: the venues' own photos (cached) and the founder's venue reads
+#: (reused for 6 h). Google's results themselves are NOT cached — its terms allow only place IDs — so each search still asks
+#: Google (≈1 s); everything slow after it is warm.
+DEMO_QUERIES = [("luxury dinner", "Chamberí, Madrid", "ES"), ("Japanese", "Salamanca, Madrid", "ES"), ("dinner", "Madrid", "ES"),
+                ("spa", "Madrid", "ES"), ("tattoo studio", "Madrid", "ES"), ("hotel", "Madrid", "ES"),
+                ("dinner", "Hoi An", "VN"), ("hotel", "Hoi An", "VN"), ("spa", "Hoi An", "VN"), ("tattoo studio", "Hoi An", "VN"),
+                ("dinner", "Hanoi", "VN"), ("hotel", "Hanoi", "VN"), ("spa", "Hanoi", "VN"), ("tattoo studio", "Hanoi", "VN")]
+
+
+@router.post("/prewarm")
+async def prewarm(request: Request):
+    from .ops import founder_only
+    from . import guest_whatsapp as GW
+    no = founder_only(request)
+    if no:
+        return no
+    from .account import account_for
+    account = account_for(request)
+    t0 = time.time()
+
+    async def one(what, where, country):
+        s, f = await GW.api(account, "POST", "/api/booking/venues/find", {"what": what, "where": where, "country": country})
+        if s != 200:
+            return {"q": f"{what} in {where}", "error": f.get("rule") or s}
+        by = {c["place_id"]: c for c in f.get("candidates") or []}
+        order = [p for p in ((f.get("ranking") or {}).get("orders") or {}).get("rated") or list(by) if p in by and p != "sasha-test-venue"]
+        top = [by[p] for p in order[:3]]
+        photos = await GW._photos(account, what, top)
+        reads = await asyncio.gather(*(GW.api(account, "POST", "/api/booking/venues/read",
+                                               {"name": c.get("name"), "city": where, "country": country, "place_id": c["place_id"],
+                                                "asked_for": what}) for c in top))
+        return {"q": f"{what} in {where}", "cards": len(top), "photos": len(photos), "reads": sum(1 for s2, _ in reads if s2 == 200)}
+    out = []
+    for i in range(0, len(DEMO_QUERIES), 4):   # four at a time: quick, and gentle on the venues' sites
+        out += await asyncio.gather(*(one(*q) for q in DEMO_QUERIES[i:i + 4]))
+    return {"ok": True, "seconds": round(time.time() - t0, 1), "queries": out,
+            "say": f"Warm: {len(out)} demo searches — {sum(o.get('photos', 0) for o in out)} photos cached, {sum(o.get('reads', 0) for o in out)} "
+                   f"venues read (reused for {GW_reuse_hours()} h). Don't redeploy before the demo: the photo cache is in the server's memory."}
+
+
+def GW_reuse_hours():
+    from .ladder_routes import read_reuse_hours
+    return int(read_reuse_hours())
 
 
 @router.post("/reset")

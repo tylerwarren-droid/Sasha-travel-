@@ -28,7 +28,8 @@ MODE_IDLE = timedelta(hours=6)
 _CAMPUS = re.compile(r"^\s*(campus\s*me|campusme|campus)\b", re.I)
 _RELOC = re.compile(r"^\s*(relocation|relocate|relocating|reloc|ex-?01|residencia)\b", re.I)
 _HEALTH = re.compile(r"^\s*(salud|health|sanidad|m[eé]dico\s+en\s+madrid|espa[nñ]a\s*me|espa[nñ]ame|espa[nñ]a)\b", re.I)
-_DILIGENCE = re.compile(r"^\s*(applied\s+diligence|diligence|ad)\b", re.I)   # CR 15 · the AD preview mode
+_DILIGENCE = re.compile(r"^\s*(applied\s+diligence|diligence|ad)(?![\w'’-])", re.I)   # CR 15 · AD preview; never "add", "Ad-hoc"
+_AD_SHORT = re.compile(r"^\s*ad(?![\w'’-])", re.I)
 _ESPANA = re.compile(r"^\s*(espa[nñ]a\s*me|espa[nñ]ame|espa[nñ]a)\b", re.I)   # CR 15 · EspañaMe: the health demo + concepts
 _EXIT = re.compile(r"^\s*(exit|sasha|back|back to sasha|quit|salir)\s*[.!]?\s*$", re.I)
 
@@ -151,8 +152,14 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
     for prod, prefixes in PREFIX.items():
         if payload.startswith(prefixes):
             target = prod
+    sashas_question = bool(pend) and pend.get("kind") != "product"
     for prod, rx in (("campus", _CAMPUS), ("relocation", _RELOC), ("health", _HEALTH), ("diligence", _DILIGENCE)):
         if not target and rx.match(body):
+            if prod == "diligence" and _AD_SHORT.match(body):
+                from . import diligence as DG
+                rest = _AD_SHORT.sub("", body, count=1).strip(" :,")
+                if sashas_question or (rest and not DG.is_ask(rest)):
+                    continue                                     # bare "ad": alone or "ad check …" only; never over Sasha's question
             target, entering = prod, True
     if asked_last and _EXIT.match(body) and not payload:
         from . import store as ST

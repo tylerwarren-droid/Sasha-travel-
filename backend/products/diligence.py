@@ -204,7 +204,7 @@ async def lookup(country: str, name: Optional[str], number: Optional[str]) -> st
 
 async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> Optional[bool]:
     pend, out = ctx["st"]["pending"], ctx["out"]
-    t = re.sub(r"(?i)^\s*(applied\s+diligence|diligence|ad)\b[\s:,-]*", "", body or "").strip()   # "ad check …": the mode word off
+    t = re.sub(r"(?i)^\s*(applied\s+diligence|diligence|ad)(?![\w'’-])[\s:,]*", "", body or "").strip()   # "ad check …": the mode word off
     if entering and not t:
         pend["step"] = "ask"
         out.text(INTRO)

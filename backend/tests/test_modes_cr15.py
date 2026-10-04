@@ -181,3 +181,23 @@ class V2Shape(Base):
             self.answer = (200, {**V2, "status": st, "entity": None})
             self.say("ad check Foo in France")
             self.assertIn(words, self.bodies()[-1], st)
+
+
+class AdIsOnlyAWholeWord(Base):
+    def test_add_address_adults_adhoc_are_never_the_mode(self):
+        from products import whatsapp as PW
+        for t in ("add it to my calendar", "address is Calle Mayor 1", "adults 2", "Ad-hoc dinner for 4", "Ad hoc meeting", "AD'S"):
+            if t == "Ad hoc meeting":
+                continue
+            self.assertIsNone(PW._DILIGENCE.match(t), t)
+        self.say("Ad hoc meeting tomorrow with the team")                  # "ad" as a word, but not a lookup: Sasha's
+        self.assertNotIn("Applied Diligence", self.said())
+
+    def test_sashas_open_question_wins_over_a_bare_ad(self):
+        self.say("dinner for 2 in Chamberí on Saturday at 21:00")             # Sasha's own pending (cards)
+        pend = run(GW.STORE.get_state(GW.wa_key(TG.GUEST)))["pending"]
+        self.assertEqual(pend["kind"], "cards")
+        self.say("ad check TotalEnergies in France")
+        self.assertEqual(self.calls, [])                                     # not the AD mode while she asks
+        self.say("diligence")                                                # the full word still switches, as every mode word does
+        self.assertIn("Applied Diligence — PREVIEW 🔎", self.bodies()[-1])

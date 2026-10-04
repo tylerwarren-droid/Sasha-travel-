@@ -1407,6 +1407,24 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             out.text(str(j.get("say")) if status == 200 else f"Not asked — {refusal_words(j, status)}.")
             return True
         return False
+    if kind == "engine_check":   # Sasha 139 · the founder checks each hotel engine link: "filled" / "not filled" (+ "wrong page")
+        m = re.match(r"^\s*(?:(?P<n>[1-9])\s*[:.)-]?\s*)?(?P<a>not\s+filled|filled|wrong(?:\s+page)?|right(?:\s+page)?)\b", body or "", re.I)
+        if not m:
+            return False
+        todo = [h for h in pend["hotels"] if str(h["n"]) not in pend.get("answers", {})]   # str keys: the state is stored as JSON
+        h = next((x for x in pend["hotels"] if m["n"] and x["n"] == int(m["n"])), todo[0] if todo else None)
+        if h is None:
+            st["pending"] = None
+            return False
+        ans = re.sub(r"\s+", " ", m["a"].lower())
+        pend.setdefault("answers", {})[str(h["n"])] = {"answer": ans, "said": body, "at": now.isoformat()}
+        left = len([x for x in pend["hotels"] if str(x["n"]) not in pend["answers"]])
+        out.text(f"Noted — {h['name']} ({h['engine']}): {ans}." + (f" {left} to go." if left else " That's all three — thank you."))
+        st["pending"] = pend if left else {**pend, "kind": "engine_check_done"}
+        log.info("[guest_whatsapp] engine check: %s %s → %s", h["name"], h["engine"], ans)
+        return True
+    if kind == "engine_check_done":
+        return False
     if kind == "hotel_choice":   # Sasha 135 · TEST booking, or the real request to the hotel
         st["pending"] = None
         if payload.startswith("test:") or re.search(r"\btest\b", body or "", re.I):

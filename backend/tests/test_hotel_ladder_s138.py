@@ -106,3 +106,22 @@ class OnWhatsApp(TG.Base):
         self.say("a hotel in Madrid from 20 to 22 October for 2")
         d = (TG.run(GW.STORE.get_state(GW.wa_key(TG.GUEST))).get("pending") or {}).get("draft") or {}
         self.assertEqual(d["what"]["activity_venue_lang"], "una habitación para 2 noches (salida el 2026-10-22)")
+
+
+class EngineCheck(TG.Base):
+    """Sasha 139 · the founder's replies per hotel link are recorded, not read as a new request."""
+
+    def test_answers_are_recorded_in_order_or_by_number(self):
+        self.link()
+        hotels = [{"n": 1, "name": "UMusic", "engine": "Neobookings"}, {"n": 2, "name": "The Hat", "engine": "Mews"},
+                  {"n": 3, "name": "The Signature", "engine": "D-Edge"}]
+        TG.run(GW.STORE.put_state(GW.wa_key(TG.GUEST), {"history": [], "pending": {"kind": "engine_check", "at": TG.NOW.isoformat(),
+                                                                                    "hotels": hotels}, "last_inbound_at": TG.NOW, "link_tries": []}))
+        self.say("not filled")
+        self.assertEqual(self.bodies()[-1], "Noted — UMusic (Neobookings): not filled. 2 to go.")
+        self.say("3 filled")
+        self.say("not filled")
+        self.assertEqual(self.bodies()[-1], "Noted — The Hat (Mews): not filled. That's all three — thank you.")
+        p = TG.run(GW.STORE.get_state(GW.wa_key(TG.GUEST)))["pending"]
+        self.assertEqual(p["kind"], "engine_check_done")
+        self.assertEqual({k: v["answer"] for k, v in p["answers"].items()}, {"1": "not filled", "3": "filled", "2": "not filled"})

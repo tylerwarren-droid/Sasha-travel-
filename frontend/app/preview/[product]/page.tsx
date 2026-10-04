@@ -25,7 +25,7 @@ export default async function Page({ params }: { params: Promise<{ product: stri
   return (
     <>
       <p style={{ margin: 0, padding: '8px 16px', background: '#1d1d1d', color: '#fff', fontSize: 13, textAlign: 'center' }}>
-        PREVIEW — not linked from the site yet. Copy: EU 150; every line carries its mark.
+        PREVIEW — the product tabs before they move to their own pages. Every line carries its mark; TEST bookings are TEST.
       </p>
       <ProductTab product={k} />
     </>

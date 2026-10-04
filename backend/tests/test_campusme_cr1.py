@@ -175,9 +175,14 @@ class OnWhatsApp(Fixtures):
         VK.reset()
         self.saved_v = VC.STORE
         VC.STORE = MemoryVaultStore()
+        # ONE clock for the turn and the vault: the vault judges a yes's age by VC.NOW; left on the real clock, the frozen
+        # test clock (2 Oct 12:00) made every yes "more than 15 minutes old" once real time passed it (4 Oct 2026)
+        self.saved_vnow = VC.NOW
+        VC.NOW = lambda: self.now
         self.link()
 
     def tearDown(self):
+        VC.NOW = self.saved_vnow
         VC.STORE = self.saved_v
         self.venv.stop()
         super().tearDown()

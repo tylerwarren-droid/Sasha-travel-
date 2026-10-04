@@ -1,7 +1,8 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from app.services.deepgram_service import transcribe_audio
 from app.services.conductor import conduct
+from app.services.chat_account import chat_account, signed_in  # Sasha 143
 import httpx
 import os
 import json
@@ -84,6 +85,7 @@ async def text_to_speech(text: str) -> bytes:
 
 @router.post("/voice/conductor")
 async def voice_conductor(
+    request: Request,
     audio: UploadFile = File(...),
     conversation_history: str = Form(default="[]"),
     session_id: str = Form(default="")
@@ -119,7 +121,9 @@ async def voice_conductor(
         except:
             history = []
 
-        result = await conduct(transcript, history)
+        # Sasha 143 · WHO, as the chat: a verified guest, the founder through the site's pass-through, else the PUBLIC demo
+        account = await chat_account(request)
+        result = await conduct(transcript, history, user_id=account, signed_in=signed_in(account))
         response_text = result["response"]
         intents = result.get("intents", [])
         photos = result.get("photos", [])

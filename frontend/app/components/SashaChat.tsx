@@ -189,7 +189,8 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
   useEffect(() => { setOpenDays(new Set([1])) }, [itineraryKey])
   // Actionable booking surfaces for the latest turn.
   const [bookingLinks, setBookingLinks] = useState<{ label: string; url: string; type: string }[]>([])
-  const [hotels, setHotels] = useState<{ name: string; stars: number; price_from: number; blurb: string; city: string; book_url: string; rating?: number; reviews?: number; tag?: string; offer_id?: string; amount_usd?: number; nights?: number }[]>([])
+  const [hotels, setHotels] = useState<{ name: string; stars?: number; price_from?: number; blurb?: string; city: string; book_url: string; rating?: number; reviews?: number; tag?: string; offer_id?: string; amount_usd?: number; nights?: number;
+    source?: 'google'; address?: string; rating_count?: number; checkin?: string; party?: number }[]>([])   // Sasha 143 · a Google-found stay: no price, said so
   // Typed booking cards (flights, airport transfers, activities, restaurants) surfaced this
   // turn — real options from live web search. Hotel/flight/cab options carry a server-priced
   // `offer_id` (+ amount_usd) so they can be booked & paid through Stripe like the whole trip;
@@ -700,7 +701,8 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
             </>
           ) : null
         ))}
-        {messages.map((msg, i) => (
+        {/* Sasha 143 · a product tab's opening turn is an empty user line in the server's history: never a bubble (the index is kept for the photos) */}
+        {messages.map((msg, i) => msg.role === 'user' && !String(msg.content ?? '').trim() ? null : (
           <div key={i} ref={i === messages.length - 1 ? lastMsgRef : undefined} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`} style={{ flex: '0 0 auto' }}>
             {/* Compact transcript (client feedback 2026-08-11): the conversation stays
                 readable but cedes space to the photos/cards below each message. */}
@@ -828,7 +830,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
                   <span className="lw-ci purple">🏨</span>
                   <div className="lw-meta">
                     <div className="lw-k">Recommended stays</div>
-                    <div className="lw-h">{hotelsDest ? `Hand-picked for ${hotelsDest}` : 'Hand-picked for you'}</div>
+                    <div className="lw-h">{hotels.some(h => h.source === 'google') ? `Found on Google Maps${hotelsDest ? ` in ${hotelsDest}` : ''}` : hotelsDest ? `Hand-picked for ${hotelsDest}` : 'Hand-picked for you'}</div>
                   </div>
                 </div>
                 <div className="lw-cardBody">
@@ -837,11 +839,16 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
                       <span className="logo">🏨</span>
                       <div className="od">
                         <div className="o1">{h.name}</div>
-                        <div className="o2">{'★'.repeat(h.stars)} · from ${h.price_from}/night{h.rating ? ` · ${h.rating}/10` : (h.city ? ` · ${h.city}` : '')}</div>
+                        {h.source === 'google' ? (
+                          /* Sasha 143 · what its Google listing says — no price is shown, because none is known */
+                          <div className="o2">{h.rating ? `★ ${h.rating}${h.rating_count ? ` (${h.rating_count.toLocaleString()})` : ''} on Google · ` : ''}{h.address || h.city}</div>
+                        ) : (
+                          <div className="o2">{'★'.repeat(h.stars ?? 0)} · from ${h.price_from}/night{h.rating ? ` · ${h.rating}/10` : (h.city ? ` · ${h.city}` : '')}</div>
+                        )}
                         {h.tag && <span className="tag">{h.tag}</span>}
                       </div>
                       {/* Sasha 135 · Reserve = a TEST booking (no hotel contacted) until a real hotel provider is on */}
-                      <HotelBookTest hotel={h.name} city={h.city} nights={h.nights} />
+                      <HotelBookTest hotel={h.name} city={h.city} nights={h.nights} checkin={h.checkin} party={h.party} />
                       {h.offer_id && (h.amount_usd ?? 0) > 0 ? (
                         /* the trip-plan path (payments.py /reserve): saves it to the trip — no hotel contacted, said so after */
                         <button className="viewlink" onClick={() => onBookItem?.({ offer_id: h.offer_id!, label: `${h.nights ?? 1} night${(h.nights ?? 1) !== 1 ? 's' : ''} · ${h.name}`, amount_usd: h.amount_usd!, kind: 'hotel', name: h.name })}>

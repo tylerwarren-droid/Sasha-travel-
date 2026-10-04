@@ -1779,6 +1779,19 @@ async def conduct(
     _itinerary = await web_turn(user_message, user_id, conversation_history) if signed_in is not False else None   # Sasha 142 · not the public demo's
     if _itinerary is not None:
         return _itinerary
+    # Sasha 143 · a hotel stay with a place and dates: real hotels from Google, as on WhatsApp (booking_signer/hotel_web.py) —
+    # the web's curated list has no Madrid, and the general chat either failed or promised cards that never came
+    try:
+        from datetime import datetime as _dt, timezone as _tz  # noqa: E402
+        from booking_signer.hotel_web import web_turn as _hotel_web  # noqa: E402
+        _stay = await _hotel_web(user_message, user_id, _dt.now(_tz.utc))
+    except Exception as e:   # never a silent failure, never a stopped chat
+        print(f"[Conductor] hotel stay failed: {type(e).__name__}: {e}")
+        _stay = None
+    if _stay is not None:
+        _stay["messages"] = list(conversation_history) + [{"role": "user", "content": user_message},
+                                                          {"role": "assistant", "content": _stay["response"]}]
+        return _stay
     # CR 13/16 · the products on the web (backend/products/web.py, CR's — the same router as WhatsApp, the trip plan included):
     # its words first; a hand-off sentence is answered by Sasha's own flow (her read-back, one yes, TEST labels) under them.
     # Wired here by the Sasha tab.

@@ -13,11 +13,11 @@ type Phase = { k: 'idle' } | { k: 'form' } | { k: 'readback'; lines: string[]; s
 
 const inAWeek = () => new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10)
 
-export function HotelBookTest({ hotel, city, nights: n0 }: { hotel: string; city?: string; nights?: number }) {
+export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 }: { hotel: string; city?: string; nights?: number; checkin?: string; party?: number }) {
   const [p, setP] = useState<Phase>({ k: 'idle' })
-  const [checkin, setCheckin] = useState(inAWeek())
+  const [checkin, setCheckin] = useState(c0 && /^\d{4}-\d{2}-\d{2}$/.test(c0) ? c0 : inAWeek())   // Sasha 143 · the stay asked for
   const [nights, setNights] = useState(n0 && n0 > 0 ? n0 : 2)
-  const [party, setParty] = useState(2)
+  const [party, setParty] = useState(p0 && p0 > 0 ? p0 : 2)
   const details = () => ({ hotel, city: city || '', checkin, nights, party })
   async function prepare() {
     const r = await bookingReq('/api/booking/travel/hotel/prepare', details())

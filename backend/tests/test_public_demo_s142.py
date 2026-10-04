@@ -87,5 +87,52 @@ class ThePublicDemoAsksAboutBookings(unittest.TestCase):
         self.assertTrue(all(x is False for x in products))  # the products are told: not signed in (they refuse)
 
 
+class TheVoicePage(unittest.TestCase):
+    """Sasha 143 · /voice/conductor acts for the same account the chat would: the founder through the site's pass-through,
+    the public demo for a visitor — it used to call conduct() with no account at all."""
+
+    def setUp(self):
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        from fastapi.testclient import TestClient
+        from app.main import app
+        self.env = mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-right", "FOUNDER_ACCOUNT_ID": "", "CONDUCTOR_API_SECRET": ""})
+        self.env.start()
+        self.c = TestClient(app)
+
+    def tearDown(self):
+        self.env.stop()
+
+    def turn(self, headers):
+        seen = {}
+
+        async def fake_conduct(transcript, history, **kw):
+            seen.update(kw)
+            return {"response": "ok", "intents": [], "photos": []}
+
+        async def fake_stt(audio, mime):
+            return {"transcript": "what is my itinerary"}
+
+        async def fake_tts(text):
+            return b""
+        with mock.patch("app.api.voice_conductor.conduct", fake_conduct), \
+             mock.patch("app.api.voice_conductor.transcribe_audio", fake_stt), \
+             mock.patch("app.api.voice_conductor.text_to_speech", fake_tts, create=True):
+            r = self.c.post("/api/voice/conductor", files={"audio": ("r.webm", b"x", "audio/webm")}, data={"conversation_history": "[]"}, headers=headers)
+        self.assertEqual(r.status_code, 200, r.text)
+        return seen
+
+    def test_a_visitor_is_the_public_demo(self):
+        seen = self.turn({})
+        self.assertEqual((seen.get("user_id"), seen.get("signed_in")), (CA.PUBLIC_DEMO_ID, False))
+
+    def test_the_founder_through_the_pass_through_is_himself(self):
+        seen = self.turn({"x-sasha-session": "founder", "x-sasha-booking-key": "k-right"})
+        self.assertEqual((seen.get("user_id"), seen.get("signed_in")), (identity.founder_account(), True))
+
+    def test_the_header_without_the_key_is_nobody(self):
+        seen = self.turn({"x-sasha-session": "founder"})
+        self.assertEqual(seen.get("user_id"), CA.PUBLIC_DEMO_ID)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -44,4 +44,4 @@ export const guestAuth = (): Record<string, string> => (token ? { Authorization:
 /** Sasha 142 · where an account-scoped call goes: the founder's session through /api/sasha/… (his account); everyone
  *  else straight to the backend, as before (a guest with their token, a visitor as the public demo). */
 export const accountUrl = (path: string): string =>
-  founder ? `/api/sasha/${path.replace(/^\/?api\//, '')}` : apiUrl(path)
+  founder ? `/api/sasha/${path.replace(/^\//, '').replace(/^api\//, '')}` : apiUrl(path)

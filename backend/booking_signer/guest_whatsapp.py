@@ -761,28 +761,37 @@ _DATES = re.compile(r"\bfrom\s+(?P<a>.+?)\s+(?:to|until|till)\s+(?P<b>[^,.?!]+)"
 _NIGHTS = re.compile(r"\b(\d{1,2})\s+nights?\b", re.I)
 
 
-async def _hotels(ctx: dict, body: str) -> None:
-    """Duffel Stays isn't enabled on this account and RateHawk has no credentials, so a hotel is NOT booked instantly: it is
-    found (Google, with its own photo), and the room is requested from the hotel itself — its form, page or email — said so."""
-    out = ctx["out"]
+def stay_of(body: str, now: datetime) -> Optional[dict]:
+    """A hotel stay in words ("a hotel in Hoi An from 14 to 16 November for 2") → {where, find, a, nights, party}, or None.
+    Shared by WhatsApp and the web (Sasha 143: hotel_web.web_turn), so both read a stay the same way."""
     m = re.search(r"\bin\s+(?P<w>[A-ZÁÉÍÓÚ][\wáéíóúñ ,'-]*?)(?=\s+(?:from|for|on|next|this)\b|[.?!]|$)", body or "")
     dm, nm = _DATES.search(body or ""), _NIGHTS.search(body or "")
-    a = HO.plain_date(dm["a"], ctx["now"]) if dm else HO.plain_date(body or "", ctx["now"])
-    b = HO.plain_date(dm["b"], ctx["now"]) if dm else None
+    a = HO.plain_date(dm["a"], now) if dm else HO.plain_date(body or "", now)
+    b = HO.plain_date(dm["b"], now) if dm else None
     if dm and a and not b and re.fullmatch(r"\s*\d{1,2}\s*", dm["a"] or ""):   # "from 14 to 16 November": the month is said once
-        b = HO.plain_date(dm["b"], ctx["now"])
+        b = HO.plain_date(dm["b"], now)
     if dm and not a and b and re.fullmatch(r"\s*\d{1,2}(?:st|nd|rd|th)?\s*", dm["a"]):
         a = b[:8] + "%02d" % int(re.sub(r"\D", "", dm["a"]))
     nights = (date.fromisoformat(b) - date.fromisoformat(a)).days if a and b else (int(nm[1]) if nm else 0)
     if not m or not a or not 1 <= nights <= 30:
-        out.text("Tell me where and the dates, e.g. “a hotel in Hoi An from 14 to 16 November for 2”.")
-        return
-    f = HO.find_request(f"hotel in {m['w'].strip()}", ctx["now"]) or {"what": "hotel", "where": m["w"].strip()}
+        return None
+    f = HO.find_request(f"hotel in {m['w'].strip()}", now) or {"what": "hotel", "where": m["w"].strip()}
     if not f.get("country"):   # Sasha 138 · "Madrid" is Spain: the country decides the call's language and the hotel's time zone
         w = m["w"].strip()
         cn = re.fullmatch(r"(.+?),\s*([^,]+)", w)
         f["country"] = (HO.COUNTRY_NAMES.get(cn[2].strip().lower()) if cn else None) or (HO.known_place(w) or (None, None, None))[2]
-    party = HO.plain_party(body or "") or 2
+    return {"where": m["w"].strip(), "find": f, "a": a, "nights": nights, "party": HO.plain_party(body or "") or 2}
+
+
+async def _hotels(ctx: dict, body: str) -> None:
+    """Duffel Stays isn't enabled on this account and RateHawk has no credentials, so a hotel is NOT booked instantly: it is
+    found (Google, with its own photo), and the room is requested from the hotel itself — its form, page or email — said so."""
+    out = ctx["out"]
+    stay = stay_of(body, ctx["now"])
+    if stay is None:
+        out.text("Tell me where and the dates, e.g. “a hotel in Hoi An from 14 to 16 November for 2”.")
+        return
+    m, f, a, nights, party = {"w": stay["where"]}, stay["find"], stay["a"], stay["nights"], stay["party"]
     out.text(f"Hotels for {nights} night{'s' if nights != 1 else ''} from {SN.day_words(a)}, {party} {'person' if party == 1 else 'people'}. "
              f"For the one you pick: a TEST booking (no hotel contacted), or a real request to the hotel.")
     ctx["no_test_card"] = True

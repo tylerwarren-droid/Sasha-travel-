@@ -13,7 +13,7 @@ import { COOKIE, valid } from '@/lib/founder-session'
  * ⛔ No founder session → 401, nothing forwarded (guests and visitors call the backend directly, as before). Only the
  * account-scoped chat routes below are forwarded; the booking routes have their own proxy.
  */
-const ROUTES = ['agents/conductor', 'agents/classify', 'trips', 'chats', 'payments/verify', 'payments/reserve', 'payments/create-checkout']
+const ROUTES = ['agents/conductor', 'agents/classify', 'voice/conductor', 'trips', 'chats', 'payments/verify', 'payments/reserve', 'payments/create-checkout']
 
 export const maxDuration = 60   // a conductor turn: the chat's own timeout is 60 s
 
@@ -35,10 +35,11 @@ async function pass(request: Request, ctx: { params: Promise<{ path: string[] }>
     return NextResponse.json({ ok: false, rule: 'path_refused', message: 'not a chat route' }, { status: 400 })
   }
   const url = `${API_URL}/api/${path.map(encodeURIComponent).join('/')}${new URL(request.url).search}`
-  const headers: Record<string, string> = { 'content-type': 'application/json', 'x-sasha-session': 'founder', 'x-sasha-booking-key': key }
+  // the body is passed as it came (JSON, or the voice page's multipart audio), with its own content type
+  const headers: Record<string, string> = { 'content-type': request.headers.get('content-type') ?? 'application/json', 'x-sasha-session': 'founder', 'x-sasha-booking-key': key }
   if (CLIENT_KEY) headers['X-Client-Key'] = CLIENT_KEY
   const init: RequestInit = { method: request.method, headers, cache: 'no-store' }
-  if (request.method !== 'GET') init.body = await request.text()
+  if (request.method !== 'GET') init.body = await request.arrayBuffer()
   let r: Response
   try {
     r = await fetch(url, init)

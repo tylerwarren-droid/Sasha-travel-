@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Mic, MicOff, Loader2 } from 'lucide-react'
 import VnFlag from '../components/VnFlag'
 import { API_URL } from '@/lib/api'
+import { accountUrl, guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // Sasha 143
 
 const DEMO_USER = {
   display_name: 'Alex',
@@ -78,8 +79,10 @@ export default function VoicePage() {
           formData.append('audio', audioBlob, 'recording.webm')
           formData.append('conversation_history', JSON.stringify(messages))
 
-          const res = await fetch(API_URL + '/voice/conductor', {
+          await refreshGuestAuth()   // Sasha 143 · the founder's own account through the pass-through; a guest's by their token
+          const res = await fetch(accountUrl('/api/voice/conductor'), {   // Sasha 143 · the backend mounts it under /api (/voice/… was a 404)
             method: 'POST',
+            headers: guestAuth(),
             body: formData
           })
           const data = await res.json()
@@ -227,9 +230,10 @@ export default function VoicePage() {
                   setTranscript(prompt)
                   setIsProcessing(true)
                   try {
-                    const res = await fetch(API_URL + '/api/agents/conductor', {
+                    await refreshGuestAuth()   // Sasha 143
+                    const res = await fetch(accountUrl('/api/agents/conductor'), {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: { 'Content-Type': 'application/json', ...guestAuth() },
                       body: JSON.stringify({ message: prompt, conversation_history: messages })
                     })
                     const data = await res.json()
@@ -237,7 +241,7 @@ export default function VoicePage() {
                     setMessages(data.conversation_history || [])
                     if (data.photos?.length > 0) { setPhotos(data.photos); setActivePhoto(0) }
                     // TTS for quick prompts
-                    const ttsRes = await fetch(API_URL + '/voice/tts', {
+                    const ttsRes = await fetch(API_URL + '/api/voice/tts', {   // Sasha 143 · under /api, as mounted
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ text: data.response })

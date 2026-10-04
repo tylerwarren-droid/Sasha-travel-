@@ -62,3 +62,11 @@ test('no personal email or phone number on the hub', () => {
     assert.doesNotMatch(read(f), /\+\d{2}[\s\d]{8,}/, f)
   }
 })
+
+test('Sasha 143 · the six-tab pages redirect to their hub tab', () => {
+  const cfg = read('next.config.ts')
+  for (const [from, to] of [['/sasha', 'sasha'], ['/applied-diligence', 'applied-diligence'], ['/campusme', 'campusme'], ['/relocation', 'relocateme'], ['/spain-services', 'espaname']]) {
+    assert.match(cfg, new RegExp(`source: '${from}', destination: '/agapi#${to}'`), from)
+    assert.match(content, new RegExp(`key: '${to}'`), to)   // the anchor is a real tab
+  }
+})

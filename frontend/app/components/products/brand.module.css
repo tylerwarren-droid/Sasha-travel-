@@ -13,8 +13,9 @@
 /* the chat's composer row (input · two prompt chips · send): with this tab's longer prompts the input was squeezed to a
    few characters even on a desktop — on these tabs the chips take their own row; the input and send keep the first */
 .chatBody :global(.lw-composer .field) { flex-wrap: wrap; row-gap: 8px; }
-.chatBody :global(.lw-composer .field input) { flex: 1 1 0; min-width: 0; }
-.chatBody :global(.lw-composer .field .lw-chip) { order: 3; flex: 1 1 40%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chatBody :global(.lw-composer .field input) { flex: 1 1 50%; min-width: 0; }   /* half the row: no chip fits beside it */
+.chatBody :global(.lw-composer .field .lw-chip) { order: 3; flex: 1 1 calc(50% - 10px); min-width: 0; white-space: nowrap;
+                                                  overflow: hidden; text-overflow: ellipsis; }
 /* Sasha's chat is designed for a dark stage (light text, translucent controls): the tab gives it one, under the brand's bar */
 .chatWrap { border: 1px solid var(--brand-soft); border-radius: 12px; overflow: hidden; background: #15161d; height: 640px;
             display: flex; flex-direction: column; }

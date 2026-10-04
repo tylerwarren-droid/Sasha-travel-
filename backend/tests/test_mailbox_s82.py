@@ -147,7 +147,7 @@ class Sync(unittest.TestCase):
         self.model = mock.AsyncMock(return_value="confirmation")
         MB.MODEL_READER = self.model
 
-        async def upcoming(a):
+        async def upcoming(a, names=True):
             return self.rows
         self.p = (mock.patch.object(GW, "_upcoming", upcoming), mock.patch.object(VC, "use_connection", mock.AsyncMock(return_value="ya29")))
         for x in self.p:

@@ -437,7 +437,7 @@ async def sync(account: str) -> List[dict]:
         if e.rule == "connection_invalid_grant":
             await STORE.set_link(account, needs_reconnect_at=NOW())
         return []
-    rows = await GW._upcoming(account) if GW.STORE else []
+    rows = await GW._upcoming(account, names=False) if GW.STORE else []   # Sasha 143 · domains only: no listing re-read
     domains = [r.get("venue_domain") for r in rows if r.get("venue_domain")]
     q = build_query(domains)
     status, j = await GMAIL_HTTP("GET", f"{GMAIL}/messages", token, {"q": q, "maxResults": 50})

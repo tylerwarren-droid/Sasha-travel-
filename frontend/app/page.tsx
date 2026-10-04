@@ -1,14 +1,6 @@
-import type { Metadata } from 'next'
-import { TabPage } from './components/site/TabPage'
-import { agapi } from './(site)/content'
+import VietnamPage from './vietnam/page'
 
-// Sasha 123 · the new project.kanoe.ai (kanoe-site-scope.md §9, copy §11). The previous home page is /archive.
-export const metadata: Metadata = {
-  title: agapi.title,
-  description: agapi.description,
-  openGraph: { title: agapi.title, description: agapi.description, siteName: 'Kanoe', type: 'website', url: agapi.route },
-}
-
-export default function Page() {
-  return <TabPage tab={agapi} />
-}
+// Sasha 142 · the founder's structure (4 Oct 2026): project.kanoe.ai is the Sasha Vietnam site — the same page as
+// /vietnam, which keeps working (Stripe returns there). The new site (Sasha 123) is the hub at /agapi.
+// No metadata here: the root layout's own ("Sasha by Kanoe: AI concierge") is the Sasha site's.
+export default VietnamPage

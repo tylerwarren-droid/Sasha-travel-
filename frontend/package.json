@@ -7,7 +7,7 @@
     "prebuild": "node scripts/check-outcome-surfaces.mjs",
     "build": "next build",
     "start": "next start",
-    "test": "node --test scripts/site-tabs.test.mjs"
+    "test": "node --test scripts/site-tabs.test.mjs scripts/agapi-hub.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.26.0",

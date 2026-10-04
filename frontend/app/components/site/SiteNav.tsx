@@ -6,7 +6,7 @@ import s from './site.module.css'
 
 /** Sasha 123 · the new site's six tabs (kanoe-site-scope.md §9.3). The archive is NOT here — a test pins that. */
 export const SITE_TABS = [
-  { href: '/',                  label: 'AgAPI' },
+  { href: '/agapi',             label: 'AgAPI' },   // Sasha 142 · the root is the Sasha Vietnam site
   { href: '/sasha',             label: 'Sasha' },
   { href: '/applied-diligence', label: 'Applied Diligence' },
   { href: '/campusme',          label: 'CampusMe' },

@@ -12,7 +12,7 @@ const CONTENT = ['agapi', 'sasha', 'ad', 'campusme', 'relocation', 'spain'].map(
 test('1 · the menu has exactly the six tabs, and no archive page', () => {
   const nav = read('app/components/site/SiteNav.tsx')
   const hrefs = [...nav.matchAll(/href: '([^']+)'/g)].map((m) => m[1])
-  assert.deepEqual(hrefs, ['/', '/sasha', '/applied-diligence', '/campusme', '/relocation', '/spain-services'])
+  assert.deepEqual(hrefs, ['/agapi', '/sasha', '/applied-diligence', '/campusme', '/relocation', '/spain-services'])
   for (const gone of ['/archive', '/deck', '/tdm', '/data-strategy', '/walkthrough', '/demo']) assert.ok(!hrefs.includes(gone), gone)
 })
 

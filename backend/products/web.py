@@ -1,0 +1,81 @@
+"""CR 16 · the products on the WEB chat — the product tabs on project.kanoe.ai (RelocateMe, CampusMe, EspañaMe) embed
+Sasha's own web chat, opened in that product's mode. ONE router for both channels: this runs the very same
+products.whatsapp.product_turn the WhatsApp line does, keyed "web:<account>", so the products, their state, the trip
+plan's hand-off and the itinerary are the same — only the channel's words differ (buttons become quick replies).
+
+  web_turn(user_id, message, mode=None, payload=None) → None (not the products': Sasha's own web flow answers) |
+      {"agent": "products", "response": str, "quick_replies": [{"title", "payload"}], "media": [{"caption", "url"}],
+       "handoff": str|None}   — with a hand-off, Sasha's conduct() answers that sentence with her own flow, as on WhatsApp.
+
+Sasha's conduct() calls it (her wiring, marked "CR 16"); `mode` opens a product on the first turn of an embedded chat.
+"""
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+
+from . import store as ST
+
+log = logging.getLogger("products.web")
+OPEN = {"relocation": "relocation", "relocate": "relocation", "campus": "campus", "campusme": "campus",
+        "espana": "españa", "españa": "españa", "espaname": "españa"}
+
+
+async def _state(key: str) -> dict:
+    """The web line's equivalent of Sasha's WhatsApp state: which product asked last (its `pending`)."""
+    for r in await ST.STORE.conversations(key):
+        if r["product"] == "webstate":
+            return {"history": [], "pending": (r["state"].get("pending") or {}).get("pending")}
+    return {"history": [], "pending": None}
+
+
+async def _save(key: str, account: str, st: dict) -> None:
+    if st.get("pending"):
+        await ST.STORE.put_conversation(key, account, "webstate", {"pending": st["pending"], "for": st["pending"].get("product")})
+    else:
+        await ST.STORE.drop_conversation(key, "webstate")
+
+
+async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = None, payload: Optional[str] = None,
+                   now: Optional[datetime] = None) -> Optional[dict]:
+    if not user_id:
+        return None
+    from booking_signer import guest_whatsapp as GW
+    from . import whatsapp as PW
+    now = now or datetime.now(timezone.utc)
+    key = f"web:{user_id}"
+    body = (message or "").strip()
+    if mode and not body and not payload:
+        word = OPEN.get(mode.lower())
+        if not word:
+            return None
+        body = word                                    # the tab opens its product exactly as its word would
+    st = await _state(key)
+    p = {"Body": body, "ButtonPayload": (payload or "").strip()}
+    out, early = GW.Out(), []
+
+    async def _early(text: str) -> None:
+        early.append(text)
+    ch = {"wa_id_sha256": key, "account_id": user_id, "number_e164": None, "channel": "web"}
+    try:
+        handled = await PW.product_turn(ch, "web", p, st, out, now, early=_early)
+    except Exception as e:
+        log.error("[products.web] the product turn failed: %s: %s", type(e).__name__, e)
+        return {"agent": "products", "response": "Something went wrong on my side with that — nothing was done. Try again?",
+                "quick_replies": [], "media": [], "handoff": None}
+    await _save(key, user_id, st)
+    texts = list(early)
+    replies, media = [], []
+    for it in out.items:
+        if it[0] == "text":
+            texts.append(it[1])
+        elif it[0] == "media":
+            media.append({"caption": it[1], "url": it[2]})
+        elif it[0] == "ask":
+            texts.append(it[1])
+            replies = [{"title": t, "payload": pl} for t, pl in it[2]]   # the last question's buttons
+    handoff = p["Body"] if not handled and p["Body"] != body else None
+    if not handled and not handoff:
+        return None                                    # not the products' message: Sasha's own web flow answers it
+    return {"agent": "products", "response": "\n\n".join(texts), "quick_replies": replies, "media": media, "handoff": handoff}

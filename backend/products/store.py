@@ -21,7 +21,7 @@ NOW = lambda: datetime.now(timezone.utc)
 
 
 PRODUCTS = ("campus", "relocation", "health")   # = 028's CHECK on product_cases.product (the memory store enforces it too)
-SKILLS = ("trip", "diligence")                              # CR 13 · skills without their own product value: a conversation row is
+SKILLS = ("trip", "diligence", "webstate")   # webstate: CR 16 · the web line's "which product asked last"                              # CR 13 · skills without their own product value: a conversation row is
                                                 # stored under the product it serves, marked state.skill — no migration
 
 

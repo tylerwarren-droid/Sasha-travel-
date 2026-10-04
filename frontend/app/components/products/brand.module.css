@@ -32,3 +32,12 @@
   .chatWrap { height: 78vh; border-radius: 0; margin: 0 -16px; border-left: 0; border-right: 0; }
 
 }
+
+/* CR 17 · EspañaMe's six areas */
+.areas { display: grid; gap: 12px; margin: 0 0 24px; }
+@media (min-width: 760px) { .areas { grid-template-columns: 1fr 1fr; } }
+.area { border: 1px solid var(--brand-soft); border-radius: 10px; background: #fff; padding: 14px; font-size: 15px; line-height: 1.45; }
+.areaParts { margin: 8px 0 0; display: grid; grid-template-columns: 1fr; gap: 2px; }
+.areaParts dt { font-weight: 700; color: var(--brand-primary); font-size: 13px; margin-top: 6px; }
+.areaParts dd { margin: 0; }
+.areaNote { font-size: 13px; color: #5c6a74; margin: 8px 0 0; }

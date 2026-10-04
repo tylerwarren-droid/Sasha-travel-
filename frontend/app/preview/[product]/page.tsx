@@ -4,9 +4,8 @@ import ProductTab from '../../components/products/ProductTab'
 import { BRANDS, type ProductKey } from '../../components/products/brands'
 
 /**
- * CR 16 · an UNLINKED preview of the product tabs while the site hold (Sasha 124) applies — the founder's choice, 4 Oct
- * 2026. noindex, no nav link, labelled PREVIEW. When the hold lifts, the Sasha tab mounts <ProductTab/> on the existing
- * routes (/relocation, /campusme, /spain-services) and this route goes.
+ * CR 16 · the product pages: RelocateMe, CampusMe, EspañaMe — linked from the AgAPI hub (/agapi, Sasha 143: the hub
+ * supersedes the six-tab pages; /relocation, /campusme and /spain-services redirect to it). noindex, labelled PREVIEW.
  */
 const SLUG: Record<string, ProductKey> = { relocateme: 'relocation', campusme: 'campus', espaname: 'espana' }
 
@@ -25,7 +24,7 @@ export default async function Page({ params }: { params: Promise<{ product: stri
   return (
     <>
       <p style={{ margin: 0, padding: '8px 16px', background: '#1d1d1d', color: '#fff', fontSize: 13, textAlign: 'center' }}>
-        PREVIEW — the product tabs before they move to their own pages. Every line carries its mark; TEST bookings are TEST.
+        PREVIEW — this product’s page, linked from the AgAPI hub. Every line carries its mark; TEST bookings are TEST.
       </p>
       <ProductTab product={k} />
     </>

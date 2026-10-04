@@ -5,13 +5,14 @@ import { SiteShell } from '../site/SiteShell'
 import s from '../site/site.module.css'
 import { BRANDS, type ProductKey } from './brands'
 import ProductChat from './ProductChat'
+import EspanaAreas from './EspanaAreas'
 import b from './brand.module.css'
 
 /**
  * CR 16 · one product tab: EU 150's copy (docs/business/product-tabs-copy.md) — the badge on top where the tab is a
  * concept, the hero, three marked lines, the status line always shown in the tab's colours — and Sasha's own chat
- * opened in this product's mode. Built on the site's shell and marks (Sasha 123). The Sasha tab mounts it on the
- * existing route when the founder lifts the site hold (Sasha 124); until then only the unlinked /preview shows it.
+ * opened in this product's mode. Built on the site's shell and marks (Sasha 123). Served at /preview/<product>, the
+ * product pages the AgAPI hub links (Sasha 143).
  */
 export default function ProductTab({ product }: { product: ProductKey }) {
   const brand = BRANDS[product]
@@ -34,6 +35,7 @@ export default function ProductTab({ product }: { product: ProductKey }) {
           ))}
         </ul>
         <p className={b.status}><span className={b.statusLabel}>Status:</span> {brand.statusLine}</p>
+        {product === 'espana' && <EspanaAreas />}
         <ProductChat brand={brand} />
         <p className={s.legend}>✅ built and rehearsed · ○ concept: designed, not built. Hover a mark for its evidence. TEST
           bookings issue no ticket and charge nothing.</p>

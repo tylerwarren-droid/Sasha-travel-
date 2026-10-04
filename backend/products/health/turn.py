@@ -35,25 +35,34 @@ FICTIONAL = {"card": "EJEMPLO-0000-0000", "birth": "1985-03-14", "dni_nie": "X00
 
 
 # CR 15 · "españa" — EspañaMe: Spain's public services. Health is the working demo; the rest are CONCEPTS, labelled so.
-ES_MENU = ("EspañaMe 🇪🇸 — Spain's public processes, done with you. Pick one:\n"
-           "1. *Health* — a doctor: a private clinic, the public service (SERMAS), or new in Madrid. (working demo)\n"
-           "2. *Padrón* — registering at the town hall. (CONCEPT — not built yet)\n"
-           "3. *More* — Cl@ve and your digital certificate, social security and tax, the DGT, schools. (CONCEPTS — not built yet)")
-ES_BUTTONS = [("1. Health", "hx:es:health"), ("2. Padrón (concept)", "hx:es:padron"), ("3. More (concepts)", "hx:es:more")]
-# EU 153 (founder, 4 Oct): EspañaMe = Spain's public processes; phone line and utilities moved to RelocateMe
-MORE_CONCEPT = ("🏛 *Cl@ve and your digital certificate, social security and tax, the DGT, schools* — CONCEPTS, not built yet and "
-                "not yet studied: each will be read at its official source before anything is built. The rule stays the same: "
-                "I prepare everything; you sign in and press.")
-MOVED = "Phone line and utilities are now part of RelocateMe (a concept there) — say “relocate”."
+# CR 17 · EspañaMe = access to Spain's PUBLIC processes: six areas, only Salud live (health/espana.py holds each card)
+ES_MENU = ("EspañaMe 🇪🇸 — Spain's public processes, done with you. Reply with a number:\n"
+           "1. *Salud* — health card, family doctor, SERMAS (live)\n"
+           "2. *Padrón* — registering at the town hall (concept)\n"
+           "3. *Identity and access* — Cl@ve, your digital certificate (concept)\n"
+           "4. *Social security and tax* — your social-security number, Agencia Tributaria basics (concept)\n"
+           "5. *DGT* — exchanging a foreign driving licence (concept)\n"
+           "6. *Education* — a school place (concept)")
+ES_BUTTONS = [("1. Salud (live)", "hx:es:salud"), ("2. Padrón", "hx:es:padron"), ("3. Identity & access", "hx:es:identity")]
+ES_KEYS = {"1": "salud", "2": "padron", "3": "identity", "4": "social", "5": "dgt", "6": "education"}
+_ES_WORDS = [("salud", r"salud|health|doctor|m[eé]dico|sermas|tarjeta"), ("padron", r"padr[oó]n|empadron"),
+             ("identity", r"cl@?ve|certificad|digital certificate|identity|identidad"),
+             ("social", r"social security|seguridad social|tax|hacienda|agencia tributaria|nie|nif"),
+             ("dgt", r"dgt|driving|licen[cs]e|carn[eé]t|permiso de conduc"), ("education", r"school|colegio|educaci|escuela")]
+MOVED = ("Phone, internet, electricity and a bank account are part of RelocateMe now — “setting up your home” (a concept "
+         "there). Say “relocate”.")
 
 
-def padron_concept() -> str:
-    from . import sources as SRC
-    p = SRC.PADRON
-    return ("🏛 *Padrón* — CONCEPT, not built yet. What it would be, from the town hall's own page (read "
-            f"{SRC.READ_ON}): what to bring — {'; '.join(p['bring'])} — and its own appointment page, which you book "
-            f"yourself (I never hunt for appointments): {p['appointment_url']}\nThen a reminder to ask for your volante. "
-            "Today the padrón step is part of Health → New in Madrid, which works.")
+def es_pick(t: str, payload: str) -> str:
+    if payload.startswith("hx:es:"):
+        return payload[6:]
+    m = re.match(r"^\s*([1-6])\b", t)
+    if m:
+        return ES_KEYS[m.group(1)]
+    for key, rx in _ES_WORDS:
+        if re.search(rf"(?i)\b({rx})", t):
+            return key
+    return "moved" if re.search(r"(?i)\b(movistar|internet|phone|utilit|electric|bank)", t) else ""
 
 
 
@@ -118,26 +127,21 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         out.ask(ES_MENU, ES_BUTTONS)
         return
     if step == "es_menu" or payload.startswith("hx:es:"):
-        pick = payload[6:] if payload.startswith("hx:es:") else (
-            "health" if re.match(r"(?i)^\s*(1\b|health|salud|doctor|m[eé]dico)", t) else
-            "padron" if re.match(r"(?i)^\s*(2\b|padr[oó]n)", t) else
-            "more" if re.match(r"(?i)^\s*(3\b|more|cl@?ve|certificad|digital certificate|social security|seguridad social|tax|hacienda|dgt|driving|school|educaci)", t) else
-            "movistar" if re.match(r"(?i)^\s*(movistar|internet|phone|utilit)", t) else "")
-        if pick == "padron":
-            out.text(padron_concept())
-            out.ask("Anything else from the menu?", ES_BUTTONS)
-            pend["step"] = "es_menu"
-        elif pick == "more":
-            out.text(MORE_CONCEPT)
-            out.ask("Anything else from the menu?", ES_BUTTONS)
-            pend["step"] = "es_menu"
-        elif pick == "movistar":                    # an old button, or the words: it lives in RelocateMe now
-            out.text(MOVED)
-            out.ask("Anything else from the menu?", ES_BUTTONS)
-            pend["step"] = "es_menu"
-        elif pick == "health":
-            pend["step"] = "consent"
+        from . import espana as ES
+        pick = es_pick(t, payload)
+        cards = {a["key"]: a for a in ES.areas()}
+        if pick == "salud":
+            out.text(ES.card(cards["salud"]))
+            pend["step"] = "consent"                 # the live demo: consent first, as always
             out.ask(CONSENT[CONSENT_CURRENT], [("Yes, continue", "hx:consent:yes"), ("No", "hx:consent:no")])
+        elif pick in cards:
+            out.text(ES.card(cards[pick]))
+            out.ask("Another area? Reply 1–6.", ES_BUTTONS)
+            pend["step"] = "es_menu"
+        elif pick in ("moved", "movistar"):            # an old button, or the words: they live in RelocateMe now
+            out.text(MOVED)
+            out.ask(ES_MENU, ES_BUTTONS)
+            pend["step"] = "es_menu"
         else:
             out.ask(ES_MENU, ES_BUTTONS)
         return
@@ -505,7 +509,7 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     if step in ("consent", "call_confirm", "pub_vault_confirm"):
         return YS.is_yes(t) or bool(re.match(r"(?i)^\s*no\b", t))
     if step == "es_menu":
-        return bool(re.match(r"(?i)^\s*([123]\b|health|salud|doctor|m[eé]dico|padr[oó]n|more|cl@?ve|dgt|movistar|internet|phone)", t))
+        return bool(es_pick(t, ""))
     if step == "choose":
         return bool(re.match(r"^\s*[123]\b", t) or re.search(r"(?i)\bprivate|privad|public|sermas|p[uú]blic|new|nuev|tarjeta", t))
     if step == "when":

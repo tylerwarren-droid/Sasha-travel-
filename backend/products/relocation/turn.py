@@ -51,11 +51,13 @@ def _said(ctx) -> str:
 
 
 # EU 153 (founder, 4 Oct): phone line and utilities belong to RelocateMe — a CONCEPT, said as one, the file untouched
-UTILITIES = re.compile(r"(?i)\b(movistar|phone line|mobile line|internet at home|home internet|fibre|fiber|utilities|electricity|"
-                       r"gas and water|water bill)\b")
-UTILITIES_CONCEPT = ("📶 *Your phone line and utilities, set up before you arrive* — CONCEPT, not built yet, and no provider's pages "
-                     "have been read (Movistar or anyone else), so no plans or prices here. The idea: I read each provider's own "
-                     "offer page, show you what each one asks for, and prepare the sign-up for you to press.")
+UTILITIES = re.compile(r"(?i)\b(movistar|phone line|mobile line|internet|home internet|fibre|fiber|wifi|utilities|electricity|"
+                       r"gas and water|water bill|bank account|spanish bank|open (?:a )?bank|setting up (?:my|your|the) home)\b")
+# CR 17 · "setting up your home" (moved here from EspañaMe by the founder): a CONCEPT, said as one
+UTILITIES_CONCEPT = ("🏠 *Setting up your home* — your phone and internet (e.g. Movistar), electricity, and a Spanish bank account. "
+                     "CONCEPT, not built yet, and no provider's or bank's pages have been read, so no plans, prices or "
+                     "requirements here. The idea: I read each one's own pages, show you what each asks for, and prepare the "
+                     "sign-up for you to press.")
 
 
 async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:

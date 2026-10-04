@@ -60,25 +60,37 @@ class Words(Base):
         self.say("campus")
         self.assertIn("CampusMe here", self.said())
 
-    def test_espana_menu_health_and_two_labelled_concepts(self):
+    def test_espana_menu_six_areas_salud_live(self):
         for word in ("espana", "españa"):
             GW.SENDER.contents.clear()
             self.say(word)
             menu, buttons = GW.SENDER.contents[-1]
-            self.assertIn("EspañaMe 🇪🇸", menu)
-            self.assertIn("2. *Padrón* — registering at the town hall. (CONCEPT — not built yet)", menu)
-            self.assertEqual([b[1] for b in buttons], ["hx:es:health", "hx:es:padron", "hx:es:more"])
+            self.assertIn("EspañaMe 🇪🇸 — Spain's public processes", menu)
+            for area in ("1. *Salud*", "2. *Padrón*", "3. *Identity and access*", "4. *Social security and tax*", "5. *DGT*", "6. *Education*"):
+                self.assertIn(area, menu)
+            self.assertNotRegex(menu, r"(?i)movistar")
+            self.assertEqual([b[1] for b in buttons], ["hx:es:salud", "hx:es:padron", "hx:es:identity"])
             self.say("sasha")
         self.say("españa")
         self.say("2")
-        self.assertIn("🏛 *Padrón* — CONCEPT, not built yet", self.said())
-        self.assertIn("servpub.madrid.es", self.said())                      # the page actually read, nothing composed
-        self.say("", payload="hx:es:more")
-        self.assertIn("Cl@ve and your digital certificate, social security and tax, the DGT, schools* — CONCEPTS", self.said())
-        self.say("", payload="hx:es:movistar")                                   # an old button: it moved (EU 153)
-        self.assertIn("now part of RelocateMe", self.said())
+        said = self.said()
+        self.assertIn("○ *Padrón — registering at the town hall* — CONCEPT, not built yet", said)
+        self.assertIn("*What you need* (from the official page)", said)
+        self.assertIn("servpub.madrid.es", said)                               # the page actually read, nothing composed
+        self.assertIn("*You press:* booking the appointment and going in person.", said)
+        self.say("5")
+        self.assertIn("DGT — exchanging a foreign driving licence* — CONCEPT", self.said())
+        self.assertIn("I haven't read its official page yet", self.bodies()[-2] + self.said()[-600:])   # unreadable: no route
+        self.say("4")
+        self.assertIn("Modelo 030", self.said())                                  # read at source, 4 Oct
+        self.say("6")
+        self.assertIn("Secretaría Virtual", self.said())
+        self.say("", payload="hx:es:movistar")                                   # an old button: it moved (CR 17)
+        self.assertIn("part of RelocateMe now", self.said())
         self.say("1")
-        self.assertIn("never why you need a doctor", self.said())             # the working health demo, consent first
+        said = self.said()
+        self.assertIn("🟢 *Salud — health card, family doctor, SERMAS* — LIVE", said)
+        self.assertIn("never why you need a doctor", said)                       # the working health demo, consent first
 
     def test_no_walls(self):
         self.say("españa")
@@ -240,6 +252,19 @@ class UtilitiesInRelocateMe(Base):
             self.say(t)
         self.say("what about my phone line and utilities?")
         said = "\n".join(self.bodies()[-2:])
-        self.assertIn("Your phone line and utilities, set up before you arrive* — CONCEPT", said)
-        self.assertIn("no provider's pages have been read (Movistar or anyone else)", said)
+        self.assertIn("🏠 *Setting up your home* — your phone and internet (e.g. Movistar), electricity, and a Spanish bank account", said)
+        self.assertIn("no provider's or bank's pages have been read", said)
         self.assertIn("Your passport number?", self.bodies()[-1])                  # the file exactly where it was
+
+
+class EspanaAreasRoute(TG.unittest.TestCase):
+    def test_the_tab_reads_the_same_six_areas(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from products import routes as PR
+        app = FastAPI(); app.include_router(PR.router)
+        j = TestClient(app).get("/products/espana/areas").json()
+        self.assertEqual([(a["key"], a["live"]) for a in j["areas"]],
+                         [("salud", True), ("padron", False), ("identity", False), ("social", False), ("dgt", False), ("education", False)])
+        dgt = next(a for a in j["areas"] if a["key"] == "dgt")
+        self.assertEqual((dgt["read"], dgt["route"], dgt["route_url"]), (False, None, None))   # nothing from memory

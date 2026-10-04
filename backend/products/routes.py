@@ -64,6 +64,13 @@ async def health() -> dict:
             "relocation": {"ex01_pdf": ex01.pdf_status(), "submits": False}}
 
 
+@router.get("/espana/areas")
+async def espana_areas() -> dict:
+    """CR 17 · EspañaMe's six areas — the same cards the chat shows (health/espana.py): public, no personal data."""
+    from .health import espana as ES
+    return {"ok": True, "areas": ES.areas(), "read_on": ES._READ.get("read_on")}
+
+
 @router.get("/reminders")
 async def reminders(request: Request) -> dict:
     """CR 10 · dated reminders the products keep — relocation's apply-from/certificates/TIE, health's padrón follow-ups.

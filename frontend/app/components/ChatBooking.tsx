@@ -137,7 +137,7 @@ export default function ChatBooking({ find }: { find: Find }) {
   useEffect(() => {
     const s = stateRef.current
     if (s.phase !== 'found') return
-    const names = s.cards.map((c) => c.gphoto?.name).filter((n): n is string => !!n && !(n in gphotos))
+    const names = s.cards.filter((c) => !c.gphoto?.uri).map((c) => c.gphoto?.name).filter((n): n is string => !!n && !(n in gphotos))
     if (!names.length) return
     ;(async () => {
       const r = await bookingReq('/api/booking/venues/gphotos', { names, width: 480 }).catch(() => null)
@@ -210,12 +210,12 @@ export default function ChatBooking({ find }: { find: Find }) {
                 const ph = st && st !== 'reading' ? st.photo : undefined
                 if (!ph || badPhoto[c.place_id]) {
                   // Sasha 156 · no picture of their own (yet): the Google listing's photo, credited as Google's terms ask
-                  const g = c.gphoto?.name ? gphotos[c.gphoto.name] : undefined
+                  const g = c.gphoto?.uri || (c.gphoto?.name ? gphotos[c.gphoto.name] : undefined)
                   if (!g || badPhoto[`g:${c.place_id}`]) return null
                   return (
                     <a href={c.listing_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', margin: '2px 0 6px' }}>
                       {/* eslint-disable-next-line @next/next/no-img-element -- Google's short-lived photo URL; never stored by us */}
-                      <img src={g} alt={`${c.name ?? 'This place'} — Google Maps photo`} loading="lazy" referrerPolicy="no-referrer"
+                      <img src={g} alt={`${c.name ?? 'This place'} — Google Maps photo`} loading="eager" referrerPolicy="no-referrer"
                         onError={() => setBadPhoto((m) => ({ ...m, [`g:${c.place_id}`]: true }))}
                         style={{ width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
                       <span style={{ fontSize: 11, opacity: 0.65 }}>Photo: Google Maps{c.gphoto?.by?.length ? ` · ${c.gphoto.by.join(', ')}` : ''} ↗</span>
@@ -227,6 +227,8 @@ export default function ChatBooking({ find }: { find: Find }) {
                     {/* eslint-disable-next-line @next/next/no-img-element -- shown from the venue's own host; never fetched or stored by us */}
                     <img src={ph.url} alt={`${c.name ?? 'This place'} — from their website`} loading="lazy" referrerPolicy="no-referrer"
                       onError={() => setBadPhoto((m) => ({ ...m, [c.place_id]: true }))}
+                      // Sasha 156 · a logo or a spacer is not a photo of the place: too small → Google's photo instead
+                      onLoad={(e) => { const i = e.currentTarget; if (i.naturalWidth < 160 || i.naturalHeight < 90) setBadPhoto((m) => ({ ...m, [c.place_id]: true })) }}
                       style={{ width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
                     <span style={{ fontSize: 11, opacity: 0.65 }}>Photo: their website ↗</span>
                   </a>

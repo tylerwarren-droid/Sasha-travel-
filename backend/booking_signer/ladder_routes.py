@@ -198,10 +198,32 @@ async def find_venues(request: Request):
     try:
         _rehearse = _with_rehearsal if not re.search(r"\b(hotel|room|stay|hostel|homestay)\b", str(body.get("what") or ""), re.I) \
             else (lambda a, out: out)   # Sasha 132 · our test RESTAURANT is never offered as a hotel
-        return _rehearse(account_for(request), await V.find_venues(HTTP, what=body.get("what"), where=body.get("where"),
-                               country=body.get("country"), now=NOW(), near=body.get("near"), open_at=body.get("open_at")))   # S-68 steps 3–4
+        out = await V.find_venues(HTTP, what=body.get("what"), where=body.get("where"),
+                                  country=body.get("country"), now=NOW(), near=body.get("near"), open_at=body.get("open_at"))   # S-68 steps 3–4
+        await _with_google_photos(out)
+        return _rehearse(account_for(request), out)
     except V.ReadRefused as e:
         return _refuse(503 if e.rule in ("places_not_configured", "places_unreachable", "places_refused") else 422, e.rule, str(e))
+
+
+async def _with_google_photos(out: dict, budget: float = 0.7) -> None:
+    """Sasha 156 · the cards shown first (every chip's top ones) arrive WITH their Google photo's URL, so the picture loads
+    as the card appears; whatever misses the budget is fetched by the chat afterwards (/venues/gphotos)."""
+    import asyncio
+    orders = ((out.get("ranking") or {}).get("orders") or {})
+    show = int(out.get("show") or V.SHOW_MAX)
+    want = {pid for order in orders.values() for pid in (order or [])[:show]} or {c["place_id"] for c in out.get("candidates", [])[:show]}
+    cards = [c for c in out.get("candidates") or [] if c.get("place_id") in want and (c.get("gphoto") or {}).get("name")][:12]
+    if not cards:
+        return
+    tasks = {c["place_id"]: asyncio.ensure_future(V.google_photo_uri(HTTP, c["gphoto"]["name"])) for c in cards}
+    done, pending = await asyncio.wait(tasks.values(), timeout=budget)
+    for t in pending:
+        t.cancel()
+    for c in cards:
+        t = tasks[c["place_id"]]
+        if t in done and not t.cancelled() and t.exception() is None and t.result():
+            c["gphoto"] = {**c["gphoto"], "uri": t.result()}
 
 
 @router.post("/venues/gphotos")

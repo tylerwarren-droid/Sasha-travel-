@@ -170,7 +170,9 @@ async def travel(origin: str, destination: str, depart: datetime, mode: str) -> 
     key = os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
     if not key or not origin or not destination:
         return None
-    body = {"origin": {"address": origin}, "destination": {"address": destination}, "travelMode": mode}
+    # Sasha 146 · "place_id:<id>" routes to a Google place without reading its listing
+    dest = {"placeId": destination[9:]} if destination.startswith("place_id:") else {"address": destination}
+    body = {"origin": {"address": origin}, "destination": dest, "travelMode": mode}
     if mode == "TRANSIT" or mode == "DRIVE":
         body["departureTime"] = depart.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     if mode == "DRIVE":   # Sasha 132 · Routes refuses a departure time for driving unless routing is traffic-aware (400, 3 Oct)
@@ -186,6 +188,21 @@ async def travel(origin: str, destination: str, depart: datetime, mode: str) -> 
         return None
     m = re.fullmatch(r"(\d+)s", str(j["routes"][0].get("duration") or ""))
     return int(m[1]) if m else None
+
+
+async def _place_dest(account: str, b: dict) -> str:
+    """The booking's venue as a Routes destination without reading its Google listing: the place ID its venue read keeps
+    (a place ID may be stored — the Maps terms). "" when there is none."""
+    from . import ladder_routes as LR
+    if not b.get("read_id") or LR.LADDER_STORE is None:
+        return ""
+    try:
+        row = await LR.LADDER_STORE.get_read(account, str(b["read_id"]))
+    except Exception as e:
+        log.warning("[proactive] the venue read for leave_now could not be read: %s", type(e).__name__)
+        return ""
+    pid = (((row or {}).get("read") or {}).get("listing") or {}).get("place_id")
+    return f"place_id:{pid}" if pid else ""
 
 
 MODE_WORDS = {"TRANSIT": "by public transport", "WALK": "on foot", "DRIVE": "by car", "TWO_WHEELER": "by scooter"}
@@ -210,6 +227,10 @@ class MemoryProactiveStore:
 
     async def finish(self, sid: int, channel: str, outcome: str) -> None:
         self.sent[sid - 1].update(channel=channel, outcome=outcome)
+
+    async def claimed(self, trip_item_id: str, kind: str) -> bool:
+        """Sasha 146 · is there already a row for this booking and kind (proactive_once)? Read only."""
+        return any(s.get("trip_item_id") == trip_item_id and s.get("kind") == kind for s in self.sent)
 
     async def sent_today(self, account: str, local_day: date) -> int:
         return sum(1 for s in self.sent if s["account_id"] == account and s["local_day"] == local_day and s.get("outcome") == "sent")
@@ -271,6 +292,14 @@ class PostgresProactiveStore:
 
     async def finish(self, sid, channel, outcome):
         await self._run(lambda c: c.execute("update proactive_sent set channel = $2, outcome = $3 where id = $1", sid, channel, outcome))
+
+    async def claimed(self, trip_item_id, kind):
+        try:
+            tid = uuid.UUID(str(trip_item_id))
+        except (ValueError, TypeError):
+            return False
+        return bool(await self._run(lambda c: c.fetchval(
+            "select exists (select 1 from proactive_sent where trip_item_id = $1 and kind = $2)", tid, kind)))
 
     async def sent_today(self, account, local_day):
         return int(await self._run(lambda c: c.fetchval(
@@ -410,13 +439,14 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
             kind = "day_before" if b.get("status") in CONFIRMED else ("not_confirmed" if b.get("status") in HONEST else None)
             if kind and kind not in prefs.get("off_kinds", []) and _due(kind, b, now):
                 due.append((PRIORITY[kind], kind, b, {}))
-            if b.get("status") in CONFIRMED and "leave_now" not in prefs.get("off_kinds", []) and now >= start - timedelta(hours=3):
+            if b.get("status") in CONFIRMED and "leave_now" not in prefs.get("off_kinds", []) and now >= start - timedelta(hours=3) \
+                    and not (hasattr(STORE, "claimed") and await STORE.claimed(str(b["id"]), "leave_now")):   # Sasha 146 · once sent, no more Routes calls
                 place = await STORE.default_place(account)
                 if place:
                     mode = os.getenv("SASHA_PROACTIVE_MODE", "TRANSIT")
                     dest = ", ".join(x for x in ((None if b.get("receipt") else b.get("venue")), b.get("address")) if x)
-                    if not dest:   # a phone booking with no address: its name, re-read for this one booking
-                        dest = (await GW._with_names(account, [dict(b)]))[0].get("venue") or ""
+                    if not dest:   # Sasha 146 · a phone booking with no address: routed to its listing's place ID (stored, allowed) —
+                        dest = await _place_dest(account, b)   # never a listing re-read each minute (≈ 1 Place Details a minute, 5 Oct)
                     secs = await travel(place["address"], dest, start, mode)
                     if secs and _due("leave_now", b, now, {"seconds": secs}):
                         due.append((PRIORITY["leave_now"], "leave_now", b, {"minutes": round(secs / 60), "mode_words": MODE_WORDS.get(mode, ""),

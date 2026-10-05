@@ -64,7 +64,7 @@ class WatchersDoNotReadListings(unittest.TestCase):
             self.now = datetime(2026, 10, 4, 3, m, tzinfo=MAD)
             run(PR.tick(self.now))
             run(PR.no_reply_offers(self.now))
-        self.assertGreaterEqual(self.calls.count("/api/booking/reservations"), 120)   # the watchers did look
+        self.assertGreaterEqual(self.calls.count("/api/booking/reservations"), 60)    # the watchers did look (the tick, each minute)
         self.assertEqual(self.receipts(), [])                                         # and re-read no listing
 
     def test_a_guest_asking_still_gets_the_real_name(self):
@@ -138,6 +138,50 @@ class AlreadySentCostsNothing(WatchersDoNotReadListings):
                 run(PR.tick(self.now))
         self.assertTrue(claimed)                 # it was due, and the dedupe was asked
         self.assertEqual(self.receipts(), [])    # and no listing was re-read for it
+
+
+class LeaveNowReadsNoListing(WatchersDoNotReadListings):
+    """Sasha 146 · a confirmed phone booking within 3 hours, with no address: the tick routed to it by re-reading its
+    Google listing for the name — every minute (5 Oct, 07:00 onwards). Now: its stored place ID, and no Routes call once
+    leave_now is sent."""
+
+    def test_routed_by_place_id_and_stopped_once_sent(self):
+        from booking_signer import ladder_routes as LR
+        soon = datetime(2026, 10, 5, 10, 0, tzinfo=MAD)
+        self.now = datetime(2026, 10, 5, 8, 30, tzinfo=MAD)
+
+        async def api(account, method, path, body=None, timeout=None):
+            self.calls.append(path)
+            if path == "/api/booking/reservations":
+                return 200, {"reservations": [{"id": "t-7", "venue": "⟨marker⟩", "date": soon.date().isoformat(), "time": "10:00",
+                                               "timezone": "Europe/Madrid", "party": 2, "status": "confirmed", "channel": "phone",
+                                               "read_id": "r-7", "receipt": "/api/booking/reservations/t-7/receipt"}]}
+            if path.endswith("/receipt"):
+                return 200, {"venue": {"name": "Casa Lucio"}}
+            return 404, {}
+        GW.api = api
+        routes = []
+
+        async def routes_http(url, headers, body):
+            routes.append(body["destination"])
+            return 200, {"routes": [{"duration": "600s"}]}
+        store = mock.Mock()
+        store.get_read = mock.AsyncMock(return_value={"read": {"listing": {"place_id": "ChIJ-casa-lucio"}}})
+        run(PR.STORE.save_place(ACCOUNT, "home", "Calle Mayor 1, Madrid"))
+        # only leave_now here: a reminder actually SENT re-reads its name, rightly (AlreadySentCostsNothing covers that)
+        run(PR.STORE.set_prefs(ACCOUNT, off_kinds=["day_before", "not_confirmed", "morning_brief"]))
+        with mock.patch.object(PR, "ROUTES_HTTP", routes_http), mock.patch.object(LR, "LADDER_STORE", store), \
+             mock.patch.dict(os.environ, {"GOOGLE_PLACES_API_KEY": "k"}):
+            for m in range(3):
+                run(PR.tick(datetime(2026, 10, 5, 8, 30 + m, tzinfo=MAD)))
+            self.assertEqual(self.receipts(), [])                       # no listing re-read for the destination
+            self.assertTrue(routes and all(d == {"placeId": "ChIJ-casa-lucio"} for d in routes))
+            n = len(routes)
+            PR.STORE.sent.append({"account_id": ACCOUNT, "trip_item_id": "t-7", "kind": "leave_now", "outcome": "sent",
+                                  "local_day": soon.date()})
+            for m in range(3):
+                run(PR.tick(datetime(2026, 10, 5, 9, m, tzinfo=MAD)))
+            self.assertEqual(len(routes), n)                            # sent: no more Routes calls
 
 
 if __name__ == "__main__":

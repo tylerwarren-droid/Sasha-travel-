@@ -277,6 +277,18 @@ class TestVenueConsent(Base):
         self.assertEqual((rec["state"], rec["taps"]), ("booked", 2))
 
 
+class NoRequest(Base):
+    async def test_without_a_reservation_it_is_sent_never_a_guess(self):
+        url = TV + "plain"
+        rec = await HO.open_handover(page_url=url, m=FR.form_map(url), step1=values(FR.TEST_FIELDS), step2=[], venue="Kanoe Test Hotel",
+                                     account=None, form_id=None, read_only=False, request=None, fictional=True)
+        _, on_press, _, on_nav = self.pages[0].watching
+        on_press("Reservar"), on_nav()
+        await asyncio.wait_for(rec["_watch"], 2)
+        self.assertEqual(rec["state"], "answered")             # not stuck, and not a ✅ it can't stand behind
+        self.assertIn("doesn't say it's confirmed", rec["say"])
+
+
 class Pressed(Base):
     async def test_the_press_is_read_into_booked_with_taps_and_seconds(self):
         got = []

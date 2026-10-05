@@ -507,7 +507,17 @@ async def finish(rec: dict, seen: dict) -> None:
     """Their answer page → the reading (the form rung's own), the form store, the receipt, ON_BOOKED; seconds recorded."""
     from . import followup as FU
     text = " ".join((seen.get("text") or "").split())[:FR.RESPONSE_CHARS]
-    reading = FU.reply_reading(text, rec.get("request") or {}) if text else {"result": "none", "why": "their answer page had no text"}
+    o = rec.get("request") or {}
+    if not text:
+        reading = {"result": "none", "why": "their answer page had no text"}
+    elif not o.get("when"):   # nothing to read their page against: never a ✅ on a guess
+        reading = {"result": "none", "why": "no reservation to compare their page with"}
+    else:
+        try:
+            reading = FU.reply_reading(text, o)
+        except Exception as e:   # a reading that fails must not leave the guest's page stuck after their press
+            log.warning("[handover] %s reading: %s", rec["id"], e)
+            reading = {"result": "none", "why": "their page couldn't be read against the reservation"}
     ref = FR._REF.search(text)
     rec.update(answer_text=text, reading=reading, reference=ref.group(1) if ref else None, answered_at=NOW().isoformat(),
                press_to_answer_ms=round((CLOCK() - rec["_pressed"]) * 1000))

@@ -59,8 +59,12 @@ class PathI(TG.Base):
         app = FastAPI(); app.include_router(IV.router)
         self.web = TestClient(app)
         IV._HITS.clear()
+        # Sasha 146 · the whole test on the test's clock: on the real 5 Oct an invitation made "on 2 Oct" has expired
+        self.iv_now = mock.patch.object(IV, "NOW", lambda: TG.NOW)
+        self.iv_now.start()
 
     def tearDown(self):
+        self.iv_now.stop()
         IV.STORE = self.iv_saved
         super().tearDown()
 

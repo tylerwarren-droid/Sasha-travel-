@@ -8,7 +8,10 @@ DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 #: Sasha 150 · DEEPGRAM_API_BASE: the server moved to the EU (europe-west4), and Deepgram's EU endpoint
 #: (https://api.eu.deepgram.com) is the near one; unset = the US endpoint, as before
 DEEPGRAM_API_BASE = (os.getenv("DEEPGRAM_API_BASE", "").strip() or "https://api.deepgram.com").rstrip("/")
-DEEPGRAM_URL = f"{DEEPGRAM_API_BASE}/v1/listen"
+#: speech-to-text may use another endpoint (DEEPGRAM_STT_BASE): measured from europe-west4, the EU endpoint's nova-3 was
+#: slower than the US one (1.8 s vs 0.7 s) while its TTS was faster (0.16 s vs 0.9 s)
+DEEPGRAM_STT_BASE = (os.getenv("DEEPGRAM_STT_BASE", "").strip() or DEEPGRAM_API_BASE).rstrip("/")
+DEEPGRAM_URL = f"{DEEPGRAM_STT_BASE}/v1/listen"
 
 async def transcribe_audio(audio_data: bytes, mime_type: str = "audio/webm") -> dict:
     """

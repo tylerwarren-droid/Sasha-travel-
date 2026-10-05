@@ -126,7 +126,8 @@ _READ_JS = """() => {
     required: !!el.required, visible: vis(el), empty: (el.type === 'checkbox' || el.type === 'radio') ? !el.checked : !el.value,
     value: (el.type === 'hidden') ? '' : (el.value || '') }));
   const form = [...document.forms].find(f => f.querySelectorAll('input:not([type=hidden]), select, textarea').length >= 3);
-  return {url: location.href, frames, fields, valid: form ? form.checkValidity() : false, html: document.documentElement.outerHTML,
+  const invalid = form ? [...form.elements].filter(e => e.willValidate && !e.checkValidity()).map(e => e.name) : [];
+  return {url: location.href, frames, fields, valid: form ? form.checkValidity() : false, invalid, html: document.documentElement.outerHTML,
           text: (document.body && document.body.innerText || '').slice(0, 6000)};
 }"""
 
@@ -177,6 +178,31 @@ _POINT_JS = """(sel) => {
   return (b.tagName === 'BUTTON' ? b.innerText : b.value || '').trim();
 }"""
 
+_POINT_BOX_JS = """([sel, box]) => {
+  const form = [...document.forms].find(f => f.querySelectorAll('input:not([type=hidden]), select, textarea').length >= 3);
+  const bs = form ? form.querySelectorAll(sel) : []; const b = bs[bs.length - 1];
+  const c = form && form.querySelector('[name="' + box + '"]');
+  if (!b || !c) return '';
+  if (!document.getElementById('kanoe-style')) {
+    const st = document.createElement('style'); st.id = 'kanoe-style';
+    st.textContent = '@keyframes kanoePulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.7)}70%{box-shadow:0 0 0 14px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}';
+    document.head.appendChild(st);
+  }
+  const lab = (c.id && document.querySelector('label[for="' + c.id + '"]')) || c.closest('label') || c;
+  for (const el of [c, lab, b]) { el.style.outline = '3px solid #22c55e'; el.style.outlineOffset = '3px'; }
+  b.style.animation = 'kanoePulse 1.6s infinite';
+  b.scrollIntoView({block: 'center'});
+  const tag = (id, text, el, below) => { let m = document.getElementById(id); if (!m) { m = document.createElement('div'); m.id = id; document.body.appendChild(m); }
+    const r = el.getBoundingClientRect(); m.textContent = text;
+    m.style.cssText = `position:absolute;left:${Math.max(6, Math.min(r.left + scrollX, document.documentElement.clientWidth - 170))}px;`
+      + `top:${(below ? r.bottom + 8 : r.top - 34) + scrollY}px;pointer-events:none;z-index:2147483647;background:#22c55e;color:#04210f;`
+      + 'font:600 13px/1 -apple-system,system-ui,sans-serif;padding:7px 12px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.25)'; };
+  const old = document.getElementById('kanoe-press'); if (old) old.remove();
+  tag('kanoe-one', '\\u2460 Tick the box', c, false);
+  tag('kanoe-two', '\\u2461 Then press ' + (b.tagName === 'BUTTON' ? b.innerText : b.value || '').trim(), b, true);
+  return (b.tagName === 'BUTTON' ? b.innerText : b.value || '').trim();
+}"""
+
 _SUBMIT = "button[type=submit], input[type=submit], button:not([type])"
 
 
@@ -185,6 +211,7 @@ class PlaywrightPage:
 
     def __init__(self) -> None:
         self.pw = self.browser = self.page = None
+        self.guest_box: Optional[str] = None      # a consent box left for the guest (our test venue only): pointed at too
 
     async def connect(self, connect_url: str) -> None:
         from playwright.async_api import async_playwright
@@ -212,6 +239,8 @@ class PlaywrightPage:
     async def point_at_book(self) -> str:
         """The form's own Book button, centred in view, outlined, with Sasha's pulsing "Press here" just above it — one
         round trip; its words come back. The marker ignores taps (they reach the button) and sends nothing anywhere."""
+        if self.guest_box:
+            return await self.page.evaluate(_POINT_BOX_JS, [_SUBMIT, self.guest_box])
         return await self.page.evaluate(_POINT_JS, _SUBMIT)
 
     async def fit(self, width: int, height: int) -> str:
@@ -265,7 +294,7 @@ PAGE_FACTORY: Callable[[], Any] = PlaywrightPage
 
 # ── the checks: one page, as the live browser shows it ────────────────────────────────────────────────────────────
 
-def check_page(seen: dict, m: dict, page_url: str) -> List[dict]:
+def check_page(seen: dict, m: dict, page_url: str, guest_box_ok: bool = False) -> List[dict]:
     """The page's booking form through the form rung's own reading — or a Refused naming why no link is sent."""
     url = seen.get("url") or page_url
     if V.platform_of(url):
@@ -286,7 +315,7 @@ def check_page(seen: dict, m: dict, page_url: str) -> List[dict]:
     fields = FR.roles_for(live, m)
     if any(x["role"] == "challenge" for x in fields):
         raise Refused("captcha", "their form has a CAPTCHA — Sasha never solves one, so no link")
-    if any(x["role"] == "consent" and x["required"] for x in fields):
+    if any(x["role"] == "consent" and x["required"] for x in fields) and not guest_box_ok:
         raise Refused("consent_box", "their form needs a box ticked to accept their terms — that box is yours, so Sasha can't hand "
                                      "over a fully filled form")
     other = [x["name"] for x in fields if x["role"] == "other" and x["required"]]
@@ -295,9 +324,9 @@ def check_page(seen: dict, m: dict, page_url: str) -> List[dict]:
     return fields
 
 
-def still_empty(seen: dict, fields: List[dict]) -> List[str]:
-    """Required, visible fields still empty after filling — any one means no link."""
-    traps = {x["name"] for x in fields if x["role"] in ("trap", "hidden")}
+def still_empty(seen: dict, fields: List[dict], guest_boxes: frozenset = frozenset()) -> List[str]:
+    """Required, visible fields still empty after filling — any one means no link (the guest's own box excepted)."""
+    traps = {x["name"] for x in fields if x["role"] in ("trap", "hidden")} | set(guest_boxes)
     return [x["name"] for x in seen.get("fields") or [] if x.get("required") and x.get("visible") and x.get("empty")
             and x.get("name") not in traps]
 
@@ -346,11 +375,20 @@ async def open_handover(*, page_url: str, m: dict, step1: List[dict], step2: Lis
         lap("connect")
         await page.goto(page_url)
         lap("page")
-        fields = check_page(await page.read(), m, page_url)
+        # Sasha 155 · on OUR test venue only, a required consent box is left for the guest (☐ + press); real venues: refused
+        fields = check_page(await page.read(), m, page_url, guest_box_ok=bool(m.get("test")))
         names = {x["name"] for x in fields}
         gone = [x["name"] for x in step1 if x["name"] not in names]
         if gone:
             raise Refused("form_changed", f"their form no longer has {', '.join(gone)} — no link")
+        boxes = frozenset(x["name"] for x in fields if x["role"] == "consent" and x["required"])
+        if boxes:
+            if len(boxes) > 1:
+                raise Refused("consent_box", "their form needs more than one box ticked — no link")
+            (box,) = boxes
+            page.guest_box = box
+            label = next((x.get("label") for x in fields if x["name"] == box), "") or box
+            rec.update(taps_left=2, guest_box=box, box_label=label if len(label) <= 40 else label[:38] + "…")
         rec["filled"] = await _fill(page, step1, fields)
         seen = await page.read()
         if step2:
@@ -365,8 +403,12 @@ async def open_handover(*, page_url: str, m: dict, step1: List[dict], step2: Lis
                 raise Refused("form_changed", f"their details page has no {', '.join(gone)} — no link")
             rec["filled"] += await _fill(page, step2, fields)
             seen = await page.read()
-        empty = still_empty(seen, fields)
-        if empty or not seen.get("valid"):
+        empty = still_empty(seen, fields, boxes)
+        valid = seen.get("valid") or (boxes and set(seen.get("invalid") or []) <= boxes)   # only the guest's box unticked
+        ticked = [x["name"] for x in seen.get("fields") or [] if x.get("name") in boxes and not x.get("empty")]
+        if ticked:
+            raise Refused("consent_box", "the consent box is ticked — only the guest may tick it; no link")
+        if empty or not valid:
             raise Refused("not_all_prefilled", f"not every field could be filled ({', '.join(empty) or 'their own check failed'}) — "
                                                "so Sasha doesn't send the link")
         lap("fill")
@@ -534,7 +576,7 @@ def _public(rec: dict, ops_view: bool = False) -> dict:
     keep = ("id", "venue", "host", "state", "test", "read_only", "steps", "engine", "rate", "room", "taps_left", "filled", "book_label",
             "ready_ms", "timings_ms", "fitted", "taps", "tapped",
             "press_to_answer_ms", "open_to_booked_s", "reference", "say", "reading", "created_at", "opened_at", "pressed_at",
-            "answered_at", "return_to", "screenshot_sha256")
+            "answered_at", "return_to", "screenshot_sha256", "box_label")
     out = {k: rec.get(k) for k in keep if k in rec}
     if ops_view:
         out.update(account_id=rec.get("account_id"), form_id=rec.get("form_id"), view_url=view_url(rec),
@@ -589,10 +631,13 @@ async def from_prepared_form(form_id: str, request: Request):
     except Refused as e:
         await FR.STORE.finish(form_id, {"status": "not_sent", "not_sent_why": f"live hand-over refused: {e.say}"}, "failed", "failed", NOW())
         return _no(422, e.rule, e.say)
-    return {"ok": True, "handover_id": rec["id"], "view_url": view_url(rec), "ready_ms": rec["ready_ms"], "taps_left": 1,
-            "book_label": rec.get("book_label"), "filled": rec["filled"],
-            "say": f"I've filled in {rec['venue']}'s own booking form — every field. One tap left: open it and press "
-                   f"“{rec.get('book_label') or 'Book'}”. {view_url(rec)}"}
+    two = rec.get("taps_left") == 2
+    return {"ok": True, "handover_id": rec["id"], "view_url": view_url(rec), "ready_ms": rec["ready_ms"], "taps_left": 2 if two else 1,
+            "book_label": rec.get("book_label"), "filled": rec["filled"], "box_left_for_you": rec.get("box_label"),
+            "say": (f"I've filled in {rec['venue']}'s own booking form — every field. Two taps left: open it, tick "
+                    f"“{rec.get('box_label')}” and press “{rec.get('book_label') or 'Book'}”. {view_url(rec)}") if two else
+                   (f"I've filled in {rec['venue']}'s own booking form — every field. One tap left: open it and press "
+                    f"“{rec.get('book_label') or 'Book'}”. {view_url(rec)}")}
 
 
 def _venue(f: dict) -> str:
@@ -694,7 +739,8 @@ def page_html(rec: Optional[dict], hid: str, t: str) -> str:
     chips = "".join(f'<span class="chip">{escape(v)}</span>' for v in (
         " · ".join(x for x in (sm["day"], sm["time"]) if x), sm["party"], sm["name"], (rec or {}).get("rate") or "") if v)
     if (rec or {}).get("taps_left") == 2:   # CR 27 · the terms box is the guest's: two taps
-        ask = f'Tick <b>&#8220;I accept the Terms&#8221;</b>, then press <b>&#8220;{escape(label)}&#8221;</b>.'
+        box = (rec or {}).get("box_label") or "I accept the Terms"
+        ask = f'Tick <b>&#8220;{escape(box)}&#8221;</b>, then press <b>&#8220;{escape(label)}&#8221;</b>.'
     else:
         ask = f'Just press <b>&#8220;{escape(label)}&#8221;</b> below.'
     if (rec or {}).get("read_only"):

@@ -386,7 +386,7 @@ async def open_gc_handover(*, engine_url: str, stay: dict, rate: str, room: Opti
                            "page_url": url, "host": urlsplit(url).hostname, "read_only": read_only, "test": False,
                            "state": "filling", "created_at": HO.NOW().isoformat(), "taps": 0, "tapped": [],
                            "return_to": HO._return_ok(return_to), "request": None, "steps": 2, "engine": "Guestcentric",
-                           "taps_left": 2, "rate": rate, "room": room, "press_is_final": True,
+                           "taps_left": 2, "rate": rate, "room": room, "press_is_final": True, "box_label": "I accept the Terms",
                            "summary": {"venue": hotel, "day": nights_line(stay["checkin"], stay["checkout"]), "time": "",
                                        "party": f"{stay.get('adults', 2)} adult{'s' if stay.get('adults', 2) != 1 else ''}",
                                        "name": f"{guest['first_name']} {guest['last_name']}"},

@@ -38,7 +38,7 @@ def page_html(variant):
     if variant == "wizard":
         return FR._WIZARD_ONE.format(token="t")
     head = '<script src="https://www.google.com/recaptcha/api.js"></script>' if variant == "captcha" else ""
-    extra = {"consent": '<input id="acepto" name="acepto" type="checkbox" required><label for="acepto">Acepto</label>',
+    extra = {"consent": '<input id="acepto" name="acepto" type="checkbox" required><label for="acepto">Acepto la política de privacidad</label>\n',
              "captcha": '<div class="g-recaptcha" data-sitekey="k"></div>',
              "card": '<label for="card">Tarjeta</label><input id="card" name="card_number" autocomplete="cc-number">',
              "extra": '<label for="dni">DNI</label><input id="dni" name="dni" required>'}.get(variant, "")
@@ -49,10 +49,12 @@ class FakePage:
     """The test venue, as a browser would hold it: its markup, the values typed, its own validity check."""
     frames: list = []
     stubborn: set = set()
+    prefilled: dict = {}
 
     def __init__(self):
         self.url = self.html = None
-        self.values, self.watching, self.advanced, self.closed = {}, None, False, False
+        self.values, self.watching, self.advanced, self.closed = dict(self.prefilled), None, False, False
+        self.guest_box = None
 
     async def connect(self, url):
         pass
@@ -68,8 +70,9 @@ class FakePage:
             v = self.values.get(x["name"], x["value"] if x["type"] == "hidden" else "")
             fields.append({"name": x["name"], "type": x["type"], "autocomplete": "cc-number" if x["name"] == "card_number" else "",
                            "required": x["required"], "visible": vis, "empty": not v, "value": v})
-        valid = all(not f["empty"] for f in fields if f["required"] and f["visible"])
-        return {"url": self.url, "frames": list(self.frames), "fields": fields, "valid": valid, "html": self.html, "text": ""}
+        invalid = [f["name"] for f in fields if f["required"] and f["visible"] and f["empty"]]
+        return {"url": self.url, "frames": list(self.frames), "fields": fields, "valid": not invalid, "invalid": invalid,
+                "html": self.html, "text": ""}
 
     async def fill_all(self, values):
         for k, v in values.items():
@@ -196,8 +199,14 @@ class Refusals(Base):
     async def test_captcha(self):
         await self.refused("captcha", variant="captcha")
 
-    async def test_terms_box(self):
-        await self.refused("consent_box", variant="consent")
+    async def test_a_real_venues_terms_box_is_still_refused(self):
+        page = page_html("consent")
+        seen = {"url": "https://www.hanakura.es/solicitar-reserva.html", "frames": [], "fields": [],
+                "html": page.replace('action="/api/booking/test-venue/consent"', 'action="/formularios/reservar.php"')}
+        m = {**FR.FORM_MAPS["www.hanakura.es"], "test": False, "fields": dict(FR.TEST_FIELDS)}
+        with self.assertRaises(HO.Refused) as c:
+            HO.check_page(seen, m, "https://www.hanakura.es/solicitar-reserva.html")
+        self.assertEqual(c.exception.rule, "consent_box")
 
     async def test_payment_field(self):
         await self.refused("payment_step", variant="card")
@@ -236,6 +245,36 @@ class Refusals(Base):
             with self.assertRaises(HO.Refused) as c:
                 await self.open()
         self.assertEqual(c.exception.rule, "cloud_browser_not_configured")
+
+
+class TestVenueConsent(Base):
+    """Sasha 155 · on OUR test venue, the consent box is left for the guest: two taps (☐ + Reservar), everything else filled."""
+
+    async def test_the_box_is_the_guests_two_taps(self):
+        rec = await self.open("consent")
+        self.assertEqual((rec["state"], rec["taps_left"], rec["guest_box"]), ("ready", 2, "acepto"))
+        self.assertEqual(rec["box_label"], "Acepto la política de privacidad")
+        self.assertNotIn("acepto", self.pages[0].values)              # never ticked by Sasha
+        self.assertEqual(self.pages[0].guest_box, "acepto")          # pointed at with the button
+        self.assertEqual({f["name"] for f in rec["filled"]}, set(FR.TEST_FIELDS))
+        body = (await HO.view(rec["id"], rec["token"])).body.decode()
+        self.assertIn("Tick <b>&#8220;Acepto la política de privacidad&#8221;</b>, then press <b>&#8220;Reservar&#8221;</b>", body)
+
+    async def test_a_box_ticked_by_anyone_but_the_guest_means_no_link(self):
+        FakePage.prefilled = {"acepto": "on"}
+        try:
+            with self.assertRaises(HO.Refused) as c:
+                await self.open("consent")
+            self.assertEqual(c.exception.rule, "consent_box")
+        finally:
+            FakePage.prefilled = {}
+
+    async def test_pressed_is_booked_as_today(self):
+        rec = await self.open("consent")
+        on_tap, on_press, _, on_nav = self.pages[0].watching
+        on_tap("acepto"), on_tap("Reservar"), on_press("Reservar"), on_nav()
+        await asyncio.wait_for(rec["_watch"], 2)
+        self.assertEqual((rec["state"], rec["taps"]), ("booked", 2))
 
 
 class Pressed(Base):

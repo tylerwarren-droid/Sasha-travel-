@@ -892,7 +892,9 @@ async def test_venue(variant: str):
 <p>Restaurante de pruebas de Kanoe. No es un restaurante real. Reservas por email: <a href="mailto:{addr}">{addr}</a></p></body></html>""")
     head = '<script src="https://www.google.com/recaptcha/api.js" async defer></script>' if variant == "captcha" else ""
     extra = {"consent": '<input id="acepto" name="acepto" type="checkbox" required><label for="acepto">Acepto la política de privacidad</label>\n',
-             "captcha": '<div class="g-recaptcha" data-sitekey="test-site-key"></div>\n'}.get(variant, "")
+             # Sasha 158 · Google's documented reCAPTCHA v2 TEST key (developers.google.com/recaptcha/docs/faq): a real "I'm not
+             # a robot" box that always passes and is marked "testing only" — for the guest's tap in the hand-over, on OUR page
+             "captcha": '<div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"></div>\n'}.get(variant, "")
     return HTMLResponse(_PAGE.format(variant=variant, head=head, extra=extra, token=uuid.uuid4().hex))
 
 

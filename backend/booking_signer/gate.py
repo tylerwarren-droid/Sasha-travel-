@@ -43,6 +43,9 @@ async def require_booking_key(request: Request) -> None:
         return   # Sasha 99 · the test venue's own cancel links — a public page, like any venue's
     if request.url.path.startswith("/api/booking/invite/") and (request.method == "GET" or request.url.path.endswith("/choose")):
         return   # S-80 · the invited guest's page: no account; the 8-character code is the key, rate-limited per address
+    if request.method == "GET" and request.url.path.startswith("/api/booking/handover/"):
+        return   # CR 23 · the guest's live hand-over page: a 32-byte token in the URL is the key (Sasha 150, the founder's yes;
+                 # real guests stay refused until BROWSERBASE_DPA=signed — fictional details only)
     want = os.getenv(ENV, "").strip()
     if not want:
         raise HTTPException(503, {"ok": False, "rule": "booking_key_not_configured",

@@ -12,7 +12,8 @@ router = APIRouter()
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
 DEEPGRAM_PROJECT_ID = os.getenv("DEEPGRAM_PROJECT_ID", "")
 DEEPGRAM_KEY_TTL = int(os.getenv("DEEPGRAM_KEY_TTL", "3600"))  # seconds; covers a session
-DEEPGRAM_TTS_URL = "https://api.deepgram.com/v1/speak"
+from app.services.deepgram_service import DEEPGRAM_API_BASE   # Sasha 150 · the EU endpoint when set
+DEEPGRAM_TTS_URL = f"{DEEPGRAM_API_BASE}/v1/speak"
 
 
 @router.post("/voice/deepgram-key")
@@ -71,16 +72,11 @@ async def text_to_speech(text: str) -> bytes:
         "model": "aura-asteria-en",
         "encoding": "mp3"
     }
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.post(
-            DEEPGRAM_TTS_URL,
-            json=payload,
-            headers=headers,
-            params=params
-        )
-        if response.status_code == 200:
-            return response.content
-        return b""
+    from booking_signer.http_pool import request   # Sasha 150 · pooled, kept alive (no new TLS handshake per reply)
+    response = await request("POST", DEEPGRAM_TTS_URL, timeout=15.0, json=payload, headers=headers, params=params)
+    if response.status_code == 200:
+        return response.content
+    return b""
 
 
 @router.post("/voice/conductor")

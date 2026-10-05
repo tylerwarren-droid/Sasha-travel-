@@ -49,6 +49,17 @@ class Gate(unittest.TestCase):
         r = self.right.post("/api/booking/calls", json={"venue": "nowhere"}, headers={"x-sasha-session": "founder"})
         self.assertEqual(r.json()["rule"], "venue_not_callable")   # past the gate, refused by the route itself
 
+    def test_the_live_handover_page_is_public_by_its_token_only(self):
+        # Sasha 150 · the founder's yes to CR 23: GET /api/booking/handover/* passes the gate; the token is the key
+        r = self.anon.get("/api/booking/handover/no-such-id?t=wrong")
+        self.assertEqual(r.status_code, 404)                                   # past the gate, refused by the token check
+        self.assertNotIn("booking_key_required", r.text)
+        s = self.anon.get("/api/booking/handover/no-such-id/status?t=")
+        self.assertEqual((s.status_code, s.json()["rule"]), (404, "handover_unknown"))
+        for m, path in (("POST", "/api/booking/forms/x/handover"), ("GET", "/api/booking/ops/handovers"), ("GET", "/api/booking/reservations")):
+            r = self.anon.request(m, path)
+            self.assertEqual((r.status_code, r.json()["detail"]["rule"]), (401, "booking_key_required"), (m, path))
+
     def test_health_and_the_signed_webhook_are_exempt(self):
         self.assertEqual(self.anon.get("/api/booking/health").status_code, 200)
         r = self.anon.post("/api/booking/email/inbound", content=b"{}")

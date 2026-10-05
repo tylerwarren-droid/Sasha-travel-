@@ -25,7 +25,8 @@ router = APIRouter(prefix="/ops", tags=["booking-ops"])
 
 HOSTS = {"supabase": None, "places": "https://places.googleapis.com/", "routes": "https://routes.googleapis.com/",
          "duffel": "https://api.duffel.com/", "anthropic": "https://api.anthropic.com/", "bland": "https://api.bland.ai/",
-         "deepgram": "https://api.deepgram.com/", "twilio": "https://api.twilio.com/"}
+         "deepgram": None,   # Sasha 150 · the endpoint actually used (DEEPGRAM_API_BASE)
+         "twilio": "https://api.twilio.com/"}
 
 
 def stats(ms: List[float]) -> Dict[str, Any]:
@@ -49,6 +50,11 @@ async def timed(fn: Callable[[], Awaitable[Any]], n: int) -> tuple:
     return stats(out), last, err
 
 
+def _deepgram_url() -> str:
+    from app.services.deepgram_service import DEEPGRAM_API_BASE
+    return DEEPGRAM_API_BASE + "/"
+
+
 def _supabase_url() -> Optional[str]:
     u = os.getenv("SASHA_SUPABASE_URL", "").strip().rstrip("/")
     return f"{u}/auth/v1/health" if u else None
@@ -66,7 +72,7 @@ async def measure(steps: List[str], n: int = 5) -> Dict[str, Any]:
     if "net" in steps:
         net = {}
         for name, url in HOSTS.items():
-            url = url or _supabase_url()
+            url = url or (_supabase_url() if name == "supabase" else _deepgram_url())
             if not url:
                 continue
 

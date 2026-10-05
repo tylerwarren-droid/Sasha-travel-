@@ -5,7 +5,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
-DEEPGRAM_URL = "https://api.deepgram.com/v1/listen"
+#: Sasha 150 · DEEPGRAM_API_BASE: the server moved to the EU (europe-west4), and Deepgram's EU endpoint
+#: (https://api.eu.deepgram.com) is the near one; unset = the US endpoint, as before
+DEEPGRAM_API_BASE = (os.getenv("DEEPGRAM_API_BASE", "").strip() or "https://api.deepgram.com").rstrip("/")
+DEEPGRAM_URL = f"{DEEPGRAM_API_BASE}/v1/listen"
 
 async def transcribe_audio(audio_data: bytes, mime_type: str = "audio/webm") -> dict:
     """
@@ -25,15 +28,10 @@ async def transcribe_audio(audio_data: bytes, mime_type: str = "audio/webm") -> 
         "Content-Type": clean_mime,
     }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            DEEPGRAM_URL,
-            content=audio_data,
-            headers=headers,
-            params=params
-        )
-        response.raise_for_status()
-        result = response.json()
+    from booking_signer.http_pool import request   # Sasha 150 · pooled, kept alive (no new TLS handshake per utterance)
+    response = await request("POST", DEEPGRAM_URL, timeout=30.0, content=audio_data, headers=headers, params=params)
+    response.raise_for_status()
+    result = response.json()
 
     # Extract transcript
     channels = result.get("results", {}).get("channels", [])

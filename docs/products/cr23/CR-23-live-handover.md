@@ -71,3 +71,13 @@ Each hand-over records `taps` (every pointer-down in the venue's page after Sash
    decides the CDP round trips).
 5. **The live view on a phone:** taps work. Browserbase says mobile keyboards aren't supported, which doesn't matter
    here because the guest types nothing. It takes ~1–2 s to paint the first frame.
+
+## Follow-up (5 Oct 2026, after the hooks were mounted — Sasha 150, 7fdcbfc)
+- **From Railway (europe-west4):** the link was ready in **2.7 s** (session 0.57 · connect 1.03 · page 0.12 · fill 0.07 ·
+  live view 0.95), and **press → ✅ took 0.12 s**, 1 tap (TV-DF9158-3B, cancelled).
+- **The founder's own finger, on his phone, in the EMBEDDED live view:** booked, 1 tap ("Reservar"), TV-4BD724-23,
+  "Their page confirms it". My four failed presses there came from the browser automation's synthetic click, not from
+  the view. "Open it full screen" stays only as a fallback.
+- **Fixed on Railway:** the robots check's argument order (8599039).
+- **Limit:** a deploy ends any hand-over in flight (in-memory records; the session closes when its connection drops).
+  Don't deploy mid-booking.

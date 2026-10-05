@@ -541,7 +541,7 @@ async def from_prepared_form(form_id: str, request: Request):
     m = FR.form_map(f["page_url"])
     if m is None:
         return _no(422, "form_not_approved", "Sasha only hands over a form that's mapped and approved")
-    if not await V._allowed(*_http(), f["page_url"]):
+    if not await _robots_ok(f["page_url"]):
         return _no(422, "robots", "their robots.txt does not allow it")
     from .form_rung import _request_of
     o = await _request_of(f)
@@ -571,9 +571,10 @@ def _venue(f: dict) -> str:
     return m.group(1) if m else (f.get("host") or "the venue")
 
 
-def _http():
+async def _robots_ok(url: str) -> bool:
+    """venue_read's robots check — its order is (http, url, resolve)."""
     from . import ladder_routes as LR
-    return LR.HTTP, LR.RESOLVE
+    return await V._allowed(LR.HTTP, url, LR.RESOLVE)
 
 
 def _rec_for(hid: str, t: str) -> Optional[dict]:
@@ -689,7 +690,7 @@ async def ops_rehearse(request: Request):
     if not m:
         return _no(422, "form_not_mapped", "only our test venue or a mapped venue's own form (form_rung.FORM_MAPS)")
     read_only = bool(body.get("read_only")) or not m.get("test")      # a real venue is ALWAYS read-only here
-    if not await V._allowed(*_http(), url):
+    if not await _robots_ok(url):
         return _no(422, "robots", "their robots.txt does not allow it")
     from datetime import date as _d, time as _t
     vals = {**FICTIONAL, "date": m["date_fmt"](_d.fromisoformat(body.get("date") or "2026-12-15")),

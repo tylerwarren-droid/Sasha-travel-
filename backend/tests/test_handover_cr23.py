@@ -301,10 +301,14 @@ class FromPreparedForm(Base):
         req = mock.Mock()
         req.json = mock.AsyncMock(return_value={"return_to": "https://project.kanoe.ai/chat"})
         with mock.patch.object(HO, "account_for", return_value=self.acct), \
-             mock.patch.object(HO.V, "_allowed", mock.AsyncMock(return_value=True)), \
+             mock.patch.object(HO.V, "_allowed", mock.AsyncMock(side_effect=self.robots)), \
              mock.patch("booking_signer.form_rung._request_of", mock.AsyncMock(return_value=REQ)), \
              mock.patch.object(HO, "_receipt", mock.AsyncMock()):
             return await HO.from_prepared_form(self.fid, req)
+
+    async def robots(self, http, url, resolve):
+        assert isinstance(url, str) and url.startswith("https://"), "robots check called as (http, url, resolve)"
+        return True
 
     async def test_link_then_booked_in_the_form_store(self):
         out = await self.call()

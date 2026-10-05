@@ -488,9 +488,10 @@ async def due(now: Optional[datetime] = None) -> int:
         for r in st.get("reminders") or []:
             if r["sent"] or r["on"] > now.date().isoformat():
                 continue
-            ch = await GW.STORE.channel_for(st.get("wa", ""))
-            gst = await GW.STORE.get_state(st.get("wa", "")) if ch else {}
-            res = await GW.deliver(ch, st.get("number_from"), GW.Out().text("🩺 " + r["text"]), gst.get("last_inbound_at")) \
+            from .. import whatsapp as PW
+            ch, wkey, frm = await PW.reach(st.get("wa", ""), st.get("number_from"), c.get("account_id"))   # CR 20
+            gst = await GW.STORE.get_state(wkey) if ch else {}
+            res = await GW.deliver(ch, frm, GW.Out().text("🩺 " + r["text"]), gst.get("last_inbound_at")) \
                 if ch else ["no channel"]
             if res and all(x == "sent" for x in res):
                 r["sent"], changed = True, True

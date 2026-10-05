@@ -63,7 +63,7 @@ class Web(TG.Base):
         self.assertIsNone(run(PWEB.web_turn(None, "", mode="campus")))          # no account: no product state at all
         self.assertIsNone(self.turn(mode="vietnam"))
 
-    def test_web_and_whatsapp_keep_separate_conversations(self):
+    def test_a_mode_word_on_whatsapp_and_exit_on_the_web_share_one_conversation(self):   # CR 20: one account, one state
         self.turn(mode="campus")
         self.link()
         self.say("relocation")                                                   # the WhatsApp line, its own state

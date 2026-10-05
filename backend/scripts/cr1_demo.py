@@ -264,6 +264,76 @@ async def rehearse(n: int, account_name: str = "demo", only: Optional[str] = Non
             page("U11 file page: the pack", f"/relocation-file/{rid}", "05_Proof-of-economic-means")
             await beat("U12 entry date → the TIE, from its page", "1 March 2027", expect="I'll remind you here")
             await beat("U13 consulate booked → itinerary", "consulate booked 12 November 10:00", expect="booked by you")
+        elif only == "both":   # CR 20 · back and forth: the SAME account, case and state on WhatsApp and the web tab
+            from products import web as PWEB
+            from app.services.conductor import conduct
+
+            async def wb(label, message="", mode=None, payload=None, expect=None):
+                t = time.monotonic()
+                try:
+                    r = await PWEB.web_turn(account, message, mode=mode, payload=payload, signed_in=True)
+                    said = "(not the products' — Sasha's own web flow)" if r is None else (
+                        r["response"] + "".join(f"\n[button: {q['title']}]" for q in r.get("quick_replies") or []))
+                except Exception as e:
+                    said = f"{type(e).__name__}: {e}"
+                took = time.monotonic() - t
+                ok = expect is None or expect in said
+                rows.append({"beat": label, "sent": "web: " + (message or (f"[tab opens: {mode}]" if mode else f"[button {payload}]")),
+                             "compute_s": round(took, 1), "msgs": 1, "room_s": round(took, 1), "ok": ok, "said": said, "expect": expect})
+                print(f"{'✓' if ok else '✗'} {label:<34} {took:5.1f}s (web)", flush=True)
+                if not ok:
+                    print("    said: " + said.replace("\n", " | ")[:400], flush=True)
+                return said
+
+            async def wq(label, message, expect):      # Sasha's own web flow (the itinerary), as the signed-in account
+                t = time.monotonic()
+                r = await conduct(message, [], user_id=account, signed_in=True)
+                said = r.get("response") or ""
+                ok = expect in said
+                rows.append({"beat": label, "sent": "web: " + message, "compute_s": round(time.monotonic() - t, 1), "msgs": 1,
+                             "room_s": round(time.monotonic() - t, 1), "ok": ok, "said": said, "expect": expect})
+                print(f"{'✓' if ok else '✗'} {label:<34} (web)", flush=True)
+                if not ok:
+                    print("    said: " + said.replace("\n", " | ")[:400], flush=True)
+            # (1) RelocateMe: phone → laptop → phone
+            await beat("X1 WA relocate", "relocate", expect="I never file anything")
+            await beat("X2 WA first", "first", expect="economic resources")
+            await beat("X3 WA me", "me", expect="present the application")
+            await beat("X4 WA myself", "myself", expect="Your passport number?")
+            await beat("X5 WA the specimen passport", media=True, expect="check digit agrees")
+            await wb("X6 web: the same file, same read-back", mode="relocation", expect="Back to your EX-01.")
+            await wb("X7 web: yes, all right (finished on the laptop)", payload="rx:doc:yes", expect="Kept")
+            await beat("X8 WA knows: the next answer", "De Bruijn", expect="")
+            await wb("X9 web: what's next for my application?", "what's next for my application?", expect="Back to your EX-01.")
+            await wb("X10 web: DEMO → prepared on the laptop", "DEMO", expect="Your EX-01 is prepared")
+            await beat("X11 WA SIGNED (the phone knows it's prepared)", "SIGNED", expect="Which country do you live in now?")
+            await beat("X12 WA UK", "UK", expect="Consulado General de España en Londres")
+            await beat("X13 WA pack SKIP", "SKIP", expect="When do you plan to enter Spain?")
+            await beat("X14 WA entry date", "1 March 2027", expect="I'll remind you here")
+            # (4) bookings both ways
+            await wb("X15 web: consulate booked (on the laptop)", "consulate booked 12 November 10:00", expect="booked by you")
+            await beat("X16 WA: the laptop's booking on the phone", "what do I have on 12 November?", expect="Consulado")
+            await beat("X17 WA: TIE booked (on the phone)", "TIE appointment booked 20 March 2027 at 9:30", expect="booked by you")
+            await wq("X18 web: the phone's booking on the laptop", "what do I have on 20 March 2027?", "TIE")
+            # (2) CampusMe: laptop → phone
+            await wb("X19 web: campus Yale in November", "campus visits at Yale in November for my son", expect="Read just now from")
+            await wb("X20 web: pick 1 (a Yale session)", "1")
+            await beat("X21 WA: what's next for the Yale visit?", "what's next for the Yale visit?", expect="Back to your campus visits.")
+            # (3) EspañaMe: phone → laptop → phone
+            await beat("X22 WA españa", "españa", expect="EspañaMe")
+            await beat("X23 WA 1 → Salud", "1", expect="never why you need a doctor")
+            await wb("X24 web: the same consent, its buttons", mode="espana", expect="[button: Yes, continue]")
+            await wb("X25 web: yes", payload="hx:consent:yes", expect="A private clinic")
+            await beat("X26 WA: new in Madrid (the next step, on the phone)", payload="hx:new", expect="Padrón (town hall)")
+            await beat("X27 WA sasha", "sasha", expect="Back to Sasha")
+            if os.getenv("KANOE_LIVE_ONE", "1") == "0":
+                res = ["skipped: KANOE_LIVE_ONE=0"]
+            else:
+                res = await _live_one(account, "🧪 Kanoe — one live check from today's rehearsal: an application, a campus visit and "
+                                               "a health step each went phone → laptop → phone on your one account.")
+            rows.append({"beat": "LIVE one real message to the account's own WhatsApp", "sent": "(live)", "compute_s": 0,
+                         "msgs": 1, "room_s": 0, "ok": res == ["sent"], "said": "; ".join(map(str, res)), "expect": "sent"})
+            print(f"{'✓' if rows[-1]['ok'] else '✗'} LIVE message → {rows[-1]['said']}", flush=True)
         elif only == "modes":   # CR 15 · the mode words exactly as the founder types them; then ONE live message
             for label, msg, expect in (
                     ("M1 relocate", "relocate", "I never file anything"),
@@ -375,7 +445,7 @@ async def rehearse(n: int, account_name: str = "demo", only: Optional[str] = Non
             await beat("R4 myself", "myself", expect="Your passport number?")
             # CR 10 · one Sasha: a flight request mid-relocation goes to her own flow, in the same chat; then back where we were
             await beat("RF1 flights → Sasha's own answer", "book me flights to Madrid on 1 March", expect=GW.ASK_ONE[:30])
-            await beat("RF2 relocation → where we were", "relocation", expect="Back to your EX-01. Your passport number?")
+            await beat("RF2 relocation → where we were", "relocation", expect="Back to your EX-01.")
             await beat("R5 specimen photo → read", media=True, expect="check digit agrees")
             await beat("R6 yes, all right", payload="rx:doc:yes", expect="Kept")
             await beat("R7 surname", "De Bruijn")
@@ -625,13 +695,13 @@ async def health() -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["rehearse", "reset", "health", "showcase", "officer"])
-    ap.add_argument("what", nargs="?", default="all", choices=["all", "campus", "relocation", "health", "officer", "us", "trip", "modes"])
+    ap.add_argument("what", nargs="?", default="all", choices=["all", "campus", "relocation", "health", "officer", "us", "trip", "modes", "both"])
     ap.add_argument("--account", default="founder", choices=["founder", "demo"])
     ap.add_argument("--vault", action="store_true")
     ap.add_argument("--n", type=int, default=1)
     a = ap.parse_args()
     if a.cmd == "rehearse":
-        asyncio.run(rehearse(a.n, a.account if "--account" in sys.argv else "demo", a.what if a.what in ("us", "trip", "modes") else None))
+        asyncio.run(rehearse(a.n, a.account if "--account" in sys.argv else "demo", a.what if a.what in ("us", "trip", "modes", "both") else None))
     elif a.cmd == "officer":
         asyncio.run(officer())
     elif a.cmd == "showcase":

@@ -62,7 +62,8 @@ def for_sasha(body: str, history: list, now) -> bool:
     try:
         if not t.strip():
             return False
-        if GW.cancel_intent(t) is not None or GW._RECEIPTS.search(t) or _FLIGHT.search(t) or GW.COMBO.search(t):
+        if GW.cancel_intent(t) is not None or GW._RECEIPTS.search(t) or _FLIGHT.search(t) or GW.COMBO.search(t) \
+                or GW.ITINERARY_Q.search(t):   # CR 20 · "what do I have on 12 November?" is Sasha's itinerary, never a re-ask
             return True
         if HO.booking_handoff(t, history or []) is not None:
             return True
@@ -75,6 +76,39 @@ def for_sasha(body: str, history: list, now) -> bool:
         return True
 
 
+def _key(ch: dict) -> str:
+    """CR 20 · ONE conversation per ACCOUNT, whichever channel the guest types on (WhatsApp, the web tab): the product's
+    state lives here, keyed by the account — never by the phone number or the browser — so a file started on the phone
+    continues on the laptop at the same question, with the same answers."""
+    return f"acct:{ch['account_id']}"
+
+
+async def _key_of(wa_key: str) -> Optional[str]:
+    """The account key behind a channel key (Sasha's parsers call context() with the WhatsApp key)."""
+    if wa_key.startswith("acct:"):
+        return wa_key
+    if wa_key.startswith("web:"):
+        return "acct:" + wa_key[4:]
+    from booking_signer import guest_whatsapp as GW
+    ch = await GW.STORE.channel_for(wa_key)
+    return _key(ch) if ch else None
+
+
+async def reach(wa: str, frm: Optional[str], account: Optional[str]):
+    """CR 20 · where a product's reminder goes: the WhatsApp channel the case started on, or — for a case started on the
+    web tab — the same account's linked WhatsApp. → (channel, its key, the number we send from) or (None, None, None)."""
+    from booking_signer import guest_whatsapp as GW
+    ch = await GW.STORE.channel_for(wa) if wa and not wa.startswith(("web:", "acct:")) else None
+    if ch:
+        return ch, wa, frm
+    if account and hasattr(GW.STORE, "channel_of_account"):
+        ch = await GW.STORE.channel_of_account(account)
+        if ch:
+            nums = sorted(GW.guest_numbers())
+            return ch, ch["wa_id_sha256"], (frm if frm and frm != "web" else (nums[0] if nums else None))
+    return None, None, None
+
+
 async def _set_aside(st: dict, ch: dict) -> Optional[dict]:
     """The product that asked last steps aside: its state is kept (product_cases), Sasha's `pending` is hers again, and
     ONE context line joins her history. Returns the context."""
@@ -83,14 +117,14 @@ async def _set_aside(st: dict, ch: dict) -> Optional[dict]:
     product = pend.get("product")
     if not product:
         return None
-    await ST.STORE.put_conversation(ch["wa_id_sha256"], ch["account_id"], product, pend)
+    await ST.STORE.put_conversation(_key(ch), ch["account_id"], product, pend)
     st["pending"] = None          # Sasha's again; her history is NOT written to (Sasha tab, CR 10: context() only)
     return _module(product).context(pend)
 
 
 async def _resume(ch: dict, product: str) -> Optional[dict]:
     from . import store as ST
-    for r in await ST.STORE.conversations(ch["wa_id_sha256"]):
+    for r in await ST.STORE.conversations(_key(ch)):
         if r["product"] == product:
             return r["state"].get("pending")
     return None
@@ -100,7 +134,7 @@ async def _waiting(ch: dict, now) -> list:
     """Set-aside products touched within MODE_IDLE, most recent first: (product, pending)."""
     from . import store as ST
     out = []
-    for r in await ST.STORE.conversations(ch["wa_id_sha256"]):
+    for r in await ST.STORE.conversations(_key(ch)):
         pend = r["state"].get("pending") or {}
         try:
             fresh = now - datetime.fromisoformat(pend.get("touched")) <= MODE_IDLE
@@ -115,7 +149,8 @@ async def context(wa_key: str) -> Optional[dict]:
     """For Sasha's parsers (e.g. a default city): the most recently touched product conversation's context, or None.
     Minimum necessary — where, when, who; never a passport fact, never a health reason. Read-only."""
     from . import store as ST
-    rows = await ST.STORE.conversations(wa_key)
+    key = await _key_of(wa_key)
+    rows = await ST.STORE.conversations(key) if key else []
     best = max(rows, key=lambda r: (r["state"].get("pending") or {}).get("touched") or "", default=None)
     if not best:
         return None
@@ -142,6 +177,14 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
     pend = st.get("pending") or {}
     asked_last = pend.get("product") if pend.get("kind") == "product" else None
     if asked_last:
+        # CR 20 · this channel's copy may be stale (the guest went on on the other channel): the shared row wins; a product
+        # finished or dropped elsewhere is not resumed from an old copy
+        fresh = await _resume(ch, asked_last)
+        if fresh is None:
+            asked_last, st["pending"], pend = None, None, {}
+        elif (fresh.get("touched") or "") >= (pend.get("touched") or ""):
+            st["pending"] = pend = {**fresh, "kind": "product", "product": asked_last}
+    if asked_last:
         try:
             if now - datetime.fromisoformat(pend.get("touched")) > MODE_IDLE:
                 asked_last, st["pending"] = None, None
@@ -161,9 +204,19 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
                 if sashas_question or (rest and not DG.is_ask(rest)):
                     continue                                     # bare "ad": alone or "ad check …" only; never over Sasha's question
             target, entering = prod, True
+    if not target and not payload and _STATUS.search(body):
+        named = next((prod for prod, rx in _NAMES if rx.search(body)), None)
+        waiting = [prod for prod, _ in await _waiting(ch, now)]
+        prod = named if named in waiting else (asked_last or (waiting[0] if waiting and not named else None))
+        saved = await _resume(ch, prod) if prod else None
+        if saved:
+            st["pending"] = {**saved, "kind": "product", "product": prod, "touched": now.isoformat()}
+            _say_back(out, prod, saved)
+            await _store_put(ch, prod, st["pending"])
+            return True
     if asked_last and _EXIT.match(body) and not payload:
         from . import store as ST
-        await ST.STORE.drop_conversation(ch["wa_id_sha256"], asked_last)
+        await ST.STORE.drop_conversation(_key(ch), asked_last)
         st["pending"] = None
         out.text("Back to Sasha — ask me anything: a booking, a flight, your plans.")   # CR 15 · "sasha" returns
         return True
@@ -178,7 +231,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
                 target, entering = "trip", True
                 if asked_last != "trip":
                     from . import store as ST
-                    await ST.STORE.drop_conversation(ch["wa_id_sha256"], "trip")   # a new plan starts afresh
+                    await ST.STORE.drop_conversation(_key(ch), "trip")   # a new plan starts afresh
         elif "trip" in waiting and asked_last != "trip":
             saved = await _resume(ch, "trip")
             if saved and TP.claims(saved, body, payload, media):
@@ -213,7 +266,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
             words = _KEYWORD.get(target, re.compile("$^")).sub("", body, count=1).strip(" :,-")
             if entering and not words and not payload and target != "trip":          # "relocation" alone: where we were, said again
                 st["pending"]["touched"] = now.isoformat()
-                out.text(_welcome_back(target, saved))
+                _say_back(out, target, saved)
                 return True
             entering = False if not words else entering
         else:
@@ -232,7 +285,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         # products"); the plan is kept, set aside, and resumes on "NEXT"
         from . import store as ST
         st["pending"]["touched"] = now.isoformat()
-        await ST.STORE.put_conversation(ch["wa_id_sha256"], ch["account_id"], target, st["pending"])
+        await ST.STORE.put_conversation(_key(ch), ch["account_id"], target, st["pending"])
         st["pending"] = None
         p["KanoeSaid"], p["Body"] = body, ctx["handoff"]
         return False
@@ -241,19 +294,47 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         return False
     from . import store as ST
     if (st.get("pending") or {}).get("step") in (None, "done"):   # finished, or never begun: nothing is kept
-        await ST.STORE.drop_conversation(ch["wa_id_sha256"], target)
+        await ST.STORE.drop_conversation(_key(ch), target)
         st["pending"] = None
         return True
     if st.get("pending"):
         st["pending"]["touched"] = now.isoformat()
         if out.items:                                             # its last question, to say again on resuming
-            st["pending"]["last_said"] = str(out.items[-1][1])[:600]
+            # CR 20 · the whole of the last turn's question (e.g. the passport read-back AND "Is every line right?"), so the
+            # other channel resumes with what it is being asked about — capped from the end, the question kept
+            said = "\n\n".join(str(it[1]) for it in out.items if it[0] in ("text", "ask"))
+            st["pending"]["last_said"] = said if len(said) <= 1500 else "…" + said[-1500:]
+            last = out.items[-1]
+            st["pending"]["last_ask"] = [list(b) for b in last[2]] if last[0] == "ask" else None
         from . import store as ST
-        await ST.STORE.put_conversation(ch["wa_id_sha256"], ch["account_id"], target, st["pending"])
+        await ST.STORE.put_conversation(_key(ch), ch["account_id"], target, st["pending"])
     return True
 
 
-_RESUME_Q = {"relocation": "Back to your EX-01.", "campus": "Back to your campus visits.", "health": "Back to your health appointment."}
+# "where are we …" is Sasha's itinerary question (itinerary_q.QUESTION), never taken here
+_STATUS = re.compile(r"(?i)\b(what'?s next|what now|what do i do next|where was i|where am i up to|status of|next step)\b")
+_NAMES = [("campus", re.compile(r"(?i)\b(campus|visit|yale|penn|tour|college|universit)")),
+          ("relocation", re.compile(r"(?i)\b(relocat|ex-?01|visa|residenc|consulate|file|application|move)")),
+          ("health", re.compile(r"(?i)\b(health|doctor|salud|sermas|clinic)")), ("trip", re.compile(r"(?i)\b(trip|plan|flight|hotel)"))]
+
+
+async def _store_put(ch: dict, product: str, pend: dict) -> None:
+    from . import store as ST
+    await ST.STORE.put_conversation(_key(ch), ch["account_id"], product, pend)
+
+
+def _say_back(out, product: str, saved: dict) -> None:
+    """Where we were, said again — with the last question's own buttons when it had some (CR 20: the other channel can
+    press them too)."""
+    text = _welcome_back(product, saved)
+    if saved.get("last_ask"):
+        out.ask(text, [tuple(b) for b in saved["last_ask"]])
+    else:
+        out.text(text)
+
+
+_RESUME_Q = {"relocation": "Back to your EX-01.", "campus": "Back to your campus visits.", "health": "Back to your health appointment.",
+             "trip": "Back to your trip plan.", "diligence": "Back to Applied Diligence."}
 
 
 def _welcome_back(product: str, saved: dict) -> str:

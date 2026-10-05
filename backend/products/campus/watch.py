@@ -60,9 +60,10 @@ async def tick(now: Optional[datetime] = None, reader: Optional[SL.Reader] = Non
         month = date(y, m, 1).strftime("%B %Y")
         text = (f"🎓 CampusMe: {' and '.join(opened)} just published {month} visit dates. Say \"campus "
                 f"{' and '.join(opened)} {date(y, m, 1).strftime('%B')}\" and I'll show you the sessions.")
-        ch = await GW.STORE.channel_for(w["wa"])
-        st = await GW.STORE.get_state(w["wa"]) if ch else {}
-        sent = await GW.deliver(ch, w["number_from"], GW.Out().text(text), st.get("last_inbound_at")) if ch else ["no channel"]
+        from .. import whatsapp as PW
+        ch, wkey, frm = await PW.reach(w["wa"], w["number_from"], case.get("account_id"))   # CR 20
+        st = await GW.STORE.get_state(wkey) if ch else {}
+        sent = await GW.deliver(ch, frm, GW.Out().text(text), st.get("last_inbound_at")) if ch else ["no channel"]
         state = case["state"]
         if sent and all(r == "sent" for r in sent):
             state["watch"]["open"] = False

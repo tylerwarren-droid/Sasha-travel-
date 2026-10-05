@@ -277,6 +277,12 @@ class TestVenueConsent(Base):
         self.assertEqual((rec["state"], rec["taps"]), ("booked", 2))
 
 
+class TestNames(unittest.TestCase):
+    def test_each_test_page_has_its_own_name(self):
+        self.assertEqual(HO._test_name(TV + "hotel"), "Kanoe Test Hotel")
+        self.assertEqual(HO._test_name(TV + "consent"), "Sasha Test Venue")
+
+
 class NoRequest(Base):
     async def test_without_a_reservation_it_is_sent_never_a_guess(self):
         url = TV + "plain"

@@ -924,6 +924,11 @@ async def ops_end(hid: str, request: Request):
     return {"ok": True, "state": rec["state"]}
 
 
+def _test_name(url: str) -> str:
+    """Our test pages' own names: the hotel variant is "Kanoe Test Hotel" (its page says so), the rest "Sasha Test Venue"."""
+    return "Kanoe Test Hotel" if urlsplit(url).path.rstrip("/").endswith("/hotel") else "Sasha Test Venue"
+
+
 #: a fictional guest — never a real person's details through the cloud browser before a DPA
 FICTIONAL = {"person_name": "Prueba Sasha", "email": "prueba@example.com", "phone": "+34600000000", "party_size": "2",
              "free_text": "Prueba de Kanoe (ficticia)."}
@@ -966,7 +971,7 @@ async def ops_rehearse(request: Request):
          "when": {"mode": "at", "at": f"{body.get('date') or '2026-12-15'}T{body.get('time') or '21:00'}"},
          "how_many": {"count": 2, "unit": "people"}, "who": {"name": FICTIONAL["person_name"]}}
     try:
-        rec = await open_handover(page_url=url, m=m, step1=step1, step2=step2, venue="Sasha Test Venue" if m.get("test") else urlsplit(url).hostname,
+        rec = await open_handover(page_url=url, m=m, step1=step1, step2=step2, venue=_test_name(url) if m.get("test") else urlsplit(url).hostname,
                                   account=None, form_id=None, read_only=read_only, return_to=body.get("return_to"), request=o, fictional=True)
     except Refused as e:
         return _no(422, e.rule, e.say)

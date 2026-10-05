@@ -310,6 +310,20 @@ class Phone(Base):
         self.assertEqual(sent[0][:3], ("acct-1", "Sasha Test Venue", HO.view_url(rec)))
         self.assertIn("2 people", sent[0][3])
 
+    async def test_its_words_say_whether_it_went(self):
+        from booking_signer import guest_whatsapp as GW
+        rec = await self.open()
+
+        async def already(*a):
+            return "not sent: already sent"
+
+        async def went(*a):
+            return "sent to +34600000000"
+        with mock.patch.object(GW, "tap_to_finish", already, create=True):
+            self.assertEqual(await HO.tap_phone("a", rec), {"sent": False, "detail": "not sent: already sent"})
+        with mock.patch.object(GW, "tap_to_finish", went, create=True):
+            self.assertTrue((await HO.tap_phone("a", rec))["sent"])
+
     async def test_no_tap_function_no_tap_and_no_failure(self):
         from booking_signer import guest_whatsapp as GW
         rec = await self.open()

@@ -669,7 +669,10 @@ async def tap_phone(account: Optional[str], rec: dict) -> dict:
         out = fn(account, rec["venue"], view_url(rec), what)
         if asyncio.iscoroutine(out):
             out = await out
-        return out if isinstance(out, dict) else {"sent": bool(out)}
+        if isinstance(out, dict):
+            return out
+        said = str(out or "")              # its own words: "not sent: …" / "not told: …" when nothing went
+        return {"sent": bool(said) and not said.startswith(("not sent", "not told")), "detail": said}
     except Exception as e:
         log.warning("[handover] %s phone tap: %s", rec.get("id"), e)
         return {"sent": False, "why": f"{type(e).__name__}"}

@@ -132,13 +132,11 @@ class OnWhatsApp(TG.Base):
                       {"rung": "email", "available": True, "fact_index": 3, "value": "hola@botavara.es"}]
         self.pick_first()
         said = "\n".join(self.bodies())
-        self.assertIn("I'll email them — they have no booking page or form.", said)
+        self.assertNotIn("I'll email them", said)   # Sasha 158 · the route is the ops console's, never explained
         _, buttons = GW.SENDER.contents[-1]
         self.say("Yes, book it", payload=buttons[0][1])
         self.assertEqual(len(self.sent), 1)
-        self.assertIn("✉️ Emailed Botavara Chamberí", "\n".join(self.bodies()))
-        self.assertIn("Not booked yet", "\n".join(self.bodies()))
-        self.assertTrue(self.bodies()[-1].startswith("✉️ Emailed Botavara Chamberí"))   # no promise: 028 not applied, flag off
+        self.assertEqual(self.bodies()[-1], GW.DONE_ASKED)   # Sasha 158 · one sentence after; no promise: 028 not applied, flag off
 
     def test_the_guest_says_call_them_instead(self):
         self.rungs = [{"rung": "phone", "available": True, "fact_index": 2, "value": "+34 91 000"},

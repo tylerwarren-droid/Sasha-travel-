@@ -68,7 +68,7 @@ class StreamedCards(TG.Base):
             took = time.perf_counter() - t0
         bodies = [b for _, b, _ in sent_at]
         cards = [(t, b, m) for t, b, m in sent_at if "·" in b and "From Google Maps" not in b]
-        self.assertTrue(any("From Google Maps" in b for b in bodies[:1]))     # the header first
+        self.assertTrue(any(b.startswith("Here are the best-rated") for b in bodies[:1]))     # the header first
         self.assertEqual(len(cards), 3)
         self.assertEqual([m is not None for _, _, m in cards], [True, True, False])   # the slow photo isn't waited for
         self.assertGreater(cards[1][0] - cards[0][0], 0.1)                    # card 1 went before card 2's photo (0.15 s) was ready

@@ -590,14 +590,16 @@ async def locate(http: Http, key: str, near: str, where: str, country: Optional[
     return {**out, "found": True, "location": loc, "place_id": pl.get("id")}
 
 
-async def find_venues(http: Http, *, what: str, where: str, country: Optional[str], now: datetime,
-                      near: Optional[str] = None, open_at: Optional[str] = None) -> dict:
+async def find_venues(http: Http, *, what: str, where: Optional[str], country: Optional[str], now: datetime,
+                      near: Optional[str] = None, open_at: Optional[str] = None, named: bool = False) -> dict:
     """S-65 · "Find venues": a kind of place in a place ("tattoo studio", "Nairobi, KE") → up to twenty candidates (S-68; the chat shows `show` of them), each
     with what its Google listing says. Search only: nothing is contacted, nothing is read from their sites until one is
     picked, and then it is the existing venue read on THAT listing."""
     if not isinstance(what, str) or not 2 <= len(what.strip()) <= 60:
         raise FindRefused("what_invalid", "what to look for is 2–60 characters (e.g. \"tattoo studio\")")
-    if not isinstance(where, str) or not 2 <= len(where.strip()) <= 80:
+    if named and not (isinstance(where, str) and where.strip()):
+        where = None   # Sasha 158 · a venue by NAME: Google finds it wherever it is
+    elif not isinstance(where, str) or not 2 <= len(where.strip()) <= 80:
         raise FindRefused("where_invalid", "where is 2–80 characters (e.g. \"Nairobi\")")
     country = country.strip().upper() if isinstance(country, str) and country.strip() else None
     if country and not re.fullmatch(r"[A-Z]{2}", country):
@@ -613,7 +615,8 @@ async def find_venues(http: Http, *, what: str, where: str, country: Optional[st
             when = datetime.strptime(str(open_at), "%Y-%m-%dT%H:%M")
         except ValueError:
             raise FindRefused("open_at_invalid", "open_at is the local time as YYYY-MM-DDTHH:MM") from None
-    body = {"textQuery": f"{what.strip()} in {where.strip()}", "maxResultCount": FIND_MAX, **({"regionCode": country} if country else {})}
+    body = {"textQuery": what.strip() if where is None else f"{what.strip()} in {where.strip()}",
+            "maxResultCount": 5 if named else FIND_MAX, **({"regionCode": country} if country else {})}
     try:
         r = await http("POST", PLACES_URL, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": FIND_FIELDS,
                                                     "content-type": "application/json"}, json=body)

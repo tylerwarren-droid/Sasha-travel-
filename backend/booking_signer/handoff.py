@@ -264,7 +264,9 @@ def known_place(where: str) -> Optional[tuple]:
     fold = lambda x: unicodedata.normalize("NFD", x).encode("ascii", "ignore").decode().lower().strip()
     names = {fold(k): k for k in KNOWN_PLACES}
     w = fold(where)
-    hit = names.get(w) or next((names[m] for m in difflib.get_close_matches(w, list(names), n=1, cutoff=0.72)), None)
+    # Sasha 158 · a near-miss must be close AND of a similar length: "Seoul" is not "Sol" (it searched Madrid)
+    near = [m for m in difflib.get_close_matches(w, list(names), n=3, cutoff=0.8) if abs(len(m) - len(w)) <= 2]
+    hit = names.get(w) or (names[near[0]] if near else None)
     return (hit, *KNOWN_PLACES[hit]) if hit else None
 
 
@@ -336,7 +338,9 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
         # Sasha 104 · "in Chamberí, somewhere romantic": the place, then a qualifier — kept with what is searched for
         head, tail = where.split(",", 1)
         tail = re.sub(r"^\s*(?:somewhere|something|algo|alg[uú]n sitio|a place)\s+", "", tail).strip(" .")
-        if known_place(head.strip()) or len(tail.split()) <= 4:
+        if re.fullmatch(r"[A-ZÁÉÍÓÚÑ][\w'’.-]*(?:\s+[A-ZÁÉÍÓÚÑ][\w'’.-]*){0,2}", tail.strip()):
+            where = f"{head.strip()}, {tail.strip()}"   # Sasha 158 · "Kreuzberg, Berlin": a place, then its city
+        elif known_place(head.strip()) or len(tail.split()) <= 4:
             where = head.strip()
             if tail and not known_place(tail):
                 what = f"{tail} {what}"
@@ -379,6 +383,50 @@ _BARE_KIND = re.compile(r"^\s*(?:an?\s+|some\s+|the\s+)?(?:(?:best|good|great|to
 # Sasha 156 · plurals too: "restaurants in Madrid tonight" fell through to the model's curated (Vietnam) dining list
 
 
+#: Sasha 158 · ANY "<kind of place> in/near <place>" is a search ("a dentist in Buenos Aires", "pottery class in Kyoto") —
+#: short, and not a trip, a stay, a flight or a question about a place
+_ANY_KIND = re.compile(r"^\s*(?:(?:please\s+)?(?:i need|i'?m looking for|looking for|any|show me|find me|get me)\s+)?(?:an?\s+|some\s+|the\s+)?"
+                       r"(?:(?:best|good|great|top|nice|cheap|local)\s+)?(?P<what>[a-záéíóúñü'’ -]{2,40}?)\s+(?:in|near|around)\s+\S", re.I)
+_NOT_A_SEARCH = re.compile(r"\b(trip|itinerary|days?|nights?|weekend|week|plan|visit|travel|things to do|weather|flights?|fly|"
+                           r"hotels?|hostels?|stay|apartments?|live|living|move|moving|relocat\w*|history|news|time|people|"
+                           r"what|where|when|why|how|who|is|are|was|do|does|can|should|tell|about|ones?|rated|reviewed|options|choices|"
+                           r"i|i'm|we|you|my|our|like|love|loved|enjoy|enjoyed|went|had|have|miss|hate|want)\b", re.I)
+
+
+def any_kind(message: str) -> Optional[str]:
+    m = _ANY_KIND.match(message or "")
+    if not m or len((message or "").split()) > 12 or len(m["what"].split()) > 4 or _NOT_A_SEARCH.search(m["what"]):
+        return None
+    return m["what"]
+
+
+#: Sasha 158 · NAME IT: "book Casa Lucio tomorrow at 9 for 2" — that venue, by name (any city it is in, or the one said)
+_NAMED = re.compile(r"^\s*(?:(?:please|can you|could you)\s+)?(?:book|reserve)\s+(?:me\s+|us\s+)?(?:a\s+table\s+at\s+|at\s+)?"
+                    r"(?P<name>(?!(?:an?|the|some|me|us|my|dinner|lunch|breakfast|brunch|a table|table)\b)[^,?.!;]{2,60}?)"
+                    r"(?:\s*,?\s+in\s+(?P<where>[A-ZÁÉÍÓÚÑ][^,?.!;]{1,40}?))?"
+                    r"(?P<rest>\s+(?:tomorrow|today|tonight|at|for|on|this|next|el|a las|para)\b.*)?\s*[.!?]?\s*$", re.I)
+_KINDS_NOT_NAMES = re.compile(r"\b(table|dinner|lunch|brunch|breakfast|restaurant|spa|massage|haircut|appointment|class|tour|session|"
+                              r"tattoo|barber|salon|hotel|room|flight|car|taxi|something|somewhere)s?\b", re.I)
+
+
+def restaurant_time(bare: dict) -> str:
+    """Sasha 158 · a bare hour at a RESTAURANT is the afternoon or evening ("at 9" → 21:00, "at 2" → 14:00); 12 is noon."""
+    h = bare["hour"] if bare["hour"] == 12 else bare["hour"] + 12
+    return f"{bare['day']}T{h:02d}:{bare['minute']:02d}"
+
+
+def named_request(message: str) -> Optional[dict]:
+    m = _NAMED.match(message or "")
+    if not m or not (m["rest"] or m["where"]):
+        return None
+    name = " ".join(m["name"].split()).strip(" ,")
+    if name == name.lower():   # spoken: "casa lucio" → "Casa Lucio" (Google finds either; the guest reads the name)
+        name = name.title()
+    if _KINDS_NOT_NAMES.search(name) or len(name.split()) > 6:
+        return None
+    return {"what": name, "where": (m["where"] or "").strip() or None, "named": True}
+
+
 def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Optional[datetime] = None) -> Optional[dict]:
     """S-66 (EU) step 5 · a full conductor turn that starts a booking IN THE CHAT — `booking_find` for the chat to run
     Find venues with (S-65) — or None, and the conductor carries on. ⛔ It no longer opens /booking-helper: the Psi-only
@@ -397,9 +445,21 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
     if re.search(r"\b(?:hotels?|hostels?|apartments?|alojamiento|a room|habitaci[oó]n)\s+(?:in|at|en|near|cerca)\b", message or "", re.I) and \
             not re.search(r"\b(dinner|lunch|table|restaurant|cena|mesa)\b", message or "", re.I):
         return None   # Sasha 137 · a stay is the hotel flow's (cards with Reserve (TEST), or a real request) — never a table search
-    f = find_request(message, now)
-    if f is None and _BARE_KIND.match(message or ""):   # Sasha 140 · "spa in Madrid" — a place kind and a place: a search, no model
-        f = find_request("find " + message.strip(), now)
+    named = named_request(message)
+    f = None if named else find_request(message, now)
+    if f is None and not named and (_BARE_KIND.match(message or "") or any_kind(message)):   # Sasha 140/158 · "<kind> in <place>": a search
+        f = find_request("find " + re.sub(r"^\s*(?:please\s+)?(?:i need|i'?m looking for|looking for|any|show me|find me|get me)\s+", "",
+                                          message.strip(), flags=re.I), now)
+    if named:
+        f = {k: v for k, v in named.items() if v is not None}
+        at = plain_open_at(message, now)
+        if at:
+            f["open_at"] = at
+        else:   # "tomorrow at 9": the hour is kept, am/pm decided once the venue's kind is known (a restaurant: the evening)
+            hm = re.search(r"\bat\s+(\d{1,2})(?::(\d{2}))?(?!\s*(?:am|pm|h\b|:))\b", message or "", re.I)
+            day = plain_date(message or "", now)
+            if hm and day and 1 <= int(hm[1]) <= 12:
+                f["bare_time"] = {"day": day, "hour": int(hm[1]), "minute": int(hm[2] or 0)}
     if f is None:
         # Sasha 101 · a spoken request often arrives in pieces (a pause ends the turn): "Book a luxury dinner for two" /
         # "in Chamberí on Saturday at nine". The guest's last lines and this one, read together, as one request.
@@ -413,10 +473,9 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
                     break
     if f is None:
         return None
-    where = f"{f['where']}{', ' + f['country'] if f.get('country') else ''}"
-    response = f"Let me look for {f['what']} in {where} — from Google Maps; nobody is contacted by looking."
-    if f.get("priority") is None:   # S-68 step 7 · asked ONCE, only when none was stated; best rated meanwhile
-        response += f" {PRIORITY_QUESTION} I'll show them best rated until you say."
+    # Sasha 158 · one sentence before; the machinery (sources, ranking, routes) is never explained to the guest
+    response = (f"Looking up {f['what']}{' in ' + f['where'] if f.get('where') else ''}." if f.get("named")
+                else f"Here are the best-rated {_plural_kind(f['what'])} in {f['where']}.")
     history = list(history or [])
     return {
         "response": response, "intents": ["booking"], "photos": [], "tools_used": [], "links": [],
@@ -427,6 +486,17 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
         # S-64 step 11 · whatever else the message says (when, how many) as the parts of reservation/1 — for later
         "reservation_draft": _draft(message, now),
     }
+
+
+def _plural_kind(what: str) -> str:
+    w = (what or "places").strip()
+    if re.search(r"\b(dinner|lunch|brunch|breakfast|supper|food|drinks?|coffee|cocktails|sushi|tapas)$", w, re.I):
+        return f"places for {w}"
+    if re.search(r"(ss|sh|ch|x)$", w, re.I):
+        return w + "es"
+    if re.search(r"[^aeiou]y$", w, re.I):
+        return w[:-1] + "ies"
+    return w if re.search(r"(s|pilates)$", w, re.I) else w + "s"
 
 
 def _draft(message: str, now: Optional[datetime]) -> dict:

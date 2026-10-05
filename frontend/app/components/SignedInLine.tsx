@@ -59,3 +59,19 @@ export function WhoIsBooking() {
     </div>
   )
 }
+
+/** Sasha 158 · on EVERY page: who this browser is — "Signed in as Tyler" (the founder's session), "Signed in as <email>",
+ *  or "Guest" with the 10-second sign-in. From /api/auth/whoami; nothing assumed, nothing shown while it is unknown. */
+export function WhoBadge() {
+  const who = useWho()
+  if (who === null || who === 'unknown') return null
+  const email = who.email ?? ''
+  const guest = !who.who || email.endsWith('@guests.kanoe.ai')
+  const label = who.who === 'founder' ? 'Signed in as Tyler' : guest ? 'Guest' : `Signed in as ${email || 'you'}`
+  return (
+    <div style={{ position: 'fixed', left: '50%', top: 6, transform: 'translateX(-50%)', zIndex: 50, fontSize: 11, padding: '3px 9px', borderRadius: 999,
+      background: 'rgba(17,17,17,.78)', color: '#fff', border: '1px solid rgba(255,255,255,.15)', pointerEvents: 'auto' }}>
+      {label}{guest && <> · <a href="/sign-in" style={{ textDecoration: 'underline' }}>Sign in</a></>}
+    </div>
+  )
+}

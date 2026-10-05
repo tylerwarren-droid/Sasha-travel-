@@ -251,7 +251,7 @@ class Turns(Base):
             self.pick_first()
             self.assertEqual(fake.forms[-1]["reservation"]["who"]["contact"], {"mobile_e164": GUEST, "email": "guest@example.com"})
             self.assertEqual(GW.SENDER.contents[-1][1][0][0], "Yes, book it")
-            self.assertIn("Exactly what I'll send:\n• I'll send the booking form:\n• Email: guest@example.com", self.bodies())   # one bullet
+            self.assertIn("What I'll send:\n• I'll send the booking form:\n• Email: guest@example.com", self.bodies())   # one bullet
             self.say("Yes, book it", payload=GW.SENDER.contents[-1][1][0][1])
             self.assertIn("✅ Booked: A Very Long Restaurant Name In Madrid, Saturday 3 October at 21:00, 2 people. Their reference: TV-FE41E1.",
                           self.bodies())                                   # was "⚠ Not confirmed yet" over a confirmed booking
@@ -302,7 +302,7 @@ class Turns(Base):
         body, buttons = GW.SENDER.contents[-1]
         self.assertEqual(body, "Book Botavara Chamberí for 2, Saturday 3 October at 21:00, under Warren?")
         self.assertEqual(buttons[0], ("Yes, book it", "yes:call-123:" + "a" * 16))
-        self.assertIn("Exactly what I'll say:\n• Hola, quería reservar…", self.bodies())
+        self.assertIn("What I'll say:\n• Hola, quería reservar…", self.bodies())
         prep = next(c for c in GW.api.calls if c[2] == "/api/booking/calls")[3]
         self.assertEqual(prep["reservation"]["who"], {"name": "Tyler Warren", "contact": {"mobile_e164": GUEST}})
         self.assertEqual(prep["fact_index"], 2)
@@ -428,7 +428,7 @@ class Turns(Base):
         GW.api.place = {"status": "placed", "say": "Calling Indian dinner in Chamberí, Madrid now."}
         self.pick_first()
         self.say("vale")
-        self.assertIn("📞 Calling Botavara Chamberí now.", self.bodies())
+        self.assertIn("📞 Calling Botavara Chamberí now — I'll tell you what they say.", self.bodies())
         self.assertNotIn("Indian dinner", " ".join(self.bodies()))
         self.assertEqual(self.spawned, ["watch_call"])
 

@@ -1279,15 +1279,44 @@ async def _invite(ctx: dict, req: dict) -> None:
 
 # ── find → cards ────────────────────────────────────────────────────────────────────────────────────────────────────
 
+def _header(f: dict, luxe: bool) -> str:
+    from .handoff import _plural_kind
+    return f"Here are the best-rated {_plural_kind(f.get('what') or 'places')} in {f.get('where')}{' (€€€ and up first)' if luxe else ''}."
+
+
+def city_of(address: Optional[str]) -> Optional[str]:
+    """The city in a Google address ("…, 28005 Madrid, Spain" → "Madrid") for a venue found by its name alone."""
+    parts = [x.strip() for x in (address or "").split(",") if x.strip()]
+    c = re.sub(r"[\d-]+", "", parts[-2]).strip() if len(parts) >= 2 else ""
+    return c if len(c) >= 2 else None
+
+
 async def _find(ctx: dict, f: dict, draft: dict) -> None:
     from .ranking import rating_words
     from .venue_read import distance_words
     out, account = ctx["out"], ctx["account"]
     status, j = await api(account, "POST", "/api/booking/venues/find",
                           {k: v for k, v in {"what": f.get("what"), "where": f.get("where"), "country": f.get("country"),
-                                             "open_at": f.get("open_at")}.items() if v})
+                                             "open_at": f.get("open_at"), "named": f.get("named")}.items() if v})
     if status != 200:
         out.text(f"I can't search for places right now — {refusal_words(j, status)}.")
+        return
+    if f.get("named"):   # Sasha 158 · NAME IT: that venue, one card, then straight on to booking it
+        c = (j.get("candidates") or [None])[0]
+        if not c:
+            out.text(f"I couldn't find {f.get('what')}. Could you tell me the city?")
+            return
+        photos, _late = await _photos_within([c], photo_wait() + 1.0)
+        out.media(" · ".join(x for x in (c.get("name"), rating_words(c), c.get("address")) if x), photos.get(c["place_id"]))
+        parts = dict(draft.get("parts") or {})
+        if "what" not in parts and re.search(r"restaurant|bar|caf|bistro|tavern|grill|steak|sushi|pizz|brasserie|tapas|food|bodega",
+                                             str(c.get("type") or ""), re.I):
+            parts["what"] = {"activity": "a table", "activity_venue_lang": "una mesa", "category": "restaurant"}   # a restaurant: a table
+            if f.get("bare_time") and not f.get("open_at"):
+                f = {**f, "open_at": HO.restaurant_time(f["bare_time"])}
+        await _picked_card(ctx, {"find": {**f, "where": f.get("where") or city_of(c.get("address")) or "the city"},
+                                 "draft": parts},
+                           {"place_id": c["place_id"], "name": c.get("name"), "country": c.get("country")})
         return
     cands = {c["place_id"]: c for c in j.get("candidates") or []}
     ranking = j.get("ranking") or {}
@@ -1312,8 +1341,7 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
     elif rehearsal(account) and not ctx.get("no_test_card"):   # Sasha 117 · the dress rehearsal books OUR test venue; the card says so
         shown = shown[:2] + [TEST_CARD]                   # still three: WhatsApp shows at most three reply buttons
     what = f.get("what") or ""
-    out.text(f"{what[:1].upper() + what[1:]} in {f.get('where')} — {ranking.get('count') or f'{len(cands)} found'}"
-             f"{' · €€€ and up first' if luxe else ''}. From Google Maps; nobody has been contacted.")
+    out.text(_header(f, luxe))   # Sasha 158 · one sentence; how they were found and ranked is not the guest's business
     for c in shown:
         line = " · ".join(x for x in (c.get("name") or "no name listed", rating_words(c),
                                        distance_words(c["distance_m"]) if c.get("distance_m") is not None else None) if x)
@@ -1443,8 +1471,7 @@ async def _stream_cards(ctx: dict, f: dict, shown: List[dict], cands: dict, rank
     elif rehearsal(account) and not ctx.get("no_test_card"):
         shown = shown[:2] + [TEST_CARD]
     what = f.get("what") or ""
-    out.text(f"{what[:1].upper() + what[1:]} in {f.get('where')} — {ranking.get('count') or f'{len(cands)} found'}"
-             f"{' · €€€ and up first' if luxe else ''}. From Google Maps; nobody has been contacted.")
+    out.text(_header(f, luxe))   # Sasha 158 · one sentence; how they were found and ranked is not the guest's business
     head = Out()
     head.items, out.items = list(out.items), []   # what the turn said so far, the header last: sent now, in order
     await deliver(ch, frm, head, last)
@@ -2051,7 +2078,11 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
     combo = (st.get("combo") or {}).get("stage") == "restaurant"
     order = [r for r in [dv.route] + dv.alternatives if r] if not combo else ["form"]
     if dv.route and not combo:
-        out.text(dv.reason)
+        # Sasha 158 · the route and its reason are the ops console's (logged), never explained to the guest — except a
+        # platform page, where the final press is theirs and they need to know it
+        log.info("[guest_whatsapp] route %s: %s", dv.route, dv.reason)
+        if pend.get("prefer") or dv.route in ("one_tap", "call_email"):   # their own ask answered; a press of theirs; two acts on one yes
+            out.text(dv.reason)
     keep = {"read": rd, "draft": d, "invite_code": pend.get("invite_code")}   # so "call them instead" can re-decide
     for route in order:
         if route == "form" and "form" in rungs:
@@ -2155,14 +2186,23 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
 
 
 _BULLET = re.compile(r"^[·•]\s*")
+#: Sasha 158 · the read-back's machinery lines (addresses, copies, where replies go) stay in the record the yes binds to,
+#: and in the ops console; the guest sees what will be SAID to the venue, and any step their yes also covers
+_MACHINERY = re.compile(r"^(?:I'll email .+ at .+ from |You're copied privately|Their reply comes to me|Shall I send it\?|Subject: |"
+                        r"I'll send the booking form on |I'll write in English)", re.I)
+
+
+def guest_lines(rung: str, lines: list) -> list:
+    out = [ln for ln in lines if not _MACHINERY.match(_BULLET.sub("", str(ln)).strip())]
+    return out or list(lines)
 
 
 async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: str, venue: str, kind: str = "confirm",
                    extra: Optional[dict] = None) -> None:
     out = ctx["out"]
     sha = read_back["sha256"]
-    out.text("Exactly what I'll " + ("say" if rung == "call" else "send") + ":\n" +
-             "\n".join("• " + _BULLET.sub("", ln) for ln in read_back["lines"]))   # Sasha 117 · one bullet, not "• ·"
+    out.text("What I'll " + ("say" if rung == "call" else "send") + ":\n" +
+             "\n".join("• " + _BULLET.sub("", ln) for ln in guest_lines(rung, read_back["lines"])))   # Sasha 117 · one bullet
     tag = f"{rid[:8]}:{sha[:16]}"
     yes_title = "Yes, book it" if kind == "confirm" else "Yes, cancel"
     out.ask(sentence, [(yes_title, f"yes:{tag}"), ("No", f"no:{tag}")])
@@ -2193,7 +2233,7 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
         out.text({"confirmed": f"✅ Booked: {venue}, {pend.get('summary', '')}.{ref}",
                   "proposed": f"⚠ Not confirmed yet: {venue}'s page offers something different — read it below.",
                   "declined": f"❌ They said no: {venue}'s page turned it down."}.get(result) or
-                 (f"⚠ Not confirmed yet: I sent {venue} their booking form; their page didn't say it's booked." if j.get("status") == "sent"
+                 (DONE_ASKED if j.get("status") == "sent"   # Sasha 158 · one sentence after
                   else f"⚠ Not confirmed yet: {j.get('say') or 'their site did not answer clearly'}"))
         if j.get("their_page"):
             out.text(f"Their page said: “{str(j['their_page'])[:500]}”")
@@ -2211,7 +2251,7 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
         if status != 200 or j.get("status") != "sent":
             out.text(f"❌ Not sent to {venue}: {j.get('say') or refusal_words(j, status)}.")
             return
-        out.text(f"✉️ Emailed {venue} — {pend.get('summary', '')}. Not booked yet: I'll show you their reply word for word the moment it arrives.")
+        out.text(DONE_ASKED)   # Sasha 158 · one sentence after; the itinerary says "Requested — waiting for <venue>"
         return
     status, j = await api(account, "POST", f"/api/booking/calls/{pend['id']}/place", {"read_back_sha256": pend["sha"], "approval": how}, timeout=120)
     if status != 200:
@@ -2224,9 +2264,12 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
     if pend.get("invite_code") and pend.get("trip_item_id"):   # S-80 · the invitation follows the inviter's booking
         from . import invitations as IV
         await IV.STORE.update(pend["invite_code"], trip_item_id=pend["trip_item_id"])
-    out.text(f"📞 Calling {venue} now." if j.get("status") in ("placed", "uncertain") else f"❌ I couldn't call {venue}: {j.get('why') or 'not placed'}.")
+    out.text(f"📞 Calling {venue} now — I'll tell you what they say." if j.get("status") in ("placed", "uncertain") else f"❌ I couldn't call {venue}: {j.get('why') or 'not placed'}.")
     if j.get("status") in ("placed", "uncertain"):
         _spawn(watch_call(ctx["ch"], ctx["frm"], account, pend["id"], venue, "book", pend.get("summary", "")))
+
+
+DONE_ASKED = "Done — I've asked them and I'll confirm here as soon as they reply."
 
 
 def _receipt_note(venue: Optional[str] = None, sent: bool = True) -> str:

@@ -127,6 +127,6 @@ class EmailOnlyVenue(TG.Base):
         finally:
             GW.api, LR.LADDER_STORE = api, saved
         self.assertEqual(fake.email["nights"], 2)                               # the ROOM request, for its nights
-        self.assertIn("I'll email them", "\n".join(self.bodies()))
+        self.assertNotIn("I'll email them", "\n".join(self.bodies()))   # Sasha 158 · the route isn't explained
         self.assertEqual(GW.SENDER.contents[-1][0], "Email ARTIEM Madrid to ask for a room for 2, Tuesday 20 October for 2 nights? "
                                                     "It's a request — nothing is booked until they reply.")

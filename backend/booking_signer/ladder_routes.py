@@ -199,7 +199,12 @@ async def find_venues(request: Request):
         _rehearse = _with_rehearsal if not re.search(r"\b(hotel|room|stay|hostel|homestay)\b", str(body.get("what") or ""), re.I) \
             else (lambda a, out: out)   # Sasha 132 · our test RESTAURANT is never offered as a hotel
         out = await V.find_venues(HTTP, what=body.get("what"), where=body.get("where"),
-                                  country=body.get("country"), now=NOW(), near=body.get("near"), open_at=body.get("open_at"))   # S-68 steps 3–4
+                                  country=body.get("country"), now=NOW(), near=body.get("near"), open_at=body.get("open_at"),   # S-68 steps 3–4
+                                  named=bool(body.get("named")))
+        if body.get("named"):   # Sasha 158 · NAME IT: Google's best match for the name, one card (no test card beside it)
+            out = {**out, "candidates": (out.get("candidates") or [])[:1], "show": 1, "named": True}
+            await _with_google_photos(out)
+            return out
         await _with_google_photos(out)
         return _rehearse(account_for(request), out)
     except V.ReadRefused as e:
@@ -334,8 +339,14 @@ async def prepare_email(request: Request):
     refused = await _optin_refusal(O.venue_ids_of(read), "email")
     if refused:
         return refused
+    if not body.get("email"):   # Sasha 158 · as forms do (Sasha 121): the account's own address, shown in the read-back
+        from . import guest_receipt as GR
+        mine = await GR.address_of(account)
+        if mine:
+            body = {**body, "email": mine}
+    quote = isinstance(body.get("quote"), dict)
     try:
-        p = E.parse_email_particulars(body, C.parse_call_particulars)
+        p = E.parse_quote_particulars(body) if quote else E.parse_email_particulars(body, C.parse_call_particulars)
     except (E.EmailRefused, C.CallRefused) as e:
         return _refuse(422, e.rule, str(e))
     country = read.get("country")
@@ -345,14 +356,18 @@ async def prepare_email(request: Request):
     email = E.compose(lang, read["name"], f["value"], p, email_id)
     lines = E.read_back(email, read["name"], f["source_label"])
     plan = _plan_of(body)   # Sasha 132 · the escalation the guest's ONE yes covers, said before the yes, in its hash
+    if plan is None and body.get("auto_plan") and any(x.get("kind") == "phone" for x in read["facts"]) and L.calls_ready(account) is None:
+        from . import decide as D, escalation as ESC   # Sasha 158 · THE LADDER: no reply in the set time → a call, under the same yes
+        plan = ESC.plan_line(f"If they don't reply within {D._h(D.reply_hours())}, I'll call them", None)
     if plan:
         lines.insert(len(lines) - 1, plan)
     if lang not in E.TEMPLATE_LANGS:   # Sasha 130 · e.g. Vietnam: written in English, and said so before the yes
         from .i18n import emails as I18N   # CR 7 i18n · …unless an i18n template is usable: then it says THAT
         lines.insert(1, I18N.read_back_line(lang, f["value"])
                      or f"I'll write in English: I have no {C.LANGUAGE_NAMES.get(lang, repr(lang))} template.")
-    rec = {"request": RS.try_from_particulars(p, account_id=account, venue_name=read["name"], timezone=tz, lang=lang,
-                                              venue_ids=O.venue_ids_of(read), read_id=str(row["read_id"])),   # S-64 step 3
+    rec = {"request": None if quote else RS.try_from_particulars(p, account_id=account, venue_name=read["name"], timezone=tz, lang=lang,
+                                                                 venue_ids=O.venue_ids_of(read), read_id=str(row["read_id"])),   # S-64 step 3
+           "type": "other" if quote else "restaurant",
            "email_id": email_id, "account_id": account, "read_id": row["read_id"], "email": email,
            "email_sha256": E.email_sha256(email), "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)),
            "created_at": NOW(), "venue_name": read["name"], "local_date": p.on, "local_time": p.at, "local_timezone": tz,

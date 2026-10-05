@@ -114,6 +114,11 @@ class EmailParticulars:
     name: str
     guest_email: str
     nights: int = 0   # Sasha 132 · > 0: a hotel ROOM request (check-in `on`, for `nights`), not a table
+    # Sasha 158 · a NO-SLOT request (a tattoo, custom work): the email IS the booking — what they want, the dates that suit
+    # them, their photos (links) — and it asks the venue for a date and a quote
+    quote_what: str = ""
+    dates_text: str = ""
+    photos: tuple = ()
 
 
 #: Sasha 132 · a ROOM request — same rules as a table: AI disclosure first, nothing agreed by email, the guest decides
@@ -129,6 +134,50 @@ _ROOM = {
            "si no es posible?\n\nNo podemos aceptar un precio, un depósito ni otras fechas por correo en nombre de {guest_short}: "
            "indíquennos lo que necesiten y lo decidirá.\n\nGracias,\nSasha (concierge de IA, Kanoe Technologies SL), para {guest_short}"),
 }
+
+
+_QUOTE = {
+    "en": ("Request — {what_short}",
+           "Hello, this is {disclosure}, writing on behalf of {name}.\n\n{name} would like: {what}\n\nDates that suit them: {dates}\n{photos}"
+           "\nCould you reply to this email with a date you can offer and a quote (or tell us if it isn't something you do)?\n\n"
+           "We can't agree to a price, a deposit or a date by email on {name}'s behalf — please say what you need and they will decide.\n\n"
+           "Thank you,\nSasha (AI concierge, Kanoe Technologies SL), for {name}"),
+    "es": ("Solicitud — {what_short}",
+           "Hola, soy {disclosure}, y le escribo de parte de {name}.\n\n{name} quiere: {what}\n\nFechas que le vienen bien: {dates}\n{photos}"
+           "\n¿Podrían responder a este correo con una fecha que puedan ofrecer y un presupuesto (o decirnos si no es algo que hacen)?\n\n"
+           "No podemos aceptar un precio, un depósito ni una fecha por correo en nombre de {name}: indíquennos lo que necesiten y lo decidirá.\n\n"
+           "Gracias,\nSasha (concierge de IA, Kanoe Technologies SL), para {name}"),
+}
+_PHOTOS = {"en": "Photos of what they have in mind: {urls}\n", "es": "Fotos de lo que tiene en mente: {urls}\n"}
+_PERSON_NAME = re.compile(r"[^\W\d_]+(?:[ '’.-][^\W\d_]+)*", re.UNICODE)
+
+
+def parse_quote_particulars(body: Mapping[str, Any]) -> EmailParticulars:
+    """Sasha 158 · {name, email, quote: {what, dates?, photos?: [https urls ≤ 4]}} — no date or time of its own: it asks."""
+    q = body.get("quote") or {}
+    name, g = body.get("name"), body.get("email")
+    if not isinstance(name, str) or not 2 <= len(name.strip()) <= 60 or not _PERSON_NAME.fullmatch(name.strip()):
+        raise EmailRefused("name_invalid", "name is 2–60 letters (spaces, apostrophes, dots and hyphens allowed)")
+    if not isinstance(g, str) or not _EMAIL.fullmatch(g.strip()):
+        raise EmailRefused("guest_email_invalid", "the guest's email address is required: they are BCC'd, so they hold what was sent")
+    what = " ".join(str(q.get("what") or "").split())
+    if not 3 <= len(what) <= 500:
+        raise EmailRefused("quote_what_invalid", "say what they would like, in 3–500 characters")
+    dates = " ".join(str(q.get("dates") or "").split())[:120]
+    photos = tuple(u for u in (q.get("photos") or [])[:4] if isinstance(u, str) and u.startswith("https://") and len(u) <= 500)
+    return EmailParticulars(on=None, at=None, party=1, name=" ".join(name.split()), guest_email=g.strip().lower(),
+                            quote_what=what, dates_text=dates, photos=photos)
+
+
+def _quote(lang: str, venue_email: str, p: EmailParticulars, email_id: str) -> dict:
+    lang = lang if lang in _QUOTE else "en"
+    subj_t, body_t = _QUOTE[lang]
+    photos = _PHOTOS[lang].format(urls=" ".join(p.photos)) if p.photos else ""
+    dates = p.dates_text or ("any — they're flexible" if lang == "en" else "cualquiera — tiene flexibilidad")
+    short = p.quote_what if len(p.quote_what) <= 60 else p.quote_what[:57] + "…"
+    return {"from": _env("SASHA_EMAIL_FROM"), "to": venue_email, "bcc": p.guest_email, "reply_to": act_address(email_id),
+            "subject": subj_t.format(what_short=short), "kind": "quote",
+            "text": body_t.format(disclosure=DISCLOSURE.get(lang, DISCLOSURE["en"]), name=p.name, what=p.quote_what, dates=dates, photos=photos)}
 
 
 def parse_email_particulars(body: Mapping[str, Any], parse_call) -> EmailParticulars:
@@ -152,6 +201,8 @@ def compose(lang: str, venue_name: str, venue_email: str, p: EmailParticulars, e
     from .i18n import emails as I18N   # CR 7 i18n · 12 more languages; unreviewed ones go only to our test addresses
     if p.nights:   # Sasha 132 · a hotel room (English or Spanish; any other language in English, as a table is)
         return _room(lang, venue_email, p, email_id)
+    if p.quote_what:   # Sasha 158 · a no-slot request: it asks for a date and a quote
+        return _quote(lang, venue_email, p, email_id)
     if lang in I18N.LANGS and I18N.usable(lang, venue_email):
         return I18N.table_email(lang, venue_email, p, email_id)
     lang = lang if lang in _T else "en"

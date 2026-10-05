@@ -66,7 +66,7 @@ class TheTurn(unittest.TestCase):
                         ("find a bar in Madrid at 5", {"what": "bar", "where": "Madrid", "country": "ES"})]:
             t = booking_handoff(m, [], NOW)
             self.assertEqual({k: v for k, v in t["booking_find"].items() if k != "priority"}, want, m)
-            self.assertIn("nobody is contacted by looking", t["response"])
+            self.assertTrue(t["response"].startswith("Here are the best-rated"), t["response"])   # Sasha 158 · one sentence, no machinery
             self.assertEqual(t["bookings"], [])                      # no console link, no card to the tab
             self.assertEqual(t["messages"][-1], {"role": "assistant", "content": t["response"]})
 
@@ -77,11 +77,13 @@ class TheTurn(unittest.TestCase):
                         ("find a tattoo studio in Madrid", None)]:
             t = booking_handoff(m, [], NOW)
             self.assertEqual(t["booking_find"].get("priority"), want, m)
-            asked = "What matters most: best rated, closest, price, or open at a time you want?" in t["response"]
-            self.assertEqual(asked, want is None, m)
+            # Sasha 158 · never asked in words any more: the chips under the cards ask it
+            self.assertNotIn("What matters most", t["response"], m)
 
     def test_the_psi_link_is_retired_and_ordinary_chat_is_untouched(self):
-        self.assertIsNone(booking_handoff("Book a table at Psi on 5 October at 8pm for 2", [], NOW))   # no "in Y": the drafts ask which place
+        # Sasha 158 · NAME IT: a venue by name is looked up by its name (one card), wherever it is
+        self.assertEqual(booking_handoff("Book a table at Psi on 5 October at 8pm for 2", [], NOW)["booking_find"],
+                         {"what": "Psi", "named": True, "open_at": "2026-10-05T20:00"})
         self.assertIsNone(booking_handoff("tell me about Hanoi", [], NOW))
         self.assertIsNone(booking_handoff("what's the weather in Madrid", [], NOW))
 

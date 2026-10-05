@@ -138,8 +138,8 @@ def real_contact_refusal(account: Optional[str], to_test_venue: bool) -> Optiona
     if to_test_venue or founder(account) or (account or "").lower() in extra_accounts():
         return None
     return JSONResponse({"ok": False, "rule": "real_venue_not_open",
-                         "message": "Sasha books real venues for invited accounts only for now. Nothing was sent. Searching and "
-                                    "test bookings work for everyone."}, status_code=403)
+                         # Sasha 158 · one plain sentence; the sign-in page is linked wherever this is shown
+                         "message": "To book real places, sign in — 10 seconds. Nothing was sent.", "sign_in": "/sign-in"}, status_code=403)
 
 
 INBOUND_CONSENT = ("You wrote to Sasha first on WhatsApp; she answers you here, in this chat. Reply STOP at any time. "

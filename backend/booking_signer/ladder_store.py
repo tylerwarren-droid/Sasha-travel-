@@ -323,6 +323,13 @@ class MemoryLadderStore(MemoryLinks):
         self.quarantined.append(dict(row))
         return True
 
+    async def email_for_item(self, account_id: str, trip_item_id: str) -> Optional[dict]:
+        """Sasha 158 · the email that made this booking (for its cancellation), with the item it made."""
+        e = next((e for e in self.emails.values() if str(e.get("trip_item_id")) == str(trip_item_id) and e["account_id"] == account_id), None)
+        if not e:
+            return None
+        return {**dict(e), "item": dict(self.trip_items.get(e["trip_item_id"]) or {}) if hasattr(self, "trip_items") else {}}
+
     async def replies_for(self, email_id: str) -> List[dict]:
         return sorted([dict(r) for r in self.replies if r["email_id"] == email_id], key=lambda r: r["received_at"])
 
@@ -383,8 +390,9 @@ class PostgresLadderStore(PostgresLinks):
                         tid = await conn.fetchval("insert into trips (owner_id, title) values ($1, $2) returning id", acct, BOOKINGS_TRIP_TITLE)
                 item = await conn.fetchval(
                     "insert into trip_items (trip_id, type, status, provider_name, date_time, local_timezone, party_size) "
-                    "values ($1, 'restaurant', 'pending', $2, ($3::date + $4::time) at time zone $5, $5, $6) returning id",
-                    tid, row["venue_name"], row["local_date"], row["local_time"], row["local_timezone"], row["party_size"])
+                    "values ($1, $7, 'pending', $2, ($3::date + $4::time) at time zone $5, $5, $6) returning id",
+                    tid, row["venue_name"], row["local_date"], row["local_time"], row["local_timezone"], row["party_size"],
+                    row.get("type") or "restaurant")   # Sasha 158 · a no-slot request is not a table
                 await conn.execute(
                     "insert into booking_emails (email_id, account_id, trip_item_id, read_id, email, email_sha256, read_back_lines, "
                     "read_back_sha256, status, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8,'awaiting_approval',$9)",
@@ -507,6 +515,20 @@ class PostgresLadderStore(PostgresLinks):
             "values ($1,$2,$3,$4,$5,$6) on conflict (provider_id) do nothing returning provider_id",
             row["provider_id"], row["to_addrs"], row["from_addr"], row["subject"], row["reason"], row["received_at"]))
         return r is not None
+
+    async def email_for_item(self, account_id, trip_item_id):
+        """Sasha 158 · the email that made this booking (for its cancellation), with the item it made."""
+        aid, tid = _uuid_or_none(account_id), _uuid_or_none(trip_item_id)
+        if aid is None or tid is None:
+            return None
+        r = _row(await self._run(lambda c: c.fetchrow(
+            "select be.*, ti.booking_reference, ti.request as item_request, ti.status as item_status, ti.provider_name "
+            "from booking_emails be join trip_items ti on ti.id = be.trip_item_id where be.trip_item_id = $1 and be.account_id = $2 "
+            "and be.status = 'sent' order by be.created_at desc limit 1", tid, aid)))
+        if not r:
+            return None
+        return {**r, "item": {"id": str(tid), "booking_reference": r.get("booking_reference"), "request": r.get("item_request"),
+                              "status": r.get("item_status"), "provider_name": r.get("provider_name")}}
 
     async def replies_for(self, email_id):
         rows = await self._run(lambda c: c.fetch(

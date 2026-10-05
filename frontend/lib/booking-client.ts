@@ -97,8 +97,9 @@ export type Ranking = { default: string; pick?: string | null; picks?: Record<st
   groups: Record<string, 'main' | 'hours_unknown' | 'closed_then' | 'closed_temporarily'>; count: string; explainers: Record<string, string> }
 export type Rung = { rung: string; available: boolean; fact_index: number | null; value: string; source_label: string; why_not: string | null }
 
-export const findVenues = (what: string, where: string, country?: string, near?: string, openAt?: string) =>
-  bookingReq('/api/booking/venues/find', { what, where, country: country || undefined, near: near || undefined, open_at: openAt || undefined })
+export const findVenues = (what: string, where: string | undefined, country?: string, near?: string, openAt?: string, named?: boolean) =>
+  bookingReq('/api/booking/venues/find', { what, where: where || undefined, country: country || undefined, near: near || undefined,
+    open_at: openAt || undefined, ...(named ? { named: true } : {}) })   // Sasha 158 · NAME IT: one venue by its name
 // S-68 step 9 · style for the cards shown (≤ 5), from each venue's own website; AI-summarised, quoted, not stored
 export type Style = { label?: string; tags?: { tag: string; quote: string }[]; source?: string; why?: string
   /** Sasha 88 · the venue's OWN share picture (og:image) from its site — shown from their host, never stored */

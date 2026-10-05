@@ -416,6 +416,10 @@ async def on_reply(email_id: str, text: Optional[str], now: datetime) -> Optiona
         o = (((call or {}).get("brief") or {}).get("followup") or {}).get("request")
     else:
         o = await LR.LADDER_STORE.request_of_email(email_id)   # the email rung's own reservation/1 object
+    if not isinstance(o, dict) and ((e.get("email") or {}) if isinstance(e.get("email"), dict) else {}).get("kind") == "quote":
+        # Sasha 158 · a reply to a no-slot request (a date, a quote, or a no) is never a booking: "quoted", their words shown
+        await LR.LADDER_STORE.reply_outcome(email_id, "quoted", "unclear", text or "", now)
+        return {"result": "quoted", "why": "a reply to a request for a date and a quote — read what they said", "quote": (text or "")[:300]}
     if not isinstance(o, dict):
         return None
     r = reply_reading(text, o)

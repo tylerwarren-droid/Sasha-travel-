@@ -83,7 +83,17 @@ async def _booking(account: str, trip_item_id: str) -> Optional[dict]:
     rows = await CRT.CALL_STORE.receipt_rows(account, trip_item_id)
     form = await FR.STORE.for_item(account, trip_item_id) if hasattr(FR.STORE, "for_item") else None
     if rows is None and form is None:
-        return None
+        # Sasha 158 · a booking made by EMAIL: cancelled the same way, through their address (their replies are read for a link)
+        em = await LR.LADDER_STORE.email_for_item(account, trip_item_id) if hasattr(LR.LADDER_STORE, "email_for_item") else None
+        if not em:
+            return None
+        read_row = await LR.LADDER_STORE.get_read(account, str(em["read_id"])) if em.get("read_id") else None
+        read = await LR.PT.hydrate_read(LR.HTTP, read_row["read"], NOW()) if read_row else {}
+        replies = await LR.LADDER_STORE.replies_for(str(em["email_id"]))
+        item = em.get("item") or {}
+        return {"request": item.get("request") or {}, "read": read, "read_row": read_row, "form": None, "item": item, "call": None,
+                "texts": [r.get("body_text") for r in replies if r.get("body_text")], "email": em,
+                "venue": ((read.get("listing") or {}).get("name") or (read_row or {}).get("venue_name") or item.get("provider_name") or "the venue")}
     item = (rows or {}).get("item") or {}
     request = item.get("request") or (await FR._request_of(form) if form else None) or {}
     read_id = ((rows or {}).get("call", {}).get("brief") or {}).get("venue_key", "")[5:] or (form or {}).get("read_id")

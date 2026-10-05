@@ -95,6 +95,10 @@ class FakePage:
         return {"url": TV + "plain", "text": "Reserva confirmada Confirmado: mesa para 2 personas el martes 15 de diciembre a las 21:00, "
                                             "a nombre de Prueba Sasha. Localizador: TV-ABC123-4F"}
 
+    async def fit(self, w, h):
+        self.fitted = (w, h)
+        return await self.point_at_book()
+
     async def screenshot(self):
         return b"png"
 
@@ -335,6 +339,51 @@ class FromPreparedForm(Base):
         out = await self.call()
         self.assertEqual(out.status_code, 422)
         self.assertEqual(FR.STORE.forms[self.fid]["status"], "not_sent")
+
+
+class GuestPage(Base):
+    """CR 25 · the page the guest opens: what they're booking on top, the live view sized to their phone, the screens after."""
+
+    async def test_live_page_says_what_is_filled_and_where_to_press(self):
+        rec = await self.open(return_to="https://wa.me/34600000000")
+        body = (await HO.view(rec["id"], rec["token"])).body.decode()
+        self.assertIn('id="live"', body)
+        self.assertIn('let state = "live"', body)
+        self.assertIn("Everything&#8217;s filled in at <em>Sasha Test Venue</em>", body)
+        self.assertIn("&#8220;Reservar&#8221;", body)
+        for chip in ("Tue 15 Dec · 21:00", "2 people", "Prueba Sasha"):
+            self.assertIn(f'<span class="chip">{chip}</span>', body)
+        self.assertIn("Open it full screen", body)
+
+    async def test_fit_takes_the_guest_frame_clamped(self):
+        rec = await self.open()
+        out = await HO.view_fit(rec["id"], rec["token"], w=5000, h=10)
+        self.assertEqual((out["ok"], self.pages[0].fitted), (True, (1024, 320)))
+        self.assertEqual((await HO.view_fit(rec["id"], "nope")).status_code, 404)
+
+    async def test_booked_page_has_the_ref_and_the_way_back(self):
+        rec = await self.open(return_to="https://wa.me/34600000000")
+        _, on_press, _, on_nav = self.pages[0].watching
+        on_press("Reservar"), on_nav()
+        await asyncio.wait_for(rec["_watch"], 2)
+        body = (await HO.view(rec["id"], rec["token"])).body.decode()
+        self.assertIn('let state = "booked"', body)
+        self.assertIn("Ref TV-ABC123-4F", body)
+        self.assertIn('href="https://wa.me/34600000000"', body)
+
+    async def test_expired_is_calm_and_says_nothing_was_sent(self):
+        with mock.patch.object(HO, "SESSION_SECONDS", 30.05):
+            rec = await self.open()
+            await asyncio.wait_for(rec["_watch"], 2)
+        body = (await HO.view(rec["id"], rec["token"])).body.decode()
+        self.assertIn('let state = "expired"', body)
+        self.assertIn("Nothing was sent to Sasha Test Venue.", body)
+
+    async def test_an_unknown_link_is_calm_too(self):
+        r = await HO.view("nope", "x")
+        self.assertEqual(r.status_code, 404)
+        self.assertIn('let state = "gone"', r.body.decode())
+        self.assertIn("Nothing was sent.", r.body.decode())
 
 
 if __name__ == "__main__":

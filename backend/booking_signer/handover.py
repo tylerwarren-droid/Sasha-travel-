@@ -153,6 +153,29 @@ _FILL_JS = """(values) => {
   return out;
 }"""
 
+_POINT_JS = """(sel) => {
+  const form = [...document.forms].find(f => f.querySelectorAll('input:not([type=hidden]), select, textarea').length >= 3);
+  const bs = form ? form.querySelectorAll(sel) : []; const b = bs[bs.length - 1];
+  if (!b) return '';
+  if (!document.getElementById('kanoe-style')) {
+    const st = document.createElement('style'); st.id = 'kanoe-style';
+    st.textContent = '@keyframes kanoePulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.7)}70%{box-shadow:0 0 0 14px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}'
+      + '@keyframes kanoeBob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,-5px)}}';
+    document.head.appendChild(st);
+  }
+  b.style.outline = '3px solid #22c55e'; b.style.outlineOffset = '3px'; b.style.animation = 'kanoePulse 1.6s infinite';
+  b.scrollIntoView({block: 'center', inline: 'center'});
+  let m = document.getElementById('kanoe-press');
+  if (!m) { m = document.createElement('div'); m.id = 'kanoe-press'; document.body.appendChild(m); }
+  m.textContent = 'Press here \u2193';
+  const r = b.getBoundingClientRect(), w = 112;
+  const x = Math.min(Math.max(r.left + r.width / 2, w / 2 + 6), document.documentElement.clientWidth - w / 2 - 6);
+  m.style.cssText = `position:absolute;left:${x + scrollX}px;top:${r.top + scrollY - 40}px;width:${w}px;transform:translateX(-50%);`
+    + 'pointer-events:none;z-index:2147483647;background:#22c55e;color:#04210f;font:600 14px/1 -apple-system,system-ui,sans-serif;'
+    + 'text-align:center;padding:8px 0;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.25);animation:kanoeBob 1.4s ease-in-out infinite';
+  return (b.tagName === 'BUTTON' ? b.innerText : b.value || '').trim();
+}"""
+
 _SUBMIT = "button[type=submit], input[type=submit], button:not([type])"
 
 
@@ -186,14 +209,15 @@ class PlaywrightPage:
             await self.page.locator(f"form {_SUBMIT}").first.click()
 
     async def point_at_book(self) -> str:
-        """The form's own Book button, scrolled into view and outlined — one round trip; its words come back."""
-        return await self.page.evaluate("""(sel) => {
-          const form = [...document.forms].find(f => f.querySelectorAll('input:not([type=hidden]), select, textarea').length >= 3);
-          const bs = form ? form.querySelectorAll(sel) : []; const b = bs[bs.length - 1];
-          if (!b) return '';
-          b.scrollIntoView({block: 'center'}); b.style.outline = '3px solid #22c55e'; b.style.outlineOffset = '3px';
-          return (b.tagName === 'BUTTON' ? b.innerText : b.value || '').trim();
-        }""", _SUBMIT)
+        """The form's own Book button, centred in view, outlined, with Sasha's pulsing "Press here" just above it — one
+        round trip; its words come back. The marker ignores taps (they reach the button) and sends nothing anywhere."""
+        return await self.page.evaluate(_POINT_JS, _SUBMIT)
+
+    async def fit(self, width: int, height: int) -> str:
+        """The cloud browser resized to the guest's frame (so the live view is 1:1 and the button is on screen), then the
+        button pointed at again."""
+        await self.page.set_viewport_size({"width": width, "height": height})
+        return await self.point_at_book()
 
     async def watch(self, on_tap: Callable[[str], None], on_press: Callable[[str], None], read_only: bool,
                     on_navigated: Callable[[], None]) -> None:
@@ -582,6 +606,29 @@ def _rec_for(hid: str, t: str) -> Optional[dict]:
     return rec if rec and t and secrets.compare_digest(rec["token"], t) and not rec["read_only"] else None
 
 
+_DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def summary(rec: dict) -> Dict[str, str]:
+    """What the guest is booking, in their words: venue · day · time · party · name (from the reservation Sasha filled from)."""
+    from datetime import date as _d
+    o = rec.get("request") or {}
+    at = ((o.get("when") or {}).get("at") or "")
+    day = tm = ""
+    if "T" in at:
+        d, tm = at.split("T", 1)
+        try:
+            x = _d.fromisoformat(d)
+            day = f"{_DAYS[x.weekday()]} {x.day} {_MONTHS[x.month - 1]}"
+        except ValueError:
+            day = d
+    hm = o.get("how_many") or {}
+    n = hm.get("count")
+    party = (f"{n} {'person' if n == 1 else 'people'}" if hm.get("unit", "people") == "people" else f"{n} {hm.get('unit')}") if n else ""
+    return {"venue": rec["venue"], "day": day, "time": tm[:5], "party": party, "name": (o.get("who") or {}).get("name") or ""}
+
+
 @router.get("/handover/{hid}/status")
 async def view_status(hid: str, t: str = ""):
     rec = _rec_for(hid, t)
@@ -590,50 +637,160 @@ async def view_status(hid: str, t: str = ""):
     return {"state": rec["state"], "say": rec.get("say"), "reference": rec.get("reference"), "return_to": rec.get("return_to")}
 
 
+@router.get("/handover/{hid}/fit")
+async def view_fit(hid: str, t: str = "", w: int = 390, h: int = 600):
+    """The guest's frame size → the cloud browser takes it, so the live view is 1:1 and their button sits on screen."""
+    rec = _rec_for(hid, t)
+    if rec is None or rec["state"] not in ("ready", "opened") or rec.get("_page") is None:
+        return _no(404, "handover_unknown", "this link isn't valid any more")
+    w, h = max(280, min(int(w), 1024)), max(320, min(int(h), 1400))
+    lock = rec.setdefault("_fit_lock", asyncio.Lock())
+    async with lock:
+        try:
+            label = await rec["_page"].fit(w, h)
+        except Exception as e:
+            log.warning("[handover] %s fit: %s", hid, e)
+            return {"ok": False}
+    rec["fitted"] = [w, h]
+    return {"ok": True, "label": label or rec.get("book_label")}
+
+
+_LIVE_STATES = ("ready", "opened")
+_ENDED = ("expired", "ended_by_operator", "read_only_stopped")
+
+
 @router.get("/handover/{hid}", response_class=HTMLResponse)
 async def view(hid: str, t: str = ""):
     rec = _rec_for(hid, t)
+    hdr = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
     if rec is None:
-        return HTMLResponse("<p style='font:16px system-ui;padding:24px'>This link isn't valid any more. Ask Sasha for a new one.</p>", 404)
+        return HTMLResponse(page_html(None, hid, t), 404, headers=hdr)
     if rec["state"] == "ready":
         rec.update(state="opened", _opened=CLOCK(), opened_at=NOW().isoformat())
-    live = rec.get("live_url") if rec["state"] in ("opened", "ready") else None
-    return HTMLResponse(_VIEW.format(venue=escape(rec["venue"]), label=escape(rec.get("book_label") or "Book"),
-                                     live=escape(live or "about:blank", quote=True), hid=escape(hid), t=quote(t),
-                                     back=escape(rec.get("return_to") or "", quote=True)),
-                        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+    return HTMLResponse(page_html(rec, hid, t), headers=hdr)
 
 
-_VIEW = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sasha — one tap left</title><style>
-:root{{--bg:#0b0f14;--fg:#f4f6f8;--muted:#9aa4af;--ok:#22c55e}}
-body{{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,sans-serif;height:100dvh;display:flex;flex-direction:column}}
-header{{padding:10px 16px;border-bottom:1px solid #1f2933}} header b{{color:var(--ok)}} header small{{color:var(--muted);display:block}}
-iframe{{flex:1;border:0;width:100%;background:#fff}}
-#done{{display:none;position:fixed;inset:0;background:var(--bg);align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px}}
-#done h1{{font-size:28px;margin:0 0 8px}} #done a{{margin-top:18px;background:var(--ok);color:#06210f;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600}}
+def page_html(rec: Optional[dict], hid: str, t: str) -> str:
+    """The guest's page — Kanoe's colours (ink, cream, gold), one screen at a time: the live form, ✅ Booked, or a calm
+    'expired'. Nothing on it is a secret except the live view's own link, which only this token's holder sees."""
+    if rec is None:
+        state, sm, live = "gone", {"venue": "", "day": "", "time": "", "party": "", "name": ""}, ""
+    else:
+        state = ("live" if rec["state"] in _LIVE_STATES + ("pressed",) and rec.get("live_url") else "booked" if rec["state"] == "booked"
+                 else "answered" if rec["state"] == "answered" else "expired")
+        sm, live = summary(rec), (rec.get("live_url") or "")
+    label = (rec or {}).get("book_label") or "Book"
+    chips = "".join(f'<span class="chip">{escape(v)}</span>' for v in (
+        " · ".join(x for x in (sm["day"], sm["time"]) if x), sm["party"], sm["name"]) if v)
+    rep = {"@@STATE@@": state, "@@VENUE@@": escape(sm["venue"]), "@@LABEL@@": escape(label), "@@CHIPS@@": chips,
+           "@@LIVE@@": escape(live, quote=True), "@@HID@@": escape(hid), "@@T@@": quote(t),
+           "@@BACK@@": escape((rec or {}).get("return_to") or "", quote=True),
+           "@@REF@@": escape((rec or {}).get("reference") or ""),
+           "@@WHEN@@": escape(" · ".join(x for x in (sm["day"], sm["time"], sm["party"]) if x))}
+    out = _VIEW
+    for k, v in rep.items():
+        out = out.replace(k, v)
+    return out
+
+
+_VIEW = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex"><title>Sasha · one tap left</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0a0a0f;--panel:#13131b;--line:#24242f;--cream:#f0ede8;--muted:#a7a29a;--gold:#DAA520;--gold2:#E8B923;--ok:#22c55e}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--ink);color:var(--cream);
+ font:15px/1.45 Inter,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.screen{display:none;height:100dvh;flex-direction:column}.screen.on{display:flex}
+.brand{display:flex;align-items:center;gap:8px;padding:10px 16px 0;font-size:13px;color:var(--muted)}
+.brand b{color:var(--gold);font-weight:700;letter-spacing:.06em;text-transform:lowercase;font-size:15px}
+.brand .dot{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(34,197,94,.18)}
+.card{margin:8px 12px 10px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:16px}
+.card h1{margin:0;font-size:18px;font-weight:700;letter-spacing:-.01em}
+.card h1 em{font-style:normal;color:var(--gold2)}
+.card p{margin:2px 0 8px;color:var(--muted);font-size:14px}.card p b{color:var(--ok);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-size:12.5px;padding:4px 10px;border-radius:999px;background:#1c1c26;border:1px solid var(--line)}
+.frame{position:relative;flex:1;min-height:0;margin:0 12px;border-radius:14px;overflow:hidden;background:#fff;border:1px solid var(--line)}
+.frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff}
+.wait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#555;font-size:14px;background:#fff}
+.foot{padding:8px 16px calc(10px + env(safe-area-inset-bottom));font-size:12px;color:var(--muted);text-align:center}
+.foot a{color:var(--muted)}
+.center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
+.tick{width:84px;height:84px;border-radius:50%;background:rgba(34,197,94,.12);display:flex;align-items:center;justify-content:center;
+ margin-bottom:18px;animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
+.tick svg{width:46px;height:46px}.tick path{stroke:var(--ok);stroke-width:6;fill:none;stroke-linecap:round;stroke-linejoin:round;
+ stroke-dasharray:60;stroke-dashoffset:60;animation:draw .5s .25s forwards}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}@keyframes draw{to{stroke-dashoffset:0}}
+.center h2{margin:0 0 6px;font-size:26px;font-weight:700}.center .v{font-size:17px;font-weight:600;margin:0}
+.center .w{color:var(--muted);margin:4px 0 14px}.ref{font:600 14px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;
+ padding:8px 14px;border-radius:10px;background:var(--panel);border:1px solid var(--line);color:var(--gold2)}
+.small{color:var(--muted);font-size:13px;margin-top:10px}
+.btn{margin-top:22px;display:inline-block;background:var(--gold);color:#1a1405;font-weight:700;padding:13px 26px;border-radius:999px;text-decoration:none}
+.soft{width:64px;height:64px;border-radius:50%;background:#1c1c26;display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:16px}
 </style></head><body>
-<header>Sasha filled in <b>{venue}</b>'s own form — every field. Check it, then press <b>“{label}”</b>.
-<small>Their website, live. Nothing is sent until you press. Kanoe never sees a card here.
-<a href="{live}" style="color:var(--ok)">Form not responding? Open it full screen</a></small></header>
-<iframe src="{live}" sandbox="allow-same-origin allow-scripts" allow="clipboard-read; clipboard-write" title="{venue}'s booking form"></iframe>
-<div id="done"><h1 id="say"></h1><p id="ref"></p><a id="back" href="{back}">Back to Sasha</a></div>
+
+<section class="screen" id="live">
+ <div class="brand"><b>kanoe</b><span>·</span><span>Sasha</span><span class="dot" style="margin-left:auto"></span><span>live</span></div>
+ <div class="card"><h1>Everything&#8217;s filled in at <em>@@VENUE@@</em></h1>
+  <p>Just press <b>&#8220;@@LABEL@@&#8221;</b> below.</p><div class="chips">@@CHIPS@@</div></div>
+ <div class="frame" id="frame"><div class="wait" id="wait">Opening their page&#8230;</div></div>
+ <div class="foot">Their own website, live &#183; nothing is sent until you press &#183; <a id="full" href="@@LIVE@@">Open it full screen</a></div>
+</section>
+
+<section class="screen" id="booked">
+ <div class="brand"><b>kanoe</b><span>·</span><span>Sasha</span></div>
+ <div class="center"><div class="tick"><svg viewBox="0 0 52 52"><path d="M14 27l8 8 16-17"/></svg></div>
+  <h2>Booked</h2><p class="v">@@VENUE@@</p><p class="w">@@WHEN@@</p>
+  <div class="ref" id="ref">Ref @@REF@@</div><div class="small">Their own page confirms it.</div>
+  <a class="btn" id="back" href="@@BACK@@">Back to Sasha</a><div class="small" id="close" hidden>You can close this page.</div></div>
+</section>
+
+<section class="screen" id="answered">
+ <div class="brand"><b>kanoe</b><span>·</span><span>Sasha</span></div>
+ <div class="center"><div class="soft">&#9993;</div><h2>Sent to @@VENUE@@</h2>
+  <p class="w">Their page doesn&#8217;t confirm it yet &#8212; it&#8217;s a request until they do.<br>Sasha has their exact words.</p>
+  <a class="btn" href="@@BACK@@" data-back>Back to Sasha</a></div>
+</section>
+
+<section class="screen" id="expired">
+ <div class="brand"><b>kanoe</b><span>·</span><span>Sasha</span></div>
+ <div class="center"><div class="soft">&#8987;</div><h2>This link has expired</h2>
+  <p class="w">Nothing was sent to @@VENUE@@.<br>Ask Sasha and she&#8217;ll fill it in again in a few seconds.</p>
+  <a class="btn" href="@@BACK@@" data-back>Back to Sasha</a></div>
+</section>
+
+<section class="screen" id="gone">
+ <div class="brand"><b>kanoe</b><span>·</span><span>Sasha</span></div>
+ <div class="center"><div class="soft">&#8987;</div><h2>This link isn&#8217;t active any more</h2>
+  <p class="w">Nothing was sent. Ask Sasha for a fresh one &#8212; it takes a few seconds.</p></div>
+</section>
+
 <script>
-const back = "{back}"; let shown = false;
-async function poll() {{
-  try {{
-    const r = await fetch("/api/booking/handover/{hid}/status?t={t}", {{cache: "no-store"}}); const s = await r.json();
-    if (["booked","answered","expired"].includes(s.state) && !shown) {{
-      shown = true; document.getElementById("say").textContent = s.say || "";
-      document.getElementById("done").style.display = "flex";
-      if (!back) document.getElementById("back").style.display = "none";
-      else if (s.state === "booked") setTimeout(() => location.href = back, 2500);
-      return;
-    }}
-  }} catch (e) {{}}
-  setTimeout(poll, 700);
-}}
-poll();
+const HID = "@@HID@@", T = "@@T@@", LIVE = document.getElementById('full').getAttribute('href'), BACK = "@@BACK@@";
+function show(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id)); }
+document.querySelectorAll('[data-back], #back').forEach(a => { if (!BACK) a.hidden = true; });
+if (!BACK) document.getElementById('close').hidden = false;
+let state = "@@STATE@@"; show(state);
+async function start() {
+  const f = document.getElementById('frame'), r = f.getBoundingClientRect();
+  try { await fetch(`/api/booking/handover/${HID}/fit?t=${T}&w=${Math.round(r.width)}&h=${Math.round(r.height)}`, {cache: 'no-store'}); } catch (e) {}
+  const i = document.createElement('iframe');
+  i.src = LIVE; i.title = "The venue's booking form, live"; i.setAttribute('sandbox', 'allow-same-origin allow-scripts');
+  i.setAttribute('allow', 'clipboard-read; clipboard-write');
+  i.onload = () => setTimeout(() => { const w = document.getElementById('wait'); if (w) w.remove(); }, 900);
+  f.appendChild(i);
+}
+async function poll() {
+  try {
+    const s = await (await fetch(`/api/booking/handover/${HID}/status?t=${T}`, {cache: 'no-store'})).json();
+    if (s.state === 'booked') { if (s.reference) document.getElementById('ref').textContent = 'Ref ' + s.reference; show('booked'); return; }
+    if (s.state === 'answered') { show('answered'); return; }
+    if (['expired', 'ended_by_operator'].includes(s.state) || s.rule === 'handover_unknown') { show(s.rule ? 'gone' : 'expired'); return; }
+  } catch (e) {}
+  setTimeout(poll, 600);
+}
+if (state === 'live') { start(); poll(); }
 </script></body></html>"""
 
 

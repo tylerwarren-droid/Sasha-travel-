@@ -1521,6 +1521,12 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             # day, time and party are kept unless the message changes them; the kind of place is replaced; every
             # quality asked for is kept. A plain yes/no/thanks gets the question again.
             merged = refine(pend, body, ctx["now"])
+            if merged is None and not payload:
+                # Sasha 156 · a whole new search ("restaurants in Lisbon tonight") is a NEW search, never "Which one?" again
+                from .handoff import booking_handoff
+                if ((booking_handoff(body) or {}).get("booking_find") or {}).get("where"):
+                    st["pending"] = None
+                    return False
             if merged is None:
                 out.text("Which one? Tap a name, or send its number (1, 2 or 3) — or tell me what else to look for.")
                 return True

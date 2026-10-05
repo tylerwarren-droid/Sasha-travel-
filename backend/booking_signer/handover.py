@@ -433,7 +433,7 @@ def _press(rec: dict, label: str) -> None:
     if rec["state"] in ("ready", "opened"):
         rec.update(state="pressed", pressed_label=label, _pressed=CLOCK(), pressed_at=NOW().isoformat())
         ev = rec.get("_nav")
-        if ev is not None and rec.get("read_only"):
+        if ev is not None and (rec.get("read_only") or rec.get("press_is_final")):   # CR 27: an SPA may never navigate
             ev.set()
 
 
@@ -531,7 +531,8 @@ async def _release(rec: dict) -> None:
 
 
 def _public(rec: dict, ops_view: bool = False) -> dict:
-    keep = ("id", "venue", "host", "state", "test", "read_only", "steps", "filled", "book_label", "ready_ms", "timings_ms", "fitted", "taps", "tapped",
+    keep = ("id", "venue", "host", "state", "test", "read_only", "steps", "engine", "rate", "room", "taps_left", "filled", "book_label",
+            "ready_ms", "timings_ms", "fitted", "taps", "tapped",
             "press_to_answer_ms", "open_to_booked_s", "reference", "say", "reading", "created_at", "opened_at", "pressed_at",
             "answered_at", "return_to", "screenshot_sha256")
     out = {k: rec.get(k) for k in keep if k in rec}
@@ -608,7 +609,8 @@ async def _robots_ok(url: str) -> bool:
 
 def _rec_for(hid: str, t: str) -> Optional[dict]:
     rec = HANDOVERS.get(hid)
-    return rec if rec and t and secrets.compare_digest(rec["token"], t) and not rec["read_only"] else None
+    ok = rec and t and secrets.compare_digest(rec["token"], t) and (not rec["read_only"] or rec.get("rehearsal_view"))
+    return rec if ok else None
 
 
 _DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -618,6 +620,8 @@ _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
 def summary(rec: dict) -> Dict[str, str]:
     """What the guest is booking, in their words: venue · day · time · party · name (from the reservation Sasha filled from)."""
     from datetime import date as _d
+    if rec.get("summary"):              # CR 27 · a hotel stay brings its own (dates · nights, adults, name)
+        return dict(rec["summary"])
     o = rec.get("request") or {}
     at = ((o.get("when") or {}).get("at") or "")
     day = tm = ""
@@ -684,12 +688,19 @@ def page_html(rec: Optional[dict], hid: str, t: str) -> str:
         state, sm, live = "gone", {"venue": "", "day": "", "time": "", "party": "", "name": ""}, ""
     else:
         state = ("live" if rec["state"] in _LIVE_STATES + ("pressed",) and rec.get("live_url") else "booked" if rec["state"] == "booked"
-                 else "answered" if rec["state"] == "answered" else "expired")
+                 else "answered" if rec["state"] == "answered" else "card" if rec["state"] == "card_page" else "expired")
         sm, live = summary(rec), (rec.get("live_url") or "")
     label = (rec or {}).get("book_label") or "Book"
     chips = "".join(f'<span class="chip">{escape(v)}</span>' for v in (
-        " · ".join(x for x in (sm["day"], sm["time"]) if x), sm["party"], sm["name"]) if v)
-    rep = {"@@STATE@@": state, "@@VENUE@@": escape(sm["venue"]), "@@LABEL@@": escape(label), "@@CHIPS@@": chips,
+        " · ".join(x for x in (sm["day"], sm["time"]) if x), sm["party"], sm["name"], (rec or {}).get("rate") or "") if v)
+    if (rec or {}).get("taps_left") == 2:   # CR 27 · the terms box is the guest's: two taps
+        ask = f'Tick <b>&#8220;I accept the Terms&#8221;</b>, then press <b>&#8220;{escape(label)}&#8221;</b>.'
+    else:
+        ask = f'Just press <b>&#8220;{escape(label)}&#8221;</b> below.'
+    if (rec or {}).get("read_only"):
+        ask += ' <span class="rh">Rehearsal: the last press is blocked — nothing can be sent.</span>'
+    rep = {"@@STATE@@": state, "@@VENUE@@": escape(sm["venue"]), "@@LABEL@@": escape(label), "@@CHIPS@@": chips, "@@ASK@@": ask,
+           "@@FALLBACK@@": escape((rec or {}).get("fallback_link") or "", quote=True),
            "@@LIVE@@": escape(live, quote=True), "@@HID@@": escape(hid), "@@T@@": quote(t),
            "@@BACK@@": escape((rec or {}).get("return_to") or "", quote=True),
            "@@REF@@": escape((rec or {}).get("reference") or ""),
@@ -738,13 +749,14 @@ _VIEW = """<!doctype html><html lang="en"><head><meta charset="utf-8">
  padding:8px 14px;border-radius:10px;background:var(--panel);border:1px solid var(--line);color:var(--gold2)}
 .small{color:var(--muted);font-size:13px;margin-top:10px}
 .btn{margin-top:22px;display:inline-block;background:var(--gold);color:#1a1405;font-weight:700;padding:13px 26px;border-radius:999px;text-decoration:none}
+.rh{display:block;margin-top:4px;color:var(--gold2);font-size:12.5px}
 .soft{width:64px;height:64px;border-radius:50%;background:#1c1c26;display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:16px}
 </style></head><body>
 
 <section class="screen" id="live">
  <div class="brand"><b>kanoe</b><span>·</span><span>Sasha</span><span class="dot" style="margin-left:auto"></span><span>live</span></div>
  <div class="card"><h1>Everything&#8217;s filled in at <em>@@VENUE@@</em></h1>
-  <p>Just press <b>&#8220;@@LABEL@@&#8221;</b> below.</p><div class="chips">@@CHIPS@@</div></div>
+  <p>@@ASK@@</p><div class="chips">@@CHIPS@@</div></div>
  <div class="frame" id="frame"><div class="wait" id="wait">Opening their page&#8230;</div></div>
  <div class="foot">Their own website, live &#183; nothing is sent until you press &#183; <a id="full" href="@@LIVE@@">Open it full screen</a></div>
 </section>
@@ -762,6 +774,13 @@ _VIEW = """<!doctype html><html lang="en"><head><meta charset="utf-8">
  <div class="center"><div class="soft">&#9993;</div><h2>Sent to @@VENUE@@</h2>
   <p class="w">Their page doesn&#8217;t confirm it yet &#8212; it&#8217;s a request until they do.<br>Sasha has their exact words.</p>
   <a class="btn" href="@@BACK@@" data-back>Back to Sasha</a></div>
+</section>
+
+<section class="screen" id="card">
+ <div class="brand"><b>kanoe</b><span>·</span><span>Sasha</span></div>
+ <div class="center"><div class="soft">&#128179;</div><h2>The hotel asked for a card</h2>
+  <p class="w">Kanoe never handles cards, so Sasha closed her copy of the page.<br>Finish on @@VENUE@@&#8217;s own page, in your own browser &#8212; your dates are already in it.</p>
+  <a class="btn" href="@@FALLBACK@@">Open the hotel&#8217;s page</a></div>
 </section>
 
 <section class="screen" id="expired">
@@ -811,6 +830,7 @@ async function poll() {
     const s = await (await fetch(`/api/booking/handover/${HID}/status?t=${T}`, {cache: 'no-store'})).json();
     if (s.state === 'booked') { if (s.reference) document.getElementById('ref').textContent = 'Ref ' + s.reference; show('booked'); return; }
     if (s.state === 'answered') { show('answered'); return; }
+    if (s.state === 'card_page') { show('card'); return; }
     if (['expired', 'ended_by_operator'].includes(s.state) || s.rule === 'handover_unknown') { show(s.rule ? 'gone' : 'expired'); return; }
   } catch (e) {}
   setTimeout(poll, 600);
@@ -903,3 +923,6 @@ async def ops_rehearse(request: Request):
 
 
 __all__ = ["router", "ops", "open_handover", "check_page", "still_empty", "finish", "measured", "status", "ON_BOOKED", "HANDOVERS", "Refused"]
+
+# CR 27 · the Guestcentric hand-over registers its routes on this router and ops (its module imports this one)
+from . import handover_guestcentric as _gc  # noqa: E402,F401

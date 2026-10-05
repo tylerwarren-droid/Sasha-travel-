@@ -121,7 +121,7 @@ class EngineCheck(TG.Base):
         self.assertEqual(self.bodies()[-1], "Noted — UMusic (Neobookings): not filled. 2 to go.")
         self.say("3 filled")
         self.say("not filled")
-        self.assertEqual(self.bodies()[-1], "Noted — The Hat (Mews): not filled. That's all three — thank you.")
+        self.assertEqual(self.bodies()[-1], "Noted — The Hat (Mews): not filled. That's all 3 — thank you.")
         p = TG.run(GW.STORE.get_state(GW.wa_key(TG.GUEST)))["pending"]
         self.assertEqual(p["kind"], "engine_check_done")
         self.assertEqual({k: v["answer"] for k, v in p["answers"].items()}, {"1": "not filled", "3": "filled", "2": "not filled"})

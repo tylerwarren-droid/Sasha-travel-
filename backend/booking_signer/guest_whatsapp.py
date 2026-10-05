@@ -1535,7 +1535,8 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         ans = re.sub(r"\s+", " ", m["a"].lower())
         pend.setdefault("answers", {})[str(h["n"])] = {"answer": ans, "said": body, "at": now.isoformat()}
         left = len([x for x in pend["hotels"] if str(x["n"]) not in pend["answers"]])
-        out.text(f"Noted — {h['name']} ({h['engine']}): {ans}." + (f" {left} to go." if left else " That's all three — thank you."))
+        out.text(f"Noted — {h['name']} ({h['engine']}): {ans}." + (f" {left} to go." if left else   # Sasha 150 · any number of links
+                 f" That's all {len(pend['hotels'])} — thank you."))
         st["pending"] = pend if left else {**pend, "kind": "engine_check_done"}
         log.info("[guest_whatsapp] engine check: %s %s → %s", h["name"], h["engine"], ans)
         return True

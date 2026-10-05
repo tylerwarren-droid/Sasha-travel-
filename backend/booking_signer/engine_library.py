@@ -2,8 +2,8 @@
 
 DATA for the Sasha tab's slot_link.py (S-37 Recipe / Sasha 138 HOTEL_PREFILL), which wires build_* to it. Every entry was
 written from the engine's PUBLIC docs or from links venues publish on their own sites (docs/products/cr22/, 5 Oct 2026),
-robots first; no platform's booking page was ever opened or probed. ⚠ Every entry is UNVERIFIED (`verified=None`) until
-the founder opens one real link once (engine_check: "1 filled / 2 not filled / 3 wrong page") — until then Sasha never
+robots first; no platform's booking page was ever opened or probed. ⚠ An entry is UNVERIFIED (`verified=None`) until
+the founder opens one real link once — verified so far: TableCheck (5 Oct 2026) (engine_check: "1 filled / 2 not filled / 3 wrong page") — until then Sasha never
 says "it's filled in", only "I've added the dates to the link; check them there".
 
 Nothing here sends a request anywhere: build() only adds query parameters to a venue page string we already hold.
@@ -45,7 +45,8 @@ LIBRARY: Dict[str, Engine] = {e.name: e for e in (
     # ── restaurants ──
     Engine("TableCheck", "restaurant", "documented", "TableCheck API docs 'Web Booking v1' (updated 2026-01-21)",
            {"date": "start_date", "time": "start_time", "party": "pax"}, taps_after=6, taps_page=9,
-           terms="audience includes concierge services; guest-details prefill only via a whitelisted partner SSO"),
+           terms="audience includes concierge services; guest-details prefill only via a whitelisted partner SSO",
+           verified="the founder, 5 Oct 2026: The Hill Station (Hoi An) link opened once — filled (via the Sasha tab's engine_check)"),
     Engine("SevenRooms", "restaurant", "seen_in_links", "booking URLs indexed from venues (London, Madrid, Lisbon)",
            {"date": "date", "party": "party_size", "time": "start_time"}, taps_after=7, taps_page=9,
            terms="ToS bans robots/scrapers and framing without written permission — link only, never a cloud session"),
@@ -136,8 +137,10 @@ def taps_to_book(engine: Optional[str], carried: Optional[List[str]] = None, *, 
         return {"taps": None, "how": "unknown", "why": "engine not in the library"}
     full = bool(carried) and set(e.params) <= set(carried)
     n = e.taps_after if full else e.taps_page
-    return {"taps": n, "how": "measured" if (e.verified and full) else "estimated",
-            "why": f"{e.name}: " + ("the link carries the slot" if full else "the guest picks the slot on the page")}
+    # a founder-verified link FILLS (that is what engine_check asks); the taps after it are still counted from the page
+    return {"taps": n, "how": "estimated",
+            "why": f"{e.name}: " + (("the link fills the slot (verified)" if e.verified else "the link carries the slot")
+                                    if full else "the guest picks the slot on the page")}
 
 
 def per_engine(rows: List[dict]) -> List[dict]:

@@ -45,8 +45,8 @@ class Build(unittest.TestCase):
         self.assertEqual(EL.build("CoverManager", page, date=date(2026, 11, 20), party=2), (page, []))
         self.assertEqual(EL.build("Unknown", page, party=2), (page, []))
 
-    def test_everything_unverified_until_the_founder_checks(self):
-        self.assertTrue(all(e.verified is None for e in EL.LIBRARY.values()))
+    def test_verified_only_where_the_founder_checked(self):
+        self.assertEqual({n for n, e in EL.LIBRARY.items() if e.verified}, {"TableCheck"})   # 1 of 6 answered (5 Oct)
 
 
 class Taps(unittest.TestCase):
@@ -54,7 +54,8 @@ class Taps(unittest.TestCase):
         self.assertEqual(EL.taps_to_book(None, test_venue=True), {"taps": 1, "how": "measured",
                          "why": "our test venue: Sasha filled its form, the guest presses Book"})
         t = EL.taps_to_book("TableCheck", ["date", "time", "party"])
-        self.assertEqual((t["taps"], t["how"]), (6, "estimated"))              # unverified → an estimate, said as one
+        self.assertEqual((t["taps"], t["how"]), (6, "estimated"))              # verified it FILLS; the taps are still an estimate
+        self.assertIn("(verified)", t["why"])
         self.assertEqual(EL.taps_to_book("TableCheck", ["date"])["taps"], 9)   # the slot not fully carried: the page count
         self.assertEqual(EL.taps_to_book("CoverManager")["taps"], 9)
         self.assertEqual(EL.taps_to_book("nobody")["how"], "unknown")

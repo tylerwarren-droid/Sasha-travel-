@@ -1,6 +1,7 @@
 'use client'
 import { FlightBookTest } from './FlightBookTest'  // Sasha 132
-import { HotelBookTest } from './HotelBookTest'  // Sasha 135
+import { HotelBookTest } from './HotelBookTest'
+import { KeepAcrossDevices } from './KeepAcrossDevices'   // Sasha 153  // Sasha 135
 import { useState, useRef, useEffect, MutableRefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2 } from 'lucide-react'
@@ -778,6 +779,8 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
         )}
         {bookingFind && <ChatBooking key={`${bookingFind.what}|${bookingFind.where}`} find={bookingFind} />}
         {bookingCancel && <ChatCancel key={bookingCancel.n} venue={bookingCancel.venue} />}{/* Sasha 96 chat cancel (Stage B) */}
+        {/* Sasha 153 · after a booking only: the private guest may add an email to keep it across devices */}
+        <KeepAcrossDevices />
         {(hotels.length > 0 || bookings.length > 0 || bookingLinks.length > 0) && (
           <>
             <div ref={resultsRef} className="lw-when">Found for you</div>

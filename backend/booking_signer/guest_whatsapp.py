@@ -502,6 +502,21 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
     stopped = await IV.on_invitee_stop(sender, p.get("Body") or "")
     if stopped:
         return _twiml_message(stopped)
+    # Sasha 153 · NO SIGN-IN WALL: a new number gets its OWN private guest account on its first message, and that message
+    # is answered as a normal turn. It wrote first, so Sasha answers here; it never gets a first message (consent "i1" < v3)
+    from . import guest_accounts as GA
+    if GA.on() and not re.fullmatch(r"\s*(stop|unsubscribe|baja|parar)\s*", p.get("Body") or "", re.I):
+        acct, why = await GA.create_guest("whatsapp", None)
+        if acct is not None:
+            await STORE.link({"account_id": acct["account_id"], "wa_id_sha256": key, "number_e164": sender, "linked_at": now,
+                              "consent_at": now, "consent_wording_version": GA.INBOUND_VERSION,
+                              "consent_text_sha256": hashlib.sha256(GA.INBOUND_CONSENT.encode()).hexdigest()})
+            await STORE.put_state(key, {"history": [], "pending": None, "last_inbound_at": now, "link_tries": []})
+            ch = await STORE.channel_for(key)
+            if ch:
+                _spawn(_turn(ch, to, p))
+                return ""
+        log.warning("[guest_whatsapp] no automatic guest for a new number: %s", why)
     # an unknown sender: one fixed sentence, at most every ten minutes; only the hash and the time are kept
     tries = [t for t in st.get("link_tries") or [] if _dt(t) > now - timedelta(hours=1)]
     onboarded = [t for t in tries if t.startswith("onboard:")]

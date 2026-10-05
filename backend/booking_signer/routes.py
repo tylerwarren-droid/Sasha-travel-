@@ -568,6 +568,8 @@ from . import perf_ops as _perf_ops  # noqa: E402
 router.include_router(_perf_ops.router)   # Sasha 149 · /api/booking/ops/perf (founder only): timings measured on the server
 from . import handover as _handover  # noqa: E402
 router.include_router(_handover.router); router.include_router(_handover.ops)   # CR 23 · /api/booking/handover/* (guest page, token) + /ops/handovers (founder only) — Sasha 150, the founder's yes
+from . import guest_accounts as _guest_accounts  # noqa: E402
+router.include_router(_guest_accounts.router)   # Sasha 153 · /api/booking/guest/start (keyed: the site's server) — automatic guest accounts
 from . import demo_spa as _demo_spa  # noqa: E402
 router.include_router(_demo_spa.router)   # Sasha 126 (3) · Kanoe Demo Spa (ours; books nothing real)
 router.include_router(_demo_spa.ops)

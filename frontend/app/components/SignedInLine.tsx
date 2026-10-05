@@ -5,6 +5,7 @@
  * CTO's SashaChat.tsx needs no change. Every line comes from /api/auth/whoami; nothing is assumed.
  */
 import { useEffect, useState } from 'react'
+import { ensureGuest } from '@/lib/guest-start'
 
 type Who = { who: 'founder' | 'guest' | null; email?: string | null; guest_sign_in_open: boolean }
 
@@ -27,11 +28,12 @@ function useWho(): Who | null | 'unknown' {
 }
 
 export function SignInToBook() {
-  const who = useWho()
-  if (who === null) return <span>Checking who&rsquo;s signed in…</span>
-  // Sasha 120 · signed out, ALWAYS "Sign in to book" with the link — never whose account booking is open to
-  const next = typeof window !== 'undefined' ? window.location.pathname : '/demo'
-  return <span><a href={`/sign-in?next=${encodeURIComponent(next)}`}>Sign in to book</a> — Sasha emails you a link.</span>
+  // Sasha 153 · no sign-in wall: this only shows when the automatic guest session couldn't open — it tries again
+  const [state, setState] = useState<'starting' | 'ready' | 'failed'>('starting')
+  useEffect(() => { ensureGuest().then((ok) => setState(ok ? 'ready' : 'failed')) }, [])
+  if (state === 'starting') return <span>Opening your private session…</span>
+  if (state === 'ready') return <span>Your private session is open — ask again and I&rsquo;ll carry on.</span>
+  return <span>I couldn&rsquo;t open your private session just now — try again in a moment.</span>
 }
 
 export function WhoIsBooking() {
@@ -49,7 +51,9 @@ export function WhoIsBooking() {
   }
   return (
     <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
-      {who.who === 'founder' ? 'Booking as the founder.' : <>Booking as {who.email ?? 'your account'}. <button type="button" onClick={signOut} style={{ textDecoration: 'underline' }}>Sign out</button></>}
+      {who.who === 'founder' ? 'Booking as the founder.' : (who.email ?? '').endsWith('@guests.kanoe.ai')
+        ? 'Booking as a private guest — only you see these bookings.'
+        : <>Booking as {who.email ?? 'your account'}. <button type="button" onClick={signOut} style={{ textDecoration: 'underline' }}>Sign out</button></>}
       {' · '}<a href="/you" style={{ textDecoration: 'underline' }}>You</a>
       {out && <> {out}</>}
     </div>

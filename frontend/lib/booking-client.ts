@@ -7,13 +7,25 @@
  * returned with the server's own rule and words, for the surface to show unchanged.
  */
 import { bookingUrl, bookingHeaders } from '@/lib/booking-api'
+import { announceBooked, ensureGuest } from '@/lib/guest-start'
 
 export type Res = { ok: boolean; status: number; json: Record<string, unknown> }
 
-/** Sasha 120 · what a surface shows when nobody is signed in (401): no booking buttons, only this — with the link. */
-export const SIGN_IN_TO_BOOK = 'Sign in to book.'
+/** Sasha 153 · there is no sign-in wall: a 401 starts the visitor's private guest session and the request is retried once;
+ *  this is said only if that, too, fails */
+export const SIGN_IN_TO_BOOK = 'Sasha couldn’t start your private session just now — try again in a moment.'
+
+//: Sasha 153 · the requests that make a booking: their success opens the "keep this across devices" offer
+const BOOKS = /\/(forms\/[^/]+\/send|emails\/[^/]+\/send|travel\/(flight|hotel)\/pay|links\/[^/]+\/(booked|done))$/
 
 export async function bookingReq(path: string, body?: unknown, timeoutMs = 30000): Promise<Res> {
+  let res = await bookingReqOnce(path, body, timeoutMs)
+  if (res.status === 401 && (await ensureGuest())) res = await bookingReqOnce(path, body, timeoutMs)
+  if (res.ok && BOOKS.test(path.split('?')[0])) announceBooked()
+  return res
+}
+
+async function bookingReqOnce(path: string, body?: unknown, timeoutMs = 30000): Promise<Res> {
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), timeoutMs)
   let r: Response
@@ -33,6 +45,11 @@ export async function bookingReq(path: string, body?: unknown, timeoutMs = 30000
 export type Consent = { version: string; text: string; sha256: string; privacy: string }
 export type Contact = { name: string; mobile_e164: string; consent_version: string; consent_at: string }
 export async function contactReq(method: 'GET' | 'PUT' | 'DELETE', body?: unknown): Promise<Res> {
+  const once = await contactReqOnce(method, body)
+  return once.status === 401 && (await ensureGuest()) ? contactReqOnce(method, body) : once   // Sasha 153 · no sign-in wall
+}
+
+async function contactReqOnce(method: 'GET' | 'PUT' | 'DELETE', body?: unknown): Promise<Res> {
   let r: Response
   try {
     r = await fetch(bookingUrl('/api/booking/contact'), { method, headers: bookingHeaders(), ...(body === undefined ? {} : { body: JSON.stringify(body) }) })

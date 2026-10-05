@@ -619,6 +619,10 @@ async def send(form_id: str, request: Request):
     m = form_map(f["page_url"])
     if m is None or (not m["test"] and os.getenv("SASHA_FORMS_ENABLED", "").strip() != "1"):
         return _refuse(422, "form_not_approved", "this form is no longer approved to send; nothing was sent")
+    from .guest_accounts import real_contact_refusal   # Sasha 153 · a real venue's form: the founder's account only, for now
+    no = real_contact_refusal(account, bool(m["test"]))
+    if no is not None:
+        return no
     now = NOW()
     approval = {"how": body["approval"].get("how"), "said": body["approval"].get("said"), "at": now.isoformat(),
                 "read_back_sha256": f["read_back_sha256"]}

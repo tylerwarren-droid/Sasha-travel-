@@ -9,6 +9,7 @@
  */
 import { createBrowserClient } from '@supabase/ssr'
 import { apiUrl } from './api'
+import { ensureGuest } from './guest-start'
 
 let token: string | null = null
 let client: ReturnType<typeof createBrowserClient> | null = null
@@ -28,6 +29,12 @@ async function refreshFounder(): Promise<void> {
 
 export async function refreshGuestAuth(): Promise<void> {
   await refreshFounder()
+  await readGuest()
+  // Sasha 153 · no sign-in wall: a browser with no account gets its own automatic private guest account, then reads it
+  if (!founder && !token && (await ensureGuest())) await readGuest()
+}
+
+async function readGuest(): Promise<void> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url || !key) { token = null; return }
   try {

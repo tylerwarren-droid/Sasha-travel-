@@ -357,6 +357,11 @@ async def send_email(email_id: str, request: Request):
         return _refuse(422, "approval_void", YS.APPROVAL_VOID)
     if E.email_sha256(e["email"]) != e["email_sha256"]:
         return _refuse(409, "email_changed", "the stored email no longer matches what was read back; nothing was sent")
+    from .guest_accounts import real_contact_refusal   # Sasha 153 · a real venue's inbox: the founder's account only, for now
+    to = str((e.get("email") or {}).get("to") or "").lower()
+    no = real_contact_refusal(account, to.endswith("kanoe.ai") or to.endswith("@" + os.getenv("SASHA_INBOUND_DOMAIN", "booking.kanoe.ai").lower()))
+    if no is not None:
+        return no
     # S-54 · checked again at the send: a venue can withdraw between the read-back and the yes
     try:
         r = await LADDER_STORE.get_read(account, str(e["read_id"])) if e.get("read_id") else None

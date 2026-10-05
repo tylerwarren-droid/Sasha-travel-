@@ -10,7 +10,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
 export const COOKIE = 'sasha_founder'
-export const SESSION_HOURS = 12
+//: Sasha 153 · the founder's own laptop and phone stay signed in to HIS account: a long-lived session (FOUNDER_SESSION_DAYS, 365)
+export const SESSION_HOURS = Math.max(1, Number((process.env.FOUNDER_SESSION_DAYS ?? '').trim() || 365)) * 24
 
 const secret = () => (process.env.FOUNDER_SESSION_SECRET ?? '').trim()
 

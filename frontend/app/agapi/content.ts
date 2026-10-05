@@ -29,6 +29,8 @@ export type Pitch = {
   model: Line[]
   status: Line[]
   demo: { href?: string; label?: string; whatsapp: string }
+  /** Sasha 155 · "Try it now": the product itself, its chat already in its own mode */
+  tryHref?: string
 }
 
 export const CLAIM_GLYPH: Record<Claim, string> = { built: '✅', test: '🧪', concept: '○', reported: '◐' }
@@ -61,7 +63,7 @@ export const HUB = {
 
 export const PITCHES: Pitch[] = [
   {
-    key: 'sasha', name: 'Sasha (Vietnam)', ready: true,
+    key: 'sasha', name: 'Sasha (Vietnam)', ready: true, tryHref: '/',
     problem: 'A visitor in Hanoi or Hoi An wants the good local place, not the one with an English booking widget. Those places take bookings by their own form, email or phone, in Vietnamese, in their own hours.',
     does: [
       { mark: 'built', text: 'Ask once, on WhatsApp or the web. Sasha finds the venues and shows cards, with photos where the venue publishes one (about 1 in 3 in Vietnam).' },
@@ -99,7 +101,7 @@ export const PITCHES: Pitch[] = [
     demo: { href: '/', label: 'project.kanoe.ai, the Sasha Vietnam site', whatsapp: 'Just ask, e.g. “dinner for 2 in Hoi An tomorrow at 7pm”' },
   },
   {
-    key: 'applied-diligence', name: 'Applied Diligence', ready: true,
+    key: 'applied-diligence', name: 'Applied Diligence', ready: true, tryHref: 'https://applieddiligence.com',
     problem: 'A decision about a company or a person (to onboard, invest, award a contract) has to be defensible: evidence from the official source, dated, with every gap said out loud. Analysts assemble it by hand, one register at a time.',
     does: [
       { mark: 'built', text: 'Free sanctions screening (US OFAC, UK OFSI, UN) on every case.' },
@@ -139,7 +141,7 @@ export const PITCHES: Pitch[] = [
             whatsapp: 'Type diligence, then “check TotalEnergies in France”: the register’s own result, source and date, marked PREVIEW. The Netherlands is never queried (KVK’s terms).' },
   },
   {
-    key: 'campusme', name: 'CampusMe', ready: true,
+    key: 'campusme', name: 'CampusMe', ready: true, tryHref: '/preview/campusme',
     problem: 'A family visiting universities juggles a dozen calendars, registration forms and the travel between campuses.',
     does: [
       { mark: 'built', text: 'Reads each university’s own visit calendar, live (Yale and Penn proven).' },
@@ -171,7 +173,7 @@ export const PITCHES: Pitch[] = [
     demo: { href: '/preview/campusme', label: 'the CampusMe preview', whatsapp: 'Type campus, then “campus visits at Yale and Penn in November for my son”' },
   },
   {
-    key: 'relocateme', name: 'RelocateMe', ready: true,
+    key: 'relocateme', name: 'RelocateMe', ready: true, tryHref: '/preview/relocateme',
     problem: 'A first Spanish residence application comes back for one fact that disagrees across documents. Then there’s the trip, the first nights, and a dozen deadlines.',
     does: [
       { mark: 'built', text: 'The passport photo is read and checked against its own check digits.' },
@@ -202,7 +204,7 @@ export const PITCHES: Pitch[] = [
     demo: { href: '/preview/relocateme', label: 'the RelocateMe preview', whatsapp: 'Type relocate, then “I’m moving to Madrid from London in March”' },
   },
   {
-    key: 'espaname', name: 'EspañaMe', badge: 'CONCEPT', ready: true,
+    key: 'espaname', name: 'EspañaMe', badge: 'CONCEPT', ready: true, tryHref: '/preview/espaname',
     problem: 'A new resident faces the padrón, social security, the health card, a doctor and a phone line, each with its own office, appointment system and ID.',
     does: [
       { mark: 'built', text: 'Health works today in our test setup: a private clinic booked by phone, public appointments (SERMAS) prepared for you to press, and the new-in-Madrid steps, each from its official page.' },

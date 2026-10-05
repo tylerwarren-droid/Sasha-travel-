@@ -24,6 +24,7 @@ function PitchView({ p }: { p: Pitch }) {
     <article className={h.pitch} aria-labelledby={`t-${p.key}`}>
       <h2 id={`t-${p.key}`} className={h.pitchName}>
         {p.name}{p.badge && <span className={h.badge}>{p.badge}</span>}
+        {p.tryHref && <a className={h.tryNow} href={p.tryHref}>Try it now →</a>}
       </h2>
       <p className={h.problem}><strong>The problem.</strong> {p.problem}</p>
 

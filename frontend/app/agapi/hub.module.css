@@ -43,3 +43,5 @@
   .agentGrid { grid-template-columns: 1fr; }
   .pitch { padding: 18px 14px; }
 }
+.tryNow { margin-left: auto; font-family: var(--site-body), system-ui, sans-serif; font-size: 14px; font-weight: 700; background: #0d2b3e; color: #fff; padding: 8px 14px; border-radius: 999px; text-decoration: none; }
+.tryNow:hover { background: #163f5a; }

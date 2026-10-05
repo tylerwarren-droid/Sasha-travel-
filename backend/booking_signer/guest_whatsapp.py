@@ -584,6 +584,11 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     # CR 1 products (backend/products/whatsapp.py): CampusMe / relocation by MODE on this one sandbox number. Not in a
     # mode and no "campus…"/"relocation…" keyword → returns False at once and everything below runs as before.
     from products import whatsapp as PW
+    from . import me3   # Sasha 155 · "tell me about RelocateMe" → two sentences, then the product's own keyword opens its mode
+    m3 = me3.asked(body) if not payload else None
+    if m3:
+        out.text(me3.INTRO[m3])
+        p = {**p, "Body": me3.KEYWORD[m3]}
 
     async def _early(text: str) -> None:   # "Reading Yale's calendar…" goes out before a slow read, not after it
         await deliver(ch, frm, Out().text(text), now)

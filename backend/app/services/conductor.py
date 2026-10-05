@@ -1765,6 +1765,25 @@ async def conduct(
         return _guarded
     conversation_history = clean_history(conversation_history)
 
+    # Sasha 155 · ME3 EVERYWHERE: "tell me about RelocateMe / CampusMe / EspañaMe" → two sentences, then that product's own
+    # mode, exactly as its WhatsApp keyword opens it (products.web, CR's). The web chat and the voice avatar both land here.
+    from booking_signer import me3 as _me3  # noqa: E402
+    _m3 = _me3.asked(user_message) if not payload else None
+    if _m3 and user_id and signed_in is not False:
+        try:
+            from products.web import web_turn as _pw  # noqa: E402
+            _t = await _pw(user_id, "", mode=_m3, signed_in=True)
+        except Exception as e:
+            print(f"[Conductor] product mode {_m3} failed: {type(e).__name__}: {e}")
+            _t = None
+        _resp = _me3.INTRO[_m3] + (f"\n\n{_t['response']}" if _t and _t.get("response") else "")
+        return {"response": _resp, "intents": ["products"], "quick_replies": (_t or {}).get("quick_replies") or [],
+                "media": (_t or {}).get("media") or [], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None,
+                "saved_card": None, "product_mode": _m3,
+                "messages": list(conversation_history) + [{"role": "user", "content": user_message},
+                                                          {"role": "assistant", "content": _resp}]}
+
     # Sasha 148 · CR 20 (5), approved: inside a product, "a 60-minute massage near my hotel on arrival" carries the product's
     # city, place and day (products.web.in_context, CR's, read-only) — so the web books what WhatsApp books. Signed-in only;
     # its line goes on top of Sasha's own answer, as with the trip hand-off. Its failure is logged, never fatal.

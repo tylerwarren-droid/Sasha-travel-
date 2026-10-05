@@ -28,12 +28,14 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft }: {
     want: what, dates: '' })
   const [p, setP] = useState<Phase>({ k: 'details' })
   const [ready, setReady] = useState(false)
+  const [named0, setNamed0] = useState(false)   // a saved name: never asked again
   useEffect(() => {
     let off = false
     contactReq('GET').then((r) => {
       if (off) return
       const c = (r.json.contact ?? null) as { name?: string; mobile_e164?: string } | null
       setD((x) => ({ ...x, name: c?.name ?? '', phone: c?.mobile_e164 ?? '' }))
+      setNamed0(!!c?.name)
       setReady(true)
     }).catch(() => { if (!off) setReady(true) })
     return () => { off = true }
@@ -103,12 +105,13 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft }: {
         <div>What would you like {venue} to do?</div>
         <textarea value={d.want} onChange={(e) => setD({ ...d, want: e.target.value })} rows={3} style={{ ...input, width: '100%', marginTop: 4 }} />
         <input placeholder="Dates that suit you (optional)" value={d.dates} onChange={(e) => setD({ ...d, dates: e.target.value })} style={{ ...input, width: '100%', marginTop: 4 }} />
-      </> : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+      </> : (at && d.date && d.time) ? null : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
         <input type="date" value={d.date} onChange={(e) => setD({ ...d, date: e.target.value })} style={input} />
         <input type="time" value={d.time} onChange={(e) => setD({ ...d, time: e.target.value })} style={input} />
         <input type="number" min={1} max={20} value={d.party} onChange={(e) => setD({ ...d, party: Number(e.target.value) })} style={{ ...input, width: 56 }} /> people
       </div>}
-      {!d.name && <input placeholder="Your name" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} style={{ ...input, marginTop: 6 }} />}
+      {!named0 && <div style={{ marginTop: 4 }}>Whose name should it be under?</div>}
+      {!named0 && <input placeholder="Your name" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} style={{ ...input, marginTop: 6 }} />}
       <div style={{ marginTop: 8 }}><button className="price" disabled={!complete} onClick={() => { prepare() }}>Continue</button></div>
     </div>
   )

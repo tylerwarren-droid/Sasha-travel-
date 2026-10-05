@@ -3,8 +3,8 @@
 DATA for the Sasha tab's slot_link.py (S-37 Recipe / Sasha 138 HOTEL_PREFILL), which wires build_* to it. Every entry was
 written from the engine's PUBLIC docs or from links venues publish on their own sites (docs/products/cr22/, 5 Oct 2026),
 robots first; no platform's booking page was ever opened or probed. ⚠ An entry is UNVERIFIED (`verified=None`) until
-the founder opens one real link once — 5 Oct 2026: FILLED TableCheck, SevenRooms, Cloudbeds, SiteMinder, Omnibees; NOT
-filled Guestcentric (its link then carries nothing) (engine_check: "1 filled / 2 not filled / 3 wrong page") — until then Sasha never
+the founder opens one real link once — 5 Oct 2026: FILLED TableCheck, SevenRooms, Cloudbeds, SiteMinder, Omnibees;
+Guestcentric rebuilt from the engine's own search (CR 26), its new link awaiting his check (engine_check: "1 filled / 2 not filled / 3 wrong page") — until then Sasha never
 says "it's filled in", only "I've added the dates to the link; check them there".
 
 Nothing here sends a request anywhere: build() only adds query parameters to a venue page string we already hold.
@@ -34,6 +34,8 @@ class Engine:
     verified: Optional[str] = None             #: who opened a real link and saw it filled, and when — None until then
     not_filled: Optional[str] = None           #: who opened a real link and saw it NOT filled, and when — the link then
                                                #: carries nothing (the guest picks the slot on the page)
+    entry: Optional[Callable[[str], Optional[str]]] = None   #: the engine's own entry from a venue page string, or None
+                                               #: when that page isn't the engine (then nothing is carried)
 
     @property
     def prefills(self) -> List[str]:
@@ -80,11 +82,13 @@ LIBRARY: Dict[str, Engine] = {e.name: e for e in (
     Engine("Bookassist", "hotel", "documented", "Bookassist booking-platform installation guide",
            {"checkin": "date_in", "checkout": "date_out", "rooms": "rms", "adults": "adults", "children": "children",
             "promo": "promo_code"}, taps_after=11, taps_page=15),
-    Engine("Guestcentric", "hotel", "documented", "blog.guestcentric.com custom booking-engine URL (2012); venues' pages over "
-           "https (e.g. www.smallportuguesehotels.com/en/property-details/…, read 5 Oct 2026: 200, its widget uses startDay/nrNights)",
+    Engine("Guestcentric", "hotel", "documented+observed",
+           "help.guestcentric.com 'custom hotel Booking Engine URL' (startDay yyyy-mm-dd, nrNights, amount, nrAdults, nrChildren); "
+           "CR 26 (5 Oct 2026), the engine's OWN search run read-only on book.smallportuguesehotels.com and book.memmoalfama.com "
+           "(HyperCommerce, same version): book.php?apikey=… redirects to /search with every parameter kept and opens on the rates, "
+           "filled. The 5 Oct 'not filled' was the group's MARKETING page (property-details: no apikey, the engine never sees it)",
            {"checkin": "startDay", "nights": "nrNights", "rooms": "amount", "adults": "nrAdults", "children": "nrChildren"},
-           taps_after=11, taps_page=15,
-           not_filled="the founder, 5 Oct 2026: Emporium Lisbon Suites (https link) opened — not filled; the http link was blocked"),
+           taps_after=11, taps_page=15, entry=lambda page: _guestcentric_entry(page)),
     Engine("Omnibees", "hotel", "seen_in_links", "book.omnibees.com links published for Lisbon hotels",
            {"checkin": "CheckIn", "checkout": "CheckOut", "rooms": "NRooms", "adults": "ad", "children": "ch"},
            date_fmt="%d%m%Y", taps_after=11, taps_page=15, verified="the founder, 5 Oct 2026: Masa Hotel Campo Grande (Lisbon) link opened once — filled (via the Sasha tab's engine_check)"),
@@ -106,6 +110,19 @@ LIBRARY: Dict[str, Engine] = {e.name: e for e in (
 TEST_VENUE_TAPS = 1
 
 
+def _guestcentric_entry(page: str) -> Optional[str]:
+    """The hotel's own HyperCommerce engine from a link it publishes: book.php?apikey=… (kept: it redirects with every
+    parameter) or the SPA's ?gc=… (→ /search). A marketing page (no apikey, no gc) is not the engine → None."""
+    u = urlsplit(page)
+    q = dict(parse_qsl(u.query, keep_blank_values=True))
+    if u.path.endswith("/book.php") and q.get("apikey"):
+        return page
+    if q.get("gc"):
+        keep = [(k, q[k]) for k in ("gc", "l", "channelKey") if q.get(k)]
+        return urlunsplit((u.scheme, u.netloc, "/search", urlencode(keep), ""))
+    return None
+
+
 def https(url: str) -> str:
     """A link Sasha sends is never http:// — phones block it as an unsafe connection (CR 22: link 6, 5 Oct 2026)."""
     return "https://" + url[len("http://"):] if (url or "").lower().startswith("http://") else url
@@ -119,6 +136,13 @@ def build(engine: str, venue_page: str, **slot) -> Tuple[str, List[str]]:
     e = LIBRARY.get(engine)
     if not e or not e.params or e.not_filled:      # a link the founder saw NOT fill carries nothing: the page as it is
         return venue_page, []
+    if e.entry is not None:
+        entry = e.entry(venue_page)
+        if entry is None:                          # not the engine's own page (CR 26: a marketing page): carry nothing
+            return venue_page, []
+        venue_page = entry
+    if "nights" in e.params and slot.get("nights") is None and slot.get("checkin") and slot.get("checkout"):
+        slot = {**slot, "nights": (slot["checkout"] - slot["checkin"]).days}
     add: List[Tuple[str, str]] = []
     carried: List[str] = []
     for ours, theirs in e.params.items():

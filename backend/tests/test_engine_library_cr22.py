@@ -54,12 +54,33 @@ class Build(unittest.TestCase):
     def test_verified_only_where_the_founder_checked(self):   # his six answers, 5 Oct 2026
         self.assertEqual({n for n, e in EL.LIBRARY.items() if e.verified},
                          {"TableCheck", "SevenRooms", "Cloudbeds", "SiteMinder", "Omnibees"})
-        self.assertEqual({n for n, e in EL.LIBRARY.items() if e.not_filled}, {"Guestcentric"})
+        self.assertEqual({n for n, e in EL.LIBRARY.items() if e.not_filled}, set())
 
-    def test_a_link_that_did_not_fill_carries_nothing(self):
+    def test_a_marketing_page_carries_nothing(self):   # CR 26: why the 5 Oct link didn't fill
         page = "https://www.smallportuguesehotels.com/en/property-details/emporium-lisbon-suites"
         self.assertEqual(EL.build("Guestcentric", page, checkin=date(2026, 11, 20), nights=2, adults=2), (page, []))
         self.assertEqual(EL.taps_to_book("Guestcentric", [])["taps"], 15)
+
+
+class Guestcentric(unittest.TestCase):
+    """CR 26 · rebuilt from what the engine's own search does (book.smallportuguesehotels.com, book.memmoalfama.com)."""
+    BOOKPHP = ("https://book.smallportuguesehotels.com/api/bg/book.php?apikey=718b5ce5fcf26a16e6b8d80d90941bef&s=default"
+               "&channelKey=39ed7b7b7dae559eb40276305db50f97&l=en")
+
+    def test_the_hotels_own_book_php_link_carries_the_stay(self):
+        url, carried = EL.build("Guestcentric", self.BOOKPHP, checkin=date(2026, 11, 16), checkout=date(2026, 11, 18),
+                                rooms=1, adults=2, children=0)
+        self.assertTrue(url.startswith("https://book.smallportuguesehotels.com/api/bg/book.php?"))
+        self.assertEqual({k: q(url)[k] for k in ("apikey", "startDay", "nrNights", "amount", "nrAdults", "nrChildren")},
+                         {"apikey": "718b5ce5fcf26a16e6b8d80d90941bef", "startDay": "2026-11-16", "nrNights": "2",
+                          "amount": "1", "nrAdults": "2", "nrChildren": "0"})
+        self.assertEqual(carried, ["checkin", "nights", "rooms", "adults", "children"])
+
+    def test_the_spa_link_goes_to_search(self):
+        url, _ = EL.build("Guestcentric", "https://book.memmoalfama.com/?gc=9a7be57592a88cc5f394e775e153012b",
+                          checkin=date(2026, 11, 16), nights=2, adults=2)
+        self.assertTrue(url.startswith("https://book.memmoalfama.com/search?gc=9a7be57592a88cc5f394e775e153012b"))
+        self.assertEqual((q(url)["startDay"], q(url)["nrNights"], q(url)["nrAdults"]), ("2026-11-16", "2", "2"))
 
 
 class Taps(unittest.TestCase):

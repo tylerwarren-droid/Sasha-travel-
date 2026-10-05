@@ -38,7 +38,12 @@ class TheResponseCarriesIt(unittest.TestCase):
         asyncio.set_event_loop(asyncio.new_event_loop())   # app.services.ideas_agent makes an asyncio.Lock at import (3.9 needs a loop)
         from fastapi.testclient import TestClient
         from app.main import app
-        r = TestClient(app).post("/api/agents/conductor", json={"message": "find me a tattoo studio in Nairobi, KE"})
+        import os
+        from unittest import mock
+        # Sasha 152 · signed out, the search is not offered (sign in first): the founder's pass-through carries it
+        with mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-s152", "FOUNDER_ACCOUNT_ID": ""}):
+            r = TestClient(app).post("/api/agents/conductor", json={"message": "find me a tattoo studio in Nairobi, KE"},
+                                     headers={"x-sasha-session": "founder", "x-sasha-booking-key": "k-s152"})
         if r.status_code == 401:
             self.skipTest("CONDUCTOR_API_SECRET is set here; the model check above still holds")
         self.assertEqual(r.json().get("booking_find"), {"what": "tattoo studio", "where": "Nairobi", "country": "KE"}, r.text[:300])

@@ -1788,6 +1788,14 @@ async def conduct(
     from booking_signer.handoff import booking_handoff  # noqa: E402
     _handoff = booking_handoff(user_message, conversation_history)
     if _handoff is not None:
+        if signed_in is False and _handoff.get("booking_find"):
+            # Sasha 152 · signed out, the cards can't load (the search needs the guest's own account, S-41/S-62): never
+            # "Let me look for …" followed by nothing — say what it takes
+            f = _handoff["booking_find"]
+            say = (f"Sign in and I'll find {f.get('what') or 'places'} in {f.get('where') or 'there'} for you — searching and "
+                   f"booking work on your own account, so nobody else's details are ever involved.")
+            _handoff = {**_handoff, "response": say, "booking_find": None, "needs_sign_in": True,
+                        "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": say}]}
         return _handoff
     # S-64 booking drafts: backend/booking_signer/chat_request.py. CTO zips drop this; Stage B re-applies it.
     from booking_signer.chat_request import booking_turn  # noqa: E402

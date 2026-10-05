@@ -278,9 +278,23 @@ def qualities(text: str) -> List[str]:
     return list(dict.fromkeys(q.lower() for q in _QUALITY.findall(text or "")))
 
 
+#: Sasha 152 · a priority SAID inside the request ("a tattoo parlor, top rated ones in Madrid") is the priority (plain_priority
+#: reads it), never part of what is searched for — the founder heard "Let me look for tattoo parlor Top rated ones"
+_PRIORITY_WORDS = re.compile(r"(?:^|\s|,)\s*(?:the\s+)?(?:best[- ]rated|top[- ]rated|highly[- ]rated|best[- ]reviewed|well[- ]reviewed|"
+                             r"good reviews|the best|best)(?:\s+ones?)?\b", re.I)
+
+
+def _without_priority(what: str) -> str:
+    out = " ".join(_PRIORITY_WORDS.sub(" ", what).split()).strip(" ,")
+    return out if len(out) >= 2 else what
+
+
 def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]:
     """{what, where, country?, near?} when the message asks for a kind of place in a place — else None. Nothing guessed:
     a country is taken only when written as a two-letter code ("Nairobi, KE")."""
+    said = message
+    # Sasha 152 · ", top rated ones in Madrid": a comma before a stated priority doesn't end the request
+    message = re.sub(r",\s*(?=(?:the\s+)?(?:best|top|highly|well)[- ]?(?:rated|reviewed)?\b)", " ", message or "", flags=re.I)
     m = _FIND.search(message or "")
     if not m:
         m = _SOFT.search(message or "")
@@ -337,6 +351,7 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
     if missing_q:
         what = " ".join(missing_q + [what])
     at = plain_open_at(message, now)
+    what = _without_priority(what)   # Sasha 152 · the priority is kept as the priority, not searched for
     return {"what": what, "where": where, **({"country": country} if country else {}), **({"near": near} if near else {}),
             **({"open_at": at} if at else {}),
             **({"priority": p} if (p := plain_priority(message, near)) else {})}   # absent: Sasha asks (S-68 step 7)

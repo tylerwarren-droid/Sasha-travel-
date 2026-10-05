@@ -1873,7 +1873,7 @@ async def _answer_need(ctx: dict, pend: dict, body: str) -> bool:
     if need == "when":
         day, hhmm = (draft.get("when") or {}).get("at", "")[:10] or None, None
         from .chat_request import plain_day, _time
-        day = plain_day(body, ctx["now"]) or day
+        day = plain_day(body, ctx["now"]) or day or draft.get("day")   # Sasha 148 · the day given earlier, kept
         hhmm = _time(body.lower()) or HO.context_time(body) or HO.plain_time(body)
         if (d.get("when") or {}).get("mode") in ("at", "venue_proposes"):
             draft["when"] = d["when"]
@@ -1896,7 +1896,10 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
     need = _missing(pend["draft"])
     if need:
         st["pending"] = {**pend, "need": need, "at": ctx["now"].isoformat()}
-        out.text(_NEED_Q[need])
+        if need == "when" and pend["draft"].get("day"):   # Sasha 148 · only the time is missing: ask only for it
+            out.text(f"What time on {SN.day_words(pend['draft']['day'])}?")
+        else:
+            out.text(_NEED_Q[need])
         return
     status, cj = await api(ctx["account"], "GET", "/api/booking/contact")
     contact = cj.get("contact") if status == 200 else None

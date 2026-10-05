@@ -1733,6 +1733,7 @@ async def conduct(
     product_mode: Optional[str] = None,   # CR 16 · the product tab's mode, on its first turn
     signed_in: Optional[bool] = None,     # Sasha 142 · a real account (verified guest or founder), not the public demo
     payload: Optional[str] = None,        # CR 16 · a product quick-reply
+    in_context_done: bool = False,        # Sasha 148 · this turn is already the product's sentence: not looked up again
 ) -> dict:
     """
     The Conductor — main entry point.
@@ -1763,6 +1764,25 @@ async def conduct(
     if _guarded is not None:
         return _guarded
     conversation_history = clean_history(conversation_history)
+
+    # Sasha 148 · CR 20 (5), approved: inside a product, "a 60-minute massage near my hotel on arrival" carries the product's
+    # city, place and day (products.web.in_context, CR's, read-only) — so the web books what WhatsApp books. Signed-in only;
+    # its line goes on top of Sasha's own answer, as with the trip hand-off. Its failure is logged, never fatal.
+    if not in_context_done and user_id and signed_in is True:
+        try:
+            from products.web import in_context as _in_context  # noqa: E402
+            _ctx = await _in_context(user_id, user_message, signed_in)
+        except Exception as e:
+            print(f"[Conductor] product context failed: {type(e).__name__}: {e}")
+            _ctx = None
+        if _ctx and _ctx.get("sentence"):
+            inner = dict(await conduct(_ctx["sentence"], conversation_history, client_config, language, user_name, force_intent,
+                                       session_id, user_id, None, signed_in, payload, in_context_done=True))
+            if _ctx.get("line"):
+                inner["response"] = _ctx["line"] + (f"\n\n{inner['response']}" if inner.get("response") else "")
+            inner["messages"] = list(conversation_history) + [{"role": "user", "content": user_message},
+                                                              {"role": "assistant", "content": inner.get("response") or ""}]
+            return inner
 
     # S-26 booking hand-off: backend/booking_signer/handoff.py. CTO zips drop this; Stage B re-applies it.
     from booking_signer.handoff import booking_handoff  # noqa: E402

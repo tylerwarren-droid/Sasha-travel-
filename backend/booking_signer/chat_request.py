@@ -47,6 +47,15 @@ QUESTIONS = {
 }
 
 
+#: Sasha 148 · the day is known; only the time is asked — same ending as QUESTIONS["when"], so a reply joins the thread
+SPACE_TAIL = " — or shall I ask them when they have space?"
+
+
+def ask_time(day: str) -> str:
+    from . import sentences as SN
+    return f"What time on {SN.day_words(day)}{SPACE_TAIL}"
+
+
 def _n(t: str) -> int:
     return int(t) if t.isdigit() else _NUM[t]
 
@@ -132,6 +141,8 @@ def draft(message: str, now: Optional[datetime] = None, lang: str = "en") -> Dic
         parts["when"] = {"mode": "window", "window": win}
     elif day and hhmm:
         parts["when"] = {"mode": "at", "at": f"{day}T{hhmm}"}
+    elif day:   # Sasha 148 · a day said without a time is KEPT (CR 20: "on arrival" = 1 March), and only the time is asked
+        parts["day"] = day
     # how many — in the activity's own unit
     unit = act[3] if act else None
     for u, rx in _UNITS.items():
@@ -155,6 +166,8 @@ def draft(message: str, now: Optional[datetime] = None, lang: str = "en") -> Dic
         k = missing[0]
         if k == "count":
             question = QUESTIONS["count"].format(unit=unit) if unit else QUESTIONS["unit"]
+        elif k == "when" and parts.get("day"):
+            question = ask_time(parts["day"])
         else:
             question = QUESTIONS[k]
     return {"parts": parts, "missing": missing, "question": question}
@@ -181,7 +194,8 @@ def _thread(message: str, history: List[Mapping[str, Any]]) -> Optional[str]:
     lines since the request that started it, joined; else this message alone, if it is a booking request at all."""
     asked = set(QUESTIONS.values()) | {QUESTIONS["count"].format(unit=u) for u in ("people", "sessions", "pieces", "places")}
     last = next((h for h in reversed(history) if h.get("role") == "assistant"), None)
-    if last and any(str(last.get("content") or "").rstrip().endswith(q) for q in asked):
+    said = str((last or {}).get("content") or "").rstrip()
+    if last and (any(said.endswith(q) for q in asked) or (said.endswith(SPACE_TAIL.strip()) and "What time on " in said)):
         users: List[str] = []
         for h in reversed(history):
             if h.get("role") == "user":

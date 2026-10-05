@@ -95,6 +95,9 @@ class FakePage:
         return {"url": TV + "plain", "text": "Reserva confirmada Confirmado: mesa para 2 personas el martes 15 de diciembre a las 21:00, "
                                             "a nombre de Prueba Sasha. Localizador: TV-ABC123-4F"}
 
+    async def snapshot(self):
+        return b"\xff\xd8jpeg"
+
     async def fit(self, w, h):
         self.fitted = (w, h)
         return await self.point_at_book()
@@ -359,6 +362,7 @@ class GuestPage(Base):
         rec = await self.open()
         out = await HO.view_fit(rec["id"], rec["token"], w=5000, h=10)
         self.assertEqual((out["ok"], self.pages[0].fitted), (True, (1024, 320)))
+        self.assertTrue(out["snapshot"].startswith("data:image/jpeg;base64,"))
         self.assertEqual((await HO.view_fit(rec["id"], "nope")).status_code, 404)
 
     async def test_booked_page_has_the_ref_and_the_way_back(self):

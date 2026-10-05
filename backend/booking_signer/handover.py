@@ -220,6 +220,10 @@ class PlaywrightPage:
         await self.page.set_viewport_size({"width": width, "height": height})
         return await self.point_at_book()
 
+    async def snapshot(self) -> bytes:
+        """What the live view will show, as a JPEG — the page shows it while Browserbase's viewer starts (a few seconds)."""
+        return await self.page.screenshot(type="jpeg", quality=72)
+
     async def watch(self, on_tap: Callable[[str], None], on_press: Callable[[str], None], read_only: bool,
                     on_navigated: Callable[[], None]) -> None:
         await self.page.expose_function("__kanoeTap", on_tap)
@@ -649,11 +653,13 @@ async def view_fit(hid: str, t: str = "", w: int = 390, h: int = 600):
     async with lock:
         try:
             label = await rec["_page"].fit(w, h)
+            shot = await rec["_page"].snapshot()
         except Exception as e:
             log.warning("[handover] %s fit: %s", hid, e)
             return {"ok": False}
     rec["fitted"] = [w, h]
-    return {"ok": True, "label": label or rec.get("book_label")}
+    import base64
+    return {"ok": True, "label": label or rec.get("book_label"), "snapshot": "data:image/jpeg;base64," + base64.b64encode(shot).decode()}
 
 
 _LIVE_STATES = ("ready", "opened")
@@ -714,14 +720,18 @@ _VIEW = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 .chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-size:12.5px;padding:4px 10px;border-radius:999px;background:#1c1c26;border:1px solid var(--line)}
 .frame{position:relative;flex:1;min-height:0;margin:0 12px;border-radius:14px;overflow:hidden;background:#fff;border:1px solid var(--line)}
 .frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff}
-.wait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#555;font-size:14px;background:#fff}
+.wait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#555;font-size:14px;background:#fff;
+ pointer-events:none;transition:opacity .5s}.wait img{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
+.wait .conn{position:absolute;top:8px;right:8px;font-size:11px;color:#334;background:rgba(255,255,255,.92);padding:3px 8px;
+ border-radius:999px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.anim .tick{animation:pop .5s cubic-bezier(.2,1.6,.4,1)}.anim .tick path{animation:draw .5s ease-out}
 .foot{padding:8px 16px calc(10px + env(safe-area-inset-bottom));font-size:12px;color:var(--muted);text-align:center}
 .foot a{color:var(--muted)}
 .center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
 .tick{width:84px;height:84px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 10px rgba(34,197,94,.14);display:flex;align-items:center;justify-content:center;
- margin-bottom:18px;animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
+ margin-bottom:18px}
 .tick svg{width:46px;height:46px}.tick path{stroke:var(--ink);stroke-width:6;fill:none;stroke-linecap:round;stroke-linejoin:round;
- stroke-dasharray:60;stroke-dashoffset:0;animation:draw .5s ease-out}
+ stroke-dasharray:60;stroke-dashoffset:0}
 @keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}@keyframes draw{from{stroke-dashoffset:60}to{stroke-dashoffset:0}}
 .center h2{margin:0 0 6px;font-size:26px;font-weight:700}.center .v{font-size:17px;font-weight:600;margin:0}
 .center .w{color:var(--muted);margin:4px 0 14px}.ref{font:600 14px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;
@@ -769,18 +779,28 @@ _VIEW = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 
 <script>
 const HID = "@@HID@@", T = "@@T@@", LIVE = document.getElementById('full').getAttribute('href'), BACK = "@@BACK@@";
-function show(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id)); }
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+  // the ✅ animates only where someone sees it (a background tab freezes animations at their first frame)
+  const go = () => document.body.classList.add('anim');
+  if (document.visibilityState === 'visible') go(); else document.addEventListener('visibilitychange', go, {once: true});
+}
 document.querySelectorAll('[data-back], #back').forEach(a => { if (!BACK) a.hidden = true; });
 if (!BACK) document.getElementById('close').hidden = false;
 let state = "@@STATE@@"; show(state);
 async function start() {
   const f = document.getElementById('frame'), r = f.getBoundingClientRect();
-  try { await fetch(`/api/booking/handover/${HID}/fit?t=${T}&w=${Math.round(r.width)}&h=${Math.round(r.height)}`, {cache: 'no-store'}); } catch (e) {}
+  const w = document.getElementById('wait');
+  try {
+    const fit = await (await fetch(`/api/booking/handover/${HID}/fit?t=${T}&w=${Math.round(r.width)}&h=${Math.round(r.height)}`, {cache: 'no-store'})).json();
+    if (fit.snapshot) { w.innerHTML = `<img alt=""><span class="conn">Connecting live&#8230;</span>`; w.querySelector('img').src = fit.snapshot; }
+  } catch (e) {}
   const i = document.createElement('iframe');
   i.src = LIVE; i.title = "The venue's booking form, live"; i.setAttribute('sandbox', 'allow-same-origin allow-scripts');
   i.setAttribute('allow', 'clipboard-read; clipboard-write');
-  i.onload = () => setTimeout(() => { const w = document.getElementById('wait'); if (w) w.remove(); }, 900);
-  f.appendChild(i);
+  // Browserbase's viewer paints its first frame a few seconds after it loads: the snapshot (identical, 1:1) stays until then
+  i.onload = () => setTimeout(() => { w.style.opacity = 0; setTimeout(() => w.remove(), 600); }, 4500);
+  f.insertBefore(i, w);
 }
 async function poll() {
   try {

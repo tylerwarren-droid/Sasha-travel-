@@ -142,11 +142,13 @@ _POINT_TWO_JS = """() => {
   const row = terms.closest('label') || terms.parentElement;
   for (const el of [row, book]) { el.style.outline = '3px solid #22c55e'; el.style.outlineOffset = '3px'; el.style.animation = 'kanoePulse 1.6s infinite'; }
   row.scrollIntoView({block: 'center'});
-  const tag = (id, text, el) => { let m = document.getElementById(id); if (!m) { m = document.createElement('div'); m.id = id; document.body.appendChild(m); }
+  // ① sits BELOW the terms row (above it is the offers box — never point near that one); ② above the sticky Book Now
+  const tag = (id, text, el, below) => { let m = document.getElementById(id); if (!m) { m = document.createElement('div'); m.id = id; document.body.appendChild(m); }
     const r = el.getBoundingClientRect(); m.textContent = text;
-    m.style.cssText = `position:fixed;left:${Math.max(6, Math.min(r.left, innerWidth - 150))}px;top:${Math.max(6, r.top - 34)}px;pointer-events:none;`
+    const top = below ? r.bottom + 8 : r.top - 34;
+    m.style.cssText = `position:fixed;left:${Math.max(6, Math.min(r.left, innerWidth - 170))}px;top:${Math.max(6, top)}px;pointer-events:none;`
       + 'z-index:2147483647;background:#22c55e;color:#04210f;font:600 13px/1 -apple-system,system-ui,sans-serif;padding:7px 12px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.25)'; };
-  tag('kanoe-one', '\\u2460 Tick this box', row); tag('kanoe-two', '\\u2461 Then press Book Now', book);
+  tag('kanoe-one', '\\u2460 Tick the box above', row, true); tag('kanoe-two', '\\u2461 Then press Book Now', book, false);
   return {terms: (row.innerText || '').trim().slice(0, 140), book: book.innerText.trim()};
 }"""
 

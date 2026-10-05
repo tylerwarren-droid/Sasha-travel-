@@ -103,3 +103,63 @@ class ItineraryIsSashas(TR.Flow):
         self.assertNotIn("Your passport number?", self.bodies()[-1])             # not re-asked: Sasha's own flow answered
         self.say("relocation")
         self.assertTrue(self.bodies()[-1].startswith("Back to your EX-01."))
+
+
+class BookingInsideAProduct(TR.Flow):
+    """CR 20 (5): "book me a 60-minute massage near my hotel on arrival" inside a product → Sasha's booking flow WITH the
+    product's context, then back to the product."""
+
+    def setUp(self):
+        super().setUp()
+        self.found, self.saved_find = [], GW._find
+
+        async def find(ctx, f, draft):
+            self.found.append((f, draft, (ctx.get("p") or {}).get("Body") if isinstance(ctx.get("p"), dict) else None))
+            ctx["out"].text(f"[venue cards: {f.get('what')} in {f.get('where')} near {f.get('near')}]")
+        GW._find = find
+
+    def tearDown(self):
+        GW._find = self.saved_find
+        super().tearDown()
+
+    def to_entry(self):
+        for t in ("relocation", "first", "me", "myself", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"):
+            self.say(t)
+
+    def test_relocation_whatsapp_then_back_to_the_file(self):
+        self.to_entry()
+        self.say("book me a 60-minute massage near my hotel on arrival")
+        said = "\n".join(self.bodies()[-3:])
+        self.assertIn("in Madrid, near Calle de Ejemplo 12, on Mon 1 Mar 2027 (your entry date)", said)
+        self.assertIn("say “relocation” to come back", said)
+        (f, draft, _), = self.found                                               # Sasha's OWN booking flow, with the context
+        self.assertEqual((f["where"], f.get("country"), f.get("near")), ("Madrid", "ES", "Calle de Ejemplo 12"))
+        self.say("relocation")
+        self.assertTrue(self.bodies()[-1].startswith("Back to your EX-01."))
+
+    def test_the_same_on_the_web_tab(self):
+        self.to_entry()
+        r = web(self, "book me a 60-minute massage near my hotel on arrival")
+        self.assertEqual(r["handoff"], "book me a 60-minute massage in Madrid near Calle de Ejemplo 12 on 2027-03-01")
+        self.assertIn("(your entry date)", r["response"])
+
+    def test_a_booked_hotel_is_the_place(self):
+        from products import itinerary as IT
+        saved = IT.hotel_on
+
+        async def hotel(account, on):
+            return "Hotel Ejemplo Gran Vía"
+        IT.hotel_on = hotel
+        try:
+            self.to_entry()
+            r = web(self, "book me a 60-minute massage near my hotel on arrival")
+            self.assertEqual(r["handoff"], "book me a 60-minute massage in Madrid near Hotel Ejemplo Gran Vía on 2027-03-01")
+            self.assertIn("near your hotel, Hotel Ejemplo Gran Vía", r["response"])
+        finally:
+            IT.hotel_on = saved
+
+    def test_espana_has_no_date_to_invent(self):
+        self.say("españa")
+        self.say("1")
+        r = web(self, "book me a 60-minute massage near my hotel on arrival")
+        self.assertEqual(r["handoff"], "book me a 60-minute massage in Madrid")

@@ -102,3 +102,25 @@ async def guest_booked(account: str, *, type_: str, provider_name: str, on: date
     except Exception as e:
         log.error("[itinerary] not added: %s: %s", type(e).__name__, e)
         return None
+
+
+async def hotel_on(account: str, on: date) -> Optional[str]:
+    """CR 20 · "near my hotel": the hotel the account has booked for that night (any status but cancelled), by its own
+    name — or None (then the product's own place stands in, said so). Read-only."""
+    if ST.BASE is None:
+        return None
+    from booking_signer.call_store import BOOKINGS_TRIP_TITLE as title
+
+    async def fn(conn):
+        return await conn.fetchval(
+            "select ti.provider_name from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 and t.title = $2 "
+            "and ti.type = 'hotel' and ti.status not in ('cancelled', 'pending') "
+            "and (ti.date_time at time zone coalesce(ti.local_timezone, 'UTC'))::date <= $3 "
+            "and (ti.date_time at time zone coalesce(ti.local_timezone, 'UTC') + make_interval(mins => coalesce(ti.duration_minutes, 1440)))::date >= $3 "
+            "order by ti.date_time desc limit 1", uuid.UUID(account), title, on)
+    try:
+        name = await ST.BASE._run(fn)
+    except Exception as e:
+        log.error("[itinerary] hotel not read: %s: %s", type(e).__name__, e)
+        return None
+    return re.sub(r"\s*\((?:TEST booking[^)]*)\)\s*$", "", name).strip() if name else None

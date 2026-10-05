@@ -55,6 +55,56 @@ def _module(product: str):
     return M
 
 
+# CR 20 (5) · words that only mean something with the product's context: "near my hotel", "on arrival"…
+_REL = re.compile(r"(?i)\b(near (?:my|the) hotel|near where i(?:'m| am) staying|on (?:my )?arrival|when i (?:arrive|land|get there)|"
+                  r"the day i arrive|on my first (?:day|night)|near (?:my|the) (?:new )?(?:address|flat|apartment|home|place|campus))\b")
+_BACK = {"relocation": "“relocation”", "campus": "“campus”", "health": "“españa”", "trip": "NEXT"}
+
+
+async def _in_context(ch: dict, product: Optional[str], pend: dict, body: str, now) -> Optional[tuple]:
+    """A booking asked from inside a product, in words that need its context: rewritten with the product's own city, date and
+    place, as a sentence Sasha's booking flow parses ("book me a 60-minute massage in Madrid near Hotel X on 2027-03-01").
+    → (sentence, the line said first) or None (nothing to fill in: Sasha gets the guest's own words). Nothing invented:
+    a date the product doesn't know is left for Sasha to ask."""
+    if not product or not _REL.search(body or ""):
+        return None
+    from booking_signer import handoff as HO
+    from datetime import date as _date, timedelta as _td
+    from . import itinerary as IT
+    f = HO.find_request(body, now) or {}
+    what = f.get("what")
+    if not what:
+        return None
+    city, on, place, why = None, None, None, ""
+    if product == "relocation":
+        a = (pend.get("facts") or {}).get("applicant") or {}
+        city = (a.get("address_town") or {}).get("value") or "Madrid"
+        street = " ".join(x for x in ((a.get("address_street") or {}).get("value"), (a.get("address_number") or {}).get("value")) if x)
+        if pend.get("entry_date"):
+            on, why = _date.fromisoformat(pend["entry_date"]), "your entry date"
+        place = street or None
+    elif product in ("campus", "trip"):
+        from . import trip as TP
+        vs = await TP._visits(ch["account_id"])
+        if vs:
+            city = vs[0]["city"].split(",")[0]
+            on, why = _date.fromisoformat(vs[0]["day"]) - _td(days=1), f"the day before {vs[0]['name']}"
+            place = vs[0]["full_name"]
+    elif product == "health":
+        city = "Madrid"
+    if not city:
+        return None
+    hotel = await IT.hotel_on(ch["account_id"], on) if on else None
+    near = hotel or place
+    sentence = re.sub(r"(?i)^\s*(.*?)\b" + re.escape(what) + r".*$", lambda m: m.group(1), body).strip() or "book me"
+    sentence = f"{sentence} {what} in {city}" + (f" near {near}" if near else "") + (f" on {on.isoformat()}" if on else "")
+    where = f"in {city}" + (f", near {'your hotel, ' + hotel if hotel else near}" if near else "") + \
+        (f", on {on.strftime('%a %-d %b %Y')} ({why})" if on else "")
+    line = (f"{what[0].upper() + what[1:]} {where} — Sasha's booking takes it from here, one yes as always. When it's done, "
+            f"say {_BACK.get(product, 'what’s next')} to come back to where we were.")
+    return sentence, line
+
+
 def for_sasha(body: str, history: list, now) -> bool:
     """Sasha's OWN detectors (guest_whatsapp's scope gate), read-only: would her flow take this message?"""
     from booking_signer import guest_whatsapp as GW, handoff as HO
@@ -241,10 +291,22 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         if _module(asked_last).claims(pend, body, payload, media):
             target = asked_last
         elif for_sasha(body, st.get("history") or [], now):
+            handed = await _in_context(ch, asked_last, pend, body, now)       # CR 20 (5): "near my hotel on arrival"
             await _set_aside(st, ch)
+            if handed:
+                out.text(handed[1])
+                p["KanoeSaid"], p["Body"] = body, handed[0]
             return False
         else:
             target = asked_last
+    if not target and not asked_last and not payload and _REL.search(body) and for_sasha(body, st.get("history") or [], now):
+        # CR 20 (5) · a product set aside (e.g. after a trip hand-off) still lends its context to "near my hotel on arrival"
+        for prod, saved in await _waiting(ch, now):
+            handed = await _in_context(ch, prod, saved, body, now)
+            if handed:
+                out.text(handed[1])
+                p["KanoeSaid"], p["Body"] = body, handed[0]
+                return False
     if not target and not st.get("pending"):
         # 4 · nobody is waiting: a set-aside product resumes only on an answer to its own question
         for prod, saved in await _waiting(ch, now):

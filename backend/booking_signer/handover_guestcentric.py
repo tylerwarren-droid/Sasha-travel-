@@ -588,7 +588,8 @@ async def route_handover(request: Request):
                                      account=account_for(request), read_only=False, fictional=False, return_to=body.get("return_to"))
     except HO.Refused as e:
         return HO._no(422, e.rule, e.say)
-    return {"ok": True, "handover_id": rec["id"], "view_url": HO.view_url(rec), "ready_ms": rec["ready_ms"], "taps_left": 2,
+    phone = await HO.tap_phone(account_for(request), rec)
+    return {"ok": True, "phone": phone, "handover_id": rec["id"], "view_url": HO.view_url(rec), "ready_ms": rec["ready_ms"], "taps_left": 2,
             "say": f"I've filled in {rec['venue']}'s own booking page — every detail, your “{rec['rate']}” rate. Two taps left: tick "
                    f"“I accept the Terms”, then press “{rec['book_label']}”. {HO.view_url(rec)}"}
 

@@ -178,10 +178,10 @@ _POINT_JS = """(sel) => {
   return (b.tagName === 'BUTTON' ? b.innerText : b.value || '').trim();
 }"""
 
-_POINT_BOX_JS = """([sel, box]) => {
+_POINT_BOX_JS = """([sel, target, first]) => {
   const form = [...document.forms].find(f => f.querySelectorAll('input:not([type=hidden]), select, textarea').length >= 3);
   const bs = form ? form.querySelectorAll(sel) : []; const b = bs[bs.length - 1];
-  const c = form && form.querySelector('[name="' + box + '"]');
+  const c = document.querySelector(target);
   if (!b || !c) return '';
   if (!document.getElementById('kanoe-style')) {
     const st = document.createElement('style'); st.id = 'kanoe-style';
@@ -198,7 +198,7 @@ _POINT_BOX_JS = """([sel, box]) => {
       + `top:${(below ? r.bottom + 8 : r.top - 34) + scrollY}px;pointer-events:none;z-index:2147483647;background:#22c55e;color:#04210f;`
       + 'font:600 13px/1 -apple-system,system-ui,sans-serif;padding:7px 12px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.25)'; };
   const old = document.getElementById('kanoe-press'); if (old) old.remove();
-  tag('kanoe-one', '\\u2460 Tick the box', c, false);
+  tag('kanoe-one', '\\u2460 ' + first, c, false);
   tag('kanoe-two', '\\u2461 Then press ' + (b.tagName === 'BUTTON' ? b.innerText : b.value || '').trim(), b, true);
   return (b.tagName === 'BUTTON' ? b.innerText : b.value || '').trim();
 }"""
@@ -211,7 +211,8 @@ class PlaywrightPage:
 
     def __init__(self) -> None:
         self.pw = self.browser = self.page = None
-        self.guest_box: Optional[str] = None      # a consent box left for the guest (our test venue only): pointed at too
+        self.guest_box: Optional[str] = None      # the guest's own first step (a consent box or a CAPTCHA; our test venue only):
+        self.guest_first = "Tick the box"           # a CSS selector, pointed at with the button, and its words
 
     async def connect(self, connect_url: str) -> None:
         from playwright.async_api import async_playwright
@@ -240,7 +241,7 @@ class PlaywrightPage:
         """The form's own Book button, centred in view, outlined, with Sasha's pulsing "Press here" just above it — one
         round trip; its words come back. The marker ignores taps (they reach the button) and sends nothing anywhere."""
         if self.guest_box:
-            return await self.page.evaluate(_POINT_BOX_JS, [_SUBMIT, self.guest_box])
+            return await self.page.evaluate(_POINT_BOX_JS, [_SUBMIT, self.guest_box, self.guest_first])
         return await self.page.evaluate(_POINT_JS, _SUBMIT)
 
     async def fit(self, width: int, height: int) -> str:
@@ -313,7 +314,7 @@ def check_page(seen: dict, m: dict, page_url: str, guest_box_ok: bool = False) -
     if "why" in live:
         raise Refused("no_form", f"no booking form on the page ({live['why']})")
     fields = FR.roles_for(live, m)
-    if any(x["role"] == "challenge" for x in fields):
+    if any(x["role"] == "challenge" for x in fields) and not guest_box_ok:
         raise Refused("captcha", "their form has a CAPTCHA — Sasha never solves one, so no link")
     if any(x["role"] == "consent" and x["required"] for x in fields) and not guest_box_ok:
         raise Refused("consent_box", "their form needs a box ticked to accept their terms — that box is yours, so Sasha can't hand "
@@ -382,13 +383,17 @@ async def open_handover(*, page_url: str, m: dict, step1: List[dict], step2: Lis
         if gone:
             raise Refused("form_changed", f"their form no longer has {', '.join(gone)} — no link")
         boxes = frozenset(x["name"] for x in fields if x["role"] == "consent" and x["required"])
+        captcha = any(x["role"] == "challenge" for x in fields)
+        if len(boxes) + (1 if captcha else 0) > 1:     # one human step besides the press, never more
+            raise Refused("consent_box", "their form needs more than one step from you besides the last press — no link")
         if boxes:
-            if len(boxes) > 1:
-                raise Refused("consent_box", "their form needs more than one box ticked — no link")
             (box,) = boxes
-            page.guest_box = box
+            page.guest_box, page.guest_first = f'[name="{box}"]', "Tick the box"
             label = next((x.get("label") for x in fields if x["name"] == box), "") or box
             rec.update(taps_left=2, guest_box=box, box_label=label if len(label) <= 40 else label[:38] + "…")
+        if captcha:    # Sasha 158 · the CAPTCHA is the guest's to solve, in the live view; Sasha never solves one
+            page.guest_box, page.guest_first = ".g-recaptcha, iframe[src*='recaptcha']", "Tick “I'm not a robot”"
+            rec.update(taps_left=2, guest_box="captcha", box_label="I'm not a robot")
         rec["filled"] = await _fill(page, step1, fields)
         seen = await page.read()
         if step2:
@@ -642,12 +647,32 @@ async def from_prepared_form(form_id: str, request: Request):
         await FR.STORE.finish(form_id, {"status": "not_sent", "not_sent_why": f"live hand-over refused: {e.say}"}, "failed", "failed", NOW())
         return _no(422, e.rule, e.say)
     two = rec.get("taps_left") == 2
-    return {"ok": True, "handover_id": rec["id"], "view_url": view_url(rec), "ready_ms": rec["ready_ms"], "taps_left": 2 if two else 1,
+    phone = await tap_phone(account, rec)
+    return {"ok": True, "phone": phone, "handover_id": rec["id"], "view_url": view_url(rec), "ready_ms": rec["ready_ms"], "taps_left": 2 if two else 1,
             "book_label": rec.get("book_label"), "filled": rec["filled"], "box_left_for_you": rec.get("box_label"),
             "say": (f"I've filled in {rec['venue']}'s own booking form — every field. Two taps left: open it, tick "
                     f"“{rec.get('box_label')}” and press “{rec.get('book_label') or 'Book'}”. {view_url(rec)}") if two else
                    (f"I've filled in {rec['venue']}'s own booking form — every field. One tap left: open it and press "
                     f"“{rec.get('book_label') or 'Book'}”. {view_url(rec)}")}
+
+
+async def tap_phone(account: Optional[str], rec: dict) -> dict:
+    """Sasha 158 · ONE WhatsApp tap to the guest's phone with the hand-over link (the Sasha tab's guest_whatsapp.tap_to_finish:
+    our links only, once per link, inside the 24-hour window). Never fatal to the hand-over."""
+    try:
+        from . import guest_whatsapp as GW
+        fn = getattr(GW, "tap_to_finish", None)
+        if fn is None or not account:
+            return {"sent": False, "why": "no WhatsApp tap available"}
+        sm = summary(rec)
+        what = " · ".join(x for x in (sm.get("day"), sm.get("time"), sm.get("party")) if x)
+        out = fn(account, rec["venue"], view_url(rec), what)
+        if asyncio.iscoroutine(out):
+            out = await out
+        return out if isinstance(out, dict) else {"sent": bool(out)}
+    except Exception as e:
+        log.warning("[handover] %s phone tap: %s", rec.get("id"), e)
+        return {"sent": False, "why": f"{type(e).__name__}"}
 
 
 def _venue(f: dict) -> str:

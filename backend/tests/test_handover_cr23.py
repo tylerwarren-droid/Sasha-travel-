@@ -196,8 +196,20 @@ class Refusals(Base):
         self.assertTrue(self.pages[0].closed)
         self.assertEqual(HO.HANDOVERS, self.saved[2])                                 # and no link exists
 
-    async def test_captcha(self):
-        await self.refused("captcha", variant="captcha")
+    async def test_a_real_venues_captcha_is_still_refused(self):
+        seen = {"url": "https://www.hanakura.es/solicitar-reserva.html", "frames": [], "fields": [],
+                "html": page_html("captcha").replace('action="/api/booking/test-venue/captcha"', 'action="/formularios/reservar.php"')}
+        m = {**FR.FORM_MAPS["www.hanakura.es"], "test": False, "fields": dict(FR.TEST_FIELDS)}
+        with self.assertRaises(HO.Refused) as c:
+            HO.check_page(seen, m, "https://www.hanakura.es/solicitar-reserva.html")
+        self.assertEqual(c.exception.rule, "captcha")
+
+    async def test_our_test_venues_captcha_is_the_guests(self):   # Sasha 158 · item 7
+        rec = await self.open("captcha")
+        self.assertEqual((rec["taps_left"], rec["guest_box"], rec["box_label"]), (2, "captcha", "I'm not a robot"))
+        self.assertIn("recaptcha", self.pages[0].guest_box)
+        body = (await HO.view(rec["id"], rec["token"])).body.decode()
+        self.assertIn("Tick <b>&#8220;I&#x27;m not a robot&#8221;</b>, then press", body)
 
     async def test_a_real_venues_terms_box_is_still_refused(self):
         page = page_html("consent")
@@ -255,7 +267,7 @@ class TestVenueConsent(Base):
         self.assertEqual((rec["state"], rec["taps_left"], rec["guest_box"]), ("ready", 2, "acepto"))
         self.assertEqual(rec["box_label"], "Acepto la política de privacidad")
         self.assertNotIn("acepto", self.pages[0].values)              # never ticked by Sasha
-        self.assertEqual(self.pages[0].guest_box, "acepto")          # pointed at with the button
+        self.assertEqual(self.pages[0].guest_box, '[name="acepto"]')  # pointed at with the button
         self.assertEqual({f["name"] for f in rec["filled"]}, set(FR.TEST_FIELDS))
         body = (await HO.view(rec["id"], rec["token"])).body.decode()
         self.assertIn("Tick <b>&#8220;Acepto la política de privacidad&#8221;</b>, then press <b>&#8220;Reservar&#8221;</b>", body)
@@ -281,6 +293,28 @@ class TestNames(unittest.TestCase):
     def test_each_test_page_has_its_own_name(self):
         self.assertEqual(HO._test_name(TV + "hotel"), "Kanoe Test Hotel")
         self.assertEqual(HO._test_name(TV + "consent"), "Sasha Test Venue")
+
+
+class Phone(Base):
+    async def test_one_whatsapp_tap_when_the_sasha_tab_offers_it(self):
+        from booking_signer import guest_whatsapp as GW
+        sent = []
+
+        async def tap(account, venue, url, what):
+            sent.append((account, venue, url, what))
+            return {"sent": True}
+        rec = await self.open()
+        with mock.patch.object(GW, "tap_to_finish", tap, create=True):
+            out = await HO.tap_phone("acct-1", rec)
+        self.assertEqual(out, {"sent": True})
+        self.assertEqual(sent[0][:3], ("acct-1", "Sasha Test Venue", HO.view_url(rec)))
+        self.assertIn("2 people", sent[0][3])
+
+    async def test_no_tap_function_no_tap_and_no_failure(self):
+        from booking_signer import guest_whatsapp as GW
+        rec = await self.open()
+        with mock.patch.object(GW, "tap_to_finish", None, create=True):
+            self.assertFalse((await HO.tap_phone("acct-1", rec))["sent"])
 
 
 class NoRequest(Base):

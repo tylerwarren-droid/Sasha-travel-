@@ -197,7 +197,6 @@ export default function VietnamPage() {
   // Sasha 156 · a plain TEXT chat that needs no call: typing opens the conversation without the avatar, the mic or the
   // camera (the call stays one tap away, as before)
   const [textOnly, setTextOnly] = useState(false)
-  const [draft, setDraft] = useState('')
   const [richItinerary, setRichItinerary] = useState<RichItinerary | null>(null)
   // Ideas held at page level so they survive IdeasPanel unmounting on every tab switch.
   const [ideasCache, setIdeasCache] = useState<Idea[] | null>(null)
@@ -1025,16 +1024,17 @@ export default function VietnamPage() {
               {verifying && <div className="text-center text-sm" style={{ color: '#DAA520', marginTop: 10 }}>Confirming your payment…</div>}
             </div>
             {/* Sasha 156 · a real text box: typing needs no call, no mic and no camera; the mic opens the call */}
-            <form className="mt-fakecomposer" onSubmit={e => {
+            <form className="mt-fakecomposer" action="#" onSubmit={e => {
               e.preventDefault()
-              const t = draft.trim()
+              // uncontrolled: what was typed before the page finished loading is kept, never wiped by hydration
+              const t = String(new FormData(e.currentTarget).get('q') ?? '').trim()
               if (!t || verifying || booked || itemBooked) return
               pendingOpenerRef.current = t
-              setDraft('')
+              e.currentTarget.reset()
               setTextOnly(true)
             }}>
               <button type="button" className="mic" onClick={() => startWith()} aria-label="Start your call with Sasha" title="Talk to Sasha (starts the call)"><Mic size={16} strokeWidth={2} /></button>
-              <input className="in" value={draft} onChange={e => setDraft(e.target.value)} placeholder="Type to Sasha — no call needed…"
+              <input className="in" name="q" autoComplete="off" placeholder="Type to Sasha — no call needed…"
                 aria-label="Message Sasha" style={{ flex: 1, background: 'transparent', border: 0, outline: 'none', color: 'inherit', font: 'inherit' }} />
               <button type="submit" className="go" aria-label="Send"><Send size={15} strokeWidth={2} /></button>
             </form>

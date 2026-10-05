@@ -96,6 +96,8 @@ def calendar_action(status: str) -> str:
         return "event"
     if status in ("proposed", "quoted", "waitlisted"):
         return "tentative"
+    if status in ("requested", "attempting"):   # Sasha 157 · asked, not yet answered: in the calendar, marked as such
+        return "requested"
     if status in ("cancelled", "declined", "failed"):
         return "delete"
     return "none"
@@ -110,6 +112,9 @@ def event_body(item: dict, action: str) -> dict:
     name = item.get("provider_name") or "Booking"
     if action == "tentative":
         title, desc, status = f"(proposed) {name}", "The venue offered this; not booked until you say yes.", "tentative"
+    elif action == "requested":
+        title, desc, status = (f"(requested) {name}", f"Requested by Sasha — waiting for {name} to confirm. Not booked yet. {web_url()}",
+                               "tentative")
     else:
         ref = item.get("booking_reference")
         title, status = name, "confirmed"

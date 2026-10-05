@@ -46,7 +46,7 @@ router = APIRouter(tags=["booking-form-rung"])
 APPROVAL_WINDOW = timedelta(minutes=15)
 NOW = lambda: datetime.now(timezone.utc)
 RESPONSE_CHARS = 4000
-TEST_VARIANTS = ("plain", "consent", "captcha", "wizard", "hotel")   # Sasha 155 · "hotel": our test hotel (the same fields)
+TEST_VARIANTS = ("plain", "consent", "captcha", "wizard", "hotel", "email")   # Sasha 157 · "email": no form, an address   # Sasha 155 · "hotel": our test hotel (the same fields)
 
 
 def public_base() -> str:
@@ -885,6 +885,11 @@ async def test_venue(variant: str):
         return HTMLResponse(_WIZARD_ONE.format(token=uuid.uuid4().hex))
     if variant == "hotel":
         return HTMLResponse(_HOTEL_PAGE.format(token=uuid.uuid4().hex))
+    if variant == "email":   # Sasha 157 · the email route on OUR venue: an address on our own domain, no form
+        addr = f"reservas-prueba@{os.getenv('SASHA_INBOUND_DOMAIN', '').strip() or 'booking.kanoe.ai'}"
+        return HTMLResponse(f"""<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Sasha Test Venue — reservas por email</title>
+<meta property="og:site_name" content="Sasha Test Venue"></head><body><h1>Sasha Test Venue</h1>
+<p>Restaurante de pruebas de Kanoe. No es un restaurante real. Reservas por email: <a href="mailto:{addr}">{addr}</a></p></body></html>""")
     head = '<script src="https://www.google.com/recaptcha/api.js" async defer></script>' if variant == "captcha" else ""
     extra = {"consent": '<input id="acepto" name="acepto" type="checkbox" required><label for="acepto">Acepto la política de privacidad</label>\n',
              "captcha": '<div class="g-recaptcha" data-sitekey="test-site-key"></div>\n'}.get(variant, "")

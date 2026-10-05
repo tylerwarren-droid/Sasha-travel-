@@ -801,7 +801,9 @@ class OnPostgres(CallRoutes, unittest.TestCase):
         self.assertEqual((r["channel"], r["status"], r["date"], r["time"], r["party"], r["booking_reference"]),
                          ("phone", "confirmed", "2026-10-08", "20:00", 4, "Johnson"))
         self.assertEqual(r["venue_words"], "Yes, that's fine. Under Johnson. / Yes, that's right.")   # every word they said, the yes to the recap included
-        self.assertEqual((r["what"], r["count"], r["unit"], r["status_words"]), ("a table", 4, "people", "Confirmed by the restaurant"))
+        self.assertEqual((r["what"], r["count"], r["unit"]), ("a table", 4, "people"))
+        # Sasha 157 · the venue named, its own words quoted, its own reference
+        self.assertEqual(r["status_words"], f"Confirmed — {r['venue']}: “{r['venue_words']}” · their ref Johnson")
 
     def test_s64_the_reservations_say_the_activity_its_length_and_its_unit(self):
         """S-64 step 14 · a massage is shown as a massage, for 60 minutes, for one person, confirmed by the VENUE; an offer
@@ -831,8 +833,9 @@ class OnPostgres(CallRoutes, unittest.TestCase):
         put(obj(flow="availability", when={"mode": "venue_proposes"}), "proposed", "11111111-1111-4111-8111-0000000000c2")
         rows = {x["intent_id"]: x for x in self.c.get("/api/booking/reservations").json()["reservations"]}
         m = rows["11111111-1111-4111-8111-0000000000c1"]
-        self.assertEqual((m["what"], m["duration_min"], m["count"], m["unit"], m["date"], m["time"], m["status_words"]),
-                         ("a 60-minute relaxing massage", 60, 1, "people", "2026-10-05", "10:00", "Confirmed by the venue"))
+        self.assertEqual((m["what"], m["duration_min"], m["count"], m["unit"], m["date"], m["time"]),
+                         ("a 60-minute relaxing massage", 60, 1, "people", "2026-10-05", "10:00"))
+        self.assertTrue(m["status_words"].startswith(f"Confirmed — {m['venue']}"), m["status_words"])   # Sasha 157
         q = rows["11111111-1111-4111-8111-0000000000c2"]
         self.assertEqual((q["date"], q["time"], q["status_words"]), (None, None, "Not booked — they offered a different time or day; read what they said"))
 

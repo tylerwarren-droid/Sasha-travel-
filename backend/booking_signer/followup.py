@@ -419,9 +419,11 @@ async def on_reply(email_id: str, text: Optional[str], now: datetime) -> Optiona
     if not isinstance(o, dict):
         return None
     r = reply_reading(text, o)
-    status = {"confirmed": "confirmed", "proposed": "proposed", "declined": "unclear"}.get(r["result"])
+    # Sasha 157 · their written no is DECLINED (their words are shown with it); before, it was filed as unclear
+    status = {"confirmed": "confirmed", "proposed": "proposed", "declined": "declined"}.get(r["result"])
     if status:
-        await LR.LADDER_STORE.reply_outcome(email_id, status, "confirmed" if status == "confirmed" else "unclear", text or "", now)
+        await LR.LADDER_STORE.reply_outcome(email_id, status, {"confirmed": "confirmed", "declined": "declined"}.get(status, "unclear"),
+                                            text or "", now)
     return r
 
 

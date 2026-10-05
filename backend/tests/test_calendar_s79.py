@@ -87,7 +87,8 @@ class Base(unittest.TestCase):
 class Map(unittest.TestCase):
     def test_2_every_status(self):
         want = {"confirmed": "event", "guest_booked": "event", "proposed": "tentative", "quoted": "tentative", "waitlisted": "tentative",
-                "cancelled": "delete", "declined": "delete", "failed": "delete"}
+                "cancelled": "delete", "declined": "delete", "failed": "delete",
+                "requested": "requested", "attempting": "requested"}   # Sasha 157 · a request is in the calendar, marked as one
         for s in "pending prepared attempting requested declined unreachable confirmed failed escalated cancelled unclear link_sent guest_booked proposed quoted waitlisted".split():
             self.assertEqual(CS.calendar_action(s), want.get(s, "none"), s)
 

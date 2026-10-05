@@ -487,11 +487,24 @@ def _read_id_of(request) -> Optional[str]:
     return ((req or {}).get("where") or {}).get("read_id")
 
 
-def status_words(status: str, request) -> str:
-    """"…by the restaurant" only for a restaurant; anything else is "the venue"."""
+def status_words(status: str, request, venue: Optional[str] = None, venue_words: Optional[str] = None,
+                 ref: Optional[str] = None) -> str:
+    """"…by the restaurant" only for a restaurant; anything else is "the venue". Sasha 157: with the venue's name, the
+    three states the guest watches name it, and quote its OWN words and reference — never ours in their place."""
     words = STATUS_WORDS.get(status, status)
     category = what_of(request, None)["category"]
-    return words if category == "restaurant" else words.replace("the restaurant", "the venue")
+    words = words if category == "restaurant" else words.replace("the restaurant", "the venue")
+    if not venue:
+        return words
+    said = " ".join(str(venue_words or "").split())
+    quote = f": “{said[:160]}{'…' if len(said) > 160 else ''}”" if said else ""
+    if status in ("requested", "attempting"):
+        return f"Requested — waiting for {venue}"
+    if status == "confirmed":
+        return f"Confirmed — {venue}{quote}" + (f" · their ref {ref}" if ref else "")
+    if status == "declined":
+        return f"Declined — {venue}{quote}"
+    return words
 
 
 @router.get("/reservations")
@@ -506,7 +519,7 @@ async def reservations(request: Request):
         "date": r["local_date"].isoformat() if r["local_date"] else None,
         "time": r["local_time"].strftime("%H:%M") if r["local_time"] else None, "timezone": r["local_timezone"],
         "party": r["party_size"], "status": r["status"], "status_words": ("Test booking: no hotel contacted" if (r["booking_reference"] or "").startswith("TEST-")   # Sasha 135
-                         else status_words(r["status"], r.get("request"))),
+                         else status_words(r["status"], r.get("request"), r["venue"], r["venue_words"], r["booking_reference"])),
         # S-64 step 14 · WHAT was asked for — the activity, its length and its count in its own unit (a table when the
         # row predates the object and nothing else is known)
         **what_of(r.get("request"), r["party_size"]),

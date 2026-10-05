@@ -76,7 +76,9 @@ def _what(r: dict) -> str:
     t = r.get("time") or ""
     if r.get("type") == "flight":
         return f"{t} {r.get('venue')}"
-    return f"{t} {r.get('venue')}" + (f", {r.get('party')} people" if r.get("party") else "")
+    # Sasha 157 · its state, in the venue's own terms: a request is never shown as if it were booked
+    state = f" — {r['status_words']}" if r.get("status_words") and r.get("status") not in ("guest_booked",) else ""
+    return f"{t} {r.get('venue')}" + (f", {r.get('party')} people" if r.get("party") else "") + state
 
 
 async def _rows(account: str) -> List[dict]:
@@ -84,7 +86,7 @@ async def _rows(account: str) -> List[dict]:
     status, j = await GW.api(account, "GET", "/api/booking/reservations")
     if status != 200:
         return []
-    return [r for r in j.get("reservations") or [] if r.get("status") not in ("cancelled", "declined", "failed")]
+    return [r for r in j.get("reservations") or [] if r.get("status") not in ("cancelled", "failed")]   # Sasha 157 · declined is shown, said so
 
 
 def where_on(rows: List[dict], d: date) -> List[str]:

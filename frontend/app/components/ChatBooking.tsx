@@ -311,10 +311,18 @@ export default function ChatBooking({ find }: { find: Find }) {
             const bt = find.bare_time
             const eatery = /restaurant|bar|caf|bistro|tavern|grill|steak|sushi|pizz|brasserie|tapas|food|bodega/i.test(state.pick.type ?? '')
             const openAt = find.open_at ?? (bt && eatery ? `${bt.day}T${String(bt.hour === 12 ? 12 : bt.hour + 12).padStart(2, '0')}:${String(bt.minute).padStart(2, '0')}` : null)
+            // a venue named, at a restaurant: what to book is a table, said in their language (the call needs both)
+            const TABLE: Record<string, string> = { ES: 'una mesa', MX: 'una mesa', AR: 'una mesa', PT: 'uma mesa', BR: 'uma mesa', FR: 'une table',
+              IT: 'un tavolo', DE: 'einen Tisch', AT: 'einen Tisch' }
+            const draftAll = (find.draft ?? null) as Record<string, unknown> | null
+            const parts = ((draftAll?.parts ?? draftAll) ?? {}) as Record<string, unknown>
+            const callDraft = find.named && eatery && !parts.what
+              ? { ...(draftAll ?? {}), parts: { ...parts, what: { activity: 'a table', activity_venue_lang: TABLE[state.read.country ?? ''] ?? 'a table', category: 'restaurant' } } }
+              : find.draft
             if (fm && !callInstead) return <ChatBookingDo key={state.read.read_id} route="form" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} />
             if (em && !callInstead) return <ChatBookingDo key={state.read.read_id} route="email" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} />
             if (ph) return <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
-              venue={venue} draft={(find.draft ?? null) as never} whatText={find.what} openAt={openAt} onContacted={setContacted} />
+              venue={venue} draft={(callDraft ?? null) as never} whatText={find.what} openAt={openAt} onContacted={setContacted} />
             if (ln) return <ChatBookingLink key={state.read.read_id} readId={state.read.read_id} platform={ln.value} draft={(find.draft ?? null) as never} openAt={openAt} />
             if (wa) {
               const at = find.open_at ?? draft?.when?.at ?? ''

@@ -190,7 +190,9 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
           {missing.key === 'name' && <input style={{ ...input, width: 240 }} value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} />}
         </div>
       )}
-      {(showForm || (phase.p === 'refused' && showForm)) && (phase.p === 'details' || phase.p === 'preparing' || phase.p === 'refused') && (
+      {/* Sasha 158 · nothing missing but what to book (or how to say it there): the details, never a blank step */}
+      {(showForm || (phase.p === 'details' && !missing && saved !== null && (d.activity.trim().length < 2 || d.venueLang.trim().length < 2)))
+        && (phase.p === 'details' || phase.p === 'preparing' || phase.p === 'refused') && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 13 }}>
           <label>What (your words)<input style={input} value={d.activity} onChange={(e) => setD({ ...d, activity: e.target.value })} /></label>
           <label>As Sasha will say it there<input style={input} value={d.venueLang} onChange={(e) => { setLangEdited(true); setD({ ...d, venueLang: e.target.value }) }} /></label>

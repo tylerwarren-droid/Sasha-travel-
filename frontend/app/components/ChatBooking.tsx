@@ -25,7 +25,8 @@ import ChatBookingCall from './ChatBookingCall'
 import ChatBookingLink from './ChatBookingLink'
 import { SignInToBook } from './SignedInLine'
 
-type Find = { what: string; where?: string; country?: string; near?: string; open_at?: string; priority?: string; draft?: unknown; named?: boolean }
+type Find = { what: string; where?: string; country?: string; near?: string; open_at?: string; priority?: string; draft?: unknown; named?: boolean
+  bare_time?: { day: string; hour: number; minute: number } }
 type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null }
 type State =
   | { phase: 'finding' } | { phase: 'founder_only' } | { phase: 'refused'; words: string }
@@ -306,11 +307,15 @@ export default function ChatBooking({ find }: { find: Find }) {
             const wa = r.find((x) => x.rung === 'whatsapp' && x.available)
             const venue = state.pick.name ?? state.read.venue
             const draft = (find.draft ?? null) as { when?: { at?: string }; how_many?: { count?: number } } | null
-            if (fm && !callInstead) return <ChatBookingDo key={state.read.read_id} route="form" readId={state.read.read_id} venue={venue} what={find.what} openAt={find.open_at ?? null} draft={draft} />
-            if (em && !callInstead) return <ChatBookingDo key={state.read.read_id} route="email" readId={state.read.read_id} venue={venue} what={find.what} openAt={find.open_at ?? null} draft={draft} />
+            // Sasha 158 · "book Casa Lucio tomorrow at 9": at a restaurant, a bare 9 is 21:00 (12 is noon) — the same rule as WhatsApp
+            const bt = find.bare_time
+            const eatery = /restaurant|bar|caf|bistro|tavern|grill|steak|sushi|pizz|brasserie|tapas|food|bodega/i.test(state.pick.type ?? '')
+            const openAt = find.open_at ?? (bt && eatery ? `${bt.day}T${String(bt.hour === 12 ? 12 : bt.hour + 12).padStart(2, '0')}:${String(bt.minute).padStart(2, '0')}` : null)
+            if (fm && !callInstead) return <ChatBookingDo key={state.read.read_id} route="form" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} />
+            if (em && !callInstead) return <ChatBookingDo key={state.read.read_id} route="email" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} />
             if (ph) return <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
-              venue={venue} draft={(find.draft ?? null) as never} whatText={find.what} openAt={find.open_at ?? null} onContacted={setContacted} />
-            if (ln) return <ChatBookingLink key={state.read.read_id} readId={state.read.read_id} platform={ln.value} draft={(find.draft ?? null) as never} openAt={find.open_at ?? null} />
+              venue={venue} draft={(find.draft ?? null) as never} whatText={find.what} openAt={openAt} onContacted={setContacted} />
+            if (ln) return <ChatBookingLink key={state.read.read_id} readId={state.read.read_id} platform={ln.value} draft={(find.draft ?? null) as never} openAt={openAt} />
             if (wa) {
               const at = find.open_at ?? draft?.when?.at ?? ''
               const msg = `Hola, me gustaría reservar para ${draft?.how_many?.count ?? 2}${at ? ` el ${at.slice(8, 10)}/${at.slice(5, 7)} a las ${at.slice(11, 16)}` : ''}. ¿Tienen disponibilidad? Gracias.`

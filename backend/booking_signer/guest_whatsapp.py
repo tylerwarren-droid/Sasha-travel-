@@ -2328,6 +2328,31 @@ async def offer_escalation(ch: dict, b: dict, read_row: dict, prefer: str, quest
     return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, last))
 
 
+_TAPPED: set = set()
+
+
+async def tap_to_finish(account: Optional[str], venue: str, url: str, what: str = "") -> str:
+    """Sasha 158 · TAP TO FINISH: a booking reached a human step (a CAPTCHA, a terms box, a payment, the final Book) — ONE
+    WhatsApp message to the phone linked to this account, wherever the booking started, opening the live hand-over, filled
+    in. Only our own hand-over links; once per link; inside WhatsApp's 24-hour window (the sandbox has no templates)."""
+    from urllib.parse import urlsplit
+    from . import form_rung as FR
+    u = urlsplit(url or "")
+    if (u.hostname or "") != (urlsplit(FR.public_base()).hostname or "") or not u.path.startswith("/api/booking/handover/"):
+        return "not sent: not one of our hand-over links"
+    if url in _TAPPED:
+        return "not sent: already sent"
+    if not account or STORE is None:
+        return "not sent: no account"
+    ch = await STORE.channel_of_account(account)
+    if not ch:
+        return "not sent: no WhatsApp linked to this account"
+    out = await _tell(ch, f"👉 Tap to finish at {venue}: {url}\nEverything's filled in{f' — {what}' if what else ''}. The last tap is yours.")
+    if "sent" in out and "not" not in out:
+        _TAPPED.add(url)
+    return out
+
+
 async def _tell(ch: dict, text: str) -> str:
     st = await STORE.get_state(ch["wa_id_sha256"])
     last = st.get("last_inbound_at")

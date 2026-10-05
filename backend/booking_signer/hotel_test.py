@@ -197,6 +197,8 @@ async def handover(request: Request):
         return _refuse(422, e.rule, e.say)
     out = {"handover_id": rec["id"], "view_url": H.view_url(rec), "taps_left": rec.get("taps_left") or 1,
            "say": HANDOVER_SAY.format(hotel=r["hotel"]), "ready_ms": rec.get("ready_ms")}
+    from . import guest_whatsapp as GW   # Sasha 158 · the same tap, on the guest's phone too (one message)
+    out["phone"] = await GW.tap_to_finish(account_for(request), "Kanoe Test Hotel", out["view_url"], f"{r['checkin']}, {r['nights']} night(s)")
     done["handover"] = out
     return {"ok": True, **out}
 

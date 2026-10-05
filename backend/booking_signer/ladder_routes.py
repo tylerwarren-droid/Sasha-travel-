@@ -246,6 +246,16 @@ async def venue_google_photos(request: Request):
     return {"photos": {n: u for n, u in zip(names, uris) if u}}
 
 
+@router.post("/handover/tap")
+async def handover_tap(request: Request):
+    """Sasha 158 · {view_url, venue, what?} → ONE WhatsApp tap to this account's phone for a live hand-over (our links only)."""
+    from . import guest_whatsapp as GW
+    body = await _json(request) or {}
+    said = await GW.tap_to_finish(account_for(request), str(body.get("venue") or "the venue")[:80], str(body.get("view_url") or ""),
+                                  str(body.get("what") or "")[:120])
+    return {"ok": not said.startswith("not"), "phone": said}
+
+
 STYLER = None   # S-68 step 9 · tests inject one; None is the model (style.anthropic_styler)
 
 

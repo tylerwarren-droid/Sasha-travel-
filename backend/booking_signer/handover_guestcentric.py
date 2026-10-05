@@ -255,6 +255,13 @@ class GuestcentricPage(HO.PlaywrightPage):
     async def point_two(self) -> Optional[dict]:
         return await self.page.evaluate(_POINT_TWO_JS)
 
+    async def fit(self, width: int, height: int) -> str:
+        """The guest's frame size, then BOTH taps pointed at again (the terms box centred; Book Now sticks to the bottom)."""
+        await self.page.set_viewport_size({"width": width, "height": height})
+        await self.page.wait_for_timeout(150)
+        p = await self.point_two()
+        return (p or {}).get("book") or "Book Now"
+
     async def watch(self, on_tap, on_press, read_only, on_navigated) -> None:
         await self.page.expose_function("__kanoeTap", on_tap)
         await self.page.expose_function("__kanoePress", on_press)

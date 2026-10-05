@@ -260,5 +260,22 @@ class Pressed(Base):
         self.assertIn('<span class="chip">Standard Rate</span>', body)
 
 
+class Fit(unittest.IsolatedAsyncioTestCase):
+    async def test_the_phone_fit_points_at_both_taps(self):
+        page = GC.GuestcentricPage()
+        calls = []
+
+        class P:
+            async def set_viewport_size(self, v): calls.append(("viewport", v))
+            async def wait_for_timeout(self, ms): pass
+            async def evaluate(self, js, *a):
+                calls.append(("evaluate", "kanoe-one" in js))
+                return {"terms": "I accept", "book": "Book Now"}
+        page.page = P()
+        self.assertEqual(await page.fit(366, 466), "Book Now")
+        self.assertEqual(calls[0], ("viewport", {"width": 366, "height": 466}))
+        self.assertEqual(calls[-1], ("evaluate", True))          # the two-tap pointer, not the restaurant one
+
+
 if __name__ == "__main__":
     unittest.main()

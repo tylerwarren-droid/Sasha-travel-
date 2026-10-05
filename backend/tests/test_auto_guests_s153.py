@@ -86,8 +86,8 @@ class WhatsAppNewNumber(unittest.TestCase):
         finally:
             GW.STORE, GW._spawn, IV.STORE = saved
         self.assertEqual(out, "")                                   # answered as a turn, not the "link your account" wall
-        self.assertEqual((ch["account_id"], ch["consent_wording_version"]), ("g-wa", "i1"))
-        self.assertFalse(GW.consent_at_least("i1", 3))              # never a proactive first message
+        self.assertEqual((ch["account_id"], ch["consent_wording_version"]), ("g-wa", "v0"))
+        self.assertFalse(GW.consent_at_least("v0", 3))              # never a proactive first message
         self.assertEqual(spawned, ["_turn"])
         self.assertIsNone(none)                                     # STOP from a stranger creates nothing
 

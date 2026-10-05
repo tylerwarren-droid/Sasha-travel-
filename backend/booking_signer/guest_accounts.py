@@ -144,6 +144,6 @@ def real_contact_refusal(account: Optional[str], to_test_venue: bool) -> Optiona
 
 INBOUND_CONSENT = ("You wrote to Sasha first on WhatsApp; she answers you here, in this chat. Reply STOP at any time. "
                    "No reminders or other first messages are sent to this number.")
-INBOUND_VERSION = "i1"   # compares below v3: no proactive message ever goes to an automatic WhatsApp guest
+INBOUND_VERSION = "v0"   # the column takes ^v[0-9]+$; v0 = no consent to first messages: no proactive message ever goes to them
 
 __all__ = ["router", "create_guest", "first_session", "real_contact_refusal", "allowed", "on", "INBOUND_CONSENT", "INBOUND_VERSION"]

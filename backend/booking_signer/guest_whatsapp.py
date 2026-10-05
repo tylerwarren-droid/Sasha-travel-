@@ -508,11 +508,17 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
     if GA.on() and not re.fullmatch(r"\s*(stop|unsubscribe|baja|parar)\s*", p.get("Body") or "", re.I):
         acct, why = await GA.create_guest("whatsapp", None)
         if acct is not None:
-            await STORE.link({"account_id": acct["account_id"], "wa_id_sha256": key, "number_e164": sender, "linked_at": now,
-                              "consent_at": now, "consent_wording_version": GA.INBOUND_VERSION,
-                              "consent_text_sha256": hashlib.sha256(GA.INBOUND_CONSENT.encode()).hexdigest()})
-            await STORE.put_state(key, {"history": [], "pending": None, "last_inbound_at": now, "link_tries": []})
-            ch = await STORE.channel_for(key)
+            try:
+                await STORE.link({"account_id": acct["account_id"], "wa_id_sha256": key, "number_e164": sender, "linked_at": now,
+                                  "consent_at": now, "consent_wording_version": GA.INBOUND_VERSION,
+                                  "consent_text_sha256": hashlib.sha256(GA.INBOUND_CONSENT.encode()).hexdigest()})
+                await STORE.put_state(key, {"history": [], "pending": None, "last_inbound_at": now, "link_tries": []})
+                ch = await STORE.channel_for(key)
+            except Exception as e:   # never a crashed webhook, never an orphan account: undone, and the old sentence instead
+                log.error("[guest_whatsapp] the new guest could not be linked: %s: %s", type(e).__name__, e)
+                from . import ops
+                await ops.ADMIN("DELETE", f"/admin/users/{acct['account_id']}", {})
+                ch, why = None, "the new guest could not be linked"
             if ch:
                 _spawn(_turn(ch, to, p))
                 return ""

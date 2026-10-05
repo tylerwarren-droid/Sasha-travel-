@@ -1,0 +1,16 @@
+{"what": "ONE real link per engine where we have a template AND a venue in Madrid, Lisbon or Hoi An — for the founder to open ONCE on his phone and answer filled / not filled. Built from strings only; nothing was requested from any platform.",
+ "links": [
+  {"engine": "TableCheck", "venue": "The Hill Station, Hoi An", "expect": ["date 2026-11-20", "time 19:00", "party 2"],
+   "url": "https://www.tablecheck.com/en/the-hill-station-vietnam/reserve?start_date=2026-11-20&start_time=19:00&pax=2"},
+  {"engine": "SevenRooms", "venue": "EVOK Brach, Madrid", "expect": ["date 2026-11-20", "party 2", "time 20:30"],
+   "url": "https://www.sevenrooms.com/explore/evokbrachmadrid/reservations/create/search?date=2026-11-20&party_size=2&start_time=20%3A30"},
+  {"engine": "Cloudbeds", "venue": "Fuse Old Town, Hoi An", "expect": ["check-in 2026-11-20", "check-out 2026-11-22", "2 adults"],
+   "url": "https://hotels.cloudbeds.com/reservation/nAuZCf?checkin=2026-11-20&checkout=2026-11-22&adults=2"},
+  {"engine": "SiteMinder", "venue": "ÊMM Hotel, Hoi An", "expect": ["check-in 2026-11-20", "check-out 2026-11-22", "2 adults"],
+   "url": "https://book-directonline.com/properties/emmhoiandirect?locale=en&items%5B0%5D%5Badults%5D=2&items%5B0%5D%5Bchildren%5D=0&items%5B0%5D%5Binfants%5D=0&checkInDate=2026-11-20&checkOutDate=2026-11-22"},
+  {"engine": "Omnibees", "venue": "Masa Hotel Campo Grande, Lisbon", "expect": ["check-in 20/11/2026", "check-out 22/11/2026", "1 room, 2 adults"],
+   "url": "https://book.omnibees.com/hotelresults?q=17958&NRooms=1&CheckIn=20112026&CheckOut=22112026&ad=2&lang=en-US"},
+  {"engine": "Guestcentric", "venue": "Emporium Lisbon Suites, Lisbon", "expect": ["start 2026-11-20", "2 nights", "2 adults"],
+   "url": "http://smallportuguesesnew-hotel.guestcentric.net/en/property-details/emporium-lisbon-suites?startDay=2026/11/20&nrNights=2&nrAdults=2&nrChildren=0"}
+ ],
+ "not_verifiable_yet": "Mews (no Lisbon hotel's configuration id published), SynXis, WebHotelier, Bookassist, RoomCloud, Simple Booking (no venue found in the three cities); no template at all for CoverManager, TheFork, OpenTable, Restoo, Zenchef, D-EDGE, Neobookings, Little Hotelier (dates), Fresha, Treatwell, Booksy."}

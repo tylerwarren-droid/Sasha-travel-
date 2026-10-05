@@ -1,0 +1,23 @@
+{"read_on": "5 Oct 2026", "how": "public vendor docs and venues' own published links only; robots.txt first; no platform booking page was opened or probed. UNVERIFIED until the founder opens one real link once.",
+ "engines": [
+  {"engine": "TableCheck", "kind": "restaurant", "confidence": "documented", "template": "https://www.tablecheck.com/{locale}/{shop_slug}/reserve?start_date={date}&start_time={time}&pax={party}",
+   "prefills": ["date", "time", "party"], "guest_details": "only via partner SSO (whitelisted utm_source + user_token)", "date_format": "YYYY-MM-DD", "time_format": "HH:MM, 15-min steps",
+   "taps_left": "~6 (confirm slot, name, email, phone, policy, book); ~3 with the partner token", "markets": "Hoi An (The Hill Station; Wafaifo XUA & NAY; Hidden Thaiger)",
+   "source": "TableCheck API docs 'Web Booking v1' (Confluence, updated 2026-01-21)", "terms": "audience includes concierge services; utm_source must be whitelisted"},
+  {"engine": "SevenRooms", "kind": "restaurant", "confidence": "seen_in_indexed_links (undocumented)", "template": "https://www.sevenrooms.com/explore/{venue_slug}/reservations/create/search?date={date}&party_size={party}&start_time={time}",
+   "prefills": ["date", "party", "time"], "date_format": "YYYY-MM-DD", "time_format": "HH:MM (encoded)", "taps_left": "~7 (+card if deposit)",
+   "markets": "Madrid (EVOK Brach, Amós, El Jardín del Ritz); Lisbon (Belcanto, Gunpowder, Attiko)",
+   "terms": "ToS bans robots/scrapers and framing without written permission; one reservation per period; robots disallows /direct/, /embed/, /iframe"},
+  {"engine": "CoverManager", "kind": "restaurant", "confidence": "venue page only", "template": null, "taps_left": "~9", "markets": "Madrid (Nómada, El Corsario, Oceanika, Cadaqués)", "terms": "no prefill documented (also found in Sasha 95's 40-venue read)"},
+  {"engine": "Zenchef", "kind": "restaurant", "confidence": "venue page only", "template": null, "taps_left": "~9", "markets": "Lisbon", "terms": "JS SDK openWith({day, pax}) per a search snippet — not a URL, unverified; merged with CoverManager (2025)"},
+  {"engine": "TheFork", "kind": "restaurant", "confidence": "venue page only", "template": null, "taps_left": "~9", "markets": "Madrid, Lisbon", "terms": "terms ban robots/scrapers/automatic devices; B2B API partner-only"},
+  {"engine": "OpenTable", "kind": "restaurant", "confidence": "none", "template": null, "taps_left": "~8", "markets": "Lisbon, Madrid", "terms": "help unreadable; partner programme exists"},
+  {"engine": "Restoo", "kind": "restaurant", "confidence": "venue page only", "template": null, "taps_left": "~9", "markets": "Madrid (Casa Suecia)"},
+  {"engine": "Quandoo", "kind": "restaurant", "confidence": "none", "template": null, "taps_left": "~9", "markets": "none found"},
+  {"engine": "Chope", "kind": "restaurant", "confidence": "none", "template": null, "markets": "none in Vietnam"},
+  {"engine": "Fresha", "kind": "spa", "confidence": "service preselect only (venue's Link builder)", "template": null, "taps_left": "~8", "markets": "Hoi An (Cong Spa, Ocean Spa, Lemontree), Lisbon, Madrid", "terms": "terms ban scraping; robots disallows booking paths"},
+  {"engine": "Treatwell", "kind": "spa", "confidence": "none", "template": null, "taps_left": "~8", "markets": "Madrid, Lisbon"},
+  {"engine": "Booksy", "kind": "spa", "confidence": "none", "template": null, "taps_left": "~8 (account required)", "markets": "Madrid"},
+  {"engine": "Mindbody", "kind": "spa", "confidence": "none", "template": null, "taps_left": "~9 (login required)", "markets": "none found"},
+  {"engine": "SimplyBook.me", "kind": "spa", "confidence": "guest prefill only inside the venue's embedded widget", "template": null, "taps_left": "~7", "markets": "none found"}
+ ]}

@@ -107,6 +107,23 @@ async def send_sms(to: Optional[str], body: str, switch: str = "SASHA_SMS_TO_GUE
         return f"sms not sent: {type(e).__name__}"
 
 
+#: Sasha 147 · our OWN test and demo venues — a booking there is a test or a rehearsal: its receipt is RECORDED as a test
+#: send and never emailed (4 Oct: the speed harness put five "Your booking at Sasha Test Venue" receipts in the founder's inbox)
+TEST_VENUES = ("sasha test venue", "kanoe demo spa", "kanoe demo market", "the sasha test line")
+
+
+def test_reason(venue: Optional[str], details: Optional[Mapping[str, Any]] = None, call: Optional[Mapping[str, Any]] = None) -> Optional[str]:
+    """Why this receipt is a TEST one, or None for a real booking."""
+    if (details or {}).get("test"):
+        return "a test booking"
+    brief = (call or {}).get("brief") or {}
+    if call is not None and (call.get("is_test") or brief.get("venue_key") == "test-line" or brief.get("test")):
+        return "a call to the test line"
+    if (venue or "").strip().lower() in TEST_VENUES:
+        return f"{venue} is our own test venue"
+    return None
+
+
 async def record(account: str, kind: str, venue: str, route: str, outcome: str, *, status_words: Optional[str] = None,
                  provider_id: Optional[str] = None, trip_item_id: Any = None, call_id: Any = None) -> None:
     """Sasha 144 · every receipt attempt into booking_receipts_sent (sql/032): the ops log says whether the guest got it.
@@ -128,8 +145,14 @@ async def record(account: str, kind: str, venue: str, route: str, outcome: str, 
 async def send_after_call(call: Mapping[str, Any]) -> str:
     """Once a booking call's reading is recorded. Returns what happened, in words (logged; the tests read it). Sasha 144:
     and recorded, sent or not."""
-    out, sent_id = await _send_after_call(call)
     brief = call.get("brief") or {}
+    why = test_reason(brief.get("venue_name"), None, call)
+    if why and (brief.get("purpose") or "book") in ("book", "cancel"):   # Sasha 147 · recorded, never emailed
+        out = f"test: not emailed ({why})"
+        await record(str(call["account_id"]), "cancel" if brief.get("purpose") == "cancel" else "booking", brief.get("venue_name") or "the venue",
+                     "after Sasha's phone call", out, trip_item_id=call.get("trip_item_id"), call_id=call.get("call_id"))
+        return out
+    out, sent_id = await _send_after_call(call)
     if out not in ("not a booking call",):
         await record(str(call["account_id"]), "cancel" if brief.get("purpose") == "cancel" else "booking",
                      brief.get("venue_name") or "the venue", "after Sasha's phone call", out, provider_id=sent_id,
@@ -217,6 +240,12 @@ def compose_route(venue: str, route: str, status: str, details: Mapping[str, Any
 async def send_for_route(account: str, venue: str, route: str, status: str, details: Mapping[str, Any]) -> str:
     """Sasha 99 · the guest's receipt after a form, an email or a slot link — awaited by the route; never fatal to it.
     Sasha 144: recorded, sent or not (`details["trip_item_id"]` ties it to the booking where the caller has it)."""
+    why = test_reason(venue, details)
+    if why:   # Sasha 147 · a test or rehearsal booking: recorded as a test send, never emailed
+        out = f"test: not emailed ({why})"
+        await record(account, "cancel" if "ancel" in (status or "") else "booking", venue, route, out, status_words=status,
+                     trip_item_id=(details or {}).get("trip_item_id"))
+        return out
     out, sent_id = await _send_for_route(account, venue, route, status, details)
     await record(account, "cancel" if "ancel" in (status or "") else "booking", venue, route, out, status_words=status,
                  provider_id=sent_id, trip_item_id=(details or {}).get("trip_item_id"))
@@ -244,4 +273,4 @@ async def _send_for_route(account: str, venue: str, route: str, status: str, det
         return f"not sent: {type(e).__name__}", None
 
 
-__all__ = ["record", "compose_route", "send_for_route", "compose", "compose_cancel", "send_after_call", "send_after_cancel", "send_sms", "address_of"]
+__all__ = ["test_reason", "TEST_VENUES", "record", "compose_route", "send_for_route", "compose", "compose_cancel", "send_after_call", "send_after_cancel", "send_sms", "address_of"]

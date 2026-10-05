@@ -33,6 +33,7 @@ class WatchersDoNotReadListings(unittest.TestCase):
         self.env.start()
         self.saved = (GW.STORE, PR.STORE, GW.api, PR.NOW, GW.NOW)
         GW.STORE, PR.STORE = GW.MemoryGuestStore(), PR.MemoryProactiveStore()
+        PR._ROUTED.clear()   # Sasha 147 · the Routes throttle starts empty in every test
         self.now = datetime(2026, 10, 4, 3, 0, tzinfo=MAD)   # the middle of the night: nothing is due
         PR.NOW = GW.NOW = lambda: self.now
         self.calls = []

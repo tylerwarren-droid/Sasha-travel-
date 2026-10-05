@@ -144,7 +144,10 @@ class FormRung(unittest.TestCase):   # LadderRoutes' set-up, not its tests
         # Sasha 99 · a receipt after EVERY route, not only a call
         env = {"SASHA_EMAILS_ENABLED": "1", "SASHA_RESEND_API_KEY": "k", "SASHA_EMAIL_FROM": "Sasha <sasha@booking.kanoe.ai>",
                "SASHA_INBOUND_DOMAIN": "booking.kanoe.ai", "SASHA_FOUNDER_EMAIL": "founder@kanoe.test"}
-        with mock.patch.dict(os.environ, env):
+        from booking_signer import guest_receipt as GR
+        # Sasha 147 · our test venue's receipt is never emailed — so to check the real email path end to end, this test
+        # treats it as a real venue (test_the_test_venue_s_receipt_is_never_emailed holds the opposite)
+        with mock.patch.dict(os.environ, env), mock.patch.object(GR, "test_reason", lambda *a, **k: None):
             v = self.read()
             prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
             self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
@@ -153,6 +156,16 @@ class FormRung(unittest.TestCase):   # LadderRoutes' set-up, not its tests
         for must in ("How: their own booking form, sent by Sasha after your yes", "When: 2026-10-10 at 21:00", "Their reference: TV-",
                      "What they answered, word for word:"):
             self.assertIn(must, mail["text"])
+
+    def test_the_test_venue_s_receipt_is_never_emailed(self):
+        # Sasha 147 · 4 Oct: five of these reached the founder's inbox from the speed harness
+        env = {"SASHA_EMAILS_ENABLED": "1", "SASHA_RESEND_API_KEY": "k", "SASHA_EMAIL_FROM": "Sasha <sasha@booking.kanoe.ai>",
+               "SASHA_INBOUND_DOMAIN": "booking.kanoe.ai", "SASHA_FOUNDER_EMAIL": "founder@kanoe.test"}
+        with mock.patch.dict(os.environ, env):
+            v = self.read()
+            prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
+            self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
+        self.assertEqual([u for m, u, b in self.web.requests if u == "https://api.resend.com/emails"], [])
 
     def test_the_wizard_reads_back_both_steps_and_sends_step_two_only_after_step_one(self):
         # Sasha 94 · the day on one page, the details on the next

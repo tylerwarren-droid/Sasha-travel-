@@ -1073,7 +1073,7 @@ async def _combo_approve(ctx: dict, pend: dict, how: dict) -> None:
                  f"Ref {got['ref']}. I used your saved membership once, for this booking — it's in your vault's log.")
         await GR.send_for_route(account, DSP.PROVIDER, "its own member portal, signed in with your saved login after your yes",
                                 "Confirmed by the venue", {"what": DSP.TREATMENT[2], "when": spa["at"].replace("T", " at "), "party": 1,
-                                                           "venue_reference": got["ref"], "their_words": got["their_page"]})
+                                                           "venue_reference": got["ref"], "their_words": got["their_page"], "test": True})   # Sasha 147 · the demo spa
     else:
         out.text("⚠ 2) Not confirmed: Kanoe Demo Spa's page didn't say it's booked.")
     if _receipt_note():
@@ -1140,7 +1140,7 @@ async def _spa_approve(ctx: dict, pend: dict) -> None:
     out.text(f"Their page said: “{got['their_page'][:300]}”")
     await GR.send_for_route(ctx["account"], DSP.PROVIDER, "its own member portal, signed in with your saved login after your yes",
                             "Confirmed by the venue", {"what": DSP.TREATMENT[2], "when": pend["when"].replace("T", " at "), "party": 1,
-                                                       "venue_reference": got["ref"], "their_words": got["their_page"]})
+                                                       "venue_reference": got["ref"], "their_words": got["their_page"], "test": True})   # Sasha 147 · the demo spa
 
 
 async def _reorder(ctx: dict) -> None:

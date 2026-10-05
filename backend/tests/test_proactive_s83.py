@@ -55,6 +55,7 @@ class Base(unittest.TestCase):
         self.env.start()
         self.saved = (GW.STORE, GW.SENDER, PR.STORE, GW._upcoming, PR.NOW, GW.NOW, PR.ROUTES_HTTP)
         GW.STORE, GW.SENDER, PR.STORE = GW.MemoryGuestStore(), FakeSender(), PR.MemoryProactiveStore()
+        PR._ROUTED.clear()   # Sasha 147 · the Routes throttle starts empty in every test
         self.rows = [booking()]
         self.reread = None
 

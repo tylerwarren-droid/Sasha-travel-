@@ -729,7 +729,8 @@ async def send(form_id: str, request: Request):
             reading.get("result"), "Requested — not confirmed until they confirm"),
         {"what": (o.get("what") or {}).get("activity"), "when": when, "party": (o.get("how_many") or {}).get("count"),
          "name": (o.get("who") or {}).get("name"), "venue_reference": outcome.get("booking_reference"), "their_words": text,
-         "trip_item_id": f.get("trip_item_id")}))   # Sasha 144 · the receipt is recorded against its booking
+         "trip_item_id": f.get("trip_item_id"),   # Sasha 144 · the receipt is recorded against its booking
+         "test": urlsplit(f["page_url"]).hostname == urlsplit(test_venue_url()).hostname}))   # Sasha 147 · our test venue: never emailed
     say = {"confirmed": "Sent. Their page confirms it, word for word below.",
            "proposed": "Sent. Their page offers something different — read it below before relying on anything.",
            "declined": "Sent. Their page says no — their words are below."}.get(reading.get("result"),

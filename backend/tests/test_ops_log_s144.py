@@ -132,6 +132,36 @@ class ReceiptsAreRecorded(unittest.TestCase):
             CRT.CALL_STORE = saved
 
 
+class TestReceiptsAreNeverEmailed(unittest.TestCase):
+    """Sasha 147 · 4 Oct 08:22–08:34: the speed harness put five "Your booking at Sasha Test Venue: Confirmed by the venue"
+    receipts in the founder's inbox. A test or rehearsal booking's receipt is RECORDED as a test send, never emailed."""
+
+    def setUp(self):
+        self.saved = CRT.CALL_STORE
+        CRT.CALL_STORE = CS.MemoryCallStore()
+
+    def tearDown(self):
+        CRT.CALL_STORE = self.saved
+
+    def sends(self):
+        return mock.patch.object(GR.E, "send", mock.AsyncMock(side_effect=AssertionError("a test receipt was emailed")))
+
+    def test_the_test_venue_the_demo_spa_and_the_test_line(self):
+        with self.sends(), mock.patch("booking_signer.ladder.emails_ready", lambda: None):
+            a = run(GR.send_for_route(A, "Sasha Test Venue", "their own booking form", "Confirmed by the venue", {"trip_item_id": "t1"}))
+            b = run(GR.send_for_route(A, "Kanoe Demo Spa", "its own member portal", "Confirmed by the venue", {"test": True}))
+            c = run(GR.send_for_route(A, "some page", "their own booking form", "Confirmed", {"test": True}))   # by the form's host
+            d = run(GR.send_after_call({"account_id": A, "call_id": None, "trip_item_id": "t2", "brief": {"venue_key": "test-line", "purpose": "book"}}))
+        for out in (a, b, c, d):
+            self.assertTrue(out.startswith("test: not emailed"), out)
+        self.assertEqual([r["outcome"][:17] for r in CRT.CALL_STORE.receipts], ["test: not emailed"] * 4)
+        self.assertEqual(CRT.CALL_STORE.receipts[0]["trip_item_id"], "t1")
+
+    def test_a_real_venue_still_gets_its_receipt(self):
+        self.assertIsNone(GR.test_reason("Casa Lucio", {"trip_item_id": "t1"}))
+        self.assertIsNone(GR.test_reason("Casa Lucio", None, {"brief": {"venue_key": "read:9"}}))
+
+
 class TheMailboxNeverNamesTheSmallPrint(unittest.TestCase):
     def test_cualquier_momento_is_not_a_venue(self):
         self.assertIsNone(M.venue_in("Tu reserva está confirmada", "Puedes cancelar tu reserva en cualquier momento desde la app."))

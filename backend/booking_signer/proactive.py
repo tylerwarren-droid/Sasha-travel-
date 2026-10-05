@@ -37,6 +37,10 @@ QUIET = (22, 8)                      # 22:00–08:00 local (the consent text say
 DAY_BEFORE_AT = dtime(18, 0)
 BRIEF_AT = dtime(9, 0)
 LEAVE_MARGIN = timedelta(minutes=10)
+#: Sasha 147 · Routes is a PAID call: asked at most this often per booking. The leave-now window is LEAVE_MARGIN (10 min)
+#: long, so asking every 5 minutes always lands in it — 12 calls an hour in a booking's last 3 h, not 60.
+ROUTES_EVERY = timedelta(minutes=5)
+_ROUTED: Dict[str, datetime] = {}   # booking → when Routes was last asked (the time only, nothing of Google's)
 CONFIRMED = ("confirmed", "guest_booked")
 HONEST = ("requested", "attempting", "unclear", "proposed", "quoted", "waitlisted", "link_sent", "pending")
 PRIORITY = {"written_confirmation": 0, "leave_now": 1, "day_before": 2, "not_confirmed": 2, "morning_brief": 3}
@@ -442,7 +446,9 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
             if b.get("status") in CONFIRMED and "leave_now" not in prefs.get("off_kinds", []) and now >= start - timedelta(hours=3) \
                     and not (hasattr(STORE, "claimed") and await STORE.claimed(str(b["id"]), "leave_now")):   # Sasha 146 · once sent, no more Routes calls
                 place = await STORE.default_place(account)
-                if place:
+                last = _ROUTED.get(str(b["id"]))
+                if place and not (last and timedelta(0) <= now - last < ROUTES_EVERY):
+                    _ROUTED[str(b["id"])] = now
                     mode = os.getenv("SASHA_PROACTIVE_MODE", "TRANSIT")
                     dest = ", ".join(x for x in ((None if b.get("receipt") else b.get("venue")), b.get("address")) if x)
                     if not dest:   # Sasha 146 · a phone booking with no address: routed to its listing's place ID (stored, allowed) —

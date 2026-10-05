@@ -798,8 +798,12 @@ async function start() {
   const i = document.createElement('iframe');
   i.src = LIVE; i.title = "The venue's booking form, live"; i.setAttribute('sandbox', 'allow-same-origin allow-scripts');
   i.setAttribute('allow', 'clipboard-read; clipboard-write');
-  // Browserbase's viewer paints its first frame a few seconds after it loads: the snapshot (identical, 1:1) stays until then
-  i.onload = () => setTimeout(() => { w.style.opacity = 0; setTimeout(() => w.remove(), 600); }, 4500);
+  // Browserbase's viewer paints ~10 s after it loads (measured 5 Oct): the snapshot (identical, 1:1; taps pass through it)
+  // stays until the guest's tap reaches the live view (it takes focus) or 20 s after it loaded — never a blank frame
+  let gone = false;
+  const hide = () => { if (gone) return; gone = true; w.style.opacity = 0; setTimeout(() => w.remove(), 600); };
+  window.addEventListener('blur', () => setTimeout(() => { if (document.activeElement === i) hide(); }, 0));
+  i.onload = () => setTimeout(hide, 20000);
   f.insertBefore(i, w);
 }
 async function poll() {

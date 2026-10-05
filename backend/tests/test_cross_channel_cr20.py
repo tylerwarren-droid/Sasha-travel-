@@ -163,3 +163,13 @@ class BookingInsideAProduct(TR.Flow):
         self.say("1")
         r = web(self, "book me a 60-minute massage near my hotel on arrival")
         self.assertEqual(r["handoff"], "book me a 60-minute massage in Madrid")
+
+
+class ConductHook(BookingInsideAProduct):
+    def test_in_context_for_conduct_before_her_handoff(self):
+        self.to_entry()
+        r = run(PWEB.in_context(TG.ACCOUNT, "book me a 60-minute massage near my hotel on arrival", signed_in=True, now=self.now))
+        self.assertEqual(r["sentence"], "book me a 60-minute massage in Madrid near Calle de Ejemplo 12 on 2027-03-01")
+        self.assertEqual(r["product"], "relocation")
+        self.assertIsNone(run(PWEB.in_context(TG.ACCOUNT, "book me a 60-minute massage near my hotel on arrival", signed_in=None)))
+        self.assertIsNone(run(PWEB.in_context(TG.ACCOUNT, "book me a massage in Madrid tomorrow at 10", signed_in=True, now=self.now)))

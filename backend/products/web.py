@@ -110,3 +110,23 @@ async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = N
     if not handled and not handoff:
         return None                                    # not the products' message: Sasha's own web flow answers it
     return {"agent": "products", "response": "\n\n".join(texts), "quick_replies": replies, "media": media, "handoff": handoff}
+
+
+async def in_context(user_id: Optional[str], message: str, signed_in: Optional[bool] = None,
+                     now: Optional[datetime] = None) -> Optional[dict]:
+    """CR 20 (5) · for Sasha's conduct(), BEFORE her own booking hand-off: a request that only means something with a
+    product's context ("a 60-minute massage near my hotel on arrival") → {"sentence": the same request with the product's
+    city, place and date, "line": what to say first, "product": …}, or None (her flow takes the guest's own words).
+    Read-only: nothing is booked, sent or stored here. Signed-in accounts only (the public demo has no products)."""
+    if not user_id or signed_in is not True:
+        return None
+    from . import whatsapp as PW
+    now = now or datetime.now(timezone.utc)
+    if not PW._REL.search(message or "") or not PW.for_sasha(message, [], now):
+        return None
+    ch = {"wa_id_sha256": f"web:{user_id}", "account_id": user_id}
+    for prod, saved in await PW._waiting(ch, now):
+        handed = await PW._in_context(ch, prod, saved, message, now)
+        if handed:
+            return {"sentence": handed[0], "line": handed[1], "product": prod}
+    return None

@@ -264,6 +264,63 @@ async def rehearse(n: int, account_name: str = "demo", only: Optional[str] = Non
             page("U11 file page: the pack", f"/relocation-file/{rid}", "05_Proof-of-economic-means")
             await beat("U12 entry date → the TIE, from its page", "1 March 2027", expect="I'll remind you here")
             await beat("U13 consulate booked → itinerary", "consulate booked 12 November 10:00", expect="booked by you")
+        elif only == "massage":   # CR 20 (5) · a booking from inside each product → Sasha's flow with context → back
+            from app.services.conductor import conduct
+
+            async def pick_test(label):
+                """Only ever the rehearsal card (our own test venue) — stop if it isn't there."""
+                asks = GW.SENDER.asks[-1][1] if GW.SENDER.asks else []
+                hit = [(t, pl) for t, pl in asks if "Test Venue" in t or "test venue" in t.lower()]
+                if not hit:
+                    raise RuntimeError(f"no test-venue card among {[t for t, _ in asks]} — stopped, nothing picked")
+                return await beat(label, payload=hit[0][1], expect="")
+
+            async def yes_if_test(label, expect):
+                asks = GW.SENDER.asks[-1][1] if GW.SENDER.asks else []
+                last = GW.SENDER.asks[-1][0] if GW.SENDER.asks else ""
+                last = str(last or "")
+                if "Test Venue" not in last and "test venue" not in last.lower():
+                    raise RuntimeError("the read-back doesn't name our test venue — stopped before the yes")
+                return await beat(label, payload=asks[0][1], expect=expect)
+
+            async def wq(label, message, expect, mode=None):
+                t = time.monotonic()
+                r = await conduct(message, [], user_id=account, signed_in=True, product_mode=mode)
+                said = (r.get("response") or "") + "".join(f"\n[card: {(b.get('name') or b.get('title') or '')}]"
+                                                           for b in (r.get("bookings") or []) if isinstance(b, dict))
+                ok = expect in said
+                rows.append({"beat": label, "sent": "web: " + message, "compute_s": round(time.monotonic() - t, 1), "msgs": 1,
+                             "room_s": round(time.monotonic() - t, 1), "ok": ok, "said": said, "expect": expect})
+                print(f"{'✓' if ok else '✗'} {label:<34} (web)", flush=True)
+                if not ok:
+                    print("    said: " + said.replace("\n", " | ")[:400], flush=True)
+            ASK = "book me a 60-minute massage near my hotel on arrival"
+            # RelocateMe, on WhatsApp: to the entry date, then the massage, completed at OUR test venue, then back
+            for i, t in enumerate(("relocation", "first", "me", "myself", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"), 1):
+                await beat(f"M{i} {t}", t)
+            await beat("MR1 massage, inside RelocateMe", ASK, expect="in Madrid, near Calle de Ejemplo 12, on Mon 1 Mar 2027")
+            await pick_test("MR2 pick OUR test venue (card 3)")
+            # a fresh minute each run: the vault's one-use approval refuses a read-back it has already seen (a rerun is a new booking)
+            mm = 5 * (int(time.time() // 60) % 11 + 1)
+            await beat("MR3 the day and time", f"1 March 2027 at 11:{mm:02d}", expect="")
+            await beat("MR3b for how many", "1 person", expect="")
+            await yes_if_test("MR4 the one yes", expect="TV-")
+            await beat("MR5 back to the file", "relocation", expect="Back to your EX-01.")
+            await wq("MR6 web itinerary has it", "what do I have on 1 March 2027?", "Sasha Test Venue")
+            await wq("MR7 web: the same ask inside RelocateMe", ASK, "Madrid", mode=None)
+            # EspañaMe, on WhatsApp: Madrid, no date invented
+            await beat("ME1 españa", "españa", expect="EspañaMe")
+            await beat("ME2 1 → Salud", "1", expect="never why you need a doctor")
+            await beat("ME3 massage, inside EspañaMe", ASK, expect="in Madrid")
+            await beat("ME4 back to españa", "españa", expect="Back to your health appointment.")
+            # its own test booking(s), cancelled through Sasha's own cancel flow — only ever OUR test venue
+            for k in range(1):   # one booking per run → one cancel (a second "cancel" found a failed row and hit S-148's crash)
+                said = await beat(f"MX{k + 1} cancel our test-venue massage", "cancel my Sasha Test Venue booking", expect="")
+                if not GW.SENDER.asks or "Test Venue" not in (str(GW.SENDER.asks[-1][0] or "") + str(said or "")):
+                    break
+                await yes_if_test(f"MX{k + 1}b yes, cancel it (ours)", expect="")
+                if "cancel" not in said.lower():
+                    break
         elif only == "both":   # CR 20 · back and forth: the SAME account, case and state on WhatsApp and the web tab
             from products import web as PWEB
             from app.services.conductor import conduct
@@ -695,13 +752,13 @@ async def health() -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["rehearse", "reset", "health", "showcase", "officer"])
-    ap.add_argument("what", nargs="?", default="all", choices=["all", "campus", "relocation", "health", "officer", "us", "trip", "modes", "both"])
+    ap.add_argument("what", nargs="?", default="all", choices=["all", "campus", "relocation", "health", "officer", "us", "trip", "modes", "both", "massage"])
     ap.add_argument("--account", default="founder", choices=["founder", "demo"])
     ap.add_argument("--vault", action="store_true")
     ap.add_argument("--n", type=int, default=1)
     a = ap.parse_args()
     if a.cmd == "rehearse":
-        asyncio.run(rehearse(a.n, a.account if "--account" in sys.argv else "demo", a.what if a.what in ("us", "trip", "modes", "both") else None))
+        asyncio.run(rehearse(a.n, a.account if "--account" in sys.argv else "demo", a.what if a.what in ("us", "trip", "modes", "both", "massage") else None))
     elif a.cmd == "officer":
         asyncio.run(officer())
     elif a.cmd == "showcase":

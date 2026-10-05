@@ -1,35 +1,34 @@
-# CR 1 rehearsal 1 — 20261005-0650 UTC
+# CR 1 rehearsal 1 — 20261005-0739 UTC
 
 Real code, real schools, real vault, real model (published specimen), real Postgres, as the FOUNDER account (11111111…). WhatsApp captured on a fictional number (nothing sent). Vault item present at start: False. Afterwards it removed only what it created: cases 3, bookings (campus visits, the clinic, CR 10 appointments) 0, call rows 0, vault items it created 0.
 
-**Beats: 22/24 as expected · the room waits 228 s in all (compute + 3.1 s per sandbox message) · script wall time 89 s.**
+**Beats: 23/23 as expected · the room waits 230 s in all (compute + 3.1 s per sandbox message) · script wall time 79 s.**
 
 | beat | sent | compute s | msgs | the room waits s | ok |
 |---|---|---|---|---|---|
-| M1 relocation | relocation | 1.9 | 2 | 8.1 | ✓ |
-| M2 first | first | 1.9 | 1 | 5.0 | ✓ |
-| M3 me | me | 1.9 | 1 | 5.0 | ✓ |
-| M4 myself | myself | 1.9 | 2 | 8.1 | ✓ |
+| M1 relocation | relocation | 2.2 | 2 | 8.4 | ✓ |
+| M2 first | first | 2.1 | 1 | 5.2 | ✓ |
+| M3 me | me | 2.0 | 1 | 5.1 | ✓ |
+| M4 myself | myself | 2.0 | 2 | 8.2 | ✓ |
 | M5 DEMO | DEMO | 2.9 | 5 | 18.4 | ✓ |
 | M6 SIGNED | SIGNED | 3.7 | 2 | 9.9 | ✓ |
 | M7 UK | UK | 3.6 | 3 | 12.9 | ✓ |
-| M8 SKIP | SKIP | 3.9 | 2 | 10.1 | ✓ |
-| M9 1 March 2027 | 1 March 2027 | 4.1 | 2 | 10.3 | ✓ |
-| MR1 massage, inside RelocateMe | book me a 60-minute massage near my hotel on arrival | 4.2 | 6 | 22.8 | ✓ |
-| MR2 pick OUR test venue (card 3) | pick:55214c:2 | 1.6 | 1 | 4.7 | ✓ |
-| MR3 the day and time | 1 March 2027 at 11:35 | 0.6 | 1 | 3.7 | ✓ |
-| MR3b for how many | 1 person | 7.1 | 3 | 16.4 | ✓ |
-| MR4 the one yes | yes:b7600acd:db2894b693b099b1 | 11.5 | 3 | 20.8 | ✓ |
+| M8 SKIP | SKIP | 4.0 | 2 | 10.2 | ✓ |
+| M9 1 March 2027 | 1 March 2027 | 3.9 | 2 | 10.1 | ✓ |
+| MR1 massage, inside RelocateMe | book me a 60-minute massage near my hotel on arrival | 4.7 | 6 | 23.3 | ✓ |
+| MR2 pick OUR test venue (card 3) | pick:e8a340:2 | 1.7 | 1 | 4.8 | ✓ |
+| MR3 the day and time | 1 March 2027 at 11:05 | 0.6 | 1 | 3.7 | ✓ |
+| MR3b for how many | 1 person | 7.2 | 3 | 16.5 | ✓ |
+| MR4 the one yes | yes:8b3bec89:0a29daa47a85bedc | 11.6 | 3 | 20.9 | ✓ |
 | MR5 back to the file | relocation | 0.6 | 1 | 3.7 | ✓ |
-| MR6 web itinerary has it | web: what do I have on 1 March 2027? | 0.9 | 1 | 0.9 | ✓ |
-| MR7 web: the same ask inside RelocateMe | web: book me a 60-minute massage near my hotel on arrival | 0.0 | 1 | 0.0 | ✗ expected: Madrid |
+| MR6 web itinerary has it | web: what do I have on 1 March 2027? | 1.1 | 1 | 1.1 | ✓ |
+| MR7 web: the same ask inside RelocateMe | web: book me a 60-minute massage near my hotel on arrival | 1.3 | 1 | 1.3 | ✓ |
 | ME1 españa | españa | 3.3 | 1 | 6.4 | ✓ |
-| ME2 1 → Salud | 1 | 2.0 | 2 | 8.2 | ✓ |
-| ME3 massage, inside EspañaMe | book me a 60-minute massage near my hotel on arrival | 3.8 | 6 | 22.4 | ✓ |
+| ME2 1 → Salud | 1 | 1.9 | 2 | 8.1 | ✓ |
+| ME3 massage, inside EspañaMe | book me a 60-minute massage near my hotel on arrival | 2.8 | 6 | 21.4 | ✓ |
 | ME4 back to españa | españa | 0.6 | 1 | 3.7 | ✓ |
 | MX1 cancel our test-venue massage | cancel my Sasha Test Venue booking | 8.7 | 2 | 14.9 | ✓ |
-| MX1b yes, cancel it (ours) | yes:fb5b580e:c5b9911df89883b9 | 5.8 | 2 | 12.0 | ✓ |
-| ⛔ stopped |  | 0 | 0 | 0 | ✗ expected: no crash |
+| MX1b yes, cancel it (ours) | yes:ceee7dd8:24e36f95d2247010 | 5.8 | 2 | 12.0 | ✓ |
 
 ## What WhatsApp would have shown
 
@@ -70,8 +69,8 @@ Your passport number?
 Filled the rest with a *fictional* applicant, Ana Ejemplo Prueba — every value says so on the file.
 ✅ Your EX-01 is prepared: 31 boxes filled from your answers, each naming its source; 8 left for you (section 5, the Dehú consent, your signature).
 The reviewer checked every field: 38 fine, 1 to look at, 0 problems. Read it field by field here, with the official PDF to download:
-https://project.kanoe.ai/relocation-file/1IcJARQJIEVdp3HB5Fc0rQ
-The official EX-01, prepared — not signed, not filed.  📎 https://project.kanoe.ai/api/products/relocation/1IcJARQJIEVdp3HB5Fc0rQ/EX-01-prepared.pdf
+https://project.kanoe.ai/relocation-file/5Bap_fNWfl3sDK2U3olfCw
+The official EX-01, prepared — not signed, not filed.  📎 https://project.kanoe.ai/api/products/relocation/5Bap_fNWfl3sDK2U3olfCw/EX-01-prepared.pdf
 When you've checked it: print it, complete section 5 yourself, decide on the Dehú consent, write the place and date, and sign in the FIRMA box. Reply SIGNED when that's done.
 ```
 
@@ -92,7 +91,7 @@ http://www.exteriores.gob.es/Consulados/LONDRES/en/Consulado/Pages/Visas.aspx
 You book it and you go in person — each appointment is for one person only — family members applying need their own. I don't book or press anything.
 (From the consulate's sheet dated 11 Feb 2022, read 3 Oct 2026; its website didn't answer when I checked today, so open the link yourself.)
 Your checklist from that sheet: 11 items — 9 for you to gather, the EX-01 done. It's on your file page:
-https://project.kanoe.ai/relocation-file/1IcJARQJIEVdp3HB5Fc0rQ
+https://project.kanoe.ai/relocation-file/5Bap_fNWfl3sDK2U3olfCw
 Your *document pack* — which of these have you gathered? Reply with the numbers (e.g. 1 3 4-6), ALL, or SKIP:
 1. National visa application form
 2. A recent passport photo with a white background
@@ -144,22 +143,22 @@ When you've booked your consulate appointment — and later, in Spain, your TIE 
 ```
 A 60-minute massage in Madrid, near Calle de Ejemplo 12, on Mon 1 Mar 2027 (your entry date) — Sasha's booking takes it from here, one yes as always. When it's done, say “relocation” to come back to where we were.
 A 60-minute massage in Madrid — 20 places found. From Google Maps; nobody has been contacted.
-Sasha's pick · Masajes de Filipinos · ★ 5.0 (362 Google reviews)
-ZenVida Foot & Body Massage Madrid Centro · ★ 5.0 (502 Google reviews)
+Sasha's pick · ZenVida Foot & Body Massage Madrid Centro · ★ 5.0 (502 Google reviews)
+Arokaya Thai Massage & Wellness · ★ 5.0 (836 Google reviews)
 Rehearsal · Sasha Test Venue — ours, not a real restaurant: booking it contacts no one
 Which one?
-[Masajes de Filipinos · ZenVida Foot & Body Massage Madrid Centro · Sasha Test Venue]
+[ZenVida Foot & Body Massage Madrid Centro · Arokaya Thai Massage & Wellness · Sasha Test Venue]
 ```
 
 ### MR2 pick OUR test venue (card 3)
-> pick:55214c:2
+> pick:e8a340:2
 
 ```
-Which day and time?
+What time on Monday 1 March?
 ```
 
 ### MR3 the day and time
-> 1 March 2027 at 11:35
+> 1 March 2027 at 11:05
 
 ```
 For how many?
@@ -174,7 +173,7 @@ Exactly what I'll send:
 • I'll send the booking form on Sasha Test Venue's own website (https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain), to https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain, with exactly these fields:
 • I'll use your saved Kanoe Test Club number (fictional) from your vault.
 • Día: 2027-03-01
-• Hora: 11:35
+• Hora: 11:05
 • Personas: 1
 • Nombre: Tyler Warren
 • Email: tyler@kanoe.ai
@@ -183,17 +182,17 @@ Exactly what I'll send:
 • plus the page's own hidden fields, sent with the page's values: token.
 • I won't tick any box agreeing to their terms, and I stop at any CAPTCHA.
 • Their answer page is kept word for word. I send it once. Shall I send it?
-Book Sasha Test Venue for 1, Monday 1 March at 11:35, under Warren?
+Book Sasha Test Venue for 1, Monday 1 March at 11:05, under Warren?
 [Yes, book it · No]
 ```
 
 ### MR4 the one yes
-> yes:b7600acd:db2894b693b099b1
+> yes:8b3bec89:0a29daa47a85bedc
 
 ```
-✅ Booked: Sasha Test Venue, Monday 1 March at 11:35, 1 person. Their reference: TV-2453EC-0C.
-Their page said: “Reserva confirmada Confirmado: mesa para 1 personas el lunes 1 de marzo a las 11:35, a nombre de Tyler Warren. Localizador: TV-2453EC-0C Para cancelar: https://sasha-travel-production.up.railway.app/api/booking/test-venue/cancel/TV-2453EC-0C”
-Your receipt is in your email.
+✅ Booked: Sasha Test Venue, Monday 1 March at 11:05, 1 person. Their reference: TV-9E812B-B9.
+Their page said: “Reserva confirmada Confirmado: mesa para 1 personas el lunes 1 de marzo a las 11:05, a nombre de Tyler Warren. Localizador: TV-9E812B-B9 Para cancelar: https://sasha-travel-production.up.railway.app/api/booking/test-venue/cancel/TV-9E812B-B9”
+No receipt is emailed: this was our own test venue.
 ```
 
 ### MR5 back to the file
@@ -213,7 +212,7 @@ When you've booked your consulate appointment — and later, in Spain, your TIE 
 
 ```
 Monday 1 March:
-• 11:35 Sasha Test Venue, 1 people
+• 11:05 Sasha Test Venue, 1 people
 Your bookings don't say where you'll be that day (no flight or hotel in them).
 ```
 
@@ -221,7 +220,9 @@ Your bookings don't say where you'll be that day (no flight or hotel in them).
 > web: book me a 60-minute massage near my hotel on arrival
 
 ```
-Let me look for a 60-minute massage in my hotel — from Google Maps; nobody is contacted by looking. What matters most: best rated, closest, price, or open at a time you want? I'll show them best rated until you say.
+A 60-minute massage in Madrid, near Calle de Ejemplo 12, on Mon 1 Mar 2027 (your entry date) — Sasha's booking takes it from here, one yes as always. When it's done, say “relocation” to come back to where we were.
+
+Let me look for a 60-minute massage in Madrid, ES — from Google Maps; nobody is contacted by looking.
 ```
 
 ### ME1 españa
@@ -287,23 +288,16 @@ Health details are sensitive. For this I use only what the appointment needs —
 
 ```
 Exactly what I'll send:
-• Sasha Test Venue sent a cancel link on their own website: https://sasha-travel-production.up.railway.app/api/booking/test-venue/cancel/TV-2453EC-0C.
+• Sasha Test Venue sent a cancel link on their own website: https://sasha-travel-production.up.railway.app/api/booking/test-venue/cancel/TV-9E812B-B9.
 • I'll open it once and keep their page word for word. It's cancelled only if their page says so.
-Cancel Sasha Test Venue, Monday 1 March at 11:35, for 1, under Tyler Warren?
+Cancel Sasha Test Venue, Monday 1 March at 11:05, for 1, under Tyler Warren?
 [Yes, cancel · No]
 ```
 
 ### MX1b yes, cancel it (ours)
-> yes:fb5b580e:c5b9911df89883b9
+> yes:ceee7dd8:24e36f95d2247010
 
 ```
 Sasha Test Venue has cancelled your booking.
-Their words: “Reserva cancelada La reserva TV-2453EC-0C a nombre de Tyler Warren queda cancelada. Gracias.”
-```
-
-### ⛔ stopped
-> 
-
-```
-TypeError: replace() argument 1 must be str, not None
+Their words: “Reserva cancelada La reserva TV-9E812B-B9 a nombre de Tyler Warren queda cancelada. Gracias.”
 ```

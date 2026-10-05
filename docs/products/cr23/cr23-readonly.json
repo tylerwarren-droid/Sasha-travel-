@@ -1,0 +1,66 @@
+{
+ "id": "4140f163fad0",
+ "account_id": null,
+ "form_id": null,
+ "venue": "www.hanakura.es",
+ "page_url": "https://www.hanakura.es/solicitar-reserva.html",
+ "host": "www.hanakura.es",
+ "read_only": true,
+ "test": false,
+ "state": "read_only_stopped",
+ "created_at": "2026-10-05T08:49:36.760180+00:00",
+ "taps": 0,
+ "tapped": [],
+ "return_to": null,
+ "steps": 1,
+ "timings_ms": {
+  "session": 677,
+  "connect": 2233,
+  "page": 902,
+  "fill": 966,
+  "live_view": 2189
+ },
+ "filled": [
+  {
+   "name": "nombre",
+   "label": "Nombre y apellidos",
+   "value": "Prueba Sasha"
+  },
+  {
+   "name": "telefono",
+   "label": "Teléfono",
+   "value": "600000000"
+  },
+  {
+   "name": "email",
+   "label": "Email",
+   "value": "prueba@example.com"
+  },
+  {
+   "name": "comensales",
+   "label": "Comensales",
+   "value": "2"
+  },
+  {
+   "name": "fecha",
+   "label": "Fecha",
+   "value": "15/12/2026"
+  },
+  {
+   "name": "hora",
+   "label": "Hora",
+   "value": "21:00"
+  },
+  {
+   "name": "menu",
+   "label": "Menús degustación (their default, \"No deseo menú degustación\")",
+   "value": "degustacion"
+  }
+ ],
+ "book_label": "Enviar mensaje",
+ "ready_ms": 6967,
+ "ready_at": "2026-10-05T08:49:43.727279+00:00",
+ "screenshot_sha256": "443a582e1dcba962d0aa2e3ae242aacb7f12e3b8daeca968c155727740595435",
+ "say": "filled up to the last press; not pressed; nothing was sent",
+ "ended_at": "2026-10-05T08:49:47.324010+00:00"
+}

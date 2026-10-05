@@ -1,0 +1,79 @@
+{
+ "id": "903c2f5356d6",
+ "account_id": null,
+ "form_id": null,
+ "venue": "Sasha Test Venue",
+ "page_url": "https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain",
+ "host": "sasha-travel-production.up.railway.app",
+ "read_only": false,
+ "test": true,
+ "state": "booked",
+ "created_at": "2026-10-05T08:48:03.946251+00:00",
+ "taps": 1,
+ "tapped": [
+  "Reservar"
+ ],
+ "return_to": null,
+ "steps": 1,
+ "timings_ms": {
+  "session": 838,
+  "connect": 2123,
+  "page": 499,
+  "fill": 892,
+  "live_view": 1613
+ },
+ "filled": [
+  {
+   "name": "fecha",
+   "label": "Día",
+   "value": "2026-12-15"
+  },
+  {
+   "name": "hora",
+   "label": "Hora",
+   "value": "21:00"
+  },
+  {
+   "name": "personas",
+   "label": "Personas",
+   "value": "2"
+  },
+  {
+   "name": "nombre",
+   "label": "Nombre",
+   "value": "Prueba Sasha"
+  },
+  {
+   "name": "email",
+   "label": "Email",
+   "value": "prueba@example.com"
+  },
+  {
+   "name": "telefono",
+   "label": "Teléfono",
+   "value": "+34600000000"
+  },
+  {
+   "name": "comentarios",
+   "label": "Comentarios",
+   "value": "Prueba de Kanoe (ficticia)."
+  }
+ ],
+ "book_label": "Reservar",
+ "ready_ms": 5966,
+ "ready_at": "2026-10-05T08:48:09.911865+00:00",
+ "first_tap_at": 1485163.954514291,
+ "pressed_label": "Reservar",
+ "pressed_at": "2026-10-05T08:48:36.004673+00:00",
+ "answer_text": "Reserva confirmada Confirmado: mesa para 2 personas el martes 15 de diciembre a las 21:00, a nombre de Prueba Sasha. Localizador: TV-D65AD5-3A Para cancelar: https://sasha-travel-production.up.railway.app/api/booking/test-venue/cancel/TV-D65AD5-3A",
+ "reading": {
+  "result": "confirmed",
+  "why": "an explicit yes restating the day, time and number",
+  "quote": "Reserva confirmada Confirmado: mesa para 2 personas el martes 15 de diciembre a las 21:00, a nombre de Prueba Sasha. Localizador: TV-D65AD5-3A Para cancelar: https://sasha-travel-production.up.railway.app/api/booking/test-venue/cancel/TV-D65AD5-3A"
+ },
+ "reference": "TV-D65AD5-3A",
+ "answered_at": "2026-10-05T08:48:36.739388+00:00",
+ "press_to_answer_ms": 735,
+ "open_to_booked_s": 26.8,
+ "say": "✅ Booked — Sasha Test Venue, ref TV-D65AD5-3A. Their page confirms it."
+}

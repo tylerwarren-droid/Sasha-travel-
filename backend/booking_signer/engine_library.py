@@ -3,7 +3,8 @@
 DATA for the Sasha tab's slot_link.py (S-37 Recipe / Sasha 138 HOTEL_PREFILL), which wires build_* to it. Every entry was
 written from the engine's PUBLIC docs or from links venues publish on their own sites (docs/products/cr22/, 5 Oct 2026),
 robots first; no platform's booking page was ever opened or probed. ⚠ An entry is UNVERIFIED (`verified=None`) until
-the founder opens one real link once — verified so far: TableCheck (5 Oct 2026) (engine_check: "1 filled / 2 not filled / 3 wrong page") — until then Sasha never
+the founder opens one real link once — 5 Oct 2026: FILLED TableCheck, SevenRooms, Cloudbeds, SiteMinder, Omnibees; NOT
+filled Guestcentric (its link then carries nothing) (engine_check: "1 filled / 2 not filled / 3 wrong page") — until then Sasha never
 says "it's filled in", only "I've added the dates to the link; check them there".
 
 Nothing here sends a request anywhere: build() only adds query parameters to a venue page string we already hold.
@@ -31,6 +32,8 @@ class Engine:
     taps_page: int = 0                         #: taps left from the venue's page with nothing prefilled
     terms: str = ""                            #: what its terms say about automation / framing (live hand-over)
     verified: Optional[str] = None             #: who opened a real link and saw it filled, and when — None until then
+    not_filled: Optional[str] = None           #: who opened a real link and saw it NOT filled, and when — the link then
+                                               #: carries nothing (the guest picks the slot on the page)
 
     @property
     def prefills(self) -> List[str]:
@@ -49,6 +52,7 @@ LIBRARY: Dict[str, Engine] = {e.name: e for e in (
            verified="the founder, 5 Oct 2026: The Hill Station (Hoi An) link opened once — filled (via the Sasha tab's engine_check)"),
     Engine("SevenRooms", "restaurant", "seen_in_links", "booking URLs indexed from venues (London, Madrid, Lisbon)",
            {"date": "date", "party": "party_size", "time": "start_time"}, taps_after=7, taps_page=9,
+           verified="the founder, 5 Oct 2026: EVOK Brach (Madrid) link opened once — filled (via the Sasha tab's engine_check)",
            terms="ToS bans robots/scrapers and framing without written permission — link only, never a cloud session"),
     Engine("CoverManager", "restaurant", "none", "40 Madrid venues' own links (Sasha 95) — no prefill seen", taps_page=9),
     Engine("TheFork", "restaurant", "none", "TheFork widget install guide — no parameters", taps_page=9,
@@ -65,10 +69,11 @@ LIBRARY: Dict[str, Engine] = {e.name: e for e in (
             "promo": "promo"}, omit_zero=("children",), taps_after=11, taps_page=15),
     Engine("Cloudbeds", "hotel", "documented", "Cloudbeds Booking Engine Immersive Experience 2.0 (help centre)",
            {"checkin": "checkin", "checkout": "checkout", "adults": "adults", "children": "kids", "promo": "promo"},
-           taps_after=11, taps_page=15),
+           taps_after=11, taps_page=15, verified="the founder, 5 Oct 2026: Fuse Old Town (Hoi An) link opened once — filled (via the Sasha tab's engine_check)"),
     Engine("SiteMinder", "hotel", "seen_in_links", "direct-book / book-directonline links published by hotels",
            {"checkin": "checkInDate", "checkout": "checkOutDate", "adults": "items[0][adults]",
-            "children": "items[0][children]"}, fixed=(("items[0][infants]", "0"),), taps_after=11, taps_page=15),
+            "children": "items[0][children]"}, fixed=(("items[0][infants]", "0"),), taps_after=11, taps_page=15,
+           verified="the founder, 5 Oct 2026: ÊMM Hotel (Hoi An) link opened once — filled (via the Sasha tab's engine_check)"),
     Engine("WebHotelier", "hotel", "documented", "docs.webhotelier.net/integration-site-availability",
            {"checkin": "checkin", "checkout": "checkout", "adults": "adults", "children": "children", "rooms": "rooms"},
            taps_after=11, taps_page=15),
@@ -78,10 +83,11 @@ LIBRARY: Dict[str, Engine] = {e.name: e for e in (
     Engine("Guestcentric", "hotel", "documented", "blog.guestcentric.com custom booking-engine URL (2012); venues' pages over "
            "https (e.g. www.smallportuguesehotels.com/en/property-details/…, read 5 Oct 2026: 200, its widget uses startDay/nrNights)",
            {"checkin": "startDay", "nights": "nrNights", "rooms": "amount", "adults": "nrAdults", "children": "nrChildren"},
-           taps_after=11, taps_page=15),
+           taps_after=11, taps_page=15,
+           not_filled="the founder, 5 Oct 2026: Emporium Lisbon Suites (https link) opened — not filled; the http link was blocked"),
     Engine("Omnibees", "hotel", "seen_in_links", "book.omnibees.com links published for Lisbon hotels",
            {"checkin": "CheckIn", "checkout": "CheckOut", "rooms": "NRooms", "adults": "ad", "children": "ch"},
-           date_fmt="%d%m%Y", taps_after=11, taps_page=15),
+           date_fmt="%d%m%Y", taps_after=11, taps_page=15, verified="the founder, 5 Oct 2026: Masa Hotel Campo Grande (Lisbon) link opened once — filled (via the Sasha tab's engine_check)"),
     Engine("Simple Booking", "hotel", "seen_in_links", "simplebooking.it ibe2 links published by hotels",
            {"checkin": "in", "checkout": "out", "promo": "coupon"}, taps_after=12, taps_page=15),
     Engine("Little Hotelier", "hotel", "none", "help centre: only promocode and room_type", {"promo": "promocode"},
@@ -111,7 +117,7 @@ def build(engine: str, venue_page: str, **slot) -> Tuple[str, List[str]]:
     children, rooms, promo."""
     venue_page = https(venue_page)
     e = LIBRARY.get(engine)
-    if not e or not e.params:
+    if not e or not e.params or e.not_filled:      # a link the founder saw NOT fill carries nothing: the page as it is
         return venue_page, []
     add: List[Tuple[str, str]] = []
     carried: List[str] = []

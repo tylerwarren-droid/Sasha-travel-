@@ -41,8 +41,8 @@ class Build(unittest.TestCase):
         self.assertEqual(q(url)["kids"], "1")
 
     def test_never_an_http_link(self):
-        url, _ = EL.build("Guestcentric", "http://smallportuguesesnew-hotel.guestcentric.net/en/property-details/x",
-                          checkin=date(2026, 11, 20), nights=2, adults=2)
+        url, _ = EL.build("Cloudbeds", "http://hotels.cloudbeds.com/reservation/x", checkin=date(2026, 11, 20),
+                          checkout=date(2026, 11, 22), adults=2)
         self.assertTrue(url.startswith("https://"))
         self.assertTrue(EL.build("Unknown", "http://venue.example/book")[0].startswith("https://"))
 
@@ -51,8 +51,15 @@ class Build(unittest.TestCase):
         self.assertEqual(EL.build("CoverManager", page, date=date(2026, 11, 20), party=2), (page, []))
         self.assertEqual(EL.build("Unknown", page, party=2), (page, []))
 
-    def test_verified_only_where_the_founder_checked(self):
-        self.assertEqual({n for n, e in EL.LIBRARY.items() if e.verified}, {"TableCheck"})   # 1 of 6 answered (5 Oct)
+    def test_verified_only_where_the_founder_checked(self):   # his six answers, 5 Oct 2026
+        self.assertEqual({n for n, e in EL.LIBRARY.items() if e.verified},
+                         {"TableCheck", "SevenRooms", "Cloudbeds", "SiteMinder", "Omnibees"})
+        self.assertEqual({n for n, e in EL.LIBRARY.items() if e.not_filled}, {"Guestcentric"})
+
+    def test_a_link_that_did_not_fill_carries_nothing(self):
+        page = "https://www.smallportuguesehotels.com/en/property-details/emporium-lisbon-suites"
+        self.assertEqual(EL.build("Guestcentric", page, checkin=date(2026, 11, 20), nights=2, adults=2), (page, []))
+        self.assertEqual(EL.taps_to_book("Guestcentric", [])["taps"], 15)
 
 
 class Taps(unittest.TestCase):

@@ -204,6 +204,21 @@ async def find_venues(request: Request):
         return _refuse(503 if e.rule in ("places_not_configured", "places_unreachable", "places_refused") else 422, e.rule, str(e))
 
 
+@router.post("/venues/gphotos")
+async def venue_google_photos(request: Request):
+    """Sasha 156 · {names: [the cards' Google photo names, ≤ 8], width?} → {photos: {name: a short-lived public URL}}: the
+    fallback picture for a card whose venue's own site names none. The key stays here; nothing is stored."""
+    import asyncio
+    body = await _json(request) or {}
+    names = [n for n in (body.get("names") or []) if isinstance(n, str) and V.PHOTO_NAME.fullmatch(n)][:8]
+    try:
+        width = int(body.get("width") or 480)
+    except (TypeError, ValueError):
+        width = 480
+    uris = await asyncio.gather(*(V.google_photo_uri(HTTP, n, width) for n in names))
+    return {"photos": {n: u for n, u in zip(names, uris) if u}}
+
+
 STYLER = None   # S-68 step 9 · tests inject one; None is the model (style.anthropic_styler)
 
 

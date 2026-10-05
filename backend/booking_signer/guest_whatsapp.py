@@ -1358,6 +1358,39 @@ def photo_wait() -> float:
 
 
 async def _photo_of(c: dict) -> Tuple[str, Optional[str]]:
+    """The venue's OWN picture first; Sasha 156: else its Google listing's photo (never cached — Google's URL is short-lived)."""
+    from . import ladder_routes as LR, venue_read as V
+    gname = (c.get("gphoto") or {}).get("name")
+    if not c.get("website"):
+        return c["place_id"], (await V.google_photo_uri(LR.HTTP, gname) if gname else None)
+    if not gname:
+        return await _own_photo_of(c)
+    own = asyncio.ensure_future(_own_photo_of(c))
+    goog = asyncio.ensure_future(V.google_photo_uri(LR.HTTP, gname))
+    try:   # their own picture wins when it comes in time (a warm cache: at once); else Google's, never a wait for both
+        _pid, img = await asyncio.wait_for(asyncio.shield(own), own_photo_wait())
+        if img:
+            goog.cancel()
+            return c["place_id"], img
+    except asyncio.TimeoutError:
+        pass
+    except Exception:
+        pass
+    g = await goog
+    if g:
+        return c["place_id"], g
+    _pid, img = await own
+    return c["place_id"], img
+
+
+def own_photo_wait() -> float:
+    try:
+        return float(os.getenv("SASHA_OWN_PHOTO_WAIT_S", "") or 0.8)
+    except ValueError:
+        return 0.8
+
+
+async def _own_photo_of(c: dict) -> Tuple[str, Optional[str]]:
     from . import ladder_routes as LR, style as ST
     site = c.get("website")
     hit = PHOTO_CACHE.get(site)
@@ -1376,7 +1409,7 @@ async def _photo_of(c: dict) -> Tuple[str, Optional[str]]:
 async def _photos(account: str, what: str, shown: List[dict]) -> Dict[str, str]:
     """The venue's OWN share picture from its own site (og:image, robots first — style.page_text), never a Google one.
     Read WITHOUT the style summary: that is a model call, and on WhatsApp the model is never called. In parallel, cached."""
-    got = await asyncio.gather(*(_photo_of(c) for c in shown if c.get("website")))
+    got = await asyncio.gather(*(_photo_of(c) for c in shown if c.get("website") or c.get("gphoto")))
     return {pid: url for pid, url in got if url}
 
 
@@ -1404,7 +1437,7 @@ async def _stream_cards(ctx: dict, f: dict, shown: List[dict], cands: dict, rank
     out, ch, frm = ctx["out"], ctx["ch"], ctx["frm"]
     last = (ctx.get("st") or {}).get("last_inbound_at")
     started = asyncio.get_running_loop().time()
-    tasks = {c["place_id"]: asyncio.ensure_future(_photo_of(c)) for c in shown if c.get("website")}
+    tasks = {c["place_id"]: asyncio.ensure_future(_photo_of(c)) for c in shown if c.get("website") or c.get("gphoto")}
     if ctx.get("third_card"):
         shown = shown[:2] + [ctx["third_card"]]
     elif rehearsal(account) and not ctx.get("no_test_card"):
@@ -1438,7 +1471,7 @@ async def _stream_cards(ctx: dict, f: dict, shown: List[dict], cands: dict, rank
 
 async def _photos_within(shown: List[dict], budget: float) -> Tuple[Dict[str, str], List[asyncio.Task]]:
     """Sasha 140 · the photos ready within `budget` seconds (all of them on a warm cache), and the fetches still running."""
-    tasks = [asyncio.ensure_future(_photo_of(c)) for c in shown if c.get("website")]
+    tasks = [asyncio.ensure_future(_photo_of(c)) for c in shown if c.get("website") or c.get("gphoto")]
     if not tasks:
         return {}, []
     done, pending = await asyncio.wait(tasks, timeout=budget)

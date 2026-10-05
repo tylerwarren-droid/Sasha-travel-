@@ -53,10 +53,19 @@ async def web_turn(message: str, user_id: Optional[str], now: datetime) -> Optio
     hotels = [{"name": c["name"], "city": city, "nights": nights, "checkin": stay["a"], "party": party,
                "address": c.get("address"), "rating": c.get("rating"), "rating_count": c.get("rating_count"),   # Google's 1–5, as its listing says
                "book_url": c.get("listing_url"), "source": "google",
-               **({"photo": photos[c["place_id"]], "photo_source": c.get("website")} if photos.get(c.get("place_id")) else {})}
+               **({"photo": photos[c["place_id"]], "photo_source": c.get("website"),
+                   **({"photo_google": True, "photo_source": c.get("listing_url"), "photo_by": (c.get("gphoto") or {}).get("by") or []}
+                      if _is_google(photos[c["place_id"]]) else {})} if photos.get(c.get("place_id")) else {})}
               for c in shown]
     return _answer(f"{head}, from Google Maps. On each: “Reserve (TEST)” makes a TEST booking (no hotel contacted, "
                    f"nothing charged); “View” opens its Google listing.", hotels)
+
+
+def _is_google(url: str) -> bool:
+    """Sasha 156 · Google's listing photo (the fallback), credited as Google's — never as the hotel's own."""
+    from urllib.parse import urlsplit
+    h = (urlsplit(url or "").hostname or "").lower()
+    return h.endswith(".googleusercontent.com") or h.endswith("googleapis.com")
 
 
 def _answer(text: str, hotels: List[dict]) -> dict:

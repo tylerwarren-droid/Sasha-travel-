@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import json
+import logging
 import os
 import re
 import socket
@@ -29,6 +30,8 @@ from html.parser import HTMLParser
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
+
+log = logging.getLogger("booking_signer.venue_read")
 
 USER_AGENT = "SashaConcierge/1.0 (+https://project.kanoe.ai; reads a venue's published contact details)"
 MAX_BYTES = 2_000_000
@@ -410,7 +413,10 @@ FIND_FIELDS = ("places.id,places.displayName,places.formattedAddress,places.inte
                "places.websiteUri,places.addressComponents,places.primaryTypeDisplayName,places.businessStatus,"
                # S-68 step 2 · what the ranking reads. The Enterprise SKU, which phone and website already reach
                # (docs/sasha/S-68-step1-places-terms.md): the cost of a search does not change
-               "places.rating,places.userRatingCount,places.priceLevel,places.location,places.regularOpeningHours")
+               "places.rating,places.userRatingCount,places.priceLevel,places.location,places.regularOpeningHours,"
+               # Sasha 156 · the listing's first photo's NAME (Pro-tier field, inside the Enterprise SKU already paid):
+               # the card's fallback picture when the venue's own site names none — resolved per shown card (google_photos)
+               "places.photos")
 #: S-68 · search wider, show fewer: 20 is Text Search's cap; the chat shows 3–5 of them
 FIND_MAX = 20
 SHOW_MAX = 5
@@ -626,7 +632,8 @@ async def find_venues(http: Http, *, what: str, where: str, country: Optional[st
         out.append({"place_id": pl["id"], "name": (pl.get("displayName") or {}).get("text"), "address": pl.get("formattedAddress"),
                     "country": c, "phone": (to_e164(raw, c) if raw else None) or raw, "website": pl.get("websiteUri"),
                     "type": (pl.get("primaryTypeDisplayName") or {}).get("text"), "status": pl.get("businessStatus"),
-                    "listing_url": f"https://www.google.com/maps/place/?q=place_id:{pl['id']}", **_ranking_facts(pl)})
+                    "listing_url": f"https://www.google.com/maps/place/?q=place_id:{pl['id']}", **_ranking_facts(pl),
+                    **({"gphoto": g} if (g := _gphoto(pl)) else {})})
         out[-1]["books"] = how_she_books(out[-1])   # S-68 step 5
     if when is not None:
         from .hours import from_places_periods, open_at as _open_at
@@ -649,6 +656,36 @@ async def find_venues(http: Http, *, what: str, where: str, country: Optional[st
             **({"open_at": when.strftime("%Y-%m-%dT%H:%M")} if when is not None else {}),
             "source": {"url": PLACES_URL, "query": body["textQuery"], "result": f"HTTP 200 — {len(out)} listing(s)",
                        "sha256": sha, "fetched_at": now.isoformat()}}
+
+
+# ── Sasha 156 · Google Places photos: the fallback picture where the venue's own (og:image) is missing ──────────────
+
+PHOTO_NAME = re.compile(r"places/[A-Za-z0-9_-]{10,}/photos/[A-Za-z0-9_-]{10,}")
+
+
+def _gphoto(pl: dict) -> Optional[dict]:
+    """The listing's first photo: its resource name and who took it (Google's terms: the author is shown with it)."""
+    ph = (pl.get("photos") or [None])[0]
+    if not isinstance(ph, dict) or not PHOTO_NAME.fullmatch(str(ph.get("name") or "")):
+        return None
+    by = [a.get("displayName") for a in ph.get("authorAttributions") or [] if isinstance(a, dict) and a.get("displayName")]
+    return {"name": ph["name"], "by": by[:2]}
+
+
+async def google_photo_uri(http: Http, name: str, width: int = 480) -> Optional[str]:
+    """The photo's short-lived public URL (googleusercontent) — the key never leaves the server; nothing is stored."""
+    key = places_key()
+    if not key or not PHOTO_NAME.fullmatch(name or ""):
+        return None
+    url = f"https://places.googleapis.com/v1/{name}/media?maxWidthPx={max(100, min(int(width), 1200))}&skipHttpRedirect=true"
+    try:
+        r = await http("GET", url, headers={"X-Goog-Api-Key": key})
+        j = r.json() if r.status_code == 200 else {}
+    except Exception as e:
+        log.info("[venue_read] google photo not resolved: %s", type(e).__name__)
+        return None
+    uri = (j or {}).get("photoUri")
+    return uri if isinstance(uri, str) and uri.startswith("https://") else None
 
 
 async def read_venue(http: Http, *, name: str, city: str, country: Optional[str], website: Optional[str],

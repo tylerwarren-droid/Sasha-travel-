@@ -191,7 +191,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
   // Actionable booking surfaces for the latest turn.
   const [bookingLinks, setBookingLinks] = useState<{ label: string; url: string; type: string }[]>([])
   const [hotels, setHotels] = useState<{ name: string; stars?: number; price_from?: number; blurb?: string; city: string; book_url: string; rating?: number; reviews?: number; tag?: string; offer_id?: string; amount_usd?: number; nights?: number;
-    source?: 'google'; address?: string; rating_count?: number; checkin?: string; party?: number; photo?: string; photo_source?: string }[]>([])   // Sasha 143 · a Google-found stay: no price, said so
+    source?: 'google'; address?: string; rating_count?: number; checkin?: string; party?: number; photo?: string; photo_source?: string; photo_google?: boolean; photo_by?: string[] }[]>([])   // Sasha 143 · a Google-found stay: no price, said so
   const [badHotelPhoto, setBadHotelPhoto] = useState<Record<string, true>>({})   // Sasha 155 · a picture that fails is simply not shown
   // Typed booking cards (flights, airport transfers, activities, restaurants) surfaced this
   // turn — real options from live web search. Hotel/flight/cab options carry a server-priced
@@ -846,10 +846,10 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
                         {h.photo && !badHotelPhoto[h.photo] ? (
                           <a href={h.photo_source || h.book_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', margin: '2px 0 6px' }}>
                             {/* eslint-disable-next-line @next/next/no-img-element -- shown from the hotel's own host; never fetched or stored by us */}
-                            <img src={h.photo} alt={`${h.name} — from their website`} loading="lazy" referrerPolicy="no-referrer"
+                            <img src={h.photo} alt={`${h.name} — ${h.photo_google ? 'Google Maps photo' : 'from their website'}`} loading="lazy" referrerPolicy="no-referrer"
                               onError={() => setBadHotelPhoto(m => ({ ...m, [h.photo!]: true }))}
                               style={{ width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
-                            <span style={{ fontSize: 11, opacity: 0.65 }}>Photo: their website ↗</span>
+                            <span style={{ fontSize: 11, opacity: 0.65 }}>{h.photo_google ? `Photo: Google Maps${h.photo_by?.length ? ` · ${h.photo_by.join(', ')}` : ''} ↗` : 'Photo: their website ↗'}</span>
                           </a>
                         ) : null}
                         <div className="o1">{h.name}</div>

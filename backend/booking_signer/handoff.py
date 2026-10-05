@@ -373,9 +373,10 @@ def cancel_request(message: str) -> Optional[dict]:
 
 
 #: Sasha 140 · a bare "<kind of place> in <place>" is a search (never the model's): the kinds Sasha finds and books
-_BARE_KIND = re.compile(r"^\s*(?:an?\s+|some\s+)?(?:[a-záéíóúñ]+\s+){0,2}(?:spa|massage|tattoo(?:\s+(?:studio|parlou?r|shop))?|"
-                        r"(?:hair|nail|beauty)\s+salon|hairdresser|barber(?:shop)?|gym|yoga(?:\s+studio)?|pilates|restaurant|dinner|lunch|"
-                        r"brunch|bar|caf[eé]|wine\s+bar|sushi|tapas)\s+(?:in|near|around)\s+[A-ZÁÉÍÓÚa-z]", re.I)
+_BARE_KIND = re.compile(r"^\s*(?:an?\s+|some\s+|the\s+)?(?:(?:best|good|great|top)\s+)?(?:[a-záéíóúñ]+\s+){0,2}(?:spas?|massages?|tattoo(?:\s+(?:studios?|parlou?rs?|shops?))?|"
+                        r"(?:hair|nail|beauty)\s+salons?|hairdressers?|barber(?:shop)?s?|gyms?|yoga(?:\s+studios?)?|pilates|restaurants?|dinner|lunch|"
+                        r"brunch|bars?|caf[eé]s?|wine\s+bars?|sushi|tapas|places\s+to\s+eat)\s+(?:in|near|around)\s+[A-ZÁÉÍÓÚa-z]", re.I)
+# Sasha 156 · plurals too: "restaurants in Madrid tonight" fell through to the model's curated (Vietnam) dining list
 
 
 def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Optional[datetime] = None) -> Optional[dict]:

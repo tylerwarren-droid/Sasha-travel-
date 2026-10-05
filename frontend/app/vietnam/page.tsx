@@ -194,6 +194,10 @@ export default function VietnamPage() {
     setUnseenTabs(u => u.filter(t => t !== tab))
   }, [])
   const [started, setStarted] = useState(false)
+  // Sasha 156 · a plain TEXT chat that needs no call: typing opens the conversation without the avatar, the mic or the
+  // camera (the call stays one tap away, as before)
+  const [textOnly, setTextOnly] = useState(false)
+  const [draft, setDraft] = useState('')
   const [richItinerary, setRichItinerary] = useState<RichItinerary | null>(null)
   // Ideas held at page level so they survive IdeasPanel unmounting on every tab switch.
   const [ideasCache, setIdeasCache] = useState<Idea[] | null>(null)
@@ -810,7 +814,7 @@ export default function VietnamPage() {
       if (on) setRichItinerary(PREVIEW_PLAN)   // layout QA only — never reached without the flag
     } catch {}
   }, [])
-  const stageLive = started || uiPreview
+  const stageLive = started || uiPreview || textOnly
   const avatarPip = stageLive && rightTab !== 'chat'
   const measureAvatar = useCallback(() => {
     const el = stageRef.current
@@ -836,6 +840,13 @@ export default function VietnamPage() {
   // A destination chip tapped BEFORE the call starts: remember it and send it once the
   // session is up, so "Plan a 7 day trip" from the welcome screen becomes the first turn.
   const pendingOpenerRef = useRef<string | null>(null)
+  useEffect(() => {
+    // Sasha 156 · text mode: the typed line is the first turn as soon as the chat is up (no call to wait for)
+    if (textOnly && !started && pendingOpenerRef.current && sendChatRef.current) {
+      const t = pendingOpenerRef.current; pendingOpenerRef.current = null
+      sendChatRef.current(t)
+    }
+  })
   useEffect(() => {
     if (started && voiceReady && pendingOpenerRef.current && sendChatRef.current) {
       const t = pendingOpenerRef.current; pendingOpenerRef.current = null
@@ -1013,11 +1024,20 @@ export default function VietnamPage() {
               </div>
               {verifying && <div className="text-center text-sm" style={{ color: '#DAA520', marginTop: 10 }}>Confirming your payment…</div>}
             </div>
-            <div className="mt-fakecomposer" onClick={() => startWith()} role="button" aria-label="Start your call with Sasha">
-              <span className="mic"><Mic size={16} strokeWidth={2} /></span>
-              <span className="in">Tap to start, then just talk or type…</span>
-              <span className="go"><Send size={15} strokeWidth={2} /></span>
-            </div>
+            {/* Sasha 156 · a real text box: typing needs no call, no mic and no camera; the mic opens the call */}
+            <form className="mt-fakecomposer" onSubmit={e => {
+              e.preventDefault()
+              const t = draft.trim()
+              if (!t || verifying || booked || itemBooked) return
+              pendingOpenerRef.current = t
+              setDraft('')
+              setTextOnly(true)
+            }}>
+              <button type="button" className="mic" onClick={() => startWith()} aria-label="Start your call with Sasha" title="Talk to Sasha (starts the call)"><Mic size={16} strokeWidth={2} /></button>
+              <input className="in" value={draft} onChange={e => setDraft(e.target.value)} placeholder="Type to Sasha — no call needed…"
+                aria-label="Message Sasha" style={{ flex: 1, background: 'transparent', border: 0, outline: 'none', color: 'inherit', font: 'inherit' }} />
+              <button type="submit" className="go" aria-label="Send"><Send size={15} strokeWidth={2} /></button>
+            </form>
           </div>
         )}
       </aside>
@@ -1473,6 +1493,7 @@ export default function VietnamPage() {
         .mt-fakecomposer{flex-shrink:0;margin:0;padding:12px 14px;border-top:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.2);display:flex;align-items:center;gap:9px;cursor:pointer}
         .mt-fakecomposer .mic{width:40px;height:40px;border-radius:50%;background:#4f46e5;display:grid;place-items:center;color:#fff;flex-shrink:0}
         .mt-fakecomposer .in{flex:1;font-size:13.5px;color:rgba(255,255,255,.3)}
+        .mt-fakecomposer .in{color:#fff}.mt-fakecomposer .in::placeholder{color:rgba(255,255,255,.4)}.mt-fakecomposer button{border:0;cursor:pointer}.mt-fakecomposer{cursor:text}
         .mt-fakecomposer .go{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#DAA520,#B8860B);display:grid;place-items:center;color:#fff;flex-shrink:0}
         /* The avatar element itself. Hero ↔ PiP is a pure geometry transition. */
         .mt-avatar{position:fixed;z-index:40;overflow:hidden;border-radius:22px;border:1px solid rgba(255,255,255,.07);background:linear-gradient(160deg,#12101b,#0a0a12);color:#fff;box-shadow:0 30px 80px -30px rgba(0,0,0,.8);transition:top .5s cubic-bezier(.2,.8,.2,1),left .5s cubic-bezier(.2,.8,.2,1),width .5s cubic-bezier(.2,.8,.2,1),height .5s cubic-bezier(.2,.8,.2,1),border-radius .5s,opacity .3s}

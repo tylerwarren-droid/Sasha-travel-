@@ -17,7 +17,7 @@
  *            When it cannot, the server's reason is shown and the booking page is the way on.
  */
 import { useEffect, useRef, useState } from 'react'
-import { findVenues, readVenue, refusal, styleVenues, type Candidate, type Ranking, type Rung, type Style } from '@/lib/booking-client'
+import { bookingReq, findVenues, readVenue, refusal, styleVenues, type Candidate, type Ranking, type Rung, type Style } from '@/lib/booking-client'
 import { setChatBookingHandler, takeTypedYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 import { ChatBookingForm } from './ChatBookingForm'
@@ -64,6 +64,8 @@ export default function ChatBooking({ find }: { find: Find }) {
   const [contacted, setContacted] = useState<'calling' | 'scheduled' | null>(null)
   // Sasha 88 · a site's picture that fails to load is simply not shown (no broken image, no stand-in)
   const [badPhoto, setBadPhoto] = useState<Record<string, true>>({})
+  // Sasha 156 · Google's photo of the listing, shown while (or where) the venue's own picture isn't there
+  const [gphotos, setGphotos] = useState<Record<string, string>>({})
   // Sasha 95 · the slot link leads when a platform is their booking route; a call only if the guest asks for one
   const [callInstead, setCallInstead] = useState(false)
   // Sasha 100 · the cards arrive after the message the chat scrolled to — bring them (and each next step) into view
@@ -132,6 +134,18 @@ export default function ChatBooking({ find }: { find: Find }) {
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the cards shown change
   }, [shownIds])
+  useEffect(() => {
+    const s = stateRef.current
+    if (s.phase !== 'found') return
+    const names = s.cards.map((c) => c.gphoto?.name).filter((n): n is string => !!n && !(n in gphotos))
+    if (!names.length) return
+    ;(async () => {
+      const r = await bookingReq('/api/booking/venues/gphotos', { names, width: 480 }).catch(() => null)
+      const got = (r?.ok ? (r.json.photos ?? {}) : {}) as Record<string, string>
+      if (Object.keys(got).length) setGphotos((m) => ({ ...m, ...got }))
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the cards shown change
+  }, [shownIds])
 
   async function pick(c: Candidate) {
     const cards = 'cards' in stateRef.current ? stateRef.current.cards : []
@@ -194,7 +208,20 @@ export default function ChatBooking({ find }: { find: Find }) {
                 // Sasha 88 · the venue's own share picture, from its website — linked to the site; none when it has none
                 const st = styles[c.place_id]
                 const ph = st && st !== 'reading' ? st.photo : undefined
-                if (!ph || badPhoto[c.place_id]) return null
+                if (!ph || badPhoto[c.place_id]) {
+                  // Sasha 156 · no picture of their own (yet): the Google listing's photo, credited as Google's terms ask
+                  const g = c.gphoto?.name ? gphotos[c.gphoto.name] : undefined
+                  if (!g || badPhoto[`g:${c.place_id}`]) return null
+                  return (
+                    <a href={c.listing_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', margin: '2px 0 6px' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- Google's short-lived photo URL; never stored by us */}
+                      <img src={g} alt={`${c.name ?? 'This place'} — Google Maps photo`} loading="lazy" referrerPolicy="no-referrer"
+                        onError={() => setBadPhoto((m) => ({ ...m, [`g:${c.place_id}`]: true }))}
+                        style={{ width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
+                      <span style={{ fontSize: 11, opacity: 0.65 }}>Photo: Google Maps{c.gphoto?.by?.length ? ` · ${c.gphoto.by.join(', ')}` : ''} ↗</span>
+                    </a>
+                  )
+                }
                 return (
                   <a href={ph.source} target="_blank" rel="noopener noreferrer" style={{ display: 'block', margin: '2px 0 6px' }}>
                     {/* eslint-disable-next-line @next/next/no-img-element -- shown from the venue's own host; never fetched or stored by us */}

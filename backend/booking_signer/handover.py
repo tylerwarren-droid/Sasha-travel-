@@ -167,10 +167,11 @@ _POINT_JS = """(sel) => {
   b.scrollIntoView({block: 'center', inline: 'center'});
   let m = document.getElementById('kanoe-press');
   if (!m) { m = document.createElement('div'); m.id = 'kanoe-press'; document.body.appendChild(m); }
-  m.textContent = 'Press here \u2193';
-  const r = b.getBoundingClientRect(), w = 112;
+  const r = b.getBoundingClientRect(), w = 112, below = r.bottom + 46 < innerHeight;
+  m.textContent = below ? '\u2191 Press here' : 'Press here \u2193';
   const x = Math.min(Math.max(r.left + r.width / 2, w / 2 + 6), document.documentElement.clientWidth - w / 2 - 6);
-  m.style.cssText = `position:absolute;left:${x + scrollX}px;top:${r.top + scrollY - 40}px;width:${w}px;transform:translateX(-50%);`
+  const y = below ? r.bottom + scrollY + 10 : r.top + scrollY - 40;
+  m.style.cssText = `position:absolute;left:${x + scrollX}px;top:${y}px;width:${w}px;transform:translateX(-50%);`
     + 'pointer-events:none;z-index:2147483647;background:#22c55e;color:#04210f;font:600 14px/1 -apple-system,system-ui,sans-serif;'
     + 'text-align:center;padding:8px 0;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.25);animation:kanoeBob 1.4s ease-in-out infinite';
   return (b.tagName === 'BUTTON' ? b.innerText : b.value || '').trim();
@@ -526,7 +527,7 @@ async def _release(rec: dict) -> None:
 
 
 def _public(rec: dict, ops_view: bool = False) -> dict:
-    keep = ("id", "venue", "host", "state", "test", "read_only", "steps", "filled", "book_label", "ready_ms", "timings_ms", "taps", "tapped",
+    keep = ("id", "venue", "host", "state", "test", "read_only", "steps", "filled", "book_label", "ready_ms", "timings_ms", "fitted", "taps", "tapped",
             "press_to_answer_ms", "open_to_booked_s", "reference", "say", "reading", "created_at", "opened_at", "pressed_at",
             "answered_at", "return_to", "screenshot_sha256")
     out = {k: rec.get(k) for k in keep if k in rec}
@@ -717,11 +718,11 @@ _VIEW = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 .foot{padding:8px 16px calc(10px + env(safe-area-inset-bottom));font-size:12px;color:var(--muted);text-align:center}
 .foot a{color:var(--muted)}
 .center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
-.tick{width:84px;height:84px;border-radius:50%;background:rgba(34,197,94,.12);display:flex;align-items:center;justify-content:center;
+.tick{width:84px;height:84px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 10px rgba(34,197,94,.14);display:flex;align-items:center;justify-content:center;
  margin-bottom:18px;animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
-.tick svg{width:46px;height:46px}.tick path{stroke:var(--ok);stroke-width:6;fill:none;stroke-linecap:round;stroke-linejoin:round;
- stroke-dasharray:60;stroke-dashoffset:60;animation:draw .5s .25s forwards}
-@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}@keyframes draw{to{stroke-dashoffset:0}}
+.tick svg{width:46px;height:46px}.tick path{stroke:var(--ink);stroke-width:6;fill:none;stroke-linecap:round;stroke-linejoin:round;
+ stroke-dasharray:60;stroke-dashoffset:0;animation:draw .5s ease-out}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}@keyframes draw{from{stroke-dashoffset:60}to{stroke-dashoffset:0}}
 .center h2{margin:0 0 6px;font-size:26px;font-weight:700}.center .v{font-size:17px;font-weight:600;margin:0}
 .center .w{color:var(--muted);margin:4px 0 14px}.ref{font:600 14px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;
  padding:8px 14px;border-radius:10px;background:var(--panel);border:1px solid var(--line);color:var(--gold2)}

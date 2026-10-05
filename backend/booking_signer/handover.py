@@ -85,10 +85,9 @@ def status() -> dict:
 
 class Browserbase:
     async def _call(self, method: str, path: str, json: Optional[dict] = None) -> dict:
-        import httpx
+        from .http_pool import request   # Sasha 149 · one kept-alive client per loop
         key = os.getenv("BROWSERBASE_API_KEY", "").strip()
-        async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as c:
-            r = await c.request(method, f"{API}{path}", json=json, headers={"X-BB-API-Key": key})
+        r = await request(method, f"{API}{path}", timeout=20.0, json=json, headers={"X-BB-API-Key": key})
         if r.status_code >= 400:
             raise Refused("cloud_browser_unavailable", f"the cloud browser answered HTTP {r.status_code}; nothing was filled")
         return r.json() if r.content else {}

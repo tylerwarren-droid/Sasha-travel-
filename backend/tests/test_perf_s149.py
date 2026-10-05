@@ -61,7 +61,8 @@ class StreamedCards(TG.Base):
             return {"image": url + "/og.jpg"}
         cands = [{**c, "website": f"https://site{i}.example"} for i, c in enumerate(TG.CANDS)]
         with mock.patch.object(ST, "page_text", page_text), mock.patch.object(TG, "CANDS", cands), \
-                mock.patch.dict(os.environ, {"SASHA_PHOTO_WAIT_S": "0.4", "SASHA_STREAM_CARDS": "1"}):
+                mock.patch.dict(os.environ, {"SASHA_PHOTO_WAIT_S": "0.4", "SASHA_STREAM_CARDS": "1",
+                                             "SASHA_REAL_CONTACT_ACCOUNTS": TG.ACCOUNT}):   # three Google cards, no test card
             t0 = time.perf_counter()
             self.say("dinner for 2 in Chamberí on Saturday at 9")
             took = time.perf_counter() - t0

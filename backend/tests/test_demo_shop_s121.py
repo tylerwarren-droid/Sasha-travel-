@@ -117,7 +117,10 @@ class RehearsalCard(unittest.TestCase):
             got = LR._with_rehearsal(founder, out)
             self.assertEqual(got["ranking"]["orders"]["rated"], ["a", "b", "sasha-test-venue", "c"])
             self.assertIn("ours — rehearsal, not a real restaurant", got["candidates"][-1]["name"])
-            self.assertEqual(LR._with_rehearsal(guest, out), out)                       # never a guest's
+            # Sasha 153 · a guest can't contact real venues, so OUR test venue is always their bookable card
+            self.assertIn("sasha-test-venue", LR._with_rehearsal(guest, out)["ranking"]["orders"]["rated"])
+        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "1", "FOUNDER_ACCOUNT_ID": "", "SASHA_REAL_CONTACT_ACCOUNTS": guest}):
+            self.assertEqual(LR._with_rehearsal(guest, out), out)                       # an account allowed real venues: none
         with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "", "FOUNDER_ACCOUNT_ID": ""}):
             self.assertEqual(LR._with_rehearsal(founder, out), out)                     # off unless rehearsing
 

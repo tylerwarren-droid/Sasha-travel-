@@ -564,6 +564,8 @@ from . import route_costs as _route_costs  # noqa: E402
 router.include_router(_route_costs.router)   # Sasha 131 · /api/booking/ops/route-costs (founder only)
 from . import ops_log as _ops_log  # noqa: E402
 router.include_router(_ops_log.router)   # Sasha 144 · /api/booking/ops/log, /ops/calls/test, /ops/calls/import-bland (founder only)
+from . import perf_ops as _perf_ops  # noqa: E402
+router.include_router(_perf_ops.router)   # Sasha 149 · /api/booking/ops/perf (founder only): timings measured on the server
 from . import demo_spa as _demo_spa  # noqa: E402
 router.include_router(_demo_spa.router)   # Sasha 126 (3) · Kanoe Demo Spa (ours; books nothing real)
 router.include_router(_demo_spa.ops)

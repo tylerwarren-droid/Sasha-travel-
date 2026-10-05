@@ -191,7 +191,8 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
   // Actionable booking surfaces for the latest turn.
   const [bookingLinks, setBookingLinks] = useState<{ label: string; url: string; type: string }[]>([])
   const [hotels, setHotels] = useState<{ name: string; stars?: number; price_from?: number; blurb?: string; city: string; book_url: string; rating?: number; reviews?: number; tag?: string; offer_id?: string; amount_usd?: number; nights?: number;
-    source?: 'google'; address?: string; rating_count?: number; checkin?: string; party?: number }[]>([])   // Sasha 143 · a Google-found stay: no price, said so
+    source?: 'google'; address?: string; rating_count?: number; checkin?: string; party?: number; photo?: string; photo_source?: string }[]>([])   // Sasha 143 · a Google-found stay: no price, said so
+  const [badHotelPhoto, setBadHotelPhoto] = useState<Record<string, true>>({})   // Sasha 155 · a picture that fails is simply not shown
   // Typed booking cards (flights, airport transfers, activities, restaurants) surfaced this
   // turn — real options from live web search. Hotel/flight/cab options carry a server-priced
   // `offer_id` (+ amount_usd) so they can be booked & paid through Stripe like the whole trip;
@@ -841,6 +842,16 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
                     <div className="lw-opt" key={i}>
                       <span className="logo">🏨</span>
                       <div className="od">
+                        {/* Sasha 155 · the hotel's own share picture from its own site (none rather than a stand-in) */}
+                        {h.photo && !badHotelPhoto[h.photo] ? (
+                          <a href={h.photo_source || h.book_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', margin: '2px 0 6px' }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element -- shown from the hotel's own host; never fetched or stored by us */}
+                            <img src={h.photo} alt={`${h.name} — from their website`} loading="lazy" referrerPolicy="no-referrer"
+                              onError={() => setBadHotelPhoto(m => ({ ...m, [h.photo!]: true }))}
+                              style={{ width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
+                            <span style={{ fontSize: 11, opacity: 0.65 }}>Photo: their website ↗</span>
+                          </a>
+                        ) : null}
                         <div className="o1">{h.name}</div>
                         {h.source === 'google' ? (
                           /* Sasha 143 · what its Google listing says — no price is shown, because none is known */

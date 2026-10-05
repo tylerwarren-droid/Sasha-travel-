@@ -160,4 +160,45 @@ async def status(request: Request):
     return {"ok": True, "status": "booked", **_BOOKED[sid]}
 
 
+# ── Sasha 155 · the hotel's own page, live: a hand-over on OUR test hotel after the TEST payment ──────────────────────
+
+HANDOVER_SAY = ("The hotel's own booking page, live: this step is rehearsed on Kanoe Test Hotel — our own test page, not {hotel}'s "
+                "site — with a fictional guest. Everything is filled; you tick the terms box and press “Reservar habitación”.")
+
+
+@router.post("/hotel/handover")
+async def handover(request: Request):
+    """After the TEST payment only (one per paid session): our test hotel's page, filled with the stay's dates and a fictional
+    guest, handed over live — the guest ticks the terms box and presses (handover.py, CR's). → {view_url, taps_left, say}."""
+    from . import form_rung as FR, handover as H
+    body = await request.json()
+    sid = str((body or {}).get("session_id") or "")
+    done = _BOOKED.get(sid)
+    if done is None:
+        return _refuse(409, "hotel_not_paid", "the TEST payment isn't confirmed yet, so there's nothing to finish on the hotel's page")
+    r = _req(body)
+    if r is None:
+        return _refuse(422, "hotel_malformed", "send the same hotel details and the session_id")
+    if done.get("handover"):
+        return {"ok": True, **done["handover"]}
+    url = FR.test_venue_url("hotel")
+    m = FR.form_map(url)
+    vals = {**H.FICTIONAL, "party_size": str(r["party"]), "date": r["checkin"], "time": "15:00",
+            "free_text": f"{r['nights']} noche{'s' if r['nights'] != 1 else ''} · prueba de Kanoe (ficticia)."}
+    step1 = [{"name": n, "value": vals[role], "label": lbl} for n, (role, lbl) in m["fields"].items() if role in vals]
+    o = {"what": {"activity": "room", "activity_venue_lang": "habitación", "category": "other"},
+         "when": {"mode": "at", "at": f"{r['checkin']}T15:00"}, "how_many": {"count": r["party"], "unit": "people"},
+         "who": {"name": H.FICTIONAL["person_name"]}}
+    from .account import account_for
+    try:
+        rec = await H.open_handover(page_url=url, m=m, step1=step1, step2=[], venue="Kanoe Test Hotel", account=account_for(request),
+                                    form_id=None, read_only=False, request=o, fictional=True)
+    except H.Refused as e:
+        return _refuse(422, e.rule, e.say)
+    out = {"handover_id": rec["id"], "view_url": H.view_url(rec), "taps_left": rec.get("taps_left") or 1,
+           "say": HANDOVER_SAY.format(hotel=r["hotel"]), "ready_ms": rec.get("ready_ms")}
+    done["handover"] = out
+    return {"ok": True, **out}
+
+
 __all__ = ["quote", "LABEL", "MARK", "is_test", "new_ref", "RECORD", "router", "provider", "tz_of"]

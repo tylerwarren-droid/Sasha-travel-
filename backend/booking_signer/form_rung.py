@@ -46,7 +46,7 @@ router = APIRouter(tags=["booking-form-rung"])
 APPROVAL_WINDOW = timedelta(minutes=15)
 NOW = lambda: datetime.now(timezone.utc)
 RESPONSE_CHARS = 4000
-TEST_VARIANTS = ("plain", "consent", "captcha", "wizard")
+TEST_VARIANTS = ("plain", "consent", "captcha", "wizard", "hotel")   # Sasha 155 · "hotel": our test hotel (the same fields)
 
 
 def public_base() -> str:
@@ -531,8 +531,12 @@ async def prepare(request: Request):
     fields = roles_for(live, m)
     wizard = is_wizard(fields, m)
     step2 = step_two_fields(m) if wizard else []
+    # Sasha 155 · for the live HAND-OVER on OUR test venue only: a required terms box is left for the guest to tick in the
+    # embedded view (CR's bf4ee35), so it isn't Sasha's to fill. send() still refuses such a form: a yes never posts it.
+    boxes = [f for f in fields if f["role"] == "consent" and f.get("required")] if (m["test"] and body.get("handover")) else []
     try:
-        filled = FF.fill(o, [f for f in fields if f["role"] not in ("hidden", "fixed")], date_fmt=m["date_fmt"], time_fmt=m["time_fmt"])
+        filled = FF.fill(o, [f for f in fields if f["role"] not in ("hidden", "fixed") and f not in boxes],
+                         date_fmt=m["date_fmt"], time_fmt=m["time_fmt"])
         filled2 = FF.fill(o, step2, date_fmt=m["date_fmt"], time_fmt=m["time_fmt"]) if wizard else []
         filled, filled2 = venue_formats(filled, fields, m), venue_formats(filled2, step2, m)
     except FF.Stop as e:
@@ -575,6 +579,7 @@ async def prepare(request: Request):
              else read_back(live["page_url"], live["action"], shown, hidden, read["name"]))
     if loyalty:
         lines = lines[:1] + [loyalty["line"]] + lines[1:]
+    lines += [f"· the box “{b.get('label') or b['name']}” is left for you to tick, then you press their button" for b in boxes]
     now = NOW()
     form_id = str(uuid.uuid4())
     rec = {"form_id": form_id, "account_id": account, "read_id": str(row["read_id"]), "host": urlsplit(live["page_url"]).hostname,
@@ -812,6 +817,25 @@ _PAGE = """<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Sas
 {extra}<button type="submit">Reservar</button></form></body></html>"""
 
 
+#: Sasha 155 · OUR test hotel: the same field names as the test venue (so the same map fills it), a hotel's words, and the
+#: terms box a real hotel engine has — left for the guest in the live hand-over. Never a real hotel: the page says so.
+_HOTEL_PAGE = """<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Kanoe Test Hotel — reservas</title>
+<meta property="og:site_name" content="Kanoe Test Hotel"></head><body>
+<h1>Kanoe Test Hotel</h1><p>Hotel de pruebas de Kanoe. No es un hotel real: aquí solo reserva Sasha, para ensayar la reserva de una habitación.</p>
+<form method="post" action="/api/booking/test-venue/hotel">
+<input type="hidden" name="token" value="{token}">
+<label for="fecha">Llegada</label><input id="fecha" name="fecha" type="date" required>
+<label for="hora">Hora de llegada</label><input id="hora" name="hora" type="time" required>
+<label for="personas">Huéspedes</label><input id="personas" name="personas" type="number" min="1" max="10" required>
+<label for="nombre">Nombre</label><input id="nombre" name="nombre" required>
+<label for="email">Email</label><input id="email" name="email" type="email" required>
+<label for="telefono">Teléfono</label><input id="telefono" name="telefono" type="tel" required>
+<label for="comentarios">Noches y peticiones</label><textarea id="comentarios" name="comentarios"></textarea>
+<input name="website_url" style="display:none" tabindex="-1" autocomplete="off">
+<input id="acepto" name="acepto" type="checkbox" required><label for="acepto">Acepto las condiciones de la reserva</label>
+<button type="submit">Reservar habitación</button></form></body></html>"""
+
+
 @router.get("/test-venue/submissions")
 async def test_venue_submissions():
     """The test venue's book (behind the booking key: not exempt)."""
@@ -859,6 +883,8 @@ async def test_venue(variant: str):
         return HTMLResponse("not found", status_code=404)
     if variant == "wizard":
         return HTMLResponse(_WIZARD_ONE.format(token=uuid.uuid4().hex))
+    if variant == "hotel":
+        return HTMLResponse(_HOTEL_PAGE.format(token=uuid.uuid4().hex))
     head = '<script src="https://www.google.com/recaptcha/api.js" async defer></script>' if variant == "captcha" else ""
     extra = {"consent": '<input id="acepto" name="acepto" type="checkbox" required><label for="acepto">Acepto la política de privacidad</label>\n',
              "captcha": '<div class="g-recaptcha" data-sitekey="test-site-key"></div>\n'}.get(variant, "")
@@ -889,7 +915,7 @@ async def _book(variant: str, form: Dict[str, str]) -> HTMLResponse:
     if form.get("website_url"):
         return HTMLResponse("<p>Rechazado.</p>", status_code=400)            # a filled honeypot is a bot
     missing = [k for k in ("fecha", "hora", "personas", "nombre", "email", "telefono") if not form.get(k)]
-    if variant == "consent" and form.get("acepto") != "on":
+    if variant in ("consent", "hotel") and form.get("acepto") != "on":
         missing.append("acepto")
     if missing:
         return HTMLResponse(f"<p>Faltan campos: {escape(', '.join(missing))}.</p>", status_code=422)
@@ -905,6 +931,11 @@ async def _book(variant: str, form: Dict[str, str]) -> HTMLResponse:
     except ValueError:
         cuando = f"{form['fecha']} a las {form['hora']}"
     cancel = f"{public_base()}/api/booking/test-venue/cancel/{ref}"   # Sasha 99 · a cancel link, as real venues send
+    if variant == "hotel":
+        return HTMLResponse(f"<html><body><h1>Reserva confirmada · Kanoe Test Hotel</h1><p>Confirmado: habitación para "
+                            f"{escape(form['personas'])} personas, llegada el {escape(cuando)}, a nombre de {escape(form['nombre'])}."
+                            f"</p><p>{escape(form.get('comentarios', ''))}</p><p>Localizador: {ref}</p><p>Para cancelar: {cancel}</p>"
+                            f"<p>Hotel de pruebas de Kanoe: no es un hotel real.</p></body></html>")
     return HTMLResponse(f"<html><body><h1>Reserva confirmada</h1><p>Confirmado: mesa para {escape(form['personas'])} personas el "
                         f"{escape(cuando)}, a nombre de {escape(form['nombre'])}.</p><p>Localizador: {ref}</p>"
                         f"<p>Para cancelar: {cancel}</p></body></html>")

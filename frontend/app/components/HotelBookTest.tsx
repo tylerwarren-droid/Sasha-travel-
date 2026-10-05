@@ -9,7 +9,9 @@ import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal, SIGN_IN_TO_BOOK } from '@/lib/booking-client'
 
 type Phase = { k: 'idle' } | { k: 'form' } | { k: 'readback'; lines: string[]; sha: string } | { k: 'paying'; url: string; sid: string }
-  | { k: 'done'; say: string } | { k: 'error'; say: string }
+  | { k: 'done'; say: string; sid?: string } | { k: 'error'; say: string }
+  // Sasha 155 · the hotel's own page, live (our test hotel, a fictional guest): the guest ticks the box and presses
+  | { k: 'live'; done: string; view: string; hid: string; t: string; say: string } | { k: 'booked'; done: string; say: string }
 
 const inAWeek = () => new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10)
 
@@ -37,11 +39,27 @@ export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 
     if (p.k !== 'paying') return
     const t = setInterval(async () => {
       const r = await bookingReq('/api/booking/travel/hotel/status', { ...details(), session_id: p.sid }).catch(() => null)
-      if (r?.json?.status === 'booked') setP({ k: 'done', say: String(r.json.say) })
+      if (r?.json?.status === 'booked') setP({ k: 'done', say: String(r.json.say), sid: p.sid })
     }, 3000)
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p])
+  useEffect(() => {
+    if (p.k !== 'live') return
+    const t = setInterval(async () => {
+      const r = await bookingReq(`/api/booking/handover/${p.hid}/status?t=${encodeURIComponent(p.t)}`).catch(() => null)
+      const st = String(r?.json?.state ?? '')
+      if (st === 'booked') setP({ k: 'booked', done: p.done, say: `✅ Booked on the hotel's page${r?.json?.reference ? ` — their reference ${String(r.json.reference)}` : ''}. (Kanoe Test Hotel: our own test page, a fictional guest.)` })
+      else if (st === 'answered') setP({ k: 'booked', done: p.done, say: `The hotel's page answered${r?.json?.say ? `: ${String(r.json.say)}` : ''} — not read as a confirmation.` })
+    }, 2500)
+    return () => clearInterval(t)
+  }, [p])
+  async function finishLive(done: string, sid: string) {
+    const r = await bookingReq('/api/booking/travel/hotel/handover', { ...details(), session_id: sid }, 60000)
+    if (!r.ok) return setP({ k: 'booked', done, say: `The hotel's page couldn't be opened live — ${refusal(r.json, r.status)}.` })
+    const view = String(r.json.view_url)
+    setP({ k: 'live', done, view, hid: String(r.json.handover_id), t: new URL(view).searchParams.get('t') ?? '', say: String(r.json.say) })
+  }
   if (p.k === 'idle') return <button className="price" onClick={() => setP({ k: 'form' })}>Reserve (TEST)</button>
   if (p.k === 'form') return (
     <div className="o2" style={{ maxWidth: 420 }}>
@@ -60,5 +78,17 @@ export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 
     </div>
   )
   if (p.k === 'paying') return <span className="o2">Pay the TEST price on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged, no hotel is contacted)…</span>
+  if (p.k === 'done') return (
+    <span className="o2">{p.say}{p.sid ? <>{' '}<button className="price" onClick={() => { finishLive(p.say, p.sid!) }}>Finish on the hotel&rsquo;s page (live) →</button></> : null}</span>
+  )
+  if (p.k === 'live') return (
+    <div className="o2" style={{ maxWidth: 420 }}>
+      <div>{p.done}</div>
+      <div style={{ margin: '6px 0' }}>{p.say}</div>
+      <iframe src={p.view} title="The hotel's page, live" allow="clipboard-write" style={{ width: '100%', height: 620, border: '1px solid #ccc', borderRadius: 8 }} />
+      <a className="viewlink" href={p.view} target="_blank" rel="noopener noreferrer">Open full screen ↗</a>
+    </div>
+  )
+  if (p.k === 'booked') return <span className="o2">{p.done} {p.say}</span>
   return <span className="o2">{p.say}</span>
 }

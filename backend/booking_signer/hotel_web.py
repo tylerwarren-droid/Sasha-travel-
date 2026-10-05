@@ -43,9 +43,18 @@ async def web_turn(message: str, user_id: Optional[str], now: datetime) -> Optio
     if not shown:
         why = "Google's search didn't answer" if status != 200 else "Google found none"
         return _answer(f"{head}: {why}, so I have none to show you yet. Try another area or name a hotel.", [])
+    # Sasha 155 · photo cards, as on WhatsApp: each hotel's OWN share picture from its own site, within a short budget
+    # (the late ones are left to fill the cache; a card never waits longer, and none is shown rather than a stand-in)
+    try:
+        photos, _late = await GW._photos_within(shown, GW.photo_wait() + 1.5)
+    except Exception as e:
+        log.info("[hotel_web] no photos: %s", type(e).__name__)
+        photos = {}
     hotels = [{"name": c["name"], "city": city, "nights": nights, "checkin": stay["a"], "party": party,
                "address": c.get("address"), "rating": c.get("rating"), "rating_count": c.get("rating_count"),   # Google's 1–5, as its listing says
-               "book_url": c.get("listing_url"), "source": "google"} for c in shown]
+               "book_url": c.get("listing_url"), "source": "google",
+               **({"photo": photos[c["place_id"]], "photo_source": c.get("website")} if photos.get(c.get("place_id")) else {})}
+              for c in shown]
     return _answer(f"{head}, from Google Maps. On each: “Reserve (TEST)” makes a TEST booking (no hotel contacted, "
                    f"nothing charged); “View” opens its Google listing.", hotels)
 

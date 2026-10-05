@@ -117,6 +117,8 @@ def seal_call(built: dict, venue) -> dict:
     brief["number_source_kind"] = kind
     if kind == "places":
         number = brief["number"]
+        if not number:   # Sasha 147 · a listing with no number: refused in words (a None here crashed a cancel, CR 20)
+            raise ListingUnavailable("venue_number_missing", "there is no number on record for this venue, so nothing was dialled")
         lines = [ln.replace(f", {number} — the number on {LISTING_LABEL}.", NUMBER_SHOWN + ".")
                    .replace(f", {number}.", NUMBER_SHOWN + ".").replace(number, NUMBER_HIDDEN) for ln in built["read_back_lines"]]
         brief["number"] = None

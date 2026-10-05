@@ -1076,8 +1076,9 @@ async def _combo_approve(ctx: dict, pend: dict, how: dict) -> None:
                                                            "venue_reference": got["ref"], "their_words": got["their_page"], "test": True})   # Sasha 147 · the demo spa
     else:
         out.text("⚠ 2) Not confirmed: Kanoe Demo Spa's page didn't say it's booked.")
-    if _receipt_note():
-        out.text("Both receipts are in your email; both bookings go on your calendar.")
+    if _receipt_note(DSP.PROVIDER):   # Sasha 147 · the demo spa is a test: its receipt is never emailed
+        out.text("Both bookings go on your calendar. " + ("No receipt is emailed for the Kanoe Demo Spa (a test)."
+                                                          if _receipt_note(DSP.PROVIDER).startswith(" No receipt") else "Both receipts are in your email."))
 
 
 async def _spa_start(ctx: dict, body: str) -> None:
@@ -2063,8 +2064,8 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
                   else f"⚠ Not confirmed yet: {j.get('say') or 'their site did not answer clearly'}"))
         if j.get("their_page"):
             out.text(f"Their page said: “{str(j['their_page'])[:500]}”")
-        if _receipt_note():
-            out.text(_receipt_note().strip())
+        if _receipt_note(venue, j.get("status") == "sent"):   # Sasha 147 · a refused send has no receipt
+            out.text(_receipt_note(venue, j.get("status") == "sent").strip())
         if result == "confirmed" and venue == "Sasha Test Venue" and os.getenv("SASHA_TEST_VENUE_DEPOSIT", "") == "1":
             await _test_deposit(ctx)   # Sasha 131 (4) · one touch, on their page — a TEST payment
         return
@@ -2095,8 +2096,14 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
         _spawn(watch_call(ctx["ch"], ctx["frm"], account, pend["id"], venue, "book", pend.get("summary", "")))
 
 
-def _receipt_note() -> str:
+def _receipt_note(venue: Optional[str] = None, sent: bool = True) -> str:
+    """The receipt line, only when it is true (Sasha 147): nothing sent → no receipt; our own test venue → none is emailed."""
     from .ladder import emails_ready
+    from . import guest_receipt as GR
+    if not sent:
+        return ""
+    if GR.test_reason(venue):
+        return " No receipt is emailed: this was our own test venue."
     return "" if emails_ready() else " Your receipt is in your email."
 
 
@@ -2303,8 +2310,8 @@ async def watch_call(ch: dict, frm: str, account: str, call_id: str, venue: str,
             out.text(f"I'm calling {venue} back once now to confirm it — I'll tell you here.")
         elif purpose == "book" and not settled:
             out.text("I've asked them to confirm in writing where I can; anything they send goes onto your booking and receipt.")
-        elif settled and v.get("outcome") == "yes" and _receipt_note():
-            out.text(_receipt_note().strip())
+        elif settled and v.get("outcome") == "yes" and _receipt_note(venue):
+            out.text(_receipt_note(venue).strip())
         await deliver(ch, frm, out, st.get("last_inbound_at"))
         return
     st = await STORE.get_state(ch["wa_id_sha256"])
@@ -2357,8 +2364,8 @@ async def push_confirmation_result(call: dict, reading, nxt: Optional[str]) -> s
         out.text(f"I'll call {venue} once more at {nxt[len('scheduled for '):]} — your yes covers it.")
     elif not settled:
         out.text("I've asked them to confirm in writing where I can; anything they send goes onto your booking and receipt.")
-    elif reading.outcome == "yes" and _receipt_note():
-        out.text(_receipt_note().strip())
+    elif reading.outcome == "yes" and _receipt_note(venue):
+        out.text(_receipt_note(venue).strip())
     st = await STORE.get_state(ch["wa_id_sha256"])
     return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, st.get("last_inbound_at")))
 

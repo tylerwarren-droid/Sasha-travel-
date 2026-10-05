@@ -538,7 +538,10 @@ async def _cancel_from_object(account: str, booking: dict, b: dict, venue: C.Cal
     except (RS.ReservationRefused, C.CallRefused) as e:
         return _refuse(422, getattr(e, "rule", "cancel_invalid"), str(e))
     built["brief"]["cancels_call_id"] = booking["call_id"]
-    built = PT.seal_call(built, venue)
+    try:
+        built = PT.seal_call(built, venue)
+    except PT.ListingUnavailable as e:   # Sasha 147 · refused in words, never a crash
+        return _refuse(422, e.rule, str(e))
     try:
         built, shown = _named(built, await _read_of(account, built["brief"]), venue.name)   # Sasha 86 · as the booking named it
     except StorageUnavailable as e:
@@ -655,6 +658,9 @@ async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
         return _refuse(422, e.rule, str(e).replace("nothing was dialled", "the cancellation could not be prepared"))
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
+    if not number:   # Sasha 147 · nothing to dial (CR 20: a crash, so the guest got no answer at all)
+        return _refuse(422, "venue_number_missing", f"I can't phone {b.get('venue_name') or 'them'} to cancel: there's no number on "
+                                                    "record for them. Nothing was dialled — cancel on their own page or by email.")
     venue = C.CallVenue(key=b["venue_key"], name=b.get("venue_name") or b["venue_key"], number_env="", language=lang_key,
                         timezone=b["timezone"], number=number, source=PT.LISTING_LABEL if listed else b.get("number_source"),
                         venue_ids=tuple(b.get("venue_ids") or ()) or None,

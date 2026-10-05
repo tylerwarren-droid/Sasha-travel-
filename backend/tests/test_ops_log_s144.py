@@ -157,6 +157,20 @@ class TestReceiptsAreNeverEmailed(unittest.TestCase):
         self.assertEqual([r["outcome"][:17] for r in CRT.CALL_STORE.receipts], ["test: not emailed"] * 4)
         self.assertEqual(CRT.CALL_STORE.receipts[0]["trip_item_id"], "t1")
 
+    def test_the_reply_never_promises_a_receipt_that_isnt_coming(self):
+        from booking_signer import guest_whatsapp as GW
+        with mock.patch("booking_signer.ladder.emails_ready", lambda: None):
+            self.assertEqual(GW._receipt_note("Casa Lucio"), " Your receipt is in your email.")
+            self.assertEqual(GW._receipt_note("Casa Lucio", sent=False), "")          # a refused send: nothing sent, no receipt
+            self.assertTrue(GW._receipt_note("Sasha Test Venue").startswith(" No receipt is emailed"))
+
+    def test_a_cancel_with_no_number_is_refused_in_words_never_a_crash(self):
+        from types import SimpleNamespace
+        from booking_signer import places_terms as PT
+        with self.assertRaises(PT.ListingUnavailable) as e:
+            PT.seal_call({"brief": {"number": None}, "read_back_lines": []}, SimpleNamespace(number_kind="places", number=None, place_id="p"))
+        self.assertEqual(e.exception.rule, "venue_number_missing")
+
     def test_a_real_venue_still_gets_its_receipt(self):
         self.assertIsNone(GR.test_reason("Casa Lucio", {"trip_item_id": "t1"}))
         self.assertIsNone(GR.test_reason("Casa Lucio", None, {"brief": {"venue_key": "read:9"}}))

@@ -421,8 +421,15 @@ async def open_gc_handover(*, engine_url: str, stay: dict, rate: str, room: Opti
         pay = payment_on(seen)
         if pay:
             raise HO.Refused("payment_step", f"the details page asks for payment ({pay}) — never through Kanoe's browser")
+        for _ in range(6):                      # the summary card can draw after the form (fast from the EU server)
+            if summary_names(seen, rate, room):
+                break
+            await asyncio.sleep(0.8)
+            seen = await page.read_guest()
         if not summary_names(seen, rate, room):
-            raise HO.Refused("wrong_rate", f"the hotel's Reservation Summary doesn't name “{rate}” — no link")
+            shows = (seen.get("summary") or "nothing")[:160]
+            log.warning("[gc-handover] %s summary mismatch: wanted %s / %s, page shows: %s", hid, rate, room, shows)
+            raise HO.Refused("wrong_rate", f"the hotel's Reservation Summary doesn't name “{rate}” (it shows: {shows}) — no link")
         lap("details_page")
         shown = await page.set_country(guest["country"])
         if guest["country"].lower() not in shown.lower():

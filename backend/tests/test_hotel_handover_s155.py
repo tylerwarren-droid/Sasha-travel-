@@ -43,6 +43,11 @@ class TestHotelPage(unittest.TestCase):
         self.assertIn("martes 15 de diciembre a las 15:00", ok)
         self.assertIn("Localizador: TV-", ok)
 
+    def test_the_gate_lets_the_cloud_browser_open_and_press_it(self):
+        from booking_signer import gate
+        self.assertIn(("GET", "/api/booking/test-venue/hotel"), gate.EXEMPT)
+        self.assertIn(("POST", "/api/booking/test-venue/hotel"), gate.EXEMPT)
+
     def test_the_restaurant_variants_are_unchanged(self):
         self.assertIn("Sasha Test Venue", asyncio.run(FR.test_venue("plain")).body.decode())
         self.assertNotIn("acepto", asyncio.run(FR.test_venue("plain")).body.decode())

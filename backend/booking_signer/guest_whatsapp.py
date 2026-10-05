@@ -1275,6 +1275,10 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
         out.text(f"I found no {f.get('what')} in {f.get('where')}. Try another area or kind of place.")
         return
     pick = shown[0]["place_id"] if luxe else (ranking.get("picks") or {}).get(chip)
+    # Sasha 149 · streamed: the header goes NOW, then each card the moment its own photo is ready (rank order kept)
+    if stream_cards() and ctx.get("ch") and ctx.get("frm"):
+        await _stream_cards(ctx, f, shown, cands, ranking, luxe, pick, draft, account)
+        return
     # Sasha 140 · never block on photos: the cards go with what's ready within the budget; the rest follow on their own
     photos, late = await _photos_within(shown, photo_wait())
     if ctx.get("third_card"):   # Sasha 126 · the combo's spa set: OUR demo spa as the third card
@@ -1344,6 +1348,62 @@ async def _photos(account: str, what: str, shown: List[dict]) -> Dict[str, str]:
     Read WITHOUT the style summary: that is a model call, and on WhatsApp the model is never called. In parallel, cached."""
     got = await asyncio.gather(*(_photo_of(c) for c in shown if c.get("website")))
     return {pid: url for pid, url in got if url}
+
+
+def stream_cards() -> bool:
+    """Sasha 149 · SASHA_STREAM_CARDS=1: WhatsApp sends each card as it's ready instead of all three together."""
+    return os.getenv("SASHA_STREAM_CARDS", "") == "1"
+
+
+def _card_line(c: dict, pick: Optional[str]) -> str:
+    from .ranking import rating_words
+    from .venue_read import distance_words
+    line = " · ".join(x for x in (c.get("name") or "no name listed", rating_words(c),
+                                   distance_words(c["distance_m"]) if c.get("distance_m") is not None else None) if x)
+    if c is TEST_CARD:
+        line = "Rehearsal · Sasha Test Venue — ours, not a real restaurant: booking it contacts no one"
+    elif c is SPA_CARD:
+        line = "Kanoe Demo Spa — ours, a demo member portal: Sasha books it with your saved membership"
+    return ("Sasha's pick · " if c["place_id"] == pick else "") + line
+
+
+async def _stream_cards(ctx: dict, f: dict, shown: List[dict], cands: dict, ranking: dict, luxe: bool, pick: Optional[str],
+                        draft: dict, account: str) -> None:
+    """The same cards, the same words and order — sent one by one as each is ready. What the turn had already said goes
+    first (so nothing arrives out of order); the "Which one?" buttons stay in the turn's own reply, last."""
+    out, ch, frm = ctx["out"], ctx["ch"], ctx["frm"]
+    last = (ctx.get("st") or {}).get("last_inbound_at")
+    started = asyncio.get_running_loop().time()
+    tasks = {c["place_id"]: asyncio.ensure_future(_photo_of(c)) for c in shown if c.get("website")}
+    if ctx.get("third_card"):
+        shown = shown[:2] + [ctx["third_card"]]
+    elif rehearsal(account) and not ctx.get("no_test_card"):
+        shown = shown[:2] + [TEST_CARD]
+    what = f.get("what") or ""
+    out.text(f"{what[:1].upper() + what[1:]} in {f.get('where')} — {ranking.get('count') or f'{len(cands)} found'}"
+             f"{' · €€€ and up first' if luxe else ''}. From Google Maps; nobody has been contacted.")
+    head = Out()
+    head.items, out.items = list(out.items), []   # what the turn said so far, the header last: sent now, in order
+    await deliver(ch, frm, head, last)
+    late: List[asyncio.Task] = []
+    for c in shown:
+        url, t = None, tasks.get(c["place_id"])
+        if t is not None:
+            left = photo_wait() - (asyncio.get_running_loop().time() - started)
+            try:
+                _pid, url = await asyncio.wait_for(asyncio.shield(t), max(0.0, left))
+            except asyncio.TimeoutError:
+                late.append(t)
+            except Exception:
+                url = None
+        await deliver(ch, frm, Out().media(_card_line(c, pick), url), last)
+    nonce = secrets.token_hex(3)
+    out.ask("Which one?", [(c.get("name") or f"Option {i + 1}", f"pick:{nonce}:{i}") for i, c in enumerate(shown)])
+    if late:
+        _spawn(_late_photos(ch, frm, {c["place_id"]: c.get("name") or "" for c in shown}, late))
+    ctx["st"]["pending"] = {"kind": "cards", "at": ctx["now"].isoformat(), "nonce": nonce, "find": f,
+                            "draft": draft.get("parts") or {},
+                            "cards": [{"place_id": c["place_id"], "name": c.get("name"), "country": c.get("country")} for c in shown]}
 
 
 async def _photos_within(shown: List[dict], budget: float) -> Tuple[Dict[str, str], List[asyncio.Task]]:

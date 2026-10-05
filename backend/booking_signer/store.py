@@ -179,6 +179,34 @@ _TRIP_FIELDS = ("venue_name", "local_date", "local_time", "local_timezone", "par
 
 # ── production ───────────────────────────────────────────────────────────────────────────────
 
+def statement_cache(url: str) -> int:
+    """Sasha 149 · prepared statements cached per connection — ONE round trip per repeated query instead of two. Only
+    on a SESSION pooler (Supabase's port 5432, which this deployment uses), where a client keeps its server connection;
+    never on the TRANSACTION pooler (6543), which can't hold them. SASHA_DB_STATEMENT_CACHE=0/1 overrides."""
+    v = os.getenv("SASHA_DB_STATEMENT_CACHE", "").strip()
+    if v in ("0", "1"):
+        return 100 if v == "1" else 0
+    from urllib.parse import urlsplit
+    try:
+        port = urlsplit(url).port
+    except ValueError:
+        port = None
+    return 100 if port in (5432, None) else 0
+
+
+def _pooler_connection_class():
+    """Sasha 149 · asyncpg resets every connection on its way back to the pool (advisory unlock, CLOSE ALL, UNLISTEN,
+    RESET ALL): one more round trip per query. Through Supabase's TRANSACTION pooler none of that session state survives
+    a transaction anyway, and this code takes no advisory locks and LISTENs to nothing — so the reset is skipped. An open
+    transaction is still rolled back (asyncpg adds ROLLBACK itself when one is open)."""
+    import asyncpg
+
+    class _PoolerConnection(asyncpg.Connection):
+        def _get_reset_query(self):
+            return ""
+    return _PoolerConnection
+
+
 class PostgresStore:
     """asyncpg against DATABASE_URL. The pool is created on first use, never at import, so a missing or wrong
     DATABASE_URL cannot stop Sasha's backend from starting — it makes the booking routes answer 503."""
@@ -199,9 +227,11 @@ class PostgresStore:
 
             async def _init(conn):
                 await conn.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
-            # ⚠ statement_cache_size=0: Supabase's pooler (transaction mode) cannot hold prepared statements
-            self._pool = await asyncpg.create_pool(self._url(), min_size=0, max_size=4,
-                                                   statement_cache_size=0, init=_init)
+            # ⚠ the TRANSACTION pooler (6543) cannot hold prepared statements; this deployment's 5432 is the SESSION pooler (statement_cache)
+            # Sasha 149 · min_size=1: one connection always open (a new one is ~5 round trips to eu-west-1); and
+            # _PoolerConnection: no session reset on release — one round trip fewer on EVERY query (444 → ~300 ms from sfo)
+            self._pool = await asyncpg.create_pool(self._url(), min_size=1, max_size=4, statement_cache_size=statement_cache(self._url()),
+                                                   init=_init, connection_class=_pooler_connection_class())
         return self._pool
 
     async def close(self) -> None:

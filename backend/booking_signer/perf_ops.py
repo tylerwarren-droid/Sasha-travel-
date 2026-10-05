@@ -153,4 +153,64 @@ async def perf(request: Request):
             "took_ms": round((time.perf_counter() - t) * 1000)}
 
 
-__all__ = ["router", "stats", "measure"]
+# ── the 1-minute keep-warm (the health ping, from inside) ────────────────────────────────────────────────────────────
+
+WARM_EVERY_S = 60
+#: hosts kept warm in the pooled client — their ROOT pages, which are not API calls and are not billed
+WARM_URLS = ("https://places.googleapis.com/", "https://api.duffel.com/")
+_warm_task = None
+LAST_WARM: Dict[str, Any] = {}
+
+
+async def warm_once() -> Dict[str, Any]:
+    """One keep-warm pass: the database pool's connection, and the kept-alive connections to the hot path's hosts.
+    Returns what each took (shown on /ops/perf/warm)."""
+    from . import routes as R
+    from .http_pool import request
+    out: Dict[str, Any] = {}
+    t = time.perf_counter()
+    try:
+        await R.STORE._run(lambda c: c.fetchval("select 1"))
+        out["db_ms"] = round((time.perf_counter() - t) * 1000)
+    except Exception as e:
+        out["db"] = f"{type(e).__name__}: {str(e)[:120]}"
+    for u in WARM_URLS:
+        t = time.perf_counter()
+        try:
+            await request("GET", u, timeout=10.0)
+            out[u] = round((time.perf_counter() - t) * 1000)
+        except Exception as e:
+            out[u] = f"{type(e).__name__}"
+    LAST_WARM.update(out, at=time.time())
+    return out
+
+
+async def _warm_forever() -> None:
+    import logging
+    log = logging.getLogger("booking_signer.perf")
+    while True:
+        try:
+            await warm_once()
+        except Exception as e:   # never stops the server; said in the log
+            log.warning("[keep-warm] %s: %s", type(e).__name__, e)
+        await asyncio.sleep(WARM_EVERY_S)
+
+
+def start_warm() -> None:
+    """Sasha 149 · SASHA_KEEP_WARM=1 (on in production; off in tests): the database and the hot path's connections are
+    never cold when a guest writes after a quiet spell. Railway's own sleep is already off (sleepApplication: false)."""
+    global _warm_task
+    if _warm_task is None and os.getenv("SASHA_KEEP_WARM", "1") == "1" and os.getenv("DATABASE_URL", "").strip():
+        _warm_task = asyncio.create_task(_warm_forever())
+
+
+@router.get("/perf/warm")
+async def warm_status(request: Request):
+    from .ops import founder_only
+    no = founder_only(request)
+    if no:
+        return no
+    return {"ok": True, "running": _warm_task is not None and not _warm_task.done(), "last": LAST_WARM}
+
+
+__all__ = ["router", "stats", "measure", "warm_once", "start_warm"]

@@ -161,9 +161,8 @@ def quiet(now: datetime, tz: ZoneInfo) -> bool:
 # ── Routes (leave_now) ──────────────────────────────────────────────────────────────────────────────────────────────
 
 async def _routes_post(url: str, headers: dict, body: dict):
-    import httpx
-    async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as c:
-        r = await c.post(url, headers=headers, json=body)
+    from .http_pool import request   # Sasha 149 · pooled, kept alive
+    r = await request("POST", url, timeout=15.0, headers=headers, json=body)
     return r.status_code, (r.json() if r.headers.get("content-type", "").startswith("application/json") else {})
 
 ROUTES_HTTP = _routes_post   # tests replace it

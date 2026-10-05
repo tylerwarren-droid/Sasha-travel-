@@ -584,5 +584,6 @@ router.include_router(_products.router)   # CR 1 products · /api/booking/produc
 async def _start_retention() -> None:
     retention.start()
     proactive.start()   # S-83 · the reminders loop (SASHA_PROACTIVE_LOOP; off in tests)
+    _perf_ops.start_warm()   # Sasha 149 · the 1-minute keep-warm (database + kept-alive connections)
     calendar_sync.start()   # S-79 · the calendar outbox drainer (SASHA_CALENDAR_LOOP; only once Google is configured)
     mailbox.start()   # S-82 · the 6-hourly read-only sync (SASHA_MAILBOX_LOOP; only once Google is configured)

@@ -55,9 +55,8 @@ READER: C.Reader = C.anthropic_reader
 
 
 async def HTTP(method: str, url: str, headers: dict, json: Optional[dict] = None):
-    import httpx
-    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:   # S-57 · Bland took over 20 s on 30 Sept
-        return await client.request(method, url, headers=headers, json=json)
+    from .http_pool import request   # Sasha 149 · pooled, kept alive
+    return await request(method, url, timeout=60.0, headers=headers, json=json)   # S-57 · Bland took over 20 s on 30 Sept
 
 
 def NOW() -> datetime:

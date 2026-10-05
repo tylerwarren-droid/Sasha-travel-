@@ -47,9 +47,8 @@ LADDER_STORE: Any = None
 
 
 async def HTTP(method: str, url: str, headers: dict, json: Optional[dict] = None):
-    import httpx
-    async with httpx.AsyncClient(timeout=httpx.Timeout(15.0), follow_redirects=False) as client:
-        return await client.request(method, url, headers=headers, json=json)
+    from .http_pool import request   # Sasha 149 · one pooled, kept-alive client (no new TLS handshake per call)
+    return await request(method, url, timeout=15.0, headers=headers, json=json)
 
 
 RESOLVE = V._resolve

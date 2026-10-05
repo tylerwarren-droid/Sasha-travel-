@@ -11,6 +11,6 @@
   {"engine": "Omnibees", "venue": "Masa Hotel Campo Grande, Lisbon", "expect": ["check-in 20/11/2026", "check-out 22/11/2026", "1 room, 2 adults"],
    "url": "https://book.omnibees.com/hotelresults?q=17958&NRooms=1&CheckIn=20112026&CheckOut=22112026&ad=2&lang=en-US"},
   {"engine": "Guestcentric", "venue": "Emporium Lisbon Suites, Lisbon", "expect": ["start 2026-11-20", "2 nights", "2 adults"],
-   "url": "http://smallportuguesesnew-hotel.guestcentric.net/en/property-details/emporium-lisbon-suites?startDay=2026/11/20&nrNights=2&nrAdults=2&nrChildren=0"}
+   "url": "https://www.smallportuguesehotels.com/en/property-details/emporium-lisbon-suites?startDay=2026/11/20&nrNights=2&nrAdults=2&nrChildren=0"}
  ],
  "not_verifiable_yet": "Mews (no Lisbon hotel's configuration id published), SynXis, WebHotelier, Bookassist, RoomCloud, Simple Booking (no venue found in the three cities); no template at all for CoverManager, TheFork, OpenTable, Restoo, Zenchef, D-EDGE, Neobookings, Little Hotelier (dates), Fresha, Treatwell, Booksy."}

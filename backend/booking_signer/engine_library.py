@@ -75,7 +75,8 @@ LIBRARY: Dict[str, Engine] = {e.name: e for e in (
     Engine("Bookassist", "hotel", "documented", "Bookassist booking-platform installation guide",
            {"checkin": "date_in", "checkout": "date_out", "rooms": "rms", "adults": "adults", "children": "children",
             "promo": "promo_code"}, taps_after=11, taps_page=15),
-    Engine("Guestcentric", "hotel", "documented", "blog.guestcentric.com custom booking-engine URL (2012)",
+    Engine("Guestcentric", "hotel", "documented", "blog.guestcentric.com custom booking-engine URL (2012); venues' pages over "
+           "https (e.g. www.smallportuguesehotels.com/en/property-details/…, read 5 Oct 2026: 200, its widget uses startDay/nrNights)",
            {"checkin": "startDay", "nights": "nrNights", "rooms": "amount", "adults": "nrAdults", "children": "nrChildren"},
            taps_after=11, taps_page=15),
     Engine("Omnibees", "hotel", "seen_in_links", "book.omnibees.com links published for Lisbon hotels",
@@ -99,10 +100,16 @@ LIBRARY: Dict[str, Engine] = {e.name: e for e in (
 TEST_VENUE_TAPS = 1
 
 
+def https(url: str) -> str:
+    """A link Sasha sends is never http:// — phones block it as an unsafe connection (CR 22: link 6, 5 Oct 2026)."""
+    return "https://" + url[len("http://"):] if (url or "").lower().startswith("http://") else url
+
+
 def build(engine: str, venue_page: str, **slot) -> Tuple[str, List[str]]:
     """The venue's own engine page with the slot added → (url, the fields carried). Unknown engine or no template: the page
     unchanged, nothing carried. slot: date/time (date/time objects), party, checkin/checkout (dates), nights, adults,
     children, rooms, promo."""
+    venue_page = https(venue_page)
     e = LIBRARY.get(engine)
     if not e or not e.params:
         return venue_page, []

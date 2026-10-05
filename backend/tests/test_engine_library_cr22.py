@@ -40,6 +40,12 @@ class Build(unittest.TestCase):
                           checkout=date(2026, 11, 22), adults=2, children=1)
         self.assertEqual(q(url)["kids"], "1")
 
+    def test_never_an_http_link(self):
+        url, _ = EL.build("Guestcentric", "http://smallportuguesesnew-hotel.guestcentric.net/en/property-details/x",
+                          checkin=date(2026, 11, 20), nights=2, adults=2)
+        self.assertTrue(url.startswith("https://"))
+        self.assertTrue(EL.build("Unknown", "http://venue.example/book")[0].startswith("https://"))
+
     def test_no_template_means_the_page_unchanged(self):
         page = "https://www.covermanager.com/reserve/module_restaurant/restaurante-nomada-madrid/spanish"
         self.assertEqual(EL.build("CoverManager", page, date=date(2026, 11, 20), party=2), (page, []))

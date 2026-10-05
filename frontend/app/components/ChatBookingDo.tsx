@@ -16,6 +16,8 @@ type Phase = { k: 'details' } | { k: 'preparing' } | { k: 'readback'; id: string
 
 const NO_SLOT = /\b(tattoo|piercing|custom|commission|portrait|design|tailor|alteration|repair|restoration|engraving|mural|bespoke|quote)/i
 const pad = (n: number) => String(n).padStart(2, '0')
+/** the server's reason without its rule code ("form_phone_missing — the form needs…" → "the form needs…") */
+const plain = (why: string) => why.replace(/^[a-z]+(?:_[a-z0-9]+)+\s*[—:-]\s*/i, '').replace(/[.]+$/, '')
 const dayWords = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
 
 export function ChatBookingDo({ route, readId, venue, what, openAt, draft }: {
@@ -29,6 +31,7 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft }: {
   const [p, setP] = useState<Phase>({ k: 'details' })
   const [ready, setReady] = useState(false)
   const [named0, setNamed0] = useState(false)   // a saved name: never asked again
+  const [phoned0, setPhoned0] = useState(false)  // a saved mobile: never asked again (their form needs one)
   useEffect(() => {
     let off = false
     contactReq('GET').then((r) => {
@@ -36,11 +39,13 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft }: {
       const c = (r.json.contact ?? null) as { name?: string; mobile_e164?: string } | null
       setD((x) => ({ ...x, name: c?.name ?? '', phone: c?.mobile_e164 ?? '' }))
       setNamed0(!!c?.name)
+      setPhoned0(!!c?.mobile_e164)
       setReady(true)
     }).catch(() => { if (!off) setReady(true) })
     return () => { off = true }
   }, [])
-  const complete = !!d.name.trim() && (quote ? d.want.trim().length >= 3 : !!(d.date && d.time && d.party))
+  const needPhone = route === 'form' && !phoned0
+  const complete = !!d.name.trim() && (!needPhone || /^\+?\d[\d\s().-]{6,}$/.test(d.phone.trim())) && (quote ? d.want.trim().length >= 3 : !!(d.date && d.time && d.party))
   // everything known already: no form to fill — straight to the read-back
   useEffect(() => { if (ready && complete && p.k === 'details' && (quote ? false : !!at)) prepare() }, [ready])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -50,7 +55,7 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft }: {
     let sentence: string
     if (route === 'form') {
       const reservation = { schema: 'reservation/1', flow: 'book', where: {},
-        who: { name: d.name.trim(), contact: d.phone ? { mobile_e164: d.phone } : {} },
+        who: { name: d.name.trim(), contact: d.phone ? { mobile_e164: d.phone.replace(/[\s().-]/g, '') } : {} },
         what: { activity: 'a table', activity_venue_lang: 'una mesa', category: 'restaurant' },
         when: { mode: 'at', at: `${d.date}T${d.time}` }, how_many: { count: d.party, unit: 'people' } }
       r = await bookingReq('/api/booking/forms', { read_id: readId, reservation })
@@ -70,7 +75,7 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft }: {
         return setP({ k: 'readback', id: String(r.json.email_id), sha: b.sha256, lines: b.lines, sentence })
       }
     }
-    setP({ k: 'stopped', say: `I couldn't — ${refusal(r.json, r.status)}. Nothing was sent.` })
+    setP({ k: 'stopped', say: `I couldn't — ${plain(refusal(r.json, r.status))}. Nothing was sent.` })
   }
 
   async function yes(said: string | null = null) {
@@ -81,7 +86,7 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft }: {
     const r = route === 'form'
       ? await bookingReq(`/api/booking/forms/${id}/send`, { read_back_sha256: sha, approval }, 120000)
       : await bookingReq(`/api/booking/emails/${id}/send`, { read_back_sha256: sha, approval }, 60000)
-    if (!r.ok) return setP({ k: 'stopped', say: `It didn't go — ${refusal(r.json, r.status)}. Nothing was sent.` })
+    if (!r.ok) return setP({ k: 'stopped', say: `It didn't go — ${plain(refusal(r.json, r.status))}. Nothing was sent.` })
     const reading = (r.json.reading ?? {}) as { result?: string }
     if (route === 'form' && reading.result === 'confirmed')
       return setP({ k: 'done', say: `Done — booked${r.json.booking_reference ? ` (their ref ${String(r.json.booking_reference)})` : ''}. It's in your itinerary.` })
@@ -112,6 +117,8 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft }: {
       </div>}
       {!named0 && <div style={{ marginTop: 4 }}>Whose name should it be under?</div>}
       {!named0 && <input placeholder="Your name" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} style={{ ...input, marginTop: 6 }} />}
+      {needPhone && <div style={{ marginTop: 6 }}>And a mobile number they can reach you on?</div>}
+      {needPhone && <input placeholder="+34 600 000 000" type="tel" value={d.phone} onChange={(e) => setD({ ...d, phone: e.target.value })} style={{ ...input, marginTop: 4 }} />}
       <div style={{ marginTop: 8 }}><button className="price" disabled={!complete} onClick={() => { prepare() }}>Continue</button></div>
     </div>
   )

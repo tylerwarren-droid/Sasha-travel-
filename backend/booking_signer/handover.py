@@ -614,7 +614,8 @@ iframe{{flex:1;border:0;width:100%;background:#fff}}
 #done h1{{font-size:28px;margin:0 0 8px}} #done a{{margin-top:18px;background:var(--ok);color:#06210f;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600}}
 </style></head><body>
 <header>Sasha filled in <b>{venue}</b>'s own form — every field. Check it, then press <b>“{label}”</b>.
-<small>Their website, live. Nothing is sent until you press. Kanoe never sees a card here.</small></header>
+<small>Their website, live. Nothing is sent until you press. Kanoe never sees a card here.
+<a href="{live}" style="color:var(--ok)">Form not responding? Open it full screen</a></small></header>
 <iframe src="{live}" sandbox="allow-same-origin allow-scripts" allow="clipboard-read; clipboard-write" title="{venue}'s booking form"></iframe>
 <div id="done"><h1 id="say"></h1><p id="ref"></p><a id="back" href="{back}">Back to Sasha</a></div>
 <script>

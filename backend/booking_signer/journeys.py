@@ -150,16 +150,54 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
         except Exception as e:
             log.info("[journeys] no plans: %s", type(e).__name__)
     ids = {p["trip_id"] for p in plans}
+    # Sasha 177 (3) · EVERY PRODUCT WRITES HERE: CampusMe visits, RelocateMe's deadlines and appointments, EspañaMe's follow-ups
+    prod = await product_rows(account)
+    from products import itinerary as IT
+    reloc_names = {IT.CONSULATE, IT.TIE}
+    reloc_items = [r for r in rows if r.get("venue") in reloc_names] + [x for x in prod if x["product"] == "relocation"]
+    campus_plan = next((p for p in plans if re.match(r"(?i)campus tour", p["title"] or "")), None)
+    move_plan = next((p for p in plans if re.match(r"(?i)move to", p["title"] or "")), None)
+    extras: Dict[str, List[dict]] = {p["trip_id"]: [] for p in plans}
+    if campus_plan:
+        extras[campus_plan["trip_id"]] += [x for x in prod if x["product"] == "campus"]
+    if move_plan:
+        extras[move_plan["trip_id"]] += reloc_items
     tabs = [{"key": p["trip_id"], "label": label({**p, "start": str(p["start"]) if p["start"] else None}), "title": p["title"],
              "start": str(p["start"]) if p["start"] else None, "end": str(p["end"]) if p["end"] else None,
              "count": sum(1 for r in rows if str(r.get("trip_id")) == p["trip_id"] and r.get("status") not in ("cancelled", "failed"))}
             for p in plans]
+    for t in tabs:
+        t["extras"] = extras.get(t["key"]) or []
+        t["count"] += len(t["extras"])
+    if not move_plan and reloc_items:   # RelocateMe's journey even before a plan exists: its deadlines and appointments
+        tabs.append({"key": "relocation", "label": "Move to Madrid", "title": "Move to Madrid (RelocateMe)", "virtual": True,
+                     "count": len(reloc_items), "extras": reloc_items})
+    if not campus_plan and any(x["product"] == "campus" for x in prod):
+        cv = [x for x in prod if x["product"] == "campus"]
+        tabs.append({"key": "campus", "label": "Campus visits", "title": "Campus visits (CampusMe)", "virtual": True, "count": len(cv), "extras": cv})
     live = [r for r in rows if r.get("status") not in ("cancelled", "failed")]
-    home = [r for r in live if str(r.get("trip_id")) not in ids]
+    home = [r for r in live if str(r.get("trip_id")) not in ids and r.get("venue") not in reloc_names] + \
+        [x for x in prod if x["product"] == "health"]
     return {"journeys": tabs, "home": {"label": home_label(), "items": home},
             "requests": [r for r in live if r.get("status") in OPEN],
             "receipts": [r for r in rows if r.get("status") in BOOKED],
             "everything": sorted(rows, key=lambda r: f"{r.get('date') or '9'}{r.get('time') or ''}")}
+
+
+async def product_rows(account: Optional[str]) -> List[dict]:
+    """The products' dated items (products.agenda, read-only) as rows: visits, deadlines, follow-ups — each with its source."""
+    if not account:
+        return []
+    try:
+        from products import agenda as AG
+        today = date.today()
+        items = await AG.agenda(account, today - timedelta(days=30), today + timedelta(days=400))
+    except Exception as e:
+        log.info("[journeys] no product items: %s", type(e).__name__)
+        return []
+    word = {"visit": "Campus visit", "deadline": "Deadline", "reminder": "To do"}
+    return [{"id": f"{x['product']}:{i}", "venue": x["text"], "date": x["on"], "time": x.get("time"), "status": x.get("kind") or "item",
+             "status_words": f"{word.get(x.get('kind'), 'Item')} · from {x.get('source')}", "product": x["product"]} for i, x in enumerate(items)]
 
 
 def for_journey(rows: List[dict], trip_id: Optional[str]) -> List[dict]:

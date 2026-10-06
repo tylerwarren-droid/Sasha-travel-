@@ -254,6 +254,13 @@ async def answer(account: str, text: str, now: datetime) -> List[str]:
     rows = await _rows(account)
     if TRIPS.search(text or ""):
         return trips_text(await JN.journeys(account, rows), text)
+    m = re.search(r"\bmy (move to \w+|campus (?:tour|visits))\b", text or "", re.I)
+    if m:   # Sasha 177 · a product's journey on WhatsApp: its items (and its bookings), each with its source
+        j = await JN.journeys(account, rows)
+        t = next((x for x in j["journeys"] if m[1].split()[0].lower() in x["label"].lower()), None)
+        if t and (t.get("virtual") or not t.get("start")):
+            items = t.get("extras") or []
+            return [f"🗂 {t['label']}:\n" + ("\n".join(_line(r) for r in items[:20]) if items else "Nothing dated yet.")]
     if TRIP.search(text or ""):   # Sasha 165 · the plan + the bookings, day by day — when there is a plan
         from . import plan_store as PS
         p = await PS.latest(account, text)

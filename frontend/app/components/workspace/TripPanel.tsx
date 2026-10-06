@@ -48,7 +48,8 @@ const shortStatus = (b: ServerBooking): string => {
 }
 type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?: string }
 type JRow = { id: string; venue: string; date: string | null; time: string | null; status: string; status_words?: string; booking_reference?: string | null; trip_id?: string }
-type Journeys = { journeys: { key: string; label: string; title: string; start?: string | null; end?: string | null; count: number }[]
+type Journeys = { journeys: { key: string; label: string; title: string; start?: string | null; end?: string | null; count: number
+    virtual?: boolean; extras?: JRow[] }[]
   home: { label: string; items: JRow[] }; requests: JRow[]; receipts: JRow[]; everything: JRow[] }
 /** Sasha 177 · the account's journeys and lists, polled like the plan (a booking made on WhatsApp shows within seconds) */
 function useJourneys(): Journeys | null {
@@ -136,6 +137,9 @@ export default function TripPanel({
       <button className="lw-chip" style={chip(view === 'everything')} onClick={() => setView('everything')}>Everything</button>
     </div>
   )
+  const curJ = (jn?.journeys ?? []).find((t) => t.key === activeTrip)
+  if (view === 'trip' && curJ?.virtual) return <div className="lw-trip">{tabs}<JourneyList title={curJ.title} rows={curJ.extras ?? []} /></div>
+  const alsoHere = curJ?.extras?.length ? <JourneyList title={`Also on this journey (from ${curJ.title.match(/campus/i) ? 'CampusMe' : 'RelocateMe'})`} rows={curJ.extras} /> : null
   if (view !== 'trip') {
     const rows = !jn ? null : view === 'home' ? jn.home.items : view === 'requests' ? jn.requests : view === 'receipts' ? jn.receipts : jn.everything
     const title = view === 'home' ? `${jn?.home.label ?? 'Home'} — outside any trip` : view === 'requests' ? 'Waiting on a reply'
@@ -177,6 +181,7 @@ export default function TripPanel({
   return (
     <>
       {tabs}
+      {alsoHere}
       <div className="lw-summary">
         <div className="lw-sumcell"><span className="k">Days</span><span className="v">{dayCount}</span></div>
         <div className="lw-sumcell"><span className="k">Travellers</span><span className="v">{pax}</span></div>

@@ -402,7 +402,10 @@ _NOT_A_SEARCH = re.compile(r"\b(trip|itinerary|days?|nights?|weekend|week|plan|v
 
 def any_kind(message: str) -> Optional[str]:
     m = _ANY_KIND.match(message or "")
-    if not m or len((message or "").split()) > 12 or len(m["what"].split()) > 4 or _NOT_A_SEARCH.search(m["what"]):
+    # Sasha 169 · the length is the request's, not its day, time and party: "a cooking class in Hoi An on the 17th at 10 in the
+    # morning for two" (15 words) is a search
+    head = re.split(r"\s+(?:on|at|for|this|next|tomorrow|tonight|today)\s+", message or "", maxsplit=1, flags=re.I)[0]
+    if not m or len(head.split()) > 12 or len(m["what"].split()) > 4 or _NOT_A_SEARCH.search(m["what"]):
         return None
     return m["what"]
 

@@ -36,7 +36,7 @@ interface TripPanelProps {
  */
 /** Sasha 165 · THE ONE VIEW: the plan on the ACCOUNT (Postgres) with every booking slotted into its day — polled, so a
  *  booking made on WhatsApp shows here within seconds, and a plan made elsewhere (or before a reload) still shows. */
-type ServerBooking = { id?: string; venue: string; time?: string; part?: string; status?: string; status_words?: string; replaces?: string; test?: boolean }
+type ServerBooking = { id?: string; venue: string; time?: string; part?: string; status?: string; status_words?: string; replaces?: string; test?: boolean; edge?: string }
 type ServerDay = { day: number; date?: string | null; city?: string; bookings?: ServerBooking[]; activities?: { name: string; time?: string; replaced_by?: string; added?: boolean }[] }
 const SHORT: Record<string, string> = { requested: 'Requested', attempting: 'Requested', pending: 'Not sent yet', confirmed: 'Confirmed ✅',
   guest_booked: 'Booked by you ✅', declined: 'Declined', quoted: 'Quoted — read their reply', proposed: 'They offered another time',
@@ -192,7 +192,7 @@ export default function TripPanel({
                         {/* Sasha 165 · this day's bookings, with their status — shown even when the day is folded */}
                         {(serverDay(d.day)?.bookings ?? []).map((b, bi) => (
                           <div key={bi} className="lw-day-city" style={{ color: /Confirmed|Booked/i.test(b.status_words ?? '') ? '#7ee2a8' : /Declined/i.test(b.status_words ?? '') ? '#f19999' : '#E8B923' }}>
-                            🔖 {b.time ? `${b.time} · ` : ''}{b.test ? 'TEST · ' : ''}{b.venue} — {shortStatus(b)}
+                            🔖 {b.time ? `${b.time}${b.edge ? ` (${b.edge})` : ''} · ` : ''}{b.test ? 'TEST · ' : ''}{b.venue} — {shortStatus(b)}
                           </div>
                         ))}
                         {/* Sasha 167 · a place picked on WhatsApp, on its day — a plan, not a booking */}

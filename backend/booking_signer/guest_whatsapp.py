@@ -133,7 +133,8 @@ def title(s: str) -> str:
 
 
 def _fold(s: str) -> str:
-    return "".join(ch for ch in unicodedata.normalize("NFD", s or "") if unicodedata.category(ch) != "Mn").lower()
+    return "".join(ch for ch in unicodedata.normalize("NFD", (s or "").replace("đ", "d").replace("Đ", "D"))
+                   if unicodedata.category(ch) != "Mn").lower()   # Sasha 169 · đ has no decomposition: "Bạch Đằng" → "bach dang"
 
 
 # ── the store: Memory for tests, Postgres (sql/020) for real ────────────────────────────────────────────────────────
@@ -1423,7 +1424,7 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
         await _stream_cards(ctx, f, shown, cands, ranking, luxe, pick, draft, account)
         return
     # Sasha 140 · never block on photos: the cards go with what's ready within the budget; the rest follow on their own
-    photos, late = await _photos_within(shown, photo_wait())
+    photos, late = await _photos_within(shown, ctx.get("photo_wait") or photo_wait())   # Sasha 169 · the voice page waits longer (no late photos)
     if ctx.get("third_card"):   # Sasha 126 · the combo's spa set: OUR demo spa as the third card
         shown = shown[:2] + [ctx["third_card"]]
     elif rehearsal(account) and not ctx.get("no_test_card"):   # Sasha 117 · the dress rehearsal books OUR test venue; the card says so
@@ -1444,7 +1445,8 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
         _spawn(_late_photos(ctx["ch"], ctx["frm"], {c["place_id"]: c.get("name") or "" for c in shown}, late))
     ctx["st"]["pending"] = {"kind": "cards", "at": ctx["now"].isoformat(), "nonce": nonce, "find": f,
                             "draft": draft.get("parts") or {},
-                            "cards": [{"place_id": c["place_id"], "name": c.get("name"), "country": c.get("country")} for c in shown]}
+                            "cards": [{"place_id": c["place_id"], "name": c.get("name"), "country": c.get("country"),
+                                       "address": c.get("address"), "type": c.get("type")} for c in shown]}   # Sasha 169 · "the one by the river"
 
 
 TEST_CARD = {"place_id": "sasha-test-venue", "name": "Sasha Test Venue", "country": "ES"}
@@ -1581,7 +1583,8 @@ async def _stream_cards(ctx: dict, f: dict, shown: List[dict], cands: dict, rank
         _spawn(_late_photos(ch, frm, {c["place_id"]: c.get("name") or "" for c in shown}, late))
     ctx["st"]["pending"] = {"kind": "cards", "at": ctx["now"].isoformat(), "nonce": nonce, "find": f,
                             "draft": draft.get("parts") or {},
-                            "cards": [{"place_id": c["place_id"], "name": c.get("name"), "country": c.get("country")} for c in shown]}
+                            "cards": [{"place_id": c["place_id"], "name": c.get("name"), "country": c.get("country"),
+                                       "address": c.get("address"), "type": c.get("type")} for c in shown]}   # Sasha 169 · "the one by the river"
 
 
 async def _photos_within(shown: List[dict], budget: float) -> Tuple[Dict[str, str], List[asyncio.Task]]:
@@ -1710,7 +1713,8 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             nh = HO.booking_handoff(body, [], ctx["now"]) or {}
             nf, nparts = nh.get("booking_find") or {}, (nh.get("reservation_draft") or {}).get("parts") or {}
             # its own place AND its own day/time or party — "Italian in Malasaña" alone stays a refinement (day and party kept)
-            if nf.get("where") and (nf.get("open_at") or nparts.get("when") or nparts.get("how_many")) and WB.sasha_clear(body, [], ctx["now"]):
+            if nf.get("where") and (nf.get("open_at") or nparts.get("when") or nparts.get("how_many") or WB._ORD_DAY.search(body or "")) \
+                    and WB.sasha_clear(body, [], ctx["now"]):   # Sasha 169 · "… on the 17th" is its own day
                 st["pending"] = None
                 return False
         if i is None:
@@ -2054,6 +2058,28 @@ def _picked(pend: dict, body: str, payload: str) -> Optional[int]:
             return _ORDINAL[w]
     words = [w for w in re.findall(r"[a-z0-9]+", t) if len(w) > 2 and w not in ("the", "one", "that", "please")]
     hits = [i for i, c in enumerate(pend["cards"]) if words and all(w in _fold(c.get("name") or "") for w in words)]
+    if len(hits) == 1:
+        return hits[0]
+    return described(pend["cards"], t)
+
+
+#: Sasha 169 · a card picked by what it's LIKE, said aloud: "the one by the river", "the one in the old town" — read against
+#: each card's own name, address and kind (never a guess: one card must match, else the question is asked again)
+_DESCRIBED = {"river": r"river|riverside|bach dang|thu bon|an hoi|bo song|waterfront|quay|ben",
+              "beach": r"beach|bien|bai|seaside|an bang|cua dai|my khe|playa",
+              "old town": r"old town|old quarter|pho co|minh an|tran phu|nguyen thai hoc|le loi|hoan kiem|casco",
+              "market": r"market|cho|mercado", "rooftop": r"rooftop|sky|terrace|azotea", "garden": r"garden|vuon|jardin",
+              "hotel": r"hotel|resort|khach san"}
+
+
+def described(cards: list, t: str) -> Optional[int]:
+    if not re.search(r"\b(?:by|near|on|in|at|with|next to|close to|beside)\b", t):
+        return None
+    keys = [k for k in _DESCRIBED if re.search(rf"\b{k}\b", t)]
+    if not keys:
+        return None
+    hits = [i for i, c in enumerate(cards) if all(re.search(rf"\b(?:{_DESCRIBED[k]})\b", _fold(" ".join(str(c.get(x) or "") for x in ("name", "address", "type"))))
+                                                  for k in keys)]   # whole words: "bean hoi" is not "an hoi"
     return hits[0] if len(hits) == 1 else None
 
 
@@ -2097,6 +2123,8 @@ async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
         out.text(f"I couldn't read how {card.get('name') or 'they'} take bookings — {refusal_words(read, status)}.")
         return
     venue = (read.get("listing") or {}).get("name") or card.get("name") or read.get("venue")
+    if "(TEST stand-in)" in str(read.get("venue") or ""):   # Sasha 169 · the demo stand-in says so, always
+        venue = read["venue"]
     rungs = {r["rung"]: r for r in read.get("rungs") or [] if r.get("available")}
     if not any(k in rungs for k in ("form", "link", "phone", "email")):   # Sasha 135 · an email-only venue has a route (Sasha 130)
         ctx["st"]["pending"] = None
@@ -2222,7 +2250,10 @@ async def _answer_need(ctx: dict, pend: dict, body: str) -> bool:
         day, hhmm = (draft.get("when") or {}).get("at", "")[:10] or None, None
         from .chat_request import plain_day, _time
         day = plain_day(body, ctx["now"]) or day or draft.get("day")   # Sasha 148 · the day given earlier, kept
-        hhmm = _time(body.lower()) or HO.context_time(body) or HO.plain_time(body)
+        from . import wa_brain as WB
+        hhmm = _time(body.lower()) or HO.context_time(body) or HO.plain_time(body) or WB.spoken_time(body)   # Sasha 169 · "10 in the morning"
+        if (d.get("how_many") or {}).get("count") and not draft.get("how_many"):   # "… for 2" said with the time: kept
+            draft["how_many"] = d["how_many"]
         if (d.get("when") or {}).get("mode") in ("at", "venue_proposes"):
             draft["when"] = d["when"]
         elif day and hhmm:
@@ -2401,6 +2432,9 @@ async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: st
     else:
         out.text("What I'll " + ("say" if rung == "call" else "send") + ":\n" +
                  "\n".join("• " + _BULLET.sub("", ln) for ln in guest_lines(rung, read_back["lines"])))   # Sasha 117 · one bullet
+    if kind == "confirm" and "(TEST stand-in)" in (venue or ""):   # Sasha 169 · the stand-in, said first
+        real = venue.split(" (TEST stand-in)")[0]
+        sentence = f"🧪 TEST: {real} — our test venue stands in; {real} is not contacted.\n{sentence}"
     tag = f"{rid[:8]}:{sha[:16]}"
     yes_title = "Yes, book it" if kind == "confirm" else "Yes, cancel"
     out.ask(sentence, [(yes_title, f"yes:{tag}"), ("No", f"no:{tag}")])

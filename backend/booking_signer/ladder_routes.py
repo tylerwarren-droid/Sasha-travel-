@@ -138,6 +138,11 @@ async def read_venue(request: Request):
         body = {"name": "Sasha Test Venue", "city": body.get("city") or "Madrid", "country": "ES", "website": test_venue_url()}
     if body is None:
         return _refuse(400, "read_malformed", "send {name, city, country?, website?} as a JSON object")
+    if body.get("place_id") and standin(account_for(request)):
+        # Sasha 169 · THE DEMO STAND-IN (founder only, SASHA_DEMO_STANDIN=1): a real listing picked → OUR test venue's own page
+        # is read and sent to instead, and its name says so everywhere — the real place is never contacted
+        from .form_rung import test_venue_url
+        body = {"name": standin_name(body.get("name")), "city": body.get("city") or "Madrid", "country": "ES", "website": test_venue_url()}
     if any(k in body for k in ("phone", "number", "phone_number", "email", "to")):
         return _refuse(422, "contact_from_request", "a venue's contact details are READ from what it publishes, never taken from the request")
     now = NOW()
@@ -184,6 +189,20 @@ async def draft_route(request: Request):
 
 
 REHEARSAL_ID = "sasha-test-venue"
+
+
+def standin(account: Optional[str]) -> bool:
+    """Sasha 169 · the founder's demo: every send goes to OUR test venue, standing in for the place he picked (labelled TEST)."""
+    import os
+    from .guest_accounts import founder
+    return os.getenv("SASHA_DEMO_STANDIN", "") == "1" and bool(account) and founder(account)
+
+
+STANDIN_MARK = "(TEST stand-in)"   # short: a venue name is at most 80 characters
+
+
+def standin_name(real: Optional[str]) -> str:
+    return f"{(real or 'the place you picked').strip()[:62]} {STANDIN_MARK}"
 
 
 def _with_rehearsal(account: str, out: dict) -> dict:

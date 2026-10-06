@@ -1781,6 +1781,19 @@ async def conduct(
         return {"response": _say, "intents": ["handoff"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
                 "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
                 "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
+    # Sasha 169 (2) · "book it" with a plan on the ACCOUNT: the whole trip — its hotels and flights, TEST — in one read-back,
+    # one yes and one tap to pay on the phone (booking_signer/trip_book.py; the card is TripBookTest on the web)
+    from booking_signer import trip_book as _tb  # noqa: E402
+    _origin = _tb.asked(user_message)
+    if _origin is not None and user_id and signed_in is not False:
+        from booking_signer import plan_store as _ps_tb  # noqa: E402
+        if await _ps_tb.latest(user_id):
+            _say = ("Here's the whole trip to book — the hotels and your flights, all TEST: nothing is reserved or charged. "
+                    "One yes, then one tap on your phone.")
+            return {"response": _say, "intents": ["book_trip"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                    "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
+                    "trip_book": {"from": _origin or "Madrid"},
+                    "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
     # Sasha 159 (5) · "send me the captcha test": a fresh CAPTCHA hand-over and one WhatsApp tap (founder only)
     from booking_signer import captcha_test as _ct  # noqa: E402
     if _ct.asked(user_message):

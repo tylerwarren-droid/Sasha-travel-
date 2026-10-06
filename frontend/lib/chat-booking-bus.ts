@@ -11,7 +11,7 @@ export function setChatBookingHandler(h: Handler | null): void { handler = h }
 
 /** true → the booking thread took the line (SashaChat shows it as the guest's message and sends nothing on) */
 export function takeChatText(text: string): boolean {
-  try { return handler ? handler(text) : false } catch { return false }
+  try { return (handler ? handler(text) : false) || takeTypedYes(text) } catch { return false }   // Sasha 169 · a card's yes with no search open
 }
 
 /** S-66 step 9 · the ONE pending read-back card a typed "yes" may approve (the newest; a new card replaces it). */

@@ -43,8 +43,9 @@ def dates_of(message: str, days: int, today: date) -> tuple:
             return date(y, mon, int(m[1])), date(y, mon, int(m[2]))
         except ValueError:
             return None, None
-    m = _FROM.search(message or "")
-    if m and m[2].lower()[:3] in _MONTHS:
+    # Sasha 169 · the first DATE, not the first "<number> <word>": "8 days in Vietnam from 12 November" read "8 days" and stopped
+    m = next((x for x in _FROM.finditer(message or "") if x[2].lower()[:3] in _MONTHS), None)
+    if m:
         mon = _MONTHS[m[2].lower()[:3]]
         y = today.year + (1 if mon < today.month else 0)
         try:
@@ -74,6 +75,11 @@ async def save(account: Optional[str], itinerary: dict, message: str, now: datet
         days = itinerary["days"]
         start, end = dates_of(message, len(days), now.date())
         cities = list(dict.fromkeys(d.get("city") for d in days if d.get("city")))
+        if not itinerary.get("party"):   # Sasha 169 · how many, as the guest said it ("2 of us") — the trip's bookings are for them
+            from .handoff import plain_party
+            n = plain_party(message or "")
+            if n:
+                itinerary = {**itinerary, "party": n}
         dest = {"cities": cities, "plan": itinerary, "kanoe": "plan/1"}
         title = (itinerary.get("title") or "Your trip")[:200]
 
@@ -101,22 +107,38 @@ async def save(account: Optional[str], itinerary: dict, message: str, now: datet
         return None
 
 
-async def latest(account: Optional[str]) -> Optional[dict]:
+def _names(r, d: dict) -> List[str]:
+    words = [w for w in re.findall(r"[A-Za-zÀ-ÿ]{4,}", r["title"] or "") if w.lower() not in ("days", "trip", "your", "plan", "move")]
+    return [c for c in (d.get("cities") or []) if c] + words
+
+
+async def latest(account: Optional[str], hint: Optional[str] = None) -> Optional[dict]:
+    """The account's plan: the one the guest's words name (a city or a word of its title, e.g. "Hoi An", "Vietnam"), else the
+    one touched most recently. Sasha 169: an account can hold several (a move to Madrid and a Vietnam holiday) — the newest
+    CREATED one hijacked "show me my itinerary" while the other was being worked on."""
     run = _run()
     if not account or run is None:
         return None
 
     async def fn(conn):
-        return await conn.fetchrow("select id, title, destinations, depart_date, return_date, created_at from trips where owner_id = $1 "
-                                   "and destinations ? 'plan' and status in ('draft','active') order by created_at desc limit 1",
-                                   uuid.UUID(account))
+        return await conn.fetch("select id, title, destinations, depart_date, return_date, created_at from trips where owner_id = $1 "
+                                "and destinations ? 'plan' and status in ('draft','active') order by updated_at desc, created_at desc limit 6",
+                                uuid.UUID(account))
     try:
-        r = await run(fn)
+        rows = await run(fn)
     except Exception as e:
         log.info("[plan_store] no plan read: %s", type(e).__name__)
         return None
-    if not r:
+    if not rows:
         return None
+    r = rows[0]
+    if hint and len(rows) > 1:
+        for x in rows:
+            dx = x["destinations"]
+            dx = json.loads(dx) if isinstance(dx, str) else dx
+            if any(re.search(rf"\b{re.escape(n)}\b", hint, re.I) for n in _names(x, dx or {})):
+                r = x
+                break
     d = r["destinations"]
     d = json.loads(d) if isinstance(d, str) else d
     return {"trip_id": str(r["id"]), "title": r["title"], "start": r["depart_date"], "end": r["return_date"], "plan": d.get("plan") or {},
@@ -239,14 +261,24 @@ def merge(p: dict, bookings: List[dict]) -> dict:
         d.setdefault("bookings", [])
     by_date = {d["date"]: d for d in days if d.get("date")}
     for b in bookings:
-        day = by_date.get(b.get("date") or "")
+        day, edge = by_date.get(b.get("date") or ""), None
+        if day is None and b.get("type") == "flight" and days and b.get("date"):
+            # Sasha 169 · the flight there leaves the day before day 1, and the one home the day after the last: shown on those days
+            try:
+                fd = date.fromisoformat(str(b["date"])[:10])
+                if days[0].get("date") and fd == date.fromisoformat(days[0]["date"]) - timedelta(days=1):
+                    day, edge = days[0], f"leaves {fd.strftime('%a')} {fd.day} {fd.strftime('%b')}"
+                elif days[-1].get("date") and fd == date.fromisoformat(days[-1]["date"]) + timedelta(days=1):
+                    day, edge = days[-1], f"leaves {fd.strftime('%a')} {fd.day} {fd.strftime('%b')}"
+            except ValueError:
+                pass
         if day is None or b.get("status") in ("cancelled",):
             continue
         part = _part(b.get("time"))
         from .wa_brain import is_test
         entry = {"id": b.get("id"), "venue": b.get("venue"), "time": b.get("time"), "part": part, "status": b.get("status"),
                  "status_words": b.get("status_words"), "what": b.get("what"), "type": b.get("type"),
-                 "test": is_test(b)}   # Sasha 167 · kept for the demo, labelled TEST; "reset the demo" clears them
+                 "test": is_test(b), **({"edge": edge} if edge else {})}   # Sasha 167 · TEST-labelled; Sasha 169 · the flight's own day
         rx = _MATCH.get(b.get("category") or b.get("type") or "", r"$^")
         for a in day.get("activities") or []:
             if not a.get("replaced_by") and (a.get("time") or "") == part and re.search(rx, f"{a.get('name','')} {a.get('blurb','')}", re.I):
@@ -279,7 +311,9 @@ def text(plan: dict) -> List[str]:
         head = f"Day {d.get('day')}{' · ' + day_words(d['date']) if d.get('date') else ''} — {d.get('city') or ''}"
         lines = [head]
         for b in sorted(d.get("bookings") or [], key=lambda x: x.get("time") or ""):
-            lines.append(f"  • {b.get('time') or ''} {'TEST · ' if b.get('test') else ''}{b.get('venue')}: {short_status(b)}".replace("  •  ", "  • "))
+            name = str(b.get("venue") or "").replace("(TEST stand-in)", "(our test venue stood in)")
+            when = f"{b.get('time') or ''} ({b['edge']})" if b.get("edge") else (b.get("time") or "")
+            lines.append(f"  • {when} {'TEST · ' if b.get('test') else ''}{name}: {short_status(b)}".replace("  •  ", "  • "))
         acts = [a for a in d.get("activities") or [] if not a.get("replaced_by")]
         for a in [a for a in acts if a.get("added")]:   # Sasha 167 · a place picked on WhatsApp: on its day, not booked
             lines.append(f"  📍 {a.get('time')}: {a.get('name')} (not booked yet)")

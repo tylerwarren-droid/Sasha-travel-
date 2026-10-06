@@ -105,6 +105,7 @@ class ConductorResponse(BaseModel):
     session_id: Optional[str] = None  # S-62 step 7 · the session this turn was filed under (a new one if the sent id was not yours)
     booking_find: Optional[dict] = None  # S-66 chat booking (Stage B)
     booking_cancel: Optional[dict] = None  # Sasha 96 chat cancel (Stage B)
+    trip_book: Optional[dict] = None  # Sasha 169 · book the whole trip (TEST): {from}
     reservation_draft: Optional[dict] = None  # S-66 chat booking (Stage B)
     quick_replies: list = []   # CR 16 · a product's buttons [{title, payload}]
     media: list = []           # CR 16 · a product's pictures [{caption, url}]
@@ -162,6 +163,7 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             saved_card=result.get("saved_card"),
             booking_find=result.get("booking_find"),  # S-66 chat booking (Stage B)
             booking_cancel=result.get("booking_cancel"),  # Sasha 96 chat cancel (Stage B)
+            trip_book=result.get("trip_book"),  # Sasha 169
             reservation_draft=result.get("reservation_draft"),  # S-66 chat booking (Stage B)
             quick_replies=result.get("quick_replies") or [],   # CR 16
             media=result.get("media") or [],

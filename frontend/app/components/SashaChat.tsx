@@ -1,6 +1,7 @@
 'use client'
 import { FlightBookTest } from './FlightBookTest'  // Sasha 132
 import { HotelBookTest } from './HotelBookTest'
+import { TripBookTest } from './TripBookTest'  // Sasha 169 · book the whole trip (TEST)
 import { KeepAcrossDevices } from './KeepAcrossDevices'   // Sasha 153  // Sasha 135
 import { useState, useRef, useEffect, MutableRefObject } from 'react'
 import { createPortal } from 'react-dom'
@@ -202,6 +203,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
   const [bookingCancel, setBookingCancel] = useState<{ venue: string; n: number } | null>(null)  // Sasha 96 chat cancel (Stage B)
   // CR 16 · a product's buttons and pictures for the current turn
   const [quickReplies, setQuickReplies] = useState<{ title: string; payload: string }[]>([])
+  const [tripBook, setTripBook] = useState<{ from: string; n: number } | null>(null)  // Sasha 169
   const [productMedia, setProductMedia] = useState<{ caption: string; url: string; link?: string }[]>([])
   const openedRef = useRef(false)
   const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number; provider?: string; provider_offer_id?: string; live_mode?: boolean }[] }[]>([])
@@ -418,6 +420,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
       setQuickReplies(Array.isArray(response.data.quick_replies) ? response.data.quick_replies : [])   // CR 16
       setProductMedia(Array.isArray(response.data.media) ? response.data.media : [])
       if (response.data.booking_find) setBookingFind({ ...response.data.booking_find, draft: response.data.reservation_draft ?? null })  // S-66 chat booking
+      if (response.data.trip_book) setTripBook({ from: String(response.data.trip_book.from ?? 'Madrid'), n: Date.now() })  // Sasha 169
       if (response.data.booking_cancel) setBookingCancel({ ...response.data.booking_cancel, n: Date.now() })  // Sasha 96 chat cancel (Stage B)
       // Replace local messages with server-authoritative history
       if (conversation_history?.length > 0) {
@@ -802,6 +805,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
           </div>
         )}
         {bookingFind && <ChatBooking key={`${bookingFind.what}|${bookingFind.where}`} find={bookingFind} />}
+        {tripBook && <TripBookTest key={tripBook.n} from={tripBook.from} />}{/* Sasha 169 · the whole trip, TEST, one tap */}
         {bookingCancel && <ChatCancel key={bookingCancel.n} venue={bookingCancel.venue} />}{/* Sasha 96 chat cancel (Stage B) */}
         {/* Sasha 153 · after a booking only: the private guest may add an email to keep it across devices */}
         <KeepAcrossDevices />

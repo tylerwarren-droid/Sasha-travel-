@@ -226,7 +226,7 @@ async def answer(account: str, text: str, now: datetime) -> List[str]:
     rows = await _rows(account)
     if TRIP.search(text or ""):   # Sasha 165 · the plan + the bookings, day by day — when there is a plan
         from . import plan_store as PS
-        p = await PS.latest(account)
+        p = await PS.latest(account, text)
         if p:
             return PS.text(PS.merge(p, rows))
     if WEEK.search(text or ""):

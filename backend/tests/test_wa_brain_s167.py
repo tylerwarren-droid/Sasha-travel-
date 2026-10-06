@@ -58,7 +58,7 @@ class Placeless(unittest.TestCase):
 
 class Context(unittest.TestCase):
     def run_ctx(self, body, latest=LATEST):
-        async def lat(a):
+        async def lat(a, hint=None):
             return latest
         with Patch(PS__latest=lat):
             return asyncio.run(WB.context("a", body, "restaurant", NOW))
@@ -85,7 +85,7 @@ class Flow(unittest.TestCase):
     def test_question_then_cards_then_added_to_its_day(self):
         found, added = [], []
 
-        async def lat(a):
+        async def lat(a, hint=None):
             return LATEST
 
         async def find(c, f, draft):
@@ -243,7 +243,7 @@ class LiveFailure(unittest.TestCase):
     def test_nine_for_dinner_is_asked_then_outside_the_trip_is_asked(self):
         found, days = [], []
 
-        async def lat(a):
+        async def lat(a, hint=None):
             return LATEST
 
         async def find(c, f, draft):

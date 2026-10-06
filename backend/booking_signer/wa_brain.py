@@ -96,7 +96,7 @@ def _pick_day(days: List[dict], city: str, kind: str) -> Optional[dict]:
 async def context(account: Optional[str], body: str, kind: str, now: datetime) -> dict:
     """{"where", "country", "trip"?} — or {"ask": [cities], "trip"} when only the guest can say which city."""
     from . import plan_store as PS, itinerary_q as IQ
-    p = await PS.latest(account)
+    p = await PS.latest(account, body)
     end = p.get("end") if p else None
     if isinstance(end, str):
         end = date.fromisoformat(end)
@@ -169,7 +169,7 @@ async def answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
             return False
         st["pending"] = None
         from . import plan_store as PS
-        p = await PS.latest(ctx["account"])
+        p = await PS.latest(ctx["account"], pend["options"][i])
         d = _pick_day(_days(p), pend["options"][i], pend["want"]["kind"]) if p else None
         trip = {**pend["trip"], **({"day": d.get("day"), "date": d.get("date"), "city": d.get("city")} if d else {})}
         await _run(ctx, pend["want"], {"where": pend["options"][i], "country": pend.get("country"), "trip": trip}, pend.get("draft") or {}, pend.get("body") or "")
@@ -264,9 +264,12 @@ async def gate(ctx: dict, f: dict, parts: dict, body: str, done: Optional[list] 
                                     "body": body, "done": done + ["hour"], "hm": [h, mi]}
             return
     done.append("hour")
-    day = (f.get("open_at") or (parts.get("when") or {}).get("at") or "")[:10]
+    if "ordinal" not in done:
+        done.append("ordinal")
+        await _ordinal_day(ctx, f, parts, body)
+    day = (f.get("open_at") or (parts.get("when") or {}).get("at") or parts.get("day") or "")[:10]
     if "trip" not in done and day and not f.get("trip"):
-        p = await PS.latest(ctx["account"])
+        p = await PS.latest(ctx["account"], f"{f.get('where') or ''} {body}")
         if p and p.get("start") and p.get("end"):
             start, end = (date.fromisoformat(str(x)[:10]) for x in (p["start"], p["end"]))
             cities = [c for c in (p.get("cities") or []) if c and c.lower() in (f.get("where") or "").lower()]
@@ -283,6 +286,64 @@ async def gate(ctx: dict, f: dict, parts: dict, body: str, done: Optional[list] 
                                         "body": body, "done": done + ["trip"], "trip_id": p["trip_id"], "city": cities[0], "day": day}
                 return
     await GW._find(ctx, f, {"parts": parts})
+
+
+_ORD_DAY = re.compile(r"\b(?:on\s+)?the\s+(\d{1,2})(?:st|nd|rd|th)\b", re.I)
+_MONTH_WORD = re.compile(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b", re.I)
+
+
+_WORDNUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+            "twelve": 12}
+_SPOKEN = re.compile(r"\b(\d{1,2}|" + "|".join(_WORDNUM) + r")(?:[:.](\d{2}))?\s*(?:o'?clock\s*)?"
+                     r"(in the morning|am|a\.m\.?|in the afternoon|in the evening|at night|tonight|pm|p\.m\.?|de la ma[nñ]ana|de la tarde|de la noche)",
+                     re.I)
+
+
+def spoken_time(body: str) -> Optional[str]:
+    """Sasha 169 · a time as it is SAID: "10 in the morning", "eight at night", "3 in the afternoon" → HH:MM."""
+    m = _SPOKEN.search(body or "")
+    if not m:
+        return None
+    h = int(m[1]) if m[1].isdigit() else _WORDNUM[m[1].lower()]
+    if not 1 <= h <= 12:
+        return None
+    pm = re.search(r"afternoon|evening|night|tonight|pm|p\.m|tarde|noche", m[3], re.I)
+    h = (h % 12) + (12 if pm else 0)
+    return f"{h:02d}:{int(m[2] or 0):02d}"
+
+
+async def _ordinal_day(ctx: dict, f: dict, parts: dict, body: str) -> None:
+    """Sasha 169 · "on the 16th", no month: the trip's 16th when a trip covers one, else the next 16th — never today (it was)."""
+    from . import plan_store as PS
+    m = _ORD_DAY.search(body or "")
+    if not m or _MONTH_WORD.search(body or ""):
+        return
+    n, today = int(m[1]), ctx["now"].date()
+    pick = None
+    p = await PS.latest(ctx["account"], f"{f.get('where') or ''} {body}")
+    if p and p.get("start") and p.get("end"):
+        a, b = (date.fromisoformat(str(x)[:10]) for x in (p["start"], p["end"]))
+        pick = next((a + timedelta(days=i) for i in range((b - a).days + 1) if (a + timedelta(days=i)).day == n), None)
+    if pick is None:
+        y, mo = today.year, today.month
+        for _ in range(3):
+            try:
+                c = date(y, mo, n)
+                if c >= today:
+                    pick = c
+                    break
+            except ValueError:
+                pass
+            y, mo = (y + 1, 1) if mo == 12 else (y, mo + 1)
+    if pick is None:
+        return
+    at = f.get("open_at") or (parts.get("when") or {}).get("at")
+    if at:
+        _set_time(f, parts, int(at[11:13]), int(at[14:16]))
+        f["open_at"] = f"{pick.isoformat()}{f['open_at'][10:]}"
+        parts["when"] = {"mode": "at", "at": f["open_at"]}
+    else:
+        parts["day"] = pick.isoformat()
 
 
 async def _gate_answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
@@ -462,12 +523,13 @@ async def _contact_answer(ctx: dict, pend: dict, body: str) -> bool:
 
 RESET = re.compile(r"^\s*(?:please\s+)?(?:reset|clear)\s+(?:the\s+|my\s+)?demo\s*[.!]?\s*$", re.I)
 _TEST_SQL = ("(ti.provider_name ilike 'Sasha Test Venue%' or ti.provider_name ilike '%(TEST booking%' or ti.booking_reference like 'TEST-%' "
+             "or ti.provider_name ilike '%(TEST stand-in)%' "
              "or ti.booking_reference like 'TV-%')")
 
 
 def is_test(b: dict) -> bool:
     v, ref = b.get("venue") or "", b.get("ref") or b.get("booking_reference") or ""
-    return bool(re.match(r"Sasha Test Venue", v) or "(TEST booking" in v or re.match(r"(TEST|TV)-", ref)
+    return bool(re.match(r"Sasha Test Venue", v) or "(TEST booking" in v or "(TEST stand-in)" in v or re.match(r"(TEST|TV)-", ref)
                 or re.search(r"their ref TV-", b.get("status_words") or ""))
 
 

@@ -58,6 +58,26 @@ const RUNG_NAME: Record<string, string> = { form: 'their booking form', link: 't
 const ORDINAL: Record<string, number> = { first: 0, '1st': 0, one: 0, second: 1, '2nd': 1, two: 1, third: 2, '3rd': 2, three: 2,
   fourth: 3, '4th': 3, four: 3, fifth: 4, '5th': 4, five: 4 }
 
+// Sasha 169 · a card picked by SAYING it — the same rules as WhatsApp (guest_whatsapp._picked / described): its name's words,
+// or what it's like ("the one by the river"), read against each card's own name, address and kind. One card, or none.
+const fold = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase()
+const DESCRIBED: Record<string, RegExp> = { river: /river|riverside|bach dang|thu bon|an hoi|bo song|waterfront|quay|ben/,
+  beach: /beach|bien|bai|seaside|an bang|cua dai|my khe|playa/, 'old town': /old town|old quarter|pho co|minh an|tran phu|nguyen thai hoc|le loi|hoan kiem|casco/,
+  market: /market|cho|mercado/, rooftop: /rooftop|sky|terrace|azotea/, garden: /garden|vuon|jardin/, hotel: /hotel|resort|khach san/ }
+const STOP = new Set(['the', 'one', 'that', 'please', 'pick', 'choose', 'want', 'like', 'lets', "let's", 'with', 'book', 'go'])
+function pickedBySaying(cards: Candidate[], text: string): Candidate | undefined {
+  const t = fold(text).replace(/[^a-z0-9 ]/g, ' ')
+  if (t.trim().split(/\s+/).length > 8) return undefined   // a longer line is a message for Sasha
+  const words = t.split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w))
+  const named = cards.filter((c) => words.length > 0 && words.every((w) => fold(c.name ?? '').includes(w)))
+  if (named.length === 1) return named[0]
+  if (!/\b(by|near|on|in|at|with|next to|close to|beside)\b/.test(t)) return undefined
+  const keys = Object.keys(DESCRIBED).filter((k) => new RegExp(`\\b${k}\\b`).test(t))
+  if (!keys.length) return undefined
+  const hits = cards.filter((c) => keys.every((k) => new RegExp(`\\b(?:${DESCRIBED[k].source})\\b`).test(fold([c.name, c.address, c.type].filter(Boolean).join(' ')))))   // whole words
+  return hits.length === 1 ? hits[0] : undefined
+}
+
 const MARK = { position: 'absolute', right: 6, bottom: 6, fontSize: 10, lineHeight: '14px', padding: '1px 6px', borderRadius: 6,
   background: 'rgba(0,0,0,.55)', color: '#fff', maxWidth: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as const
 /** the city part of a Google address ("…, 28005 Madrid, Spain" → "Madrid"), for a venue found by its name alone */
@@ -192,8 +212,8 @@ export default function ChatBooking({ find }: { find: Find }) {
       }
       if (s.phase !== 'found' && s.phase !== 'read' && s.phase !== 'read_refused') return false
       const m = text.toLowerCase().match(/\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th|one|two|three|four|five)\b/)
-      if (!m || !/\b(one|pick|choose|that|the)\b/.test(text.toLowerCase())) return false
-      const card = s.cards[ORDINAL[m[1]]]
+      const byNumber = m && /\b(one|pick|choose|that|the)\b/.test(text.toLowerCase()) ? s.cards[ORDINAL[m[1]]] : undefined
+      const card = byNumber ?? pickedBySaying(s.cards, text)   // Sasha 169 · its name, or "the one by the river"
       if (!card) return false
       pick(card).catch(() => { /* every path above sets a visible state */ })
       return true

@@ -30,6 +30,15 @@ ACTIVITIES = [
      {"es": "un corte de pelo", "pt": "um corte de cabelo", "fr": "une coupe de cheveux", "de": "einen Haarschnitt", "it": "un taglio di capelli", "en": "a haircut"}),
     (r"\btattoo\b", "a tattoo", "beauty", "pieces", "quote_first",
      {"es": "un tatuaje", "pt": "uma tatuagem", "fr": "un tatouage", "de": "ein Tattoo", "it": "un tatuaggio", "en": "a tattoo"}),
+    # Sasha 169 · an event to book on a trip: a class, a show, a lesson
+    (r"\bcooking (?:class|lesson|school)\b", "a cooking class", "experience", "people", "book",
+     {"es": "una clase de cocina", "pt": "uma aula de culinária", "fr": "un cours de cuisine", "de": "einen Kochkurs", "it": "un corso di cucina",
+      "en": "a cooking class", "vi": "một lớp học nấu ăn"}),
+    (r"\b(?:show|performance|concert|theatre|theater|puppet)\b", "seats for the show", "experience", "people", "book",
+     {"es": "entradas para el espectáculo", "pt": "lugares para o espetáculo", "fr": "des places pour le spectacle", "de": "Plätze für die Vorstellung",
+      "it": "posti per lo spettacolo", "en": "seats for the show"}),
+    (r"\b(?:class|lesson|workshop)\b", "a class", "experience", "people", "book",
+     {"es": "una clase", "pt": "uma aula", "fr": "un cours", "de": "einen Kurs", "it": "una lezione", "en": "a class"}),
     (r"\b(kayak|boat|walking|food|wine|city)\s+tour\b|\btour\b", "a tour", "experience", "people", "book",
      {"es": "una visita guiada", "pt": "uma visita guiada", "fr": "une visite guidée", "de": "eine Führung", "it": "una visita guidata", "en": "a tour"}),
 ]

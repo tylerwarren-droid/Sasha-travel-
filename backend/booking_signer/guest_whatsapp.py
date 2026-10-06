@@ -587,17 +587,27 @@ async def voice_text(p: Dict[str, str]) -> Optional[str]:
         r = await request("GET", p["MediaUrl0"], timeout=20.0, follow_redirects=True,
                           headers={"authorization": "Basic " + base64.b64encode(f"{sid}:{token}".encode()).decode()})
         if r.status_code != 200 or not r.content:
-            log.info("[guest_whatsapp] voice note not fetched: HTTP %s", r.status_code)
+            log.warning("[guest_whatsapp] voice note not fetched: HTTP %s", r.status_code)
             return None
         base = os.getenv("DEEPGRAM_STT_BASE", "").strip().rstrip("/") or "https://api.deepgram.com"
-        d = await request("POST", f"{base}/v1/listen", timeout=30.0, content=r.content,
-                          params={"model": "nova-3", "language": "multi", "smart_format": "true", "punctuate": "true"},
-                          headers={"Authorization": f"Token {key}", "Content-Type": str(p["MediaContentType0"]).split(";")[0]})
-        alts = (((d.json().get("results") or {}).get("channels") or [{}])[0].get("alternatives") or [{}]) if d.status_code == 200 else [{}]
-        words = " ".join(str(alts[0].get("transcript") or "").split())
-        return words or None
+        ctype = str(p["MediaContentType0"]).split(";")[0]
+        # Sasha 173 · live, a voice note came back with no words and nothing was logged: the reason is logged now, and an empty
+        # or failed transcript is tried once more with the plain English model before Sasha says she couldn't make it out
+        for params in ({"model": "nova-3", "language": "multi", "smart_format": "true", "punctuate": "true"},
+                       {"model": "nova-2", "language": "en", "smart_format": "true", "punctuate": "true"}):
+            d = await request("POST", f"{base}/v1/listen", timeout=30.0, content=r.content, params=params,
+                              headers={"Authorization": f"Token {key}", "Content-Type": ctype})
+            if d.status_code != 200:
+                log.warning("[guest_whatsapp] voice note: Deepgram %s HTTP %s: %s", params["model"], d.status_code, d.text[:200])
+                continue
+            alts = ((d.json().get("results") or {}).get("channels") or [{}])[0].get("alternatives") or [{}]
+            words = " ".join(str(alts[0].get("transcript") or "").split())
+            if words:
+                return words
+            log.warning("[guest_whatsapp] voice note: Deepgram %s heard no words (%s bytes, %s)", params["model"], len(r.content), ctype)
+        return None
     except Exception as e:
-        log.info("[guest_whatsapp] voice note not transcribed: %s", type(e).__name__)
+        log.warning("[guest_whatsapp] voice note not transcribed: %s: %s", type(e).__name__, e)
         return None
 
 
@@ -609,7 +619,9 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         heard = await voice_text(p)   # Sasha 165 (5) · a voice note: its words, as if typed
         if heard:
             body = heard
-            p = {**p, "Body": heard, "NumMedia": "0"}
+            # Sasha 173 · the WORDS go on, never the audio: a voice note's file was handed to the products as if it were a photo,
+            # and EspañaMe's DNI reader took "a massage at a spa in Hanoi …" (live)
+            p = {**{k: v for k, v in p.items() if not k.startswith("Media")}, "Body": heard, "NumMedia": "0"}
     payload = (p.get("ButtonPayload") or "").strip()
     now = NOW()
     st = await STORE.get_state(key)

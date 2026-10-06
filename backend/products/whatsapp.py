@@ -348,6 +348,12 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         return True
     if asked_last and asked_last != target:
         await _set_aside(st, ch)                                # another product steps in: the first one is kept
+    cur = st.get("pending") or {}
+    if entering and not payload and target != "trip" and cur.get("product") == target and cur.get("step") not in (None, "done") \
+            and not _KEYWORD.get(target, re.compile("$^")).sub("", body, count=1).strip(" :,-"):
+        cur["touched"] = now.isoformat()                         # CR 36 · its own name while it's asking: where we were,
+        _say_back(out, target, cur)                              # never the same question re-asked (the never-ask-twice line)
+        return True
     if not (st.get("pending") or {}).get("product") == target:
         saved = await _resume(ch, target)
         if saved:

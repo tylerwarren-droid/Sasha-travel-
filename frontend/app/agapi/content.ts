@@ -96,7 +96,7 @@ export const PITCHES: Pitch[] = [
     model: [{ mark: 'concept', text: 'B2B2C first: hotels and concierge operators pay a fee per confirmed booking, plus a per-property fee (prices: founder assumptions). Consumer tiers later. No revenue today.' }],
     status: [
       { mark: 'built', text: 'Vietnam: discovery, and booking by form or email; calls in English, with +84 not connected yet.' },
-      { mark: 'built', text: 'Madrid: the full ladder, in closed beta. WhatsApp is the Twilio sandbox. The confirmation rate isn’t published yet.' },
+      { mark: 'built', text: 'Madrid: the full ladder, in closed beta. WhatsApp on our own number. The confirmation rate isn’t published yet.' },
     ],
     demo: { href: '/', label: 'project.kanoe.ai, the Sasha Vietnam site', whatsapp: 'Just ask, e.g. “dinner for 2 in Hoi An tomorrow at 7pm”' },
   },
@@ -105,7 +105,7 @@ export const PITCHES: Pitch[] = [
     problem: 'A decision about a company or a person (to onboard, invest, award a contract) has to be defensible: evidence from the official source, dated, with every gap said out loud. Analysts assemble it by hand, one register at a time.',
     does: [
       { mark: 'built', text: 'Free sanctions screening (US OFAC, UK OFSI, UN) on every case.' },
-      { mark: 'built', text: 'Company registers in 12 EU countries and 3 US states answer in seconds (as of 2 Oct 2026).' },
+      { mark: 'built', text: 'Company registers on sale in the 27 EU countries and the UK.' },
       { mark: 'built', text: 'The subject’s answers are checked against the evidence, labelled as AI estimates; a verdict that shows its working, and one dated packet.' },
     ],
     agents: [
@@ -138,7 +138,7 @@ export const PITCHES: Pitch[] = [
     ],
     status: [{ mark: 'built', text: 'Live at applieddiligence.com, in beta.' }],
     demo: { href: 'https://applieddiligence.com', label: 'applieddiligence.com',
-            whatsapp: 'Type diligence, then “check TotalEnergies in France”: the register’s own result, source and date, marked PREVIEW. The Netherlands is never queried (KVK’s terms).' },
+            whatsapp: 'Type diligence, then “check SIREN 542051180 in France”: the register’s own result, source and date, marked PREVIEW. The Netherlands is never queried (KVK’s terms).' },
   },
   {
     key: 'campusme', name: 'CampusMe', ready: true, tryHref: '/preview/campusme',

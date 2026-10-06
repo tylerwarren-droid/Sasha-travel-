@@ -8,7 +8,7 @@ export const ad: Tab = {
   headline: 'Due diligence you can defend.',
   lines: [
     { status: 'proven', evidence: 'Applied Diligence: lib/jurisdiction-agents (OFAC, OFSI, UN screens; the instant registers), as of 2 Oct 2026',
-      text: 'Every case is screened free against the US (OFAC), UK (OFSI) and UN sanctions lists; company registers in 12 EU countries and 3 US states answer in seconds (as of 2 Oct 2026).' },
+      text: 'Every case is screened free against the US (OFAC), UK (OFSI) and UN sanctions lists; company registers on sale in the 27 EU countries and the UK.' },
     { status: 'proven', evidence: 'Applied Diligence: the veracity scoring (each score labelled an AI estimate)',
       text: 'Question the subject, and their answers are checked against the evidence on the case. Every score is an AI estimate, and labelled so.' },
     { status: 'proven', evidence: 'Applied Diligence: the case report (one dated PDF, every finding with its source and date)',

@@ -30,6 +30,7 @@ OPENING = {
               "sign in and press — I never do that part for you. What do you need?",
 }
 PRODUCT_OF = {"relocation": "relocation", "campus": "campus", "españa": "health"}
+FIRST_STEP = {"relocation": (None, "route"), "campus": (None,), "health": (None, "es_menu")}   # the opener's own question
 OPEN = {"relocation": "relocation", "relocate": "relocation", "campus": "campus", "campusme": "campus",
         "espana": "españa", "españa": "españa", "espaname": "españa"}
 
@@ -96,8 +97,13 @@ async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = N
     st = await _state(key)
     ch_ = {"wa_id_sha256": key, "account_id": user_id}
     opening = PRODUCT_OF.get(body) if (mode and not (message or "").strip() and not payload) else None
-    if opening and await PW._resume(ch_, opening):
-        opening = None                                 # under way already: the product says where it was
+    if opening:
+        saved = await PW._resume(ch_, opening)
+        if saved and saved.get("step") in FIRST_STEP.get(opening, ()):   # CR 36 · nothing answered yet: the tab opens on its
+            await ST.STORE.drop_conversation(PW._key(ch_), opening)        # opener, never the bare first question
+            saved = None
+        if saved:
+            opening = None                             # under way already: the product says where it was
     p = {"Body": body, "ButtonPayload": (payload or "").strip()}
     out, early = GW.Out(), []
 

@@ -475,6 +475,61 @@ async def _prepare(ctx: dict, approval: dict) -> None:
     out.text("Open it, check each answer, then press Register on " + s["name"] + "'s own page. " + " ".join(tail) +
              "\nReply REGISTERED once you've pressed it.")
     pend.update(step="handed_over", case_id=cid)
+    # CR 33 · the founder's own account: the school's real form, filled live in Sasha's browser; SUBMIT stays his
+    from booking_signer import handover as HO
+    if HO.founder_override(ctx["account"]) and s.get("variant") == "register" and HO.configured():
+        out.text(f"I'm also filling {s['name']}'s own form for you in Sasha's browser — a link comes to your phone in about "
+                 "20 seconds: tick “Yes, I understand”, then pressing SUBMIT is yours (or not). I send nothing to "
+                 f"{s['name']}.")
+        from booking_signer import guest_whatsapp as GW
+        GW._spawn(_live(ctx["account"], ctx["ch"]["wa_id_sha256"], ctx["frm"], cid, session, dict(profile), attendees))
+
+
+async def _live(account: str, wa: str, frm: str, cid: str, session, profile: dict, attendees: int) -> None:
+    """CR 33 · in the background (filling takes seconds): the live hand-over, then ONE tap to the phone. The student's details
+    live only in this task's memory and the cloud page; never stored."""
+    from booking_signer import guest_whatsapp as GW, handover as HO
+    from .. import whatsapp as PW
+    from . import live as LV
+
+    async def say(text: str) -> None:
+        ch, _, number = await PW.reach(wa, frm, account)
+        if ch:
+            gst = await GW.STORE.get_state(ch["wa_id_sha256"])
+            await GW.deliver(ch, number, GW.Out().text(text), gst.get("last_inbound_at"))
+    try:
+        rec = await LV.open_campus_handover(session=session, profile=profile, attendees=attendees, account=account,
+                                            read_only=False, fictional=False)
+    except HO.Refused as e:
+        await say(f"I couldn't open the live form: {e.say}. The question-by-question page I sent still works.")
+        return
+    case = await ST.STORE.get(cid)
+    if case:
+        case["state"]["live_handover"] = {"id": rec["id"], "ready_ms": rec.get("ready_ms"), "at": rec.get("ready_at")}
+        await ST.STORE.update(cid, case["state"])
+    tap = await HO.tap_phone(account, rec)
+    if not tap.get("sent"):
+        await say(f"📲 {rec['venue']} is filled and waiting (10 minutes): {HO.view_url(rec)}")
+
+
+async def _live_done(pub: dict) -> None:
+    """The school's reply after the parent's own SUBMIT → the campus case (its words, not ours)."""
+    for c in await ST.STORE.of_product("campus"):
+        if (c["state"].get("live_handover") or {}).get("id") == pub.get("id"):
+            st = c["state"]
+            st["live_handover"].update(state=pub.get("state"), say=pub.get("say"), pressed_at=pub.get("pressed_at"))
+            if pub.get("state") == "booked":
+                st["status"] = "registered_by_you_on_their_page"
+            await ST.STORE.update(c["id"], st)
+
+
+def _hook() -> None:
+    from . import live as LV
+    if _live_done not in LV.CAMPUS_DONE:
+        LV.CAMPUS_DONE.append(_live_done)
+
+
+_hook()
 
 
 async def _registered(ctx: dict) -> None:

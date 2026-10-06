@@ -142,7 +142,7 @@ def line(v: Venue, d: Decision, venue: str) -> str:
     if d.route == "form":
         return "They take bookings online. I'll fill it in and book it for you. Book it?"
     if d.route == "one_tap":
-        return f"They book through {v.platform or 'their booking page'}. I'll fill it in and send the last step to your phone. Book it?"
+        return f"They book through {v.platform or 'their booking page'}. I'll send their page to your phone — tap, then book. Shall I?"   # Sasha 163
     if d.route == "call_email":
         return f"There's no online booking for {venue}, and it's soon — I'll call them and email them at once. Shall I?"
     if d.route == "call":

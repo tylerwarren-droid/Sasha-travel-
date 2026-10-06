@@ -617,6 +617,12 @@ async def find_venues(http: Http, *, what: str, where: Optional[str], country: O
             raise FindRefused("open_at_invalid", "open_at is the local time as YYYY-MM-DDTHH:MM") from None
     body = {"textQuery": what.strip() if where is None else f"{what.strip()} in {where.strip()}",
             "maxResultCount": 5 if named else FIND_MAX, **({"regionCode": country} if country else {})}
+    if named and where is None:   # Sasha 161 · a venue named with no city: near the guest's home first ("book Indian Accent"
+        try:                      # found New Delhi's, then New York's) — SASHA_HOME_LATLNG, Madrid by default, 50 km
+            lat, lng = (float(x) for x in (os.getenv("SASHA_HOME_LATLNG", "") or "40.4168,-3.7038").split(","))
+            body["locationBias"] = {"circle": {"center": {"latitude": lat, "longitude": lng}, "radius": 50000.0}}
+        except ValueError:
+            pass
     try:
         r = await http("POST", PLACES_URL, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": FIND_FIELDS,
                                                     "content-type": "application/json"}, json=body)

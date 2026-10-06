@@ -261,6 +261,10 @@ async def answer(account: str, text: str, now: datetime) -> List[str]:
         if t and (t.get("virtual") or not t.get("start")):
             items = t.get("extras") or []
             return [f"🗂 {t['label']}:\n" + ("\n".join(_line(r) for r in items[:20]) if items else "Nothing dated yet.")]
+        if not t:   # never another journey in its place (it showed the campus tour)
+            what = m[1].lower()
+            return [f"There's no {'move' if what.startswith('move') else 'campus'} journey on your account yet — "
+                    + ("RelocateMe starts it: say “relocation”." if what.startswith("move") else "CampusMe starts it: say “campus”.")]
     if TRIP.search(text or ""):   # Sasha 165 · the plan + the bookings, day by day — when there is a plan
         from . import plan_store as PS
         p = await PS.latest(account, text)

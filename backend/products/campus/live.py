@@ -328,7 +328,7 @@ async def finish(rec: dict, seen: dict) -> None:
                     if done else "Pressed — the school's page doesn't say the registration went through; check the email they send."))
     for fn in list(CAMPUS_DONE):
         try:
-            await fn(HO._public(rec, ops_view=True))
+            await fn({**HO._public(rec, ops_view=True), "answer_text": text})   # CR 45 · its words, for the confirmation check
         except Exception as e:
             log.warning("[campus-handover] %s done hook: %s", rec["id"], e)
     await HO._release(rec)

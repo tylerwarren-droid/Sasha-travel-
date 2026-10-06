@@ -287,13 +287,14 @@ class OnWhatsApp(Fixtures):
         self.say("", payload=self.last_buttons()[0][1])
         self.say("REGISTERED")
         said = self.said()
-        self.assertIn("registered on your word", said)
+        self.assertIn("registration not confirmed yet", said)                      # CR 45 · never assumed
         self.assertIn("calendar.google.com/calendar/render?action=TEMPLATE", said)
         self.assertRegex(said, r"https://sasha\.test/api/products/campus/[\w-]{22}/visit\.ics")
         self.say("Thank you for registering for a campus visit. We look forward to seeing you soon — see you then!")
-        self.assertIn("doesn't name Yale and 14 October", self.said())
-        self.say("Yale Undergraduate Admissions: your registration is confirmed for Wednesday, October 14 at 9:00 AM.")
-        self.assertIn("✅ Confirmed in Yale's own words", self.said())
+        self.assertIn("Registration not confirmed yet — Yale's reply doesn't show", self.said())   # CR 45 · checked, never assumed
+        self.say("Yale Undergraduate Admissions: Sam, your registration is confirmed for Wednesday, October 14 at 9:00 AM. "
+                 "Confirmation number YA-55120.")
+        self.assertIn("✅ Registered ✓ — Yale, Wed 14 Oct 9am, confirmation #YA-55120", self.said())
 
     def test_modes_switch_and_sasha_is_untouched_outside_them(self):
         self.say("hello")

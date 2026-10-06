@@ -47,8 +47,9 @@ async def agenda(account: str, start: date, end: date) -> List[dict]:
         s = SC.SCHOOLS.get(st.get("school") or "")
         if not s:
             continue
-        status = {"registered_on_your_word": "registered on your word", "confirmed_in_writing": "confirmed by the school",
-                  "handed_over": "prepared — not registered yet"}.get(st.get("status"), st.get("status") or "")
+        status = {"registered_on_your_word": "registration not confirmed — you said you registered", "confirmed_in_writing": "confirmed by the school",
+                  "handed_over": "prepared — not registered yet",
+                  "registration_not_confirmed": "registration not confirmed"}.get(st.get("status"), st.get("status") or "")   # CR 45
         out.append({"on": x["day"], "time": x.get("start"), "text": f"{VS.name_of(s, x)} ({status})", "product": "campus",
                     "kind": "visit", "source": f"{s['name']}'s own visit calendar"})
     out.sort(key=lambda r: (r["on"], r["time"] or "99:99"))

@@ -120,7 +120,8 @@ class Tour(Base):
         self.assertEqual(c.get(f"/products/campus/{cid}/tour-card.jpg").headers["content-type"], "image/jpeg")
         self.say("registered Princeton")
         st = run(ST.STORE.get(cid))["state"]
-        self.assertTrue(next(v for v in st["plan"]["visits"] if v["school"] == "princeton")["status"].startswith("registered"))
+        self.assertTrue(next(v for v in st["plan"]["visits"] if v["school"] == "princeton")["status"].startswith(
+            "Registration not confirmed"))                                              # CR 45 · its confirmation decides
         self.assertEqual(self.spawned, [])                                              # no hand-over for a guest
 
     def test_the_founder_gets_yale_and_brown_filled(self):

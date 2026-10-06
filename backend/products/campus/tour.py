@@ -400,15 +400,21 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
         out.text("Yes or no?")
         return True
     if step == "tour_ready":
+        if len(t) >= 60 and re.search(r"(?i)confirm|registered|registration|look forward|see you", t):   # CR 45 · its email, pasted
+            v = next((v for v in tr["plan"]["visits"] if v.get("session") and any(a in t.lower() for a in _aliases(v["school"]))), None)
+            if v:
+                await _confirm_visit(ctx, tr, v, t, "the school's email, pasted here")
+                return True
         m = re.match(r"(?i)^\s*(registered|booked|done)\b\s*(?:at\s+|for\s+)?(\w+)?", t)
         k = next((x for x in tr.get("keys") or [] if m and m.group(2) and x.startswith(m.group(2).lower()[:4])), None)
         if m and k:
+            name = SC.SCHOOLS.get(k, PATTERNS.get(k, {})).get("name", k)
             for v in tr["plan"]["visits"]:
-                if v["school"] == k:
-                    v["status"] = "registered — on your word (the school's email confirms)"
+                if v["school"] == k:                         # CR 45 · never assumed: not confirmed until its confirmation says so
+                    v["status"] = f"Registration not confirmed — you said you registered; {name}'s confirmation decides"
             await _save(ctx)
-            out.text(f"Noted: {SC.SCHOOLS.get(k, PATTERNS.get(k, {})).get('name', k)} registered, on your word. Its confirmation email "
-                     "is what counts — forward it to me if you like.")
+            out.text(f"Noted that you registered at {name} — I'll mark it registered when its confirmation says so. Paste "
+                     f"{name}'s confirmation email here and I'll check it against what was prepared (student, date, time).")
             return True
         return False
     return False
@@ -591,6 +597,54 @@ async def open_live(school: str, session, fam: Dict[str, str], account: str, rea
                                          read_only=read_only, fictional=fictional)
 
 
+def _aliases(school: str) -> List[str]:
+    s = SC.SCHOOLS.get(school) or PATTERNS.get(school) or {}
+    return [x.lower() for x in s.get("aliases", [])] + ([s["full_name"].lower()] if s.get("full_name") else []) + \
+        ([s["name"].lower()] if s.get("name") else [])
+
+
+def _student(fam_name: str) -> str:
+    return (fam_name or "").split(" ")[0]
+
+
+async def _confirm_visit(ctx: Optional[dict], tr: Optional[dict], v: dict, text: str, source: str, from_page: bool = False,
+                         at: str = "", fam_name: str = "") -> str:
+    """CR 45 · a visit's confirmation, checked against what was prepared; its status line set from the result."""
+    from . import confirm as CF
+    school = SC.SCHOOLS.get(v["school"]) or {"name": v["name"], "aliases": _aliases(v["school"])}
+    fam = (tr or {}).get("fam") or {}
+    exp = CF.expect(school, v["session"], fam.get("student_first") or _student(fam_name))
+    r = CF.read(text, exp, from_page=from_page)
+    v["status"] = CF.line(exp, r)
+    v["confirmation"] = CF.record(r, source, at or (ctx["now"].isoformat() if ctx else ""))
+    if ctx is not None:
+        await _save(ctx)
+        ctx["out"].text(("✅ " if r["confirmed"] else "⚠ ") + v["status"] + ("" if r["confirmed"] else ". I haven't marked it registered."))
+    return v["status"]
+
+
+async def _live_done(pub: dict) -> None:
+    """CR 45 · after the family's own press in a tour's hand-over: the school's page, checked, on that visit."""
+    for c in await ST.STORE.of_product("campus"):
+        st = c["state"]
+        if st.get("kind") != "tour":
+            continue
+        v = next((v for v in (st.get("plan") or {}).get("visits") or [] if v.get("handover_id") == pub.get("id")), None)
+        if v:
+            await _confirm_visit(None, None, v, pub.get("answer_text") or "", "the school's page after your press", from_page=True,
+                                 at=pub.get("answered_at") or "", fam_name=st.get("fam_name") or "")
+            await ST.STORE.update(c["id"], st)
+
+
+def _hook() -> None:
+    from . import live as LV
+    if _live_done not in LV.CAMPUS_DONE:
+        LV.CAMPUS_DONE.append(_live_done)
+
+
+_hook()
+
+
 async def _status(cid: str, school: str, status: str, hid: Optional[str] = None) -> None:
     case = await ST.STORE.get(cid)
     if not case:
@@ -612,5 +666,6 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     if step in ("tour_keep", "tour_confirm"):
         return YS.is_yes(t) or bool(re.match(r"(?i)^\s*no\b|just this once", t))
     if step == "tour_ready":
-        return bool(re.match(r"(?i)^\s*(registered|booked|done)\b", t))
+        return bool(re.match(r"(?i)^\s*(registered|booked|done)\b", t)) or \
+            (len(t) >= 60 and bool(re.search(r"(?i)confirm|registered|registration|look forward|see you", t)))   # CR 45 · its email
     return False

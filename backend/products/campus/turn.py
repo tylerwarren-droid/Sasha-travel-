@@ -549,8 +549,19 @@ async def _live_done(pub: dict) -> None:
         if (c["state"].get("live_handover") or {}).get("id") == pub.get("id"):
             st = c["state"]
             st["live_handover"].update(state=pub.get("state"), say=pub.get("say"), pressed_at=pub.get("pressed_at"))
-            if pub.get("state") == "booked":
-                st["status"] = "registered_by_you_on_their_page"
+            from . import confirm as CF                      # CR 45 · its own confirmation, checked against what was prepared
+            if not (SC.SCHOOLS.get(st.get("school") or "") and (st.get("session") or {}).get("day")):
+                st["status"] = "registration_not_confirmed"          # nothing to check it against: never assumed
+                await ST.STORE.update(c["id"], st)
+                continue
+            exp = CF.expect(SC.SCHOOLS[st["school"]], st["session"], st.get("student_first") or "")
+            r = CF.read(pub.get("answer_text") or "", exp, from_page=True)
+            st["confirmation"] = CF.record(r, "the school's page after your press", pub.get("answered_at") or "")
+            st["status"] = "confirmed_in_writing" if r["confirmed"] else "registration_not_confirmed"
+            st["status_line"] = CF.line(exp, r)
+            if r["confirmed"]:
+                from . import visits as VS
+                await VS.confirm(st.get("trip_item_id"))
             await ST.STORE.update(c["id"], st)
 
 
@@ -576,9 +587,10 @@ async def _registered(ctx: dict) -> None:
     item = await VS.record(ctx["account"], s, x, 1 + int((st.get("ask") or {}).get("guests", 1)))
     st.update(status="registered_on_your_word", registered_at=ctx["now"].isoformat(), trip_item_id=item)
     await ST.STORE.update(cid, st)
-    out.text(f"Noted — registered on your word: {s['name']}, {date.fromisoformat(x['day']).strftime('%A %-d %B')} at "
-             f"{time_words(x['start'])}. {'It’s in your bookings (You → My bookings), and I’ll remind you the day before. ' if item else ''}"
-             f"I'll call it confirmed when {s['name']}'s own confirmation email says so — paste it here when it arrives.")
+    out.text(f"Noted that you registered: {s['name']}, {date.fromisoformat(x['day']).strftime('%A %-d %B')} at "
+             f"{time_words(x['start'])} — registration not confirmed yet. {'It’s in your bookings (You → My bookings), and I’ll remind you the day before. ' if item else ''}"
+             f"I'll mark it registered when {s['name']}'s own confirmation says so — paste its email here and I'll check it "
+             "against what was prepared (student, date, time).")   # CR 45 · never assumed
     out.text(f"📅 Add it to your calendar: {VS.google_link(s, x)}\nor download it: {web()}/api/products/campus/{cid}/visit.ics")
     pend["step"] = "registered"
 
@@ -594,21 +606,22 @@ async def _pasted_confirmation(ctx: dict, body: str) -> bool:
         return False
     st = case["state"]
     x, s = st["session"], SC.SCHOOLS[st["school"]]
-    d = date.fromisoformat(x["day"])
-    says_school = any(a in body.lower() for a in s["aliases"] + [s["full_name"].lower()])
-    says_day = bool(re.search(rf"\b{d.strftime('%B')}\s+{d.day}\b|\b{d.day}\s+{d.strftime('%B')}\b|{d.isoformat()}|\b{d.month}/{d.day}/", body, re.I))
-    says_confirmed = bool(re.search(r"\b(confirm|registered|registration|see you|we look forward)", body, re.I))
-    if not says_confirmed:
+    if not re.search(r"\b(confirm|registered|registration|see you|we look forward)", body, re.I):
         return False
-    if not (says_school and says_day):
-        out.text(f"That reads like a confirmation, but it doesn't name {s['name']} and {d.strftime('%-d %B')} — so I've "
-                 "left the visit as \"registered on your word\".")
+    from . import confirm as CF                              # CR 45 · school, student, day, time, number — checked
+    exp = CF.expect(s, x, st.get("student_first") or "")
+    r = CF.read(body, exp)
+    st["confirmation"] = CF.record(r, "the school's email, pasted here", ctx["now"].isoformat())
+    st["status_line"] = CF.line(exp, r)
+    if not r["confirmed"]:
+        st["status"] = "registration_not_confirmed"
+        await ST.STORE.update(cid, st)
+        out.text(st["status_line"] + ". I haven't marked it registered.")
         return True
-    quote = re.sub(r"\s+", " ", body).strip()[:300]
-    st.update(status="confirmed_in_writing", confirmation_quote=quote, confirmed_at=ctx["now"].isoformat())
+    st.update(status="confirmed_in_writing", confirmation_quote=r["quote"], confirmed_at=ctx["now"].isoformat())
     await ST.STORE.update(cid, st)
     await VS.confirm(st.get("trip_item_id"))
-    out.text(f"✅ Confirmed in {s['name']}'s own words: “{quote[:200]}…”")
+    out.text(f"✅ {st['status_line']} — in {s['name']}'s own words: “{r['quote'][:200]}”")
     pend["step"] = "done"
     return True
 

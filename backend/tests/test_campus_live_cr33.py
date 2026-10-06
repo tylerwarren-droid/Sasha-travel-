@@ -159,7 +159,8 @@ class Filled(Base):
         self.assertEqual(rec["state"], "read_only_stopped")
 
     async def test_his_press_then_the_schools_own_words_and_the_case(self):
-        cid = await ST.STORE.put("campus", FOUNDER, "wa", {"status": "handed_over"})
+        cid = await ST.STORE.put("campus", FOUNDER, "wa", {"status": "handed_over", "school": "penn", "session": SESSION.as_dict(),
+                                                         "student_first": "Sam"})
         rec = await self.open()
         case = await ST.STORE.get(cid)
         case["state"]["live_handover"] = {"id": rec["id"]}
@@ -169,7 +170,9 @@ class Filled(Base):
         self.assertEqual(rec["state"], "booked")
         self.assertIn("Thank you for registering", rec["say"])
         st = (await ST.STORE.get(cid))["state"]
-        self.assertEqual(st["status"], "registered_by_you_on_their_page")
+        # CR 45 · "Thank you for registering!" names neither the student nor the day: not confirmed yet — its email decides
+        self.assertEqual(st["status"], "registration_not_confirmed")
+        self.assertIn("its confirmation email decides", st["status_line"])
         self.assertEqual(st["live_handover"]["state"], "booked")
 
     async def test_no_confirmation_words_is_never_a_tick(self):

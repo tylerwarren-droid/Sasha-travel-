@@ -1,0 +1,403 @@
+"""Sasha 167 · WHATSAPP DOES EVERYTHING THE WEB DOES — no "open Sasha at …" dead end.
+
+The founder's live test: a voice note, transcribed perfectly ("I want a romantic location that has great Vietnamese food"),
+got the canned "On WhatsApp I can book, change or cancel… for anything else, open Sasha at …". Now:
+
+  · placeless()  — a request for a kind of place with NO place named ("a romantic spot with great Vietnamese food") is a search;
+  · context()    — its place comes from the ACTIVE TRIP (one city → that city; a date or city said → that day; several → ONE
+                   short question, "In Hanoi, Hoi An or Ho Chi Minh City?"), else the home city. The words said ("romantic",
+                   "great Vietnamese food") shape the search;
+  · a card picked from a trip search is ADDED to the trip on its day (a plan, not a booking — nothing is sent); "book it at 8"
+    then runs the normal ladder (read-back, one yes);
+  · web_turn()   — anything else goes to the web chat's own brain (conductor.conduct), rendered for WhatsApp: a trip plan is
+                   built and saved on the account exactly as on the web;
+  · ask_contact()— "add your name at {web}" became a question here: the name, with this WhatsApp number, under the consent
+                   sentence shown;
+  · reset the demo (founder only, after a yes): the TEST bookings and the places added on the demo are cleared.
+"""
+from __future__ import annotations
+
+import logging
+import re
+import uuid
+from datetime import date, datetime, timedelta
+from typing import List, Optional
+
+log = logging.getLogger("booking_signer.wa_brain")
+
+# ── a place asked for with no place named ────────────────────────────────────────────────────────────────────────────
+
+_WANT = re.compile(r"\b(?:i(?:'d| would)?\s+(?:like|love|want|need|fancy)|we(?:'d| would)?\s+(?:like|love|want|need|fancy)|"
+                   r"looking for|find\s+(?:me|us)|find\s+(?:an?|some)|show me|recommend|suggest|where (?:can|should|could) (?:i|we)|"
+                   r"know (?:an?|any)|any (?:good|nice|great)|somewhere|quiero|busco|buscamos|recomi[eé]nda\w*)\b", re.I)
+_PLACE = re.compile(r"\b(place|location|spot|somewhere|restaurant|bar|caf[eé]|bistro|food|dinner|lunch|brunch|breakfast|eat|meal|"
+                    r"spa|massage|cocktails?|rooftop|wine|sitio|restaurante|cena|comida)s?\b", re.I)
+#: a place said: "in Hoi An", "near the river in Hanoi" — that's handoff.find_request's, not ours
+_SAID_WHERE = re.compile(r"\b(?:in|near|around|en|cerca de)\s+(?:the\s+)?[A-ZÁÉÍÓÚ]")
+_NOT_PLACE = re.compile(r"\b(trip|itinerary|plan|flights?|fly|hotels?|stay|visa|weather|history|recipe|cook(?:ing)? at home|how to)\b", re.I)
+
+
+def placeless(body: str) -> Optional[dict]:
+    """{"what", "kind"} for a request for a kind of place with no place said — else None."""
+    from .guest_whatsapp import CUISINE
+    from . import handoff as HO
+    t = body or ""
+    cu = CUISINE.search(t)
+    if not _WANT.search(t) or not (_PLACE.search(t) or cu) or _SAID_WHERE.search(t) or _NOT_PLACE.search(t):
+        return None
+    low = t.lower()
+    if re.search(r"\b(spa|massage)\b", low):
+        kind = "spa"
+    elif re.search(r"\b(cocktails?|bar|wine|rooftop)\b", low) and not re.search(r"\b(food|dinner|lunch|eat|meal|restaurant)\b", low):
+        kind = "cocktail bar" if "cocktail" in low else ("rooftop bar" if "rooftop" in low else ("wine bar" if "wine" in low else "bar"))
+    else:
+        kind = "restaurant"
+    quals = HO.qualities(t)
+    cuisine = cu[1].capitalize() if cu and kind == "restaurant" else None
+    what = " ".join(x for x in (*quals, cuisine, kind) if x)
+    return {"what": what, "kind": kind}
+
+
+# ── where: the active trip, else home ────────────────────────────────────────────────────────────────────────────────
+
+def home_city() -> tuple:
+    """No account stores a home city yet: SASHA_HOME_CITY ("Madrid, ES"), Madrid by default — said as such."""
+    import os
+    raw = os.getenv("SASHA_HOME_CITY", "Madrid, ES")
+    city, _, cc = raw.partition(",")
+    return city.strip() or "Madrid", (cc.strip().upper() or "ES")
+
+
+def _country_of(title: str, cities: List[str]) -> Optional[str]:
+    from .handoff import COUNTRY_NAMES
+    for w in re.findall(r"[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)?", title or ""):
+        if w.lower() in COUNTRY_NAMES:
+            return COUNTRY_NAMES[w.lower()]
+    for w in (title or "").split():
+        if w.lower().strip(",.") in COUNTRY_NAMES:
+            return COUNTRY_NAMES[w.lower().strip(",.")]
+    return None
+
+
+def _days(p: dict) -> List[dict]:
+    from . import plan_store as PS
+    return PS.merge(p, []).get("days") or []
+
+
+def _pick_day(days: List[dict], city: str, kind: str) -> Optional[dict]:
+    """The first day in that city — preferring one with no booking of that kind yet."""
+    there = [d for d in days if (d.get("city") or "").lower() == city.lower()]
+    if not there:
+        return None
+    free = [d for d in there if not any((b.get("type") or "") == ("restaurant" if kind == "restaurant" else "beauty") for b in d.get("bookings") or [])]
+    return (free or there)[0]
+
+
+async def context(account: Optional[str], body: str, kind: str, now: datetime) -> dict:
+    """{"where", "country", "trip"?} — or {"ask": [cities], "trip"} when only the guest can say which city."""
+    from . import plan_store as PS, itinerary_q as IQ
+    p = await PS.latest(account)
+    end = p.get("end") if p else None
+    if isinstance(end, str):
+        end = date.fromisoformat(end)
+    live = p and (p.get("plan") or {}).get("days") and (end is None or end >= now.date())
+    if not live:
+        city, cc = home_city()
+        return {"where": city, "country": cc, "home": True}
+    days = _days(p)
+    cities = list(dict.fromkeys(d.get("city") for d in days if d.get("city")))
+    cc = _country_of(p.get("title") or "", cities)
+    trip = {"trip_id": p["trip_id"], "title": p.get("title")}
+
+    def at(d: dict) -> dict:
+        return {"where": d.get("city"), "country": cc, "trip": {**trip, "day": d.get("day"), "date": d.get("date"), "city": d.get("city")}}
+    said = IQ.day_of(body, now)
+    if said:
+        d = next((x for x in days if x.get("date") == said.isoformat()), None)
+        if d:
+            return at(d)
+    named = [c for c in cities if re.search(rf"\b{re.escape(c)}\b", body or "", re.I)]
+    if len(named) == 1:
+        return at(_pick_day(days, named[0], kind))
+    if len(cities) == 1:
+        return at(_pick_day(days, cities[0], kind))
+    return {"ask": cities, "country": cc, "trip": trip}
+
+
+def _or_list(xs: List[str]) -> str:
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " or " + xs[-1]
+
+
+async def search(ctx: dict, want: dict, body: str) -> None:
+    """The search with its place from context, or the ONE question."""
+    from . import guest_whatsapp as GW, handoff as HO
+    c = await context(ctx["account"], body, want["kind"], ctx["now"])
+    draft = HO._draft(body, ctx["now"])
+    if c.get("ask"):
+        nonce = uuid.uuid4().hex[:6]
+        q = f"In {_or_list(c['ask'])}?"
+        if len(c["ask"]) <= 3:
+            ctx["out"].ask(q, [(x, f"where:{nonce}:{i}") for i, x in enumerate(c["ask"])])
+        else:
+            ctx["out"].text(q)
+        ctx["st"]["pending"] = {"kind": "trip_where", "at": ctx["now"].isoformat(), "nonce": nonce, "want": want, "body": body,
+                                "options": c["ask"], "country": c.get("country"), "trip": c["trip"], "draft": draft.get("parts") or {}}
+        return
+    await _run(ctx, want, c, draft.get("parts") or {})
+
+
+async def _run(ctx: dict, want: dict, c: dict, parts: dict) -> None:
+    from . import guest_whatsapp as GW
+    f = {"what": want["what"], "where": c["where"], "priority": "rated", **({"country": c["country"]} if c.get("country") else {}),
+         **({"trip": c["trip"]} if c.get("trip") else {})}
+    if c.get("home"):
+        ctx["out"].text(f"No trip on now, so I looked near home ({c['where']}) — tell me a city for anywhere else.")
+    await GW._find(ctx, f, {"parts": parts})
+
+
+async def answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
+    """The answer to OUR open questions (trip_where · trip_added · contact_name · demo_reset). False: not an answer."""
+    kind, out, st = pend["kind"], ctx["out"], ctx["st"]
+    if kind == "trip_where":
+        i = None
+        if payload.startswith(f"where:{pend['nonce']}:"):
+            i = int(payload.rsplit(":", 1)[1])
+        else:
+            hits = [k for k, x in enumerate(pend["options"]) if re.search(rf"\b{re.escape(x)}\b", body or "", re.I)]
+            i = hits[0] if len(hits) == 1 else None
+        if i is None or not 0 <= i < len(pend["options"]):
+            return False
+        st["pending"] = None
+        from . import plan_store as PS
+        p = await PS.latest(ctx["account"])
+        d = _pick_day(_days(p), pend["options"][i], pend["want"]["kind"]) if p else None
+        trip = {**pend["trip"], **({"day": d.get("day"), "date": d.get("date"), "city": d.get("city")} if d else {})}
+        await _run(ctx, pend["want"], {"where": pend["options"][i], "country": pend.get("country"), "trip": trip}, pend.get("draft") or {})
+        return True
+    if kind == "trip_added":
+        m = re.search(r"\b(?:book|reserve|res[eé]rva)\b", body or "", re.I)
+        if not m:
+            return False
+        st["pending"] = None
+        await book_added(ctx, pend, body)
+        return True
+    if kind == "contact_name":
+        return await _contact_answer(ctx, pend, body)
+    if kind == "demo_reset":
+        from .guest_whatsapp import NO
+        if payload == f"yes:{pend['nonce']}" or re.fullmatch(r"\s*(yes|yes please|s[ií]|ok|reset)\s*[.!]?\s*", body or "", re.I):
+            st["pending"] = None
+            n = await reset_demo(ctx["account"], dry=False)
+            out.text(f"Done — the demo is reset: {n['bookings']} TEST booking{'s' if n['bookings'] != 1 else ''} and "
+                     f"{n['added']} added place{'s' if n['added'] != 1 else ''} cleared. Your plan itself is kept.")
+            return True
+        if payload == f"no:{pend['nonce']}" or NO.fullmatch(body or ""):
+            st["pending"] = None
+            out.text("OK — nothing was cleared.")
+            return True
+        return False
+    return False
+
+
+# ── a card picked from a trip search → on the trip, on its day ───────────────────────────────────────────────────────
+
+async def add_to_trip(ctx: dict, pend: dict, card: dict) -> None:
+    from . import plan_store as PS, sentences as SN
+    f, trip = pend["find"], pend["find"]["trip"]
+    part = "Evening" if f.get("what", "").endswith("restaurant") or "bar" in f.get("what", "") else "Afternoon"
+    ok = await PS.add_place(ctx["account"], trip["trip_id"], trip.get("day"), {
+        "name": card.get("name"), "time": part, "place_id": card.get("place_id"), "added": True,
+        "blurb": f"{f.get('what')} — picked on WhatsApp; not booked yet"})
+    if not ok:
+        ctx["out"].text(f"I couldn't add {card.get('name')} to your trip just now — nothing was booked. Say “book {card.get('name')}” to book it.")
+        return
+    on = f"Day {trip.get('day')} · {SN.day_words(trip['date'])}" if trip.get("date") else f"Day {trip.get('day')}"
+    ctx["out"].text(f"Added {card.get('name')} to {on} in {trip.get('city') or f.get('where')} — {trip.get('title') or 'your trip'}. "
+                    f"Nothing is booked yet: say “book it at 8” and I'll ask them for a table.")
+    ctx["st"]["pending"] = {"kind": "trip_added", "at": ctx["now"].isoformat(), "card": card, "find": f, "draft": pend.get("draft") or {}}
+
+
+async def book_added(ctx: dict, pend: dict, body: str) -> None:
+    """"book it at 8 for 2" → the venue's own route (the read-back and one yes), on the trip's day."""
+    from . import guest_whatsapp as GW, handoff as HO
+    f = {k: v for k, v in pend["find"].items() if k != "trip"}
+    day = (pend["find"].get("trip") or {}).get("date")
+    at = HO.plain_open_at(body, ctx["now"])
+    hm = re.search(r"\bat\s+(\d{1,2})(?::(\d{2}))?\b", body or "", re.I)
+    if day and hm and not re.search(r"\d\s*(?:am|pm)|\d:\d", body or "", re.I) and 1 <= int(hm[1]) <= 12:
+        at = HO.restaurant_time({"day": day, "hour": int(hm[1]), "minute": int(hm[2] or 0)})
+    elif day and at:
+        at = f"{day}T{at[11:16]}"
+    if at:
+        f["open_at"] = at
+    parts = dict(pend.get("draft") or {})
+    n = HO.plain_party(body or "")
+    if n:
+        parts["how_many"] = {"count": n, "unit": "people"}
+    await GW._picked_card(ctx, {"find": f, "draft": parts}, pend["card"])
+
+
+# ── the web chat's brain, for everything else ────────────────────────────────────────────────────────────────────────
+
+def wa_markdown(s: str) -> str:
+    s = re.sub(r"\*\*(.+?)\*\*", r"*\1*", s or "")
+    s = re.sub(r"^#{1,6}\s*", "", s, flags=re.M)
+    s = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r"\1: \2", s)
+    return s.strip()
+
+
+def chunks(lines: List[str], size: int = 1400) -> List[str]:
+    out, cur = [], ""
+    for ln in lines:
+        while len(ln) > size:
+            cut = ln.rfind("\n", 0, size)
+            cut = cut if cut > 200 else size
+            if cur:
+                out.append(cur)
+                cur = ""
+            out.append(ln[:cut])
+            ln = ln[cut:].lstrip("\n")
+        if cur and len(cur) + len(ln) + 2 > size:
+            out.append(cur)
+            cur = ""
+        cur = f"{cur}\n\n{ln}" if cur else ln
+    return out + ([cur] if cur else [])
+
+
+CONDUCT = None   # tests replace it
+
+
+async def web_turn(ctx: dict, body: str) -> bool:
+    """The web chat's answer, on WhatsApp. False only when the brain itself failed."""
+    from . import guest_whatsapp as GW
+    conduct = CONDUCT
+    if conduct is None:
+        from app.services.conductor import conduct
+    hist = [h for h in (ctx["st"].get("history") or []) if h.get("role") in ("user", "assistant")][-12:]
+    try:
+        r = await conduct(body, hist, user_id=ctx["account"], signed_in=True,
+                          session_id=f"wa-{(ctx.get('ch') or {}).get('wa_id_sha256', '')[:16]}")
+    except Exception as e:
+        log.error("[wa_brain] the web brain failed on WhatsApp: %s: %s", type(e).__name__, e)
+        return False
+    out = ctx["out"]
+    if r.get("booking_find"):
+        await GW._find(ctx, r["booking_find"], r.get("reservation_draft") or {})
+        return True
+    for c in chunks([wa_markdown(r.get("response") or "")]):
+        out.text(c)
+    shown = 0
+    for ph in r.get("photos") or []:
+        url = ph.get("url") if isinstance(ph, dict) else ph if isinstance(ph, str) else None
+        if url and url.startswith("https://") and shown < 3:
+            out.media((ph.get("caption") or ph.get("title") or "📷") if isinstance(ph, dict) else "📷", url)
+            shown += 1
+    if r.get("itinerary") and (r["itinerary"] or {}).get("days"):
+        from . import plan_store as PS, itinerary_q as IQ
+        p = await PS.latest(ctx["account"])
+        if p:
+            for c in chunks(PS.text(PS.merge(p, await IQ._rows(ctx["account"])))):
+                out.text(c)
+            out.text("It's saved on your account — it's the same plan on the web. Ask for a place (“a romantic dinner in Hoi An”) and I'll add it to its day.")
+    links = [l for l in r.get("links") or [] if isinstance(l, dict) and str(l.get("url", "")).startswith("https://")][:3]
+    for l in links:
+        out.text(f"{l.get('title') or l.get('label') or 'Link'}: {l['url']}")
+    return True
+
+
+# ── the name to book under, asked here ───────────────────────────────────────────────────────────────────────────────
+
+async def ask_contact(ctx: dict, resume: Optional[dict]) -> None:
+    from .contacts import consent
+    num = ctx.get("wa_number")
+    if not num:
+        ctx["out"].text("Whose name should I book under? Tell me the name and a mobile with its country code, e.g. “Tyler Warren +34 600 000 000”. "
+                        + consent()["text"])
+    else:
+        ctx["out"].text(f"Whose name should I book under? I'll give them that name and this WhatsApp number. {consent()['text']} Reply with the name.")
+    ctx["st"]["pending"] = {"kind": "contact_name", "at": ctx["now"].isoformat(), "resume": resume}
+
+
+async def _contact_answer(ctx: dict, pend: dict, body: str) -> bool:
+    from . import guest_whatsapp as GW
+    from .contacts import consent, e164
+    t = " ".join((body or "").split())
+    phone = re.search(r"\+?\d[\d\s().-]{7,}\d", t)
+    mobile = e164(phone[0]) if phone else e164(ctx.get("wa_number"))
+    name = (t[:phone.start()] + t[phone.end():]).strip(" ,.") if phone else t.strip(" .")
+    if not 1 <= len(name) <= 80 or len(name.split()) > 6 or re.search(r"[?@]|\b(book|cancel|find|show|what|where)\b", name, re.I):
+        return False   # not a name: a new request
+    if not mobile:
+        ctx["out"].text("And a mobile with its country code, e.g. +34 600 000 000?")
+        return True
+    c = consent()
+    s, j = await GW.api(ctx["account"], "PUT", "/api/booking/contact",
+                        {"name": name, "mobile": mobile, "consent_version": c["version"], "consent_sha256": c["sha256"]})
+    if s != 200:
+        ctx["st"]["pending"] = None
+        ctx["out"].text(f"I couldn't save that — {GW.refusal_words(j, s)}. Nothing was booked.")
+        return True
+    ctx["st"]["pending"] = None
+    ctx["out"].text(f"Saved — bookings go under {name}.")
+    resume = pend.get("resume")
+    if resume and resume.get("kind") == "need":
+        resume["at"] = ctx["now"].isoformat()
+        await GW._prepare_or_ask(ctx, resume)
+    elif resume is None:
+        ctx["out"].text("Now, what shall I book?")
+    return True
+
+
+# ── reset the demo (founder only) ────────────────────────────────────────────────────────────────────────────────────
+
+RESET = re.compile(r"^\s*(?:please\s+)?(?:reset|clear)\s+(?:the\s+|my\s+)?demo\s*[.!]?\s*$", re.I)
+_TEST_SQL = ("(ti.provider_name ilike 'Sasha Test Venue%' or ti.provider_name ilike '%(TEST booking%' or ti.booking_reference like 'TEST-%' "
+             "or ti.booking_reference like 'TV-%')")
+
+
+def is_test(b: dict) -> bool:
+    v, ref = b.get("venue") or "", b.get("ref") or b.get("booking_reference") or ""
+    return bool(re.match(r"Sasha Test Venue", v) or "(TEST booking" in v or re.match(r"(TEST|TV)-", ref)
+                or re.search(r"their ref TV-", b.get("status_words") or ""))
+
+
+async def reset_demo(account: str, dry: bool) -> dict:
+    """{"bookings": n, "added": n}: the founder's TEST bookings from today on (status → cancelled; nothing is deleted) and the
+    places added to his latest plan on WhatsApp."""
+    from . import plan_store as PS
+    run = PS._run()
+    if run is None:
+        return {"bookings": 0, "added": 0}
+
+    async def fn(conn):
+        where = (f"from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 and {_TEST_SQL} "
+                 "and ti.status not in ('cancelled', 'failed') and ti.date_time >= now() - interval '1 day'")
+        if dry:
+            return await conn.fetchval(f"select count(*) {where}", uuid.UUID(account))
+        ids = [r["id"] for r in await conn.fetch(f"select ti.id {where}", uuid.UUID(account))]
+        if ids:
+            await conn.execute("update trip_items set status = 'cancelled', updated_at = now() where id = any($1::uuid[])", ids)
+        return len(ids)
+    n = await run(fn)
+    added = await PS.clear_added(account, dry=dry)
+    return {"bookings": int(n or 0), "added": added}
+
+
+async def start_reset(ctx: dict) -> None:
+    from .guest_accounts import founder
+    if not founder(ctx["account"]):
+        ctx["out"].text("Resetting the demo is the founder's — nothing was changed.")
+        return
+    n = await reset_demo(ctx["account"], dry=True)
+    if not n["bookings"] and not n["added"]:
+        ctx["out"].text("The demo is already clean — no TEST bookings or added places.")
+        return
+    nonce = uuid.uuid4().hex[:6]
+    ctx["out"].ask(f"That clears {n['bookings']} TEST booking{'s' if n['bookings'] != 1 else ''} and {n['added']} added "
+                   f"place{'s' if n['added'] != 1 else ''} from your itinerary (your plan stays). Reset?",
+                   [("Reset", f"yes:{nonce}"), ("Keep them", f"no:{nonce}")])
+    ctx["st"]["pending"] = {"kind": "demo_reset", "at": ctx["now"].isoformat(), "nonce": nonce}
+
+
+__all__ = ["placeless", "context", "search", "answer", "add_to_trip", "web_turn", "ask_contact", "reset_demo", "start_reset",
+           "is_test", "RESET", "wa_markdown", "chunks"]

@@ -123,6 +123,61 @@ async def latest(account: Optional[str]) -> Optional[dict]:
             "cities": d.get("cities") or []}
 
 
+async def _edit(account: str, trip_id: Optional[str], change) -> Any:
+    """Read the plan's trip, change its plan in Python, write it back — one transaction, the owner checked in the SQL."""
+    run = _run()
+    if not account or run is None:
+        return None
+
+    async def fn(conn):
+        async with conn.transaction():
+            q = ("select id, destinations from trips where owner_id = $1 and destinations ? 'plan' and status in ('draft','active') "
+                 + ("and id = $2 " if trip_id else "") + "order by created_at desc limit 1 for update")
+            r = await conn.fetchrow(q, *([uuid.UUID(account), uuid.UUID(trip_id)] if trip_id else [uuid.UUID(account)]))
+            if not r:
+                return None
+            d = r["destinations"]
+            d = json.loads(d) if isinstance(d, str) else d
+            res = change(d.get("plan") or {})
+            await conn.execute("update trips set destinations = $2::jsonb, updated_at = now() where id = $1", r["id"], _jsonable(d))
+            return res
+    try:
+        return await run(fn)
+    except Exception as e:
+        log.warning("[plan_store] the plan was not changed: %s: %s", type(e).__name__, e)
+        return None
+
+
+async def add_place(account: str, trip_id: str, day: Optional[int], activity: dict) -> bool:
+    """Sasha 167 · a place picked on WhatsApp, on its day of the plan (a plan item — nothing booked)."""
+    def change(plan):
+        days = plan.get("days") or []
+        d = next((x for x in days if x.get("day") == day), days[0] if days else None)
+        if d is None:
+            return False
+        acts = d.setdefault("activities", [])
+        if not any(a.get("place_id") and a.get("place_id") == activity.get("place_id") for a in acts):
+            acts.insert(0, activity)
+        return True
+    return bool(await _edit(account, trip_id, change))
+
+
+async def clear_added(account: str, dry: bool = False) -> int:
+    """Sasha 167 · "reset the demo": the places added on WhatsApp leave the latest plan (count only when dry)."""
+    if dry:
+        p = await latest(account)
+        return sum(1 for d in ((p or {}).get("plan") or {}).get("days") or [] for a in d.get("activities") or [] if a.get("added"))
+
+    def change(plan):
+        n = 0
+        for d in plan.get("days") or []:
+            keep = [a for a in d.get("activities") or [] if not a.get("added")]
+            n += len(d.get("activities") or []) - len(keep)
+            d["activities"] = keep
+        return n
+    return int(await _edit(account, None, change) or 0)
+
+
 _PART = (("Morning", 0, 12), ("Afternoon", 12, 18), ("Evening", 18, 24))
 _MATCH = {"restaurant": r"dinner|lunch|restaurant|eat|food|meal|street.?food|tasting",
           "beauty": r"spa|massage|wellness|tattoo|salon|nail|hair",
@@ -146,7 +201,8 @@ def merge(p: dict, bookings: List[dict]) -> dict:
         start = date.fromisoformat(start)
     days = plan.get("days") or []
     for i, d in enumerate(days):
-        d["date"] = (start + timedelta(days=i)).isoformat() if start else None
+        # CR 35 · a day may carry its OWN date (RelocateMe's sparse deadlines); else the start + its place in the plan
+        d["date"] = str(d.get("date") or "")[:10] or ((start + timedelta(days=i)).isoformat() if start else None)
         d.setdefault("bookings", [])
     by_date = {d["date"]: d for d in days if d.get("date")}
     for b in bookings:
@@ -154,8 +210,10 @@ def merge(p: dict, bookings: List[dict]) -> dict:
         if day is None or b.get("status") in ("cancelled",):
             continue
         part = _part(b.get("time"))
+        from .wa_brain import is_test
         entry = {"id": b.get("id"), "venue": b.get("venue"), "time": b.get("time"), "part": part, "status": b.get("status"),
-                 "status_words": b.get("status_words"), "what": b.get("what"), "type": b.get("type")}
+                 "status_words": b.get("status_words"), "what": b.get("what"), "type": b.get("type"),
+                 "test": is_test(b)}   # Sasha 167 · kept for the demo, labelled TEST; "reset the demo" clears them
         rx = _MATCH.get(b.get("category") or b.get("type") or "", r"$^")
         for a in day.get("activities") or []:
             if not a.get("replaced_by") and (a.get("time") or "") == part and re.search(rx, f"{a.get('name','')} {a.get('blurb','')}", re.I):
@@ -188,12 +246,14 @@ def text(plan: dict) -> List[str]:
         head = f"Day {d.get('day')}{' · ' + day_words(d['date']) if d.get('date') else ''} — {d.get('city') or ''}"
         lines = [head]
         for b in sorted(d.get("bookings") or [], key=lambda x: x.get("time") or ""):
-            lines.append(f"  • {b.get('time') or ''} {b.get('venue')}: {short_status(b)}".replace("  •  ", "  • "))
-        planned = [a for a in d.get("activities") or [] if not a.get("replaced_by")][:2]
-        for a in planned:
+            lines.append(f"  • {b.get('time') or ''} {'TEST · ' if b.get('test') else ''}{b.get('venue')}: {short_status(b)}".replace("  •  ", "  • "))
+        acts = [a for a in d.get("activities") or [] if not a.get("replaced_by")]
+        for a in [a for a in acts if a.get("added")]:   # Sasha 167 · a place picked on WhatsApp: on its day, not booked
+            lines.append(f"  📍 {a.get('time')}: {a.get('name')} (not booked yet)")
+        for a in [a for a in acts if not a.get("added")][:2]:
             lines.append(f"  · {a.get('time')}: {a.get('name')}")
         out.append("\n".join(lines))
     return out
 
 
-__all__ = ["save", "latest", "merge", "text", "dates_of"]
+__all__ = ["save", "latest", "merge", "text", "dates_of", "add_place", "clear_added"]

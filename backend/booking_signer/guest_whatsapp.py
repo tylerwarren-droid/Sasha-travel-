@@ -75,6 +75,7 @@ def web_url() -> str:
     return os.getenv("SASHA_WEB_URL", "https://project.kanoe.ai").rstrip("/") + "/you#whatsapp"   # Sasha 120 · the guest's own page
 
 
+#: Sasha 167 · no longer said anywhere (the web chat's brain answers instead); kept only as an exported name
 OUT_OF_SCOPE = "On WhatsApp I can book, change or cancel things for you, and send your receipts. For anything else, open Sasha at {web}."
 ONBOARD = "Hi, I'm Sasha by Kanoe. To book on WhatsApp, link your account first: {web}"
 LINKED = "Linked. You can book with me here now — for example: dinner for 2 on Saturday at 21:00 in Chamberí."
@@ -659,8 +660,11 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     if not body and not payload:
         # Sasha 104 · a voice note or a picture arrives with no words: voice notes are phase 3 (F-3), so say so plainly
         has_media = int(p.get("NumMedia") or 0) > 0
-        out.text("I can't listen to voice notes or read pictures here yet — please type it in one message, e.g. \"dinner "
-                 "for 2 in Chamberí on Saturday at 21:00\"." if has_media else HELP)
+        # Sasha 167 · a voice note IS heard (voice_text); one that couldn't be made out is said so, never "can't listen"
+        audio = str(p.get("MediaContentType0") or "").startswith("audio")
+        out.text(("I couldn't make out that voice note — could you send it again, or type it?" if audio else
+                  "Got the picture, but I can only read photos inside EspañaMe or RelocateMe for now (say “tell me about "
+                  "EspañaMe”). For anything else, tell me in words — a voice note works too.") if has_media else HELP)
         await STORE.put_state(key, st)
         await deliver(ch, frm, out, now)
         return out
@@ -673,7 +677,8 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     # Sasha 126 · the two-booking plan rides INSIDE the open question (guest_wa_state stores only its four columns):
     # it lives exactly as long as a question is open, and goes with it
     st["combo"] = (st.get("pending") or {}).pop("combo", None)
-    ctx = {"account": account, "ch": ch, "frm": frm, "st": st, "now": now, "out": out, "button_text": (p.get("ButtonText") or "").strip()}
+    ctx = {"account": account, "ch": ch, "frm": frm, "st": st, "now": now, "out": out, "button_text": (p.get("ButtonText") or "").strip(),
+           "wa_number": str(p.get("From") or "").replace("whatsapp:", "") or None}   # Sasha 167 · the guest's own number, to book under
     handled = await _answer_pending(ctx, body, payload)
     if not handled:
         await _new_request(ctx, body)
@@ -770,6 +775,10 @@ async def _new_request(ctx: dict, body: str) -> None:
     if _HELP.match(body):
         out.text(HELP)
         return
+    from . import wa_brain as WB
+    if WB.RESET.match(body or ""):   # Sasha 167 (4) · "reset the demo" — founder only, after a yes
+        await WB.start_reset(ctx)
+        return
     # Sasha 109 · CANCEL before anything else: "Please cancel", "No Please Cancel Yatri", "cancela", "anula la de Yatri"
     ci = cancel_intent(body)
     if ci is not None:
@@ -824,6 +833,10 @@ async def _new_request(ctx: dict, body: str) -> None:
     if CT.asked(body):
         out.text(await CT.send(ctx["account"]))
         return
+    want = WB.placeless(body)   # Sasha 167 (2) · a place asked for, no place said: the trip's city (or ONE question), else home
+    if want is not None:
+        await WB.search(ctx, want, body)
+        return
     h = HO.booking_handoff(body, history, ctx["now"])   # Sasha 138 · the turn's own clock: "Saturday" and urgency agree
     if h is not None:
         if h.get("booking_cancel"):
@@ -838,11 +851,14 @@ async def _new_request(ctx: dict, body: str) -> None:
     if t is not None:
         out.text(t["response"])
         return
-    # Sasha 104 · out of scope ONLY when there is clearly no booking, change or cancel in it; unsure → one question
+    # Sasha 104 · a booking said only in part ("sort out Saturday night for 2") → one question, in WhatsApp's own flow
     if maybe_booking(body):
         out.text(ASK_ONE)
         return
-    out.text(OUT_OF_SCOPE.format(web=web_url()))
+    # Sasha 167 (1) · no dead end: anything else is the web chat's own turn (plan a trip, ideas, questions), here
+    if await WB.web_turn(ctx, body):
+        return
+    out.text("I couldn't answer that just now — please try again in a moment.")
 
 
 # ── Sasha 132 · flights in Duffel TEST mode: cards → Book it → one-touch test payment → the test order → the itinerary ──
@@ -1334,7 +1350,8 @@ async def _invite(ctx: dict, req: dict) -> None:
     s, cj = await api(ctx["account"], "GET", "/api/booking/contact")
     first = (((cj.get("contact") or {}).get("name") or "").split() or [""])[0] if s == 200 else ""
     if not first:
-        out.text(NO_CONTACT.format(web=web_url()))
+        from . import wa_brain as WB   # Sasha 167 (5) · asked here, never "add them at …"
+        await WB.ask_contact(ctx, None)
         return
     inv = await IV.create(ctx["account"], first, req, ctx["now"])   # Sasha 118 · as typed
     if not inv["slots"]:
@@ -1640,6 +1657,13 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
     # answered, and the open item stays open
     from .itinerary_q import TRIP as _TRIP
     if not payload and _TRIP.search(body or "") and not RESUME.fullmatch(body or ""):
+        return False
+    if kind in ("trip_where", "trip_added", "contact_name", "demo_reset"):   # Sasha 167 · wa_brain's own questions
+        from . import wa_brain as WB
+        if await WB.answer(ctx, pend, body, payload):
+            return True
+        if kind != "trip_added":   # an added place stays bookable ("book it at 8") across other questions
+            st["pending"] = None
         return False
     # Sasha 161 · STALE: after a greeting or a gap, ASK whether to continue — never resume mid-question
     if pend.get("resume_asked") and not payload:
@@ -1994,6 +2018,10 @@ def _payload_ok(pend: dict, payload: str) -> bool:
     """A button answers ONLY the question it was sent with: its id names this card set, or this call and its hash."""
     if pend["kind"] in ("cards", "flight_cards"):
         return payload.startswith(f"pick:{pend['nonce']}:")
+    if pend["kind"] == "trip_where":   # Sasha 167
+        return payload.startswith(f"where:{pend['nonce']}:")
+    if pend["kind"] == "demo_reset":
+        return payload in (f"yes:{pend['nonce']}", f"no:{pend['nonce']}")
     tag = f"{str(pend.get('id', ''))[:8]}:{str(pend.get('sha', ''))[:16]}"
     if pend["kind"] == "hotel_choice":   # Sasha 135
         return payload in (f"test:{tag}", f"req:{tag}")
@@ -2035,6 +2063,10 @@ async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
             out.text(f"Together with the restaurant, I can book only Kanoe Demo Spa today. Tap it, or ask me for "
                      f"{card.get('name') or 'that spa'} on its own. Nothing was sent.")
             ctx["st"]["pending"] = pend
+        return
+    if (pend.get("find") or {}).get("trip"):   # Sasha 167 (3) · picked from a trip search: on the trip, on its day — not booked
+        from . import wa_brain as WB
+        await WB.add_to_trip(ctx, pend, card)
         return
     if (pend.get("draft") or {}).get("nights") and not pend.get("real"):   # Sasha 135 · a hotel: TEST booking, or the real request
         await _hotel_choice(ctx, pend, card)
@@ -2207,8 +2239,8 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
     status, cj = await api(ctx["account"], "GET", "/api/booking/contact")
     contact = cj.get("contact") if status == 200 else None
     if not contact:
-        st["pending"] = None
-        out.text(NO_CONTACT.format(web=web_url()))
+        from . import wa_brain as WB   # Sasha 167 (5) · asked here, then straight on with this booking
+        await WB.ask_contact(ctx, {**pend})
         return
     d, rd = pend["draft"], pend["read"]
     reservation = {"schema": "reservation/1",

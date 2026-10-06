@@ -189,9 +189,17 @@ class Turns(Base):
         self.link()
         run(GW.STORE.put_state(GW.wa_key(GUEST), {"history": [], "pending": None, "last_inbound_at": NOW, "link_tries": []}))
 
-    def test_anything_but_booking_gets_the_fixed_sentence_and_no_model(self):
-        self.say("write me a poem about Madrid")
-        self.assertEqual(self.bodies(), [GW.OUT_OF_SCOPE.format(web=GW.web_url())])
+    def test_anything_but_booking_is_the_web_chats_turn_never_a_dead_end(self):
+        from booking_signer import wa_brain as WB   # Sasha 167 · was the fixed "open Sasha at …" sentence
+
+        async def conduct(msg, hist, **kw):
+            return {"response": "Madrid at dusk, a poem.", "photos": [], "links": []}
+        WB.CONDUCT = conduct
+        try:
+            self.say("write me a poem about Madrid")
+        finally:
+            WB.CONDUCT = None
+        self.assertEqual(self.bodies(), ["Madrid at dusk, a poem."])
         self.assertEqual(GW.api.calls, [])
 
     def test_a_spoken_style_request_shows_three_cards_and_one_question(self):
@@ -437,10 +445,10 @@ class Turns(Base):
         self.say("can you sort out Saturday night for 2?")
         self.assertEqual(self.bodies(), [GW.ASK_ONE])
 
-    def test_sasha104_a_voice_note_is_asked_to_be_typed(self):
+    def test_sasha104_a_voice_note_not_made_out_is_asked_again(self):
         ch = run(GW.STORE.channel_for(GW.wa_key(GUEST)))
         run(GW.turn(ch, SANDBOX, {"From": f"whatsapp:{GUEST}", "Body": "", "NumMedia": "1", "MediaContentType0": "audio/ogg"}))
-        self.assertIn("voice notes", self.bodies()[-1])
+        self.assertIn("couldn't make out that voice note", self.bodies()[-1])   # Sasha 167 · voice notes are heard (165)
         self.assertEqual(GW.api.calls, [])
 
     YATRI = {"id": "t-2", "venue": "Restaurante Yatri", "date": "2026-10-03", "time": "21:00", "party": 2, "status": "unclear",

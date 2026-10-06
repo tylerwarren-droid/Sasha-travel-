@@ -2683,7 +2683,8 @@ async def tap_to_pay(account: Optional[str], amount: str, what: str, url: str) -
     return out
 
 
-async def tap_platform(account: Optional[str], text: str, url: str) -> str:
+async def tap_platform(account: Optional[str], text: str, url: str, link_id: Optional[str] = None, venue: Optional[str] = None,
+                       when: Optional[str] = None) -> str:
     """Sasha 163 · a platform venue booked from the laptop: the ONE message, on the guest's phone. Only a URL Sasha built
     for a booking platform's venue page (slot_link) — Sasha never fetched it; the guest's own browser opens it."""
     from .venue_read import platform_of
@@ -2699,6 +2700,10 @@ async def tap_platform(account: Optional[str], text: str, url: str) -> str:
     out = await _tell(ch, text)
     if "sent" in out and "not" not in out:
         _TAPPED.add(url)
+        if link_id:   # Sasha 175 · the guest's "BOOKED" on WhatsApp now belongs to THIS link (it went nowhere: no pending link)
+            st = await STORE.get_state(ch["wa_id_sha256"])
+            st["pending"] = {"kind": "link", "at": NOW().isoformat(), "link_id": link_id, "venue": venue or "", "when": when or ""}
+            await STORE.put_state(ch["wa_id_sha256"], st)
     return out
 
 

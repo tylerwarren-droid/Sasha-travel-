@@ -29,11 +29,12 @@ CONSENT = {"v1": ("Health details are sensitive. For this I use only what the ap
                   "you. Is that OK?")}
 CONSENT_CURRENT = "v1"
 CHOOSE = ("What would help?\n1. *A private clinic* — I call them and book for you.\n2. *The public health service "
-          "(SERMAS)* — I prepare everything; you book on its own page.\n3. *I'm new in Madrid* — how to get your health "
-          "card and doctor, step by step.\n4. *Your health card form* — send your DNI or passport; I fill the "
-          "Comunidad de Madrid's official form (1449F1) for you to sign and take in.")
-# WhatsApp shows at most three buttons: "3" (new in Madrid) is typed
-CHOOSE_BUTTONS = [("1. Private clinic", "hx:priv"), ("2. Public (SERMAS)", "hx:pub"), ("4. Health card form", "hx:tsi")]
+          "(SERMAS)* — I prepare everything; you book on its own page.\n3. *Your health card* — new, renewed, replaced "
+          "or updated: send your DNI or passport and I fill the Comunidad de Madrid's official form for you to sign "
+          "and take in.")
+# CR 30 · the new-arrivals checklist belongs to RelocateMe (EspañaMe scope, row 10): off this menu; its old button
+# (hx:new) and "new in Madrid" in words still reach it until RelocateMe's "setting up your home" carries it
+CHOOSE_BUTTONS = [("1. Private clinic", "hx:priv"), ("2. Public (SERMAS)", "hx:pub"), ("3. Health card", "hx:tsi")]
 FICTIONAL = {"card": "EJEMPLO-0000-0000", "birth": "1985-03-14", "dni_nie": "X0000000T", "name": "Lucía Ejemplo (fictional)"}
 
 
@@ -162,14 +163,14 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
             out.text("OK — nothing kept.")
         return
     if step == "choose" or payload in ("hx:priv", "hx:pub", "hx:new", "hx:tsi"):
-        pick = payload or {"1": "hx:priv", "2": "hx:pub", "3": "hx:new", "4": "hx:tsi"}.get(t[:1], "")
+        pick = payload or {"1": "hx:priv", "2": "hx:pub", "3": "hx:tsi", "4": "hx:tsi"}.get(t[:1], "")
         if not pick and re.search(r"(?i)health card|card form|tarjeta|\bdni\b|passport|pasaporte|1449", t):
             pick = "hx:tsi"
         if not pick and re.search(r"(?i)\bprivate|privad", t):
             pick = "hx:priv"
         if not pick and re.search(r"(?i)\bpublic|sermas|p[uú]blic", t):
             pick = "hx:pub"
-        if not pick and re.search(r"(?i)\bnew|nuev|card", t):
+        if not pick and re.search(r"(?i)new in madrid|just (arrived|moved)|reci[eé]n llegad", t):
             pick = "hx:new"
         if pick == "hx:priv":
             pend["step"] = "when"

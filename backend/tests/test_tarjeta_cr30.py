@@ -201,6 +201,17 @@ class Flow(Base):
         self.assertIsNone(ST.STORE.rows[c["id"]]["state"]["rows"])
 
 
+class Menu(Base):
+    def test_three_is_the_health_card_and_new_in_madrid_is_off_the_menu(self):
+        self.say("españa")
+        self.say("", payload="hx:es:salud")
+        self.say("", payload="hx:consent:yes")
+        self.assertEqual([b for _, b in self.buttons()][2], "hx:tsi")
+        self.assertNotIn("new in Madrid", HT.CHOOSE)
+        self.say("3")
+        self.assertEqual(self.pend()["step"], "ts_doc")
+
+
 class Web(Base):
     def test_the_laptop_upload_is_read_from_its_bytes(self):
         web = lambda m="", payload=None, media=None: run(PWEB.web_turn(TG.ACCOUNT, m, payload=payload, now=self.now,

@@ -85,5 +85,38 @@ class Sasha161(unittest.TestCase):
         self.assertIn("Want me to try somewhere similar nearby?", D.line(v, D.decide(v), "X"))
 
 
+class Sasha162(unittest.TestCase):
+    def test_what_sasha_starts_goes_from_the_number_they_wrote_to(self):
+        from booking_signer import guest_whatsapp as GW
+        with mock.patch.dict(os.environ, {"SASHA_GUEST_WHATSAPP_TO": "+447915914215,+14155238886"}):
+            self.assertEqual(GW.sender_for({"last_to": "+14155238886"}), "+14155238886")   # wrote to the sandbox: from it
+            self.assertEqual(GW.sender_for({"last_to": "+447915914215"}), "+447915914215")
+            self.assertEqual(GW.sender_for({}), "+447915914215")                            # unknown: the permanent sender
+            self.assertEqual(GW.sender_for({"last_to": "+999"}), "+447915914215")         # not ours: never used
+        with mock.patch.dict(os.environ, {"SASHA_GUEST_WHATSAPP_TO": "+14155238886"}):
+            self.assertEqual(GW.sender_for({}), "+14155238886")
+
+    def test_outside_the_window_the_template_goes_and_only_then(self):
+        from datetime import timedelta
+        from booking_signer import guest_whatsapp as GW
+        sent = []
+
+        class S:
+            async def send(self, frm, to, **kw):
+                sent.append((frm, to, kw)); return "sent"
+
+        class St:
+            def __init__(self, last): self.last = last
+            async def get_state(self, k): return {"last_inbound_at": self.last, "last_to": "+447915914215"}
+        ch = {"wa_id_sha256": "k", "number_e164": "+34600000000"}
+        with mock.patch.dict(os.environ, {"SASHA_GUEST_WHATSAPP_TO": "+447915914215,+14155238886"}), \
+                mock.patch.object(GW, "SENDER", S()), mock.patch.object(GW, "STORE", St(GW.NOW() - timedelta(hours=30))):
+            out = asyncio.run(GW._tell(ch, "hi", ("tap_to_finish", {1: "X", 2: "Tue", 3: "https://u"})))
+            self.assertIn("template", out)
+            self.assertEqual(sent[-1][2]["content_sid"], GW.TEMPLATES["tap_to_finish"][1])   # +34 → the Spanish one
+            self.assertEqual(sent[-1][0], "+447915914215")
+            self.assertTrue(asyncio.run(GW._tell(ch, "hi")).startswith("not told"))          # no template: nothing goes
+
+
 if __name__ == "__main__":
     unittest.main()

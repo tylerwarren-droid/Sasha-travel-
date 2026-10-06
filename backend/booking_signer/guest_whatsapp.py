@@ -107,6 +107,20 @@ def wa_key(number: str) -> str:
     return PT.number_key(number).split(":", 1)[1]
 
 
+SANDBOX_NUMBER = "+14155238886"
+
+
+def sender_for(st: Optional[dict] = None) -> str:
+    """Sasha 162 · the number a message Sasha STARTS goes from: the one this guest last wrote to; else a permanent sender
+    (not the sandbox); else the sandbox — kept as the fallback through Friday (founder)."""
+    nums = guest_numbers()
+    last = (st or {}).get("last_to")
+    if last and last in nums:
+        return last
+    permanent = sorted(n for n in nums if n != SANDBOX_NUMBER)
+    return permanent[0] if permanent else sorted(nums)[0]
+
+
 def guest_numbers() -> set:
     """The numbers that serve GUESTS (the sandbox's, in phase 1). Empty: the guest pipeline is off everywhere."""
     return {n.strip() for n in os.getenv("SASHA_GUEST_WHATSAPP_TO", "").split(",") if n.strip()}
@@ -560,6 +574,7 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     now = NOW()
     st = await STORE.get_state(key)
     st["last_inbound_at"] = now
+    st["last_to"] = frm   # Sasha 162 · the number they wrote to: what Sasha starts goes from it
     out = Out()
     if ch.get("opted_out_at"):
         if _START.match(body):
@@ -2406,7 +2421,7 @@ async def offer_escalation(ch: dict, b: dict, read_row: dict, prefer: str, quest
     out = Out().ask(question, [(yes_title, f"yes:{b['id'][:8]}:{sha[:16]}"), ("No", f"no:{b['id'][:8]}:{sha[:16]}")])
     st["pending"] = {"kind": "no_reply_call", "at": NOW().isoformat(), "id": b["id"], "sha": sha, "read": rd, "draft": draft, "prefer": prefer}
     await STORE.put_state(ch["wa_id_sha256"], st)
-    return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, last))
+    return ", ".join(await deliver(ch, sender_for(st), out, last))
 
 
 _TAPPED: set = set()
@@ -2425,7 +2440,8 @@ async def tap_to_pay(account: Optional[str], amount: str, what: str, url: str) -
     ch = await STORE.channel_of_account(account)
     if not ch:
         return "not sent: no WhatsApp linked to this account"
-    out = await _tell(ch, f"💳 Tap to pay {amount} for {what} (TEST — nothing is charged): {url}")
+    out = await _tell(ch, f"💳 Tap to pay {amount} for {what} (TEST — nothing is charged): {url}",
+                      ("tap_to_pay", {1: what.split(",")[0], 2: what, 3: amount, 4: url}))
     if "sent" in out and "not" not in out:
         _TAPPED.add(url)
     return out
@@ -2447,18 +2463,36 @@ async def tap_to_finish(account: Optional[str], venue: str, url: str, what: str 
     ch = await STORE.channel_of_account(account)
     if not ch:
         return "not sent: no WhatsApp linked to this account"
-    out = await _tell(ch, f"👉 Tap to finish at {venue}: {url}\nEverything's filled in{f' — {what}' if what else ''}. The last tap is yours.")
+    out = await _tell(ch, f"👉 Tap to finish at {venue}: {url}\nEverything's filled in{f' — {what}' if what else ''}. The last tap is yours.",
+                      ("tap_to_finish", {1: venue, 2: what or "your booking", 3: url}))
     if "sent" in out and "not" not in out:
         _TAPPED.add(url)
     return out
 
 
-async def _tell(ch: dict, text: str) -> str:
+#: Sasha 162 · CR's Utility templates (Twilio Content API), for OUTSIDE the 24-hour window only: (en, es) ContentSids
+TEMPLATES = {"tap_to_finish": ("HX12e6eec86092c1d454b65b2d589c92f2", "HX4bcb4eadb04d342fa07739eb59422459"),
+             "tap_to_pay": ("HX93b4206c856d2ec3dea35e3ff6585f35", "HX0d88d7b092003bee468ba0ccee3c135d"),
+             "booking_confirmed": ("HXefe783beee3e58392b92afa12ee2fb85", "HX4e70a561daf564d8ada567bc5795e18f"),
+             "booking_declined": ("HX1be24941f5128ecb6b1015b9962b91ba", "HXe0caf9bf80181a5bf81633818e0fa9e1"),
+             "booking_reminder": ("HX393eb8f7cf23d412f9ae1dc591d20588", "HXcb573c6fb66ef00606343dfa44923085")}
+
+
+async def _tell(ch: dict, text: str, template: Optional[tuple] = None) -> str:
+    """Inside the 24-hour window: the text. Outside it: the approved template (name, variables), when one is given."""
     st = await STORE.get_state(ch["wa_id_sha256"])
     last = st.get("last_inbound_at")
-    if not (last and NOW() - last <= SESSION_WINDOW) or not guest_numbers():
-        return "not told: outside the 24-hour window"
-    return ", ".join(await deliver(ch, sorted(guest_numbers())[0], Out().text(text), last))
+    if not guest_numbers():
+        return "not told: WhatsApp for guests is off"
+    if not (last and NOW() - last <= SESSION_WINDOW):
+        if not template or ch.get("opted_out_at") or not ch.get("number_e164"):
+            return "not told: outside the 24-hour window"
+        name, variables = template
+        sid = TEMPLATES[name][1 if str(ch["number_e164"]).startswith("+34") else 0]
+        r = await SENDER.send(sender_for(st), ch["number_e164"], content_sid=sid, variables=variables)
+        log.info("[guest_whatsapp] %s template outside the window: %s", name, str(r)[:80])
+        return f"{r} (template)" 
+    return ", ".join(await deliver(ch, sender_for(st), Out().text(text), last))
 
 
 def _draft_of(b: dict) -> dict:
@@ -2511,7 +2545,7 @@ async def auto_call_from_email(ch: dict, b: dict, email_id: str) -> str:
     when = f" at {str(pj.get('scheduled_for') or '')[11:16]}, when they open" if pj.get("status") == "scheduled" else " now"
     await _tell(ch, f"No reply from {b.get('venue')} to my email in 24 hours, so — as you agreed — I'm calling them{when}. I'll tell you what they say.")
     if pj.get("status") in ("placed", "uncertain") and guest_numbers():
-        _spawn(watch_call(ch, sorted(guest_numbers())[0], account, cj["call_id"], b.get("venue") or "the venue", "book",
+        _spawn(watch_call(ch, sender_for(await STORE.get_state(ch["wa_id_sha256"])), account, cj["call_id"], b.get("venue") or "the venue", "book",
                           f"{SN.day_words(b['date'])} at {b['time']}"))
     return pj.get("status")
 
@@ -2660,7 +2694,7 @@ async def push_confirmation_result(call: dict, reading, nxt: Optional[str]) -> s
         elif not (call.get("approval") or {}).get("scheduled_for"):
             return "not sent: an immediate cancelling call is told by its watcher"
         st = await STORE.get_state(ch["wa_id_sha256"])
-        return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, st.get("last_inbound_at")))
+        return ", ".join(await deliver(ch, sender_for(st), out, st.get("last_inbound_at")))
     if nxt and nxt.startswith("scheduled for "):
         out.text(f"I'll call {venue} once more at {nxt[len('scheduled for '):]} — your yes covers it.")
     elif not settled:
@@ -2668,7 +2702,7 @@ async def push_confirmation_result(call: dict, reading, nxt: Optional[str]) -> s
     elif reading.outcome == "yes" and _receipt_note(venue):
         out.text(_receipt_note(venue).strip())
     st = await STORE.get_state(ch["wa_id_sha256"])
-    return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, st.get("last_inbound_at")))
+    return ", ".join(await deliver(ch, sender_for(st), out, st.get("last_inbound_at")))
 
 
 async def push_payment_question(call: dict, pr: dict) -> str:
@@ -2684,7 +2718,7 @@ async def push_payment_question(call: dict, pr: dict) -> str:
     out.ask(pr["read_back_lines"][-1], [("Yes, ask them", f"yes:{tag}"), ("No", f"no:{tag}")])
     st["pending"] = {"kind": "payment", "at": NOW().isoformat(), "id": pr["id"], "sha": pr["read_back_sha256"], "venue": pr["payee"]}
     await STORE.put_state(ch["wa_id_sha256"], st)
-    return ", ".join(await deliver(ch, sorted(guest_numbers())[0], out, st.get("last_inbound_at")))
+    return ", ".join(await deliver(ch, sender_for(st), out, st.get("last_inbound_at")))
 
 
 # ── receipts and cancelling ─────────────────────────────────────────────────────────────────────────────────────────

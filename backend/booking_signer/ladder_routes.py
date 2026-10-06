@@ -335,6 +335,46 @@ async def journeys_view(request: Request):
     return await JN.journeys(account, rows)
 
 
+@router.post("/journeys/remove")
+async def journeys_remove(request: Request):
+    """Sasha 181 (4) · the ✕ on a tab: {key} → a plan/journey is cancelled (nothing deleted), a city tab's SAVED searches are
+    cancelled. Bookings are NEVER cancelled here — they stay, and are said so (cancelled one by one, separately)."""
+    from . import journeys as JN, plan_store as PS
+    account = account_for(request)
+    body = await _json(request) or {}
+    key = str(body.get("key") or "")
+    run = PS._run()
+    if not account or run is None:
+        return {"ok": False, "say": "Not removed — sign in first."}
+    a = uuid.UUID(account)
+    if re.fullmatch(r"[0-9a-f-]{36}", key):
+        async def go(c):
+            t = await c.fetchrow("select title from trips where id = $1 and owner_id = $2 and destinations ? 'plan' "
+                                 "and status in ('draft','active')", uuid.UUID(key), a)
+            if not t:
+                return None, 0
+            n = await c.fetchval("select count(*) from trip_items where trip_id = $1 and status not in ('cancelled','failed')", uuid.UUID(key))
+            await c.execute("update trips set status = 'cancelled', updated_at = now() where id = $1 and owner_id = $2", uuid.UUID(key), a)
+            return t["title"], n
+        title, n = await run(go)
+        if title is None:
+            return {"ok": False, "say": "That tab isn't one of your plans — nothing was changed."}
+        return {"ok": True, "say": f"Removed “{title}”." + (f" Its {n} booking{'s' if n != 1 else ''} are kept — cancel them separately if you want." if n else "")}
+    if key.startswith("city:"):
+        city = JN._fold(key[5:])
+        async def go2(c):
+            rows = await c.fetch("select ti.id, ti.location_name from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 "
+                                 "and ti.status = 'pending' and ti.escalation_notes = $2", a, JN.SAVED)
+            ids = [r["id"] for r in rows if JN._fold(str(r["location_name"] or "").split(",")[0]) == city]
+            if ids:
+                await c.execute("update trip_items set status = 'cancelled', updated_at = now() where id = any($1::uuid[])", ids)
+            return len(ids)
+        n = await run(go2)
+        return {"ok": True, "say": f"Removed {n} saved search{'es' if n != 1 else ''} in {key[5:]}. "
+                                   "Bookings there are kept — cancel them separately if you want."}
+    return {"ok": False, "say": "That tab comes from its product's file — open it and say “start over” to restart it."}
+
+
 @router.post("/handover/tap")
 async def handover_tap(request: Request):
     """Sasha 158 · {view_url, venue, what?} → ONE WhatsApp tap to this account's phone for a live hand-over (our links only)."""

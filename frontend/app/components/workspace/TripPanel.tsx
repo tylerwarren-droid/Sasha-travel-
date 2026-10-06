@@ -141,15 +141,40 @@ export default function TripPanel({
   const server = useServerPlan(tripId, setPlans)
   const jn = useJourneys()
   const [handoff, setHandoff] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<string | null>(null)
+  const [removeSay, setRemoveSay] = useState<string | null>(null)
   const richItinerary = (tripId ? null : localItinerary) ?? (server as RichItinerary | null)
   const activeTrip = tripId ?? server?.trip_id ?? null
   const chip = (on: boolean) => (on ? { borderColor: '#E8B923', color: '#E8B923' } : undefined)
   const tabs = (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
       {(jn?.journeys ?? []).map((t) => (
-        <button key={t.key} className="lw-chip" style={chip(view === 'trip' && activeTrip === t.key)}
-          onClick={() => { setTripId(t.key); setView('trip') }}>{t.label}{t.count ? ` · ${t.count}` : ''}</button>
+        <span key={t.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+          <button className="lw-chip" style={chip(view === 'trip' && activeTrip === t.key)}
+            onClick={() => { setTripId(t.key); setView('trip') }}>{t.label}{t.count ? ` · ${t.count}` : ''}</button>
+          {/* Sasha 181 (4) · ✕ removes a plan / a city's saved searches — one confirm, never a booking */}
+          {(!t.virtual || t.key.startsWith('city:')) && (
+            <button className="viewlink" aria-label={`Remove ${t.label}`} title="Remove this tab"
+              onClick={() => { setRemoving(t.key); setRemoveSay(null) }} style={{ fontSize: 12, opacity: 0.6, padding: '0 4px' }}>✕</button>
+          )}
+        </span>
       ))}
+      {removing && (() => {
+        const t = (jn?.journeys ?? []).find((x) => x.key === removing)
+        return (
+          <div className="o2" style={{ width: '100%', fontSize: 13, marginTop: 4 }}>
+            Remove “{t?.label ?? 'this tab'}”? {removing.startsWith('city:') ? 'Its saved searches go.' : 'The plan goes.'} Bookings in it are kept — they&rsquo;re cancelled separately.{' '}
+            <button className="price" onClick={async () => {
+              const r = await bookingReq('/api/booking/journeys/remove', { key: removing }).catch(() => null)
+              setRemoveSay(String(r?.json?.say ?? 'Not removed — Sasha’s server did not answer.'))
+              if (r?.ok && r.json?.ok) { if (activeTrip === removing) setTripId(null); setView('trip') }
+              setRemoving(null)
+            }}>Remove</button>{' '}
+            <button className="viewlink" onClick={() => setRemoving(null)}>Keep it</button>
+          </div>
+        )
+      })()}
+      {removeSay && <div className="o2" style={{ width: '100%', fontSize: 13, marginTop: 4 }}>{removeSay}</div>}
       {(jn?.home.items.length ?? 0) > 0 && <button className="lw-chip" style={chip(view === 'home')} onClick={() => setView('home')}>{jn?.home.label ?? 'Home'} · {jn!.home.items.length}</button>}{/* Sasha 181 · no empty home tab */}
       <button className="lw-chip" style={chip(view === 'requests')} onClick={() => setView('requests')}>Requests{jn?.requests.length ? ` · ${jn.requests.length}` : ''}</button>
       <button className="lw-chip" style={chip(view === 'receipts')} onClick={() => setView('receipts')}>Receipts</button>

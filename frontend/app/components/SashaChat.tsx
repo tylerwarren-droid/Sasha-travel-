@@ -1238,6 +1238,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
         .lw-prefk{font-size:11px;letter-spacing:.04em;text-transform:capitalize;color:rgba(255,255,255,.4)}
         .lw-prefv{font-size:13px;color:rgba(255,255,255,.82);text-transform:capitalize;text-align:right}
         .lw-composer{flex-shrink:0;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.07);background:rgba(0,0,0,.2)}
+        .lw-handoff{margin-top:6px;font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid rgba(218,165,32,.4);background:rgba(218,165,32,.1);color:#E8B923;cursor:pointer}
         .lw-attachrow{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;align-items:center}
         .lw-attach{position:relative;width:54px;height:54px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,.15)}
         .lw-attach img{width:100%;height:100%;object-fit:cover;display:block}

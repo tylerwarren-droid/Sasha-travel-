@@ -567,15 +567,55 @@ async def _turn(ch: dict, frm: str, p: Dict[str, str]) -> None:
                                               "again in a minute."), st.get("last_inbound_at"))
 
 
+async def voice_text(p: Dict[str, str]) -> Optional[str]:
+    """Sasha 165 (5) · a WhatsApp VOICE NOTE → its words (Deepgram, any language), handled like typed text. The audio is
+    fetched once from Twilio with our own credentials and not kept. None when it isn't a voice note or can't be read."""
+    try:
+        n = int(p.get("NumMedia") or 0)
+    except ValueError:
+        n = 0
+    if n < 1 or not str(p.get("MediaContentType0") or "").startswith("audio/") or not p.get("MediaUrl0"):
+        return None
+    from .http_pool import request
+    sid, token = os.getenv("TWILIO_ACCOUNT_SID", "").strip(), os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    key = os.getenv("DEEPGRAM_API_KEY", "").strip()
+    if not (sid and token and key):
+        return None
+    try:
+        r = await request("GET", p["MediaUrl0"], timeout=20.0, follow_redirects=True,
+                          headers={"authorization": "Basic " + base64.b64encode(f"{sid}:{token}".encode()).decode()})
+        if r.status_code != 200 or not r.content:
+            log.info("[guest_whatsapp] voice note not fetched: HTTP %s", r.status_code)
+            return None
+        base = os.getenv("DEEPGRAM_STT_BASE", "").strip().rstrip("/") or "https://api.deepgram.com"
+        d = await request("POST", f"{base}/v1/listen", timeout=30.0, content=r.content,
+                          params={"model": "nova-3", "language": "multi", "smart_format": "true", "punctuate": "true"},
+                          headers={"Authorization": f"Token {key}", "Content-Type": str(p["MediaContentType0"]).split(";")[0]})
+        alts = (((d.json().get("results") or {}).get("channels") or [{}])[0].get("alternatives") or [{}]) if d.status_code == 200 else [{}]
+        words = " ".join(str(alts[0].get("transcript") or "").split())
+        return words or None
+    except Exception as e:
+        log.info("[guest_whatsapp] voice note not transcribed: %s", type(e).__name__)
+        return None
+
+
 async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     key, account = ch["wa_id_sha256"], ch["account_id"]
     body = (p.get("Body") or "").strip()
+    heard = None
+    if not body and not (p.get("ButtonPayload") or "").strip():
+        heard = await voice_text(p)   # Sasha 165 (5) · a voice note: its words, as if typed
+        if heard:
+            body = heard
+            p = {**p, "Body": heard, "NumMedia": "0"}
     payload = (p.get("ButtonPayload") or "").strip()
     now = NOW()
     st = await STORE.get_state(key)
     st["last_inbound_at"] = now
     st["last_to"] = frm   # Sasha 162 · the number they wrote to: what Sasha starts goes from it
     out = Out()
+    if heard:   # what she heard, so a mis-hearing is seen before anything happens
+        out.text(f"🎙 I heard: “{heard}”")
     if ch.get("opted_out_at"):
         if _START.match(body):
             await STORE.set_opted_out(key, None)

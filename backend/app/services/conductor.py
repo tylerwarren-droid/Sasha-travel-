@@ -1774,6 +1774,13 @@ async def conduct(
         _r = await _pt.web(user_id, user_message, _pt.decode(media), product_mode, payload, signed_in)
         _r["messages"] = list(conversation_history or []) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _r["response"]}]
         return _r
+    # Sasha 165 (4) · "send this to my phone": ONE WhatsApp, "Picking up: <trip> — <the open item>. Reply to carry on."
+    from booking_signer import handoff_phone as _hp  # noqa: E402
+    if _hp.asked(user_message):
+        _say = await _hp.send(user_id if signed_in is not False else None)
+        return {"response": _say, "intents": ["handoff"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
+                "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
     # Sasha 159 (5) · "send me the captcha test": a fresh CAPTCHA hand-over and one WhatsApp tap (founder only)
     from booking_signer import captcha_test as _ct  # noqa: E402
     if _ct.asked(user_message):
@@ -2222,6 +2229,12 @@ async def conduct(
             total_usd=itinerary.get("estimated_total_usd") or 0,
             payload=itinerary,
         )
+        # Sasha 165 · THE BRIDGE: the plan is also a trip on the ACCOUNT (Postgres) — readable on WhatsApp and voice, kept
+        # across redeploys, and the bookings slot into its days. After the builder, never instead of it; never fatal.
+        if user_id and signed_in is not False and user_id != PUBLIC_DEMO_ID:
+            from booking_signer import plan_store as _ps  # noqa: E402
+            from datetime import datetime as _dtp, timezone as _tzp  # noqa: E402
+            itinerary["trip_id"] = await _ps.save(user_id, itinerary, user_message, _dtp.now(_tzp.utc))
 
     # Step 5 — Merge responses
     if len(agent_responses) == 0:

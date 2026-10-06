@@ -1,5 +1,7 @@
 'use client'
+import { useEffect, useState } from 'react'
 import TripMap from '../TripMap'
+import { bookingReq } from '@/lib/booking-client'
 import type { RichItinerary } from '../ItineraryDays'
 
 interface TripPanelProps {
@@ -32,9 +34,33 @@ interface TripPanelProps {
  * the guest was left reading fake numbers and believing Sasha had planned their trip. An
  * honest empty state is better: it says nothing is planned, and points at the Ideas tab.
  */
+/** Sasha 165 · THE ONE VIEW: the plan on the ACCOUNT (Postgres) with every booking slotted into its day — polled, so a
+ *  booking made on WhatsApp shows here within seconds, and a plan made elsewhere (or before a reload) still shows. */
+type ServerBooking = { id?: string; venue: string; time?: string; part?: string; status?: string; status_words?: string; replaces?: string }
+type ServerDay = { day: number; date?: string | null; city?: string; bookings?: ServerBooking[]; activities?: { name: string; replaced_by?: string }[] }
+type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?: string }
+function useServerPlan(): ServerPlan | null {
+  const [plan, setPlan] = useState<ServerPlan | null>(null)
+  useEffect(() => {
+    let off = false
+    const pull = async () => {
+      const r = await bookingReq('/api/booking/plan').catch(() => null)
+      if (!off && r?.ok) setPlan((r.json.plan ?? null) as ServerPlan | null)
+    }
+    pull()
+    const t = setInterval(pull, 6000)
+    return () => { off = true; clearInterval(t) }
+  }, [])
+  return plan
+}
+
 export default function TripPanel({
-  richItinerary, openDays, toggleDay, onBook, travellerCount, onBrowseIdeas, bookingRef, paidWith,
+  richItinerary: localItinerary, openDays, toggleDay, onBook, travellerCount, onBrowseIdeas, bookingRef, paidWith,
 }: TripPanelProps) {
+  const server = useServerPlan()
+  const [handoff, setHandoff] = useState<string | null>(null)
+  const richItinerary = localItinerary ?? (server as RichItinerary | null)
+  const serverDay = (n: number): ServerDay | undefined => (server?.days ?? []).find((x) => x.day === n)
   const isBooked = Boolean(bookingRef)
   const isPaid = isBooked && Boolean(paidWith)
   const doneWord = isPaid ? 'Paid' : 'Saved'   // Sasha 133 · nobody was contacted on this path: never "Booked"/"Reserved"
@@ -86,6 +112,13 @@ export default function TripPanel({
             <div className="lw-meta">
               <div className="lw-k">Your itinerary</div>
               <div className="lw-h">{richItinerary.title}</div>
+              {/* Sasha 165 · hand-off: ONE WhatsApp, "Picking up: <trip> — <the open item>. Reply to carry on." */}
+              <button type="button" className="lw-handoff" onClick={async () => {
+                setHandoff('Sending…')
+                const r = await bookingReq('/api/booking/handoff/phone', {}).catch(() => null)
+                setHandoff(String(r?.json?.say ?? 'Not sent — try again.'))
+              }}>📱 Continue on my phone</button>
+              {handoff && <div style={{ fontSize: 11.5, opacity: 0.75, marginTop: 2 }}>{handoff}</div>}
             </div>
           </div>
           <div className="lw-cardBody">
@@ -146,7 +179,14 @@ export default function TripPanel({
                       <div className="num">{d.day}</div>
                       <div className="lw-day-meta">
                         <div className="lw-day-title">{d.title}</div>
-                        <div className="lw-day-city">📍 {d.city}{showHotel ? ` · ${showHotel.name}` : ''}</div>
+                        <div className="lw-day-city">📍 {d.city}{showHotel ? ` · ${showHotel.name}` : ''}{serverDay(d.day)?.date
+                          ? ` · ${new Date(`${serverDay(d.day)!.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}` : ''}</div>
+                        {/* Sasha 165 · this day's bookings, with their status — shown even when the day is folded */}
+                        {(serverDay(d.day)?.bookings ?? []).map((b, bi) => (
+                          <div key={bi} className="lw-day-city" style={{ color: /Confirmed|Booked/i.test(b.status_words ?? '') ? '#7ee2a8' : /Declined/i.test(b.status_words ?? '') ? '#f19999' : '#E8B923' }}>
+                            🔖 {b.time ? `${b.time} · ` : ''}{b.venue} — {b.status_words ?? b.status}
+                          </div>
+                        ))}
                       </div>
                       <div className="lw-day-right">
                         <span className="lw-day-tag">Day {d.day}</span>
@@ -168,6 +208,7 @@ export default function TripPanel({
                             {/* Plain rows — activities book through Sasha's Book & Pay
                                 cards, never a GetYourGuide link. */}
                             {d.activities.map((a: any, ai: number) => (
+                              (serverDay(d.day)?.activities ?? []).some((x) => x.name === a.name && x.replaced_by) ? null :
                               <div className="lw-act" key={ai}>
                                 <span className="lw-act-time">{a.time}</span>
                                 <div className="lw-act-body">

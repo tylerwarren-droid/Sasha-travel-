@@ -261,6 +261,26 @@ async def venue_google_photos(request: Request):
     return {"photos": {n: u for n, u in zip(names, uris) if u}}
 
 
+@router.post("/handoff/phone")
+async def handoff_phone(request: Request):
+    """Sasha 165 (4) · the web's "Continue on my phone": the same as saying "send this to my phone"."""
+    from . import handoff_phone as HP
+    return {"ok": True, "say": await HP.send(account_for(request))}
+
+
+@router.get("/plan")
+async def plan_view(request: Request):
+    """Sasha 165 · THE ONE VIEW: the latest plan on this account with every booking slotted into its day."""
+    from . import plan_store as PS, guest_whatsapp as GW
+    account = account_for(request)
+    p = await PS.latest(account)
+    if not p:
+        return {"plan": None}
+    s, j = await GW.api(account, "GET", "/api/booking/reservations")
+    rows = (j or {}).get("reservations") or [] if s == 200 else []
+    return {"plan": PS.merge(p, rows)}
+
+
 @router.post("/handover/tap")
 async def handover_tap(request: Request):
     """Sasha 158 · {view_url, venue, what?} → ONE WhatsApp tap to this account's phone for a live hand-over (our links only)."""

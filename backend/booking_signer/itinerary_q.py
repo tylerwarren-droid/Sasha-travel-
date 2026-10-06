@@ -165,7 +165,10 @@ async def time_for(account: str, text: str, rows: List[dict], now: datetime) -> 
 
 WEEK = re.compile(r"\bwhat do i (?:need|have) to do (?:this|next) week\b|\bwhat(?:'s| is) (?:on )?(?:for )?(?:this|next) week\b"
                   r"|\bmy week\b|\bwhat do i have (?:this|next) week\b", re.I)
-QUESTION = re.compile(r"\bwhere (?:am i|are we|will i be)\b|\bdo i have time\b|\bwhat(?:'s| is) (?:on )?my (?:itinerary|plan|schedule)\b"
+#: Sasha 165 · the whole trip: the plan (the builder's, now on the account) with every booking slotted into its day
+TRIP = re.compile(r"\bshow (?:me )?my (?:\w+ )?(?:itinerary|trip|plan)\b|\bwhat does my (?:\w+ )?trip look like\b|"
+                  r"^\s*(?:my )?(?:\w+ )?itinerary\s*[?.!]*\s*$|\bwhat was i doing\b|^\s*carry on\s*[.!]*\s*$", re.I)
+QUESTION = re.compile(TRIP.pattern + r"|\bwhere (?:am i|are we|will i be)\b|\bdo i have time\b|\bwhat(?:'s| is) (?:on )?my (?:itinerary|plan|schedule)\b"
                       r"|\bwhat do i have (?:on|tomorrow|today|this)\b|\bwhere do i (?:sleep|stay)\b|" + WEEK.pattern, re.I)
 
 
@@ -221,6 +224,11 @@ async def web_turn(message: str, user_id: Optional[str], history: list) -> Optio
 
 async def answer(account: str, text: str, now: datetime) -> List[str]:
     rows = await _rows(account)
+    if TRIP.search(text or ""):   # Sasha 165 · the plan + the bookings, day by day — when there is a plan
+        from . import plan_store as PS
+        p = await PS.latest(account)
+        if p:
+            return PS.text(PS.merge(p, rows))
     if WEEK.search(text or ""):
         return await week(account, text, rows, now)
     if re.search(r"\bdo i have time\b", text or "", re.I):

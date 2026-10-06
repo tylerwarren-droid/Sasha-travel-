@@ -43,6 +43,7 @@ const SHORT: Record<string, string> = { requested: 'Requested', attempting: 'Req
   unclear: 'Read their reply', link_sent: 'Link sent — not booked yet', waitlisted: 'Waiting list' }
 /** a booking's status in a few words; its reference when confirmed (the full words are on its receipt) */
 const shortStatus = (b: ServerBooking): string => {
+  if (b.test && (b.status === 'confirmed' || b.status === 'guest_booked')) return 'TEST · booked (demo)'   // Sasha 179 · never "Confirmed"
   const ref = /their ref ([A-Z0-9-]+)/.exec(b.status_words ?? '')
   return (SHORT[b.status ?? ''] ?? b.status_words ?? b.status ?? '') + (ref && b.status === 'confirmed' ? ` · ref ${ref[1]}` : '')
 }
@@ -267,8 +268,9 @@ export default function TripPanel({
               </>
             ) : (
               <>
-                <button className="lw-bookBtn" onClick={onBook}>Book the whole trip with Sasha →</button>
-                <div className="lw-booknote">Tap here or just say “book it” — Sasha will confirm your saved card and complete the booking right here.</div>
+                {/* Sasha 179 (1) · the old button charged a demo "saved card" that doesn't exist. The real route: "book it" in the
+                    chat → the TEST read-back of what can actually be booked → one TEST payment on the phone. */}
+                <div className="lw-booknote">To book this trip, say “book it” in the chat: Sasha reads back the hotels and flights that can be booked, then sends one TEST payment to your phone — nothing is charged.</div>
               </>
             )}
           </div>
@@ -293,7 +295,7 @@ export default function TripPanel({
                         {/* Sasha 165 · this day's bookings, with their status — shown even when the day is folded */}
                         {(serverDay(d.day)?.bookings ?? []).map((b, bi) => (
                           <div key={bi} className="lw-day-city" style={{ color: /Confirmed|Booked/i.test(b.status_words ?? '') ? '#7ee2a8' : /Declined/i.test(b.status_words ?? '') ? '#f19999' : '#E8B923' }}>
-                            🔖 {b.time ? `${b.time}${b.edge ? ` (${b.edge})` : ''} · ` : ''}{b.test ? 'TEST · ' : ''}{b.venue} — {shortStatus(b)}
+                            🔖 {b.time ? `${b.time}${b.edge ? ` (${b.edge})` : ''} · ` : ''}{b.test && !shortStatus(b).startsWith('TEST') ? 'TEST · ' : ''}{b.venue} — {shortStatus(b)}
                           </div>
                         ))}
                         {/* Sasha 167 · a place picked on WhatsApp, on its day — a plan, not a booking */}

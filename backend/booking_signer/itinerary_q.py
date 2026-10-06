@@ -86,7 +86,8 @@ async def _rows(account: str) -> List[dict]:
     status, j = await GW.api(account, "GET", "/api/booking/reservations")
     if status != 200:
         return []
-    return [r for r in j.get("reservations") or [] if r.get("status") not in ("cancelled", "failed")]   # Sasha 157 · declined is shown, said so
+    from . import plan_store as PS
+    return PS.truthful([r for r in j.get("reservations") or [] if r.get("status") not in ("cancelled", "failed")])   # Sasha 157 · declined is shown, said so
 
 
 def where_on(rows: List[dict], d: date) -> List[str]:
@@ -210,8 +211,18 @@ async def ask_anything(account: str, text: str, rows: List[dict], now: datetime)
             return [f"There's no {m['t']} trip on your account."]
         dd = WB.ordinals_as_digits(f"the {m['d']}")
         n = int(re.search(r"\d+", dd)[0])
-        plan = PS.merge(p, JN.for_journey(rows, p.get("trip_id")))
-        day = next((d for d in plan.get("days") or [] if d.get("date") and int(d["date"][8:10]) == n), None)
+        cands = [p] + [q for q in await PS.plans(account) if q.get("trip_id") != p.get("trip_id")
+                       and JN._fold(m["t"].strip()) in JN._fold(q.get("title") or "")]
+        plan, day = None, None
+        for c in cands:   # Sasha 179 (1) · two plans share the word: the one that HAS that day (never an undated stub's "no 16th")
+            full = c if c.get("days") is not None else (await PS.by_id(account, c["trip_id"]) or {})
+            if not full:
+                continue
+            plan = PS.merge(full, JN.for_journey(rows, full.get("trip_id")))
+            day = next((d for d in plan.get("days") or [] if d.get("date") and int(d["date"][8:10]) == n), None)
+            if day:
+                p = full
+                break
         if not day:
             return [f"Your {JN.label(p)} trip has no {m['d']} in it."]
         lines = [f"{JN.label(p)} · Day {day.get('day')} · {SN.day_words(day['date'])} — {day.get('city')}:"]
@@ -227,7 +238,7 @@ async def ask_anything(account: str, text: str, rows: List[dict], now: datetime)
             return ["I can't read your relocation file just now."]
         ps = await package_status(account)
         if not ps:
-            return ["You don't have a RelocateMe file yet — say “relocation” to start one."]
+            return ["You don't have a relocation file yet — say “relocate” to start."]
         icon = {"filled": "✏️ filled", "signed": "✅ signed", "missing": "❗ missing", "waiting": "⏳ waiting"}
         lines = [f"🏠 Your relocation package (in your {ps.get('tab') or 'Move to Madrid'} tab):"]
         for fm in ps.get("forms") or []:
@@ -258,7 +269,10 @@ def trips_text(j: dict, text: str) -> List[str]:
         lines.append(f"• {t['label']}{dates} — {t['count']} booking{'s' if t['count'] != 1 else ''}")
     lines.append(f"• {j['home']['label']} — {len(j['home']['items'])} outside any trip")
     lines.append(f"• Requests — {len(j['requests'])} waiting on a reply")
-    lines.append("Say “show me my Vietnam trip”, “my move to Madrid” or “my requests” for one of them.")
+    # Sasha 179 (1) · the hint names only tabs that exist
+    names = list(dict.fromkeys(re.sub(r",.*$", "", re.sub(r"^\W+\s*", "", t["label"])) for t in j["journeys"]))[:2]
+    say = [f"“my {n} trip”" if not re.match(r"(?i)move to|campus|españa|health", n) else f"“my {n.lower()}”" for n in names]
+    lines.append(f"Say {', '.join(say + ['“my requests”'])} for one of them." if say else "Say “my requests” to see what's waiting on a reply.")
     return ["\n".join(lines)]
 
 

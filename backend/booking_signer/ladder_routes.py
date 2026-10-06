@@ -320,7 +320,7 @@ async def plan_view(request: Request):
     if not p:
         return {"plan": None, "plans": await PS.plans(account)}
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
-    rows = (j or {}).get("reservations") or [] if s == 200 else []
+    rows = PS.truthful((j or {}).get("reservations") or [] if s == 200 else [])
     return {"plan": PS.merge(p, JN.for_journey(rows, p.get("trip_id"))), "plans": await PS.plans(account)}
 
 

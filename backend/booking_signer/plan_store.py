@@ -340,8 +340,25 @@ _SHORT = {"requested": "Requested", "attempting": "Requested", "pending": "Not s
           "link_sent": "Link sent — not booked yet", "waitlisted": "Waiting list"}
 
 
+#: Sasha 179 (1) · a TEST booking never reads "Confirmed" anywhere — no venue confirmed anything
+TEST_BOOKED = "TEST · booked (demo)"
+
+
+def _is_test(b: dict) -> bool:
+    from .wa_brain import is_test
+    return bool(b.get("test")) or is_test(b)
+
+
+def truthful(rows: List[dict]) -> List[dict]:
+    """The reservations with every booked TEST item's words replaced by TEST_BOOKED (web tabs, WhatsApp, ask-anything)."""
+    return [{**r, "status_words": TEST_BOOKED, "test": True} if r.get("status") in ("confirmed", "guest_booked") and _is_test(r) else r
+            for r in rows or []]
+
+
 def short_status(b: dict) -> str:
     """The status in a few words for the compact view (the full words, with their quote, are on the web and the receipt)."""
+    if b.get("status") in ("confirmed", "guest_booked") and _is_test(b):
+        return TEST_BOOKED
     words = _SHORT.get(b.get("status") or "", b.get("status_words") or b.get("status") or "")
     ref = re.search(r"their ref ([A-Z0-9-]+)", b.get("status_words") or "")
     return words + (f" · ref {ref[1]}" if ref and b.get("status") == "confirmed" else "")
@@ -357,7 +374,7 @@ def text(plan: dict) -> List[str]:
         for b in sorted(d.get("bookings") or [], key=lambda x: x.get("time") or ""):
             name = str(b.get("venue") or "").replace("(TEST stand-in)", "(our test venue stood in)")
             when = f"{b.get('time') or ''} ({b['edge']})" if b.get("edge") else (b.get("time") or "")
-            lines.append(f"  • {when} {'TEST · ' if b.get('test') else ''}{name}: {short_status(b)}".replace("  •  ", "  • "))
+            lines.append(f"  • {when} {'TEST · ' if b.get('test') and not short_status(b).startswith('TEST') else ''}{name}: {short_status(b)}".replace("  •  ", "  • "))
         acts = [a for a in d.get("activities") or [] if not a.get("replaced_by")]
         for a in [a for a in acts if a.get("added")]:   # Sasha 167 · a place picked on WhatsApp: on its day, not booked
             lines.append(f"  📍 {a.get('time')}: {a.get('name')} (not booked yet)")
@@ -367,4 +384,4 @@ def text(plan: dict) -> List[str]:
     return out
 
 
-__all__ = ["save", "latest", "merge", "text", "dates_of", "add_place", "clear_added", "add_day"]
+__all__ = ["TEST_BOOKED", "truthful", "short_status", "save", "latest", "merge", "text", "dates_of", "add_place", "clear_added", "add_day"]

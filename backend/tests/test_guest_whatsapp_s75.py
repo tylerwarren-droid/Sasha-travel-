@@ -294,8 +294,8 @@ class Turns(Base):
             self.say("Cancel the Retiro dinner.")
         listed = self.bodies()[-1]
         self.assertNotIn("La Contra", listed)
-        self.assertIn("1. Sasha Test Venue — Saturday 3 October at 21:00 · confirmed by the restaurant · ref TV-62BB32", listed)
-        self.assertIn("2. Sasha Test Venue — Saturday 3 October at 21:00 · confirmed by the restaurant · ref TV-FE41E1", listed)
+        self.assertIn("1. Sasha Test Venue — Saturday 3 October at 21:00 · TEST · booked (demo) · ref TV-62BB32", listed)
+        self.assertIn("2. Sasha Test Venue — Saturday 3 October at 21:00 · TEST · booked (demo) · ref TV-FE41E1", listed)
         with mock.patch.object(GW, "NOW", lambda: self.now):
             self.say("Cancel the Retiro dinner.")                                   # asked again: a fresh list, not "reply with the number"
         self.assertTrue(self.bodies()[-1].startswith("Which one should I cancel?"))

@@ -209,7 +209,8 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
         except Exception as e:
             log.info("[journeys] no plans: %s", type(e).__name__)
     cities, saved = await _extra(account) if account else ({}, [])
-    rows = list(rows) + saved   # Sasha 178 · parked, unbooked: in their tab AND in Requests
+    from . import plan_store as PS
+    rows = PS.truthful(list(rows)) + saved   # Sasha 179 · TEST never "Confirmed"; Sasha 178 · parked, unbooked: in their tab AND in Requests
     ids = {p["trip_id"] for p in plans}
     # Sasha 177 (3) · EVERY PRODUCT WRITES HERE: CampusMe visits, RelocateMe's deadlines and appointments, EspañaMe's follow-ups
     prod = await product_rows(account)

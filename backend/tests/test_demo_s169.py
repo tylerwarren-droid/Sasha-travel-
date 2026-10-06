@@ -72,7 +72,7 @@ class FlightsAroundTheTrip(unittest.TestCase):
                           "status": "confirmed"}])
         self.assertEqual(m["days"][0]["bookings"][0]["edge"], "leaves Wed 11 Nov")
         self.assertEqual(m["days"][-1]["bookings"][0]["edge"], "leaves Tue 17 Nov")
-        self.assertIn("07:44 (leaves Wed 11 Nov) TEST · Flight", "\n".join(PS.text(m)))
+        self.assertIn("07:44 (leaves Wed 11 Nov) Flight ZZ 1 Madrid → Hanoi (TEST booking): TEST · booked (demo)", "\n".join(PS.text(m)))
 
 
 class PickByVoice(unittest.TestCase):

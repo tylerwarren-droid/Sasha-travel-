@@ -3037,7 +3037,8 @@ async def _with_names(account: str, rows: List[dict]) -> List[dict]:
             s, rc = await api(account, "GET", r["receipt"])
             if s == 200 and (rc.get("venue") or {}).get("name"):
                 r["venue"] = rc["venue"]["name"]
-    return rows
+    from . import plan_store as PS
+    return PS.truthful(rows)   # Sasha 179 · TEST never "Confirmed"
 
 
 async def _receipts(ctx: dict) -> None:

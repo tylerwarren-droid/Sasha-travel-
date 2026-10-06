@@ -263,11 +263,15 @@ def trips_text(j: dict, text: str) -> List[str]:
     if re.search(r"\breceipts\b", text or "", re.I):
         rc = j["receipts"]
         return ["🧾 Booked:\n" + "\n".join(_line(r) for r in rc[:15])] if rc else ["No bookings with receipts yet."]
+    if not j["journeys"] and not j["home"]["items"]:   # Sasha 181 · after "reset the demo"
+        return ["No tabs — ready from zero." + (f" {len(j['receipts'])} real booking{'s' if len(j['receipts']) != 1 else ''} in Receipts "
+                                               "(say “my receipts”)." if j["receipts"] else "")]
     lines = ["🗂 Your trips:"]
     for t in j["journeys"]:
         dates = f" ({SN.day_words(t['start'])} – {SN.day_words(t['end'])})" if t.get("start") and t.get("end") else ""
         lines.append(f"• {t['label']}{dates} — {t['count']} booking{'s' if t['count'] != 1 else ''}")
-    lines.append(f"• {j['home']['label']} — {len(j['home']['items'])} outside any trip")
+    if j["home"]["items"]:
+        lines.append(f"• {j['home']['label']} — {len(j['home']['items'])} outside any trip")
     lines.append(f"• Requests — {len(j['requests'])} waiting on a reply")
     # Sasha 179 (1) · the hint names only tabs that exist
     names = list(dict.fromkeys(re.sub(r",.*$", "", re.sub(r"^\W+\s*", "", t["label"])) for t in j["journeys"]))[:2]

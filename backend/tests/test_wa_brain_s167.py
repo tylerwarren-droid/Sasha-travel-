@@ -204,7 +204,7 @@ class TestLabel(unittest.TestCase):
         with mock.patch.object(WB, "reset_demo", mock.AsyncMock(return_value={"bookings": 1, "added": 0, "saved": 2, "plans": 1})):
             asyncio.run(WB.start_reset(c))
         self.assertNotIn("founder's", c["out"].said())
-        self.assertIn("1 TEST booking, 0 added places, 2 saved searches, 1 empty undated plan", c["out"].said())
+        self.assertIn("1 TEST booking, 0 added places, 2 saved searches, 1 plan/journey — every tab goes", c["out"].said())
 
 
 class LiveFailure(unittest.TestCase):

@@ -150,7 +150,7 @@ export default function TripPanel({
         <button key={t.key} className="lw-chip" style={chip(view === 'trip' && activeTrip === t.key)}
           onClick={() => { setTripId(t.key); setView('trip') }}>{t.label}{t.count ? ` · ${t.count}` : ''}</button>
       ))}
-      <button className="lw-chip" style={chip(view === 'home')} onClick={() => setView('home')}>{jn?.home.label ?? 'Home'}{jn?.home.items.length ? ` · ${jn.home.items.length}` : ''}</button>
+      {(jn?.home.items.length ?? 0) > 0 && <button className="lw-chip" style={chip(view === 'home')} onClick={() => setView('home')}>{jn?.home.label ?? 'Home'} · {jn!.home.items.length}</button>}{/* Sasha 181 · no empty home tab */}
       <button className="lw-chip" style={chip(view === 'requests')} onClick={() => setView('requests')}>Requests{jn?.requests.length ? ` · ${jn.requests.length}` : ''}</button>
       <button className="lw-chip" style={chip(view === 'receipts')} onClick={() => setView('receipts')}>Receipts</button>
       <button className="lw-chip" style={chip(view === 'everything')} onClick={() => setView('everything')}>Everything</button>

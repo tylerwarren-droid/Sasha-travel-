@@ -233,6 +233,12 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
         t["extras"] = extras.get(t["key"]) or []
         t["count"] += len(t["extras"])
     forms = await _relocation_forms(account)                     # CR 45 · every form lives in the journey
+    # Sasha 181 · after "reset the demo" a product's tab stays hidden until that product is used again (its file is kept)
+    used = await _used_since_reset(account)
+    if used is not None:
+        prod = [x for x in prod if x["product"] in used]
+        reloc_items = [r for r in reloc_items if "relocation" in used]
+        forms = forms if "relocation" in used else []
     if not move_plan and (reloc_items or forms):   # RelocateMe's journey even before a plan exists: its deadlines and appointments
         tabs.append({"key": "relocation", "label": badged("relocation", "Move to Madrid"), "product": "RelocateMe",
                      "title": "Move to Madrid (RelocateMe)", "virtual": True, "count": len(reloc_items), "extras": reloc_items})
@@ -257,14 +263,42 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
         c = r.get("city") or cities.get(str(r.get("id"))) or home_city
         c = home_city if _fold(c) in (_fold(home_city), "madrid") else c
         by_city.setdefault(c, []).append(r)
-    home = by_city.pop(home_city, [])
+    home = [r for r in by_city.pop(home_city, []) if _upcoming(r)]   # Sasha 181 · past ones live in Receipts / Everything
     for c, items in sorted(by_city.items()):
         tabs.append({"key": f"city:{c}", "label": f"📍 {c}",   # Sasha 179 (2) · a one-off city's own tab "product": "Sasha", "title": f"{c} — outside any trip",
                      "virtual": True, "count": len(items), "extras": items})
     return {"journeys": tabs, "home": {"label": badged("sasha", home_label()), "items": home},
             "requests": [r for r in live if r.get("status") in OPEN or r.get("status") == "saved"],
-            "receipts": [r for r in rows if r.get("status") in BOOKED],
+            # Sasha 181 · real bookings, kept, and real PLATFORM bookings cancelled (a TEST one never: the reset cleared those)
+            "receipts": [r for r in rows if r.get("status") in BOOKED or (r.get("status") == "cancelled" and not PS._is_test(r)
+                                                                          and r.get("channel") == "link")],   # a platform's, cancelled
             "everything": sorted(rows, key=lambda r: f"{r.get('date') or '9'}{r.get('time') or ''}")}
+
+
+def _upcoming(r: dict) -> bool:
+    from datetime import date as _d
+    return not r.get("date") or str(r["date"]) >= _d.today().isoformat()
+
+
+async def _used_since_reset(account: Optional[str]):
+    """None: never reset. Else the products with an open conversation now (the reset closed them all)."""
+    run = _run()
+    if not account or run is None:
+        return None
+    from .wa_brain import RESET_MARK
+    try:
+        n = await run(lambda c: c.fetchval("select count(*) from trips where owner_id = $1 and title = $2", uuid.UUID(account), RESET_MARK))
+    except Exception as e:
+        log.info("[journeys] reset marker unread: %s", type(e).__name__)
+        return None
+    if not n:
+        return None
+    try:
+        from products import store as ST
+        return {r["product"] for r in await ST.STORE.conversations(f"acct:{account}")} | \
+               {r["product"] for r in await ST.STORE.conversations(f"web:{account}")}
+    except Exception:
+        return set()
 
 
 async def _relocation_forms(account: Optional[str]) -> List[dict]:

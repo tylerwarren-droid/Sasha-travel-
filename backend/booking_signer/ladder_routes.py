@@ -103,9 +103,11 @@ def _read_view(row: dict, read: Optional[dict] = None) -> dict:
     """`read`: the read with its listing re-read (places_terms.hydrate_read) — shown, never stored."""
     read = read if read is not None else row["read"]
     chosen = L.choose(read, account=row.get("account_id"))
-    return {"read_id": row["read_id"], "venue": read["name"], "country": read.get("country"), "listing": read.get("listing"),
+    # Sasha 161 · the venue's LISTING name first: a reused read can carry the guest's own words as its name
+    name = ((read.get("listing") or {}).get("name") or read["name"])
+    return {"read_id": row["read_id"], "venue": name, "country": read.get("country"), "listing": read.get("listing"),
             "facts": [{k: f[k] for k in ("kind", "value", "source_label", "source_url", "snippet", "fetched_at")} for f in read["facts"]],
-            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"], "plan": _plan_for(read, chosen["rungs"]),
+            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"], "plan": _plan_for({**read, "name": name}, chosen["rungs"]),
             **({"listing_reread": read["listing_reread"]} if read.get("listing_reread") else {})}
 
 
@@ -146,8 +148,8 @@ async def read_venue(request: Request):
             row = await LADDER_STORE.recent_read(account_for(request), str(body["place_id"]), now - timedelta(hours=read_reuse_hours()))
         except StorageUnavailable:
             row = None
-        if row:
-            return _read_view(row, await PT.hydrate_read(HTTP, row["read"], now))
+        if row and (not body.get("name") or (row.get("read") or {}).get("name") == body.get("name")):   # Sasha 161 · a read made
+            return _read_view(row, await PT.hydrate_read(HTTP, row["read"], now))                          # under another name is not reused
     try:
         read = await V.read_venue(HTTP, name=body.get("name"), city=body.get("city"), country=body.get("country"),
                                   website=body.get("website") or None, now=now, resolve=RESOLVE,

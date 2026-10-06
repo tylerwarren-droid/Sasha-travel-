@@ -1,5 +1,4 @@
 'use client'
-import SashaReservations from './SashaReservations'  // Sasha 175 · the All bookings / In progress tabs
 import { useEffect, useState } from 'react'
 import TripMap from '../TripMap'
 import { bookingReq } from '@/lib/booking-client'
@@ -48,6 +47,49 @@ const shortStatus = (b: ServerBooking): string => {
   return (SHORT[b.status ?? ''] ?? b.status_words ?? b.status ?? '') + (ref && b.status === 'confirmed' ? ` · ref ${ref[1]}` : '')
 }
 type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?: string }
+type JRow = { id: string; venue: string; date: string | null; time: string | null; status: string; status_words?: string; booking_reference?: string | null; trip_id?: string }
+type Journeys = { journeys: { key: string; label: string; title: string; start?: string | null; end?: string | null; count: number }[]
+  home: { label: string; items: JRow[] }; requests: JRow[]; receipts: JRow[]; everything: JRow[] }
+/** Sasha 177 · the account's journeys and lists, polled like the plan (a booking made on WhatsApp shows within seconds) */
+function useJourneys(): Journeys | null {
+  const [j, setJ] = useState<Journeys | null>(null)
+  useEffect(() => {
+    let off = false
+    const pull = async () => {
+      const r = await bookingReq('/api/booking/journeys').catch(() => null)
+      if (!off && r?.ok) setJ(r.json as unknown as Journeys)
+    }
+    pull()
+    const t = setInterval(pull, 6000)
+    return () => { off = true; clearInterval(t) }
+  }, [])
+  return j
+}
+const dayHead = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()
+function JourneyList({ title, rows }: { title: string; rows: JRow[] | null }) {
+  if (!rows) return <div className="lw-note-s">Loading…</div>
+  const byDay = new Map<string, JRow[]>()
+  for (const r of rows) byDay.set(r.date ?? '', [...(byDay.get(r.date ?? '') ?? []), r])
+  return (
+    <>
+      <div className="lw-when">{title}</div>
+      <div className="lw-card"><div className="lw-cardBody" style={{ paddingTop: 14 }}>
+        {rows.length === 0 && <div className="lw-note-s">Nothing here.</div>}
+        {[...byDay].map(([d, rs]) => (
+          <div key={d} style={{ marginBottom: 10 }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>{d ? dayHead(d) : 'No day set yet'}</div>
+            {rs.map((r) => (
+              <div key={r.id} style={{ marginBottom: 6 }}>
+                <div>{r.time ? `${r.time} · ` : ''}{r.venue.replace(/ \(TEST stand-in\)$/, ' (test venue stood in)')}</div>
+                <div className="lw-note-s">{r.status_words ?? r.status}{r.booking_reference ? ` · ref ${r.booking_reference}` : ''}</div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div></div>
+    </>
+  )
+}
 type PlanRef = { trip_id: string; title: string; start?: string | null; end?: string | null; cities?: string[] }
 function useServerPlan(tripId: string | null, onPlans?: (p: PlanRef[]) => void): ServerPlan | null {
   const [plan, setPlan] = useState<ServerPlan | null>(null)
@@ -71,33 +113,35 @@ export default function TripPanel({
   richItinerary: localItinerary, openDays, toggleDay, onBook, travellerCount, onBrowseIdeas, bookingRef, paidWith,
 }: TripPanelProps) {
   // Sasha 175 · THE TABS the founder asked for: this trip (any of his trips), every booking anywhere, and what's still open
-  const [view, setView] = useState<'trip' | 'bookings' | 'progress'>('trip')
+  // Sasha 177 · ONE TRIPS SPACE: a tab per journey (from /journeys), home, requests, receipts, everything. Switching tabs never
+  // moves a booking — each is filed by the server into the journey whose dates AND place fit.
+  const [view, setView] = useState<'trip' | 'home' | 'requests' | 'receipts' | 'everything'>('trip')
   const [tripId, setTripId] = useState<string | null>(null)
-  const [plans, setPlans] = useState<PlanRef[]>([])
+  const [, setPlans] = useState<PlanRef[]>([])
   const server = useServerPlan(tripId, setPlans)
+  const jn = useJourneys()
   const [handoff, setHandoff] = useState<string | null>(null)
   const richItinerary = (tripId ? null : localItinerary) ?? (server as RichItinerary | null)
-  const OPEN = ['pending', 'requested', 'attempting', 'link_sent', 'quoted', 'proposed', 'unclear', 'waitlisted']
+  const activeTrip = tripId ?? server?.trip_id ?? null
+  const chip = (on: boolean) => (on ? { borderColor: '#E8B923', color: '#E8B923' } : undefined)
   const tabs = (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
-      {([['trip', 'This trip'], ['bookings', 'All bookings'], ['progress', 'In progress']] as const).map(([k, label]) => (
-        <button key={k} className={`lw-chip ${view === k ? 'on' : ''}`} onClick={() => setView(k)}
-          style={view === k ? { borderColor: '#E8B923', color: '#E8B923' } : undefined}>{label}</button>
+      {(jn?.journeys ?? []).map((t) => (
+        <button key={t.key} className="lw-chip" style={chip(view === 'trip' && activeTrip === t.key)}
+          onClick={() => { setTripId(t.key); setView('trip') }}>{t.label}{t.count ? ` · ${t.count}` : ''}</button>
       ))}
-      {view === 'trip' && plans.length > 1 && (
-        <select value={tripId ?? server?.trip_id ?? ''} onChange={(e) => setTripId(e.target.value || null)}
-          style={{ background: 'rgba(0,0,0,.25)', color: 'inherit', border: '1px solid rgba(255,255,255,.15)', borderRadius: 6, padding: '3px 6px', maxWidth: 260 }}>
-          {plans.map((p) => <option key={p.trip_id} value={p.trip_id}>{p.title}{p.start ? ` · ${p.start}` : ''}</option>)}
-        </select>
-      )}
+      <button className="lw-chip" style={chip(view === 'home')} onClick={() => setView('home')}>{jn?.home.label ?? 'Home'}{jn?.home.items.length ? ` · ${jn.home.items.length}` : ''}</button>
+      <button className="lw-chip" style={chip(view === 'requests')} onClick={() => setView('requests')}>Requests{jn?.requests.length ? ` · ${jn.requests.length}` : ''}</button>
+      <button className="lw-chip" style={chip(view === 'receipts')} onClick={() => setView('receipts')}>Receipts</button>
+      <button className="lw-chip" style={chip(view === 'everything')} onClick={() => setView('everything')}>Everything</button>
     </div>
   )
-  if (view === 'bookings') return <div className="lw-trip">{tabs}<SashaReservations title="All your bookings" /></div>
-  if (view === 'progress') return (
-    <div className="lw-trip">{tabs}
-      <SashaReservations title="In progress" only={(st) => OPEN.includes(st)} empty="Nothing in progress — every request has its answer." />
-    </div>
-  )
+  if (view !== 'trip') {
+    const rows = !jn ? null : view === 'home' ? jn.home.items : view === 'requests' ? jn.requests : view === 'receipts' ? jn.receipts : jn.everything
+    const title = view === 'home' ? `${jn?.home.label ?? 'Home'} — outside any trip` : view === 'requests' ? 'Waiting on a reply'
+      : view === 'receipts' ? 'Booked' : 'Everything, by date'
+    return <div className="lw-trip">{tabs}<JourneyList title={title} rows={rows} /></div>
+  }
   const serverDay = (n: number): ServerDay | undefined => (server?.days ?? []).find((x) => x.day === n)
   const isBooked = Boolean(bookingRef)
   const isPaid = isBooked && Boolean(paidWith)

@@ -731,11 +731,23 @@ async def start_another(ctx: dict, rest: str) -> None:
     if not finds:
         ctx["out"].text("Tell me what to start, e.g. “a restaurant in Madrid tonight”.")
         return
-    if len(finds) == 1:   # one thing: straight into its search
-        await gate(ctx, finds[0][0], finds[0][1], finds[0][2])
+    trip_cities = {JN_fold(c) for p in await PS.plans(ctx["account"]) for c in (p.get("cities") or [])}
+    if len(finds) == 1:   # one thing: its search — Sasha 179 (2) · a city that's neither home nor on a trip is asked about ONCE first
+        f, gp, part = finds[0]
+        city = f["where"].split(",")[-1].strip()
+        at = f.get("open_at") or gp.get("day")
+        if JN_fold(city) not in trip_cities and JN_fold(city) != "madrid" and \
+                await tab_of(ctx["account"], f["where"], at) not in [JN_label(p) for p in await PS.plans(ctx["account"])] and \
+                not (ctx["st"].get("city_asked") or {}).get(JN_fold(city)):
+            nonce = uuid.uuid4().hex[:6]
+            ctx["out"].ask(f"{f['what'].capitalize()} in {city} — is that a one-off, or part of a trip?",
+                           [("A one-off", f"oneoff:{nonce}"), ("Part of a trip", f"tripq:{nonce}")])
+            ctx["st"]["pending"] = {"kind": "city_q", "at": ctx["now"].isoformat(), "nonce": nonce, "city": city,
+                                    "then": {"f": f, "gp": gp, "part": part}}
+            return
+        await gate(ctx, f, gp, part)
         return
     lines, new_city = [], None
-    trip_cities = {JN_fold(c) for p in await PS.plans(ctx["account"]) for c in (p.get("cities") or [])}
     for f, gp, part in finds:
         at = f.get("open_at") or gp.get("day")
         await save_item(ctx["account"], f"{HO.found_line(f)[len('Here are the best-rated '):].rstrip('.')} (saved)"
@@ -791,6 +803,11 @@ async def web_start(account: str, rest: str, now) -> tuple:
     return "Started, both saved (nothing booked yet):\n" + "\n".join(lines), None
 
 
+def JN_label(p: dict) -> str:
+    from . import journeys as JN
+    return JN.label(p)
+
+
 def JN_fold(s: str) -> str:
     from . import journeys as JN
     return JN._fold(s)
@@ -808,8 +825,13 @@ async def city_answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
     if not (one or trip):
         return False
     ctx["st"]["pending"] = None
-    ctx["out"].text(f"OK — {pend['city']} stays its own tab." if one else
-                    f"Then say “plan me 3 days in {pend['city']}” — I'll build the trip and file these in it.")
+    ctx["st"].setdefault("city_asked", {})[JN_fold(pend["city"])] = "oneoff" if one else "trip"   # asked once
+    ctx["out"].text(f"OK — a one-off: it goes in a new 📍 {pend['city']} tab." if one else
+                    f"OK — when you're ready, say “plan me 3 days in {pend['city']}” and I'll build the trip and file this in it. "
+                    f"Until then it's in a 📍 {pend['city']} tab.")
+    then = pend.get("then")
+    if then:   # Sasha 179 (2) · then straight into the search it was asked for — the CURRENT request (a later "not ready" saves this one)
+        await gate(ctx, then["f"], then["gp"], then["part"])
     return True
 
 

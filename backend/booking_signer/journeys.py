@@ -259,7 +259,7 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
         by_city.setdefault(c, []).append(r)
     home = by_city.pop(home_city, [])
     for c, items in sorted(by_city.items()):
-        tabs.append({"key": f"city:{c}", "label": badged("sasha", c), "product": "Sasha", "title": f"{c} — outside any trip",
+        tabs.append({"key": f"city:{c}", "label": f"📍 {c}",   # Sasha 179 (2) · a one-off city's own tab "product": "Sasha", "title": f"{c} — outside any trip",
                      "virtual": True, "count": len(items), "extras": items})
     return {"journeys": tabs, "home": {"label": badged("sasha", home_label()), "items": home},
             "requests": [r for r in live if r.get("status") in OPEN or r.get("status") == "saved"],

@@ -622,8 +622,14 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
   }, [])  // stable — all dynamic props are read via refs above
 
   const toggleListening = () => {
-    if (connectedRef.current) stopAll()
-    else connect()
+    if (connectedRef.current) { stopAll(); return }
+    // Sasha 171 · a CLICK on the mic is the guest asking to talk: the gate opens now. It started closed "until the avatar
+    // finishes speaking" — in the text box, with no call, the avatar never speaks, so nothing said ever reached Deepgram
+    // (live: "the 🎙 in the text box does not accept"). The call's own gate (onSetGate) still closes it while she talks.
+    micGatedRef.current = false
+    gateOpenedAtRef.current = Date.now()
+    console.log('[GATE] opened by a click on the mic')
+    connect()
   }
 
   useEffect(() => {

@@ -89,6 +89,26 @@ const cityOf = (address: string | null | undefined): string | undefined => {
 
 export default function ChatBooking({ find }: { find: Find }) {
   const [state, setState] = useState<State>({ phase: 'finding' })
+  // Sasha 172 · booked on the OTHER device: the same day and time appears in the plan (from WhatsApp) — this choice closes
+  const [elsewhere, setElsewhere] = useState<string | null>(null)
+  useEffect(() => {
+    const at = find.open_at ?? ''
+    if (!at) return
+    let off = false
+    let seen: Set<string> | null = null
+    const look = async () => {
+      const r = await bookingReq('/api/booking/plan').catch(() => null)
+      if (off || !r?.ok) return
+      const days = ((r.json.plan ?? {}) as { days?: { day: number; date?: string; bookings?: { id?: string; venue: string; time?: string; status?: string }[] }[] }).days ?? []
+      const all = days.flatMap((d) => (d.bookings ?? []).map((b) => ({ ...b, day: d.day, date: d.date })))
+      if (seen === null) { seen = new Set(all.map((b) => String(b.id))); return }   // what was there before this choice opened
+      const hit = all.find((b) => !seen!.has(String(b.id)) && b.date === at.slice(0, 10) && (b.time ?? '') === at.slice(11, 16))
+      if (hit) setElsewhere(`Booked on your phone ✅ — ${hit.venue.replace(/ \(TEST stand-in\)$/, '')}, ${hit.time} — it's on Day ${hit.day} of your trip.`)
+    }
+    look()
+    const t = setInterval(look, 5000)
+    return () => { off = true; clearInterval(t) }
+  }, [find])
   const stateRef = useRef(state)
   // S-68 step 9 · style per place_id, read for the cards SHOWN only; 'reading' while their sites are read
   const [styles, setStyles] = useState<Record<string, Style | 'reading'>>({})
@@ -224,6 +244,7 @@ export default function ChatBooking({ find }: { find: Find }) {
 
   const box = { border: '1px solid rgba(0,0,0,.12)', borderRadius: 10, padding: 12, margin: '8px 0' } as const
   if (state.phase === 'founder_only') return <div style={box}><SignInToBook /></div>
+  if (elsewhere) return <div style={box}>{elsewhere}</div>
   if (state.phase === 'finding') return <div style={box}>One moment…</div>
   if (state.phase === 'refused') return <div style={box}>{state.words}</div>
   const cards = state.cards

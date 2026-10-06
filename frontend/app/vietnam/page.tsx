@@ -191,6 +191,9 @@ export default function VietnamPage() {
   }, [])
   const handleTabChange = useCallback((tab: WorkspaceTab) => {
     setRightTab(tab)
+    // Sasha 172 · Trip / Ideas / You open the workspace without a call: a fresh page showed an empty Trip tab though the
+    // account's plan and its bookings (made on the phone) were on the server
+    if (tab !== 'chat') setTextOnly(true)
     setUnseenTabs(u => u.filter(t => t !== tab))
   }, [])
   const [started, setStarted] = useState(false)

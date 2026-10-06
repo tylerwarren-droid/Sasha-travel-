@@ -145,7 +145,7 @@ async def read_venue(request: Request):
         # a request for a date and a quote (a tattoo, custom work) has no slot to book: our EMAIL-only test venue stands in
         quote = re.search(r"tattoo|piercing|custom|commission|portrait|bespoke|tailor|quote", str(body.get("asked_for") or ""), re.I)
         body = {"name": standin_name(body.get("name")), "city": body.get("city") or "Madrid", "country": "ES",
-                "website": test_venue_url("email" if quote else "plain")}
+                "website": test_venue_url("email" if quote else "captcha" if standin_captcha(body.get("asked_for")) else "plain")}
     if any(k in body for k in ("phone", "number", "phone_number", "email", "to")):
         return _refuse(422, "contact_from_request", "a venue's contact details are READ from what it publishes, never taken from the request")
     now = NOW()
@@ -200,6 +200,12 @@ def standin(account: Optional[str]) -> bool:
     import os
     from .guest_accounts import founder
     return os.getenv("SASHA_DEMO_STANDIN", "") == "1" and bool(account) and founder(account)
+
+
+def standin_captcha(asked_for) -> bool:
+    """Sasha 172 · ONE booking in the demo meets a real CAPTCHA (our own test page, Google's documented reCAPTCHA TEST key):
+    the spa — "Tap to finish" on the phone, the guest ticks it, it's booked. Every other kind goes straight through."""
+    return bool(re.search(r"\b(spa|massage|wellness)\b", str(asked_for or ""), re.I))
 
 
 STANDIN_MARK = "(TEST stand-in)"   # short: a venue name is at most 80 characters

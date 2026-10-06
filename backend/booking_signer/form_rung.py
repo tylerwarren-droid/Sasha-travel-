@@ -534,7 +534,8 @@ async def prepare(request: Request):
     step2 = step_two_fields(m) if wizard else []
     # Sasha 155 · for the live HAND-OVER on OUR test venue only: a required terms box is left for the guest to tick in the
     # embedded view (CR's bf4ee35), so it isn't Sasha's to fill. send() still refuses such a form: a yes never posts it.
-    boxes = [f for f in fields if f["role"] == "consent" and f.get("required")] if (m["test"] and body.get("handover")) else []
+    boxes = [f for f in fields if (f["role"] == "consent" and f.get("required")) or f["role"] == "challenge"] \
+        if (m["test"] and body.get("handover")) else []   # Sasha 172 · OUR test page's CAPTCHA too: the guest ticks it, never Sasha
     try:
         filled = FF.fill(o, [f for f in fields if f["role"] not in ("hidden", "fixed") and f not in boxes],
                          date_fmt=m["date_fmt"], time_fmt=m["time_fmt"])

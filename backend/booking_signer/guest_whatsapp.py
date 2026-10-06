@@ -2344,6 +2344,16 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
                 await _ask_yes(ctx, "form", j["form_id"], j["read_back"], SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
                                extra={"summary": summary(reservation), **keep})
                 return
+            if j.get("rule") == "form_challenge" and "(TEST stand-in)" in str(rd.get("venue") or "") and not combo:
+                # Sasha 172 · the demo's CAPTCHA (our own test page): Sasha fills everything else, the guest ticks it on the phone
+                s2, j2 = await api(ctx["account"], "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": res_form, "handover": True})
+                if s2 == 200:
+                    ctx["route_line"] = ("Their page has an “I'm not a robot” box — that one is yours, never mine. I'll fill in everything "
+                                         "else and send it to your phone: you tick it and press their button. Shall I?")
+                    await _ask_yes(ctx, "handover", j2["form_id"], j2["read_back"], ctx["route_line"], rd["venue"],
+                                   extra={"summary": summary(reservation), **keep})
+                    return
+                j, status = j2, s2
             why = refusal_words(j, status)
             log.warning("[guest_whatsapp] form rung refused (%s: %s); trying the next route", status, j.get("rule"))
         if combo:   # Sasha 126 · together, only through their own form today
@@ -2463,7 +2473,8 @@ async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: st
         out.text("What I'll " + ("say" if rung == "call" else "send") + ":\n" +
                  "\n".join("• " + _BULLET.sub("", ln) for ln in guest_lines(rung, read_back["lines"])))   # Sasha 117 · one bullet
     if kind == "confirm" and "(TEST stand-in)" in (venue or ""):   # Sasha 169 · the stand-in, said first
-        sentence = f"🧪 Demo: our test venue stands in; the restaurant isn't contacted.\n{sentence.replace(' (TEST stand-in)', '')}"
+        kind = "spa" if re.search(r"spa|massage|wellness", venue, re.I) else "studio" if re.search(r"tattoo|ink|piercing", venue, re.I) else "restaurant"
+        sentence = f"🧪 Demo: our test venue stands in; the {kind} isn't contacted.\n{sentence.replace(' (TEST stand-in)', '')}"
     tag = f"{rid[:8]}:{sha[:16]}"
     yes_title = "Yes, book it" if kind == "confirm" else "Yes, cancel"
     out.ask(sentence, [(yes_title, f"yes:{tag}"), ("No", f"no:{tag}")])
@@ -2516,6 +2527,15 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
             out.text(note.strip())
         if result == "confirmed" and venue == "Sasha Test Venue" and os.getenv("SASHA_TEST_VENUE_DEPOSIT", "") == "1":
             await _test_deposit(ctx)   # Sasha 131 (4) · one touch, on their page — a TEST payment
+        return
+    if pend["rung"] == "handover":   # Sasha 172 · filled in the cloud browser; the guest ticks the CAPTCHA and presses, on the phone
+        status, j = await api(account, "POST", f"/api/booking/forms/{pend['id']}/handover", {}, timeout=120)
+        if status != 200:
+            out.text(f"❌ I couldn't open {plain_venue(venue)}'s page for you: {j.get('say') or refusal_words(j, status)}. Nothing was sent.")
+            return
+        sent = (j.get("phone") or {}).get("sent")
+        out.text("📲 Sent to your phone: open it, tick “I'm not a robot”, then press their button — I'll confirm here."
+                 if sent else f"Open it here, tick “I'm not a robot”, then press their button: {j.get('view_url')}")
         return
     if pend["rung"] == "call_email":   # Sasha 131 · URGENT: both on the one yes — the email first (it can't be refused by a ring)
         s2, ej = await api(account, "POST", f"/api/booking/emails/{pend['email_id']}/send", {"read_back_sha256": pend["email_sha"], "approval": how}, timeout=60)
@@ -2614,6 +2634,7 @@ async def tap_to_pay(account: Optional[str], amount: str, what: str, url: str) -
         return "not sent: not a Stripe checkout link"
     if url in _TAPPED:
         return "not sent: already sent"
+    venue = plain_venue(venue)   # Sasha 172 · the stand-in mark was said once, before the yes
     if not account or STORE is None:
         return "not sent: no account"
     ch = await STORE.channel_of_account(account)
@@ -3172,3 +3193,28 @@ async def whatsapp_unlink(request: Request):
 
 __all__ = ["dispatch", "turn", "deliver", "consent", "wa_key", "guest_numbers", "MemoryGuestStore", "PostgresGuestStore",
            "Sender", "Out", "api", "OUT_OF_SCOPE", "ONBOARD", "LINKED", "BAD_CODE", "STOPPED", "STARTED", "HELP", "title"]
+
+
+async def _told_handover_booked(pub: dict) -> None:
+    """Sasha 172 · a hand-over the guest finished (ticked, pressed) → "✅ Booked …" and its trip day, on WhatsApp."""
+    account = pub.get("account_id")
+    if not account or pub.get("state") != "booked":
+        return
+    ch = await STORE.channel_of_account(account)
+    if not ch:
+        return
+    from . import itinerary_q as IQ, wa_brain as WB
+    venue = plain_venue(pub.get("venue"))
+    rows = [r for r in await IQ._rows(account) if plain_venue(r.get("venue")) == venue]
+    day = (rows[-1].get("date") if rows else "") or ""
+    where = await WB.trip_day_words(account, day, venue)
+    ref = f", ref {pub['reference']}" if pub.get("reference") else ""
+    await _tell(ch, f"✅ Booked: {venue}{ref}.\n{where} — receipt sent to your email.")
+
+
+try:
+    from . import handover as _H
+    _H.ON_BOOKED.append(_told_handover_booked)
+except Exception as _e:   # the hook never stops the module loading
+    log.warning("[guest_whatsapp] hand-over hook not registered: %s", _e)
+

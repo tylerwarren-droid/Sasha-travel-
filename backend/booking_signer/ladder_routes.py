@@ -313,12 +313,13 @@ async def plan_view(request: Request):
     """Sasha 165 · THE ONE VIEW: the latest plan on this account with every booking slotted into its day."""
     from . import plan_store as PS, guest_whatsapp as GW
     account = account_for(request)
-    p = await PS.latest(account)
+    tid = request.query_params.get("trip_id")   # Sasha 175 · any of the account's trips, by id (the Trips tab)
+    p = (await PS.by_id(account, tid)) if tid and re.fullmatch(r"[0-9a-f-]{36}", tid) else await PS.latest(account)
     if not p:
-        return {"plan": None}
+        return {"plan": None, "plans": await PS.plans(account)}
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
     rows = (j or {}).get("reservations") or [] if s == 200 else []
-    return {"plan": PS.merge(p, rows)}
+    return {"plan": PS.merge(p, rows), "plans": await PS.plans(account)}
 
 
 @router.post("/handover/tap")

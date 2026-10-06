@@ -233,6 +233,50 @@ async def clear_added(account: str, dry: bool = False) -> int:
     return int(await _edit(account, None, change) or 0)
 
 
+async def plans(account: Optional[str]) -> List[dict]:
+    """Sasha 175 · every trip plan on the account, newest touched first: {trip_id, title, start, end, cities}."""
+    run = _run()
+    if not account or run is None:
+        return []
+
+    async def fn(conn):
+        return await conn.fetch("select id, title, destinations->'cities' cities, depart_date, return_date from trips where owner_id = $1 "
+                                "and destinations ? 'plan' and status in ('draft','active') order by updated_at desc limit 20", uuid.UUID(account))
+    try:
+        rows = await run(fn)
+    except Exception as e:
+        log.info("[plan_store] no plans read: %s", type(e).__name__)
+        return []
+    out = []
+    for r in rows:
+        c = r["cities"]
+        c = json.loads(c) if isinstance(c, str) else c
+        out.append({"trip_id": str(r["id"]), "title": r["title"], "start": str(r["depart_date"]) if r["depart_date"] else None,
+                    "end": str(r["return_date"]) if r["return_date"] else None, "cities": c or []})
+    return out
+
+
+async def by_id(account: Optional[str], trip_id: str) -> Optional[dict]:
+    """One plan of the account's, by its trip id (the latest() shape)."""
+    run = _run()
+    if not account or run is None:
+        return None
+
+    async def fn(conn):
+        return await conn.fetchrow("select id, title, destinations, depart_date, return_date from trips where owner_id = $1 and id = $2 "
+                                   "and destinations ? 'plan'", uuid.UUID(account), uuid.UUID(trip_id))
+    try:
+        r = await run(fn)
+    except Exception:
+        return None
+    if not r:
+        return None
+    d = r["destinations"]
+    d = json.loads(d) if isinstance(d, str) else d
+    return {"trip_id": str(r["id"]), "title": r["title"], "start": r["depart_date"], "end": r["return_date"], "plan": d.get("plan") or {},
+            "cities": d.get("cities") or []}
+
+
 _PART = (("Morning", 0, 12), ("Afternoon", 12, 18), ("Evening", 18, 24))
 _MATCH = {"restaurant": r"dinner|lunch|restaurant|eat|food|meal|street.?food|tasting",
           "beauty": r"spa|massage|wellness|tattoo|salon|nail|hair",

@@ -44,7 +44,9 @@ const dayHeader = (iso: string) => {
 }
 const zoneName = (tz: string | null) => (tz ? `${tz.split('/').pop()!.replace(/_/g, ' ')} time` : 'their local time')
 
-export default function SashaReservations() {
+/** Sasha 175 · the Trip panel's "All bookings" and "In progress" tabs reuse this list: a title, a filter, an empty sentence */
+export default function SashaReservations({ title = 'Reservations Sasha made', only, empty = 'No reservations made through Sasha yet.' }:
+  { title?: string; only?: (status: string) => boolean; empty?: string } = {}) {
   const [state, setState] = useState<State>({ phase: 'loading' })
 
   useEffect(() => {
@@ -64,19 +66,19 @@ export default function SashaReservations() {
   if (state.phase === 'hidden') return null
   const byDay = new Map<string, Reservation[]>()
   if (state.phase === 'loaded') {
-    for (const r of [...state.items].sort((a, b) => `${a.date ?? '9'}${a.time ?? ''}`.localeCompare(`${b.date ?? '9'}${b.time ?? ''}`))) {
+    for (const r of [...state.items].filter((x) => !only || only(x.status)).sort((a, b) => `${a.date ?? '9'}${a.time ?? ''}`.localeCompare(`${b.date ?? '9'}${b.time ?? ''}`))) {
       const key = r.date ?? ''   // an ASKING call's reservation has no day yet: grouped last, said plainly
       byDay.set(key, [...(byDay.get(key) ?? []), r])
     }
   }
   return (
     <>
-      <div className="lw-when">Reservations Sasha made</div>
+      <div className="lw-when">{title}</div>
       <div className="lw-card">
         <div className="lw-cardBody" style={{ paddingTop: 14 }}>
           {state.phase === 'loading' && <div className="lw-note-s">Loading your reservations…</div>}
           {state.phase === 'failed' && <div className="lw-note-s">Your reservations couldn&rsquo;t be loaded just now.</div>}
-          {state.phase === 'loaded' && state.items.length === 0 && <div className="lw-note-s">No reservations made through Sasha yet.</div>}
+          {state.phase === 'loaded' && byDay.size === 0 && <div className="lw-note-s">{empty}</div>}
           {state.phase === 'loaded' && [...byDay].map(([day, rows]) => (
             <div key={day} style={{ marginBottom: 12 }}>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>{day ? dayHeader(day) : 'No day set yet — they were asked when they have space'}</div>

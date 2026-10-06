@@ -1,4 +1,5 @@
 'use client'
+import SashaReservations from './SashaReservations'  // Sasha 175 · the All bookings / In progress tabs
 import { useEffect, useState } from 'react'
 import TripMap from '../TripMap'
 import { bookingReq } from '@/lib/booking-client'
@@ -47,27 +48,56 @@ const shortStatus = (b: ServerBooking): string => {
   return (SHORT[b.status ?? ''] ?? b.status_words ?? b.status ?? '') + (ref && b.status === 'confirmed' ? ` · ref ${ref[1]}` : '')
 }
 type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?: string }
-function useServerPlan(): ServerPlan | null {
+type PlanRef = { trip_id: string; title: string; start?: string | null; end?: string | null; cities?: string[] }
+function useServerPlan(tripId: string | null, onPlans?: (p: PlanRef[]) => void): ServerPlan | null {
   const [plan, setPlan] = useState<ServerPlan | null>(null)
   useEffect(() => {
     let off = false
     const pull = async () => {
-      const r = await bookingReq('/api/booking/plan').catch(() => null)
-      if (!off && r?.ok) setPlan((r.json.plan ?? null) as ServerPlan | null)
+      const r = await bookingReq(`/api/booking/plan${tripId ? `?trip_id=${encodeURIComponent(tripId)}` : ''}`).catch(() => null)
+      if (!off && r?.ok) {
+        setPlan((r.json.plan ?? null) as ServerPlan | null)
+        onPlans?.((r.json.plans ?? []) as PlanRef[])   // Sasha 175 · every trip on the account, for the picker
+      }
     }
     pull()
     const t = setInterval(pull, 6000)
     return () => { off = true; clearInterval(t) }
-  }, [])
+  }, [tripId])  // eslint-disable-line react-hooks/exhaustive-deps
   return plan
 }
 
 export default function TripPanel({
   richItinerary: localItinerary, openDays, toggleDay, onBook, travellerCount, onBrowseIdeas, bookingRef, paidWith,
 }: TripPanelProps) {
-  const server = useServerPlan()
+  // Sasha 175 · THE TABS the founder asked for: this trip (any of his trips), every booking anywhere, and what's still open
+  const [view, setView] = useState<'trip' | 'bookings' | 'progress'>('trip')
+  const [tripId, setTripId] = useState<string | null>(null)
+  const [plans, setPlans] = useState<PlanRef[]>([])
+  const server = useServerPlan(tripId, setPlans)
   const [handoff, setHandoff] = useState<string | null>(null)
-  const richItinerary = localItinerary ?? (server as RichItinerary | null)
+  const richItinerary = (tripId ? null : localItinerary) ?? (server as RichItinerary | null)
+  const OPEN = ['pending', 'requested', 'attempting', 'link_sent', 'quoted', 'proposed', 'unclear', 'waitlisted']
+  const tabs = (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+      {([['trip', 'This trip'], ['bookings', 'All bookings'], ['progress', 'In progress']] as const).map(([k, label]) => (
+        <button key={k} className={`lw-chip ${view === k ? 'on' : ''}`} onClick={() => setView(k)}
+          style={view === k ? { borderColor: '#E8B923', color: '#E8B923' } : undefined}>{label}</button>
+      ))}
+      {view === 'trip' && plans.length > 1 && (
+        <select value={tripId ?? server?.trip_id ?? ''} onChange={(e) => setTripId(e.target.value || null)}
+          style={{ background: 'rgba(0,0,0,.25)', color: 'inherit', border: '1px solid rgba(255,255,255,.15)', borderRadius: 6, padding: '3px 6px', maxWidth: 260 }}>
+          {plans.map((p) => <option key={p.trip_id} value={p.trip_id}>{p.title}{p.start ? ` · ${p.start}` : ''}</option>)}
+        </select>
+      )}
+    </div>
+  )
+  if (view === 'bookings') return <div className="lw-trip">{tabs}<SashaReservations title="All your bookings" /></div>
+  if (view === 'progress') return (
+    <div className="lw-trip">{tabs}
+      <SashaReservations title="In progress" only={(st) => OPEN.includes(st)} empty="Nothing in progress — every request has its answer." />
+    </div>
+  )
   const serverDay = (n: number): ServerDay | undefined => (server?.days ?? []).find((x) => x.day === n)
   const isBooked = Boolean(bookingRef)
   const isPaid = isBooked && Boolean(paidWith)
@@ -75,6 +105,7 @@ export default function TripPanel({
   if (!richItinerary) {
     return (
       <div className="lw-stream">
+        {tabs}
         <div className="lw-empty">
           <div className="lw-empty-ic">🗺</div>
           <div className="lw-empty-t">No trip planned yet</div>
@@ -101,6 +132,7 @@ export default function TripPanel({
 
   return (
     <>
+      {tabs}
       <div className="lw-summary">
         <div className="lw-sumcell"><span className="k">Days</span><span className="v">{dayCount}</span></div>
         <div className="lw-sumcell"><span className="k">Travellers</span><span className="v">{pax}</span></div>

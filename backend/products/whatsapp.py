@@ -38,6 +38,27 @@ _EXIT = re.compile(r"^\s*(exit|sasha|back|back to sasha|quit|salir)\s*[.!]?\s*$"
 
 
 _KEYWORD = {"campus": _CAMPUS, "relocation": _RELOC, "health": _HEALTH, "diligence": _DILIGENCE}
+#: Sasha 170 · START OVER: "start over", "restart relocate", "reset campus", "empezar de nuevo españa", "start over sasha" — the
+#: named product (else the one asked last, else Sasha) starts from the beginning: its saved conversation is dropped, never
+#: answered as a reply to its last question (live: "reset" in RelocateMe got its checklist question again)
+_START_OVER = re.compile(r"^\s*(?:please\s+)?(?:start(?:\s+(?:it|again|over))?\s+over|start\s+again|restart|reset|begin\s+again|from\s+the\s+(?:start|beginning)|"
+                         r"empezar\s+de\s+nuevo|empieza\s+de\s+nuevo|volver\s+a\s+empezar|reiniciar|de\s+cero)"
+                         r"(?:\s+(?:the\s+|with\s+|en\s+|con\s+)?(?P<what>[a-zñáéíóú ]{2,30}?))?\s*[.!]?\s*$", re.I)
+_START_NAME = [("relocation", re.compile(r"(?i)\b(relocat\w*|relocation|ex-?01)\b")), ("campus", re.compile(r"(?i)\bcampus(?:\s*me)?\b")),
+               ("health", re.compile(r"(?i)\b(espa[nñ]a(?:\s*me)?|health|salud)\b")), ("sasha", re.compile(r"(?i)\b(sasha|bookings?|chat)\b"))]
+START_WORD = {"relocation": "relocation", "campus": "campus", "health": "españa"}
+
+
+def start_over(body: str) -> Optional[str]:
+    """"" for a bare "start over"; the product named ("relocation" | "campus" | "health" | "sasha"); None when it isn't one —
+    "reset the demo" is Sasha's own command, not this."""
+    m = _START_OVER.match(body or "")
+    if not m:
+        return None
+    w = (m["what"] or "").strip()
+    if not w:
+        return ""
+    return next((k for k, rx in _START_NAME if rx.search(w)), None)
 PREFIX = {"campus": ("cm:", "cmyes:", "cmno:"), "relocation": ("rx:",), "health": ("hx:", "hxyes:", "hxno:", "hxv:", "hxvno:"),
           "trip": ("tp:",), "diligence": ("ad:",)}
 _FLIGHT = re.compile(r"\b(flights?|fly(?:ing)? (?:to|from)|plane|airfare|vuelos?|volar|avi[oó]n|hotel|hostel|apartment|car hire|rent a car)\b", re.I)
@@ -242,6 +263,22 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
                 asked_last, st["pending"] = None, None
         except (TypeError, ValueError):
             pass
+    so = start_over(body) if not payload else None
+    if so is not None:
+        prod = so or asked_last or "sasha"
+        from . import store as ST
+        if prod in START_WORD:
+            await ST.STORE.drop_conversation(_key(ch), prod)   # from the beginning: nothing it was asking is answered
+            st["pending"] = None
+            body = START_WORD[prod]
+            p["Body"] = body
+            asked_last, pend = None, {}
+        else:
+            if asked_last:
+                await _set_aside(st, ch)                        # a product left open is kept; Sasha starts afresh
+            st["pending"] = None
+            out.text("Fresh start — what would you like? A table, a spa, a trip, a flight…")
+            return True
     # 1 · a product's button or keyword
     target, entering = None, False
     for prod, prefixes in PREFIX.items():
@@ -266,7 +303,8 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         # returns to it. Not "book my flights" (CR 13's trip) and not "near my hotel" (CR 20's in-context hand-off).
         from booking_signer import wa_brain as _WB
         from . import trip as _TP
-        if _WB.sasha_clear(body, st.get("history") or [], now) and not _REL.search(body) and not _TP.wants_plan(body):
+        if (_WB.RESET.match(body) or _WB.sasha_clear(body, st.get("history") or [], now)) and not _REL.search(body) \
+                and not _TP.wants_plan(body):   # Sasha 170 · "reset the demo" too (live: RelocateMe answered it)
             if asked_last:
                 await _set_aside(st, ch)
             return False

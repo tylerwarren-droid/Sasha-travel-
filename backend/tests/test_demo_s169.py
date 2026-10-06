@@ -146,3 +146,65 @@ class VoicePage(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StartOver(unittest.TestCase):
+    """Sasha 170 · "reset" in RelocateMe got its checklist question again; "start over" restarts any of the four."""
+
+    def test_the_words(self):
+        from products import whatsapp as PW
+        for m, w in (("start over", ""), ("Start over relocate", "relocation"), ("restart campus", "campus"), ("reset CampusMe", "campus"),
+                     ("empezar de nuevo españa", "health"), ("start over with Sasha", "sasha"), ("reset", ""), ("volver a empezar", "")):
+            self.assertEqual(PW.start_over(m), w, m)
+        for m in ("reset the demo", "start over the itinerary for Hoi An tomorrow please", "restart my phone"):
+            self.assertIsNone(PW.start_over(m), m)
+
+    def test_in_a_product_it_restarts_that_product(self):
+        from products import whatsapp as PW
+        dropped = []
+
+        class Store:
+            async def drop_conversation(self, key, prod):
+                dropped.append(prod)
+
+            async def put_conversation(self, *a):
+                return None
+        from products import store as ST
+        old_store, old_resume, old_turn = ST.STORE, PW._resume, PW._module
+        ST.STORE = Store()
+
+        saved = {"kind": "product", "product": "relocation", "step": "pack", "touched": NOW.isoformat()}
+
+        async def resume(ch, prod):   # the shared row, until it is dropped
+            return dict(saved) if prod == "relocation" and prod not in dropped else None
+        PW._resume = resume
+        seen = []
+
+        class Mod:
+            @staticmethod
+            async def turn(ctx, rest, payload, entering=False):
+                seen.append((rest, entering))
+                ctx["out"].text("Welcome to RelocateMe")
+                ctx["st"]["pending"]["step"] = "ask"
+                return True
+
+            @staticmethod
+            def claims(*a):
+                return False
+        PW._module = lambda prod: Mod
+        st = {"pending": {"kind": "product", "product": "relocation", "step": "pack", "touched": NOW.isoformat()}, "history": []}
+
+        async def put(ch, prod, pend):
+            return None
+        old_put = PW._store_put
+        PW._store_put = put
+        try:
+            out = GW.Out()
+            asyncio.run(PW.product_turn({"account_id": "a", "wa_id_sha256": "k"}, "f", {"Body": "reset"}, st, out, NOW))
+        finally:
+            ST.STORE, PW._resume, PW._module, PW._store_put = old_store, old_resume, old_turn, old_put
+        self.assertEqual(dropped, ["relocation"])
+        self.assertTrue(seen and seen[0][1])   # entered afresh, not answered as a reply to "the numbers, please"
+
+    def test_reset_the_demo_leaves_a_product(self):
+        self.assertTrue(WB.RESET.match("reset the demo"))

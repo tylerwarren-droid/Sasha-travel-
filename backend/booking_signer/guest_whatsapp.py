@@ -1624,6 +1624,11 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         return False
     at = _dt(pend.get("at") or "")
     kind = pend["kind"]
+    # Sasha 165 · "show me my itinerary" / "what was I doing?" is a QUESTION, never the answer to the open one: it's
+    # answered, and the open item stays open
+    from .itinerary_q import TRIP as _TRIP
+    if not payload and _TRIP.search(body or "") and not RESUME.fullmatch(body or ""):
+        return False
     # Sasha 161 · STALE: after a greeting or a gap, ASK whether to continue — never resume mid-question
     if pend.get("resume_asked") and not payload:
         if RESUME.fullmatch(body or ""):

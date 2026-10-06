@@ -314,8 +314,12 @@ A4 = (1240, 1754)
 
 def _font(size: int, bold: bool = False):
     import os
-    import reportlab
     from PIL import ImageFont
+    try:
+        import reportlab
+    except ImportError:                                  # an environment without it: the pack still builds (accents may not print)
+        log.warning("[three] reportlab missing: Pillow's own font for the pack")
+        return ImageFont.load_default(size=size)
     return ImageFont.truetype(os.path.join(os.path.dirname(reportlab.__file__), "fonts", "VeraBd.ttf" if bold else "Vera.ttf"), size)
 
 

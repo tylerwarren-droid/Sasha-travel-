@@ -395,7 +395,7 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
             return True
         if payload == f"cm:tyes:{sha}" or (not payload and YS.is_yes(t)):
             await _prepare(ctx, {"how": "whatsapp_button" if payload else "whatsapp_text", "said": t, "at": ctx["now"].isoformat(),
-                                 "read_back_sha256": sha})
+                                 "read_back_sha256": hashlib.sha256("\n".join(approved_lines(tr)).encode()).hexdigest()})
             return True
         out.text("Yes or no?")
         return True
@@ -434,14 +434,26 @@ async def _plan(ctx: dict) -> None:
     pend["step"] = "tour_confirm"
     out.text(f"Your tour, from what's really published:\n" + "\n".join(ls))
     out.text(promise(plan, ctx["account"]))
+    if tr.get("vault"):                                   # CR 48 · the yes names the kept item it opens
+        out.text(approved_lines(tr)[0])
     out.ask("Prepare it?", [("Yes, prepare it", f"cm:tyes:{sha}"), ("No", f"cm:tno:{sha}")])
+
+
+def approved_lines(tr: dict) -> List[str]:
+    """CR 48 · what the family's yes covers, as the vault checks it: the kept item's own access line (its label — shown in the
+    read-back before "Prepare it?") and the plan's fingerprint. The approval is the full sha256 of these lines (vault.use)."""
+    lines = [tr["sha"]]
+    if tr.get("vault"):
+        from booking_signer.vault import crypto as VC
+        lines.insert(0, VC.access_line(PROVIDER, tr["vault"]["label"], "identifier"))
+    return lines
 
 
 async def _open_fam(ctx: dict, tr: dict, approval: dict) -> Dict[str, str]:
     if tr.get("fam"):
         return dict(tr["fam"])
     from booking_signer.vault import crypto as VC
-    async with VC.use(ctx["account"], tr["vault"]["id"], approval=approval, approved_lines=[tr["sha"]],
+    async with VC.use(ctx["account"], tr["vault"]["id"], approval=approval, approved_lines=approved_lines(tr),
                       action_kind="campusme_tour", action_ref=f"tour-{tr['sha']}") as secret:
         return json.loads(secret.get("value") or "{}")
 

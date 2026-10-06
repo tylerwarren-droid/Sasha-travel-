@@ -587,8 +587,15 @@ async def voice_text(p: Dict[str, str]) -> Optional[str]:
         r = await request("GET", p["MediaUrl0"], timeout=20.0, follow_redirects=True,
                           headers={"authorization": "Basic " + base64.b64encode(f"{sid}:{token}".encode()).decode()})
         if r.status_code != 200 or not r.content:
-            log.warning("[guest_whatsapp] voice note not fetched: HTTP %s", r.status_code)
-            return None
+            # Sasha 173 · live: HTTP 404 with our credentials — the note came in on a number of ANOTHER Twilio account (its media
+            # URL names that account). Twilio's media is readable without credentials unless media auth is enforced: try that.
+            acct = (re.search(r"/Accounts/(AC[0-9a-f]{6})", str(p["MediaUrl0"])) or [None, "?"])[1]
+            log.warning("[guest_whatsapp] voice note not fetched with our credentials: HTTP %s (media of account %s…, to %s)",
+                        r.status_code, acct, str(p.get("To") or "")[-6:])
+            r = await request("GET", p["MediaUrl0"], timeout=20.0, follow_redirects=True)
+            if r.status_code != 200 or not r.content:
+                log.warning("[guest_whatsapp] voice note not fetched without credentials either: HTTP %s", r.status_code)
+                return None
         base = os.getenv("DEEPGRAM_STT_BASE", "").strip().rstrip("/") or "https://api.deepgram.com"
         ctype = str(p["MediaContentType0"]).split(";")[0]
         # Sasha 173 · live, a voice note came back with no words and nothing was logged: the reason is logged now, and an empty

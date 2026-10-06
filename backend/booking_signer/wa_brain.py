@@ -202,10 +202,13 @@ async def answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
         if payload == f"yes:{pend['nonce']}" or re.fullmatch(r"\s*(yes|yes please|s[ií]|ok|reset)\s*[.!]?\s*", body or "", re.I):
             st["pending"] = None
             n = await reset_demo(ctx["account"], dry=False)
-            out.text(f"Done — the demo is reset: {n['bookings']} TEST booking{'s' if n['bookings'] != 1 else ''} and "
-                     f"{n['added']} added place{'s' if n['added'] != 1 else ''} cleared"
+            st["history"] = []   # Sasha 179 · the conversation starts fresh too
+            out.text(f"Done — the demo is reset: {n['bookings']} TEST booking{'s' if n['bookings'] != 1 else ''}, "
+                     f"{n['added']} added place{'s' if n['added'] != 1 else ''}, {n.get('saved', 0)} saved "
+                     f"search{'es' if n.get('saved') != 1 else ''} and {n.get('plans', 0)} empty undated "
+                     f"plan{'s' if n.get('plans') != 1 else ''} cleared"
                      + (f", {n['modes']} open product conversation{'s' if n.get('modes') != 1 else ''} closed" if n.get("modes") else "")
-                     + ". Your plan itself is kept.")
+                     + ". Real bookings and your dated plans are kept.")
             return True
         if payload == f"no:{pend['nonce']}" or NO.fullmatch(body or ""):
             st["pending"] = None
@@ -621,6 +624,23 @@ async def reset_demo(account: str, dry: bool) -> dict:
         return len(ids)
     n = await run(fn)
     added = await PS.clear_added(account, dry=dry)
+
+    async def clean(conn):   # Sasha 179 · a clean slate: saved searches, and stray plans (no dates, nothing in them) go too
+        a = uuid.UUID(account)
+        saved = await conn.fetch("select ti.id from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 "
+                                 "and ti.status = 'pending' and ti.escalation_notes = $2", a, SAVED_NOTE())
+        stray = await conn.fetch("select t.id from trips t where t.owner_id = $1 and t.destinations ? 'plan' and t.depart_date is null "
+                                 "and t.status in ('draft', 'active') and not exists (select 1 from trip_items ti where ti.trip_id = t.id "
+                                 "and ti.status not in ('cancelled', 'failed'))", a)
+        if not dry:
+            if saved:
+                await conn.execute("update trip_items set status = 'cancelled', updated_at = now() where id = any($1::uuid[])",
+                                   [r["id"] for r in saved])
+            if stray:
+                await conn.execute("update trips set status = 'cancelled', updated_at = now() where id = any($1::uuid[])",
+                                   [r["id"] for r in stray])
+        return len(saved), len(stray)
+    saved_n, stray_n = await run(clean)
     modes = 0
     if not dry:   # CR 39 · the open CampusMe / RelocateMe / EspañaMe conversations close too (their files are kept)
         try:
@@ -629,21 +649,28 @@ async def reset_demo(account: str, dry: bool) -> dict:
                 modes = int(await PW.reset_modes(account) or 0)
         except Exception as e:
             log.warning("[wa_brain] product modes not reset: %s: %s", type(e).__name__, e)
-    return {"bookings": int(n or 0), "added": added, "modes": modes}
+    return {"bookings": int(n or 0), "added": added, "modes": modes, "saved": saved_n, "plans": stray_n}
+
+
+def SAVED_NOTE() -> str:
+    from .journeys import SAVED
+    return SAVED
 
 
 async def start_reset(ctx: dict) -> None:
-    from .guest_accounts import founder
-    if not founder(ctx["account"]):
-        ctx["out"].text("Resetting the demo is the founder's — nothing was changed.")
-        return
+    # Sasha 179 · any account (a guest too): it only ever touches that account's OWN TEST bookings, saved searches, added
+    # places, empty undated plans and open conversation — real bookings, dated plans and files are never touched
     n = await reset_demo(ctx["account"], dry=True)
-    if not n["bookings"] and not n["added"]:
-        ctx["out"].text("The demo is already clean — no TEST bookings or added places.")
+    if not any(n.get(k) for k in ("bookings", "added", "saved", "plans")):
+        ctx["st"]["history"] = []
+        ctx["out"].text("The demo is already clean — no TEST bookings, saved searches, added places or stray plans. "
+                        "The conversation starts fresh.")
         return
     nonce = uuid.uuid4().hex[:6]
-    ctx["out"].ask(f"That clears {n['bookings']} TEST booking{'s' if n['bookings'] != 1 else ''} and {n['added']} added "
-                   f"place{'s' if n['added'] != 1 else ''} from your itinerary (your plan stays). Reset?",
+    bits = [f"{n['bookings']} TEST booking{'s' if n['bookings'] != 1 else ''}", f"{n['added']} added place{'s' if n['added'] != 1 else ''}",
+            f"{n.get('saved', 0)} saved search{'es' if n.get('saved') != 1 else ''}",
+            f"{n.get('plans', 0)} empty undated plan{'s' if n.get('plans') != 1 else ''}"]
+    ctx["out"].ask(f"That clears {', '.join(bits)} (real bookings and your dated plans stay). Reset?",
                    [("Reset", f"yes:{nonce}"), ("Keep them", f"no:{nonce}")])
     ctx["st"]["pending"] = {"kind": "demo_reset", "at": ctx["now"].isoformat(), "nonce": nonce}
 

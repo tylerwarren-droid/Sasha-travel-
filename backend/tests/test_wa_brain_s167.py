@@ -197,11 +197,14 @@ class TestLabel(unittest.TestCase):
             self.assertTrue(WB.RESET.match(m), m)
         self.assertFalse(WB.RESET.match("reset the demo bookings at Hanakura and book"))
 
-    def test_reset_is_the_founders(self):
+    def test_reset_is_any_accounts_own(self):   # Sasha 179 · a guest resets its own demo (EU 181)
         c = ctx()
         c["account"] = "22222222-2222-4222-8222-222222222222"
-        asyncio.run(WB.start_reset(c))
-        self.assertIn("founder's", c["out"].said())
+        from unittest import mock
+        with mock.patch.object(WB, "reset_demo", mock.AsyncMock(return_value={"bookings": 1, "added": 0, "saved": 2, "plans": 1})):
+            asyncio.run(WB.start_reset(c))
+        self.assertNotIn("founder's", c["out"].said())
+        self.assertIn("1 TEST booking, 0 added places, 2 saved searches, 1 empty undated plan", c["out"].said())
 
 
 class LiveFailure(unittest.TestCase):

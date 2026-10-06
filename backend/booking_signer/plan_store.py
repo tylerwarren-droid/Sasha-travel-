@@ -27,6 +27,12 @@ _RANGE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s*(?:[-–—]|to|until|till)\
 _FROM = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3})[a-z]*\b", re.I)
 
 
+def _jsonable(x: Any) -> Any:
+    """The plan as plain JSON values — handed to the driver as an OBJECT (its jsonb codec encodes it; a pre-encoded string
+    would be stored as a JSON string, which `destinations ? 'plan'` never matches)."""
+    return json.loads(json.dumps(x, default=str))
+
+
 def dates_of(message: str, days: int, today: date) -> tuple:
     """(start, end) from "12–20 Nov" / "from 12 to 20 November" / "12 Nov" (+ the plan's length); (None, None) when unsaid."""
     m = _RANGE.search(message or "")
@@ -82,11 +88,11 @@ async def save(account: Optional[str], itinerary: dict, message: str, now: datet
                 if prev["title"] == title or set(pd.get("cities") or []) & set(cities):
                     await conn.execute("update trips set title = $2, destinations = $3::jsonb, depart_date = coalesce($4, depart_date), "
                                        "return_date = coalesce($5, return_date), updated_at = now() where id = $1",
-                                       prev["id"], title, json.dumps(dest, default=str), start, end)
+                                       prev["id"], title, _jsonable(dest), start, end)
                     return prev["id"]
             return await conn.fetchval(
                 "insert into trips (owner_id, title, status, destinations, depart_date, return_date) values ($1,$2,'draft',$3::jsonb,$4,$5) returning id",
-                uuid.UUID(account), title, json.dumps(dest, default=str), start, end)
+                uuid.UUID(account), title, _jsonable(dest), start, end)
         tid = await run(fn)
         log.info("[plan_store] plan saved as trip %s (%s → %s)", tid, start, end)
         return str(tid)

@@ -2234,7 +2234,8 @@ async def conduct(
         if user_id and signed_in is not False and user_id != PUBLIC_DEMO_ID:
             from booking_signer import plan_store as _ps  # noqa: E402
             from datetime import datetime as _dtp, timezone as _tzp  # noqa: E402
-            itinerary["trip_id"] = await _ps.save(user_id, itinerary, user_message, _dtp.now(_tzp.utc))
+            _said = " | ".join([user_message] + [str(h.get("content") or "") for h in reversed(conversation_history or []) if h.get("role") == "user"])
+            itinerary["trip_id"] = await _ps.save(user_id, itinerary, _said, _dtp.now(_tzp.utc))   # the dates, newest words first
 
     # Step 5 — Merge responses
     if len(agent_responses) == 0:

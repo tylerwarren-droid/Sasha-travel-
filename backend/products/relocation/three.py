@@ -249,8 +249,10 @@ def booking_messages(cid: str, f: dict) -> List[str]:
 
 # ── the 790-052, pre-filled where the official form allows ─────────────────────────────────────────────────────────
 
-LEFT_790 = ["your NIE (leave it blank if you have none — Washington's instructions, item 2)",
-            "your current address abroad (Washington's instructions, items 5–9; we hold only your Spanish address)",
+INSTR_790 = "the 790's official instructions, as the Washington consulate publishes them"   # CR 41 · read by a New York or
+# London applicant too: "Washington's instructions" alone read as the wrong consulate's
+LEFT_790 = [f"your NIE (leave it blank if you have none — {INSTR_790}, item 2)",
+            "your current address abroad (the same instructions, items 5–9; we hold only your Spanish address)",
             "the place and date, and your signature inside the box (item 12)", "how it's paid (the consulate takes it)"]
 
 
@@ -261,7 +263,7 @@ def rows_790(f: dict, today: date) -> List[dict]:
     rs = []
     y = str(today.year)
     for i, ch in enumerate(y):
-        rs.append({"field": f"Ejercicio_{i}", "value": ch, "source": "the current year (Washington's instructions, item 1)"})
+        rs.append({"field": f"Ejercicio_{i}", "value": ch, "source": f"the current year ({INSTR_790}, item 1)"})
     surnames = " ".join(x for x in (v("surname_1"), v("surname_2")) if x)
     if surnames or v("given_names"):
         rs.append({"field": "Nombre_Completo", "value": f"{surnames} {v('given_names')}".strip().upper(),
@@ -272,7 +274,7 @@ def rows_790(f: dict, today: date) -> List[dict]:
         rs.append({"field": "Nacionalidad", "value": _ES_NAT.get(g, nat.upper()), "source": "your passport, in Spanish (item 4)"})
     if v("mobile"):
         rs.append({"field": "Telefono_Domicilio", "value": v("mobile"), "source": "your phone (item 6)"})
-    rs.append({"field": "PRINCIPAL", "value": "/Yes", "source": "Washington's instructions, item 10"})
+    rs.append({"field": "PRINCIPAL", "value": "/Yes", "source": f"{INSTR_790}, item 10"})
     rs.append({"field": "Activado1_3", "value": "/Yes", "source": "1.c Autorización inicial de residencia temporal (item 11)"})
     return rs
 

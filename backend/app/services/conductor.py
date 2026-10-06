@@ -895,7 +895,7 @@ async def run_restaurant_intent(message: str, history: list, session_id: "Option
             card["matched_option"] = matched
         elif _foreign_referent(message, names_list):
             spoken = (f"Hmm, I don't see that one on my current list — what I have in {dest} is "
-                      f"{', '.join(names_list[:3])} and more on the card. Just name the one you'd like and I'll reserve it, or ask me to look for something else.")
+                      f"{', '.join(names_list[:3])} and more on the card. Tap one to open its page, or ask me to look for something else.")
         else:
             spoken = (f"Of course — just tell me which of these you'd like ({names}) and "
                       "I'll get your table reserved. You can also tap Reserve on its card.")
@@ -1300,7 +1300,7 @@ async def run_flight_intent(message: str, history: list, session_id: "Optional[s
             card["matched_option"] = matched
         elif _foreign_referent(message, names_list):
             spoken = (f"I don't see that airline on the current list — what I have is "
-                      f"{', '.join(names_list[:3])} and more on the card. Just name the one you'd like and I'll reserve it, or ask me to search again.")
+                      f"{', '.join(names_list[:3])} and more on the card. Tap one to open its page, or ask me to search again.")
         else:
             spoken = (f"Of course — just tell me which flight suits you best "
                       f"({', '.join(names_list[:3])}) and I'll reserve it. You can also tap Reserve on its card.")
@@ -1355,7 +1355,7 @@ async def run_cab_intent(message: str, history: list, session_id: "Optional[str]
             card["matched_option"] = matched
         elif _foreign_referent(message, names_list):
             spoken = (f"I don't see that provider on the current list — what I have is "
-                      f"{', '.join(names_list[:3])}. Just name the one you'd like and I'll reserve it, or ask me to look again.")
+                      f"{', '.join(names_list[:3])}. Tap one to open its page, or ask me to look again.")
         else:
             spoken = (f"Of course — just tell me which ride you'd like "
                       f"({', '.join(names_list[:3])}) and I'll sort it out. You can also tap Reserve on its card.")
@@ -1384,16 +1384,16 @@ async def run_activity_intent(message: str, history: list) -> dict:
     if _is_book_complete(message) and names_list:
         if matched:
             spoken = (f"Lovely choice — {matched} is pulled up on the right. Tap Reserve on "
-                      "its card and your spot is saved.")
+                      "its card to open its page.")
             card["matched_option"] = matched
         elif _foreign_referent(message, names_list):
             spoken = (f"I don't see that one on the current list — what I have is "
-                      f"{', '.join(names_list[:3])} and more on the card. Just name the one you'd like and I'll reserve it, or ask me for other ideas.")
+                      f"{', '.join(names_list[:3])} and more on the card. Tap one to open its page, or ask me for other ideas.")
         else:
             spoken = (f"Of course — just tell me which one you'd like "
                       f"({', '.join(names_list[:3])}) and I'll reserve it. You can also tap Reserve on its card.")
     elif has_prices:
-        spoken = f"A few things you can book in {dest} — {_named_options(opts)}. I've pulled them up with prices — just name one and I'll reserve it."
+        spoken = f"A few things you can book in {dest} — {_named_options(opts)}. I've pulled them up — example prices, not live; tap one to open its page."
     else:
         spoken = f"Here are some experiences you can book in {dest} — I've pulled it up for you."
     return {"agent": "activity", "response": spoken, "data": {"booking": card}}
@@ -1781,6 +1781,13 @@ async def conduct(
         return {"response": _say, "intents": ["handoff"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
                 "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
                 "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
+    # Sasha 175 (EU 172) · "where should I eat tonight?" with no city: ask it — never the 4 Aug Vietnam cache (it assumed Vietnam)
+    from booking_signer import handoff as _ho  # noqa: E402
+    _ask = _ho.city_question(user_message)
+    if _ask:
+        return {"response": _ask, "intents": ["booking"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
+                "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _ask}]}
     # Sasha 169 (2) · "book it" with a plan on the ACCOUNT: the whole trip — its hotels and flights, TEST — in one read-back,
     # one yes and one tap to pay on the phone (booking_signer/trip_book.py; the card is TripBookTest on the web)
     from booking_signer import trip_book as _tb  # noqa: E402
@@ -1960,11 +1967,10 @@ async def conduct(
         # the whole conversation history, so once the guest answers it simply remembers —
         # no extraction or session state needed here.
         name_directive = (
-            "\n\nYou do not know the traveller's name yet. If they have not shared it in this "
-            "conversation, warmly ask \"May I have your name?\" as part of your FIRST reply, "
-            "before diving into planning. Once they tell you, use their first name occasionally "
-            "when it feels natural — and never ask for it again. If they decline or ignore the "
-            "question, drop it gracefully and never re-ask."
+            # Sasha 175 (EU 172) · never a name before something useful: "I'm bored, any ideas?" got "May I have your name?"
+            "\n\nYou do not know the traveller's name yet. Never ask for it before you have given them something "
+            "useful — answer what they asked first. You may ask for their name once, lightly, at the END of a "
+            "later reply when it helps (e.g. to book). If they decline or ignore it, never re-ask."
         )
     general_prompt += name_directive
     merge_prompt += name_directive

@@ -596,6 +596,10 @@ COUNTRY_NAME = {"ES": "Spain", "PT": "Portugal", "FR": "France", "IT": "Italy", 
                 "KH": "Cambodia", "LA": "Laos", "MA": "Morocco", "PE": "Peru", "CO": "Colombia", "BR": "Brazil", "CH": "Switzerland"}
 
 
+_ADULT = re.compile(r"er[oó]tic|tantra|sensual|happy\s*ending|nuru|body\s*to\s*body|\badult|\bsex|strip\s*club|escort|"
+                    r"masajes?\s+(?:para\s+)?(?:hombres|caballeros)\s+(?:er|sens)|lingam", re.I)
+
+
 async def find_venues(http: Http, *, what: str, where: Optional[str], country: Optional[str], now: datetime,
                       near: Optional[str] = None, open_at: Optional[str] = None, named: bool = False) -> dict:
     """S-65 · "Find venues": a kind of place in a place ("tattoo studio", "Nairobi, KE") → up to twenty candidates (S-68; the chat shows `show` of them), each
@@ -654,6 +658,19 @@ async def find_venues(http: Http, *, what: str, where: Optional[str], country: O
                     "listing_url": f"https://www.google.com/maps/place/?q=place_id:{pl['id']}", **_ranking_facts(pl),
                     **({"gphoto": g} if (g := _gphoto(pl)) else {})})
         out[-1]["books"] = how_she_books(out[-1])   # S-68 step 5
+    # Sasha 175 (EU 172) · never an adult listing ("Erotic Madrid Masajes", "Tantra massage" came back for "a massage near Sol"),
+    # and never the same place twice ("HANOI OLD QUARTER SPA" ×2): by name + the start of its address
+    seen_keys, kept = set(), []
+    for c in out:
+        blob = f"{c.get('name') or ''} {c.get('type') or ''}"
+        if _ADULT.search(blob):
+            continue
+        k = (re.sub(r"\W", "", (c.get("name") or "").lower()), re.sub(r"\W", "", (c.get("address") or "").lower())[:18])
+        if k in seen_keys or (k[0] and any(k[0] == x[0] for x in seen_keys)):
+            continue
+        seen_keys.add(k)
+        kept.append(c)
+    out = kept
     if when is not None:
         from .hours import from_places_periods, open_at as _open_at
         for c in out:

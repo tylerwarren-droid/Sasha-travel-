@@ -42,12 +42,17 @@ _WORD_HOURS = {w: n for n, w in enumerate(["zero", "one", "two", "three", "four"
 #: Sasha 104 · a Spanish request, read by the same parsers: only booking phrasing is rewritten, and only when the message
 #: reads as Spanish. Place names and qualifiers ("algo romántico") are left as written.
 _ES_MARK = re.compile(r"\b(cena|cenar|comida|almuerzo|desayuno|mesa|reserv\w*|res[eé]rvame|para\s+(?:\d|dos|tres|cuatro|seis)|"
+                      r"clase|masaje|algo|rom[aá]ntic[oa]s?|relajante|tatuaje|esta\s+noche|d[oó]nde|qu[eé]\s+hacer|"
                       r"s[aá]bado|domingo|lunes|martes|mi[eé]rcoles|jueves|viernes|a las|personas|quiero|quisiera|busco|b[uú]scame)\b", re.I)
 _ES_NUM = {"una": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9,
            "diez": 10, "once": 11, "doce": 12}
 _ES_DAYS = {"lunes": "monday", "martes": "tuesday", "miércoles": "wednesday", "miercoles": "wednesday", "jueves": "thursday",
             "viernes": "friday", "sábado": "saturday", "sabado": "saturday", "domingo": "sunday"}
-_ES_WORDS = [(r"\b(?:quiero|quisiera|queremos|necesito|necesitamos)\s+(?:reservar|una reserva(?:\s+de)?)\b", "book"),
+_ES_WORDS = [(r"\bclases?\s+de\s+cocina\b", "cooking class"), (r"\b(?:un\s+)?masajes?(?:\s+relajantes?)?\b", "massage"),
+             (r"\balgo\s+rom[aá]ntico\b", "something romantic"), (r"\bpara\s+esta\s+noche\b", "tonight"),
+             (r"\b(?:una\s+)?cena\s+rom[aá]ntica\b", "a romantic dinner"), (r"\b(?:un\s+)?(?:estudio\s+de\s+)?tatuajes?\b", "tattoo studio"),
+             (r"\b(?:algo\s+divertido|qu[eé]\s+hacer|planes)\b", "something fun"),
+             (r"\b(?:quiero|quisiera|queremos|necesito|necesitamos)\s+(?:reservar|una reserva(?:\s+de)?)\b", "book"),
              (r"\b(?:res[eé]rvame|res[eé]rvanos|reserva|reservar|reservad)\b", "book"),
              (r"\b(?:b[uú]scame|b[uú]scanos|busca|buscar|busco|buscamos)\b", "find"),
              (r"\b(?:quiero|quisiera|queremos)\b", "i want"),
@@ -507,11 +512,21 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
                 if f is not None:
                     message = joined
                     break
+    if f is None and _FUN.search(message or ""):
+        # Sasha 175 (EU 172) · "something fun to do in Hoi An this evening": a REAL search, never the 4 Aug cache's priced list
+        cm = re.search(r"\b(?:in|near|around)\s+(?P<w>[A-ZÁÉÍÓÚ][^?.!;,]{1,40}?)(?=\s+(?:this|tonight|today|tomorrow|on|at|for)\b|[?.!,]|$)", message or "")
+        if cm:
+            f = {"what": "things to do", "where": cm["w"].strip()}
     if f is None:
         return None
+    if not f.get("named"):
+        f = {**f, "what": category(f["what"])}
+    if not f.get("country") and (f.get("where") or "").split(",")[0].strip().lower() in VN_CITIES:
+        f = {**f, "country": "VN"}   # Sasha 175 · Google finds nothing for a bare "Hoi An" from our servers
+    lang = "es" if is_spanish(said) else "en"
     # Sasha 158 · one sentence before; the machinery (sources, ranking, routes) is never explained to the guest
     response = (f"Looking up {f['what']}{' in ' + f['where'] if f.get('where') else ''}." if f.get("named")
-                else f"Here are the best-rated {_plural_kind(f['what'])} in {f['where']}.")
+                else found_line(f, lang))
     history = list(history or [])
     return {
         "response": response, "intents": ["booking"], "photos": [], "tools_used": [], "links": [],
@@ -528,6 +543,66 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
 _LOOSE = re.compile(r"\b(?:at|to)\s+(?:an?\s+|the\s+|some\s+)?(?P<kind>(?:[a-záéíóúñ]+\s+){0,2}?(?:restaurant|bistro|bar|caf[eé]|spa|"
                     r"steakhouse|brasserie|tavern|trattoria|pizzeria|salon|studio))\s+(?:in|near|around)\s+(?P<where>[A-ZÁÉÍÓÚ][^?.!;]{1,80})", re.I)
 _LOOSE_ASK = re.compile(r"\b(book|booking|reserve|reservation|table|res[eé]rva\w*)\b", re.I)
+
+
+#: Sasha 175 (EU 172) · a vague ask becomes a real category before the search, and the reply is phrased from the category
+_CATEGORY = [(r"^(?:something|somewhere|a place)\s+romantic$|^romantic(?:\s+(?:place|spot|evening|night))?$",
+              "romantic restaurant"),
+             (r"^(?:something|anything)\s+(?:fun|nice|interesting)(?:\s+to\s+do)?$|^things?\s+to\s+do$|^fun(?:\s+things)?$", "things to do"),
+             (r"^(?:a\s+)?(?:relaxing\s+)?massage(?:\s+(?:relaxing|relajante))?$", "massage"),
+             (r"^tattoo$", "tattoo studio")]
+ES_PHRASE = {"romantic restaurant": "restaurantes románticos", "romantic dinner": "restaurantes para una cena romántica", "things to do": "planes y actividades", "massage": "masajes", "spa": "spas",
+             "cooking class": "clases de cocina", "tattoo studio": "estudios de tatuaje", "dinner": "sitios para cenar", "lunch": "sitios para comer",
+             "restaurant": "restaurantes", "tapas": "bares de tapas", "brunch": "sitios de brunch"}
+
+
+VN_CITIES = {"hanoi", "ha noi", "hoi an", "ho chi minh city", "ho chi minh", "saigon", "sai gon", "da nang", "danang", "hue", "ha long",
+             "ha long bay", "halong", "nha trang", "sapa", "sa pa", "ninh binh", "phu quoc", "dalat", "da lat", "can tho", "hai phong", "mui ne"}
+
+
+def category(what: str) -> str:
+    w = " ".join((what or "").lower().split())
+    for rx, cat in _CATEGORY:
+        if re.search(rx, w):
+            return cat
+    return what
+
+
+def is_spanish(text: str) -> bool:
+    t = text or ""
+    return bool(_ES_MARK.search(t) or re.search(r"\b(en|para|una|un|el|la|mañana|noche)\b", t, re.I)) and \
+        not re.search(r"\b(the|in|for|at|and|with|on|tomorrow|tonight|book|find|me|near|can|you|please|my|to|of|reserve)\b", t, re.I)
+
+
+def found_line(f: dict, lang: str = "en") -> str:
+    """The ONE sentence before the cards, from the category, in the guest's language."""
+    what, where = f.get("what") or "places", f.get("where") or ""
+    if lang == "es":
+        ph = ES_PHRASE.get(what.lower(), what)
+        fem = ph.split()[0] in ("clases",)
+        return f"{'Estas son las' if fem else 'Estos son los'} {ph} mejor {'valoradas' if fem else 'valorados'} en {where}."
+    if what.lower() == "things to do":
+        return f"Here are some of the best-rated things to do in {where}."
+    return f"Here are the best-rated {_plural_kind(what)} in {where}."
+
+
+_EAT_WHERE = re.compile(r"\b(?:where\s+(?:should|can|could|do)\s+(?:i|we)\s+(?:eat|have\s+(?:dinner|lunch)|go\s+(?:out|for\s+dinner))|"
+                        r"what\s+(?:should|can)\s+(?:i|we)\s+do|d[oó]nde\s+(?:como|cenamos|ceno|comemos|puedo\s+comer|podemos\s+cenar))\b", re.I)
+_SAYS_CITY = re.compile(r"\b(?:in|en|near|cerca de|around)\s+[A-ZÁÉÍÓÚ]")
+
+
+def city_question(message: str) -> Optional[str]:
+    """"where should I eat tonight?" with NO city: one question, in their language — never a guess (it answered from the
+    4 Aug Vietnam cache, for a visitor in Madrid)."""
+    if not _EAT_WHERE.search(message or "") or _SAYS_CITY.search(message or ""):
+        return None
+    if is_spanish(message) or re.search(r"d[oó]nde", message or "", re.I):
+        return "¿En qué ciudad estás? Te busco los sitios mejor valorados para comer allí."
+    return "Which city are you in? I'll find the best-rated places to eat there."
+
+
+_FUN = re.compile(r"\b(?:something|anything)\s+(?:fun|nice|interesting)(?:\s+to\s+do)?|\bthings?\s+to\s+do\b|\bwhat\s+to\s+do\b",
+                  re.I)
 
 
 def _plural_kind(what: str) -> str:

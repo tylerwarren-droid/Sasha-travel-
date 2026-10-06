@@ -23,13 +23,17 @@ class Search(unittest.TestCase):
             self.assertEqual((f or {}).get("what"), what, m)
             self.assertEqual((f or {}).get("where"), where, m)
 
+    def test_things_to_do_is_a_real_search(self):   # Sasha 175 (EU 172) · never the 4 Aug cache's priced list
+        self.assertEqual(find("things to do in Kyoto"), {"what": "things to do", "where": "Kyoto"})
+        self.assertEqual(find("something fun to do in Hoi An this evening"), {"what": "things to do", "where": "Hoi An", "country": "VN"})
+
     def test_seoul_is_not_sol(self):
         self.assertIsNone(known_place("Seoul"))
         self.assertEqual(find("nail salon in Seoul")["where"], "Seoul")
         self.assertEqual(known_place("Chambhuri")[0], "Chamberí")   # a real near-miss still corrects
 
     def test_not_a_search(self):
-        for m in ("plan a 7 day trip in Vietnam", "what is the weather in Hanoi", "things to do in Kyoto", "7 days in Hanoi",
+        for m in ("plan a 7 day trip in Vietnam", "what is the weather in Hanoi", "7 days in Hanoi",
                   "best time to visit Bali", "I like the food in Hanoi", "a hotel in Madrid for 2 nights"):
             self.assertIsNone(find(m), m)
 

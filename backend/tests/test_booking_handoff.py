@@ -55,7 +55,7 @@ class TheTurn(unittest.TestCase):
                         ("book a massage in Madrid for 2 on Friday", {"what": "massage", "where": "Madrid", "country": "ES"}),
                         ("Can you reserve a kayak tour near Lisbon?", {"what": "kayak tour", "where": "Lisbon"}),
                         ("find a tattoo studio in Nairobi, KE", {"what": "tattoo studio", "where": "Nairobi", "country": "KE"}),
-                        ("look for a restaurant in Hanoi tonight", {"what": "restaurant", "where": "Hanoi"}),
+                        ("look for a restaurant in Hanoi tonight", {"what": "restaurant", "where": "Hanoi", "country": "VN"}),   # Sasha 175 · its country
                         # S-68 step 3 · what the distance is measured from, as said — "my hotel" is asked about later
                         ("find a tattoo parlour in Madrid near my hotel", {"what": "tattoo parlour", "where": "Madrid", "country": "ES", "near": "my hotel"}),
                         ("find a tattoo studio in Madrid, near Hotel Urban for Tuesday", {"what": "tattoo studio", "where": "Madrid", "country": "ES", "near": "Hotel Urban"}),

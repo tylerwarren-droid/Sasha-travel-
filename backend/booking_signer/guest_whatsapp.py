@@ -1485,7 +1485,8 @@ def rehearsal(account: str) -> bool:
     from .guest_accounts import extra_accounts
     if account == founder_account():
         return os.getenv("SASHA_REHEARSAL", "") == "1"
-    return bool(account) and (account or "").lower() not in extra_accounts()
+    # Sasha 175 (EU 172) · never to a guest: "Sasha Test Venue (ours — rehearsal)" in a stranger's search was a failure
+    return False
 
 
 #: Sasha 140 · each venue's OWN share-picture URL, by its website (not Google content: cacheable), with "none" remembered too

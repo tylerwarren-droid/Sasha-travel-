@@ -220,8 +220,8 @@ def _with_rehearsal(account: str, out: dict) -> dict:
     surface (the web chat as WhatsApp), named as what it is — booking it contacts no one."""
     from .guest_whatsapp import rehearsal
     from .form_rung import test_venue_url
-    if not rehearsal(account) or not isinstance(out, dict):
-        return out
+    if not rehearsal(account) or not isinstance(out, dict) or not (out.get("candidates") or []):
+        return out   # Sasha 175 (EU 172) · never as filler: an empty search says it found nothing
     card = {"place_id": REHEARSAL_ID, "name": "Sasha Test Venue (ours — rehearsal, not a real restaurant)", "country": "ES",
             "website": test_venue_url(), "rating": None, "rating_count": None, "distance_m": None}
     rk = dict(out.get("ranking") or {})

@@ -27,7 +27,7 @@ CASES = [
     ("Book a table for 2 in Chamberi saturday 21:00", "table", CHAMBERI, SAT_21, 2),
     ("We need a table for 4 tomorrow at 2030 near Retiro", "table", "Retiro, Madrid", "2026-10-03T20:30", 4),
     ("Cena para 2 el sábado a las 21:00 en Chamberí", "dinner", CHAMBERI, SAT_21, 2),
-    ("Quiero reservar una mesa para dos el sábado a las 21h en Chamberi, algo romántico", "romántico table", CHAMBERI, SAT_21, 2),
+    ("Quiero reservar una mesa para dos el sábado a las 21h en Chamberi, algo romántico", "romantic table", CHAMBERI, SAT_21, 2),
     ("Reserva cena para 2 en Chamberí el sábado a las 9 de la noche", "dinner", CHAMBERI, SAT_21, 2),
     ("Mesa para 4 mañana a las 14:00 en Malasaña", "table", "Malasaña, Madrid", "2026-10-03T14:00", 4),
     ("Busco un restaurante romántico en Chamberí para el sábado a las 21:00 para dos personas", "restaurant romántico", CHAMBERI, SAT_21, 2),

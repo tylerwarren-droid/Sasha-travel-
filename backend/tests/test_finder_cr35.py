@@ -153,3 +153,25 @@ class Again(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TwoDevices(TC.Base):
+    """CR 35 · the founder's laptop run: one conversation per account; RelocateMe waiting at "Postcode?" while EspañaMe's
+    health card asked last (on the phone). "28010" is relocation's answer — never swallowed by the health card's question."""
+
+    def test_an_answer_goes_to_the_product_waiting_for_it(self):
+        from tests.test_relocation_cr1 import OnWhatsApp as R
+        for t in ("relocation", "first application", "me", "myself"):
+            self.say(t)
+        for a in R.ANSWERS[:R.ANSWERS.index("28010")]:
+            self.say(a)
+        self.assertEqual(self.bodies()[-1], "Postcode?")
+        self.to_photo()                                            # the phone: EspañaMe → Salud → yes → the health card
+        self.say("DEMO")
+        self.say("", payload=f"hx:ts:ok:{self.pend()['ts_sha']}")
+        self.say("", payload="hx:ts:m:NUEVA")
+        self.say("", payload="hx:ts:addr:yes")
+        self.say("28013")                                          # the health card's own postcode
+        self.assertIn("mobile number", self.bodies()[-1])
+        self.say("28010")                                          # the laptop: relocation's postcode
+        self.assertEqual(self.bodies()[-1], "Province?")

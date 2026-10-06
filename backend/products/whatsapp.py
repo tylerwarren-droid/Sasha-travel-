@@ -320,7 +320,12 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
                 p["KanoeSaid"], p["Body"] = body, handed[0]
             return False
         else:
-            target = asked_last
+            # CR 35 · one conversation per account, two devices: when the product that asked last doesn't recognise this,
+            # a set-aside product waiting for exactly this answer takes it ("28010" on the laptop's relocation, while the
+            # phone's EspañaMe asked last); otherwise the re-ask goes to the one that asked last, as before
+            other = next((prod for prod, saved in await _waiting(ch, now)
+                          if prod != asked_last and _module(prod).claims(saved, body, payload, media)), None)
+            target = other or asked_last
     if not target and not asked_last and not payload and _REL.search(body) and for_sasha(body, st.get("history") or [], now):
         # CR 20 (5) · a product set aside (e.g. after a trip hand-off) still lends its context to "near my hotel on arrival"
         for prod, saved in await _waiting(ch, now):

@@ -580,8 +580,12 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
         return bool(media) or bool(re.fullmatch(r"(?i)\s*demo\s*", t))
     if step == "ts_confirm":
         return YS.is_yes(t) or bool(re.match(r"(?i)^\s*(no|wrong)\b", t))
-    if step == "ts_ask":
-        return bool(t) and not t.endswith("?")
+    if step == "ts_ask":                     # CR 35 · only an answer to ITS question (a shared account's other product may be asking)
+        from . import tarjeta as TS
+        import copy
+        ts = pend.get("ts") or {}
+        k = pend.get("ts_q") or TS.next_question(ts.get("facts") or {})
+        return bool(t or payload) and bool(k) and TS.answer(k, t, payload, copy.deepcopy(ts.get("facts") or {})) is None
     if step in ("consent", "call_confirm", "pub_vault_confirm"):
         return YS.is_yes(t) or bool(re.match(r"(?i)^\s*no\b", t))
     if step == "es_menu":

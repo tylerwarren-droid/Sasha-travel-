@@ -138,7 +138,7 @@ async def read_venue(request: Request):
         body = {"name": "Sasha Test Venue", "city": body.get("city") or "Madrid", "country": "ES", "website": test_venue_url()}
     if body is None:
         return _refuse(400, "read_malformed", "send {name, city, country?, website?} as a JSON object")
-    if body.get("place_id") and standin(account_for(request)):
+    if body.get("place_id") and standin(account_for(request)) and not body.get("real_venue"):   # Sasha 175 · the founder's platform run reads real venues
         # Sasha 169 · THE DEMO STAND-IN (founder only, SASHA_DEMO_STANDIN=1): a real listing picked → OUR test venue's own page
         # is read and sent to instead, and its name says so everywhere — the real place is never contacted
         from .form_rung import test_venue_url

@@ -109,7 +109,8 @@ class Checks(Base):
 
     def test_the_address_is_split_into_the_forms_boxes(self):
         self.assertEqual(TS.split_address("AVDA. DE AMERICA 12, 3º B"),
-                         {"type": "AVENIDA", "name": "DE AMERICA", "number": "12", "floor": "3", "letter": "B"})
+                         {"type": "AVENIDA", "name": "DE AMERICA", "number": "12", "portal": "", "stair": "", "floor": "3",
+                          "letter": "B"})
         self.assertEqual(TS.split_address("C. EJEMPLO 1 P02 A")["type"], "CALLE")
 
     def test_the_citizens_boxes_are_refused_by_the_filler(self):

@@ -103,15 +103,6 @@ def _norm(s: str) -> str:
     return " ".join(words)
 
 
-_TYPES = ("CALLE", "AVENIDA", "PLAZA", "PASEO", "CARRETERA", "CRA", "CAMINO", "RONDA", "TRAVESIA", "GLORIETA", "COSTANILLA",
-          "PASAJE", "PSAJE", "URBANIZACION", "CL", "AV", "PL", "PS")
-
-
-def _street_key(s: str) -> str:
-    w = _norm(s).split()
-    return " ".join(w[1:] if w and w[0] in _TYPES else w)
-
-
 def municipalities(page: str) -> Dict[str, str]:
     sel = re.search(r'cbxLocalidades".*?</select>', page, re.S)
     return {_norm(n): v for v, n in re.findall(r'<option[^>]*value="([^"]*)"[^>]*>([^<]*)</option>', sel.group(0))} if sel else {}
@@ -120,13 +111,6 @@ def municipalities(page: str) -> Dict[str, str]:
 def candidates(page: str) -> List[dict]:
     return [{"id": i, "address": _flat(a), "municipality": _flat(m)} for i, a, m in
             re.findall(r"DetalleAsistenciales\.aspx\?ID=(\d+)'[^>]*>(.*?)</a>.*?<td[^>]*>(.*?)</td>", page, re.S)]
-
-
-def pick(cands: List[dict], street: str, number: str) -> List[dict]:
-    """The candidates that ARE this address: the same street name and number (never the nearest-sounding one)."""
-    key, n = _street_key(street), (number or "").strip().upper()
-    return [c for c in cands if _street_key(c["address"].rsplit(",", 1)[0]) == key
-            and c["address"].rsplit(",", 1)[-1].strip().upper() == n]
 
 
 _FIELDS = [("code", r"Código de centro:"), ("address", r"Dirección postal:"), ("municipality", r"Municipio:"),
@@ -147,32 +131,66 @@ def centre(page: str, cid: str) -> dict:
     return out
 
 
-async def find(street: str, number: str, municipality: str) -> dict:
-    """SERMAS's own finder, read now → {centre…} or FinderRefused (say why; never a guess)."""
+class Choose(Exception):
+    """No single exact address: the finder's own closest streets for the citizen to pick (empty: nothing like it at all)."""
+
+    def __init__(self, cands: List[dict], said: str):
+        super().__init__(said)
+        self.cands, self.said = cands, said
+
+
+def _form(page: str) -> dict:
+    return {k: H.unescape(v) for k, v in re.findall(r'<input type="hidden" name="([^"]+)" id="[^"]*" value="([^"]*)"', page)}
+
+
+async def find(line: str, municipality: str) -> dict:
+    """SERMAS's own finder, read now, for the citizen's address as written (DNI or padrón) → the centre, or Choose with the
+    finder's closest streets, or FinderRefused (the finder itself didn't answer). Never a guess: a street is taken only when
+    its name IS the citizen's (address.same), at their number."""
+    from . import address as A
+    p = A.parse(line)
+    if not p["name"] or not p["number"]:
+        raise Choose([], "I need the street and its number")
     st, page, ck = await _paced("GET", FINDER["url"])
     if st != 200:
         raise FinderRefused(f"SERMAS's finder answered HTTP {st}")
-    munis = municipalities(page)
-    code = munis.get(_norm(municipality))
+    code = municipalities(page).get(_norm(municipality))
     if not code:
-        raise FinderRefused(f"SERMAS's finder has no municipality “{municipality}”")
-    form = {k: H.unescape(v) for k, v in re.findall(r'<input type="hidden" name="([^"]+)" id="[^"]*" value="([^"]*)"', page)}
-    form.update({"ctl00$ContenedorContenidoSeccion$txtDireccion": _street_key(street) or street,
-                 "ctl00$ContenedorContenidoSeccion$txtNumero": number or "S/N",
-                 "ctl00$ContenedorContenidoSeccion$cbxLocalidades": code,
-                 "ctl00$ContenedorContenidoSeccion$btnBuscar": "Buscar"})
-    st, page, ck = await _paced("POST", FINDER["url"], form, ck)
-    if st != 200:
-        raise FinderRefused(f"SERMAS's finder answered HTTP {st}")
-    hits = pick(candidates(page), street, number)
-    if len(hits) != 1:
-        raise FinderRefused("SERMAS's finder " + ("doesn't list that exact address" if not hits else
-                            f"lists {len(hits)} addresses like it") + " — check the street and number")
-    cid = hits[0]["id"]
+        raise Choose([], f"SERMAS's finder has no town called “{municipality.title()}”")
+    seen: Dict[str, dict] = {}
+    numbers = [p["number"]] + ([p["portal"]] if p["portal"] and p["portal"] != p["number"] else [])
+    for n in numbers:
+        for q in A.queries(p):
+            form = _form(page)
+            form.update({"ctl00$ContenedorContenidoSeccion$txtDireccion": q, "ctl00$ContenedorContenidoSeccion$txtNumero": n,
+                         "ctl00$ContenedorContenidoSeccion$cbxLocalidades": code,
+                         "ctl00$ContenedorContenidoSeccion$btnBuscar": "Buscar"})
+            st, got, ck = await _paced("POST", FINDER["url"], form, ck)
+            if st != 200:
+                raise FinderRefused(f"SERMAS's finder answered HTTP {st}")
+            page = got if _form(got) else page
+            for c in candidates(got):
+                c["number"] = c["address"].rsplit(",", 1)[-1].strip()
+                c["street"] = c["address"].rsplit(",", 1)[0].strip()
+                seen.setdefault(f"{c['id']}|{c['address']}", c)     # the ID is the centre's area: two streets may share it
+            exact = [c for c in seen.values() if A.same(p, c["street"]) and c["number"].upper() == n.upper()]
+            if len(exact) == 1:
+                return await detail(exact[0]["id"], ck)
+            if len(exact) > 1:            # the same street listed twice (blocks of one address) → one centre, or ask
+                found = [await detail(x["id"], ck) for x in exact[:4]]
+                if len({f["code"] for f in found}) == 1:
+                    return found[0]
+                raise Choose(exact[:3], "SERMAS's finder lists more than one street by that name, with different centres")
+    near = sorted(seen.values(), key=lambda c: -A.closeness(A.full(p), c["street"]))
+    near = [c for c in near if A.closeness(A.full(p), c["street"]) > 0][:3]
+    raise Choose(near, f"SERMAS's finder has no “{A.full(p).title()}, {p['number']}” in {municipality.title()}")
+
+
+async def detail(cid: str, cookies=None) -> dict:
     hit = _CENTRES.get(cid)
     if hit and time.monotonic() - hit[0] < CACHE_S:
         return dict(hit[1])
-    st, page, _ = await _paced("GET", FINDER["detail"].format(id=cid), None, ck)
+    st, page, _ = await _paced("GET", FINDER["detail"].format(id=cid), None, cookies)
     if st != 200:
         raise FinderRefused(f"SERMAS's centre page answered HTTP {st}")
     c = centre(page, cid)
@@ -220,6 +238,37 @@ def _expired(ci: dict, now: datetime) -> bool:
         return True
 
 
+AGAIN = re.compile(r"(?i)\b(find|look\s*up|search)\b.{0,12}\b(my\s+)?(health\s+)?(cent(re|er)|centro)\b|\bmi centro de salud\b")
+
+
+async def resume(ctx: dict) -> bool:
+    """CR 35 · "find my centre" after the form was prepared (or after the lookup failed): the address comes back from the
+    citizen's own latest 1449F1 case, inside its 24 hours — never kept anywhere else. False: no such case."""
+    from .. import store as ST
+    from datetime import timezone
+    from . import tarjeta as TS
+    now = datetime.now(timezone.utc)
+    mine = [c for c in await ST.STORE.of_product("health")
+            if c.get("account_id") == ctx["account"] and (c["state"] or {}).get("kind") == "tarjeta"
+            and (c["state"] or {}).get("rows") and not TS.expired(c["state"], now)]
+    if not mine:
+        return False
+    st = max(mine, key=lambda c: c["state"].get("prepared_at") or "")["state"]
+    r = {x["field"]: x["value"] for x in st["rows"]}
+    line = " ".join(x for x in (r.get("TLTIPOVIAL_INTER", ""), r.get("TLNOMVIAL_INTER", ""), r.get("NMNUMVIAL_INTER", "")) if x)
+    if r.get("TLNUMVIAL_INTER"):
+        line += f", PORTAL {r['TLNUMVIAL_INTER']}"
+    ctx["st"]["pending"]["ci"] = {"line": line, "municipality": r.get("DSMUNI_INTER") or "MADRID",
+                                  "motive": r.get("ITMOTIVO_SOLIC", ""), "expire_at": st["values_expire_at"],
+                                  "copy": {"nombre": r.get("TLNOMBRE_INTER", "").title(),
+                                           "apellidos": f"{r.get('TLAPELLIDO1_INTER', '')} {r.get('TLAPELLIDO2_INTER', '')}".strip().title(),
+                                           "dni": r.get("CDDOCIDENT_INTER", ""), "movil": r.get("TLTELF_MOVIL_INTER", ""),
+                                           "correo": r.get("TLEMAIL_INTER", "")}}
+    ctx["st"]["pending"]["step"] = "ci_offer"
+    await on_offer(ctx, "yes", "hx:ci:find")
+    return True
+
+
 async def on_offer(ctx: dict, t: str, payload: str) -> None:
     from booking_signer import yes as YS
     pend, out = ctx["st"]["pending"], ctx["out"]
@@ -234,21 +283,82 @@ async def on_offer(ctx: dict, t: str, payload: str) -> None:
         out.ask("Shall I find your centro de salud?", [("Yes, find my centre", "hx:ci:find"), ("Not now", "hx:ci:no")])
         return
     await ctx["early"]("Reading SERMAS's centre finder for your address…")
+    await _look(ctx, ci["line"], ci["municipality"])
+
+
+async def _look(ctx: dict, line: str, municipality: str) -> None:
+    """The finder, then the centre — or the finder's own closest streets to pick from, or "type it as on your padrón". Never
+    "look yourself"."""
+    pend, out = ctx["st"]["pending"], ctx["out"]
+    ci = pend["ci"]
     try:
-        c = await find(ci["street"], ci["number"], ci["municipality"])
+        c = await find(line, municipality)
+    except Choose as e:
+        if e.cands:
+            ci["choices"] = {f"{x['id']}|{i}": x["address"] for i, x in enumerate(e.cands, 1)}
+            pend["step"] = "ci_pick"
+            listed = "\n".join(f"{i}. {x['address'].title()}, {x['municipality'].title()}" for i, x in enumerate(e.cands, 1))
+            out.text(f"{e.said}. Did you mean one of these (SERMAS's own spelling)?\n{listed}")
+            out.ask("Which is yours?", [(f"{i}. {x['street'].title()[:16]}", f"hx:ci:pick:{x['id']}|{i}")
+                                        for i, x in enumerate(e.cands, 1)])
+        else:
+            pend["step"] = "ci_street"
+            out.text(f"{e.said}. Type your street and number as your padrón has them — e.g. “Calle de la Vereda de Palacio 1, "
+                     f"Alcobendas” — and I'll look again.")
+        return
     except FinderRefused as e:
-        out.text(f"I couldn't find it: {e}. You can look yourself on SERMAS's finder: {FINDER['url']}")
-        pend["step"] = "done"
-        pend.pop("ci", None)
+        out.text(f"{e}. I'll try again when you say “find my centre”.")
+        pend["step"] = "ci_offer"
         return
     except Exception as e:
         log.error("[cita] finder: %s", type(e).__name__)
-        out.text(f"SERMAS's finder didn't answer just now ({type(e).__name__}). Its page: {FINDER['url']}")
+        out.text(f"SERMAS's finder didn't answer just now ({type(e).__name__}). Say “find my centre” to try again.")
+        pend["step"] = "ci_offer"
         return
-    ci["centre"] = c
+    await _found(ctx, c)
+
+
+async def _found(ctx: dict, c: dict) -> None:
+    pend, out = ctx["st"]["pending"], ctx["out"]
+    pend["ci"]["centre"] = c
+    pend["ci"].pop("choices", None)
     pend["step"] = "ci_route"
     out.text(card(c))
     out.ask("How would you like to do it?", ROUTE_BUTTONS)
+
+
+async def on_pick(ctx: dict, t: str, payload: str) -> None:
+    """The citizen's pick among the finder's streets (a button, its number, or "none")."""
+    pend, out = ctx["st"]["pending"], ctx["out"]
+    ci = pend.get("ci") or {}
+    ids = list((ci.get("choices") or {}).keys())
+    cid = payload[len("hx:ci:pick:"):] if payload.startswith("hx:ci:pick:") else ""
+    m = re.match(r"^\s*([1-3])\b", t)
+    if not cid and m and int(m.group(1)) <= len(ids):
+        cid = ids[int(m.group(1)) - 1]
+    if cid not in ids:
+        pend["step"] = "ci_street"
+        out.text("Then type your street and number as your padrón has them — e.g. “Calle de la Vereda de Palacio 1, "
+                 "Alcobendas”.")
+        return
+    try:
+        c = await detail(cid.split("|")[0])
+    except FinderRefused as e:
+        out.text(f"{e}. Pick again in a moment.")
+        return
+    await _found(ctx, c)
+
+
+async def on_street(ctx: dict, t: str) -> None:
+    """The street typed as on the padrón ("…, Alcobendas" names the town; else the one on the form)."""
+    pend = ctx["st"]["pending"]
+    ci = pend["ci"]
+    line, town = t, ci["municipality"]
+    m = re.match(r"^(.*\d.*?)\s*,\s*([^,\d]+)$", t.strip())
+    if m:
+        line, town = m.group(1), m.group(2).strip()
+    ci.update(line=line, municipality=town)
+    await _look(ctx, line, town)
 
 
 async def on_route(ctx: dict, t: str, payload: str) -> None:

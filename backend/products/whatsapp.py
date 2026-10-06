@@ -256,6 +256,10 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
                 if sashas_question or (rest and not DG.is_ask(rest)):
                     continue                                     # bare "ad": alone or "ad check …" only; never over Sasha's question
             target, entering = prod, True
+    if not target and not payload:                              # CR 35 · "find my centre": health's, from anywhere
+        from .health import cita as CI
+        if CI.AGAIN.search(body):
+            target = "health"
     if not target and not payload and _STATUS.search(body):
         named = next((prod for prod, rx in _NAMES if rx.search(body)), None)
         waiting = [prod for prod, _ in await _waiting(ch, now)]

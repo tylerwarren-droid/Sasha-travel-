@@ -68,20 +68,20 @@ class Base(TT.Base):
 
 class FindIt(Base):
     def test_the_exact_address_on_sermas_own_finder(self):
-        c = run(CI.find("CALLE EJEMPLO", "1", "MADRID"))
+        c = run(CI.find("C. EJEMPLO 1 P02 A", "MADRID"))
         self.assertEqual((c["name"], c["code"], c["phone_cita"], c["phone_e164"]), ("C.S. LAS CORTES", "2360", "91 369 04 91",
                                                                                    "+34913690491"))
         (m1, u1, _), (m2, u2, form), (m3, u3, _) = self.finder.calls
         self.assertEqual((m1, m2, m3), ("GET", "POST", "GET"))
         self.assertEqual(form["ctl00$ContenedorContenidoSeccion$cbxLocalidades"], "079")
-        self.assertEqual(form["ctl00$ContenedorContenidoSeccion$txtDireccion"], "EJEMPLO")
+        self.assertEqual(form["ctl00$ContenedorContenidoSeccion$txtDireccion"], "CALLE EJEMPLO")
         self.assertTrue(u3.endswith("ID=453"))                     # "EJEMPLO GALIANO" is another street: never the nearest
 
     def test_no_exact_match_is_said_never_guessed(self):
-        with self.assertRaises(CI.FinderRefused):
-            run(CI.find("CALLE EJEMPLO", "3", "MADRID"))
-        with self.assertRaises(CI.FinderRefused):
-            run(CI.find("CALLE EJEMPLO", "1", "ATLANTIS"))
+        with self.assertRaises(CI.Choose):
+            run(CI.find("CALLE EJEMPLO 3", "MADRID"))
+        with self.assertRaises(CI.Choose):
+            run(CI.find("CALLE EJEMPLO 1", "ATLANTIS"))
 
     def test_what_to_bring_is_the_forms_own(self):
         self.assertIn("the 1449F1, printed and SIGNED by you", CI.bring("NUEVA"))

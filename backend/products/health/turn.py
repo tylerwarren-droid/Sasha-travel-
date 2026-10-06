@@ -186,10 +186,18 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         else:
             out.ask(CHOOSE, CHOOSE_BUTTONS)
         return
-    if step in ("ci_offer", "ci_route", "ci_when", "ci_call_when", "ci_call_confirm", "ci_booked"):   # CR 34 · form → cita
+    if step not in ("ci_pick", "ci_street", "ts_ask") and not payload:    # CR 35 · "find my centre", again, any time
         from . import cita as CI
+        if CI.AGAIN.search(t) and await CI.resume(ctx):
+            return
+    if step in ("ci_offer", "ci_pick", "ci_street", "ci_route", "ci_when", "ci_call_when", "ci_call_confirm", "ci_booked"):
+        from . import cita as CI                                   # CR 34 · form → cita; CR 35 · pick / type the street
         if step == "ci_offer":
             await CI.on_offer(ctx, t, payload)
+        elif step == "ci_pick":
+            await CI.on_pick(ctx, t, payload)
+        elif step == "ci_street":
+            await CI.on_street(ctx, t)
         elif step == "ci_route":
             await CI.on_route(ctx, t, payload)
         elif step == "ci_call_when":
@@ -552,8 +560,15 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     step, t = pend.get("step"), (body or "").strip()
     if payload.startswith(("hx:", "hxyes:", "hxno:", "hxv:", "hxvno:")):   # incl. hx:sermas:…
         return True
+    from . import cita as CI
+    if CI.AGAIN.search(t):                                    # CR 35 · "find my centre" is health's, from any step
+        return True
     if step in ("ci_offer", "ci_call_confirm"):
         return YS.is_yes(t) or bool(re.match(r"(?i)^\s*(no|not now|later)\b", t))
+    if step == "ci_pick":
+        return bool(re.match(r"(?i)^\s*([1-3]\b|none\b|no\b)", t))
+    if step == "ci_street":
+        return bool(re.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]{3}.*\d", t))
     if step == "ci_route":
         return bool(re.search(r"(?i)\bcall|llam|online|web|internet|\bgo\b|myself|walk", t))
     if step in ("ci_when", "ci_booked"):

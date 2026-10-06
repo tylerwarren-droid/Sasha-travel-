@@ -49,9 +49,6 @@ MOTIVES = {"NUEVA": "a new card (first issue)", "DOMICILIO": "a change of regist
            "EXTRAVIO": "a lost, stolen or damaged card"}
 MOTIVE_BUTTONS = [("New card", "hx:ts:m:NUEVA"), ("New address", "hx:ts:m:DOMICILIO"), ("Lost / damaged", "hx:ts:m:EXTRAVIO")]
 SHIFTS = {"MANIANA": "mornings", "TARDE": "afternoons", "INDISTINTO": "either"}
-STREET_TYPES = {"CALLE": r"C/?|CL|CALLE", "AVENIDA": r"AV|AVD|AVDA|AVENIDA", "PLAZA": r"PL|PZA|PLAZA", "PASEO": r"PS|PSO|PASEO",
-                "CARRETERA": r"CTRA|CARRETERA", "CAMINO": r"CMNO|CAMINO", "RONDA": r"RDA|RONDA", "TRAVESIA": r"TRAV|TRAVESIA",
-                "GLORIETA": r"GTA|GLORIETA", "COSTANILLA": r"CTLLA|COSTANILLA", "PASAJE": r"PJE|PASAJE", "URBANIZACION": r"URB|URBANIZACION"}
 LEFT_FOR_YOU = ["§5 how you'd like to be notified (online or by certified post) — your choice",
                 "§6 the boxes to tick ONLY if you object to the Comunidad consulting your DNI, padrón and INSS records — "
                 "leave them blank to let it consult (then you needn't bring copies)",
@@ -188,28 +185,12 @@ def read_back(facts: Dict[str, dict]) -> List[str]:
 # ── the address, the questions, the form ───────────────────────────────────────────────────────────────────────────
 
 def split_address(line: str) -> Dict[str, str]:
-    """'C. PADRE DAMIAN 41 P05 B' → type CALLE, name PADRE DAMIAN, number 41, floor 05, letter B (best effort; read back)."""
-    t = re.sub(r"\s+", " ", (line or "").upper().replace(",", " ")).strip()
-    out = {"type": "", "name": "", "number": "", "floor": "", "letter": ""}
-    for typ, rx in STREET_TYPES.items():
-        m = re.match(rf"^({rx})\.?\s+", t)
-        if m:
-            out["type"], t = typ, t[m.end():]
-            break
-    m = re.search(r"\s(\d+[A-Z]?)\b(.*)$", " " + t)
-    if m:
-        out["name"] = t[:m.start()].strip()
-        out["number"] = m.group(1)
-        rest = m.group(2)
-        fl = re.search(r"\bP(?:ISO)?\.?\s*(\d+|BJ|BAJO)\b", rest) or re.search(r"\b(\d+)[ºª]", rest)
-        if fl:
-            out["floor"] = fl.group(1)
-        le = re.search(r"\b([A-Z])\s*$", rest)
-        if le:
-            out["letter"] = le.group(1)
-    else:
-        out["name"] = t
-    return out
+    """'VEREDA DE PALACIO, Nº 1, PORTAL 8, 11-B' → type VEREDA · name DE PALACIO · number 1 · portal 8 · floor 11 · letter B
+    (address.parse — the same reading SERMAS's finder gets; read back to the citizen before anything is filled)."""
+    from .address import parse
+    a = parse(line)
+    return {"type": a["type"], "name": a["name"], "number": a["number"], "portal": a["portal"], "stair": a["stair"],
+            "floor": a["floor"], "letter": a["door"]}
 
 
 QUESTIONS = [
@@ -337,6 +318,8 @@ def rows(f: Dict[str, dict], today: date) -> List[dict]:
     put("TLTIPOVIAL_INTER", "Street type", addr["type"], a_src)
     put("TLNOMVIAL_INTER", "Street", addr["name"], a_src)
     put("NMNUMVIAL_INTER", "Number", addr["number"], a_src)
+    put("TLNUMVIAL_INTER", "Portal", addr["portal"], a_src)
+    put("TLESCALERA_INTER", "Staircase", addr["stair"], a_src)
     put("TLPISO_INTER", "Floor", addr["floor"], a_src)
     put("TLPUERTA_INTER", "Door", addr["letter"], a_src)
     put("CDPOSTAL_INTER", "Postcode", v("postcode"), src("postcode"))
@@ -529,9 +512,8 @@ async def _prepare(ctx: dict) -> None:
     # CR 34 · from the form to the cita: only what the lookup and the copy lines need, dropped with the form
     from . import cita as CI
     v = lambda k: (f.get(k) or {}).get("value", "")
-    a = split_address(v("street") or v("address_line"))
-    CI.offer(out, pend, {"street": f"{a['type']} {a['name']}".strip(), "number": a["number"],
-                         "municipality": v("municipality") or "MADRID", "motive": v("motive"),
+    CI.offer(out, pend, {"line": v("street") or v("address_line"), "municipality": v("municipality") or "MADRID",
+                         "motive": v("motive"),
                          "copy": {"nombre": v("given_names").title(), "apellidos": f"{v('surname_1')} {v('surname_2')}".strip().title(),
                                   "dni": v("dni"), "movil": v("phone"), "correo": v("email")}},
              (now + VALUES_TTL).isoformat())

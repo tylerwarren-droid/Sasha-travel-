@@ -753,6 +753,10 @@ async def _new_request(ctx: dict, body: str) -> None:
     if inv_req is not None and IV.STORE is not None:
         await _invite(ctx, inv_req)
         return
+    from . import captcha_test as CT   # Sasha 159 (5) · "send me the captcha test" (founder only)
+    if CT.asked(body):
+        out.text(await CT.send(ctx["account"]))
+        return
     h = HO.booking_handoff(body, history, ctx["now"])   # Sasha 138 · the turn's own clock: "Saturday" and urgency agree
     if h is not None:
         if h.get("booking_cancel"):

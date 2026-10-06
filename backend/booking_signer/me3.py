@@ -26,9 +26,10 @@ INTRO = {
     "campus": "CampusMe plans university visits: I read each university's own visit calendar live and prepare its "
               "registration from your details — you press Register, I never do. Then I plan the trip around the visits: "
               "flights, a hotel near each campus and the drive between them (test bookings for now).",
-    "espana": "EspañaMe helps with Spain's public services, each step from its official page — I prepare everything, and you "
-              "sign in and press; I never do that part for you. It's a concept today: the health part works in our test "
-              "setup, and the padrón, utilities and phone line are still being studied.",
+    # Sasha 159 · EU 160 §4 row 13: the citizen wording (newcomer steps are RelocateMe's)
+    "espana": "EspañaMe helps you get Spain's public services done — renewals, help, appointments, taxes — each step from its "
+              "official page; I prepare, you sign in and press. It's a concept today: the doctor's appointment works in our "
+              "test setup.",
 }
 
 

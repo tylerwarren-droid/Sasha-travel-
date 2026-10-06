@@ -9,6 +9,7 @@ import { User, Itinerary } from '@/types'
 import VoiceButton, { MicDevicesInfo } from './VoiceButton'
 import { renderMarkdown } from '@/lib/markdown'
 import { apiUrl, apiHeaders } from '@/lib/api'
+import { MAX_PHOTOS, imagesOf, toJpeg, type Attachment } from '@/lib/photo-attach'
 import type { RichItinerary } from './ItineraryDays'
 import IdeasPanel, { Idea } from './workspace/IdeasPanel'
 import TripPanel from './workspace/TripPanel'
@@ -279,10 +280,28 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
    * most of the time, so the Ideas buttons looked broken). A deliberate action interrupts
    * her instead, which is what a person expects: you pressed it, she stops and does it.
    */
+  // Sasha 159 (1) · photos attached to the next message (attach, drag-and-drop, paste, a phone's camera)
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [attachNote, setAttachNote] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const addPhotos = async (files: File[]) => {
+    const room = MAX_PHOTOS - attachments.length
+    if (!files.length) return
+    if (room <= 0) { setAttachNote(`Up to ${MAX_PHOTOS} photos at a time.`); return }
+    setAttachNote(null)
+    const got: Attachment[] = []
+    for (const f of files.slice(0, room)) {
+      try { got.push(await toJpeg(f)) } catch (e) { setAttachNote((e as Error).message) }
+    }
+    if (got.length) setAttachments((a) => [...a, ...got].slice(0, MAX_PHOTOS))
+  }
   const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string; payload?: string; opening?: boolean }) => {
-    if (!opts?.opening && !opts?.payload && takeChatText(content)) { setMessages(prev => [...prev, { role: 'user', content }]); return }  // S-66 chat booking
+    const media = attachments
+    if (!content.trim() && media.length) content = media.length === 1 ? '📷 (photo)' : `📷 (${media.length} photos)`
+    if (!opts?.opening && !opts?.payload && !media.length && takeChatText(content)) { setMessages(prev => [...prev, { role: 'user', content }]); return }  // S-66 chat booking
     await refreshGuestAuth()  // S-62 step 7 · a signed-in guest's chat is filed under their own account
     if (!content.trim() && !opts?.opening) return   // CR 16 · a product tab's opening turn is empty on purpose
+    if (media.length) setAttachments([])
     setQuickReplies([])   // CR 16 · a product's buttons answer only the turn they came with
     // Verbal stop — "Sasha, stop", "stop stop stop", "be quiet", a bare "wait"/"hold on".
     // In the live demo the guest said "stop" FIVE times in a row while Sasha narrated on;
@@ -392,6 +411,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
         force_intent: opts?.intent,              // set when the UI knows the intent (idea build)
         ...(productMode && (opts?.opening || historyBeforeMessage.length === 0) ? { product_mode: productMode } : {}),   // CR 16
         ...(opts?.payload ? { payload: opts.payload } : {}),   // CR 16 · a product quick-reply
+        ...(media.length ? { media: media.map(({ content_type, data_b64 }) => ({ content_type, data_b64 })) } : {}),   // Sasha 159 (1)
       }, { timeout: 60000, headers: apiHeaders(guestAuth()) })  // bound the call so a hung backend can't stall the turn · S-62 step 7
       const { response: sashaResponse, conversation_history, photos: respPhotos, links, hotels: hotelRecs, bookings: bookingCards, itinerary, action, booking_ref, itinerary_id, payment_item, saved_card } = response.data
       if (response.data.session_id && response.data.session_id !== chatSessionIdRef.current) chatSessionIdRef.current = response.data.session_id  // S-62 step 7 · a session not ours is never continued
@@ -901,8 +921,26 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
       )}
 
       {/* ── Composer ── */}
-      <div className="lw-composer">
+      <div className="lw-composer"
+        onDragOver={e => { if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault() }}
+        onDrop={e => { const f = imagesOf(e.dataTransfer.files); if (f.length) { e.preventDefault(); addPhotos(f) } }}>
+        {/* Sasha 159 (1) · the photos going with the next message */}
+        {(attachments.length > 0 || attachNote) && (
+          <div className="lw-attachrow">
+            {attachments.map((a, i) => (
+              <span key={i} className="lw-attach">
+                {/* eslint-disable-next-line @next/next/no-img-element -- a local preview, never uploaded on its own */}
+                <img src={a.preview} alt={a.name} />
+                <button type="button" aria-label="Remove photo" onClick={() => setAttachments(x => x.filter((_, j) => j !== i))}>✕</button>
+              </span>
+            ))}
+            {attachNote && <span className="lw-attachnote">{attachNote}</span>}
+          </div>
+        )}
         <div className="field">
+          <input ref={fileRef} type="file" accept="image/*" multiple hidden
+            onChange={e => { addPhotos(imagesOf(e.target.files)); e.target.value = '' }} />
+          <button type="button" className="lw-clip" aria-label="Add a photo" title="Add a photo (or paste / drop one)" onClick={() => fileRef.current?.click()}>📎</button>
           <VoiceButton
             // HARD mute while the plan builds AND for the whole in-flight turn: barge-in can't
             // defeat it, because there is nothing to barge into (the turn is server-side). Gating
@@ -946,12 +984,13 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage(input, { force: true }))}
+            onPaste={e => { const f = imagesOf(e.clipboardData?.files); if (f.length) { e.preventDefault(); addPhotos(f) } }}
             placeholder="Ask Sasha anything…  (or just talk)"
           />
           {presetPrompts?.slice(0, 2).map(prompt => (
             <button key={prompt} className="lw-chip" onClick={() => sendMessage(prompt, { force: true })}>{prompt}</button>
           ))}
-          <button className="lw-send" onClick={() => sendMessage(input, { force: true })} disabled={!input.trim() || isLoading}>➤</button>
+          <button className="lw-send" onClick={() => sendMessage(input, { force: true })} disabled={(!input.trim() && !attachments.length) || isLoading}>➤</button>
         </div>
       </div>
 
@@ -1196,6 +1235,12 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
         .lw-prefk{font-size:11px;letter-spacing:.04em;text-transform:capitalize;color:rgba(255,255,255,.4)}
         .lw-prefv{font-size:13px;color:rgba(255,255,255,.82);text-transform:capitalize;text-align:right}
         .lw-composer{flex-shrink:0;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.07);background:rgba(0,0,0,.2)}
+        .lw-attachrow{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;align-items:center}
+        .lw-attach{position:relative;width:54px;height:54px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,.15)}
+        .lw-attach img{width:100%;height:100%;object-fit:cover;display:block}
+        .lw-attach button{position:absolute;top:1px;right:1px;width:18px;height:18px;border-radius:50%;border:0;background:rgba(0,0,0,.7);color:#fff;font-size:10px;line-height:18px;cursor:pointer}
+        .lw-attachnote{font-size:11.5px;color:rgba(255,255,255,.6)}
+        .lw-clip{background:transparent;border:0;font-size:17px;cursor:pointer;padding:0 2px;opacity:.85}
         .lw-composer .field{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:6px 8px}
         .lw-composer .field input{flex:1;min-width:60px;background:transparent;border:none;outline:none;color:#fff;font-size:13.5px;font-family:inherit}
         .lw-composer .field input::placeholder{color:rgba(255,255,255,.3)}

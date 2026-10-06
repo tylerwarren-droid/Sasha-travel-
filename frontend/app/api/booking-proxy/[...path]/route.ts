@@ -17,7 +17,9 @@ async function pass(request: Request, ctx: { params: Promise<{ path: string[] }>
   const store = await cookies()
   let who: Record<string, string>
   if (valid(store.get(COOKIE)?.value)) {
-    who = { 'x-sasha-session': 'founder' }
+    // Sasha 159 · with his address, so guests on his devices and wifi are never capped
+    const ip = (request.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || request.headers.get('x-real-ip') || ''
+    who = { 'x-sasha-session': 'founder', ...(ip ? { 'x-sasha-client-ip': ip } : {}) }
   } else {
     const g = await guest()
     if (!g) {

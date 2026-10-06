@@ -38,6 +38,9 @@ async function pass(request: Request, ctx: { params: Promise<{ path: string[] }>
   // the body is passed as it came (JSON, or the voice page's multipart audio), with its own content type
   const headers: Record<string, string> = { 'content-type': request.headers.get('content-type') ?? 'application/json', 'x-sasha-session': 'founder', 'x-sasha-booking-key': key }
   if (CLIENT_KEY) headers['X-Client-Key'] = CLIENT_KEY
+  // Sasha 159 · the founder's address, so guests on his devices and wifi are never capped
+  const ip = (request.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || request.headers.get('x-real-ip') || ''
+  if (ip) headers['x-sasha-client-ip'] = ip
   const init: RequestInit = { method: request.method, headers, cache: 'no-store' }
   if (request.method !== 'GET') init.body = await request.arrayBuffer()
   let r: Response

@@ -1734,6 +1734,7 @@ async def conduct(
     signed_in: Optional[bool] = None,     # Sasha 142 · a real account (verified guest or founder), not the public demo
     payload: Optional[str] = None,        # CR 16 · a product quick-reply
     in_context_done: bool = False,        # Sasha 148 · this turn is already the product's sentence: not looked up again
+    media: Optional[list] = None,         # Sasha 159 (1) · photos from the web chat
 ) -> dict:
     """
     The Conductor — main entry point.
@@ -1767,6 +1768,19 @@ async def conduct(
 
     # Sasha 155 · ME3 EVERYWHERE: "tell me about RelocateMe / CampusMe / EspañaMe" → two sentences, then that product's own
     # mode, exactly as its WhatsApp keyword opens it (products.web, CR's). The web chat and the voice avatar both land here.
+    # Sasha 159 (1) · a photo goes to the products' reader (the same as WhatsApp's), in whatever mode the chat is in
+    if media:
+        from booking_signer import photo_turn as _pt  # noqa: E402
+        _r = await _pt.web(user_id, user_message, _pt.decode(media), product_mode, payload, signed_in)
+        _r["messages"] = list(conversation_history or []) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _r["response"]}]
+        return _r
+    # Sasha 159 (5) · "send me the captcha test": a fresh CAPTCHA hand-over and one WhatsApp tap (founder only)
+    from booking_signer import captcha_test as _ct  # noqa: E402
+    if _ct.asked(user_message):
+        _say = await _ct.send(user_id)
+        return {"response": _say, "intents": ["ops"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
+                "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
     from booking_signer import me3 as _me3  # noqa: E402
     _m3 = _me3.asked(user_message) if not payload else None
     if _m3 and user_id and signed_in is not False:

@@ -42,9 +42,33 @@ def _cap(name: str, default: int) -> int:
         return default
 
 
+#: Sasha 159 · the founder's own addresses (seen with his signed-in session, kept 24 h) and any listed in
+#: SASHA_GUESTS_UNCAPPED_IPS: the demo devices beside him (his phone, an iPad, the venue's wifi) are never capped
+_FOUNDER_IPS: Dict[str, float] = {}
+
+
+def _ip_key(ip: str) -> str:
+    return hashlib.sha256(ip.encode()).hexdigest()[:16]
+
+
+def note_founder_ip(ip: Optional[str], now: Optional[float] = None) -> None:
+    if ip:
+        _FOUNDER_IPS[_ip_key(ip)] = now or time.time()
+
+
+def uncapped(ip: Optional[str], now: Optional[float] = None) -> bool:
+    if not ip:
+        return False
+    listed = {x.strip() for x in os.getenv("SASHA_GUESTS_UNCAPPED_IPS", "").split(",") if x.strip()}
+    seen = _FOUNDER_IPS.get(_ip_key(ip))
+    return ip in listed or (seen is not None and (now or time.time()) - seen < 86400)
+
+
 def allowed(ip: Optional[str], now: Optional[float] = None) -> Optional[str]:
     """None when a new guest may be made now; else why not."""
     now = now or time.time()
+    if uncapped(ip, now):
+        return None
     while _DAY and now - _DAY[0] > 86400:
         _DAY.popleft()
     if len(_DAY) >= _cap("SASHA_GUESTS_PER_DAY", 500):

@@ -80,6 +80,7 @@ class ConductorRequest(BaseModel):
     force_intent: Optional[str] = None
     product_mode: Optional[str] = Field(default=None, max_length=20)   # CR 16 · the product tab the chat opened in (first turn)
     payload: Optional[str] = Field(default=None, max_length=200)       # CR 16 · a product quick-reply's payload
+    media: Optional[list] = Field(default=None, max_length=5)           # Sasha 159 (1) · photos [{content_type, data_b64}]
 
 
 class ConductorResponse(BaseModel):
@@ -132,6 +133,7 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             product_mode=body.product_mode,   # CR 16
             payload=body.payload,
             signed_in=signed_in(account),     # Sasha 142 · the products act only for a real account
+            media=body.media,                 # Sasha 159 (1)
         )
         # Persist this turn (best-effort; a DB hiccup must never break the conversation).
         await chat_store.save_turn(

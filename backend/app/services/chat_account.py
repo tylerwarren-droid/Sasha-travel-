@@ -31,7 +31,11 @@ def founder_session(request: Request) -> bool:
         return False
     want = os.getenv("SASHA_BOOKING_KEY", "").strip()
     got = request.headers.get("x-sasha-booking-key", "").strip()
-    return bool(want) and bool(got) and hmac.compare_digest(got.encode(), want.encode())
+    ok = bool(want) and bool(got) and hmac.compare_digest(got.encode(), want.encode())
+    if ok:   # Sasha 159 · the founder's address: guests beside him (the demo devices) are never capped
+        from booking_signer.guest_accounts import note_founder_ip
+        note_founder_ip(request.headers.get("x-sasha-client-ip", "").strip()[:64] or None)
+    return ok
 
 
 def signed_in(account: Optional[str]) -> bool:

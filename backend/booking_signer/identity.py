@@ -122,7 +122,9 @@ async def resolve(request: Request) -> Optional[str]:
     session = request.headers.get(SESSION_HEADER, "").strip().lower()
     if not session:
         return None
-    if session == "founder":
+    if session == "founder":   # (the booking gate has already checked the key)
+        from .guest_accounts import note_founder_ip   # Sasha 159 · his address: guests beside him are never capped
+        note_founder_ip(request.headers.get("x-sasha-client-ip", "").strip()[:64] or None)
         return founder_account()
     if session == "demo":
         return DEMO_ACCOUNT_ID

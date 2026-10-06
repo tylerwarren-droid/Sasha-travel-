@@ -752,6 +752,45 @@ async def start_another(ctx: dict, rest: str) -> None:
         ctx["st"]["pending"] = {"kind": "city_q", "at": ctx["now"].isoformat(), "nonce": nonce, "city": new_city}
 
 
+async def web_park(account: str, history: list, now) -> Optional[str]:
+    """The web chat and the avatar: "not ready to book that yet" saves the LAST search asked for (its words, re-read)."""
+    from . import handoff as HO
+    for h in reversed(history or []):
+        if h.get("role") != "user":
+            continue
+        hf = HO.booking_handoff(str(h.get("content") or ""), [], now)
+        f = (hf or {}).get("booking_find")
+        if f and f.get("where"):
+            g, gp = dict(f), dict(((hf.get("reservation_draft") or {}).get("parts") or {}))
+            await _ordinal_day({"account": account, "now": now}, g, gp, str(h.get("content") or ""))
+            at = g.get("open_at") or gp.get("day")
+            name = f"{g['what']} in {g['where']}"
+            if not await save_item(account, f"{name} (saved)", at, g["where"]):
+                return "I couldn't save it just now — nothing was booked."
+            return f"Saved, not booked: {name} — it's in your {await tab_of(account, g['where'], at)} tab and in Requests."
+    return None
+
+
+async def web_start(account: str, rest: str, now) -> tuple:
+    """The web chat and the avatar: "let me start another: …" → (the sentence, a booking_find for ONE request or None)."""
+    from . import handoff as HO
+    parts = [x.strip(" .") for x in re.split(r",|;|\s+and\s+(?=(?:an?|some|the)\s)", rest or "") if x.strip(" .")]
+    hs = [(p, HO.booking_handoff(p, [], now)) for p in parts]
+    hs = [(p, h) for p, h in hs if (h or {}).get("booking_find", {}).get("where")]
+    if len(hs) == 1:
+        return hs[0][1]["response"], hs[0][1]
+    if not hs:
+        return None, None
+    lines = []
+    for p, h in hs:
+        g, gp = dict(h["booking_find"]), dict(((h.get("reservation_draft") or {}).get("parts") or {}))
+        await _ordinal_day({"account": account, "now": now}, g, gp, p)
+        at = g.get("open_at") or gp.get("day")
+        await save_item(account, f"{g['what']} in {g['where']} (saved)", at, g["where"])
+        lines.append(f"• {g['what']} in {g['where']}{(' — ' + SN_day(at)) if at else ''} → {await tab_of(account, g['where'], at)}")
+    return "Started, both saved (nothing booked yet):\n" + "\n".join(lines), None
+
+
 def JN_fold(s: str) -> str:
     from . import journeys as JN
     return JN._fold(s)

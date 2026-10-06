@@ -1858,6 +1858,23 @@ async def conduct(
                                                               {"role": "assistant", "content": inner.get("response") or ""}]
             return inner
 
+    # Sasha 178 · PARK AND SWITCH on the web and the avatar (WhatsApp's is in guest_whatsapp)
+    if user_id and signed_in is not False:
+        from booking_signer import wa_brain as _wbp  # noqa: E402
+        from datetime import datetime as _dtk, timezone as _tzk  # noqa: E402
+        _sm = _wbp.START.match(user_message or "")
+        _said = None
+        if _sm and _sm["rest"].strip():
+            _said, _one = await _wbp.web_start(user_id, _sm["rest"], _dtk.now(_tzk.utc))
+            if _one:
+                return {**_one, "messages": list(conversation_history) + [{"role": "user", "content": user_message},
+                                                                       {"role": "assistant", "content": _one["response"]}]}
+        elif _wbp.PARK.search(user_message or ""):
+            _said = await _wbp.web_park(user_id, conversation_history, _dtk.now(_tzk.utc))
+        if _said:
+            return {"response": _said, "intents": ["booking"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                    "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
+                    "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _said}]}
     # S-26 booking hand-off: backend/booking_signer/handoff.py. CTO zips drop this; Stage B re-applies it.
     from booking_signer.handoff import booking_handoff  # noqa: E402
     _handoff = booking_handoff(user_message, conversation_history)

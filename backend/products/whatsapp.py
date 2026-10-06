@@ -47,6 +47,21 @@ _START_OVER = re.compile(r"^\s*(?:please\s+)?(?:start(?:\s+(?:it|again|over))?\s
 _START_NAME = [("relocation", re.compile(r"(?i)\b(relocat\w*|relocation|ex-?01)\b")), ("campus", re.compile(r"(?i)\bcampus(?:\s*me)?\b")),
                ("health", re.compile(r"(?i)\b(espa[nñ]a(?:\s*me)?|health|salud)\b")), ("sasha", re.compile(r"(?i)\b(sasha|bookings?|chat)\b"))]
 START_WORD = {"relocation": "relocation", "campus": "campus", "health": "españa"}
+PRODUCT_NAME = {"relocation": "RelocateMe", "campus": "CampusMe", "health": "EspañaMe"}
+
+
+async def reset_modes(account: str) -> int:
+    """CR 39 · "reset the demo" (the founder's, called from Sasha's reset): every product conversation on the account is
+    closed — each opens on its opener next time. The files themselves (cases: the EX-01, the tour, the health card) are kept."""
+    from . import store as ST
+    n = 0
+    for r in await ST.STORE.conversations(f"acct:{account}"):
+        await ST.STORE.drop_conversation(f"acct:{account}", r["product"])
+        n += 1
+    for r in await ST.STORE.conversations(f"web:{account}"):
+        await ST.STORE.drop_conversation(f"web:{account}", r["product"])
+        n += 1
+    return n
 
 
 def start_over(body: str) -> Optional[str]:
@@ -263,12 +278,38 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
                 asked_last, st["pending"] = None, None
         except (TypeError, ValueError):
             pass
+    if payload.startswith("so:"):                              # CR 39 · the answer to "Start <product> from the beginning?"
+        _, yes_no, prod = (payload.split(":", 2) + ["", ""])[:3]
+        if prod in START_WORD:
+            from . import store as ST
+            if yes_no == "yes":
+                await ST.STORE.drop_conversation(_key(ch), prod)   # the conversation goes; its file (the case) is kept
+                st["pending"] = None
+                body, payload = START_WORD[prod], ""
+                p["Body"], p["ButtonPayload"] = body, ""
+                asked_last, pend = None, {}
+            else:
+                saved = await _resume(ch, prod)
+                if saved:
+                    st["pending"] = {**saved, "kind": "product", "product": prod, "touched": now.isoformat()}
+                    _say_back(out, prod, saved)
+                    await _store_put(ch, prod, st["pending"])
+                else:
+                    out.text("OK — nothing changed.")
+                return True
     so = start_over(body) if not payload else None
     if so is not None:
         prod = so or asked_last or "sasha"
         from . import store as ST
         if prod in START_WORD:
-            await ST.STORE.drop_conversation(_key(ch), prod)   # from the beginning: nothing it was asking is answered
+            under_way = asked_last == prod or bool(await _resume(ch, prod))
+            if under_way:                                         # CR 39 · asked once, never silently
+                if asked_last == prod:
+                    await _store_put(ch, prod, {**st["pending"], "touched": now.isoformat()})
+                st["pending"] = None
+                out.ask(f"Start {PRODUCT_NAME[prod]} from the beginning? Your old file is kept, not deleted.",
+                        [("Yes, start over", f"so:yes:{prod}"), ("No, carry on", f"so:no:{prod}")])
+                return True
             st["pending"] = None
             body = START_WORD[prod]
             p["Body"] = body

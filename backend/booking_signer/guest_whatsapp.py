@@ -776,7 +776,8 @@ async def _new_request(ctx: dict, body: str) -> None:
         ctx["cancel_day"] = cancel_day(body)
         await _cancel_find(ctx, ci or None)
         return
-    if _RECEIPTS.search(body):
+    from .itinerary_q import TRIP as _TRIP
+    if _RECEIPTS.search(body) and not _TRIP.search(body):   # Sasha 165 · "show me my itinerary" is the TRIP (below), not receipts
         await _receipts(ctx)
         return
     if await _forwarded_confirmation(ctx, body):   # Sasha 118 · the venue's confirmation, forwarded by the guest
@@ -784,7 +785,18 @@ async def _new_request(ctx: dict, body: str) -> None:
     from . import demo_spa as DSP
     if ITINERARY_Q.search(body or ""):   # Sasha 132 · ask your itinerary — first: "do I have time to fly…" is a question, not a search
         from . import itinerary_q as IQ
-        for line in await IQ.answer(ctx["account"], body, ctx["now"]):
+        lines = await IQ.answer(ctx["account"], body, ctx["now"])
+        if IQ.TRIP.search(body or ""):   # Sasha 165 · the trip compactly: as few messages as WhatsApp's length allows
+            chunk = ""
+            for ln in lines:
+                if chunk and len(chunk) + len(ln) + 2 > 1400:
+                    ctx["out"].text(chunk)
+                    chunk = ""
+                chunk = f"{chunk}\n\n{ln}" if chunk else ln
+            if chunk:
+                ctx["out"].text(chunk)
+            return
+        for line in lines:
             ctx["out"].text(line)
         return
     if FLIGHT.search(body or ""):   # Sasha 132 · flights, Duffel TEST mode

@@ -203,7 +203,9 @@ async def answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
             st["pending"] = None
             n = await reset_demo(ctx["account"], dry=False)
             out.text(f"Done — the demo is reset: {n['bookings']} TEST booking{'s' if n['bookings'] != 1 else ''} and "
-                     f"{n['added']} added place{'s' if n['added'] != 1 else ''} cleared. Your plan itself is kept.")
+                     f"{n['added']} added place{'s' if n['added'] != 1 else ''} cleared"
+                     + (f", {n['modes']} open product conversation{'s' if n.get('modes') != 1 else ''} closed" if n.get("modes") else "")
+                     + ". Your plan itself is kept.")
             return True
         if payload == f"no:{pend['nonce']}" or NO.fullmatch(body or ""):
             st["pending"] = None
@@ -617,7 +619,15 @@ async def reset_demo(account: str, dry: bool) -> dict:
         return len(ids)
     n = await run(fn)
     added = await PS.clear_added(account, dry=dry)
-    return {"bookings": int(n or 0), "added": added}
+    modes = 0
+    if not dry:   # CR 39 · the open CampusMe / RelocateMe / EspañaMe conversations close too (their files are kept)
+        try:
+            from products import whatsapp as PW
+            if hasattr(PW, "reset_modes"):
+                modes = int(await PW.reset_modes(account) or 0)
+        except Exception as e:
+            log.warning("[wa_brain] product modes not reset: %s: %s", type(e).__name__, e)
+    return {"bookings": int(n or 0), "added": added, "modes": modes}
 
 
 async def start_reset(ctx: dict) -> None:

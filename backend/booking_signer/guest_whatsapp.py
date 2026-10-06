@@ -1702,6 +1702,17 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             st["pending"] = None
             return False
         i = _picked(pend, body, payload)
+        if i is None and not payload:
+            # Sasha 167 · a WHOLE new request (a kind of place AND a place, said plainly) is a new search — never folded into
+            # these cards as a refinement (live: "romantic booking for two at a restaurant in Hoi An, October 27 at 09:00"
+            # was searched as "romantic booking two October restaurant", and its 09:00 never asked about)
+            from . import wa_brain as WB
+            nh = HO.booking_handoff(body, [], ctx["now"]) or {}
+            nf, nparts = nh.get("booking_find") or {}, (nh.get("reservation_draft") or {}).get("parts") or {}
+            # its own place AND its own day/time or party — "Italian in Malasaña" alone stays a refinement (day and party kept)
+            if nf.get("where") and (nf.get("open_at") or nparts.get("when") or nparts.get("how_many")) and WB.sasha_clear(body, [], ctx["now"]):
+                st["pending"] = None
+                return False
         if i is None:
             # Sasha 104 · while the cards show, anything that is not a pick is a REFINEMENT of this search: the area,
             # day, time and party are kept unless the message changes them; the kind of place is replaced; every

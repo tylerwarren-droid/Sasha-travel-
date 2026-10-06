@@ -267,6 +267,21 @@ class LiveFailure(unittest.TestCase):
         self.assertEqual(draft["parts"]["when"]["at"], "2026-10-27T21:00")
         self.assertEqual(draft["parts"]["how_many"]["count"], 2)
 
+    def test_a_whole_new_request_over_open_cards_is_a_new_search(self):
+        c = ctx({"kind": "cards", "at": NOW.isoformat(), "nonce": "n", "find": {"what": "restaurant", "where": "Hoi An"}, "draft": {},
+                 "cards": [{"place_id": "p1", "name": "Red Bean"}]})
+        self.assertFalse(asyncio.run(GW._answer_pending(c, self.SAID, "")))
+        self.assertIsNone(c["st"]["pending"])
+        c = ctx({"kind": "cards", "at": NOW.isoformat(), "nonce": "n", "find": {"what": "restaurant", "where": "Madrid"}, "draft": {},
+                 "cards": [{"place_id": "p1", "name": "Red Bean"}]})
+        got = []
+
+        async def find(c_, f, draft):
+            got.append(f)
+        with Patch(GW___find=find):
+            asyncio.run(GW._answer_pending(c, "Italian in Malasaña", ""))
+        self.assertEqual(len(got), 1)   # still a refinement of the open search
+
     def test_at_night_is_never_asked(self):
         self.assertEqual(WB.hour_said("a dinner at 08:00 at night"), (8, 0, "night"))
         self.assertEqual(WB.hour_said("breakfast at 9:00"), (9, 0, "morning"))

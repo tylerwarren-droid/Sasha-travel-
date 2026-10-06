@@ -38,6 +38,14 @@ interface TripPanelProps {
  *  booking made on WhatsApp shows here within seconds, and a plan made elsewhere (or before a reload) still shows. */
 type ServerBooking = { id?: string; venue: string; time?: string; part?: string; status?: string; status_words?: string; replaces?: string }
 type ServerDay = { day: number; date?: string | null; city?: string; bookings?: ServerBooking[]; activities?: { name: string; replaced_by?: string }[] }
+const SHORT: Record<string, string> = { requested: 'Requested', attempting: 'Requested', pending: 'Not sent yet', confirmed: 'Confirmed ✅',
+  guest_booked: 'Booked by you ✅', declined: 'Declined', quoted: 'Quoted — read their reply', proposed: 'They offered another time',
+  unclear: 'Read their reply', link_sent: 'Link sent — not booked yet', waitlisted: 'Waiting list' }
+/** a booking's status in a few words; its reference when confirmed (the full words are on its receipt) */
+const shortStatus = (b: ServerBooking): string => {
+  const ref = /their ref ([A-Z0-9-]+)/.exec(b.status_words ?? '')
+  return (SHORT[b.status ?? ''] ?? b.status_words ?? b.status ?? '') + (ref && b.status === 'confirmed' ? ` · ref ${ref[1]}` : '')
+}
 type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?: string }
 function useServerPlan(): ServerPlan | null {
   const [plan, setPlan] = useState<ServerPlan | null>(null)
@@ -184,7 +192,7 @@ export default function TripPanel({
                         {/* Sasha 165 · this day's bookings, with their status — shown even when the day is folded */}
                         {(serverDay(d.day)?.bookings ?? []).map((b, bi) => (
                           <div key={bi} className="lw-day-city" style={{ color: /Confirmed|Booked/i.test(b.status_words ?? '') ? '#7ee2a8' : /Declined/i.test(b.status_words ?? '') ? '#f19999' : '#E8B923' }}>
-                            🔖 {b.time ? `${b.time} · ` : ''}{b.venue} — {b.status_words ?? b.status}
+                            🔖 {b.time ? `${b.time} · ` : ''}{b.venue} — {shortStatus(b)}
                           </div>
                         ))}
                       </div>

@@ -202,7 +202,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
   const [bookingCancel, setBookingCancel] = useState<{ venue: string; n: number } | null>(null)  // Sasha 96 chat cancel (Stage B)
   // CR 16 · a product's buttons and pictures for the current turn
   const [quickReplies, setQuickReplies] = useState<{ title: string; payload: string }[]>([])
-  const [productMedia, setProductMedia] = useState<{ caption: string; url: string }[]>([])
+  const [productMedia, setProductMedia] = useState<{ caption: string; url: string; link?: string }[]>([])
   const openedRef = useRef(false)
   const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number; provider?: string; provider_offer_id?: string; live_mode?: boolean }[] }[]>([])
   // Photos Sasha surfaced, keyed by the index of the assistant message that produced them.
@@ -785,8 +785,11 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
             {productMedia.map((m, i) => (
               <figure key={i}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- a product's own image, shown as given */}
-                <img src={m.url} alt={m.caption} loading="lazy" referrerPolicy="no-referrer" style={{ maxWidth: '100%', borderRadius: 8 }} />
-                <figcaption className="text-xs opacity-70">{m.caption}</figcaption>
+                {/* CR 33 · a filled form's card opens its full PDF */}
+                {m.link
+                  ? <a href={m.link} target="_blank" rel="noopener noreferrer"><img src={m.url} alt={m.caption} loading="lazy" referrerPolicy="no-referrer" style={{ maxWidth: '100%', borderRadius: 8 }} /></a>
+                  : <img src={m.url} alt={m.caption} loading="lazy" referrerPolicy="no-referrer" style={{ maxWidth: '100%', borderRadius: 8 }} />}
+                <figcaption className="text-xs opacity-70">{m.caption}{m.link ? <> · <a href={m.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'underline' }}>Open the full PDF</a></> : null}</figcaption>
               </figure>
             ))}
           </div>

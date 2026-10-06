@@ -39,3 +39,20 @@ class Opener(W.WebPhoto):
 
 if __name__ == "__main__":
     TG.unittest.main()
+
+
+class Booked(TG.unittest.TestCase):
+    """CR 36 · the citizen's booked cita, as they send it: their words or the office's own confirmation, pasted."""
+
+    def test_the_confirmation_as_pasted(self):
+        from datetime import date, datetime, timezone
+        from products.health import cita as CI
+        now = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
+        self.assertEqual(CI.when("jueves, 8 de octubre de 2026 a las 10:30", now), (date(2026, 10, 8), "10:30"))
+        self.assertEqual(CI.when("Fecha: 08/10/2026 Hora: 10:30 Código de cita: A1B2C", now), (date(2026, 10, 8), "10:30"))
+        self.assertEqual(CI.when("booked Thursday 9:30, code 12345", now), (date(2026, 10, 8), "09:30"))
+
+    def test_alcobendas_opens_on_the_nearest_listed_office(self):
+        from products.health import cita as CI
+        self.assertEqual(CI.REGISTRY_NEAR[CI._norm("Alcobendas")]["centro"], "1005")
+        self.assertIsNone(CI.REGISTRY_NEAR.get(CI._norm("Madrid")))          # the page's own list instead: never a guess

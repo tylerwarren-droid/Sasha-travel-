@@ -43,6 +43,11 @@ OFIREG = {"name": "Cita previa — Oficinas de Registro y Atención al Ciudadano
           "url": "https://gestiona.comunidad.madrid/ctac_cita/OFIREG",
           "info": "https://www.comunidad.madrid/servicios/informacion-atencion-ciudadano/cita-previa-oficinas-registro-atencion-ciudadano",
           "words": "En la Red de Oficinas se atiende con cita y sin cita según disponibilidad."}
+# CR 36 · the office for the citizen's town, from the official list (OFIREG page above, read 6 Oct 2026): only where it names
+# one; elsewhere the page opens on its own office list. Alcobendas has none of its own: its neighbour's is the nearest listed.
+_DAT_NORTE = {"centro": "1005", "name": "Oficina de Registro DAT Madrid Norte",
+              "address": "Avenida de Valencia, sin número, 28702 San Sebastián de los Reyes"}
+REGISTRY_NEAR = {"ALCOBENDAS": _DAT_NORTE, "SAN SEBASTIAN REYES": _DAT_NORTE}
 SERMAS_ONLINE_NEEDS_CIPA = "SERMAS's own online cita asks for your card's code (CIPA) — not possible before your first card."
 UA = "KanoeEspanaMe/0.1 (+https://project.kanoe.ai; one citizen's own lookup, read-only; tyler@kanoe.ai)"
 PACE = 2.0
@@ -394,15 +399,21 @@ async def _online(ctx: dict, ci: dict) -> None:
     copy = ci.get("copy") or {}
     lines = [f"{k}: {v}" for k, v in (("Nombre", copy.get("nombre")), ("Apellidos", copy.get("apellidos")),
                                       ("DNI/NIE", copy.get("dni")), ("Móvil", copy.get("movil")), ("Correo", copy.get("correo"))) if v]
+    near = REGISTRY_NEAR.get(_norm(ci.get("municipality", "")))
+    if near:
+        ci["office"] = near
+    url = f"{OFIREG['url']}?centro={near['centro']}" if near else OFIREG["url"]
+    where = (f"{near['name']} ({near['address']}) — the official list's nearest office to {ci['municipality'].title()}, "
+             "already chosen; pick the service" if near else "Pick an office near you, the service")
     msg = (f"📲 The Comunidad's own cita page for its registry offices (Oficinas de Registro y Atención al Ciudadano):\n"
-           f"{OFIREG['url']}\nPick an office near you, the service, then a day and time. Your details, ready to copy:\n"
+           f"{url}\n{where}, then a day and time. Your details, ready to copy:\n"
            + "\n".join("• " + x for x in lines) +
            "\nIt ends with a “No soy un robot” box and Enviar — both yours. Then tell me the day and time (and the code they give you).")
     pend.update(step="ci_booked", ci_route="online")
     if ctx["frm"] == "web":
         sent = await _to_phone(ctx, msg)
         out.text("I've sent the cita page to your phone — " + ("open it there." if sent else
-                 f"(your phone isn't linked, so here it is): {OFIREG['url']}"))
+                 f"(your phone isn't linked, so here it is): {url}"))
     else:
         out.text(msg)
     out.text(f"(SERMAS's own online cita isn't the route here: {SERMAS_ONLINE_NEEDS_CIPA})")
@@ -423,11 +434,16 @@ def when(t: str, now: datetime) -> Optional[Tuple[date, str]]:
     """"Tuesday 10:00" (the health turn's own reading) or "14 October 9:30" (the itinerary's) → (day, "HH:MM")."""
     from .. import itinerary as IT
     from .turn import MADRID, parse_when
+    hm = re.search(r"\b([01]?\d|2[0-3])[:.h]([0-5]\d)\b", t or "")    # an explicit HH:MM wins ("8 de octubre … a las 10:30")
     at = parse_when(t, now if now.tzinfo else now.replace(tzinfo=MADRID))
     if at:
         at = at.astimezone(MADRID)
-        return at.date(), at.strftime("%H:%M")
-    return IT.parse_day_time(t, now.astimezone(MADRID).date() if now.tzinfo else now.date())
+        got = (at.date(), at.strftime("%H:%M"))
+    else:
+        got = IT.parse_day_time(t, now.astimezone(MADRID).date() if now.tzinfo else now.date())
+    if got and hm:
+        got = (got[0], f"{int(hm.group(1)):02d}:{hm.group(2)}")
+    return got
 
 
 async def on_when(ctx: dict, t: str) -> None:
@@ -447,9 +463,11 @@ async def _record(ctx: dict, on: date, at: str, said: str = "") -> None:
     ci = pend.get("ci") or {}
     c = ci.get("centre") or {}
     route = pend.get("ci_route")
-    place = c.get("name") if route != "online" else "Oficina de Registro (Comunidad de Madrid)"
-    loc = f"{c.get('address')}, {c.get('postcode')} {c.get('municipality', '').title()}" if route != "online" else ""
-    code = re.search(r"\b(?:code|c[oó]digo)\D{0,6}(\d{3,6})\b", said or "", re.I)
+    office = ci.get("office") or {}
+    place = c.get("name") if route != "online" else (office.get("name") or "Oficina de Registro (Comunidad de Madrid)")
+    loc = (f"{c.get('address')}, {c.get('postcode')} {c.get('municipality', '').title()}" if route != "online"
+           else office.get("address", ""))
+    code = re.search(r"\b(?:code|c[oó]digo)(?:\s+de\s+(?:la\s+)?cita)?\s*[:#]?\s*([A-Z0-9]{3,8})\b", said or "", re.I)
     items = bring(ci.get("motive", ""))
     item = await IT.guest_booked(ctx["account"], type_="doctor", provider_name=f"{place} — hand in your health-card form",
                                  on=on, at=at, tz="Europe/Madrid", location=loc or None)

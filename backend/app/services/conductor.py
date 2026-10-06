@@ -1849,6 +1849,18 @@ async def conduct(
                    f"booking work on your own account, so nobody else's details are ever involved.")
             _handoff = {**_handoff, "response": say, "booking_find": None, "needs_sign_in": True,
                         "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": say}]}
+        if _handoff.get("booking_find") and user_id and signed_in is not False:
+            # Sasha 169 · "on the 16th" with a trip on: the trip's 16th (as on WhatsApp) — it booked today
+            from booking_signer import wa_brain as _wb  # noqa: E402
+            from datetime import datetime as _dtw, timezone as _tzw  # noqa: E402
+            _f = dict(_handoff["booking_find"])
+            _rd = dict(_handoff.get("reservation_draft") or {})
+            _parts = dict(_rd.get("parts") or {})
+            try:
+                await _wb._ordinal_day({"account": user_id, "now": _dtw.now(_tzw.utc)}, _f, _parts, user_message)
+                _handoff = {**_handoff, "booking_find": _f, "reservation_draft": {**_rd, "parts": _parts}}
+            except Exception as _e:
+                print(f"[Conductor] the trip's day was not applied: {type(_e).__name__}: {_e}")
         return _handoff
     # S-64 booking drafts: backend/booking_signer/chat_request.py. CTO zips drop this; Stage B re-applies it.
     from booking_signer.chat_request import booking_turn  # noqa: E402

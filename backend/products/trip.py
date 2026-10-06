@@ -234,6 +234,12 @@ async def _plan(ctx, pend, out) -> bool:
         head = "Your move, in order — one yes per booking, as always (TEST bookings stay TEST):"
         legs_ = []
         pend["until"] = (date.fromisoformat(case["state"]["after"]["entry_date"]) + timedelta(days=FIRST_NIGHTS)).isoformat()
+        from .relocation import move as MV            # CR 35 · the move as ONE trip on the account, before the first booking
+        tid = await MV.save(ctx["account"], case, pend["origin"], FIRST_NIGHTS, ctx["now"])
+        if tid:
+            pend["trip_id"] = tid
+            head += (f"\n(Your “{MV.TITLE}” trip is on your account — its paperwork deadlines are dated in it, and each booking "
+                     "lands on its day. Say “show me my itinerary” any time.)")
     else:
         vs = await _visits(ctx["account"])
         legs_ = await legs(vs)

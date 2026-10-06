@@ -590,6 +590,12 @@ async def locate(http: Http, key: str, near: str, where: str, country: Optional[
     return {**out, "found": True, "location": loc, "place_id": pl.get("id")}
 
 
+COUNTRY_NAME = {"ES": "Spain", "PT": "Portugal", "FR": "France", "IT": "Italy", "DE": "Germany", "AT": "Austria", "GB": "United Kingdom",
+                "IE": "Ireland", "VN": "Vietnam", "KE": "Kenya", "TH": "Thailand", "JP": "Japan", "KR": "South Korea", "US": "United States",
+                "MX": "Mexico", "AR": "Argentina", "TR": "Turkey", "NL": "Netherlands", "BE": "Belgium", "GR": "Greece", "ID": "Indonesia",
+                "KH": "Cambodia", "LA": "Laos", "MA": "Morocco", "PE": "Peru", "CO": "Colombia", "BR": "Brazil", "CH": "Switzerland"}
+
+
 async def find_venues(http: Http, *, what: str, where: Optional[str], country: Optional[str], now: datetime,
                       near: Optional[str] = None, open_at: Optional[str] = None, named: bool = False) -> dict:
     """S-65 · "Find venues": a kind of place in a place ("tattoo studio", "Nairobi, KE") → up to twenty candidates (S-68; the chat shows `show` of them), each
@@ -615,7 +621,11 @@ async def find_venues(http: Http, *, what: str, where: Optional[str], country: O
             when = datetime.strptime(str(open_at), "%Y-%m-%dT%H:%M")
         except ValueError:
             raise FindRefused("open_at_invalid", "open_at is the local time as YYYY-MM-DDTHH:MM") from None
-    body = {"textQuery": what.strip() if where is None else f"{what.strip()} in {where.strip()}",
+    # Sasha 169 · the country in the words too: from production's servers Google found 0 for "restaurant in Hoi An" and 20 for
+    # "restaurant in Hoi An, Vietnam" (regionCode alone did not help; a laptop in Madrid got 19 either way)
+    in_words = f"{where.strip()}, {COUNTRY_NAME[country]}" if where is not None and country and "," not in where and COUNTRY_NAME.get(country) \
+        else (where.strip() if where is not None else None)
+    body = {"textQuery": what.strip() if in_words is None else f"{what.strip()} in {in_words}",
             "maxResultCount": 5 if named else FIND_MAX, **({"regionCode": country} if country else {})}
     if named and where is None:   # Sasha 161 · a venue named with no city: near the guest's home first ("book Indian Accent"
         try:                      # found New Delhi's, then New York's) — SASHA_HOME_LATLNG, Madrid by default, 50 km

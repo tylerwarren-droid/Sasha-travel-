@@ -61,7 +61,7 @@ class Find(unittest.TestCase):
         self.assertEqual((c["name"], c["address"], c["phone"], c["website"], c["type"], c["country"]),
                          ("Ink Studio 1", "1 Moi Ave, Nairobi, Kenya", "+254700000001", "https://ink1.example", "Tattoo shop", "KE"))
         method, url, headers, body = http.requests[0]
-        self.assertEqual(body, {"textQuery": "tattoo studio in Nairobi", "maxResultCount": 20, "regionCode": "KE"})
+        self.assertEqual(body, {"textQuery": "tattoo studio in Nairobi, Kenya", "maxResultCount": 20, "regionCode": "KE"})   # Sasha 169 · the country in the words
         self.assertIn("places.primaryTypeDisplayName", headers["X-Goog-FieldMask"])
         self.assertEqual(len(out["source"]["sha256"]), 64)
 

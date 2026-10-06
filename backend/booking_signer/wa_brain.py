@@ -268,6 +268,12 @@ async def gate(ctx: dict, f: dict, parts: dict, body: str, done: Optional[list] 
         done.append("ordinal")
         await _ordinal_day(ctx, f, parts, body)
     day = (f.get("open_at") or (parts.get("when") or {}).get("at") or parts.get("day") or "")[:10]
+    if not f.get("country") and f.get("where"):   # a city on the trip: its country, in Google's words too (venue_read.find_venues)
+        pc = await PS.latest(ctx["account"], f"{f.get('where') or ''} {body}")
+        if pc and any(c and c.lower() in f["where"].lower() for c in (pc.get("cities") or [])):
+            cc = _country_of(pc.get("title") or "", [])
+            if cc:
+                f["country"] = cc
     if "trip" not in done and day and not f.get("trip"):
         p = await PS.latest(ctx["account"], f"{f.get('where') or ''} {body}")
         if p and p.get("start") and p.get("end"):

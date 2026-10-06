@@ -1858,6 +1858,13 @@ async def conduct(
             _parts = dict(_rd.get("parts") or {})
             try:
                 await _wb._ordinal_day({"account": user_id, "now": _dtw.now(_tzw.utc)}, _f, _parts, user_message)
+                if not _f.get("country") and _f.get("where"):   # a city on the trip: the trip's country (Google needs it, see find_venues)
+                    from booking_signer import plan_store as _ps_c  # noqa: E402
+                    _p = await _ps_c.latest(user_id, f"{_f['where']} {user_message}")
+                    if _p and any(c and c.lower() in _f["where"].lower() for c in (_p.get("cities") or [])):
+                        _cc = _wb._country_of(_p.get("title") or "", [])
+                        if _cc:
+                            _f["country"] = _cc
                 _handoff = {**_handoff, "booking_find": _f, "reservation_draft": {**_rd, "parts": _parts}}
             except Exception as _e:
                 print(f"[Conductor] the trip's day was not applied: {type(_e).__name__}: {_e}")

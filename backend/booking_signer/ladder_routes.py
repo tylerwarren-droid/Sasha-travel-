@@ -455,7 +455,8 @@ async def prepare_email(request: Request):
            "type": "other" if quote else "restaurant",
            "email_id": email_id, "account_id": account, "read_id": row["read_id"], "email": email,
            "email_sha256": E.email_sha256(email), "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)),
-           "created_at": NOW(), "venue_name": (read.get("listing") or {}).get("name") or read["name"], "local_date": p.on,   # Sasha 175 · its listing's name "local_time": p.at, "local_timezone": tz,
+           "created_at": NOW(), "venue_name": (read.get("listing") or {}).get("name") or read["name"], "local_date": p.on,
+           "local_time": p.at, "local_timezone": tz,   # Sasha 175 · venue_name: its listing's name
            "party_size": p.party}
     if quote and body.get("date"):   # Sasha 165 · a request's PREFERRED day (and time), so it lands on its day in the trip
         try:
@@ -745,7 +746,8 @@ async def prepare_link(request: Request):
                                               venue_ids=O.venue_ids_of(read), read_id=str(row["read_id"])),   # S-64 step 3
            "link_id": link_id, "account_id": account, "read_id": row["read_id"], "platform": link.platform, "url": link.url,
            "slot_filled": link.slot_filled, "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)),
-           "created_at": NOW(), "venue_name": (read.get("listing") or {}).get("name") or read["name"], "local_date": p.on,   # Sasha 175 · its listing's name "local_time": p.at, "local_timezone": tz,
+           "created_at": NOW(), "venue_name": (read.get("listing") or {}).get("name") or read["name"], "local_date": p.on,
+           "local_time": p.at, "local_timezone": tz,   # Sasha 175 · venue_name: its listing's name
            "party_size": p.party}
     try:
         item = await LADDER_STORE.put_link(rec)

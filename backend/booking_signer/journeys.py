@@ -231,9 +231,13 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
     for t in tabs:
         t["extras"] = extras.get(t["key"]) or []
         t["count"] += len(t["extras"])
-    if not move_plan and reloc_items:   # RelocateMe's journey even before a plan exists: its deadlines and appointments
+    forms = await _relocation_forms(account)                     # CR 45 · every form lives in the journey
+    if not move_plan and (reloc_items or forms):   # RelocateMe's journey even before a plan exists: its deadlines and appointments
         tabs.append({"key": "relocation", "label": badged("relocation", "Move to Madrid"), "product": "RelocateMe",
                      "title": "Move to Madrid (RelocateMe)", "virtual": True, "count": len(reloc_items), "extras": reloc_items})
+    for t in tabs:
+        if forms and (t["key"] == "relocation" or (move_plan and t["key"] == move_plan["trip_id"])):
+            t["forms"] = forms
     if not campus_plan and any(x["product"] == "campus" for x in prod):
         cv = [x for x in prod if x["product"] == "campus"]
         tabs.append({"key": "campus", "label": badged("campus", "Campus visits"), "product": "CampusMe", "title": "Campus visits (CampusMe)",
@@ -260,6 +264,20 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
             "requests": [r for r in live if r.get("status") in OPEN or r.get("status") == "saved"],
             "receipts": [r for r in rows if r.get("status") in BOOKED],
             "everything": sorted(rows, key=lambda r: f"{r.get('date') or '9'}{r.get('time') or ''}")}
+
+
+async def _relocation_forms(account: Optional[str]) -> List[dict]:
+    """CR 45 · RelocateMe's forms for the Move tab (products.relocation.package_status, read-only): each with its state, its
+    PDF one tap away, and where it goes next. Never raises."""
+    if not account:
+        return []
+    try:
+        from products.relocation import package_status
+        st = await package_status(account)
+    except Exception as e:
+        log.info("[journeys] no relocation forms: %s", type(e).__name__)
+        return []
+    return (st or {}).get("forms") or []
 
 
 async def product_rows(account: Optional[str]) -> List[dict]:

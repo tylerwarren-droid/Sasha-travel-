@@ -98,7 +98,7 @@ def checklist(f: dict, today: date, residence: Optional[str]) -> List[dict]:
         if key == "uk_permit" and F.fold((a.get("nationality") or {}).get("value", "")) in ("british", "britanica", "britanico",
                                                                                             "reino unido", "united kingdom"):
             item.update(status="not_needed", why="you're British")
-        if key == "ex01":
+        if key in CS.PREPARED_KEYS:                    # CR 45 · the national visa form and the 790 too, not only the EX-01
             item.update(status="prepared", why="prepared by Kanoe from your answers — you sign it")
         if key == "passport":
             exp = (a.get("passport_expiry") or {}).get("value")
@@ -439,7 +439,7 @@ def us_checklist(f: dict, today: date, cid: str) -> List[dict]:
     out = []
     for it in CS.checklist(cid):
         it = {**it, "status": "yours", "why": None}
-        if it["key"] == "ex01":
+        if it["key"] in CS.prepared_for(cid):          # CR 45 · the visa form and 790 only where Kanoe fills them
             it.update(status="prepared", why="prepared by Kanoe from your answers — you sign it")
         if it["key"] == "passport" and re.search(r"validez m[ií]nima de 1 año", it["words"]):
             exp = (a.get("passport_expiry") or {}).get("value")
@@ -468,7 +468,7 @@ async def _pack(ctx: dict, body: str) -> bool:
     if have is None:
         out.text("The numbers of what you've gathered, please — e.g. 1 3 4-6 — or ALL, or SKIP.")
         return True
-    pk = CS.pack(items, have)
+    pk = CS.pack(items, have, CS.prepared_for(cons.get("three") or cons.get("id")))
     after["pack"] = pk
     await _save(ctx, {"after": after})
     office = cons.get("office", "the consulate")

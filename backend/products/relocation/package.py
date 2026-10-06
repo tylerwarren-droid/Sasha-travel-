@@ -7,6 +7,28 @@ from datetime import date
 from typing import Optional
 
 
+# CR 45 · where each form goes next, and its PDF one tap away (None: there is no PDF — prepared values, or not here yet)
+NEXT = {"National visa application": "signed, to your consulate appointment with the pack",
+        "EX-01": "signed, to your consulate appointment",
+        "Modelo 790-052": "two signed copies, paid at the consulate",
+        "EX-17 (TIE)": "to your fingerprint appointment (Policía), signed there",
+        "Modelo 790-012 (TIE fee)": "paid at a bank or online, then to your fingerprint appointment",
+        "Padrón": "your Línea Madrid office, in person, with a cita",
+        "TA.1 (Social Security number)": "a TGSS office, in person",
+        "Health card (1449F1)": "your centro de salud, in person"}
+PDF = {"National visa application": "visa-form.pdf", "EX-01": "EX-01-prepared.pdf", "Modelo 790-052": "790-052.pdf",
+       "EX-17 (TIE)": "EX-17.pdf", "TA.1 (Social Security number)": "TA-1.pdf"}
+
+
+def _with_links(forms: list, cid: Optional[str]) -> list:
+    from .turn import web
+    for f in forms:
+        name = PDF.get(f["name"])
+        f["pdf"] = f"{web()}/api/products/relocation/{cid}/{name}" if cid and name and f["state"] in ("filled", "signed") else None
+        f["next"] = NEXT.get(f["name"])
+    return forms
+
+
 def _forms(st: dict) -> list:
     from . import arrival as AR
     after = st.get("after") or {}
@@ -31,7 +53,8 @@ def _forms(st: dict) -> list:
 
 
 async def package_status(account: str, today: Optional[date] = None) -> Optional[dict]:
-    """→ {"forms": [{name, state, note}], "next_deadline": {on, text} | None, "tab": "Move to Madrid"}, or None (no file)."""
+    """→ {"forms": [{name, state, note, pdf, next}], "next_deadline": {on, text} | None, "tab": "Move to Madrid", "case_id"},
+    or None (no file). `pdf` is one tap to the filled form (None when there is none to open); `next` is where it goes."""
     from .. import store as ST
     from . import move as MV
     from .three import CONSULATES
@@ -53,4 +76,4 @@ async def package_status(account: str, today: Optional[date] = None) -> Optional
                 nxt = {"on": days[0]["date"], "text": days[0]["activities"][0]["name"]}
         except Exception:
             nxt = None
-    return {"forms": _forms(st), "next_deadline": nxt, "tab": MV.TITLE}
+    return {"forms": _with_links(_forms(st), case.get("id")), "next_deadline": nxt, "tab": MV.TITLE, "case_id": case.get("id")}

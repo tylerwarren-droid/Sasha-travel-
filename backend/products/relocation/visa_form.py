@@ -123,16 +123,16 @@ def values(f: dict, after: Optional[dict], residence: Optional[str]) -> Dict[str
         v[mar] = ("X", "your answers")
     v["passport_ordinary"] = ("X", "an ordinary passport — the one you gave me")
     put("passport_number", _fact(f, "passport_number"), "your passport")
-    put("passport_issued", _dmy(_fact(f, "passport_issued")), "your passport (the Keep)")
+    put("passport_issued", _dmy(_fact(f, "passport_issued")), "your passport (your answers)")
     put("passport_expiry", _dmy(_fact(f, "passport_expiry")), "your passport")
-    put("passport_issuer", _fact(f, "passport_issuer"), "your passport (the Keep)")
+    put("passport_issuer", _fact(f, "passport_issuer"), "your passport (your answers)")
     home = "\n".join(x for x in (_fact(f, "home_address_abroad").upper(), _fact(f, "email")) if x)   # the email on its own line
-    put("home", home, "your Keep: home address abroad and email")
-    put("phone", _fact(f, "mobile"), "your Keep: mobile")
+    put("home", home, "your answers: home address abroad and email")
+    put("phone", _fact(f, "mobile"), "your answers: mobile")
     if residence and _fact(f, "nationality"):
         same = {"us": "united states", "uk": "united kingdom"}.get(nat_group(_fact(f, "nationality"))) == residence
         v["abroad_no" if same else "abroad_yes"] = ("X", f"you live in {residence.title()}; nationality {_fact(f, 'nationality')}")
-    put("occupation", _fact(f, "occupation"), "your Keep: occupation")
+    put("occupation", _fact(f, "occupation"), "your answers: occupation")
     v["purpose"] = ("X", "the non-lucrative residence visa — residence without work")
     if (after or {}).get("entry_date"):
         put("arrival", _dmy(after["entry_date"]), "the entry date you gave me")

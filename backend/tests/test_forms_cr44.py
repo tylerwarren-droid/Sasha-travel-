@@ -166,6 +166,7 @@ class OnWhatsApp(Base):
             self.say(t)
         said = self.said()
         self.assertIn("Your national visa application (New York's own Application for a National Visa (2023))", said)
+        self.assertIn("filled from this file's answers", said)                # CR 45 · a DEMO applicant is never "your Keep"
         self.assertTrue(any("/visa-form-card.jpg" in (m.get("media") or "") for m in GW.SENDER.sent))
         self.assertIn("The application form's own footer prints an older one (cog.nuevayork.vis@maec.es)", said)
         self.assertIn("say “after arrival”", said)

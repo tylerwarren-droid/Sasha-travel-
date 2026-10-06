@@ -448,7 +448,7 @@ def items(cid: str, f: Optional[dict] = None, today: Optional[date] = None) -> L
     out = []
     for i, (key, name, copies, words) in enumerate(CONSULATES[cid]["checklist"], 1):
         it = {"n": i, "key": key, "label": name, "words": words, "copies": copies or None,
-              "status": "prepared" if key == "ex01" else "yours", "why": None}
+              "status": "prepared" if key in ("ex01", "visa_form", "fee_790", "fees_790") else "yours", "why": None}   # CR 45
         if key == "passport" and exp and today:
             ok = exp >= (today + timedelta(days=365)).isoformat()
             it.update(status="ok" if ok else "problem", why=f"your passport is valid until {exp}: " +
@@ -484,7 +484,8 @@ async def present(ctx: dict, cid: str, base: dict, web: str, save) -> None:
              "“Move to Madrid” trip with what to bring.")
     from . import visa_form as VF                     # CR 44 · A1: the national visa form, filled, first in every consulate's list
     vf = VF.FORMS[VF.FORM_FOR.get(cid, "generic")]
-    FC.show(out, f"Your national visa application ({vf['name']}), filled from your answers and your Keep. Not signed — the "
+    from .keep import where_from
+    FC.show(out, f"Your national visa application ({vf['name']}), filled from {where_from(f)}. Not signed — the "
                  "place, date, signature and photo are yours.",
             f"{web}/api/products/relocation/{case}/visa-form-card.jpg", f"{web}/api/products/relocation/{case}/visa-form.pdf")
     FC.show(out, f"Your Modelo 790 código 052, filled where the official form allows — {c['copies_790_words']}. Not signed, not paid.",

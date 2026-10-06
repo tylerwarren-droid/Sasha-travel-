@@ -76,3 +76,11 @@ async def open_into(account: str, item_id: str, f: dict, appr: dict, read_on: st
             a[k] = F.fact(v, SOURCE, read_on)
             n += 1
     return n
+
+
+def where_from(f: dict) -> str:
+    """CR 45 · a card's caption names the TRUE source: "your Keep" only when values came out of the vault — a DEMO (fictional)
+    applicant is never kept, and a first file's answers are this file's."""
+    a = (f or {}).get("applicant") or {}
+    return "your Keep" if any(x.get("source") == SOURCE for x in a.values()) else "this file's answers"
+

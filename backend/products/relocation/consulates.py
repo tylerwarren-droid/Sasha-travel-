@@ -240,12 +240,23 @@ def _slug(s: str) -> str:
     return s[:60].rstrip("-") or "document"
 
 
-def pack(items: List[dict], have: set) -> List[dict]:
+# CR 45 · every form Kanoe fills is "prepared — you sign it", never "still to gather": the EX-01, the national visa form
+# (CR 44), the 790-052 (CR 37)
+PREPARED_KEYS = ("ex01", "visa_form", "fee_790", "fees_790")
+THREE = ("london", "newyork", "washington")          # the consulates whose visa form and 790 Kanoe fills (CR 37 / CR 44)
+
+
+def prepared_for(cid: Optional[str]) -> tuple:
+    """Which checklist keys Kanoe prepared for this consulate: all three forms for the three; only the EX-01 elsewhere."""
+    return PREPARED_KEYS if cid in THREE else ("ex01",)
+
+
+def pack(items: List[dict], have: set, prepared: tuple = PREPARED_KEYS) -> List[dict]:
     """The document pack: each item in the consulate's own order, named so the files sort in that order, with what the
-    page says about originals and copies. 'prepared' = the EX-01 Kanoe prepared (signed by the applicant)."""
+    page says about originals and copies. 'prepared' = a form Kanoe prepared (signed by the applicant)."""
     out = []
     for it in items:
-        status = "prepared" if it["key"] == "ex01" else ("gathered" if it["n"] in have else "missing")
+        status = "prepared" if it["key"] in prepared else ("gathered" if it["n"] in have else "missing")
         title = it["label"] or (it["words"].split(".")[0])
         out.append({"n": it["n"], "name": f"{it['n']:02d}_{_slug(title)}", "title": title, "status": status,
                     "copies": it["copies"], "words": it["words"]})

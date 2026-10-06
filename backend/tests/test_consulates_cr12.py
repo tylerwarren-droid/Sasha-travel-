@@ -85,7 +85,7 @@ class Pack(TG.unittest.TestCase):
         pk = CS.pack(items, {1, 3, 4})
         self.assertEqual([x["name"] for x in pk[:4]], ["01_National-visa-application-form", "02_EX-01-residence-authorisation-form",
                                                        "03_Passport-photo", "04_Passport"])
-        self.assertEqual([x["status"] for x in pk[:5]], ["gathered", "prepared", "gathered", "gathered", "missing"])
+        self.assertEqual([x["status"] for x in pk[:5]], ["prepared", "prepared", "gathered", "gathered", "missing"])
         self.assertEqual(pk[3]["copies"], "the original and one copy")    # the page's own words: "el original y una fotocopia"
         self.assertEqual(pk[9]["copies"], "two signed copies")            # "dos ejemplares" of the 790-052
 
@@ -139,7 +139,7 @@ class NewYorkOnWhatsApp(TG.Base):
         self.assertIn("☐ 09_Prueba-de-residencia-en-la-demarcacion — still to gather", pack)
         self.assertIn("☐ 05_Medios-economicos — still to gather", pack)
         self.assertIn("3 still to gather", pack)
-        self.assertEqual([x["status"] for x in self.after()["pack"]][:5], ["gathered", "prepared", "gathered", "gathered", "missing"])
+        self.assertEqual([x["status"] for x in self.after()["pack"]][:5], ["prepared", "prepared", "gathered", "gathered", "missing"])
         self.say("1 March 2027")
         rs = self.after()["reminders"]
         self.assertEqual(len(rs), 1)                                 # the TIE, from ITS page; no 90-day window it doesn't state

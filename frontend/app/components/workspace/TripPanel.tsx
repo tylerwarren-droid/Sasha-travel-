@@ -48,8 +48,10 @@ const shortStatus = (b: ServerBooking): string => {
 }
 type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?: string }
 type JRow = { id: string; venue: string; date: string | null; time: string | null; status: string; status_words?: string; booking_reference?: string | null; trip_id?: string }
+/** CR 45 · a RelocateMe form on the Move tab: its state, its PDF one tap away (if there is one), where it goes next */
+type JForm = { name: string; state: 'filled' | 'signed' | 'missing' | 'waiting'; note: string; pdf: string | null; next: string | null }
 type Journeys = { journeys: { key: string; label: string; title: string; start?: string | null; end?: string | null; count: number
-    virtual?: boolean; extras?: JRow[] }[]
+    virtual?: boolean; extras?: JRow[]; forms?: JForm[] }[]
   home: { label: string; items: JRow[] }; requests: JRow[]; receipts: JRow[]; everything: JRow[] }
 /** Sasha 177 · the account's journeys and lists, polled like the plan (a booking made on WhatsApp shows within seconds) */
 function useJourneys(): Journeys | null {
@@ -85,6 +87,22 @@ function JourneyList({ title, rows }: { title: string; rows: JRow[] | null }) {
                 <div className="lw-note-s">{r.status_words ?? r.status}{r.booking_reference ? ` · ref ${r.booking_reference}` : ''}</div>
               </div>
             ))}
+          </div>
+        ))}
+      </div></div>
+    </>
+  )
+}
+const FORM_MARK: Record<JForm['state'], string> = { filled: '✓ Prepared — sign it', signed: '✓ Signed', missing: '☐ Still yours to do', waiting: '⏳ Waiting' }
+function FormsList({ forms }: { forms: JForm[] }) {
+  return (
+    <>
+      <div className="lw-when">Your forms — in the order you need them</div>
+      <div className="lw-card"><div className="lw-cardBody" style={{ paddingTop: 14 }}>
+        {forms.map((f) => (
+          <div key={f.name} style={{ marginBottom: 8 }}>
+            <div>{f.name} · <b>{FORM_MARK[f.state]}</b>{f.pdf ? <> · <a className="underline" href={f.pdf} target="_blank" rel="noopener noreferrer">Open the PDF</a></> : null}</div>
+            <div className="lw-note-s">{f.note}{f.next ? ` — next: ${f.next}` : ''}</div>
           </div>
         ))}
       </div></div>
@@ -138,7 +156,8 @@ export default function TripPanel({
     </div>
   )
   const curJ = (jn?.journeys ?? []).find((t) => t.key === activeTrip)
-  if (view === 'trip' && curJ?.virtual) return <div className="lw-trip">{tabs}<JourneyList title={curJ.title} rows={curJ.extras ?? []} /></div>
+  const formsHere = curJ?.forms?.length ? <FormsList forms={curJ.forms} /> : null   // CR 45 · every form lives in the journey
+  if (view === 'trip' && curJ?.virtual) return <div className="lw-trip">{tabs}{formsHere}<JourneyList title={curJ.title} rows={curJ.extras ?? []} /></div>
   const alsoHere = curJ?.extras?.length ? <JourneyList title={`Also on this journey (from ${curJ.title.match(/campus/i) ? 'CampusMe' : 'RelocateMe'})`} rows={curJ.extras} /> : null
   if (view !== 'trip') {
     const rows = !jn ? null : view === 'home' ? jn.home.items : view === 'requests' ? jn.requests : view === 'receipts' ? jn.receipts : jn.everything
@@ -181,6 +200,7 @@ export default function TripPanel({
   return (
     <>
       {tabs}
+      {formsHere}
       {alsoHere}
       <div className="lw-summary">
         <div className="lw-sumcell"><span className="k">Days</span><span className="v">{dayCount}</span></div>

@@ -72,7 +72,7 @@ def ta1_rows(f: dict) -> List[dict]:
         ("Texto24", a["number"], "núm."), ("Texto27", a["floor"], "piso"), ("Texto28", a["door"], "puerta"),
         ("Texto29", a["postcode"], "c. postal"), ("Texto30", a["town"].upper(), "municipio"),
         ("Texto31", a["province"].upper(), "provincia"),
-        ("Texto32", _v(f, "email"), "1.9 correo electrónico — your Keep"), ("Texto35", _v(f, "mobile"), "teléfono móvil — your Keep"),
+        ("Texto32", _v(f, "email"), "1.9 correo electrónico — your answers"), ("Texto35", _v(f, "mobile"), "teléfono móvil — your answers"),
         ("A", "/1", "2 · asignación número de Seguridad Social — what you're asking for"),
         ("Texto71", f"DIRECCIÓN PROVINCIAL DE LA TGSS DE {a['province'].upper()}" if a["province"] else "",
          "órgano: the TGSS office of your province"),
@@ -235,7 +235,8 @@ async def present(ctx: dict, web: str) -> None:
     if not _v(f, "nie"):
         out.text("Your NIE isn't on file yet — it's printed on your visa. Tell me “my NIE is X1234567L” and the 790-012, the TA.1 and "
                  "the EX-17 fill it in.")
-    FC.show(out, "Your TA.1 (Social Security number), filled from your Keep. Not signed — the NSS, consent to communications, "
+    from .keep import where_from
+    FC.show(out, f"Your TA.1 (Social Security number), filled from {where_from(f)}. Not signed — the NSS, consent to communications, "
                  "place, date and signature are yours. In person at the TGSS.",
             f"{web}/api/products/relocation/{cid}/TA-1-card.jpg", f"{web}/api/products/relocation/{cid}/TA-1.pdf")
 

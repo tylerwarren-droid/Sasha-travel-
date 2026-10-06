@@ -50,7 +50,8 @@ class Web(TG.Base):
             self.turn(t) if t != "first" else (self.turn(mode="relocation"), self.turn(t))
         r = self.turn("DEMO")
         self.assertIn("Your EX-01 is prepared", r["response"])
-        self.assertTrue(any(m["url"].endswith("EX-01-prepared.pdf") for m in r["media"]))
+        self.assertTrue(any(m["url"].endswith("EX-01-card.jpg") and m["link"].endswith("EX-01-prepared.pdf")
+                            and "Open the full PDF" not in m["caption"] for m in r["media"]))   # CR 33 · the card opens the PDF
         for t in ("SIGNED", "UK", "SKIP", "1 March 2027"):
             self.turn(t)
         r = self.turn("book my flights")

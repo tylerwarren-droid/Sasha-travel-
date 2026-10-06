@@ -117,7 +117,9 @@ async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = N
         if it[0] == "text":
             texts.append(it[1])
         elif it[0] == "media":
-            media.append({"caption": it[1], "url": it[2]})
+            from .formcard import split
+            caption, link = split(it[1])                 # CR 33 · a filled form's card: the picture opens the full PDF
+            media.append({"caption": caption, "url": it[2], **({"link": link} if link else {})})
         elif it[0] == "ask":
             texts.append(it[1])
             replies = [{"title": t, "payload": pl} for t, pl in it[2]]   # the last question's buttons

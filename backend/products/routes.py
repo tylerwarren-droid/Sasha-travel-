@@ -8,6 +8,7 @@ unknown id is a plain 404 that says so.
   GET /api/booking/products/relocation/{id}              the reviewer's screen: every EX-01 widget, its state, its checks
   GET /api/booking/products/relocation/{id}/EX-01-prepared.pdf   the official PDF, prepared — not signed, not filed
   GET /api/booking/products/health/{id}/1449F1-prepared.pdf      CR 30 · the health-card form, filled — not signed, not submitted
+  GET /api/booking/products/{relocation|health}/{id}/{EX-01|1449F1}-card.jpg   CR 33 · page 1 as the chat's card, filled boxes highlighted
   GET /api/booking/products/reminders                    CR 10 · the account's dated reminders (not bookings), for "You"
 """
 from __future__ import annotations
@@ -154,10 +155,29 @@ async def relocation_pdf(cid: str) -> Response:
                     headers={"content-disposition": 'inline; filename="EX-01-prepared-not-signed.pdf"'})
 
 
-@router.get("/health/{cid}/1449F1-prepared.pdf")
-async def health_card_pdf(cid: str) -> Response:
-    """CR 30 · the Comunidad de Madrid's own health-card form, filled — not signed, not submitted. Rebuilt from the rows on
-    every download (the guard runs each time); after 24 hours the rows are dropped and the link says so."""
+@router.get("/relocation/{cid}/EX-01-card.jpg")
+async def relocation_card(cid: str) -> Response:
+    """CR 33 · page 1 of the same filled EX-01, as the chat's card: the filled boxes highlighted."""
+    from . import formcard as FC
+    from .relocation import ex01 as E
+    rows = (await _case(cid, "relocation"))["state"]["rows"]
+    jpg = FC.card(E.fill(rows), [r["name"] for r in rows if r["state"] == E.FILLED],
+                  "Filled by Sasha  ·  highlighted = filled for you  ·  NOT signed, NOT filed")
+    return Response(jpg, media_type="image/jpeg", headers={"cache-control": "private, max-age=300"})
+
+
+@router.get("/health/{cid}/1449F1-card.jpg")
+async def health_card_card(cid: str) -> Response:
+    """CR 33 · page 1 of the same filled 1449F1, as the chat's card; gone with the details after 24 hours."""
+    from . import formcard as FC
+    from .health import tarjeta as TS
+    rows = await _tarjeta_rows(cid)
+    jpg = FC.card(TS.fill(rows), [r["field"] for r in rows],
+                  "Filled by Sasha  ·  highlighted = filled for you  ·  NOT signed, NOT submitted")
+    return Response(jpg, media_type="image/jpeg", headers={"cache-control": "private, max-age=300"})
+
+
+async def _tarjeta_rows(cid: str) -> list:
     from datetime import datetime, timezone
     from .health import tarjeta as TS
     c = await _case(cid, "health")
@@ -170,7 +190,15 @@ async def health_card_pdf(cid: str) -> Response:
             await ST.STORE.update(cid, st)
         raise HTTPException(410, {"ok": False, "rule": "values_expired",
                                   "message": "This form's details were dropped after 24 hours. Ask Sasha again for a new one."})
-    return Response(TS.fill(st["rows"]), media_type="application/pdf",
+    return st["rows"]
+
+
+@router.get("/health/{cid}/1449F1-prepared.pdf")
+async def health_card_pdf(cid: str) -> Response:
+    """CR 30 · the Comunidad de Madrid's own health-card form, filled — not signed, not submitted. Rebuilt from the rows on
+    every download (the guard runs each time); after 24 hours the rows are dropped and the link says so."""
+    from .health import tarjeta as TS
+    return Response(TS.fill(await _tarjeta_rows(cid)), media_type="application/pdf",
                     headers={"content-disposition": 'inline; filename="Tarjeta-Sanitaria-1449F1-not-signed.pdf"'})
 
 

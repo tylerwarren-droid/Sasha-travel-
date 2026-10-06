@@ -215,7 +215,9 @@ async def _prepare(ctx: dict) -> None:
     verdict = (f"The reviewer checked every field: {s['ok']} fine, {s['check']} to look at, {s['problem']} problem"
                f"{'s' if s['problem'] != 1 else ''}.")
     out.text(f"{verdict} Read it field by field here, with the official PDF to download:\n{link}")
-    out.media("The official EX-01, prepared — not signed, not filed.", f"{web()}/api/products/relocation/{cid}/EX-01-prepared.pdf")
+    from .. import formcard as FC                     # CR 33 · page 1 as a card, the filled boxes highlighted
+    FC.show(out, "Your EX-01, page 1 — highlighted: what I filled. Not signed, not filed.",
+            f"{web()}/api/products/relocation/{cid}/EX-01-card.jpg", f"{web()}/api/products/relocation/{cid}/EX-01-prepared.pdf")
     out.text("When you've checked it: print it, complete section 5 yourself, decide on the Dehú consent, write the place "
              "and date, and sign in the FIRMA box. Reply SIGNED when that's done.")
 

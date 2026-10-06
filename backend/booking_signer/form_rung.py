@@ -498,7 +498,8 @@ async def prepare(request: Request):
     if m is None:
         return _refuse(422, "form_not_approved", "Sasha only sends a form that has been mapped and approved — our test venue, "
                                                  "or a venue the founder has approved; this one hasn't been")
-    if not m["test"] and os.getenv("SASHA_FORMS_ENABLED", "").strip() != "1":
+    from .guest_accounts import founder as _founder   # Sasha 162 · the founder's own HAND-OVER: he presses, Sasha sends nothing
+    if not m["test"] and os.getenv("SASHA_FORMS_ENABLED", "").strip() != "1" and not (body.get("handover") and _founder(account)):
         return _refuse(422, "forms_disabled", "sending real venues' forms is switched off on this server; nothing was filled")
     country = read.get("country")
     if country not in V.COUNTRIES:

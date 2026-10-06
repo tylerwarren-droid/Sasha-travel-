@@ -121,8 +121,7 @@ class OnWhatsApp(TG.Base):
         self.pick_first()
         said = "\n".join(self.bodies())
         self.assertIn("They book through CoverManager. I'll fill it in and send the last step to your phone.", said)   # Sasha 161
-        self.assertIn("One tap: Botavara Chamberí's booking page on CoverManager — the day, time and party are filled in. "
-                      "Press their confirm button; I can't press it for you.", said)
+        self.assertIn("Here's Botavara Chamberí on CoverManager — Saturday 21:00, 2 people. Tap, then book.", said)   # Sasha 163
         self.say("BOOKED")
         self.assertIn("I'm looking for their confirmation email in your Gmail now.", self.bodies()[-1])
         self.assertIn("watch_gmail_confirmation", self.spawned)

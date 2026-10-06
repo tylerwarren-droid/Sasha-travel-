@@ -685,9 +685,14 @@ async def prepare_link(request: Request):
         item = await LADDER_STORE.put_link(rec)
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
+    phone = None
+    if body.get("to_phone") and not nights:   # Sasha 163 · from the laptop: the ONE platform message, on the guest's phone
+        from . import guest_whatsapp as GW
+        venue = (read.get("listing") or {}).get("name") or read["name"]
+        phone = await GW.tap_platform(account, SL.platform_message(venue, link.platform, p.on, p.at, p.party, link.slot_filled, link.url), link.url)
     return {"link_id": link_id, "trip_item_id": item, "platform": link.platform, "slot_filled": link.slot_filled, "url": link.url,
             "prefill_tried": link.prefill_tried, "read_back": {"lines": lines},   # Sasha 138
-            "forward_to": forward_to, "read_back": {"lines": lines, "sha256": rec["read_back_sha256"]}}
+            "forward_to": forward_to, "read_back": {"lines": lines, "sha256": rec["read_back_sha256"]}, "phone": phone}
 
 
 @router.post("/links/{link_id}/opened")

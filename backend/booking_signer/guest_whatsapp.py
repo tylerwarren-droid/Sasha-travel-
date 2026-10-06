@@ -2042,10 +2042,10 @@ async def _send_link(ctx: dict, rd: dict, reservation: dict, name: str, plan: Op
         ctx["out"].text(f"One tap: {rd['venue']}'s own booking engine ({j.get('platform') or 'their booking page'}).\n"
                         + "\n".join("• " + ln for ln in lines) + f"\n{j['url']}")
         return True
-    ctx["out"].text(f"One tap: {rd['venue']}'s booking page on {j.get('platform') or 'their platform'} — "
-                    f"{'the day, time and party are filled in' if j.get('slot_filled') else 'choose the day, time and party there'}. "
-                    f"Press their confirm button; I can't press it for you.\n{j['url']}\n"
-                    f"Reply BOOKED once it's done, and I'll find their confirmation email in your Gmail and file it.")
+    from . import slot_link as SL   # Sasha 163 · the one platform message
+    dt = datetime.fromisoformat(at)
+    ctx["out"].text(SL.platform_message(rd["venue"], j.get("platform") or "their booking page", dt.date(), dt.time(),
+                                        reservation["how_many"]["count"], bool(j.get("slot_filled")), j["url"]))
     return True
 
 
@@ -2442,6 +2442,25 @@ async def tap_to_pay(account: Optional[str], amount: str, what: str, url: str) -
         return "not sent: no WhatsApp linked to this account"
     out = await _tell(ch, f"💳 Tap to pay {amount} for {what} (TEST — nothing is charged): {url}",
                       ("tap_to_pay", {1: what.split(",")[0], 2: what, 3: amount, 4: url}))
+    if "sent" in out and "not" not in out:
+        _TAPPED.add(url)
+    return out
+
+
+async def tap_platform(account: Optional[str], text: str, url: str) -> str:
+    """Sasha 163 · a platform venue booked from the laptop: the ONE message, on the guest's phone. Only a URL Sasha built
+    for a booking platform's venue page (slot_link) — Sasha never fetched it; the guest's own browser opens it."""
+    from .venue_read import platform_of
+    if not platform_of(url or ""):
+        return "not sent: not a booking platform's page"
+    if url in _TAPPED:
+        return "not sent: already sent"
+    if not account or STORE is None:
+        return "not sent: no account"
+    ch = await STORE.channel_of_account(account)
+    if not ch:
+        return "not sent: no WhatsApp linked to this account"
+    out = await _tell(ch, text)
     if "sent" in out and "not" not in out:
         _TAPPED.add(url)
     return out

@@ -134,4 +134,4 @@ class OneYesOnWhatsApp(TG.Base):
         self.assertEqual(self.links, [])                                                   # nothing made before the yes
         self.say("Yes, send it", payload=buttons[0][1])
         self.assertIn("Your yes covers these steps", self.links[0]["plan_line"])
-        self.assertTrue(self.bodies()[-1].startswith("One tap: Botavara Chamberí's booking page on CoverManager"))
+        self.assertTrue(self.bodies()[-1].startswith("Here's Botavara Chamberí on CoverManager"))   # Sasha 163

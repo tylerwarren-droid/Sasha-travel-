@@ -6,8 +6,8 @@
  * the venue's site), says plainly that the guest makes the final press, records that they opened it and that they
  * booked, and watches for the confirmation they forward. Every sentence is the server's (backend slot_link.read_back).
  */
-import { useState } from 'react'
-import { bookingReq, refusal } from '@/lib/booking-client'
+import { useEffect, useRef, useState } from 'react'
+import { bookingReq, contactReq, refusal } from '@/lib/booking-client'
 import { GatedButton } from '../booking-helper/GatedButton'
 
 type Link = { link_id: string; url: string; sha256: string; platform: string; lines: string[] }
@@ -21,13 +21,24 @@ export default function ChatBookingLink({ readId, platform, draft, openAt }: {
   const [d, setD] = useState({ date: at[0], time: at[1], party: parts.how_many?.count ?? 2, name: parts.who?.name ?? '' })
   const [link, setLink] = useState<Link | null>(null)
   const [status, setStatus] = useState<string | null>(null)
+  const [phone, setPhone] = useState(false)   // Sasha 163 · the message went to the guest's phone
+  useEffect(() => {   // the saved name, so nothing needs typing
+    let off = false
+    contactReq('GET').then((r) => {
+      const n = ((r.json.contact ?? null) as { name?: string } | null)?.name
+      if (!off && n) setD((x) => (x.name ? x : { ...x, name: n }))
+    }).catch(() => { /* the form below asks */ })
+    return () => { off = true }
+  }, [])
   const [note, setNote] = useState<string | null>(null)
   const input = { width: '100%', padding: '4px 6px', border: '1px solid rgba(0,0,0,.25)', borderRadius: 6, color: '#111', background: '#fff', colorScheme: 'light' } as const
 
   async function prepare() {
     setNote(null)
-    const r = await bookingReq('/api/booking/links', { read_id: readId, date: d.date, time: d.time, party: d.party, name: d.name.trim() })
+    // Sasha 163 · the ONE platform message goes to the guest's phone too ("Here's X on Y — Thursday 21:00, 2 people. Tap, then book.")
+    const r = await bookingReq('/api/booking/links', { read_id: readId, date: d.date, time: d.time, party: d.party, name: d.name.trim(), to_phone: true })
     if (!r.ok) { setNote(`No link — ${refusal(r.json, r.status)}`); return }
+    setPhone(String(r.json.phone ?? '').startsWith('sent'))
     const rb = r.json.read_back as { lines: string[]; sha256: string }
     setLink({ link_id: String(r.json.link_id), url: String(r.json.url), sha256: rb.sha256, platform: String(r.json.platform), lines: rb.lines })
     setStatus('offered')
@@ -39,10 +50,17 @@ export default function ChatBookingLink({ readId, platform, draft, openAt }: {
     setStatus(String(g.json.status ?? '')); setNote(typeof g.json.say === 'string' ? g.json.say : null)
   }
   const run = (f: () => Promise<void>) => () => { f().catch((e) => setNote(`Stopped: ${(e as Error).message}`)) }
+  // the day, time, party and name already known: no form — the page is made and sent at once
+  const auto = useRef(false)
+  useEffect(() => {
+    if (auto.current || link || !d.date || !d.time || !(d.party >= 1) || d.name.trim().length < 2) return
+    auto.current = true
+    prepare().catch((e) => setNote(`Stopped: ${(e as Error).message}`))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d.name, d.date, d.time, d.party])
 
   return (
     <div style={{ marginTop: 10, borderTop: '1px solid rgba(0,0,0,.1)', paddingTop: 10, fontSize: 13 }}>
-      <div style={{ marginBottom: 6 }}>They book only through {platform}: I&rsquo;ll get their page ready with what to pick — <strong>you make the final press</strong>.</div>
       {!link && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           <label>Day<input style={input} type="date" value={d.date} onChange={(e) => setD({ ...d, date: e.target.value })} /></label>
@@ -57,15 +75,16 @@ export default function ChatBookingLink({ readId, platform, draft, openAt }: {
       )}
       {link && (
         <div>
-          {link.lines.map((l, i) => <div key={i} style={{ marginBottom: 2 }}>{l}</div>)}
+          {phone ? <div style={{ fontWeight: 600 }}>📱 Sent to your phone — tap, then book. I&rsquo;ll ask whether it&rsquo;s booked.</div>
+            : link.lines.map((l, i) => <div key={i} style={{ marginBottom: 2 }}>{l}</div>)}
           <a href={link.url} target="_blank" rel="noopener noreferrer"
             style={{ display: 'inline-block', marginTop: 6, padding: '4px 10px', border: '1px solid rgba(0,0,0,.3)', borderRadius: 6 }}
             onClick={() => { state('/opened', { read_back_sha256: link.sha256 }).catch(() => { /* shown by the next state */ }) }}>
-            Open their {link.platform} page ↗
+            {phone ? `or open it here ↗` : `Open their ${link.platform} page ↗`}
           </a>
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
             <GatedButton label="I booked it" onClick={run(() => state('/booked', { how: 'button' }))}
-              needs={[status === 'offered' && 'their page to be opened first']} done={(status === 'guest_booked' || status === 'confirmed') && 'Noted'} />
+              needs={[!phone && status === 'offered' && 'their page to be opened first']} done={(status === 'guest_booked' || status === 'confirmed') && 'Noted'} />
             <GatedButton label="Check for the confirmation" onClick={run(() => state(''))} needs={[]} />
           </div>
         </div>

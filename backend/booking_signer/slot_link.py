@@ -154,6 +154,18 @@ def build(read: dict, on: date, at: time, party: int, recipes: Optional[Dict[str
     return SlotLink(platform, urlunsplit((u.scheme, u.netloc, u.path, q, "")), True, label)
 
 
+def platform_message(venue: str, platform: str, on: date, at: time, party: int, filled: bool, url: str) -> str:
+    """Sasha 163 · THE ONE MESSAGE for a platform venue: their own page, opened in the guest's OWN browser (their autofill,
+    their CAPTCHA if the platform serves one, their press). Sasha never fetches the platform; it says plainly when the
+    page can't take the slot from the link."""
+    when = f"{on.strftime('%A')} {at.strftime('%H:%M')}, {party} {'person' if party == 1 else 'people'}"
+    lines = [f"Here's {venue} on {platform} — {when}. Tap, then book.", url]
+    if not filled:
+        lines.append(f"Their page doesn't take the time from a link — pick {when} there.")
+    lines.append("Reply BOOKED when it's done (or forward their confirmation email) and I'll put it in your itinerary.")
+    return "\n".join(lines)
+
+
 def _when(on: date, at: time) -> str:
     h = at.hour % 12 or 12
     return f"{on.strftime('%A')} {on.day} {on.strftime('%B')} at {h}{':' + format(at.minute, '02d') if at.minute else ''} {'pm' if at.hour >= 12 else 'am'}"

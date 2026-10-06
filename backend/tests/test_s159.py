@@ -55,5 +55,16 @@ class GuestCap(unittest.TestCase):
             self.assertIsNone(GA.allowed("9.9.9.9"))
 
 
+class Greeting(unittest.TestCase):
+    def test_hi_says_hello_and_names_the_open_item(self):
+        from booking_signer import guest_whatsapp as GW
+        for m in ("Hey Sasha", "hi", "Hola!", "hello there"):
+            self.assertTrue(GW.GREETING.fullmatch(m), m)
+        for m in ("hi, book dinner at 9", "highlight", "hey can you call them"):
+            self.assertFalse(GW.GREETING.fullmatch(m), m)
+        self.assertEqual(GW._open_item({"kind": "need", "read": {"venue": "Casa Lucio"}}), "We were in the middle of your booking at Casa Lucio.")
+        self.assertIn("choosing", GW._open_item({"kind": "cards", "find": {"what": "restaurants", "where": "Madrid"}}))
+
+
 if __name__ == "__main__":
     unittest.main()

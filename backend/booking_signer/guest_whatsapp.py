@@ -1525,6 +1525,23 @@ async def _late_photos(ch: dict, frm: str, names: Dict[str, str], pending: List[
 
 # ── pending questions ───────────────────────────────────────────────────────────────────────────────────────────────
 
+GREETING = re.compile(r"\s*(?:hi|hey|hello|hola|buenas|good (?:morning|afternoon|evening)|ola|ciao)(?:\s+(?:sasha|there|again))?\s*[!.?👋]*\s*", re.I)
+
+
+def _open_item(pend: dict) -> str:
+    """What's half-done, in a few words, from what the pending step holds (never its machinery)."""
+    venue = (pend.get("read") or {}).get("venue") or pend.get("venue")
+    kind = pend.get("kind")
+    if kind == "cards":
+        f = pend.get("find") or {}
+        return f"You were choosing {f.get('what') or 'a place'} in {f.get('where') or 'town'}."
+    if kind in ("confirm", "cancel_confirm"):
+        return f"Your {'cancellation' if kind == 'cancel_confirm' else 'booking'} at {venue or 'the venue'} is waiting for your yes."
+    if venue:
+        return f"We were in the middle of your booking at {venue}."
+    return "We were in the middle of something."
+
+
 async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
     out, st, now = ctx["out"], ctx["st"], ctx["now"]
     pend = st.get("pending")
@@ -1535,6 +1552,10 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         return False
     at = _dt(pend.get("at") or "")
     kind = pend["kind"]
+    # Sasha 159 · a bare "hi" while something is half-done says hello and names it — it never answers the old question for them
+    if not payload and GREETING.fullmatch(body or ""):
+        out.text(f"Hi! {_open_item(pend)} Say “carry on” to finish it, or tell me what you'd like now.")
+        return True
     # Sasha 117 · "Cancel the Retiro dinner" while cards (or another open question) show is a CANCELLATION, never a
     # refinement or an answer — live, it searched for "Cancel Retiro dinner dinner". Not for a yes/no on a booking or a
     # cancel ("No, cancel" there means "don't"). A new cancel while the which-one list shows starts a fresh list.

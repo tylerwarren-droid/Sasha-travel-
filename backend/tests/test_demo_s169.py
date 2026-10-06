@@ -287,3 +287,13 @@ class PlatformEmailsBookOnTheirOwn(unittest.TestCase):
     def test_thefork_wording_is_a_confirmation(self):
         from booking_signer import mailbox as MB
         self.assertRegex("Your reservation at La Gaditana Castellana", MB._CONFIRM)
+
+
+class BooksyByTheDay(unittest.TestCase):
+    def test_a_nameless_platform_email_matches_the_days_one_link(self):
+        from booking_signer import mailbox as MB
+        rows = [{"id": "b1", "venue": "barbería in Madrid", "date": "2026-10-07", "time": "18:00", "status": "pending"}]
+        row, basis = MB.match({"via": "Booksy", "venue": None, "at": "2026-10-07T10:30"}, rows)
+        self.assertEqual((row["id"], basis), ("b1", "platform_day"))
+        two = rows + [{"id": "b2", "venue": "x", "date": "2026-10-07", "time": "21:00", "status": "link_sent"}]
+        self.assertEqual(MB.match({"via": "Booksy", "venue": None, "at": "2026-10-07T10:30"}, two), (None, None))   # never a guess

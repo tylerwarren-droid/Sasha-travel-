@@ -236,6 +236,13 @@ def match(facts: dict, rows: List[dict]) -> Tuple[Optional[dict], Optional[str]]
             rt = datetime.fromisoformat(f"{r['date']}T{r['time']}")
             if mine & theirs and abs((rt - at).total_seconds()) <= 90 * 60:
                 return r, "platform_link"
+    # Sasha 175 · live (Booksy): the email names no shop Sasha can read, and the guest took the slot that was free (10:30, the link
+    # said 18:00). A platform's email on the SAME DAY as the guest's ONE open platform link that day is that link.
+    if facts.get("via") and facts.get("at"):
+        day = facts["at"][:10]
+        open_links = [r for r in rows if r.get("status") in ("link_sent", "pending", "guest_booked") and r.get("date") == day]
+        if len(open_links) == 1:
+            return open_links[0], "platform_day"
     return None, None
 
 
@@ -277,6 +284,9 @@ def offer(kind: str, facts: dict, row: Optional[dict], now: Optional[datetime] =
 # ── the store: Memory for tests, Postgres (sql/025) for real ────────────────────────────────────────────────────────
 
 class MemoryMailboxStore:
+    async def set_time(self, account, trip_item_id, at):   # Sasha 175 · tests: nothing to move
+        return None
+
     def __init__(self) -> None:
         self.links: Dict[str, dict] = {}
         self.finds: Dict[str, dict] = {}
@@ -397,6 +407,14 @@ class PostgresMailboxStore:
         rows = await self._run(lambda c: c.fetch("select * from mailbox_links where needs_reconnect_at is null"))
         return [{**dict(r), "account_id": str(r["account_id"]), "vault_item_id": str(r["vault_item_id"])} for r in rows]
 
+    async def set_time(self, account, trip_item_id, at):
+        """Sasha 175 · the booked slot from the platform's email (local time, the booking's own zone)."""
+        async def go(c):
+            await c.execute("update trip_items ti set date_time = ($3::timestamp at time zone coalesce(ti.local_timezone, 'Europe/Madrid')), "
+                            "updated_at = now() from trips t where t.id = ti.trip_id and ti.id = $1 and t.owner_id = $2",
+                            uuid.UUID(trip_item_id), uuid.UUID(account), datetime.fromisoformat(at))
+        await self._run(go)
+
     async def apply(self, account, action, trip_item_id, facts):
         """The status write the guest said yes to (S-79's trigger then updates the calendar)."""
         from .store import BOOKINGS_TRIP_TITLE
@@ -492,7 +510,7 @@ async def sync(account: str) -> List[dict]:
         if kind == "other" and row and MODEL_READER and os.getenv("SASHA_MAILBOX_MODEL", "") == "1":
             kind, facts, parsed_by = await MODEL_READER(body, row), facts, "model"   # M-3 · matched and unread by rules only
         off = offer(kind, facts, row, now)
-        if off and basis == "platform_link" and off[0] in ("confirm", "cancel"):
+        if off and basis in ("platform_link", "platform_day") and off[0] in ("confirm", "cancel"):
             # Sasha 175 · AUTOMATIC: the guest booked on the platform page Sasha sent; its own email confirms (or cancels) it —
             # no "BOOKED" needed. Applied, then said once on WhatsApp.
             tid = await STORE.apply(account, off[0], row.get("id"), facts)
@@ -501,6 +519,8 @@ async def sync(account: str) -> List[dict]:
                      "offered_action": None, "offered_sentence": None, "offer_sha256": None, "action_status": "done" if tid else "none"}
             await STORE.put_find(find0)
             found.append(find0)
+            if tid and off[0] == "confirm" and facts.get("at") and "T" in facts["at"] and (row.get("time") or "") != facts["at"][11:16]:
+                await STORE.set_time(account, tid, facts["at"])   # the slot the guest actually took, from the platform's email
             if tid:
                 await _told_auto(account, off[0], facts, row)
             continue

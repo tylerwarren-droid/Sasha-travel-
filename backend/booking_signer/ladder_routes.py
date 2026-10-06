@@ -455,7 +455,9 @@ async def prepare_email(request: Request):
            "type": "other" if quote else "restaurant",
            "email_id": email_id, "account_id": account, "read_id": row["read_id"], "email": email,
            "email_sha256": E.email_sha256(email), "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)),
-           "created_at": NOW(), "venue_name": (read.get("listing") or {}).get("name") or read["name"], "local_date": p.on,
+           # Sasha 175 · a place_id read is stored WITHOUT its listing (S-64 A): the name the guest picked comes with the request
+           "created_at": NOW(), "venue_name": (read.get("listing") or {}).get("name") or str(body.get("venue") or "").strip()[:120] or read["name"],
+           "local_date": p.on,
            "local_time": p.at, "local_timezone": tz,   # Sasha 175 · venue_name: its listing's name
            "party_size": p.party}
     if quote and body.get("date"):   # Sasha 165 · a request's PREFERRED day (and time), so it lands on its day in the trip
@@ -746,7 +748,9 @@ async def prepare_link(request: Request):
                                               venue_ids=O.venue_ids_of(read), read_id=str(row["read_id"])),   # S-64 step 3
            "link_id": link_id, "account_id": account, "read_id": row["read_id"], "platform": link.platform, "url": link.url,
            "slot_filled": link.slot_filled, "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)),
-           "created_at": NOW(), "venue_name": (read.get("listing") or {}).get("name") or read["name"], "local_date": p.on,
+           # Sasha 175 · a place_id read is stored WITHOUT its listing (S-64 A): the name the guest picked comes with the request
+           "created_at": NOW(), "venue_name": (read.get("listing") or {}).get("name") or str(body.get("venue") or "").strip()[:120] or read["name"],
+           "local_date": p.on,
            "local_time": p.at, "local_timezone": tz,   # Sasha 175 · venue_name: its listing's name
            "party_size": p.party}
     try:
@@ -756,7 +760,7 @@ async def prepare_link(request: Request):
     phone = None
     if body.get("to_phone") and not nights:   # Sasha 163 · from the laptop: the ONE platform message, on the guest's phone
         from . import guest_whatsapp as GW
-        venue = (read.get("listing") or {}).get("name") or read["name"]
+        venue = (read.get("listing") or {}).get("name") or str(body.get("venue") or "").strip()[:120] or read["name"]
         phone = await GW.tap_platform(account, SL.platform_message(venue, link.platform, p.on, p.at, p.party, link.slot_filled, link.url), link.url,
                                       link_id=link_id, venue=venue, when=f"{p.on.isoformat()} {p.at.strftime('%H:%M')}")
     return {"link_id": link_id, "trip_item_id": item, "platform": link.platform, "slot_filled": link.slot_filled, "url": link.url,

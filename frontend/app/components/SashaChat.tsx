@@ -203,6 +203,8 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
   const [bookingCancel, setBookingCancel] = useState<{ venue: string; n: number } | null>(null)  // Sasha 96 chat cancel (Stage B)
   // CR 16 · a product's buttons and pictures for the current turn
   const [quickReplies, setQuickReplies] = useState<{ title: string; payload: string }[]>([])
+  const [modeLabel, setModeLabel] = useState<string | null>(null)   // Sasha 179 · the current mode, shown small; sent back each turn
+  const modeRef = useRef<string | null>(null)
   const [tripBook, setTripBook] = useState<{ from: string; n: number } | null>(null)  // Sasha 169
   const [productMedia, setProductMedia] = useState<{ caption: string; url: string; link?: string }[]>([])
   const openedRef = useRef(false)
@@ -413,11 +415,13 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
         force_intent: opts?.intent,              // set when the UI knows the intent (idea build)
         ...(productMode && (opts?.opening || historyBeforeMessage.length === 0) ? { product_mode: productMode } : {}),   // CR 16
         ...(opts?.payload ? { payload: opts.payload } : {}),   // CR 16 · a product quick-reply
+        ...(modeRef.current ? { mode_label: modeRef.current } : {}),   // Sasha 179
         ...(media.length ? { media: media.map(({ content_type, data_b64 }) => ({ content_type, data_b64 })) } : {}),   // Sasha 159 (1)
       }, { timeout: 60000, headers: apiHeaders(guestAuth()) })  // bound the call so a hung backend can't stall the turn · S-62 step 7
       const { response: sashaResponse, conversation_history, photos: respPhotos, links, hotels: hotelRecs, bookings: bookingCards, itinerary, action, booking_ref, itinerary_id, payment_item, saved_card } = response.data
       if (response.data.session_id && response.data.session_id !== chatSessionIdRef.current) chatSessionIdRef.current = response.data.session_id  // S-62 step 7 · a session not ours is never continued
       setQuickReplies(Array.isArray(response.data.quick_replies) ? response.data.quick_replies : [])   // CR 16
+      if (response.data.mode) { modeRef.current = String(response.data.mode); setModeLabel(String(response.data.mode)) }   // Sasha 179
       setProductMedia(Array.isArray(response.data.media) ? response.data.media : [])
       if (response.data.booking_find) setBookingFind({ ...response.data.booking_find, draft: response.data.reservation_draft ?? null })  // S-66 chat booking
       if (response.data.trip_book) setTripBook({ from: String(response.data.trip_book.from ?? 'Madrid'), n: Date.now() })  // Sasha 169
@@ -797,6 +801,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
             ))}
           </div>
         )}
+        {modeLabel && <div className="o2" style={{ fontSize: 11, opacity: 0.7 }}>Now: {modeLabel}</div>}{/* Sasha 179 · the current mode */}
         {quickReplies.length > 0 && (   /* CR 16 · a product's buttons: the title is shown as the guest's line, the payload is sent */
           <div className="flex flex-wrap gap-2">
             {quickReplies.map((q, i) => (

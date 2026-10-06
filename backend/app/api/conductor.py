@@ -1,3 +1,4 @@
+import logging
 import uuid
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
@@ -81,6 +82,7 @@ class ConductorRequest(BaseModel):
     product_mode: Optional[str] = Field(default=None, max_length=20)   # CR 16 · the product tab the chat opened in (first turn)
     payload: Optional[str] = Field(default=None, max_length=200)       # CR 16 · a product quick-reply's payload
     media: Optional[list] = Field(default=None, max_length=5)           # Sasha 159 (1) · photos [{content_type, data_b64}]
+    mode_label: Optional[str] = Field(default=None, max_length=80)     # Sasha 179 · the mode the last reply was in
 
 
 class ConductorResponse(BaseModel):
@@ -108,6 +110,7 @@ class ConductorResponse(BaseModel):
     trip_book: Optional[dict] = None  # Sasha 169 · book the whole trip (TEST): {from}
     reservation_draft: Optional[dict] = None  # S-66 chat booking (Stage B)
     quick_replies: list = []   # CR 16 · a product's buttons [{title, payload}]
+    mode: Optional[str] = None  # Sasha 179 · the current mode's label ("✈️ Vietnam, Nov", "📍 Paris", "🏠 Move to Madrid")
     media: list = []           # CR 16 · a product's pictures [{caption, url}]
     conversation_history: list
 
@@ -122,8 +125,20 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
         # real itinerary exists for this session, and to file any plan it builds against it.
         # S-62 step 7 · a session someone else owns is never appended to or read: this turn starts a new one.
         session_id = await own_session(body.session_id, account) or str(uuid.uuid4())
+        from booking_signer import switching as SW   # Sasha 179 · automatic switching, as on WhatsApp
+        sw = SW.on(account)
+        message, payload, product_mode = body.message, body.payload, body.product_mode
+        bk = SW.back_to(payload or "") if sw else None
+        if bk and bk[0] == "j":   # "Back to Vietnam, Nov"
+            say = f"↩ Back to {SW._short(bk[1])} — what next?"
+            return ConductorResponse(response=say, intents=["mode"], photos=[], tools_used=[], session_id=session_id, mode=bk[1],
+                                     conversation_history=list(body.conversation_history or []) + [
+                                         {"role": "user", "content": body.message}, {"role": "assistant", "content": say}])
+        if bk:                     # "Back to RelocateMe": its own word resumes it
+            from products.whatsapp import START_WORD
+            message, payload = START_WORD.get(bk[1], bk[1]), None
         result = await conduct(
-            user_message=body.message,
+            user_message=message,
             conversation_history=body.conversation_history,
             client_config=client_config,
             language=body.language,
@@ -131,11 +146,29 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             force_intent=body.force_intent,
             session_id=session_id,
             user_id=account,
-            product_mode=body.product_mode,   # CR 16
-            payload=body.payload,
+            product_mode=product_mode,   # CR 16
+            payload=payload,
             signed_in=signed_in(account),     # Sasha 142 · the products act only for a real account
             media=body.media,                 # Sasha 159 (1)
         )
+        mode, quick = None, list(result.get("quick_replies") or [])
+        if sw:
+            try:
+                old = None
+                if body.mode_label:
+                    pk = next((k for k, v in SW.PRODUCT_LABEL.items() if v == body.mode_label), None)
+                    old = {"k": "p", "p": pk, "label": body.mode_label} if pk else {"k": "j", "label": body.mode_label}
+                prod = product_mode or (bk[1] if bk else None) or (_product_of(result) if result.get("quick_replies") else None)
+                new = ({"k": "p", "p": prod, "label": SW.PRODUCT_LABEL.get(prod, prod)} if prod in SW.PRODUCT_LABEL else
+                       await SW.after(account, message, {"pending": {"find": result.get("booking_find") or {}}}))
+                items = [("text", result["response"])]
+                cur = SW.announce(items, old, new, 0)
+                if len(items) > 1:   # switched: the line first, its Back as a button
+                    result["response"] = items[0][1] + "\n" + result["response"]
+                    quick = [{"title": t, "payload": pl} for t, pl in items[0][2]] + quick
+                mode = (cur or {}).get("label")
+            except Exception as e:
+                logging.getLogger("conductor").warning("[switching] web: %s: %s", type(e).__name__, e)
         # Persist this turn (best-effort; a DB hiccup must never break the conversation).
         await chat_store.save_turn(
             session_id=session_id,
@@ -165,10 +198,22 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             booking_cancel=result.get("booking_cancel"),  # Sasha 96 chat cancel (Stage B)
             trip_book=result.get("trip_book"),  # Sasha 169
             reservation_draft=result.get("reservation_draft"),  # S-66 chat booking (Stage B)
-            quick_replies=result.get("quick_replies") or [],   # CR 16
+            quick_replies=quick,   # CR 16; Sasha 179 · the Back button first
+            mode=mode,
             media=result.get("media") or [],
             session_id=session_id,
             conversation_history=result["messages"],
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _product_of(result: dict) -> Optional[str]:
+    """Sasha 179 · which product's buttons these are (their payload prefixes), for the mode label."""
+    from products.whatsapp import PREFIX
+    for q in result.get("quick_replies") or []:
+        pl = str(q.get("payload") or "")
+        for prod, pre in PREFIX.items():
+            if prod in ("relocation", "campus", "health", "trip") and pl.startswith(pre):
+                return prod
+    return None

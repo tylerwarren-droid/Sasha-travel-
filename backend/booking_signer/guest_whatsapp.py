@@ -2379,8 +2379,8 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
                 # Sasha 172 · the demo's CAPTCHA (our own test page): Sasha fills everything else, the guest ticks it on the phone
                 s2, j2 = await api(ctx["account"], "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": res_form, "handover": True})
                 if s2 == 200:
-                    ctx["route_line"] = ("Their page has an “I'm not a robot” box — that one is yours, never mine. I'll fill in everything "
-                                         "else and send it to your phone: you tick it and press their button. Shall I?")
+                    # Sasha 173 · the founder's words: conversational, not technical
+                    ctx["route_line"] = "Stand by — a human is required for this one. A CAPTCHA will appear on your phone. Shall I go ahead?"
                     await _ask_yes(ctx, "handover", j2["form_id"], j2["read_back"], ctx["route_line"], rd["venue"],
                                    extra={"summary": summary(reservation), **keep})
                     return
@@ -2565,8 +2565,8 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
             out.text(f"❌ I couldn't open {plain_venue(venue)}'s page for you: {j.get('say') or refusal_words(j, status)}. Nothing was sent.")
             return
         sent = (j.get("phone") or {}).get("sent")
-        out.text("📲 Sent to your phone: open it, tick “I'm not a robot”, then press their button — I'll confirm here."
-                 if sent else f"Open it here, tick “I'm not a robot”, then press their button: {j.get('view_url')}")
+        out.text("📲 It's on your phone — tick the box, then press Reservar. I'll confirm here."
+                 if sent else f"Open this, tick the box, then press Reservar: {j.get('view_url')}")
         return
     if pend["rung"] == "call_email":   # Sasha 131 · URGENT: both on the one yes — the email first (it can't be refused by a ring)
         s2, ej = await api(account, "POST", f"/api/booking/emails/{pend['email_id']}/send", {"read_back_sha256": pend["email_sha"], "approval": how}, timeout=60)

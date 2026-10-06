@@ -274,9 +274,7 @@ def lines(plan: dict, fam: Dict[str, str], plain: bool = False) -> List[str]:
 def pdf(plan: dict, fam: Dict[str, str], title: str) -> bytes:
     from ..relocation.three import _text_page, DPI
     who = f"{fam.get('student_name', 'the student')} with {fam.get('parent_name', 'family')} · party of {fam.get('party', '?')}"
-    page = _text_page(title, [who, ""] + lines(plan, fam, plain=True) + ["", "Times from Yale's and Brown's own calendars, read today; "
-                                                                  "Princeton and Harvard: their published pattern only — check on their page. "
-                                                                  "Drives: Google Routes. Nothing was registered by Kanoe: the family presses."])
+    page = _text_page(title, [who, ""] + lines(plan, fam, plain=True) + ["", sources_line(plan)])
     buf = io.BytesIO()
     page.save(buf, "PDF", resolution=DPI)
     return buf.getvalue()
@@ -419,7 +417,9 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
 async def _plan(ctx: dict) -> None:
     pend, out = ctx["st"]["pending"], ctx["out"]
     tr = pend["tour"]
-    await ctx["early"]("Reading Yale's and Brown's own calendars, and checking each drive with Google…")
+    readable = [SC.SCHOOLS[k]["name"] for k in tr["keys"] if k in SC.SCHOOLS]   # CR 43 · the tour's own schools, never a fixed pair
+    await ctx["early"](f"Reading {_and([n + chr(39) + 's' for n in readable]) or 'each school'}{' own calendars' if len(readable) > 1 else ' own calendar' if readable else ' page'}, "
+                       "and checking each drive with Google…")
     plan = await schedule(tr["keys"], date.fromisoformat(tr["start"]), ctx.get("reader"))
     tr["plan"] = plan
     ls = lines(plan, tr["fam"])
@@ -427,9 +427,7 @@ async def _plan(ctx: dict) -> None:
     tr["sha"] = sha
     pend["step"] = "tour_confirm"
     out.text(f"Your tour, from what's really published:\n" + "\n".join(ls))
-    out.text("If you say yes: I fill Yale's and Brown's own registration forms for you to check and press (a link to your phone "
-             "for each — you press Submit, I never do), and give you Princeton's and Harvard's own registration pages with each "
-             "of your details ready to copy. Then the whole tour goes in your itinerary, with a PDF.")
+    out.text(promise(plan, ctx["account"]))
     out.ask("Prepare it?", [("Yes, prepare it", f"cm:tyes:{sha}"), ("No", f"cm:tno:{sha}")])
 
 
@@ -454,7 +452,8 @@ async def _prepare(ctx: dict, approval: dict) -> None:
         out.text(f"❌ Your kept details couldn't be opened ({type(e).__name__}). Nothing was prepared.")
         return
     plan = tr["plan"]
-    founder = HO.founder_override(ctx["account"]) and HO.configured()
+    owner = HO.founder_override(ctx["account"])                     # CR 43 · the founder's own account: the live hand-over
+    founder = owner and HO.configured()
     title = _title(date.fromisoformat(tr["start"]))
     cid = await ST.STORE.put("campus", ctx["account"], ctx["ch"]["wa_id_sha256"],
                              {"kind": "tour", "title": title, "plan": plan, "fam_name": fam.get("student_name"),
@@ -463,12 +462,17 @@ async def _prepare(ctx: dict, approval: dict) -> None:
     web = __import__("products.campus.turn", fromlist=["web"]).web()
     for v in plan["visits"]:
         name = v["name"]
-        if v["read"] and v.get("session") and founder and v["school"] in ("yale", "brown"):
+        fillable = bool(v["read"] and v.get("session") and live_school(v["school"]))
+        if fillable and founder:
             v["status"] = "filling in Kanoe's browser — a tap to finish comes to your phone"
+            out.text(f"🎓 {name}: I'm filling its own form in Kanoe's browser — “Tap to finish” comes to your phone; you tick and "
+                     "press, I never submit.")
             GW._spawn(_live(ctx["account"], ctx["ch"]["wa_id_sha256"], ctx["frm"], cid, v, fam))
         else:
             v["status"] = "yours to register — link sent" if not v["read"] else "yours to register on its own page — link sent"
-            out.text(f"🎓 {name}: register on its own page — {v['link']}"
+            out.text((f"🎓 {name}: I couldn't open the filled page (the cloud browser isn't set up on this server) — here's the "
+                      f"link and your details: {v['link']}" if fillable and owner else    # CR 43 · never a silent plain link
+                      f"🎓 {name}: register on its own page — {v['link']}")
                      + (f"\n(not read by Kanoe: {v['why']}; its published pattern: {v['title']} — check on their page)" if not v["read"] else
                         f"\n({v['title']}, {date.fromisoformat(v['date']).strftime('%a %-d %b')} {_t12(v['start'])})")
                      + "\nYour details, each ready to copy:")
@@ -513,16 +517,78 @@ async def _live(account: str, wa: str, frm: str, cid: str, v: dict, fam: Dict[st
             gst = await GW.STORE.get_state(ch["wa_id_sha256"])
             await GW.deliver(ch, number, GW.Out().text(text), gst.get("last_inbound_at"))
     try:
-        rec = await LV.open_tour_handover(school=v["school"], session=Session(**v["session"]), fam=fam, account=account,
-                                          read_only=False, fictional=False)
-    except HO.Refused as e:
-        await say(f"{v['name']}: I couldn't fill its form ({e.say}). Its own page: {v['link']}")
-        await _status(cid, v["school"], f"not filled ({e.rule}) — register on its own page")
+        rec = await open_live(v["school"], Session(**v["session"]), fam, account)
+    except Exception as e:                                          # CR 43 · said, never a silent fall-back to a bare link
+        why = e.say if isinstance(e, HO.Refused) else f"the cloud browser failed ({type(e).__name__})"
+        log.warning("[tour] %s live hand-over not opened: %s", v["school"], getattr(e, "rule", type(e).__name__))
+        await say(f"🎓 {v['name']}: I couldn't open the filled page — {why}. Here's the link and your details:\n{v['link']}")
+        for m in copy_messages(fam):
+            await say(m)
+        await _status(cid, v["school"], f"not filled ({getattr(e, 'rule', 'error')}) — register on its own page")
         return
     await _status(cid, v["school"], "filled — waiting for your press (link on your phone)", rec["id"])
     tap = await HO.tap_phone(account, rec)
     if not tap.get("sent"):
         await say(f"📲 {rec['venue']} is filled and waiting (10 minutes): {HO.view_url(rec)}")
+
+
+def sources_line(plan: dict) -> str:
+    """CR 43 · the PDF's footer, from THIS tour's schools (it named Yale/Brown and Princeton/Harvard whatever the tour was)."""
+    read = [v["name"] for v in plan["visits"] if v["read"]]
+    pattern = [v["name"] for v in plan["visits"] if not v["read"]]
+    out = []
+    if read:
+        out.append(f"Times from {_and([n + chr(39) + 's' for n in read])} own calendar{'s' if len(read) > 1 else ''}, read today")
+    if pattern:
+        out.append(f"{_and(pattern)}: {'their' if len(pattern) > 1 else 'its'} published pattern only — check on {'their' if len(pattern) > 1 else 'its'} page")
+    return "; ".join(out) + ". Drives: Google Routes. Nothing was registered by Kanoe: the family presses."
+
+
+def _and(xs: List[str]) -> str:
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1] if xs else ""
+
+
+def promise(plan: dict, account: Optional[str]) -> str:
+    """CR 43 · what "yes" does, school by school, for THIS tour and THIS account: on the founder's account the schools whose own
+    form the live hand-over fills; every other school's own page with the details ready to copy."""
+    from booking_signer import handover as HO
+    owner = HO.founder_override(account)
+    pos = lambda n: n + "'s"
+    filled = [v["name"] for v in plan["visits"] if owner and v["read"] and v.get("session") and live_school(v["school"])]
+    linked = [v["name"] for v in plan["visits"] if v["name"] not in filled]
+    parts = []
+    if filled:
+        parts.append(f"I fill {_and([pos(n) for n in filled])} own registration form{'s' if len(filled) > 1 else ''} in Kanoe's browser "
+                     "for you to check and press (“Tap to finish” on your phone for each — you press Submit, I never do)")
+    if linked:
+        parts.append(f"{'I give you' if not filled else 'give you'} {_and([pos(n) for n in linked])} own registration "
+                     f"page{'s' if len(linked) > 1 else ''} with each of your details ready to copy")
+    return "If you say yes: " + ", and ".join(parts) + ". Then the whole tour goes in your itinerary, with a PDF."
+
+
+def live_school(school: str) -> bool:
+    """CR 43 · the schools whose own form the live hand-over fills: Yale and Brown (CR 38), and the one-page "register" forms
+    (Penn, CR 33) — before, a tour sent only Yale and Brown, so Penn in a tour came as a bare link."""
+    from . import live as LV
+    return school in LV.TOUR_FIRST or (SC.SCHOOLS.get(school) or {}).get("variant") == "register"
+
+
+def as_profile(fam: Dict[str, str]) -> Dict[str, str]:
+    """The tour's details in the shape the one-page hand-over (Penn) takes."""
+    return {"first": fam.get("student_first") or "", "last": fam.get("student_last") or "", "email": fam.get("email") or "",
+            "birthdate": fam.get("birthdate") or "", "grad_year": fam.get("grad_year") or "", "high_school": fam.get("high_school") or "",
+            "mobile": fam.get("mobile") or ""}
+
+
+async def open_live(school: str, session, fam: Dict[str, str], account: str, read_only: bool = False, fictional: bool = False) -> dict:
+    """The school's own form, filled in Kanoe's cloud browser — Yale/Brown's (CR 38) or the one-page register form (Penn)."""
+    from . import live as LV
+    if school in LV.TOUR_FIRST:
+        return await LV.open_tour_handover(school=school, session=session, fam=fam, account=account, read_only=read_only,
+                                           fictional=fictional)
+    party = max(1, min(int(re.sub(r"\D", "", str(fam.get("party") or "")) or 1), 4))
+    return await LV.open_campus_handover(session=session, profile=as_profile(fam), attendees=party, account=account,
+                                         read_only=read_only, fictional=fictional)
 
 
 async def _status(cid: str, school: str, status: str, hid: Optional[str] = None) -> None:

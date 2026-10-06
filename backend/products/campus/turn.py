@@ -496,9 +496,14 @@ async def _prepare(ctx: dict, approval: dict) -> None:
     pend.update(step="handed_over", case_id=cid)
     # CR 33 · the founder's own account: the school's real form, filled live in Sasha's browser; SUBMIT stays his
     from booking_signer import handover as HO
-    if HO.founder_override(ctx["account"]) and s.get("variant") == "register" and HO.configured():
-        out.text(f"I'm also filling {s['name']}'s own form for you in Sasha's browser — a link comes to your phone in about "
-                 "20 seconds: tick “Yes, I understand”, then pressing SUBMIT is yours (or not). I send nothing to "
+    from . import tour as TR
+    if HO.founder_override(ctx["account"]) and TR.live_school(s["key"]):      # CR 43 · Yale and Brown too, not only Penn
+        if not HO.configured():
+            out.text(f"I couldn't open {s['name']}'s filled page (the cloud browser isn't set up on this server) — the page above "
+                     "has every answer to copy.")
+            return
+        out.text(f"I'm also filling {s['name']}'s own form for you in Sasha's browser — “Tap to finish” comes to your phone in "
+                 "about 20 seconds: tick what's yours, then pressing SUBMIT is yours (or not). I send nothing to "
                  f"{s['name']}.")
         from booking_signer import guest_whatsapp as GW
         GW._spawn(_live(ctx["account"], ctx["ch"]["wa_id_sha256"], ctx["frm"], cid, session, dict(profile), attendees))
@@ -516,11 +521,18 @@ async def _live(account: str, wa: str, frm: str, cid: str, session, profile: dic
         if ch:
             gst = await GW.STORE.get_state(ch["wa_id_sha256"])
             await GW.deliver(ch, number, GW.Out().text(text), gst.get("last_inbound_at"))
+    from . import tour as TR
+    fam = {"student_first": profile.get("first"), "student_last": profile.get("last"), "email": profile.get("email"),
+           "mobile": profile.get("mobile"), "birthdate": profile.get("birthdate"), "high_school": profile.get("high_school"),
+           "grad_year": profile.get("grad_year"), "address": profile.get("address"), "parent_email": profile.get("parent_email"),
+           "party": str(attendees)}
     try:
-        rec = await LV.open_campus_handover(session=session, profile=profile, attendees=attendees, account=account,
-                                            read_only=False, fictional=False)
-    except HO.Refused as e:
-        await say(f"I couldn't open the live form: {e.say}. The question-by-question page I sent still works.")
+        rec = await TR.open_live(session.school, session, {k: v for k, v in fam.items() if v}, account)
+    except Exception as e:                                          # CR 43 · said, never a silent fall-back
+        why = e.say if isinstance(e, HO.Refused) else f"the cloud browser failed ({type(e).__name__})"
+        log.warning("[campus] %s live hand-over not opened: %s", session.school, getattr(e, "rule", type(e).__name__))
+        await say(f"I couldn't open the filled page — {why}. Here's the link and your details: the question-by-question page "
+                  f"I sent has every answer to copy, and {SC.SCHOOLS[session.school]['name']}'s own page is {session.form_url}")
         return
     case = await ST.STORE.get(cid)
     if case:

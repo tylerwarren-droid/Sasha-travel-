@@ -267,6 +267,10 @@ async def gate(ctx: dict, f: dict, parts: dict, body: str, done: Optional[list] 
     if "ordinal" not in done:
         done.append("ordinal")
         await _ordinal_day(ctx, f, parts, body)
+    if not f.get("open_at") and not (parts.get("when") or {}).get("at") and parts.get("day") and spoken_time(body):
+        # Sasha 170 · "… on the 13th at 4 in the afternoon": the time said aloud, with the day (it asked "What time?")
+        f["open_at"] = f"{parts['day']}T{spoken_time(body)}"
+        parts["when"] = {"mode": "at", "at": f["open_at"]}
     day = (f.get("open_at") or (parts.get("when") or {}).get("at") or parts.get("day") or "")[:10]
     if not f.get("country") and f.get("where"):   # a city on the trip: its country, in Google's words too (venue_read.find_venues)
         pc = await PS.latest(ctx["account"], f"{f.get('where') or ''} {body}")

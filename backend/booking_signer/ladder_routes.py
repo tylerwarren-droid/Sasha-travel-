@@ -142,7 +142,10 @@ async def read_venue(request: Request):
         # Sasha 169 · THE DEMO STAND-IN (founder only, SASHA_DEMO_STANDIN=1): a real listing picked → OUR test venue's own page
         # is read and sent to instead, and its name says so everywhere — the real place is never contacted
         from .form_rung import test_venue_url
-        body = {"name": standin_name(body.get("name")), "city": body.get("city") or "Madrid", "country": "ES", "website": test_venue_url()}
+        # a request for a date and a quote (a tattoo, custom work) has no slot to book: our EMAIL-only test venue stands in
+        quote = re.search(r"tattoo|piercing|custom|commission|portrait|bespoke|tailor|quote", str(body.get("asked_for") or ""), re.I)
+        body = {"name": standin_name(body.get("name")), "city": body.get("city") or "Madrid", "country": "ES",
+                "website": test_venue_url("email" if quote else "plain")}
     if any(k in body for k in ("phone", "number", "phone_number", "email", "to")):
         return _refuse(422, "contact_from_request", "a venue's contact details are READ from what it publishes, never taken from the request")
     now = NOW()

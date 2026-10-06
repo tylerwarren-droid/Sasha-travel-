@@ -315,6 +315,8 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
                   " ".join(m["what"].split()), flags=re.I)
     # Sasha 101 · "a table at a luxury restaurant" searches for the luxury restaurant — every qualifier kept
     what = re.sub(r"^(?:a\s+)?table\s+(?:at|in)\s+(?:an?\s+|the\s+)?", "", what, flags=re.I).strip() or what
+    # Sasha 170 · "a massage at a spa" is a massage spa (it was searched, and said, as "massage at a spas")
+    what = re.sub(r"\b([a-z]+)\s+at\s+an?\s+(spa|salon|studio|parlou?r|bar|restaurant)\b", r"\1 \2", what, flags=re.I)
     # Sasha 167 · "make me a dinner reservation", "add a dinner booking": the meal is searched for, not the word "reservation"
     what = re.sub(r"\s+(?:reservation|booking|reserva)s?$", "", what, flags=re.I).strip() or what
     # Sasha 104 · a short sentence of qualifiers after the request ("Something luxurious and romantic.") is part of what

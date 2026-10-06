@@ -2406,6 +2406,22 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
                 return
             why = refusal_words(j, status)
             log.info("[guest_whatsapp] email refused (%s); trying the next route", status)
+        elif route == "email" and "email" in rungs:
+            # Sasha 170 · no slot to book (a tattoo, custom work): their email asks for a date and a quote — as the web does
+            from . import guest_receipt as GR, ladder_routes as LR
+            mine = await GR.address_of(ctx["account"]) if LR.LADDER_STORE is not None else None
+            day = d.get("day") or ((reservation.get("when") or {}).get("at") or "")[:10]
+            want = (d.get("quote_what") or (d.get("what") or {}).get("activity") or "an appointment").strip()
+            status, j = await api(ctx["account"], "POST", "/api/booking/emails",
+                                  {"read_id": rd["read_id"], "name": contact["name"], "email": mine or "",
+                                   "quote": {"what": want if len(want.split()) >= 2 else f"{want} — please tell me what you can offer",
+                                             "dates": SN.day_words(day) if day else ""}})
+            if status == 200:
+                sentence = (f"I'll send {rd['venue']} your request and ask for a date and a quote"
+                            f"{' for ' + SN.day_words(day) if day else ''}. Shall I?")
+                await _ask_yes(ctx, "email", j["email_id"], j["read_back"], sentence, rd["venue"], extra={"summary": "", **keep})
+                return
+            why = refusal_words(j, status)
     st["pending"] = None
     said = f"I can't book {rd['venue']} from here right now" + (f" — {why}" if why else "")
     out.text(said + ("" if said.endswith(("?", ".")) else ".") + " Nothing was sent.")

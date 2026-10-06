@@ -135,6 +135,30 @@ def decide(v: Venue, prefer: Optional[str] = None) -> Decision:
                                        "I found no way to book them that I may use."), None, [])
 
 
+def line(v: Venue, d: Decision, venue: str) -> str:
+    """Sasha 161 · the route in ONE plain line, then the question — the same words on the web, WhatsApp and voice. The call
+    script, the plan's mechanics and the read-back stay in the call itself and the logs, never in the chat."""
+    venue = venue or "them"
+    if d.route == "form":
+        return "They take bookings online. I'll fill it in and book it for you. Book it?"
+    if d.route == "one_tap":
+        return f"They book through {v.platform or 'their booking page'}. I'll fill it in and send the last step to your phone. Book it?"
+    if d.route == "call_email":
+        return f"There's no online booking for {venue}, and it's soon — I'll call them and email them at once. Shall I?"
+    if d.route == "call":
+        only = "they only take bookings by phone" if not v.email else "the quickest way is a call"
+        if v.open_now is False:
+            when = f"when they open at {v.opens_at}" if v.opens_at else "when they open"
+            return f"There's no online booking for {venue} — {only}. They're closed now, so I'll call {when}. Shall I?"
+        return f"There's no online booking for {venue} — {only}. I'll call them now. Shall I?"
+    if d.route == "email":
+        if v.phone:
+            return (f"There's no online booking for {venue}. I'll email them, and call if they haven't replied in "
+                    f"{_h(reply_hours())}. Shall I?")
+        return f"There's no online booking or phone number for {venue} — only email. I'll email them and tell you as soon as they reply. Shall I?"
+    return f"I can't find a way to book {venue} — no online booking, phone or email. Want me to try somewhere similar nearby?"
+
+
 def _h(hours: float) -> str:
     return f"{int(hours)} hours" if hours != 1 else "an hour"
 

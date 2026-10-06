@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal, SIGN_IN_TO_BOOK } from '@/lib/booking-client'
 
-type Phase = { k: 'idle' } | { k: 'form' } | { k: 'readback'; lines: string[]; sha: string } | { k: 'paying'; url: string; sid: string }
+type Phase = { k: 'idle' } | { k: 'form' } | { k: 'readback'; lines: string[]; sha: string } | { k: 'paying'; url: string; sid: string; phone?: boolean }
   | { k: 'done'; say: string; sid?: string } | { k: 'error'; say: string }
   // Sasha 155 · the hotel's own page, live (our test hotel, a fictional guest): the guest ticks the box and presses
   | { k: 'live'; done: string; view: string; hid: string; t: string; say: string } | { k: 'booked'; done: string; say: string }
@@ -32,8 +32,10 @@ export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 
   async function yes(sha: string) {
     const r = await bookingReq('/api/booking/travel/hotel/pay', { ...details(), read_back_sha256: sha, approval: { how: 'button' } })
     if (!r.ok) return setP({ k: 'error', say: `No test booking — ${refusal(r.json, r.status)}.` })
-    setP({ k: 'paying', url: String(r.json.url), sid: String(r.json.session_id) })
-    window.open(String(r.json.url), '_blank', 'noopener')
+    // Sasha 161 · desktop books, phone confirms: the tap to pay went to the phone; the laptop keeps "or pay here"
+    const phone = String(r.json.phone ?? '').startsWith('sent')
+    setP({ k: 'paying', url: String(r.json.url), sid: String(r.json.session_id), phone })
+    if (!phone) window.open(String(r.json.url), '_blank', 'noopener')
   }
   useEffect(() => {
     if (p.k !== 'paying') return
@@ -77,7 +79,9 @@ export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 
       <button className="viewlink" onClick={() => setP({ k: 'idle' })}>No</button>
     </div>
   )
-  if (p.k === 'paying') return <span className="o2">Pay the TEST price on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged, no hotel is contacted)…</span>
+  if (p.k === 'paying') return p.phone
+    ? <span className="o2">Waiting for you to confirm on your phone… (TEST — nothing is charged) · or <a href={p.url} target="_blank" rel="noopener noreferrer">pay here</a></span>
+    : <span className="o2">Pay the TEST price on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged, no hotel is contacted)…</span>
   if (p.k === 'done') return (
     <span className="o2">{p.say}{p.sid ? <>{' '}<button className="price" onClick={() => { finishLive(p.say, p.sid!) }}>Finish on the hotel&rsquo;s page (live) →</button></> : null}</span>
   )

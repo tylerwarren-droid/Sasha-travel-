@@ -27,8 +27,10 @@ type Phase =
 
 const SLEEP = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-export default function ChatBookingCall({ readId, country, phone, venue, draft, whatText, openAt, onContacted }: {
+export default function ChatBookingCall({ readId, country, phone, venue, draft, whatText, openAt, onContacted, line }: {
   readId: string; country: string | null; phone: Rung; venue: string; draft: Draft; whatText: string; openAt?: string | null
+  /** Sasha 161 · the route's one plain line (the server's decide.line), shown instead of the read-back */
+  line?: string | null
   /** Sasha 88 · told when a call is placed or scheduled, so the chat stops saying "nothing has been contacted" */
   onContacted?: (how: 'calling' | 'scheduled') => void }) {
   // Sasha 86 · pre-filled from THIS message only (its draft, else the day and time its cards were filtered by) — every
@@ -225,7 +227,8 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
       {(phase.p === 'readback' || phase.p === 'placing') && (
         <div>
           {/* Sasha 96 · ONE confirmation sentence; the yes still binds to the full read-back's hash, which is one tap away */}
-          <div style={{ fontWeight: 600 }}>{confirmSentence}</div>
+          <div style={{ fontWeight: 600 }}>{line || confirmSentence}</div>
+          {line && confirmSentence ? <div style={{ fontSize: 12.5, opacity: 0.75 }}>{confirmSentence.replace(/^Book /, '').replace(/\?$/, '')}</div> : null}
           {phase.p === 'readback' && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
               <GatedButton label="Yes" onClick={run(() => approve(phase.callId, phase.sha, phase.lines, 'button', null))} needs={[]} />
@@ -234,11 +237,7 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
               <button type="button" onClick={() => { setPendingYes(null); setShowForm(true); setPhase({ p: 'details' }) }} style={{ fontSize: 12, textDecoration: 'underline' }}>Change details</button>
             </div>
           )}
-          <details style={{ marginTop: 6, fontSize: 13 }}>
-            <summary>See exactly what I&rsquo;ll say</summary>
-            <div style={{ fontSize: 12, opacity: 0.75, margin: '4px 0' }}>Your yes covers exactly these words:</div>
-            <ol style={{ paddingLeft: 18 }}>{phase.lines.map((l, i) => <li key={i}>{l}</li>)}</ol>
-          </details>
+          {/* Sasha 161 · the call script stays in the call itself and the logs, never in the chat */}
           {phase.p === 'placing' && <div>Placing the call…</div>}
         </div>
       )}

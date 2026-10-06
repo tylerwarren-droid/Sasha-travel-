@@ -105,8 +105,21 @@ def _read_view(row: dict, read: Optional[dict] = None) -> dict:
     chosen = L.choose(read, account=row.get("account_id"))
     return {"read_id": row["read_id"], "venue": read["name"], "country": read.get("country"), "listing": read.get("listing"),
             "facts": [{k: f[k] for k in ("kind", "value", "source_label", "source_url", "snippet", "fetched_at")} for f in read["facts"]],
-            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"],
+            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"], "plan": _plan_for(read, chosen["rungs"]),
             **({"listing_reread": read["listing_reread"]} if read.get("listing_reread") else {})}
+
+
+def _plan_for(read: dict, rungs: list) -> dict:
+    """Sasha 161 · the route Sasha takes and its ONE plain line — the same decision and words as WhatsApp (decide.py)."""
+    from . import guest_whatsapp as GW
+    try:
+        rd = {"venue": read.get("name"), "country": read.get("country"),
+              "rungs": {r["rung"]: {"value": r.get("value")} for r in rungs if r.get("available")}, **GW._hours_of(read, NOW())}
+        dv = GW.decision_of(rd, None, None, NOW())
+        return {"route": dv.route, "line": GW.route_line_of(rd, dv)}
+    except Exception as e:   # never a failed read for want of a sentence
+        log.info("[ladder_routes] no plan: %s", type(e).__name__)
+        return {"route": None, "line": None}
 
 
 # ── reading a venue ───────────────────────────────────────────────────────────────────────────

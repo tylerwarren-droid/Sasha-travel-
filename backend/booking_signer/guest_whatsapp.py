@@ -1528,6 +1528,23 @@ async def _late_photos(ch: dict, frm: str, names: Dict[str, str], pending: List[
 GREETING = re.compile(r"\s*(?:hi|hey|hello|hola|buenas|good (?:morning|afternoon|evening)|ola|ciao)(?:\s+(?:sasha|there|again))?\s*[!.?👋]*\s*", re.I)
 
 
+STALE_AFTER = timedelta(hours=2)
+RESUME = re.compile(r"\s*(?:yes|yeah|yep|sure|ok(?:ay)?|carry on|continue|go on|s[ií]|vale)\b.*", re.I)
+NO = re.compile(r"\s*(?:no|nope|drop it|cancel that|never mind|forget it)\b.*", re.I)
+
+
+def _still_want(pend: dict) -> str:
+    """"Still want Casa Lucio for Wednesday?" — from what the pending step holds."""
+    from . import sentences as SN
+    venue = (pend.get("read") or {}).get("venue") or pend.get("venue")
+    at = (((pend.get("draft") or {}).get("when") or {}).get("at") or "")
+    day = f" for {SN.day_words(at[:10]).split(' ')[0]}" if len(at) >= 10 else ""
+    if pend.get("kind") == "cards":
+        f = pend.get("find") or {}
+        return f"Still looking for {f.get('what') or 'a place'} in {f.get('where') or 'town'}?"
+    return f"Still want {venue}{day}?" if venue else "Still want to finish what we started?"
+
+
 def _open_item(pend: dict) -> str:
     """What's half-done, in a few words, from what the pending step holds (never its machinery)."""
     venue = (pend.get("read") or {}).get("venue") or pend.get("venue")
@@ -1552,9 +1569,30 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         return False
     at = _dt(pend.get("at") or "")
     kind = pend["kind"]
-    # Sasha 159 · a bare "hi" while something is half-done says hello and names it — it never answers the old question for them
-    if not payload and GREETING.fullmatch(body or ""):
-        out.text(f"Hi! {_open_item(pend)} Say “carry on” to finish it, or tell me what you'd like now.")
+    # Sasha 161 · STALE: after a greeting or a gap, ASK whether to continue — never resume mid-question
+    if pend.get("resume_asked") and not payload:
+        if RESUME.fullmatch(body or ""):
+            pend.pop("resume_asked", None)
+            pend["at"] = ctx["now"].isoformat()
+            if kind == "need":
+                await _prepare_or_ask(ctx, pend)
+            else:
+                out.text("OK — where were we: " + _open_item(pend))
+            return True
+        if NO.fullmatch(body or ""):
+            st["pending"] = None
+            out.text("OK — dropped. What would you like instead?")
+            return True
+        st["pending"] = None
+        return False   # anything else is a new request: it starts afresh
+    gap = (ctx["now"] - at) > STALE_AFTER if at else False
+    if not payload and (GREETING.fullmatch(body or "") or (gap and kind in ("need", "cards", "confirm"))):
+        from .handoff import booking_handoff
+        if gap and not GREETING.fullmatch(body or "") and booking_handoff(body or "") is not None:
+            st["pending"] = None
+            return False   # a whole new request after a gap starts afresh
+        pend["resume_asked"] = True
+        out.text(f"{'Hi! ' if GREETING.fullmatch(body or '') else ''}{_still_want(pend)} Say “yes” to carry on, or tell me what you'd like now.")
         return True
     # Sasha 117 · "Cancel the Retiro dinner" while cards (or another open question) show is a CANCELLATION, never a
     # refinement or an answer — live, it searched for "Cancel Retiro dinner dinner". Not for a yes/no on a booking or a
@@ -2008,6 +2046,17 @@ def _hours_of(read: dict, now) -> dict:
     return {"open_now": s.get("open_now"), "opens_at": (s.get("opens_at") or "")[11:16] or None}
 
 
+def route_line_of(rd: dict, dv) -> str:
+    """Sasha 161 · the decision's one plain line for this venue (decide.line)."""
+    from . import decide as D
+    rungs = rd.get("rungs") or {}
+    link = (rungs.get("link") or {}).get("value") or ""
+    from . import venue_read as V
+    v = D.Venue(form="form" in rungs, platform=((V.platform_of(link) if link.startswith("http") else link) or None) if "link" in rungs else None,
+                phone="phone" in rungs, email="email" in rungs, open_now=rd.get("open_now"), opens_at=rd.get("opens_at"))
+    return D.line(v, dv, rd.get("venue") or "them")
+
+
 def decision_of(rd: dict, prefer: Optional[str] = None, at: Optional[str] = None, now=None):
     """Sasha 130 · the read, as the decision workflow sees it. Sasha 131 · `at` (the booking's local time) makes it urgent."""
     from . import calls as C, decide as D, venue_read as V
@@ -2102,12 +2151,16 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
     dv = decision_of(rd, pend.get("prefer"), (reservation.get("when") or {}).get("at"), ctx["now"])
     combo = (st.get("combo") or {}).get("stage") == "restaurant"
     order = [r for r in [dv.route] + dv.alternatives if r] if not combo else ["form"]
-    if dv.route and not combo:
-        # Sasha 158 · the route and its reason are the ops console's (logged), never explained to the guest — except a
-        # platform page, where the final press is theirs and they need to know it
-        log.info("[guest_whatsapp] route %s: %s", dv.route, dv.reason)
-        if pend.get("prefer") or dv.route in ("one_tap", "call_email"):   # their own ask answered; a press of theirs; two acts on one yes
-            out.text(dv.reason)
+    log.info("[guest_whatsapp] route %s: %s", dv.route, dv.reason)   # Sasha 158 · the reasoning is the ops console's
+    if not combo:   # Sasha 161 · the route in ONE plain line, asked once (the read-back stays in the record and the logs)
+        ctx["route_line"] = route_line_of(rd, dv) if not d.get("nights") else None   # a hotel room keeps its own request sentence
+    if dv.route == "one_tap" and not combo:   # their page is sent next (no yes card): the line goes first, on its own
+        out.text(route_line_of(rd, dv))
+    if not dv.route and not combo:
+        ctx["route_line"] = route_line_of(rd, dv)
+        st["pending"] = None
+        out.text(ctx["route_line"])
+        return
     keep = {"read": rd, "draft": d, "invite_code": pend.get("invite_code")}   # so "call them instead" can re-decide
     for route in order:
         if route == "form" and "form" in rungs:
@@ -2226,8 +2279,11 @@ async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: st
                    extra: Optional[dict] = None) -> None:
     out = ctx["out"]
     sha = read_back["sha256"]
-    out.text("What I'll " + ("say" if rung == "call" else "send") + ":\n" +
-             "\n".join("• " + _BULLET.sub("", ln) for ln in guest_lines(rung, read_back["lines"])))   # Sasha 117 · one bullet
+    if ctx.get("route_line") and kind == "confirm":   # Sasha 161 · one plain line + what's booked; no script in the chat
+        sentence = f"{ctx['route_line']}\n{(extra or {}).get('summary') or ''}".strip()
+    else:
+        out.text("What I'll " + ("say" if rung == "call" else "send") + ":\n" +
+                 "\n".join("• " + _BULLET.sub("", ln) for ln in guest_lines(rung, read_back["lines"])))   # Sasha 117 · one bullet
     tag = f"{rid[:8]}:{sha[:16]}"
     yes_title = "Yes, book it" if kind == "confirm" else "Yes, cancel"
     out.ask(sentence, [(yes_title, f"yes:{tag}"), ("No", f"no:{tag}")])
@@ -2354,6 +2410,25 @@ async def offer_escalation(ch: dict, b: dict, read_row: dict, prefer: str, quest
 
 
 _TAPPED: set = set()
+
+
+async def tap_to_pay(account: Optional[str], amount: str, what: str, url: str) -> str:
+    """Sasha 161 · DESKTOP BOOKS, PHONE CONFIRMS: a payment started on the web → ONE WhatsApp to the account's phone,
+    "Tap to pay €X for <what>", opening Stripe's (TEST) page, where Apple Pay works. Stripe's own checkout links only."""
+    from urllib.parse import urlsplit
+    if (urlsplit(url or "").hostname or "") != "checkout.stripe.com":
+        return "not sent: not a Stripe checkout link"
+    if url in _TAPPED:
+        return "not sent: already sent"
+    if not account or STORE is None:
+        return "not sent: no account"
+    ch = await STORE.channel_of_account(account)
+    if not ch:
+        return "not sent: no WhatsApp linked to this account"
+    out = await _tell(ch, f"💳 Tap to pay {amount} for {what} (TEST — nothing is charged): {url}")
+    if "sent" in out and "not" not in out:
+        _TAPPED.add(url)
+    return out
 
 
 async def tap_to_finish(account: Optional[str], venue: str, url: str, what: str = "") -> str:

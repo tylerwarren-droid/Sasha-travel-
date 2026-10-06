@@ -251,7 +251,7 @@ class Turns(Base):
             self.pick_first()
             self.assertEqual(fake.forms[-1]["reservation"]["who"]["contact"], {"mobile_e164": GUEST, "email": "guest@example.com"})
             self.assertEqual(GW.SENDER.contents[-1][1][0][0], "Yes, book it")
-            self.assertIn("What I'll send:\n• I'll send the booking form:\n• Email: guest@example.com", self.bodies())   # one bullet
+            self.assertTrue(GW.SENDER.contents[-1][0].startswith("They take bookings online."))   # Sasha 161 · one line, no script
             self.say("Yes, book it", payload=GW.SENDER.contents[-1][1][0][1])
             self.assertIn("✅ Booked: A Very Long Restaurant Name In Madrid, Saturday 3 October at 21:00, 2 people. Their reference: TV-FE41E1.",
                           self.bodies())                                   # was "⚠ Not confirmed yet" over a confirmed booking
@@ -300,9 +300,10 @@ class Turns(Base):
     def test_a_pick_reads_the_place_and_asks_one_sentence_bound_to_its_read_back(self):
         self.pick_first()
         body, buttons = GW.SENDER.contents[-1]
-        self.assertEqual(body, "Book Botavara Chamberí for 2, Saturday 3 October at 21:00, under Warren?")
+        self.assertTrue(body.startswith("There's no online booking for Botavara Chamberí"), body)   # Sasha 161 · one plain line…
+        self.assertIn("Saturday 3 October at 21:00", body)                                           # …and what's booked
         self.assertEqual(buttons[0], ("Yes, book it", "yes:call-123:" + "a" * 16))
-        self.assertIn("What I'll say:\n• Hola, quería reservar…", self.bodies())
+        self.assertFalse(any(b.startswith("What I'll say") for b in self.bodies() if isinstance(b, str)))   # the script stays in the call
         prep = next(c for c in GW.api.calls if c[2] == "/api/booking/calls")[3]
         self.assertEqual(prep["reservation"]["who"], {"name": "Tyler Warren", "contact": {"mobile_e164": GUEST}})
         self.assertEqual(prep["fact_index"], 2)

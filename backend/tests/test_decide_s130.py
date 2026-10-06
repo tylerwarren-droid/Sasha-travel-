@@ -120,7 +120,7 @@ class OnWhatsApp(TG.Base):
         self.rungs = [{"rung": "link", "available": True, "fact_index": 1, "value": "https://www.covermanager.com/reserve/botavara"}]
         self.pick_first()
         said = "\n".join(self.bodies())
-        self.assertIn("They book through CoverManager.", said)
+        self.assertIn("They book through CoverManager. I'll fill it in and send the last step to your phone.", said)   # Sasha 161
         self.assertIn("One tap: Botavara Chamberí's booking page on CoverManager — the day, time and party are filled in. "
                       "Press their confirm button; I can't press it for you.", said)
         self.say("BOOKED")
@@ -143,7 +143,7 @@ class OnWhatsApp(TG.Base):
                       {"rung": "email", "available": True, "fact_index": 3, "value": "hola@botavara.es"}]
         self.pick_first()
         self.say("call them instead")
-        self.assertIn("As you asked: I'll call them, after your yes.", self.bodies())
+        self.assertIn("I'll call them", GW.SENDER.contents[-1][0])   # Sasha 161 · their ask answered in the one line
         self.assertIn("/api/booking/calls", self.api_paths())
         self.assertEqual(self.sent, [])
 
@@ -230,11 +230,10 @@ class Urgent(OnWhatsApp):
         with mock.patch.dict(os.environ, {"SASHA_URGENT_HOURS": "48"}):                 # Saturday 21:00 is 33 h away
             self.pick_first()
         said = "\n".join(self.bodies())
-        self.assertIn("It's within 48 hours, so I'll call them and email them at once — one yes covers both.", said)
-        self.assertIn("The call:", said)
-        self.assertIn("The email, sent at the same time:", said)
+        self.assertIn("I'll call them and email them at once", GW.SENDER.contents[-1][0])   # Sasha 161 · one line
+        self.assertNotIn("The call:", said)   # Sasha 161 · the scripts stay in the call and the email's own record
         body, buttons = GW.SENDER.contents[-1]
-        self.assertTrue(body.startswith("Call and email them now?"))
+        self.assertTrue(body.startswith("There's no online booking for"), body)
         self.assertEqual(self.sent, [])
         self.say("Yes, book it", payload=buttons[0][1])
         self.assertEqual(len(self.sent), 1)                                            # the email, with its OWN read-back's hash

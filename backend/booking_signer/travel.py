@@ -228,7 +228,9 @@ async def pay(request: Request):
     got = await TD.checkout(c["amount"], c["currency"], f"{c['owner']} {c['flights']} {c['from']}→{c['to']}", sha[:16])
     if "why" in got:
         return _refuse(422, "test_payment_unavailable", got["why"])
-    return {"ok": True, "url": got["url"], "session_id": got["id"]}
+    from . import guest_whatsapp as GW   # Sasha 161 · desktop books, phone confirms
+    phone = await GW.tap_to_pay(account_for(request), f"{c['amount']} {c['currency']}", f"{c['owner']} {c['from']}→{c['to']}", got["url"])
+    return {"ok": True, "url": got["url"], "session_id": got["id"], "phone": phone}
 
 
 @router.get("/flight/status")

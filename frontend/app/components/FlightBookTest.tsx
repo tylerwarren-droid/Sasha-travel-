@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal, SIGN_IN_TO_BOOK } from '@/lib/booking-client'
 
-type Phase = { k: 'idle' } | { k: 'reading' } | { k: 'readback'; lines: string[]; sha: string } | { k: 'paying'; url: string; sid: string }
+type Phase = { k: 'idle' } | { k: 'reading' } | { k: 'readback'; lines: string[]; sha: string } | { k: 'paying'; url: string; sid: string; phone?: boolean }
   | { k: 'booked'; say: string } | { k: 'error'; say: string }
 
 export function FlightBookTest({ offerId }: { offerId: string }) {
@@ -25,8 +25,10 @@ export function FlightBookTest({ offerId }: { offerId: string }) {
   async function yes(sha: string) {
     const r = await bookingReq('/api/booking/travel/flight/pay', { offer_id: offerId, read_back_sha256: sha, approval: { how: 'button' } })
     if (!r.ok) return setP({ k: 'error', say: `Not booked — ${refusal(r.json, r.status)}.` })
-    setP({ k: 'paying', url: String(r.json.url), sid: String(r.json.session_id) })
-    window.open(String(r.json.url), '_blank', 'noopener')
+    // Sasha 161 · desktop books, phone confirms: the tap to pay went to the phone; the laptop keeps "or pay here"
+    const phone = String(r.json.phone ?? '').startsWith('sent')
+    setP({ k: 'paying', url: String(r.json.url), sid: String(r.json.session_id), phone })
+    if (!phone) window.open(String(r.json.url), '_blank', 'noopener')
   }
   useEffect(() => {
     if (p.k !== 'paying') return
@@ -47,6 +49,8 @@ export function FlightBookTest({ offerId }: { offerId: string }) {
       <button className="viewlink" onClick={() => setP({ k: 'idle' })}>No</button>
     </div>
   )
-  if (p.k === 'paying') return <span className="o2">Pay the TEST fare on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged). I&rsquo;ll book it the moment it&rsquo;s paid…</span>
+  if (p.k === 'paying') return p.phone
+    ? <span className="o2">Waiting for you to confirm on your phone… (TEST — nothing is charged) · or <a href={p.url} target="_blank" rel="noopener noreferrer">pay here</a></span>
+    : <span className="o2">Pay the TEST fare on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged). I&rsquo;ll book it the moment it&rsquo;s paid…</span>
   return <span className="o2">{p.say}</span>
 }

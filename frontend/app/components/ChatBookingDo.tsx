@@ -20,8 +20,10 @@ const pad = (n: number) => String(n).padStart(2, '0')
 const plain = (why: string) => why.replace(/^[a-z]+(?:_[a-z0-9]+)+\s*[—:-]\s*/i, '').replace(/[.]+$/, '')
 const dayWords = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
 
-export function ChatBookingDo({ route, readId, venue, what, openAt, draft }: {
+export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line }: {
   route: Route; readId: string; venue: string; what: string; openAt: string | null
+  /** Sasha 161 · the route's one plain line (the server's), said instead of a sentence of our own */
+  line?: string | null
   draft: { when?: { at?: string }; how_many?: { count?: number } } | null
 }) {
   const at = openAt || draft?.when?.at || ''
@@ -124,13 +126,10 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft }: {
   )
   if (p.k === 'readback') return (
     <div style={box}>
-      <div>{p.sentence}</div>
-      <details style={{ marginTop: 6, fontSize: 13 }}>
-        <summary style={{ cursor: 'pointer', opacity: 0.8 }}>See exactly what I&rsquo;ll send</summary>
-        <div style={{ whiteSpace: 'pre-wrap', marginTop: 6, opacity: 0.9 }}>{p.lines.join('\n')}</div>
-      </details>
+      <div>{line || p.sentence}</div>
+      {line ? <div style={{ fontSize: 12.5, opacity: 0.75 }}>{quote ? d.want : `${d.party} people · ${dayWords(d.date)} at ${d.time}`}</div> : null}
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button className="price" onClick={() => { yes() }}>Yes, go ahead</button>
+        <button className="price" onClick={() => { yes() }}>{route === 'form' ? 'Book it' : 'Yes'}</button>
         <button className="viewlink" onClick={() => setP({ k: 'stopped', say: 'OK — nothing was sent.' })}>No</button>
       </div>
     </div>

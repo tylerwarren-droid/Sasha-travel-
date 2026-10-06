@@ -27,7 +27,9 @@ import { SignInToBook } from './SignedInLine'
 
 type Find = { what: string; where?: string; country?: string; near?: string; open_at?: string; priority?: string; draft?: unknown; named?: boolean
   bare_time?: { day: string; hour: number; minute: number } }
-type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null }
+type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null
+  /** Sasha 161 · the server's decision and its one plain line (decide.py — the same words as WhatsApp) */
+  plan?: { route: string | null; line: string | null } }
 type State =
   | { phase: 'finding' } | { phase: 'founder_only' } | { phase: 'refused'; words: string }
   | { phase: 'found'; cards: Candidate[]; near?: Near; ranking?: Ranking; all: Candidate[]; chip: string; show: number } | { phase: 'reading'; cards: Candidate[]; pick: Candidate }
@@ -319,18 +321,22 @@ export default function ChatBooking({ find }: { find: Find }) {
             const callDraft = find.named && eatery && !parts.what
               ? { ...(draftAll ?? {}), parts: { ...parts, what: { activity: 'a table', activity_venue_lang: TABLE[state.read.country ?? ''] ?? 'a table', category: 'restaurant' } } }
               : find.draft
-            if (fm && !callInstead) return <ChatBookingDo key={state.read.read_id} route="form" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} />
-            if (em && !callInstead) return <ChatBookingDo key={state.read.read_id} route="email" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} />
-            if (ph) return <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
-              venue={venue} draft={(callDraft ?? null) as never} whatText={find.what} openAt={openAt} onContacted={setContacted} />
-            if (ln) return <ChatBookingLink key={state.read.read_id} readId={state.read.read_id} platform={ln.value} draft={(find.draft ?? null) as never} openAt={openAt} />
+            const plan = state.read.plan ?? { route: null, line: null }
+            const pr = plan.route
+            if (fm && !callInstead && (!pr || pr === 'form')) return <ChatBookingDo key={state.read.read_id} route="form" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
+            if (em && !callInstead && (!pr || pr === 'email')) return <ChatBookingDo key={state.read.read_id} route="email" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
+            if (ph && (!pr || pr === 'call' || pr === 'call_email' || callInstead)) return <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
+              venue={venue} draft={(callDraft ?? null) as never} whatText={find.what} openAt={openAt} onContacted={setContacted} line={callInstead ? null : plan.line} />
+            if (ln) return <>{plan.line ? <div style={{ fontWeight: 600, marginBottom: 4 }}>{plan.line}</div> : null}
+              <ChatBookingLink key={state.read.read_id} readId={state.read.read_id} platform={ln.value} draft={(find.draft ?? null) as never} openAt={openAt} /></>
+            if (em) return <ChatBookingDo key={state.read.read_id} route="email" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
             if (wa) {
               const at = find.open_at ?? draft?.when?.at ?? ''
               const msg = `Hola, me gustaría reservar para ${draft?.how_many?.count ?? 2}${at ? ` el ${at.slice(8, 10)}/${at.slice(5, 7)} a las ${at.slice(11, 16)}` : ''}. ¿Tienen disponibilidad? Gracias.`
               return <div>{venue} books on WhatsApp — I&rsquo;ve written the message; you send it.{' '}
                 <a className="price" href={`https://wa.me/${String(wa.value).replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`} target="_blank" rel="noopener noreferrer">Open WhatsApp</a></div>
             }
-            return <div>I can&rsquo;t book {venue} from here. Try another place?</div>
+            return <div>{plan.line ?? `I can't find a way to book ${venue} — no online booking, phone or email. Want me to try somewhere similar nearby?`}</div>
           })()}
         </div>
       )}

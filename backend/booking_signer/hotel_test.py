@@ -136,7 +136,10 @@ async def pay(request: Request):
     got = await TD.checkout(f"{q['eur']:.2f}", "EUR", f"{LABEL} — {r['hotel']} {r['checkin']} ({r['nights']} nights)", q["sha256"][:16])
     if "why" in got:
         return _refuse(422, "test_payment_unavailable", got["why"])
-    return {"ok": True, "url": got["url"], "session_id": got["id"]}
+    from . import guest_whatsapp as GW   # Sasha 161 · desktop books, phone confirms: the tap to pay on the phone too
+    from .account import account_for
+    phone = await GW.tap_to_pay(account_for(request), f"€{q['eur']:.2f}", f"{r['hotel']}, {r['checkin']}, {r['nights']} night(s)", got["url"])
+    return {"ok": True, "url": got["url"], "session_id": got["id"], "phone": phone}
 
 
 @router.post("/hotel/status")

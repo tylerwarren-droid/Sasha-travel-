@@ -97,7 +97,7 @@ class OnWhatsApp(TG.Base):
         self.assertEqual([t for t, _ in choice], ["Test booking", "Book with hotel"])
         self.say("Book with hotel", payload=choice[1][1])
         said = "\n".join(self.bodies())
-        self.assertIn("They book through SynXis.", said)
+        self.assertIn("They book through SynXis. I'll fill it in and send the last step to your phone.", said)   # Sasha 161
         self.assertEqual(self.links[0]["nights"], 2)
         self.assertIn("One tap: Hotel Test Madrid's own booking engine (SynXis).", said)
         self.assertIn("https://be.synxis.com/?hotel=1&arrive=2026-10-20", said)

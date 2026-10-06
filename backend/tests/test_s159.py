@@ -66,5 +66,24 @@ class Greeting(unittest.TestCase):
         self.assertIn("choosing", GW._open_item({"kind": "cards", "find": {"what": "restaurants", "where": "Madrid"}}))
 
 
+class Sasha161(unittest.TestCase):
+    def test_still_want(self):
+        from booking_signer import guest_whatsapp as GW
+        self.assertEqual(GW._still_want({"kind": "need", "read": {"venue": "Casa Lucio"}, "draft": {"when": {"mode": "at", "at": "2026-10-07T21:00"}}}),
+                         "Still want Casa Lucio for Wednesday?")
+        self.assertTrue(GW.RESUME.fullmatch("carry on"))
+        self.assertTrue(GW.NO.fullmatch("no thanks"))
+
+    def test_one_line_per_route(self):
+        from booking_signer import decide as D
+        v = D.Venue(phone=True, open_now=False, opens_at="13:00")
+        self.assertEqual(D.line(v, D.decide(v), "Indian Accent"),
+                         "There's no online booking for Indian Accent — they only take bookings by phone. They're closed now, so I'll call when they open at 13:00. Shall I?")
+        v = D.Venue(email=True)
+        self.assertIn("only email. I'll email them and tell you as soon as they reply. Shall I?", D.line(v, D.decide(v), "X"))
+        v = D.Venue()
+        self.assertIn("Want me to try somewhere similar nearby?", D.line(v, D.decide(v), "X"))
+
+
 if __name__ == "__main__":
     unittest.main()

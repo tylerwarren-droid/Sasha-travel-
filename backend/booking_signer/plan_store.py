@@ -168,6 +168,18 @@ def merge(p: dict, bookings: List[dict]) -> dict:
     return plan
 
 
+_SHORT = {"requested": "Requested", "attempting": "Requested", "pending": "Not sent yet", "confirmed": "Confirmed ✅", "guest_booked": "Booked by you ✅",
+          "declined": "Declined", "quoted": "Quoted — read their reply", "proposed": "They offered another time", "unclear": "Read their reply",
+          "link_sent": "Link sent — not booked yet", "waitlisted": "Waiting list"}
+
+
+def short_status(b: dict) -> str:
+    """The status in a few words for the compact view (the full words, with their quote, are on the web and the receipt)."""
+    words = _SHORT.get(b.get("status") or "", b.get("status_words") or b.get("status") or "")
+    ref = re.search(r"their ref ([A-Z0-9-]+)", b.get("status_words") or "")
+    return words + (f" · ref {ref[1]}" if ref and b.get("status") == "confirmed" else "")
+
+
 def text(plan: dict) -> List[str]:
     """Compact, for WhatsApp and the voice: one block per day — the place, the bookings with their status, what's planned."""
     from .sentences import day_words
@@ -176,7 +188,7 @@ def text(plan: dict) -> List[str]:
         head = f"Day {d.get('day')}{' · ' + day_words(d['date']) if d.get('date') else ''} — {d.get('city') or ''}"
         lines = [head]
         for b in sorted(d.get("bookings") or [], key=lambda x: x.get("time") or ""):
-            lines.append(f"  • {b.get('time') or ''} {b.get('venue')}: {b.get('status_words') or b.get('status')}".replace("  •  ", "  • "))
+            lines.append(f"  • {b.get('time') or ''} {b.get('venue')}: {short_status(b)}".replace("  •  ", "  • "))
         planned = [a for a in d.get("activities") or [] if not a.get("replaced_by")][:2]
         for a in planned:
             lines.append(f"  · {a.get('time')}: {a.get('name')}")

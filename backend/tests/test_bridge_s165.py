@@ -40,7 +40,7 @@ class Merge(unittest.TestCase):
         self.assertFalse(any(b["venue"] == "Outside" for d in m["days"] for b in d["bookings"]))   # outside the trip: as today
         t = "\n".join(PS.text(m))
         self.assertIn("Day 1", t)
-        self.assertIn("Requested — waiting for Chả Cá Thăng Long", t)
+        self.assertIn("Chả Cá Thăng Long: Requested", t)
         self.assertNotIn("Street food dinner", t)                                         # replaced, not shown twice
 
 

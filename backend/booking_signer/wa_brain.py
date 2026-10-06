@@ -278,7 +278,7 @@ async def gate(ctx: dict, f: dict, parts: dict, body: str, done: Optional[list] 
             cc = _country_of(pc.get("title") or "", [])
             if cc:
                 f["country"] = cc
-    if "trip" not in done and day and not f.get("trip"):
+    if "trip" not in done and day and not f.get("trip") and _DATE_SAID.search(ordinals_as_digits(body)):
         p = await PS.latest(ctx["account"], f"{f.get('where') or ''} {body}")
         if p and p.get("start") and p.get("end"):
             start, end = (date.fromisoformat(str(x)[:10]) for x in (p["start"], p["end"]))
@@ -296,6 +296,27 @@ async def gate(ctx: dict, f: dict, parts: dict, body: str, done: Optional[list] 
                                         "body": body, "done": done + ["trip"], "trip_id": p["trip_id"], "city": cities[0], "day": day}
                 return
     await GW._find(ctx, f, {"parts": parts})
+
+
+_ORD_UNITS = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9}
+_ORD_TEENS = {"tenth": 10, "eleventh": 11, "twelfth": 12, "thirteenth": 13, "fourteenth": 14, "fifteenth": 15, "sixteenth": 16,
+              "seventeenth": 17, "eighteenth": 18, "nineteenth": 19, "twentieth": 20, "thirtieth": 30}
+
+
+def ordinals_as_digits(t: str) -> str:
+    """Sasha 171 · a voice note's "on the sixteenth" → "on the 16th" (Deepgram writes the words; the date was lost, live)."""
+    t = re.sub(r"\b(twenty|thirty)[\s-](" + "|".join(_ORD_UNITS) + r")\b",
+               lambda m: f"{(20 if m[1].lower() == 'twenty' else 30) + _ORD_UNITS[m[2].lower()]}th", t or "", flags=re.I)
+    t = re.sub(r"\b(" + "|".join(_ORD_TEENS) + r")\b", lambda m: f"{_ORD_TEENS[m[1].lower()]}th", t, flags=re.I)
+    return re.sub(r"\bthe\s+(" + "|".join(_ORD_UNITS) + r")\b(?!\s+(?:one|place|card|restaurant|option))",
+                  lambda m: f"the {_ORD_UNITS[m[1].lower()]}th", t, flags=re.I)
+
+
+#: a date the guest SAID (else "outside your trip?" is never asked — live it asked about today, which nobody had said)
+_DATE_SAID = re.compile(r"\b(today|tonight|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+                        r"jan(?:uary)?|feb(?:ruary)?|march|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|"
+                        r"dec(?:ember)?|\d{1,2}(?:st|nd|rd|th)|\d{1,2}[/.-]\d{1,2}|hoy|ma[nñ]ana|lunes|martes|mi[eé]rcoles|jueves|viernes|"
+                        r"s[aá]bado|domingo)\b", re.I)
 
 
 _ORD_DAY = re.compile(r"\b(?:on\s+)?the\s+(\d{1,2})(?:st|nd|rd|th)\b", re.I)
@@ -325,8 +346,9 @@ def spoken_time(body: str) -> Optional[str]:
 async def _ordinal_day(ctx: dict, f: dict, parts: dict, body: str) -> None:
     """Sasha 169 · "on the 16th", no month: the trip's 16th when a trip covers one, else the next 16th — never today (it was)."""
     from . import plan_store as PS
-    m = _ORD_DAY.search(body or "")
-    if not m or _MONTH_WORD.search(body or ""):
+    body = ordinals_as_digits(body or "")
+    m = _ORD_DAY.search(body)
+    if not m or _MONTH_WORD.search(body):
         return
     n, today = int(m[1]), ctx["now"].date()
     pick = None

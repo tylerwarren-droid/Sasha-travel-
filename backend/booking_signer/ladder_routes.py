@@ -192,6 +192,7 @@ async def draft_route(request: Request):
 
 
 REHEARSAL_ID = "sasha-test-venue"
+_FIND_CACHE: dict = {}   # Sasha 171 · (account, request) → (when, the cards) — the phone and the laptop see the same
 
 
 def standin(account: Optional[str]) -> bool:
@@ -235,6 +236,13 @@ async def find_venues(request: Request):
     try:
         _rehearse = _with_rehearsal if not re.search(r"\b(hotel|room|stay|hostel|homestay)\b", str(body.get("what") or ""), re.I) \
             else (lambda a, out: out)   # Sasha 132 · our test RESTAURANT is never offered as a hotel
+        # Sasha 171 · the SAME cards on the phone and the laptop: one search per account and request for 20 minutes (live, the
+        # two showed different restaurants for the same dinner)
+        ckey = (account_for(request), str(body.get("what") or "").lower().strip(), str(body.get("where") or "").lower().strip(),
+                str(body.get("country") or "").upper(), str(body.get("open_at") or ""), str(body.get("near") or ""), bool(body.get("named")))
+        hit = _FIND_CACHE.get(ckey)
+        if hit and NOW().timestamp() - hit[0] < 1200:
+            return hit[1]
         out = await V.find_venues(HTTP, what=body.get("what"), where=body.get("where"),
                                   country=body.get("country"), now=NOW(), near=body.get("near"), open_at=body.get("open_at"),   # S-68 steps 3–4
                                   named=bool(body.get("named")))
@@ -243,7 +251,11 @@ async def find_venues(request: Request):
             await _with_google_photos(out)
             return out
         await _with_google_photos(out)
-        return _rehearse(account_for(request), out)
+        out = _rehearse(account_for(request), out)
+        _FIND_CACHE[ckey] = (NOW().timestamp(), out)
+        if len(_FIND_CACHE) > 300:
+            _FIND_CACHE.pop(next(iter(_FIND_CACHE)))
+        return out
     except V.ReadRefused as e:
         return _refuse(503 if e.rule in ("places_not_configured", "places_unreachable", "places_refused") else 422, e.rule, str(e))
 

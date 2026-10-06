@@ -222,3 +222,26 @@ class StartOver(unittest.TestCase):
 
     def test_reset_the_demo_leaves_a_product(self):
         self.assertTrue(WB.RESET.match("reset the demo"))
+
+
+class SpokenDates(unittest.TestCase):
+    """Sasha 171 live: "on the sixteenth at eight at night" (Deepgram's words) lost the date, and 'outside your trip?' asked
+    about today — 'Add to my trip' then added 6 October to the plan."""
+
+    def test_words_become_the_trips_day(self):
+        async def lat(a, hint=None):
+            return {"trip_id": "t", "start": date(2026, 11, 12), "end": date(2026, 11, 19), "plan": {"days": DAYS}}
+        f, parts = {"open_at": "2026-10-06T20:00"}, {}
+        old = PS.latest
+        PS.latest = lat
+        try:
+            asyncio.run(WB._ordinal_day({"account": "a", "now": NOW}, f, parts,
+                                        "Please book a romantic dinner in Hoi An on the sixteenth at eight at night for two."))
+        finally:
+            PS.latest = old
+        self.assertEqual(f["open_at"], "2026-11-16T20:00")
+
+    def test_no_date_said_no_trip_question(self):
+        self.assertIsNone(WB._DATE_SAID.search(WB.ordinals_as_digits("a romantic dinner in Hoi An at eight at night")))
+        self.assertTrue(WB._DATE_SAID.search(WB.ordinals_as_digits("dinner on the sixteenth")))
+        self.assertEqual(WB.ordinals_as_digits("the first one"), "the first one")   # a pick stays a pick

@@ -83,16 +83,33 @@ SEX_WORDS = {"H": "male (H)", "M": "female (M)", "X": "X"}
 MARITAL_WORDS = {"S": "single (S)", "C": "married (C)", "V": "widowed (V)", "D": "divorced (D)", "Sp": "separated (Sp)"}
 
 
+#: CR 30 · not an answer, said in any of the ways people say it — never stored as a value
+NOT_AN_ANSWER = re.compile(r"(?i)^\s*(hmm+|umm*|err*|\?+|idk|not sure|unsure|no idea|i don'?t know|dunno|don'?t remember|"
+                           r"no s[eé]|ni idea|no lo s[eé]|wait|one sec(ond)?|hang on)\b")
+
+
 def _text(min_len: int = 1) -> Callable[[str], Tuple[Optional[str], Optional[str]]]:
     def p(t: str):
         t = re.sub(r"\s+", " ", (t or "").strip())
+        if NOT_AN_ANSWER.match(t):
+            return None, "No problem — type it when you have it, or say “later” and I'll keep everything."
         return (t, None) if len(t) >= min_len else (None, "Please type it out.")
     return p
 
 
 def _passport(t: str):
-    v = re.sub(r"[\s-]", "", t or "").upper()
-    return (v, None) if re.fullmatch(r"[A-Z0-9]{5,12}", v) else (None, "A passport number is letters and digits, e.g. 567812345.")
+    """The number, from however it's said: "AB1234567", "ab 123 4567", "my passport number is AB1234567" (CR 30: a whole
+    sentence used to be squashed into one long string and refused — every time). It has 5–12 letters and digits and at
+    least one digit ("HMMNOTSURE" isn't a number)."""
+    if NOT_AN_ANSWER.match(t or ""):
+        return None, "No problem — send a photo of the passport's photo page and I'll read it, or type the number when you have it."
+    whole = re.sub(r"[\s-]", "", t or "").upper()
+    if re.fullmatch(r"(?=.*\d)[A-Z0-9]{5,12}", whole):
+        return whole, None
+    tokens = [x for x in re.findall(r"[A-Z0-9]+", (t or "").upper()) if re.fullmatch(r"(?=.*\d)[A-Z0-9]{5,12}", x)]
+    if len(tokens) == 1:
+        return tokens[0], None
+    return None, "A passport number is letters and digits, e.g. 567812345 — or send a photo of the photo page and I'll read it."
 
 
 def _nie(t: str):

@@ -180,7 +180,7 @@ async def on_media(ctx: dict, facts: dict) -> bool:
     await ctx["early"]("Reading your passport photo page… It goes to Anthropic's AI model to be read, once; I don't keep the "
                        "photo.")
     try:
-        data, mt = await FETCH(m["url"])
+        data, mt = (m["bytes"], m["type"]) if m.get("bytes") else await FETCH(m["url"])   # CR 30 · a web upload: its own bytes
         if len(data) > MAX_BYTES:
             raise ValueError("the photo is larger than 8 MB")
         read = await READ(data, mt if mt in IMAGE_TYPES else m["type"])

@@ -53,8 +53,25 @@ SIGN_IN = {"relocation": "RelocateMe", "relocate": "RelocateMe", "campus": "Camp
            "espana": "EspañaMe", "españa": "EspañaMe", "espaname": "EspañaMe"}
 
 
+#: CR 30 · a photo uploaded in the web chat (laptop or phone): the same reader as WhatsApp's, its bytes passed in, never kept
+WEB_MEDIA_TYPES = ("image/jpeg", "image/png")
+WEB_MEDIA_MAX = 8 * 1024 * 1024
+WEB_MEDIA_COUNT = 5
+
+
+def web_media(media) -> list:
+    """[{"bytes": b"…", "content_type": "image/jpeg"}] → the router's media items ({url: None, type, bytes}); anything else,
+    too large or too many is dropped here (the reader then says what it can read)."""
+    out = []
+    for m in (media or [])[:WEB_MEDIA_COUNT]:
+        b, ct = (m or {}).get("bytes"), str((m or {}).get("content_type") or "").split(";")[0].strip().lower()
+        if isinstance(b, (bytes, bytearray)) and 0 < len(b) <= WEB_MEDIA_MAX:
+            out.append({"url": None, "type": ct, "bytes": bytes(b)})
+    return out
+
+
 async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = None, payload: Optional[str] = None,
-                   now: Optional[datetime] = None, signed_in: Optional[bool] = None) -> Optional[dict]:
+                   now: Optional[datetime] = None, signed_in: Optional[bool] = None, media=None) -> Optional[dict]:
     """⛔ Only for a SIGNED-IN visitor (`signed_in=True`, from the conductor's verified token). A visitor with no token is
     the public demo account — which, since CR 3, IS the founder's real account: the products must never act on it for a
     stranger (his files, his visits, his itinerary). Until the caller says signed_in, nothing here runs (4 Oct 2026)."""
@@ -71,7 +88,7 @@ async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = N
     now = now or datetime.now(timezone.utc)
     key = f"web:{user_id}"
     body = (message or "").strip()
-    if mode and not body and not payload:
+    if mode and not body and not payload and not media:
         word = OPEN.get(mode.lower())
         if not word:
             return None
@@ -88,7 +105,7 @@ async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = N
         early.append(text)
     ch = {"wa_id_sha256": key, "account_id": user_id, "number_e164": None, "channel": "web"}
     try:
-        handled = await PW.product_turn(ch, "web", p, st, out, now, early=_early)
+        handled = await PW.product_turn(ch, "web", p, st, out, now, early=_early, media=web_media(media))
     except Exception as e:
         log.error("[products.web] the product turn failed: %s: %s", type(e).__name__, e)
         return {"agent": "products", "response": "Something went wrong on my side with that — nothing was done. Try again?",

@@ -31,6 +31,8 @@ _HEALTH = re.compile(r"^\s*(salud|health|sanidad|m[eé]dico\s+en\s+madrid|espa[n
 _DILIGENCE = re.compile(r"^\s*(applied\s+diligence|diligence|ad)(?![\w'’-])", re.I)   # CR 15 · AD preview; never "add", "Ad-hoc"
 _AD_SHORT = re.compile(r"^\s*ad(?![\w'’-])", re.I)
 _ESPANA = re.compile(r"^\s*(espa[nñ]a\s*me|espa[nñ]ame|espa[nñ]a)\b", re.I)   # CR 15 · EspañaMe: the health demo + concepts
+_LATER = re.compile(r"^\s*(later|not now|another time|luego|m[aá]s tarde|despu[eé]s)\s*[.!]?\s*$", re.I)   # CR 30 · kept, set aside
+_RESUME_WORD = {"relocation": "relocation", "campus": "campus", "health": "españa", "trip": "trip", "diligence": "diligence"}
 _EXIT = re.compile(r"^\s*(exit|sasha|back|back to sasha|quit|salir)\s*[.!]?\s*$", re.I)
 
 
@@ -219,11 +221,11 @@ async def context(wa_key: str) -> Optional[dict]:
     return {k: v for k, v in c.items() if k != "line"}
 
 
-async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now, early=None) -> bool:
+async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now, early=None, media=None) -> bool:
     """True: a product answered (the caller stores the state and delivers `out`). False: Sasha's own flow answers."""
     body = (p.get("Body") or "").strip()
     payload = (p.get("ButtonPayload") or "").strip()
-    media = _media(p)
+    media = media if media is not None else _media(p)   # CR 30 · the web passes its photos' bytes; WhatsApp's come from Twilio
     pend = st.get("pending") or {}
     asked_last = pend.get("product") if pend.get("kind") == "product" else None
     if asked_last:
@@ -264,6 +266,12 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
             _say_back(out, prod, saved)
             await _store_put(ch, prod, st["pending"])
             return True
+    if asked_last and _LATER.match(body) and not payload:
+        await _store_put(ch, asked_last, {**st["pending"], "touched": now.isoformat()})
+        await _set_aside(st, ch)
+        out.text(f"Kept — everything you've given me stays. Say “{_RESUME_WORD.get(asked_last, asked_last)}” when you want to "
+                 "carry on. Back to Sasha meanwhile.")
+        return True
     if asked_last and _EXIT.match(body) and not payload:
         from . import store as ST
         await ST.STORE.drop_conversation(_key(ch), asked_last)
@@ -341,6 +349,8 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         rest = body if rest and not re.match(r"^(me|mode)\b", rest, re.I) else rest   # "campus visits at Yale…": all of it
     ctx = {"account": ch["account_id"], "ch": ch, "frm": frm, "st": st, "now": now, "out": out, "media": media,
            "early": early or _no_early, "plan_for": plan_for, "espana": bool(entering and _ESPANA.match(body))}
+    import json as _json
+    before = (st["pending"].get("step"), _json.dumps(st["pending"].get("facts"), sort_keys=True, default=str))
     handled = await _module(target).turn(ctx, rest, payload, entering=entering)
     if ctx.get("handoff"):
         # CR 13 · a booking step: Sasha's own flow answers this sentence as if typed (her hand-off line, marked "CR 13
@@ -361,6 +371,8 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         return True
     if st.get("pending"):
         st["pending"]["touched"] = now.isoformat()
+        if out.items:
+            _guard(out, st["pending"], before, bool(body or payload or media))
         if out.items:                                             # its last question, to say again on resuming
             # CR 20 · the whole of the last turn's question (e.g. the passport read-back AND "Is every line right?"), so the
             # other channel resumes with what it is being asked about — capped from the end, the question kept
@@ -371,6 +383,58 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         from . import store as ST
         await ST.STORE.put_conversation(_key(ch), ch["account_id"], target, st["pending"])
     return True
+
+
+# ── CR 30 · NEVER ASK TWICE: about to repeat the last question with nothing learned → say what's held and what's missing, once
+
+_NEVER_SAY = re.compile(r"(?i)tarjeta|cipa|\bsip\b|nuss|naf|health|salud|card_?code|cvv|iban|password|pin")
+_LABELS = {"passport_number": "Passport number", "surname_1": "First surname", "surname_2": "Second surname", "given_names": "Given names",
+           "birth_date": "Date of birth", "nationality": "Nationality", "email": "Email", "phone": "Phone"}
+
+
+def _norm(q: str) -> str:
+    return re.sub(r"\W+", " ", (q or "").lower()).strip()
+
+
+def held(facts, prefix: str = "") -> list:
+    """What a product holds, as 'Label: value' lines — leaves {"value": …} anywhere in its facts; never a health or
+    payment identifier."""
+    out = []
+    if isinstance(facts, dict):
+        if "value" in facts and not isinstance(facts["value"], (dict, list)):
+            if facts["value"] not in (None, "") and not _NEVER_SAY.search(prefix):
+                name = prefix.rsplit(".", 1)[-1]
+                out.append(f"{_LABELS.get(name, name.replace('_', ' ').capitalize())}: {facts['value']}")
+            return out
+        for k, v in facts.items():
+            if not _NEVER_SAY.search(str(k)):
+                out += held(v, f"{prefix}.{k}" if prefix else str(k))
+    return out
+
+
+def _guard(out, pend: dict, before: tuple, said_something: bool) -> None:
+    """The turn ends on the SAME question as the last one, the step and the facts unchanged, and the person did say
+    something → once per question: what Sasha has, what is missing, and how to move on — the question's buttons kept."""
+    import json as _json
+    last = out.items[-1]
+    q = str(last[1]) if last[0] in ("ask", "text") else ""
+    turn = _norm(" ".join(str(it[1]) for it in out.items if it[0] in ("text", "ask")))   # the WHOLE reply: a menu's new card isn't a loop
+    now_ = (pend.get("step"), _json.dumps(pend.get("facts"), sort_keys=True, default=str))
+    same = q and turn == pend.get("last_turn") and now_ == before and said_something
+    pend["last_turn"] = turn
+    if not same or pend.get("guarded_q") == _norm(q):
+        return
+    pend["guarded_q"] = _norm(q)
+    have = held(pend.get("facts"))[:8]
+    line = ("I asked that a moment ago and didn't get an answer I could use — so you don't go round in circles:\n"
+            + ("What I have: " + "; ".join(have) + ".\n" if have else "")
+            + f"Still missing: {q.strip()}\n"
+            + "Answer in your own words, send a photo if it's on a document, or say “later” and I'll keep everything for when you're back.")
+    out.items = [it for it in out.items[:-1] if it[0] == "media"]
+    if last[0] == "ask":
+        out.ask(line, list(last[2]))
+    else:
+        out.text(line)
 
 
 # "where are we …" is Sasha's itinerary question (itinerary_q.QUESTION), never taken here

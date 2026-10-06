@@ -43,11 +43,12 @@ OFIREG = {"name": "Cita previa — Oficinas de Registro y Atención al Ciudadano
           "url": "https://gestiona.comunidad.madrid/ctac_cita/OFIREG",
           "info": "https://www.comunidad.madrid/servicios/informacion-atencion-ciudadano/cita-previa-oficinas-registro-atencion-ciudadano",
           "words": "En la Red de Oficinas se atiende con cita y sin cita según disponibilidad."}
-# CR 36 · the office for the citizen's town, from the official list (OFIREG page above, read 6 Oct 2026): only where it names
-# one; elsewhere the page opens on its own office list. Alcobendas has none of its own: its neighbour's is the nearest listed.
-_DAT_NORTE = {"centro": "1005", "name": "Oficina de Registro DAT Madrid Norte",
-              "address": "Avenida de Valencia, sin número, 28702 San Sebastián de los Reyes"}
-REGISTRY_NEAR = {"ALCOBENDAS": _DAT_NORTE, "SAN SEBASTIAN REYES": _DAT_NORTE}
+# CR 37 · the office and service for handing in the 1449F1 by cita, read on the OFIREG page itself (6 Oct 2026): under
+# "06 Consejería de Sanidad (OFICINA 360)", the office "SERMAS. Paseo de la Castellana, 280", service "01-REGISTRO DE
+# DOCUMENTACIÓN" (id 3152); the page's own link ?servicio=3152 opens straight on "Solicitar cita" with both chosen.
+# (CR 36 had preselected DAT Madrid Norte: an EDUCATION office — dropped.)
+SERMAS_REGISTRY = {"servicio": "3152", "name": "SERMAS. Paseo de la Castellana, 280", "service": "01-REGISTRO DE DOCUMENTACIÓN",
+                   "address": "Paseo de la Castellana, 280, Madrid", "url": "https://gestiona.comunidad.madrid/ctac_cita/OFIREG?servicio=3152"}
 SERMAS_ONLINE_NEEDS_CIPA = "SERMAS's own online cita asks for your card's code (CIPA) — not possible before your first card."
 UA = "KanoeEspanaMe/0.1 (+https://project.kanoe.ai; one citizen's own lookup, read-only; tyler@kanoe.ai)"
 PACE = 2.0
@@ -209,7 +210,7 @@ async def detail(cid: str, cookies=None) -> dict:
 def card(c: dict) -> str:
     return (f"Your centro de salud — from SERMAS's own finder, read just now:\n*{c['name']}*\n{c['address']}, {c['postcode']} "
             f"{c['municipality'].title()}\n{c['hours']}\nCita line: {c['phone_cita'] or c['phone_info']}\n"
-            f"The Comunidad's page: “{HAND_IN['words']}”")
+            f"No cita needed: walk into {c['name']} during public hours, 8:30–20:30 — the Comunidad's page: “{HAND_IN['words']}”")
 
 
 # ── the calendar ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -394,28 +395,29 @@ async def on_route(ctx: dict, t: str, payload: str) -> None:
 
 
 async def _online(ctx: dict, ci: dict) -> None:
-    """The registry offices' own cita page, to the citizen's phone; their details ready to copy; the CAPTCHA and Enviar theirs."""
+    """The Comunidad's own cita page, opened straight on "Solicitar cita" at SERMAS's registry office and its service; each
+    personal detail as its own message (one tap copies it); the CAPTCHA and Enviar are the citizen's."""
     pend, out = ctx["st"]["pending"], ctx["out"]
     copy = ci.get("copy") or {}
     lines = [f"{k}: {v}" for k, v in (("Nombre", copy.get("nombre")), ("Apellidos", copy.get("apellidos")),
                                       ("DNI/NIE", copy.get("dni")), ("Móvil", copy.get("movil")), ("Correo", copy.get("correo"))) if v]
-    near = REGISTRY_NEAR.get(_norm(ci.get("municipality", "")))
-    if near:
-        ci["office"] = near
-    url = f"{OFIREG['url']}?centro={near['centro']}" if near else OFIREG["url"]
-    where = (f"{near['name']} ({near['address']}) — the official list's nearest office to {ci['municipality'].title()}, "
-             "already chosen; pick the service" if near else "Pick an office near you, the service")
-    msg = (f"📲 The Comunidad's own cita page for its registry offices (Oficinas de Registro y Atención al Ciudadano):\n"
-           f"{url}\n{where}, then a day and time. Your details, ready to copy:\n"
-           + "\n".join("• " + x for x in lines) +
-           "\nIt ends with a “No soy un robot” box and Enviar — both yours. Then tell me the day and time (and the code they give you).")
+    o = SERMAS_REGISTRY
+    ci["office"] = {"name": o["name"], "address": o["address"]}
+    head = (f"📲 The Comunidad's own cita page, open on “Solicitar cita” at {o['name']}, service “{o['service']}”:\n{o['url']}\n"
+            "Pick a day and a time, then your details — each one below, ready to copy. It ends with “No soy un robot” and "
+            "Enviar: both yours. Then tell me the day and time (and the code they give you).")
     pend.update(step="ci_booked", ci_route="online")
     if ctx["frm"] == "web":
-        sent = await _to_phone(ctx, msg)
-        out.text("I've sent the cita page to your phone — " + ("open it there." if sent else
-                 f"(your phone isn't linked, so here it is): {url}"))
+        sent = all([await _to_phone(ctx, head)] + [await _to_phone(ctx, x.split(": ", 1)[1]) for x in lines])
+        out.text("I've sent the cita page and your details to your phone — " + ("open it there." if sent else
+                 f"(your phone isn't linked, so here they are): {o['url']}"))
+        if not sent:
+            for x in lines:
+                out.text(x.split(": ", 1)[1])
     else:
-        out.text(msg)
+        out.text(head)
+        for x in lines:                                   # each on its own: a long-press copies just that value
+            out.text(x.split(": ", 1)[1])
     out.text(f"(SERMAS's own online cita isn't the route here: {SERMAS_ONLINE_NEEDS_CIPA})")
 
 

@@ -52,7 +52,7 @@ class Booked(TG.unittest.TestCase):
         self.assertEqual(CI.when("Fecha: 08/10/2026 Hora: 10:30 Código de cita: A1B2C", now), (date(2026, 10, 8), "10:30"))
         self.assertEqual(CI.when("booked Thursday 9:30, code 12345", now), (date(2026, 10, 8), "09:30"))
 
-    def test_alcobendas_opens_on_the_nearest_listed_office(self):
+    def test_the_registry_page_opens_on_sermas_own_service(self):
         from products.health import cita as CI
-        self.assertEqual(CI.REGISTRY_NEAR[CI._norm("Alcobendas")]["centro"], "1005")
-        self.assertIsNone(CI.REGISTRY_NEAR.get(CI._norm("Madrid")))          # the page's own list instead: never a guess
+        self.assertTrue(CI.SERMAS_REGISTRY["url"].endswith("OFIREG?servicio=3152"))   # the page opens on "Solicitar cita"
+        self.assertEqual(CI.SERMAS_REGISTRY["service"], "01-REGISTRO DE DOCUMENTACIÓN")

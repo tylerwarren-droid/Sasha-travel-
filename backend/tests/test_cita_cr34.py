@@ -116,9 +116,9 @@ class Routes(Base):
         self.mark()
         self.say("", payload="hx:ci:web")
         got = self.last()
-        self.assertIn(CI.OFIREG["url"], got)
-        self.assertIn("• DNI/NIE: 99999999R", got)
-        self.assertIn("“No soy un robot” box and Enviar — both yours", got)
+        self.assertIn(CI.SERMAS_REGISTRY["url"], got)
+        self.assertIn("\n99999999R\n", "\n" + got + "\n")                      # each detail its own message
+        self.assertIn("“No soy un robot” and Enviar: both yours", got)
         self.assertIn(CI.SERMAS_ONLINE_NEEDS_CIPA, got)             # SERMAS's own online cita: not before a first card
         self.mark()
         self.say("booked Thursday 9:30, code 12345")

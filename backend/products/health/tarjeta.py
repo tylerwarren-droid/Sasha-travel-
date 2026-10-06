@@ -516,7 +516,7 @@ async def _prepare(ctx: dict) -> None:
     out.text(f"✅ Your health-card form is ready: {len(rs)} boxes of the official 1449F1 filled from your ID and your answers, "
              "each naming its source. Nothing has been submitted.")
     out.media("Solicitud de la Tarjeta Sanitaria (1449F1) — filled, NOT signed, NOT submitted.",
-              f"{web()}/api/booking/products/health/{cid}/1449F1-prepared.pdf")
+              f"{web()}/api/products/health/{cid}/1449F1-prepared.pdf")
     out.text("Left for you:\n" + "\n".join(f"• {x}" for x in LEFT_FOR_YOU) +
              f"\n\nThen: print it, sign it, and take it to your health centre (with a cita) — the card is collected there in "
              f"person. Source: {SOURCE['procedure']} (updated {SOURCE['updated']}), read {SOURCE['read_on']}. "

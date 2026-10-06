@@ -154,7 +154,7 @@ class Flow(Base):
         back = TS.read_pdf(r.content)
         self.assertEqual((back["TLNOMBRE_INTER"], back["NMNUMVIAL_INTER"], back["ITMOTIVO_SOLIC"]), ("CARMEN", "1", "/NUEVA"))
         self.assertFalse([k for k in back if k.startswith(("ITICDA_", "ITTIPONOTIFICA", "TLNUMAFILSS"))])
-        self.assertIn("/api/booking/products/health/", "\n".join(str(m) for m in GW.SENDER.sent))
+        self.assertIn("/api/products/health/", "\n".join(str(m) for m in GW.SENDER.sent))
 
     def test_a_wrong_letter_is_said_and_no_rereads_it(self):
         self.to_photo()

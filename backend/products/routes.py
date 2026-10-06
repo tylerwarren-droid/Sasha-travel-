@@ -117,7 +117,7 @@ async def campus_case(cid: str) -> dict:
             "confirmation_quote": st.get("confirmation_quote"), "prepared_at": str(c["created_at"]),
             "fictional": bool(st.get("fictional")), "showcase": bool(st.get("showcase")),
             "form_rows": st.get("rows"), "left_for_you": st.get("left_for_you"), "form_source": st.get("source"),
-            "form_pdf": f"/api/booking/products/health/{cid}/1449F1-prepared.pdf" if st.get("rows") else None,
+            "form_pdf": f"/api/products/health/{cid}/1449F1-prepared.pdf" if st.get("rows") else None,
             "expires_at": str(c["expires_at"]), "submits": False}
 
 

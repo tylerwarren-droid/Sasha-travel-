@@ -18,7 +18,7 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Request
@@ -417,6 +417,12 @@ async def prepare_email(request: Request):
            "email_sha256": E.email_sha256(email), "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)),
            "created_at": NOW(), "venue_name": read["name"], "local_date": p.on, "local_time": p.at, "local_timezone": tz,
            "party_size": p.party}
+    if quote and body.get("date"):   # Sasha 165 · a request's PREFERRED day (and time), so it lands on its day in the trip
+        try:
+            rec["local_date"] = date.fromisoformat(str(body["date"]))
+            rec["local_time"] = time.fromisoformat(str(body.get("time") or "12:00"))
+        except ValueError:
+            pass
     try:
         item = await LADDER_STORE.put_email(rec, None)
     except UnknownTrip:

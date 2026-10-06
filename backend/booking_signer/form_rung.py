@@ -57,6 +57,59 @@ def test_venue_url(variant: str = "plain") -> str:
     return f"{public_base()}/api/booking/test-venue/{variant}"
 
 
+# ── CR 42 · the test venue's CAPTCHA: reCAPTCHA v2 (checkbox) or Cloudflare Turnstile, a REAL key when Railway has one ─────
+# SASHA_TEST_CAPTCHA = recaptcha (default) | turnstile; the pair RECAPTCHA_SITE_KEY + RECAPTCHA_SECRET_KEY, or TURNSTILE_SITE_KEY +
+# TURNSTILE_SECRET_KEY. Until BOTH of a pair are set, the provider's documented always-pass TEST pair is used (Google:
+# developers.google.com/recaptcha/docs/faq; Cloudflare: developers.cloudflare.com/turnstile/troubleshooting/testing).
+# The guest solves it in the live view; Sasha never solves one.
+CAPTCHA_ENV = {"recaptcha": ("RECAPTCHA_SITE_KEY", "RECAPTCHA_SECRET_KEY"), "turnstile": ("TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY")}
+CAPTCHA_TEST_KEYS = {"recaptcha": ("6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI", "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe"),
+                     "turnstile": ("1x00000000000000000000AA", "1x0000000000000000000000000000000AA")}
+CAPTCHA_SCRIPT = {"recaptcha": '<script src="https://www.google.com/recaptcha/api.js" async defer></script>',
+                  "turnstile": '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'}
+CAPTCHA_BOX = {"recaptcha": '<div class="g-recaptcha" data-sitekey="{site}"></div>',
+               "turnstile": '<div class="cf-turnstile" data-sitekey="{site}"></div>'}
+CAPTCHA_FIELD = {"recaptcha": "g-recaptcha-response", "turnstile": "cf-turnstile-response"}
+CAPTCHA_VERIFY_URL = {"recaptcha": "https://www.google.com/recaptcha/api/siteverify",
+                      "turnstile": "https://challenges.cloudflare.com/turnstile/v0/siteverify"}
+
+
+def captcha_kind() -> str:
+    k = os.getenv("SASHA_TEST_CAPTCHA", "").strip().lower()
+    return k if k in CAPTCHA_ENV else "recaptcha"
+
+
+def captcha_keys(kind: str):
+    """→ (site key, secret, real?) — the real pair only when both halves are set."""
+    site, secret = (os.getenv(e, "").strip() for e in CAPTCHA_ENV[kind])
+    return (site, secret, True) if site and secret else (*CAPTCHA_TEST_KEYS[kind], False)
+
+
+async def _captcha_verify(kind: str, token: str, secret: str):
+    """→ (passed?, why) from the provider's own siteverify; no token, or no answer, is a fail."""
+    if not token:
+        return False, "no token (the box was not completed)"
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            j = (await c.post(CAPTCHA_VERIFY_URL[kind], data={"secret": secret, "response": token})).json()
+    except Exception as e:
+        return False, f"siteverify unreachable ({type(e).__name__})"
+    return bool(j.get("success")), f"success={j.get('success')} host={j.get('hostname')} errors={j.get('error-codes') or []}"
+
+
+CAPTCHA_VERIFY = _captcha_verify   # tests replace it: no network
+
+
+def captcha_status() -> Dict[str, Any]:
+    """What the test venue's box is — names and whether set, never a key's value."""
+    kind = captcha_kind()
+    site_env, secret_env = CAPTCHA_ENV[kind]
+    return {"kind": kind, "real_key": captcha_keys(kind)[2], "site_key_set": bool(os.getenv(site_env, "").strip()),
+            "secret_set": bool(os.getenv(secret_env, "").strip()), "env": [site_env, secret_env, "SASHA_TEST_CAPTCHA"],
+            "register_domain": urlsplit(public_base()).hostname}
+
+
 # ── the maps: which forms Sasha may send, and what each field is ──────────────────────────────────────────────────
 
 #: field name → (S-46 role, the label the read-back shows). The test venue's form, all three variants.
@@ -197,10 +250,10 @@ def roles_for(live: Dict[str, Any], m: Dict[str, Any]) -> List[Dict[str, Any]]:
     for x in live["fields"]:
         if not x["name"] or x["type"] in ("submit", "button", "reset", "image"):
             continue
-        if x["type"] == "hidden":
-            out.append({**x, "role": "hidden"})
-        elif _CHALLENGE.search(x["name"]):
+        if _CHALLENGE.search(x["name"]):       # CR 42 · first: Turnstile's token field is type=hidden
             out.append({**x, "role": "challenge"})
+        elif x["type"] == "hidden":
+            out.append({**x, "role": "hidden"})
         elif x["hidden_by_style"] or x["autocomplete_off_trap"]:
             out.append({**x, "role": "trap"})
         elif x["name"] in m["fields"]:
@@ -879,6 +932,11 @@ async def test_venue_wizard_confirm(request: Request):
     return await _book("wizard", {k: str(v) for k, v in (await request.form()).items()})
 
 
+@router.get("/test-venue-captcha/status")
+async def test_venue_captcha_status():
+    return captcha_status()
+
+
 @router.get("/test-venue/{variant}", response_class=HTMLResponse)
 async def test_venue(variant: str):
     if variant not in TEST_VARIANTS:
@@ -892,11 +950,12 @@ async def test_venue(variant: str):
         return HTMLResponse(f"""<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Sasha Test Venue — reservas por email</title>
 <meta property="og:site_name" content="Sasha Test Venue"></head><body><h1>Sasha Test Venue</h1>
 <p>Restaurante de pruebas de Kanoe. No es un restaurante real. Reservas por email: <a href="mailto:{addr}">{addr}</a></p></body></html>""")
-    head = '<script src="https://www.google.com/recaptcha/api.js" async defer></script>' if variant == "captcha" else ""
+    kind = captcha_kind()
+    head = CAPTCHA_SCRIPT[kind] if variant == "captcha" else ""
     extra = {"consent": '<input id="acepto" name="acepto" type="checkbox" required><label for="acepto">Acepto la política de privacidad</label>\n',
-             # Sasha 158 · Google's documented reCAPTCHA v2 TEST key (developers.google.com/recaptcha/docs/faq): a real "I'm not
-             # a robot" box that always passes and is marked "testing only" — for the guest's tap in the hand-over, on OUR page
-             "captcha": '<div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"></div>\n'}.get(variant, "")
+             # Sasha 158 / CR 42 · the guest's own box in the hand-over, on OUR page: reCAPTCHA v2 or Turnstile, with the REAL
+             # site key once Railway has one (captcha_keys), else the provider's documented always-pass TEST key
+             "captcha": CAPTCHA_BOX[kind].format(site=escape(captcha_keys(kind)[0])) + "\n"}.get(variant, "")
     return HTMLResponse(_PAGE.format(variant=variant, head=head, extra=extra, token=uuid.uuid4().hex))
 
 
@@ -928,6 +987,13 @@ async def _book(variant: str, form: Dict[str, str]) -> HTMLResponse:
         missing.append("acepto")
     if missing:
         return HTMLResponse(f"<p>Faltan campos: {escape(', '.join(missing))}.</p>", status_code=422)
+    if variant == "captcha":   # CR 42 · checked by Google / Cloudflare, server-side: a failed or missing token is NOT booked
+        kind = captcha_kind()
+        ok, why = await CAPTCHA_VERIFY(kind, form.get(CAPTCHA_FIELD[kind], ""), captcha_keys(kind)[1])
+        log.info("[test-venue] captcha %s (%s, real key=%s): %s", "passed" if ok else "FAILED", kind, captcha_keys(kind)[2], why)
+        if not ok:
+            return HTMLResponse("<html><body><h1>Reserva no realizada</h1><p>La verificación «No soy un robot» no se ha completado: "
+                                "no hay ninguna reserva.</p></body></html>", status_code=403)
     ref = _tv_ref(uuid.uuid4().hex[:6].upper())
     TEST_SUBMISSIONS.append({"variant": variant, "received_at": NOW().isoformat(), "reference": ref,
                              "fields": {k: v for k, v in form.items() if k != "token"}, "had_token": bool(form.get("token"))})

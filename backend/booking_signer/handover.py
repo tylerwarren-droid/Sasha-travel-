@@ -411,8 +411,10 @@ async def open_handover(*, page_url: str, m: dict, step1: List[dict], step2: Lis
             label = next((x.get("label") for x in fields if x["name"] == box), "") or box
             rec.update(taps_left=2, guest_box=box, box_label=label if len(label) <= 40 else label[:38] + "…")
         if captcha:    # Sasha 158 · the CAPTCHA is the guest's to solve, in the live view; Sasha never solves one
-            page.guest_box, page.guest_first = ".g-recaptcha, iframe[src*='recaptcha']", "Tick “I'm not a robot”"
-            rec.update(taps_left=2, guest_box="captcha", box_label="I'm not a robot")
+            ts = any(x["role"] == "challenge" and "turnstile" in x["name"] for x in fields)   # CR 42 · or Cloudflare's
+            page.guest_box = ".cf-turnstile, iframe[src*='challenges.cloudflare.com']" if ts else ".g-recaptcha, iframe[src*='recaptcha']"
+            page.guest_first = "Tick “Verify you are human”" if ts else "Tick “I'm not a robot”"
+            rec.update(taps_left=2, guest_box="captcha", box_label="Verify you are human" if ts else "I'm not a robot")
         rec["filled"] = await _fill(page, step1, fields)
         seen = await page.read()
         if step2:

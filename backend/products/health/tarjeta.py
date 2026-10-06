@@ -523,9 +523,18 @@ async def _prepare(ctx: dict) -> None:
     FC.show(out, "Your health-card form (1449F1), page 1 — highlighted: what I filled. Not signed, not submitted.",
             f"{web()}/api/products/health/{cid}/1449F1-card.jpg", f"{web()}/api/products/health/{cid}/1449F1-prepared.pdf")
     out.text("Left for you:\n" + "\n".join(f"• {x}" for x in LEFT_FOR_YOU) +
-             f"\n\nThen: print it, sign it, and take it to your health centre (with a cita) — the card is collected there in "
+             f"\n\nThen: print it, sign it, and hand it in at your centro de salud — the card is collected there in "
              f"person. Source: {SOURCE['procedure']} (updated {SOURCE['updated']}), read {SOURCE['read_on']}. "
              f"The link works for 24 hours; then the details are dropped.")
+    # CR 34 · from the form to the cita: only what the lookup and the copy lines need, dropped with the form
+    from . import cita as CI
+    v = lambda k: (f.get(k) or {}).get("value", "")
+    a = split_address(v("street") or v("address_line"))
+    CI.offer(out, pend, {"street": f"{a['type']} {a['name']}".strip(), "number": a["number"],
+                         "municipality": v("municipality") or "MADRID", "motive": v("motive"),
+                         "copy": {"nombre": v("given_names").title(), "apellidos": f"{v('surname_1')} {v('surname_2')}".strip().title(),
+                                  "dni": v("dni"), "movil": v("phone"), "correo": v("email")}},
+             (now + VALUES_TTL).isoformat())
 
 
 # a fictional specimen (Spain's own DNI specimen style) — tests and DEMO only, never a real person

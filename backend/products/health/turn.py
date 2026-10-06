@@ -186,6 +186,19 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         else:
             out.ask(CHOOSE, CHOOSE_BUTTONS)
         return
+    if step in ("ci_offer", "ci_route", "ci_when", "ci_call_when", "ci_call_confirm", "ci_booked"):   # CR 34 · form → cita
+        from . import cita as CI
+        if step == "ci_offer":
+            await CI.on_offer(ctx, t, payload)
+        elif step == "ci_route":
+            await CI.on_route(ctx, t, payload)
+        elif step == "ci_call_when":
+            await CI.call_prepare(ctx, t)
+        elif step == "ci_call_confirm":
+            await CI.call_yes(ctx, t, payload)
+        else:
+            await CI.on_when(ctx, t)
+        return
     if step in ("ts_doc", "ts_back", "ts_confirm", "ts_ask"):     # CR 30 · the health-card form (tarjeta.py)
         from . import tarjeta as TS
         if step in ("ts_doc", "ts_back"):
@@ -389,8 +402,14 @@ async def _public_handover(ctx: dict, values: Optional[dict], source: Optional[s
         out.text("Health isn't switched on on this server yet (its storage isn't ready). Nothing was kept.")
         return
     pend.update(step="sermas_wait", case_id=cid)
+    link = f"{web()}/health-handover/{cid}"
     out.text(f"Your SERMAS appointment, prepared — the official page, what it asks for{' (ready to copy)' if keep else ''}, "
-             f"and the appointment type:\n{web()}/health-handover/{cid}")
+             f"and the appointment type:\n{link}")
+    if ctx["frm"] == "web":                    # CR 34 · from the laptop, the page goes to the phone: the citizen books there
+        from . import cita as CI
+        sent = await CI._to_phone(ctx, f"📲 Your SERMAS appointment, ready — open SERMAS's own page from here and book it "
+                                       f"yourself:\n{link}")
+        out.text("I've sent it to your phone too." if sent else "(Your phone isn't linked, so open it from here.)")
     out.text("You open SERMAS's own page and press. I never sign in, book or press on a public health website — and I "
              "never look for free slots for you. Once you've booked, tell me the day and time if you'd like it in your itinerary.")
 
@@ -420,8 +439,11 @@ async def _sermas_add(ctx: dict, t: str, payload: str) -> None:
     if payload == "hx:sermas:yes" or (not payload and YS.is_yes(t)):
         item = await IT.guest_booked(ctx["account"], type_="doctor", provider_name=IT.SERMAS,
                                      on=date.fromisoformat(pend["sermas_on"]), at=pend["sermas_at"], tz="Europe/Madrid")
-        out.text("Added to your itinerary — booked by you. I'll remind you the day before." if item else
-                 "I couldn't add it to your itinerary just now — nothing was kept.")
+        on = date.fromisoformat(pend["sermas_on"])
+        from . import cita as CI                 # CR 34 · and the calendar: only the day and time, never why
+        link = CI.gcal("Cita médica (SERMAS)", on, pend["sermas_at"], "", "Booked by you on SERMAS's own page.")
+        out.text(("Added to your itinerary — booked by you. I'll remind you the day before." if item else
+                  "I couldn't add it to your itinerary just now — nothing was kept.") + f"\n📅 Add it to your calendar: {link}")
     else:
         out.text("OK — not added. Nothing was kept.")
     for k in ("sermas_on", "sermas_at"):
@@ -530,6 +552,15 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     step, t = pend.get("step"), (body or "").strip()
     if payload.startswith(("hx:", "hxyes:", "hxno:", "hxv:", "hxvno:")):   # incl. hx:sermas:…
         return True
+    if step in ("ci_offer", "ci_call_confirm"):
+        return YS.is_yes(t) or bool(re.match(r"(?i)^\s*(no|not now|later)\b", t))
+    if step == "ci_route":
+        return bool(re.search(r"(?i)\bcall|llam|online|web|internet|\bgo\b|myself|walk", t))
+    if step in ("ci_when", "ci_booked"):
+        from . import cita as CI
+        return CI.when(t, datetime.now(MADRID)) is not None
+    if step == "ci_call_when":
+        return parse_when(t, datetime.now(MADRID)) is not None
     if step in ("ts_doc", "ts_back"):
         return bool(media) or bool(re.fullmatch(r"(?i)\s*demo\s*", t))
     if step == "ts_confirm":

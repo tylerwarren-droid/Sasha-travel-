@@ -295,6 +295,45 @@ class TestNames(unittest.TestCase):
         self.assertEqual(HO._test_name(TV + "consent"), "Sasha Test Venue")
 
 
+class FounderOverride(Base):
+    """Sasha 162 · the founder's own account passes the DPA gate (logged); everyone else, and the demo fallback, do not."""
+    FOUNDER = "11111111-2222-4333-8444-555555555555"
+
+    async def real(self, account):
+        return await HO.open_handover(page_url="https://www.hanakura.es/solicitar-reserva.html", m={**FR._HANAKURA, "test": False},
+                                      step1=[], step2=[], venue="Hanakura", account=account, form_id="f", read_only=False)
+
+    async def test_the_founders_own_account_passes_the_dpa_gate(self):
+        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": self.FOUNDER, "BROWSERBASE_DPA": ""}):
+            with self.assertLogs("booking_signer.handover", "INFO") as logs:
+                self.assertTrue(HO.dpa_ok(self.FOUNDER))
+            self.assertIn("founder override", "\n".join(logs.output))
+            with self.assertRaises(HO.Refused) as c:      # past the DPA gate; it stops later (no form on the fake page)
+                await self.real(self.FOUNDER)
+            self.assertNotEqual(c.exception.rule, "no_dpa")
+
+    async def test_anyone_else_still_waits_for_the_dpa(self):
+        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": self.FOUNDER, "BROWSERBASE_DPA": ""}):
+            with self.assertRaises(HO.Refused) as c:
+                await self.real("99999999-2222-4333-8444-555555555555")
+            self.assertEqual(c.exception.rule, "no_dpa")
+
+    async def test_no_founder_id_means_no_override_not_even_the_demo_account(self):
+        from booking_signer.account import DEMO_ACCOUNT_ID
+        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": "", "BROWSERBASE_DPA": ""}):
+            self.assertFalse(HO.founder_override(DEMO_ACCOUNT_ID))
+            with self.assertRaises(HO.Refused) as c:
+                await self.real(DEMO_ACCOUNT_ID)
+            self.assertEqual(c.exception.rule, "no_dpa")
+
+    async def test_platforms_stay_refused_even_for_the_founder(self):
+        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": self.FOUNDER, "BROWSERBASE_DPA": ""}):
+            with self.assertRaises(HO.Refused) as c:
+                await HO.open_handover(page_url="https://www.thefork.es/restaurante/x", m={"fields": {}, "test": False}, step1=[],
+                                       step2=[], venue="x", account=self.FOUNDER, form_id="f", read_only=False)
+            self.assertEqual(c.exception.rule, "platform")
+
+
 class Phone(Base):
     async def test_one_whatsapp_tap_when_the_sasha_tab_offers_it(self):
         from booking_signer import guest_whatsapp as GW

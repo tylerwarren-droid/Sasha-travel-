@@ -372,7 +372,7 @@ async def open_gc_handover(*, engine_url: str, stay: dict, rate: str, room: Opti
                            account: Optional[str], read_only: bool, fictional: bool, return_to: Optional[str] = None) -> dict:
     if not HO.configured():
         raise HO.Refused("cloud_browser_not_configured", "the live hand-over isn't set up on this server (BROWSERBASE_API_KEY)")
-    if not read_only and not fictional and os.getenv("BROWSERBASE_DPA", "").strip() != "signed":
+    if not read_only and not fictional and not HO.dpa_ok(account):
         raise HO.Refused("no_dpa", "a real guest's details don't go through the cloud browser until Kanoe has a signed data-processing "
                                    "agreement with it")
     _engine_ok(engine_url)

@@ -71,6 +71,25 @@ class Refused(Exception):
         self.rule, self.say = rule, say
 
 
+def founder_override(account: Optional[str]) -> bool:
+    """Sasha 162 · the founder's decision: his OWN account's real bookings go through the cloud browser (his details, his
+    consent) before the DPA. Only when FOUNDER_ACCOUNT_ID is really set and is this account — never the demo fallback."""
+    import re as _re
+    v = os.getenv("FOUNDER_ACCOUNT_ID", "").strip().lower()
+    return bool(account) and bool(_re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", v)) \
+        and str(account).strip().lower() == v
+
+
+def dpa_ok(account: Optional[str]) -> bool:
+    """Real guests' details may go through Browserbase: a signed DPA, or the founder's own account (logged)."""
+    if os.getenv("BROWSERBASE_DPA", "").strip() == "signed":
+        return True
+    if founder_override(account):
+        log.info("[handover] founder override: the founder's own real booking goes through the cloud browser before the DPA")
+        return True
+    return False
+
+
 def configured() -> bool:
     return bool(os.getenv("BROWSERBASE_API_KEY", "").strip())
 
@@ -353,7 +372,7 @@ async def open_handover(*, page_url: str, m: dict, step1: List[dict], step2: Lis
     """→ the hand-over record (ready, with its link), or Refused. The session is released on any refusal."""
     if not configured():
         raise Refused("cloud_browser_not_configured", "the live hand-over isn't set up on this server (BROWSERBASE_API_KEY)")
-    if not m.get("test") and not read_only and not fictional and os.getenv("BROWSERBASE_DPA", "").strip() != "signed":
+    if not m.get("test") and not read_only and not fictional and not dpa_ok(account):
         raise Refused("no_dpa", "a real guest's details don't go through the cloud browser until Kanoe has a signed data-processing "
                                 "agreement with it — Sasha sends the form herself after your yes instead")
     if V.platform_of(page_url):

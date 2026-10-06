@@ -37,16 +37,30 @@ class BookTheTrip(unittest.TestCase):
             return {"cards": [{"id": f"off_{o}", "owner": "Duffel Airways", "flights": "ZZ 1", "from": o[:3].upper(), "to": d[:3].upper(),
                                "from_city": o, "to_city": d, "departs": f"{day}T10:00:00", "arrives": f"{day}T22:00:00", "stops": 0,
                                "minutes": 720, "amount": "500.00", "currency": "EUR"}]}
+        async def held(c):
+            return 200, {}
         old = PS.latest
-        PS.latest, TB.SEARCH = lat, search
+        PS.latest, TB.SEARCH, TB.ORDERABLE = lat, search, held
         try:
             b = asyncio.run(TB.bundle("11111111-1111-4111-8111-111111111111", "Madrid"))
         finally:
-            PS.latest, TB.SEARCH = old, None
+            PS.latest, TB.SEARCH, TB.ORDERABLE = old, None, None
         self.assertIn("TEST", b["lines"][0])
         self.assertEqual(b["eur"], 5 * 120 + 1000)
         self.assertIn("Wed 11 Nov", b["lines"][4])     # the flight there leaves the day before day 1
         self.assertIn("ONE tap to pay", b["lines"][-2])
+
+
+class OnlyFaresTheAirlineWillBook(unittest.TestCase):
+    def test_a_gone_fare_is_skipped(self):
+        async def check(c):
+            return (404 if c["id"] == "gone" else 200), {}
+        TB.ORDERABLE = check
+        try:
+            got = asyncio.run(TB._orderable([{"id": "gone"}, {"id": "held"}]))
+        finally:
+            TB.ORDERABLE = None
+        self.assertEqual(got["id"], "held")
 
 
 class FlightsAroundTheTrip(unittest.TestCase):

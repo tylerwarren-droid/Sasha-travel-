@@ -73,9 +73,9 @@ async def bundle(account: str, origin: str) -> dict:
     for s in (out_s, back_s):
         if "why" in s:
             return {"why": f"the flights couldn't be priced — {s['why']}"}
-        c = next((c for c in s["cards"] if c.get("currency") == "EUR"), None)
+        c = await _orderable([c for c in s["cards"] if c.get("currency") == "EUR"])
         if c is None:
-            return {"why": "the test fares came back in another currency than euros"}
+            return {"why": "no test fare in euros that the airline's test system will book"}
         flights.append(c)
     lines = [f"⚠ TEST bookings — no hotel or airline is contacted, nothing is reserved and nothing is charged. For {party}."]
     total = 0.0
@@ -151,15 +151,35 @@ async def pay(request: Request):
     return {"ok": True, "url": got["url"], "session_id": got["id"], "phone": phone}
 
 
+ORDERABLE = None   # tests replace it
+
+
+async def _orderable(cards: List[dict]) -> Optional[dict]:
+    """Sasha 171 · the cheapest fare Duffel TEST still holds when asked for it again — live, its China Eastern fares came back
+    from the search but were 'gone' when booked (the founder paid, and the flight home wasn't booked)."""
+    from . import travel as T
+    check = ORDERABLE or (lambda c: T.HTTP("GET", f"/air/offers/{c['id']}"))
+    for c in cards:
+        try:
+            st, _j = await check(c)
+        except Exception:
+            continue
+        if st == 200:
+            return c
+    return None
+
+
 async def _same_or_cheaper(c: dict, party: int) -> Optional[dict]:
     from . import travel as T
     search = SEARCH or T.search
     try:
-        r = await search(c.get("from_city") or c["from"], c.get("to_city") or c["to"], str(c["departs"])[:10], adults=party, limit=5)
+        r = await search(c.get("from_city") or c["from"], c.get("to_city") or c["to"], str(c["departs"])[:10], adults=party, limit=8)
     except Exception as e:
         log.warning("[trip_book] re-price failed: %s: %s", type(e).__name__, e)
         return None
-    ok = [x for x in r.get("cards") or [] if x.get("currency") == c.get("currency") and float(x["amount"]) <= float(c["amount"])]
+    same = [x for x in r.get("cards") or [] if x.get("currency") == c.get("currency")]
+    ok = [x for x in same if float(x["amount"]) <= float(c["amount"])] or \
+         [x for x in same if float(x["amount"]) <= float(c["amount"]) * 1.5]   # TEST mode: a dearer test fare, said, not dropped
     return ok[0] if ok else None
 
 
@@ -195,7 +215,9 @@ async def book_paid(account: str, sid: str) -> dict:
             if alt is not None:
                 o2 = await T.order(alt, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"))
                 if "why" not in o2:
-                    note = f" (the fare priced had gone; this one is €{alt['amount']}, not more)"
+                    diff = float(alt["amount"]) - float(c["amount"])
+                    note = (f" (the fare priced had gone; this one is €{alt['amount']}" +
+                            (f" — €{diff:.2f} more, TEST" if diff > 0 else ", not more") + ")")
                     c, o = alt, o2
         if "why" in o:
             failed.append(f"{c['from']}→{c['to']} ({o['why']})")

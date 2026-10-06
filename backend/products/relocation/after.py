@@ -13,10 +13,13 @@ import re
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional
 
+import logging
+
 from .. import store as ST
 from . import consulates as CS
 from . import facts as F
 
+log = logging.getLogger("products.relocation.after")
 LONDON_SHEET = {
     "name": "Consulado General de España en Londres — Visado de residencia no lucrativa (requirements sheet)",
     "url": "https://www.exteriores.gob.es/Consulados/londres/en/Information-consular-services/Documents/RES%20ES-EN.pdf",
@@ -195,6 +198,12 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
         residence = "united kingdom" if _UK.search(body) else F.fold(body).strip(" .")
         c = CONSULATES.get(residence)
         f.setdefault("choices", {})["residence"] = F.fact(residence, "said on WhatsApp", now.strftime("%-d %b %Y"))
+        if residence == "united kingdom":                    # CR 37 · London, read live: fees, BLS, the 790, one pack
+            from . import three as TH
+            await TH.present(ctx, "london", {"residence": residence}, web(), _save)
+            pend["step"] = "pack"
+            out.text(pack_q(TH.items("london")))
+            return True
         if not c:
             out.text(f"I haven't read the Spanish consulate's own page for {body.strip()} yet, so I won't give you a link I "
                      "haven't checked. It's the Consulado General de España that covers where you live, on exteriores.gob.es.")
@@ -287,20 +296,53 @@ async def _appointment(ctx: dict, body: str) -> bool:
     tie = bool(_TIE.search(body))
     case = await ST.STORE.get(ctx["st"]["pending"].get("case_id") or "")
     cons = ((case or {}).get("state", {}).get("after") or {}).get("consulate") or {}
+    th = None
+    if cons.get("three"):
+        from . import three as TH
+        th = TH.CONSULATES[cons["three"]]
     if tie:
         name, tz, where = IT.TIE, "Europe/Madrid", None
+    elif th:                                                 # CR 37 · its own name, clock and the place you actually go
+        name, tz, where = IT.consulate_name(th["office"]), th["tz"], th["booking"]["who"]
     elif cons.get("id"):                                     # CR 12 · a US consulate: its own name, its own clock
         name, tz, where = IT.consulate_name(cons["office"]), CS.TZ[cons["id"]], cons["office"]
     else:
         name, tz, where = IT.CONSULATE, "Europe/London", "Spanish Consulate General, London"
     item = await IT.guest_booked(ctx["account"], type_="visa", provider_name=name, on=on, at=at, tz=tz, location=where)
     what = "your TIE appointment" if tie else "your consulate appointment"
+    if th and not tie:                                       # CR 37 · on the "Move to Madrid" trip, with what to bring
+        on_trip = await _on_trip(ctx["account"], on, at, th)
+        bring = ", ".join(n for k, n, _, _ in th["checklist"] if k not in ("termination", "accommodation", "school"))
+        out.text(("On your “Move to Madrid” trip" if on_trip else "Noted for your trip") + f" — {th['booking']['who']}, "
+                 f"{on.strftime('%A %-d %B %Y')} at {at}. Bring, in the consulate's order: {bring}. Your pack: "
+                 f"{web()}/api/products/relocation/{ctx['st']['pending'].get('case_id')}/pack.pdf")
     if item:
         out.text(f"Added to your itinerary: {what}, {on.strftime('%A %-d %B %Y')} at {at} — booked by you. I'll remind you the "
                  "day before. Forward their confirmation email to me to add the reference.")
     else:
         out.text(f"Noted: {what}, {on.strftime('%A %-d %B %Y')} at {at}. I couldn't add it to your itinerary just now.")
     return True
+
+
+async def _on_trip(account: str, on: date, at: str, th: dict) -> bool:
+    """CR 37 · the consulate appointment as a dated day on the account's "Move to Madrid" plan (Sasha's plan_store: add_day,
+    then the item on it). False when there's no such plan or it can't be reached — the itinerary item stands either way."""
+    try:
+        from booking_signer import plan_store as PS
+        from .move import TITLE
+        p = await PS.latest(account, hint=TITLE)
+        if not p or (p.get("title") or "") != TITLE:
+            return False
+        await PS.add_day(account, p["trip_id"], on.isoformat(), th["city"])
+        p = await PS.latest(account, hint=TITLE)
+        day = next((d.get("day") for d in ((p or {}).get("plan") or {}).get("days") or [] if str(d.get("date") or "")[:10] == on.isoformat()), None)
+        if day is None:
+            return False
+        return await PS.add_place(account, p["trip_id"], day, {"time": PS._part(at), "name": f"Visa appointment — {th['booking']['who']}",
+                                                               "blurb": f"{at}. {th['office']}. Bring your pack (EX-01 and 790-052 signed)."})
+    except Exception as e:
+        log.warning("[relocation] not on the trip: %s: %s", type(e).__name__, e)
+        return False
 
 
 async def _us(ctx: dict, state: str, cid: Optional[str] = None, county: Optional[str] = None) -> bool:
@@ -322,6 +364,12 @@ async def _us(ctx: dict, state: str, cid: Optional[str] = None, county: Optional
         await _save(ctx, {"after": {**base, "consulate": None, "unread": CS.unread_offices()}})
         pend["step"] = "entry"
         out.text(ENTRY_Q)
+        return True
+    if cid in ("newyork", "washington"):                    # CR 37 · read live today (Washington's stored page was New York's)
+        from . import three as TH
+        await TH.present(ctx, cid, base, web(), _save)
+        pend["step"] = "pack"
+        out.text(pack_q(TH.items(cid)))
         return True
     c = CS.consulate(cid)
     r = CS.READ[cid]
@@ -398,7 +446,7 @@ async def _pack(ctx: dict, body: str) -> bool:
     after = ((case or {}).get("state") or {}).get("after") or {}
     cons = after.get("consulate") or {}
     items = after.get("checklist") or []
-    items = items if cons.get("id") else london_items(items)
+    items = items if (cons.get("id") or cons.get("three")) else london_items(items)
     if not items:
         out.text("There's no consulate list on your file to build a pack from.")
         return True

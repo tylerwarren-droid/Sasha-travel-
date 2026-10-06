@@ -125,22 +125,19 @@ class NewYorkOnWhatsApp(TG.Base):
         self.assertIn("Which US state", self.bodies()[-1])
         self.say("New Jersey")
         said = self.said()
-        self.assertIn("*Consulado General de España en Nueva York* — its own page (dated 23 de marzo de 2022) names New Jersey", said)
-        self.assertIn("cog.nuevayork.visnac@maec.es", said)
-        self.assertIn("you send it from your own address", said)
-        self.assertNotIn("ministry's standard text", said)
-        a = self.after()
-        self.assertEqual(a["email_draft"]["to"], "cog.nuevayork.visnac@maec.es")
-        self.assertIn("A) Nombre completo: Ana Ejemplo Prueba", a["email_draft"]["body"])
-        self.assertIn("C) Número de pasaporte y nacionalidad: [to fill]", a["email_draft"]["body"])   # never typed by us
-        self.assertEqual(len(a["checklist"]), 10)
+        self.assertIn("*Consulado General de España en Nueva York* — it covers Connecticut, Delaware, New Jersey", said)   # CR 37
+        self.assertIn("mailto:cog.nuevayork.visnac@maec.es?", said)               # one tap: drafted in their own mail app
+        self.assertIn("I never send it", said)
+        self.assertIn("only by USPS money order", said)
+        self.assertIn("C%29%20N%C3%BAmero%20de%20pasaporte%20y%20nacionalidad%3A%20%0A", said)   # never typed into the email by us
+        self.assertEqual(len(self.after()["checklist"]), 10)
         self.assertIn("Your *document pack*", self.bodies()[-1])
         self.say("1 3 4 6-8")
         pack = self.bodies()[-2]
-        self.assertIn("✓ 01_National-visa-application-form", pack)
-        self.assertIn("✓ 02_EX-01-residence-authorisation-form — one copy, signed (prepared; you sign it)", pack)
-        self.assertIn("☐ 09_Proof-you-live-in-the-consulate-s-territory — still to gather", pack)
-        self.assertIn("☐ 05_Proof-of-economic-means — still to gather", pack)
+        self.assertIn("✓ 01_Formulario-de-solicitud-de-visado-nacional", pack)
+        self.assertIn("✓ 02_EX-01 — sign one copy (prepared; you sign it)", pack)
+        self.assertIn("☐ 09_Prueba-de-residencia-en-la-demarcacion — still to gather", pack)
+        self.assertIn("☐ 05_Medios-economicos — still to gather", pack)
         self.assertIn("3 still to gather", pack)
         self.assertEqual([x["status"] for x in self.after()["pack"]][:5], ["gathered", "prepared", "gathered", "gathered", "missing"])
         self.say("1 March 2027")
@@ -151,6 +148,7 @@ class NewYorkOnWhatsApp(TG.Base):
         (x,) = self.added
         self.assertEqual((x["provider_name"], x["tz"]), ("Consulado General de España en Nueva York — visa appointment",
                                                          "America/New_York"))
+        self.assertIn("Bring, in the consulate's order", self.said())
         self.say("pack 5")                                            # updated later, by the word PACK
         self.assertEqual(self.after()["pack"][4]["status"], "gathered")
 

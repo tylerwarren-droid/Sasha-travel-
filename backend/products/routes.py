@@ -155,6 +155,48 @@ async def relocation_pdf(cid: str) -> Response:
                     headers={"content-disposition": 'inline; filename="EX-01-prepared-not-signed.pdf"'})
 
 
+def _three_case(c: dict) -> tuple:
+    """CR 37 · the case's consulate (one of the three read live) and the EX-01 rows/facts the 790 and the pack are built from."""
+    st = c["state"]
+    th = ((st.get("after") or {}).get("consulate") or {}).get("three")
+    if not th:
+        raise HTTPException(404, {"ok": False, "rule": "no_consulate", "message": "This file has no consulate chosen yet."})
+    return th, st
+
+
+@router.get("/relocation/{cid}/790-052.pdf")
+async def relocation_790(cid: str) -> Response:
+    from datetime import date
+    from .relocation import three as TH
+    th, st = _three_case(await _case(cid, "relocation"))
+    pdf = TH.fill_790(TH.rows_790(st.get("facts") or {}, date.today()))
+    return Response(pdf, media_type="application/pdf", headers={"content-disposition": 'inline; filename="790-052-prepared-not-signed.pdf"'})
+
+
+@router.get("/relocation/{cid}/790-card.jpg")
+async def relocation_790_card(cid: str) -> Response:
+    from datetime import date
+    from . import formcard as FC
+    from .relocation import three as TH
+    th, st = _three_case(await _case(cid, "relocation"))
+    rs = TH.rows_790(st.get("facts") or {}, date.today())
+    jpg = FC.card(TH.fill_790(rs), [r["field"] for r in rs], "Filled by Sasha  ·  highlighted = filled for you  ·  NOT signed, NOT paid")
+    return Response(jpg, media_type="image/jpeg", headers={"cache-control": "private, max-age=300"})
+
+
+@router.get("/relocation/{cid}/pack.pdf")
+async def relocation_pack(cid: str) -> Response:
+    from datetime import date
+    from .relocation import ex01 as E
+    from .relocation import three as TH
+    th, st = _three_case(await _case(cid, "relocation"))
+    a = (st.get("facts") or {}).get("applicant") or {}
+    who = " ".join(x for x in ((a.get("given_names") or {}).get("value"), (a.get("surname_1") or {}).get("value"),
+                               (a.get("surname_2") or {}).get("value")) if x) or "the applicant"
+    pdf = TH.pack(th, E.fill(st["rows"]), TH.rows_790(st.get("facts") or {}, date.today()), who)
+    return Response(pdf, media_type="application/pdf", headers={"content-disposition": 'inline; filename="visa-pack-print-and-sign.pdf"'})
+
+
 @router.get("/relocation/{cid}/EX-01-card.jpg")
 async def relocation_card(cid: str) -> Response:
     """CR 33 · page 1 of the same filled EX-01, as the chat's card: the filled boxes highlighted."""

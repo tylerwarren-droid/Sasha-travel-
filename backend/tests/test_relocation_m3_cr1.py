@@ -147,9 +147,9 @@ class Flow(TG.Base):
         self.say("London, UK")
         said = "\n".join(self.bodies())
         self.assertIn("*Consulado General de España en Londres*", said)
-        self.assertIn("http://www.exteriores.gob.es/Consulados/LONDRES/en/Consulado/Pages/Visas.aspx", said)
-        self.assertIn("I don't book or press anything", said)
-        self.assertIn("dated 11 Feb 2022", said)
+        self.assertIn("Visado-de-residencia-no-lucrativa.aspx (July 6, 2026)", said)          # CR 37 · its own page, read live
+        self.assertIn("https://uk.blsspainglobal.com/Global/account/login", said)              # BLS books it now, not the consulate
+        self.assertIn("/pack.pdf", said)
         cid = self.pend()["case_id"]
         items = {i["key"]: i for i in run(ST.STORE.get(cid))["state"]["after"]["checklist"]}
         self.assertEqual(items["passport"]["status"], "ok")               # the demo passport runs to 2031

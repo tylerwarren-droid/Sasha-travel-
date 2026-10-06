@@ -20,3 +20,4 @@ pypdf==6.19.0  # CR 1 · filling the official EX-01 PDF (products/relocation/ex0
 playwright==1.47.0  # CR 23 · the live hand-over drives a Browserbase browser over CDP (the driver only; no browser is installed)
 pypdfium2==5.14.0  # CR 33 · a filled official form's page 1 drawn as the chat's card (products/formcard.py)
 Pillow==12.3.0  # CR 33 · the card's highlights and strip
+reportlab==5.0.1  # CR 37 · its Bitstream Vera font: the visa pack prints accents (products/relocation/three.py)

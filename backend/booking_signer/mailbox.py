@@ -40,12 +40,13 @@ CONSENT = {"v1": ("Sasha will look in your Gmail only for emails about bookings,
                   "keep only the details she needs (venue, date, reference, amount), and never store your emails. You can "
                   "disconnect at any time.")}
 CURRENT = "v1"
-PLATFORMS = ("thefork.com", "eltenedor.es", "thefork.es", "fresha.com", "covermanager.com", "zenchef.com", "opentable.com",
+PLATFORMS = ("thefork.com", "eltenedor.es", "thefork.es", "fresha.com", "covermanager.com", "zenchef.com", "opentable.com", "booksy.com",
              "opentable.es", "booking.com", "resy.com", "sevenrooms.com", "quandoo.com", "restaurantes.com")
 PLATFORM_NAMES = {"thefork": "TheFork", "eltenedor": "ElTenedor", "opentable": "OpenTable", "covermanager": "CoverManager",
                   "zenchef": "Zenchef", "resy": "Resy", "sevenrooms": "SevenRooms", "quandoo": "Quandoo", "fresha": "Fresha",
-                  "booking.com": "Booking.com", "restaurantes.com": "Restaurantes.com"}
-KEYWORDS = ("reserva", "booking", "reservation", "confirmación", "confirmation", "cancelación", "cancellation", "factura",
+                  "booking.com": "Booking.com", "restaurantes.com": "Restaurantes.com", "booksy": "Booksy"}   # Sasha 175 · Booksy
+KEYWORDS = ("reserva", "booking", "reservation", "confirmación", "confirmation", "cancelación", "cancellation", "factura", "cita",
+            "appointment",
             "invoice", "receipt", "recibo")
 
 
@@ -80,8 +81,12 @@ _TIME = re.compile(r"\b([01]?\d|2[0-3])[:.h]([0-5]\d)(?:\s*([ap])\.?m\b\.?)?|\b(
 _PARTY = re.compile(r"\b(\d{1,2})\s*(?:personas|comensales|people|guests|persons|pessoas|pax|adults?|adultos)\b", re.I)
 _AMOUNT = re.compile(r"(?:€|\bEUR)\s?(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s?(?:€|EUR\b)", re.I)
 _CONFIRM = re.compile(r"confirmad[ao]|reserva confirmada|est[aá] confirmada|booking (?:is )?confirmed|reservation (?:is )?confirmed|\bis confirmed\b|"
+                      # Sasha 175 · TheFork's own wording read as "other" (live): the reservation emails of the platforms
+                      r"your reservation|reservation at|booking at|reserva realizada|has reservado|reserva en|tu mesa|your table|"
+                      r"your appointment|appointment (?:is )?confirmed|tu cita|cita confirmada|cita reservada|has reservado una cita|"
                       r"we look forward|te esperamos|os esperamos|le esperamos|confirmamos|your booking|tu reserva|su reserva (?:est[aá]|queda)", re.I)
-_CANCEL = re.compile(r"cancelad[ao]|anulad[ao]|cancellation confirmed|has been cancelled|has been canceled|reserva cancelada", re.I)
+_CANCEL = re.compile(r"cancelad[ao]|anulad[ao]|cancellation confirmed|has been cancelled|has been canceled|reserva cancelada|"
+                     r"appointment (?:was |has been )?cancell?ed|cita cancelada", re.I)
 _BILL = re.compile(r"\b(factura|invoice|receipt|recibo|ticket de compra)\b", re.I)
 _CHANGE = re.compile(r"modificad[ao]|ha cambiado|has been (?:changed|modified)|nueva hora|new time", re.I)
 
@@ -219,7 +224,23 @@ def match(facts: dict, rows: List[dict]) -> Tuple[Optional[dict], Optional[str]]
                 rt = datetime.fromisoformat(f"{r['date']}T{r['time']}")
                 if abs((rt - at).total_seconds()) <= 90 * 60:
                     return r, "venue_and_time"
+    # Sasha 175 · a PLATFORM's email for a booking Sasha sent the guest to (live: "La Gaditana Castellana" for "Gaditana Retiro",
+    # "Alcaravea Cea Bermúdez" for "Alcaravea"): a branch name differs, so one distinctive shared word + the time (±90 min)
+    if facts.get("via") and facts.get("venue") and facts.get("at") and "T" in facts["at"]:
+        at = datetime.fromisoformat(facts["at"])
+        mine = {w for w in re.findall(r"[a-z0-9]+", _fold(facts["venue"])) if len(w) >= 5 and w not in _GENERIC}
+        for r in rows:
+            if r.get("status") not in ("link_sent", "pending", "guest_booked") or not (r.get("date") and r.get("time")):
+                continue
+            theirs = {w for w in re.findall(r"[a-z0-9]+", _fold(r.get("venue") or "")) if len(w) >= 5 and w not in _GENERIC}
+            rt = datetime.fromisoformat(f"{r['date']}T{r['time']}")
+            if mine & theirs and abs((rt - at).total_seconds()) <= 90 * 60:
+                return r, "platform_link"
     return None, None
+
+
+_GENERIC = {"restaurante", "restaurant", "taberna", "madrid", "barberia", "barber", "salon", "spa", "massage", "masajes", "centro",
+            "studio", "estudio", "casa", "grupo", "cocina", "bistro", "tapas", "hotel", "beauty"}
 
 
 def upcoming(at: Optional[str], now: datetime, tz: str = "Europe/Madrid") -> bool:
@@ -471,6 +492,18 @@ async def sync(account: str) -> List[dict]:
         if kind == "other" and row and MODEL_READER and os.getenv("SASHA_MAILBOX_MODEL", "") == "1":
             kind, facts, parsed_by = await MODEL_READER(body, row), facts, "model"   # M-3 · matched and unread by rules only
         off = offer(kind, facts, row, now)
+        if off and basis == "platform_link" and off[0] in ("confirm", "cancel"):
+            # Sasha 175 · AUTOMATIC: the guest booked on the platform page Sasha sent; its own email confirms (or cancels) it —
+            # no "BOOKED" needed. Applied, then said once on WhatsApp.
+            tid = await STORE.apply(account, off[0], row.get("id"), facts)
+            find0 = {"id": str(uuid.uuid4()), "account_id": account, "gmail_message_id": m["id"], "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+                     "kind": kind, "facts": facts, "parsed_by": parsed_by, "trip_item_id": tid or row.get("id"), "match_basis": basis,
+                     "offered_action": None, "offered_sentence": None, "offer_sha256": None, "action_status": "done" if tid else "none"}
+            await STORE.put_find(find0)
+            found.append(find0)
+            if tid:
+                await _told_auto(account, off[0], facts, row)
+            continue
         find = {"id": str(uuid.uuid4()), "account_id": account, "gmail_message_id": m["id"],
                 "body_sha256": hashlib.sha256(body.encode()).hexdigest(), "kind": kind, "facts": facts, "parsed_by": parsed_by,
                 "trip_item_id": (row or {}).get("id"), "match_basis": basis, "offered_action": off[0] if off else None,
@@ -484,6 +517,42 @@ async def sync(account: str) -> List[dict]:
     await STORE.set_link(account, last_sync_at=now)
     await _offer_on_whatsapp(account, [f for f in found if f["offered_action"]])
     return found
+
+
+async def _told_auto(account: str, action: str, facts: dict, row: dict) -> None:
+    """One line on WhatsApp for an automatic update from a platform's email."""
+    from . import guest_whatsapp as GW, sentences as SN
+    if GW.STORE is None:
+        return
+    ch = await GW.STORE.channel_of_account(account)
+    if not ch:
+        return
+    at = facts.get("at") or ""
+    when = f"{SN.day_words(at[:10])} at {at[11:16]}" if "T" in at else (row.get("date") or "")
+    venue = facts.get("venue") or row.get("venue") or "the venue"
+    via = facts.get("via") or "the platform"
+    ref = f" (ref {facts['reference']})" if facts.get("reference") else ""
+    text = (f"✅ {via} confirms {venue}, {when}{ref} — it's in your itinerary. No need to tell me." if action == "confirm"
+            else f"Cancelled at {via}: {venue}, {when} — I've updated your itinerary.")
+    try:
+        await GW._tell(ch, text)
+    except Exception as e:
+        log.warning("[mailbox] the automatic update wasn't told: %s", type(e).__name__)
+
+
+async def watch_after_link(account: str, link_id: str, minutes: int = 15) -> None:
+    """Sasha 175 · after a platform link is sent: Gmail is read every 30 s for its confirmation, until the booking changes."""
+    from . import ladder_routes as LR
+    for _ in range(minutes * 2):
+        await asyncio.sleep(30)
+        try:
+            await sync(account)
+            it = await LR.LADDER_STORE._run(lambda c: c.fetchval(
+                "select ti.status from trip_items ti join booking_links bl on bl.trip_item_id = ti.id where bl.link_id = $1", uuid.UUID(link_id)))
+            if it in ("confirmed", "cancelled"):
+                return
+        except Exception as e:
+            log.info("[mailbox] watch after link: %s", type(e).__name__)
 
 
 async def _offer_on_whatsapp(account: str, finds: List[dict]) -> None:

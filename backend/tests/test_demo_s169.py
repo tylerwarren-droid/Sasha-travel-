@@ -267,3 +267,23 @@ class StandInQuestion(unittest.TestCase):
         self.assertEqual(c["st"]["pending"]["kind"], "confirm")
         self.assertEqual(c["out"].items[-1][2][0][0], "Yes, book it")
         self.assertIn("the spa isn't contacted", c["out"].items[-1][1])
+
+
+class PlatformEmailsBookOnTheirOwn(unittest.TestCase):
+    """Sasha 175 live: TheFork's email named "La Gaditana Castellana" for the link sent as "Gaditana Retiro"; CoverManager's
+    "Alcaravea Cea Bermúdez" for "Alcaravea". One distinctive word + the time matches a platform link."""
+
+    def test_branch_names_match_a_link(self):
+        from booking_signer import mailbox as MB
+        rows = [{"id": "t1", "venue": "Gaditana Retiro", "date": "2026-10-07", "time": "21:00", "status": "link_sent"},
+                {"id": "t2", "venue": "Alcaravea", "date": "2026-10-07", "time": "21:00", "status": "guest_booked"}]
+        row, basis = MB.match({"via": "TheFork", "venue": "La Gaditana Castellana", "at": "2026-10-07T21:00"}, rows)
+        self.assertEqual((row["id"], basis), ("t1", "platform_link"))
+        row, basis = MB.match({"via": "CoverManager", "venue": "Alcaravea Cea Bermúdez", "at": "2026-10-07T20:30"}, rows)
+        self.assertEqual(row["id"], "t2")
+        self.assertEqual(MB.match({"via": "TheFork", "venue": "Restaurante Madrid Centro", "at": "2026-10-07T21:00"}, rows), (None, None))
+        self.assertEqual(MB.match({"venue": "La Gaditana Castellana", "at": "2026-10-07T21:00"}, rows), (None, None))   # not a platform's
+
+    def test_thefork_wording_is_a_confirmation(self):
+        from booking_signer import mailbox as MB
+        self.assertRegex("Your reservation at La Gaditana Castellana", MB._CONFIRM)

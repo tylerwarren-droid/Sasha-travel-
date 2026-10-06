@@ -2705,6 +2705,9 @@ async def tap_platform(account: Optional[str], text: str, url: str, link_id: Opt
             st = await STORE.get_state(ch["wa_id_sha256"])
             st["pending"] = {"kind": "link", "at": NOW().isoformat(), "link_id": link_id, "venue": venue or "", "when": when or ""}
             await STORE.put_state(ch["wa_id_sha256"], st)
+            from . import mailbox as MB   # Sasha 175 · and its confirmation email marks it booked on its own (Gmail connected)
+            if MB.STORE is not None and await MB.STORE.get_link(account):
+                _spawn(MB.watch_after_link(account, link_id))
     return out
 
 

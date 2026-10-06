@@ -2088,10 +2088,15 @@ def _picked(pend: dict, body: str, payload: str) -> Optional[int]:
         except ValueError:
             return None
     t = _fold(body).strip(" .!")
-    for w in re.findall(r"[a-z0-9]+", t):
-        if w in _ORDINAL and _ORDINAL[w] < len(pend["cards"]) and len(t.split()) <= 4:
+    # Sasha 173 · live: "please book the first one" (5 words) became a NEW search ("book first restaurants in Hanoi"). The
+    # ways a pick is said around the number don't count: please, book, pick, choose, let's go with, I'll take, can you…
+    core = re.sub(r"\b(please|pls|plz|ok(?:ay)?|yes|yeah|so|then|thanks|thank you|can you|could you|would you|i'?d like|i want|"
+                  r"i'?ll (?:take|have|go with)|let'?s (?:go (?:with|for)|do|book|have)|go (?:with|for)|book|reserve|pick|choose|"
+                  r"select|take|make it|that|me|us|it|for|(?:the|a) one)\b", " ", t)
+    for w in re.findall(r"[a-z0-9]+", core):   # "the one by the river" is a description, not "one"
+        if w in _ORDINAL and _ORDINAL[w] < len(pend["cards"]) and (len(t.split()) <= 4 or len(core.split()) <= 3):
             return _ORDINAL[w]
-    words = [w for w in re.findall(r"[a-z0-9]+", t) if len(w) > 2 and w not in ("the", "one", "that", "please")]
+    words = [w for w in re.findall(r"[a-z0-9]+", core) if len(w) > 2 and w not in ("the", "one", "that", "please")]
     hits = [i for i, c in enumerate(pend["cards"]) if words and all(w in _fold(c.get("name") or "") for w in words)]
     if len(hits) == 1:
         return hits[0]

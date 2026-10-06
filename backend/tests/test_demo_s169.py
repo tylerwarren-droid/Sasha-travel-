@@ -83,6 +83,10 @@ class PickByVoice(unittest.TestCase):
     def test_number_name_or_what_its_like(self):
         pend = {"nonce": "n", "cards": self.CARDS}
         self.assertEqual(GW._picked(pend, "the second one", ""), 1)
+        self.assertEqual(GW._picked(pend, "Please book the first one.", ""), 0)        # Sasha 173 live
+        self.assertEqual(GW._picked(pend, "ok let's go with the second one please", ""), 1)
+        self.assertEqual(GW._picked(pend, "book Mango Rooms please", ""), 1)
+        self.assertIsNone(GW._picked(pend, "book the first restaurant you find in Hanoi for tomorrow at nine", ""))
         self.assertEqual(GW._picked(pend, "Mango Rooms please", ""), 1)
         self.assertEqual(GW._picked(pend, "the one by the river", ""), 1)
         self.assertIsNone(GW._picked(pend, "the one in the old town", ""))   # two match: asked again, never a guess

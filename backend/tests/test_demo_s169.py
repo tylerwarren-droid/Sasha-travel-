@@ -245,3 +245,14 @@ class SpokenDates(unittest.TestCase):
         self.assertIsNone(WB._DATE_SAID.search(WB.ordinals_as_digits("a romantic dinner in Hoi An at eight at night")))
         self.assertTrue(WB._DATE_SAID.search(WB.ordinals_as_digits("dinner on the sixteenth")))
         self.assertEqual(WB.ordinals_as_digits("the first one"), "the first one")   # a pick stays a pick
+
+
+class StandInQuestion(unittest.TestCase):
+    """Sasha 173 · the demo line's "spa/restaurant" overwrote the question's kind: "Yes, cancel" and a yes that booked nothing."""
+
+    def test_the_yes_stays_a_booking_yes(self):
+        c = {"out": GW.Out(), "st": {}, "now": NOW}
+        asyncio.run(GW._ask_yes(c, "handover", "f1", {"sha256": "a" * 64, "lines": []}, "Shall I?", "Hanoi Spa - Massage (TEST stand-in)"))
+        self.assertEqual(c["st"]["pending"]["kind"], "confirm")
+        self.assertEqual(c["out"].items[-1][2][0][0], "Yes, book it")
+        self.assertIn("the spa isn't contacted", c["out"].items[-1][1])

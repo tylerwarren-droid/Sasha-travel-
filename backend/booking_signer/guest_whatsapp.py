@@ -584,8 +584,15 @@ async def voice_text(p: Dict[str, str]) -> Optional[str]:
     if not (sid and token and key):
         return None
     try:
-        r = await request("GET", p["MediaUrl0"], timeout=20.0, follow_redirects=True,
-                          headers={"authorization": "Basic " + base64.b64encode(f"{sid}:{token}".encode()).decode()})
+        auth = {"authorization": "Basic " + base64.b64encode(f"{sid}:{token}".encode()).decode()}
+        r = await request("GET", p["MediaUrl0"], timeout=20.0, follow_redirects=True, headers=auth)
+        # Sasha 173 · live on the +44 business sender (same account): HTTP 404 at once — its media isn't stored yet when the
+        # webhook arrives (the sandbox's is). A few short retries before giving up.
+        for wait in (1.0, 1.5, 2.5, 4.0):
+            if r.status_code != 404:
+                break
+            await asyncio.sleep(wait)
+            r = await request("GET", p["MediaUrl0"], timeout=20.0, follow_redirects=True, headers=auth)
         if r.status_code != 200 or not r.content:
             # Sasha 173 · live: HTTP 404 with our credentials — the note came in on a number of ANOTHER Twilio account (its media
             # URL names that account). Twilio's media is readable without credentials unless media auth is enforced: try that.
@@ -2492,8 +2499,8 @@ async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: st
         out.text("What I'll " + ("say" if rung == "call" else "send") + ":\n" +
                  "\n".join("• " + _BULLET.sub("", ln) for ln in guest_lines(rung, read_back["lines"])))   # Sasha 117 · one bullet
     if kind == "confirm" and "(TEST stand-in)" in (venue or ""):   # Sasha 169 · the stand-in, said first
-        kind = "spa" if re.search(r"spa|massage|wellness", venue, re.I) else "studio" if re.search(r"tattoo|ink|piercing", venue, re.I) else "restaurant"
-        sentence = f"🧪 Demo: our test venue stands in; the {kind} isn't contacted.\n{sentence.replace(' (TEST stand-in)', '')}"
+        place = "spa" if re.search(r"spa|massage|wellness", venue, re.I) else "studio" if re.search(r"tattoo|ink|piercing", venue, re.I) else "restaurant"
+        sentence = f"🧪 Demo: our test venue stands in; the {place} isn't contacted.\n{sentence.replace(' (TEST stand-in)', '')}"
     tag = f"{rid[:8]}:{sha[:16]}"
     yes_title = "Yes, book it" if kind == "confirm" else "Yes, cancel"
     out.ask(sentence, [(yes_title, f"yes:{tag}"), ("No", f"no:{tag}")])

@@ -315,6 +315,13 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
                   " ".join(m["what"].split()), flags=re.I)
     # Sasha 101 · "a table at a luxury restaurant" searches for the luxury restaurant — every qualifier kept
     what = re.sub(r"^(?:a\s+)?table\s+(?:at|in)\s+(?:an?\s+|the\s+)?", "", what, flags=re.I).strip() or what
+    # Sasha 173 · "make an appointment FOR A SPA in Hanoi on the 13th…": the what was "appointment" (the "for a spa" went with
+    # the time) and Google answered with a church and the sea. A booking word alone is not a kind of place: the kind said is.
+    if re.fullmatch(r"(?:an?\s+)?(?:appointment|booking|reservation|slot|session|treatment|cita|reserva)s?", what, re.I):
+        km = re.search(r"\b(?:for|at|with)\s+(?:an?|the|some)\s+(?P<k>[a-záéíóúñ' -]{2,30}?)\s+(?:in|near|around)\s", message or "", re.I)
+        if km:
+            what = km["k"].strip()
+    what = re.sub(r"^(?:an?\s+)?(?:appointment|booking|reservation|table)\s+(?:at|for|with)\s+(?:an?|the)\s+", "", what, flags=re.I) or what
     # Sasha 170 · "a massage at a spa" is a massage spa (it was searched, and said, as "massage at a spas")
     what = re.sub(r"\b([a-z]+)\s+at\s+an?\s+(spa|salon|studio|parlou?r|bar|restaurant)\b", r"\1 \2", what, flags=re.I)
     # Sasha 167 · "make me a dinner reservation", "add a dinner booking": the meal is searched for, not the word "reservation"

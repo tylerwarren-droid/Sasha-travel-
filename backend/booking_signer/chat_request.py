@@ -26,6 +26,10 @@ ACTIVITIES = [
      {"es": "una mesa", "pt": "uma mesa", "fr": "une table", "de": "einen Tisch", "it": "un tavolo", "en": "a table"}),
     (r"\bmassage\b", "a massage", "beauty", "people", "book",
      {"es": "un masaje", "pt": "uma massagem", "fr": "un massage", "de": "eine Massage", "it": "un massaggio", "en": "a massage"}),
+    # Sasha 173 · "an appointment for a spa": a spa treatment (it asked "What should I book there?")
+    (r"\b(spa|wellness|facial|treatment)s?\b", "a spa treatment", "beauty", "people", "book",
+     {"es": "un tratamiento de spa", "pt": "um tratamento de spa", "fr": "un soin au spa", "de": "eine Spa-Behandlung", "it": "un trattamento spa",
+      "en": "a spa treatment", "vi": "một liệu trình spa"}),
     (r"\b(haircut|hair ?cut)\b", "a haircut", "beauty", "people", "book",
      {"es": "un corte de pelo", "pt": "um corte de cabelo", "fr": "une coupe de cheveux", "de": "einen Haarschnitt", "it": "un taglio di capelli", "en": "a haircut"}),
     (r"\btattoo\b", "a tattoo", "beauty", "pieces", "quote_first",

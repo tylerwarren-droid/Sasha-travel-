@@ -132,6 +132,28 @@ class HealthCard(TG.unittest.TestCase):
             ST.STORE = saved
 
 
+class Package(TG.unittest.TestCase):
+    """For Sasha 178 (3): read-only, form by form, the next dated step, the tab."""
+
+    def test_status(self):
+        from products import store as ST
+        from products.relocation import package_status
+        saved = ST.STORE
+        ST.STORE = ST.MemoryCaseStore()
+        try:
+            self.assertIsNone(run(package_status("acct-none")))
+            run(ST.STORE.put("relocation", "acct-1", "w", {"facts": demo(), "rows": [{}], "status": "signed_on_your_word",
+                                                          "after": {"entry_date": "2027-03-01", "consulate": {"three": "london"}}}))
+            got = run(package_status("acct-1", date(2026, 10, 6)))
+            states = {f["name"]: f["state"] for f in got["forms"]}
+            self.assertEqual((states["EX-01"], states["National visa application"], states["Padrón"]), ("signed", "filled", "missing"))
+            self.assertEqual(states["EX-17 (TIE)"], "filled" if AR.ex17_ready() else "waiting")
+            self.assertEqual(got["tab"], "Move to Madrid")
+            self.assertEqual(got["next_deadline"]["on"], "2026-12-01")              # entry − 90: the visa window
+        finally:
+            ST.STORE = saved
+
+
 class Keep(TG.unittest.TestCase):
     def test_a_fictional_applicant_is_never_kept(self):
         f = {"applicant": {"surname_1": F.fact("Ejemplo", RT.FICTIONAL, ""), "email": F.fact("a@b.co", "said on WhatsApp", "")}}
@@ -242,7 +264,7 @@ if __name__ == "__main__":
 def load_tests(loader, tests, pattern):
     """Only this file's own tests (OnWhatsApp inherits the consulate tests, which run in their own files)."""
     suite = TG.unittest.TestSuite()
-    for cls in (VisaForm, Arrival, HealthCard, Keep, KeepOnWhatsApp):
+    for cls in (VisaForm, Arrival, HealthCard, Package, Keep, KeepOnWhatsApp):
         suite.addTests(loader.loadTestsFromTestCase(cls))
     suite.addTest(OnWhatsApp("test_ny_pack_card_and_after_arrival"))
     return suite

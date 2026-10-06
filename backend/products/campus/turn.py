@@ -122,6 +122,15 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         pend["step"] = "ask"
         pend["intro_said"] = True
         return
+    if (step or "").startswith("tour_") or payload.startswith(("cm:tkeep:", "cm:tyes:", "cm:tno:")):   # CR 38 · the tour
+        from . import tour as TR
+        if await TR.on_message(ctx, body, payload):
+            return
+    if step != "confirm" and body and not payload:
+        from . import tour as TR
+        if TR.is_tour(body):
+            await TR.start(ctx, body)
+            return
     if step == "confirm":
         if await _answer_yes(ctx, body, payload):
             return
@@ -601,6 +610,9 @@ _PARTY = re.compile(r"(?i)\b(\d+|two|three|four)\s+(people|persons|of us|guests)
 
 
 def claims(pend: dict, body: str, payload: str, media: list) -> bool:
+    from . import tour as TR                                   # CR 38 · the tour's own questions
+    if TR.claims(pend, body, payload, media):
+        return True
     step, t = pend.get("step"), (body or "").strip()
     if payload.startswith(("cm:", "cmyes:", "cmno:")):
         return True

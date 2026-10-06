@@ -122,6 +122,27 @@ async def campus_case(cid: str) -> dict:
             "expires_at": str(c["expires_at"]), "submits": False}
 
 
+@router.get("/campus/{cid}/tour.pdf")
+async def campus_tour_pdf(cid: str) -> Response:
+    """CR 38 · the finished tour itinerary: days, visits, addresses, drives, nights, each registration's status."""
+    from .campus import tour as TR
+    st = (await _case(cid, "campus"))["state"]
+    if st.get("kind") != "tour":
+        raise HTTPException(404, {"ok": False, "rule": "case_not_found", "message": "This page has expired or never existed."})
+    return Response(TR.pdf(st["plan"], {"student_name": st.get("fam_name")}, st.get("title") or "Campus tour"),
+                    media_type="application/pdf", headers={"content-disposition": 'inline; filename="campus-tour.pdf"'})
+
+
+@router.get("/campus/{cid}/tour-card.jpg")
+async def campus_tour_card(cid: str) -> Response:
+    from .campus import tour as TR
+    st = (await _case(cid, "campus"))["state"]
+    if st.get("kind") != "tour":
+        raise HTTPException(404, {"ok": False, "rule": "case_not_found", "message": "This page has expired or never existed."})
+    return Response(TR.card(st["plan"], {}, st.get("title") or "Campus tour"), media_type="image/jpeg",
+                    headers={"cache-control": "private, max-age=120"})
+
+
 @router.get("/campus/{cid}/visit.ics")
 async def campus_ics(cid: str) -> Response:
     from .campus import visits as VS

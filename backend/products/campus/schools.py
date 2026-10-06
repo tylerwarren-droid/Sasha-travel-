@@ -38,6 +38,17 @@ SCHOOLS: Dict[str, dict] = {
                   "Campus tours directly follow each information session; guests are encouraged to attend both."],
         "max_attendees": 5, "proven": True,
     },
+    # CR 38 · EU 167 (docs/campusme/four-schools.md, read 6 Oct 2026): the same Slate widget as Yale; each session carries its
+    # own /register/?id= link; no space counts are shown; the form is paged and asks a mailing address.
+    "brown": {
+        "key": "brown", "name": "Brown", "full_name": "Brown University", "city": "Providence, RI",
+        "tz": "America/New_York", "host": "apply.college.brown.edu", "variant": "widget",
+        "visit_page": "https://apply.college.brown.edu/portal/campus-visit_vNew",
+        "service": "/portal/widget/event?portal_id=66bd5c0f-5042-414a-9af5-08bf1e3bfaed&part=c6ef8d5b-0e6a-4ef0-8db7-9da5436c75da",
+        "aliases": ["brown", "brown university"],
+        "rules": ["a limit of three total visitors per registration"],
+        "max_attendees": 3, "proven": True, "address": "Manning Hall, Admission Welcome Center, 21 Prospect St, Providence, RI",
+    },
     # Configured from AD's scout (P807on), NOT proven here: shown as "not read yet", never as sessions.
     "williams": {
         "key": "williams", "name": "Williams", "full_name": "Williams College", "city": "Williamstown, MA",
@@ -56,6 +67,7 @@ SCHOOLS: Dict[str, dict] = {
 # Named in AD's scout but not on Slate, or never readable (P807on L16–27): CampusMe says why, and reads nothing.
 NOT_READABLE = {
     "harvard": "Harvard's visit page answered 503 when it was scouted, and its terms prohibit automated access — I'll prepare, you register",
+    "princeton": "Princeton's admission site refuses AI agents, and its visit page blocked our read: I'll prepare, you register",
     "amherst": "Amherst's robots file couldn't be read, so its pages stay unread",
     "berkeley": "Berkeley's tours run on its own system, not one CampusMe reads yet",
     "ohio state": "Ohio State's visit system isn't one CampusMe reads yet",

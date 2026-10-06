@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import urllib.parse
 import uuid
 from datetime import date
 from typing import Any, Dict, List, Optional
@@ -334,3 +335,217 @@ async def finish(rec: dict, seen: dict) -> None:
 
 
 CAMPUS_DONE: List[Any] = []        # turn.py records the outcome on the campus case
+
+
+# ── CR 38 · the four-school tour: Yale and Brown's own Slate forms, filled for the family's press ────────────────────
+# Read in the cloud browser, read-only, 6 Oct 2026 (nothing typed, every write aborted):
+#   · Yale: "I am a visiting:" (Prospective Student / Educator) reveals the student's questions on the same screen; a
+#     "Continue" button (2 pages) — pressed with nothing filled it sent NOTHING (only the page's own seat-count read);
+#   · Brown: "Select the option which best describes you." (Prospective Student / Parent… / Counselor) reveals its pages;
+#     its Submit is on screen from the start; the session is chosen by its own link (/register/?id=…).
+# Left for the family, always: Brown's "Do you have time to answer additional questions?", its accommodations question,
+# its mobile box (it carries a consent to texts), and every school's last press.
+
+TOUR_FIRST = {"yale": "Prospective Student", "brown": "Prospective Student"}
+
+
+def tour_values(school: str, fam: Dict[str, str]) -> List[dict]:
+    """What goes in each school's form (by Slate's own export names), from the family's details (the Keep)."""
+    f = fam
+    first, last = (f.get("student_first") or ""), (f.get("student_last") or "")
+    party = max(1, min(int(f.get("party") or 1), 4))
+    v = []
+    if school == "yale":
+        v += [("sys:email", "text", f.get("email")), ("sys:first", "text", first), ("sys:last", "text", last),
+              ("sys:birthdate", "date", f.get("birthdate")), ("sys:address", "address", f.get("address")),
+              ("sys:mobile", "text", f.get("mobile")), ("sys:field:term", "select", f"Fall {f.get('grad_year')}" if f.get("grad_year") else None),
+              ("sys:field:type", "select", "First-Year"), ("sys:school:name", "text", f.get("high_school")),
+              ("sys:guests", "select", str(min(3, party - 1))), ("sys:field:parent1_email", "text", f.get("parent_email"))]
+    elif school == "brown":
+        v += [("sys:first", "text", first), ("sys:last", "text", last), ("sys:preferred", "text", first),
+              ("sys:email", "text", f.get("email")), ("sys:field:student_type", "select", "First-Year/Freshman"),
+              ("sys:field:term", "select", f"Fall {f.get('grad_year')}" if f.get("grad_year") else None),
+              ("sys:school:name", "text", f.get("high_school")), ("sys:birthdate", "date", f.get("birthdate")),
+              ("sys:attendees", "select", str(min(3, party)))]
+    return [{"export": e, "kind": k, "value": x} for e, k, x in v if x]
+
+
+_ADDR = re.compile(r"^\s*(?P<street>[^,]+),\s*(?P<city>[^,]+),\s*(?P<region>[A-Za-z .]+?)\s+(?P<postal>\d{5}(?:-\d{4})?)\s*(?:,\s*(?P<country>.+))?$")
+
+
+class SlateTourPage(SlatePage):
+    async def first_answer(self, answer: str) -> None:
+        await self.page.wait_for_load_state("load", timeout=20000)
+        loc = self.page.locator(f'.form_question input[type=radio][value="{answer}"]').first
+        await loc.wait_for(state="visible", timeout=15000)
+        await loc.check(force=True)
+        await self.page.wait_for_timeout(800)
+
+    async def fill_q(self, export: str, kind: str, value: str) -> str:
+        q = self.page.locator(f'{_q(export)}:visible').first
+        await q.wait_for(state="visible", timeout=8000)
+        if kind == "text":
+            inp = q.locator("input:not([type=hidden]), textarea").first
+            await inp.fill(value)
+            await self.page.keyboard.press("Escape")
+            return await inp.input_value()
+        if kind == "select":
+            sel = q.locator("select").first
+            opts = [o.strip() for o in await sel.locator("option").all_inner_texts()]
+            pick = next((o for o in opts if o.lower() == value.lower()), None)
+            if not pick:
+                raise HO.Refused("not_all_prefilled", f"their “{export}” has no option “{value}” — no link")
+            await sel.select_option(label=pick)
+            return pick
+        if kind == "date":
+            y, m, d = value.split("-")
+            for part, val in (("_m", m), ("_d", d), ("_y", y)):
+                await q.locator(f'select[name$="{part}"]').first.select_option(value=val)
+            return value
+        if kind == "address":
+            a = _ADDR.match(value or "")
+            if not a:
+                raise HO.Refused("not_all_prefilled", "the mailing address isn't in the shape the form needs (street, city, state ZIP)")
+            await q.locator('select[name$="_country"]').first.select_option(label="United States")
+            await self.page.wait_for_timeout(400)
+            await q.locator('textarea[name$="_street"], input[name$="_street"]').first.fill(a["street"].strip())
+            await q.locator('input[name$="_city"]').first.fill(a["city"].strip())
+            reg = q.locator('select[name$="_region"]').first
+            region = a["region"].strip()
+            try:
+                await reg.select_option(value=region.upper()) if len(region) == 2 else await reg.select_option(label=region)
+            except Exception:
+                raise HO.Refused("not_all_prefilled", f"their state list has no “{region}” — no link")
+            await q.locator('input[name$="_postal"]').first.fill(a["postal"])
+            return value
+        raise ValueError(kind)
+
+    async def tick_time(self, start_hhmm: str) -> bool:
+        """Yale's tour times are ticked in its form (its own words: "pick the tour time(s)"): the box whose summary says that time."""
+        h, mi = map(int, start_hhmm.split(":"))
+        words = f"{(h % 12) or 12}:{mi:02d} {'AM' if h < 12 else 'PM'}"
+        boxes = self.page.locator('input[type=checkbox][data-event], input[type=checkbox][name$="_event"]')
+        for i in range(await boxes.count()):
+            b = boxes.nth(i)
+            val = urllib.parse.unquote(await b.get_attribute("value") or "")     # "Monday%2c … 9%3a00 AM": encoded
+            if words in val and await b.is_visible():
+                await b.check(force=True)
+                return True
+        return False
+
+    async def press_continue(self) -> bool:
+        btn = self.page.locator("button:visible", has_text="Continue")
+        if not await btn.count():
+            return False
+        await btn.first.click()
+        await self.page.wait_for_timeout(2500)
+        return True
+
+
+TOUR_FACTORY = SlateTourPage
+
+
+FAMILY_BOXES = {"brown": ('.form_question[data-export="additional_questions_student"] input[type=radio]',
+                          "Answer “additional questions?”")}
+NOT_OURS = {"additional_questions_student", "sys:mobile", "accommodationperson", "ada_details"}
+
+
+async def open_tour_handover(*, school: str, session: Session, fam: Dict[str, str], account: Optional[str], read_only: bool,
+                             fictional: bool) -> dict:
+    """CR 38 · Yale's or Brown's own form, filled in Kanoe's cloud browser for the family's press (founder override until the
+    DPA). Everything is read back from the page; what is the family's stays theirs; SUBMIT is never pressed."""
+    s = SC.SCHOOLS[school]
+    if not HO.configured():
+        raise HO.Refused("cloud_browser_not_configured", "the live hand-over isn't set up on this server (BROWSERBASE_API_KEY)")
+    if not read_only and not fictional and not HO.dpa_ok(account):
+        raise HO.Refused("no_dpa", "a real family's details don't go through the cloud browser until Kanoe has a signed "
+                                   "data-processing agreement with it")
+    if school not in TOUR_FIRST:
+        raise HO.Refused("not_supported", f"{s['name']}'s form isn't one the live hand-over fills")
+    vals = tour_values(school, fam)
+    title = session.title.split(" · ")[0]
+    t0 = HO.CLOCK()
+    hid = uuid.uuid4().hex[:12]
+    rec: Dict[str, Any] = {"id": hid, "token": HO._token(), "account_id": account, "form_id": None, "venue": f"{s['name']} — {title}",
+                           "page_url": session.form_url, "host": urlsplit(session.form_url).hostname, "read_only": read_only,
+                           "test": False, "state": "filling", "created_at": HO.NOW().isoformat(), "taps": 0, "tapped": [],
+                           "return_to": None, "request": None, "steps": 1, "engine": "Slate", "press_is_final": True,
+                           "taps_left": 2 if school in FAMILY_BOXES else 1, "fictional": fictional, "campus": True,
+                           "box_label": FAMILY_BOXES.get(school, (None, None))[1],
+                           "summary": {"venue": f"{s['name']} — {title}", **_when(session),
+                                       "party": f"{fam.get('party') or 1} visitor{'s' if str(fam.get('party') or 1) != '1' else ''}",
+                                       "name": f"{fam.get('student_first', '')} {fam.get('student_last', '')}".strip()},
+                           "fallback_link": session.form_url}
+    lap = HO._laps(rec, t0)
+    sess = await HO.BB.create(f"campus-tour:{hid}")
+    lap("session")
+    rec["session_id"] = sess["id"]
+    page = TOUR_FACTORY()
+    try:
+        await page.connect(sess["connectUrl"])
+        await page.guard(read_only)
+        lap("connect")
+        await page.goto(session.form_url)
+        await page.first_answer(TOUR_FIRST[school])
+        lap("page")
+        seen = await page.read_slate()
+        if seen["captcha"]:
+            raise HO.Refused("captcha", f"{s['name']}'s form has a CAPTCHA — Sasha never solves one; its own page: {session.form_url}")
+        if any(HO.V.platform_of(f) or HO._PAY_FRAME.search(f) for f in seen["frames"] if f) or seen["pay"]:
+            raise HO.Refused("payment_step", "the page carries a platform's or a payment frame — never through Kanoe's browser")
+        filled = []
+        for v in vals:
+            got = await page.fill_q(v["export"], v["kind"], v["value"])
+            if v["kind"] == "text" and got != v["value"]:
+                raise HO.Refused("not_all_prefilled", f"their “{v['export']}” didn't keep Sasha's value — no link")
+            filled.append({"name": v["export"], "label": v["export"], "value": got})
+        lap("fill")
+        if school == "yale":                         # its 2nd page holds the tour times
+            if not await page.press_continue():
+                raise HO.Refused("unexpected_step", "Yale's form has no Continue where it should — no link")
+            if not await page.tick_time(session.start):
+                raise HO.Refused("not_all_prefilled", f"Yale's form didn't offer {session.start} after Continue — no link")
+            filled.append({"name": "session", "label": "session", "value": f"{title} {session.start}"})
+        seen = await page.read_slate()
+        empty = [q["label"] or q["export"] for q in seen["qs"] if q["required"] and q["visible"] and not q["value"]
+                 and (q["export"] or "") not in NOT_OURS]
+        if empty:
+            raise HO.Refused("not_all_prefilled", f"their form still needs: {', '.join(empty)} — no link")
+        if seen["captcha"]:
+            raise HO.Refused("captcha", "a CAPTCHA appeared while filling — no link")
+        rec["filled"] = filled
+        box = FAMILY_BOXES.get(school)
+        rec["book_label"] = await (page.page.evaluate(HO._POINT_BOX_JS, [SUBMIT, box[0], box[1]]) if box
+                                   else page.page.evaluate(HO._POINT_JS, SUBMIT))
+        if not rec["book_label"]:
+            raise HO.Refused("unexpected_step", f"{s['name']}'s Submit isn't where it should be — no link")
+        rec["_nav"] = asyncio.Event()
+        _, live = await asyncio.gather(
+            page.watch(lambda what: HO._tap(rec, what), lambda label: HO._press(rec, label), read_only, lambda: None),
+            HO.BB.live_urls(sess["id"]))
+        lap("live_view")
+        fs = (live.get("pages") or [{}])[0].get("debuggerFullscreenUrl") or live.get("debuggerFullscreenUrl")
+        rec.update(live_url=f"{fs}&navbar=false" if "?" in (fs or "") else fs, state="ready",
+                   ready_ms=round((HO.CLOCK() - t0) * 1000), ready_at=HO.NOW().isoformat())
+        if read_only:
+            rec["_screenshot"] = await page.screenshot()
+    except HO.Refused:
+        await page.close()
+        await HO.BB.release(sess["id"])
+        raise
+    except Exception as e:
+        await page.close()
+        await HO.BB.release(sess["id"])
+        log.warning("[campus-tour] %s failed: %s: %s", hid, type(e).__name__, e)
+        raise HO.Refused("handover_failed", f"the cloud browser couldn't prepare {s['name']}'s form ({type(e).__name__}) — no link") from None
+    rec["_page"] = page
+    rec["_watch"] = asyncio.ensure_future(_watch(rec))
+    HO.HANDOVERS[hid] = rec
+    log.info("[campus-tour] %s ready in %sms: %s (read_only=%s)", hid, rec["ready_ms"], rec["venue"], read_only)
+    return rec
+
+
+FICTIONAL_FAMILY = {"parent_name": "Padre Ejemplo", "student_first": "Prueba", "student_last": "Sasha", "email": "prueba@example.com",
+                    "parent_email": "padre@example.com", "mobile": "2025550123", "high_school": "Kanoe Test High School",
+                    "grad_year": "2027", "major": "Engineering", "birthdate": "2009-03-14",
+                    "address": "100 Example Street, Princeton, NJ 08540", "party": "3"}

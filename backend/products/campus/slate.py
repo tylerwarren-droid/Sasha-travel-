@@ -202,6 +202,18 @@ def parse_widget_list(s: dict, day: str, body: str, receipt: dict) -> List[Sessi
         out.append(Session(school=s["key"], day=day, start=to24(m.group(2)), end=to24(m.group(3)), title=m.group("title").strip(),
                            location=m.group("loc").strip(), status="open" if n > 0 else "full", spaces=n,
                            form_url=form_url, event_id=None, read=receipt))
+    if not out:                                      # CR 38 · Brown's widget: one block per session, its own link, no counts
+        for m in re.finditer(r'<div class="calendar_legend (available|unavailable)"></div><div class="event" data-date="'
+                             r'(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}):\d{2}"[^>]*>(.*?)</div></div></div>', body, re.S):
+            link = re.search(r'href="(/register/\?id=[0-9a-f-]{36})"[^>]*>(.*?)</a>', m.group(4), re.S)
+            if not link or m.group(2) != day:
+                continue
+            loc = _text(m.group(4)).split("\n")[-1].strip() if "\n" in _text(m.group(4)) else None
+            lines = [x.strip() for x in _text(m.group(4)).split("\n") if x.strip()]
+            out.append(Session(school=s["key"], day=day, start=m.group(3), end=None, title=_text(link.group(2)).strip(),
+                               location=lines[-1] if len(lines) > 2 else loc, status="open" if m.group(1) == "available" else "full",
+                               spaces=None, form_url=f"{_base(s)}{H.unescape(link.group(1))}",
+                               event_id=link.group(1).rsplit("=", 1)[-1], read=receipt))
     return out
 
 

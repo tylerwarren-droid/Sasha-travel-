@@ -324,9 +324,22 @@ async def _look(ctx: dict, line: str, municipality: str) -> None:
     await _found(ctx, c)
 
 
+async def _note(ctx: dict, **kv) -> None:
+    """CR 46 · the case keeps where it got to (the centre found, the cita booked) for health_status — never raises."""
+    from .. import store as ST
+    cid = ctx["st"]["pending"].get("case_id")
+    try:
+        case = await ST.STORE.get(cid) if cid else None
+        if case:
+            await ST.STORE.update(cid, {**case["state"], **kv})
+    except Exception as e:
+        log.warning("[cita] status not noted: %s", type(e).__name__)
+
+
 async def _found(ctx: dict, c: dict) -> None:
     pend, out = ctx["st"]["pending"], ctx["out"]
     pend["ci"]["centre"] = c
+    await _note(ctx, centre={k: c.get(k) for k in ("name", "address", "postcode", "municipality", "phone_cita", "hours") if c.get(k)})
     pend["ci"].pop("choices", None)
     pend["step"] = "ci_route"
     out.text(card(c))
@@ -479,6 +492,8 @@ async def _record(ctx: dict, on: date, at: str, said: str = "") -> None:
     out.text(("✅ In your itinerary" if item else "Noted (your itinerary couldn't be reached just now)") +
              f": {place}, {on.strftime('%A %-d %B')} at {at}{' (cita ' + code.group(1) + ')' if code else ''}.\n"
              "Bring:\n" + "\n".join("• " + x for x in items) + f"\n📅 Add it to your calendar: {link}")
+    await _note(ctx, cita={"on": on.isoformat(), "at": at, "place": place, "route": route or "go",
+                           "code": code.group(1) if code else None})
     pend.pop("ci", None)
     pend.pop("ci_route", None)
     pend["step"] = "done"

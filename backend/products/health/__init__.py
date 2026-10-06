@@ -15,3 +15,5 @@ Health-data rules (GDPR Art. 9; S-77 §6–7, H-1):
     stored: the hand-over says what to have ready, with no values. The demo's patient is FICTIONAL;
   · values shown on a hand-over are purged from it after VALUES_TTL; every case is deleted after 30 days.
 """
+
+from .status import health_status  # noqa: E402,F401  (CR 46 · the platform's 🇪🇸 Health card tab)

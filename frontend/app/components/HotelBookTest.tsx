@@ -64,7 +64,7 @@ export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 
   }
   if (p.k === 'idle') return <button className="price" onClick={() => setP({ k: 'form' })}>Reserve (TEST)</button>
   if (p.k === 'form') return (
-    <div className="o2" style={{ maxWidth: 420 }}>
+    <div className="o2" style={{ maxWidth: 420, flexBasis: '100%' }}>
       <div>Test booking: no hotel contacted.</div>
       <label>Check-in <input type="date" value={checkin} onChange={e => setCheckin(e.target.value)} /></label>{' '}
       <label>Nights <input type="number" min={1} max={30} value={nights} onChange={e => setNights(Number(e.target.value))} style={{ width: 48 }} /></label>{' '}
@@ -73,17 +73,18 @@ export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 
     </div>
   )
   if (p.k === 'readback') return (
-    <div className="o2" style={{ maxWidth: 420 }}>
+    <div className="o2" style={{ maxWidth: 420, flexBasis: '100%' }}>
       <ul>{p.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
       <button className="price" onClick={() => { yes(p.sha) }}>Yes, test-book it</button>{' '}
       <button className="viewlink" onClick={() => setP({ k: 'idle' })}>No</button>
     </div>
   )
+  // Sasha 161 · past the button, the step takes its own full line in the card (it never squeezes the hotel's details)
   if (p.k === 'paying') return p.phone
-    ? <span className="o2">Waiting for you to confirm on your phone… (TEST — nothing is charged) · or <a href={p.url} target="_blank" rel="noopener noreferrer">pay here</a></span>
+    ? <span className="o2" style={{ flexBasis: '100%' }}>Waiting for you to confirm on your phone… (TEST — nothing is charged) · or <a href={p.url} target="_blank" rel="noopener noreferrer">pay here</a></span>
     : <span className="o2">Pay the TEST price on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged, no hotel is contacted)…</span>
   if (p.k === 'done') return (
-    <span className="o2">{p.say}{p.sid ? <>{' '}<button className="price" onClick={() => { finishLive(p.say, p.sid!) }}>Finish on the hotel&rsquo;s page (live) →</button></> : null}</span>
+    <span className="o2" style={{ flexBasis: '100%' }}>✅ {p.say}{p.sid ? <>{' '}<button className="price" onClick={() => { finishLive(p.say, p.sid!) }}>Finish on the hotel&rsquo;s page (live) →</button></> : null}</span>
   )
   if (p.k === 'live') return (
     <div className="o2" style={{ maxWidth: 420 }}>

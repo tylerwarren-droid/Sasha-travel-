@@ -864,12 +864,13 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
                       <div className="od">
                         {/* Sasha 155 · the hotel's own share picture from its own site (none rather than a stand-in) */}
                         {h.photo && !badHotelPhoto[h.photo] ? (
-                          <a href={h.photo_source || h.book_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', margin: '2px 0 6px' }}>
+                          <a href={h.photo_source || h.book_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', margin: '2px 0 6px', position: 'relative' }}>
                             {/* eslint-disable-next-line @next/next/no-img-element -- shown from the hotel's own host; never fetched or stored by us */}
                             <img src={h.photo} alt={`${h.name} — ${h.photo_google ? 'Google Maps photo' : 'from their website'}`} loading="lazy" referrerPolicy="no-referrer"
                               onError={() => setBadHotelPhoto(m => ({ ...m, [h.photo!]: true }))}
                               style={{ width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
-                            <span style={{ fontSize: 11, opacity: 0.65 }}>{h.photo_google ? `Photo: Google Maps${h.photo_by?.length ? ` · ${h.photo_by.join(', ')}` : ''} ↗` : 'Photo: their website ↗'}</span>
+                            {/* Sasha 161 · the credit as a small mark ON the photo, as on the restaurant cards */}
+                            <span className="lw-photomark" title={h.photo_google ? `Photo: Google Maps${h.photo_by?.length ? ` · ${h.photo_by.join(', ')}` : ''}` : 'Photo: their website'}>{h.photo_google ? `Google${h.photo_by?.length ? ` · ${h.photo_by[0]}` : ''}` : 'their site'}</span>
                           </a>
                         ) : null}
                         <div className="o1">{h.name}</div>
@@ -1217,7 +1218,9 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
         .lw-gal{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
         .lw-gal img{width:100%;height:96px;object-fit:cover;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:pointer;transition:.2s}
         .lw-gal img:hover{transform:translateY(-2px)}
-        .lw-opt{display:flex;align-items:center;gap:13px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;margin-top:9px;background:rgba(255,255,255,.02)}
+        .lw-opt{display:flex;flex-wrap:wrap;align-items:center;gap:13px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;margin-top:9px;background:rgba(255,255,255,.02)}
+        .lw-opt .od{flex:1 1 180px;min-width:180px}
+        .lw-photomark{position:absolute;right:6px;bottom:6px;font-size:10px;line-height:14px;padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.55);color:#fff;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .lw-opt:first-of-type{margin-top:0;border-color:rgba(218,165,32,.4);background:rgba(218,165,32,0.10)}
         .lw-opt .logo{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.06);display:grid;place-items:center;font-size:16px;flex-shrink:0}
         .lw-opt .od{flex:1;min-width:0}

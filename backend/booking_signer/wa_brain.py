@@ -402,6 +402,25 @@ async def _gate_answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
     return True
 
 
+async def trip_day_words(account: str, day: str, venue: str) -> str:
+    """Sasha 171 · "Added to your Vietnam trip (Day 5, Mon 16 Nov)" — only when that day IS on the plan (merge puts it there
+    by its date); else "It's in your bookings"."""
+    from . import plan_store as PS
+    try:
+        p = await PS.latest(account, venue)
+        if p and day:
+            d = next((x for x in PS.merge(p, []).get("days") or [] if x.get("date") == day), None)
+            if d:
+                dd = date.fromisoformat(day)
+                cc = _country_of(p.get("title") or "", [])
+                from .venue_read import COUNTRY_NAME
+                trip = f"{COUNTRY_NAME.get(cc)} trip" if cc and COUNTRY_NAME.get(cc) else "trip"
+                return f"Added to your {trip} (Day {d.get('day')}, {dd.strftime('%a')} {dd.day} {dd.strftime('%b')})"
+    except Exception as e:
+        log.warning("[wa_brain] trip day not named: %s: %s", type(e).__name__, e)
+    return "It's in your bookings"
+
+
 # ── a card picked from a trip search → on the trip, on its day ───────────────────────────────────────────────────────
 
 async def add_to_trip(ctx: dict, pend: dict, card: dict) -> None:

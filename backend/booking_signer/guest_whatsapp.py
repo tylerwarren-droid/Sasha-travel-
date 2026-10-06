@@ -1661,6 +1661,13 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
     from .itinerary_q import TRIP as _TRIP
     if not payload and _TRIP.search(body or "") and not RESUME.fullmatch(body or ""):
         return False
+    if kind == "booked":
+        if payload == f"cxl:{pend['nonce']}":   # the Cancel button: the same cancellation as typed, one yes before anything
+            st["pending"] = None
+            await _cancel_find(ctx, pend.get("venue"))
+            return True
+        st["pending"] = None
+        return False
     if kind in ("trip_where", "trip_added", "contact_name", "demo_reset", "gate"):   # Sasha 167 · wa_brain's own questions
         from . import wa_brain as WB
         if await WB.answer(ctx, pend, body, payload):
@@ -2035,6 +2042,8 @@ def _payload_ok(pend: dict, payload: str) -> bool:
         return payload.startswith(f"pick:{pend['nonce']}:")
     if pend["kind"] == "trip_where":   # Sasha 167
         return payload.startswith(f"where:{pend['nonce']}:")
+    if pend["kind"] == "booked":   # Sasha 171 · the Cancel under a confirmation
+        return payload == f"cxl:{pend['nonce']}"
     if pend["kind"] == "gate":   # Sasha 167
         return payload.split(":", 1)[-1] == pend["nonce"] and payload.split(":", 1)[0] in ("am", "pm", "tripadd", "tripkeep")
     if pend["kind"] == "demo_reset":
@@ -2199,7 +2208,12 @@ def route_line_of(rd: dict, dv) -> str:
     from . import venue_read as V
     v = D.Venue(form="form" in rungs, platform=((V.platform_of(link) if link.startswith("http") else link) or None) if "link" in rungs else None,
                 phone="phone" in rungs, email="email" in rungs, open_now=rd.get("open_now"), opens_at=rd.get("opens_at"))
-    return D.line(v, dv, rd.get("venue") or "them")
+    return D.line(v, dv, plain_venue(rd.get("venue")) or "them")
+
+
+def plain_venue(name: Optional[str]) -> str:
+    """Sasha 171 · the venue as the guest knows it: the demo's stand-in mark is said once, in the read-back, not in every line."""
+    return (name or "").replace(" (TEST stand-in)", "")
 
 
 def decision_of(rd: dict, prefer: Optional[str] = None, at: Optional[str] = None, now=None):
@@ -2449,8 +2463,7 @@ async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: st
         out.text("What I'll " + ("say" if rung == "call" else "send") + ":\n" +
                  "\n".join("• " + _BULLET.sub("", ln) for ln in guest_lines(rung, read_back["lines"])))   # Sasha 117 · one bullet
     if kind == "confirm" and "(TEST stand-in)" in (venue or ""):   # Sasha 169 · the stand-in, said first
-        real = venue.split(" (TEST stand-in)")[0]
-        sentence = f"🧪 TEST: {real} — our test venue stands in; {real} is not contacted.\n{sentence}"
+        sentence = f"🧪 Demo: our test venue stands in; the restaurant isn't contacted.\n{sentence.replace(' (TEST stand-in)', '')}"
     tag = f"{rid[:8]}:{sha[:16]}"
     yes_title = "Yes, book it" if kind == "confirm" else "Yes, cancel"
     out.ask(sentence, [(yes_title, f"yes:{tag}"), ("No", f"no:{tag}")])
@@ -2478,15 +2491,29 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
         # Sasha 117 · the send is "sent"; what the venue's page SAID is the reading — "confirmed" was never the status
         result = (j.get("reading") or {}).get("result") if j.get("status") == "sent" else None
         ref = f" Their reference: {j['booking_reference']}." if j.get("booking_reference") and result == "confirmed" else ""
-        out.text({"confirmed": f"✅ Booked: {venue}, {pend.get('summary', '')}.{ref}",
+        shown = plain_venue(venue)   # Sasha 171 · the stand-in was said once, before the yes — not again
+        out.text({"confirmed": f"✅ Booked: {shown}, {pend.get('summary', '')}.{ref}",
                   "proposed": f"⚠ Not confirmed yet: {venue}'s page offers something different — read it below.",
                   "declined": f"❌ They said no: {venue}'s page turned it down."}.get(result) or
                  (DONE_ASKED if j.get("status") == "sent"   # Sasha 158 · one sentence after
                   else f"⚠ Not confirmed yet: {j.get('say') or 'their site did not answer clearly'}"))
-        if j.get("their_page"):
-            out.text(f"Their page said: “{str(j['their_page'])[:500]}”")
-        if _receipt_note(venue, j.get("status") == "sent"):   # Sasha 147 · a refused send has no receipt
-            out.text(_receipt_note(venue, j.get("status") == "sent").strip())
+        if j.get("their_page"):   # Sasha 171 · their words, without a raw link: cancelling is the Cancel button below
+            words = re.sub(r"\s*(?:Para cancelar|To cancel|Cancel)[^:]*:\s*https?://\S+", "", str(j["their_page"]), flags=re.I)
+            words = re.sub(r"https?://\S+", "", words).strip()
+            if words:
+                out.text(f"Their page said: “{words[:500]}”")
+        note = _receipt_note(venue, j.get("status") == "sent")
+        if result == "confirmed":
+            from . import wa_brain as WB
+            at = ((pend.get("draft") or {}).get("when") or {}).get("at") or ""
+            where = await WB.trip_day_words(account, at[:10], shown)
+            emailed = note.strip() == "Your receipt is in your email."
+            nonce = secrets.token_hex(3)
+            out.ask(f"{where} — receipt sent to your email." if emailed else f"{where}.",
+                    [("Cancel", f"cxl:{nonce}")])
+            ctx["st"]["pending"] = {"kind": "booked", "at": ctx["now"].isoformat(), "nonce": nonce, "venue": shown}
+        elif note:   # Sasha 147 · a refused send has no receipt
+            out.text(note.strip())
         if result == "confirmed" and venue == "Sasha Test Venue" and os.getenv("SASHA_TEST_VENUE_DEPOSIT", "") == "1":
             await _test_deposit(ctx)   # Sasha 131 (4) · one touch, on their page — a TEST payment
         return

@@ -672,6 +672,8 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     if m3:
         out.text(me3.INTRO[m3])
         p = {**p, "Body": me3.KEYWORD[m3]}
+    elif not payload and me3.back(body):   # Sasha 178 · "back to the campus tour": the product's own word resumes it, no intro
+        p = {**p, "Body": me3.KEYWORD[me3.back(body)]}
 
     async def _early(text: str) -> None:   # "Reading Yale's calendar…" goes out before a slow read, not after it
         await deliver(ch, frm, Out().text(text), now)
@@ -813,7 +815,8 @@ async def _new_request(ctx: dict, body: str) -> None:
         await _cancel_find(ctx, ci or None)
         return
     from .itinerary_q import TRIP as _TRIP
-    if _RECEIPTS.search(body) and not _TRIP.search(body):   # Sasha 165 · "show me my itinerary" is the TRIP (below), not receipts
+    from .itinerary_q import ASK_WHEN as _ASK_WHEN, TRIPS as _TRIPS
+    if _RECEIPTS.search(body) and not _TRIP.search(body) and not _ASK_WHEN.search(body) and not _TRIPS.search(body):   # Sasha 165/178
         await _receipts(ctx)
         return
     if await _forwarded_confirmation(ctx, body):   # Sasha 118 · the venue's confirmation, forwarded by the guest
@@ -859,6 +862,10 @@ async def _new_request(ctx: dict, body: str) -> None:
     from . import captcha_test as CT   # Sasha 159 (5) · "send me the captcha test" (founder only)
     if CT.asked(body):
         out.text(await CT.send(ctx["account"]))
+        return
+    sm = WB.START.match(body or "")
+    if sm and sm["rest"].strip():   # Sasha 178 · "let me start another: …" with nothing open
+        await WB.start_another(ctx, sm["rest"])
         return
     want = WB.placeless(body)   # Sasha 167 (2) · a place asked for, no place said: the trip's city (or ONE question), else home
     if want is not None:
@@ -1695,6 +1702,21 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             return True
         st["pending"] = None
         return False
+    from . import wa_brain as _WB
+    if not payload and kind in _WB.PARKABLE:   # Sasha 178 · PARK AND SWITCH
+        sm = _WB.START.match(body or "")
+        if sm:
+            out.text(await _WB.park(ctx, pend))
+            await _WB.start_another(ctx, sm["rest"])
+            return True
+        if _WB.PARK.search(body or ""):
+            out.text(await _WB.park(ctx, pend))
+            return True
+    if kind == "city_q":
+        if await _WB.city_answer(ctx, pend, body, payload):
+            return True
+        st["pending"] = None
+        return False
     if kind in ("trip_where", "trip_added", "contact_name", "demo_reset", "gate"):   # Sasha 167 · wa_brain's own questions
         from . import wa_brain as WB
         if await WB.answer(ctx, pend, body, payload):
@@ -2078,6 +2100,8 @@ def _payload_ok(pend: dict, payload: str) -> bool:
         return payload == f"cxl:{pend['nonce']}"
     if pend["kind"] == "gate":   # Sasha 167
         return payload.split(":", 1)[-1] == pend["nonce"] and payload.split(":", 1)[0] in ("am", "pm", "tripadd", "tripkeep")
+    if pend["kind"] == "city_q":   # Sasha 178
+        return payload in (f"oneoff:{pend['nonce']}", f"tripq:{pend['nonce']}")
     if pend["kind"] == "demo_reset":
         return payload in (f"yes:{pend['nonce']}", f"no:{pend['nonce']}")
     tag = f"{str(pend.get('id', ''))[:8]}:{str(pend.get('sha', ''))[:16]}"

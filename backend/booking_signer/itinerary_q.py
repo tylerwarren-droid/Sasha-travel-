@@ -166,13 +166,77 @@ async def time_for(account: str, text: str, rows: List[dict], now: datetime) -> 
 WEEK = re.compile(r"\bwhat do i (?:need|have) to do (?:this|next) week\b|\bwhat(?:'s| is) (?:on )?(?:for )?(?:this|next) week\b"
                   r"|\bmy week\b|\bwhat do i have (?:this|next) week\b", re.I)
 #: Sasha 165 · the whole trip: the plan (the builder's, now on the account) with every booking slotted into its day
+#: Sasha 178 · ASK SASHA ANYTHING over the one record (web, avatar and WhatsApp): a reservation by its venue, a trip's day,
+#: the relocation package
+ASK_WHEN = re.compile(r"\bwhen(?:'s| is| was)? (?:my |the )?(?:reservation|booking|table|appointment|dinner|lunch)\s+(?:at|with|for|in)\s+(?P<v>.+?)\s*\??$", re.I)
+ASK_DAY = re.compile(r"\bwhat(?:'s| is| do i have)? (?:on|in) my (?P<t>[\w ]+?) (?:trip|journey|tour)?\s*on the (?P<d>\d{1,2}(?:st|nd|rd|th)|[a-z]+(?:st|nd|rd|th))\b", re.I)
+ASK_PACKAGE = re.compile(r"\b(?:what(?:'s| is)? (?:missing|left|still to do)|what do i still need)\b.*\b(?:relocation|move|package|file|forms?)\b|"
+                         r"\b(?:relocation|move) (?:package|file|forms?) status\b", re.I)
 #: Sasha 177 · the journeys on WhatsApp: "show me my trips", "my requests", "my receipts", "my move to Madrid", "my campus tour"
 TRIPS = re.compile(r"\b(?:show (?:me )?|what are |list )?my (?:trips|journeys)\b|\bmy (?:requests|receipts)\b", re.I)
 TRIP = re.compile(r"\bshow (?:me )?my (?:\w+ )?(?:itinerary|trip|plan)\b|\bwhat does my (?:\w+ )?trip look like\b|"
                   r"\b(?:show (?:me )?)?my (?:move to \w+|campus tour|\w+ trip)\b|"
                   r"^\s*(?:my )?(?:\w+ )?itinerary\s*[?.!]*\s*$|\bwhat was i doing\b|^\s*carry on\s*[.!]*\s*$", re.I)
-QUESTION = re.compile(TRIPS.pattern + "|" + TRIP.pattern + r"|\bwhere (?:am i|are we|will i be)\b|\bdo i have time\b|\bwhat(?:'s| is) (?:on )?my (?:itinerary|plan|schedule)\b"
+QUESTION = re.compile(TRIPS.pattern + "|" + ASK_WHEN.pattern + "|" + ASK_DAY.pattern + "|" + ASK_PACKAGE.pattern + "|" + TRIP.pattern + r"|\bwhere (?:am i|are we|will i be)\b|\bdo i have time\b|\bwhat(?:'s| is) (?:on )?my (?:itinerary|plan|schedule)\b"
                       r"|\bwhat do i have (?:on|tomorrow|today|this)\b|\bwhere do i (?:sleep|stay)\b|" + WEEK.pattern, re.I)
+
+
+async def ask_anything(account: str, text: str, rows: List[dict], now: datetime) -> Optional[List[str]]:
+    """Sasha 178 · answers that cite the item and its tab. None: not one of these questions."""
+    from . import journeys as JN
+    t = text or ""
+    m = ASK_WHEN.search(t)
+    if m:
+        want = {w for w in re.findall(r"[a-z0-9]+", JN._fold(m["v"])) if len(w) > 2 and w not in ("the", "restaurant", "spa")}
+        hits = [r for r in rows if r.get("status") not in ("cancelled", "failed") and want and want <= set(re.findall(r"[a-z0-9]+", JN._fold(r.get("venue") or "")))]
+        if not hits:
+            hits = [r for r in rows if r.get("status") not in ("cancelled", "failed") and want and want & set(re.findall(r"[a-z0-9]+", JN._fold(r.get("venue") or "")))]
+        if not hits:
+            return [f"I don't see a booking at {m['v'].strip(' ?')} on your account."]
+        j = await JN.journeys(account, rows)
+        out = []
+        for r in hits[:3]:
+            tab = next((x["label"] for x in j["journeys"] if str(r.get("trip_id")) == x["key"]), None) or j["home"]["label"]
+            when = f"{SN.day_words(r['date'])}{' at ' + r['time'] if r.get('time') else ''}" if r.get("date") else "no day set yet"
+            from . import plan_store as PS
+            out.append(f"{str(r.get('venue') or '').replace(' (TEST stand-in)', '')}: {when} — {PS.short_status(r)}"
+                       f"{' · ref ' + r['booking_reference'] if r.get('booking_reference') and r['booking_reference'] not in PS.short_status(r) else ''} (in your {tab} tab)")
+        return out
+    m = ASK_DAY.search(t)
+    if m:
+        from . import plan_store as PS, wa_brain as WB
+        p = await PS.latest(account, m["t"])
+        if not p:
+            return [f"There's no {m['t']} trip on your account."]
+        dd = WB.ordinals_as_digits(f"the {m['d']}")
+        n = int(re.search(r"\d+", dd)[0])
+        plan = PS.merge(p, JN.for_journey(rows, p.get("trip_id")))
+        day = next((d for d in plan.get("days") or [] if d.get("date") and int(d["date"][8:10]) == n), None)
+        if not day:
+            return [f"Your {JN.label(p)} trip has no {m['d']} in it."]
+        lines = [f"{JN.label(p)} · Day {day.get('day')} · {SN.day_words(day['date'])} — {day.get('city')}:"]
+        for b in sorted(day.get("bookings") or [], key=lambda x: x.get("time") or ""):
+            lines.append(f"• {b.get('time') or ''} {str(b.get('venue') or '').replace(' (TEST stand-in)', '')}: {PS.short_status(b)}".replace("•  ", "• "))
+        for a in [a for a in day.get("activities") or [] if not a.get("replaced_by")][:3]:
+            lines.append(f"· {a.get('time')}: {a.get('name')}")
+        return ["\n".join(lines)]
+    if ASK_PACKAGE.search(t):
+        try:
+            from products.relocation import package_status
+        except ImportError:
+            return ["I can't read your relocation file just now."]
+        ps = await package_status(account)
+        if not ps:
+            return ["You don't have a RelocateMe file yet — say “relocation” to start one."]
+        icon = {"filled": "✏️ filled", "signed": "✅ signed", "missing": "❗ missing", "waiting": "⏳ waiting"}
+        lines = [f"🏠 Your relocation package (in your {ps.get('tab') or 'Move to Madrid'} tab):"]
+        for fm in ps.get("forms") or []:
+            lines.append(f"• {fm.get('name')}: {icon.get(fm.get('state'), fm.get('state'))}{' — ' + fm['note'] if fm.get('note') else ''}")
+        nd = ps.get("next_deadline")
+        if nd:
+            lines.append(f"Next deadline: {SN.day_words(nd['on'])} — {nd.get('text')}")
+        return ["\n".join(lines)]
+    return None
 
 
 def _line(r: dict) -> str:
@@ -254,6 +318,9 @@ async def answer(account: str, text: str, now: datetime) -> List[str]:
     rows = await _rows(account)
     if TRIPS.search(text or ""):
         return trips_text(await JN.journeys(account, rows), text)
+    asked = await ask_anything(account, text, rows, now)
+    if asked:
+        return asked
     m = re.search(r"\bmy (move to \w+|campus (?:tour|visits))\b", text or "", re.I)
     if m:   # Sasha 177 · a product's journey on WhatsApp: its items (and its bookings), each with its source
         j = await JN.journeys(account, rows)

@@ -648,5 +648,131 @@ async def start_reset(ctx: dict) -> None:
     ctx["st"]["pending"] = {"kind": "demo_reset", "at": ctx["now"].isoformat(), "nonce": nonce}
 
 
+# ── Sasha 178 · PARK AND SWITCH ─────────────────────────────────────────────────────────────────────────────────────────
+
+PARK = re.compile(r"\b(?:not ready to book|not ready yet|not yet|hold (?:it|that|on to it)|save (?:it|that|this)(?: for later)?|keep it for later|"
+                  r"later,? (?:please|thanks)|maybe later|park (?:it|that))\b", re.I)
+START = re.compile(r"^\s*(?:ok(?:ay)?[,.!]?\s+)?(?:let me |let'?s |i(?:'d| would) like to |i want to )?start (?:another(?: one)?|something else|a new one)"
+                   r"\s*[:,.-]?\s*(?P<rest>.*)$", re.I)
+PARKABLE = ("cards", "confirm", "need", "gate", "trip_added")
+
+
+async def save_item(account: str, name: str, at: Optional[str], city: Optional[str]) -> Optional[str]:
+    """A saved, unbooked item on the account's list (filed like any booking, shown 'Saved — not booked yet')."""
+    from . import plan_store as PS, journeys as JN
+    from .store import BOOKINGS_TRIP_TITLE
+    run = PS._run()
+    if run is None:
+        return None
+    tz = "Asia/Ho_Chi_Minh" if city and city.split(",")[0].strip().lower() in __import__("booking_signer.handoff", fromlist=["VN_CITIES"]).VN_CITIES else "Europe/Madrid"
+
+    async def go(conn):
+        a = uuid.UUID(account)
+        trip = await conn.fetchval("select id from trips where owner_id = $1 and title = $2 limit 1", a, BOOKINGS_TRIP_TITLE)
+        if trip is None:
+            trip = await conn.fetchval("insert into trips (owner_id, title) values ($1,$2) returning id", a, BOOKINGS_TRIP_TITLE)
+        dt = datetime.fromisoformat(at).replace(tzinfo=__import__("zoneinfo").ZoneInfo(tz)) if at and "T" in at else \
+            (datetime.fromisoformat(f"{at[:10]}T00:00").replace(tzinfo=__import__("zoneinfo").ZoneInfo(tz)) if at else None)
+        return await conn.fetchval("insert into trip_items (trip_id, type, status, provider_name, date_time, local_timezone, location_name, "
+                                   "escalation_notes) values ($1,'other','pending',$2,$3,$4,$5,$6) returning id",
+                                   trip, name[:200], dt, tz, (city or "")[:120] or None, JN.SAVED)
+    try:
+        tid = await run(go)
+        await JN.file(account)
+        return str(tid)
+    except Exception as e:
+        log.warning("[wa_brain] not saved: %s: %s", type(e).__name__, e)
+        return None
+
+
+async def tab_of(account: str, city: Optional[str], at: Optional[str]) -> str:
+    """The tab a saved item lands in, in words."""
+    from . import journeys as JN, plan_store as PS
+    for p in await PS.plans(account):
+        pl = {**p, "country": JN.country_of_plan(p["title"], p.get("cities") or [])}
+        if at and JN.fits({"date": at[:10], "read_city": city}, pl):
+            return JN.label(pl)
+    home = JN.home_label()
+    if not city or JN._fold(city.split(",")[-1].strip()) in (JN._fold(home.replace(" (home)", "")), "madrid"):
+        return home
+    return city.split(",")[-1].strip() if "," in city else city
+
+
+async def park(ctx: dict, pend: dict) -> str:
+    """"I'm not ready to book that yet": what's open is SAVED (unbooked) in its tab; the open question closes. → its words."""
+    f = pend.get("find") or (pend.get("read") and {"what": pend["read"].get("venue"), "where": None}) or {}
+    name = (pend.get("venue") or (pend.get("read") or {}).get("venue") or
+            (f"{f.get('what')} in {f.get('where')}" if f.get("where") else f.get("what")) or "your request")
+    from .guest_whatsapp import plain_venue
+    name = plain_venue(name)
+    at = f.get("open_at") or ((pend.get("draft") or {}).get("when") or {}).get("at") or (pend.get("draft") or {}).get("day")
+    city = f.get("where")
+    ctx["st"]["pending"] = None
+    tid = await save_item(ctx["account"], f"{name} (saved)", at, city)
+    if not tid:
+        return "I couldn't save it just now — nothing was booked."
+    return f"Saved, not booked: {name} — it's in your {await tab_of(ctx['account'], city, at)} tab and in Requests."
+
+
+async def start_another(ctx: dict, rest: str) -> None:
+    """"let me start another: a restaurant in Madrid tonight, a spa in Paris on Saturday" → each saved into its tab;
+    a city that's neither home nor on a trip is asked about ONCE."""
+    from . import handoff as HO, plan_store as PS
+    parts = [x.strip(" .") for x in re.split(r",|;|\s+and\s+(?=(?:an?|some|the)\s)", rest or "") if x.strip(" .")]
+    finds = []
+    for part in parts:
+        h = HO.booking_handoff(part, [], ctx["now"])
+        f = (h or {}).get("booking_find")
+        if f and f.get("where"):
+            d = (h.get("reservation_draft") or {}).get("parts") or {}
+            g, gp = dict(f), dict(d)
+            await _ordinal_day(ctx, g, gp, part)
+            finds.append((g, gp, part))
+    if not finds:
+        ctx["out"].text("Tell me what to start, e.g. “a restaurant in Madrid tonight”.")
+        return
+    if len(finds) == 1:   # one thing: straight into its search
+        await gate(ctx, finds[0][0], finds[0][1], finds[0][2])
+        return
+    lines, new_city = [], None
+    trip_cities = {JN_fold(c) for p in await PS.plans(ctx["account"]) for c in (p.get("cities") or [])}
+    for f, gp, part in finds:
+        at = f.get("open_at") or gp.get("day")
+        await save_item(ctx["account"], f"{HO.found_line(f)[len('Here are the best-rated '):].rstrip('.')} (saved)"
+                        if f["what"] else part, at, f["where"])
+        tab = await tab_of(ctx["account"], f["where"], at)
+        lines.append(f"• {f['what']} in {f['where']}{(' — ' + SN_day(at)) if at else ''} → {tab}")
+        city = f["where"].split(",")[-1].strip()
+        if not new_city and JN_fold(city) not in trip_cities and JN_fold(city) not in ("madrid",):
+            new_city = city
+    ctx["out"].text("Started, both saved (nothing booked yet):\n" + "\n".join(lines) + "\nSay “show me the places for …” to see them.")
+    if new_city:
+        nonce = uuid.uuid4().hex[:6]
+        ctx["out"].ask(f"Is {new_city} part of a trip, or a one-off?", [("A one-off", f"oneoff:{nonce}"), ("Part of a trip", f"tripq:{nonce}")])
+        ctx["st"]["pending"] = {"kind": "city_q", "at": ctx["now"].isoformat(), "nonce": nonce, "city": new_city}
+
+
+def JN_fold(s: str) -> str:
+    from . import journeys as JN
+    return JN._fold(s)
+
+
+def SN_day(at: str) -> str:
+    from . import sentences as SN
+    return SN.day_words(at[:10]) + (f" at {at[11:16]}" if "T" in at else "")
+
+
+async def city_answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
+    n = pend["nonce"]
+    one = payload == f"oneoff:{n}" or (not payload and re.search(r"\bone[- ]?off|\bjust\b|\bno\b", body or "", re.I))
+    trip = payload == f"tripq:{n}" or (not payload and re.search(r"\b(?:part of|trip|yes)\b", body or "", re.I))
+    if not (one or trip):
+        return False
+    ctx["st"]["pending"] = None
+    ctx["out"].text(f"OK — {pend['city']} stays its own tab." if one else
+                    f"Then say “plan me 3 days in {pend['city']}” — I'll build the trip and file these in it.")
+    return True
+
+
 __all__ = ["placeless", "context", "search", "answer", "add_to_trip", "web_turn", "ask_contact", "reset_demo", "start_reset",
            "is_test", "RESET", "wa_markdown", "chunks", "sasha_clear", "gate", "hour_said"]

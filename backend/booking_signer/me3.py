@@ -33,6 +33,21 @@ INTRO = {
 }
 
 
+#: Sasha 178 · "back to the campus tour", "resume my relocation", "continue with EspañaMe" — that product, where it was left
+BACK = re.compile(r"^\s*(?:ok(?:ay)?[,.!]?\s+)?(?:(?:let'?s\s+)?(?:go\s+)?back\s+to|resume|continue(?:\s+with)?|carry\s+on\s+with|return\s+to)\s+"
+                  r"(?:the\s+|my\s+)?(?P<p>campus(?:\s*(?:tour|visits?|me))?|relocat\w*(?:\s*me)?|move(?:\s+to\s+madrid)?|"
+                  r"espa[nñ]a\s*me|espa[nñ]a|health)\b", re.I)
+
+
+def back(message: str) -> Optional[str]:
+    """The product mode to RESUME ("campus" | "relocation" | "espana"), or None."""
+    m = BACK.match(message or "")
+    if not m:
+        return None
+    w = m["p"].lower()
+    return "campus" if w.startswith("campus") else "relocation" if w.startswith(("relocat", "move")) else "espana"
+
+
 def asked(message: str) -> Optional[str]:
     """The product mode the guest asked about ("relocation" | "campus" | "espana"), or None."""
     m = ASK.search(message or "") or BARE.match(message or "")
@@ -42,4 +57,4 @@ def asked(message: str) -> Optional[str]:
     return MODE.get(key)
 
 
-__all__ = ["asked", "INTRO", "KEYWORD", "MODE", "NAME"]
+__all__ = ["asked", "back", "BACK", "INTRO", "KEYWORD", "MODE", "NAME"]

@@ -1810,6 +1810,20 @@ async def conduct(
                 "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
     from booking_signer import me3 as _me3  # noqa: E402
     _m3 = _me3.asked(user_message) if not payload else None
+    _back = _me3.back(user_message) if not payload and not _m3 else None
+    if _back and user_id and signed_in is not False:   # Sasha 178 · "back to the campus tour" (web + avatar): resumed where it was
+        try:
+            from products.web import web_turn as _pw  # noqa: E402
+            _t = await _pw(user_id, "", mode=_back, signed_in=True)
+        except Exception as e:
+            print(f"[Conductor] product resume {_back} failed: {type(e).__name__}: {e}")
+            _t = None
+        _resp = f"Back to {_me3.NAME[_back]}." + (f"\n\n{_t['response']}" if _t and _t.get("response") else "")
+        return {"response": _resp, "intents": ["products"], "quick_replies": (_t or {}).get("quick_replies") or [],
+                "media": (_t or {}).get("media") or [], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None,
+                "saved_card": None, "product_mode": _back,
+                "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _resp}]}
     if _m3 and user_id and signed_in is not False:
         try:
             from products.web import web_turn as _pw  # noqa: E402

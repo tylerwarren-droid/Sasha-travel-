@@ -46,6 +46,20 @@ def country_of_plan(title: str, cities: List[str]) -> Optional[str]:
     return None
 
 
+BADGE = {"sasha": "✈️", "campus": "🎓", "relocation": "🏠", "health": "🇪🇸"}
+PRODUCT = {"sasha": "Sasha", "campus": "CampusMe", "relocation": "RelocateMe", "health": "EspañaMe"}
+
+
+def product_of(title: str) -> str:
+    t = _fold(title)
+    return "campus" if t.startswith("campus") else "relocation" if t.startswith("move to") else "sasha"
+
+
+def badged(product: str, text: str) -> str:
+    """Sasha 178 · the product on each tab: "✈️ Vietnam, Nov" · "🎓 Campus tour, week of 15 Nov" · "🏠 Move to Madrid"."""
+    return f"{BADGE.get(product, '')} {text}".strip()
+
+
 def label(p: dict) -> str:
     """"Vietnam, Nov" · "Campus tour, week of 15 Nov" · "Move to Madrid"."""
     t = (p.get("title") or "Trip").strip()
@@ -140,6 +154,51 @@ def home_label() -> str:
     return f"{city} (home)"
 
 
+SAVED = "Sasha 178 · saved by the guest, not booked"
+
+
+def city_of(item: dict) -> Optional[str]:
+    """The city a one-off booking happens in: the city its venue was searched in, its location, else its time zone's city."""
+    for v in (item.get("read_city"), item.get("location")):
+        if v and "→" not in v:
+            return v.split(",")[-1].strip() if "," in v and len(v.split(",")[-1].strip()) > 2 else v.strip()
+    tz = item.get("timezone") or ""
+    return tz.split("/")[-1].replace("_", " ") if "/" in tz else None
+
+
+async def _extra(account: str) -> tuple:
+    """(each item's city by id, the saved — parked, unbooked — items as rows)."""
+    run = _run()
+    if run is None:
+        return {}, []
+
+    async def go(conn):
+        rs = await conn.fetch(
+            "select ti.id, ti.trip_id, ti.status, ti.provider_name, ti.location_name, ti.local_timezone, ti.escalation_notes, "
+            "to_char(ti.date_time at time zone coalesce(ti.local_timezone, 'UTC'), 'YYYY-MM-DD') as day, "
+            "to_char(ti.date_time at time zone coalesce(ti.local_timezone, 'UTC'), 'HH24:MI') as hm, "
+            "coalesce(vf.query->>'city', ve.query->>'city', vl.query->>'city') as read_city "
+            "from trip_items ti join trips t on t.id = ti.trip_id "
+            "left join booking_forms bf on bf.trip_item_id = ti.id left join venue_reads vf on vf.read_id = bf.read_id "
+            "left join booking_emails be on be.trip_item_id = ti.id left join venue_reads ve on ve.read_id = be.read_id "
+            "left join booking_links bl on bl.trip_item_id = ti.id left join venue_reads vl on vl.read_id = bl.read_id "
+            "where t.owner_id = $1", uuid.UUID(account))
+        cities, saved = {}, []
+        for r in rs:
+            item = {"read_city": r["read_city"], "location": r["location_name"], "timezone": r["local_timezone"]}
+            cities[str(r["id"])] = city_of(item)
+            if r["status"] == "pending" and SAVED in (r["escalation_notes"] or ""):
+                saved.append({"id": str(r["id"]), "trip_id": str(r["trip_id"]), "venue": r["provider_name"], "date": r["day"],
+                              "time": r["hm"] if r["hm"] != "00:00" else None, "status": "saved",
+                              "status_words": "Saved — not booked yet", "city": cities[str(r["id"])]})
+        return cities, saved
+    try:
+        return await run(go)
+    except Exception as e:
+        log.info("[journeys] no cities: %s", type(e).__name__)
+        return {}, []
+
+
 async def journeys(account: Optional[str], rows: List[dict]) -> dict:
     """The tabs, from the account's reservations (each carries its trip_id)."""
     run = _run()
@@ -149,6 +208,8 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
             plans = await run(lambda c: _plans(c, account))
         except Exception as e:
             log.info("[journeys] no plans: %s", type(e).__name__)
+    cities, saved = await _extra(account) if account else ({}, [])
+    rows = list(rows) + saved   # Sasha 178 · parked, unbooked: in their tab AND in Requests
     ids = {p["trip_id"] for p in plans}
     # Sasha 177 (3) · EVERY PRODUCT WRITES HERE: CampusMe visits, RelocateMe's deadlines and appointments, EspañaMe's follow-ups
     prod = await product_rows(account)
@@ -162,7 +223,8 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
         extras[campus_plan["trip_id"]] += [x for x in prod if x["product"] == "campus"]
     if move_plan:
         extras[move_plan["trip_id"]] += reloc_items
-    tabs = [{"key": p["trip_id"], "label": label({**p, "start": str(p["start"]) if p["start"] else None}), "title": p["title"],
+    tabs = [{"key": p["trip_id"], "label": badged(product_of(p["title"]), label({**p, "start": str(p["start"]) if p["start"] else None})),
+             "product": PRODUCT[product_of(p["title"])], "title": p["title"],
              "start": str(p["start"]) if p["start"] else None, "end": str(p["end"]) if p["end"] else None,
              "count": sum(1 for r in rows if str(r.get("trip_id")) == p["trip_id"] and r.get("status") not in ("cancelled", "failed"))}
             for p in plans]
@@ -170,16 +232,32 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
         t["extras"] = extras.get(t["key"]) or []
         t["count"] += len(t["extras"])
     if not move_plan and reloc_items:   # RelocateMe's journey even before a plan exists: its deadlines and appointments
-        tabs.append({"key": "relocation", "label": "Move to Madrid", "title": "Move to Madrid (RelocateMe)", "virtual": True,
-                     "count": len(reloc_items), "extras": reloc_items})
+        tabs.append({"key": "relocation", "label": badged("relocation", "Move to Madrid"), "product": "RelocateMe",
+                     "title": "Move to Madrid (RelocateMe)", "virtual": True, "count": len(reloc_items), "extras": reloc_items})
     if not campus_plan and any(x["product"] == "campus" for x in prod):
         cv = [x for x in prod if x["product"] == "campus"]
-        tabs.append({"key": "campus", "label": "Campus visits", "title": "Campus visits (CampusMe)", "virtual": True, "count": len(cv), "extras": cv})
+        tabs.append({"key": "campus", "label": badged("campus", "Campus visits"), "product": "CampusMe", "title": "Campus visits (CampusMe)",
+                     "virtual": True, "count": len(cv), "extras": cv})
+    from products import itinerary as IT2
+    health = [x for x in prod if x["product"] == "health"] + [r for r in rows if r.get("venue") == IT2.SERMAS and r.get("status") not in ("cancelled", "failed")]
+    if health:   # Sasha 178 · EspañaMe is its own tab (modular: only when used)
+        tabs.append({"key": "espana", "label": badged("health", "EspañaMe"), "product": "EspañaMe", "title": "EspañaMe (Spain's public services)",
+                     "virtual": True, "count": len(health), "extras": health})
     live = [r for r in rows if r.get("status") not in ("cancelled", "failed")]
-    home = [r for r in live if str(r.get("trip_id")) not in ids and r.get("venue") not in reloc_names] + \
-        [x for x in prod if x["product"] == "health"]
-    return {"journeys": tabs, "home": {"label": home_label(), "items": home},
-            "requests": [r for r in live if r.get("status") in OPEN],
+    one_offs = [r for r in live if str(r.get("trip_id")) not in ids and r.get("venue") not in reloc_names and r.get("venue") != IT2.SERMAS]
+    # Sasha 178 · ONE TAB PER CITY for one-offs outside a journey: the home city's is "Madrid (home)", the others by their name
+    home_city = home_label().replace(" (home)", "")
+    by_city: Dict[str, List[dict]] = {}
+    for r in one_offs:
+        c = r.get("city") or cities.get(str(r.get("id"))) or home_city
+        c = home_city if _fold(c) in (_fold(home_city), "madrid") else c
+        by_city.setdefault(c, []).append(r)
+    home = by_city.pop(home_city, [])
+    for c, items in sorted(by_city.items()):
+        tabs.append({"key": f"city:{c}", "label": badged("sasha", c), "product": "Sasha", "title": f"{c} — outside any trip",
+                     "virtual": True, "count": len(items), "extras": items})
+    return {"journeys": tabs, "home": {"label": badged("sasha", home_label()), "items": home},
+            "requests": [r for r in live if r.get("status") in OPEN or r.get("status") == "saved"],
             "receipts": [r for r in rows if r.get("status") in BOOKED],
             "everything": sorted(rows, key=lambda r: f"{r.get('date') or '9'}{r.get('time') or ''}")}
 

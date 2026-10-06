@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime, timedelta
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 log = logging.getLogger("products.whatsapp")
 MODE_IDLE = timedelta(hours=6)
@@ -509,8 +509,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         if out.items:                                             # its last question, to say again on resuming
             # CR 20 · the whole of the last turn's question (e.g. the passport read-back AND "Is every line right?"), so the
             # other channel resumes with what it is being asked about — capped from the end, the question kept
-            said = "\n\n".join(str(it[1]) for it in out.items if it[0] in ("text", "ask"))
-            st["pending"]["last_said"] = said if len(said) <= 1500 else "…" + said[-1500:]
+            st["pending"]["last_said"] = _last_said([str(it[1]) for it in out.items if it[0] in ("text", "ask")])
             last = out.items[-1]
             st["pending"]["last_ask"] = [list(b) for b in last[2]] if last[0] == "ask" else None
         from . import store as ST
@@ -594,6 +593,22 @@ def _say_back(out, product: str, saved: dict) -> None:
 
 _RESUME_Q = {"relocation": "Back to your EX-01.", "campus": "Back to your campus visits.", "health": "Back to your health appointment.",
              "trip": "Back to your trip plan.", "diligence": "Back to Applied Diligence."}
+
+
+def _last_said(parts: List[str], cap: int = 1500) -> str:
+    """CR 41 · the last turn's words for the say-back, capped from the END by whole messages (live: a cut mid-way through
+    Princeton's details read "…/2009 Kanoe Test High School"); one message too long alone keeps its last whole paragraphs."""
+    keep: List[str] = []
+    for t in reversed([x for x in parts if x.strip()]):
+        if sum(len(k) + 2 for k in keep) + len(t) > cap:
+            if not keep:
+                for para in reversed(t.split("\n\n")):
+                    if sum(len(k) + 2 for k in keep) + len(para) > cap:
+                        break
+                    keep.append(para)
+            break
+        keep.append(t)
+    return "\n\n".join(reversed(keep))
 
 
 def _welcome_back(product: str, saved: dict) -> str:

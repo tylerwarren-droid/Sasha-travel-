@@ -6,6 +6,8 @@ deleted. reset_modes (called by Sasha's "reset the demo", founder only) closes a
 """
 from __future__ import annotations
 
+import unittest
+
 from products import store as ST, whatsapp as PW
 from tests import test_guest_whatsapp_s75 as TG
 from tests import test_relocation_m3_cr1 as TR
@@ -41,3 +43,22 @@ class Restart(TR.Flow):
 
 if __name__ == "__main__":
     TG.unittest.main()
+
+
+class SayBackCap(unittest.TestCase):
+    """CR 41 · live: the say-back after a long turn began mid-way through a school's details."""
+
+    def test_whole_messages_from_the_end(self):
+        from products.whatsapp import _last_said
+        parts = ["P" * 600, "Y" * 600, "B" * 600, "When you've registered somewhere, tell me."]
+        got = _last_said(parts)
+        self.assertTrue(got.startswith("Y"))
+        self.assertTrue(got.endswith("tell me."))
+        self.assertNotIn("P", got)
+
+    def test_one_long_message_keeps_whole_paragraphs(self):
+        from products.whatsapp import _last_said
+        got = _last_said(["\n\n".join(["x" * 400] * 6) + "\n\nYour question?"])
+        self.assertTrue(got.endswith("Your question?"))
+        self.assertLessEqual(len(got), 1500)
+        self.assertTrue(got.startswith("x"))

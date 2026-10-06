@@ -426,6 +426,10 @@ async def on_doc(ctx: dict, t: str) -> bool:
         return True
     imgs = [m for m in ctx.get("media") or [] if m.get("type") in IMAGE_TYPES]
     if not imgs:
+        if ctx.get("media") and all((m.get("type") or "").startswith("audio/") for m in ctx["media"]):
+            out.text("I couldn't make out that voice note. For the form I need a photo of your DNI (front, then back) or "
+                     "your passport's photo page — or type DEMO.")
+            return True
         if ctx.get("media"):
             out.text("I can read a photo (JPEG or PNG) of your DNI or passport — not that kind of file.")
             return True

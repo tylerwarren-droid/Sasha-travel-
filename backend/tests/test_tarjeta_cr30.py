@@ -185,6 +185,16 @@ class Flow(Base):
         self.assertIn("fictional", self.pend()["ts"]["facts"]["dni"]["source"])
         self.assertEqual(self.reads, [])
 
+    def test_a_voice_note_that_could_not_be_heard_is_not_read_as_a_photo(self):
+        self.to_photo()
+        self.mark()
+        ch = run(GW.STORE.channel_for(GW.wa_key(TG.GUEST)))
+        run(GW.turn(ch, TG.SANDBOX, {"From": f"whatsapp:{TG.GUEST}", "To": f"whatsapp:{TG.SANDBOX}", "Body": "",
+                                      "NumMedia": "1", "MediaUrl0": "https://api.twilio.com/media/ME2",
+                                      "MediaContentType0": "audio/ogg"}))
+        self.assertIn("couldn't make out that voice note", self.last())
+        self.assertEqual((self.reads, self.pend()["step"]), ([], "ts_doc"))
+
     def test_after_24_hours_the_details_are_gone(self):
         self.through()
         self.answers()

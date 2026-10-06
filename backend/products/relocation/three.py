@@ -424,6 +424,20 @@ def pack(cid: str, ex01_pdf: bytes, rs790: List[dict], applicant: str, visa: Opt
     return buf.getvalue()
 
 
+def page_consulate(cid: str, saved: Optional[dict] = None) -> dict:
+    """CR 44 fix · the consulate in the shape the file page (frontend/app/relocation-file) reads — its source, its booking
+    route in its own words. CR 37 saved only {office, three, id}, and the page's `consulate.source.read` threw: every London,
+    New York and Washington file page answered 500. Built from the same record the chat used; nothing new is claimed."""
+    c, b = CONSULATES[cid], CONSULATES[cid]["booking"]
+    out = {**(saved or {}), "office": c["office"], "three": cid,
+           "source": {"name": f"{c['office']} — its own page", "url": c["page"], "dated": c["page_dated"], "read": READ_ON},
+           "appointment_url": b.get("url"), "appointment_words": b["words"], "appointment_email": b.get("email"),
+           "one_per_person": f"you go to {b['who']}"}
+    if c.get("territory"):
+        out["territory"] = {"from": c["territory"]}
+    return out
+
+
 # ── the conversation (called from after.py once the consulate is known) ──────────────────────────────────────────
 
 def items(cid: str, f: Optional[dict] = None, today: Optional[date] = None) -> List[dict]:
@@ -486,5 +500,5 @@ async def present(ctx: dict, cid: str, base: dict, web: str, save) -> None:
     flag = next((i for i in its if i["status"] == "problem"), None)
     if flag:
         out.text(f"⚠ {flag['why']}.")
-    await save(ctx, {"after": {**base, "consulate": {"office": c["office"], "three": cid, **({"id": cid} if cid != "london" else {})},
+    await save(ctx, {"after": {**base, "consulate": page_consulate(cid, {**({"id": cid} if cid != "london" else {})}),
                                "checklist": its}})

@@ -159,10 +159,15 @@ async def relocation_case(cid: str) -> dict:
     from .relocation import ex01 as E
     c = await _case(cid, "relocation")
     st = c["state"]
+    after = st.get("after")
+    th = ((after or {}).get("consulate") or {}).get("three")
+    if th and "source" not in after["consulate"]:          # CR 44 fix · files saved before it: the page's shape, on read
+        from .relocation import three as TH
+        after = {**after, "consulate": TH.page_consulate(th, after["consulate"])}
     return {"ok": True, "rows": st["rows"], "counts": st["counts"], "checks": st["checks"], "status": st.get("status"),
             "route": st.get("route"), "fictional": st.get("fictional", False), "showcase": bool(st.get("showcase")),
             "prepared_at": st.get("prepared_at"),
-            "signed_at": st.get("signed_at"), "after": st.get("after"), "expires_at": str(c["expires_at"]),
+            "signed_at": st.get("signed_at"), "after": after, "expires_at": str(c["expires_at"]),
             "form": {"name": "EX-01", "title": "Autorización de residencia temporal no lucrativa", "pages": 3,
                      "widgets": len(st["rows"]), "pdf_sha256": E.PDF_SHA256}, "submits": False}
 

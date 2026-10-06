@@ -150,6 +150,17 @@ class OnWhatsApp(Base):
         cid, c = self.case_id(), client()
         self.assertEqual(c.get(f"/products/relocation/{cid}/visa-form.pdf").status_code, 200)
         self.assertEqual(c.get(f"/products/relocation/{cid}/visa-form-card.jpg").headers["content-type"], "image/jpeg")
+        # CR 44 fix · the file page reads consulate.source.* — CR 37's {office, three} made every such page answer 500
+        con = c.get(f"/products/relocation/{cid}").json()["after"]["consulate"]
+        self.assertTrue(all(con["source"][k] for k in ("name", "url", "dated", "read")))
+        self.assertEqual((con["appointment_email"], con["office"]), ("cog.nuevayork.visnac@maec.es", TH.CONSULATES["newyork"]["office"]))
+        self.assertTrue(con["appointment_words"])
+        from products import store as ST                      # a file saved before the fix: shaped on read
+        st = run(ST.STORE.get(cid))["state"]
+        st["after"]["consulate"] = {"office": "x", "three": "newyork", "id": "newyork"}
+        run(ST.STORE.update(cid, st))
+        con = c.get(f"/products/relocation/{cid}").json()["after"]["consulate"]
+        self.assertEqual(con["source"]["read"], TH.READ_ON)
         self.say("after arrival")
         said = self.said()
         self.assertIn("Padrón — in person", said)

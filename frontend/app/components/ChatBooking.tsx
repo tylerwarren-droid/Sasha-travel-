@@ -327,7 +327,7 @@ export default function ChatBooking({ find }: { find: Find }) {
             const ph = r.find((x) => x.rung === 'phone' && x.available)
             const ln = r.find((x) => x.rung === 'link' && x.available)
             const wa = r.find((x) => x.rung === 'whatsapp' && x.available)
-            const venue = state.pick.name ?? state.read.venue
+            const venue = / \(TEST stand-in\)$/.test(state.read.venue ?? '') ? state.read.venue : (state.pick.name ?? state.read.venue)   // Sasha 169 · the stand-in says so
             const draft = (find.draft ?? null) as { when?: { at?: string }; how_many?: { count?: number } } | null
             // Sasha 158 · "book Casa Lucio tomorrow at 9": at a restaurant, a bare 9 is 21:00 (12 is noon) — the same rule as WhatsApp
             const bt = find.bare_time

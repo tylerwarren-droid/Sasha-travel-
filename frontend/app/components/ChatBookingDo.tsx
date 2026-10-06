@@ -124,8 +124,11 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line 
       <div style={{ marginTop: 8 }}><button className="price" disabled={!complete} onClick={() => { prepare() }}>Continue</button></div>
     </div>
   )
+  // Sasha 169 · the founder's demo stand-in (SASHA_DEMO_STANDIN): said first, every time — the place picked is never contacted
+  const standIn = / \(TEST stand-in\)$/.test(venue) ? venue.replace(/ \(TEST stand-in\)$/, '') : null
   if (p.k === 'readback') return (
     <div style={box}>
+      {standIn && <div style={{ color: '#E8B923', marginBottom: 4 }}>🧪 TEST: {standIn} — our test venue stands in; {standIn} is not contacted.</div>}
       <div>{line || p.sentence}</div>
       {line ? <div style={{ fontSize: 12.5, opacity: 0.75 }}>{quote ? d.want : `${d.party} people · ${dayWords(d.date)} at ${d.time}`}</div> : null}
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>

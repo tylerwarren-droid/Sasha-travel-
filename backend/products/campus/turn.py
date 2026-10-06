@@ -126,6 +126,11 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         from . import tour as TR
         if await TR.on_message(ctx, body, payload):
             return
+    if not payload and re.search(r"(?i)\b(what can you do|how does (this|it) work|what is (this|campusme)|help)\b", body or "") \
+            and not SC.find_schools(body) and not RQ.parse(body, ctx["now"].date()).month:
+        out.text(INTRO)                                       # CR 40 · a question is answered, not taken as a school
+        pend["step"], pend["intro_said"] = pend.get("step") or "ask", True
+        return
     if step != "confirm" and body and not payload:
         from . import tour as TR
         if TR.is_tour(body):
@@ -179,7 +184,12 @@ async def _new_ask(ctx: dict, body: str) -> None:
         return
     if not a.schools:
         pend["step"] = "ask"
-        out.text("None of those are schools CampusMe reads yet. It reads Yale and Penn today.")
+        from .tour import PATTERNS
+        links = [f"{PATTERNS[k]['name']}'s own visit page: {PATTERNS[k]['link']}" for k in PATTERNS
+                 if any(k in (w or "").lower() for w in a.unreadable)]
+        read = ", ".join(x["name"] for x in SC.SCHOOLS.values() if x.get("proven"))
+        out.text(("\n".join(links) + "\n" if links else "") + f"CampusMe reads {read} live today — name one of those for its "
+                 "real sessions.")
         return
     names = " and ".join(s["name"] for s in a.schools)
     await ctx["early"](f"Reading {names}'s own visit calendar{'s' if len(a.schools) > 1 else ''} for {a.when_words()}…")

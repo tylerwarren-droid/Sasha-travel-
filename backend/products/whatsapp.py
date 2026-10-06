@@ -50,6 +50,28 @@ START_WORD = {"relocation": "relocation", "campus": "campus", "health": "españa
 PRODUCT_NAME = {"relocation": "RelocateMe", "campus": "CampusMe", "health": "EspañaMe"}
 
 
+def _lev(a: str, b: str) -> int:
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def typo_keyword(body: str) -> Optional[str]:
+    """One word, one or two letters off a product's own word (never a real word of Sasha's) → that product."""
+    w = (body or "").strip().lower().strip(".!?")
+    if not w or " " in w or len(w) < 5:
+        return None
+    for prod, words in (("relocation", ("relocation", "relocate")), ("campus", ("campus", "campusme")),
+                        ("health", ("españa", "espana", "españame"))):
+        if any(0 < _lev(w, x) <= (1 if len(x) <= 6 else 2) for x in words):
+            return prod
+    return None
+
+
 async def reset_modes(account: str) -> int:
     """CR 39 · "reset the demo" (the founder's, called from Sasha's reset): every product conversation on the account is
     closed — each opens on its opener next time. The files themselves (cases: the EX-01, the tour, the health card) are kept."""
@@ -228,7 +250,7 @@ async def _waiting(ch: dict, now) -> list:
             fresh = now - datetime.fromisoformat(pend.get("touched")) <= MODE_IDLE
         except (TypeError, ValueError):
             fresh = False
-        if fresh and pend.get("step") not in (None, "done"):
+        if fresh and pend.get("step") not in (None, "done") and not pend.get("parked"):   # parked: only its word resumes it
             out.append((r["product"], pend))
     return out
 
@@ -268,7 +290,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         # CR 20 · this channel's copy may be stale (the guest went on on the other channel): the shared row wins; a product
         # finished or dropped elsewhere is not resumed from an old copy
         fresh = await _resume(ch, asked_last)
-        if fresh is None:
+        if fresh is None or fresh.get("parked"):                  # CR 40 · parked elsewhere ("sasha"): only its word resumes it
             asked_last, st["pending"], pend = None, None, {}
         elif (fresh.get("touched") or "") >= (pend.get("touched") or ""):
             st["pending"] = pend = {**fresh, "kind": "product", "product": asked_last}
@@ -334,6 +356,12 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
                 if sashas_question or (rest and not DG.is_ask(rest)):
                     continue                                     # bare "ad": alone or "ad check …" only; never over Sasha's question
             target, entering = prod, True
+    if not target and not payload:                              # CR 40 · "relocaton", "campsu", "espña": the word, mistyped
+        guess = typo_keyword(body)
+        if guess:
+            target, entering = guess, True
+            body = START_WORD[guess]
+            p["Body"] = body
     if not target and not payload:                              # CR 35 · "find my centre": health's, from anywhere
         from .health import cita as CI
         if CI.AGAIN.search(body):
@@ -366,8 +394,8 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
                  "carry on. Back to Sasha meanwhile.")
         return True
     if asked_last and _EXIT.match(body) and not payload:
-        from . import store as ST
-        await ST.STORE.drop_conversation(_key(ch), asked_last)
+        st["pending"] = {**st["pending"], "touched": now.isoformat(), "parked": True}
+        await _set_aside(st, ch)                                # CR 40 · kept, parked: only its word brings it back
         st["pending"] = None
         out.text("Back to Sasha — ask me anything: a booking, a flight, your plans.")   # CR 15 · "sasha" returns
         return True
@@ -436,11 +464,12 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
     if not (st.get("pending") or {}).get("product") == target:
         saved = await _resume(ch, target)
         if saved:
-            st["pending"] = {**saved, "kind": "product", "product": target}
+            st["pending"] = {**{k: v for k, v in saved.items() if k != "parked"}, "kind": "product", "product": target}
             words = _KEYWORD.get(target, re.compile("$^")).sub("", body, count=1).strip(" :,-")
             if entering and not words and not payload and target != "trip":          # "relocation" alone: where we were, said again
                 st["pending"]["touched"] = now.isoformat()
                 _say_back(out, target, saved)
+                await _store_put(ch, target, st["pending"])     # CR 40 · un-parked in the shared row too
                 return True
             entering = False if not words else entering
         else:

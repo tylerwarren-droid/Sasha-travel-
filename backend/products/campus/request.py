@@ -11,10 +11,14 @@ from typing import List, Optional, Tuple
 from . import schools as SC
 
 MONTHS = {m.lower(): i for i, m in enumerate(calendar.month_name) if m}
+MONTHS.update({m: i for i, m in enumerate(["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+                                            "septiembre", "octubre", "noviembre", "diciembre"], 1)})   # CR 40 · Spanish too
+MONTHS["setiembre"] = 9
 MONTHS.update({m.lower(): i for i, m in enumerate(calendar.month_abbr) if m})
 MONTHS.update({"sept": 9})
 _MONTH = re.compile(r"\b(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b(?:\s+(\d{4}))?", re.I)
 _DAY = re.compile(r"\b(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\s+(\d{1,2})(?:st|nd|rd|th)?\b", re.I)
+_DAY_FIRST = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:de\s+|of\s+)?(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b", re.I)
 #: CR 30 · a day of the month on its own ("the 14th", "on the 3rd", "14th") — a day only with a month already given
 _DOM = re.compile(r"(?i)^\s*(?:on\s+)?(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)\b|\b(?:on\s+)?the\s+(\d{1,2})(?:st|nd|rd|th)?\b")
 _WHO = re.compile(r"\bfor\s+(?:my\s+)?(son|daughter|child|kid|student|niece|nephew|grandson|granddaughter|myself|me)\b"
@@ -35,7 +39,7 @@ class Ask:
 
     def missing(self) -> Optional[str]:
         if not self.schools and not self.unreadable:
-            return "Which universities? For example: \"Yale and Penn\"."
+            return "Which universities? For example: \"Yale and Brown\" (Yale, Brown and Penn are read live)."
         if not self.month and not self.day:
             return "Which month would you like to visit?"
         return None
@@ -62,12 +66,14 @@ def _next(month: int, year: Optional[int], today: date) -> Tuple[int, int]:
 def parse(text: str, today: date) -> Ask:
     a = Ask(schools=SC.find_schools(text), unreadable=SC.unreadable_named(text))
     d = _DAY.search(text)
-    if d:
-        y, m = _next(MONTHS[d.group(1).lower()], None, today)
+    df = _DAY_FIRST.search(text) if not d else None          # CR 40 · "el 14 de octubre", "14th of October"
+    if d or df:
+        mon, dd = (d.group(1), d.group(2)) if d else (df.group(2), df.group(1))
+        y, m = _next(MONTHS[mon.lower()], None, today)
         try:
-            a.day = date(y, m, int(d.group(2)))
+            a.day = date(y, m, int(dd))
             if a.day < today:
-                a.day = date(y + 1, m, int(d.group(2)))
+                a.day = date(y + 1, m, int(dd))
         except ValueError:
             a.day = None
     if not a.day:

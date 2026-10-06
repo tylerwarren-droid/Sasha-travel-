@@ -126,6 +126,14 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
     pend, out = ctx["st"]["pending"], ctx["out"]
     step = pend.get("step")
     t = (body or "").strip()
+    if step not in ("ci_pick", "ci_street", "ts_ask") and not payload:    # CR 35 · "find my centre", again, any time
+        from . import cita as CI
+        if CI.AGAIN.search(t):
+            if await CI.resume(ctx):
+                return
+            out.text("I don't have a health-card form from you in the last 24 hours, so there's no address to look up. "
+                     "Choose 1 · Salud → 3 · Your health card: I fill the form from your DNI, then find your centre.")
+            return
     if entering and not step and ctx.get("espana"):            # CR 15 · "españa": the menu first
         pend["step"] = "es_menu"
         out.ask(ES_MENU, ES_BUTTONS)
@@ -186,10 +194,6 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         else:
             out.ask(CHOOSE, CHOOSE_BUTTONS)
         return
-    if step not in ("ci_pick", "ci_street", "ts_ask") and not payload:    # CR 35 · "find my centre", again, any time
-        from . import cita as CI
-        if CI.AGAIN.search(t) and await CI.resume(ctx):
-            return
     if step in ("ci_offer", "ci_pick", "ci_street", "ci_route", "ci_when", "ci_call_when", "ci_call_confirm", "ci_booked"):
         from . import cita as CI                                   # CR 34 · form → cita; CR 35 · pick / type the street
         if step == "ci_offer":

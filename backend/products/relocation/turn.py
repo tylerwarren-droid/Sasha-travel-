@@ -95,18 +95,23 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         await _prepare(ctx)
         return
     if step == "route":
-        if re.search(r"(?i)\bfirst|initial|inicial|new\b", t):
+        if re.search(r"(?i)\bfirst|initial|inicial|primer|new\b", t):
             f["choices"]["route"] = F.fact("initial", _said(ctx), _on(ctx))
         elif re.search(r"(?i)renew|renovaci", t):
             f["choices"]["route"] = F.fact("renewal", _said(ctx), _on(ctx))
             out.text("Noted: a renewal. Renewals are lodged electronically only (the form's footnote 6). Whether a renewal "
                      "uses this same form isn't something I've established — I'll prepare it, and the checklist says so.")
-        else:
-            out.text(ROUTE_Q)
+        else:                                                 # CR 40 · "not sure": the difference, not the same question
+            out.text("A *first* application is made from outside Spain, in person at the Spanish consulate for where you live — "
+                     "you don't hold this residence yet. A *renewal* is for someone already living in Spain on it. Which is yours: "
+                     "first or renewal?")
             return
         pend["step"] = "resources"
         out.text(RESOURCES_Q)
         return
+    if step in ("resources", "presenter") and re.search(r"(?i)\b(actually|no,? it'?s|wait)\b.*\b(renew\w*|renovaci\w*|first|primer\w*)", t):
+        pend["step"] = "route"                                # CR 40 · a change of mind about the route: taken, never lectured
+        return await turn(ctx, re.sub(r"(?i)^.*?\b(actually|no,? it'?s|wait)\b", "", t), payload, entering=False)
     if step == "resources":
         if re.search(r"(?i)\b(me|myself|i do|mine|yo)\b", t):
             f["choices"]["resources"] = F.fact("self", _said(ctx), _on(ctx))
@@ -233,7 +238,7 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     if re.fullmatch(r"(?i)demo", t) and step not in (None, "prepared", "signed", "residence", "us_state", "us_county", "pack", "entry", "done"):
         return True
     if step == "route":
-        return bool(re.search(r"(?i)\bfirst|initial|inicial|new\b|renew|renovaci", t))
+        return bool(re.search(r"(?i)\bfirst|initial|inicial|primer|new\b|renew|renovaci", t))
     if step == "resources":
         return bool(re.search(r"(?i)\b(me|myself|i do|mine|yo)\b|family|spouse|wife|husband|partner|parent|familiar", t))
     if step == "presenter":

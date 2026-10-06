@@ -313,13 +313,26 @@ async def plan_view(request: Request):
     """Sasha 165 · THE ONE VIEW: the latest plan on this account with every booking slotted into its day."""
     from . import plan_store as PS, guest_whatsapp as GW
     account = account_for(request)
+    from . import journeys as JN
+    await JN.file(account)   # Sasha 177 · each booking in its journey (dates AND place), before the view
     tid = request.query_params.get("trip_id")   # Sasha 175 · any of the account's trips, by id (the Trips tab)
     p = (await PS.by_id(account, tid)) if tid and re.fullmatch(r"[0-9a-f-]{36}", tid) else await PS.latest(account)
     if not p:
         return {"plan": None, "plans": await PS.plans(account)}
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
     rows = (j or {}).get("reservations") or [] if s == 200 else []
-    return {"plan": PS.merge(p, rows), "plans": await PS.plans(account)}
+    return {"plan": PS.merge(p, JN.for_journey(rows, p.get("trip_id"))), "plans": await PS.plans(account)}
+
+
+@router.get("/journeys")
+async def journeys_view(request: Request):
+    """Sasha 177 · ONE TRIPS SPACE: a tab per journey, home, requests, receipts, everything — from the same reservations."""
+    from . import journeys as JN, guest_whatsapp as GW
+    account = account_for(request)
+    await JN.file(account)
+    s, j = await GW.api(account, "GET", "/api/booking/reservations")
+    rows = (j or {}).get("reservations") or [] if s == 200 else []
+    return await JN.journeys(account, rows)
 
 
 @router.post("/handover/tap")

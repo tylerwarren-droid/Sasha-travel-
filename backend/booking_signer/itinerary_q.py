@@ -166,10 +166,36 @@ async def time_for(account: str, text: str, rows: List[dict], now: datetime) -> 
 WEEK = re.compile(r"\bwhat do i (?:need|have) to do (?:this|next) week\b|\bwhat(?:'s| is) (?:on )?(?:for )?(?:this|next) week\b"
                   r"|\bmy week\b|\bwhat do i have (?:this|next) week\b", re.I)
 #: Sasha 165 · the whole trip: the plan (the builder's, now on the account) with every booking slotted into its day
+#: Sasha 177 · the journeys on WhatsApp: "show me my trips", "my requests", "my receipts", "my move to Madrid", "my campus tour"
+TRIPS = re.compile(r"\b(?:show (?:me )?|what are |list )?my (?:trips|journeys)\b|\bmy (?:requests|receipts)\b", re.I)
 TRIP = re.compile(r"\bshow (?:me )?my (?:\w+ )?(?:itinerary|trip|plan)\b|\bwhat does my (?:\w+ )?trip look like\b|"
+                  r"\b(?:show (?:me )?)?my (?:move to \w+|campus tour|\w+ trip)\b|"
                   r"^\s*(?:my )?(?:\w+ )?itinerary\s*[?.!]*\s*$|\bwhat was i doing\b|^\s*carry on\s*[.!]*\s*$", re.I)
-QUESTION = re.compile(TRIP.pattern + r"|\bwhere (?:am i|are we|will i be)\b|\bdo i have time\b|\bwhat(?:'s| is) (?:on )?my (?:itinerary|plan|schedule)\b"
+QUESTION = re.compile(TRIPS.pattern + "|" + TRIP.pattern + r"|\bwhere (?:am i|are we|will i be)\b|\bdo i have time\b|\bwhat(?:'s| is) (?:on )?my (?:itinerary|plan|schedule)\b"
                       r"|\bwhat do i have (?:on|tomorrow|today|this)\b|\bwhere do i (?:sleep|stay)\b|" + WEEK.pattern, re.I)
+
+
+def _line(r: dict) -> str:
+    when = f"{SN.day_words(r['date'])}{' at ' + r['time'] if r.get('time') else ''}" if r.get("date") else "no day yet"
+    return f"• {when} — {str(r.get('venue') or '').replace(' (TEST stand-in)', '')}: {r.get('status_words') or r.get('status')}"
+
+
+def trips_text(j: dict, text: str) -> List[str]:
+    """Sasha 177 · "show me my trips" → one line per tab; "my requests" / "my receipts" → that list."""
+    if re.search(r"\brequests\b", text or "", re.I):
+        rq = j["requests"]
+        return ["⏳ Waiting on a reply:\n" + "\n".join(_line(r) for r in rq[:12])] if rq else ["Nothing is waiting on a reply."]
+    if re.search(r"\breceipts\b", text or "", re.I):
+        rc = j["receipts"]
+        return ["🧾 Booked:\n" + "\n".join(_line(r) for r in rc[:15])] if rc else ["No bookings with receipts yet."]
+    lines = ["🗂 Your trips:"]
+    for t in j["journeys"]:
+        dates = f" ({SN.day_words(t['start'])} – {SN.day_words(t['end'])})" if t.get("start") and t.get("end") else ""
+        lines.append(f"• {t['label']}{dates} — {t['count']} booking{'s' if t['count'] != 1 else ''}")
+    lines.append(f"• {j['home']['label']} — {len(j['home']['items'])} outside any trip")
+    lines.append(f"• Requests — {len(j['requests'])} waiting on a reply")
+    lines.append("Say “show me my Vietnam trip”, “my move to Madrid” or “my requests” for one of them.")
+    return ["\n".join(lines)]
 
 
 async def week(account: str, text: str, rows: List[dict], now: datetime) -> List[str]:
@@ -223,12 +249,16 @@ async def web_turn(message: str, user_id: Optional[str], history: list) -> Optio
 
 
 async def answer(account: str, text: str, now: datetime) -> List[str]:
+    from . import journeys as JN
+    await JN.file(account)   # Sasha 177 · each booking in its journey before anything is shown
     rows = await _rows(account)
+    if TRIPS.search(text or ""):
+        return trips_text(await JN.journeys(account, rows), text)
     if TRIP.search(text or ""):   # Sasha 165 · the plan + the bookings, day by day — when there is a plan
         from . import plan_store as PS
         p = await PS.latest(account, text)
         if p:
-            return PS.text(PS.merge(p, rows))
+            return PS.text(PS.merge(p, JN.for_journey(rows, p.get("trip_id"))))   # its OWN bookings only
     if WEEK.search(text or ""):
         return await week(account, text, rows, now)
     if re.search(r"\bdo i have time\b", text or "", re.I):

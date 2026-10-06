@@ -120,6 +120,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
     if entering and not body.strip():
         out.text(INTRO)
         pend["step"] = "ask"
+        pend["intro_said"] = True
         return
     if step == "confirm":
         if await _answer_yes(ctx, body, payload):
@@ -135,6 +136,14 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         if pick is not None:
             await _picked(ctx, pick)
             return
+        a = RQ.parse(body, ctx["now"].date())
+        if not (a.schools or a.month or a.day or a.dom or a.unreadable) and (a.who or _PARTY.search(body)):
+            # CR 30 · "for my son, 2 people" while sessions are on screen: noted, and the same sessions asked about again
+            pend["ask"] = RQ.to_state(RQ.merge(RQ.from_state(pend.get("ask") or {}), a))
+            n = len(pend.get("cards") or [])
+            out.text(f"Noted{' — for your ' + a.who if a.who and a.who not in ('me', 'myself') else ''}. Which session? "
+                     f"Reply with its number, 1–{n}, or a day (e.g. \"the 14th\").")
+            return
     if step == "handed_over" and re.match(r"^\s*(registered|done|booked|i registered|we registered)\b", body, re.I):
         await _registered(ctx)
         return
@@ -147,7 +156,7 @@ async def _new_ask(ctx: dict, body: str) -> None:
     pend, out, now = ctx["st"]["pending"], ctx["out"], ctx["now"]
     today = now.date()
     a = RQ.parse(body, today)
-    if pend.get("ask") and pend.get("step") == "ask":
+    if pend.get("ask") and pend.get("step") in ("ask", "cards"):    # CR 30 · a day said over the list keeps the school and month
         a = RQ.merge(RQ.from_state(pend["ask"]), a)
     pend["ask"] = RQ.to_state(a)
     for why in a.unreadable:
@@ -155,7 +164,9 @@ async def _new_ask(ctx: dict, body: str) -> None:
     q = a.missing()
     if q:
         pend["step"] = "ask"
-        out.text(q if a.schools or a.unreadable or a.month else INTRO)
+        # CR 30 · the intro once; after it, only the one thing still missing ("campus tours" used to bring the intro back)
+        out.text(q if a.schools or a.unreadable or a.month or pend.get("intro_said") else INTRO)
+        pend["intro_said"] = True
         return
     if not a.schools:
         pend["step"] = "ask"
@@ -531,15 +542,20 @@ async def _keep_watch(ctx: dict, a: RQ.Ask) -> None:
 
 # ── CR 10 · one Sasha: is this message an answer to CampusMe's own question? And what context goes to Sasha ─────────
 
+_PARTY = re.compile(r"(?i)\b(\d+|two|three|four)\s+(people|persons|of us|guests)\b")
+
+
 def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     step, t = pend.get("step"), (body or "").strip()
     if payload.startswith(("cm:", "cmyes:", "cmno:")):
         return True
     if step == "ask":
         a = RQ.parse(t, date.today())
-        return bool(a.schools or a.unreadable or a.month or a.day)
+        return bool(a.schools or a.unreadable or a.month or a.day or a.dom or re.search(r"(?i)\b(campus|tour|visit)", t))
     if step == "cards":
-        return _pick(pend, t, payload) is not None
+        a = RQ.parse(t, date.today())
+        return _pick(pend, t, payload) is not None or bool(a.schools or a.month or a.day or a.dom or a.unreadable or a.who
+                                                            or _PARTY.search(t))
     if step == "profile":
         k = pend.get("asking")
         return {"name": lambda: len(t.split()) >= 2 and not re.search(r"\d", t),

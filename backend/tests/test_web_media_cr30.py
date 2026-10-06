@@ -98,3 +98,21 @@ class NeverAskTwice(TR.Flow):
         facts = {"applicant": {"passport_number": {"value": "AB1234567"}}, "health": {"tarjeta": {"value": "MDRD123"}},
                  "card_code": {"value": "X"}}
         self.assertEqual(PW.held(facts), ["Passport number: AB1234567"])
+
+
+from tests import test_campusme_cr1 as TC  # noqa: E402
+
+
+class CampusNaturalAnswers(TC.Fixtures):
+    """CR 30 (2b) · the campus-tours loop: natural answers reach the live sessions and a pick, never the intro again."""
+
+    def test_campus_tours_to_a_session_in_natural_words(self):
+        self.link()
+        steps = [("campus", "CampusMe here"), ("campus tours", "Which universities?"), ("yale", "Which month"),
+                 ("in october", "Campus Tour"), ("the 14th", "Wed 14 Oct"), ("for my son, 2 people", "Noted — for your son"),
+                 ("1", "Yale, Wed 14 Oct at 9:00 AM")]
+        for said, expect in steps:
+            n = len(self.bodies())
+            self.say(said)
+            self.assertIn(expect, "\n".join(self.bodies()[n:]), said)
+        self.assertEqual(sum("CampusMe here" in b for b in self.bodies()), 1)     # the intro, once

@@ -15,6 +15,8 @@ MONTHS.update({m.lower(): i for i, m in enumerate(calendar.month_abbr) if m})
 MONTHS.update({"sept": 9})
 _MONTH = re.compile(r"\b(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b(?:\s+(\d{4}))?", re.I)
 _DAY = re.compile(r"\b(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\s+(\d{1,2})(?:st|nd|rd|th)?\b", re.I)
+#: CR 30 · a day of the month on its own ("the 14th", "on the 3rd", "14th") — a day only with a month already given
+_DOM = re.compile(r"(?i)^\s*(?:on\s+)?(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)\b|\b(?:on\s+)?the\s+(\d{1,2})(?:st|nd|rd|th)?\b")
 _WHO = re.compile(r"\bfor\s+(?:my\s+)?(son|daughter|child|kid|student|niece|nephew|grandson|granddaughter|myself|me)\b"
                   r"(?:\s*,?\s*([A-Z][a-z]+))?", re.I)
 _GUESTS = re.compile(r"\b(?:with|and)\s+(me|us|my\s+(?:wife|husband|partner)|both of us|my\s+(?:wife|husband|partner)\s+and\s+me)\b", re.I)
@@ -29,6 +31,7 @@ class Ask:
     who: Optional[str] = None                     # "son" / "daughter" / "myself" …
     student_name: Optional[str] = None
     guests: int = 1                               # parents coming along, besides the student
+    dom: Optional[int] = None                     # CR 30 · "the 14th": a day of the month, made a date with the month known
 
     def missing(self) -> Optional[str]:
         if not self.schools and not self.unreadable:
@@ -68,6 +71,10 @@ def parse(text: str, today: date) -> Ask:
         except ValueError:
             a.day = None
     if not a.day:
+        dm = _DOM.search(text)
+        if dm and 1 <= int(dm.group(1) or dm.group(2)) <= 31:
+            a.dom = int(dm.group(1) or dm.group(2))
+    if not a.day:
         for m in _MONTH.finditer(text):
             # "may" is usually the verb ("may we visit"): a month only after in/during/for or before a year
             if m.group(1).lower() == "may" and not (m.group(2) or re.search(r"\b(in|during|for)\s+$", text[:m.start()], re.I)):
@@ -84,14 +91,26 @@ def parse(text: str, today: date) -> Ask:
         a.guests = 2 if re.search(r"both|and me|wife|husband|partner", g.group(1), re.I) else 1
     if a.who in ("myself", "me"):
         a.guests = 0 if not g else a.guests
+    if a.dom and a.month and not a.day:
+        try:
+            a.day = date(a.month[0], a.month[1], a.dom)
+        except ValueError:
+            pass
     return a
 
 
 def merge(a: Ask, b: Ask) -> Ask:
     """A follow-up answers what was missing ("April"); what was already said stays."""
-    return Ask(schools=b.schools or a.schools, unreadable=b.unreadable or a.unreadable, month=b.month or a.month,
-               day=b.day or a.day, who=b.who or a.who, student_name=b.student_name or a.student_name,
-               guests=b.guests if b.guests != 1 else a.guests)
+    month = b.month or a.month
+    day = b.day
+    if not day and b.dom and month:               # "the 14th" after "October": 14 October
+        try:
+            day = date(month[0], month[1], b.dom)
+        except ValueError:
+            day = None
+    return Ask(schools=b.schools or a.schools, unreadable=b.unreadable or a.unreadable, month=month,
+               day=day or (None if b.month and b.month != a.month else a.day), who=b.who or a.who,
+               student_name=b.student_name or a.student_name, guests=b.guests if b.guests != 1 else a.guests)
 
 
 def to_state(a: Ask) -> dict:

@@ -43,10 +43,17 @@ def placeless(body: str) -> Optional[dict]:
     from . import handoff as HO
     t = body or ""
     cu = CUISINE.search(t)
-    if not _WANT.search(t) or not (_PLACE.search(t) or cu) or _SAID_WHERE.search(t) or _NOT_PLACE.search(t):
+    # Sasha 174 · or said BARE, as a voice note does: "a spa for two on the 13th at 4 in the afternoon" (no city: the trip's)
+    bare = re.match(r"^\s*(?:(?:an?|some|una?|el|la)\s+)?(?:[a-záéíóúñ]+\s+){0,2}?(?:spa|massage|masaje|dinner|lunch|brunch|"
+                    r"restaurant|table|cena|mesa|tattoo|cooking class|class)s?\b", t, re.I)
+    if not (_WANT.search(t) or bare) or not (_PLACE.search(t) or cu or bare) or _SAID_WHERE.search(t) or _NOT_PLACE.search(t):
         return None
     low = t.lower()
-    if re.search(r"\b(spa|massage)\b", low):
+    if re.search(r"\btattoo", low):
+        kind = "tattoo studio"
+    elif re.search(r"\bcooking class", low):
+        kind = "cooking class"
+    elif re.search(r"\b(spa|massage|masaje)\b", low):
         kind = "spa"
     elif re.search(r"\b(cocktails?|bar|wine|rooftop)\b", low) and not re.search(r"\b(food|dinner|lunch|eat|meal|restaurant)\b", low):
         kind = "cocktail bar" if "cocktail" in low else ("rooftop bar" if "rooftop" in low else ("wine bar" if "wine" in low else "bar"))
@@ -114,6 +121,11 @@ async def context(account: Optional[str], body: str, kind: str, now: datetime) -
     said = IQ.day_of(body, now)
     if said:
         d = next((x for x in days if x.get("date") == said.isoformat()), None)
+        if d:
+            return at(d)
+    od = _ORD_DAY.search(ordinals_as_digits(body or ""))   # Sasha 174 · "on the 13th" (no month): the trip's 13th, and its city
+    if od:
+        d = next((x for x in days if x.get("date") and int(str(x["date"])[8:10]) == int(od[1])), None)
         if d:
             return at(d)
     named = [c for c in cities if re.search(rf"\b{re.escape(c)}\b", body or "", re.I)]
@@ -305,6 +317,8 @@ _ORD_TEENS = {"tenth": 10, "eleventh": 11, "twelfth": 12, "thirteenth": 13, "fou
 
 def ordinals_as_digits(t: str) -> str:
     """Sasha 171 · a voice note's "on the sixteenth" → "on the 16th" (Deepgram writes the words; the date was lost, live)."""
+    # Sasha 174 · Spanish: "el 16" (a day, not "el 16 de noviembre", which has its month) → "the 16th"
+    t = re.sub(r"\bel\s+(\d{1,2})\b(?!\s*(?:de\s+[a-z]|personas|people|h\b|:))", lambda m: f"the {m[1]}th", t or "", flags=re.I)
     t = re.sub(r"\b(twenty|thirty)[\s-](" + "|".join(_ORD_UNITS) + r")\b",
                lambda m: f"{(20 if m[1].lower() == 'twenty' else 30) + _ORD_UNITS[m[2].lower()]}th", t or "", flags=re.I)
     t = re.sub(r"\b(" + "|".join(_ORD_TEENS) + r")\b", lambda m: f"{_ORD_TEENS[m[1].lower()]}th", t, flags=re.I)

@@ -195,6 +195,7 @@ def context_time(message: str) -> Optional[str]:
 
 
 _WHERE_END = re.compile(r"(?:\s+|\s*,\s*)(?:for|on|at|tomorrow|today|tonight|this|next|by|please|from|open|opened|"
+                        r"el\s+\d{1,2}|a\s+las|para|ma[nñ]ana|hoy|esta\s+noche|el\s+(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)|"
                         r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
                         # Sasha 167 · "in Hoi An, October 27 at 09:00": the date ends the place (it was searched as "October 27 restaurant")
                         r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|"
@@ -315,6 +316,9 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
                   " ".join(m["what"].split()), flags=re.I)
     # Sasha 101 · "a table at a luxury restaurant" searches for the luxury restaurant — every qualifier kept
     what = re.sub(r"^(?:a\s+)?table\s+(?:at|in)\s+(?:an?\s+|the\s+)?", "", what, flags=re.I).strip() or what
+    # Sasha 174 · Spanish articles and "a spa day": "Un spa en Madrid" was searched as "Un spa"
+    what = re.sub(r"^(?:un|una|unos|unas|el|la|los|las)\s+", "", what, flags=re.I).strip() or what
+    what = re.sub(r"\bspa\s+day\b", "spa", what, flags=re.I)
     # Sasha 173 · "make an appointment FOR A SPA in Hanoi on the 13th…": the what was "appointment" (the "for a spa" went with
     # the time) and Google answered with a church and the sea. A booking word alone is not a kind of place: the kind said is.
     if re.fullmatch(r"(?:an?\s+)?(?:appointment|booking|reservation|slot|session|treatment|cita|reserva)s?", what, re.I):
@@ -410,6 +414,7 @@ _NOT_A_SEARCH = re.compile(r"\b(trip|itinerary|days?|nights?|weekend|week|plan|v
 
 
 def any_kind(message: str) -> Optional[str]:
+    message = re.sub(r"\bspa\s+day\b", "spa", message or "", flags=re.I)   # Sasha 174 · "day" is not a trip here
     m = _ANY_KIND.match(message or "")
     # Sasha 169 · the length is the request's, not its day, time and party: "a cooking class in Hoi An on the 17th at 10 in the
     # morning for two" (15 words) is a search
@@ -425,6 +430,7 @@ _NAMED = re.compile(r"^\s*(?:(?:please|can you|could you)\s+)?(?:book|reserve)\s
                     r"(?:\s*,?\s+in\s+(?P<where>[A-ZÁÉÍÓÚÑ][^,?.!;]{1,40}?))?"
                     r"(?P<rest>\s+(?:tomorrow|today|tonight|at|for|on|this|next|el|a las|para)\b.*)?\s*[.!?]?\s*$", re.I)
 _KINDS_NOT_NAMES = re.compile(r"\b(table|dinner|lunch|brunch|breakfast|restaurant|spa|massage|haircut|appointment|class|tour|session|"
+                              r"masaje|mesa|cena|comida|almuerzo|tatuaje|peluquer[ií]a|clase|cita|reserva|un|una|"
                               r"tattoo|barber|salon|hotel|room|flight|car|taxi|something|somewhere)s?\b", re.I)
 
 

@@ -1746,8 +1746,13 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             nh = HO.booking_handoff(body, [], ctx["now"]) or {}
             nf, nparts = nh.get("booking_find") or {}, (nh.get("reservation_draft") or {}).get("parts") or {}
             # its own place AND its own day/time or party — "Italian in Malasaña" alone stays a refinement (day and party kept)
-            if nf.get("where") and (nf.get("open_at") or nparts.get("when") or nparts.get("how_many") or WB._ORD_DAY.search(body or "")) \
-                    and WB.sasha_clear(body, [], ctx["now"]):   # Sasha 169 · "… on the 17th" is its own day
+            old = pend.get("find") or {}
+            ow, nw = _fold(old.get("where") or ""), _fold(nf.get("where") or "")
+            # another CITY (Hoi An after Hanoi), never a neighbourhood of the same one ("Malasaña" → "Malasaña, Madrid" after Madrid)
+            other_place = bool(nw) and bool(ow) and ow.split(",")[-1].strip() not in nw and nw.split(",")[0].strip() not in ow
+            if nf.get("where") and (nf.get("open_at") or nparts.get("when") or nparts.get("how_many") or WB._ORD_DAY.search(body or "")
+                                    or other_place) \
+                    and WB.sasha_clear(body, [], ctx["now"]):   # Sasha 169/174 · its own day, place or kind: a new search
                 st["pending"] = None
                 return False
         if i is None:

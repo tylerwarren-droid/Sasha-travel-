@@ -7,6 +7,7 @@ unknown id is a plain 404 that says so.
   GET /api/booking/products/campus/{id}/visit.ics        the visit, for any calendar
   GET /api/booking/products/relocation/{id}              the reviewer's screen: every EX-01 widget, its state, its checks
   GET /api/booking/products/relocation/{id}/EX-01-prepared.pdf   the official PDF, prepared — not signed, not filed
+  GET /api/booking/products/health/{id}/1449F1-prepared.pdf      CR 30 · the health-card form, filled — not signed, not submitted
   GET /api/booking/products/reminders                    CR 10 · the account's dated reminders (not bookings), for "You"
 """
 from __future__ import annotations
@@ -115,6 +116,8 @@ async def campus_case(cid: str) -> dict:
             "rows": st["rows"], "counts": HV.counts(st["rows"]), "status": st.get("status"),
             "confirmation_quote": st.get("confirmation_quote"), "prepared_at": str(c["created_at"]),
             "fictional": bool(st.get("fictional")), "showcase": bool(st.get("showcase")),
+            "form_rows": st.get("rows"), "left_for_you": st.get("left_for_you"), "form_source": st.get("source"),
+            "form_pdf": f"/api/booking/products/health/{cid}/1449F1-prepared.pdf" if st.get("rows") else None,
             "expires_at": str(c["expires_at"]), "submits": False}
 
 
@@ -151,6 +154,26 @@ async def relocation_pdf(cid: str) -> Response:
                     headers={"content-disposition": 'inline; filename="EX-01-prepared-not-signed.pdf"'})
 
 
+@router.get("/health/{cid}/1449F1-prepared.pdf")
+async def health_card_pdf(cid: str) -> Response:
+    """CR 30 · the Comunidad de Madrid's own health-card form, filled — not signed, not submitted. Rebuilt from the rows on
+    every download (the guard runs each time); after 24 hours the rows are dropped and the link says so."""
+    from datetime import datetime, timezone
+    from .health import tarjeta as TS
+    c = await _case(cid, "health")
+    st = c["state"]
+    if st.get("kind") != "tarjeta":
+        raise HTTPException(404, {"ok": False, "rule": "case_not_found", "message": "This page has expired or never existed."})
+    if not st.get("rows") or TS.expired(st, datetime.now(timezone.utc)):
+        if st.get("rows"):
+            st["rows"] = None
+            await ST.STORE.update(cid, st)
+        raise HTTPException(410, {"ok": False, "rule": "values_expired",
+                                  "message": "This form's details were dropped after 24 hours. Ask Sasha again for a new one."})
+    return Response(TS.fill(st["rows"]), media_type="application/pdf",
+                    headers={"content-disposition": 'inline; filename="Tarjeta-Sanitaria-1449F1-not-signed.pdf"'})
+
+
 @router.get("/health/{cid}")
 async def health_case(cid: str) -> dict:
     """The health hand-over or the new-in-Madrid checklist. The identifiers are served only inside their 24 hours, and
@@ -162,6 +185,11 @@ async def health_case(cid: str) -> dict:
     if st.get("values") and (st.get("values_expire_at") or "") <= datetime.now(timezone.utc).isoformat():
         st["values"] = None
         await ST.STORE.update(cid, st)
+    if st.get("kind") == "tarjeta" and st.get("rows"):
+        from .health import tarjeta as TS
+        if TS.expired(st, datetime.now(timezone.utc)):
+            st["rows"] = None
+            await ST.STORE.update(cid, st)
     return {"ok": True, "kind": st.get("kind"), "appointment_type": st.get("appointment_type"), "values": st.get("values"),
             "values_source": st.get("values_source"), "values_expire_at": st.get("values_expire_at"),
             "fictional": bool(st.get("fictional")), "checklist": st.get("checklist"), "reminders": st.get("reminders"),

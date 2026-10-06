@@ -30,7 +30,10 @@ CONSENT = {"v1": ("Health details are sensitive. For this I use only what the ap
 CONSENT_CURRENT = "v1"
 CHOOSE = ("What would help?\n1. *A private clinic* — I call them and book for you.\n2. *The public health service "
           "(SERMAS)* — I prepare everything; you book on its own page.\n3. *I'm new in Madrid* — how to get your health "
-          "card and doctor, step by step.")
+          "card and doctor, step by step.\n4. *Your health card form* — send your DNI or passport; I fill the "
+          "Comunidad de Madrid's official form (1449F1) for you to sign and take in.")
+# WhatsApp shows at most three buttons: "3" (new in Madrid) is typed
+CHOOSE_BUTTONS = [("1. Private clinic", "hx:priv"), ("2. Public (SERMAS)", "hx:pub"), ("4. Health card form", "hx:tsi")]
 FICTIONAL = {"card": "EJEMPLO-0000-0000", "birth": "1985-03-14", "dni_nie": "X0000000T", "name": "Lucía Ejemplo (fictional)"}
 
 
@@ -153,18 +156,20 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         if payload == "hx:consent:yes" or (not payload and YS.is_yes(t)):
             c = consent()
             pend.update(step="choose", consent={**c, "at": ctx["now"].isoformat()})
-            out.ask(CHOOSE, [("1. Private clinic", "hx:priv"), ("2. Public (SERMAS)", "hx:pub"), ("3. New in Madrid", "hx:new")])
+            out.ask(CHOOSE, CHOOSE_BUTTONS)
         else:
             pend["step"] = None
             out.text("OK — nothing kept.")
         return
-    if step == "choose" or payload in ("hx:priv", "hx:pub", "hx:new"):
-        pick = payload or {"1": "hx:priv", "2": "hx:pub", "3": "hx:new"}.get(t[:1], "")
+    if step == "choose" or payload in ("hx:priv", "hx:pub", "hx:new", "hx:tsi"):
+        pick = payload or {"1": "hx:priv", "2": "hx:pub", "3": "hx:new", "4": "hx:tsi"}.get(t[:1], "")
+        if not pick and re.search(r"(?i)health card|card form|tarjeta|\bdni\b|passport|pasaporte|1449", t):
+            pick = "hx:tsi"
         if not pick and re.search(r"(?i)\bprivate|privad", t):
             pick = "hx:priv"
         if not pick and re.search(r"(?i)\bpublic|sermas|p[uú]blic", t):
             pick = "hx:pub"
-        if not pick and re.search(r"(?i)\bnew|nuev|card|tarjeta", t):
+        if not pick and re.search(r"(?i)\bnew|nuev|card", t):
             pick = "hx:new"
         if pick == "hx:priv":
             pend["step"] = "when"
@@ -174,8 +179,21 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
             await _public(ctx, t)
         elif pick == "hx:new":
             await _new(ctx)
+        elif pick == "hx:tsi":
+            from . import tarjeta as TS
+            await TS.start(ctx)
         else:
-            out.ask(CHOOSE, [("1. Private clinic", "hx:priv"), ("2. Public (SERMAS)", "hx:pub"), ("3. New in Madrid", "hx:new")])
+            out.ask(CHOOSE, CHOOSE_BUTTONS)
+        return
+    if step in ("ts_doc", "ts_back", "ts_confirm", "ts_ask"):     # CR 30 · the health-card form (tarjeta.py)
+        from . import tarjeta as TS
+        if step in ("ts_doc", "ts_back"):
+            if not await TS.on_doc(ctx, t):
+                ctx["out"].text("Send a photo of your DNI (front, then back) or your passport's photo page — or type DEMO.")
+        elif step == "ts_confirm":
+            await TS.on_confirm(ctx, t, payload)
+        else:
+            await TS.on_answer(ctx, t, payload)
         return
     if step == "when":
         at = parse_when(t, ctx["now"])
@@ -485,6 +503,10 @@ async def due(now: Optional[datetime] = None) -> int:
         changed = False
         if st.get("values") and st.get("values_expire_at") and st["values_expire_at"] <= now.isoformat():
             st["values"], changed = None, True                        # the identifiers go after VALUES_TTL
+        if st.get("kind") == "tarjeta" and st.get("rows"):
+            from . import tarjeta as TS
+            if TS.expired(st, now):
+                st["rows"], changed = None, True                      # CR 30 · the form's ID details go after 24 hours
         for r in st.get("reminders") or []:
             if r["sent"] or r["on"] > now.date().isoformat():
                 continue
@@ -507,12 +529,18 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     step, t = pend.get("step"), (body or "").strip()
     if payload.startswith(("hx:", "hxyes:", "hxno:", "hxv:", "hxvno:")):   # incl. hx:sermas:…
         return True
+    if step in ("ts_doc", "ts_back"):
+        return bool(media) or bool(re.fullmatch(r"(?i)\s*demo\s*", t))
+    if step == "ts_confirm":
+        return YS.is_yes(t) or bool(re.match(r"(?i)^\s*(no|wrong)\b", t))
+    if step == "ts_ask":
+        return bool(t) and not t.endswith("?")
     if step in ("consent", "call_confirm", "pub_vault_confirm"):
         return YS.is_yes(t) or bool(re.match(r"(?i)^\s*no\b", t))
     if step == "es_menu":
         return bool(es_pick(t, ""))
     if step == "choose":
-        return bool(re.match(r"^\s*[123]\b", t) or re.search(r"(?i)\bprivate|privad|public|sermas|p[uú]blic|new|nuev|tarjeta", t))
+        return bool(re.match(r"^\s*[1234]\b", t) or re.search(r"(?i)\bprivate|privad|public|sermas|p[uú]blic|new|nuev|tarjeta|health card|\bdni\b|passport", t))
     if step == "when":
         return parse_when(t, datetime.now(MADRID)) is not None
     if step in ("pub_offer", "sermas_wait"):

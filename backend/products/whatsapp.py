@@ -260,6 +260,16 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         from .health import cita as CI
         if CI.AGAIN.search(body):
             target = "health"
+    if not target and not payload:
+        # Sasha 167 · a CLEAR booking / search / trip request is Sasha's, whatever mode was left open (a stale CampusMe took
+        # "a restaurant in Hoi An, October 27" as a visit date). The mode is set aside, kept, and resumes when the guest
+        # returns to it. Not "book my flights" (CR 13's trip) and not "near my hotel" (CR 20's in-context hand-off).
+        from booking_signer import wa_brain as _WB
+        from . import trip as _TP
+        if _WB.sasha_clear(body, st.get("history") or [], now) and not _REL.search(body) and not _TP.wants_plan(body):
+            if asked_last:
+                await _set_aside(st, ch)
+            return False
     if not target and not payload and _STATUS.search(body):
         named = next((prod for prod, rx in _NAMES if rx.search(body)), None)
         waiting = [prod for prod, _ in await _waiting(ch, now)]

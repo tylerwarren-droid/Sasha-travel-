@@ -841,8 +841,8 @@ async def _new_request(ctx: dict, body: str) -> None:
     if h is not None:
         if h.get("booking_cancel"):
             await _cancel_find(ctx, h["booking_cancel"]["venue"])
-        elif h.get("booking_find"):
-            await _find(ctx, h["booking_find"], h.get("reservation_draft") or {})
+        elif h.get("booking_find"):   # Sasha 167 · morning or night? inside the trip? — asked first, then the search
+            await WB.gate(ctx, dict(h["booking_find"]), dict((h.get("reservation_draft") or {}).get("parts") or {}), body)
         else:
             out.text(h["response"])
         return
@@ -1658,7 +1658,7 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
     from .itinerary_q import TRIP as _TRIP
     if not payload and _TRIP.search(body or "") and not RESUME.fullmatch(body or ""):
         return False
-    if kind in ("trip_where", "trip_added", "contact_name", "demo_reset"):   # Sasha 167 · wa_brain's own questions
+    if kind in ("trip_where", "trip_added", "contact_name", "demo_reset", "gate"):   # Sasha 167 · wa_brain's own questions
         from . import wa_brain as WB
         if await WB.answer(ctx, pend, body, payload):
             return True
@@ -2020,6 +2020,8 @@ def _payload_ok(pend: dict, payload: str) -> bool:
         return payload.startswith(f"pick:{pend['nonce']}:")
     if pend["kind"] == "trip_where":   # Sasha 167
         return payload.startswith(f"where:{pend['nonce']}:")
+    if pend["kind"] == "gate":   # Sasha 167
+        return payload.split(":", 1)[-1] == pend["nonce"] and payload.split(":", 1)[0] in ("am", "pm", "tripadd", "tripkeep")
     if pend["kind"] == "demo_reset":
         return payload in (f"yes:{pend['nonce']}", f"no:{pend['nonce']}")
     tag = f"{str(pend.get('id', ''))[:8]}:{str(pend.get('sha', ''))[:16]}"

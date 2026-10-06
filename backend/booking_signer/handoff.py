@@ -153,7 +153,7 @@ def plain_party(message: str) -> Optional[int]:
 _WHEN = (r"(?:\s+(?:for|on|at(?!\s+(?:an?|the)\b)|this|next|tomorrow|tonight|today|el|a las|para)\b"
          r"(?:(?!\bat\s+(?:an?|the)\b)[^?.!;]){0,48}?)?")
 #: S-66 (EU) step 5 · "find / book / reserve … {X} in {Y}" for ANY kind of place
-_FIND = re.compile(r"\b(?:find|book|reserve|look for|search for|get)\s+(?:me\s+|us\s+)?(?:an?\s+|some\s+|the\s+)?"
+_FIND = re.compile(r"\b(?:find|book|reserve|look for|search for|get|add|make)\s+(?:me\s+|us\s+)?(?:an?\s+|some\s+|the\s+)?"
                    r"(?P<what>[a-z][\w'’ -]{1,58}?)" + _WHEN + r"\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
 #: Sasha 101 · how a request is SPOKEN without "book": "I'd like a luxury dinner in …", "can you get us a table in …".
 #: Taken only when what is asked for is a bookable thing (a table, a meal, a place to book) — "I want to see the museum
@@ -195,7 +195,10 @@ def context_time(message: str) -> Optional[str]:
 
 
 _WHERE_END = re.compile(r"(?:\s+|\s*,\s*)(?:for|on|at|tomorrow|today|tonight|this|next|by|please|from|open|opened|"
-                        r"monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b.*$", re.I)
+                        r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+                        # Sasha 167 · "in Hoi An, October 27 at 09:00": the date ends the place (it was searched as "October 27 restaurant")
+                        r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|"
+                        r"nov(?:ember)?|dec(?:ember)?|\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*)\b.*$", re.I)
 
 
 #: Sasha 126 · a country said by name after the place (only the countries venue_read knows)
@@ -312,11 +315,15 @@ def find_request(message: str, now: Optional[datetime] = None) -> Optional[dict]
                   " ".join(m["what"].split()), flags=re.I)
     # Sasha 101 · "a table at a luxury restaurant" searches for the luxury restaurant — every qualifier kept
     what = re.sub(r"^(?:a\s+)?table\s+(?:at|in)\s+(?:an?\s+|the\s+)?", "", what, flags=re.I).strip() or what
+    # Sasha 167 · "make me a dinner reservation", "add a dinner booking": the meal is searched for, not the word "reservation"
+    what = re.sub(r"\s+(?:reservation|booking|reserva)s?$", "", what, flags=re.I).strip() or what
     # Sasha 104 · a short sentence of qualifiers after the request ("Something luxurious and romantic.") is part of what
     # is searched for — every qualifier the guest said, kept
     after = re.split(r"[.!;]\s*", (message or "")[m.end():], maxsplit=1)
     extra = after[1] if len(after) > 1 else ""
     q = re.sub(r"^(?:something|somewhere|a place|ideally|preferably|it should be|we want|i want|i'd like)\s+", "", extra.strip(" .!?"), flags=re.I)
+    if re.fullmatch(r"(?:thanks?(?: you)?(?: so much| very much)?|thank you,? sasha|cheers|gracias|please|por favor|ok|okay)", q, re.I):
+        q = ""   # Sasha 167 · "… Thank you." is courtesy, not a quality searched for ("Thank you dinner")
     if q and len(q.split()) <= 6 and not re.search(r"\d|\b(?:for|on|at|in|near|tomorrow|today|tonight)\b", q, re.I):
         what = f"{q} {what}"
     raw = m["where"]
@@ -460,6 +467,17 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
             day = plain_date(message or "", now)
             if hm and day and 1 <= int(hm[1]) <= 12:
                 f["bare_time"] = {"day": day, "hour": int(hm[1]), "minute": int(hm[2] or 0)}
+    if f is None and not named:
+        # Sasha 167 · said loosely, as a voice note does: "romantic booking for two at a restaurant in Hoi An, October 27 at 09:00"
+        lm = _LOOSE.search(message or "")
+        if lm and _LOOSE_ASK.search(message or ""):
+            f = find_request(f"find {lm['kind']} in {lm['where']}", now)
+            if f is not None:
+                at = plain_open_at(message, now)
+                f = {**f, **({"open_at": at} if at else {}), **({"priority": p} if (p := plain_priority(message, None)) else {})}
+                missing_q = [q for q in qualities(message) if q not in f["what"].lower()]
+                if missing_q:
+                    f["what"] = " ".join(missing_q + [f["what"]])
     if f is None:
         # Sasha 101 · a spoken request often arrives in pieces (a pause ends the turn): "Book a luxury dinner for two" /
         # "in Chamberí on Saturday at nine". The guest's last lines and this one, read together, as one request.
@@ -486,6 +504,12 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
         # S-64 step 11 · whatever else the message says (when, how many) as the parts of reservation/1 — for later
         "reservation_draft": _draft(message, now),
     }
+
+
+#: Sasha 167 · a kind of place in a place, anywhere in a sentence that asks to book — "… at a restaurant in Hoi An, …"
+_LOOSE = re.compile(r"\b(?:at|to)\s+(?:an?\s+|the\s+|some\s+)?(?P<kind>(?:[a-záéíóúñ]+\s+){0,2}?(?:restaurant|bistro|bar|caf[eé]|spa|"
+                    r"steakhouse|brasserie|tavern|trattoria|pizzeria|salon|studio))\s+(?:in|near|around)\s+(?P<where>[A-ZÁÉÍÓÚ][^?.!;]{1,80})", re.I)
+_LOOSE_ASK = re.compile(r"\b(book|booking|reserve|reservation|table|res[eé]rva\w*)\b", re.I)
 
 
 def _plural_kind(what: str) -> str:

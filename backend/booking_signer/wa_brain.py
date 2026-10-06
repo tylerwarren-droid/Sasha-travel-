@@ -143,16 +143,16 @@ async def search(ctx: dict, want: dict, body: str) -> None:
         ctx["st"]["pending"] = {"kind": "trip_where", "at": ctx["now"].isoformat(), "nonce": nonce, "want": want, "body": body,
                                 "options": c["ask"], "country": c.get("country"), "trip": c["trip"], "draft": draft.get("parts") or {}}
         return
-    await _run(ctx, want, c, draft.get("parts") or {})
+    await _run(ctx, want, c, draft.get("parts") or {}, body)
 
 
-async def _run(ctx: dict, want: dict, c: dict, parts: dict) -> None:
+async def _run(ctx: dict, want: dict, c: dict, parts: dict, body: str = "") -> None:
     from . import guest_whatsapp as GW
     f = {"what": want["what"], "where": c["where"], "priority": "rated", **({"country": c["country"]} if c.get("country") else {}),
          **({"trip": c["trip"]} if c.get("trip") else {})}
     if c.get("home"):
         ctx["out"].text(f"No trip on now, so I looked near home ({c['where']}) — tell me a city for anywhere else.")
-    await GW._find(ctx, f, {"parts": parts})
+    await gate(ctx, f, parts, body, ["trip"])
 
 
 async def answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
@@ -172,7 +172,7 @@ async def answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
         p = await PS.latest(ctx["account"])
         d = _pick_day(_days(p), pend["options"][i], pend["want"]["kind"]) if p else None
         trip = {**pend["trip"], **({"day": d.get("day"), "date": d.get("date"), "city": d.get("city")} if d else {})}
-        await _run(ctx, pend["want"], {"where": pend["options"][i], "country": pend.get("country"), "trip": trip}, pend.get("draft") or {})
+        await _run(ctx, pend["want"], {"where": pend["options"][i], "country": pend.get("country"), "trip": trip}, pend.get("draft") or {}, pend.get("body") or "")
         return True
     if kind == "trip_added":
         m = re.search(r"\b(?:book|reserve|res[eé]rva)\b", body or "", re.I)
@@ -181,6 +181,8 @@ async def answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
         st["pending"] = None
         await book_added(ctx, pend, body)
         return True
+    if kind == "gate":
+        return await _gate_answer(ctx, pend, body, payload)
     if kind == "contact_name":
         return await _contact_answer(ctx, pend, body)
     if kind == "demo_reset":
@@ -197,6 +199,114 @@ async def answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
             return True
         return False
     return False
+
+
+# ── a clear request leaves any product mode (Sasha 167, live: a stale CampusMe took a Hoi An dinner) ────────────────────
+
+def sasha_clear(body: str, history: list, now) -> bool:
+    """A booking, a search, a flight, a hotel or the itinerary — said plainly enough that no product question is its answer."""
+    from . import guest_whatsapp as GW, handoff as HO, itinerary_q as IQ
+    t = body or ""
+    if not t.strip():
+        return False
+    try:
+        h = HO.booking_handoff(t, [], now)
+        # a place to book, said as such — "check TotalEnergies in France" is AD's, not a search
+        bookable = HO._BOOKABLE.search(t) or GW.CUISINE.search(t) or HO._LOOSE_ASK.search(t)
+        if h and (h.get("booking_cancel") or ((h.get("booking_find") or {}).get("where") and bookable)):
+            return True
+        if GW.FLIGHT.search(t) or GW.HOTEL.search(t) or IQ.TRIP.search(t) or placeless(t):
+            return True
+    except Exception as e:   # a detector's failure never takes the guest's turn
+        log.warning("[wa_brain] sasha_clear failed: %s: %s", type(e).__name__, e)
+    return False
+
+
+# ── before a search: the hour (morning or night?) and the day (inside the trip?) ───────────────────────────────────
+
+_HHMM = re.compile(r"\b(0?[1-9]|1[01])[:.h]([0-5]\d)\b(?!\s*(?:am|pm|a\.m|p\.m))", re.I)
+_NIGHT = re.compile(r"\b(at night|tonight|in the evening|evening|pm|p\.m|de la noche|por la noche|noche|night)\b", re.I)
+_MORNING = re.compile(r"\b(in the morning|morning|am|a\.m|de la ma[nñ]ana|breakfast|brunch|desayuno|coffee)\b", re.I)
+_EVENINGISH = re.compile(r"\b(dinner|supper|romantic|restaurant|table|cena|drinks|cocktails?|bar|date night)\b", re.I)
+
+
+def hour_said(body: str) -> Optional[tuple]:
+    """(hour, minute, "night" | "morning" | None) for an HH:MM under 12 said without am/pm — None when there is none."""
+    m = _HHMM.search(body or "")
+    if not m:
+        return None
+    side = "night" if _NIGHT.search(body) else "morning" if _MORNING.search(body) else None
+    return int(m[1]), int(m[2]), side
+
+
+def _set_time(f: dict, parts: dict, hh: int, mm: int) -> None:
+    day = (f.get("open_at") or ((parts.get("when") or {}).get("at")) or "")[:10]
+    if not day:
+        return
+    at = f"{day}T{hh:02d}:{mm:02d}"
+    f["open_at"] = at
+    parts["when"] = {"mode": "at", "at": at}
+
+
+async def gate(ctx: dict, f: dict, parts: dict, body: str, done: Optional[list] = None) -> None:
+    """The questions before a search, each asked at most once, then the search itself (GW._find)."""
+    from . import guest_whatsapp as GW, plan_store as PS, sentences as SN
+    done = list(done or [])
+    nonce = uuid.uuid4().hex[:6]
+    hs = hour_said(body) if "hour" not in done and not f.get("named") else None
+    if hs and (f.get("open_at") or (parts.get("when") or {}).get("at")):
+        h, mi, side = hs
+        if side == "night":
+            _set_time(f, parts, h + 12, mi)          # "08:00 at night" → 20:00, never asked
+        elif side is None and _EVENINGISH.search(f"{body} {f.get('what') or ''}"):
+            ctx["out"].ask(f"{h} in the morning or {h} at night?", [(f"{h} in the morning", f"am:{nonce}"), (f"{h} at night", f"pm:{nonce}")])
+            ctx["st"]["pending"] = {"kind": "gate", "q": "hour", "at": ctx["now"].isoformat(), "nonce": nonce, "f": f, "parts": parts,
+                                    "body": body, "done": done + ["hour"], "hm": [h, mi]}
+            return
+    done.append("hour")
+    day = (f.get("open_at") or (parts.get("when") or {}).get("at") or "")[:10]
+    if "trip" not in done and day and not f.get("trip"):
+        p = await PS.latest(ctx["account"])
+        if p and p.get("start") and p.get("end"):
+            start, end = (date.fromisoformat(str(x)[:10]) for x in (p["start"], p["end"]))
+            cities = [c for c in (p.get("cities") or []) if c and c.lower() in (f.get("where") or "").lower()]
+            if cities and not f.get("country"):
+                cc = _country_of(p.get("title") or "", cities)
+                if cc:
+                    f["country"] = cc
+            d = date.fromisoformat(day)
+            if cities and not start <= d <= end:
+                ctx["out"].ask(f"{SN.day_words(day)} is outside your trip ({SN.day_words(start.isoformat())} to "
+                               f"{SN.day_words(end.isoformat())}). Add it to the trip, or keep it separate?",
+                               [("Add to my trip", f"tripadd:{nonce}"), ("Keep it separate", f"tripkeep:{nonce}")])
+                ctx["st"]["pending"] = {"kind": "gate", "q": "trip", "at": ctx["now"].isoformat(), "nonce": nonce, "f": f, "parts": parts,
+                                        "body": body, "done": done + ["trip"], "trip_id": p["trip_id"], "city": cities[0], "day": day}
+                return
+    await GW._find(ctx, f, {"parts": parts})
+
+
+async def _gate_answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
+    from . import plan_store as PS, sentences as SN
+    n, t = pend["nonce"], body or ""
+    if pend["q"] == "hour":
+        h, mi = pend["hm"]
+        pm = payload == f"pm:{n}" or (not payload and bool(_NIGHT.search(t) or re.search(r"\b(dinner|cena|evening)\b", t, re.I)))
+        am = payload == f"am:{n}" or (not payload and bool(_MORNING.search(t)))
+        if pm == am:
+            return False
+        _set_time(pend["f"], pend["parts"], h + 12 if pm else h, mi)
+    else:
+        add = payload == f"tripadd:{n}" or (not payload and bool(re.search(r"\b(add|yes|trip|a[nñ]ade)\b", t, re.I)))
+        keep = payload == f"tripkeep:{n}" or (not payload and bool(re.search(r"\b(separate|keep|no|aparte)\b", t, re.I)))
+        if add == keep:
+            return False
+        if add:
+            ok = await PS.add_day(ctx["account"], pend["trip_id"], pend["day"], pend["city"])
+            ctx["out"].text(f"Added {SN.day_words(pend['day'])} in {pend['city']} to your trip." if ok
+                            else "I couldn't add that day to your trip — I'll book it on its own.")
+    ctx["st"]["pending"] = None
+    await gate(ctx, pend["f"], pend["parts"], pend["body"], pend["done"])
+    return True
 
 
 # ── a card picked from a trip search → on the trip, on its day ───────────────────────────────────────────────────────
@@ -400,4 +510,4 @@ async def start_reset(ctx: dict) -> None:
 
 
 __all__ = ["placeless", "context", "search", "answer", "add_to_trip", "web_turn", "ask_contact", "reset_demo", "start_reset",
-           "is_test", "RESET", "wa_markdown", "chunks"]
+           "is_test", "RESET", "wa_markdown", "chunks", "sasha_clear", "gate", "hour_said"]

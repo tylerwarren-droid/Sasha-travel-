@@ -162,6 +162,39 @@ async def add_place(account: str, trip_id: str, day: Optional[int], activity: di
     return bool(await _edit(account, trip_id, change))
 
 
+async def add_day(account: str, trip_id: str, day: str, city: str) -> bool:
+    """Sasha 167 (4) · a date outside the trip, added to it: every day gets its own date (CR 35's merge honours it), the new day
+    joins in date order, the days are renumbered, and the trip's dates widen."""
+    p = await latest(account)
+    if not p or p.get("trip_id") != trip_id:
+        return False
+    start = p.get("start")
+    start = date.fromisoformat(str(start)[:10]) if start else None
+
+    def change(plan):
+        days = plan.get("days") or []
+        for i, d in enumerate(days):
+            d["date"] = str(d.get("date") or "")[:10] or ((start + timedelta(days=i)).isoformat() if start else None)
+        if any(d.get("date") == day for d in days):
+            return True
+        days.append({"day": 0, "date": day, "city": city, "title": f"{city} — added", "activities": []})
+        days.sort(key=lambda d: d.get("date") or "9999")
+        for i, d in enumerate(days, 1):
+            d["day"] = i
+        plan["days"] = days
+        return True
+    ok = await _edit(account, trip_id, change)
+    if ok:
+        async def widen(conn):
+            await conn.execute("update trips set depart_date = least(depart_date, $2::date), return_date = greatest(return_date, $2::date) "
+                               "where id = $1 and owner_id = $3", uuid.UUID(trip_id), date.fromisoformat(day), uuid.UUID(account))
+        try:
+            await _run()(widen)
+        except Exception as e:
+            log.warning("[plan_store] the trip's dates were not widened: %s: %s", type(e).__name__, e)
+    return bool(ok)
+
+
 async def clear_added(account: str, dry: bool = False) -> int:
     """Sasha 167 · "reset the demo": the places added on WhatsApp leave the latest plan (count only when dry)."""
     if dry:
@@ -256,4 +289,4 @@ def text(plan: dict) -> List[str]:
     return out
 
 
-__all__ = ["save", "latest", "merge", "text", "dates_of", "add_place", "clear_added"]
+__all__ = ["save", "latest", "merge", "text", "dates_of", "add_place", "clear_added", "add_day"]

@@ -204,5 +204,81 @@ class TestLabel(unittest.TestCase):
         self.assertIn("founder's", c["out"].said())
 
 
+class LiveFailure(unittest.TestCase):
+    """Sasha 167 live: "romantic booking for two at a restaurant in Hoi An, October 27 at 09:00" got the CampusMe intro."""
+    SAID = "romantic booking for two at a restaurant in Hoi An, October 27 at 09:00"
+
+    def test_it_is_a_search_and_clear(self):
+        from booking_signer import handoff as HO
+        f = HO.booking_handoff(self.SAID, [], NOW)["booking_find"]
+        self.assertEqual((f["what"], f["where"], f["open_at"]), ("romantic restaurant", "Hoi An", "2026-10-27T09:00"))
+        self.assertTrue(WB.sasha_clear(self.SAID, [], NOW))
+        for m in ("Please, add a dinner in Hoi An on the fifteenth at 08:00 at night. Thank you.",
+                  "Make me a dinner reservation for two people on November 15 in Hoi An, Vietnam."):
+            f = HO.booking_handoff(m, [], NOW)["booking_find"]
+            self.assertEqual((f["what"], f["where"]), ("dinner", "Hoi An"), m)
+        for m in ("October 27", "Yale and Harvard", "2", "Tyler Warren", "book my flights"):
+            self.assertFalse(WB.sasha_clear(m, [], NOW), m)
+
+    def test_a_product_mode_steps_aside(self):
+        from products import whatsapp as PW
+        st = {"pending": {"kind": "product", "product": "campus", "step": "ask", "touched": NOW.isoformat()}, "history": []}
+        set_aside = []
+
+        async def aside(st_, ch):
+            set_aside.append(st_["pending"]["product"])
+            st_["pending"] = None
+
+        async def resume(ch, prod):
+            return None
+        old = PW._set_aside, PW._resume
+        PW._set_aside, PW._resume = aside, resume
+        try:
+            st["pending"]["touched"] = NOW.isoformat()
+            got = asyncio.run(PW.product_turn({"account_id": "a", "wa_id_sha256": "k"}, "f", {"Body": self.SAID}, st, GW.Out(), NOW))
+        finally:
+            PW._set_aside, PW._resume = old
+        self.assertFalse(got)   # Sasha's flow answers it
+
+    def test_nine_for_dinner_is_asked_then_outside_the_trip_is_asked(self):
+        found, days = [], []
+
+        async def lat(a):
+            return LATEST
+
+        async def find(c, f, draft):
+            found.append((f, draft))
+
+        async def add_day(account, trip_id, day, city):
+            days.append((day, city))
+            return True
+        c = ctx()
+        with Patch(PS__latest=lat, GW___find=find, PS__add_day=add_day):
+            asyncio.run(GW._new_request(c, self.SAID))
+            self.assertEqual(c["out"].items[-1][1], "9 in the morning or 9 at night?")
+            n = c["st"]["pending"]["nonce"]
+            asyncio.run(GW._answer_pending(c, "", f"pm:{n}"))
+            self.assertIn("is outside your trip", c["out"].items[-1][1])
+            n = c["st"]["pending"]["nonce"]
+            asyncio.run(GW._answer_pending(c, "", f"tripadd:{n}"))
+        self.assertEqual(days, [("2026-10-27", "Hoi An")])
+        f, draft = found[0]
+        self.assertEqual((f["open_at"], f["country"]), ("2026-10-27T21:00", "VN"))
+        self.assertEqual(draft["parts"]["when"]["at"], "2026-10-27T21:00")
+        self.assertEqual(draft["parts"]["how_many"]["count"], 2)
+
+    def test_at_night_is_never_asked(self):
+        self.assertEqual(WB.hour_said("a dinner at 08:00 at night"), (8, 0, "night"))
+        self.assertEqual(WB.hour_said("breakfast at 9:00"), (9, 0, "morning"))
+        self.assertIsNone(WB.hour_said("dinner at 21:00"))
+
+    def test_add_day_keeps_order(self):
+        p = {**LATEST, "plan": {**PLAN, "days": [dict(d) for d in PLAN["days"]]}}
+        m = PS.merge(p, [])
+        self.assertEqual(m["days"][0]["date"], "2026-11-12")
+        own = {**p, "plan": {"days": [{"day": 1, "date": "2026-10-27", "city": "Hoi An"}, {"day": 2, "city": "Hanoi"}]}}
+        self.assertEqual([d["date"] for d in PS.merge(own, [])["days"]], ["2026-10-27", "2026-11-13"])   # CR 35: a day's own date wins
+
+
 if __name__ == "__main__":
     unittest.main()

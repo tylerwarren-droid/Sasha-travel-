@@ -114,7 +114,11 @@ CONSULATES: Dict[str, dict] = {
                              "E) Copia escaneada, en formato PDF, del ID/Carnet de conducir",
                              "F) Copia escaneada, en formato PDF, de la página de identidad de su pasaporte"],
                     "notes": ["All applicants in ONE email (its page: “todo en un único email”).",
-                              "Non-US citizens also attach their US residence visa or Green Card (item F)."],
+                              "Non-US citizens also attach their US residence visa or Green Card (item F).",
+                              # CR 44 · EU 174: the 2023 form's own footer prints cog.nuevayork.vis@maec.es; the visa page (read
+                              # 6 Oct 2026) names …visnac@ for booking — the page is the current word, so the draft uses it
+                              "This draft goes to the address on the consulate's current visa page (cog.nuevayork.visnac@maec.es). "
+                              "The application form's own footer prints an older one (cog.nuevayork.vis@maec.es) — use the page's."],
                     "in_person": "“La solicitud de visado se presentará personalmente por el interesado”"},
         "checklist": [("visa_form", "Formulario de solicitud de visado nacional", "complete and sign", "“Cada solicitante completará … y firmará” (its link is broken: 404)"),
                       ("ex01", "EX-01", "sign one copy", "“firmar un ejemplar del impreso EX - 01”"),
@@ -391,19 +395,23 @@ def ex01_signature(pdf: bytes) -> Optional[Tuple[int, Tuple[float, float, float,
 SIGN_790 = (60, 150, 290, 170)            # under the "En … a …" line: the box item 12 of the instructions names
 
 
-def pack(cid: str, ex01_pdf: bytes, rs790: List[dict], applicant: str) -> bytes:
+def pack(cid: str, ex01_pdf: bytes, rs790: List[dict], applicant: str, visa: Optional[tuple] = None) -> bytes:
     """ONE PDF: the consulate's checklist (its order) → each document we prepared, at its place in that order (the EX-01, the
     790-052 × the copies it asks for, the photo spec) — SIGN HERE beside every signature box. Nothing signed, nothing sent."""
     c = CONSULATES[cid]
     lines = [f"For: {applicant} — prepared by Kanoe from {c['office']}'s own page, read {READ_ON}:", c["page"],
              f"Signatures: {c['sign']}", ""]
     for i, (key, name, copies, words) in enumerate(c["checklist"], 1):
-        mark = {"ex01": "[IN THIS PACK]", "fees_790": "[IN THIS PACK]", "photo": "[spec IN THIS PACK]"}.get(
+        mark = {"ex01": "[IN THIS PACK]", "fees_790": "[IN THIS PACK]", "photo": "[spec IN THIS PACK]",
+                "visa_form": "[IN THIS PACK]" if visa else "[yours to gather]"}.get(
             key, "[the 790-052 IN THIS PACK]" if key == "fees" and cid != "washington" else "[yours to gather]")
         lines.append(f"{i}. {name}{' — ' + copies if copies else ''} {mark} {words}")
     pages = [_text_page(f"{c['city']}: your visa pack, in the consulate's order", lines)]
     for key, name, copies, words in c["checklist"]:
-        if key == "ex01":
+        if key == "visa_form" and visa:                  # CR 44 · the national visa form, filled, its signature box marked
+            vpdf, sign = visa
+            pages += _pages(vpdf, {sign[0]: sign[1]} if sign else {})
+        elif key == "ex01":
             at = ex01_signature(ex01_pdf)
             pages += _pages(ex01_pdf, {at[0]: at[1]} if at else {})
         elif key == "fees_790" or (key == "fees" and cid != "washington"):
@@ -460,12 +468,19 @@ async def present(ctx: dict, cid: str, base: dict, web: str, save) -> None:
         out.text(m)
     out.text("When it's booked, tell me the day and time (e.g. \"consulate booked 12 November 10:00\") and it goes on your "
              "“Move to Madrid” trip with what to bring.")
+    from . import visa_form as VF                     # CR 44 · A1: the national visa form, filled, first in every consulate's list
+    vf = VF.FORMS[VF.FORM_FOR.get(cid, "generic")]
+    FC.show(out, f"Your national visa application ({vf['name']}), filled from your answers and your Keep. Not signed — the "
+                 "place, date, signature and photo are yours.",
+            f"{web}/api/products/relocation/{case}/visa-form-card.jpg", f"{web}/api/products/relocation/{case}/visa-form.pdf")
     FC.show(out, f"Your Modelo 790 código 052, filled where the official form allows — {c['copies_790_words']}. Not signed, not paid.",
             f"{web}/api/products/relocation/{case}/790-card.jpg", f"{web}/api/products/relocation/{case}/790-052.pdf")
     out.text("Left for you on the 790: " + "; ".join(LEFT_790) + ".")
-    out.text(f"🖨 Your whole pack as ONE print-ready PDF, in {c['office']}'s own order — its checklist, the EX-01, the 790-052 "
+    out.text(f"🖨 Your whole pack as ONE print-ready PDF, in {c['office']}'s own order — its checklist, the national visa form, the EX-01, the 790-052 "
              f"(both copies), the photo spec — with SIGN HERE beside every signature box:\n{web}/api/products/relocation/{case}/pack.pdf\n"
              f"Signatures: {c['sign']}")
+    out.text("After you arrive, say “after arrival”: your padrón, your TIE (EX-17 + the 790-012 fee) and your Social Security "
+             "number (TA.1) — each prepared from the same answers, in the order you need them.")      # CR 44
     pend["consulate_office"] = c["office"]
     its = items(cid, f, ctx["now"].date())
     flag = next((i for i in its if i["status"] == "problem"), None)

@@ -67,6 +67,38 @@ def card(pdf: bytes, filled: Iterable[str], strip: str, page: int = 0) -> bytes:
     return buf.getvalue()
 
 
+def card_rects(pdf: bytes, rects, strip: str, page: int = 0) -> bytes:
+    """CR 44 · the same card for a FLAT form (no fields): the rectangles (PDF points) where Sasha drew a value, highlighted."""
+    import pypdfium2 as pdfium
+    from PIL import Image, ImageDraw, ImageFont
+    doc = pdfium.PdfDocument(pdf)
+    try:
+        pg = doc[page]
+        width, height = pg.get_size()
+        img = pg.render(scale=SCALE).to_pil().convert("RGBA")
+    finally:
+        doc.close()
+    over = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(over)
+    for x0, y0, x1, y1 in rects:
+        d.rectangle([x0 * SCALE - 1, (height - y1) * SCALE - 1, x1 * SCALE + 1, (height - y0) * SCALE + 1],
+                    fill=HIGHLIGHT, outline=OUTLINE, width=2)
+    img = Image.alpha_composite(img, over).convert("RGB")
+    bar = max(54, img.width // 16)
+    out = Image.new("RGB", (img.width, img.height + bar), "white")
+    out.paste(img, (0, bar))
+    d = ImageDraw.Draw(out)
+    d.rectangle([0, 0, img.width, bar], fill=STRIP)
+    try:
+        font = ImageFont.load_default(size=int(bar * 0.36))
+    except TypeError:
+        font = ImageFont.load_default()
+    d.text((bar // 3, bar // 2), strip, fill="white", font=font, anchor="lm")
+    buf = io.BytesIO()
+    out.save(buf, "JPEG", quality=82, optimize=True)
+    return buf.getvalue()
+
+
 PDF_LINE = "📄 Open the full PDF: "
 _PDF_LINE = re.compile(r"\n?" + re.escape(PDF_LINE) + r"(\S+)\s*$")
 

@@ -28,10 +28,11 @@ class Days(TG.unittest.TestCase):
         p = MV.plan(case(), "London", 3, date(2026, 10, 6))
         self.assertEqual(p["title"], "Move to Madrid")
         got = [(d["date"], [a["name"] for a in d["activities"]]) for d in p["days"]]
-        self.assertEqual([d for d, _ in got], ["2026-12-01", "2027-03-01", "2027-03-02", "2027-03-03", "2027-03-22", "2027-03-31"])
+        self.assertEqual([d for d, _ in got], ["2026-12-01", "2027-03-01", "2027-03-02", "2027-03-03", "2027-03-22", "2027-03-31",
+                                             "2027-04-05", "2027-04-10"])   # CR 44 · TA.1, then the health card
         self.assertEqual(got[1][1], ["Fly London → Madrid", "Check in — your first nights"])
         self.assertIn("Book your TIE appointment", got[4][1])
-        self.assertEqual([d["day"] for d in p["days"]], [1, 2, 3, 4, 5, 6])
+        self.assertEqual([d["day"] for d in p["days"]], [1, 2, 3, 4, 5, 6, 7, 8])
         self.assertNotIn("Get your certificates", [n for _, ns in got for n in ns])   # 2 Oct 2026: already past, left out
 
     def test_a_us_consulate_only_what_its_page_says(self):

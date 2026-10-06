@@ -174,6 +174,7 @@ def from_read(read: Dict[str, Any], side: str) -> Dict[str, dict]:
 
 LABELS = [("dni", "DNI"), ("surname_1", "First surname"), ("surname_2", "Second surname"), ("given_names", "Name"),
           ("sex", "Sex"), ("birth_date", "Date of birth"), ("nationality", "Nationality"), ("birth_place", "Place of birth"),
+          ("birth_country", "Country of birth"), ("postcode", "Postcode"), ("phone", "Mobile"), ("email", "Email"),
           ("birth_province", "Province of birth"), ("expiry", "Valid until"), ("address_line", "Address (on the DNI)"),
           ("municipality", "Town"), ("province", "Province")]
 
@@ -221,7 +222,8 @@ def ask(out, k: str, f: Dict[str, dict]) -> None:
     if k == "motive":
         out.ask("What is the card for?\n" + "\n".join(f"• {v}" for v in MOTIVES.values()) + "\n(or type \"changed details\")", MOTIVE_BUTTONS)
     elif k == "address_ok":
-        out.ask(f"Your DNI says: *{f['address_line']['value']}*{', ' + f['municipality']['value'] if f.get('municipality') else ''}. "
+        whose = "Your RelocateMe address is" if f["address_line"].get("source") == RX_SOURCE else "Your DNI says"   # CR 44
+        out.ask(f"{whose}: *{f['address_line']['value']}*{', ' + f['municipality']['value'] if f.get('municipality') else ''}. "
                 "Is that still where you're registered (your padrón)?", [("Yes, still there", "hx:ts:addr:yes"), ("No, it's changed", "hx:ts:addr:no")])
     elif k == "street":
         out.text("Your current address, as on your padrón? (street and number, floor and door — e.g. \"Calle Padre Damián 41, 5º B\")")
@@ -309,6 +311,8 @@ def rows(f: Dict[str, dict], today: date) -> List[dict]:
     put("DSSEXO_INTER", "Sex", sx, src("sex"))
     put("TLPROVNAC_INTER", "Province of birth", v("birth_province").upper(), src("birth_province"))
     put("TLPAISNAC_INTER", "Country of birth", "ESPAÑA" if v("birth_province") else "", src("birth_province") + " (a Spanish province)" if v("birth_province") else "")
+    if not v("birth_province"):                                    # CR 44 · born abroad: the country the person gave
+        put("TLPAISNAC_INTER", "Country of birth", v("birth_country").upper(), src("birth_country"))
     put("TLNACIONALIDAD_INTER", "Nationality", "ESPAÑOLA" if v("nationality").upper()[:3] in ("ESP", "ESPAÑOLA"[:3]) else v("nationality").upper(), src("nationality"))
     bd = v("birth_date")
     put("TLFECHANAC_INTER", "Date of birth", f"{bd[8:10]}/{bd[5:7]}/{bd[0:4]}" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", bd) else "", src("birth_date"))
@@ -389,19 +393,67 @@ def web() -> str:
     return w()
 
 
+RX_SOURCE = "your RelocateMe file (the Keep)"
+
+
+async def from_relocation(account: str) -> Dict[str, dict]:
+    """CR 44 · row 10 fed from the ONE Keep record: the account's RelocateMe answers, in this form's own shapes — never asked
+    again. Empty when there is no RelocateMe file."""
+    from .. import store as ST
+    try:
+        cases = [c for c in await ST.STORE.of_account(account, "relocation") if (c["state"].get("facts") or {}).get("applicant")]
+    except Exception:
+        return {}
+    if not cases:
+        return {}
+    a = max(cases, key=lambda c: str(c.get("created_at") or ""))["state"]["facts"]["applicant"]
+    v = lambda k: ((a.get(k) or {}).get("value") or "").strip()
+    out: Dict[str, dict] = {}
+    put = lambda k, val: out.__setitem__(k, _fact(val, RX_SOURCE)) if val else None
+    put("dni", v("nie").upper())                                   # the NIE is the NIF the form asks for
+    put("surname_1", v("surname_1")); put("surname_2", v("surname_2")); put("given_names", v("given_names"))
+    put("sex", {"H": "M", "M": "F"}.get(v("sex"), ""))              # RelocateMe: H/M (hombre/mujer) → the DNI's M/F
+    put("birth_date", v("birth_date")); put("nationality", v("nationality")); put("birth_place", v("birth_place"))
+    put("birth_country", v("birth_country"))
+    street = " ".join(x for x in (v("address_street"), v("address_number")) if x)
+    put("address_line", street + (f", {v('address_floor')}" if street and v("address_floor") else ""))
+    put("municipality", v("address_town")); put("province", v("address_province"))
+    if re.fullmatch(r"28\d{3}", v("address_postcode")):
+        put("postcode", v("address_postcode"))
+    d = re.sub(r"\D", "", v("mobile"))
+    d = d[2:] if d.startswith("34") and len(d) == 11 else d
+    if re.fullmatch(r"[6-9]\d{8}", d):
+        put("phone", d)
+    put("email", v("email"))
+    return out
+
+
 async def start(ctx: dict) -> None:
     pend, out = ctx["st"]["pending"], ctx["out"]
     pend.update(step="ts_doc", ts={"facts": {}, "mrz": None, "sides": []})
     out.text("Your health card — I'll fill the Comunidad de Madrid's own form (1449F1) for you. I read your ID once to fill "
              "it; I don't ask for your Social Security number or anything about your health, and I keep the details 24 hours.")
+    if await from_relocation(ctx["account"]):                      # CR 44 · asked once, ever
+        out.ask("You've already given me your details for RelocateMe — fill the form from them (name, birth, NIE, address, phone, "
+                "email)? I read them back first.", [("Yes, use them", "hx:ts:rx:yes"), ("No, read my ID", "hx:ts:rx:no")])
+        return
     out.text("Send a photo of the FRONT of your DNI (then the back), or your passport's photo page. "
              "(Type DEMO for a fictional specimen.)")
 
 
-async def on_doc(ctx: dict, t: str) -> bool:
+async def on_doc(ctx: dict, t: str, payload: str = "") -> bool:
     """A photo (or DEMO) at ts_doc / ts_back. True when this turn was handled."""
     pend, out = ctx["st"]["pending"], ctx["out"]
     ts = pend["ts"]
+    if payload == "hx:ts:rx:yes" or (not payload and re.fullmatch(r"(?i)\s*(yes|use them)\s*", t) and pend["step"] == "ts_doc"):
+        ts["facts"] = await from_relocation(ctx["account"])          # CR 44 · read back before anything is filled
+        if ts["facts"]:
+            ts["sides"] = ["relocateme"]
+            _confirm(ctx)
+            return True
+    if payload == "hx:ts:rx:no":
+        out.text("Send a photo of the FRONT of your DNI (then the back), or your passport's photo page. (Type DEMO for a fictional specimen.)")
+        return True
     if re.fullmatch(r"(?i)\s*demo\s*", t):
         ts["facts"] = {k: _fact(v, "a fictional specimen (not a real person)") for k, v in SPECIMEN.items()}
         ts["mrz"], ts["sides"], ts["fictional"] = mrz_td1(SPECIMEN_MRZ), ["dni_front", "dni_back"], True

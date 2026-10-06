@@ -35,6 +35,8 @@ DEMO = dict(passport_number="EXAMPLE000", surname_1="Ejemplo", surname_2="Prueba
             passport_expiry="2031-06-30", marital_status="C", father_name="", mother_name="", nie="",
             address_street="Calle de Ejemplo", address_number="12", address_floor="3º B", address_town="Madrid",
             address_postcode="28010", address_province="Madrid", mobile="+34600000000", email="ana.ejemplo@example.com",
+            home_address_abroad="100 Example Street, Princeton, NJ 08540, USA", occupation="Retired teacher",   # CR 44 · the Keep's
+            passport_issued="2021-06-30", passport_issuer="Passport Canada",
             school_age_children_in_spain="no")
 
 
@@ -136,9 +138,31 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
             out.text(PRESENTER_Q)
             return
         pend["step"] = "facts"
+        from . import keep as KP
+        kept = await KP.item(ctx["account"])                     # CR 44 · asked once, ever: a kept record fills this file
+        if kept:
+            pend.update(step="keep_use", keep_id=str(kept["id"]))
+            out.ask(f"Your details are kept in your vault (“{KP.LABEL}”). Fill this file from them? I open them only under "
+                    "your yes, and you check every value on the form.", [("Yes, use them", "rx:keep:use"), ("No, ask me", "rx:keep:ask")])
+            return
         out.text("Now your details, as your passport shows them. (Or send a photo of your passport's photo page and I'll "
                  "read it — you confirm each value. Type DEMO to use a fictional applicant.)")
         _next_question(pend, out)
+        return
+    if step == "keep_use":
+        from . import keep as KP
+        if payload == "rx:keep:use" or (not payload and re.match(r"(?i)^\s*(yes|y|sí|si|ok|use)\b", t)):
+            try:
+                n = await KP.open_into(ctx["account"], pend["keep_id"], f, KP.approval(ctx["now"], "button" if payload else "text", t),
+                                       _on(ctx))
+                out.text(f"Filled {n} answers from your Keep — I'll ask only what's missing.")
+            except Exception as e:
+                log.warning("[relocation] keep not opened: %s", type(e).__name__)
+                out.text("I couldn't open your Keep just now — I'll ask instead.")
+        pend["step"] = "facts"
+        _next_question(pend, out)
+        if pend["step"] == "notices_done":
+            await _keep_then_prepare(ctx)
         return
     if step == "facts":
         k = pend.get("asking")
@@ -151,7 +175,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
             f["applicant"][k] = F.fact(v, _said(ctx), _on(ctx))
         _next_question(pend, out)
         if pend["step"] == "notices_done":
-            await _prepare(ctx)
+            await _keep_then_prepare(ctx)
         return
     if step == "notices":
         v, bad = F._yesno(t)
@@ -159,6 +183,15 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
             out.text(NOTICES_Q)
             return
         f["choices"]["notices_to_own_address"] = F.fact(v, _said(ctx), _on(ctx))
+        await _keep_then_prepare(ctx)
+        return
+    if step == "keep_offer":
+        from . import keep as KP
+        if payload == "rx:keep:yes" or (not payload and re.match(r"(?i)^\s*(yes|y|sí|si|ok|keep)\b", t)):
+            if await KP.save(ctx["account"], f):
+                out.text(f"Kept in your vault as “{KP.LABEL}” — the next form is one yes.")
+            else:
+                out.text("I couldn't keep them just now — nothing was saved; this file is unaffected.")
         await _prepare(ctx)
         return
     if step == "prepared" and re.match(r"(?i)^\s*(signed|i signed|firmado)\b", t):
@@ -197,6 +230,23 @@ def applies(f: dict) -> Dict[str, bool]:
     return {"2": (c.get("resources") or {}).get("value") == "family",
             "3": False,   # a representative completes their own section: never filled from the applicant's answers
             "legal_rep": False}
+
+
+async def _keep_then_prepare(ctx: dict) -> None:
+    """CR 44 · once, before the first form: may these details be kept, so no form ever asks them again? A fictional applicant,
+    or details that came from the Keep, are not offered."""
+    from . import keep as KP
+    pend, out = ctx["st"]["pending"], ctx["out"]
+    a = pend["facts"].get("applicant") or {}
+    own = any(x.get("source") not in (FICTIONAL, KP.SOURCE) for x in a.values())
+    if own and not any(x.get("source") == FICTIONAL for x in a.values()) and not pend.get("keep_offered") \
+            and not await KP.item(ctx["account"]):
+        pend.update(step="keep_offer", keep_offered=True)
+        out.ask("Keep these details in your vault (encrypted, deletable any time)? Every RelocateMe form — the visa form, EX-01, "
+                "EX-17, padrón, Social Security — fills from them, and I never ask again.",
+                [("Yes, keep them", "rx:keep:yes"), ("Just this file", "rx:keep:no")])
+        return
+    await _prepare(ctx)
 
 
 async def _prepare(ctx: dict) -> None:
@@ -248,8 +298,14 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
         return bool(q) and q[2](t)[1] is None
     if step == "notices":
         return F._yesno(t)[1] is None
+    if step in ("keep_use", "keep_offer"):                # CR 44
+        return bool(re.match(r"(?i)^\s*(yes|y|no|n|sí|si|ok|use|keep)\b", t))
     if step == "doc_confirm":
         return bool(re.match(r"(?i)^\s*(yes|no|y|n|sí|si)\b", t))
+    if step in ("prepared", "signed", "entry", "appointments", "pack", "done"):   # CR 44 · after arrival, an NIE
+        from . import arrival as AR
+        if AR.ARRIVAL.search(t) or AR.NIE_SAID.search(t):
+            return True
     if step == "prepared":
         return bool(re.match(r"(?i)^\s*(signed|i signed|firmado)\b", t))
     if step == "residence":

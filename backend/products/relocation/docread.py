@@ -238,4 +238,4 @@ async def on_confirm(ctx: dict, facts: dict, body: str, payload: str) -> None:
             return
         RT._next_question(pend, out)
         if pend["step"] == "notices_done":
-            await RT._prepare(ctx)
+            await RT._keep_then_prepare(ctx)   # CR 44

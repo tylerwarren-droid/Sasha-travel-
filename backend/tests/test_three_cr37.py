@@ -75,7 +75,7 @@ class London(Base):
         self.assertIn("https://uk.blsspainglobal.com/Global/account/login", said)
         self.assertIn("EXAMPLE000", self.bodies())                                                   # its own message
         pack, f790 = self.pdfs()
-        self.assertEqual(len(pack.pages), 7)                  # checklist · EX-01 (3) · photo · 790 (its 2 copies)
+        self.assertEqual(len(pack.pages), 12)                 # checklist · CR 44 national visa form (5) · EX-01 (3) · photo · 790 (2)
         got = {k: str(v.get("/V")) for k, v in (f790.get_fields() or {}).items() if v.get("/V") not in (None, "", "/Off")}
         self.assertEqual((got["Nacionalidad"], got["PRINCIPAL"], got["Activado1_3"]), ("CANADÁ", "/Yes", "/Yes"))
         self.assertNotIn("NIF", got)                          # no NIE: left blank, as the instructions say
@@ -102,7 +102,7 @@ class Washington(Base):
         self.assertIn("Total: $822.", said)                                                          # 789 + 13 + BLS 20
         self.assertIn("https://usa.blsspainglobal.com/Global/account/login", said)
         pack, _ = self.pdfs()
-        self.assertEqual(len(pack.pages), 7)
+        self.assertEqual(len(pack.pages), 12)   # CR 44 · + the national visa form (5)
         self.assertEqual(len(self.after()["checklist"]), 17)
 
 

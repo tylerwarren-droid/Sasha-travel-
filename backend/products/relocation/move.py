@@ -48,19 +48,31 @@ def days(case: dict, origin: str, nights: int, today: date) -> List[dict]:
         add(entry - timedelta(days=150), origin, "Paperwork", "Morning", "Get your certificates",
             "Criminal record and medical certificates — no older than 3 months when you apply (the consulate's sheet).")
         add(entry - timedelta(days=90), origin, "Paperwork", "Morning", "Your visa window opens",
-            f"Apply from today — up to 90 days before entry. Book your appointment at the {office} (its own instructions).")
+            f"Apply from today — up to 90 days before entry. Book your appointment at the {office} (its own instructions). "
+            "Bring your pack: the national visa form, the EX-01, the 790-052 — each signed by you.")   # CR 44
     add(entry, town, "The move", "Morning", f"Fly {origin} → {town}", "Your entry date.")
     add(entry, town, "The move", "Evening", "Check in — your first nights",
         f"A hotel near your new address{' (' + street + ')' if street else ''} for {nights} nights.")
     for i in range(1, nights):
         add(entry + timedelta(days=i), town, "First nights", "Afternoon", "Settle in", f"Near {street or town}.")
+    # CR 44 · after arrival, in process order: padrón first (the fingerprint appointment often asks for it), then the TIE
+    # (EX-17 + the 790-012 fee), then Social Security (TA.1), then the health card. Suggested days; the deadlines are the sheets'.
+    from . import arrival as AR
+    add(entry + timedelta(days=2), town, "Paperwork", "Morning", "Padrón: book your cita",
+        f"In person, signed by hand there. Book at {AR.PADRON_CITA} or call 010. Say “after arrival” to me for your details "
+        "ready to copy.")
     tie = [r for r in AF.reminders(after["entry_date"], today, cons) if "TIE" in r["text"]]
     if tie:
         add(date.fromisoformat(tie[0]["on"]), town, "Paperwork", "Morning", "Book your TIE appointment",
-            f"Cita previa: {AF.CITA_EXTRANJERIA['url']}")
+            f"Cita previa: {AF.CITA_EXTRANJERIA['url']} — bring the EX-17 (signed there) and the 790-012 fee "
+            f"({AR.P790_012_FEE}, paid), your passport and a photo.")
     if not us:
         add(entry + timedelta(days=30), town, "Paperwork", "Morning", "TIE deadline",
             "One month from entry to request your TIE (the consulate's sheet).")
+    add(entry + timedelta(days=35), town, "Paperwork", "Morning", "Social Security number: the TA.1",
+        "Your TA.1, filled — in person at the TGSS. Say “after arrival” to me for the PDF.")
+    add(entry + timedelta(days=40), town, "Paperwork", "Morning", "Health card (tarjeta sanitaria)",
+        "Say “españa” to me: the 1449F1 is filled, and your centro de salud found.")
     return [out[d] for d in sorted(out)]
 
 

@@ -170,6 +170,19 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
     pend, out, now = ctx["st"]["pending"], ctx["out"], ctx["now"]
     step = pend.get("step")
     f = pend.get("facts") or {}
+    from . import arrival as AR                                    # CR 44 · after arrival: padrón → EX-17 + 790-012 → TA.1
+    nie = AR.NIE_SAID.search(body or "")
+    if nie and step not in ("residence", "us_state", "us_county"):
+        val = re.sub(r"[\s-]", "", nie.group(1)).upper()
+        if not F._nie(val)[1]:
+            f.setdefault("applicant", {})["nie"] = F.fact(val, "said on WhatsApp", now.strftime("%-d %b %Y"))
+            await _save(ctx, {"facts": f})
+            out.text(f"Noted: NIE {val} — the 790-012, the TA.1 and the EX-17 use it now.")
+            await AR.present(ctx, web())
+            return True
+    if AR.ARRIVAL.search(body or "") and step in ("prepared", "signed", "entry", "appointments", "pack", "done"):
+        await AR.present(ctx, web())
+        return True
     if step == "residence" and (CS.is_us(body) or CS.state_from(body)):
         state = CS.state_from(body)
         f.setdefault("choices", {})["residence"] = F.fact("united states", "said on WhatsApp", now.strftime("%-d %b %Y"))

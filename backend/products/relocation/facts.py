@@ -196,6 +196,11 @@ APPLICANT: List[Tuple[str, str, Callable]] = [
     ("address_province", "Province?", _text(2)),
     ("mobile", "Your mobile number, with the country code?", _mobile),
     ("email", "Your email address?", _email),
+    # CR 44 · the Keep: asked once, here, because the national visa form, the EX-17, the padrón and the TA.1 need them too
+    ("home_address_abroad", "Your home address now, where you live (street, city, state or region, postcode, country)?", _text(8)),
+    ("occupation", "Your current occupation?", _text(2)),
+    ("passport_issued", "Your passport's date of issue? (on its photo page, e.g. 30/06/2021)", _date_past),
+    ("passport_issuer", "Issued by — the authority printed on your passport (e.g. United States Department of State)?", _text(3)),
     ("school_age_children_in_spain", "Do you have children of school age who will be in your care in Spain? Yes or no.", _yesno),
 ]
 ADDRESS_KEYS = ("address_number", "address_floor", "address_town", "address_postcode", "address_province")

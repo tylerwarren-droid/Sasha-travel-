@@ -214,8 +214,73 @@ async def relocation_pack(cid: str) -> Response:
     a = (st.get("facts") or {}).get("applicant") or {}
     who = " ".join(x for x in ((a.get("given_names") or {}).get("value"), (a.get("surname_1") or {}).get("value"),
                                (a.get("surname_2") or {}).get("value")) if x) or "the applicant"
-    pdf = TH.pack(th, E.fill(st["rows"]), TH.rows_790(st.get("facts") or {}, date.today()), who)
+    from .relocation import visa_form as VF
+    try:
+        vpdf, _, sign, _ = VF.build(st, th)                  # CR 44 · the national visa form, first in the consulate's order
+        visa = (vpdf, sign)
+    except VF.FormChanged:
+        visa = None
+    pdf = TH.pack(th, E.fill(st["rows"]), TH.rows_790(st.get("facts") or {}, date.today()), who, visa)
     return Response(pdf, media_type="application/pdf", headers={"content-disposition": 'inline; filename="visa-pack-print-and-sign.pdf"'})
+
+
+@router.get("/relocation/{cid}/visa-form.pdf")
+async def relocation_visa_form(cid: str) -> Response:
+    """CR 44 · the national visa application, filled where the official form allows; never signed."""
+    from .relocation import visa_form as VF
+    th, st = _three_case(await _case(cid, "relocation"))
+    pdf, _, _, _ = VF.build(st, th)
+    return Response(pdf, media_type="application/pdf", headers={"content-disposition": 'inline; filename="national-visa-form-prepared-not-signed.pdf"'})
+
+
+@router.get("/relocation/{cid}/visa-form-card.jpg")
+async def relocation_visa_form_card(cid: str) -> Response:
+    from .relocation import visa_form as VF
+    th, st = _three_case(await _case(cid, "relocation"))
+    pdf, placed, _, _ = VF.build(st, th)
+    jpg = VF.card(pdf, placed, "Filled by Sasha  ·  highlighted = filled for you  ·  NOT signed")
+    return Response(jpg, media_type="image/jpeg", headers={"cache-control": "private, max-age=300"})
+
+
+@router.get("/relocation/{cid}/TA-1.pdf")
+async def relocation_ta1(cid: str) -> Response:
+    """CR 44 · the TA.1 (Social Security number), filled from the file's facts; never signed."""
+    from .relocation import arrival as AR
+    st = (await _case(cid, "relocation"))["state"]
+    pdf = AR.fill_ta1(AR.ta1_rows(st.get("facts") or {}))
+    return Response(pdf, media_type="application/pdf", headers={"content-disposition": 'inline; filename="TA-1-prepared-not-signed.pdf"'})
+
+
+@router.get("/relocation/{cid}/TA-1-card.jpg")
+async def relocation_ta1_card(cid: str) -> Response:
+    from . import formcard as FC
+    from .relocation import arrival as AR
+    st = (await _case(cid, "relocation"))["state"]
+    rows = AR.ta1_rows(st.get("facts") or {})
+    jpg = FC.card(AR.fill_ta1(rows), [r["field"] for r in rows], "Filled by Sasha  ·  highlighted = filled for you  ·  NOT signed")
+    return Response(jpg, media_type="image/jpeg", headers={"cache-control": "private, max-age=300"})
+
+
+@router.get("/relocation/{cid}/EX-17.pdf")
+async def relocation_ex17(cid: str) -> Response:
+    """CR 44 · the EX-17, once the founder has brought the official PDF in (we may not fetch it); else 404, said plainly."""
+    from .relocation import arrival as AR, ex01 as E
+    if not AR.ex17_ready():
+        raise HTTPException(404, {"ok": False, "rule": "ex17_not_here", "message": AR.EX17_WAITING})
+    st = (await _case(cid, "relocation"))["state"]
+    pdf = AR.fill_ex17(AR.ex17_rows(st.get("facts") or {}))
+    return Response(pdf, media_type="application/pdf", headers={"content-disposition": 'inline; filename="EX-17-prepared-not-signed.pdf"'})
+
+
+@router.get("/relocation/{cid}/EX-17-card.jpg")
+async def relocation_ex17_card(cid: str) -> Response:
+    from . import formcard as FC
+    from .relocation import arrival as AR
+    if not AR.ex17_ready():
+        raise HTTPException(404, {"ok": False, "rule": "ex17_not_here", "message": AR.EX17_WAITING})
+    rows = AR.ex17_rows((await _case(cid, "relocation"))["state"].get("facts") or {})
+    jpg = FC.card(AR.fill_ex17(rows), [r["field"] for r in rows], "Filled by Sasha  ·  highlighted = filled for you  ·  NOT signed")
+    return Response(jpg, media_type="image/jpeg", headers={"cache-control": "private, max-age=300"})
 
 
 @router.get("/relocation/{cid}/EX-01-card.jpg")

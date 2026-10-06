@@ -115,7 +115,9 @@ class Reviewer(TG.unittest.TestCase):
 class OnWhatsApp(TG.Base):
     ANSWERS = ["EXAMPLE000", "Ejemplo", "Prueba", "Ana", "F", "14/03/1985", "Toronto", "Canadá", "canadiense", "30/06/2031",
                "married", "NONE", "NONE", "NONE", "Calle de Ejemplo", "12", "3º B", "Madrid", "28010", "Madrid",
-               "+34 600 000 000", "ana@example.com", "no"]
+               "+34 600 000 000", "ana@example.com",
+               "100 Example Street, Princeton, NJ 08540, USA", "Retired teacher", "30/06/2021", "Passport Canada",   # CR 44 · the Keep
+               "no"]
 
     def setUp(self):
         super().setUp()
@@ -140,6 +142,8 @@ class OnWhatsApp(TG.Base):
         for a in self.ANSWERS:
             self.say(a)
         self.say("yes")                                                    # notices to my own address
+        self.assertIn("Keep these details in your vault", "\n".join(b for b, _ in GW.SENDER.contents))   # CR 44 · offered once
+        self.say("", payload="rx:keep:no")
         said = "\n".join(self.bodies())
         self.assertIn("✅ Your EX-01 is prepared: 31 boxes filled", said)
         self.assertIn("8 left for you", said)

@@ -214,7 +214,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
     if step in ("ts_doc", "ts_back", "ts_confirm", "ts_ask"):     # CR 30 · the health-card form (tarjeta.py)
         from . import tarjeta as TS
         if step in ("ts_doc", "ts_back"):
-            if not await TS.on_doc(ctx, t):
+            if not await TS.on_doc(ctx, t, payload):
                 ctx["out"].text("Send a photo of your DNI (front, then back) or your passport's photo page — or type DEMO.")
         elif step == "ts_confirm":
             await TS.on_confirm(ctx, t, payload)
@@ -581,7 +581,7 @@ def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     if step == "ci_call_when":
         return parse_when(t, datetime.now(MADRID)) is not None
     if step in ("ts_doc", "ts_back"):
-        return bool(media) or bool(re.fullmatch(r"(?i)\s*demo\s*", t))
+        return bool(media) or bool(re.fullmatch(r"(?i)\s*demo\s*", t)) or payload.startswith("hx:ts:rx:")
     if step == "ts_confirm":
         return YS.is_yes(t) or bool(re.match(r"(?i)^\s*(no|wrong)\b", t))
     if step == "ts_ask":                     # CR 35 · only an answer to ITS question (a shared account's other product may be asking)

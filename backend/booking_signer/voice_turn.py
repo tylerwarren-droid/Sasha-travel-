@@ -13,12 +13,17 @@ from typing import List, Optional
 log = logging.getLogger("booking_signer.voice_turn")
 
 
+def _unlabel(s: str) -> str:
+    from .switching import strip_label
+    return strip_label(s)
+
+
 def _spoken(items: List[tuple]) -> tuple:
     """(the words to say, the photos to show) from a turn's messages."""
     said, photos, n = [], [], 0
     for it in items:
         if it[0] == "text":
-            said.append(it[1])
+            said.append(_unlabel(it[1]))
         elif it[0] == "media":
             n += 1
             said.append(f"{n}. {it[1].replace('Sasha' + chr(39) + 's pick · ', '')}")
@@ -26,7 +31,8 @@ def _spoken(items: List[tuple]) -> tuple:
         elif it[0] == "ask":
             titles = [t for t, _ in it[2]]
             opts = (", ".join(titles[:-1]) + " or " + titles[-1]) if len(titles) > 1 else (titles[0] if titles else "")
-            said.append(f"{it[1]} ({opts})" if it[1].startswith("Which one") and opts else it[1])
+            body = _unlabel(it[1])
+            said.append(f"{body} ({opts})" if body.startswith("Which one") and opts else body)
     return "\n".join(s for s in said if s), photos
 
 
@@ -53,9 +59,16 @@ async def turn(account: Optional[str], transcript: str, history: list) -> Option
     st["last_inbound_at"] = now
     ctx = {"account": account, "ch": None, "frm": None, "st": st, "now": now, "out": out, "button_text": "", "wa_number": None,
            "no_test_card": False, "photo_wait": 4.0}
+    from . import switching as SW   # Sasha 179 · the avatar switches as WhatsApp does: one spoken line (no label in speech)
+    sw = SW.on(account)
+    mode0 = SW.before(st, now) if sw else None
     try:
         if not await GW._answer_pending(ctx, transcript, ""):
             await GW._new_request(ctx, transcript)
+        if sw:
+            cur = SW.announce(out.items, mode0, await SW.after(account, transcript, st), 0)
+            if cur:   # the mode rides in the history, as on WhatsApp
+                SW.label_first(out.items, cur)
     except Exception as e:
         log.error("[voice_turn] the booking turn failed: %s: %s", type(e).__name__, e)
         return None

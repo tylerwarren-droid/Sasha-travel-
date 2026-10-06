@@ -133,7 +133,8 @@ async def latest(account: Optional[str], hint: Optional[str] = None) -> Optional
         return None
     r = rows[0]
     if hint and len(rows) > 1:
-        for x in rows:
+        # Sasha 179 · the DATED plan first when several share the word (an undated "Vietnam" stub took "my Vietnam trip")
+        for x in sorted(rows, key=lambda y: y["depart_date"] is None):
             dx = x["destinations"]
             dx = json.loads(dx) if isinstance(dx, str) else dx
             if any(re.search(rf"\b{re.escape(n)}\b", hint, re.I) for n in _names(x, dx or {})):

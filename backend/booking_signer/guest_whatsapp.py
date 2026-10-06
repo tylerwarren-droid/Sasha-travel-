@@ -677,7 +677,63 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
 
     async def _early(text: str) -> None:   # "Reading Yale's calendar…" goes out before a slow read, not after it
         await deliver(ch, frm, Out().text(text), now)
-    if await PW.product_turn(ch, frm, p, st, out, now, early=_early):
+    # Sasha 179 · AUTOMATIC SWITCHING (switching.py): the mode this turn starts in; a product idle 30 min steps aside (kept)
+    from . import switching as SW
+    lead = 1 if heard else 0
+    sw = SW.on(account)
+    pend0 = (st.get("pending") or {}) if sw else {}
+    if pend0.get("kind") == "product":
+        try:
+            if now - datetime.fromisoformat(pend0.get("touched")) > SW.PRODUCT_IDLE:
+                await PW._set_aside(st, ch)
+        except (TypeError, ValueError):
+            pass
+    if pend0.get("kind") == "amb" and not payload.startswith("amb:"):
+        st["pending"] = None
+    mode0 = SW.before(st, now) if sw else None
+    skip_products = False
+    bk = SW.back_to(payload) if sw else None
+    if bk and bk[0] == "p":   # "Back to RelocateMe": its own word resumes it, where it was
+        p = {**p, "Body": PW.START_WORD.get(bk[1], bk[1]), "ButtonPayload": ""}
+        payload = ""
+    elif bk:
+        if (st.get("pending") or {}).get("kind") == "product":
+            await PW._set_aside(st, ch)
+        out.text(f"↩ Back to {SW._short(bk[1])} — what next?")
+        SW.label_first(out.items, {"k": "j", "label": bk[1]})
+        st["history"] = ((st.get("history") or []) + [{"role": "user", "content": body or "back"},
+                                                     {"role": "assistant", "content": out.said()}])[-HISTORY_KEEP:]
+        await STORE.put_state(key, st)
+        await deliver(ch, frm, out, now)
+        return out
+    if sw and payload.startswith("amb:") and (st.get("pending") or {}).get("kind") == "amb":
+        ap, parts = st["pending"], payload.split(":", 3)
+        st["pending"] = None
+        if len(parts) == 4 and parts[1] == ap.get("nonce"):
+            if parts[2] == "s":
+                said = await SW.flights_for(account, parts[3])
+                if said:
+                    body, payload, skip_products = said, "", True
+                    p = {**p, "Body": said, "ButtonPayload": ""}
+            else:
+                body, payload = ap.get("body") or body, ""
+                p = {**p, "Body": body, "ButtonPayload": ""}
+    elif sw and not payload and body:
+        pq = (st.get("pending") or {})
+        amb = await SW.ambiguous(account, body, [w for w, _ in await PW._waiting(ch, now)],
+                                 pq.get("product") if pq.get("kind") == "product" else None)
+        if amb:
+            if pq.get("kind") == "product":
+                await PW._set_aside(st, ch)
+            out.ask(amb[0], amb[1])
+            st["pending"] = {"kind": "amb", "nonce": amb[1][0][1].split(":")[1], "body": body, "at": now.isoformat()}
+            SW.label_first(out.items, mode0)
+            await STORE.put_state(key, st)
+            await deliver(ch, frm, out, now)
+            return out
+    if not skip_products and await PW.product_turn(ch, frm, p, st, out, now, early=_early):
+        if sw:
+            SW.label_first(out.items, SW.announce(out.items, mode0, await SW.after(account, body, st), lead))
         await STORE.put_state(key, st)   # never into Sasha's history: a product's answers (passport facts) aren't hers
         await deliver(ch, frm, out, now)
         return out
@@ -714,6 +770,11 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     offer = await _reminders_offer(ch)
     if offer:
         out.text(offer)
+    try:   # Sasha 179 · the switch line (with Back) and the mode label; never blocks the reply
+        if sw:
+            SW.label_first(out.items, SW.announce(out.items, mode0, await SW.after(account, body, st), lead))
+    except Exception as e:
+        log.warning("[guest_whatsapp] no mode label: %s: %s", type(e).__name__, e)
     st["history"] = (st.get("history") or []) + [{"role": "user", "content": body}] + \
                     ([{"role": "assistant", "content": out.said()}] if out.items else [])
     st["history"] = st["history"][-HISTORY_KEEP:]

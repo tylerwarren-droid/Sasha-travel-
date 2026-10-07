@@ -8,7 +8,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from scripts import flight_suite as F, core_suites as C  # noqa: E402
+from scripts import flight_suite as F, core_suites as C, basket_suite as BS  # noqa: E402
 
 
 async def main() -> int:
@@ -17,8 +17,9 @@ async def main() -> int:
         duffel_fake.install()
     a = await F.main()
     b = await C.main()
-    print(f"\nDEPLOY GATE: {'PASS' if a == 0 and b == 0 else 'FAIL'}")
-    return 1 if (a or b) else 0
+    c = await BS.main()   # Sasha 198 · the trip basket (grows R2 → R10)
+    print(f"\nDEPLOY GATE: {'PASS' if not (a or b or c) else 'FAIL'}")
+    return 1 if (a or b or c) else 0
 
 
 if __name__ == "__main__":

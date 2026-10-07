@@ -109,7 +109,8 @@ async def main() -> int:
         ok(f"W2 voice: “Give me the {al} fight, please, Sasha.” → its read-back", bool(r2.get("flight_pick")), (r2.get("response") or "")[:90])
         r3 = await conduct("Okay. Go ahead. I'm ready to pay.", [], user_id=a, signed_in=True, session_id="suite-w2b-" + uuid.uuid4().hex[:6])
         ok("W2 honesty: “I'm ready to pay” with nothing open never claims a booking",
-           not re.search(r"booked|payment('s)? (has )?gone through|secure payment form", r3.get("response") or "", re.I), (r3.get("response") or "")[:90])
+           not re.search(r"\b(?:is|are|been|all|now|it's|you're|i've|i have|has been|successfully)\s+booked\b|✅ booked|payment('s)? (has )?gone through"
+                         r"|secure payment form", r3.get("response") or "", re.I), (r3.get("response") or "")[:90])   # a claim, not "haven't booked"
 
         # W3 · web, the guided trip (Sasha 196): plan → flights asked about → a pick ADDED (not booked) → "book it, flying from Madrid"
         #      → ONE total with THAT flight → paid → booked

@@ -294,7 +294,8 @@ async def book_case(ch: str, a: str, say, chosen) -> None:
         rows = await BK.by_session(q["session_id"])
         try:
             from scripts import duffel_fake as DF
-            last = list(DF._ORDERS.values())[-1] if DF._ORDERS else {}
+            fl_row = next((x for x in rows if x["kind"] == "flight"), {})
+            last = DF._ORDERS.get(fl_row.get("order_id") or "", {})   # THIS booking's order (other watchers may order meanwhile)
             names = [(x.get("given_name"), x.get("family_name"), x.get("born_on"), x.get("title")) for x in last.get("passengers") or []]
             ok(f"BASKET R7 {ch}: the Duffel order carries the saved travellers, not placeholders",
                names == [("Alex", "Smith", "1985-03-12", "mr"), ("Sam", "Smith", "1987-05-02", "ms")], str(names))

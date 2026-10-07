@@ -22,7 +22,6 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import quote_plus
 
-import httpx
 
 
 DUFFEL_BASE_URL = os.getenv("DUFFEL_BASE_URL", "https://api.duffel.com").rstrip("/")
@@ -42,45 +41,22 @@ def duffel_enabled() -> bool:
     return DUFFEL_ENABLED and bool(DUFFEL_ACCESS_TOKEN)
 
 
-def _headers() -> dict:
-    return {
-        "Accept": "application/json",
-        "Accept-Encoding": "gzip",
-        "Content-Type": "application/json",
-        "Duffel-Version": "v2",
-        "Authorization": f"Bearer {DUFFEL_ACCESS_TOKEN}",
-    }
-
-
 async def _request(method: str, path: str, *, params: Optional[dict] = None,
                    body: Optional[dict] = None):
-    if not DUFFEL_ACCESS_TOKEN:
-        raise DuffelError("DUFFEL_ACCESS_TOKEN is not configured")
+    """Sasha 198 R4 · ONE DUFFEL CLIENT: every Duffel call goes through booking_signer.travel's transport (its TEST-token guard,
+    its headers, the deploy gate's recorded replay). This keeps the old contract: the `data` of a 2xx, else DuffelError."""
+    from booking_signer import travel as T
+    if not T.token():
+        raise DuffelError("DUFFEL_ACCESS_TOKEN is not configured (a duffel_test_ token)")
     try:
-        async with httpx.AsyncClient(base_url=DUFFEL_BASE_URL, timeout=DUFFEL_TIMEOUT_S) as http:
-            response = await http.request(method, path, headers=_headers(), params=params, json=body)
-    except httpx.HTTPError as exc:
-        raise DuffelError(f"Duffel transport error: {exc}") from exc
-
-    if response.status_code >= 400:
-        detail = response.text[:500]
-        try:
-            payload = response.json()
-            errors = payload.get("errors") or []
-            if errors:
-                detail = "; ".join(
-                    str(e.get("message") or e.get("title") or e.get("code") or e)
-                    for e in errors[:3]
-                )
-        except Exception:
-            pass
-        raise DuffelError(f"Duffel {response.status_code}: {detail}")
-
-    try:
-        payload = response.json()
+        status, payload = await T.HTTP(method, path, body, params)
     except Exception as exc:
-        raise DuffelError("Duffel returned non-JSON content") from exc
-    return payload.get("data")
+        raise DuffelError(f"Duffel transport error: {exc}") from exc
+    if status >= 400:
+        errors = (payload or {}).get("errors") or []
+        detail = "; ".join(str(e.get("message") or e.get("title") or e.get("code") or e) for e in errors[:3]) or f"HTTP {status}"
+        raise DuffelError(f"Duffel {status}: {detail}")
+    return (payload or {}).get("data")
 
 
 def _json_object(raw: str) -> Optional[dict]:
@@ -283,7 +259,16 @@ def _normalise_offer(offer: dict, *, origin_query: str, destination_query: str,
         "party_size": party_size,
         "expires_at": offer.get("expires_at"),
         "live_mode": bool(offer.get("live_mode")),
+        "card": _card(offer),   # Sasha 198 R4 · the ONE offer shape (booking_signer.travel.card_of) — booked from as is
     }
+
+
+def _card(offer: dict) -> Optional[dict]:
+    try:
+        from booking_signer.travel import card_of
+        return card_of(offer)
+    except Exception:
+        return None
 
 
 def card_has_live_offer(card: dict, *, safety_seconds: int = 90) -> bool:

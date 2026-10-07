@@ -8,7 +8,7 @@ of days), the number of passengers (price scaled), fresh offer ids and a 30-minu
 replay issued; an order on an issued offer returns a fresh booking reference (never live_mode).
 
 The LIVE Duffel suite is not lost: it runs on a schedule (scripts/live_suite.py) and alerts, but never blocks a deploy.
-`install()` replaces both clients' transports — booking_signer.travel.HTTP and app.services.duffel._request.
+`install()` replaces the one Duffel transport, booking_signer.travel.HTTP (app.services.duffel calls through it since R4).
 """
 from __future__ import annotations
 
@@ -135,14 +135,7 @@ async def replay(method: str, path: str, body=None, params=None):
 def install() -> None:
     from booking_signer import travel as T
     from app.services import duffel as D
-    T.HTTP = replay
+    T.HTTP = replay   # Sasha 198 R4 · the ONE transport: app.services.duffel calls through it too
     T.token = lambda: "duffel_test_replay"
-
-    async def _request(method, path, *, params=None, body=None):
-        s, j = await replay(method, path, body, params)
-        if s >= 400:
-            raise D.DuffelError(f"Duffel {s}: {((j.get('errors') or [{}])[0]).get('message')}")
-        return j.get("data")
-    D._request = _request
     D.DUFFEL_ACCESS_TOKEN = D.DUFFEL_ACCESS_TOKEN or "duffel_test_replay"
     print("DUFFEL: recorded fixtures (scripts/fixtures/duffel, recorded 7 Oct 2026) — no network", flush=True)

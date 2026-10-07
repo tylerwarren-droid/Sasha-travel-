@@ -108,6 +108,47 @@ async def view_cases(a: str) -> None:
         BK.ON = None
 
 
+async def flight_cases(a: str) -> None:
+    """R4 · ONE Duffel client: the guided flow's flights come through the one transport, each option carries the one card shape,
+    and the flights shown are the basket's suggestions for the trip (Magellan)."""
+    import types as _ty
+    from booking_signer import basket as BK, travel as T
+    import booking_signer.account as ACC
+    from app.services.conductor import conduct
+    from app.services import duffel as D
+    seen = []
+    real_http = T.HTTP
+
+    async def spy(method, path, body=None, params=None):
+        seen.append(path.split("?")[0])
+        return await real_http(method, path, body, params)
+    T.HTTP = spy
+    BK.ON = True
+    sid = "basket-r4-" + uuid.uuid4().hex[:6]
+    h = []
+    try:
+        for m in ("plan me 6 days in Vietnam from 12 November for 2 of us", "Alex", "food and culture", "from Madrid", "yes please"):
+            r = await conduct(m, h, user_id=a, signed_in=True, session_id=sid)
+            h = r.get("messages") or h
+        card = next((b for b in r.get("bookings") or [] if b.get("trip_pick")), None)
+        opts = (card or {}).get("options") or []
+        ok("BASKET R4-1: one Duffel client — the conversation's search went through the one transport",
+           "/air/offer_requests" in seen and D._request.__doc__ and "ONE DUFFEL CLIENT" in D._request.__doc__, str(seen[:6]))
+        ok("BASKET R4-2: every option carries the ONE card shape (id, owner, flights, from/to, departs, amount)",
+           bool(opts) and all((o.get("card") or {}).get("id") == o.get("provider_offer_id") and (o.get("card") or {}).get("flights") for o in opts),
+           str([(o.get("name"), (o.get("card") or {}).get("flights")) for o in opts][:4]))
+        from booking_signer import plan_store as PS
+        p = await PS.latest(a)
+        sk = {r["slice_key"] for r in await BK.items(a, p["trip_id"]) if r["id"] in {o.get("basket_item_id") for o in opts}} if p else set()
+        fl = [r for r in await BK.items(a, p["trip_id"]) if r["kind"] == "flight" and r["slice_key"] in sk] if p else []   # this search's slice
+        ok("BASKET R4-3 (Magellan): the flights shown are the trip's suggested flights, one row each, linked by id",
+           len(fl) == len(opts) and all(r["state"] == "suggested" and r["price_source"] == "quoted" for r in fl)
+           and {o.get("basket_item_id") for o in opts} == {r["id"] for r in fl}, f"{len(fl)} rows, {len(opts)} options")
+    finally:
+        T.HTTP = real_http
+        BK.ON = None
+
+
 async def main() -> int:
     if os.getenv("SASHA_FLIGHT_SUITE", "") == "skip":
         print("basket suite SKIPPED (SASHA_FLIGHT_SUITE=skip) — this deploy is not covered")
@@ -130,6 +171,7 @@ async def main() -> int:
             return 1
         await store_cases(a, other, trip)
         await view_cases(a)
+        await flight_cases(a)
     except Exception as e:
         ok("the basket suite itself", False, f"{type(e).__name__}: {e}")
     finally:

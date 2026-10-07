@@ -1937,6 +1937,20 @@ async def conduct(
             if not _opts:
                 return _say196("I couldn't find flights for those dates just now — shall I try another day?")
             _card = {**_card, "options": (_fit or _opts)[:4], "trip_pick": True}
+            from booking_signer import basket as _bk198
+            if _bk198.on() and _p and _p.get("trip_id"):   # Sasha 198 R4 · the flights shown are the basket's suggestions (Magellan)
+                try:
+                    _sk = f"{_org}→{_city} {(_card.get('departure_date') or '')}"
+                    _ids = await _bk198.suggest(user_id, _p["trip_id"], "flight", [{
+                        "provider": "duffel", "provider_ref": o.get("provider_offer_id"), "slice_key": _sk,
+                        "offer_request_id": _card.get("_duffel_offer_request_id"), "day": (_card.get("departure_date") or None),
+                        "party": _party, "expires_at": o.get("expires_at"), "price_amount": float(o.get("provider_amount") or 0) or None,
+                        "price_currency": o.get("currency") or None, "price_source": "quoted",
+                        "snapshot": {**(o.get("card") or {}), "name": o.get("name"), "detail": o.get("detail"), "dep": o.get("dep")}}
+                        for o in _card["options"]], slice_key=_sk)
+                    _card = {**_card, "options": [{**o, "basket_item_id": i} for o, i in zip(_card["options"], _ids)]}
+                except Exception as _e:
+                    print(f"[Conductor] Sasha 198 flights not put in the basket: {type(_e).__name__}: {_e}")
             return _say196(("Here are the flights that fit — which would you like?" if _fit else
                             "Nothing fits exactly — here's what there is. Which would you like?"), bookings=[_card])
         except Exception as _e:

@@ -56,6 +56,7 @@ PLATFORMS = {
     "covermanager": "CoverManager", "sevenrooms": "SevenRooms", "resy.com": "Resy", "quandoo": "Quandoo",
     "tablein": "Tablein", "bookatable": "Bookatable", "resdiary": "ResDiary", "zenchef": "Zenchef",
     "guestonline": "Guestonline", "restoo": "Restoo", "booksy": "Booksy", "fresha": "Fresha",
+    "restaurantic": "Restaurantic",   # Sasha 187 · Casa Alberto (Huertas 18) embeds its Restaurantic booking on its own page
     # Sasha 138 · HOTEL booking engines — recognised from the link or widget on the hotel's OWN site; like every platform here,
     # their pages are never fetched (the guest opens them, with one tap)
     "direct-book.com": "SiteMinder", "book-directonline.com": "SiteMinder", "thebookingbutton": "SiteMinder",
@@ -251,6 +252,9 @@ def facts_from_html(html: str, url: str, country: Optional[str], fetched_at: str
             plat = platform_of(u.geturl()) if u.hostname else None
             if plat:
                 add("platform", plat, f'<a href="{h}">{text}</a>', {"link": u.geturl()})
+    if any(re.search(r"recaptcha/api\.js|hcaptcha\.com|challenges\.cloudflare\.com/turnstile", src or "", re.I) for src in p.srcs):
+        # Sasha 187 · the page asks the guest to prove they're human (read from its own page's scripts)
+        add("challenge", "captcha", next(src for src in p.srcs if re.search(r"captcha|turnstile", src or "", re.I))[:200])
     for src in p.srcs:
         plat = platform_of(urljoin(url, src))
         if plat:
@@ -396,7 +400,23 @@ async def read_site(http: Http, url: str, country: Optional[str], now: datetime,
                         "sha256": hashlib.sha256(html.encode("utf-8", "replace")).hexdigest(), "fetched_at": now.isoformat()})
         if r.status_code != 200:
             continue
-        facts += [f for f in facts_from_html(html, final, country, now.isoformat()) if (f.kind, f.value) not in {(x.kind, x.value) for x in facts}]
+        for f in facts_from_html(html, final, country, now.isoformat()):
+            f0 = next((x for x in facts if (x.kind, x.value) == (f.kind, f.value)), None)
+            if f0 is None:
+                facts.append(f)
+            elif f.kind == "platform" and f.detail:
+                # Sasha 187 · a later page's links and embeds to the SAME platform are kept (Casa Alberto: the home page's footer
+                # credit "restaurantic.es", its booking embed on /reservar-casa-alberto — the embed was dropped)
+                for k, v in list(f.detail.items()):
+                    vals = v if isinstance(v, list) else [v]
+                    key = k if k.endswith("s") else k + "s"
+                    f0.detail.setdefault(key, [f0.detail.get(key[:-1])] if f0.detail.get(key[:-1]) else [])
+                    for one in vals:
+                        if one and one not in f0.detail[key]:
+                            f0.detail[key].append(one)
+                    f0.detail.setdefault("pages", [])
+                    if final not in f0.detail["pages"]:
+                        f0.detail["pages"].append(final)
         if page == url:
             queue += contact_links(html, final)
     return facts, sources

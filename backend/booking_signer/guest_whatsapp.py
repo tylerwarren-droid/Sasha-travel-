@@ -1520,7 +1520,7 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
                 f = {**f, "open_at": HO.restaurant_time(f["bare_time"])}
         await _picked_card(ctx, {"find": {**f, "where": f.get("where") or city_of(c.get("address")) or "the city"},
                                  "draft": parts},
-                           {"place_id": c["place_id"], "name": c.get("name"), "country": c.get("country")})
+                           {"place_id": c["place_id"], "name": c.get("name"), "country": c.get("country"), "type": c.get("type")})
         return
     cands = {c["place_id"]: c for c in j.get("candidates") or []}
     ranking = j.get("ranking") or {}
@@ -1530,6 +1530,10 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
     if luxe:   # Sasha 104 · "luxury": Google's €€€ and €€€€ first, best rated within; the rest after, never dropped
         order = sorted(order, key=lambda pid: not ((cands.get(pid) or {}).get("price_level") or 0) >= 3)
     shown = [cands[i] for i in order if i in cands][:3]
+    if j.get("note"):   # Sasha 187 · said in one line: online-only, looked further, or none online
+        out.text(j["note"])
+    if not shown and j.get("note"):
+        return
     if not shown and j.get("no_match"):   # Sasha 186 · the cuisine is honoured: never another kind of place in its place
         out.text(f"I found no {j['no_match'].title()} places in {f.get('where')} — Google's results there weren't {j['no_match'].title()}. "
                  f"Shall I widen it (say “restaurants in {f.get('where')}”) or try another area?")
@@ -2285,7 +2289,9 @@ async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
     else:
         status, read = await api(account, "POST", "/api/booking/venues/read",
                                  {"name": card.get("name") or f.get("what"), "city": f.get("where"), "country": card.get("country") or f.get("country"),
-                                  "place_id": card["place_id"], "asked_for": f.get("what")})
+                                  "place_id": card["place_id"],
+                                  # Sasha 187 · the listing's type rides along ("Spanish Restaurant"): a restaurant named by its name is real
+                                  "asked_for": " ".join(x for x in (f.get("what"), card.get("type")) if x)[:200]})
     if status != 200:
         ctx["st"]["pending"] = None
         out.text(f"I couldn't read how {card.get('name') or 'they'} take bookings — {refusal_words(read, status)}.")
@@ -2360,7 +2366,15 @@ def _hours_of(read: dict, now) -> dict:
 
 
 def route_line_of(rd: dict, dv) -> str:
-    """Sasha 161 · the decision's one plain line for this venue (decide.line)."""
+    """Sasha 161 · the decision's one plain line for this venue (decide.line). Sasha 187 · a page that asks the guest to prove
+    they're human says so."""
+    line = _route_line(rd, dv)
+    if dv.route == "one_tap" and any(f.get("kind") == "challenge" for f in rd.get("facts") or []):
+        line = line.replace("— tap, then book.", "— tap, then book.") + " Their page asks you to prove you're human — I've sent it to your phone."
+    return line
+
+
+def _route_line(rd: dict, dv) -> str:
     from . import decide as D
     rungs = rd.get("rungs") or {}
     link = (rungs.get("link") or {}).get("value") or ""
@@ -2375,7 +2389,7 @@ def plain_venue(name: Optional[str]) -> str:
     return (name or "").replace(" (TEST stand-in)", "")
 
 
-def decision_of(rd: dict, prefer: Optional[str] = None, at: Optional[str] = None, now=None):
+def decision_of(rd: dict, prefer: Optional[str] = None, at: Optional[str] = None, now=None, account: Optional[str] = None):
     """Sasha 130 · the read, as the decision workflow sees it. Sasha 131 · `at` (the booking's local time) makes it urgent."""
     from . import calls as C, decide as D, venue_read as V
     rungs = rd.get("rungs") or {}
@@ -2390,9 +2404,17 @@ def decision_of(rd: dict, prefer: Optional[str] = None, at: Optional[str] = None
             hours = None
     link = (rungs.get("link") or {}).get("value") or ""   # the link rung's value is the platform's NAME ("CoverManager")
     name = (V.platform_of(link) if link.startswith("http") else link) or "an online booking platform"
-    return D.decide(D.Venue(form="form" in rungs, platform=name if "link" in rungs else None,
+    demo = bool(account and _founder_demo(account))
+    if demo and "form" in rungs and "link" not in rungs and prefer != "form":
+        # Sasha 187 · the founder's restaurants: their own booking page opens on HIS phone (the 175 flow) — never filled by Sasha
+        return D.decide(D.Venue(form=False, platform="their own booking page", phone="phone" in rungs, email="email" in rungs,
+                                open_now=rd.get("open_now"), opens_at=rd.get("opens_at"), scripted=lang in C.LANGUAGES,
+                                language_label=C.LANGUAGE_NAMES.get(lang, ""), calls_on=(prefer == "call"), hours_until=hours), prefer)
+    return D.decide(D.Venue(form="form" in rungs and not (demo and "link" in rungs), platform=name if "link" in rungs else None,
                             phone="phone" in rungs, email="email" in rungs, open_now=rd.get("open_now"), opens_at=rd.get("opens_at"),
-                            scripted=lang in C.LANGUAGES, calls_on=True, language_label=C.LANGUAGE_NAMES.get(lang, ""),
+                            scripted=lang in C.LANGUAGES, language_label=C.LANGUAGE_NAMES.get(lang, ""),
+                            # Sasha 187 · NO CALLS on the founder's demo account unless he says "call them" (never chosen for him)
+                            calls_on=(prefer == "call") or not (account and _founder_demo(account)),
                             hours_until=hours), prefer)
 
 
@@ -2469,14 +2491,17 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
     rungs = rd["rungs"]
     why = None
     # Sasha 130 · THE DECISION (decide.py): the route, and its reason said to the guest first; the others in order after it
-    dv = decision_of(rd, pend.get("prefer"), (reservation.get("when") or {}).get("at"), ctx["now"])
+    dv = decision_of(rd, pend.get("prefer"), (reservation.get("when") or {}).get("at"), ctx["now"], ctx.get("account"))
     combo = (st.get("combo") or {}).get("stage") == "restaurant"
     order = [r for r in [dv.route] + dv.alternatives if r] if not combo else ["form"]
     log.info("[guest_whatsapp] route %s: %s", dv.route, dv.reason)   # Sasha 158 · the reasoning is the ops console's
     if not combo:   # Sasha 161 · the route in ONE plain line, asked once (the read-back stays in the record and the logs)
         ctx["route_line"] = route_line_of(rd, dv) if not d.get("nights") else None   # a hotel room keeps its own request sentence
     if dv.route == "one_tap" and not combo:   # their page is sent next (no yes card): the line goes first, on its own
-        out.text(route_line_of(rd, dv))
+        if not _founder_demo(ctx.get("account")):
+            out.text(route_line_of(rd, dv))
+        elif any(f.get("kind") == "challenge" for f in rd.get("facts") or []):   # Sasha 187 · the 175 flow: one message (+ the CAPTCHA beat)
+            out.text("Their page asks you to prove you're human — I've sent it to your phone.")
     if not dv.route and not combo:
         ctx["route_line"] = route_line_of(rd, dv)
         st["pending"] = None
@@ -2520,9 +2545,10 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
             out.text(f"I can't book {rd['venue']} together with the spa from here (no form I may send{', and calls are off' if 'phone' in rungs else ''}). "
                      f"Nothing was sent. Pick a place I can book by its form, or ask for each one separately.")
             return
-        if route == "one_tap" and "link" in rungs and reservation["when"]["mode"] == "at":
+        if route == "one_tap" and ("link" in rungs or ("form" in rungs and _founder_demo(ctx.get("account")))) \
+                and reservation["when"]["mode"] == "at":   # Sasha 187 · or their own booking page, on the founder's phone
             from . import proactive as PR
-            plan = dv.then if dv.route == "one_tap" and PR.tap_escalation_on() else None
+            plan = dv.then if dv.route == "one_tap" and PR.tap_escalation_on() and not _founder_demo(ctx.get("account")) else None
             if plan:   # Sasha 132 · ONE yes covers the plan: asked first, then the page
                 lines = [f"I'll send you {rd['venue']}'s booking page on {dv_platform(rd)} — you press their confirm button; I can't press it for you.",
                          plan]

@@ -14,6 +14,7 @@ never a booking platform); an email is capped at SASHA_EMAILS_PER_DAY (default 5
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -107,17 +108,17 @@ def _read_view(row: dict, read: Optional[dict] = None) -> dict:
     name = ((read.get("listing") or {}).get("name") or read["name"])
     return {"read_id": row["read_id"], "venue": name, "country": read.get("country"), "listing": read.get("listing"),
             "facts": [{k: f[k] for k in ("kind", "value", "source_label", "source_url", "snippet", "fetched_at")} for f in read["facts"]],
-            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"], "plan": _plan_for({**read, "name": name}, chosen["rungs"]),
+            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"], "plan": _plan_for({**read, "name": name}, chosen["rungs"], row.get("account_id")),
             **({"listing_reread": read["listing_reread"]} if read.get("listing_reread") else {})}
 
 
-def _plan_for(read: dict, rungs: list) -> dict:
+def _plan_for(read: dict, rungs: list, account: Optional[str] = None) -> dict:
     """Sasha 161 · the route Sasha takes and its ONE plain line — the same decision and words as WhatsApp (decide.py)."""
     from . import guest_whatsapp as GW
     try:
-        rd = {"venue": read.get("name"), "country": read.get("country"),
+        rd = {"venue": read.get("name"), "country": read.get("country"), "facts": read.get("facts") or [],
               "rungs": {r["rung"]: {"value": r.get("value")} for r in rungs if r.get("available")}, **GW._hours_of(read, NOW())}
-        dv = GW.decision_of(rd, None, None, NOW())
+        dv = GW.decision_of(rd, None, None, NOW(), account)
         return {"route": dv.route, "line": GW.route_line_of(rd, dv)}
     except Exception as e:   # never a failed read for want of a sentence
         log.info("[ladder_routes] no plan: %s", type(e).__name__)
@@ -242,6 +243,58 @@ def _with_rehearsal(account: str, out: dict) -> dict:
     return {**out, "candidates": list(out.get("candidates") or []) + [card], "ranking": rk}
 
 
+async def _online_route(account: str, c: dict, body: dict) -> Optional[str]:
+    """Sasha 187 · how this venue takes bookings ONLINE (its platform's name, or "their own booking page"), read from its own
+    site — the same read a pick makes, stored so the pick reuses it. None: phone/email only (never shown to the founder)."""
+    now = NOW()
+    read = None
+    try:
+        if hasattr(LADDER_STORE, "recent_read") and read_reuse_hours() > 0:
+            row = await LADDER_STORE.recent_read(account, str(c["place_id"]), now - timedelta(hours=read_reuse_hours()))
+            read = (row or {}).get("read")
+        if read is None:
+            r = await V.read_venue(HTTP, name=c.get("name"), city=body.get("where"), country=c.get("country") or body.get("country"),
+                                   website=None, now=now, resolve=RESOLVE, place_id=c["place_id"], asked_for=str(body.get("what") or ""))
+            read = r.to_json()
+            await LADDER_STORE.put_read({"read_id": str(uuid.uuid4()), "account_id": account,
+                                         "query": {"city": body.get("where"), "country": c.get("country") or body.get("country"),
+                                                   "website": None, "place_id": c["place_id"], "asked_for": body.get("what")},
+                                         "venue_name": read.get("name"), "country": read.get("country"), "read": PT.storable_read(read),
+                                         "created_at": now})
+    except Exception as e:
+        log.info("[ladder_routes] online check failed for %s: %s", c.get("name"), type(e).__name__)
+        return None
+    rungs = {x["rung"] for x in L.choose(read, account=account)["rungs"] if x.get("available")}
+    if "link" in rungs:
+        page = SL.platform_page(read)
+        return page[0] if page else "online booking"
+    if "form" in rungs:
+        return "their own booking page"
+    return None
+
+
+async def _online_only(account: str, out: dict, body: dict) -> dict:
+    """Only the venues he can book online; fewer than three among the best → further down the list, said in one line."""
+    cands = [c for c in out.get("candidates") or [] if c.get("place_id") != REHEARSAL_ID]
+    order = ((out.get("ranking") or {}).get("orders") or {}).get((out.get("ranking") or {}).get("default") or "rated") or [c["place_id"] for c in cands]
+    by = {c["place_id"]: c for c in cands}
+    ranked = [by[i] for i in order if i in by] + [c for c in cands if c["place_id"] not in order]
+    kept, note = [], None
+    for chunk in (ranked[:8], ranked[8:16]):
+        if len(kept) >= 3 or not chunk:
+            break
+        if chunk is not ranked[:8]:
+            note = "Fewer than 3 of the best-rated book online, so I looked further down the list — these all book online."
+        got = await asyncio.gather(*(_online_route(account, c, body) for c in chunk))
+        kept += [{**c, "online": g} for c, g in zip(chunk, got) if g]
+    ids = [c["place_id"] for c in kept]
+    rk = dict(out.get("ranking") or {})
+    rk["orders"] = {k: [i for i in v if i in ids] for k, v in (rk.get("orders") or {}).items()}
+    if not kept:
+        note = "None of these book online — I can widen the search (say “restaurants nearby”), or call one if you say “call them”."
+    return {**out, "candidates": kept, "ranking": rk, **({"note": note} if note else {})}
+
+
 @router.post("/venues/find")
 async def find_venues(request: Request):
     """S-65 · "Find venues": {what, where, country?} → up to twenty Google listings (S-68), not stored. Search only — nothing is contacted."""
@@ -271,6 +324,8 @@ async def find_venues(request: Request):
             return out
         await _with_google_photos(out)
         out = _rehearse(account_for(request), out)
+        if standin(account_for(request)) and (out.get("cuisine") or is_restaurant(body.get("what"))):
+            out = await _online_only(account_for(request), out, body)   # Sasha 187 · only restaurants he can book ONLINE
         _FIND_CACHE[ckey] = (NOW().timestamp(), out)
         if len(_FIND_CACHE) > 300:
             _FIND_CACHE.pop(next(iter(_FIND_CACHE)))
@@ -801,7 +856,14 @@ async def prepare_link(request: Request):
     try:
         p = C.parse_call_particulars(body)
         nights = body.get("nights") if isinstance(body.get("nights"), int) and 1 <= body.get("nights") <= 30 else None
-        link = SL.build_hotel(read, p.on, nights, p.party) if nights else SL.build(read, p.on, p.at, p.party)   # Sasha 138 · a stay
+        try:
+            link = SL.build_hotel(read, p.on, nights, p.party) if nights else SL.build(read, p.on, p.at, p.party)   # Sasha 138 · a stay
+        except SL.LinkRefused:
+            # Sasha 187 · the founder's restaurants: no platform, but their OWN booking page (where the form is) opens on his phone
+            form = next((f for f in read.get("facts") or [] if f.get("kind") == "booking_form" and str(f.get("source_url") or "").startswith("https://")), None)
+            if nights or not form or not standin(account) or any(f.get("kind") == "platform" for f in read.get("facts") or []):
+                raise   # a platform they use but don't link stays refused (never their form page in its place)
+            link = SL.SlotLink("their own booking page", form["source_url"], False, f"{form.get('source_label')} (their own booking page)")
     except (C.CallRefused, SL.LinkRefused) as e:
         return _refuse(422, e.rule, str(e))
     link_id = str(uuid.uuid4())

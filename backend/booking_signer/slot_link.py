@@ -126,6 +126,13 @@ def platform_page(read: dict) -> Optional[tuple]:
                 return f["value"], link, f["source_label"]
         # Sasha 138 · a hotel engine only EMBEDDED (a widget on the hotel's own page, e.g. Mews): the one-tap page is the hotel's
         # own page that carries it — never a guessed engine URL
+        # Sasha 187 · a RESTAURANT whose platform is only embedded on its own booking page (Casa Alberto: Restaurantic inside
+        # /reservar-casa-alberto): the one-tap page is that page of theirs — never the platform's widget URL
+        emb = [l for l, how in _candidates(f) if how == "embed" and platform_of(l) == f["value"] and not urlsplit(l).path.endswith((".js", ".css"))]
+        pages = [p for p in (((f.get("detail") or {}).get("pages") or []) + [f.get("source_url")]) if str(p or "").startswith("https://")]
+        page = next((p for p in pages if re.search(r"reserv|book", urlsplit(p).path or "", re.I)), None)
+        if not hotel and emb and page:   # only a page of theirs MADE for booking (never their home page with a widget)
+            return f["value"], page, f"{f['source_label']} (booking through {f['value']} on their own page)"
         if hotel and any(how == "embed" for _l, how in _candidates(f)) and str(f.get("source_url") or "").startswith("https://"):
             u = urlsplit(f["source_url"])   # their page, without Google's tracking parameters
             clean = urlunsplit((u.scheme, u.netloc, u.path, urlencode([(k, v) for k, v in parse_qsl(u.query) if not k.startswith("utm_")]), ""))

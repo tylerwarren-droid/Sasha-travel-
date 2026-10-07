@@ -210,7 +210,7 @@ export default function ChatBooking({ find }: { find: Find }) {
     setState({ phase: 'reading', cards, pick: c })
     try {
       // Sasha 64 · stored by place_id with the guest's own words ("asked_for"); the listing's name is shown, never stored
-      const r = await readVenue({ name: c.name ?? find.what, city: find.where || cityOf(c.address) || 'unknown', country: c.country ?? find.country, place_id: c.place_id, asked_for: find.what })
+      const r = await readVenue({ name: c.name ?? find.what, city: find.where || cityOf(c.address) || 'unknown', country: c.country ?? find.country, place_id: c.place_id, asked_for: [find.what, (c as { type?: string }).type].filter(Boolean).join(' ') })   // Sasha 187 · its type rides along
       if (r.status === 401) { setState({ phase: 'founder_only' }); return }
       if (!r.ok) { setState({ phase: 'read_refused', cards, words: refusal(r.json, r.status) }); return }
       setState({ phase: 'read', cards, pick: c, read: r.json as unknown as Read })

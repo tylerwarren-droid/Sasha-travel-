@@ -463,6 +463,10 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
     link is retired; any kind of place, anywhere, is found the same way, and nothing is contacted by finding it."""
     said = message
     message = spoken(message)
+    # Sasha 187 · a venue NAMED bare, with when/how many: "Casa Alberto tonight for 2" is "book Casa Alberto tonight for 2"
+    m_bare = re.match(r"^\s*((?:[A-ZÁÉÍÓÚÑ][\w'’&.-]*\s+){1,4}?)(?=(?:tonight|today|tomorrow|this evening|on\s+\w+|for\s+\d|at\s+\d)\b)", message or "")
+    if m_bare and not re.match(r"(?i)^\s*(?:book|reserve|a|an|the|my|dinner|lunch|table|cancel|show|what|when|where|plan|find|i|we|in|on|at|near|by|from|en|para|yes|no|ok)\b", message):
+        message = said = "book " + message.strip()
     c = cancel_request(said) or cancel_request(message)   # Sasha 104 · the guest's own words first ("cancela la reserva en X")
     if c is not None:
         response = f"Let me find your booking at {c['venue']} — I'll ask you once before I cancel anything."

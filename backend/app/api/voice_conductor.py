@@ -16,6 +16,26 @@ from app.services.deepgram_service import DEEPGRAM_API_BASE   # Sasha 150 · the
 DEEPGRAM_TTS_URL = f"{DEEPGRAM_API_BASE}/v1/speak"
 
 
+_PROJECT: dict = {}
+
+
+async def _deepgram_project() -> str:
+    """Sasha 192 · the key's own project, asked of Deepgram once (DEEPGRAM_PROJECT_ID was never set on Railway, so this route
+    answered 501 and the browser's voice fell back). DEEPGRAM_PROJECT_ID still wins when set."""
+    if DEEPGRAM_PROJECT_ID:
+        return DEEPGRAM_PROJECT_ID
+    if _PROJECT.get("id"):
+        return _PROJECT["id"]
+    async with httpx.AsyncClient(timeout=8.0) as http:
+        r = await http.get("https://api.deepgram.com/v1/projects", headers={"Authorization": f"Token {DEEPGRAM_API_KEY}"})
+    if r.status_code != 200:
+        print(f"[voice] deepgram projects: HTTP {r.status_code}")
+        return ""
+    projects = (r.json() or {}).get("projects") or []
+    _PROJECT["id"] = (projects[0] or {}).get("project_id", "") if projects else ""
+    return _PROJECT["id"]
+
+
 @router.post("/voice/deepgram-key")
 async def deepgram_ephemeral_key():
     """Mint a short-lived, scoped Deepgram key for browser STT.
@@ -28,12 +48,15 @@ async def deepgram_ephemeral_key():
     Returns 501 when the proxy isn't configured (no master key / project id) so the client
     can transparently fall back to the public env key for local development.
     """
-    if not DEEPGRAM_API_KEY or not DEEPGRAM_PROJECT_ID:
+    if not DEEPGRAM_API_KEY:
         raise HTTPException(status_code=501, detail="deepgram key proxy not configured")
     try:
+        project = await _deepgram_project()
+        if not project:
+            raise HTTPException(status_code=502, detail="deepgram project not found for the key")
         async with httpx.AsyncClient(timeout=8.0) as http:
             r = await http.post(
-                f"https://api.deepgram.com/v1/projects/{DEEPGRAM_PROJECT_ID}/keys",
+                f"https://api.deepgram.com/v1/projects/{project}/keys",
                 headers={
                     "Authorization": f"Token {DEEPGRAM_API_KEY}",
                     "Content-Type": "application/json",

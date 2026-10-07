@@ -213,6 +213,11 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
   // Start gated — worklet runs immediately but audio is suppressed until first AVATAR_SPEAK_ENDED
   const micGatedRef = useRef(true)
   const gateOpenedAtRef = useRef(0)  // when the mic last opened — bounds the echo window
+  // Sasha 192 · THE WATCHDOG: listening never dies silently (live 7 Oct: 3 minutes deaf after Sasha's question)
+  const heardAtRef = useRef(0)        // when speech started with no transcript yet
+  const lastAliveRef = useRef(0)      // last transcript, or (re)connection
+  const gatedSinceRef = useRef(0)     // when the mic was last closed for Sasha speaking
+  const [notCaught, setNotCaught] = useState(false)
   const loudFramesRef = useRef(0)
   const keepAliveIntervalRef = useRef<any>(null)
   // Deepgram auto-reconnect state. The mic stream stays alive across reconnects; only
@@ -264,6 +269,8 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
     onSetGate?.((value) => {
       console.log('[GATE] set to', value)
       micGatedRef.current = value
+      gatedSinceRef.current = value ? Date.now() : 0
+      heardAtRef.current = 0
       if (!value) {
         gateOpenedAtRef.current = Date.now()  // start the echo window
         transcriptRef.current = ''
@@ -426,7 +433,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         setIsConnecting(false)
         setIsConnected(true)
         onConnectedChangeRef.current?.(true)
-        connectedRef.current = true
+        connectedRef.current = true; lastAliveRef.current = Date.now()   // Sasha 192
         dgReconnectAttemptsRef.current = 0   // healthy connection — reset backoff
 
         // KeepAlive runs for the lifetime of the session — not gated, always on
@@ -499,6 +506,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         try {
           const data = JSON.parse(event.data)
           if (data.type === 'SpeechStarted') {
+            if (!heardAtRef.current) heardAtRef.current = Date.now()   // Sasha 192 · the watchdog's clock
             clearTimeout(pendingFire)   // guest resumed — this turn isn't over
             setIsSpeaking(true)
             onSpeakingChangeRef.current?.(true)
@@ -528,6 +536,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
             lastFinal = final
             lastFinalAt = Date.now()
             if (isEcho(final)) return
+            heardAtRef.current = 0; lastAliveRef.current = Date.now(); setNotCaught(false)   // Sasha 192 · heard: the watchdog rests
             onTranscriptRef.current?.(final)
           }
 
@@ -620,6 +629,32 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       else reportMicError(err.message || 'Could not access microphone')
     }
   }, [])  // stable — all dynamic props are read via refs above
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (manualStopRef.current || !readyToListenRef.current || mutedRef.current) return
+      const now = Date.now()
+      // 1 · Sasha finished but the mic stayed closed (her "finished" never came): re-arm it
+      if (micGatedRef.current && gatedSinceRef.current && now - gatedSinceRef.current > 45000) {
+        console.warn('[WATCHDOG] mic closed 45 s — re-arming')
+        micGatedRef.current = false; gatedSinceRef.current = 0; gateOpenedAtRef.current = now
+      }
+      // 2 · speech heard, no transcript within 8 s: the stream is stuck — restart it and say so
+      if (!micGatedRef.current && heardAtRef.current && now - heardAtRef.current > 8000) {
+        console.warn('[WATCHDOG] speech with no transcript for 8 s — restarting the stream')
+        heardAtRef.current = 0
+        setNotCaught(true); setTimeout(() => setNotCaught(false), 6000)
+        try { wsRef.current?.close() } catch { /* onclose reconnects */ }
+      }
+      // 3 · not connected and not connecting while we should be listening: connect
+      if (!connectedRef.current && !wsRef.current && now - lastAliveRef.current > 5000) {
+        console.warn('[WATCHDOG] not listening — reconnecting')
+        lastAliveRef.current = now
+        connect()
+      }
+    }, 2000)
+    return () => clearInterval(t)
+  }, [connect])
 
   const toggleListening = () => {
     if (connectedRef.current) { stopAll(); return }
@@ -714,7 +749,8 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       </button>
       {micError && <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>}
       {muted && <p className="text-xs text-red-400/80 text-center">Not listening</p>}
-      {!muted && isConnected && !isSpeaking && <p className="text-xs text-white/30 text-center">Ready</p>}
+      {notCaught && <p className="text-xs text-amber-300 text-center">I didn&rsquo;t catch that — say it again</p>}
+      {!muted && isConnected && !isSpeaking && !notCaught && <p className="text-xs text-white/60 text-center">{micGatedRef.current ? 'Sasha is speaking…' : 'Listening…'}</p>}
       {!muted && isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
       {/* The mic picker is deliberately NOT rendered here. It is published upward via
           onMicDevices and drawn by the page as a pill beside the camera toggle, where the rest

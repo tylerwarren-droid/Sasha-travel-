@@ -2014,8 +2014,8 @@ async def conduct(
                         await _bk198c.choose(user_id, _row198["id"])
                     except _bk198c.BasketError as _be:
                         _say = f"I couldn't add that flight — {_be}. Which one would you like?"
-                elif _pl:
-                    await _ps196b.choose_flight(user_id, _pl["trip_id"], {k: _o.get(k) for k in ("name", "detail", "price", "provider_offer_id", "dep", "provider_amount", "currency")})
+                else:   # never a claim without the row (R10: plan.chosen_flight is gone)
+                    _say = "I couldn't add that flight just now — shall I show the flights again?"
                 return {"response": _say, "intents": ["itinerary"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
                         "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
                         "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}

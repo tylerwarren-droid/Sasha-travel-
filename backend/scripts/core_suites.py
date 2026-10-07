@@ -146,8 +146,11 @@ async def guided(a: str, conduct) -> None:
     ok("GUIDED 6: “Done — I've added the … flight to your itinerary.” + anything else?",
        f"Done — I've added the {name} flight to your itinerary." in _said(r) and "anything else you'd like me to add" in _said(r), _said(r)[:140])
     p = await PS.latest(a)
-    ok("GUIDED 6: the flight is ON the itinerary, not booked", ((p or {}).get("plan") or {}).get("chosen_flight", {}).get("name") == name
-       and not any("Flight" in str(x.get("venue")) for x in await IQ._rows(a)), "")
+    from booking_signer import basket as BK   # Sasha 198 R10 · the pick is the basket's chosen flight
+    _ch = [x for x in await BK.items(a, p["trip_id"], ("chosen",)) if x["kind"] == "flight"] if p else []
+    ok("GUIDED 6: the flight is ON the itinerary (the basket's one chosen flight), not booked",
+       len(_ch) == 1 and (_ch[0]["snapshot"].get("owner") == name or _ch[0]["snapshot"].get("name") == name)
+       and not any("Flight" in str(x.get("venue")) for x in await IQ._rows(a)), str([x["snapshot"].get("owner") for x in _ch]))
     real = GW.rehearsal
     GW.rehearsal = lambda acct: True
     try:
@@ -177,6 +180,9 @@ async def guided(a: str, conduct) -> None:
     r = await say("change the hotel in Hoi An to something on the beach")
     ok("GUIDED 9: the hotel swapped, then “Anything else?”", "Hoi An is now" in _said(r) and _said(r).rstrip().endswith("Anything else?"), _said(r)[:120])
     r = await say("no, book it")
+    from booking_signer import passengers as PX   # Sasha 198 R7 · the travellers, asked once before the first total
+    ok("GUIDED 9b: the first “book it” asks the travellers' details once", PX.MARK in _said(r), _said(r)[:100])
+    r = await say("Alex Smith, Mr, 12 March 1985; Sam Smith, Ms, 2 May 1987")
     ok(f"GUIDED 10: ONE total for the hotels and the {name} flight — “Shall I book it?” (no flights offered again)",
        bool(r.get("trip_book")) and f"the {name} flight" in _said(r) and "Shall I book it?" in _said(r) and not r.get("bookings"), _said(r)[:140])
     real_acc = ACC.account_for

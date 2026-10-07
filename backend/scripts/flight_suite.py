@@ -133,6 +133,10 @@ async def main() -> int:
         ok(f"W3 plan: “Can I book the {al} flight, please?” → added to the itinerary (not booked yet)",
            f"I've added the {al} flight to your itinerary" in (rp.get("response") or ""), (rp.get("response") or "")[:110])
         rb = await conduct("book it, flying from Madrid", h, user_id=a, signed_in=True, session_id=sid)
+        from booking_signer import passengers as PX   # Sasha 198 R7 · the travellers, asked once before the first total
+        ok("W3 plan: the first “book it” asks the travellers' details once", PX.MARK in (rb.get("response") or ""), (rb.get("response") or "")[:90])
+        rb = await conduct("Alex Smith, Mr, 12 March 1985; Sam Smith, Ms, 2 May 1987", rb.get("messages") or h, user_id=a, signed_in=True,
+                           session_id=sid)
         ok(f"W3 plan: “book it, flying from Madrid” → ONE total with the {al} flight",
            bool(rb.get("trip_book")) and f"the {al} flight" in (rb.get("response") or ""), (rb.get("response") or "")[:120])
         if rb.get("trip_book"):

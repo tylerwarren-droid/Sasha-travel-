@@ -281,7 +281,7 @@ async def book_case(ch: str, a: str, say, chosen) -> None:
         held = await BK.by_session(q.get("session_id") or "-")
         ok(f"BASKET R6 {ch}: one Stripe TEST checkout; the rows hold its session (nothing in memory)",
            q.get("ok") and "checkout.stripe.com" in str(q.get("url")) and len(held) >= 2 and all(h["state"] == "pending_payment" for h in held)
-           and a not in TB._QUOTES, f"{len(held)} held")
+           and not hasattr(TB, "_QUOTES"), f"{len(held)} held")
         real = TD.session_paid
 
         async def paid(_s):

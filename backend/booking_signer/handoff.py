@@ -147,7 +147,8 @@ def plain_party(message: str) -> Optional[int]:
     """1–20, or None. Accepts: for 2 · for two · table for 4 · 3 people · party of 6."""
     t = message.lower()
     words = "|".join(_NUMBERS)
-    m = re.search(rf"\b(?:for|party of)\s+(\d{{1,2}}|{words})\b(?!\s*(?:am|pm|:))", t) or \
+    # Sasha 198 · "for 8 days" is the trip's length, never 8 people (it made an 8-day plan a party of 8)
+    m = re.search(rf"\b(?:for|party of)\s+(\d{{1,2}}|{words})\b(?!\s*(?:am|pm|:|days?|nights?|weeks?|months?|hours?|mins?|minutes?))", t) or \
         re.search(rf"\b(\d{{1,2}}|{words})\s+(?:people|persons|guests|of us)\b", t)
     if not m:
         return None

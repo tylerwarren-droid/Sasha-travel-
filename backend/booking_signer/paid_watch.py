@@ -127,12 +127,8 @@ async def fulfil(row_id, payload: dict) -> dict:
                 "say": f"✅ Booked: {c['owner']} {c['flights']} · {T.card_line(c).split(' · ', 2)[1] if ' · ' in T.card_line(c) else ''} · ref {ref}{note}. "
                        f"It's in your {tab} on the platform itinerary."}   # no email is sent for a flight: never said
     if payload["kind"] == "trip":
-        if payload.get("basket"):   # Sasha 198 R6 · the basket's rows ARE the quote (nothing in memory)
-            from . import basket_book as BB
-            r = await BB.book_paid(account, sid)
-        else:
-            TB._QUOTES[sid] = payload["bundle"]
-            r = await TB.book_paid(account, sid)
+        from . import basket_book as BB   # Sasha 198 · the basket's rows ARE the quote (R10: the in-memory bundle is gone)
+        r = await BB.book_paid(account, sid)
         await run(lambda x: x.execute("update trip_items set status = 'cancelled', provider_name = $2, escalation_notes = $3, updated_at = now() "
                                       "where id = $1", row_id, "Whole-trip TEST payment (booked as its own items)",
                                       DONE + json.dumps({"sid": sid, "status": r.get("status")})))

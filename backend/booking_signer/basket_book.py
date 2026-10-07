@@ -246,6 +246,8 @@ async def book_paid(account: str, sid: str) -> Dict[str, Any]:
     bad = [r for r in rows if r["state"] == "failed"]
     say = "✅ Booked — everything's in your itinerary." if done and not bad else ("Partly booked:" if done else "Not booked:")
     say += "\n" + "\n".join(r.get("status_line") or "" for r in done + bad)   # Pacioli's lines, word for word
+    from . import test_deposit as TD
+    TD.note(sid, bool(done), say.split("\n")[0])   # Stripe's return page says what happened
     return {"status": "booked" if done else "failed", "say": say, "booked": [r["status_line"] for r in done],
             "failed": [r["status_line"] for r in bad]}
 

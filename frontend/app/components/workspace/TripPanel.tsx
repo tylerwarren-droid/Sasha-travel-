@@ -333,6 +333,12 @@ export default function TripPanel({
           </div>
           <div className="lw-trip-right">
             <div className="lw-when" style={{ marginTop: 0 }}>Day by day</div>
+            {/* Sasha 198 R10 · the trip's flights, from the basket, each in its state's words (Pacioli's line once booked) */}
+            {(((server as any)?.basket?.flights ?? []) as { owner?: string; flights?: string; from?: string; to?: string; words: string; state: string }[]).map((f, fi) => (
+              <div key={`bf${fi}`} className="lw-day-city" style={{ color: f.state === 'booked' ? '#7ee2a8' : f.state === 'cancelled' || f.state === 'failed' ? '#f19999' : '#E8B923' }}>
+                ✈️ {f.state === 'booked' || f.state === 'failed' || f.state === 'cancelled' ? f.words : `${f.owner ?? ''} ${f.flights ?? ''} ${f.from ?? ''}→${f.to ?? ''} — ${f.words}`}
+              </div>
+            ))}
             {(() => {
               let carried: any = null
               return richItinerary.days?.map(d => {

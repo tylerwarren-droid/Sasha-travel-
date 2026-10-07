@@ -1,129 +1,33 @@
-"""Sasha 169 (2) · BOOK THE WHOLE TRIP — the plan's hotels (TEST bookings: no hotel contacted) and its flights (Duffel TEST
-mode), in ONE read-back, ONE yes, ONE Stripe TEST payment, ONE tap on the guest's phone (desktop books, phone confirms).
+"""Sasha 169 (2) → Sasha 198 R10 · BOOK THE WHOLE TRIP — from the TRIP BASKET (basket.py / basket_book.py): the stays and the
+chosen flights, in ONE read-back, ONE yes, ONE Stripe TEST payment, ONE tap on the guest's phone.
 
-  prepare → the stays (consecutive days at the same hotel = one stay) and the flights out (the day before day 1, so day 1 is
-  spent there) and back (the day after the last day), each priced: hotels at the TEST rate (hotel_test, a placeholder, said
-  so), flights at Duffel's TEST fares → the read-back lines and their hash.
-  pay     → the yes, bound to that hash → one Stripe TEST checkout for the total → the tap to pay on the phone.
-  status  → once Stripe records the TEST payment: every hotel recorded (TEST- refs) and every Duffel TEST order placed, each
-            on the account's list (and so on its day of the plan, by date). Done once per payment.
+  prepare → basket_book.quote(): Sherlock re-checks each chosen flight (an expired offer re-found, the choice kept); stays at
+            their provider's price (the TEST hotel's placeholder, said so) → the read-back lines and their hash.
+  pay     → the yes, bound to that hash (recomputed from the rows) → one Stripe TEST checkout → the rows hold the session.
+  status  → paid_watch.settle(): every held item booked by its provider; Pacioli writes each line.
+R10 deleted the in-memory stitching this file used to hold (_QUOTES, _BOOKED, the bundle re-search, book_paid, stays()).
 Nothing is reserved, nothing is charged; every line says TEST.
 """
 from __future__ import annotations
 
-import asyncio
-import hashlib
 import logging
-from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 log = logging.getLogger("booking_signer.trip_book")
 router = APIRouter(prefix="/travel", tags=["travel"])
-_QUOTES: Dict[str, dict] = {}    # account → its last bundle (the offers the yes was to)
-_BOOKED: Dict[str, dict] = {}    # Stripe session → what it booked (once)
 SEARCH = None                    # tests replace it (travel.search)
 
 
-def stays(days: List[dict], start: date) -> List[dict]:
-    """Consecutive days at the same hotel → one stay {hotel, city, checkin, nights}."""
-    out: List[dict] = []
-    for i, d in enumerate(days):
-        h = d.get("hotel")
-        name = (h.get("name") if isinstance(h, dict) else h) or f"a hotel in {d.get('city')}"
-        on = str(d.get("date") or "")[:10] or (start + timedelta(days=i)).isoformat()
-        if out and out[-1]["hotel"] == name and out[-1]["city"] == d.get("city"):
-            out[-1]["nights"] += 1
-        else:
-            out.append({"hotel": name, "city": d.get("city") or "", "checkin": on, "nights": 1})
-    return out
-
-
-def _eur(x: Any) -> float:
-    return round(float(x), 2)
-
-
 async def bundle(account: str, origin: str) -> dict:
-    """{stays, flights, lines, sha256, eur, party, title} — or {why}."""
-    from . import basket as BK
-    if BK.on():   # Sasha 198 R6 · the basket's quote: validated, persisted, nothing held in memory
-        from . import basket_book as BB
-        return await BB.quote(account, origin)
-    from . import hotel_test as HT, plan_store as PS, travel as T
-    p = await PS.latest(account)
-    if not p or not (p.get("plan") or {}).get("days"):
-        return {"why": "there's no trip plan on your account to book yet — ask me to plan one"}
-    m = PS.merge(p, [])
-    days = m["days"]
-    start = date.fromisoformat(str(days[0].get("date") or p.get("start") or "")[:10]) if (days[0].get("date") or p.get("start")) else None
-    if start is None:
-        return {"why": "the plan has no dates yet — tell me when it starts (e.g. “from 12 November”)"}
-    pl = p.get("plan") or {}
-    try:
-        party = max(1, min(9, int(pl.get("party") or pl.get("travelers") or 2)))
-    except (TypeError, ValueError):
-        party = 2
-    from .wa_brain import _country_of
-    tz = HT.tz_of(_country_of(p.get("title") or "", []))
-    ss = stays(days, start)
-    last = date.fromisoformat(str(days[-1].get("date"))[:10])
-    first_city, last_city = days[0].get("city") or "", days[-1].get("city") or ""
-    search = SEARCH or T.search
-    # Sasha 182 · 8, not 3: the cheapest test fares are often ones Duffel's test system won't book (China Eastern: 422), and
-    # with three of them the bundle refused "no test fare … will book" while Iberia and Duffel Airways were bookable
-    out_s = back_s = None
-    if not ((p.get("plan") or {}).get("chosen_flight") or {}).get("provider_offer_id"):
-        out_s, back_s = await asyncio.gather(search(origin, first_city, (start - timedelta(days=1)).isoformat(), adults=party, limit=8),
-                                             search(last_city, origin, (last + timedelta(days=1)).isoformat(), adults=party, limit=8))
-    flights = []
-    chosen = (p.get("plan") or {}).get("chosen_flight")
-    if chosen and chosen.get("provider_offer_id"):
-        # Sasha 196 · the flight HE picked (added to the itinerary earlier) — never flights offered again
-        st, j = await T.HTTP("GET", f"/air/offers/{chosen['provider_offer_id']}")
-        oid = chosen["provider_offer_id"]
-        if st != 200:
-            new = await T.refreshed(oid)
-            if new:
-                oid = new
-                st, j = await T.HTTP("GET", f"/air/offers/{new}")
-        if st != 200:
-            return {"why": f"the {chosen.get('name')} flight you picked has gone — shall I look again?"}
-        flights.append(T.card_of(j["data"]))
-        out_s = back_s = None
-    for s in ((out_s, back_s) if not flights else ()):
-        if "why" in s:
-            return {"why": f"the flights couldn't be priced — {s['why']}"}
-        c = await _orderable([c for c in s["cards"] if c.get("currency") == "EUR"])
-        if c is None:
-            return {"why": "no test fare in euros that the airline's test system will book"}
-        flights.append(c)
-    lines = [f"⚠ TEST bookings — no hotel or airline is contacted, nothing is reserved and nothing is charged. For {party}."]
-    total = 0.0
-    for st in ss:
-        eur = _eur(HT.rate_eur() * st["nights"])
-        total += eur
-        out = (date.fromisoformat(st["checkin"]) + timedelta(days=st["nights"])).isoformat()
-        lines.append(f"🏨 {st['hotel']}, {st['city']} — {st['checkin']} to {out}, {st['nights']} night{'s' if st['nights'] != 1 else ''} · "
-                     f"€{eur:.2f} (TEST price, {HT.rate_eur():.0f}/night placeholder)")
-    for c in flights:
-        total += _eur(c["amount"])
-        lines.append(f"✈️ {T.card_line(c)}")
-    lines.append(f"Total €{total:.2f} (TEST) — ONE tap to pay on your phone: Apple Pay or a saved card on Stripe's TEST page.")
-    lines.append("Each goes in your itinerary on its day, marked TEST, with its reference.")
-    sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
-    b = {"stays": ss, "flights": flights, "lines": lines, "sha256": sha, "eur": round(total, 2), "party": party, "title": p.get("title"), "tz": tz,
-         "origin": origin, "at": datetime.now().timestamp(), "trip_id": p.get("trip_id"), "chosen": bool(chosen),
-         # Sasha 189 · the card shows this, briefly (the yes stays bound to the full lines above)
-         "summary": {"hotels": len(ss), "cities": [st["city"] for st in ss], "party": party, "eur": round(total, 2),
-                     "flights": [f"{c['owner']} {c['flights']} · {c['from']}→{c['to']} · {str(c.get('departs') or '')[:10]}" for c in flights]}}
-    _QUOTES[account] = b
-    return b
+    """The whole trip's quote, from the basket: {lines, sha256, eur, flights, chosen, summary, …} or {why}."""
+    from . import basket_book as BB
+    return await BB.quote(account, origin)
 
 
 import re  # noqa: E402
-from . import sentences as SN  # noqa: E402
 
 ASK = re.compile(r"^\s*(?:(?:ok(?:ay)?|yes|great|perfect|lovely|now|and)[,!. ]+)*(?:please\s+|let'?s\s+|can you\s+)?"
                  r"book\s+(?:it(?:\s+all)?|everything|(?:the|my|this)\s+(?:whole\s+|entire\s+)?trip|the\s+(?:hotels?|stays?)\s+and\s+(?:the\s+)?flights?|"
@@ -153,17 +57,7 @@ async def prepare(request: Request):
     except Exception:
         body = {}
     origin = str((body or {}).get("from") or "Madrid").strip()[:60] or "Madrid"
-    from . import basket as BK
-    if BK.on():   # Sasha 198 R6 · read back the basket as it stands (the conductor's quote already validated it)
-        b = await bundle(account_for(request), origin)
-        if "why" in b:
-            return _refuse(422, "trip_not_bookable", b["why"])
-        return {"ok": True, "read_back": {"lines": b["lines"], "sha256": b["sha256"]}, "eur": b["eur"], "title": b["title"], "summary": b.get("summary")}
-    q = _QUOTES.get(account_for(request))   # Sasha 189 · the total Sasha just said: the same quote, not a second pricing
-    from . import plan_store as _PS   # Sasha 194 · reused only for the SAME plan — a new trip never shows an old quote
-    _cur = await _PS.latest(account_for(request))
-    b = q if q and q.get("origin") == origin and q.get("trip_id") == (_cur or {}).get("trip_id") \
-        and datetime.now().timestamp() - float(q.get("at") or 0) < 300 else await bundle(account_for(request), origin)
+    b = await bundle(account_for(request), origin)
     if "why" in b:
         return _refuse(422, "trip_not_bookable", b["why"])
     return {"ok": True, "read_back": {"lines": b["lines"], "sha256": b["sha256"]}, "eur": b["eur"], "title": b["title"], "summary": b.get("summary")}
@@ -171,31 +65,16 @@ async def prepare(request: Request):
 
 @router.post("/trip/pay")
 async def pay(request: Request):
-    from . import guest_whatsapp as GW, test_deposit as TD, yes as YS
+    from . import yes as YS, basket_book as BB
     from .account import account_for
     account = account_for(request)
     body = await request.json()
     if not YS.approval_ok(body.get("approval")):
         return _refuse(422, "approval_void", YS.APPROVAL_VOID)
-    from . import basket as BK
-    if BK.on():   # Sasha 198 R6 · one Stripe payment for exactly the rows read back; the rows hold the session
-        from . import basket_book as BB
-        got = await BB.pay(account, str(body.get("read_back_sha256") or ""))
-        if "why" in got:
-            return _refuse(422, "approval_void" if "different words" in got["why"] else "trip_not_bookable", got["why"])
-        return {"ok": True, "url": got["url"], "session_id": got["session_id"], "phone": got["phone"]}
-    b = _QUOTES.get(account)
-    if not b or body.get("read_back_sha256") != b["sha256"]:
-        return _refuse(422, "approval_void", "the yes was to different words — prepare it again")
-    got = await TD.checkout(f"{b['eur']:.2f}", "EUR", f"TEST — {b['title'] or 'your trip'}: {len(b['stays'])} hotels + 2 flights", b["sha256"][:16])
+    got = await BB.pay(account, str(body.get("read_back_sha256") or ""))
     if "why" in got:
-        return _refuse(422, "test_payment_unavailable", got["why"])
-    _QUOTES[got["id"]] = b   # the session's own bundle: a later prepare never changes what was paid for
-    from . import paid_watch as PWT   # Sasha 183 · written down before paying — a restart never loses it
-    await PWT.remember(account, "trip", got["id"], {"bundle": b}, f"{b['title'] or 'Your trip'} — {len(b['stays'])} hotels and 2 flights",
-                       None, b.get("tz") or "Europe/Madrid")
-    phone = await GW.tap_to_pay(account, f"€{b['eur']:.2f}", f"{b['title'] or 'your trip'} — {len(b['stays'])} hotels and 2 flights (TEST)", got["url"])
-    return {"ok": True, "url": got["url"], "session_id": got["id"], "phone": phone}
+        return _refuse(422, "approval_void" if "different words" in got["why"] else "trip_not_bookable", got["why"])
+    return {"ok": True, "url": got["url"], "session_id": got["session_id"], "phone": got["phone"]}
 
 
 ORDERABLE = None   # tests replace it
@@ -230,84 +109,14 @@ async def _same_or_cheaper(c: dict, party: int) -> Optional[dict]:
     return ok[0] if ok else None
 
 
-async def book_paid(account: str, sid: str) -> dict:
-    """Once paid: every hotel and flight, each recorded. Idempotent per session."""
-    from . import hotel_test as HT, test_deposit as TD, travel as T, guest_whatsapp as GW, guest_receipt as GR
-    if sid in _BOOKED:
-        return _BOOKED[sid]
-    b = _QUOTES.get(sid)
-    if not b:
-        return {"status": "failed", "say": "paid (TEST), but this server no longer holds what was paid for — nothing booked; ask me again"}
-    _BOOKED[sid] = {"status": "booking"}
-    done, failed = [], []
-    for st in b["stays"]:
-        ref = HT.new_ref()
-        try:
-            await HT.RECORD(account, st["hotel"], st["city"], b.get("tz") or "Europe/Madrid", st["checkin"],
-                            st["nights"], b["party"], ref)
-            done.append(f"🏨 {st['hotel']} — {st['checkin']}, {st['nights']} night{'s' if st['nights'] != 1 else ''} · {ref}")
-        except Exception as e:
-            log.error("[trip_book] hotel not recorded: %s: %s", type(e).__name__, e)
-            failed.append(st["hotel"])
-    _s, cj = await GW.api(account, "GET", "/api/booking/contact")
-    contact = (cj or {}).get("contact") or {}
-    email = await GR.address_of(account)
-    for c in b["flights"]:
-        o = await T.order(c, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"))
-        note = ""
-        if "why" in o:
-            # a TEST fare can be withdrawn between the quote and the payment (seen live): the same route and day, priced again,
-            # booked only if it costs no more than what was paid — and said so
-            alt = await _same_or_cheaper(c, b["party"])
-            if alt is not None:
-                o2 = await T.order(alt, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"))
-                if "why" not in o2:
-                    diff = float(alt["amount"]) - float(c["amount"])
-                    note = (f" (the fare priced had gone; this one is €{alt['amount']}" +
-                            (f" — €{diff:.2f} more, TEST" if diff > 0 else ", not more") + ")")
-                    c, o = alt, o2
-        if "why" in o:
-            failed.append(f"{c['from']}→{c['to']} ({o['why']})")
-            continue
-        await T.RECORD(account, c, o["booking_reference"] or "")
-        done.append(f"✈️ {c['owner']} {c['flights']} {c['from']}→{c['to']} · {o['booking_reference']}{note}")
-    nh, nf = sum(1 for d in done if d.startswith("🏨")), sum(1 for d in done if d.startswith("✈️"))
-    say = "✅ Booked — everything's in your itinerary."   # Sasha 196 · the founder's words
-    try:   # the venue bookings (restaurant, spa) are shown apart: booked with the venue, not part of this payment
-        from . import itinerary_q as IQ
-        theirs = [r for r in await IQ._rows(account) if r.get("status") in ("confirmed", "guest_booked", "link_sent", "requested")
-                  and str(r.get("trip_id")) == str(b.get("trip_id")) and r.get("type") not in ("flight", "hotel")]
-        if theirs:
-            say += "\nAlready booked with the venue: " + "; ".join(f"{str(r.get('venue') or '')[:40]} ({SN.day_words(r['date']) if r.get('date') else ''}"
-                                                                   f"{' ' + r['time'] if r.get('time') else ''})" for r in theirs[:4])
-    except Exception as e:
-        log.info("[trip_book] venue bookings not listed: %s", type(e).__name__)
-    if failed:
-        say += "\nNot booked: " + "; ".join(failed)
-    out = {"status": "booked" if done else "failed", "say": say, "booked": done, "failed": failed}
-    _BOOKED[sid] = out
-    TD.note(sid, bool(done), say.split("\n")[0])
-    return out
-
-
 @router.get("/trip/status")
 async def trip_status(request: Request):
-    from . import test_deposit as TD
-    from .account import account_for
+    from . import paid_watch as PWT
     sid = request.query_params.get("session_id") or ""
-    from . import paid_watch as PWT   # Sasha 183 · the one booking path after a payment (survives a restart)
-    r = await PWT.settle(sid)
-    if r is not None:
-        if (_BOOKED.get(sid) or {}).get("status") in ("booked", "failed"):
-            return {"ok": True, **_BOOKED[sid]}
-        return {"ok": True, "status": "awaiting_payment"} if r.get("status") == "booking" else {"ok": True, **r}
-    if (_BOOKED.get(sid) or {}).get("status") in ("booked", "failed"):
-        return {"ok": True, **_BOOKED[sid]}
-    if (_BOOKED.get(sid) or {}).get("status") == "booking":
+    r = await PWT.settle(sid)   # the one booking path after a payment (survives a restart)
+    if r is None:
         return {"ok": True, "status": "awaiting_payment"}
-    if not await TD.session_paid(sid):
-        return {"ok": True, "status": "awaiting_payment"}
-    return {"ok": True, **(await book_paid(account_for(request), sid))}
+    return {"ok": True, "status": "awaiting_payment"} if r.get("status") == "booking" else {"ok": True, **r}
 
 
-__all__ = ["router", "stays", "bundle", "book_paid", "asked", "ASK"]
+__all__ = ["router", "bundle", "asked", "ASK", "prepare", "pay"]

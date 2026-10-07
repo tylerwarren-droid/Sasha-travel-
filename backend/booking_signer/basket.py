@@ -289,12 +289,11 @@ async def event(source: str, event_id: str, event_type: str, payload: Any, *, ve
 
 # ── R3 · the plan's stays in the basket, and the view rendered from it ─────────────────────────────────────────────────────
 
-ON = None   # the suite sets True; otherwise SASHA_BASKET=1 (off until the basket's steps have all passed)
+ON = None   # Sasha 198 R10 · the basket is THE path (the SASHA_BASKET switch is gone); a test may set False to read a plan alone
 
 
 def on() -> bool:
-    import os
-    return ON if ON is not None else os.getenv("SASHA_BASKET", "") == "1"
+    return ON is not False
 
 
 async def sync_stays(account: str, trip_id: str, days: List[dict], start: Optional[date], party: Optional[int]) -> List[str]:

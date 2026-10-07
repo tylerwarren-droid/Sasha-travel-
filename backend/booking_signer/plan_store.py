@@ -108,14 +108,6 @@ async def save(account: Optional[str], itinerary: dict, message: str, now: datet
                 pd = prev["destinations"]
                 pd = json.loads(pd) if isinstance(pd, str) else pd
                 if prev["title"] == title or set(pd.get("cities") or []) & set(cities):
-                    # Sasha 196 · a revision (a hotel swap) keeps the flight he picked — on the plan and on Day 1
-                    cf = ((pd.get("plan") or {}).get("chosen_flight"))
-                    if cf and not (dest["plan"] or {}).get("chosen_flight"):
-                        dest["plan"]["chosen_flight"] = cf
-                        old_fl = next((a for d0 in ((pd.get("plan") or {}).get("days") or [])[:1] for a in d0.get("activities") or [] if a.get("flight")), None)
-                        nd = (dest["plan"].get("days") or [])
-                        if old_fl and nd and not any(a.get("flight") for a in nd[0].get("activities") or []):
-                            nd[0].setdefault("activities", []).insert(0, old_fl)
                     await conn.execute("update trips set title = $2, destinations = $3::jsonb, depart_date = coalesce($4, depart_date), "
                                        "return_date = coalesce($5, return_date), updated_at = now() where id = $1",
                                        prev["id"], title, _jsonable(dest), start, end)
@@ -211,21 +203,6 @@ async def add_place(account: str, trip_id: str, day: Optional[int], activity: di
         acts = d.setdefault("activities", [])
         if not any(a.get("place_id") and a.get("place_id") == activity.get("place_id") for a in acts):
             acts.insert(0, activity)
-        return True
-    return bool(await _edit(account, trip_id, change))
-
-
-async def choose_flight(account: str, trip_id: str, option: dict) -> bool:
-    """Sasha 196 · the flight he picked, ADDED to the itinerary (not booked, not paid): kept on the plan for "book it", and shown
-    on Day 1 as "added — not booked yet"."""
-    def change(plan):
-        plan["chosen_flight"] = option
-        days = plan.get("days") or []
-        if days:
-            acts = [a for a in days[0].setdefault("activities", []) if not a.get("flight")]
-            acts.insert(0, {"time": "Flight", "name": f"✈️ {option.get('name')} {option.get('dep') or ''}".strip() + " (added — not booked yet)",
-                            "added": True, "flight": True})
-            days[0]["activities"] = acts
         return True
     return bool(await _edit(account, trip_id, change))
 

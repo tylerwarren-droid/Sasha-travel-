@@ -24,11 +24,14 @@ class BookTheTrip(unittest.TestCase):
         for m in ("book a table at Botín", "book dinner in Hoi An", "book it at 8"):
             self.assertIsNone(TB.asked(m), m)
 
+    @unittest.skip("Sasha 198 R10: trip_book.stays() was deleted — runs of nights are basket.sync_stays, held by the BASKET suite (R3-1)")
     def test_consecutive_nights_are_one_stay(self):
         s = TB.stays(DAYS, date(2026, 11, 12))
         self.assertEqual([(x["hotel"], x["checkin"], x["nights"]) for x in s],
                          [("Metropole", "2026-11-12", 2), ("Cruise", "2026-11-14", 1), ("Nam Hai", "2026-11-15", 2)])
 
+    @unittest.skip("Sasha 198 R10: the in-memory bundle was deleted — the read-back and ONE total come from the basket, held by the "
+                   "BASKET suite (R6: read-back names stays + flight, total = the basket's)")
     def test_the_bundle_reads_back_test_and_one_total(self):
         async def lat(a, hint=None):
             return {"trip_id": "t", "title": "Vietnam", "start": date(2026, 11, 12), "end": date(2026, 11, 16), "plan": {"days": DAYS}}

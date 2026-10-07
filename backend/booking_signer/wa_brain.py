@@ -646,6 +646,25 @@ async def reset_demo(account: str, dry: bool) -> dict:
                                a, RESET_MARK, {"demo_reset_at": datetime.now(timezone.utc).isoformat()})
         return len(saved), len(stray)
     saved_n, stray_n = await run(clean)
+
+    async def unpaid(conn):   # Sasha 186 · a "Tap to pay" never paid: its link expires and its row is cancelled
+        from .paid_watch import MARK
+        return await conn.fetch("select ti.id, ti.escalation_notes from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 "
+                                "and ti.status = 'pending' and ti.escalation_notes like $2", uuid.UUID(account), MARK + "%")
+    waiting = await run(unpaid)
+    if not dry and waiting:
+        import json as _json
+        from . import test_deposit as TD
+        from .paid_watch import MARK
+        for w in waiting:
+            sid = (_json.loads(w["escalation_notes"][len(MARK):]) or {}).get("sid")
+            try:
+                if sid and not await TD.session_paid(sid):
+                    await TD.HTTP("POST", f"/checkout/sessions/{sid}/expire", {})
+            except Exception as e:
+                log.warning("[wa_brain] a test payment link not expired: %s", type(e).__name__)
+        await run(lambda c: c.execute("update trip_items set status = 'cancelled', escalation_notes = 'Sasha 186 · reset: the unpaid TEST link expired', "
+                                      "updated_at = now() where id = any($1::uuid[])", [w["id"] for w in waiting]))
     modes = 0
     if not dry:   # CR 39 · the open CampusMe / RelocateMe / EspañaMe conversations close too (their files are kept)
         try:
@@ -654,7 +673,7 @@ async def reset_demo(account: str, dry: bool) -> dict:
                 modes = int(await PW.reset_modes(account) or 0)
         except Exception as e:
             log.warning("[wa_brain] product modes not reset: %s: %s", type(e).__name__, e)
-    return {"bookings": int(n or 0), "added": added, "modes": modes, "saved": saved_n, "plans": stray_n}
+    return {"bookings": int(n or 0), "added": added, "modes": modes, "saved": saved_n, "plans": stray_n, "links": len(waiting)}
 
 
 RESET_MARK = "Sasha · demo reset"

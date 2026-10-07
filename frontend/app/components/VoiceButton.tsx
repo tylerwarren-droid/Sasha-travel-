@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Mic, MicOff, Loader2 } from 'lucide-react'
 import { apiUrl, apiHeaders } from '@/lib/api'
+import { watchdogAction } from '@/lib/voice-watchdog.mjs'
 
 interface VoiceButtonProps {
   onTranscript: (text: string) => void
@@ -217,6 +218,8 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
   const heardAtRef = useRef(0)        // when speech started with no transcript yet
   const lastAliveRef = useRef(0)      // last transcript, or (re)connection
   const gatedSinceRef = useRef(0)     // when the mic was last closed for Sasha speaking
+  const connectingRef = useRef(false)  // Sasha 197 · a connect is in flight (permission, key, socket) — never start a second
+  const hadConnectedRef = useRef(false) // Sasha 197 · the watchdog only REconnects a connection that was up
   const [notCaught, setNotCaught] = useState(false)
   const loudFramesRef = useRef(0)
   const keepAliveIntervalRef = useRef<any>(null)
@@ -306,7 +309,8 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
   }, [])
 
   const connect = useCallback(async () => {
-    if (connectedRef.current) return
+    if (connectedRef.current || connectingRef.current) return
+    connectingRef.current = true
     manualStopRef.current = false  // a fresh connect attempt re-enables reconnect
     console.log('[DG] connecting...')
     reportMicError(null)
@@ -384,7 +388,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         }
       }
       const dgKey = await keyPromise
-      if (!dgKey) { setIsConnecting(false); reportMicError('Voice service unavailable'); return }
+      if (!dgKey) { connectingRef.current = false; setIsConnecting(false); reportMicError('Voice service unavailable'); return }
 
       // AudioContext — resume() immediately for Safari (requires in-gesture call stack)
       const ctx = new AudioContext()
@@ -434,6 +438,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         setIsConnected(true)
         onConnectedChangeRef.current?.(true)
         connectedRef.current = true; lastAliveRef.current = Date.now()   // Sasha 192
+        connectingRef.current = false; hadConnectedRef.current = true    // Sasha 197
         dgReconnectAttemptsRef.current = 0   // healthy connection — reset backoff
 
         // KeepAlive runs for the lifetime of the session — not gated, always on
@@ -591,6 +596,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         const wasActiveSocket = wsRef.current === ws
         if (!wasActiveSocket) return  // superseded socket — ignore
         wsRef.current = null
+        connectingRef.current = false
         clearTimeout(connectTimeoutRef.current)
         setIsConnecting(false)  // never leave the mic stuck on the connecting spinner
 
@@ -619,6 +625,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       }
 
     } catch (err: any) {
+      connectingRef.current = false
       setIsConnecting(false)
       // Name the actual failure. "Could not access microphone" sent people hunting for a
       // permission problem when the real cause was another app holding the device.
@@ -632,23 +639,28 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
 
   useEffect(() => {
     const t = setInterval(() => {
-      if (manualStopRef.current || !readyToListenRef.current || mutedRef.current) return
       const now = Date.now()
-      // 1 · Sasha finished but the mic stayed closed (her "finished" never came): re-arm it
-      if (micGatedRef.current && gatedSinceRef.current && now - gatedSinceRef.current > 45000) {
+      // a gate closed from the start (before her greeting) gets a clock too, so rule 1 covers the first turn
+      if (micGatedRef.current && !gatedSinceRef.current && connectedRef.current) gatedSinceRef.current = now
+      // Sasha 197 · the decision is lib/voice-watchdog.mjs (held by scripts/check-voice-watchdog.mjs at build).
+      // 192 connected whenever "not connected and no socket" — true for the whole of a first connect (mic permission,
+      // key, socket), so after the greeting it kept starting new connects over the one about to open: the mic never came on.
+      const act = watchdogAction({
+        now, manualStop: manualStopRef.current, ready: readyToListenRef.current, muted: mutedRef.current,
+        connected: connectedRef.current, connecting: connectingRef.current, hadConnected: hadConnectedRef.current,
+        wsOpen: !!wsRef.current, lastAlive: lastAliveRef.current, gated: micGatedRef.current,
+        gatedSince: gatedSinceRef.current, heardAt: heardAtRef.current,
+      })
+      if (act === 'rearm') {
         console.warn('[WATCHDOG] mic closed 45 s — re-arming')
         micGatedRef.current = false; gatedSinceRef.current = 0; gateOpenedAtRef.current = now
-      }
-      // 2 · speech heard, no transcript within 8 s: the stream is stuck — restart it and say so
-      if (!micGatedRef.current && heardAtRef.current && now - heardAtRef.current > 8000) {
+      } else if (act === 'restart') {
         console.warn('[WATCHDOG] speech with no transcript for 8 s — restarting the stream')
         heardAtRef.current = 0
         setNotCaught(true); setTimeout(() => setNotCaught(false), 6000)
         try { wsRef.current?.close() } catch { /* onclose reconnects */ }
-      }
-      // 3 · not connected and not connecting while we should be listening: connect
-      if (!connectedRef.current && !wsRef.current && now - lastAliveRef.current > 5000) {
-        console.warn('[WATCHDOG] not listening — reconnecting')
+      } else if (act === 'reconnect') {
+        console.warn('[WATCHDOG] connection lost and not retrying — reconnecting')
         lastAliveRef.current = now
         connect()
       }

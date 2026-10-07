@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3000",
-    "prebuild": "node scripts/check-outcome-surfaces.mjs",
+    "prebuild": "node scripts/check-outcome-surfaces.mjs && node scripts/check-voice-watchdog.mjs",
     "build": "next build",
     "start": "next start",
     "test": "node --test scripts/site-tabs.test.mjs scripts/agapi-hub.test.mjs"

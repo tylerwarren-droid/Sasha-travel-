@@ -69,6 +69,9 @@ app.include_router(trips_router)     # already prefixed /api/trips
 # S-17 booking signer: backend/booking_signer/ (outside app/). CTO zips drop this line; Stage B re-applies it.
 from booking_signer.routes import router as booking_signer_router  # noqa: E402
 app.include_router(booking_signer_router)  # /api/booking/*
+# Sasha 203 · Sasha as an AI agent with tools (/next): one model, AgAPI v0 (agapi/v0.py) — alongside the current Sasha
+from app.agent.sasha import router as agent_router  # noqa: E402
+app.include_router(agent_router)  # /api/agent/*
 
 
 @app.on_event("startup")

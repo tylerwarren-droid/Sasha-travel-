@@ -1,7 +1,7 @@
-// GENERATED from docs/sasha/sasha-persona.md (sha256 32f89ba4307f2359d9d40adc0a34e0001abd966dd4e996a028cea7e079aa9223) by scripts/derive_persona.py — do not edit.
+// GENERATED from docs/sasha/sasha-persona.md (sha256 647cc314c8b3c8589d1144a7d62c28616edf9ff169b6b29ffce4f3cf41e24dd8) by scripts/derive_persona.py — do not edit.
 // Sasha 201 · the charter, rule 1: the LiveAvatar context (its opening and prompt) is derived from her one source. Applied
 // and checked by app/api/heygen/context/route.ts; the token route opens CONTEXT_ID.
-export const PERSONA_SHA256 = "32f89ba4307f2359d9d40adc0a34e0001abd966dd4e996a028cea7e079aa9223"
+export const PERSONA_SHA256 = "647cc314c8b3c8589d1144a7d62c28616edf9ff169b6b29ffce4f3cf41e24dd8"
 export const CONTEXT_ID = "10b5933f-d54a-4305-9f88-333b628a1d09"
 export const OPENING_TEXT = "Hi, I'm Sasha, your travel concierge. Where are you dreaming of going?"
 export const QUIVER = ["That sounds fun!", "Let me look into that.", "Hold on one second while I sort that out.", "Lovely.", "Got it.", "One moment."]

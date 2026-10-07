@@ -37,6 +37,14 @@ def avatar_prompt(p: dict) -> str:
     return "\n".join(line.replace("{QUIVER}", quiver) for line in p["avatar_prompt"])
 
 
+def agent_system() -> str:
+    """Sasha 203 · the /next agent's system prompt: the charter and her persona (without its JSON block), as written."""
+    charter = open(os.path.join(ROOT, "docs", "sasha", "charter.md"), encoding="utf-8").read()
+    charter = charter.split("## How each rule is held")[0].strip()
+    persona = re.sub(r"## The source.*", "", open(SOURCE, encoding="utf-8").read(), flags=re.S).strip()
+    return f"{charter}\n\n---\n\n{persona}"
+
+
 def render_py(p: dict, sha: str) -> str:
     return f'''"""GENERATED from docs/sasha/sasha-persona.md (sha256 {sha}) by scripts/derive_persona.py — do not edit.
 Sasha 201 · the charter, rule 1: her voice and script have ONE source; this file is derived from it."""
@@ -48,6 +56,7 @@ AVATAR_PROMPT = {avatar_prompt(p)!r}
 FORBIDDEN_AI = {tuple(p["forbidden_ai"])!r}
 SERVER_VOICE_RULES = {(chr(10).join(p["server_voice_rules"]))!r}
 LINES = {json.dumps(p["lines"], ensure_ascii=False, indent=4)}
+AGENT_SYSTEM = {agent_system()!r}
 '''
 
 
@@ -65,6 +74,7 @@ export const PROMPT = {json.dumps(avatar_prompt(p), ensure_ascii=False)}
 
 def main() -> int:
     p, sha = load()
+    sha = hashlib.sha256((sha + open(os.path.join(ROOT, "docs", "sasha", "charter.md"), encoding="utf-8").read()).encode()).hexdigest()
     want = {PY: render_py(p, sha), MJS: render_mjs(p, sha)}
     if "--check" in sys.argv:
         stale = [os.path.relpath(f, ROOT) for f, t in want.items() if not os.path.exists(f) or open(f, encoding="utf-8").read() != t]

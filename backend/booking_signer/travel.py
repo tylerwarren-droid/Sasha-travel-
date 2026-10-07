@@ -228,6 +228,9 @@ async def pay(request: Request):
     got = await TD.checkout(c["amount"], c["currency"], f"{c['owner']} {c['flights']} {c['from']}→{c['to']}", sha[:16])
     if "why" in got:
         return _refuse(422, "test_payment_unavailable", got["why"])
+    from . import paid_watch as PWT   # Sasha 183 · written down before paying — a restart never loses it
+    await PWT.remember(account_for(request), "flight", got["id"], {"card": c, **(_who or {})},
+                       f"Flight {c['flights']} {c['from']} → {c['to']}", c.get("departs"), c.get("from_tz") or "Europe/Madrid")
     from . import guest_whatsapp as GW   # Sasha 161 · desktop books, phone confirms
     phone = await GW.tap_to_pay(account_for(request), f"{c['amount']} {c['currency']}", f"{c['owner']} {c['from']}→{c['to']}", got["url"])
     return {"ok": True, "url": got["url"], "session_id": got["id"], "phone": phone}
@@ -241,6 +244,12 @@ async def flight_status(request: Request):
     sid, offer = request.query_params.get("session_id") or "", request.query_params.get("offer_id") or ""
     if sid in _BOOKED:
         return {"ok": True, "status": "booked", **_BOOKED[sid]}
+    from . import paid_watch as PWT   # Sasha 183 · the one booking path after a payment
+    r = await PWT.settle(sid)
+    if r is not None:
+        if r.get("status") == "booking":
+            return {"ok": True, "status": "awaiting_payment"}
+        return {"ok": True, "status": r["status"], "say": r.get("say"), "booking_reference": r.get("booking_reference")}
     paid = await TD.session_paid(sid)
     if not paid:
         return {"ok": True, "status": "awaiting_payment"}

@@ -606,3 +606,5 @@ async def _start_retention() -> None:
     _perf_ops.start_warm()   # Sasha 149 · the 1-minute keep-warm (database + kept-alive connections)
     calendar_sync.start()   # S-79 · the calendar outbox drainer (SASHA_CALENDAR_LOOP; only once Google is configured)
     mailbox.start()   # S-82 · the 6-hourly read-only sync (SASHA_MAILBOX_LOOP; only once Google is configured)
+    from . import paid_watch as _pw
+    _pw.start()   # Sasha 183 · a paid booking always lands: any payment still waiting is settled every 15 s (and survives restarts)

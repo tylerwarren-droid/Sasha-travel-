@@ -1122,10 +1122,26 @@ async def _flight_approve(ctx: dict, pend: dict) -> None:
         return
     ctx["out"].text(f"One touch: pay the TEST fare ({c['currency']} {c['amount']}) on Stripe's test page — Apple Pay or your phone's saved card; "
                     f"nothing is charged, and I never see your card.\n{got['url']}\nI'll book the test flight the moment it's paid, and tell you here.")
+    from . import paid_watch as PWT   # Sasha 183 · written down BEFORE paying: a restart can never lose the booking
+    await PWT.remember(ctx["account"], "flight", got["id"], {"card": c, "name": pend["name"], "email": pend["email"], "phone": pend.get("phone")},
+                       f"Flight {c['flights']} {c['from']} → {c['to']}", c.get("departs"), c.get("from_tz") or "Europe/Madrid")
     _spawn(watch_flight_payment(ctx["ch"], ctx["frm"], ctx["account"], c, got["id"], pend["name"], pend["email"], pend.get("phone")))
 
 
 WATCH_PAY = (10, 60)   # every 10 s for 10 minutes
+
+
+async def _remembered(session_id: str) -> bool:
+    """A payment paid_watch holds (it books it); False → the old path books it here."""
+    from . import paid_watch as PWT
+    run = PWT._run()
+    if run is None:
+        return False
+    try:
+        return bool(await run(lambda c: c.fetchval("select 1 from trip_items where escalation_notes like $1 limit 1",
+                                                   f"Sasha 183 · %\"sid\": \"{session_id}\"%")))
+    except Exception:
+        return False
 
 
 async def watch_flight_payment(ch: dict, frm: str, account: str, c: dict, session_id: str, name: str, email: str, phone: Optional[str]) -> None:
@@ -1133,7 +1149,12 @@ async def watch_flight_payment(ch: dict, frm: str, account: str, c: dict, sessio
     every, times = WATCH_PAY
     for _ in range(times):
         await asyncio.sleep(every)
-        paid = await TD.session_paid(session_id)
+        from . import paid_watch as PWT   # Sasha 183 · booked once, by whoever sees the payment first (and said by it)
+        r = await PWT.settle(session_id)
+        if r is not None:
+            if r.get("status") in ("booked", "failed", "booking"):
+                return
+        paid = await TD.session_paid(session_id) if r is None and not await _remembered(session_id) else None
         if not paid:
             continue
         o = await TR.order(c, name, email, phone)

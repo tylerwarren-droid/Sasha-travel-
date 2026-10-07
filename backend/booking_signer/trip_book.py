@@ -149,6 +149,9 @@ async def pay(request: Request):
     if "why" in got:
         return _refuse(422, "test_payment_unavailable", got["why"])
     _QUOTES[got["id"]] = b   # the session's own bundle: a later prepare never changes what was paid for
+    from . import paid_watch as PWT   # Sasha 183 · written down before paying — a restart never loses it
+    await PWT.remember(account, "trip", got["id"], {"bundle": b}, f"{b['title'] or 'Your trip'} — {len(b['stays'])} hotels and 2 flights",
+                       None, b.get("tz") or "Europe/Madrid")
     phone = await GW.tap_to_pay(account, f"€{b['eur']:.2f}", f"{b['title'] or 'your trip'} — {len(b['stays'])} hotels and 2 flights (TEST)", got["url"])
     return {"ok": True, "url": got["url"], "session_id": got["id"], "phone": phone}
 
@@ -240,6 +243,12 @@ async def trip_status(request: Request):
     from . import test_deposit as TD
     from .account import account_for
     sid = request.query_params.get("session_id") or ""
+    from . import paid_watch as PWT   # Sasha 183 · the one booking path after a payment (survives a restart)
+    r = await PWT.settle(sid)
+    if r is not None:
+        if (_BOOKED.get(sid) or {}).get("status") in ("booked", "failed"):
+            return {"ok": True, **_BOOKED[sid]}
+        return {"ok": True, "status": "awaiting_payment"} if r.get("status") == "booking" else {"ok": True, **r}
     if (_BOOKED.get(sid) or {}).get("status") in ("booked", "failed"):
         return {"ok": True, **_BOOKED[sid]}
     if (_BOOKED.get(sid) or {}).get("status") == "booking":

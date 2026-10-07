@@ -314,6 +314,8 @@ async def plan_view(request: Request):
     from . import plan_store as PS, guest_whatsapp as GW
     account = account_for(request)
     from . import journeys as JN
+    from . import paid_watch as PWT
+    await PWT.sweep(account)   # Sasha 183 · a payment waiting is booked before anything is shown
     await JN.file(account)   # Sasha 177 · each booking in its journey (dates AND place), before the view
     tid = request.query_params.get("trip_id")   # Sasha 175 · any of the account's trips, by id (the Trips tab)
     p = (await PS.by_id(account, tid)) if tid and re.fullmatch(r"[0-9a-f-]{36}", tid) else await PS.latest(account)
@@ -329,6 +331,8 @@ async def journeys_view(request: Request):
     """Sasha 177 · ONE TRIPS SPACE: a tab per journey, home, requests, receipts, everything — from the same reservations."""
     from . import journeys as JN, guest_whatsapp as GW
     account = account_for(request)
+    from . import paid_watch as PWT
+    await PWT.sweep(account)   # Sasha 183 · a payment waiting is booked before anything is shown
     await JN.file(account)
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
     rows = (j or {}).get("reservations") or [] if s == 200 else []

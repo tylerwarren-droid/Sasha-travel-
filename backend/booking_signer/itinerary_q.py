@@ -331,7 +331,8 @@ async def web_turn(message: str, user_id: Optional[str], history: list) -> Optio
 
 
 async def answer(account: str, text: str, now: datetime) -> List[str]:
-    from . import journeys as JN
+    from . import journeys as JN, paid_watch as PWT
+    await PWT.sweep(account)   # Sasha 183 · a payment waiting is booked before anything is shown
     await JN.file(account)   # Sasha 177 · each booking in its journey before anything is shown
     rows = await _rows(account)
     if TRIPS.search(text or ""):

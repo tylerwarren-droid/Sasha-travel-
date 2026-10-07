@@ -65,10 +65,7 @@ async def turn(account: Optional[str], transcript: str, history: list) -> Option
     try:
         if not await GW._answer_pending(ctx, transcript, ""):
             await GW._new_request(ctx, transcript)
-        if sw:
-            cur = SW.announce(out.items, mode0, await SW.after(account, transcript, st), 0)
-            if cur:   # the mode rides in the history, as on WhatsApp
-                SW.label_first(out.items, cur)
+        # Sasha 194 · no automatic switching: spaces change only by their word
     except Exception as e:
         log.error("[voice_turn] the booking turn failed: %s: %s", type(e).__name__, e)
         return None

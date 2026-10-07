@@ -152,24 +152,15 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             signed_in=signed_in(account),     # Sasha 142 · the products act only for a real account
             media=body.media,                 # Sasha 159 (1)
         )
-        mode, quick = None, list(result.get("quick_replies") or [])
-        if sw:
-            try:
-                old = None
-                if body.mode_label:
-                    pk = next((k for k, v in SW.PRODUCT_LABEL.items() if v == body.mode_label), None)
-                    old = {"k": "p", "p": pk, "label": body.mode_label} if pk else {"k": "j", "label": body.mode_label}
-                prod = product_mode or (bk[1] if bk else None) or (_product_of(result) if result.get("quick_replies") else None)
-                new = ({"k": "p", "p": prod, "label": SW.PRODUCT_LABEL.get(prod, prod)} if prod in SW.PRODUCT_LABEL else
-                       await SW.after(account, message, {"pending": {"find": result.get("booking_find") or {}}}))
-                items = [("text", result["response"])]
-                cur = SW.announce(items, old, new, 0)
-                if len(items) > 1:   # switched: the line first, its Back as a button
-                    result["response"] = items[0][1] + "\n" + result["response"]
-                    quick = [{"title": t, "payload": pl} for t, pl in items[0][2]] + quick
-                mode = (cur or {}).get("label")
-            except Exception as e:
-                logging.getLogger("conductor").warning("[switching] web: %s: %s", type(e).__name__, e)
+        quick = list(result.get("quick_replies") or [])
+        # Sasha 194 · the SPACE, always shown (no automatic switching: a space changes only by its word or button)
+        try:
+            from products.web import current_space as _cs
+            from booking_signer.switching import space_label
+            mode = space_label(await _cs(account) if signed_in(account) else None)
+        except Exception as e:
+            logging.getLogger("conductor").warning("[spaces] label: %s", type(e).__name__)
+            mode = None
         # Persist this turn (best-effort; a DB hiccup must never break the conversation).
         await chat_store.save_turn(
             session_id=session_id,

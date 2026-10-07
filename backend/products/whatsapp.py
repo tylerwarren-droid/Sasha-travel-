@@ -18,12 +18,16 @@ Called from booking_signer/guest_whatsapp.turn() — the guarded block marked "C
 from __future__ import annotations
 
 import logging
+import os
 import re
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 log = logging.getLogger("products.whatsapp")
 MODE_IDLE = timedelta(hours=6)
+#: Sasha 194 · STRICT SPACES (the founder, 7 Oct): a space is entered and left ONLY by its word or its button; inside a space every
+#: request is that space's; outside, only a word enters one. No automatic switching either way. SASHA_SPACES=loose restores the old.
+STRICT = os.getenv("SASHA_SPACES", "strict") != "loose"
 
 _CAMPUS = re.compile(r"^\s*(campus\s*me|campusme|campus)\b", re.I)
 _RELOC = re.compile(r"^\s*(relocation|relocate|relocating|reloc|ex-?01|residencia)\b", re.I)
@@ -296,7 +300,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
             st["pending"] = pend = {**fresh, "kind": "product", "product": asked_last}
     if asked_last:
         try:
-            if now - datetime.fromisoformat(pend.get("touched")) > MODE_IDLE:
+            if not STRICT and now - datetime.fromisoformat(pend.get("touched")) > MODE_IDLE:
                 asked_last, st["pending"] = None, None
         except (TypeError, ValueError):
             pass
@@ -362,7 +366,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
             target, entering = guess, True
             body = START_WORD[guess]
             p["Body"] = body
-    if not target and not payload:                              # CR 35 · "find my centre": health's, from anywhere
+    if not target and not payload and (not STRICT or asked_last == "health"):   # CR 35 · "find my centre": health's (strict: in it)
         from .health import cita as CI
         if CI.AGAIN.search(body):
             target = "health"
@@ -372,12 +376,12 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         # returns to it. Not "book my flights" (CR 13's trip) and not "near my hotel" (CR 20's in-context hand-off).
         from booking_signer import wa_brain as _WB
         from . import trip as _TP
-        if (_WB.RESET.match(body) or _WB.sasha_clear(body, st.get("history") or [], now)) and not _REL.search(body) \
-                and not _TP.wants_plan(body):   # Sasha 170 · "reset the demo" too (live: RelocateMe answered it)
+        if (_WB.RESET.match(body) or (not STRICT and _WB.sasha_clear(body, st.get("history") or [], now))) and not _REL.search(body) \
+                and not _TP.wants_plan(body):   # Sasha 194 · strict: only "reset the demo" leaves a space this way   # Sasha 170 · "reset the demo" too (live: RelocateMe answered it)
             if asked_last:
                 await _set_aside(st, ch)
             return False
-    if not target and not payload and _STATUS.search(body):
+    if not target and not payload and _STATUS.search(body) and (not STRICT or asked_last):
         named = next((prod for prod, rx in _NAMES if rx.search(body)), None)
         waiting = [prod for prod, _ in await _waiting(ch, now)]
         prod = named if named in waiting else (asked_last or (waiting[0] if waiting and not named else None))
@@ -406,7 +410,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         if asked_last != "trip":
             from . import store as ST
             await ST.STORE.drop_conversation(_key(ch), "trip")
-    if not target and not payload:
+    if not target and not payload and (not STRICT or asked_last in ("relocation", "campus", "trip")):
         # CR 13 · "book my flights" / "plan the trip around the visits": the products' context, acted on by Sasha's travel
         from . import trip as TP
         waiting = [w for w, _ in await _waiting(ch, now)]
@@ -427,19 +431,22 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
             target = asked_last
         elif for_sasha(body, st.get("history") or [], now):
             handed = await _in_context(ch, asked_last, pend, body, now)       # CR 20 (5): "near my hotel on arrival"
-            await _set_aside(st, ch)
-            if handed:
-                out.text(handed[1])
-                p["KanoeSaid"], p["Body"] = body, handed[0]
-            return False
+            if STRICT and not handed:
+                target = asked_last   # Sasha 194 · strict: the space keeps it (its re-ask) — only ITS OWN hand-off goes to Sasha
+            else:
+                await _set_aside(st, ch)
+                if handed:
+                    out.text(handed[1])
+                    p["KanoeSaid"], p["Body"] = body, handed[0]
+                return False
         else:
             # CR 35 · one conversation per account, two devices: when the product that asked last doesn't recognise this,
             # a set-aside product waiting for exactly this answer takes it ("28010" on the laptop's relocation, while the
             # phone's EspañaMe asked last); otherwise the re-ask goes to the one that asked last, as before
-            other = next((prod for prod, saved in await _waiting(ch, now)
-                          if prod != asked_last and _module(prod).claims(saved, body, payload, media)), None)
+            other = None if STRICT else next((prod for prod, saved in await _waiting(ch, now)
+                                              if prod != asked_last and _module(prod).claims(saved, body, payload, media)), None)
             target = other or asked_last
-    if not target and not asked_last and not payload and _REL.search(body) and for_sasha(body, st.get("history") or [], now):
+    if not STRICT and not target and not asked_last and not payload and _REL.search(body) and for_sasha(body, st.get("history") or [], now):
         # CR 20 (5) · a product set aside (e.g. after a trip hand-off) still lends its context to "near my hotel on arrival"
         for prod, saved in await _waiting(ch, now):
             handed = await _in_context(ch, prod, saved, body, now)
@@ -447,7 +454,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
                 out.text(handed[1])
                 p["KanoeSaid"], p["Body"] = body, handed[0]
                 return False
-    if not target and not st.get("pending"):
+    if not STRICT and not target and not st.get("pending"):
         # 4 · nobody is waiting: a set-aside product resumes only on an answer to its own question
         for prod, saved in await _waiting(ch, now):
             if _module(prod).claims(saved, body, payload, media):

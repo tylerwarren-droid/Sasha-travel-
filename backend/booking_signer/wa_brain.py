@@ -665,6 +665,15 @@ async def reset_demo(account: str, dry: bool) -> dict:
                 log.warning("[wa_brain] a test payment link not expired: %s", type(e).__name__)
         await run(lambda c: c.execute("update trip_items set status = 'cancelled', escalation_notes = 'Sasha 186 · reset: the unpaid TEST link expired', "
                                       "updated_at = now() where id = any($1::uuid[])", [w["id"] for w in waiting]))
+    if not dry:   # Sasha 194 · a clean start: no quote, flight list, offer or pick from before the reset may come back
+        try:
+            from . import trip_book as _TB
+            _TB._QUOTES.pop(account, None)
+            from app.services import chat_store as _CS
+            for _s in await _CS.list_sessions(account):
+                await _CS.clear_session_cards(_s.get("id"))
+        except Exception as e:
+            log.warning("[wa_brain] cached searches not cleared: %s: %s", type(e).__name__, e)
     modes = 0
     if not dry:   # CR 39 · the open CampusMe / RelocateMe / EspañaMe conversations close too (their files are kept)
         try:

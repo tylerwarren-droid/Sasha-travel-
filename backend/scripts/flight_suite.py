@@ -114,8 +114,12 @@ async def main() -> int:
         # W3 · web: plan → its flights → a pick from the plan's own list → "book it, flying from Madrid" → the whole trip
         sid = "suite-w3-" + uuid.uuid4().hex[:6]
         h = []
-        for m in ("plan me 8 days in Vietnam from 12 November for 2 of us", "a mix of culture and beaches"):
+        for m in ("plan me 8 days in Vietnam from 12 November for 2 of us", "from Madrid, a mix of culture and beaches"):
             rr = await conduct(m, h, user_id=a, signed_in=True, session_id=sid)
+            if m.startswith("plan me"):   # Sasha 194 · the origin is asked, and a new trip starts clean (no old lists or prices)
+                ok("W3 plan: asks where from (Madrid suggested)", "flying from" in (rr.get("response") or ""), (rr.get("response") or "")[:90])
+                ok("W3 plan: a clean start — no flight list, offer or price before the plan", not rr.get("bookings")
+                   and "€" not in (rr.get("response") or ""), "")
             h = rr.get("messages") or h
         card = next((b for b in rr.get("bookings") or [] if b.get("_provider") == "duffel"), None)
         ok("W3 plan: built, with flights to consider", bool(rr.get("itinerary")) and bool(card), (rr.get("response") or "")[:90])

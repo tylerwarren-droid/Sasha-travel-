@@ -43,6 +43,17 @@ async def _state(key: str) -> dict:
     return {"history": [], "pending": None}
 
 
+async def current_space(user_id: Optional[str]) -> Optional[str]:
+    """Sasha 194 · the space the web chat is in: "relocation" | "campus" | "health" | "trip" | "diligence", or None (Sasha)."""
+    if not user_id:
+        return None
+    try:
+        pend = (await _state(f"web:{user_id}")).get("pending") or {}
+    except Exception:
+        return None
+    return pend.get("product") if pend.get("kind") == "product" else None
+
+
 async def _save(key: str, account: str, st: dict) -> None:
     if st.get("pending"):
         await ST.STORE.put_conversation(key, account, "webstate", {"pending": st["pending"], "for": st["pending"].get("product")})

@@ -18,7 +18,7 @@ from typing import List, Optional, Tuple
 
 PRODUCT_IDLE = timedelta(minutes=30)
 PRODUCT_LABEL = {"relocation": "🏠 Move to Madrid", "campus": "🎓 CampusMe", "health": "🇪🇸 EspañaMe", "trip": "✈️ Trip planning"}
-_LABEL = re.compile(r"^_Now: (?P<l>[^_\n]+)_\n?")
+_LABEL = re.compile(r"^_(?:Now: (?P<l>[^_\n]+)|You're in [^_\n]+)_\n?")
 _TO = re.compile(r"\b(?:flights?|fly(?:ing)?|hotels?|vuelos?)\b[^.?!]*?\bto\s+(?P<d>[A-ZÁÉÍÓÚ][\wáéíóúñ'-]*(?:\s+[A-Z][\wáéíóúñ'-]*)?)")
 _IN = re.compile(r"\b(?:in|en)\s+(?P<d>[A-ZÁÉÍÓÚ][\wáéíóúñ'-]*(?:\s+[A-Z][\wáéíóúñ'-]*)?)")
 _MY = re.compile(r"\bmy (?P<t>[\w ,]+?) (?:trip|journey|itinerary|plan)\b", re.I)
@@ -32,9 +32,29 @@ def on(account: Optional[str]) -> bool:
     return bool(account) and (os.getenv("SASHA_SWITCHING", "") == "all" or founder(account))
 
 
+SPACE_NAME = {"relocation": "RelocateMe", "campus": "CampusMe", "health": "EspañaMe", "trip": "your trip planner", "diligence": "Applied Diligence"}
+
+
+def space_label(product: Optional[str]) -> str:
+    """Sasha 194 · the space, always said: "You're in CampusMe — say “sasha” for travel" / "You're in Sasha (travel)"."""
+    if product:
+        return f"You're in {SPACE_NAME.get(product, product)} — say “sasha” for travel"
+    return "You're in Sasha (travel)"
+
+
+def label_space(out_items: list, product: Optional[str]) -> None:
+    import os
+    if os.getenv("SASHA_SPACE_LABEL", "1") == "0":
+        return
+    for i, it in enumerate(out_items):
+        if it[0] in ("text", "ask") and not it[1].startswith("🎙"):
+            out_items[i] = (it[0], f"_{space_label(product)}_\n{strip_label(it[1])}", *it[2:])
+            return
+
+
 def label_of(text: str) -> Optional[str]:
     m = _LABEL.match(text or "")
-    return m["l"].strip() if m else None
+    return m["l"].strip() if m and m["l"] else None
 
 
 def strip_label(text: str) -> str:

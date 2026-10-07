@@ -141,6 +141,7 @@ class Conversation(Base):
 
 
 class Again(Base):
+    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
     def test_find_my_centre_again_rebuilds_from_the_forms_own_case(self):
         self.to_offer()
         self.say("", payload="hx:ci:no")                               # (the founder's run: the old lookup ended the step)
@@ -158,6 +159,8 @@ if __name__ == "__main__":
 class TwoDevices(TC.Base):
     """CR 35 · the founder's laptop run: one conversation per account; RelocateMe waiting at "Postcode?" while EspañaMe's
     health card asked last (on the phone). "28010" is relocation's answer — never swallowed by the health card's question."""
+
+    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
 
     def test_an_answer_goes_to_the_product_waiting_for_it(self):
         from tests.test_relocation_cr1 import OnWhatsApp as R

@@ -4,7 +4,9 @@
 """
 from __future__ import annotations
 
+import os
 import unittest
+from unittest import mock
 
 from booking_signer.decide import Venue, decide, preference
 
@@ -34,7 +36,7 @@ class Decide(unittest.TestCase):
     def test_urgent_is_call_and_email_at_once_on_one_yes(self):
         d = decide(Venue(platform="CoverManager", phone=True, email=True, open_now=True, hours_until=5))
         self.assertEqual(d.route, "call_email")
-        self.assertIn("It's within 24 hours, so I'll call them and email them at once — one yes covers both.", d.reason)
+        self.assertIn("It's within 48 hours, so I'll call them and email them at once — one yes covers both.", d.reason)
         self.assertEqual(decide(Venue(platform="TheFork", phone=True, hours_until=5)).route, "call")
         self.assertEqual(decide(Venue(platform="TheFork", hours_until=5)).route, "one_tap")    # nothing else exists
 
@@ -125,6 +127,8 @@ class OnWhatsApp(TG.Base):
         self.say("BOOKED")
         self.assertIn("I'm looking for their confirmation email in your Gmail now.", self.bodies()[-1])
         self.assertIn("watch_gmail_confirmation", self.spawned)
+
+    @mock.patch.dict(os.environ, {'SASHA_URGENT_HOURS': '24'})   # Sasha 194 · the 48 h rule made this booking (33 h away) urgent; the far case is what this pins
 
     def test_no_page_no_form_is_email_not_a_call_even_with_a_phone(self):
         self.rungs = [{"rung": "phone", "available": True, "fact_index": 2, "value": "+34 91 000"},

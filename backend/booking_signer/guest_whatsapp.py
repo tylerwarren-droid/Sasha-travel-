@@ -681,7 +681,7 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     from . import switching as SW
     lead = 1 if heard else 0
     sw = SW.on(account)
-    pend0 = (st.get("pending") or {}) if sw else {}
+    pend0 = {}   # Sasha 194 · no idle exit from a space: only its word leaves it
     if pend0.get("kind") == "product":
         try:
             if now - datetime.fromisoformat(pend0.get("touched")) > SW.PRODUCT_IDLE:
@@ -732,8 +732,9 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
             await deliver(ch, frm, out, now)
             return out
     if not skip_products and await PW.product_turn(ch, frm, p, st, out, now, early=_early):
-        if sw:
-            SW.label_first(out.items, SW.announce(out.items, mode0, await SW.after(account, body, st), lead))
+        _pp = st.get("pending") or {}
+        if sw:   # Sasha 194 · the space, always said (the founder's account; guests next, with their tests)
+            SW.label_space(out.items, _pp.get("product") if _pp.get("kind") == "product" else None)
         await STORE.put_state(key, st)   # never into Sasha's history: a product's answers (passport facts) aren't hers
         await deliver(ch, frm, out, now)
         return out
@@ -770,9 +771,9 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     offer = await _reminders_offer(ch)
     if offer:
         out.text(offer)
-    try:   # Sasha 179 · the switch line (with Back) and the mode label; never blocks the reply
+    try:   # Sasha 194 · the space, always said (Sasha 179's automatic "↪ Switching" is gone: spaces change only by their word)
         if sw:
-            SW.label_first(out.items, SW.announce(out.items, mode0, await SW.after(account, body, st), lead))
+            SW.label_space(out.items, None)
     except Exception as e:
         log.warning("[guest_whatsapp] no mode label: %s: %s", type(e).__name__, e)
     st["history"] = (st.get("history") or []) + [{"role": "user", "content": body}] + \

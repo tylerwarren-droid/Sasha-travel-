@@ -39,8 +39,8 @@ def reply_hours() -> float:
 
 
 def urgent_hours() -> float:
-    """A booking this soon is URGENT: call and email at once."""
-    return _num("SASHA_URGENT_HOURS", 24)
+    """A booking this soon is URGENT: call and email at once. Sasha 194 · the founder's 48-hour rule (was 24)."""
+    return _num("SASHA_URGENT_HOURS", 48)
 
 
 ROUTES = ("form", "one_tap", "call", "email", "call_email")

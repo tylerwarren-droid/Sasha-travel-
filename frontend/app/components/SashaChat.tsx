@@ -804,7 +804,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
             ))}
           </div>
         )}
-        {modeLabel && <div className="o2" style={{ fontSize: 11, opacity: 0.7 }}>Now: {modeLabel}</div>}{/* Sasha 179 · the current mode */}
+        {modeLabel && <div className="o2" style={{ fontSize: 11, opacity: 0.75 }}>{modeLabel}</div>}{/* Sasha 179 · the current mode */}
         {quickReplies.length > 0 && (   /* CR 16 · a product's buttons: the title is shown as the guest's line, the payload is sent */
           <div className="flex flex-wrap gap-2">
             {quickReplies.map((q, i) => (

@@ -94,7 +94,7 @@ async def bundle(account: str, origin: str) -> dict:
     lines.append("Each goes in your itinerary on its day, marked TEST, with its reference.")
     sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
     b = {"stays": ss, "flights": flights, "lines": lines, "sha256": sha, "eur": round(total, 2), "party": party, "title": p.get("title"), "tz": tz,
-         "origin": origin, "at": datetime.now().timestamp(),
+         "origin": origin, "at": datetime.now().timestamp(), "trip_id": p.get("trip_id"),
          # Sasha 189 · the card shows this, briefly (the yes stays bound to the full lines above)
          "summary": {"hotels": len(ss), "cities": [st["city"] for st in ss], "party": party, "eur": round(total, 2),
                      "flights": [f"{c['owner']} {c['flights']} · {c['from']}→{c['to']} · {str(c.get('departs') or '')[:10]}" for c in flights]}}
@@ -133,7 +133,10 @@ async def prepare(request: Request):
         body = {}
     origin = str((body or {}).get("from") or "Madrid").strip()[:60] or "Madrid"
     q = _QUOTES.get(account_for(request))   # Sasha 189 · the total Sasha just said: the same quote, not a second pricing
-    b = q if q and q.get("origin") == origin and datetime.now().timestamp() - float(q.get("at") or 0) < 300 else await bundle(account_for(request), origin)
+    from . import plan_store as _PS   # Sasha 194 · reused only for the SAME plan — a new trip never shows an old quote
+    _cur = await _PS.latest(account_for(request))
+    b = q if q and q.get("origin") == origin and q.get("trip_id") == (_cur or {}).get("trip_id") \
+        and datetime.now().timestamp() - float(q.get("at") or 0) < 300 else await bundle(account_for(request), origin)
     if "why" in b:
         return _refuse(422, "trip_not_bookable", b["why"])
     return {"ok": True, "read_back": {"lines": b["lines"], "sha256": b["sha256"]}, "eur": b["eur"], "title": b["title"], "summary": b.get("summary")}

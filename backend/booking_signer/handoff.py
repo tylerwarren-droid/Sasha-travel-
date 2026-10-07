@@ -82,6 +82,8 @@ def spoken(message: str) -> str:
     """Sasha 88 · a request SPOKEN to Sasha reads like a typed one: speech-to-text writes "9 p.m.", "nine p.m.",
     "9 P.M." — the parsers read "9pm". Sasha 104 · "2100", "21h" and a Spanish request read the same way."""
     t = _es(message or "")
+    # Sasha 194 · what a voice adds before the request: "Uh, a table for two…", "Okay so, …", "Sasha, …", "Um well, …"
+    t = re.sub(r"^\s*(?:(?:uh+|um+|er+|erm|hmm+|ok(?:ay)?|so|well|right|hey|hi|sasha|alright|yeah|now)[\s,.!-]+)+", "", t, flags=re.I)
     t = re.sub(r"\b([ap])\.\s?m\.?(?=\W|$)", lambda m: m[1].lower() + "m", t, flags=re.I)
     t = re.sub(r"\b(\d{1,2})\s+([ap]m)\b", r"\1\2", t, flags=re.I)
     # Sasha 104 · "at 2100", "a las 2130", "2100h" — a 24-hour clock written without its colon is that time

@@ -4,10 +4,12 @@ Duffel signs each event: X-Duffel-Signature: t=<timestamp>,v1=<hex HMAC-SHA256 o
 (DUFFEL_WEBHOOK_SECRET on Railway — Duffel shows it once, when the webhook is created). No secret set → 503, nothing read.
 A bad or stale (> 5 min) signature → 401, nothing recorded. A verified event is recorded once (basket_events, by Duffel's
 event id: a redelivery is not a second), then:
-    order cancelled (order_cancellation.confirmed, or an order.updated whose order carries cancelled_at)
+    order cancelled (order_cancellation.confirmed, or an air.order.changed whose order carries cancelled_at)
                                               → the basket row cancelled + its trip_items row cancelled; the guest told
     order.airline_initiated_change_detected   → the row's line says the airline changed the schedule; the guest told
-    anything else (order.created, order.updated, ping.triggered)  → recorded only
+    anything else (order.created, air.order.changed, order_cancellation.created, testing)  → recorded only
+Subscribed (Duffel's own names, 7 Oct): order.created, air.order.changed, order.airline_initiated_change_detected,
+order_cancellation.created, order_cancellation.confirmed.
 Pacioli writes every line; the model never sees an event.
 """
 from __future__ import annotations
@@ -68,7 +70,7 @@ async def handle(event: Dict[str, Any]) -> Dict[str, Any]:
     rows = await _rows_of_order(order_id) if order_id else []
     if not rows:
         return {"done": "recorded (no basket item for this order)"}
-    cancelled = etype == "order_cancellation.confirmed" or (etype == "order.updated" and obj.get("cancelled_at"))
+    cancelled = etype == "order_cancellation.confirmed" or (etype in ("air.order.changed", "order.updated") and obj.get("cancelled_at"))
     out = []
     for r in rows:
         if cancelled and r["state"] != "cancelled":

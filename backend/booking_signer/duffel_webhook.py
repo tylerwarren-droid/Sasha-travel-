@@ -19,6 +19,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from typing import Any, Dict, Optional
@@ -34,21 +35,42 @@ PATH = "/api/booking/travel/duffel/webhook"
 TELL = None   # tests replace it: (account, words) → None
 
 
+MATCHED: list = []   # which key form and version verified (names only), for the log
+
+
+def _keys(secret: str):
+    yield "raw", secret.encode()
+    try:
+        import base64
+        k = base64.b64decode(secret, validate=True)
+        if k:
+            yield "base64", k
+    except Exception:
+        pass
+
+
 def why_not(secret: str, header: str, body: bytes, now: Optional[float] = None) -> Optional[str]:
-    """None when the signature is Duffel's; else why not (said in the log — never a value)."""
+    """None when the signature is Duffel's; else why not (said in the log — never a value). Duffel's header is
+    t=<ts>,v1=<hex> (or v2); the key is tried as given and base64-decoded."""
     try:
         parts = dict(p.strip().split("=", 1) for p in (header or "").split(","))
-        t, sig = parts["t"], parts["v1"]
+        t = parts["t"]
         ts = int(t)
+        sigs = {k: v.lower() for k, v in parts.items() if re.fullmatch(r"v\d+", k)}
+        if not sigs:
+            raise KeyError("v")
     except (ValueError, KeyError):
         return f"malformed header (keys: {sorted(k.split('=')[0].strip() for k in (header or '').split(',') if k)})"
     ts_s = ts / 1000 if ts > 10 ** 11 else ts   # seconds, or milliseconds
     if abs((now or time.time()) - ts_s) > 300:
         return f"stale timestamp ({int((now or time.time()) - ts_s)} s off)"
-    want = hmac.new(secret.encode(), t.encode() + b"." + body, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(want, sig.lower()):
-        return f"mismatch (secret {len(secret)} chars, signature {len(sig)} chars, body {len(body)} bytes)"
-    return None
+    for kname, key in _keys(secret):
+        want = hmac.new(key, t.encode() + b"." + body, hashlib.sha256).hexdigest()
+        for vname, sig in sigs.items():
+            if hmac.compare_digest(want, sig):
+                MATCHED[:] = [f"{kname} key, {vname}"]
+                return None
+    return f"mismatch (versions {sorted(sigs)}, secret {len(secret)} chars, body {len(body)} bytes)"
 
 
 def verify(secret: str, header: str, body: bytes, now: Optional[float] = None) -> bool:
@@ -120,7 +142,7 @@ async def webhook(request: Request):
     except Exception as e:
         log.error("[duffel_webhook] %s not handled: %s: %s", event.get("type"), type(e).__name__, e)
         return JSONResponse({"ok": False, "rule": "not_handled"}, status_code=500)   # Duffel retries
-    log.info("[duffel_webhook] %s %s → %s", event.get("type"), event.get("id"), r["done"])
+    log.info("[duffel_webhook] %s %s → %s (verified: %s)", event.get("type"), event.get("id"), r["done"], ", ".join(MATCHED))
     return {"ok": True, **r}
 
 

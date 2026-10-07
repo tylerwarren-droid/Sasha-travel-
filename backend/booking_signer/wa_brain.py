@@ -617,7 +617,7 @@ async def reset_demo(account: str, dry: bool) -> dict:
 
     async def fn(conn):
         where = (f"from trip_items ti join trips t on t.id = ti.trip_id where t.owner_id = $1 and {_TEST_SQL} "
-                 "and ti.status not in ('cancelled', 'failed') and ti.date_time >= now() - interval '1 day'")
+                 "and ti.status not in ('cancelled', 'failed') and (ti.date_time >= now() - interval '1 day' or ti.date_time is null)")   # Sasha 186 · undated quote requests too
         if dry:
             return await conn.fetchval(f"select count(*) {where}", uuid.UUID(account))
         ids = [r["id"] for r in await conn.fetch(f"select ti.id {where}", uuid.UUID(account))]

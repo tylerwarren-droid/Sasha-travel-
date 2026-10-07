@@ -12,6 +12,7 @@ import LogoMark from '../components/portal/LogoMark'
 import { stripMarkdown } from '@/lib/markdown'
 import { apiUrl, apiHeaders } from '@/lib/api'
 import { accountUrl, guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // Sasha 142
+import { bookingPeek } from '@/lib/booking-client'
 import { PAYMENTS_ENABLED, SAVED_CARD_LAST4 } from '@/lib/flags'
 import { buildItineraryHtml, buildItineraryText } from '@/lib/itineraryDoc'
 import { User, Itinerary } from '@/types'
@@ -809,6 +810,16 @@ export default function VietnamPage() {
   // `?ui=preview` renders the shell with a placeholder tile and no live session — layout QA
   // without spending LiveAvatar credits. Read after mount so SSR and client agree.
   const [uiPreview, setUiPreview] = useState(false)
+  // Sasha 183 · "Meet Sasha / Tap to start your call" is for FIRST-TIME visitors only: never for an account that already has
+  // trips or bookings, never again once closed (its ✕)
+  const [meetHidden, setMeetHidden] = useState(false)
+  useEffect(() => {
+    try { if (localStorage.getItem('sasha.meet.closed') === '1') setMeetHidden(true) } catch { /* private window: shown, closable */ }
+    bookingPeek('/api/booking/journeys').then((r) => {
+      const j = r?.json as { journeys?: unknown[]; receipts?: unknown[]; everything?: unknown[] } | undefined
+      if (r?.ok && ((j?.journeys?.length ?? 0) + (j?.receipts?.length ?? 0) + (j?.everything?.length ?? 0)) > 0) setMeetHidden(true)
+    }).catch(() => { /* not signed in: a first-time visitor */ })
+  }, [])
   useEffect(() => {
     try {
       const on = new URLSearchParams(window.location.search).get('ui') === 'preview'
@@ -1083,8 +1094,10 @@ export default function VietnamPage() {
               <div className="mt-ov-top absolute top-0 left-0 right-0 flex items-center" style={{ padding: '14px 16px', zIndex: 3 }}>
                 <span className="mt-standbypill"><span className="mt-standbydot" /> {uiPreview ? 'Preview' : 'Standby'}</span>
               </div>
-              {!uiPreview && (
-                <div className="mt-startwrap">
+              {!uiPreview && !meetHidden && (
+                <div className="mt-startwrap" style={{ position: 'relative' }}>
+                  <button type="button" aria-label="Close" onClick={() => { setMeetHidden(true); try { localStorage.setItem('sasha.meet.closed', '1') } catch { /* fine */ } }}
+                    style={{ position: 'absolute', top: -6, right: -6, width: 28, height: 28, borderRadius: 999, border: '1px solid rgba(255,255,255,.3)', background: 'rgba(0,0,0,.45)', color: '#fff', cursor: 'pointer', zIndex: 4 }}>✕</button>
                   <div className="mt-eyebrow">AI Travel Concierge</div>
                   <div className="mt-bigname">Meet Sasha</div>
                   <button className="mt-startbtn" onClick={() => startWith()}><Play size={16} strokeWidth={2.2} fill="#fff" /> Tap to start your call</button>

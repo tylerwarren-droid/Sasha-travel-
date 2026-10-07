@@ -25,6 +25,9 @@ export async function bookingReq(path: string, body?: unknown, timeoutMs = 30000
   return res
 }
 
+/** Sasha 183 · a read that never starts a guest session (a 401 stays a 401) — for "is this a returning visitor?" */
+export const bookingPeek = (path: string): Promise<Res> => bookingReqOnce(path)
+
 async function bookingReqOnce(path: string, body?: unknown, timeoutMs = 30000): Promise<Res> {
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), timeoutMs)

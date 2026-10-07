@@ -139,11 +139,16 @@ export default function TripPanel({
   const [tripId, setTripId] = useState<string | null>(null)
   const [, setPlans] = useState<PlanRef[]>([])
   const server = useServerPlan(tripId, setPlans)
-  const jn = useJourneys()
+  const jnLive = useJourneys()
+  const [gone, setGone] = useState<string[]>([])   // Sasha 183 · a removed tab goes at once (the poll confirms it)
+  const jn = jnLive ? { ...jnLive, journeys: jnLive.journeys.filter((t) => !gone.includes(t.key)) } : null
   const [handoff, setHandoff] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
   const [removeSay, setRemoveSay] = useState<string | null>(null)
-  const richItinerary = (tripId ? null : localItinerary) ?? (server as RichItinerary | null)
+  // Sasha 183 · a removed plan never lingers as the chat's own copy (live: "Remove didn't remove"); a new plan shows again
+  const [dropLocal, setDropLocal] = useState(false)
+  useEffect(() => { setDropLocal(false) }, [localItinerary])
+  const richItinerary = (tripId || dropLocal ? null : localItinerary) ?? (server as RichItinerary | null)
   const activeTrip = tripId ?? server?.trip_id ?? null
   const chip = (on: boolean) => (on ? { borderColor: '#E8B923', color: '#E8B923' } : undefined)
   const tabs = (
@@ -164,13 +169,17 @@ export default function TripPanel({
         return (
           <div className="o2" style={{ width: '100%', fontSize: 13, marginTop: 4 }}>
             Remove “{t?.label ?? 'this tab'}”? {removing.startsWith('city:') ? 'Its saved searches go.' : 'The plan goes.'} Bookings in it are kept — they&rsquo;re cancelled separately.{' '}
-            <button className="price" onClick={async () => {
-              const r = await bookingReq('/api/booking/journeys/remove', { key: removing }).catch(() => null)
-              setRemoveSay(String(r?.json?.say ?? 'Not removed — Sasha’s server did not answer.'))
-              if (r?.ok && r.json?.ok) { if (activeTrip === removing) setTripId(null); setView('trip') }
-              setRemoving(null)
-            }}>Remove</button>{' '}
-            <button className="viewlink" onClick={() => setRemoving(null)}>Keep it</button>
+            <button type="button" style={{ background: '#E8B923', color: '#111', border: 0, borderRadius: 8, padding: '4px 12px', fontWeight: 600, cursor: 'pointer', marginLeft: 6 }}
+              onClick={async (e) => {
+                e.stopPropagation()
+                const key = removing
+                const r = await bookingReq('/api/booking/journeys/remove', { key }).catch(() => null)
+                setRemoveSay(String(r?.json?.say ?? 'Not removed — Sasha’s server did not answer.'))
+                if (r?.ok && r.json?.ok && key) { setGone((g) => [...g, key]); if (activeTrip === key) { setTripId(null); setDropLocal(true) } setView('trip') }
+                setRemoving(null)
+              }}>Remove</button>
+            <button type="button" style={{ background: 'transparent', color: 'inherit', border: '1px solid rgba(255,255,255,.35)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', marginLeft: 6 }}
+              onClick={(e) => { e.stopPropagation(); setRemoving(null) }}>Keep it</button>
           </div>
         )
       })()}

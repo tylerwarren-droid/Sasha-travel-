@@ -115,7 +115,7 @@ async def main() -> int:
         #      → ONE total with THAT flight → paid → booked
         sid = "suite-w3-" + uuid.uuid4().hex[:6]
         h = []
-        for m in ("plan me 8 days in Vietnam from 12 November for 2 of us", "culture and beaches", "from Madrid"):
+        for m in ("plan me 8 days in Vietnam from 12 November for 2 of us", "Alex", "culture and beaches", "from Madrid"):
             rr = await conduct(m, h, user_id=a, signed_in=True, session_id=sid)
             if m.startswith("plan me"):
                 ok("W3 plan: one question first, and a clean start (no flights, offers or prices)", "?" in (rr.get("response") or "")

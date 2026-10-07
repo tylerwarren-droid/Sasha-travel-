@@ -28,7 +28,9 @@ async def itinerary(a: str, conduct) -> None:
     sid = "core-i2-" + uuid.uuid4().hex[:6]
     v = await conduct("I'd like you to plan a trip for me to Vietnam, please, for twelve days. From November 15 to November 27.", [],
                       user_id=a, signed_in=True, session_id=sid)
-    ok("ITIN voice: the meeting's words → ONE question first (what I'm into)", "What are you into" in _said(v) and _said(v).count("?") <= 2, _said(v)[:110])
+    ok("ITIN voice: the meeting's words → ONE question first (my name)", "what's your name" in _said(v) and _said(v).count("?") == 1, _said(v)[:110])
+    v = await conduct("It's Alex.", v["messages"], user_id=a, signed_in=True, session_id=sid)
+    ok("ITIN voice: the name → greeted by it, then what kind of trip", "Alex" in _said(v) and "What kind of trip" in _said(v), _said(v)[:110])
     v2 = await conduct("Be two of us, flying from London, and we'd like a mixture between culture and beaches, please.", v["messages"],
                        user_id=a, signed_in=True, session_id=sid)
     ok("ITIN voice: everything said → built for the 15th–27th, flights asked about from London", bool(v2.get("itinerary"))
@@ -124,7 +126,10 @@ async def guided(a: str, conduct) -> None:
         h = r.get("messages") or h
         return r
     r = await say("plan me a trip to Vietnam from 12 November for 8 days")
-    ok("GUIDED 1: asks what I'm into (one question)", "What are you into" in _said(r) and "?" in _said(r), _said(r)[:90])
+    ok("GUIDED 1: introduces herself, asks my NAME first (one question)", "I'm Sasha" in _said(r) and "what's your name" in _said(r)
+       and _said(r).count("?") == 1, _said(r)[:90])
+    r = await say("Uh, my name is Alex.")
+    ok("GUIDED 1b: then what kind of trip, by name", "Alex" in _said(r) and "What kind of trip" in _said(r) and _said(r).count("?") == 1, _said(r)[:90])
     r = await say("Uh, we're into food and culture, please.")
     ok("GUIDED 2: then how many", "How many of you" in _said(r), _said(r)[:90])
     r = await say("Be two of us.")

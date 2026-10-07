@@ -456,7 +456,7 @@ async def classify_intents(user_message: str, conversation_history: list,
     # Party-intake follow-up: Sasha just asked "how many of you will be travelling?" before
     # building. The guest's answer ("six of us", "just the two of us", "6") carries no build
     # verb, so it must be routed straight back to the itinerary builder.
-    if re.search(r"what kind of trip|what are you into|where will you be flying from|how many of you will be travelling", last_assistant) \
+    if re.search(r"first, what's your name|what kind of trip|what are you into|where will you be flying from|how many of you will be travelling", last_assistant) \
             and not re.search(r"\b(?:cancel|stop|forget it)\b", lower):
         intents = ["itinerary"]   # Sasha 189/194 · the intake's answer builds the plan — even "…flying from London…"
     if not intents and "how many of you will be travelling" in last_assistant:
@@ -1239,6 +1239,20 @@ _NOT_PLACE194 = {"January", "February", "March", "April", "May", "June", "July",
                  "The", "And", "A", "We", "I", "It", "Just", "Both", "Mix", "Mostly", "Some", "Two", "Four", "Ok", "Okay"}
 
 
+def _name_answer(history, message) -> Optional[str]:
+    """Sasha 197 · the guest's answer to "First, what's your name?" — "Tyler", "I'm Tyler", "my name is Tyler Warren"."""
+    msgs = [m for m in (history or []) if isinstance(m, dict)] + [{"role": "user", "content": message or ""}]
+    for i, m in enumerate(msgs):
+        if m.get("role") == "assistant" and "first, what's your name" in (m.get("content") or "").lower():
+            ans = next((x.get("content") or "" for x in msgs[i + 1:] if x.get("role") == "user"), "")
+            ans = re.sub(r"^\s*(?:uh|um|er|oh|hi|hey|hello|well|so|yes|sure|okay|ok)[,.!]?\s+", "", ans.strip(), flags=re.I)
+            ans = re.sub(r"^(?:my name(?:'s| is)|i'm|i am|it's|it is|call me|this is)\s+", "", ans, flags=re.I)
+            w = re.match(r"([A-Za-zÀ-ÿ'’-]{2,20})", ans)
+            if w and w[1].lower() not in {"no", "not", "rather", "skip", "pass", "none", "nothing", "just", "why", "plan", "you"}:
+                return w[1][:1].upper() + w[1][1:]
+    return None
+
+
 def _origin_of(history, message) -> "Optional[str]":
     """Sasha 194 · where the guest flies from, from their own words: "flying from London", "from Madrid", or the answer to
     "Where will you be flying from — Madrid?" ("yes" / "Madrid" / "London, and food please"). None: not said yet."""
@@ -1547,9 +1561,15 @@ async def run_itinerary_intent(message: str, history: list,
         _asked = lambda k: any(k in (m.get("content") or "").lower() for m in (history or [])[-8:]
                                if isinstance(m, dict) and m.get("role") == "assistant")
         _origin_known = _origin_of(history, message) is not None
+        # Sasha 197 · the founder's order: she introduces herself and asks the NAME first, then what kind of trip, then how
+        # many, then where from — one question at a time, each asked once.
         if not _hands_off:
+            if not _asked("first, what's your name"):
+                return {"agent": "itinerary", "data": {}, "response": "Wonderful — I'm Sasha, and I'll put it all together for you. First, what's your name?"}
             if not _style_said and not _asked("what are you into") and not _asked("what kind of trip"):
-                return {"agent": "itinerary", "data": {}, "response": "Lovely! What are you into — culture, food, beaches, adventure? Any must-sees?"}
+                _nm = _name_answer(history, message)
+                return {"agent": "itinerary", "data": {}, "response": (f"Lovely to meet you, {_nm}! " if _nm else "Lovely! ")
+                        + "What kind of trip are you interested in — culture, food, beaches, adventure?"}
             if not _knows_party and not _asked_party:
                 return {"agent": "itinerary", "data": {}, "response": "How many of you will be travelling?"}
             if not _origin_known and not _asked("flying from"):

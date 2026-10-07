@@ -24,7 +24,7 @@ export type Pitch = {
   ready: boolean
   problem: string
   does: Line[]
-  agents: { agent: 'Magellan' | 'Sherlock' | 'Austen' | 'Pacioli'; text: string; mark: Claim }[]
+  agents: { agent: 'MaSh' | 'Austen' | 'Pacioli'; text: string; mark: Claim }[]   // CR 49 · MaSh = finds and obtains
   market: Figure[]
   model: Line[]
   status: Line[]
@@ -47,15 +47,15 @@ const S = (url: string, read = false): Source => ({ url, read })
 
 export const HUB = {
   headline: 'One method, proven in five products. The shared engine is what this round funds.',
-  agents: [
-    { name: 'Magellan', role: 'finds', text: 'Where a thing can be done, and how: the venue’s own form, the school’s own calendar, the register, the consulate’s own page. Robots and terms first.' },
-    { name: 'Sherlock', role: 'obtains, lawfully', text: 'The record, the answer or the document, by a route a person has approved.' },
-    { name: 'Austen', role: 'completes, after your yes', text: 'The booking, the form, the request. One yes, bound to the exact words. It never signs or declares for you.' },
-    { name: 'Pacioli', role: 'reconciles', text: 'What each source says, side by side, and where they disagree. A record of the check, never a verdict.' },
+  agents: [   // CR 49 · the leave-behind's three roles (docs/business/leave-behind.md)
+    { name: 'MaSh', role: 'finds and obtains', text: 'The official route and the record: the venue’s own booking route, the school’s own calendar, the consulate’s own form, the register’s own entry. Robots and terms first.' },
+    { name: 'Austen', role: 'completes, after your yes', text: 'The booking, the form, the request. One yes, bound to the exact words. It refuses what only you may do: the signature, the consent, the final press.' },
+    { name: 'Pacioli', role: 'reconciles', text: 'What’s missing, the evidence, the confirmation: “booked” only on the provider’s own words. A record of the check, never a verdict.' },
   ],
   status: [
     { mark: 'built', text: 'The method works in five products today, in two codebases (Sasha’s and Applied Diligence’s).' },
-    { mark: 'concept', text: 'The shared engine is the plan: Pacioli first, then Magellan, then Austen, each tested offline against today’s answers before anything switches.' },
+    { mark: 'built', text: 'The human steps happen where the human is: the phone, where authentication already lives. Sasha does everything up to that one tap — one “Tap to pay”, one “tap to finish”, the “I’m not a robot” box ticked by you, never by us.' },
+    { mark: 'concept', text: 'The shared engine is the plan: Pacioli first, then MaSh, then Austen, each tested offline against today’s answers before anything switches.' },
   ] as Line[],
   whatsapp: 'Try it on WhatsApp: type relocate, campus, españa or diligence.',
   marketKey: 'TAM is the spend or volume the product touches; SAM the part we can reach with what’s built and the routes we may use; SOM what we’d take in three years, a founder assumption left as a variable. Sizes are spend or volume, not our revenue.',
@@ -66,17 +66,18 @@ export const PITCHES: Pitch[] = [
     key: 'sasha', name: 'Sasha (Vietnam)', ready: true, tryHref: '/',
     problem: 'A visitor in Hanoi or Hoi An wants the good local place, not the one with an English booking widget. Those places take bookings by their own form, email or phone, in Vietnamese, in their own hours.',
     does: [
-      { mark: 'built', text: 'Ask once, on WhatsApp or the web. Sasha finds the venues and shows cards, with photos where the venue publishes one (about 1 in 3 in Vietnam).' },
-      { mark: 'built', text: 'After one yes, she books by the venue’s own form or email. Calls to Vietnam are in English; +84 calls aren’t connected yet.' },
+      // CR 49 · each line from the investor narrative's ✅ (verified live) marks
+      { mark: 'built', text: 'One platform space where every journey lands: a tab per journey, labelled with its product. A booking lands where its dates and place fit, and Sasha asks rather than guesses.' },
+      { mark: 'built', text: 'Search anything, anywhere, with photos: any kind of place in any city, with credited listing photos; a cuisine you ask for is honoured, and if nothing matches Sasha says so.' },
+      { mark: 'built', text: 'Book by the venue’s own route: its form, one tap, email, or a disclosed AI call in the venue’s language. In Vietnam, calls are in English; +84 calls aren’t connected yet.' },
+      { mark: 'built', text: 'Real platform bookings, made in your own browser: CoverManager, TheFork, Booksy and Fresha, each confirmed by the platform’s own email (and cancelled afterwards).' },
       { mark: 'test', text: 'Hotels: “Reserve (TEST)”, or a real room request to the hotel (✅). Flights: TEST bookings.' },
       // CR 50 · each line confirmed true and live by the Sasha tab (7 Oct): no real Apple Pay tap has completed a whole trip yet
       { mark: 'test', text: 'Laptop books, phone pays: a whole Vietnam trip priced and read back on the laptop; one Apple Pay tap is sent to the phone (TEST).' },
       { mark: 'test', text: 'A tattoo-studio request: found, sent by email (our test venue stands in), and filed under Requests.' },
-      { mark: 'built', text: 'Every journey in one place: Sasha’s trips space, with a tab per journey.' },
     ],
     agents: [
-      { agent: 'Magellan', mark: 'built', text: 'Reads each venue’s own site for its routes; Vietnam is one of the countries it reads.' },
-      { agent: 'Sherlock', mark: 'built', text: 'Obtains the venue’s answer in writing: an email to Sasha’s own address, matched to the booking.' },
+      { agent: 'MaSh', mark: 'built', text: 'Finds each venue’s own route on its own site, and obtains its answer in writing: an email to Sasha’s own address, matched to the booking.' },
       { agent: 'Austen', mark: 'built', text: 'Books by form, then one tap, then email, then a call, on one yes covering the plan.' },
       { agent: 'Pacioli', mark: 'built', text: 'Checks the venue’s words against the request: “booked” only on their words; “unclear” is never shown as booked.' },
     ],
@@ -109,12 +110,13 @@ export const PITCHES: Pitch[] = [
     problem: 'A decision about a company or a person (to onboard, invest, award a contract) has to be defensible: evidence from the official source, dated, with every gap said out loud. Analysts assemble it by hand, one register at a time.',
     does: [
       { mark: 'built', text: 'Free sanctions screening (US OFAC, UK OFSI, UN) on every case.' },
-      { mark: 'built', text: 'Company registers on sale in the 27 EU countries and the UK.' },
+      { mark: 'built', text: 'Eleven company registers run instantly today; the rest of the EU and the UK are coming soon.' },
+      { mark: 'built', text: 'Contradictions and follow-ups: what doesn’t add up is labelled, and a follow-up question is drafted for the subject.' },
+      { mark: 'built', text: 'The case as one dated packet, in six sections.' },
       { mark: 'built', text: 'The subject’s answers are checked against the evidence, labelled as AI estimates; a verdict that shows its working, and one dated packet.' },
     ],
     agents: [
-      { agent: 'Magellan', mark: 'reported', text: 'Discovers registers and forms; an admin accepts each.' },
-      { agent: 'Sherlock', mark: 'built', text: 'Obtains the official record: 15 certified instant routes (◐ an attended route for hard registers such as Greece).' },
+      { agent: 'MaSh', mark: 'built', text: 'Obtains the official record from the register itself: eleven company registers run instantly today (◐ discovering new registers: an admin accepts each).' },
       { agent: 'Austen', mark: 'built', text: 'Completes approved acts, with six recorded outcomes.' },
       { agent: 'Pacioli', mark: 'built', text: 'Checks a case’s completeness (one route); reconciliation isn’t wired yet (○).' },
     ],
@@ -148,13 +150,14 @@ export const PITCHES: Pitch[] = [
     key: 'campusme', name: 'CampusMe', ready: true, tryHref: '/preview/campusme',
     problem: 'A family visiting universities juggles a dozen calendars, registration forms and the travel between campuses.',
     does: [
-      { mark: 'built', text: 'Reads each university’s own visit calendar, live (Yale and Penn proven).' },
-      { mark: 'built', text: 'Prepares the school’s own registration from the family’s saved details, and stops before Register: a person presses.' },
+      { mark: 'built', text: 'Reads each university’s own visit calendar, live.' },
+      { mark: 'built', text: 'Yale’s, Brown’s and Penn’s own registration forms filled in Kanoe’s browser, from the family’s kept details, up to Submit: the family presses.' },
+      { mark: 'built', text: 'A four-school Ivy week as one finished document: the schedule, the drives, the nights and each registration’s status, as a card, a PDF and a trip.' },
+      { mark: 'concept', text: 'Any school: its own registration page found on its own site and filled the same way. Coming.' },
       { mark: 'test', text: 'Plans the trip around the visits: flights and hotels as TEST bookings, and the drive between campuses checked by Google (✅). Train times aren’t checked.' },
     ],
     agents: [
-      { agent: 'Magellan', mark: 'built', text: 'Each school’s visit calendar, robots first.' },
-      { agent: 'Sherlock', mark: 'built', text: 'The sessions and spaces, read-only, from the school’s own domain.' },
+      { agent: 'MaSh', mark: 'built', text: 'Each school’s own visit calendar, robots first: the sessions and spaces, read-only, from the school’s own domain.' },
       { agent: 'Austen', mark: 'built', text: 'The hand-over, prepared, never submitted.' },
       { agent: 'Pacioli', mark: 'built', text: '“Registered” only when the confirmation names the day.' },
     ],
@@ -181,12 +184,14 @@ export const PITCHES: Pitch[] = [
     problem: 'A first Spanish residence application comes back for one fact that disagrees across documents. Then there’s the trip, the first nights, and a dozen deadlines.',
     does: [
       { mark: 'built', text: 'The passport photo is read and checked against its own check digits.' },
-      { mark: 'built', text: 'The official EX-01 is prepared from the person’s own words and checked field by field. We never sign it and never file it. The consulate’s own route and list (London and 7 US consulates).' },
-      { mark: 'test', text: 'Then flights and the first nights as TEST bookings, and one itinerary with every deadline (✅).' },
+      { mark: 'built', text: 'London, New York and Washington: each consulate’s own page read live, with its fees in local currency by nationality.' },
+      { mark: 'built', text: 'The national visa form, the EX-01, the 790-052 and the TA.1, filled from the person’s own words and checked field by field. We never sign and never file.' },
+      { mark: 'built', text: 'One print-ready 12-page pack in the consulate’s own order, with SIGN HERE beside every signature box.' },
+      { mark: 'built', text: 'After arrival, in order: padrón, the TIE’s fee (790-012) with every value ready, and Social Security; the EX-17 once we have the official PDF.' },
+      { mark: 'test', text: 'Sasha for flights and the first nights, from the move’s own dates, as TEST bookings on the Move to Madrid trip (✅).' },
     ],
     agents: [
-      { agent: 'Magellan', mark: 'built', text: 'The consulate’s own appointment page and checklist.' },
-      { agent: 'Sherlock', mark: 'built', text: 'The passport’s values from a photo, each confirmed.' },
+      { agent: 'MaSh', mark: 'built', text: 'The consulate’s own page, fees and checklist, read live; the official forms; the passport’s values from a photo, each confirmed.' },
       { agent: 'Austen', mark: 'built', text: 'The EX-01 fill, refused on any signature, consent or intent box.' },
       { agent: 'Pacioli', mark: 'built', text: 'The checker: cross-fact agreement and staleness.' },
     ],
@@ -222,12 +227,11 @@ export const PITCHES: Pitch[] = [
     does: [
       { mark: 'built', text: 'Health works today in our test setup: a private clinic booked by phone, and public appointments (SERMAS) prepared for you to press.' },
       { mark: 'concept', text: 'DNI renewal, IMV and bono social, padrón change of address, IBI, DGT: read at source on 5 Oct 2026, not built.' },
-      { mark: 'built', text: '🇪🇸 Health card on the platform: ID read → official form filled → your centre → cita or walk in.' },   // CR 50
-      { mark: 'built', text: 'The rule: Sasha prepares, you press. She never signs in to, books, or calls a public service for you.' },
+      { mark: 'built', text: 'DNI → the Comunidad’s 1449F1 filled → your health centre → the official cita page, or walk in. The 🇪🇸 Health card on the platform.' },   // CR 49/50
+      { mark: 'built', text: 'The rule: Sasha prepares, you press. She never signs in to a public service or presses for you.' },
     ],
     agents: [
-      { agent: 'Magellan', mark: 'built', text: 'The official pages.' },
-      { agent: 'Sherlock', mark: 'built', text: 'Only what the appointment needs, never why; no stored health identifiers before a data-protection assessment.' },
+      { agent: 'MaSh', mark: 'built', text: 'The official pages and SERMAS’s own centre finder; only what the form needs, never why; no stored health identifiers before a data-protection assessment.' },
       { agent: 'Austen', mark: 'built', text: 'The private clinic’s call, after the yes; the SERMAS hand-over, which you press.' },
       { agent: 'Pacioli', mark: 'concept', text: 'Not yet: there’s nothing to reconcile in the concept parts.' },
     ],

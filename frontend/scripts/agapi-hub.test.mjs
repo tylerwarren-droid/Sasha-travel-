@@ -25,9 +25,12 @@ test('the five products, in the founder\'s order, each with its copy in or held'
 })
 
 test('no placeholder is ever published', () => {
-  for (const bad of ['TODO', 'TBD', 'lorem', 'placeholder', 'coming soon', 'XXX']) {
+  for (const bad of ['TODO', 'TBD', 'lorem', 'placeholder', 'XXX']) {
     assert.ok(!body.toLowerCase().includes(bad.toLowerCase()), bad)
   }
+  // CR 49 · "coming soon" as a placeholder (a text that IS it) is banned; a sentence saying what is coming, by whom, is
+  // not (the founder's own AD line: "Eleven company registers run instantly today; the rest of the EU and the UK are coming soon.")
+  assert.ok(!/(['"`])\s*coming soon/i.test(body), 'coming soon as a placeholder')
 })
 
 test('every figure carries a mark, and every sourced or vendor figure a source URL', () => {

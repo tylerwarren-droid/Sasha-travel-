@@ -206,7 +206,14 @@ async def classify_intents(user_message: str, conversation_history: list,
                  "wellness", "jacuzzi", "reflexology", "body scrub", "hot spring",
                  "hot springs", "mud bath", "herbal bath", "onsen", "foot massage"]
     _spa_amenity = re.search(r"with (a |an )?(spa|sauna|jacuzzi|massage|wellness)", lower)
-    if _mentions(lower, ACTIVITY_WORDS):
+    # Sasha 191 · a MULTI-DAY trip is a plan, never an activity: "a twelve day trip to Vietnam" matched "day trip" and got the
+    # 4 Aug activity cache (Hue tours) on the founder's live run; there was no build verb, so the plan never fired
+    _num = r"(?:\d+|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|a couple of|a few)"
+    _multi_day = re.search(rf"\b{_num}[\s-]*(?:days?|nights?|weeks?)[\s-]*(?:trip|holiday|vacation|itinerary|tour|getaway|break|journey)\b"
+                           rf"|\b(?:trip|holiday|vacation|getaway|journey)\b[^.?!]{{0,40}}\b{_num}\s*(?:days?|nights?|weeks?)\b", lower)
+    if _multi_day:
+        intents.append("itinerary")
+    elif _mentions(lower, ACTIVITY_WORDS):
         intents.append("activity")
     elif _mentions(lower, SPA_WORDS) and not _spa_amenity:
         intents.append("activity")

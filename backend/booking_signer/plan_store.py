@@ -43,6 +43,22 @@ def dates_of(message: str, days: int, today: date) -> tuple:
             return date(y, mon, int(m[1])), date(y, mon, int(m[2]))
         except ValueError:
             return None, None
+    # Sasha 191 · MONTH FIRST, as said aloud: "between November 15 and November 27", "Nov 15 to 27", "November 15"
+    _MF = re.compile(r"\b([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:\s*(?:-|–|to|and|until|till|through)\s*(?:([A-Za-z]{3,9})\.?\s+)?(\d{1,2})(?:st|nd|rd|th)?\b)?")
+    mm = next((x for x in _MF.finditer(message or "") if x[1].lower()[:3] in _MONTHS), None)
+    if mm:
+        mon = _MONTHS[mm[1].lower()[:3]]
+        y = today.year + (1 if mon < today.month else 0)
+        try:
+            a = date(y, mon, int(mm[2]))
+            if mm[4]:
+                mon2 = _MONTHS.get((mm[3] or mm[1]).lower()[:3], mon)
+                b = date(y + (1 if mon2 < mon else 0), mon2, int(mm[4]))
+                if b >= a:
+                    return a, b
+            return a, a + timedelta(days=max(0, days - 1))
+        except ValueError:
+            pass
     # Sasha 169 · the first DATE, not the first "<number> <word>": "8 days in Vietnam from 12 November" read "8 days" and stopped
     m = next((x for x in _FROM.finditer(message or "") if x[2].lower()[:3] in _MONTHS), None)
     if m:

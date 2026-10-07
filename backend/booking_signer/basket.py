@@ -200,6 +200,18 @@ async def choose(account: str, item_id: str) -> Dict[str, Any]:
     return _row(r)
 
 
+async def unchoose_flights(account: str, trip_id: str) -> int:
+    """Sasha 202 · a NEW proposal replaces the trip's flights: any chosen flight (another leg, another origin) goes back to
+    suggested — never two outbound flights booked. Held or booked rows are never touched."""
+    async def fn(conn):
+        return await conn.execute("update trip_basket_items set state = 'suggested', updated_at = now() where account_id = $1 "
+                                  "and trip_id = $2 and kind = 'flight' and state = 'chosen'", uuid.UUID(account), uuid.UUID(trip_id))
+    n = int(str(await _go(fn)).split()[-1])
+    if n:
+        _log(MAGELLAN, "%d earlier chosen flight(s) set back to suggested on trip %s (a new proposal)", n, trip_id[:8])
+    return n
+
+
 async def hold(account: str, trip_id: str, session_id: str) -> List[Dict[str, Any]]:
     """The yes: everything "book it" books moves to pending_payment, carrying the Stripe session (in the rows, not in memory)."""
     rows = to_book(await items(account, trip_id, ("suggested", "chosen")))
@@ -357,4 +369,4 @@ def overlay(plan: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 __all__ = ["MAGELLAN", "SHERLOCK", "AUSTEN", "PACIOLI", "BasketError", "items", "item", "by_ref", "by_session", "to_book", "total",
-           "suggest", "refresh", "choose", "hold", "remove", "status_line", "booked", "failed", "cancelled", "event", "on", "sync_stays", "words", "overlay"]
+           "suggest", "refresh", "choose", "unchoose_flights", "hold", "remove", "status_line", "booked", "failed", "cancelled", "event", "on", "sync_stays", "words", "overlay"]

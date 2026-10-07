@@ -23,6 +23,30 @@ def _said(r) -> str:
     return (r or {}).get("response") or ""
 
 
+async def _cont(conduct, r, a, sid):
+    """Sasha 202 · as the client does: after the pacing line, the proposal is asked for at once (a hidden "…")."""
+    if not r.get("continue_turn"):
+        return r
+    r2 = await conduct("…", r.get("messages") or [], user_id=a, signed_in=True, session_id=sid)
+    return {**r2, "response": f"{r.get('response')} {r2.get('response') or ''}", "paced": r.get("response")}
+
+
+async def _proposal_ok(a: str, r: dict) -> tuple:
+    """(ok, why): the pacing line first, ONE flight already chosen (direct when one was offered), the total = the basket's."""
+    from app.services import conductor as CD
+    from booking_signer import basket as BK, plan_store as PS
+    p = await PS.latest(a)
+    rows = await BK.items(a, p["trip_id"]) if p else []
+    ch = [x for x in rows if x["kind"] == "flight" and x["state"] == "chosen"]
+    tot = BK.total(rows)["amount"]
+    m = re.search(r"about €([\d,]+)", _said(r))
+    said = float(m[1].replace(",", "")) if m else None
+    offered_direct = any("nonstop" in str((x.get("snapshot") or {}).get("detail")) for x in rows if x["kind"] == "flight")
+    good = (r.get("paced") == CD.S202_PACE and "Here's what I've put together, with a flight that fits." in _said(r) and len(ch) == 1
+            and said is not None and abs(said - tot) <= 1 and (not offered_direct or "nonstop" in str(ch[0]["snapshot"].get("detail"))))
+    return good, f"paced={r.get('paced')!r} chosen={len(ch)} said={said} basket={tot}"
+
+
 async def itinerary(a: str, conduct) -> None:
     """The intake from the meeting's own words (all said at once) and a hotel swap; the step-by-step intake is GUIDED's."""
     sid = "core-i2-" + uuid.uuid4().hex[:6]
@@ -36,9 +60,10 @@ async def itinerary(a: str, conduct) -> None:
     ok("ITIN voice: the name → greeted by it, then what kind of trip", "Alex" in _said(v) and CD.S199_KIND in _said(v), _said(v)[:110])
     v2 = await conduct("Be two of us, flying from London, and we'd like a mixture between culture and beaches, please.", v["messages"],
                        user_id=a, signed_in=True, session_id=sid)
-    ok("ITIN voice: everything said → built for the 15th–27th, and the flights from London to choose", bool(v2.get("itinerary"))
-       and _said(v2).startswith(CD.S199_PLAN) and (v2.get("itinerary") or {}).get("days")
-       and any(b.get("trip_pick") and "London" in str(b.get("title")) for b in v2.get("bookings") or []), _said(v2)[:150])
+    v2 = await _cont(conduct, v2, a, sid)
+    _good, _why = await _proposal_ok(a, v2)
+    ok("ITIN voice: everything said → paced, then the proposal: built, a flight from London chosen, the total = the basket's",
+       bool(v2.get("itinerary")) and _good, _why + " · " + _said(v2)[:120])
     v3 = await conduct("change the hotel in Hoi An to something on the beach", v2["messages"], user_id=a, signed_in=True, session_id=sid)
     ok("ITIN: the Hoi An hotel swapped to a beach hotel — “Done — your Hoi An stay is changed.”",
        _said(v3).startswith("Done — your Hoi An stay is changed.") and any("Beach" in str((d.get("hotel") or {}).get("name")) for d in
@@ -127,7 +152,7 @@ async def guided(a: str, conduct) -> None:
 
     async def say(m):
         nonlocal h
-        r = await conduct(m, h, user_id=a, signed_in=True, session_id=sid)
+        r = await _cont(conduct, await conduct(m, h, user_id=a, signed_in=True, session_id=sid), a, sid)
         h = r.get("messages") or h
         return r
     from app.services import conductor as CD
@@ -156,16 +181,24 @@ async def guided(a: str, conduct) -> None:
     r = await say("From 12 November for 8 days.")
     ok("GUIDED 3: then where from (Madrid suggested) — still NO plan", _said(r) == CD.S199_FROM and short(r) and not r.get("itinerary"), _said(r)[:90])
     r = await say("Madrid please.")
-    card = next((b for b in r.get("bookings") or [] if b.get("trip_pick")), None)
-    ok("GUIDED 4: only now the plan — “Here's your itinerary, with somewhere to stay each night.” — and the flights, to CHOOSE",
-       bool(r.get("itinerary")) and _said(r) == f"{CD.S199_PLAN} {CD.S199_FLIGHTS}" and bool(card) and short(r), _said(r)[:140])
-    r = await say("Direct ones please.")
+    _good, _why = await _proposal_ok(a, r)
+    ok("GUIDED 4: only now — “Let me put together a schedule…”, then THE PROPOSAL: the plan with a flight that fits, chosen, and the "
+       "total (= the basket's); other flights optional", bool(r.get("itinerary")) and _good and _said(r).rstrip().endswith("Want to see other flights?")
+       and not r.get("bookings"), _why + " · " + _said(r)[:160])
+    lines.append(r["paced"])
+    lines.append(_said(r)[len(r["paced"]):].strip())
+    r = await say("Yes, direct ones please.")
     card = next((b for b in r.get("bookings") or [] if b.get("trip_pick")), None)
     ok("GUIDED 5: direct flights shown, each to CHOOSE (not book)", bool(card) and all("nonstop" in (o.get("detail") or "") for o in card["options"])
        and _said(r) == CD.S199_FLIGHTS, _said(r)[:90])
     name = (card or {}).get("options", [{}])[0].get("name", "")
     r = await say(f"the {name} one")
-    ok("GUIDED 6: “Done — I've added it to your itinerary. Anything else you'd like to add?”", _said(r) == CD.S199_ADDED and short(r), _said(r)[:140])
+    p = await PS.latest(a)
+    from booking_signer import basket as BK
+    _tot = BK.total(await BK.items(a, p["trip_id"]))["amount"] if p else 0
+    m6 = re.fullmatch(r"Good choice — I've swapped it in\. The total is now €([\d,]+)\.", _said(r))
+    ok("GUIDED 6: “Good choice — I've swapped it in. The total is now €X.” — never a bare “Done”, X = the basket's total",
+       bool(m6) and abs(float(m6[1].replace(",", "")) - _tot) <= 1 and short(r), f"{_said(r)[:90]} · basket {_tot}")
     p = await PS.latest(a)
     from booking_signer import basket as BK   # Sasha 198 R10 · the pick is the basket's chosen flight
     _ch = [x for x in await BK.items(a, p["trip_id"], ("chosen",)) if x["kind"] == "flight"] if p else []

@@ -516,7 +516,7 @@ async def web_turn(ctx: dict, body: str) -> bool:
     conduct = CONDUCT
     if conduct is None:
         from app.services.conductor import conduct
-    hist = [h for h in (ctx["st"].get("history") or []) if h.get("role") in ("user", "assistant")][-12:]
+    hist = [h for h in (ctx["st"].get("history") or []) if h.get("role") in ("user", "assistant")][-20:]   # Sasha 202 · all that's kept
     try:
         r = await conduct(body, hist, user_id=ctx["account"], signed_in=True,
                           session_id=f"wa-{(ctx.get('ch') or {}).get('wa_id_sha256', '')[:16]}")
@@ -524,6 +524,14 @@ async def web_turn(ctx: dict, body: str) -> bool:
         log.error("[wa_brain] the web brain failed on WhatsApp: %s: %s", type(e).__name__, e)
         return False
     out = ctx["out"]
+    if r.get("continue_turn"):   # Sasha 202 · the pacing line, then the proposal straight after — as the web asks for it
+        out.text(wa_markdown(r.get("response") or ""))
+        try:
+            r = await conduct("…", r.get("messages") or hist, user_id=ctx["account"], signed_in=True,
+                              session_id=f"wa-{(ctx.get('ch') or {}).get('wa_id_sha256', '')[:16]}")
+        except Exception as e:
+            log.error("[wa_brain] the proposal failed on WhatsApp: %s: %s", type(e).__name__, e)
+            return True
     if r.get("booking_find"):
         await GW._find(ctx, r["booking_find"], r.get("reservation_draft") or {})
         return True

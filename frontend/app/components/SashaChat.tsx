@@ -144,6 +144,8 @@ export type WorkspaceTab = 'chat' | 'ideas' | 'trip' | 'you'
 // card-producing intents get a line; general chat and photos are fast, so she stays silent rather
 // than padding a quick turn. Two on-topic variants each so back-to-back searches don't repeat
 // word-for-word. A build outranks the domain lines when several intents fire on one turn.
+/** Sasha 202 · the hidden turn that asks for the proposal after the pacing line (never shown as the guest's words) */
+const CONTINUE_TURN = '…'
 const INTERIM_LINES: Record<string, string[]> = {
   itinerary:  ["Let me put your day-by-day together — this'll take a moment.", "Let me build out your full trip now."],
   flight:     ["Let me check live flights for you.", "Let me pull up the best flights."],
@@ -300,7 +302,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
     }
     if (got.length) setAttachments((a) => [...a, ...got].slice(0, MAX_PHOTOS))
   }
-  const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string; payload?: string; opening?: boolean }) => {
+  const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string; payload?: string; opening?: boolean; history?: any[] }) => {
     const media = attachments
     if (!content.trim() && media.length) content = media.length === 1 ? '📷 (photo)' : `📷 (${media.length} photos)`
     if (!opts?.opening && !opts?.payload && !media.length && takeChatText(content)) { setMessages(prev => [...prev, { role: 'user', content }]); setInput(''); return }  // S-66 chat booking; Sasha 186 · the typed yes clears
@@ -340,7 +342,8 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
       return
     }
     inFlightRef.current = true
-    const historyBeforeMessage = messages  // snapshot before appending
+    const historyBeforeMessage = opts?.history ?? messages  // snapshot before appending (Sasha 202 · a continuation brings its own)
+    let continueWith: any[] | null = null   // Sasha 202 · "Let me put together a schedule…" → the proposal is asked for at once
     if (!opts?.opening) setMessages(prev => [...prev, { role: 'user', content }])   // CR 16 · the opening turn shows no line of the guest's
     setInput('')
     setIsLoading(true)
@@ -428,9 +431,10 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
       if (response.data.trip_book) setTripBook({ from: String(response.data.trip_book.from ?? 'Madrid'), n: Date.now() })  // Sasha 169
       if (response.data.flight_pick?.offer_id) setFlightPick({ offerId: String(response.data.flight_pick.offer_id), n: Date.now() })  // Sasha 182
       if (response.data.booking_cancel) setBookingCancel({ ...response.data.booking_cancel, n: Date.now() })  // Sasha 96 chat cancel (Stage B)
+      if (response.data.continue_turn && conversation_history?.length > 0) continueWith = conversation_history
       // Replace local messages with server-authoritative history
       if (conversation_history?.length > 0) {
-        setMessages(conversation_history)
+        setMessages(conversation_history.filter((m: any) => !(m.role === 'user' && m.content === CONTINUE_TURN)))
       } else {
         setMessages(prev => [...prev, { role: 'assistant', content: sashaResponse }])
       }
@@ -507,6 +511,8 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
       // that outlives its turn is exactly the class of stuck-forever UI this app has been
       // bitten by before, so it is released in finally and nowhere else.
       setBuilding(false)
+      // Sasha 202 · the pacing line is said; the proposal is asked for straight away (no one waits to type). Never shown.
+      if (continueWith) { const h = continueWith; setTimeout(() => { sendRef.current(CONTINUE_TURN, { opening: true, history: h }) }, 30) }
     }
   }
 

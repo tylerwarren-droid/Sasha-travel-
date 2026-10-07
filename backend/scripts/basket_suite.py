@@ -128,9 +128,9 @@ async def flight_cases(a: str) -> None:
     sid = "basket-r4-" + uuid.uuid4().hex[:6]
     h = []
     try:
-        for m in ("plan me 6 days in Vietnam from 12 November for 2 of us", "Sounds good", "Alex", "food and culture", "from Madrid"):
-            r = await conduct(m, h, user_id=a, signed_in=True, session_id=sid)
-            h = r.get("messages") or h
+        say = await _web(a, sid)
+        for m in ("plan me 6 days in Vietnam from 12 November for 2 of us", "Sounds good", "Alex", "food and culture", "from Madrid", "yes please"):
+            _t, r = await say(m)
         card = next((b for b in r.get("bookings") or [] if b.get("trip_pick")), None)
         opts = (card or {}).get("options") or []
         ok("BASKET R4-1: one Duffel client — the conversation's search went through the one transport",
@@ -143,8 +143,9 @@ async def flight_cases(a: str) -> None:
         sk = {r["slice_key"] for r in await BK.items(a, p["trip_id"]) if r["id"] in {o.get("basket_item_id") for o in opts}} if p else set()
         fl = [r for r in await BK.items(a, p["trip_id"]) if r["kind"] == "flight" and r["slice_key"] in sk] if p else []   # this search's slice
         ok("BASKET R4-3 (Magellan): the flights shown are the trip's suggested flights, one row each, linked by id",
-           len(fl) == len(opts) and all(r["state"] == "suggested" and r["price_source"] == "quoted" for r in fl)
-           and {o.get("basket_item_id") for o in opts} == {r["id"] for r in fl}, f"{len(fl)} rows, {len(opts)} options")
+           {o.get("basket_item_id") for o in opts} <= {r["id"] for r in fl} and len(fl) - len(opts) <= 1   # + the proposal's chosen one
+           and all(r["state"] in ("suggested", "chosen") and r["price_source"] == "quoted" for r in fl)
+           and sum(1 for r in fl if r["state"] == "chosen") == 1, f"{len(fl)} rows, {len(opts)} options")
     finally:
         T.HTTP = real_http
         BK.ON = None
@@ -158,6 +159,11 @@ async def _web(a: str, sid: str):
         nonlocal h
         r = await conduct(m, h, user_id=a, signed_in=True, session_id=sid)
         h = r.get("messages") or h
+        if r.get("continue_turn"):   # Sasha 202 · as the web client does: the proposal asked for at once, never shown
+            first = r.get("response") or ""
+            r = await conduct("…", h, user_id=a, signed_in=True, session_id=sid)
+            h = r.get("messages") or h
+            return f"{first} {r.get('response') or ''}", r
         return r.get("response") or "", r
     return say
 
@@ -250,7 +256,7 @@ async def book_case(ch: str, a: str, say, chosen) -> None:
             await conn.execute("update trip_basket_items set provider_ref = 'off_expired_suite' where id = $1", uuid.UUID(chosen["id"]))
         await BK._go(fn)
     from booking_signer import passengers as PX
-    words, r = await say("book it, flying from Madrid")
+    words, r = await say("Then book it.")   # Sasha 202 · live it fell through to the flight search
     ok(f"BASKET R7 {ch}: the first “book it” asks the travellers' details ONCE, before any total",
        PX.MARK in words and "€" not in words, words[:120])
     words, r = await say("Alex Smith, Mr, 12 March 1985")
@@ -320,7 +326,16 @@ async def pick_cases(guests: dict) -> None:
             say = await (_whatsapp(a, sid) if ch == "WhatsApp" else _web(a, sid))
             for m in ("plan me 5 days in Vietnam from 12 November for 2 of us", "Sounds good", "Sam", "food and culture"):
                 await say(m)
-            listed, rr = await say("from Madrid")
+            prop, _ = await say("from Madrid")
+            from app.services import conductor as CD
+            p0 = await PS.latest(a)
+            rows0 = await BK.items(a, p0["trip_id"]) if p0 else []
+            ch0 = [x for x in rows0 if x["kind"] == "flight" and x["state"] == "chosen"]
+            m0 = re.search(r"about €([\d,]+)", prop)
+            ok(f"BASKET 202 {ch}: “Let me put together a schedule…”, then the proposal — a flight already chosen, the total = the basket's",
+               prop.startswith(CD.S202_PACE) and "with a flight that fits" in prop and len(ch0) == 1 and bool(m0)
+               and abs(float(m0[1].replace(",", "")) - BK.total(rows0)["amount"]) <= 1, prop[:160])
+            listed, rr = await say("yes please")
             listed += " ".join(o.get("name") or "" for b in ((rr or {}).get("bookings") or []) if b.get("trip_pick") for o in b.get("options") or [])
             ok(f"BASKET R5 {ch}: the flights listed to choose", "Iberia" in listed and "British Airways" in listed
                and (ch != "WhatsApp" or "Reply with its number or airline" in listed), listed[:160])
@@ -329,9 +344,15 @@ async def pick_cases(guests: dict) -> None:
             p = await PS.latest(a)
             ch_rows = [r for r in await BK.items(a, p["trip_id"]) if r["kind"] == "flight" and r["state"] == "chosen"] if p else []
             ok(f"BASKET R5 {ch}: “{first}” then “{second}” → ONE chosen flight, Iberia, in the basket (Austen)",
-               "added it to your itinerary" in r1 and "added it to your itinerary" in r2 and len(ch_rows) == 1 and ch_rows[0]["snapshot"].get("owner") == "Iberia",
+               "I've swapped it in" in r1 and "I've swapped it in" in r2 and len(ch_rows) == 1 and ch_rows[0]["snapshot"].get("owner") == "Iberia",
                f"{r2[:70]} | {[c['snapshot'].get('owner') for c in ch_rows]}")
             ok(f"BASKET R5 {ch}: nothing written to the old plan.chosen_flight", not ((p or {}).get("plan") or {}).get("chosen_flight"))
+            m2 = re.search(r"The total is now €([\d,]+)\.", r2)
+            ok(f"BASKET 202 {ch}: the swap says the new total (= the basket's) — never a bare “Done”",
+               bool(m2) and abs(float(m2[1].replace(",", "")) - BK.total(await BK.items(a, p["trip_id"]))["amount"]) <= 1, r2[:100])
+            tq, _ = await say("No. What's the total price with the flight and the lodging?")
+            ok(f"BASKET 202 {ch}: “No. What's the total…?” is answered with the total (live: it was ignored)",
+               tq.startswith("The whole trip comes to about €"), tq[:100])
             await book_case(ch, a, say, ch_rows[0] if ch_rows else None)
     finally:
         BK.ON = None

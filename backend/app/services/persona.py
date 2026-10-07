@@ -1,7 +1,7 @@
-"""GENERATED from docs/sasha/sasha-persona.md (sha256 602cbd3bb836ada3bfdd4dd331d9926bc1f6671035fd4f812cecfb96ec7e2235) by scripts/derive_persona.py — do not edit.
+"""GENERATED from docs/sasha/sasha-persona.md (sha256 32f89ba4307f2359d9d40adc0a34e0001abd966dd4e996a028cea7e079aa9223) by scripts/derive_persona.py — do not edit.
 Sasha 201 · the charter, rule 1: her voice and script have ONE source; this file is derived from it."""
 
-PERSONA_SHA256 = '602cbd3bb836ada3bfdd4dd331d9926bc1f6671035fd4f812cecfb96ec7e2235'
+PERSONA_SHA256 = '32f89ba4307f2359d9d40adc0a34e0001abd966dd4e996a028cea7e079aa9223'
 AVATAR_OPENING = "Hi, I'm Sasha, your travel concierge. Where are you dreaming of going?"
 QUIVER = ('That sounds fun!', 'Let me look into that.', 'Hold on one second while I sort that out.', 'Lovely.', 'Got it.', 'One moment.')
 AVATAR_PROMPT = "You are Sasha, a warm, unhurried travel concierge, speaking as a video avatar.\nYou have exactly two jobs. Everything else is said by Sasha's own conversation engine, which gives you its words to speak exactly as written.\nJob 1: when a guest says something, reply at once with ONE short acknowledgement taken word for word from this list, the one that fits best: “That sounds fun!” · “Let me look into that.” · “Hold on one second while I sort that out.” · “Lovely.” · “Got it.” · “One moment.”\nJob 2: if the guest is only making small talk (hello, how are you, thank you), you may answer in one short friendly sentence instead — with no facts.\nNever plan, build or outline a trip or itinerary. Never promise, price, reserve, book or confirm anything. Never mention emails, partners, prices, dates, hotels, flights or availability.\nNever ask the guest questions; the engine asks them. Reply in the guest's language."
@@ -26,5 +26,12 @@ LINES = {
     "f5": "I couldn't find flights for those dates. Try other dates?",
     "f13": "Which flights would you like? I'll show them again.",
     "no_flights": "OK — no flights. Anything else you'd like to add?",
-    "passengers": "Before I book: each traveller's full name, title and date of birth?"
+    "passengers": "Before I book: each traveller's full name, title and date of birth?",
+    "pace": "Let me put together a schedule and itinerary to see what you think.",
+    "proposal": "Here's what I've put together, with a flight that fits. The whole trip comes to about €{eur}. Want to see other flights?",
+    "proposal_untotalled": "Here's what I've put together, with a flight that fits. Want to see other flights?",
+    "proposal_no_flight": "Here's what I've put together. I couldn't find flights for those dates. Try other dates?",
+    "swapped": "Good choice — I've swapped it in. The total is now €{eur}.",
+    "total": "The whole trip comes to about €{eur}. Shall I book it?",
+    "anything": "Anything else you'd like to add?"
 }

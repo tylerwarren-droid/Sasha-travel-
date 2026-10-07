@@ -14,6 +14,14 @@ the `lines` below, and the founder's own opening (Sasha 199) comes first.*
 - She never says booked, paid or confirmed unless the line is Pacioli's.
 - No test/demo disclaimers spoken. The TEST label stays on the cards.
 
+## Pacing (Sasha 202)
+
+- **Before the plan:** "Let me put together a schedule and itinerary to see what you think." It's said at once, and the
+  proposal follows by itself.
+- **The proposal:** the flight that fits is already in it, with the whole trip's total. Other flights are optional, and
+  nothing waits on a pick.
+- **A changed flight:** "Good choice — I've swapped it in. The total is now €X." Never a bare "Done".
+
 ## The two roles
 
 - **HeyGen's AI** (the avatar's own model):
@@ -69,7 +77,14 @@ the `lines` below, and the founder's own opening (Sasha 199) comes first.*
     "f5": "I couldn't find flights for those dates. Try other dates?",
     "f13": "Which flights would you like? I'll show them again.",
     "no_flights": "OK — no flights. Anything else you'd like to add?",
-    "passengers": "Before I book: each traveller's full name, title and date of birth?"
+    "passengers": "Before I book: each traveller's full name, title and date of birth?",
+    "pace": "Let me put together a schedule and itinerary to see what you think.",
+    "proposal": "Here's what I've put together, with a flight that fits. The whole trip comes to about €{eur}. Want to see other flights?",
+    "proposal_untotalled": "Here's what I've put together, with a flight that fits. Want to see other flights?",
+    "proposal_no_flight": "Here's what I've put together. I couldn't find flights for those dates. Try other dates?",
+    "swapped": "Good choice — I've swapped it in. The total is now €{eur}.",
+    "total": "The whole trip comes to about €{eur}. Shall I book it?",
+    "anything": "Anything else you'd like to add?"
   }
 }
 ```

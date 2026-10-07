@@ -2756,7 +2756,7 @@ async def tap_to_pay(account: Optional[str], amount: str, what: str, url: str) -
         return "not sent: not a Stripe checkout link"
     if url in _TAPPED:
         return "not sent: already sent"
-    venue = plain_venue(venue)   # Sasha 172 · the stand-in mark was said once, before the yes
+    what = plain_venue(what)   # Sasha 172 · the stand-in mark was said once, before the yes (Sasha 182 · it named an unset variable: every tap to pay crashed)
     if not account or STORE is None:
         return "not sent: no account"
     ch = await STORE.channel_of_account(account)

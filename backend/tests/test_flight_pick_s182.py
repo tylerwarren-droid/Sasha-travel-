@@ -31,5 +31,13 @@ class Pick(unittest.TestCase):
         self.assertTrue(is_flight_list("British Airways — … Here's exactly what I'll book (TEST — no real ticket"))
 
 
+class TapToPay(unittest.TestCase):
+    def test_it_never_crashes_before_the_phone(self):   # live 7 Oct: an unset variable — every flight/hotel/trip payment 500'd
+        import asyncio
+        from booking_signer import guest_whatsapp as GW
+        said = asyncio.run(GW.tap_to_pay(None, "€1.00", "Duffel Airways ZZ 3829 (TEST stand-in)", "https://checkout.stripe.com/c/pay/cs_test_x"))
+        self.assertEqual(said, "not sent: no account")
+
+
 if __name__ == "__main__":
     unittest.main()

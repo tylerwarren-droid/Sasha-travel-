@@ -67,8 +67,10 @@ async def bundle(account: str, origin: str) -> dict:
     last = date.fromisoformat(str(days[-1].get("date"))[:10])
     first_city, last_city = days[0].get("city") or "", days[-1].get("city") or ""
     search = SEARCH or T.search
-    out_s, back_s = await asyncio.gather(search(origin, first_city, (start - timedelta(days=1)).isoformat(), adults=party, limit=3),
-                                         search(last_city, origin, (last + timedelta(days=1)).isoformat(), adults=party, limit=3))
+    # Sasha 182 · 8, not 3: the cheapest test fares are often ones Duffel's test system won't book (China Eastern: 422), and
+    # with three of them the bundle refused "no test fare … will book" while Iberia and Duffel Airways were bookable
+    out_s, back_s = await asyncio.gather(search(origin, first_city, (start - timedelta(days=1)).isoformat(), adults=party, limit=8),
+                                         search(last_city, origin, (last + timedelta(days=1)).isoformat(), adults=party, limit=8))
     flights = []
     for s in (out_s, back_s):
         if "why" in s:

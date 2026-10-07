@@ -1792,7 +1792,19 @@ async def conduct(
     # on screen, the pick goes straight to that flight's TEST read-back on the card (FlightBookTest, auto-started); "forget
     # the flights" drops them. Nothing is booked before the read-back's yes and the Stripe TEST payment.
     _recent_a = [str(m.get("content") or "") for m in reversed(conversation_history or []) if isinstance(m, dict) and m.get("role") == "assistant"][:3]
-    if session_id and not payload:
+    # Sasha 185 · "book it, flying from Madrid" / "book the whole trip" is the WHOLE TRIP, never a pick from the flight list
+    # (182's pick reader took it as "the first flight" — the demo's bundle line stopped working)
+    from booking_signer import trip_book as _tb185  # noqa: E402
+    _whole_trip = _tb185.asked(re.sub(r"^\s*(?:ok(?:ay)?|so|right)?[,.]?\s*sasha[,!.]?\s*", "", user_message or "", flags=re.I)) is not None and \
+        bool(re.search(r"\b(?:flying from|from \w+|whole|entire|everything|all|trip|hotels? and)\b", user_message or "", re.I))
+    # Sasha 185 · the answer to Sasha's own flight question ("Yeah" to "Shall I also line up your flights?", "December 15" to
+    # "just tell me your departure date") goes to the flight search — live, the general model said "I'll pull up flights…"
+    # and searched nothing
+    if not force_intent and not payload and _recent_a and not _whole_trip and re.search(
+            r"I can check flight options — just tell me|Shall I also line up your flights\?|Which city are you flying from\?", _recent_a[0]) \
+            and len((user_message or "").split()) <= 14 and not re.search(r"\b(?:no|not now|later|nope|skip|don'?t)\b", user_message or "", re.I):
+        force_intent = "flight"
+    if session_id and not payload and not _whole_trip:
         from booking_signer import flight_pick as _fp  # noqa: E402
         if any(_fp.is_flight_list(x) for x in _recent_a):   # the list was shown in the last three replies
             _fc = await chat_store.latest_session_card(session_id, "flight")

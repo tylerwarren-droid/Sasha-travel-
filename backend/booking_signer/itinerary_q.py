@@ -178,7 +178,9 @@ TRIPS = re.compile(r"\b(?:show (?:me )?|what are |list )?my (?:trips|journeys)\b
 TRIP = re.compile(r"\bshow (?:me )?my (?:\w+ )?(?:itinerary|trip|plan)\b|\bwhat does my (?:\w+ )?trip look like\b|"
                   r"\b(?:show (?:me )?)?my (?:move to \w+|campus tour|\w+ trip)\b|"
                   r"^\s*(?:my )?(?:\w+ )?itinerary\s*[?.!]*\s*$|\bwhat was i doing\b|^\s*carry on\s*[.!]*\s*$", re.I)
-QUESTION = re.compile(TRIPS.pattern + "|" + ASK_WHEN.pattern + "|" + ASK_DAY.pattern + "|" + ASK_PACKAGE.pattern + "|" + TRIP.pattern + r"|\bwhere (?:am i|are we|will i be)\b|\bdo i have time\b|\bwhat(?:'s| is) (?:on )?my (?:itinerary|plan|schedule)\b"
+#: Sasha 184 · "show me my health card" — EspañaMe's checklist, the same as the platform's 🇪🇸 Health card tab
+HEALTH = re.compile(r"\b(?:show (?:me )?|where(?:'s| is) )?my (?:health[- ]card|tarjeta(?: sanitaria)?)\b|\bhealth[- ]card (?:status|checklist)\b", re.I)
+QUESTION = re.compile(HEALTH.pattern + "|" + TRIPS.pattern + "|" + ASK_WHEN.pattern + "|" + ASK_DAY.pattern + "|" + ASK_PACKAGE.pattern + "|" + TRIP.pattern + r"|\bwhere (?:am i|are we|will i be)\b|\bdo i have time\b|\bwhat(?:'s| is) (?:on )?my (?:itinerary|plan|schedule)\b"
                       r"|\bwhat do i have (?:on|tomorrow|today|this)\b|\bwhere do i (?:sleep|stay)\b|" + WEEK.pattern, re.I)
 
 
@@ -335,6 +337,17 @@ async def answer(account: str, text: str, now: datetime) -> List[str]:
     await PWT.sweep(account)   # Sasha 183 · a payment waiting is booked before anything is shown
     await JN.file(account)   # Sasha 177 · each booking in its journey before anything is shown
     rows = await _rows(account)
+    if HEALTH.search(text or ""):
+        steps = await JN.health_card(account)
+        if not steps:
+            return ["You don't have a health-card case yet — say “españa” to start one."]
+        mark = {"filled": "✏️ prepared — sign it", "done": "✅", "doing": "⏳", "missing": "☐", "expired": "⌛ expired", "info": "ℹ️"}
+        lines = ["🇪🇸 Your health card (tarjeta sanitaria) — also in the 🇪🇸 Health card tab:"]
+        for f in steps:
+            m = mark.get(f["state"], "•")
+            icon, words = (m.split(" ", 1) + [""])[:2]
+            lines.append(f"{icon} {f['name']}{' — ' + words if words else ''}: {f['note']}" + (f"\n   PDF: {f['pdf']}" if f.get("pdf") else ""))
+        return ["\n".join(lines)]
     if TRIPS.search(text or ""):
         return trips_text(await JN.journeys(account, rows), text)
     asked = await ask_anything(account, text, rows, now)

@@ -251,9 +251,11 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
                      "virtual": True, "count": len(cv), "extras": cv})
     from products import itinerary as IT2
     health = [x for x in prod if x["product"] == "health"] + [r for r in rows if r.get("venue") == IT2.SERMAS and r.get("status") not in ("cancelled", "failed")]
-    if health:   # Sasha 178 · EspañaMe is its own tab (modular: only when used)
-        tabs.append({"key": "espana", "label": badged("health", "EspañaMe"), "product": "EspañaMe", "title": "EspañaMe (Spain's public services)",
-                     "virtual": True, "count": len(health), "extras": health})
+    hforms = await _health_forms(account) if (used is None or "health" in used) else []
+    if health or hforms:   # Sasha 178 · EspañaMe is its own tab (modular: only when used); Sasha 184 · the health-card checklist in it
+        tabs.append({"key": "espana", "label": badged("health", "Health card" if hforms else "EspañaMe"), "product": "EspañaMe",
+                     "title": "EspañaMe · your health card (tarjeta sanitaria)" if hforms else "EspañaMe (Spain's public services)",
+                     "virtual": True, "count": len(health) + len(hforms), "extras": health, **({"forms": hforms} if hforms else {})})
     live = [r for r in rows if r.get("status") not in ("cancelled", "failed")]
     one_offs = [r for r in live if str(r.get("trip_id")) not in ids and r.get("venue") not in reloc_names and r.get("venue") != IT2.SERMAS]
     # Sasha 178 · ONE TAB PER CITY for one-offs outside a journey: the home city's is "Madrid (home)", the others by their name
@@ -299,6 +301,40 @@ async def _used_since_reset(account: Optional[str]):
                {r["product"] for r in await ST.STORE.conversations(f"web:{account}")}
     except Exception:
         return set()
+
+
+async def health_card(account: Optional[str]) -> List[dict]:
+    """Sasha 184 · EspañaMe's health-card case as a checklist (CR's products.health.health_status, read-only), in order:
+    the ID read → the 1449F1 (its PDF, "sign it") → the centre (name, address, cita line) → the cita (booked, or walk in
+    8:30–20:30) → what to bring (from the 1449F1's own §6). [] when there is no case. Never raises."""
+    if not account:
+        return []
+    try:
+        from products.health import health_status
+        from products.health import cita as CI
+        hs = await health_status(account)
+    except Exception as e:
+        log.info("[journeys] no health card: %s", type(e).__name__)
+        return []
+    if not hs:
+        return []
+    out = []
+    for st in hs.get("steps") or []:
+        state = {"done": "done", "doing": "doing", "todo": "missing", "expired": "expired"}.get(st.get("state"), "missing")
+        note = st.get("note") or ""
+        if st.get("name", "").startswith("Health-card form") and st.get("state") == "done":
+            state = "filled"   # "✓ Prepared — sign it"
+        if st.get("name", "").startswith("Your cita") and st.get("state") != "done":
+            note = ("No cita needed: walk into your centro de salud during public hours, 8:30–20:30 (the Comunidad de Madrid: "
+                    f"“{CI.HAND_IN['words']}”) — or book one and tell me the day and time")
+        out.append({"name": st.get("name"), "state": state, "note": note, "pdf": st.get("pdf"), "next": None})
+    out.append({"name": "What to bring", "state": "info", "note": "; ".join(CI.bring("")), "pdf": None, "next": None})
+    if hs.get("fictional"):
+        out.insert(0, {"name": "DEMO", "state": "info", "note": "a fictional person's case — nothing real was filed", "pdf": None, "next": None})
+    return out
+
+
+_health_forms = health_card
 
 
 async def _relocation_forms(account: Optional[str]) -> List[dict]:

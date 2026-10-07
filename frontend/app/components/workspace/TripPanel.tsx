@@ -50,7 +50,7 @@ const shortStatus = (b: ServerBooking): string => {
 type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?: string }
 type JRow = { id: string; venue: string; date: string | null; time: string | null; status: string; status_words?: string; booking_reference?: string | null; trip_id?: string }
 /** CR 45 · a RelocateMe form on the Move tab: its state, its PDF one tap away (if there is one), where it goes next */
-type JForm = { name: string; state: 'filled' | 'signed' | 'missing' | 'waiting'; note: string; pdf: string | null; next: string | null }
+type JForm = { name: string; state: 'filled' | 'signed' | 'missing' | 'waiting' | 'done' | 'doing' | 'expired' | 'info'; note: string; pdf: string | null; next: string | null }
 type Journeys = { journeys: { key: string; label: string; title: string; start?: string | null; end?: string | null; count: number
     virtual?: boolean; extras?: JRow[]; forms?: JForm[] }[]
   home: { label: string; items: JRow[] }; requests: JRow[]; receipts: JRow[]; everything: JRow[] }
@@ -94,7 +94,8 @@ function JourneyList({ title, rows }: { title: string; rows: JRow[] | null }) {
     </>
   )
 }
-const FORM_MARK: Record<JForm['state'], string> = { filled: '✓ Prepared — sign it', signed: '✓ Signed', missing: '☐ Still yours to do', waiting: '⏳ Waiting' }
+const FORM_MARK: Record<JForm['state'], string> = { filled: '✓ Prepared — sign it', signed: '✓ Signed', missing: '☐ Still yours to do', waiting: '⏳ Waiting',
+  done: '✓ Done', doing: '… Under way', expired: '⌛ Expired — fill it again', info: 'ℹ︎' }   // Sasha 184 · the health card's steps
 function FormsList({ forms }: { forms: JForm[] }) {
   return (
     <>

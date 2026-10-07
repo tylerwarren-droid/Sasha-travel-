@@ -235,7 +235,7 @@ async def book_paid(account: str, sid: str) -> dict:
         await T.RECORD(account, c, o["booking_reference"] or "")
         done.append(f"✈️ {c['owner']} {c['flights']} {c['from']}→{c['to']} · {o['booking_reference']}{note}")
     nh, nf = sum(1 for d in done if d.startswith("🏨")), sum(1 for d in done if d.startswith("✈️"))
-    say = (f"✅ Booked (TEST) — {nh} hotel{'s' if nh != 1 else ''} and {nf} flight{'s' if nf != 1 else ''}, "
+    say = (f"✅ Booked — {nh} hotel{'s' if nh != 1 else ''} and {nf} flight{'s' if nf != 1 else ''}, "
            "each in your trip with its reference.")   # Sasha 189 · brief; the references are on the trip
     if failed:
         say += "\nNot booked: " + "; ".join(failed)

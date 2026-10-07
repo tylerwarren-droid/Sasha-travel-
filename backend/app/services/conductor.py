@@ -1226,6 +1226,14 @@ async def _stable_card(session_id, kind: str, dest: str, fetch,
     return card
 
 
+def _eur190(usd) -> int:
+    """Sasha 190 · ONE CURRENCY: the plan's dollar estimate said in euros (SASHA_USD_EUR, 0.92 by default)."""
+    try:
+        return int(round(float(usd) * float(os.getenv("SASHA_USD_EUR", "0.92") or 0.92)))
+    except (TypeError, ValueError):
+        return 0
+
+
 async def run_flight_intent(message: str, history: list, session_id: "Optional[str]" = None) -> dict:
     """Real flight options via live web search — surfaced as a booking card."""
     from app.services.travel_search import _localize_flight_card
@@ -1852,7 +1860,8 @@ async def conduct(
             try:   # Sasha 189 · ONE total for the package, said once (the card reuses this quote)
                 from booking_signer import trip_book as _tbq
                 _b = await _tbq.bundle(user_id, _origin or "Madrid")
-                _say = (f"We have your itinerary and flights — your total is €{_b['eur']:,.2f}. Shall I book it?" if "eur" in _b
+                _say = (f"We have your itinerary and flights — your total is €{_b['eur']:,.2f} for the hotels and flights; "
+                        "activities and meals in the plan's estimate are paid as you go. Shall I book it?" if "eur" in _b
                         else f"I can't price the whole trip just now — {_b.get('why')}.")
             except Exception as _e:
                 _say = "We have your itinerary and flights — here's your total. Shall I book it?"
@@ -2455,7 +2464,7 @@ async def conduct(
                 _tot = itinerary.get("estimated_total_usd")
                 if _chg:
                     final_response = ("Done — " + "; ".join(f"{c} is now {h}" for c, h in _chg[:2]) + "."
-                                      + (f" Your new total is about ${int(_tot):,}." if isinstance(_tot, (int, float)) and _tot else ""))
+                                      + (f" Your plan's estimate is now about €{_eur190(_tot):,} (hotels, activities and meals)." if isinstance(_tot, (int, float)) and _tot else ""))
             except Exception as _e:
                 print(f"[Conductor] Sasha 189 swap line: {type(_e).__name__}")
         elif stored_itinerary:
@@ -2467,7 +2476,7 @@ async def conduct(
             _total = itinerary.get("estimated_total_usd")
             _trav = (itinerary.get("cost_breakdown") or {}).get("travellers") or itinerary.get("travellers")
             _party_phrase = "one traveller" if _trav == 1 else f"{_TRAVELLER_WORDS.get(_trav, 'two')} travellers"
-            _tot = (f" — now about ${int(_total):,} for {_party_phrase}"
+            _tot = (f" — now about €{_eur190(_total):,} for {_party_phrase}"
                     if isinstance(_total, (int, float)) and _total else "")
             final_response = (f"Done — I've updated your plan; the new {_n}-day version is on "
                               f"the right{_tot}. Anything else you'd like to change?")
@@ -2487,7 +2496,7 @@ async def conduct(
             _trav = (itinerary.get("cost_breakdown") or {}).get("travellers") or itinerary.get("travellers")
             _party_phrase = "one traveller" if _trav == 1 else f"{_TRAVELLER_WORDS.get(_trav, 'two')} travellers"
             _total_str = (
-                f" The estimated total for {_party_phrase} — hotels, activities and meals — comes to about ${int(_total):,}."
+                f" The estimated total for {_party_phrase} — hotels, activities and meals — comes to about €{_eur190(_total):,}."
                 if isinstance(_total, (int, float)) and _total else ""
             )
             _hotel_str = f" You'll start at {_first_hotel}." if _first_hotel else ""

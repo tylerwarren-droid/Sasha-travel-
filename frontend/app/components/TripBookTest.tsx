@@ -80,5 +80,5 @@ export function TripBookTest({ from }: { from: string }) {
     ? <div className="o2" style={box}>📱 Sent to your phone — tap to pay with Apple Pay. · or <a href={p.url} target="_blank" rel="noopener noreferrer">pay here</a></div>
     : <div className="o2" style={box}>Pay the TEST total on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged). I&rsquo;ll book everything the moment it&rsquo;s paid…</div>
   if (p.k === 'no') return <div className="o2" style={box}>OK — nothing was booked.</div>
-  return <div className="o2" style={{ ...box, whiteSpace: 'pre-line' }}>{p.say}</div>
+  return <div className="o2" style={{ ...box, whiteSpace: 'pre-line' }}>{p.k === 'booked' && <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', background: '#E8B923', color: '#111', borderRadius: 4, padding: '1px 5px', marginRight: 6 }}>TEST</span>}{p.say}</div>   // Sasha 190 · the tag on the card, not in the words
 }

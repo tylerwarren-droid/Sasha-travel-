@@ -494,6 +494,10 @@ async def present(ctx: dict, cid: str, base: dict, web: str, save) -> None:
     out.text(f"🖨 Your whole pack as ONE print-ready PDF, in {c['office']}'s own order — its checklist, the national visa form, the EX-01, the 790-052 "
              f"(both copies), the photo spec — with SIGN HERE beside every signature box:\n{web}/api/products/relocation/{case}/pack.pdf\n"
              f"Signatures: {c['sign']}")
+    town = ((f.get("applicant") or {}).get("address_town") or {}).get("value") or "Madrid"
+    out.ask(f"✈️ Getting there — ask Sasha for flights to {town} and your first nights, booked right here. Your entry date and "
+            f"new address are filled in, and every booking lands on your “Move to {town}” trip with the visa deadlines.",
+            [("Plan my flights & first nights", "tp:go:relocation")])                      # CR 50 · like CampusMe's trip
     out.text("After you arrive, say “after arrival”: your padrón, your TIE (EX-17 + the 790-012 fee) and your Social Security "
              "number (TA.1) — each prepared from the same answers, in the order you need them.")      # CR 44
     pend["consulate_office"] = c["office"]

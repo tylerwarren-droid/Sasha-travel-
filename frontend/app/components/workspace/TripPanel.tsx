@@ -12,6 +12,7 @@ interface TripPanelProps {
   travellerCount: number
   // Nothing planned yet — send the guest to the Ideas tab rather than dead-ending them.
   onBrowseIdeas?: () => void
+  onAsk?: (text: string) => void   // CR 50 · a sentence said to Sasha in the chat (the Move tab's "Getting there")
   // The confirmed booking reference, once the trip is paid for. Its presence turns every
   // booking control into a statement of what's already reserved: continuing to offer "Book"
   // on a paid trip invites the guest to buy the same rooms twice.
@@ -51,8 +52,10 @@ type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?:
 type JRow = { id: string; venue: string; date: string | null; time: string | null; status: string; status_words?: string; booking_reference?: string | null; trip_id?: string }
 /** CR 45 · a RelocateMe form on the Move tab: its state, its PDF one tap away (if there is one), where it goes next */
 type JForm = { name: string; state: 'filled' | 'signed' | 'missing' | 'waiting' | 'done' | 'doing' | 'expired' | 'info'; note: string; pdf: string | null; next: string | null }
+/** CR 50 · the Move tab's "Getting there": Sasha books the flights and first nights from here, onto this trip */
+type JGetting = { title: string; text: string; say: string; entry_date?: string | null; to?: string }
 type Journeys = { journeys: { key: string; label: string; title: string; start?: string | null; end?: string | null; count: number
-    virtual?: boolean; extras?: JRow[]; forms?: JForm[] }[]
+    virtual?: boolean; extras?: JRow[]; forms?: JForm[]; getting_there?: JGetting }[]
   home: { label: string; items: JRow[] }; requests: JRow[]; receipts: JRow[]; everything: JRow[] }
 /** Sasha 177 · the account's journeys and lists, polled like the plan (a booking made on WhatsApp shows within seconds) */
 function useJourneys(): Journeys | null {
@@ -131,7 +134,7 @@ function useServerPlan(tripId: string | null, onPlans?: (p: PlanRef[]) => void):
 }
 
 export default function TripPanel({
-  richItinerary: localItinerary, openDays, toggleDay, onBook, travellerCount, onBrowseIdeas, bookingRef, paidWith,
+  richItinerary: localItinerary, openDays, toggleDay, onBook, travellerCount, onBrowseIdeas, onAsk, bookingRef, paidWith,
 }: TripPanelProps) {
   // Sasha 175 · THE TABS the founder asked for: this trip (any of his trips), every booking anywhere, and what's still open
   // Sasha 177 · ONE TRIPS SPACE: a tab per journey (from /journeys), home, requests, receipts, everything. Switching tabs never
@@ -192,7 +195,21 @@ export default function TripPanel({
     </div>
   )
   const curJ = (jn?.journeys ?? []).find((t) => t.key === activeTrip)
-  const formsHere = curJ?.forms?.length ? <FormsList forms={curJ.forms} /> : null   // CR 45 · every form lives in the journey
+  const getting = curJ?.getting_there
+  const formsHere = curJ?.forms?.length ? (
+    <>
+      {getting && (
+        <>
+          <div className="lw-when">✈️ {getting.title}</div>
+          <div className="lw-card"><div className="lw-cardBody" style={{ paddingTop: 14 }}>
+            <div>{getting.text}</div>
+            {onAsk && <button className="lw-empty-cta" style={{ marginTop: 10 }} onClick={() => onAsk(getting.say)}>Ask Sasha to book it →</button>}
+          </div></div>
+        </>
+      )}
+      <FormsList forms={curJ.forms} />
+    </>
+  ) : null   // CR 45 · every form lives in the journey; CR 50 · and how to get there
   if (view === 'trip' && curJ?.virtual) return <div className="lw-trip">{tabs}{formsHere}<JourneyList title={curJ.title} rows={curJ.extras ?? []} /></div>
   const alsoHere = curJ?.extras?.length ? <JourneyList title={`Also on this journey (from ${curJ.title.match(/campus/i) ? 'CampusMe' : 'RelocateMe'})`} rows={curJ.extras} /> : null
   if (view !== 'trip') {

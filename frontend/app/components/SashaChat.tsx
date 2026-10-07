@@ -684,6 +684,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
                 onBook={onBook}
                 travellerCount={travellerCount}
                 onBrowseIdeas={() => onTabChange?.('ideas')}
+                onAsk={(text: string) => { onTabChange?.('chat'); sendMessage(text) }}   /* CR 50 · "Getting there" → Sasha */
                 bookingRef={bookingRef}
                 paidWith={paidWith}
               />

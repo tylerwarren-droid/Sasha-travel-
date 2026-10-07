@@ -69,6 +69,10 @@ export const PITCHES: Pitch[] = [
       { mark: 'built', text: 'Ask once, on WhatsApp or the web. Sasha finds the venues and shows cards, with photos where the venue publishes one (about 1 in 3 in Vietnam).' },
       { mark: 'built', text: 'After one yes, she books by the venue’s own form or email. Calls to Vietnam are in English; +84 calls aren’t connected yet.' },
       { mark: 'test', text: 'Hotels: “Reserve (TEST)”, or a real room request to the hotel (✅). Flights: TEST bookings.' },
+      // CR 50 · each line confirmed true and live by the Sasha tab (7 Oct): no real Apple Pay tap has completed a whole trip yet
+      { mark: 'test', text: 'Laptop books, phone pays: a whole Vietnam trip priced and read back on the laptop; one Apple Pay tap is sent to the phone (TEST).' },
+      { mark: 'test', text: 'A tattoo-studio request: found, sent by email (our test venue stands in), and filed under Requests.' },
+      { mark: 'built', text: 'Every journey in one place: Sasha’s trips space, with a tab per journey.' },
     ],
     agents: [
       { agent: 'Magellan', mark: 'built', text: 'Reads each venue’s own site for its routes; Vietnam is one of the countries it reads.' },
@@ -218,6 +222,7 @@ export const PITCHES: Pitch[] = [
     does: [
       { mark: 'built', text: 'Health works today in our test setup: a private clinic booked by phone, and public appointments (SERMAS) prepared for you to press.' },
       { mark: 'concept', text: 'DNI renewal, IMV and bono social, padrón change of address, IBI, DGT: read at source on 5 Oct 2026, not built.' },
+      { mark: 'built', text: '🇪🇸 Health card on the platform: ID read → official form filled → your centre → cita or walk in.' },   // CR 50
       { mark: 'built', text: 'The rule: Sasha prepares, you press. She never signs in to, books, or calls a public service for you.' },
     ],
     agents: [

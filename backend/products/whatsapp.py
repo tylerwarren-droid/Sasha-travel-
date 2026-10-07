@@ -400,6 +400,12 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         out.text("Back to Sasha — ask me anything: a booking, a flight, your plans.")   # CR 15 · "sasha" returns
         return True
     plan_for = None
+    if payload.startswith("tp:go:") and payload[6:] in ("relocation", "campus"):   # CR 50 · "Getting there": the product's
+        plan_for, target, entering = payload[6:], "trip", True                  # own plan, its dates and place pre-filled
+        payload, p["ButtonPayload"] = "", ""
+        if asked_last != "trip":
+            from . import store as ST
+            await ST.STORE.drop_conversation(_key(ch), "trip")
     if not target and not payload:
         # CR 13 · "book my flights" / "plan the trip around the visits": the products' context, acted on by Sasha's travel
         from . import trip as TP

@@ -76,4 +76,13 @@ async def package_status(account: str, today: Optional[date] = None) -> Optional
                 nxt = {"on": days[0]["date"], "text": days[0]["activities"][0]["name"]}
         except Exception:
             nxt = None
-    return {"forms": _with_links(_forms(st), case.get("id")), "next_deadline": nxt, "tab": MV.TITLE, "case_id": case.get("id")}
+    a = (st.get("facts") or {}).get("applicant") or {}
+    town = (a.get("address_town") or {}).get("value") or "Madrid"
+    street = " ".join(x for x in ((a.get("address_street") or {}).get("value"), (a.get("address_number") or {}).get("value")) if x)
+    getting = {"title": "Getting there", "say": "book my flights",                       # CR 50 · Sasha books it, here
+               "text": f"Flights to {town}" + (f" for {after['entry_date']}" if after.get("entry_date") else "") +
+                       f" and your first nights{' near ' + street if street else ''} — Sasha books them right here; each lands "
+                       f"on this trip with the visa deadlines.",
+               "entry_date": after.get("entry_date"), "to": town}
+    return {"forms": _with_links(_forms(st), case.get("id")), "next_deadline": nxt, "tab": MV.TITLE, "case_id": case.get("id"),
+            "getting_there": getting}

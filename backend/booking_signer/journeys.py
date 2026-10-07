@@ -242,9 +242,12 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
     if not move_plan and (reloc_items or forms):   # RelocateMe's journey even before a plan exists: its deadlines and appointments
         tabs.append({"key": "relocation", "label": badged("relocation", "Move to Madrid"), "product": "RelocateMe",
                      "title": "Move to Madrid (RelocateMe)", "virtual": True, "count": len(reloc_items), "extras": reloc_items})
+    getting = await _relocation_getting(account) if forms else None
     for t in tabs:
         if forms and (t["key"] == "relocation" or (move_plan and t["key"] == move_plan["trip_id"])):
             t["forms"] = forms
+            if getting:
+                t["getting_there"] = getting
     if not campus_plan and any(x["product"] == "campus" for x in prod):
         cv = [x for x in prod if x["product"] == "campus"]
         tabs.append({"key": "campus", "label": badged("campus", "Campus visits"), "product": "CampusMe", "title": "Campus visits (CampusMe)",
@@ -335,6 +338,17 @@ async def health_card(account: Optional[str]) -> List[dict]:
 
 
 _health_forms = health_card
+
+
+async def _relocation_getting(account: Optional[str]) -> Optional[dict]:
+    """CR 50 · the Move tab's "Getting there" block (package_status, read-only)."""
+    if not account:
+        return None
+    try:
+        from products.relocation import package_status
+        return ((await package_status(account)) or {}).get("getting_there")
+    except Exception:
+        return None
 
 
 async def _relocation_forms(account: Optional[str]) -> List[dict]:

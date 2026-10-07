@@ -2336,6 +2336,7 @@ async def _send_link(ctx: dict, rd: dict, reservation: dict, name: str, plan: Op
     nights = (keep.get("draft") or {}).get("nights")
     status, j = await api(ctx["account"], "POST", "/api/booking/links", {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16],
                                                                           "party": reservation["how_many"]["count"], "name": name,
+                                                                          "venue": plain_venue(rd.get("venue"))[:120],   # Sasha 187 · the name he picked, never the site's legal name
                                                                           **({"plan_line": plan} if plan else {}),
                                                                           **({"nights": int(nights)} if nights else {})})
     if status != 200:

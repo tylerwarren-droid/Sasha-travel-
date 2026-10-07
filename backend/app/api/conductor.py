@@ -108,6 +108,7 @@ class ConductorResponse(BaseModel):
     booking_find: Optional[dict] = None  # S-66 chat booking (Stage B)
     booking_cancel: Optional[dict] = None  # Sasha 96 chat cancel (Stage B)
     trip_book: Optional[dict] = None  # Sasha 169 · book the whole trip (TEST): {from}
+    flight_pick: Optional[dict] = None  # Sasha 182 · a flight picked by words: {offer_id, name, detail, price}
     reservation_draft: Optional[dict] = None  # S-66 chat booking (Stage B)
     quick_replies: list = []   # CR 16 · a product's buttons [{title, payload}]
     mode: Optional[str] = None  # Sasha 179 · the current mode's label ("✈️ Vietnam, Nov", "📍 Paris", "🏠 Move to Madrid")
@@ -197,6 +198,7 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             booking_find=result.get("booking_find"),  # S-66 chat booking (Stage B)
             booking_cancel=result.get("booking_cancel"),  # Sasha 96 chat cancel (Stage B)
             trip_book=result.get("trip_book"),  # Sasha 169
+            flight_pick=result.get("flight_pick"),  # Sasha 182
             reservation_draft=result.get("reservation_draft"),  # S-66 chat booking (Stage B)
             quick_replies=quick,   # CR 16; Sasha 179 · the Back button first
             mode=mode,

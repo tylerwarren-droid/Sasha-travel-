@@ -7,11 +7,12 @@
  */
 import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal, SIGN_IN_TO_BOOK } from '@/lib/booking-client'
+import { setPendingYes } from '@/lib/chat-booking-bus'
 
 type Phase = { k: 'idle' } | { k: 'reading' } | { k: 'readback'; lines: string[]; sha: string } | { k: 'paying'; url: string; sid: string; phone?: boolean }
   | { k: 'booked'; say: string } | { k: 'error'; say: string }
 
-export function FlightBookTest({ offerId }: { offerId: string }) {
+export function FlightBookTest({ offerId, autoStart = false }: { offerId: string; autoStart?: boolean }) {
   const [p, setP] = useState<Phase>({ k: 'idle' })
   async function prepare() {
     setP({ k: 'reading' })
@@ -22,14 +23,22 @@ export function FlightBookTest({ offerId }: { offerId: string }) {
     const rb = r.json.read_back as { lines: string[]; sha256: string }
     setP({ k: 'readback', lines: rb.lines, sha: rb.sha256 })
   }
-  async function yes(sha: string) {
-    const r = await bookingReq('/api/booking/travel/flight/pay', { offer_id: offerId, read_back_sha256: sha, approval: { how: 'button' } })
+  async function yes(sha: string, said: string | null = null) {
+    const r = await bookingReq('/api/booking/travel/flight/pay', { offer_id: offerId, read_back_sha256: sha, approval: said ? { how: 'chat', said } : { how: 'button' } })
     if (!r.ok) return setP({ k: 'error', say: `Not booked — ${refusal(r.json, r.status)}.` })
     // Sasha 161 · desktop books, phone confirms: the tap to pay went to the phone; the laptop keeps "or pay here"
     const phone = String(r.json.phone ?? '').startsWith('sent')
     setP({ k: 'paying', url: String(r.json.url), sid: String(r.json.session_id), phone })
     if (!phone) window.open(String(r.json.url), '_blank', 'noopener')
   }
+  // Sasha 182 · picked by words in the chat: the read-back at once; a typed or spoken "yes" answers it, as the button does
+  useEffect(() => { if (autoStart) prepare() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (p.k !== 'readback') return
+    const sha = p.sha
+    setPendingYes((said) => { yes(sha, said) })
+    return () => setPendingYes(null)
+  }, [p])  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (p.k !== 'paying') return
     const t = setInterval(async () => {

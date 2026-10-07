@@ -206,6 +206,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
   const [modeLabel, setModeLabel] = useState<string | null>(null)   // Sasha 179 · the current mode, shown small; sent back each turn
   const modeRef = useRef<string | null>(null)
   const [tripBook, setTripBook] = useState<{ from: string; n: number } | null>(null)  // Sasha 169
+  const [flightPick, setFlightPick] = useState<{ offerId: string; n: number } | null>(null)  // Sasha 182
   const [productMedia, setProductMedia] = useState<{ caption: string; url: string; link?: string }[]>([])
   const openedRef = useRef(false)
   const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number; provider?: string; provider_offer_id?: string; live_mode?: boolean }[] }[]>([])
@@ -425,6 +426,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
       setProductMedia(Array.isArray(response.data.media) ? response.data.media : [])
       if (response.data.booking_find) setBookingFind({ ...response.data.booking_find, draft: response.data.reservation_draft ?? null })  // S-66 chat booking
       if (response.data.trip_book) setTripBook({ from: String(response.data.trip_book.from ?? 'Madrid'), n: Date.now() })  // Sasha 169
+      if (response.data.flight_pick?.offer_id) setFlightPick({ offerId: String(response.data.flight_pick.offer_id), n: Date.now() })  // Sasha 182
       if (response.data.booking_cancel) setBookingCancel({ ...response.data.booking_cancel, n: Date.now() })  // Sasha 96 chat cancel (Stage B)
       // Replace local messages with server-authoritative history
       if (conversation_history?.length > 0) {
@@ -810,6 +812,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
           </div>
         )}
         {bookingFind && <ChatBooking key={`${bookingFind.what}|${bookingFind.where}`} find={bookingFind} />}
+        {flightPick && <div className="o2" style={{ marginTop: 6 }}><FlightBookTest key={flightPick.n} offerId={flightPick.offerId} autoStart /></div>}{/* Sasha 182 · the flight picked by words: its read-back at once */}
         {tripBook && <TripBookTest key={tripBook.n} from={tripBook.from} />}{/* Sasha 169 · the whole trip, TEST, one tap */}
         {bookingCancel && <ChatCancel key={bookingCancel.n} venue={bookingCancel.venue} />}{/* Sasha 96 chat cancel (Stage B) */}
         {/* Sasha 153 · after a booking only: the private guest may add an email to keep it across devices */}

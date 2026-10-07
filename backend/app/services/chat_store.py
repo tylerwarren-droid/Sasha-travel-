@@ -324,6 +324,20 @@ def _get_session_card(session_id, kind, dest):
             return None
 
 
+def _latest_session_card(session_id, kind):
+    """Sasha 182 · the session's NEWEST card of a kind (the flight list on screen), whatever its destination."""
+    _ensure()
+    with _connect() as conn:
+        r = conn.execute("SELECT payload FROM session_cards WHERE session_id = ? AND kind = ? ORDER BY created_at DESC LIMIT 1",
+                         (session_id, kind)).fetchone()
+        if not r:
+            return None
+        try:
+            return json.loads(r["payload"])
+        except Exception:
+            return None
+
+
 def _clear_session_cards(session_id, kind=None) -> None:
     _ensure()
     with _connect() as conn:
@@ -452,6 +466,14 @@ async def get_session_card(session_id, kind, dest):
         return await asyncio.to_thread(_get_session_card, session_id, kind, dest)
     except Exception as e:
         print(f"[chat_store] get_session_card failed (non-fatal): {e}")
+        return None
+
+
+async def latest_session_card(session_id, kind):
+    try:
+        return await asyncio.to_thread(_latest_session_card, session_id, kind)
+    except Exception as e:
+        print(f"[chat_store] latest_session_card failed (non-fatal): {e}")
         return None
 
 

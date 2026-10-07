@@ -1788,10 +1788,41 @@ async def conduct(
         return {"response": _ask, "intents": ["booking"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
                 "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
                 "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _ask}]}
+    # Sasha 182 · A FLIGHT PICKED BY WORDS (live 7 Oct: every pick re-ran the search and the list looped). With Duffel's list
+    # on screen, the pick goes straight to that flight's TEST read-back on the card (FlightBookTest, auto-started); "forget
+    # the flights" drops them. Nothing is booked before the read-back's yes and the Stripe TEST payment.
+    _recent_a = [str(m.get("content") or "") for m in reversed(conversation_history or []) if isinstance(m, dict) and m.get("role") == "assistant"][:3]
+    if session_id and not payload:
+        from booking_signer import flight_pick as _fp  # noqa: E402
+        if any(_fp.is_flight_list(x) for x in _recent_a):   # the list was shown in the last three replies
+            _fc = await chat_store.latest_session_card(session_id, "flight")
+            _opts = [o for o in ((_fc or {}).get("options") or []) if o.get("provider") == "duffel" and o.get("provider_offer_id")]
+            _i = _fp.pick(user_message, _opts)
+            _miss = _fp.named_missing(user_message, _opts) if _opts and _i != "none" else None
+            if _miss:   # never another airline in its place
+                _have = ", ".join(dict.fromkeys(f"{o.get('name')} ({o.get('price')})" for o in _opts[:4]))
+                _say = f"{_miss} isn't on this flight list — on screen: {_have}. Which one shall I book? (“the first one”, or its airline)"
+                return {"response": _say, "intents": ["flight"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                        "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
+                        "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
+            if _i == "none":
+                await chat_store.clear_session_cards(session_id, "flight")
+                _say = "OK — no flights. What next?"
+                return {"response": _say, "intents": ["flight"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                        "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
+                        "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
+            if isinstance(_i, int) and 0 <= _i < len(_opts):
+                _o = _opts[_i]
+                _say = (f"{_o.get('name')} — {_o.get('detail') or ''}, {_o.get('price') or ''}. Here's exactly what I'll book (TEST — "
+                        "no real ticket, nothing charged): say “yes” or tap “Yes, book it (TEST)”, then one tap to pay on your phone.").replace(" — ,", " —")
+                return {"response": _say, "intents": ["flight"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                        "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
+                        "flight_pick": {"offer_id": _o["provider_offer_id"], "name": _o.get("name"), "detail": _o.get("detail"), "price": _o.get("price")},
+                        "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
     # Sasha 169 (2) · "book it" with a plan on the ACCOUNT: the whole trip — its hotels and flights, TEST — in one read-back,
     # one yes and one tap to pay on the phone (booking_signer/trip_book.py; the card is TripBookTest on the web)
     from booking_signer import trip_book as _tb  # noqa: E402
-    _origin = _tb.asked(user_message)
+    _origin = _tb.asked(re.sub(r"^\s*(?:ok(?:ay)?|so|right)?[,.]?\s*sasha[,!.]?\s*", "", user_message or "", flags=re.I))   # Sasha 182 · "Sasha, let's book it."
     if _origin is not None and user_id and signed_in is not False:
         from booking_signer import plan_store as _ps_tb  # noqa: E402
         if await _ps_tb.latest(user_id):

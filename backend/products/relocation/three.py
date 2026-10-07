@@ -536,6 +536,7 @@ async def walk(ctx: dict, step: str) -> bool:
     w = (pend.get("walk") or {}).get(step)
     if not w:
         return False
+    pend["walk_at"] = step                                   # where they are, for a line typed mid-walk
     if w.get("media"):
         FC.show(out, *w["media"])
     out.ask(w["text"], [tuple(b) for b in w["buttons"]])

@@ -300,7 +300,29 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
         return True
     if step == "appointments":
         return await _appointment(ctx, body)
+    if step == "walk" and not payload:                            # CR 52 · anything else typed mid-walk stays here: the step
+        return await _walk_typed(ctx, body)                       # it names, or the one they're on — never a guessed figure
     return False   # CR 10 · not relocation's: Sasha answers it, in the same chat
+
+
+_WALK_WORDS = (("fees", r"(?i)\b(fees?|costs?|price|pay|paying|payment|money|how much)\b"),
+               ("forms", r"(?i)\b(forms?|790|visa form|pdf)\b"),
+               ("docs", r"(?i)\b(documents?|papers?|bring|checklist|list)\b"),
+               ("book", r"(?i)\b(book(ing)? (the|an|my) (consulate|appointment)|email the consulate)\b"))
+
+
+async def _walk_typed(ctx: dict, body: str) -> bool:
+    """CR 52 · typed mid-walk: the step it asks about, else the step they're on (re-shown), said plainly."""
+    from . import three as TH
+    pend = ctx["st"]["pending"]
+    if re.search(r"(?i)\b(flights?|fly|flying|getting there|travel)\b", body or ""):
+        return await _travel(ctx)
+    key = next((k for k, rx in _WALK_WORDS if re.search(rx, body or "")), None)
+    if key and await TH.walk(ctx, key):
+        return True
+    at = pend.get("walk_at") or "fees"
+    ctx["out"].text("We're on your consulate steps — here's where you are (say “sasha” for travel):")
+    return await TH.walk(ctx, at)
 
 
 async def _travel(ctx: dict) -> bool:

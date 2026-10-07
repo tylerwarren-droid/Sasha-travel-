@@ -119,6 +119,23 @@ class NewYorkOnWhatsApp(TG.Base):
     def said(self):
         return "\n".join(self.bodies())
 
+    def test_typed_mid_walk_stays_in_relocateme(self):
+        """CR 52 · a line typed between the steps is RelocateMe's — the step it names, or the one they're on; never Sasha's guess."""
+        from booking_signer import guest_whatsapp as GW
+        for t in ("relocation", "DEMO", "SIGNED", "USA", "New Jersey"):
+            self.say(t)
+
+        def new(t, **kw):
+            n, m = len(GW.SENDER.contents), len(self.bodies())
+            self.say(t, **kw)
+            return "\n".join(self.bodies()[m:] + [c for c, _ in GW.SENDER.contents[n:]])
+        self.assertIn("Total $119, paid only by USPS money order", new("how much does it cost?"))
+        self.assertIn("We're on your consulate steps", new("hmm ok"))
+        self.assertIn("Your fees at New York", new("hmm ok"))          # the step they're on, again
+        self.assertIn("New York books this visa by email", new("", payload="rx:go:book"))
+        self.assertIn("New York books this visa by email", new("I'm not sure"))
+        self.assertIn("Getting there", new("and my flights?"))
+
     def test_us_then_new_jersey_its_list_its_email_the_pack_the_tie_and_the_appointment(self):
         for t in ("relocation", "DEMO", "SIGNED", "USA"):
             self.say(t)

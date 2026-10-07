@@ -775,7 +775,8 @@ _PARTY_TALK = ("wife", "husband", "partner", "spouse", "daughter", "son", " kid"
 
 async def run_general(message: str, history: list, general_prompt: str) -> dict:
     """General Sasha conversation — travel advice, destinations, planning."""
-    system = general_prompt + NEVER_FAKE_BOOKING + NEVER_FAKE_ITINERARY_CHANGE + CAPABILITY_FACTS
+    system = general_prompt + NEVER_FAKE_BOOKING + NEVER_FAKE_ITINERARY_CHANGE + CAPABILITY_FACTS \
+        + "\n\n" + _P.SERVER_VOICE_RULES   # Sasha 201 · the charter's voice, from the one source (sasha-persona.md)
     # CURRENT message only: the miscount risk is the turn where the GUEST restates the party.
     # Triggering off history too made every turn near party talk pay the ~1s resolver call
     # ("wife" in Sasha's own previous reply added a visible delay to an unrelated answer).
@@ -1242,23 +1243,25 @@ _NOT_PLACE194 = {"January", "February", "March", "April", "May", "June", "July",
 
 # Sasha 199 · THE GUIDED TRIP'S LINES — EU's script (docs/sasha/guided-trip-script.md), ≤ ~15 words, the cards carry the
 # details. The opening is the founder's own (199). Each line is also a marker the next turn reads, so they live here once.
-S199_OPEN = ("That sounds fun! Let's have a chat about what you're into and who's travelling, and then we can start "
-             "pulling together an itinerary for you. How does that sound?")
-S199_NAME = "Great — first, what's your name?"
-S199_KIND = "What kind of trip are you after?"
-S199_PARTY = "How many of you are travelling?"
-S199_DATES = "Which dates are you thinking of?"
-S199_WHERE_DATES = "Where to, and which dates?"
-S199_FROM = "Where are you flying from — Madrid?"
-S199_PLAN = "Here's your itinerary, with somewhere to stay each night."
-S199_FLIGHTS = "I've found some flights for you to consider."
-S199_ADDED = "Done — I've added it to your itinerary. Anything else you'd like to add?"
-S199_CHANGES = "Any changes?"
-S199_BOOK_Q = "Shall I book it?"
-S199_SENT = "I've sent it to your phone — tap to pay."
-S199_F2B = "That airline isn't on this list. Pick one of these?"
-S199_F5 = "I couldn't find flights for those dates. Try other dates?"
-S199_F13 = "Which flights would you like? I'll show them again."
+from app.services import persona as _P   # Sasha 201 · GENERATED from docs/sasha/sasha-persona.md — the one source
+S199_OPEN = _P.LINES["open"]
+S199_NOT_NOW = _P.LINES["not_now"]
+S199_NAME = _P.LINES["name"]
+S199_KIND = _P.LINES["kind"]
+S199_PARTY = _P.LINES["party"]
+S199_DATES = _P.LINES["dates"]
+S199_WHERE_DATES = _P.LINES["where_dates"]
+S199_FROM = _P.LINES["from"]
+S199_PLAN = _P.LINES["plan"]
+S199_FLIGHTS = _P.LINES["flights"]
+S199_ADDED = _P.LINES["added"]
+S199_CHANGES = _P.LINES["changes"]
+S199_BOOK_Q = _P.LINES["book_q"]
+S199_SENT = _P.LINES["sent"]
+S199_F2B = _P.LINES["f2b"]
+S199_F5 = _P.LINES["f5"]
+S199_F13 = _P.LINES["f13"]
+S199_NO_FLIGHTS = _P.LINES["no_flights"]
 _TRIP199 = re.compile(r"\b(?:go(?:ing)?\s+to|trip|travel(?:l?ing)?|visit(?:ing)?|holiday|vacation|getaway|itinerary|plan\s+(?:a|my|me|our|us)|tour\s+of)\b", re.I)
 _NOT_TRIP199 = re.compile(r"\b(?:flights?|fly|hotels?|restaurant|table|dinner|lunch|spa|massage|reservation|relocat\w*|move\s+to|moving|campus|"
                           r"university|visa|book\s+(?:a|an|the|me)|just plan it|you decide|surprise me)\b", re.I)
@@ -2011,7 +2014,7 @@ async def conduct(
     if user_id and signed_in is not False and not payload and (("Shall we look at flights?" in _last196 and (_flightish196 or _no196))
                                                                or (S199_FLIGHTS in _last196 and _pref196)):
         if _no196 and not _book196:
-            return _say196("OK — no flights. Anything else you'd like to add?")
+            return _say196(S199_NO_FLIGHTS)
         try:
             _gf = await _guided_flights199(user_id, conversation_history, user_message, session_id)
             return _say196(S199_FLIGHTS, bookings=[_gf]) if _gf else _say196(S199_F5)   # Sasha 199 · the cards carry the details
@@ -2323,7 +2326,7 @@ async def conduct(
         if not _has_plan199:
             return _say196(S199_OPEN)
     if not payload and _last196 == S199_OPEN and re.match(r"(?i)^\s*(?:no|nope|not now|not yet|later)\b", user_message or ""):
-        return _say196("No problem — just tell me when you're ready.")
+        return _say196(S199_NOT_NOW)
     if not (user_message or "").strip():   # CR 16 · an empty product-tab turn the products didn't take: nothing to answer
         return {"response": "Ask me anything — a booking, a flight, your plans.", "intents": [], "photos": [], "tools_used": [],
                 "links": [], "hotels": [], "bookings": [], "itinerary": None, "action": None, "booking_ref": None,
@@ -2730,7 +2733,7 @@ async def conduct(
                     max_tokens=250,  # short spoken replies — voice interface
                     # Same guards as run_general: the merge agent speaks over card turns too,
                     # and it produced the on-camera "use Google Flights or Kayak" denial.
-                    system=cached_system(merge_prompt + NEVER_FAKE_BOOKING
+                    system=cached_system(merge_prompt + "\n\n" + _P.SERVER_VOICE_RULES + NEVER_FAKE_BOOKING
                                          + NEVER_FAKE_ITINERARY_CHANGE + CAPABILITY_FACTS),
                     messages=[{"role": "user", "content": f"User asked: {user_message}\n\nAgent responses:\n{combined}"}]
                 ),

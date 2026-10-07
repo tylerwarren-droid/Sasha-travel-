@@ -17,7 +17,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
-ASK = "Before I book: each traveller's full name, title and date of birth?"   # Sasha 199 · ≤ 15 words, asked once
+from app.services.persona import LINES as _LINES   # Sasha 201 · from the one source (docs/sasha/sasha-persona.md)
+ASK = _LINES["passengers"]   # ≤ 15 words, asked once
 MARK = "each traveller's full name, title and date of birth"
 _TITLE = {"mr": ("mr", "m"), "mister": ("mr", "m"), "ms": ("ms", "f"), "mrs": ("mrs", "f"), "miss": ("miss", "f"),
           "dr": ("dr", None)}

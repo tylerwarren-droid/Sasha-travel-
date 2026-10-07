@@ -1089,19 +1089,23 @@ export default function VietnamPage() {
                   on — so the call starts where the eye already is. (public/sasha-preview.jpg
                   is the LiveAvatar preview for the configured avatar; refresh it if the avatar
                   changes.) */}
-              <img className="mt-standby" src="/sasha-preview.jpg" alt="" style={{ opacity: uiPreview ? 1 : .55, filter: uiPreview ? 'none' : 'saturate(.7)' }} />
+              <img className="mt-standby" src="/sasha-preview.jpg" alt="" style={{ opacity: uiPreview || meetHidden ? 1 : .55, filter: uiPreview || meetHidden ? 'none' : 'saturate(.7)' }} />
               <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 22%, transparent 58%, rgba(0,0,0,.85) 100%)' }} />
               <div className="mt-ov-top absolute top-0 left-0 right-0 flex items-center" style={{ padding: '14px 16px', zIndex: 3 }}>
                 <span className="mt-standbypill"><span className="mt-standbydot" /> {uiPreview ? 'Preview' : 'Standby'}</span>
               </div>
-              {!uiPreview && !meetHidden && (
+              {!uiPreview && (
+                // Sasha 184 · the start control is ALWAYS there; only the first-time welcome ("Meet Sasha") is hidden for a
+                // returning account or once closed (Sasha 183 hid the whole block: Sasha "disappeared" for the founder)
                 <div className="mt-startwrap" style={{ position: 'relative' }}>
-                  <button type="button" aria-label="Close" onClick={() => { setMeetHidden(true); try { localStorage.setItem('sasha.meet.closed', '1') } catch { /* fine */ } }}
-                    style={{ position: 'absolute', top: -6, right: -6, width: 28, height: 28, borderRadius: 999, border: '1px solid rgba(255,255,255,.3)', background: 'rgba(0,0,0,.45)', color: '#fff', cursor: 'pointer', zIndex: 4 }}>✕</button>
-                  <div className="mt-eyebrow">AI Travel Concierge</div>
-                  <div className="mt-bigname">Meet Sasha</div>
-                  <button className="mt-startbtn" onClick={() => startWith()}><Play size={16} strokeWidth={2.2} fill="#fff" /> Tap to start your call</button>
-                  <div className="mt-hint">Audio plays automatically once you start</div>
+                  {!meetHidden && (
+                    <button type="button" aria-label="Close the welcome" onClick={() => { setMeetHidden(true); try { localStorage.setItem('sasha.meet.closed', '1') } catch { /* fine */ } }}
+                      style={{ position: 'absolute', top: -6, right: -6, width: 28, height: 28, borderRadius: 999, border: '1px solid rgba(255,255,255,.3)', background: 'rgba(0,0,0,.45)', color: '#fff', cursor: 'pointer', zIndex: 4 }}>✕</button>
+                  )}
+                  {!meetHidden && <div className="mt-eyebrow">AI Travel Concierge</div>}
+                  {!meetHidden && <div className="mt-bigname">Meet Sasha</div>}
+                  <button className="mt-startbtn" onClick={() => startWith()}><Play size={16} strokeWidth={2.2} fill="#fff" /> {meetHidden ? 'Talk to Sasha' : 'Tap to start your call'}</button>
+                  {!meetHidden && <div className="mt-hint">Audio plays automatically once you start</div>}
                 </div>
               )}
             </>

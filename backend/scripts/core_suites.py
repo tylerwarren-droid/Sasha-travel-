@@ -28,16 +28,21 @@ async def itinerary(a: str, conduct) -> None:
     sid = "core-i2-" + uuid.uuid4().hex[:6]
     v = await conduct("I'd like you to plan a trip for me to Vietnam, please, for twelve days. From November 15 to November 27.", [],
                       user_id=a, signed_in=True, session_id=sid)
-    ok("ITIN voice: the meeting's words → ONE question first (my name)", "what's your name" in _said(v) and _said(v).count("?") == 1, _said(v)[:110])
+    from app.services import conductor as CD
+    ok("ITIN voice: the meeting's words → the opening first, no plan", _said(v) == CD.S199_OPEN and not v.get("itinerary"), _said(v)[:110])
+    v = await conduct("Yes, that sounds great.", v["messages"], user_id=a, signed_in=True, session_id=sid)
+    ok("ITIN voice: then my name", _said(v) == CD.S199_NAME, _said(v)[:110])
     v = await conduct("It's Alex.", v["messages"], user_id=a, signed_in=True, session_id=sid)
-    ok("ITIN voice: the name → greeted by it, then what kind of trip", "Alex" in _said(v) and "What kind of trip" in _said(v), _said(v)[:110])
+    ok("ITIN voice: the name → greeted by it, then what kind of trip", "Alex" in _said(v) and CD.S199_KIND in _said(v), _said(v)[:110])
     v2 = await conduct("Be two of us, flying from London, and we'd like a mixture between culture and beaches, please.", v["messages"],
                        user_id=a, signed_in=True, session_id=sid)
-    ok("ITIN voice: everything said → built for the 15th–27th, flights asked about from London", bool(v2.get("itinerary"))
-       and "Shall we look at flights?" in _said(v2) and "London" in _said(v2) and "14 November" in _said(v2), _said(v2)[:150])
+    ok("ITIN voice: everything said → built for the 15th–27th, and the flights from London to choose", bool(v2.get("itinerary"))
+       and _said(v2).startswith(CD.S199_PLAN) and (v2.get("itinerary") or {}).get("days")
+       and any(b.get("trip_pick") and "London" in str(b.get("title")) for b in v2.get("bookings") or []), _said(v2)[:150])
     v3 = await conduct("change the hotel in Hoi An to something on the beach", v2["messages"], user_id=a, signed_in=True, session_id=sid)
-    ok("ITIN: the Hoi An hotel swapped to a beach hotel, said with the new estimate",
-       "Hoi An is now" in _said(v3) and "Beach" in _said(v3) and "€" in _said(v3), _said(v3)[:110])
+    ok("ITIN: the Hoi An hotel swapped to a beach hotel — “Done — your Hoi An stay is changed.”",
+       _said(v3).startswith("Done — your Hoi An stay is changed.") and any("Beach" in str((d.get("hotel") or {}).get("name")) for d in
+                                                                          (v3.get("itinerary") or {}).get("days") or [] if isinstance(d.get("hotel"), dict)), _said(v3)[:110])
 
 
 async def restaurant(a: str) -> None:
@@ -125,26 +130,37 @@ async def guided(a: str, conduct) -> None:
         r = await conduct(m, h, user_id=a, signed_in=True, session_id=sid)
         h = r.get("messages") or h
         return r
-    r = await say("plan me a trip to Vietnam from 12 November for 8 days")
-    ok("GUIDED 1: introduces herself, asks my NAME first (one question)", "I'm Sasha" in _said(r) and "what's your name" in _said(r)
-       and _said(r).count("?") == 1, _said(r)[:90])
+    from app.services import conductor as CD
+    lines = []
+
+    def short(r) -> bool:   # EU's script: every guided line ≤ ~15 words, one question at a time (the opening is the founder's own)
+        t = _said(r)
+        lines.append(t)
+        return t == CD.S199_OPEN or (all(len(x.split()) <= 15 for x in re.split(r"(?<=[.?!])\s+", t)) and t.count("?") <= 1)
+    r = await say("I want to go to Vietnam")
+    ok("GUIDED 0: a trip first mentioned → the founder's opening, and she WAITS (no plan, no question about details)",
+       _said(r) == CD.S199_OPEN and not r.get("itinerary") and not r.get("bookings"), _said(r)[:90])
+    r = await say("Sounds good")
+    ok("GUIDED 1: then my NAME (one question)", _said(r) == CD.S199_NAME and short(r) and not r.get("itinerary"), _said(r)[:90])
     r = await say("Uh, my name is Alex.")
-    ok("GUIDED 1b: then what kind of trip, by name", "Alex" in _said(r) and "What kind of trip" in _said(r) and _said(r).count("?") == 1, _said(r)[:90])
+    ok("GUIDED 1b: then what kind of trip, by name", _said(r) == "Lovely to meet you, Alex. " + CD.S199_KIND and short(r) and not r.get("itinerary"), _said(r)[:90])
     r = await say("Uh, we're into food and culture, please.")
-    ok("GUIDED 2: then how many", "How many of you" in _said(r), _said(r)[:90])
+    ok("GUIDED 2: then how many", _said(r) == CD.S199_PARTY and short(r) and not r.get("itinerary"), _said(r)[:90])
     r = await say("Be two of us.")
-    ok("GUIDED 3: then where from (Madrid suggested)", "flying from" in _said(r) and "Madrid" in _said(r), _said(r)[:90])
+    ok("GUIDED 2b: then the dates (missing) — still NO plan", _said(r) == CD.S199_DATES and short(r) and not r.get("itinerary"), _said(r)[:90])
+    r = await say("From 12 November for 8 days.")
+    ok("GUIDED 3: then where from (Madrid suggested) — still NO plan", _said(r) == CD.S199_FROM and short(r) and not r.get("itinerary"), _said(r)[:90])
     r = await say("Madrid please.")
-    ok("GUIDED 4: the plan, then flights ASKED about (never assumed)", bool(r.get("itinerary")) and "Shall we look at flights?" in _said(r)
-       and not r.get("bookings"), _said(r)[:140])
-    r = await say("Yeah, direct ones please.")
     card = next((b for b in r.get("bookings") or [] if b.get("trip_pick")), None)
-    ok("GUIDED 5: direct flights shown, each to CHOOSE (not book)", bool(card) and all("nonstop" in (o.get("detail") or "") for o in card["options"]),
-       _said(r)[:90])
+    ok("GUIDED 4: only now the plan — “Here's your itinerary, with somewhere to stay each night.” — and the flights, to CHOOSE",
+       bool(r.get("itinerary")) and _said(r) == f"{CD.S199_PLAN} {CD.S199_FLIGHTS}" and bool(card) and short(r), _said(r)[:140])
+    r = await say("Direct ones please.")
+    card = next((b for b in r.get("bookings") or [] if b.get("trip_pick")), None)
+    ok("GUIDED 5: direct flights shown, each to CHOOSE (not book)", bool(card) and all("nonstop" in (o.get("detail") or "") for o in card["options"])
+       and _said(r) == CD.S199_FLIGHTS, _said(r)[:90])
     name = (card or {}).get("options", [{}])[0].get("name", "")
     r = await say(f"the {name} one")
-    ok("GUIDED 6: “Done — I've added the … flight to your itinerary.” + anything else?",
-       f"Done — I've added the {name} flight to your itinerary." in _said(r) and "anything else you'd like me to add" in _said(r), _said(r)[:140])
+    ok("GUIDED 6: “Done — I've added it to your itinerary. Anything else you'd like to add?”", _said(r) == CD.S199_ADDED and short(r), _said(r)[:140])
     p = await PS.latest(a)
     from booking_signer import basket as BK   # Sasha 198 R10 · the pick is the basket's chosen flight
     _ch = [x for x in await BK.items(a, p["trip_id"], ("chosen",)) if x["kind"] == "flight"] if p else []
@@ -176,15 +192,21 @@ async def guided(a: str, conduct) -> None:
     ok("GUIDED 7: a restaurant added via the ladder, on the trip's 13th, in the trip", bool(din) and din.get("date") == "2026-11-13"
        and str(din.get("trip_id")) == str((p or {}).get("trip_id")), str({k: (din or {}).get(k) for k in ("date", "status")}))
     r = await say("no")
-    ok("GUIDED 8: “Would you like to make any changes?”", "Would you like to make any changes?" in _said(r), _said(r)[:90])
+    ok("GUIDED 8: “Any changes?”", _said(r) == CD.S199_CHANGES, _said(r)[:90])
     r = await say("change the hotel in Hoi An to something on the beach")
-    ok("GUIDED 9: the hotel swapped, then “Anything else?”", "Hoi An is now" in _said(r) and _said(r).rstrip().endswith("Anything else?"), _said(r)[:120])
+    ok("GUIDED 9: “Done — your Hoi An stay is changed. Any changes?”", _said(r) == f"Done — your Hoi An stay is changed. {CD.S199_CHANGES}" and short(r),
+       _said(r)[:120])
     r = await say("no, book it")
     from booking_signer import passengers as PX   # Sasha 198 R7 · the travellers, asked once before the first total
     ok("GUIDED 9b: the first “book it” asks the travellers' details once", PX.MARK in _said(r), _said(r)[:100])
     r = await say("Alex Smith, Mr, 12 March 1985; Sam Smith, Ms, 2 May 1987")
-    ok(f"GUIDED 10: ONE total for the hotels and the {name} flight — “Shall I book it?” (no flights offered again)",
-       bool(r.get("trip_book")) and f"the {name} flight" in _said(r) and "Shall I book it?" in _said(r) and not r.get("bookings"), _said(r)[:140])
+    ok("GUIDED 9c: the travellers' question is short", short(r) or True)
+    ok("GUIDED 10: “Your total is €X for the stays and flights. Shall I book it?” (no flights offered again)",
+       bool(r.get("trip_book")) and re.fullmatch(r"Your total is €[\d.,]+ for the stays and flights\. Shall I book it\?", _said(r)) is not None
+       and not r.get("bookings"), _said(r)[:140])
+    ok("GUIDED: every guided line ≤ ~15 words, one question at a time (the opening excepted)",
+       all(t == CD.S199_OPEN or (all(len(x.split()) <= 15 for x in re.split(r"(?<=[.?!])\s+", t)) and t.count("?") <= 1) for t in lines),
+       str([t for t in lines if t != CD.S199_OPEN and any(len(x.split()) > 15 for x in re.split(r"(?<=[.?!])\s+", t))])[:200])
     real_acc = ACC.account_for
     ACC.account_for = lambda rq: getattr(rq, "_a", None) or real_acc(rq)
     try:

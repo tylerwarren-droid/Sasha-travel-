@@ -120,7 +120,8 @@ def pick(message: str, options: List[dict]) -> Union[int, str, None]:
 def is_flight_list(text: str) -> bool:
     """Sasha's last reply was a Duffel flight list (the cards are on screen)."""
     return bool(re.search(r"found a few flights to|Book it \(TEST\)\" makes a TEST booking|Here's exactly what I'll book \(TEST|"
-                          r"isn't on this flight list|Here are some flights for you to consider|Say “yes” to book it|Here are the flights that fit|"
+                          r"isn't on this flight list|Here are some flights for you to consider|I've found some flights for you to consider|"
+                          r"That airline isn't on this list|Which flights would you like\? I'll show them again|Say “yes” to book it|Here are the flights that fit|"
                           r"here's what there is", text or ""))
 
 

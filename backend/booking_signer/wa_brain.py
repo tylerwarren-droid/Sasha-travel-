@@ -672,13 +672,17 @@ async def reset_demo(account: str, dry: bool) -> dict:
                                       "updated_at = now() where id = any($1::uuid[])", [w["id"] for w in waiting]))
     if not dry:   # Sasha 194 · a clean start: no quote, flight list, offer or pick from before the reset may come back
         try:
-            from . import trip_book as _TB
-            _TB._QUOTES.pop(account, None)
-            from app.services import chat_store as _CS
+            from app.services import chat_store as _CS   # Sasha 199 · (R10 deleted trip_book._QUOTES — its pop raised here)
             for _s in await _CS.list_sessions(account):
                 await _CS.clear_session_cards(_s.get("id"))
         except Exception as e:
             log.warning("[wa_brain] cached searches not cleared: %s: %s", type(e).__name__, e)
+    pax = 0
+    if not dry:   # Sasha 199 · a clean start asks the travellers again (the basket rows go with the plans they belong to)
+        try:
+            pax = int(str(await run(lambda c: c.execute("delete from saved_passengers where account_id = $1", uuid.UUID(account)))).split()[-1])
+        except Exception as e:
+            log.error("[wa_brain] saved travellers not cleared: %s: %s", type(e).__name__, e)
     modes = 0
     if not dry:   # CR 39 · the open CampusMe / RelocateMe / EspañaMe conversations close too (their files are kept)
         try:

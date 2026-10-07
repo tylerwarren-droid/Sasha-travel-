@@ -116,29 +116,26 @@ async def main() -> int:
         #      → ONE total with THAT flight → paid → booked
         sid = "suite-w3-" + uuid.uuid4().hex[:6]
         h = []
-        for m in ("plan me 8 days in Vietnam from 12 November for 2 of us", "Alex", "culture and beaches", "from Madrid"):
+        for m in ("plan me 8 days in Vietnam from 12 November for 2 of us", "Sounds good", "Alex", "culture and beaches", "from Madrid"):
             rr = await conduct(m, h, user_id=a, signed_in=True, session_id=sid)
             if m.startswith("plan me"):
-                ok("W3 plan: one question first, and a clean start (no flights, offers or prices)", "?" in (rr.get("response") or "")
-                   and not rr.get("bookings") and "€" not in (rr.get("response") or ""), (rr.get("response") or "")[:90])
+                ok("W3 plan: the opening first, and a clean start (no plan, flights, offers or prices)", "pulling together an itinerary" in (rr.get("response") or "")
+                   and not rr.get("bookings") and not rr.get("itinerary") and "€" not in (rr.get("response") or ""), (rr.get("response") or "")[:90])
             h = rr.get("messages") or h
-        ok("W3 plan: built, flights asked about (never assumed)", bool(rr.get("itinerary")) and "Shall we look at flights?" in (rr.get("response") or ""),
-           (rr.get("response") or "")[:120])
-        rr = await conduct("yes please", h, user_id=a, signed_in=True, session_id=sid)
-        h = rr.get("messages") or h
         card = next((b for b in rr.get("bookings") or [] if b.get("trip_pick")), None)
+        ok("W3 plan: built, and the flights shown to choose", bool(rr.get("itinerary")) and bool(card), (rr.get("response") or "")[:120])
         al = _airline(card)
         rp = await conduct(f"Can I book the {al} flight, please? I like that one.", h, user_id=a, signed_in=True, session_id=sid)
         h = rp.get("messages") or h
         ok(f"W3 plan: “Can I book the {al} flight, please?” → added to the itinerary (not booked yet)",
-           f"I've added the {al} flight to your itinerary" in (rp.get("response") or ""), (rp.get("response") or "")[:110])
+           "I've added it to your itinerary" in (rp.get("response") or ""), (rp.get("response") or "")[:110])
         rb = await conduct("book it, flying from Madrid", h, user_id=a, signed_in=True, session_id=sid)
         from booking_signer import passengers as PX   # Sasha 198 R7 · the travellers, asked once before the first total
         ok("W3 plan: the first “book it” asks the travellers' details once", PX.MARK in (rb.get("response") or ""), (rb.get("response") or "")[:90])
         rb = await conduct("Alex Smith, Mr, 12 March 1985; Sam Smith, Ms, 2 May 1987", rb.get("messages") or h, user_id=a, signed_in=True,
                            session_id=sid)
-        ok(f"W3 plan: “book it, flying from Madrid” → ONE total with the {al} flight",
-           bool(rb.get("trip_book")) and f"the {al} flight" in (rb.get("response") or ""), (rb.get("response") or "")[:120])
+        ok("W3 plan: “book it, flying from Madrid” → ONE total for the stays and flights",
+           bool(rb.get("trip_book")) and "for the stays and flights" in (rb.get("response") or ""), (rb.get("response") or "")[:120])
         if rb.get("trip_book"):
             await _pay_and_settle(a, TB.prepare, TB.pay, {"from": "Madrid"}, "W3 whole trip")
             rows = await IQ._rows(a)

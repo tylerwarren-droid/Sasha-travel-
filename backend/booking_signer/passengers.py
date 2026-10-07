@@ -17,9 +17,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
-ASK = ("Before I book: for the airline I need each traveller's full name, title and date of birth — "
-       "e.g. “Alex Smith, Mr, 12 March 1985; Sam Smith, Ms, 2 May 1987”. I'll save them, so I only ask once.")
-MARK = "for the airline I need each traveller's full name"
+ASK = "Before I book: each traveller's full name, title and date of birth?"   # Sasha 199 · ≤ 15 words, asked once
+MARK = "each traveller's full name, title and date of birth"
 _TITLE = {"mr": ("mr", "m"), "mister": ("mr", "m"), "ms": ("ms", "f"), "mrs": ("mrs", "f"), "miss": ("miss", "f"),
           "dr": ("dr", None)}
 _MON = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}

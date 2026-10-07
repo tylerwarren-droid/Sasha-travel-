@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import sys
 import time
 import uuid
@@ -127,7 +128,7 @@ async def flight_cases(a: str) -> None:
     sid = "basket-r4-" + uuid.uuid4().hex[:6]
     h = []
     try:
-        for m in ("plan me 6 days in Vietnam from 12 November for 2 of us", "Alex", "food and culture", "from Madrid", "yes please"):
+        for m in ("plan me 6 days in Vietnam from 12 November for 2 of us", "Sounds good", "Alex", "food and culture", "from Madrid"):
             r = await conduct(m, h, user_id=a, signed_in=True, session_id=sid)
             h = r.get("messages") or h
         card = next((b for b in r.get("bookings") or [] if b.get("trip_pick")), None)
@@ -261,8 +262,8 @@ async def book_case(ch: str, a: str, say, chosen) -> None:
        == [("Alex", "Smith", "1985-03-12", "mr"), ("Sam", "Smith", "1987-05-02", "ms")], str(saved)[:160])
     again, _ = await say("book it")
     ok(f"BASKET R7 {ch}: a second “book it” never asks again", PX.MARK not in again and "Shall I book it?" in again, again[:100])
-    ok(f"BASKET R6 {ch}: “book it” → ONE total with the Iberia flight, from the basket",
-       "the Iberia flight" in words and "€" in words and "Shall I book it?" in words, words[:150])
+    ok(f"BASKET R6 {ch}: “book it” → ONE total for the stays and flights, from the basket (EU's 9→ line)",
+       re.fullmatch(r"Your total is €[\d.,]+ for the stays and flights\. Shall I book it\?", words.strip()) is not None, words[:150])
     real_acc = ACC.account_for
     ACC.account_for = lambda q: getattr(q, "_a", None) or real_acc(q)
     try:
@@ -317,9 +318,9 @@ async def pick_cases(guests: dict) -> None:
         for ch, (a, first, second) in guests.items():
             sid = uuid.uuid4().hex[:12] + f"-r5-{ch}"   # unique within the first 16 characters (WhatsApp's session key keeps 16)
             say = await (_whatsapp(a, sid) if ch == "WhatsApp" else _web(a, sid))
-            for m in ("plan me 5 days in Vietnam from 12 November for 2 of us", "Sam", "food and culture", "from Madrid"):
+            for m in ("plan me 5 days in Vietnam from 12 November for 2 of us", "Sounds good", "Sam", "food and culture"):
                 await say(m)
-            listed, rr = await say("yes please")
+            listed, rr = await say("from Madrid")
             listed += " ".join(o.get("name") or "" for b in ((rr or {}).get("bookings") or []) if b.get("trip_pick") for o in b.get("options") or [])
             ok(f"BASKET R5 {ch}: the flights listed to choose", "Iberia" in listed and "British Airways" in listed
                and (ch != "WhatsApp" or "Reply with its number or airline" in listed), listed[:160])
@@ -328,7 +329,7 @@ async def pick_cases(guests: dict) -> None:
             p = await PS.latest(a)
             ch_rows = [r for r in await BK.items(a, p["trip_id"]) if r["kind"] == "flight" and r["state"] == "chosen"] if p else []
             ok(f"BASKET R5 {ch}: “{first}” then “{second}” → ONE chosen flight, Iberia, in the basket (Austen)",
-               "added the" in r1 and "added the Iberia flight" in r2 and len(ch_rows) == 1 and ch_rows[0]["snapshot"].get("owner") == "Iberia",
+               "added it to your itinerary" in r1 and "added it to your itinerary" in r2 and len(ch_rows) == 1 and ch_rows[0]["snapshot"].get("owner") == "Iberia",
                f"{r2[:70]} | {[c['snapshot'].get('owner') for c in ch_rows]}")
             ok(f"BASKET R5 {ch}: nothing written to the old plan.chosen_flight", not ((p or {}).get("plan") or {}).get("chosen_flight"))
             await book_case(ch, a, say, ch_rows[0] if ch_rows else None)

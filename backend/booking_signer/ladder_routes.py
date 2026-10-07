@@ -100,7 +100,7 @@ def read_reuse_hours() -> float:
         return 6.0
 
 
-def _read_view(row: dict, read: Optional[dict] = None) -> dict:
+def _read_view(row: dict, read: Optional[dict] = None, at: Optional[str] = None, party: Optional[int] = None) -> dict:
     """`read`: the read with its listing re-read (places_terms.hydrate_read) — shown, never stored."""
     read = read if read is not None else row["read"]
     chosen = L.choose(read, account=row.get("account_id"))
@@ -108,8 +108,22 @@ def _read_view(row: dict, read: Optional[dict] = None) -> dict:
     name = ((read.get("listing") or {}).get("name") or read["name"])
     return {"read_id": row["read_id"], "venue": name, "country": read.get("country"), "listing": read.get("listing"),
             "facts": [{k: f[k] for k in ("kind", "value", "source_label", "source_url", "snippet", "fetched_at")} for f in read["facts"]],
-            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"], "plan": _plan_for({**read, "name": name}, chosen["rungs"], row.get("account_id")),
+            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"], "plan": {**_plan_for({**read, "name": name}, chosen["rungs"], row.get("account_id")),
+                     "ladder": _ladder_for({**read, "name": name}, chosen["rungs"], at, party)},
             **({"listing_reread": read["listing_reread"]} if read.get("listing_reread") else {})}
+
+
+def _ladder_for(read: dict, rungs: list, at: Optional[str], party: Optional[int]) -> Optional[dict]:
+    """Sasha 195 · the ladder's words for the web card — the same as WhatsApp's (decide.ladder): {line, options:[{title, route}]}."""
+    from . import guest_whatsapp as GW
+    try:
+        rd = {"venue": read.get("name"), "country": read.get("country"), "facts": read.get("facts") or [],
+              "rungs": {r["rung"]: {"value": r.get("value")} for r in rungs if r.get("available")}}
+        lad = GW.ladder_of(rd, {"when": {"mode": "at", "at": at} if at else {}, "how_many": {"count": party or 2}}, NOW())
+        return {"line": lad["line"], "options": [{"title": t, "route": r} for t, r in lad["options"]]} if lad else None
+    except Exception as e:
+        log.info("[ladder_routes] no ladder: %s", type(e).__name__)
+        return None
 
 
 def _plan_for(read: dict, rungs: list, account: Optional[str] = None) -> dict:
@@ -159,7 +173,7 @@ async def read_venue(request: Request):
         except StorageUnavailable:
             row = None
         if row and (not body.get("name") or (row.get("read") or {}).get("name") == body.get("name")):   # Sasha 161 · a read made
-            return _read_view(row, await PT.hydrate_read(HTTP, row["read"], now))                          # under another name is not reused
+            return _read_view(row, await PT.hydrate_read(HTTP, row["read"], now), body.get("at"), body.get("party"))   # under another name is not reused
     try:
         read = await V.read_venue(HTTP, name=body.get("name"), city=body.get("city"), country=body.get("country"),
                                   website=body.get("website") or None, now=now, resolve=RESOLVE,
@@ -177,7 +191,8 @@ async def read_venue(request: Request):
         await LADDER_STORE.put_read(row)
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
-    return _read_view(row, {**read.to_json(), "listing": {**(read.listing or {}), "attribution": "Google Maps"} if read.listing else None})
+    return _read_view(row, {**read.to_json(), "listing": {**(read.listing or {}), "attribution": "Google Maps"} if read.listing else None},
+                      body.get("at"), body.get("party"))
 
 
 @router.post("/draft")
@@ -203,8 +218,15 @@ _RESTAURANT = re.compile(r"\b(restaurant|restaurante|dinner|lunch|brunch|breakfa
                          r"chinese|thai|mexican|french|korean|vietnamese|peruvian|greek|lebanese|vegan|vegetarian|cafe|caf[eé])\b", re.I)
 
 
+_REAL_BEAUTY = re.compile(r"\b(spa|spas|massage|masaje|wellness|beauty|nail|nails|manicure|pedicure|hair|hairdresser|barber|barbería|"
+                          r"peluquer[ií]a|salon|facial|sauna|hammam)\b", re.I)
+_DEMO_ONLY = re.compile(r"\b(tattoo|piercing|tatuaje)\b", re.I)
+
+
 def is_restaurant(asked_for) -> bool:
-    return bool(_RESTAURANT.search(str(asked_for or "")))
+    """Sasha 186/195 · REAL for the founder's demo: restaurants AND spas/beauty (Fresha, Treatwell, Booksy…); a tattoo stays demo."""
+    t = str(asked_for or "")
+    return not _DEMO_ONLY.search(t) and bool(_RESTAURANT.search(t) or _REAL_BEAUTY.search(t))
 
 
 def standin(account: Optional[str]) -> bool:
@@ -280,8 +302,8 @@ async def _online_only(account: str, out: dict, body: dict) -> dict:
     by = {c["place_id"]: c for c in cands}
     ranked = [by[i] for i in order if i in by] + [c for c in cands if c["place_id"] not in order]
     kept, note = [], None
-    for chunk in (ranked[:8], ranked[8:16]):
-        if len(kept) >= 3 or not chunk:
+    for i, chunk in enumerate((ranked[:8], ranked[8:16], ranked[16:24])):
+        if not chunk or len(kept) >= 3 or (i == 2 and len(kept) >= 2):
             break
         if chunk is not ranked[:8]:
             note = "Fewer than 3 of the best-rated book online, so I looked further down the list — these all book online."
@@ -861,7 +883,7 @@ async def prepare_link(request: Request):
         except SL.LinkRefused:
             # Sasha 187 · the founder's restaurants: no platform, but their OWN booking page (where the form is) opens on his phone
             form = next((f for f in read.get("facts") or [] if f.get("kind") == "booking_form" and str(f.get("source_url") or "").startswith("https://")), None)
-            if nights or not form or not standin(account) or any(f.get("kind") == "platform" for f in read.get("facts") or []):
+            if nights or not form or any(f.get("kind") == "platform" for f in read.get("facts") or []):   # Sasha 195 · any account
                 raise   # a platform they use but don't link stays refused (never their form page in its place)
             link = SL.SlotLink("their own booking page", form["source_url"], False, f"{form.get('source_label')} (their own booking page)")
     except (C.CallRefused, SL.LinkRefused) as e:

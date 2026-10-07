@@ -56,7 +56,7 @@ PLATFORMS = {
     "covermanager": "CoverManager", "sevenrooms": "SevenRooms", "resy.com": "Resy", "quandoo": "Quandoo",
     "tablein": "Tablein", "bookatable": "Bookatable", "resdiary": "ResDiary", "zenchef": "Zenchef",
     "guestonline": "Guestonline", "restoo": "Restoo", "booksy": "Booksy", "fresha": "Fresha",
-    "restaurantic": "Restaurantic",   # Sasha 187 · Casa Alberto (Huertas 18) embeds its Restaurantic booking on its own page
+    "restaurantic": "Restaurantic", "treatwell": "Treatwell",   # Sasha 195 · spas   # Sasha 187 · Casa Alberto (Huertas 18) embeds its Restaurantic booking on its own page
     # Sasha 138 · HOTEL booking engines — recognised from the link or widget on the hotel's OWN site; like every platform here,
     # their pages are never fetched (the guest opens them, with one tap)
     "direct-book.com": "SiteMinder", "book-directonline.com": "SiteMinder", "thebookingbutton": "SiteMinder",

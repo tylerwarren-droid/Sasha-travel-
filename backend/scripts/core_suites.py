@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import types
 import re
 import sys
 import time
@@ -58,6 +59,19 @@ async def restaurant(a: str) -> None:
                        "detail": {"link": "https://www.covermanager.com/reservation/module_restaurant/restaurante-ejemplo/spanish"}}]}
     page = SL.platform_page(read)
     ok("REST platform: the venue's own CoverManager page is the one sent (never fetched)", bool(page) and "covermanager.com" in page[1], str(page)[:100])
+    W = "Saturday 10 October at 21:00, 2 people"
+    L = lambda **k: (D.ladder(V(**k), "Casa Ejemplo", W) or {}).get("line", "")
+    ok("LADDER >48 h, books directly: “I can book Casa Ejemplo for you directly — … Shall I?”",
+       L(form=True, phone=True, email=True, hours_until=72) == f"I can book Casa Ejemplo for you directly — {W}. Shall I?")
+    ok("LADDER >48 h, a page: “We have time. Would you like me to email … or … book with them now?”",
+       L(platform="CoverManager", phone=True, email=True, hours_until=72).startswith("We have time. Would you like me to email Casa Ejemplo"))
+    ok("LADDER within 48 h, a page: “It's soon, so I recommend we book it now together … Or I can call them for you.”",
+       L(platform="CoverManager", phone=True, email=True, hours_until=20) == "It's soon, so I recommend we book it now together — I'll send their booking page to your phone. Or I can call them for you.")
+    ok("LADDER a CAPTCHA page counts as a page (never 'directly')", L(form=True, challenge=True, email=True, hours_until=72).startswith("We have time"))
+    ok("LADDER no online booking, >48 h: “They don't take online bookings — I'll email them …”",
+       L(phone=True, email=True, hours_until=72) == "They don't take online bookings — I'll email them and update you as soon as they reply. OK?")
+    ok("LADDER no online booking, within 48 h: “They only take bookings by phone — shall I call them?”",
+       L(phone=True, hours_until=20) == "They only take bookings by phone — shall I call them?")
     real = GW.rehearsal
     GW.rehearsal = lambda acct: True   # this process only: the guest's cards end with OUR test venue (contacts no one)
     try:
@@ -65,8 +79,9 @@ async def restaurant(a: str) -> None:
         for said in ("dinner for 2 in Chamberí, Madrid on Saturday at 9pm", "Sasha Test Venue", "Suite Guest +34 600 000 000", "yes"):
             v = await VT.turn(a, said, h)
             h = (v or {}).get("messages") or h
-            if said == "Sasha Test Venue":
-                ok("REST pick by name → the read-back (their form, Sasha fills it)", re.search(r"Book it|book it|Shall I|Whose name", _said(v)) is not None, _said(v)[:110])
+            if said.startswith("Suite Guest"):
+                ok("REST typed: the ladder's words — “I can book Sasha Test Venue for you directly — … Shall I?”",
+                   "I can book Sasha Test Venue for you directly" in _said(v), _said(v)[:120])
         ok("REST typed → booked at the test venue, with its reference", re.search(r"✅|[Bb]ooked|confirmed", _said(v)) is not None, _said(v)[:120])
         h = []
         for said in ("Uh, a table for two in Chamberí, Madrid, Saturday at nine at night, please.", "the third one", "yes"):
@@ -79,22 +94,32 @@ async def restaurant(a: str) -> None:
 
 
 async def spa(a: str) -> None:
-    from booking_signer import voice_turn as VT, guest_whatsapp as GW, ladder_routes as LR
-    real_r, real_s = GW.rehearsal, LR.standin
-    GW.rehearsal = lambda acct: True
-    LR.standin = lambda acct: bool(acct)   # this process only: the demo's stand-in (our CAPTCHA test page for a spa)
+    from booking_signer import ladder_routes as LR, captcha_test as CT, decide as D
+    real_s = LR.standin
+    LR.standin = lambda acct: bool(acct)   # this process only: the founder's demo setting (real spas, online only)
     try:
-        h = []
-        v = await VT.turn(a, "a spa in Madrid on Saturday at 4pm for 2", h)
-        ok("SPA: spas found", "spa" in _said(v).lower(), _said(v)[:100])
-        v = await VT.turn(a, "the first one", (v or {}).get("messages") or [])
-        ok("SPA: the demo's CAPTCHA beat is said — “a human is required… a CAPTCHA will appear on your phone”",
-           "CAPTCHA" in _said(v), _said(v)[:140])
-        v = await VT.turn(a, "yes", (v or {}).get("messages") or [])
-        ok("SPA: yes → the hand-over is made (the tick is the guest's, on the phone)",
-           re.search(r"phone|tap|finish|CAPTCHA|tick the box|handover", _said(v), re.I) is not None and not re.search(r"couldn't|can't|refused", _said(v), re.I), _said(v)[:140])
+        req = types.SimpleNamespace(state=types.SimpleNamespace(), headers={})
+        body = {"what": "spa", "where": "Madrid", "country": "ES"}
+        out = await LR._online_only(a, await __import__("booking_signer.venue_read", fromlist=["find_venues"]).find_venues(
+            LR.HTTP, what="spa", where="Madrid", country="ES", now=LR.NOW()), body)
+        c = out.get("candidates") or []
+        ok("SPA live: real spas, each bookable online (platform or own page)", bool(c) and all(x.get("online") for x in c),
+           " | ".join(f"{x.get('name')} ({x.get('online')})" for x in c[:3]))
+        ok("SPA live: never our test venue among real spas", not any(x.get("place_id") == LR.REHEARSAL_ID for x in c), "")
     finally:
-        GW.rehearsal, LR.standin = real_r, real_s
+        LR.standin = real_s
+    W = "Saturday 10 October at 16:00, 2 people"
+    line = (D.ladder(D.Venue(form=True, challenge=True, hours_until=20), "Spa Ejemplo", W) or {}).get("line", "")
+    ok("SPA a CAPTCHA page within 48 h → their page on the phone, now", line.startswith("It's soon, so I recommend we book it now together"), line[:100])
+    ok("SPA “send me the captcha test” still answered", CT.asked("send me the captcha test"), "")
+
+
+async def tabs(a: str) -> None:
+    from booking_signer import journeys as JN, itinerary_q as IQ
+    j = await JN.journeys(a, await IQ._rows(a))
+    sp = {t["key"]: t.get("space") for t in j["journeys"]}
+    ok("TABS: CampusMe, RelocateMe and EspañaMe always there, each opening its space",
+       sp.get("campus") == "campus" and sp.get("relocation") == "relocate" and sp.get("espana") == "españa", str(sp))
 
 
 async def spaces(a: str, conduct) -> None:
@@ -146,7 +171,7 @@ async def main() -> int:
     print(f"scratch guest {a[:8]}", flush=True)
     try:
         for name, fn in (("itinerary", lambda: itinerary(a, conduct)), ("restaurant", lambda: restaurant(a)),
-                         ("spa", lambda: spa(a)), ("spaces", lambda: spaces(a, conduct))):
+                         ("spa", lambda: spa(a)), ("tabs", lambda: tabs(a)), ("spaces", lambda: spaces(a, conduct))):
             try:
                 await fn()
             except Exception as e:

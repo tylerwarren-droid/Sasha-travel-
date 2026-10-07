@@ -259,6 +259,16 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
         tabs.append({"key": "espana", "label": badged("health", "Health card" if hforms else "EspañaMe"), "product": "EspañaMe",
                      "title": "EspañaMe · your health card (tarjeta sanitaria)" if hforms else "EspañaMe (Spain's public services)",
                      "virtual": True, "count": len(health) + len(hforms), "extras": health, **({"forms": hforms} if hforms else {})})
+    # Sasha 195 · THE PRODUCT TABS, always there (labelled even before first use, and after "reset the demo"): a tap opens that
+    # product's space (its word) and shows its journey/checklist
+    for key, prod, word, title in (("campus", "campus", "campus", "CampusMe"), ("relocation", "relocation", "relocate", "RelocateMe"),
+                                   ("espana", "health", "españa", "EspañaMe")):
+        have = next((t for t in tabs if t["key"] == key or (t.get("product") == title and t.get("virtual"))), None)
+        if have:
+            have["space"] = word
+        else:
+            tabs.append({"key": key, "label": badged(prod, title), "product": title, "title": f"{title} — say “{word}” to start",
+                         "virtual": True, "count": 0, "extras": [], "space": word})
     live = [r for r in rows if r.get("status") not in ("cancelled", "failed")]
     one_offs = [r for r in live if str(r.get("trip_id")) not in ids and r.get("venue") not in reloc_names and r.get("venue") != IT2.SERMAS]
     # Sasha 178 · ONE TAB PER CITY for one-offs outside a journey: the home city's is "Madrid (home)", the others by their name

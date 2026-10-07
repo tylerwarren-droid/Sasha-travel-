@@ -160,7 +160,12 @@ export default function TripPanel({
       {(jn?.journeys ?? []).map((t) => (
         <span key={t.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
           <button className="lw-chip" style={chip(view === 'trip' && activeTrip === t.key)}
-            onClick={() => { setTripId(t.key); setView('trip') }}>{t.label}{t.count ? ` · ${t.count}` : ''}</button>
+            onClick={() => {
+              setTripId(t.key); setView('trip')
+              // Sasha 195 · a product's tab opens its SPACE (its word, as if said) — the strict-space rule
+              const sp = (t as { space?: string }).space
+              if (sp) { try { window.dispatchEvent(new CustomEvent('sasha-open-space', { detail: sp })) } catch { /* the tab still shows its journey */ } }
+            }}>{t.label}{t.count ? ` · ${t.count}` : ''}</button>
           {/* Sasha 181 (4) · ✕ removes a plan / a city's saved searches — one confirm, never a booking */}
           {(!t.virtual || t.key.startsWith('city:')) && (
             <button className="viewlink" aria-label={`Remove ${t.label}`} title="Remove this tab"

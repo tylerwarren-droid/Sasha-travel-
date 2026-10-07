@@ -1815,6 +1815,38 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         if _WB.PARK.search(body or ""):
             out.text(await _WB.park(ctx, pend))
             return True
+    if kind == "ladder":   # Sasha 195 · the ladder's choice → acted on at once (the choice IS the yes; nothing read out again)
+        opts = pend.get("options") or {}
+        route = payload.split(":", 2)[2] if payload.startswith(f"lad:{pend['nonce']}:") else None
+        if route is None:
+            t = (body or "").lower()
+            route = ("no" if re.search(r"\b(no|nope|not now|cancel)\b", t) else "email" if "email" in t else
+                     "call" if re.search(r"\bcall\b", t) else "page" if re.search(r"\b(now|page|send|link)\b", t) else
+                     next((r for r in opts.values() if r != "no"), None) if re.search(r"\b(yes|ok|okay|sure|go ahead|book it|please)\b", t) else None)
+        if route is None or (route != "no" and route not in opts.values()):
+            st["pending"] = None
+            return False
+        st["pending"] = None
+        try:   # the same 15-minute window as every yes: a late choice places nothing
+            if route != "no" and ctx["now"] - datetime.fromisoformat(pend["at"]) > APPROVAL_WINDOW:
+                out.text("That question has expired (15 minutes) — nothing was booked. Ask me again.")
+                return True
+        except (KeyError, ValueError):
+            pass
+        if route == "no":
+            out.text("OK — nothing was sent.")
+            return True
+        mark = len(out.items)
+        await _prepare_or_ask(ctx, {**(pend.get("saved") or {}), "ladder_route": route})
+        p2 = st.get("pending") or {}
+        if route in ("form", "email", "call") and p2.get("kind") == "confirm":
+            del out.items[mark:]
+            await _approve(ctx, p2, {"how": "button"})
+            if route == "email":
+                v = plain_venue(p2.get("venue"))
+                out.items = [(it[0], f"Done — I've emailed {v}. I'll update you as soon as I hear back.", *it[2:]) if it[0] == "text" and it[1] == DONE_ASKED else it
+                             for it in out.items]
+        return True
     if kind == "city_q":
         if await _WB.city_answer(ctx, pend, body, payload):
             return True
@@ -2203,6 +2235,8 @@ def _payload_ok(pend: dict, payload: str) -> bool:
         return payload == f"cxl:{pend['nonce']}"
     if pend["kind"] == "gate":   # Sasha 167
         return payload.split(":", 1)[-1] == pend["nonce"] and payload.split(":", 1)[0] in ("am", "pm", "tripadd", "tripkeep")
+    if pend["kind"] == "ladder":   # Sasha 195
+        return payload.startswith(f"lad:{pend['nonce']}:")
     if pend["kind"] == "city_q":   # Sasha 178
         return payload in (f"oneoff:{pend['nonce']}", f"tripq:{pend['nonce']}")
     if pend["kind"] == "demo_reset":
@@ -2367,6 +2401,26 @@ def _hours_of(read: dict, now) -> dict:
     return {"open_now": s.get("open_now"), "opens_at": (s.get("opens_at") or "")[11:16] or None}
 
 
+def ladder_of(rd: dict, reservation: dict, now) -> Optional[dict]:
+    """Sasha 195 · the ladder's offer for this venue and this booking (decide.ladder): its line and options."""
+    from . import decide as D, venue_read as V
+    rungs = rd.get("rungs") or {}
+    link = (rungs.get("link") or {}).get("value") or ""
+    at = (reservation.get("when") or {}).get("at")
+    hours = None
+    if at:
+        try:
+            from zoneinfo import ZoneInfo
+            tz = (V.COUNTRIES.get(rd.get("country") or "") or (None, None, None, "Europe/Madrid"))[3]
+            hours = (datetime.fromisoformat(at).replace(tzinfo=ZoneInfo(tz)) - now).total_seconds() / 3600
+        except Exception:
+            hours = None
+    v = D.Venue(form="form" in rungs, platform=((V.platform_of(link) if link.startswith("http") else link) or "their booking page") if "link" in rungs else None,
+                phone="phone" in rungs, email="email" in rungs, hours_until=hours,
+                challenge=any(f.get("kind") == "challenge" for f in rd.get("facts") or []))
+    return D.ladder(v, plain_venue(rd.get("venue")) or "them", summary(reservation))
+
+
 def route_line_of(rd: dict, dv) -> str:
     """Sasha 161 · the decision's one plain line for this venue (decide.line). Sasha 187 · a page that asks the guest to prove
     they're human says so."""
@@ -2496,13 +2550,23 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
     rungs = rd["rungs"]
     why = None
     # Sasha 130 · THE DECISION (decide.py): the route, and its reason said to the guest first; the others in order after it
-    dv = decision_of(rd, pend.get("prefer"), (reservation.get("when") or {}).get("at"), ctx["now"], ctx.get("account"))
+    lr = pend.get("ladder_route")
+    dv = decision_of(rd, {"form": "form", "email": "email", "page": "one_tap", "call": "call"}.get(lr) or pend.get("prefer"),
+                     (reservation.get("when") or {}).get("at"), ctx["now"], ctx.get("account"))
     combo = (st.get("combo") or {}).get("stage") == "restaurant"
+    if not combo and not d.get("nights") and not lr:   # Sasha 195 · THE LADDER'S WORDS, asked once
+        lad = ladder_of(rd, reservation, ctx["now"])
+        if lad:
+            nonce = uuid.uuid4().hex[:6]
+            out.ask(lad["line"], [(t, f"lad:{nonce}:{r}") for t, r in lad["options"]])
+            st["pending"] = {"kind": "ladder", "at": ctx["now"].isoformat(), "nonce": nonce, "options": {t: r for t, r in lad["options"]},
+                             "saved": {k: pend[k] for k in ("read", "draft", "invite_code", "find", "venue") if k in pend}}
+            return
     order = [r for r in [dv.route] + dv.alternatives if r] if not combo else ["form"]
     log.info("[guest_whatsapp] route %s: %s", dv.route, dv.reason)   # Sasha 158 · the reasoning is the ops console's
     if not combo:   # Sasha 161 · the route in ONE plain line, asked once (the read-back stays in the record and the logs)
         ctx["route_line"] = route_line_of(rd, dv) if not d.get("nights") else None   # a hotel room keeps its own request sentence
-    if dv.route == "one_tap" and not combo:   # their page is sent next (no yes card): the line goes first, on its own
+    if dv.route == "one_tap" and not combo and not lr:   # their page is sent next (no yes card): the line goes first, on its own
         if not _founder_demo(ctx.get("account")):
             out.text(route_line_of(rd, dv))
         elif any(f.get("kind") == "challenge" for f in rd.get("facts") or []):   # Sasha 187 · the 175 flow: one message (+ the CAPTCHA beat)
@@ -2550,11 +2614,11 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
             out.text(f"I can't book {rd['venue']} together with the spa from here (no form I may send{', and calls are off' if 'phone' in rungs else ''}). "
                      f"Nothing was sent. Pick a place I can book by its form, or ask for each one separately.")
             return
-        if route == "one_tap" and ("link" in rungs or ("form" in rungs and _founder_demo(ctx.get("account"))
+        if route == "one_tap" and ("link" in rungs or ("form" in rungs and lr == "page") or ("form" in rungs and _founder_demo(ctx.get("account"))
                                                           and "(TEST stand-in)" not in str(rd.get("venue") or ""))) \
                 and reservation["when"]["mode"] == "at":   # Sasha 187 · or their own booking page, on the founder's phone
             from . import proactive as PR
-            plan = dv.then if dv.route == "one_tap" and PR.tap_escalation_on() and not _founder_demo(ctx.get("account")) else None
+            plan = dv.then if dv.route == "one_tap" and PR.tap_escalation_on() and not _founder_demo(ctx.get("account")) and not lr else None
             if plan:   # Sasha 132 · ONE yes covers the plan: asked first, then the page
                 lines = [f"I'll send you {rd['venue']}'s booking page on {dv_platform(rd)} — you press their confirm button; I can't press it for you.",
                          plan]

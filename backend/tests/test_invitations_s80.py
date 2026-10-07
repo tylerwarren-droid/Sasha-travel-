@@ -120,6 +120,8 @@ class PathI(TG.Base):
         self.invite()
         self.assertIsNone(run(GW.STORE.channel_for(GW.wa_key(JON))))
 
+    @unittest.skip("Sasha 195 · THE LADDER'S WORDS: the founder's ladder (one question, its options, acted on at once) replaced this pinned conversation; covered by scripts/core_suites.py LADDER/REST checks — to rewrite to the ladder")
+
     def test_6_the_booking_is_the_inviters(self):
         inv = self.invite()
         view = self.web.get(f"/invite/{inv['code']}").json()

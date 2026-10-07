@@ -911,6 +911,12 @@ export default function VietnamPage() {
           ))}
         </nav>
         <button className="mt-newchat" onClick={newChat}><Plus size={14} strokeWidth={2.2} /> New chat</button>
+        {/* Sasha 195 · the other pages, back beside Sasha */}
+        <nav aria-label="More" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px', margin: '12px 4px 0', fontSize: 12.5 }}>
+          {[['Deck', '/deck'], ['Demo', '/demo'], ['Vietnam', '/vietnam'], ['Phú Quốc', '/phuquoc']].map(([t, h]) => (
+            <a key={h} href={h} style={{ color: 'rgba(255,255,255,.7)', textDecoration: 'underline', textUnderlineOffset: 3 }}>{t}</a>
+          ))}
+        </nav>
         <div className="mt-sidefoot">
           <select value={language} onChange={(e) => setLanguage(e.target.value)} title="Language Sasha speaks" className="mt-select">
             <option value="en">🇬🇧 English</option>

@@ -514,6 +514,12 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
   const sendRef = useRef(sendMessage)
   sendRef.current = sendMessage
   useEffect(() => { registerSend?.((t: string) => sendRef.current(t)) }, [])
+  // Sasha 195 · a product tab in the Trip panel opens that product's space: its word, sent as the guest would say it
+  useEffect(() => {
+    const open = (e: Event) => { const w = (e as CustomEvent).detail; if (typeof w === 'string' && w) sendRef.current(w) }
+    window.addEventListener('sasha-open-space', open)
+    return () => window.removeEventListener('sasha-open-space', open)
+  }, [])
 
   // ── Auto-scroll ────────────────────────────────────────────────────────────
   // .lw-stream is overflow-y:auto but nothing ever scrolled it, so the conversation ran off

@@ -109,7 +109,7 @@ export type Style = { label?: string; tags?: { tag: string; quote: string }[]; s
   photo?: { url: string; source: string } }
 export const styleVenues = (what: string, venues: { place_id: string; website: string | null }[]) =>
   bookingReq('/api/booking/venues/style', { what, venues }, 60000)
-export const readVenue = (q: { name: string; city: string; country?: string; website?: string; place_id?: string; asked_for?: string }) =>
+export const readVenue = (q: { name: string; city: string; country?: string; website?: string; place_id?: string; asked_for?: string; at?: string | null; party?: number | null }) =>
   bookingReq('/api/booking/venues/read', { name: q.name, city: q.city, country: q.country || undefined, website: q.website || undefined,
     ...(q.place_id ? { place_id: q.place_id, asked_for: q.asked_for } : {}) })
 export const prepareCall = (body: Record<string, unknown>) => bookingReq('/api/booking/calls', body)

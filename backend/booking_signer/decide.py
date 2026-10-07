@@ -58,6 +58,7 @@ class Venue:
     calls_on: bool = True              #: calls are on, for this account and the server
     language_label: str = ""           #: "Vietnamese", for the reason when unscripted
     hours_until: Optional[float] = None  #: hours from now to the booking; None = not a fixed time
+    challenge: bool = False            #: Sasha 195 · their own page asks the guest to prove they're human (a CAPTCHA)
 
 
 @dataclass(frozen=True)
@@ -157,6 +158,35 @@ def line(v: Venue, d: Decision, venue: str) -> str:
                     f"{_h(reply_hours())}. Shall I?")
         return f"There's no online booking or phone number for {venue} — only email. I'll email them and tell you as soon as they reply. Shall I?"
     return f"I can't find a way to book {venue} — no online booking, phone or email. Want me to try somewhere similar nearby?"
+
+
+def ladder(v: Venue, venue: str, when: str) -> Optional[dict]:
+    """Sasha 195 · THE LADDER'S WORDS, exactly as the founder wrote them (restaurant and spa; web, WhatsApp, the avatar):
+    {"line", "options": [(title, route)]} — route ∈ form | email | page | call | no. None: nothing Sasha may use.
+    More than 48 h (urgent_hours): a venue Sasha can book directly (its own form, no CAPTCHA) → "I can book … directly";
+    otherwise "We have time…" — email them, or their page now. Within 48 h: their page now together, or a call (only on a yes).
+    No form or platform: email (> 48 h) or a call (within 48 h)."""
+    venue = venue or "them"
+    far = v.hours_until is None or v.hours_until > urgent_hours()
+    direct = v.form and not v.challenge
+    page = bool(v.platform) or (v.form and v.challenge)
+    if direct:
+        return {"line": f"I can book {venue} for you directly — {when}. Shall I?", "options": [("Yes, book it", "form"), ("No", "no")]}
+    if page and far:
+        if v.email:
+            return {"line": f"We have time. Would you like me to email {venue} and confirm as soon as they reply, or would you like to "
+                            "book with them now?", "options": [("Email them", "email"), ("Book now", "page")]}
+        return {"line": f"I'll send {venue}'s booking page to your phone — {when} — tap, then book. Shall I?", "options": [("Send it", "page"), ("No", "no")]}
+    if page:
+        opts = [("Send the page", "page")] + ([("Call them", "call")] if v.phone else [])
+        return {"line": "It's soon, so I recommend we book it now together — I'll send their booking page to your phone."
+                        + (" Or I can call them for you." if v.phone else ""), "options": opts}
+    if v.email and (far or not v.phone):
+        return {"line": "They don't take online bookings — I'll email them and update you as soon as they reply. OK?",
+                "options": [("OK", "email"), ("No", "no")]}
+    if v.phone:
+        return {"line": "They only take bookings by phone — shall I call them?", "options": [("Call them", "call"), ("No", "no")]}
+    return None
 
 
 def _h(hours: float) -> str:

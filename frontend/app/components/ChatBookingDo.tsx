@@ -24,10 +24,10 @@ const pad = (n: number) => String(n).padStart(2, '0')
 const plain = (why: string) => why.replace(/^[a-z]+(?:_[a-z0-9]+)+\s*[—:-]\s*/i, '').replace(/[.]+$/, '')
 const dayWords = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
 
-export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line }: {
+export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line, auto = false }: {
   route: Route; readId: string; venue: string; what: string; openAt: string | null
   /** Sasha 161 · the route's one plain line (the server's), said instead of a sentence of our own */
-  line?: string | null
+  line?: string | null; auto?: boolean
   draft: { when?: { at?: string }; how_many?: { count?: number } } | null
 }) {
   const at = openAt || draft?.when?.at || ''
@@ -97,9 +97,12 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line 
     if (route === 'form' && reading.result === 'confirmed')
       return setP({ k: 'done', say: `Done — booked${r.json.booking_reference ? ` (their ref ${String(r.json.booking_reference)})` : ''}. It's in your itinerary.` })
     if (route === 'email' && r.json.status !== 'sent') return setP({ k: 'stopped', say: String(r.json.say ?? 'It was not sent.') })
-    setP({ k: 'done', say: "Done — I've asked them and I'll confirm here as soon as they reply." })
+    setP({ k: 'done', say: route === 'email' ? `Done — I've emailed ${venue.replace(/ \(TEST stand-in\)$/, '')}. I'll update you as soon as I hear back.`
+      : "Done — I've asked them and I'll confirm here as soon as they reply." })
   }
 
+  // Sasha 195 · chosen on the ladder (Email / Book directly): the choice is the yes — acted on at once, nothing read out again
+  useEffect(() => { if (auto && p.k === 'readback') yes() }, [p.k])  // eslint-disable-line react-hooks/exhaustive-deps
   // a typed "yes" in the chat answers the read-back, as the button does
   useEffect(() => {
     if (p.k !== 'readback') { return }

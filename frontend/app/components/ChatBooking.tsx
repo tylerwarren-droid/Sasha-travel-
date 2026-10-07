@@ -29,7 +29,7 @@ type Find = { what: string; where?: string; country?: string; near?: string; ope
   bare_time?: { day: string; hour: number; minute: number } }
 type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null
   /** Sasha 161 · the server's decision and its one plain line (decide.py — the same words as WhatsApp) */
-  plan?: { route: string | null; line: string | null } }
+  plan?: { route: string | null; line: string | null; ladder?: { line: string; options: { title: string; route: string }[] } | null } }
 type State =
   | { phase: 'finding' } | { phase: 'founder_only' } | { phase: 'refused'; words: string }
   | { phase: 'found'; cards: Candidate[]; near?: Near; ranking?: Ranking; all: Candidate[]; chip: string; show: number } | { phase: 'reading'; cards: Candidate[]; pick: Candidate }
@@ -119,6 +119,7 @@ export default function ChatBooking({ find }: { find: Find }) {
   // Sasha 156 · Google's photo of the listing, shown while (or where) the venue's own picture isn't there
   const [gphotos, setGphotos] = useState<Record<string, string>>({})
   // Sasha 95 · the slot link leads when a platform is their booking route; a call only if the guest asks for one
+  const [chosen, setChosen] = useState<string | null>(null)   // Sasha 195 · the ladder's choice
   const [callInstead, setCallInstead] = useState(false)
   // Sasha 100 · the cards arrive after the message the chat scrolled to — bring them (and each next step) into view
   const listRef = useRef<HTMLOListElement | null>(null)
@@ -210,7 +211,8 @@ export default function ChatBooking({ find }: { find: Find }) {
     setState({ phase: 'reading', cards, pick: c })
     try {
       // Sasha 64 · stored by place_id with the guest's own words ("asked_for"); the listing's name is shown, never stored
-      const r = await readVenue({ name: c.name ?? find.what, city: find.where || cityOf(c.address) || 'unknown', country: c.country ?? find.country, place_id: c.place_id, asked_for: [find.what, (c as { type?: string }).type].filter(Boolean).join(' ') })   // Sasha 187 · its type rides along
+      const r = await readVenue({ name: c.name ?? find.what, city: find.where || cityOf(c.address) || 'unknown', country: c.country ?? find.country, place_id: c.place_id, asked_for: [find.what, (c as { type?: string }).type].filter(Boolean).join(' '),
+        at: find.open_at ?? ((find.draft as { when?: { at?: string } } | null)?.when?.at ?? null), party: ((find.draft as { how_many?: { count?: number } } | null)?.how_many?.count ?? null) })   // Sasha 195 · the ladder needs when   // Sasha 187 · its type rides along
       if (r.status === 401) { setState({ phase: 'founder_only' }); return }
       if (!r.ok) { setState({ phase: 'read_refused', cards, words: refusal(r.json, r.status) }); return }
       setState({ phase: 'read', cards, pick: c, read: r.json as unknown as Read })
@@ -363,6 +365,26 @@ export default function ChatBooking({ find }: { find: Find }) {
               ? { ...(draftAll ?? {}), parts: { ...parts, what: { activity: 'a table', activity_venue_lang: TABLE[state.read.country ?? ''] ?? 'a table', category: 'restaurant' } } }
               : find.draft
             const plan = state.read.plan ?? { route: null, line: null }
+            // Sasha 195 · THE LADDER'S WORDS: one question, its options as buttons; a tap acts at once (nothing read out again)
+            const lad = plan.ladder
+            if (lad && !chosen) return (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>{lad.line}</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {lad.options.map((o) => (
+                    <button key={o.route} type="button" onClick={() => setChosen(o.route)}
+                      style={o.route === 'no' ? { background: 'transparent', color: 'inherit', border: '1px solid rgba(255,255,255,.35)', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' }
+                        : { background: '#E8B923', color: '#111', border: 0, borderRadius: 8, padding: '6px 14px', fontWeight: 600, cursor: 'pointer' }}>{o.title}</button>
+                  ))}
+                </div>
+              </div>
+            )
+            if (chosen === 'no') return <div>OK — nothing was sent.</div>
+            if (chosen === 'form' && fm) return <ChatBookingDo key={state.read.read_id} route="form" auto readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={null} />
+            if (chosen === 'email' && em) return <ChatBookingDo key={state.read.read_id} route="email" auto readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={null} />
+            if (chosen === 'page') return <ChatBookingLink key={state.read.read_id} readId={state.read.read_id} platform={ln?.value ?? 'their booking page'} draft={(find.draft ?? null) as never} openAt={openAt} />
+            if (chosen === 'call' && ph) return <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
+              venue={venue} draft={(callDraft ?? null) as never} whatText={find.what} openAt={openAt} onContacted={setContacted} line={null} />
             const pr = plan.route
             if (fm && !callInstead && (!pr || pr === 'form')) return <ChatBookingDo key={state.read.read_id} route="form" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
             if (em && !callInstead && (!pr || pr === 'email')) return <ChatBookingDo key={state.read.read_id} route="email" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />

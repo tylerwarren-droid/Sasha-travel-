@@ -123,6 +123,8 @@ class OneYesOnWhatsApp(TG.Base):
         p.start()
         self.addCleanup(p.stop)
 
+    @unittest.skip("Sasha 195 · THE LADDER'S WORDS: the founder's ladder (one question, its options, acted on at once) replaced this pinned conversation; covered by scripts/core_suites.py LADDER/REST checks — to rewrite to the ladder")
+
     def test_one_yes_then_the_page(self):
         self.say("dinner for 2 in Chamberí on Saturday at 9")
         _, cards = GW.SENDER.contents[-1]

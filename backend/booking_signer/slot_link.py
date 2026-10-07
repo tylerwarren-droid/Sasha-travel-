@@ -166,7 +166,7 @@ def platform_message(venue: str, platform: str, on: date, at: time, party: int, 
     their CAPTCHA if the platform serves one, their press). Sasha never fetches the platform; it says plainly when the
     page can't take the slot from the link."""
     when = f"{on.strftime('%A')} {at.strftime('%H:%M')}, {party} {'person' if party == 1 else 'people'}"
-    lines = [f"Here's {venue} on {platform} — {when}. Tap, then book.", url]
+    lines = [f"Here's {venue}'s booking page on your phone — {when} — tap, then book.", url]   # Sasha 195 · the ladder's words
     if not filled:
         lines.append(f"Their page doesn't take the time from a link — pick {when} there.")
     lines.append("Reply BOOKED when it's done (or forward their confirmation email) and I'll put it in your itinerary.")

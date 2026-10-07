@@ -449,6 +449,8 @@ async def classify_intents(user_message: str, conversation_history: list,
     # Party-intake follow-up: Sasha just asked "how many of you will be travelling?" before
     # building. The guest's answer ("six of us", "just the two of us", "6") carries no build
     # verb, so it must be routed straight back to the itinerary builder.
+    if not intents and "what kind of trip" in last_assistant:   # Sasha 189 · the intake's answer builds the plan
+        intents = ["itinerary"]
     if not intents and "how many of you will be travelling" in last_assistant:
         if (re.search(r"\b\d+\b", lower)
                 or re.search(r"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b", lower)
@@ -1283,8 +1285,8 @@ async def run_flight_intent(message: str, history: list, session_id: "Optional[s
         _to = card.get("dest") or dest   # Sasha 137 · the card's OWN destination — never the page's default (it said "to Vietnam" for Madrid)
         if has_prices:
             spoken = (
-                f"I found a few flights to {_to}{_from} — {_named_options(opts)}. "
-                "They're on screen; \"Book it (TEST)\" makes a TEST booking (no real ticket, nothing charged)."
+                f"I found a few flights to {_to}{_from} — {_named_options(opts)}. "   # Sasha 189 · brief; the card carries the TEST tag
+                "Here are some flights for you to consider."
             )
         else:
             spoken = (
@@ -1459,7 +1461,7 @@ async def run_itinerary_intent(message: str, history: list,
         _knows_dest = bool(_find_destinations(_user_ctx))
         _hands_off = re.search(
             r"you (decide|choose|pick)|surprise me|up to you|whatever you (think|suggest|recommend)"
-            r"|anything (works|is fine)|dealer'?s choice",
+            r"|anything (works|is fine)|dealer'?s choice|just plan it|plan it|just build it|go ahead and plan",   # Sasha 189
             (message or "").lower())
         if not _knows_dest and not _knows_days and not _hands_off:
             return {
@@ -1490,15 +1492,19 @@ async def run_itinerary_intent(message: str, history: list,
             for m in (history or [])[-6:]
             if isinstance(m, dict) and m.get("role") == "assistant"
         )
-        if not _knows_party and not _hands_off and not _asked_party:
-            return {
-                "agent": "itinerary",
-                "response": (
-                    "Happy to! One quick thing first — how many of you will be travelling? "
-                    "Then I'll put the whole plan together around your group."
-                ),
-                "data": {},
-            }
+        # Sasha 189 · CONVERSATIONAL INTAKE, as she used to: one or two short questions — who, and what kind of trip — then
+        # the build. Enough detail ("food and beaches, slow pace") or "just plan it" builds at once. Asked once.
+        _style_said = re.search(r"\b(culture|cultural|food|foodie|beach|beaches|adventure|relax|relaxing|nature|history|temples?|"
+                                r"nightlife|luxury|budget|slow|fast|pace|must[- ]see|shopping|hiking|trek|diving|island)\b",
+                                " ".join([message or ""] + [str(m.get("content") or "") for m in (history or [])
+                                                             if isinstance(m, dict) and m.get("role") == "user"]), re.I)
+        _asked_style = any("what kind of trip" in (m.get("content") or "").lower()
+                           for m in (history or [])[-6:] if isinstance(m, dict) and m.get("role") == "assistant")
+        if not _hands_off and not _asked_party and not _asked_style and (not _knows_party or not _style_said):
+            q = ("Lovely! Two quick things first: how many of you, and what kind of trip — culture, food, beaches or adventure? "
+                 "Any must-sees? Or just say “plan it”." if not _knows_party else
+                 "Lovely! What kind of trip — culture, food, beaches or adventure — and any must-sees? Or just say “plan it”.")
+            return {"agent": "itinerary", "response": q, "data": {}}
 
     itin = await build_itinerary(message, history, current_itinerary=current_itinerary,
                                  hotel_swap=hotel_swap)
@@ -1831,8 +1837,7 @@ async def conduct(
                         "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
             if isinstance(_i, int) and 0 <= _i < len(_opts):
                 _o = _opts[_i]
-                _say = (f"{_o.get('name')} — {_o.get('detail') or ''}, {_o.get('price') or ''}. Here's exactly what I'll book (TEST — "
-                        "no real ticket, nothing charged): say “yes” or tap “Yes, book it (TEST)”, then one tap to pay on your phone.").replace(" — ,", " —")
+                _say = f"{_o.get('name')}, {_o.get('price') or ''}. Say “yes” to book it."   # Sasha 189 · brief
                 return {"response": _say, "intents": ["flight"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
                         "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
                         "flight_pick": {"offer_id": _o["provider_offer_id"], "name": _o.get("name"), "detail": _o.get("detail"), "price": _o.get("price")},
@@ -1844,8 +1849,14 @@ async def conduct(
     if _origin is not None and user_id and signed_in is not False:
         from booking_signer import plan_store as _ps_tb  # noqa: E402
         if await _ps_tb.latest(user_id):
-            _say = ("Here's the whole trip to book — the hotels and your flights, all TEST: nothing is reserved or charged. "
-                    "One yes, then one tap on your phone.")
+            try:   # Sasha 189 · ONE total for the package, said once (the card reuses this quote)
+                from booking_signer import trip_book as _tbq
+                _b = await _tbq.bundle(user_id, _origin or "Madrid")
+                _say = (f"We have your itinerary and flights — your total is €{_b['eur']:,.2f}. Shall I book it?" if "eur" in _b
+                        else f"I can't price the whole trip just now — {_b.get('why')}.")
+            except Exception as _e:
+                _say = "We have your itinerary and flights — here's your total. Shall I book it?"
+                print(f"[Conductor] Sasha 189 total failed: {type(_e).__name__}")
             return {"response": _say, "intents": ["book_trip"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
                     "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
                     "trip_book": {"from": _origin or "Madrid"},
@@ -2435,6 +2446,18 @@ async def conduct(
         _runner_line = next((r["response"] for r in agent_responses if r.get("agent") == "itinerary"), "")
         if _was_revision and _runner_line:
             final_response = _runner_line
+            try:   # Sasha 189 · the swap said in one line: the new hotel, and the new total
+                _old_days = ((stored_itinerary or {}).get("payload") or {}).get("days") or []
+                _hn = lambda d: ((d.get("hotel") or {}).get("name") if isinstance(d.get("hotel"), dict) else d.get("hotel")) or ""
+                _old = {d.get("city"): _hn(d) for d in _old_days}
+                _chg = [(d.get("city"), _hn(d)) for d in (itinerary.get("days") or []) if _hn(d) and _old.get(d.get("city")) not in (None, _hn(d))]
+                _chg = list(dict.fromkeys(_chg))
+                _tot = itinerary.get("estimated_total_usd")
+                if _chg:
+                    final_response = ("Done — " + "; ".join(f"{c} is now {h}" for c, h in _chg[:2]) + "."
+                                      + (f" Your new total is about ${int(_tot):,}." if isinstance(_tot, (int, float)) and _tot else ""))
+            except Exception as _e:
+                print(f"[Conductor] Sasha 189 swap line: {type(_e).__name__}")
         elif stored_itinerary:
             # Any build over a PRE-EXISTING plan is an update in the guest's eyes ("add
             # Sapa", "make it 10 days", "for four people") — confirm the change briefly,
@@ -2483,6 +2506,26 @@ async def conduct(
                 "Have a browse, and just tell me if you'd like to swap any of the hotels or "
                 f"activities.{_flight_offer}"
             )
+            # Sasha 189 · ONE PACKAGE, briefly: the plan, then flights offered as part of it (from home) — never a long read-out
+            if not _flights_discussed and _days:
+                try:
+                    from booking_signer import plan_store as _ps189
+                    from datetime import datetime, timedelta
+                    _plan_words = " ".join([str(m.get("content") or "") for m in (conversation_history or [])
+                                            if isinstance(m, dict) and m.get("role") == "user"] + [user_message or ""])
+                    _st, _en = _ps189.dates_of(_plan_words, _n, datetime.now().date())
+                    _first_city = next((d.get("city") for d in _days if d.get("city")), None)
+                    if _st and _first_city:
+                        _fr = await run_flight_intent(f"flights from Madrid to {_first_city.split(',')[0]} on "
+                                                      f"{(_st - timedelta(days=1)).isoformat()} for {_trav or 2}", [], session_id)
+                        _fc = (_fr.get("data") or {}).get("booking")
+                        if _fc and _fc.get("options") and not all(o.get("fallback") for o in _fc["options"]):
+                            bookings.append(_fc)
+                            final_response = (f"All set — your {_n}-day plan is on the right{(', starting at ' + _first_hotel) if _first_hotel else ''}. "
+                                              "Here are some flights for you to consider, from Madrid. When you're happy, say “book it” "
+                                              "and I'll give you one total.")
+                except Exception as _e:
+                    print(f"[Conductor] Sasha 189 flights with the plan failed: {type(_e).__name__}: {_e}")
             # The guest asked to take it one day at a time — honour that from the very first
             # announcement instead of reading the whole plan out (the demo's "no, I just want
             # to talk about the first day" moment).

@@ -462,6 +462,13 @@ def _pick_hotel(city: str, current_name: str, mode: str, target: Optional[str] =
     if target:
         return target
     others = [h for h in pool if h.get("name") != current_name] or pool
+    if mode.startswith("near:"):
+        word, _, how = mode[5:].partition("|")
+        near = [h for h in others if word in f"{h.get('name', '')} {h.get('blurb', '')}".lower()]
+        if near:
+            return (min(near, key=lambda h: h.get("price_from", 0)) if how == "cheaper" else
+                    max(near, key=lambda h: (h.get("stars", 0), h.get("price_from", 0)))).get("name")
+        mode = how or "rotate"
     if mode == "cheaper":
         pick = min(others, key=lambda h: h.get("price_from", 0))
     elif mode == "upgrade":
@@ -536,6 +543,11 @@ def revise_local_itinerary(current: dict, message: str,
     if wants_hotel_change or global_price_move:
         mode = "cheaper" if any(w in low for w in _CHEAPER_WORDS) else (
             "upgrade" if any(w in low for w in _UPGRADE_WORDS) else "rotate")
+        # Sasha 189 · "something on the beach" / "by the river": a stay that IS there (its own blurb says so)
+        _where = re.search(r"\b(beach|beachfront|seaside|sea|river|riverside|old town|ancient town|spa)\b", low)
+        if _where:
+            mode = "near:" + {"beachfront": "beach", "seaside": "beach", "sea": "beach", "riverside": "river",
+                              "ancient town": "old town"}.get(_where[1], _where[1]) + ("|cheaper" if mode == "cheaper" else "")
         scope = [c for c in (named or []) if c in plan_cities]
         if target_city:
             scope = [target_city]

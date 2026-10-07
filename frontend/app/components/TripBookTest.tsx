@@ -14,7 +14,8 @@ import { setPendingYes } from '@/lib/chat-booking-bus'
 const YES_BTN = { background: '#E8B923', color: '#111', border: 0, borderRadius: 8, padding: '6px 14px', fontWeight: 600, cursor: 'pointer' } as const
 const NO_BTN = { background: 'transparent', color: 'inherit', border: '1px solid rgba(255,255,255,.35)', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' } as const
 
-type Phase = { k: 'reading' } | { k: 'readback'; lines: string[]; sha: string } | { k: 'paying'; url: string; sid: string; phone: boolean }
+type Summary = { hotels: number; cities: string[]; party: number; eur: number; flights: string[] }
+type Phase = { k: 'reading' } | { k: 'readback'; lines: string[]; sha: string; sum?: Summary | null } | { k: 'paying'; url: string; sid: string; phone: boolean }
   | { k: 'booked'; say: string } | { k: 'error'; say: string } | { k: 'no' }
 
 export function TripBookTest({ from }: { from: string }) {
@@ -28,7 +29,7 @@ export function TripBookTest({ from }: { from: string }) {
         if (r.status === 401) return setP({ k: 'error', say: SIGN_IN_TO_BOOK })
         if (!r.ok) return setP({ k: 'error', say: `Not booked — ${refusal(r.json, r.status)}.` })
         const rb = r.json.read_back as { lines: string[]; sha256: string }
-        setP({ k: 'readback', lines: rb.lines, sha: rb.sha256 })
+        setP({ k: 'readback', lines: rb.lines, sha: rb.sha256, sum: (r.json.summary ?? null) as Summary | null })
       })
     return () => { off = true }
   }, [from])
@@ -57,18 +58,26 @@ export function TripBookTest({ from }: { from: string }) {
     return () => clearInterval(t)
   }, [p])
   const box = { background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 10, padding: 10, marginTop: 6, maxWidth: 560 } as const
-  if (p.k === 'reading') return <div className="o2" style={box}>Pricing the hotels and flights (TEST)…</div>
+  if (p.k === 'reading') return <div className="o2" style={box}>Pricing your trip…</div>
   if (p.k === 'readback') return (
     <div className="o2" style={box}>
-      <ul style={{ margin: 0, paddingLeft: 18 }}>{p.lines.map((l, i) => <li key={i} style={{ marginBottom: 3 }}>{l}</li>)}</ul>
+      {/* Sasha 189 · brief: the package in four lines and a small TEST tag (the yes still binds the full read-back) */}
+      {p.sum ? (
+        <div>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', background: '#E8B923', color: '#111', borderRadius: 4, padding: '1px 5px' }}>TEST</span>
+          <div style={{ marginTop: 6 }}>🏨 {p.sum.hotels} hotels · {Array.from(new Set(p.sum.cities)).join(' → ')}</div>
+          {p.sum.flights.map((f, i) => <div key={i}>✈️ {f}</div>)}
+          <div style={{ marginTop: 4, fontWeight: 600 }}>Total €{p.sum.eur.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} for {p.sum.party}</div>
+        </div>
+      ) : <ul style={{ margin: 0, paddingLeft: 18 }}>{p.lines.map((l, i) => <li key={i} style={{ marginBottom: 3 }}>{l}</li>)}</ul>}
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button className="price" style={YES_BTN} onClick={() => { yes(p.sha) }}>Yes, book it all (TEST)</button>
+        <button className="price" style={YES_BTN} onClick={() => { yes(p.sha) }}>Yes, book it</button>
         <button className="viewlink" style={NO_BTN} onClick={() => setP({ k: 'no' })}>No</button>
       </div>
     </div>
   )
   if (p.k === 'paying') return p.phone
-    ? <div className="o2" style={box}>📱 Sent to your phone — tap to pay there (Apple Pay; TEST, nothing is charged). I&rsquo;ll book everything the moment it&rsquo;s paid… · or <a href={p.url} target="_blank" rel="noopener noreferrer">pay here</a></div>
+    ? <div className="o2" style={box}>📱 Sent to your phone — tap to pay with Apple Pay. · or <a href={p.url} target="_blank" rel="noopener noreferrer">pay here</a></div>
     : <div className="o2" style={box}>Pay the TEST total on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged). I&rsquo;ll book everything the moment it&rsquo;s paid…</div>
   if (p.k === 'no') return <div className="o2" style={box}>OK — nothing was booked.</div>
   return <div className="o2" style={{ ...box, whiteSpace: 'pre-line' }}>{p.say}</div>

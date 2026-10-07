@@ -112,7 +112,7 @@ async def fulfil(row_id, payload: dict) -> dict:
         tab = await _tab(account, row_id)
         return {"status": "booked", "booking_reference": ref, "card": c,
                 "say": f"✅ Booked: {c['owner']} {c['flights']} · {T.card_line(c).split(' · ', 2)[1] if ' · ' in T.card_line(c) else ''} · ref {ref}{note}. "
-                       f"It's in your {tab} on the platform itinerary. ({T.LABEL})"}   # no email is sent for a flight: never said
+                       f"It's in your {tab} on the platform itinerary. (TEST)"}   # no email is sent for a flight: never said
     if payload["kind"] == "trip":
         TB._QUOTES[sid] = payload["bundle"]
         r = await TB.book_paid(account, sid)

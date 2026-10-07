@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Request
@@ -93,7 +93,11 @@ async def bundle(account: str, origin: str) -> dict:
     lines.append(f"Total €{total:.2f} (TEST) — ONE tap to pay on your phone: Apple Pay or a saved card on Stripe's TEST page.")
     lines.append("Each goes in your itinerary on its day, marked TEST, with its reference.")
     sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
-    b = {"stays": ss, "flights": flights, "lines": lines, "sha256": sha, "eur": round(total, 2), "party": party, "title": p.get("title"), "tz": tz}
+    b = {"stays": ss, "flights": flights, "lines": lines, "sha256": sha, "eur": round(total, 2), "party": party, "title": p.get("title"), "tz": tz,
+         "origin": origin, "at": datetime.now().timestamp(),
+         # Sasha 189 · the card shows this, briefly (the yes stays bound to the full lines above)
+         "summary": {"hotels": len(ss), "cities": [st["city"] for st in ss], "party": party, "eur": round(total, 2),
+                     "flights": [f"{c['owner']} {c['flights']} · {c['from']}→{c['to']} · {str(c.get('departs') or '')[:10]}" for c in flights]}}
     _QUOTES[account] = b
     return b
 
@@ -128,10 +132,11 @@ async def prepare(request: Request):
     except Exception:
         body = {}
     origin = str((body or {}).get("from") or "Madrid").strip()[:60] or "Madrid"
-    b = await bundle(account_for(request), origin)
+    q = _QUOTES.get(account_for(request))   # Sasha 189 · the total Sasha just said: the same quote, not a second pricing
+    b = q if q and q.get("origin") == origin and datetime.now().timestamp() - float(q.get("at") or 0) < 300 else await bundle(account_for(request), origin)
     if "why" in b:
         return _refuse(422, "trip_not_bookable", b["why"])
-    return {"ok": True, "read_back": {"lines": b["lines"], "sha256": b["sha256"]}, "eur": b["eur"], "title": b["title"]}
+    return {"ok": True, "read_back": {"lines": b["lines"], "sha256": b["sha256"]}, "eur": b["eur"], "title": b["title"], "summary": b.get("summary")}
 
 
 @router.post("/trip/pay")
@@ -229,7 +234,9 @@ async def book_paid(account: str, sid: str) -> dict:
             continue
         await T.RECORD(account, c, o["booking_reference"] or "")
         done.append(f"✈️ {c['owner']} {c['flights']} {c['from']}→{c['to']} · {o['booking_reference']}{note}")
-    say = "✅ Booked (TEST — nothing reserved or charged):\n" + "\n".join(done)
+    nh, nf = sum(1 for d in done if d.startswith("🏨")), sum(1 for d in done if d.startswith("✈️"))
+    say = (f"✅ Booked (TEST) — {nh} hotel{'s' if nh != 1 else ''} and {nf} flight{'s' if nf != 1 else ''}, "
+           "each in your trip with its reference.")   # Sasha 189 · brief; the references are on the trip
     if failed:
         say += "\nNot booked: " + "; ".join(failed)
     out = {"status": "booked" if done else "failed", "say": say, "booked": done, "failed": failed}

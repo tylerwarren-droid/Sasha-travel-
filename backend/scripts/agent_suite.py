@@ -69,6 +69,14 @@ async def cases(a: str) -> None:
        st.get("ok") and not st["result"]["anything_booked"] and AG.guard_check("Great — it's all booked!", set(), st["result"]["anything_booked"]))
 
 
+async def quiver_cases() -> None:
+    """Sasha 204 · never silent — a scripted model, real timing: a quiver line before a slow tool's result, at ~0.9 s of silence,
+    and none when the answer is quick."""
+    from app.agent.fakes import quiver_checks
+    for name, (good, detail) in (await quiver_checks()).items():
+        ok(f"AGENT QUIVER: {name}", good, detail[:180])
+
+
 async def main() -> int:
     if os.getenv("SASHA_FLIGHT_SUITE", "") == "skip":
         print("agent suite SKIPPED (SASHA_FLIGHT_SUITE=skip) — this deploy is not covered")
@@ -83,6 +91,7 @@ async def main() -> int:
     a = g["account_id"]
     try:
         await cases(a)
+        await quiver_cases()
     except Exception as e:
         ok("the agent suite itself", False, f"{type(e).__name__}: {e}")
     finally:

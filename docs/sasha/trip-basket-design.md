@@ -136,3 +136,43 @@ Written 7 Oct 2026 from the code as it stands at `311fea2`.
 | R10 | Remove the dead paths (P7's separate checkout, `USED_LISTS`); the suite stays the gate | 0.5 |
 
 **Total:** about 9.5 working sessions. R9 waits on Duffel; everything else can start on approval. R1's SQL is drafted, never applied by this tab.
+
+## 5 · Sasha 198: approved, with conditions. The AgAPI roles
+
+The founder approved this on 7 Oct, with conditions. Every write to the basket is made by one of four roles, named in code (`basket.py`'s `ROLE`) and on each event:
+
+| Role | Job | In the basket |
+|---|---|---|
+| **Magellan** | search: Duffel offer requests, hotel search (Duffel Stays once enabled), Places | writes `suggested` items: the offers shown and the plan's stays |
+| **Sherlock** | details and validation: offer details, expiry, price re-check, the venue's route (the ladder's read) | refreshes `snapshot`, `expires_at`, price; keeps the choice on a re-search |
+| **Austen** | booking after the guest's yes: Stripe checkout → Duffel order, hotel booking, the ladder | `chosen` → `pending_payment` (with `paid_session`), then calls the provider |
+| **Pacioli** | proof and truth: order references, Duffel webhooks, platform emails | the only writer of `booked`, `failed`, `cancelled`, `booking_reference`, `status_line`; records every event in `basket_events` |
+
+**The model never writes a booked or paid line.** Sasha reads Pacioli's `status_line` aloud.
+
+### Conditions
+
+1. **One Duffel client.** Quotes and choices are persisted; nothing is held in memory.
+2. **Real passengers.** The name comes from the intake, the rest is asked once, and both are saved in `saved_passengers`.
+3. **Webhooks wired.**
+4. **The guided conversation acts only on the basket.** The old pick readers and bundle stitching are removed once their replacements pass.
+5. **The same behaviour on web, avatar and WhatsApp.** BASKET suite cases run on all three.
+6. **No other changes** while R1–R10 run.
+
+### Webhook secret
+
+| | |
+|---|---|
+| Variable | `DUFFEL_WEBHOOK_SECRET` |
+| Where | Railway, the backend service (sasha-travel-production) |
+| How it is obtained | Duffel returns the secret once, when the webhook is created (`POST /air/webhooks`, url `https://sasha-travel-production.up.railway.app/travel/duffel/webhook`). At R8 this tab creates the webhook with the existing TEST token and sets the secret via the Railway CLI without printing it. If the founder prefers to create it in the Duffel dashboard, he gives the value and the tab sets it. |
+
+### Access request
+
+The Duffel Stays email to send is drafted in `docs/sasha/duffel-stays-access-request.md`.
+
+### Migration
+
+`backend/booking_signer/sql/033_trip_basket.sql` creates `trip_basket_items`, `saved_passengers` and `basket_events`. It is a draft; the founder runs it.
+
+The existing `public.travellers` table is left untouched. Its FK points to `public.users`, which has 0 rows.

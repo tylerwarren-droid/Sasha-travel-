@@ -174,6 +174,67 @@ async def _whatsapp(a: str, sid: str):
     return say
 
 
+class _Hook:
+    def __init__(self, body: bytes, sig: str):
+        self._b, self.headers = body, {"x-duffel-signature": sig}
+
+    async def body(self):
+        return self._b
+
+
+async def webhook_cases(a: str) -> None:
+    """R8 · Duffel's signed webhooks → Pacioli: no secret → refused; a bad signature → refused, nothing recorded; a schedule
+    change → the line says so and the guest is told; a cancellation → the row and its trip item cancelled, told; a redelivery
+    is recorded once."""
+    import hashlib as _h, hmac as _hm, json as _j
+    from booking_signer import basket as BK, duffel_webhook as DW, plan_store as PS
+    p = await PS.latest(a)
+    fl = [r for r in await BK.items(a, p["trip_id"], ("booked",)) if r["kind"] == "flight" and r.get("order_id")] if p else []
+    if not ok("BASKET R8: a booked flight with its Duffel order id to receive events", bool(fl)):
+        return
+    row, told = fl[0], []
+
+    async def tell(acct, words):
+        told.append((acct, words))
+    DW.TELL = tell
+    secret, old = "whsec_suite_" + uuid.uuid4().hex, os.environ.get("DUFFEL_WEBHOOK_SECRET")
+
+    def signed(ev: dict, key: str = None):
+        body = _j.dumps(ev).encode()
+        t = str(int(time.time()))
+        return _Hook(body, f"t={t},v1=" + _hm.new((key or secret).encode(), t.encode() + b"." + body, _h.sha256).hexdigest())
+    ev = lambda typ, obj: {"id": "wev_suite_" + uuid.uuid4().hex[:12], "type": typ, "data": {"object": obj}, "live_mode": False}
+    try:
+        os.environ.pop("DUFFEL_WEBHOOK_SECRET", None)
+        r0 = await DW.webhook(signed(ev("ping.triggered", {})))
+        ok("BASKET R8: no DUFFEL_WEBHOOK_SECRET → 503, nothing read", getattr(r0, "status_code", 200) == 503)
+        os.environ["DUFFEL_WEBHOOK_SECRET"] = secret
+        bad = ev("order_cancellation.confirmed", {"order_id": row["order_id"]})
+        r1 = await DW.webhook(signed(bad, key="whsec_wrong"))
+        still = await BK.item(a, row["id"])
+        ok("BASKET R8: a bad signature → 401; the booking untouched", getattr(r1, "status_code", 200) == 401 and still["state"] == "booked")
+        r2 = await DW.webhook(signed(ev("order.airline_initiated_change_detected", {"id": row["order_id"]})))
+        ch = await BK.item(a, row["id"])
+        ok("BASKET R8: a schedule change → Pacioli's line says so; the guest told", r2.get("ok") and "airline changed the schedule" in ch["status_line"]
+           and told and told[-1][0] == a, ch["status_line"])
+        cx = ev("order_cancellation.confirmed", {"order_id": row["order_id"]})
+        r3 = await DW.webhook(signed(cx))
+        c = await BK.item(a, row["id"])
+
+        async def ti(conn):
+            return await conn.fetchval("select status from trip_items where id = $1", uuid.UUID(c["trip_item_id"])) if c.get("trip_item_id") else None
+        ok("BASKET R8: a cancellation → the row and its trip item cancelled, the guest told", r3.get("ok") and c["state"] == "cancelled"
+           and await BK._go(ti) == "cancelled" and "cancelled" in told[-1][1], f"{c['state']} · {told[-1][1][:80]}")
+        r4 = await DW.webhook(signed(cx))
+        ok("BASKET R8: the same event redelivered → recorded once", r4.get("done") == "already recorded", str(r4))
+    finally:
+        DW.TELL = None
+        if old is None:
+            os.environ.pop("DUFFEL_WEBHOOK_SECRET", None)
+        else:
+            os.environ["DUFFEL_WEBHOOK_SECRET"] = old
+
+
 async def book_case(ch: str, a: str, say, chosen) -> None:
     """R6 · "book it" → ONE total from the basket (the chosen flight, re-checked at Duffel; an expired offer re-found and KEPT)
     → the read-back → one Stripe TEST checkout → the rows hold the session → paid → every item booked, Pacioli's lines."""
@@ -300,6 +361,7 @@ async def main() -> int:
         await pick_cases({"web": (other, "the British Airways one", "Actually, the Iberia flight please"),
                           "avatar": (av, "Okay. Give me the British Airways fight, please, Sasha.", "Uh, actually the Iberia one."),
                           "WhatsApp": (wa, "2", "Iberia")})
+        await webhook_cases(other)
     except Exception as e:
         ok("the basket suite itself", False, f"{type(e).__name__}: {e}")
     finally:
@@ -307,7 +369,7 @@ async def main() -> int:
             run = PS._run()
 
             async def fn(conn):   # the suite's own events, and those of its guests' items (before the guests take the items)
-                return await conn.execute("delete from basket_events where source = 'suite' or item_id in "
+                return await conn.execute("delete from basket_events where source = 'suite' or event_id like 'wev_suite_%' or item_id in "
                                           "(select id from trip_basket_items where account_id = any($1::uuid[]))",
                                           [uuid.UUID(g) for g in guests])
             print(f"suite events cleaned: {await run(fn)}")

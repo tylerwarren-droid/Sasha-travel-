@@ -572,6 +572,8 @@ from . import travel as _travel  # noqa: E402
 router.include_router(_travel.router)   # Sasha 132 · /api/booking/travel/flight/* (Duffel TEST mode)
 from . import trip_book as _trip_book  # noqa: E402
 router.include_router(_trip_book.router)   # Sasha 169 · /api/booking/travel/trip/* (the whole trip, TEST, one tap)
+from . import duffel_webhook as _duffel_webhook  # noqa: E402
+router.include_router(_duffel_webhook.router)   # Sasha 198 R8 · /api/booking/travel/duffel/webhook (HMAC-signed, Pacioli)
 from . import test_deposit as _test_deposit  # noqa: E402
 router.include_router(_test_deposit.ops)
 router.include_router(_test_deposit.public)   # Sasha 136 · /api/booking/test-pay/{done,back} — Stripe's return page, public   # Sasha 131 · /api/booking/ops/test-deposit/* (founder only; Stripe TEST mode)

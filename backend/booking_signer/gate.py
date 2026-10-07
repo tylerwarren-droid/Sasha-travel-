@@ -35,6 +35,8 @@ EXEMPT |= {("GET", "/api/booking/test-pay/done"), ("GET", "/api/booking/test-pay
 EXEMPT |= {("GET", "/api/booking/demo-spa"), ("POST", "/api/booking/demo-spa/login"), ("POST", "/api/booking/demo-spa/book")}   # Sasha 126
 # S-79 · Google's OAuth redirect: no key can ride on it; its signed, 10-minute `state` names the account (calendar_sync)
 EXEMPT |= {("GET", "/api/booking/google/callback")}
+# Sasha 198 R8 · Duffel's webhook: no key can ride on it; each event is HMAC-signed and verified (duffel_webhook.verify)
+EXEMPT |= {("POST", "/api/booking/travel/duffel/webhook")}
 
 
 async def require_booking_key(request: Request) -> None:

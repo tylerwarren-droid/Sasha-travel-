@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 import os
 import re
 import sys
@@ -89,7 +90,7 @@ async def main() -> int:
     try:
         # W1 · web, typed: a single flight from home, picked by airline, booked
         sid = "suite-w1-" + uuid.uuid4().hex[:6]
-        r = await conduct("find me flights to Hanoi on 12 November for 2", [], user_id=a, signed_in=True, session_id=sid)
+        r = await conduct(f"find me flights to Hanoi on {random.randint(10, 28)} November for 2", [], user_id=a, signed_in=True, session_id=sid)
         card = next((b for b in r.get("bookings") or [] if b.get("_provider") == "duffel"), None)
         ok("W1 web: flights to Hanoi listed from Madrid", bool(card and card.get("options")) and "Madrid" in (r.get("response") or ""),
            (r.get("response") or "")[:90])
@@ -101,7 +102,7 @@ async def main() -> int:
 
         # W2 · web, transcribed voice: the mic's words in the meeting
         sid = "suite-w2-" + uuid.uuid4().hex[:6]
-        r = await conduct("find me flights to Hanoi on 13 November for 2", [], user_id=a, signed_in=True, session_id=sid)
+        r = await conduct(f"find me flights to Hanoi on {random.randint(1, 20)} December for 2", [], user_id=a, signed_in=True, session_id=sid)
         card = next((b for b in r.get("bookings") or [] if b.get("_provider") == "duffel"), None)
         al = _airline(card)
         r2 = await conduct(f"Okay. Give me the {al} fight, please, Sasha.", r["messages"], user_id=a, signed_in=True, session_id=sid)
@@ -137,7 +138,7 @@ async def main() -> int:
 
         # V1 · the avatar's voice page and WhatsApp share this flow: a flight by voice → read-back → yes → checkout → booked
         h = []
-        v = await VT.turn(a, "book a flight from Madrid to London on 15 November", h)
+        v = await VT.turn(a, f"book a flight from Madrid to London on {random.randint(1, 28)} January", h)
         ok("V1 voice/WhatsApp: flights Madrid → London listed", bool(v) and "London" in (v or {}).get("response", ""), ((v or {}).get("response") or "")[:90])
         v2 = await VT.turn(a, "the first one", (v or {}).get("messages") or [])
         ok("V1: “the first one” → the read-back, asked once", bool(v2) and re.search(r"Book it\?|book it", (v2 or {}).get("response", "")) is not None,

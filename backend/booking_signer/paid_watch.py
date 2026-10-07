@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import logging
 import os
 import uuid
@@ -82,6 +83,18 @@ async def fulfil(row_id, payload: dict) -> dict:
         c = payload["card"]
         o = await T.order(c, payload.get("name") or "Guest Test", payload.get("email") or "", payload.get("phone"))
         note = ""
+        if "why" in o and re.search(r"same details|already (?:been )?(?:made|booked)", o["why"], re.I):
+            # Sasha 193 · Duffel TEST refuses the SAME flight booked twice under one name (rehearsals do this): the next DIFFERENT
+            # flight on the same route and day, priced no more than 1.5× — said
+            got = await T.search(c.get("from_city") or c["from"], c.get("to_city") or c["to"], str(c["departs"])[:10],
+                                 adults=int(c.get("party") or 1), limit=8)
+            for alt in [x for x in got.get("cards") or [] if x.get("flights") != c.get("flights") and x.get("currency") == c.get("currency")
+                        and float(x["amount"]) <= float(c["amount"]) * 1.5]:
+                o2 = await T.order(alt, payload.get("name") or "Guest Test", payload.get("email") or "", payload.get("phone"))
+                if "why" not in o2:
+                    note = f" ({c['flights']} was already booked under this name, so I booked {alt['owner']} {alt['flights']} instead)"
+                    c, o = alt, o2
+                    break
         if "why" in o:   # a TEST offer expires: the same route and day, priced again — said
             alt = await TB._same_or_cheaper(c, int(c.get("party") or 1))
             if alt is not None:

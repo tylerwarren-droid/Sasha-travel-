@@ -2002,11 +2002,20 @@ async def conduct(
                         "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
             if isinstance(_i, int) and 0 <= _i < len(_opts) and any("Here are the flights that fit" in x or "here's what there is" in x for x in _recent_a) and user_id:
                 _o = _opts[_i]   # Sasha 196 · in the guided trip: ADDED to the itinerary — not booked, not paid
-                from booking_signer import plan_store as _ps196b
+                from booking_signer import plan_store as _ps196b, basket as _bk198c
                 _pl = await _ps196b.latest(user_id)
-                if _pl:
-                    await _ps196b.choose_flight(user_id, _pl["trip_id"], {k: _o.get(k) for k in ("name", "detail", "price", "provider_offer_id", "dep", "provider_amount", "currency")})
                 _say = f"Done — I've added the {_o.get('name')} flight to your itinerary. Is there anything else you'd like me to add — a restaurant, a spa?"
+                _row198 = None
+                if _bk198c.on() and _pl:   # Sasha 198 R5 · the pick is the BASKET's: one chosen flight per slice (Austen)
+                    _row198 = ({"id": _o["basket_item_id"]} if _o.get("basket_item_id")
+                               else await _bk198c.by_ref(user_id, _pl["trip_id"], _o.get("provider_offer_id") or ""))
+                if _row198:
+                    try:
+                        await _bk198c.choose(user_id, _row198["id"])
+                    except _bk198c.BasketError as _be:
+                        _say = f"I couldn't add that flight — {_be}. Which one would you like?"
+                elif _pl:
+                    await _ps196b.choose_flight(user_id, _pl["trip_id"], {k: _o.get(k) for k in ("name", "detail", "price", "provider_offer_id", "dep", "provider_amount", "currency")})
                 return {"response": _say, "intents": ["itinerary"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
                         "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
                         "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}

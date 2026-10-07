@@ -85,6 +85,16 @@ async def item(account: str, item_id: str) -> Optional[Dict[str, Any]]:
     return _row(r) if r else None
 
 
+async def by_ref(account: str, trip_id: str, provider_ref: str) -> Optional[Dict[str, Any]]:
+    """The live item a provider id names (a shown offer → its basket row)."""
+    async def fn(conn):
+        return await conn.fetchrow("select * from trip_basket_items where account_id = $1 and trip_id = $2 and provider_ref = $3 "
+                                   "and state = any($4::text[]) order by created_at desc limit 1",
+                                   uuid.UUID(account), uuid.UUID(trip_id), provider_ref, list(LIVE))
+    r = await _go(fn)
+    return _row(r) if r else None
+
+
 async def by_session(session_id: str) -> List[Dict[str, Any]]:
     async def fn(conn):
         return await conn.fetch("select * from trip_basket_items where paid_session = $1 order by kind, created_at", session_id)
@@ -347,5 +357,5 @@ def overlay(plan: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     return plan
 
 
-__all__ = ["MAGELLAN", "SHERLOCK", "AUSTEN", "PACIOLI", "BasketError", "items", "item", "by_session", "to_book", "total",
+__all__ = ["MAGELLAN", "SHERLOCK", "AUSTEN", "PACIOLI", "BasketError", "items", "item", "by_ref", "by_session", "to_book", "total",
            "suggest", "refresh", "choose", "hold", "remove", "status_line", "booked", "failed", "cancelled", "event", "on", "sync_stays", "words", "overlay"]

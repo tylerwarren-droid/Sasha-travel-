@@ -62,6 +62,10 @@ def pick(message: str, options: List[dict]) -> Union[int, str, None]:
         hits = [i for i, b in enumerate(blob) if code in b or code.replace(" ", "") in b.replace(" ", "")]
         if len(hits) == 1:
             return hits[0]
+    # Sasha 198 R5 · a bare number — WhatsApp's numbered list ("2", "2.")
+    m0 = re.fullmatch(r"\s*(\d)\s*[.)!]?\s*", t)
+    if m0 and 1 <= int(m0[1]) <= n:
+        return int(m0[1]) - 1
     # an ordinal, possibly within one airline: "the first China Eastern"
     k = None
     m = re.search(r"\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|last|cheapest)\b", t) or \

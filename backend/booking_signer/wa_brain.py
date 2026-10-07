@@ -529,6 +529,11 @@ async def web_turn(ctx: dict, body: str) -> bool:
         return True
     for c in chunks([wa_markdown(r.get("response") or "")]):
         out.text(c)
+    for b in r.get("bookings") or []:   # Sasha 198 R5 · the guided trip's flights, as the web shows them: numbered, to CHOOSE
+        if isinstance(b, dict) and b.get("trip_pick"):
+            out.text("\n".join(f"{i}. {o.get('name')} — {o.get('price') or ''} · {o.get('detail') or ''}".strip(" ·")
+                                for i, o in enumerate([o for o in b.get("options") or [] if not o.get("fallback")][:4], 1))
+                     + "\n\nReply with its number or airline to add it to your itinerary.")
     shown = 0
     for ph in r.get("photos") or []:
         url = ph.get("url") if isinstance(ph, dict) else ph if isinstance(ph, str) else None

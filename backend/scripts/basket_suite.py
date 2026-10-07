@@ -149,6 +149,57 @@ async def flight_cases(a: str) -> None:
         BK.ON = None
 
 
+async def _web(a: str, sid: str):
+    from app.services.conductor import conduct
+    h = []
+
+    async def say(m):
+        nonlocal h
+        r = await conduct(m, h, user_id=a, signed_in=True, session_id=sid)
+        h = r.get("messages") or h
+        return r.get("response") or "", r
+    return say
+
+
+async def _whatsapp(a: str, sid: str):
+    """WhatsApp's own brain path (wa_brain.web_turn), its words captured — nothing is sent."""
+    from booking_signer import wa_brain as WB, guest_whatsapp as GW
+    st = {"history": []}
+
+    async def say(m):
+        out = GW.Out()
+        await WB.web_turn({"account": a, "st": st, "ch": {"wa_id_sha256": sid}, "out": out, "now": GW.NOW()}, m)
+        st["history"] += [{"role": "user", "content": m}, {"role": "assistant", "content": out.said()}]
+        return out.said(), None
+    return say
+
+
+async def pick_cases(guests: dict) -> None:
+    """R5 · on web, the avatar's words and WhatsApp: the guided trip's pick is the BASKET's — one chosen flight, a re-pick swaps it."""
+    from booking_signer import basket as BK, plan_store as PS
+    BK.ON = True
+    try:
+        for ch, (a, first, second) in guests.items():
+            sid = uuid.uuid4().hex[:12] + f"-r5-{ch}"   # unique within the first 16 characters (WhatsApp's session key keeps 16)
+            say = await (_whatsapp(a, sid) if ch == "WhatsApp" else _web(a, sid))
+            for m in ("plan me 5 days in Vietnam from 12 November for 2 of us", "Sam", "food and culture", "from Madrid"):
+                await say(m)
+            listed, rr = await say("yes please")
+            listed += " ".join(o.get("name") or "" for b in ((rr or {}).get("bookings") or []) if b.get("trip_pick") for o in b.get("options") or [])
+            ok(f"BASKET R5 {ch}: the flights listed to choose", "Iberia" in listed and "British Airways" in listed
+               and (ch != "WhatsApp" or "Reply with its number or airline" in listed), listed[:160])
+            r1, _ = await say(first)
+            r2, _ = await say(second)
+            p = await PS.latest(a)
+            ch_rows = [r for r in await BK.items(a, p["trip_id"]) if r["kind"] == "flight" and r["state"] == "chosen"] if p else []
+            ok(f"BASKET R5 {ch}: “{first}” then “{second}” → ONE chosen flight, Iberia, in the basket (Austen)",
+               "added the" in r1 and "added the Iberia flight" in r2 and len(ch_rows) == 1 and ch_rows[0]["snapshot"].get("owner") == "Iberia",
+               f"{r2[:70]} | {[c['snapshot'].get('owner') for c in ch_rows]}")
+            ok(f"BASKET R5 {ch}: nothing written to the old plan.chosen_flight", not ((p or {}).get("plan") or {}).get("chosen_flight"))
+    finally:
+        BK.ON = None
+
+
 async def main() -> int:
     if os.getenv("SASHA_FLIGHT_SUITE", "") == "skip":
         print("basket suite SKIPPED (SASHA_FLIGHT_SUITE=skip) — this deploy is not covered")
@@ -158,13 +209,13 @@ async def main() -> int:
     t0, start = time.time(), len(RESULTS)
     guests = []
     try:
-        for n in ("basket-suite", "basket-suite-other"):
+        for n in ("basket-suite", "basket-suite-other", "basket-suite-avatar", "basket-suite-wa"):
             g, why = await GA.create_guest(n)
             if not g:
                 ok("basket suite: scratch guests", False, why)
                 return 1
             guests.append(g["account_id"])
-        a, other = guests
+        a, other, av, wa = guests
         trip = await PS.save(a, {"title": "Basket suite", "days": [{"day": 1, "city": "Hanoi", "activities": []}]},
                              "12 November for 2", datetime.now(timezone.utc))
         if not ok("basket suite: scratch trip", bool(trip)):
@@ -172,6 +223,9 @@ async def main() -> int:
         await store_cases(a, other, trip)
         await view_cases(a)
         await flight_cases(a)
+        await pick_cases({"web": (other, "the British Airways one", "Actually, the Iberia flight please"),
+                          "avatar": (av, "Okay. Give me the British Airways fight, please, Sasha.", "Uh, actually the Iberia one."),
+                          "WhatsApp": (wa, "2", "Iberia")})
     except Exception as e:
         ok("the basket suite itself", False, f"{type(e).__name__}: {e}")
     finally:

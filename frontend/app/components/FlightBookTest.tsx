@@ -12,7 +12,9 @@ import { setPendingYes } from '@/lib/chat-booking-bus'
 type Phase = { k: 'idle' } | { k: 'reading' } | { k: 'readback'; lines: string[]; sha: string } | { k: 'paying'; url: string; sid: string; phone?: boolean }
   | { k: 'booked'; say: string } | { k: 'error'; say: string }
 
-export function FlightBookTest({ offerId, autoStart = false }: { offerId: string; autoStart?: boolean }) {
+export function FlightBookTest({ offerId: firstOffer, autoStart = false }: { offerId: string; autoStart?: boolean }) {
+  const [offerId, setOfferId] = useState(firstOffer)   // Sasha 183 · an expired offer comes back priced again, with a new id
+  const [note, setNote] = useState<string | null>(null)
   const [p, setP] = useState<Phase>({ k: 'idle' })
   async function prepare() {
     setP({ k: 'reading' })
@@ -21,6 +23,8 @@ export function FlightBookTest({ offerId, autoStart = false }: { offerId: string
     if (r.status === 401) return setP({ k: 'error', say: SIGN_IN_TO_BOOK })
     if (!r.ok) return setP({ k: 'error', say: `Not booked — ${refusal(r.json, r.status)}.` })
     const rb = r.json.read_back as { lines: string[]; sha256: string }
+    if (r.json.offer_id) setOfferId(String(r.json.offer_id))
+    setNote(r.json.note ? String(r.json.note) : null)
     setP({ k: 'readback', lines: rb.lines, sha: rb.sha256 })
   }
   async function yes(sha: string, said: string | null = null) {
@@ -53,6 +57,7 @@ export function FlightBookTest({ offerId, autoStart = false }: { offerId: string
   if (p.k === 'reading') return <span className="o2">Reading the offer…</span>
   if (p.k === 'readback') return (
     <div className="o2" style={{ maxWidth: 420 }}>
+      {note && <div style={{ marginBottom: 4 }}>{note}</div>}
       <ul>{p.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
       <button className="price" onClick={() => { yes(p.sha) }}>Yes, book it (TEST)</button>{' '}
       <button className="viewlink" onClick={() => setP({ k: 'idle' })}>No</button>

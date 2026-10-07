@@ -94,6 +94,7 @@ async def fulfil(row_id, payload: dict) -> dict:
                                           "where id = $1", row_id, f"Flight {c['flights']} {c['from']} → {c['to']} (TEST — paid, not booked)"[:200],
                                           DONE + json.dumps({"sid": sid, "why": o["why"]})))
             return {"status": "failed", "say": f"Your TEST payment went through, but the test flight wasn't booked: {o['why']}."}
+        T.mark_used(payload["card"]["id"]); T.mark_used(c["id"])   # one booking per search list
         tz = c.get("from_tz") or "Europe/Madrid"
         dep = datetime.fromisoformat(c["departs"])
         dt = dep.replace(tzinfo=ZoneInfo(tz)) if dep.tzinfo is None else dep

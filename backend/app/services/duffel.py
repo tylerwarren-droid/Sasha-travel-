@@ -309,6 +309,12 @@ async def search_flights_from_text(message: str, *, context: str = "",
         return None
 
     query = await _extract_search(message, context=context, dest_hint=dest_hint)
+    if not query.get("origin_query"):   # Sasha 183 · flights start from home (Madrid) unless the guest names another city
+        try:
+            from booking_signer.journeys import home_label
+            query["origin_query"] = home_label().replace(" (home)", "") or "Madrid"
+        except Exception:
+            query["origin_query"] = "Madrid"
     missing = [key for key in ("origin_query", "destination_query", "departure_date") if not query.get(key)]
     if missing:
         return {
@@ -385,6 +391,12 @@ async def search_flights_from_text(message: str, *, context: str = "",
         )
         for offer in offers[:DUFFEL_MAX_OFFERS]
     ]
+    try:   # Sasha 183 · each offer's route (an expired one is priced again) and its list (one booking per Duffel search)
+        from booking_signer import travel as _T
+        _T.register_list([(o.get("provider_offer_id"), o.get("name")) for o in options], query["origin_query"],
+                         query["destination_query"], query["departure_date"], int(query.get("adults") or 1))
+    except Exception as exc:
+        print(f"[duffel] offers not registered: {exc}")
 
     if not options:
         return {

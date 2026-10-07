@@ -111,11 +111,14 @@ async def search(origin: str, dest: str, day: str, adults: int = 1, limit: int =
 
 
 def read_back(c: dict, name: str, email: str) -> List[str]:
+    # Sasha 183 · only what's true: no saved traveller details or passport are used (Duffel's TEST mode takes placeholders),
+    # payment is Apple Pay on the phone (Stripe TEST), and no confirmation email is sent for a test flight
     return [f"I'll book {card_line(c)} for {name}.",
+            "Traveller details: no saved details or passport are used — Duffel's test mode needs a birth date, title and gender, "
+            "so I'll use test placeholders (1 Jan 1980, Mr, M).",
+            "Payment: Apple Pay on your phone, on Stripe's TEST page — nothing is charged, and I never see your card.",
             f"⚠ {LABEL}.",
-            "Payment: one touch on Stripe's TEST page — Apple Pay or your phone's saved card; nothing is charged. I never see your card.",
-            f"Duffel's test mode needs a birth date, title and gender: I'll use placeholders (1 Jan 1980, Mr, M) — test only.",
-            f"The test order's confirmation goes to {email or 'your account email'}; it goes in your itinerary and calendar."]
+            "Once it's paid it goes straight into your itinerary on the platform, and I'll confirm it here."]
 
 
 async def order(c: dict, name: str, email: str, phone: Optional[str]) -> Dict[str, Any]:
@@ -170,6 +173,46 @@ async def _record(account: str, c: dict, ref: str) -> Optional[str]:
 
 RECORD = _record   # tests replace it
 
+# ── Sasha 183 · an expired offer is priced again; one booking per search list ──────────────────────────────────────
+OFFER_ROUTE: Dict[str, dict] = {}   # offer id → {from, to, day, adults, owner, list}  (this server's memory: offers live ~30 min)
+USED_LISTS: set = set()             # the lists a booking was made from (Duffel refuses a second order from one search)
+LIST_USED = "You've booked one from this list — want me to search again?"
+
+
+def register_list(offers: list, origin: str, dest: str, day: str, adults: int) -> None:
+    key = uuid.uuid4().hex[:12]
+    for oid, owner in offers:
+        if oid:
+            OFFER_ROUTE[oid] = {"from": origin, "to": dest, "day": day, "adults": adults, "owner": owner, "list": key}
+    if len(OFFER_ROUTE) > 3000:
+        for k in list(OFFER_ROUTE)[:1000]:
+            OFFER_ROUTE.pop(k, None)
+
+
+def list_used(offer_id: str) -> bool:
+    return (OFFER_ROUTE.get(offer_id) or {}).get("list") in USED_LISTS
+
+
+def mark_used(offer_id: str) -> None:
+    k = (OFFER_ROUTE.get(offer_id) or {}).get("list")
+    if k:
+        USED_LISTS.add(k)
+
+
+async def refreshed(offer_id: str) -> Optional[str]:
+    """An expired offer → the same airline, route and day, priced again now → its new offer id (or None)."""
+    r = OFFER_ROUTE.get(offer_id)
+    if not r:
+        return None
+    got = await search(r["from"], r["to"], r["day"], adults=r["adults"], limit=8)
+    same = [c for c in got.get("cards") or [] if (c.get("owner") or "").lower() == (r.get("owner") or "").lower()] or (got.get("cards") or [])
+    for c in same:
+        st, _j = await HTTP("GET", f"/air/offers/{c['id']}")
+        if st == 200:
+            OFFER_ROUTE[c["id"]] = {**r, "list": uuid.uuid4().hex[:12]}
+            return c["id"]
+    return None
+
 __all__ = ["search", "order", "read_back", "card_line", "card_of", "place", "token", "LABEL", "RECORD"]
 
 
@@ -207,10 +250,19 @@ async def prepare(request: Request):
     if not token():
         return _refuse(422, "travel_off", "flights need a Duffel TEST token, and none is set")
     body = await request.json()
-    c, lines, sha, _who = await _card_and_lines(account_for(request), str(body.get("offer_id") or ""))
+    oid = str(body.get("offer_id") or "")
+    if list_used(oid):   # Sasha 183 · never a dead end: Duffel refuses a 2nd order from one search
+        return _refuse(409, "list_used", LIST_USED)
+    c, lines, sha, _who = await _card_and_lines(account_for(request), oid)
+    note = None
+    if c is None:   # Sasha 183 · expired: the same airline, route and day, priced again — never a dead card
+        new = await refreshed(oid)
+        if new:
+            c, lines, sha, _who = await _card_and_lines(account_for(request), new)
+            oid, note = new, "That offer had expired — here it is priced again now."
     if c is None:
-        return _refuse(404, "offer_gone", "that flight offer has gone — search again")
-    return {"ok": True, "card": c, "line": card_line(c), "read_back": {"lines": lines, "sha256": sha}}
+        return _refuse(404, "offer_gone", "that flight offer has gone and couldn't be priced again — ask me to search again")
+    return {"ok": True, "offer_id": oid, "note": note, "card": c, "line": card_line(c), "read_back": {"lines": lines, "sha256": sha}}
 
 
 @router.post("/flight/pay")
@@ -261,6 +313,7 @@ async def flight_status(request: Request):
         TD.note(sid, False, f"Paid (TEST), but not booked: {o['why']}")
         return {"ok": True, "status": "failed", "say": f"paid (test), but not booked: {o['why']}"}
     await RECORD(account, c, o["booking_reference"] or "")
+    mark_used(offer)
     _BOOKED[sid] = {"booking_reference": o["booking_reference"], "say": f"✅ Booked (TEST): {card_line(c)}. Reference {o['booking_reference']} — {LABEL}."}
     TD.note(sid, True, _BOOKED[sid]["say"])
     return {"ok": True, "status": "booked", **_BOOKED[sid]}

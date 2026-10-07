@@ -63,7 +63,7 @@ class Duffel(unittest.TestCase):
         self.assertEqual(TR.card_line(c), "Duffel Airways ZZ 123 + ZZ 456 · Thu 12 Nov 08:30 MAD → 07:15+1 HAN · 1 stop · 21h 45m · EUR 391.52 (TEST)")
         lines = TR.read_back(c, "Tyler Warren", "guest@example.com")
         self.assertIn("⚠ TEST booking — Duffel test mode: no real ticket, nothing charged.", lines)
-        self.assertTrue(any("placeholders (1 Jan 1980, Mr, M) — test only" in ln for ln in lines))
+        self.assertTrue(any("test placeholders (1 Jan 1980, Mr, M)" in ln for ln in lines))
 
     def test_the_order_is_refused_when_the_price_moved(self):
         with mock.patch.dict(os.environ, {"DUFFEL_ACCESS_TOKEN": "duffel_test_x"}):

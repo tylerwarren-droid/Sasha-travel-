@@ -1811,6 +1811,12 @@ async def conduct(
                 return {"response": _say, "intents": ["flight"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
                         "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
                         "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
+            from booking_signer import travel as _tv  # noqa: E402
+            if isinstance(_i, int) and 0 <= _i < len(_opts) and _tv.list_used(_opts[_i]["provider_offer_id"]):
+                _say = _tv.LIST_USED   # Sasha 183 · never a dead end
+                return {"response": _say, "intents": ["flight"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                        "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
+                        "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
             if isinstance(_i, int) and 0 <= _i < len(_opts):
                 _o = _opts[_i]
                 _say = (f"{_o.get('name')} — {_o.get('detail') or ''}, {_o.get('price') or ''}. Here's exactly what I'll book (TEST — "

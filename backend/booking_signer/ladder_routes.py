@@ -265,10 +265,10 @@ async def _online_route(account: str, c: dict, body: dict) -> Optional[str]:
         log.info("[ladder_routes] online check failed for %s: %s", c.get("name"), type(e).__name__)
         return None
     rungs = {x["rung"] for x in L.choose(read, account=account)["rungs"] if x.get("available")}
-    if "link" in rungs:
-        page = SL.platform_page(read)
-        return page[0] if page else "online booking"
-    if "form" in rungs:
+    page = SL.platform_page(read) if "link" in rungs else None
+    if page:   # a page he can actually be sent (Kippu: CoverManager read, but no page of ITS own → not shown)
+        return page[0]
+    if "form" in rungs and not any(f.get("kind") == "platform" for f in read.get("facts") or []):
         return "their own booking page"
     return None
 

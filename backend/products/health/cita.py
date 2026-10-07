@@ -233,8 +233,8 @@ def offer(out, pend: dict, keep: dict, expire_at: str) -> None:
     """Right after the 1449F1: the question, and only what the lookup and the copy lines need (dropped with the form)."""
     pend["ci"] = {**keep, "expire_at": expire_at}
     pend["step"] = "ci_offer"
-    out.ask("Book the appointment to hand it in? I'll find your centro de salud from your address on SERMAS's own finder.",
-            [("Yes, find my centre", "hx:ci:find"), ("Not now", "hx:ci:no")])
+    out.ask("Next: your centro de salud — I'll find it from your address on SERMAS's own finder.",
+            [("Find my centre", "hx:ci:find"), ("Not now", "hx:ci:no"), ("What's left for me", "hx:more:left")])   # CR 52
 
 
 def _expired(ci: dict, now: datetime) -> bool:

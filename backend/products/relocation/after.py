@@ -170,6 +170,33 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
     pend, out, now = ctx["st"]["pending"], ctx["out"], ctx["now"]
     step = pend.get("step")
     f = pend.get("facts") or {}
+    from .. import steps as STP                                    # CR 52 · a step's details, or its next step, by its button
+    key = STP.is_more(payload or "", "rx:")
+    if key:
+        STP.show(pend, key, out)
+        return True
+    if (payload or "").startswith("rx:go:"):
+        go = payload[6:]
+        from . import three as TH, arrival as AR0
+        if go == "skip":
+            pend["step"] = "entry"
+            out.text(ENTRY_Q)
+            return True
+        if go == "travel":
+            return await _travel(ctx)
+        if go in AR0.STEPS:
+            return await AR0.step(ctx, go, web())
+        if await TH.walk(ctx, go):
+            return True
+    if step == "walk" and not payload:                            # CR 52 · typing still works mid-walk: the buttons only lead
+        if re.search(r"(?i)\b(booked|appointment|cita)\b", body or ""):
+            return await _appointment(ctx, body)
+        if F.parse_date(body or ""):
+            pend["step"] = "entry"
+            step = "entry"
+        elif re.match(r"(?i)^\s*(skip|all|pack\b)", body or "") or CS.numbers_in(body or "", 30) is not None:
+            pend["step"] = "pack"
+            return await _pack(ctx, re.sub(r"(?i)^\s*pack\b[:\s]*", "", body))
     from . import arrival as AR                                    # CR 44 · after arrival: padrón → EX-17 + 790-012 → TA.1
     nie = AR.NIE_SAID.search(body or "")
     if nie and step not in ("residence", "us_state", "us_county"):
@@ -177,6 +204,7 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
         if not F._nie(val)[1]:
             f.setdefault("applicant", {})["nie"] = F.fact(val, "said on WhatsApp", now.strftime("%-d %b %Y"))
             await _save(ctx, {"facts": f})
+            AR.refresh(pend, f)                                     # CR 52 · the details to copy, with the NIE, at once
             out.text(f"Noted: NIE {val} — the 790-012, the TA.1 and the EX-17 use it now.")
             await AR.present(ctx, web())
             return True
@@ -214,8 +242,7 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
         if residence == "united kingdom":                    # CR 37 · London, read live: fees, BLS, the 790, one pack
             from . import three as TH
             await TH.present(ctx, "london", {"residence": residence}, web(), _save)
-            pend["step"] = "pack"
-            out.text(pack_q(TH.items("london")))
+            pend["step"] = "walk"                            # CR 52 · one step at a time, by its buttons
             return True
         if not c:
             out.text(f"I haven't read the Spanish consulate's own page for {body.strip()} yet, so I won't give you a link I "
@@ -261,13 +288,29 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
         pend["step"] = "appointments"
         lines = "\n".join(f"• {date.fromisoformat(r['on']).strftime('%-d %b %Y')}: {r['text'].split(' — ')[0].split(': ')[0]}"
                           for r in rs) or "(none — the dates your consulate's page gives have passed or aren't stated)"
-        out.text(f"I'll remind you here:\n{lines}\n(WhatsApp lets me write first only within 24 hours of your last message; "
-                 "otherwise the reminder waits for your next message, and it's always on your file page.)")
-        out.text('When you\'ve booked your consulate appointment — and later, in Spain, your TIE one — tell me the day and time (e.g. "consulate booked 12 November 10:00") and I\'ll put it in your itinerary.')
+        from .. import steps as STP                                # CR 52 · the dates behind a tap; next: getting there
+        STP.stash(pend, "reminders", [f"I'll remind you here:\n{lines}",
+                                      "WhatsApp lets me write first only within 24 hours of your last message; otherwise the "
+                                      "reminder waits for your next message, and it's always on your file page.",
+                                      'When you\'ve booked your consulate appointment — and later, in Spain, your TIE one — tell me '
+                                      'the day and time (e.g. "consulate booked 12 November 10:00") and I\'ll put it in your itinerary.'])
+        out.ask(f"Noted: you enter Spain on {date.fromisoformat(d).strftime('%-d %B %Y')}. I'll remind you before each deadline"
+                f"{' (' + str(len(rs)) + (' date)' if len(rs) == 1 else ' dates)') if rs else ''}.\nNext: getting there.",
+                [("Getting there →", "rx:go:travel"), STP.more("rx:", "reminders", "The dates")])
         return True
     if step == "appointments":
         return await _appointment(ctx, body)
     return False   # CR 10 · not relocation's: Sasha answers it, in the same chat
+
+
+async def _travel(ctx: dict) -> bool:
+    """CR 50/52 · getting there: Sasha's flights and first nights, the move's own dates — then, later, after arrival."""
+    f = ctx["st"]["pending"].get("facts") or {}
+    town = ((f.get("applicant") or {}).get("address_town") or {}).get("value") or "Madrid"
+    ctx["out"].ask(f"✈️ Getting there: Sasha books your flights to {town} and your first nights, from your entry date — "
+                   f"each lands on your “Move to {town}” trip.",
+                   [("Plan my flights & first nights", "tp:go:relocation"), ("After arrival →", "rx:go:padron")])
+    return True
 
 
 async def due(now: Optional[datetime] = None) -> int:
@@ -381,8 +424,7 @@ async def _us(ctx: dict, state: str, cid: Optional[str] = None, county: Optional
     if cid in ("newyork", "washington"):                    # CR 37 · read live today (Washington's stored page was New York's)
         from . import three as TH
         await TH.present(ctx, cid, base, web(), _save)
-        pend["step"] = "pack"
-        out.text(pack_q(TH.items(cid)))
+        pend["step"] = "walk"                                # CR 52 · one step at a time, by its buttons
         return True
     c = CS.consulate(cid)
     r = CS.READ[cid]
@@ -477,9 +519,12 @@ async def _pack(ctx: dict, body: str) -> bool:
                       + (" — still to gather" if x["status"] == "missing" else "") + (" (prepared; you sign it)" if x["status"] == "prepared" else "")
                       for x in pk)
     missing = sum(1 for x in pk if x["status"] == "missing")
-    out.text(f"Your document pack, in {office}'s own order — name your files like this and they sort the way it asks:\n{lines}\n"
-             + (f"{missing} still to gather. Say PACK and the numbers any time to update it." if missing else "Everything it lists is gathered.")
-             + (f"\nIts page, on every foreign document: “{cons['general']}”" if cons.get("general") else ""))
+    from .. import steps as STP                                    # CR 52 · the count now, the named list behind a tap
+    STP.stash(pend, "pack", [f"Your document pack, in {office}'s own order — name your files like this and they sort the way it asks:\n{lines}"]
+              + ([f"Its page, on every foreign document: “{cons['general']}”"] if cons.get("general") else []))
+    out.ask((f"Noted: {len(pk) - missing} of {len(pk)} ready (your forms included); {missing} still to gather. Say PACK and the "
+             "numbers any time to update it." if missing else f"All {len(pk)} documents ready."),
+            [STP.more("rx:", "pack", "My pack list")])
     if pend.get("step") == "pack":
         pend["step"] = "entry"
         out.text(ENTRY_Q)

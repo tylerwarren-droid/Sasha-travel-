@@ -92,7 +92,7 @@ class Espana(TG.Base):
         self.assertIn("never why you need a doctor", GW.SENDER.contents[-1][0])
         r = web(self, mode="espana")                                          # the laptop: the same consent question
         self.assertTrue(r["response"].startswith("Back to your health appointment."))
-        self.assertEqual([q["payload"] for q in r["quick_replies"]], ["hx:consent:yes", "hx:consent:no"])
+        self.assertEqual([q["payload"] for q in r["quick_replies"]], ["hx:consent:yes", "hx:consent:no", "hx:more:area"])   # CR 52
         r = web(self, payload="hx:consent:yes")
         self.assertIn("A private clinic", r["response"])
         self.say("", payload="hx:new")                                         # back on the phone: the next step
@@ -105,7 +105,8 @@ class ItineraryIsSashas(TR.Flow):
         self.say("what do I have on 12 November?")
         self.assertNotIn("Your passport number?", self.bodies()[-1])             # not re-asked: Sasha's own flow answered
         self.say("relocation")
-        self.assertTrue(self.bodies()[-1].startswith("Back to your EX-01."))
+        last = (self.bodies() + [c for c, _ in GW.SENDER.contents])                # CR 52 · the say-back may carry its buttons
+        self.assertTrue(any(x.startswith("Back to your EX-01.") for x in last[-2:] + [GW.SENDER.contents[-1][0]]))
 
 
 class BookingInsideAProduct(TR.Flow):
@@ -138,7 +139,8 @@ class BookingInsideAProduct(TR.Flow):
         (f, draft, _), = self.found                                               # Sasha's OWN booking flow, with the context
         self.assertEqual((f["where"], f.get("country"), f.get("near")), ("Madrid", "ES", "Calle de Ejemplo 12"))
         self.say("relocation")
-        self.assertTrue(self.bodies()[-1].startswith("Back to your EX-01."))
+        self.assertTrue((self.bodies() + [c for c, _ in GW.SENDER.contents])[-1].startswith("Back to your EX-01.")
+                        or GW.SENDER.contents[-1][0].startswith("Back to your EX-01."))   # CR 52 · the say-back carries its buttons
 
     @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
 

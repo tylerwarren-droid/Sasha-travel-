@@ -210,35 +210,48 @@ def forms_table(f: dict) -> List[dict]:
     ]
 
 
+STEPS = ("padron", "tie", "ta1", "health")
+
+
+def refresh(pend: dict, f: dict) -> None:
+    """The after-arrival details to copy, from the file as it is NOW (an NIE said later shows in them at once)."""
+    from .. import steps as STP
+    STP.stash(pend, "padron", ["Padrón — your details, each ready to copy onto the hoja padronal:"] +
+              [f"{k}: {v}" for k, v in padron(f)] + [PADRON_IN_PERSON])
+    STP.stash(pend, "tie", ["790-012 — every value, ready to copy:"] + [f"{k}: {v}" for k, v in p790_012(f)] +
+              ([] if _v(f, "nie") else ["Your NIE isn't on file yet — it's printed on your visa. Tell me “my NIE is X1234567L” "
+                                        "and the 790-012, the TA.1 and the EX-17 fill it in."]) +
+              [EX17_WAITING if not ex17_ready() else "Your EX-17 is filled from your EX-01 answers; you sign it at the appointment."])
+
+
 async def present(ctx: dict, web: str) -> None:
-    """After arrival: each form in process order — padrón → fingerprints (EX-17 + 790-012) → TA.1. Nothing is sent."""
+    """CR 52 · after arrival, one step at a time: padrón → the TIE → Social Security → the health card."""
+    await step(ctx, "padron", web)
+
+
+async def step(ctx: dict, which: str, web: str) -> bool:
+    """One after-arrival step: what it is, where it happens, one button on; the values to copy behind a tap."""
     from .. import formcard as FC
+    from .. import steps as STP
     pend, out = ctx["st"]["pending"], ctx["out"]
     f = pend.get("facts") or {}
     cid = pend.get("case_id")
-    out.text("After you arrive — in this order (each is on your “Move to Madrid” trip):\n1. Padrón (book first — the fingerprint "
-             "appointment often asks for it).\n2. Fingerprints for your TIE, within a month of entry: the EX-17 and the 790-012 fee.\n"
-             "3. Your Social Security number: the TA.1.\n4. Your health card: say “españa” (EspañaMe fills the 1449F1).")
-    out.text(PADRON_IN_PERSON)
-    out.text("Padrón — your details, each ready to copy onto the hoja padronal:")
-    for k, v in padron(f):
-        out.text(f"{k}: {v}")
-    if ex17_ready():
-        FC.show(out, "Your EX-17 (TIE application), filled from your EX-01 answers. Not signed — you sign it at the appointment.",
-                f"{web}/api/products/relocation/{cid}/EX-17-card.jpg", f"{web}/api/products/relocation/{cid}/EX-17.pdf")
-    else:
-        out.text(EX17_WAITING)
-    out.text(f"💶 790-012 (the TIE fee, {P790_012_FEE}): the police's own form — {P790_012}\nIt has a security code (a CAPTCHA), so "
-             "you fill it: every value is below, ready to copy. Then download it, print it, and pay at a bank or online — yours.")
-    for k, v in p790_012(f):
-        out.text(f"{k}: {v}")
-    if not _v(f, "nie"):
-        out.text("Your NIE isn't on file yet — it's printed on your visa. Tell me “my NIE is X1234567L” and the 790-012, the TA.1 and "
-                 "the EX-17 fill it in.")
-    from .keep import where_from
-    FC.show(out, f"Your TA.1 (Social Security number), filled from {where_from(f)}. Not signed — the NSS, consent to communications, "
-                 "place, date and signature are yours. In person at the TGSS.",
-            f"{web}/api/products/relocation/{cid}/TA-1-card.jpg", f"{web}/api/products/relocation/{cid}/TA-1.pdf")
+    refresh(pend, f)
+    if which == "padron":
+        out.ask(f"After you arrive, first: your padrón (registering your address). It's in person, with a cita — book it at "
+                f"{PADRON_CITA} or call 010.", [("Next: your TIE →", "rx:go:tie"), STP.more("rx:", "padron", "Copy my details")])
+    elif which == "tie":
+        out.ask(f"Then your TIE, within a month of entry. Its fee is {P790_012_FEE} on the police's own form — it has a CAPTCHA, so "
+                f"you fill it: {P790_012}", [("Next: Social Security →", "rx:go:ta1"), STP.more("rx:", "tie", "Copy my details")])
+    elif which == "ta1":
+        from .keep import where_from
+        FC.show(out, f"Your TA.1 (Social Security number), filled from {where_from(f)}. Not signed.",
+                f"{web}/api/products/relocation/{cid}/TA-1-card.jpg", f"{web}/api/products/relocation/{cid}/TA-1.pdf")
+        out.ask("Your Social Security form (TA.1) is filled — sign it and take it to a TGSS office.",
+                [("Next: your health card →", "rx:go:health")])
+    elif which == "health":
+        out.text("Last: your health card. Say “españa” and EspañaMe fills its form from this file.")
+    return True
 
 
 NIE_SAID = re.compile(r"(?i)\bmy\s+nie\s+is\s+([XYZ]\s*-?\s*\d{7}\s*-?\s*[A-Z])\b")

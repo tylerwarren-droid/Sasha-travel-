@@ -44,6 +44,7 @@ class KeptDetails(TC.OnWhatsApp):
             self.say("", payload=f"cm:tyes:{pend['tour']['sha']}")
         said = self.said()
         self.assertNotIn("couldn't be opened", said)
+        self.say("", payload="cm:more:details")                                                    # CR 52 · behind a tap
         self.assertIn("prueba@example.com", self.bodies())                                        # its details, to copy
         uses = run(VC.STORE.uses_of(TG.ACCOUNT))
         self.assertEqual([(u["action_kind"], u["status"]) for u in uses], [("campusme_tour", "done")])  # opened once, logged

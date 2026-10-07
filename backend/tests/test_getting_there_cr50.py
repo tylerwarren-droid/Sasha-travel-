@@ -23,8 +23,9 @@ class Card(Base):
     def test_after_the_consulate_one_tap_plans_the_move(self):
         for t in ("relocation", "DEMO", "SIGNED", "United States", "New York"):
             self.say(t)
+        self.say("", payload="rx:go:travel")                                         # CR 52 · its own step in the walk
         said = self.said()
-        self.assertIn("✈️ Getting there — ask Sasha for flights to Madrid and your first nights, booked right here", said)
+        self.assertIn("✈️ Getting there: Sasha books your flights to Madrid and your first nights", said)
         self.assertIn("tp:go:relocation", [p for _, bs in TG.GW.SENDER.contents for _, p in bs])
         self.say("", payload="tp:go:relocation")
         self.assertIn("When do you plan to enter Spain?", self.said())                 # the plan's own first question

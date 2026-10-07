@@ -72,6 +72,15 @@ def areas() -> List[Dict]:
     return out
 
 
+def short(a: Dict) -> str:
+    """CR 52 · an area in two lines: what it is and whether it's live; the rest (what you need, the route, the source) is
+    its card, behind "What you need"."""
+    head = f"{'🟢' if a['live'] else '○'} *{a['name']}* — {'LIVE' if a['live'] else 'CONCEPT, not built yet'}"
+    if not a.get("read"):
+        return f"{head}\nIts official page hasn't been read yet, so nothing here from memory."
+    return f"{head}\n*I {'prepare' if a['live'] else 'would prepare'}:* {a['prepare']}; *you press:* {a['press']}."
+
+
 def card(a: Dict) -> str:
     """One area as a WhatsApp/web message. A concept says so first; an unread page gives no route and says why."""
     head = f"{'🟢' if a['live'] else '○'} *{a['name']}* — {'LIVE' if a['live'] else 'CONCEPT, not built yet'}"

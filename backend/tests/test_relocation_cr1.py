@@ -131,8 +131,9 @@ class OnWhatsApp(TG.Base):
 
     def test_answers_to_a_prepared_file_with_its_pdf_and_nothing_filed(self):
         self.say("relocation")
-        self.assertIn("I never file anything", self.bodies()[-2])
-        self.assertIn("first* application", self.bodies()[-1])
+        from tests import calm as CALM                                     # CR 52 · one opening step, its promise in it
+        self.assertIn("I never file anything", CALM.everything(self))
+        self.assertIn("first* application", CALM.everything(self))
         self.say("first application")
         self.say("me")
         self.say("myself")
@@ -144,10 +145,11 @@ class OnWhatsApp(TG.Base):
         self.say("yes")                                                    # notices to my own address
         self.assertIn("Keep these details in your vault", "\n".join(b for b, _ in GW.SENDER.contents))   # CR 44 · offered once
         self.say("", payload="rx:keep:no")
-        said = "\n".join(self.bodies())
-        self.assertIn("✅ Your EX-01 is prepared: 31 boxes filled", said)
+        from tests import calm as CALM
+        said = CALM.everything(self)
+        self.assertIn("✅ Your EX-01 is ready: 31 boxes filled", said)
         self.assertIn("8 left for you", said)
-        cid = next(s["body"] for s in GW.SENDER.sent if "relocation-file/" in s["body"]).split("relocation-file/")[1][:22]
+        cid = __import__("tests.calm", fromlist=["x"]).everything(self).split("relocation-file/")[1][:22]
         pdf = next(s for s in GW.SENDER.sent if s["media"])
         self.assertEqual(pdf["media"], f"https://sasha.test/api/products/relocation/{cid}/EX-01-card.jpg")      # CR 33 · the card
         self.assertIn(f"Open the full PDF: https://sasha.test/api/products/relocation/{cid}/EX-01-prepared.pdf", pdf["body"])
@@ -168,7 +170,7 @@ class OnWhatsApp(TG.Base):
         self.say("DEMO")
         said = "\n".join(self.bodies())
         self.assertIn("*fictional* applicant, Ana Ejemplo Prueba", said)
-        cid = next(s["body"] for s in GW.SENDER.sent if "relocation-file/" in s["body"]).split("relocation-file/")[1][:22]
+        cid = __import__("tests.calm", fromlist=["x"]).everything(self).split("relocation-file/")[1][:22]
         case = run(ST.STORE.get(cid))["state"]
         self.assertTrue(case["fictional"])
         self.assertTrue(all("fictional" in r["provenance"] for r in case["rows"] if r["state"] == E.FILLED
@@ -177,7 +179,7 @@ class OnWhatsApp(TG.Base):
     def test_the_reviewer_page_and_the_pdf_route(self):
         self.say("relocation")
         self.say("DEMO")
-        cid = next(s["body"] for s in GW.SENDER.sent if "relocation-file/" in s["body"]).split("relocation-file/")[1][:22]
+        cid = __import__("tests.calm", fromlist=["x"]).everything(self).split("relocation-file/")[1][:22]
         app = FastAPI(); app.include_router(PR.router)
         c = TestClient(app)
         j = c.get(f"/products/relocation/{cid}").json()

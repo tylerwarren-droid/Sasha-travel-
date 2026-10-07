@@ -145,22 +145,27 @@ class Flow(TG.Base):
         self.say("SIGNED")
         self.assertIn("Which country do you live in now?", self.bodies()[-1])
         self.say("London, UK")
-        said = "\n".join(self.bodies())
-        self.assertIn("*Consulado General de España en Londres*", said)
-        self.assertIn("Visado-de-residencia-no-lucrativa.aspx (July 6, 2026)", said)          # CR 37 · its own page, read live
+        from tests import calm as CALM                                                      # CR 52 · one step at a time
+        self.assertIn("Your consulate is London — you apply there in person.", CALM.everything(self))
+        said = CALM.walk_consulate(self)
+        self.assertIn("Consulado General de España en Londres", said)
+        self.assertIn("Visado-de-residencia-no-lucrativa.aspx", said)                       # CR 37 · its own page, read live
+        self.assertIn("July 6, 2026", said)
         self.assertIn("https://uk.blsspainglobal.com/Global/account/login", said)              # BLS books it now, not the consulate
         self.assertIn("/pack.pdf", said)
         cid = self.pend()["case_id"]
         items = {i["key"]: i for i in run(ST.STORE.get(cid))["state"]["after"]["checklist"]}
         self.assertEqual(items["passport"]["status"], "ok")               # the demo passport runs to 2031
         self.assertEqual(items["ex01"]["status"], "prepared")
-        self.assertIn("Your *document pack*", self.bodies()[-1])                    # CR 12 · the pack, then the date
+        self.assertIn("Your *document pack*", said)                                          # CR 12 · the pack, then the date
         self.say("SKIP")
         self.say("1 March 2027")
         rs = run(ST.STORE.get(cid))["state"]["after"]["reminders"]
         self.assertEqual([r["on"] for r in rs], ["2026-10-02", "2026-12-01", "2027-03-22"])   # in date order, from today
-        self.assertIn("I'll remind you here", self.bodies()[-2])
-        self.assertIn("tell me the day and time", self.bodies()[-1])                 # CR 10 · their own appointments next
+        self.assertIn("Noted: you enter Spain on 1 March 2027", CALM.everything(self))
+        said = CALM.press(self, "rx:more:reminders")
+        self.assertIn("I'll remind you here", said)
+        self.assertIn("tell me the day and time", said)                                        # CR 10 · their own appointments next
 
     def test_a_consulate_whose_page_we_havent_read_gets_no_link(self):
         self.say("relocation")

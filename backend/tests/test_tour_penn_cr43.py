@@ -49,28 +49,32 @@ class PennTour(Base):
     def test_the_founder_gets_penn_filled_too(self):
         with mock.patch.dict(os.environ, FOUNDER):
             self.intake()
+            self.say("", payload="cm:more:plan")                                    # CR 52 · what "yes" does, behind a tap
             said = self.said()
             self.assertIn("I fill Yale's, Brown's and Penn's own registration forms in Kanoe's browser", said)
-            self.assertNotIn("Princeton", said.split("Prepare it?")[0].split("If you say yes")[-1])
+            self.assertNotIn("Princeton", said.split("If you say yes")[-1])
             self.say("", payload=f"cm:tyes:{self.pend()['tour']['sha']}")
         self.assertEqual(len(self.spawned), 3)                                          # Yale, Brown AND Penn
         said = self.said()
-        self.assertIn("🎓 Penn: I'm filling its own form in Kanoe's browser", said)
+        self.assertIn("🎓 Penn: filling its own form — “Tap to finish” comes to your phone", said)
         self.assertNotIn("key.admissions.upenn.edu", said)                              # no bare link
 
     def test_a_guest_still_gets_the_links(self):
         self.intake()
+        self.say("", payload="cm:more:plan")
         self.assertIn("I give you Yale's, Brown's and Penn's own registration pages", self.said())
         self.say("", payload=f"cm:tyes:{self.pend()['tour']['sha']}")
         self.assertEqual(self.spawned, [])
-        self.assertIn("🎓 Penn: register on its own page — https://key.admissions.upenn.edu", self.said())
+        self.assertIn("🎓 Penn: register here — https://key.admissions.upenn.edu", self.said())
 
     def test_no_cloud_browser_is_said_never_a_silent_link(self):
         with mock.patch.dict(os.environ, {**FOUNDER, "BROWSERBASE_API_KEY": ""}):
             self.intake()
             self.say("", payload=f"cm:tyes:{self.pend()['tour']['sha']}")
-        self.assertIn("🎓 Penn: I couldn't open the filled page (the cloud browser isn't set up on this server) — here's the link "
-                      "and your details: https://key.admissions.upenn.edu", self.said())
+        said = self.said()                                                          # CR 52 · one line, never a silent link
+        self.assertIn("🎓 Penn: register here — https://key.admissions.upenn.edu", said)
+        self.assertIn("(I couldn't open the filled page: the cloud browser isn't set up)", said)
+        self.say("", payload="cm:more:details")
         self.assertIn("prueba@example.com", self.bodies())
 
 

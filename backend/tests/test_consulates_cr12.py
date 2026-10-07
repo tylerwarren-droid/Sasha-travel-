@@ -124,16 +124,19 @@ class NewYorkOnWhatsApp(TG.Base):
             self.say(t)
         self.assertIn("Which US state", self.bodies()[-1])
         self.say("New Jersey")
-        said = self.said()
-        self.assertIn("*Consulado General de España en Nueva York* — it covers Connecticut, Delaware, New Jersey", said)   # CR 37
+        from tests import calm as CALM                                     # CR 52 · one step at a time; details behind a tap
+        self.assertIn("Your consulate is New York — you apply there in person.", CALM.everything(self))
+        said = CALM.walk_consulate(self)
+        self.assertIn("Consulado General de España en Nueva York covers Connecticut, Delaware, New Jersey", said)   # CR 37
         self.assertIn("mailto:cog.nuevayork.visnac@maec.es?", said)               # one tap: drafted in their own mail app
         self.assertIn("I never send it", said)
         self.assertIn("only by USPS money order", said)
         self.assertIn("C%29%20N%C3%BAmero%20de%20pasaporte%20y%20nacionalidad%3A%20%0A", said)   # never typed into the email by us
         self.assertEqual(len(self.after()["checklist"]), 10)
-        self.assertIn("Your *document pack*", self.bodies()[-1])
+        self.assertIn("Your *document pack*", said)
         self.say("1 3 4 6-8")
-        pack = self.bodies()[-2]
+        self.assertIn("3 still to gather", CALM.everything(self))
+        pack = CALM.press(self, "rx:more:pack")
         self.assertIn("✓ 01_Formulario-de-solicitud-de-visado-nacional", pack)
         self.assertIn("✓ 02_EX-01 — sign one copy (prepared; you sign it)", pack)
         self.assertIn("☐ 09_Prueba-de-residencia-en-la-demarcacion — still to gather", pack)

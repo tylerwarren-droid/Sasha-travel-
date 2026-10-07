@@ -88,6 +88,8 @@ class Base(TG.Base):
 class Tour(Base):
     def test_the_week_from_what_is_really_published(self):
         self.through_intake()
+        self.assertIn("Sun 15 Nov: Princeton (check its page) · night near Yale", self.said())   # CR 52 · one line per day
+        self.say("", payload="cm:more:plan")                                            # the full plan, behind a tap
         said = self.said()
         self.assertIn("■ Sunday 15 November", said)
         self.assertIn("Princeton — weekdays: an information session", said)
@@ -108,6 +110,7 @@ class Tour(Base):
         for link in ("apply.princeton.edu/portal/tours_info", "apply.college.harvard.edu/portal/campus-visit",
                      "apps.admissions.yale.edu/register/?id=", "apply.college.brown.edu/register/?id="):
             self.assertIn(link, said)
+        self.say("", payload="cm:more:details")                                         # CR 52 · behind "Copy my details"
         self.assertIn("prueba@example.com", self.bodies())                               # each detail its own message
         self.assertIn("03/14/2009", self.bodies())
         (itin, msg), = self.trips

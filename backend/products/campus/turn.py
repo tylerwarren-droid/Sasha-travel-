@@ -122,7 +122,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         pend["step"] = "ask"
         pend["intro_said"] = True
         return
-    if (step or "").startswith("tour_") or payload.startswith(("cm:tkeep:", "cm:tyes:", "cm:tno:")):   # CR 38 · the tour
+    if (step or "").startswith("tour_") or payload.startswith(("cm:tkeep:", "cm:tyes:", "cm:tno:", "cm:more:")):   # CR 38 · the tour
         from . import tour as TR
         if await TR.on_message(ctx, body, payload):
             return

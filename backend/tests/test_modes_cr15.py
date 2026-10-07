@@ -73,23 +73,27 @@ class Words(Base):
             self.say("sasha")
         self.say("españa")
         self.say("2")
+        self.assertIn("○ *Padrón — registering at the town hall* — CONCEPT, not built yet", self.said())   # CR 52 · short
+        self.say("", payload="hx:more:area")                                   # what you need, the route: behind a tap
         said = self.said()
-        self.assertIn("○ *Padrón — registering at the town hall* — CONCEPT, not built yet", said)
         self.assertIn("*What you need* (from the official page)", said)
         self.assertIn("servpub.madrid.es", said)                               # the page actually read, nothing composed
         self.assertIn("*You press:* booking the appointment and going in person.", said)
         self.say("5")
         self.assertIn("DGT — exchanging a foreign driving licence* — CONCEPT", self.said())
+        self.say("", payload="hx:more:area")
         self.assertIn("the UK is on it; the US is not", self.said())             # dgt.es read at source (CR 19)
         self.say("4")
+        self.say("", payload="hx:more:area")
         self.assertIn("Modelo 030", self.said())                                  # read at source, 4 Oct
         self.say("6")
+        self.say("", payload="hx:more:area")
         self.assertIn("Secretaría Virtual", self.said())
         self.say("", payload="hx:es:movistar")                                   # an old button: it moved (CR 17)
         self.assertIn("part of RelocateMe now", self.said())
         self.say("1")
         said = self.said()
-        self.assertIn("🟢 *Salud — health card, family doctor, SERMAS* — LIVE", said)
+        self.assertIn("🟢 *Salud* — your health card and family doctor.", said)            # CR 52 · with its consent, one step
         self.assertIn("never why you need a doctor", said)                       # the working health demo, consent first
 
     def test_no_walls(self):

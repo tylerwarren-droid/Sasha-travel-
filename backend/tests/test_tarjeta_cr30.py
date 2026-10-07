@@ -132,6 +132,8 @@ class Flow(Base):
         self.photo(FRONT)
         self.assertIn("Now the BACK of your DNI", self.last())
         self.photo(BACK)
+        self.assertIn("I read: CARMEN ESPAÑOLA ESPAÑOLA · 99999999R", self.said())       # CR 52 · the key lines first
+        self.say("", payload="hx:more:read")                                        # every line, behind a tap
         said = self.said()
         self.assertIn("• DNI: 99999999R", said)
         self.assertIn("✓ The DNI letter matches its number.", said)
@@ -235,7 +237,7 @@ class Web(Base):
         r = web(media=[{"bytes": b"\xff\xd8 front", "content_type": "image/jpeg"},
                        {"bytes": b"\xff\xd8 back", "content_type": "image/jpeg"}])
         self.assertEqual(self.fetched, [])
-        self.assertIn("• DNI: 99999999R", r["response"])
+        self.assertIn("I read: CARMEN ESPAÑOLA ESPAÑOLA · 99999999R", r["response"])     # CR 52 · every line behind "See every line"
         self.assertTrue(r["quick_replies"][0]["payload"].startswith("hx:ts:ok:"))
 
 

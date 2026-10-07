@@ -91,7 +91,7 @@ class FindIt(Base):
 class Routes(Base):
     def test_after_the_form_the_offer_then_the_centre_from_the_finder(self):
         self.to_offer()
-        self.assertIn("Book the appointment to hand it in?", self.said())
+        self.assertIn("Next: your centro de salud — I'll find it from your address on SERMAS's own finder.", self.said())   # CR 52
         self.mark()
         self.say("", payload="hx:ci:find")
         got = self.last()

@@ -463,47 +463,89 @@ def which(residence: str, state: Optional[str], us_cid: Optional[str]) -> Option
     return us_cid if us_cid in ("newyork", "washington") else None
 
 
+def _clean(line: str) -> str:
+    """A fee line without its quote and its long label — the quote stays behind "Sources"."""
+    line = re.sub(r" — “[^”]*”.*$", "", line)
+    line = re.sub(r"Residence-permit fee \(Modelo 790 código 052[^)]*\)", "Residence fee (790-052)", line)
+    return line.rstrip(".")
+
+
+def _short_pay(c: dict) -> str:
+    return re.sub(r"\s+", " ", re.sub(r" — “[^”]*”", "", c["pay"]).split(";")[0].replace(" — ", " ")).rstrip(".")
+
+
 async def present(ctx: dict, cid: str, base: dict, web: str, save) -> None:
-    """Everything for this consulate, in the order the applicant needs it: who and why, the differences, the fees, the
-    booking (one tap + each detail its own message), the 790-052 (card + PDF), the one print-ready pack."""
-    from .. import formcard as FC
+    """CR 52 · CALM: the consulate step only — one short message and one button. Everything else for this consulate is
+    prepared now and kept for its own step (fees → booking → forms → documents), its details behind "More"/"Sources"."""
+    from .. import steps as STP
     pend, out = ctx["st"]["pending"], ctx["out"]
     c = CONSULATES[cid]
     f = pend.get("facts") or {}
     case = pend.get("case_id")
     nat = ((f.get("applicant") or {}).get("nationality") or {}).get("value", "")
-    out.text(f"Your consulate: *{c['office']}*" + (f" — it covers {c['territory']}" if c.get("territory") else "") +
-             f". Everything below is from its own page, read {READ_ON}: {c['page']} ({c['page_dated']}). The page is {c['template']}.")
-    out.text(DIFFERENCES)
-    lines, total = fees(cid, nat)
-    out.text(f"💷 Fees at {c['office']}{' for ' + nat if nat else ''} — its own table ({c['fees_dated']}):\n" +
-             "\n".join("• " + x for x in lines) + (f"\nTotal: {total}." if total else ""))
-    for m in booking_messages(cid, f):
-        out.text(m)
-    out.text("When it's booked, tell me the day and time (e.g. \"consulate booked 12 November 10:00\") and it goes on your "
-             "“Move to Madrid” trip with what to bring.")
-    from . import visa_form as VF                     # CR 44 · A1: the national visa form, filled, first in every consulate's list
-    vf = VF.FORMS[VF.FORM_FOR.get(cid, "generic")]
-    from .keep import where_from
-    FC.show(out, f"Your national visa application ({vf['name']}), filled from {where_from(f)}. Not signed — the "
-                 "place, date, signature and photo are yours.",
-            f"{web}/api/products/relocation/{case}/visa-form-card.jpg", f"{web}/api/products/relocation/{case}/visa-form.pdf")
-    FC.show(out, f"Your Modelo 790 código 052, filled where the official form allows — {c['copies_790_words']}. Not signed, not paid.",
-            f"{web}/api/products/relocation/{case}/790-card.jpg", f"{web}/api/products/relocation/{case}/790-052.pdf")
-    out.text("Left for you on the 790: " + "; ".join(LEFT_790) + ".")
-    out.text(f"🖨 Your whole pack as ONE print-ready PDF, in {c['office']}'s own order — its checklist, the national visa form, the EX-01, the 790-052 "
-             f"(both copies), the photo spec — with SIGN HERE beside every signature box:\n{web}/api/products/relocation/{case}/pack.pdf\n"
-             f"Signatures: {c['sign']}")
-    town = ((f.get("applicant") or {}).get("address_town") or {}).get("value") or "Madrid"
-    out.ask(f"✈️ Getting there — ask Sasha for flights to {town} and your first nights, booked right here. Your entry date and "
-            f"new address are filled in, and every booking lands on your “Move to {town}” trip with the visa deadlines.",
-            [("Plan my flights & first nights", "tp:go:relocation")])                      # CR 50 · like CampusMe's trip
-    out.text("After you arrive, say “after arrival”: your padrón, your TIE (EX-17 + the 790-012 fee) and your Social Security "
-             "number (TA.1) — each prepared from the same answers, in the order you need them.")      # CR 44
-    pend["consulate_office"] = c["office"]
     its = items(cid, f, ctx["now"].date())
-    flag = next((i for i in its if i["status"] == "problem"), None)
-    if flag:
-        out.text(f"⚠ {flag['why']}.")
+    pend["consulate_office"] = c["office"]
     await save(ctx, {"after": {**base, "consulate": page_consulate(cid, {**({"id": cid} if cid != "london" else {})}),
                                "checklist": its}})
+    from . import visa_form as VF
+    from .keep import where_from
+    vf = VF.FORMS[VF.FORM_FOR.get(cid, "generic")]
+    lines, total = fees(cid, nat)
+    book = booking_messages(cid, f)
+    b = c["booking"]
+    mail = re.search(r"(mailto:\S+)", book[0])
+    flag = next((i for i in its if i["status"] == "problem"), None)
+    STP.stash(pend, "consulate", [f"{c['office']}" + (f" covers {c['territory']}." if c.get("territory") else "."),
+                                  DIFFERENCES, f"Official information: {c['page']} (read {READ_ON}; {c['page_dated']})"])
+    STP.stash(pend, "fees", [f"{c['office']}'s own table ({c['fees_dated']}):\n" + "\n".join("• " + x for x in lines),
+                             f"Official information: {c.get('fees_url') or c['page']}"])
+    STP.stash(pend, "book", book[1:] + ["When it's booked, tell me the day and time (e.g. \"consulate booked 12 November 10:00\") "
+                                        "and it goes on your Move to Madrid trip with what to bring."])
+    STP.stash(pend, "forms", ["Left for you on the 790: " + "; ".join(LEFT_790) + ".", f"Signatures: {c['sign']}"],
+              media=[(f"Your Modelo 790 código 052 — {c['copies_790_words']}. Not signed, not paid.",
+                      f"{web}/api/products/relocation/{case}/790-card.jpg", f"{web}/api/products/relocation/{case}/790-052.pdf")])
+    STP.stash(pend, "checklist", [pack_q_text(its)])
+    city = c["city"]
+    pend["walk"] = {
+        "fees": {"text": f"Your fees at {city}" + (f" (nationality: {nat})" if nat else "") + ":\n" +
+                         "\n".join("• " + _clean(x) for x in lines[:-1]) +            # every fee the total adds up
+                         (f"\nTotal {total}, paid {_short_pay(c)}." if total else f"\nPaid {_short_pay(c)}."),
+                 "buttons": [["Book the appointment →", "rx:go:book"], ["Sources", "rx:more:fees"]]},
+        "book": {"text": (f"{city} books this visa by email. It's drafted — tap to open it in your mail app, add your passport "
+                          f"number, attach the two scans, and send it yourself (I never send it):\n{mail.group(1)}" if b["kind"] == "email" and mail else
+                          f"{city} books online at {b['who'].split(',')[0]} — its account and CAPTCHA are yours:\n{b.get('url', '')}")
+                         + "\nTell me the date once it's booked.",
+                 "buttons": [["Next: your forms →", "rx:go:forms"], ["Copy my details", "rx:more:book"]]},
+        "forms": {"media": [f"Your national visa application ({vf['name']}), filled from {where_from(f)}. Not signed.",
+                            f"{web}/api/products/relocation/{case}/visa-form-card.jpg", f"{web}/api/products/relocation/{case}/visa-form.pdf"],
+                  "text": "Your visa form, EX-01 and 790 are filled — print them and sign where it says SIGN HERE. All in one "
+                          f"PDF:\n{web}/api/products/relocation/{case}/pack.pdf",
+                  "buttons": [["Next: your documents →", "rx:go:docs"], ["More", "rx:more:forms"]]},
+        "docs": {"text": f"{city}'s list has {len(its)} documents; your forms are {sum(1 for i in its if i['status'] == 'prepared')} "
+                         "of them. Which have you gathered? Reply with the numbers (e.g. 1 3 4-6), or ALL.",
+                 "buttons": [["Show the list", "rx:more:checklist"], ["Skip for now", "rx:go:skip"]]},
+    }
+    out.ask(f"Your consulate is {city} — you apply there in person." + (f"\n⚠ {flag['why']}." if flag else "") +
+            "\nNext: your fees.", [("Fees →", "rx:go:fees"), STP.more("rx:", "consulate")])
+
+
+async def walk(ctx: dict, step: str) -> bool:
+    """CR 52 · the consulate's next step, prepared by present(): one message, one button. → handled?"""
+    from .. import formcard as FC
+    pend, out = ctx["st"]["pending"], ctx["out"]
+    w = (pend.get("walk") or {}).get(step)
+    if not w:
+        return False
+    if w.get("media"):
+        FC.show(out, *w["media"])
+    out.ask(w["text"], [tuple(b) for b in w["buttons"]])
+    if step == "docs":
+        pend["step"] = "pack"
+    return True
+
+
+def pack_q_text(its: List[dict]) -> str:
+    from .after import pack_q
+    return pack_q(its)
+
+

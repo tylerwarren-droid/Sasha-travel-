@@ -26,7 +26,7 @@ class Restart(TR.Flow):
         self.assertTrue(self.bodies()[-1].startswith("Back to your EX-01."))
         self.say("reset relocation")
         self.say("", payload="so:yes:relocation")
-        self.assertIn("first* application", "\n".join(self.bodies()[-3:]))      # its first question again
+        self.assertIn("first* application", "\n".join(self.bodies()[-3:] + [c for c, _ in TG.GW.SENDER.contents[-2:]]))   # its first question again
         self.assertEqual(len(ST.STORE.rows), cases)                             # nothing deleted
 
     def test_nothing_open_enters_directly(self):

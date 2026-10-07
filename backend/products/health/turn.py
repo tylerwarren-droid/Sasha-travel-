@@ -40,13 +40,9 @@ FICTIONAL = {"card": "EJEMPLO-0000-0000", "birth": "1985-03-14", "dni_nie": "X00
 
 # CR 15 · "españa" — EspañaMe: Spain's public services. Health is the working demo; the rest are CONCEPTS, labelled so.
 # CR 17 · EspañaMe = access to Spain's PUBLIC processes: six areas, only Salud live (health/espana.py holds each card)
-ES_MENU = ("EspañaMe 🇪🇸 — Spain's public processes, done with you. Reply with a number:\n"
-           "1. *Salud* — health card, family doctor, SERMAS (live)\n"
-           "2. *Padrón* — registering at the town hall (concept)\n"
-           "3. *Identity and access* — Cl@ve, your digital certificate (concept)\n"
-           "4. *Social security and tax* — your social-security number, Agencia Tributaria basics (concept)\n"
-           "5. *DGT* — exchanging a foreign driving licence (concept)\n"
-           "6. *Education* — a school place (concept)")
+ES_MENU = ("EspañaMe 🇪🇸 — Spain's public processes, done with you.\n"      # CR 52 · three lines; numbers as before
+           "1. *Salud* — your health card and family doctor (live)\n"
+           "Concepts: 2. *Padrón* · 3. *Identity and access* · 4. *Social security and tax* · 5. *DGT* · 6. *Education*")
 ES_BUTTONS = [("1. Salud (live)", "hx:es:salud"), ("2. Padrón", "hx:es:padron"), ("3. Identity & access", "hx:es:identity")]
 ES_KEYS = {"1": "salud", "2": "padron", "3": "identity", "4": "social", "5": "dgt", "6": "education"}
 _ES_WORDS = [("salud", r"salud|health|doctor|m[eé]dico|sermas|tarjeta"), ("padron", r"padr[oó]n|empadron"),
@@ -134,6 +130,14 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
             out.text("I don't have a health-card form from you in the last 24 hours, so there's no address to look up. "
                      "Choose 1 · Salud → 3 · Your health card: I fill the form from your DNI, then find your centre.")
             return
+    from .. import steps as STP0
+    if STP0.is_more(payload or "", "hx:"):                     # CR 52 · a step's details, by its own button
+        STP0.show(pend, STP0.is_more(payload, "hx:"), out)
+        return
+    if payload == "hx:es:menu":
+        pend["step"] = "es_menu"
+        out.ask(ES_MENU, ES_BUTTONS)
+        return
     if entering and not step and ctx.get("espana"):            # CR 15 · "españa": the menu first
         pend["step"] = "es_menu"
         out.ask(ES_MENU, ES_BUTTONS)
@@ -142,13 +146,16 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         from . import espana as ES
         pick = es_pick(t, payload)
         cards = {a["key"]: a for a in ES.areas()}
+        from .. import steps as STP                   # CR 52 · the area in a line; what you need + the official page behind a tap
         if pick == "salud":
-            out.text(ES.card(cards["salud"]))
-            pend["step"] = "consent"                 # the live demo: consent first, as always
-            out.ask(CONSENT[CONSENT_CURRENT], [("Yes, continue", "hx:consent:yes"), ("No", "hx:consent:no")])
+            STP.stash(pend, "area", [ES.card(cards["salud"])])
+            pend["step"] = "consent"                 # the live demo: consent first, as always (its words unchanged)
+            out.ask("🟢 *Salud* — your health card and family doctor.\n" + CONSENT[CONSENT_CURRENT],
+                    [("Yes, continue", "hx:consent:yes"), ("No", "hx:consent:no"), STP.more("hx:", "area", "What you need")])
         elif pick in cards:
-            out.text(ES.card(cards[pick]))
-            out.ask("Another area? Reply 1–6.", ES_BUTTONS)
+            STP.stash(pend, "area", [ES.card(cards[pick])])
+            out.ask(ES.short(cards[pick]) + "\nAnother area? Reply 1–6.",
+                    [STP.more("hx:", "area", "What you need"), ("1. Salud (live)", "hx:es:salud"), ("Back to the list", "hx:es:menu")])
             pend["step"] = "es_menu"
         elif pick in ("moved", "movistar"):            # an old button, or the words: they live in RelocateMe now
             out.text(MOVED)

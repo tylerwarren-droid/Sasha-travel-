@@ -164,12 +164,14 @@ class OnWhatsApp(Base):
     def test_ny_pack_card_and_after_arrival(self):
         for t in ("relocation", "DEMO", "SIGNED", "United States", "New York"):
             self.say(t)
-        said = self.said()
+        from tests import calm as CALM                                     # CR 52 · one step at a time; details behind a tap
+        said = CALM.walk_consulate(self)
         self.assertIn("Your national visa application (New York's own Application for a National Visa (2023))", said)
         self.assertIn("filled from this file's answers", said)                # CR 45 · a DEMO applicant is never "your Keep"
         self.assertTrue(any("/visa-form-card.jpg" in (m.get("media") or "") for m in GW.SENDER.sent))
         self.assertIn("The application form's own footer prints an older one (cog.nuevayork.vis@maec.es)", said)
-        self.assertIn("say “after arrival”", said)
+        self.assertIn("After arrival →", "\n".join(t for _, bs in GW.SENDER.contents for t, _ in bs) + CALM.press(self, "rx:go:travel")
+                      + str([t for _, bs in GW.SENDER.contents for t, _ in bs]))      # CR 52 · reached from Getting there
         cid, c = self.case_id(), client()
         self.assertEqual(c.get(f"/products/relocation/{cid}/visa-form.pdf").status_code, 200)
         self.assertEqual(c.get(f"/products/relocation/{cid}/visa-form-card.jpg").headers["content-type"], "image/jpeg")
@@ -185,14 +187,16 @@ class OnWhatsApp(Base):
         con = c.get(f"/products/relocation/{cid}").json()["after"]["consulate"]
         self.assertEqual(con["source"]["read"], TH.READ_ON)
         self.say("after arrival")
-        said = self.said()
+        self.assertIn("your padrón (registering your address)", CALM.everything(self))     # CR 52 · one step at a time
+        said = CALM.press(self, "rx:more:padron", "rx:go:tie", "rx:more:tie", "rx:go:ta1")
         self.assertIn("Padrón — in person", said)
         self.assertIn("waiting for the official PDF", said)
         self.assertIn("https://sede.policia.gob.es/Tasa790_012/ImpresoRellenar", said)
         self.assertIn("Your NIE isn't on file yet", said)
         self.assertTrue(any("/TA-1-card.jpg" in (m.get("media") or "") for m in GW.SENDER.sent))
         self.say("my NIE is Y1234567X")
-        self.assertIn("Noted: NIE Y1234567X", self.said())
+        self.assertIn("Noted: NIE Y1234567X", CALM.everything(self))
+        CALM.press(self, "rx:more:tie")
         self.assertIn("NIF / NIE: Y1234567X", self.bodies())
         ta1 = PdfReader(io.BytesIO(c.get(f"/products/relocation/{cid}/TA-1.pdf").content)).get_fields()
         self.assertEqual(str(ta1["Texto8"]["/V"]), "Y1234567X")
@@ -242,7 +246,7 @@ class KeepOnWhatsApp(TG.Base):
             self.say("", payload="rx:keep:yes")
             self.assertIn("Kept in your vault as “RelocateMe details”", self.said())
             self.assertEqual(kept["occupation"], "Retired teacher")
-            self.assertIn("✅ Your EX-01 is prepared", self.said())
+            self.assertIn("✅ Your EX-01 is ready", self.said() + "\n".join(c for c, _ in GW.SENDER.contents))
             # a new file ("start over" → yes): the details are NOT asked again
             self.say("start over")
             self.say("", payload="so:yes:relocation")

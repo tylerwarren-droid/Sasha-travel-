@@ -67,8 +67,10 @@ class London(Base):
     def test_london_end_to_end(self):
         for t in ("relocation", "DEMO", "SIGNED", "UK"):
             self.say(t)
-        said = self.said()
-        self.assertIn("Visado-de-residencia-no-lucrativa.aspx (July 6, 2026)", said)
+        from tests import calm as CALM                                     # CR 52 · one step at a time; details behind a tap
+        said = CALM.walk_consulate(self)
+        self.assertIn("Visado-de-residencia-no-lucrativa.aspx", said)
+        self.assertIn("July 6, 2026", said)
         self.assertIn("Which consulate you use is decided by where you live", said)                 # the differences, plainly
         self.assertIn("Visa fee: not stated — the list doesn't name this visa for Canadians", said)   # never a guess
         self.assertIn("£9.60 — “Aut. Inicial residencia temporal 9,60”", said)
@@ -94,12 +96,14 @@ class Washington(Base):
     def test_washington_end_to_end_never_new_yorks_page(self):
         for t in ("relocation", "DEMO", "SIGNED", "USA", "Maryland"):
             self.say(t)
-        said = self.said()
-        self.assertIn("*Sección Consular de la Embajada de España en Washington*", said)
+        from tests import calm as CALM                                     # CR 52 · one step at a time; details behind a tap
+        said = CALM.walk_consulate(self)
+        self.assertIn("Sección Consular de la Embajada de España en Washington", said)
         self.assertIn("washington/en/ServiciosConsulares/Paginas/Consular/Visado-de-residencia-no-lucrativa.aspx", said)
         self.assertNotIn("cog.nuevayork", said)                                                      # the old read was NY's page
         self.assertIn("Visa fee: $789 — “Citizens of Canada: $789”", said)
-        self.assertIn("Total: $822.", said)                                                          # 789 + 13 + BLS 20
+        self.assertIn("Total $822", said)                                                            # 789 + 13 + BLS 20
+        self.assertIn("• BLS", said)                                                                 # every fee the total adds up
         self.assertIn("https://usa.blsspainglobal.com/Global/account/login", said)
         pack, _ = self.pdfs()
         self.assertEqual(len(pack.pages), 12)   # CR 44 · + the national visa form (5)

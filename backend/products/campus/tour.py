@@ -271,6 +271,16 @@ def lines(plan: dict, fam: Dict[str, str], plain: bool = False) -> List[str]:
     return out
 
 
+def compact(plan: dict) -> List[str]:
+    """CR 52 · the tour in one line per day: the visits and their times, and where the night is. The full plan is a tap away."""
+    out = []
+    for d in plan["days"]:
+        vs = ", ".join(f"{v['name']}" + (f" {_t12(v['start'])}" if v["read"] and v["start"] else " (check its page)") for v in d["visits"])
+        night = f" · night near {d['night']['near']}" if d.get("night") else ""
+        out.append(f"{date.fromisoformat(d['date']).strftime('%a %-d %b')}: {vs}{night}")
+    return out
+
+
 def pdf(plan: dict, fam: Dict[str, str], title: str) -> bytes:
     from ..relocation.three import _text_page, DPI
     who = f"{fam.get('student_name', 'the student')} with {fam.get('parent_name', 'family')} · party of {fam.get('party', '?')}"
@@ -352,6 +362,10 @@ async def start(ctx: dict, body: str) -> None:
 
 async def on_message(ctx: dict, body: str, payload: str) -> bool:
     pend, out = ctx["st"]["pending"], ctx["out"]
+    from .. import steps as STP
+    if STP.is_more(payload or "", "cm:"):                 # CR 52 · a step's details, by its own button
+        STP.show(pend, STP.is_more(payload, "cm:"), out)
+        return True
     step, t = pend.get("step"), (body or "").strip()
     tr = pend.setdefault("tour", {})
     if step == "tour_week":
@@ -432,11 +446,11 @@ async def _plan(ctx: dict) -> None:
     sha = hashlib.sha256("\n".join(ls).encode()).hexdigest()[:16]
     tr["sha"] = sha
     pend["step"] = "tour_confirm"
-    out.text(f"Your tour, from what's really published:\n" + "\n".join(ls))
-    out.text(promise(plan, ctx["account"]))
-    if tr.get("vault"):                                   # CR 48 · the yes names the kept item it opens
-        out.text(approved_lines(tr)[0])
-    out.ask("Prepare it?", [("Yes, prepare it", f"cm:tyes:{sha}"), ("No", f"cm:tno:{sha}")])
+    from .. import steps as STP                           # CR 52 · one line per day; the full plan and what "yes" does behind a tap
+    STP.stash(pend, "plan", ["Your tour, from what's really published:\n" + "\n".join(ls), promise(plan, ctx["account"])])
+    keep = f"\n{approved_lines(tr)[0]}" if tr.get("vault") else ""   # CR 48 · the yes names the kept item it opens
+    out.ask("Your tour:\n" + "\n".join(compact(plan)) + keep + "\nPrepare it?",
+            [("Yes, prepare it", f"cm:tyes:{sha}"), ("No", f"cm:tno:{sha}"), STP.more("cm:", "plan", "Full plan")])
 
 
 def approved_lines(tr: dict) -> List[str]:
@@ -478,24 +492,24 @@ async def _prepare(ctx: dict, approval: dict) -> None:
                               "approval": approval, "status": "prepared"})
     tr["case_id"] = cid
     web = __import__("products.campus.turn", fromlist=["web"]).web()
+    from .. import steps as STP                         # CR 52 · one line per school; details to copy behind a tap
+    status, notes = [], []
     for v in plan["visits"]:
         name = v["name"]
         fillable = bool(v["read"] and v.get("session") and live_school(v["school"]))
         if fillable and founder:
             v["status"] = "filling in Kanoe's browser — a tap to finish comes to your phone"
-            out.text(f"🎓 {name}: I'm filling its own form in Kanoe's browser — “Tap to finish” comes to your phone; you tick and "
-                     "press, I never submit.")
+            status.append(f"🎓 {name}: filling its own form — “Tap to finish” comes to your phone")
             GW._spawn(_live(ctx["account"], ctx["ch"]["wa_id_sha256"], ctx["frm"], cid, v, fam))
         else:
             v["status"] = "yours to register — link sent" if not v["read"] else "yours to register on its own page — link sent"
-            out.text((f"🎓 {name}: I couldn't open the filled page (the cloud browser isn't set up on this server) — here's the "
-                      f"link and your details: {v['link']}" if fillable and owner else    # CR 43 · never a silent plain link
-                      f"🎓 {name}: register on its own page — {v['link']}")
-                     + (f"\n(not read by Kanoe: {v['why']}; its published pattern: {v['title']} — check on their page)" if not v["read"] else
-                        f"\n({v['title']}, {date.fromisoformat(v['date']).strftime('%a %-d %b')} {_t12(v['start'])})")
-                     + "\nYour details, each ready to copy:")
-            for m in copy_messages(fam):
-                out.text(m)
+            status.append(f"🎓 {name}: register here — {v['link']}" + (" (I couldn't open the filled page: the cloud browser isn't set up)"
+                                                                         if fillable and owner else ""))   # CR 43 · never silent
+            notes.append(f"{name}: " + (f"not read by Kanoe ({v['why']}); its published pattern: {v['title']} — check on its page."
+                                         if not v["read"] else f"{v['title']}, {date.fromisoformat(v['date']).strftime('%a %-d %b')} "
+                                                               f"{_t12(v['start'])}."))
+    STP.stash(pend, "details", ["Your details, each ready to copy:"] + copy_messages(fam) + notes)
+    out.text("\n".join(status))
     await _save(ctx)
     FC.show(out, f"Your {title} — one itinerary: the visits, the drives, the nights, each registration's status.",
             f"{web}/api/products/campus/{cid}/tour-card.jpg", f"{web}/api/products/campus/{cid}/tour.pdf")
@@ -505,11 +519,13 @@ async def _prepare(ctx: dict, approval: dict) -> None:
                                                                     f"{date.fromisoformat(tr['start']).strftime('%b')}", ctx["now"])
         if tid:
             tr["trip_id"] = tid
-            out.text("It's on your account as a trip too — the laptop's Trip panel, or say “show me my itinerary”.")
+            STP.stash(pend, "plan", ((pend.get("more") or {}).get("plan") or {}).get("texts", []) +
+                      ["It's on your account as a trip too — the laptop's Trip panel, or say “show me my itinerary”."])
     except Exception as e:
         log.warning("[tour] trip not saved: %s", type(e).__name__)
     pend["step"] = "tour_ready"
-    out.text("When you've registered somewhere, tell me (e.g. \"registered Princeton\") and its status updates.")
+    out.ask("When you've registered somewhere, tell me (e.g. \"registered Princeton\") — or paste its confirmation email.",
+            [STP.more("cm:", "details", "Copy my details"), STP.more("cm:", "plan", "Full plan")])
 
 
 async def _save(ctx: dict) -> None:
@@ -671,7 +687,7 @@ async def _status(cid: str, school: str, status: str, hid: Optional[str] = None)
 
 def claims(pend: dict, body: str, payload: str, media: list) -> bool:
     step, t = pend.get("step"), (body or "").strip()
-    if payload.startswith(("cm:tkeep:", "cm:tyes:", "cm:tno:")):
+    if payload.startswith(("cm:tkeep:", "cm:tyes:", "cm:tno:", "cm:more:")):
         return True
     if step in ("tour_ask", "tour_week"):
         return bool(t) and not t.endswith("?")

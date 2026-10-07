@@ -71,10 +71,13 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         return
     f = pend.setdefault("facts", {"applicant": {}, "choices": {}})
     if entering and not pend.get("step"):
-        out.text(INTRO)
         pend["step"] = "route"
+        from .. import steps as STP                   # CR 52 · one short opening, the rest behind "More"
+        STP.stash(pend, "intro", [INTRO])
         if not body:
-            out.text(ROUTE_Q)
+            out.ask("RelocateMe 🇪🇸 — I fill Spain's residence forms with you; you sign and lodge them — I never file anything.\n"
+                    "Is this your *first* application, or a renewal?", [("First application", "rx:route:first"), ("Renewal", "rx:route:renewal"),
+                                                    STP.more("rx:", "intro")])
             return
     if ctx.get("media") and pend.get("step") not in ("done",):
         from . import docread
@@ -82,6 +85,12 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
             return
     step = pend.get("step")
     t = (body or "").strip()
+    from .. import steps as STP
+    if STP.is_more(payload or "", "rx:") and step in ("route", "resources", "presenter", "facts", "notices", "prepared", "doc_confirm"):
+        STP.show(pend, STP.is_more(payload, "rx:"), out)
+        return
+    if payload.startswith("rx:route:"):               # CR 52 · the opening's buttons
+        t = payload[9:]
     if step == "doc_confirm":
         from . import docread
         await docread.on_confirm(ctx, f, t, payload)
@@ -194,11 +203,12 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
                 out.text("I couldn't keep them just now — nothing was saved; this file is unaffected.")
         await _prepare(ctx)
         return
-    if step == "prepared" and re.match(r"(?i)^\s*(signed|i signed|firmado)\b", t):
+    if step == "prepared" and (payload == "rx:signed" or re.match(r"(?i)^\s*(signed|i signed|firmado)\b", t)):
         from . import after
         await after.signed(ctx)
         return
-    if step in ("prepared", "signed", "residence", "us_state", "us_county", "pack", "entry", "appointments", "done"):
+    if step in ("prepared", "signed", "residence", "us_state", "us_county", "pack", "entry", "appointments", "done", "walk") \
+            or (payload or "").startswith(("rx:go:", "rx:more:")):                    # CR 52 · a step's buttons, anywhere
         from . import after
         if await after.on_message(ctx, t, payload):
             return
@@ -265,16 +275,16 @@ async def _prepare(ctx: dict) -> None:
         cid = await ST.STORE.put("relocation", ctx["account"], ctx["ch"]["wa_id_sha256"], case)
     pend.update(step="prepared", case_id=cid)
     link = f"{web()}/relocation-file/{cid}"
-    out.text(f"✅ Your EX-01 is prepared: {c['filled']} boxes filled from your answers, each naming its source; "
-             f"{c['prepared_not_adopted']} left for you (section 5, the Dehú consent, your signature).")
     verdict = (f"The reviewer checked every field: {s['ok']} fine, {s['check']} to look at, {s['problem']} problem"
                f"{'s' if s['problem'] != 1 else ''}.")
-    out.text(f"{verdict} Read it field by field here, with the official PDF to download:\n{link}")
     from .. import formcard as FC                     # CR 33 · page 1 as a card, the filled boxes highlighted
+    from .. import steps as STP                       # CR 52 · one step: the card, one line, what's next; the rest behind "More"
     FC.show(out, "Your EX-01, page 1 — highlighted: what I filled. Not signed, not filed.",
             f"{web()}/api/products/relocation/{cid}/EX-01-card.jpg", f"{web()}/api/products/relocation/{cid}/EX-01-prepared.pdf")
-    out.text("When you've checked it: print it, complete section 5 yourself, decide on the Dehú consent, write the place "
-             "and date, and sign in the FIRMA box. Reply SIGNED when that's done.")
+    STP.stash(pend, "ex01", [f"{verdict} The official PDF is on that page too.",
+                             "Left for you: section 5, the Dehú consent, the place and date, and your signature in the FIRMA box."])
+    out.ask(f"✅ Your EX-01 is ready: {c['filled']} boxes filled, {c['prepared_not_adopted']} left for you. Check it field by "
+            f"field:\n{link}\nThen print it, sign it, and reply SIGNED.", [("I've signed it", "rx:signed"), STP.more("rx:", "ex01")])
 
 
 # ── CR 10 · one Sasha: is this message an answer to relocation's own question? And what context goes to Sasha ──────

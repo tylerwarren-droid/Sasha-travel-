@@ -43,13 +43,13 @@ class Web(TG.Base):
         self.assertIn("○ *Padrón — registering at the town hall* — CONCEPT, not built yet", r["response"])
         r = self.turn(payload="hx:es:salud")
         self.assertIn("never why you need a doctor", r["response"])
-        self.assertEqual([q["title"] for q in r["quick_replies"]], ["Yes, continue", "No"])
+        self.assertEqual([q["title"] for q in r["quick_replies"]], ["Yes, continue", "No", "What you need"])   # CR 52 · details a tap away
 
     def test_relocation_through_to_the_file_and_the_trip_hand_off(self):
         for t in ("first", "me", "myself"):
             self.turn(t) if t != "first" else (self.turn(mode="relocation"), self.turn(t))
         r = self.turn("DEMO")
-        self.assertIn("Your EX-01 is prepared", r["response"])
+        self.assertIn("Your EX-01 is ready", r["response"])
         self.assertTrue(any(m["url"].endswith("EX-01-card.jpg") and m["link"].endswith("EX-01-prepared.pdf")
                             and "Open the full PDF" not in m["caption"] for m in r["media"]))   # CR 33 · the card opens the PDF
         for t in ("SIGNED", "UK", "SKIP", "1 March 2027"):
@@ -68,7 +68,7 @@ class Web(TG.Base):
         self.turn(mode="campus")
         self.link()
         self.say("relocation")                                                   # the WhatsApp line, its own state
-        self.assertIn("I never file anything", "\n".join(self.bodies()))
+        self.assertIn("I never file anything", "\n".join(self.bodies() + [c for c, _ in TG.GW.SENDER.contents]))
         r = self.turn("sasha")
         self.assertIn("Back to Sasha", r["response"])
 

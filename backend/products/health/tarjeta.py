@@ -502,8 +502,16 @@ def _confirm(ctx: dict) -> None:
     lines = read_back(ts["facts"]) + [""] + checks(ts["facts"], ts.get("mrz"), ctx["now"].date())
     sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()[:16]
     pend.update(step="ts_confirm", ts_sha=sha)
-    out.text("What I read:\n" + "\n".join(lines))
-    out.ask("Is every line right?", [("Yes, all right", f"hx:ts:ok:{sha}"), ("Something's wrong", f"hx:ts:bad:{sha}")])
+    from .. import steps as STP                       # CR 52 · the key lines now; every line behind "See every line"
+    f = ts["facts"]
+    v = lambda k: (f.get(k) or {}).get("value", "")
+    who = " ".join(x for x in (v("given_names"), v("surname_1"), v("surname_2")) if x)
+    ok = [x for x in lines if x.startswith("✓")]
+    bad = [x for x in lines if x.startswith(("✗", "⚠"))]
+    STP.stash(pend, "read", ["What I read:\n" + "\n".join(lines)])
+    out.ask(f"I read: {who}" + (f" · {v('dni')}" if v("dni") else "") + (f" · born {v('birth_date')}" if v("birth_date") else "") +
+            (f"\n{bad[0]}" if bad else (f"\n✓ Its own checks pass ({len(ok)})." if ok else "")) + "\nIs every line right?",
+            [("Yes, all right", f"hx:ts:ok:{sha}"), ("Something's wrong", f"hx:ts:bad:{sha}"), STP.more("hx:", "read", "See every line")])
 
 
 async def on_confirm(ctx: dict, t: str, payload: str) -> None:
@@ -552,15 +560,15 @@ async def _prepare(ctx: dict) -> None:
         return
     pend.update(step="done", case_id=cid)
     pend.pop("ts", None)
-    out.text(f"✅ Your health-card form is ready: {len(rs)} boxes of the official 1449F1 filled from your ID and your answers, "
-             "each naming its source. Nothing has been submitted.")
     from .. import formcard as FC                     # CR 33 · page 1 as a card, the filled boxes highlighted
+    from .. import steps as STP                       # CR 52 · the card, one line; what's left for you behind a tap
     FC.show(out, "Your health-card form (1449F1), page 1 — highlighted: what I filled. Not signed, not submitted.",
             f"{web()}/api/products/health/{cid}/1449F1-card.jpg", f"{web()}/api/products/health/{cid}/1449F1-prepared.pdf")
-    out.text("Left for you:\n" + "\n".join(f"• {x}" for x in LEFT_FOR_YOU) +
-             f"\n\nThen: print it, sign it, and hand it in at your centro de salud — the card is collected there in "
-             f"person. Source: {SOURCE['procedure']} (updated {SOURCE['updated']}), read {SOURCE['read_on']}. "
-             f"The link works for 24 hours; then the details are dropped.")
+    STP.stash(pend, "left", ["Left for you:\n" + "\n".join(f"• {x}" for x in LEFT_FOR_YOU),
+                             f"Then: print it, sign it, and hand it in at your centro de salud — the card is collected there in "
+                             f"person. The link works for 24 hours; then the details are dropped.",
+                             f"Official information: {SOURCE['procedure']} (updated {SOURCE['updated']}, read {SOURCE['read_on']})"])
+    out.text(f"✅ Your health-card form is ready: {len(rs)} boxes filled. Print it, sign it, and hand it in at your centro de salud.")
     # CR 34 · from the form to the cita: only what the lookup and the copy lines need, dropped with the form
     from . import cita as CI
     v = lambda k: (f.get(k) or {}).get("value", "")

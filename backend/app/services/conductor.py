@@ -2011,7 +2011,12 @@ async def conduct(
     # Wired here by the Sasha tab.
     try:
         from products.web import web_turn as _products_web  # noqa: E402
-        _trip = await _products_web(user_id, user_message, mode=product_mode, payload=payload, signed_in=signed_in) if user_id else None
+        # Sasha 193 · a trip or flights to a place NAMED that isn't the move ("plan a twelve day trip to Singapore", "flights to
+        # Hanoi") is Sasha's own — live in the meeting, RelocateMe took it and asked "When do you plan to enter Spain?"
+        _dest193 = re.search(r"\b(?:trip|flights?|fly(?:ing)?|holiday|vacation|travel)\b[^.?!]{0,30}?\bto\s+([A-Za-zÀ-ÿ][\w' -]{2,30}?)(?=[\s,.!?]|$)", user_message or "", re.I)
+        _not_move = bool(_dest193) and not re.match(r"(?i)(spain|madrid|españa|my |the |campus|school|college|uni)", _dest193[1].strip())
+        _trip = await _products_web(user_id, user_message, mode=product_mode, payload=payload, signed_in=signed_in) \
+            if user_id and not (_not_move and not product_mode and not payload) else None
     except Exception as e:   # a product's failure never stops the chat — and is never a silent one
         print(f"[Conductor] trip plan failed: {type(e).__name__}: {e}")   # the conductor's own logging
         _trip = None
@@ -2729,6 +2734,16 @@ async def conduct(
         # until the guest answers, then reserves it (saved card) or opens the payment form.
         action = "await_payment_item"   # S-81 · the real payment popup, never a saved-card question
         final_response = pay_sentence(payment_item["name"])
+
+    # Sasha 193 · NEVER A BOOKING CLAIMED THAT DIDN'T HAPPEN: live in the meeting the general model said "the payment's gone
+    # through and your Iberia flight is booked" — nothing had been booked or paid. A booking is only ever said by the booking
+    # flows themselves (their cards and the payment's own result); a model line claiming one is replaced.
+    if not payment_item and not action and re.search(
+            r"payment('s| has| is)? (?:gone|went|been) through|(?:flight|hotel|trip|table|room|booking)\b[^.]{0,40}\b(?:is|are|has been|have been) (?:now )?(?:booked|confirmed|paid)"
+            r"|I'?(?:ll|ve) (?:open(?:ed)?|sent) the (?:secure )?payment|confirm your card|you'?re all booked|it'?s booked", final_response or "", re.I):
+        print(f"[Conductor] Sasha 193 · a booking claim with no booking — replaced: {final_response[:120]!r}")
+        final_response = ("Nothing is booked yet. Pick a flight by its airline (“the Iberia one”) or say “book it” for the whole "
+                          "trip, and I'll read it back before anything is paid.")
 
     return {
         "response": final_response,

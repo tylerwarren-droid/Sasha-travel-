@@ -47,7 +47,8 @@ def _digits(s: str) -> str:
 
 
 def pick(message: str, options: List[dict]) -> Union[int, str, None]:
-    t = _fold(message)
+    # Sasha 193 · what the mic hears: "the Iberia fight", "the first fly", "flight's" — said as "flight"
+    t = re.sub(r"\b(?:fight|flite|fly|flighs|flights)\b", "flight", _fold(message))
     if NONE.search(t):
         return "none"
     if not options:
@@ -91,7 +92,8 @@ def pick(message: str, options: List[dict]) -> Union[int, str, None]:
             return pool[-1]
         if 0 <= k < len(pool):
             return pool[k]
-    if airline and len(airline) >= 1 and (_BOOKISH.search(t) or len(t.split()) <= 6):
+    if airline and len(airline) >= 1 and (_BOOKISH.search(t) or len(t.split()) <= 6
+                                          or re.search(r"\b(?:give me|get me|i'?d like|i like|can i|could i|let me have|go for|please)\b", t)):
         return airline[0]
     # a time: "07:44", "7:44"
     for hh, mm in re.findall(r"\b(\d{1,2})[:.h](\d{2})\b", t):
@@ -114,7 +116,7 @@ def pick(message: str, options: List[dict]) -> Union[int, str, None]:
 def is_flight_list(text: str) -> bool:
     """Sasha's last reply was a Duffel flight list (the cards are on screen)."""
     return bool(re.search(r"found a few flights to|Book it \(TEST\)\" makes a TEST booking|Here's exactly what I'll book \(TEST|"
-                          r"isn't on this flight list", text or ""))
+                          r"isn't on this flight list|Here are some flights for you to consider|Say “yes” to book it", text or ""))
 
 
 __all__ = ["pick", "is_flight_list", "named_missing", "NONE"]

@@ -2405,7 +2405,10 @@ def decision_of(rd: dict, prefer: Optional[str] = None, at: Optional[str] = None
             hours = None
     link = (rungs.get("link") or {}).get("value") or ""   # the link rung's value is the platform's NAME ("CoverManager")
     name = (V.platform_of(link) if link.startswith("http") else link) or "an online booking platform"
-    demo = bool(account and _founder_demo(account))
+    # Sasha 193 · only a REAL venue's own page goes to his phone; the demo stand-in (spa CAPTCHA, tattoo email) keeps its own
+    # flow — live in the meeting the spa's stand-in page was sent as a link instead of Sasha filling it with the CAPTCHA on the phone
+    demo = bool(account and _founder_demo(account)) and "(TEST stand-in)" not in str(rd.get("venue") or "") \
+        and "Sasha Test Venue" not in str(rd.get("venue") or "")
     if demo and "form" in rungs and "link" not in rungs and prefer != "form":
         # Sasha 187 · the founder's restaurants: their own booking page opens on HIS phone (the 175 flow) — never filled by Sasha
         return D.decide(D.Venue(form=False, platform="their own booking page", phone="phone" in rungs, email="email" in rungs,
@@ -2546,7 +2549,8 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
             out.text(f"I can't book {rd['venue']} together with the spa from here (no form I may send{', and calls are off' if 'phone' in rungs else ''}). "
                      f"Nothing was sent. Pick a place I can book by its form, or ask for each one separately.")
             return
-        if route == "one_tap" and ("link" in rungs or ("form" in rungs and _founder_demo(ctx.get("account")))) \
+        if route == "one_tap" and ("link" in rungs or ("form" in rungs and _founder_demo(ctx.get("account"))
+                                                          and "(TEST stand-in)" not in str(rd.get("venue") or ""))) \
                 and reservation["when"]["mode"] == "at":   # Sasha 187 · or their own booking page, on the founder's phone
             from . import proactive as PR
             plan = dv.then if dv.route == "one_tap" and PR.tap_escalation_on() and not _founder_demo(ctx.get("account")) else None

@@ -1,9 +1,14 @@
 {
   "build": {
     "builder": "NIXPACKS",
-    "watchPatterns": ["/backend/**"]
+    "watchPatterns": [
+      "/backend/**"
+    ]
   },
   "deploy": {
-    "startCommand": "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    "startCommand": "uvicorn app.main:app --host 0.0.0.0 --port $PORT",
+    "preDeployCommand": [
+      "python -m scripts.flight_suite"
+    ]
   }
 }

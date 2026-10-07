@@ -31,6 +31,13 @@ class Pick(unittest.TestCase):
         self.assertTrue(is_flight_list("British Airways — … Here's exactly what I'll book (TEST — no real ticket"))
 
 
+class Sasha193(unittest.TestCase):
+    def test_the_meetings_words(self):
+        self.assertEqual(pick("Okay. Give me the Iberia fight, please, Sasha.", [{"name": "Iberia"}, {"name": "British Airways"}]), 0)
+        self.assertEqual(pick("Can I book the Iberia flight, please? I like that one.", [{"name": "British Airways"}, {"name": "Iberia"}]), 1)
+        self.assertTrue(is_flight_list("All set — your 8-day plan is on the right. Here are some flights for you to consider, from Madrid."))
+
+
 class TapToPay(unittest.TestCase):
     def test_it_never_crashes_before_the_phone(self):   # live 7 Oct: an unset variable — every flight/hotel/trip payment 500'd
         import asyncio

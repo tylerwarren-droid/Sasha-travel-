@@ -541,7 +541,7 @@ async def web_turn(ctx: dict, body: str) -> bool:
         if p:
             from . import journeys as JN
             await JN.file(ctx["account"])
-            for c in chunks(PS.text(PS.merge(p, JN.for_journey(await IQ._rows(ctx["account"]), p.get("trip_id"))))):
+            for c in chunks(PS.text(await PS.view(ctx["account"], p, JN.for_journey(await IQ._rows(ctx["account"]), p.get("trip_id"))))):
                 out.text(c)
             out.text("It's saved on your account — it's the same plan on the web. Ask for a place (“a romantic dinner in Hoi An”) and I'll add it to its day.")
     links = [l for l in r.get("links") or [] if isinstance(l, dict) and str(l.get("url", "")).startswith("https://")][:3]

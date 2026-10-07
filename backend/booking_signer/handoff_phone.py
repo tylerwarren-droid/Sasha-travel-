@@ -21,7 +21,7 @@ async def summary(account: str) -> Optional[str]:
     rows = (j or {}).get("reservations") or [] if s == 200 else []
     if p:
         from . import journeys as JN   # Sasha 177 · its own bookings only
-        merged = PS.merge(p, JN.for_journey(rows, p.get("trip_id")))
+        merged = await PS.view(account, p, JN.for_journey(rows, p.get("trip_id")))
         open_items = [(d, b) for d in merged.get("days") or [] for b in d.get("bookings") or []
                       if b.get("status") in ("requested", "attempting", "pending", "link_sent", "proposed", "quoted", "unclear")]
         if open_items:

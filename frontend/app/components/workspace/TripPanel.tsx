@@ -38,7 +38,7 @@ interface TripPanelProps {
 /** Sasha 165 · THE ONE VIEW: the plan on the ACCOUNT (Postgres) with every booking slotted into its day — polled, so a
  *  booking made on WhatsApp shows here within seconds, and a plan made elsewhere (or before a reload) still shows. */
 type ServerBooking = { id?: string; venue: string; time?: string; part?: string; status?: string; status_words?: string; replaces?: string; test?: boolean; edge?: string }
-type ServerDay = { day: number; date?: string | null; city?: string; bookings?: ServerBooking[]; activities?: { name: string; time?: string; replaced_by?: string; added?: boolean }[] }
+type ServerDay = { day: number; date?: string | null; city?: string; bookings?: ServerBooking[]; activities?: { name: string; time?: string; replaced_by?: string; added?: boolean }[]; stay?: { name?: string; state: string; words: string } }   // Sasha 198 R3 · the basket's stay (SASHA_BASKET=1)
 const SHORT: Record<string, string> = { requested: 'Requested', attempting: 'Requested', pending: 'Not sent yet', confirmed: 'Confirmed ✅',
   guest_booked: 'Booked by you ✅', declined: 'Declined', quoted: 'Quoted — read their reply', proposed: 'They offered another time',
   unclear: 'Read their reply', link_sent: 'Link sent — not booked yet', waitlisted: 'Waiting list' }
@@ -407,7 +407,9 @@ export default function TripPanel({
                             </div>
                             {/* Stays are paid inside the whole-trip checkout — never a
                                 Booking.com button. */}
-                            {isBooked
+                            {serverDay(d.day)?.stay
+                              ? <span className="lw-hotel-reserved" style={serverDay(d.day)!.stay!.state === 'booked' ? undefined : { opacity: 0.75 }}>{serverDay(d.day)!.stay!.words}</span>
+                              : isBooked
                               ? <span className="lw-hotel-reserved">✓ {doneWord}</span>
                               : <span className="lw-hotel-reserved" style={{ opacity: 0.75 }}>Included in trip</span>}
                           </div>

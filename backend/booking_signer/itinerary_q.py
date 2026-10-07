@@ -220,7 +220,7 @@ async def ask_anything(account: str, text: str, rows: List[dict], now: datetime)
             full = c if c.get("days") is not None else (await PS.by_id(account, c["trip_id"]) or {})
             if not full:
                 continue
-            plan = PS.merge(full, JN.for_journey(rows, full.get("trip_id")))
+            plan = await PS.view(account, full, JN.for_journey(rows, full.get("trip_id")))
             day = next((d for d in plan.get("days") or [] if d.get("date") and int(d["date"][8:10]) == n), None)
             if day:
                 p = full
@@ -368,7 +368,7 @@ async def answer(account: str, text: str, now: datetime) -> List[str]:
         from . import plan_store as PS
         p = await PS.latest(account, text)
         if p:
-            return PS.text(PS.merge(p, JN.for_journey(rows, p.get("trip_id"))))   # its OWN bookings only
+            return PS.text(await PS.view(account, p, JN.for_journey(rows, p.get("trip_id"))))   # its OWN bookings only
     if WEEK.search(text or ""):
         return await week(account, text, rows, now)
     if re.search(r"\bdo i have time\b", text or "", re.I):

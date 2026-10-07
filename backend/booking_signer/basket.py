@@ -277,5 +277,75 @@ async def event(source: str, event_id: str, event_type: str, payload: Any, *, ve
     return new is not None
 
 
+# ── R3 · the plan's stays in the basket, and the view rendered from it ─────────────────────────────────────────────────────
+
+ON = None   # the suite sets True; otherwise SASHA_BASKET=1 (off until the basket's steps have all passed)
+
+
+def on() -> bool:
+    import os
+    return ON if ON is not None else os.getenv("SASHA_BASKET", "") == "1"
+
+
+async def sync_stays(account: str, trip_id: str, days: List[dict], start: Optional[date], party: Optional[int]) -> List[str]:
+    """Magellan: the plan's hotels as `suggested` stays — one per run of nights at the same hotel, priced as the plan's ESTIMATE
+    (said so). A revision replaces the suggestions; a stay already chosen, held or booked is kept and not suggested twice."""
+    if not start or not days:
+        return []
+    import os
+    from datetime import timedelta
+    usd_eur = float(os.getenv("SASHA_USD_EUR", "0.92") or 0.92)
+    runs: List[dict] = []
+    for i, d in enumerate(days[:-1] if len(days) > 1 else days):   # the last day is the way home: no night
+        h = d.get("hotel")
+        name = (h.get("name") if isinstance(h, dict) else h) or ""
+        if not name:
+            if runs:
+                runs[-1]["nights"] += 1   # a day without its own hotel continues the stay (as the panel shows it)
+            continue
+        on_day = str(d.get("date") or "")[:10] or (start + timedelta(days=i)).isoformat()
+        rate = float((h or {}).get("price_from") or 0) if isinstance(h, dict) else 0.0
+        if runs and runs[-1]["name"] == name:
+            runs[-1]["nights"] += 1
+        else:
+            runs.append({"name": name, "city": d.get("city") or "", "day": on_day, "nights": 1, "rate": rate})
+    kept = {(r["snapshot"].get("name"), r["day"]) for r in await items(account, trip_id, ("chosen", "pending_payment", "booked"))
+            if r["kind"] == "stay"}
+    found = []
+    for r in runs:
+        if (r["name"], r["day"]) in kept:
+            continue
+        end = (date.fromisoformat(r["day"]) + timedelta(days=r["nights"])).isoformat()
+        found.append({"provider": "plan", "day": r["day"], "party": party,
+                      "starts_at": r["day"] + "T15:00:00+00:00", "ends_at": end + "T11:00:00+00:00",
+                      "price_amount": round(r["rate"] * r["nights"] * usd_eur, 2) if r["rate"] else None,
+                      "price_currency": "EUR" if r["rate"] else None, "price_source": "estimate" if r["rate"] else None,
+                      "snapshot": {"name": r["name"], "city": r["city"], "nights": r["nights"], "checkout": end}})
+    return await suggest(account, trip_id, "stay", found)
+
+
+def words(r: Dict[str, Any]) -> str:
+    """An item's state in the guest's words. Booked / failed / cancelled are Pacioli's line, never composed here."""
+    if r["state"] in ("booked", "failed", "cancelled"):
+        return r.get("status_line") or status_line(r)
+    return {"suggested": "in your plan — not booked", "chosen": "chosen — not booked yet",
+            "pending_payment": "waiting for your payment"}.get(r["state"], r["state"])
+
+
+def overlay(plan: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The merged plan with the basket on it: each day's `stay` (the stay covering that night), and the trip's flights."""
+    stays = [r for r in rows if r["kind"] == "stay"]
+    for d in plan.get("days") or []:
+        on_day = d.get("date")
+        hit = next((r for r in stays if on_day and r.get("day") and r["day"] <= on_day < (r["snapshot"].get("checkout") or r["day"])), None)
+        if hit:
+            d["stay"] = {"id": hit["id"], "name": hit["snapshot"].get("name"), "state": hit["state"], "words": words(hit),
+                         "first_night": hit["day"] == on_day, "price_eur": hit.get("price_amount"), "price_source": hit.get("price_source")}
+    plan["basket"] = {"flights": [{"id": r["id"], "state": r["state"], "words": words(r), "day": r.get("day"), **{
+        k: r["snapshot"].get(k) for k in ("owner", "flights", "from", "to", "dep")}} for r in rows
+        if r["kind"] == "flight" and r["state"] != "suggested"], "total": total(rows)}
+    return plan
+
+
 __all__ = ["MAGELLAN", "SHERLOCK", "AUSTEN", "PACIOLI", "BasketError", "items", "item", "by_session", "to_book", "total",
-           "suggest", "refresh", "choose", "hold", "remove", "status_line", "booked", "failed", "cancelled", "event"]
+           "suggest", "refresh", "choose", "hold", "remove", "status_line", "booked", "failed", "cancelled", "event", "on", "sync_stays", "words", "overlay"]

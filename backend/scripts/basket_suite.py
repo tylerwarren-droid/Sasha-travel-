@@ -76,6 +76,38 @@ async def store_cases(a: str, other: str, trip: str) -> None:
        x["status_line"])
 
 
+async def view_cases(a: str) -> None:
+    """R3 · the plan's hotels become suggested stays; every surface's view shows each stay in its state; a revision keeps a chosen
+    stay and never suggests it twice."""
+    from booking_signer import basket as BK, plan_store as PS
+    days = [{"day": 1, "city": "Hanoi", "hotel": {"name": "Sofitel Legend Metropole Hanoi", "price_from": 300}, "activities": []},
+            {"day": 2, "city": "Hanoi", "hotel": None, "activities": []},
+            {"day": 3, "city": "Hoi An", "hotel": {"name": "Anantara Hoi An", "price_from": 200}, "activities": []},
+            {"day": 4, "city": "Hoi An", "hotel": None, "activities": []}]
+    BK.ON = True
+    try:
+        trip = await PS.save(a, {"title": "Basket view suite", "days": days, "party": 2}, "from 12 November 2026 for 2", datetime.now(timezone.utc))
+        st = [r for r in await BK.items(a, trip) if r["kind"] == "stay"]
+        ok("BASKET R3-1 (Magellan): the plan's hotels → 2 suggested stays (2 nights Hanoi, 1 night Hoi An), priced as an ESTIMATE",
+           [(r["snapshot"]["name"], r["snapshot"]["nights"], r["price_source"]) for r in st]
+           == [("Sofitel Legend Metropole Hanoi", 2, "estimate"), ("Anantara Hoi An", 1, "estimate")], str([(r["snapshot"], r["price_amount"]) for r in st]))
+        p = await PS.by_id(a, trip)
+        v = await PS.view(a, p, [])
+        ok("BASKET R3-2: the view (web, WhatsApp, voice) carries each night's stay in its state",
+           [((d.get("stay") or {}).get("name"), (d.get("stay") or {}).get("words")) for d in v["days"]][:3]
+           == [("Sofitel Legend Metropole Hanoi", "in your plan — not booked")] * 2 + [("Anantara Hoi An", "in your plan — not booked")],
+           str([(d.get("date"), d.get("stay")) for d in v["days"]]))
+        await BK.choose(a, st[0]["id"])
+        t = "\n".join(PS.text(await PS.view(a, await PS.by_id(a, trip), [])))
+        ok("BASKET R3-3: WhatsApp/voice text says the chosen stay as chosen, not booked", "🏨 Sofitel Legend Metropole Hanoi: chosen — not booked yet" in t, t[:200])
+        await PS.save(a, {"title": "Basket view suite", "days": days, "party": 2}, "from 12 November 2026 for 2", datetime.now(timezone.utc))
+        st2 = [(r["snapshot"]["name"], r["state"]) for r in await BK.items(a, trip) if r["kind"] == "stay"]
+        ok("BASKET R3-4: a revision keeps the chosen stay and never suggests it twice",
+           sorted(st2) == [("Anantara Hoi An", "suggested"), ("Sofitel Legend Metropole Hanoi", "chosen")], str(st2))
+    finally:
+        BK.ON = None
+
+
 async def main() -> int:
     if os.getenv("SASHA_FLIGHT_SUITE", "") == "skip":
         print("basket suite SKIPPED (SASHA_FLIGHT_SUITE=skip) — this deploy is not covered")
@@ -97,6 +129,7 @@ async def main() -> int:
         if not ok("basket suite: scratch trip", bool(trip)):
             return 1
         await store_cases(a, other, trip)
+        await view_cases(a)
     except Exception as e:
         ok("the basket suite itself", False, f"{type(e).__name__}: {e}")
     finally:

@@ -125,6 +125,12 @@ async def save(account: Optional[str], itinerary: dict, message: str, now: datet
                 uuid.UUID(account), title, _jsonable(dest), start, end)
         tid = await run(fn)
         log.info("[plan_store] plan saved as trip %s (%s → %s)", tid, start, end)
+        from . import basket as BK
+        if BK.on():   # Sasha 198 R3 · the plan's hotels as suggested stays in the basket (Magellan)
+            try:
+                await BK.sync_stays(account, str(tid), itinerary.get("days") or [], start, itinerary.get("party"))
+            except Exception as e:
+                log.error("[plan_store] the stays were not put in the basket: %s: %s", type(e).__name__, e)
         return str(tid)
     except Exception as e:
         log.warning("[plan_store] the plan was not saved on the account: %s: %s", type(e).__name__, e)
@@ -404,10 +410,22 @@ def short_status(b: dict) -> str:
     return words + (f" · ref {ref[1]}" if ref and b.get("status") == "confirmed" else "")
 
 
+async def view(account: Optional[str], p: dict, bookings: List[dict]) -> dict:
+    """Sasha 198 R3 · THE VIEW every surface shows (web panel, WhatsApp, voice, ask-anything): merge(), and with the basket on
+    (SASHA_BASKET=1) each day's stay and the trip's flights from the basket — the same on all three."""
+    m = merge(p, bookings)
+    from . import basket as BK
+    if account and p.get("trip_id") and BK.on():
+        m = BK.overlay(m, await BK.items(account, p["trip_id"]))
+    return m
+
+
 def text(plan: dict) -> List[str]:
     """Compact, for WhatsApp and the voice: one block per day — the place, the bookings with their status, what's planned."""
     from .sentences import day_words
     out = [f"🗺 {plan.get('title') or 'Your trip'}" + (f" — {day_words(plan['start'])} to {day_words(plan['end'])}" if plan.get("start") and plan.get("end") else "")]
+    for f in (plan.get("basket") or {}).get("flights") or []:
+        out.append(f"✈️ {f.get('owner') or ''} {f.get('flights') or ''} {f.get('from') or ''}→{f.get('to') or ''}: {f.get('words')}".replace("  ", " "))
     for d in plan.get("days") or []:
         head = f"Day {d.get('day')}{' · ' + day_words(d['date']) if d.get('date') else ''} — {d.get('city') or ''}"
         lines = [head]
@@ -415,6 +433,8 @@ def text(plan: dict) -> List[str]:
             name = str(b.get("venue") or "").replace("(TEST stand-in)", "(our test venue stood in)")
             when = f"{b.get('time') or ''} ({b['edge']})" if b.get("edge") else (b.get("time") or "")
             lines.append(f"  • {when} {'TEST · ' if b.get('test') and not short_status(b).startswith('TEST') else ''}{name}: {short_status(b)}".replace("  •  ", "  • "))
+        if d.get("stay") and d["stay"].get("first_night"):   # Sasha 198 R3 · the basket's stay, in its state's words
+            lines.append(f"  🏨 {d['stay'].get('name')}: {d['stay'].get('words')}")
         acts = [a for a in d.get("activities") or [] if not a.get("replaced_by")]
         for a in [a for a in acts if a.get("added")]:   # Sasha 167 · a place picked on WhatsApp: on its day, not booked
             lines.append(f"  📍 {a.get('time')}: {a.get('name')} (not booked yet)")
@@ -424,4 +444,4 @@ def text(plan: dict) -> List[str]:
     return out
 
 
-__all__ = ["TEST_BOOKED", "truthful", "short_status", "save", "latest", "merge", "text", "dates_of", "add_place", "clear_added", "add_day"]
+__all__ = ["TEST_BOOKED", "truthful", "short_status", "save", "latest", "merge", "view", "text", "dates_of", "add_place", "clear_added", "add_day"]

@@ -174,6 +174,59 @@ async def _whatsapp(a: str, sid: str):
     return say
 
 
+async def book_case(ch: str, a: str, say, chosen) -> None:
+    """R6 · "book it" → ONE total from the basket (the chosen flight, re-checked at Duffel; an expired offer re-found and KEPT)
+    → the read-back → one Stripe TEST checkout → the rows hold the session → paid → every item booked, Pacioli's lines."""
+    from booking_signer import basket as BK, trip_book as TB, paid_watch as PW, test_deposit as TD, plan_store as PS
+    from scripts.flight_suite import Req, _resp
+    import booking_signer.account as ACC
+    if not chosen:
+        ok(f"BASKET R6 {ch}: a chosen flight to book", False)
+        return
+    if ch == "avatar":   # the offer expired between the pick and "book it": Sherlock finds the SAME flight again
+        async def fn(conn):
+            await conn.execute("update trip_basket_items set provider_ref = 'off_expired_suite' where id = $1", uuid.UUID(chosen["id"]))
+        await BK._go(fn)
+    words, r = await say("book it, flying from Madrid")
+    ok(f"BASKET R6 {ch}: “book it” → ONE total with the Iberia flight, from the basket",
+       "the Iberia flight" in words and "€" in words and "Shall I book it?" in words, words[:150])
+    real_acc = ACC.account_for
+    ACC.account_for = lambda q: getattr(q, "_a", None) or real_acc(q)
+    try:
+        pr = _resp(await TB.prepare(Req(a, {"from": "Madrid"})))
+        lines = (pr.get("read_back") or {}).get("lines") or []
+        p = await PS.latest(a)
+        fl = [x for x in await BK.items(a, p["trip_id"], ("chosen",)) if x["kind"] == "flight"]
+        if ch == "avatar":
+            ok("BASKET R6 avatar: the expired offer → the SAME flight re-found (new offer id), the choice kept",
+               len(fl) == 1 and fl[0]["provider_ref"] != "off_expired_suite" and fl[0]["snapshot"].get("flights") == chosen["snapshot"].get("flights"),
+               str([(x["provider_ref"][:14], x["snapshot"].get("flights")) for x in fl]))
+        ok(f"BASKET R6 {ch}: the read-back names the stays and the Iberia flight, its total = the basket's",
+           pr.get("ok") and any(l.startswith("🏨") for l in lines) and any("Iberia" in l for l in lines if l.startswith("✈️"))
+           and abs(float(pr.get("eur") or 0) - BK.total(await BK.items(a, p["trip_id"]))["amount"]) < 0.01, str(lines[:3])[:160])
+        q = _resp(await TB.pay(Req(a, {"read_back_sha256": pr["read_back"]["sha256"], "approval": {"how": "chat", "said": "yes"}})))
+        held = await BK.by_session(q.get("session_id") or "-")
+        ok(f"BASKET R6 {ch}: one Stripe TEST checkout; the rows hold its session (nothing in memory)",
+           q.get("ok") and "checkout.stripe.com" in str(q.get("url")) and len(held) >= 2 and all(h["state"] == "pending_payment" for h in held)
+           and a not in TB._QUOTES, f"{len(held)} held")
+        real = TD.session_paid
+
+        async def paid(_s):
+            return {"amount": 1, "currency": "EUR", "payment": "pi_suite", "created": int(time.time())}
+        TD.session_paid = paid   # the ONE simulated step: the person's Apple Pay tap
+        try:
+            res = await PW.settle(q["session_id"])
+        finally:
+            TD.session_paid = real
+        rows = await BK.by_session(q["session_id"])
+        ok(f"BASKET R6 {ch}: paid → every item booked; the reply is Pacioli's lines word for word",
+           (res or {}).get("status") == "booked" and rows and all(x["state"] == "booked" for x in rows)
+           and all(x["status_line"] in (res or {}).get("say", "") for x in rows) and "✅ Booked — everything's in your itinerary." in (res or {}).get("say", ""),
+           str((res or {}).get("say"))[:200])
+    finally:
+        ACC.account_for = real_acc
+
+
 async def pick_cases(guests: dict) -> None:
     """R5 · on web, the avatar's words and WhatsApp: the guided trip's pick is the BASKET's — one chosen flight, a re-pick swaps it."""
     from booking_signer import basket as BK, plan_store as PS
@@ -196,6 +249,7 @@ async def pick_cases(guests: dict) -> None:
                "added the" in r1 and "added the Iberia flight" in r2 and len(ch_rows) == 1 and ch_rows[0]["snapshot"].get("owner") == "Iberia",
                f"{r2[:70]} | {[c['snapshot'].get('owner') for c in ch_rows]}")
             ok(f"BASKET R5 {ch}: nothing written to the old plan.chosen_flight", not ((p or {}).get("plan") or {}).get("chosen_flight"))
+            await book_case(ch, a, say, ch_rows[0] if ch_rows else None)
     finally:
         BK.ON = None
 
@@ -232,8 +286,10 @@ async def main() -> int:
         try:
             run = PS._run()
 
-            async def fn(conn):
-                return await conn.execute("delete from basket_events where source = 'suite'")
+            async def fn(conn):   # the suite's own events, and those of its guests' items (before the guests take the items)
+                return await conn.execute("delete from basket_events where source = 'suite' or item_id in "
+                                          "(select id from trip_basket_items where account_id = any($1::uuid[]))",
+                                          [uuid.UUID(g) for g in guests])
             print(f"suite events cleaned: {await run(fn)}")
         except Exception as e:
             print(f"suite events NOT cleaned: {type(e).__name__}: {e}")

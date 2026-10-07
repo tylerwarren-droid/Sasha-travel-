@@ -47,6 +47,10 @@ def _eur(x: Any) -> float:
 
 async def bundle(account: str, origin: str) -> dict:
     """{stays, flights, lines, sha256, eur, party, title} — or {why}."""
+    from . import basket as BK
+    if BK.on():   # Sasha 198 R6 · the basket's quote: validated, persisted, nothing held in memory
+        from . import basket_book as BB
+        return await BB.quote(account, origin)
     from . import hotel_test as HT, plan_store as PS, travel as T
     p = await PS.latest(account)
     if not p or not (p.get("plan") or {}).get("days"):
@@ -149,6 +153,12 @@ async def prepare(request: Request):
     except Exception:
         body = {}
     origin = str((body or {}).get("from") or "Madrid").strip()[:60] or "Madrid"
+    from . import basket as BK
+    if BK.on():   # Sasha 198 R6 · read back the basket as it stands (the conductor's quote already validated it)
+        b = await bundle(account_for(request), origin)
+        if "why" in b:
+            return _refuse(422, "trip_not_bookable", b["why"])
+        return {"ok": True, "read_back": {"lines": b["lines"], "sha256": b["sha256"]}, "eur": b["eur"], "title": b["title"], "summary": b.get("summary")}
     q = _QUOTES.get(account_for(request))   # Sasha 189 · the total Sasha just said: the same quote, not a second pricing
     from . import plan_store as _PS   # Sasha 194 · reused only for the SAME plan — a new trip never shows an old quote
     _cur = await _PS.latest(account_for(request))
@@ -167,6 +177,13 @@ async def pay(request: Request):
     body = await request.json()
     if not YS.approval_ok(body.get("approval")):
         return _refuse(422, "approval_void", YS.APPROVAL_VOID)
+    from . import basket as BK
+    if BK.on():   # Sasha 198 R6 · one Stripe payment for exactly the rows read back; the rows hold the session
+        from . import basket_book as BB
+        got = await BB.pay(account, str(body.get("read_back_sha256") or ""))
+        if "why" in got:
+            return _refuse(422, "approval_void" if "different words" in got["why"] else "trip_not_bookable", got["why"])
+        return {"ok": True, "url": got["url"], "session_id": got["session_id"], "phone": got["phone"]}
     b = _QUOTES.get(account)
     if not b or body.get("read_back_sha256") != b["sha256"]:
         return _refuse(422, "approval_void", "the yes was to different words — prepare it again")

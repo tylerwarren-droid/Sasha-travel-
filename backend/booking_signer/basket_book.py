@@ -214,6 +214,8 @@ async def book_paid(account: str, sid: str) -> Dict[str, Any]:
     _s, cj = await GW.api(account, "GET", "/api/booking/contact")
     contact = (cj or {}).get("contact") or {}
     email = await GR.address_of(account)
+    from . import passengers as PX
+    people = await PX.saved(account)   # Sasha 198 R7 · the real travellers (asked once at "book it")
     for r in [r for r in rows if r["state"] == "pending_payment"]:
         s = r.get("snapshot") or {}
         if r["kind"] == "stay":
@@ -226,11 +228,11 @@ async def book_paid(account: str, sid: str) -> Dict[str, Any]:
                 await BK.failed(account, r["id"], f"not recorded ({type(e).__name__})")
         elif r["kind"] == "flight":
             c = _card(r)
-            o = await T.order(c, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"))
+            o = await T.order(c, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"), people)
             if "why" in o:   # a TEST fare withdrawn between the quote and the payment: the same flight, priced again
                 again = await TB._same_or_cheaper(c, int(r.get("party") or 2))
                 if again is not None and again.get("flights") == c.get("flights"):
-                    o2 = await T.order(again, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"))
+                    o2 = await T.order(again, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"), people)
                     if "why" not in o2:
                         c, o = again, o2
             if "why" in o:

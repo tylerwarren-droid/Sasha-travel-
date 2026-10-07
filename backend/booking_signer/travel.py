@@ -121,7 +121,7 @@ def read_back(c: dict, name: str, email: str) -> List[str]:
             "Once it's paid it goes straight into your itinerary on the platform, and I'll confirm it here."]
 
 
-async def order(c: dict, name: str, email: str, phone: Optional[str]) -> Dict[str, Any]:
+async def order(c: dict, name: str, email: str, phone: Optional[str], people: Optional[list] = None) -> Dict[str, Any]:
     """The Duffel TEST order — only after Stripe recorded the test payment. {booking_reference, order_id} or {why}."""
     if not token():
         return {"why": "no Duffel TEST token"}
@@ -131,9 +131,12 @@ async def order(c: dict, name: str, email: str, phone: Optional[str]) -> Dict[st
     o = j["data"]
     if o["total_amount"] != c["amount"] or o["total_currency"] != c["currency"]:
         return {"why": f"the price changed to {o['total_currency']} {o['total_amount']} — nothing booked; ask again"}
-    given, _, family = (name or "Guest Test").partition(" ")
-    pax = [{"id": p["id"], "type": "adult", "given_name": given, "family_name": family or "Guest", "email": email or "guest@example.com",
-            "phone_number": phone or "+34600000000", **PLACEHOLDERS} for p in o["passengers"]]
+    from . import passengers as PX   # Sasha 198 R7 · the travellers asked once and saved; placeholders only without them (TEST)
+    pax = PX.for_order(people or [], [p["id"] for p in o["passengers"]], email, phone)
+    if pax is None:
+        given, _, family = (name or "Guest Test").partition(" ")
+        pax = [{"id": p["id"], "type": "adult", "given_name": given, "family_name": family or "Guest", "email": email or "guest@example.com",
+                "phone_number": phone or "+34600000000", **PLACEHOLDERS} for p in o["passengers"]]
     s, j = await HTTP("POST", "/air/orders", {"data": {"type": "instant", "selected_offers": [c["id"]], "passengers": pax,
                                                        "payments": [{"type": "balance", "currency": o["total_currency"], "amount": o["total_amount"]}],
                                                        "metadata": {"sasha": "test_booking"}}})

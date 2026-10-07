@@ -187,7 +187,19 @@ async def book_case(ch: str, a: str, say, chosen) -> None:
         async def fn(conn):
             await conn.execute("update trip_basket_items set provider_ref = 'off_expired_suite' where id = $1", uuid.UUID(chosen["id"]))
         await BK._go(fn)
+    from booking_signer import passengers as PX
     words, r = await say("book it, flying from Madrid")
+    ok(f"BASKET R7 {ch}: the first “book it” asks the travellers' details ONCE, before any total",
+       PX.MARK in words and "€" not in words, words[:120])
+    words, r = await say("Alex Smith, Mr, 12 March 1985")
+    ok(f"BASKET R7 {ch}: one traveller of two → asks for the one missing (never books on placeholders)",
+       PX.MARK in words and "1 more traveller" in words, words[:140])
+    words, r = await say("Uh, Sam Smith, Ms, 2nd of May 1987")
+    saved = await PX.saved(a)
+    ok(f"BASKET R7 {ch}: both saved on the account, then the total", [(x["given_name"], x["family_name"], str(x["born_on"]), x["title"]) for x in saved]
+       == [("Alex", "Smith", "1985-03-12", "mr"), ("Sam", "Smith", "1987-05-02", "ms")], str(saved)[:160])
+    again, _ = await say("book it")
+    ok(f"BASKET R7 {ch}: a second “book it” never asks again", PX.MARK not in again and "Shall I book it?" in again, again[:100])
     ok(f"BASKET R6 {ch}: “book it” → ONE total with the Iberia flight, from the basket",
        "the Iberia flight" in words and "€" in words and "Shall I book it?" in words, words[:150])
     real_acc = ACC.account_for
@@ -219,6 +231,14 @@ async def book_case(ch: str, a: str, say, chosen) -> None:
         finally:
             TD.session_paid = real
         rows = await BK.by_session(q["session_id"])
+        try:
+            from scripts import duffel_fake as DF
+            last = list(DF._ORDERS.values())[-1] if DF._ORDERS else {}
+            names = [(x.get("given_name"), x.get("family_name"), x.get("born_on"), x.get("title")) for x in last.get("passengers") or []]
+            ok(f"BASKET R7 {ch}: the Duffel order carries the saved travellers, not placeholders",
+               names == [("Alex", "Smith", "1985-03-12", "mr"), ("Sam", "Smith", "1987-05-02", "ms")], str(names))
+        except ImportError:
+            pass
         ok(f"BASKET R6 {ch}: paid → every item booked; the reply is Pacioli's lines word for word",
            (res or {}).get("status") == "booked" and rows and all(x["state"] == "booked" for x in rows)
            and all(x["status_line"] in (res or {}).get("say", "") for x in rows) and "✅ Booked — everything's in your itinerary." in (res or {}).get("say", ""),

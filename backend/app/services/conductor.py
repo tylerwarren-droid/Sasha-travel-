@@ -2034,6 +2034,31 @@ async def conduct(
         _origin = ""   # Sasha 196 · the yes to "Then shall I book it?" is "book it"
     if _origin is None and _no196 and _book196:
         _origin = ""   # "no, book it"
+    from booking_signer import basket as _bk198p, passengers as _px198  # noqa: E402
+    if user_id and signed_in is not False and _bk198p.on() and _px198.MARK in _last196:
+        # Sasha 198 R7 · the answer to "for the airline I need each traveller's full name…": read, saved, then the total
+        _got = _px198.parse(user_message)
+        _pl198 = await (__import__("booking_signer.plan_store", fromlist=["latest"]).latest(user_id))
+        _party198 = int((((_pl198 or {}).get("plan") or {}).get("party")) or 2)
+        _have = await _px198.saved(user_id)
+        if _got["passengers"]:
+            await _px198.save(user_id, _got["passengers"])
+            _have = await _px198.saved(user_id)
+        if len(_have) < _party198:
+            _need = "; ".join(_got["missing"]) or f"{_party198 - len(_have)} more traveller{'s' if _party198 - len(_have) != 1 else ''}"
+            _say = f"Thanks — {_px198.MARK}, title and date of birth; still missing: {_need}. (e.g. “Sam Smith, Ms, 2 May 1987”)"
+            return {"response": _say, "intents": ["book_trip"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                    "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
+                    "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
+        _origin = ""   # saved: on to the total, as if "book it" had just been said
+    if _origin is not None and user_id and signed_in is not False and _bk198p.on() and _px198.MARK not in _last196:
+        _pl198 = await (__import__("booking_signer.plan_store", fromlist=["latest"]).latest(user_id))
+        _party198 = int((((_pl198 or {}).get("plan") or {}).get("party")) or 2)
+        if _pl198 and len(await _px198.saved(user_id)) < _party198:   # Sasha 198 R7 · asked ONCE, before the first total
+            _say = _px198.ASK
+            return {"response": _say, "intents": ["book_trip"], "photos": [], "tools_used": [], "links": [], "hotels": [], "bookings": [],
+                    "itinerary": None, "action": None, "booking_ref": None, "itinerary_id": None, "payment_item": None, "saved_card": None,
+                    "messages": list(conversation_history) + [{"role": "user", "content": user_message}, {"role": "assistant", "content": _say}]}
     if _origin is not None and user_id and signed_in is not False:
         from booking_signer import plan_store as _ps_tb  # noqa: E402
         if await _ps_tb.latest(user_id):

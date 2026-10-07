@@ -1,0 +1,848 @@
+{
+ "Madrid": {
+  "status": 200,
+  "body": {
+   "data": [
+    {
+     "city_name": null,
+     "icao_code": null,
+     "iata_country_code": "ES",
+     "airports": [
+      {
+       "city_name": "Madrid",
+       "icao_code": "LEMD",
+       "iata_country_code": "ES",
+       "iata_city_code": "MAD",
+       "iata_code": "MAD",
+       "latitude": 40.49923,
+       "longitude": -3.567169,
+       "time_zone": "Europe/Madrid",
+       "type": "airport",
+       "name": "Adolfo Su\u00e1rez Madrid-Barajas Airport",
+       "id": "arp_mad_es"
+      },
+      {
+       "city_name": "Madrid",
+       "icao_code": "LETO",
+       "iata_country_code": "ES",
+       "iata_city_code": "MAD",
+       "iata_code": "TOJ",
+       "latitude": 40.487654,
+       "longitude": -3.457359,
+       "time_zone": "Europe/Madrid",
+       "type": "airport",
+       "name": "Madrid\u2013Torrej\u00f3n Airport",
+       "id": "arp_toj_es"
+      }
+     ],
+     "iata_city_code": "MAD",
+     "iata_code": "MAD",
+     "latitude": null,
+     "longitude": null,
+     "city": null,
+     "time_zone": null,
+     "type": "city",
+     "name": "Madrid",
+     "id": "cit_mad_es"
+    },
+    {
+     "city_name": "Madrid",
+     "icao_code": "LEMD",
+     "iata_country_code": "ES",
+     "airports": null,
+     "iata_city_code": "MAD",
+     "iata_code": "MAD",
+     "latitude": 40.49923,
+     "longitude": -3.567169,
+     "city": {
+      "city_name": null,
+      "icao_code": null,
+      "iata_country_code": "ES",
+      "iata_city_code": "MAD",
+      "iata_code": "MAD",
+      "latitude": null,
+      "longitude": null,
+      "time_zone": null,
+      "type": "city",
+      "name": "Madrid",
+      "id": "cit_mad_es"
+     },
+     "time_zone": "Europe/Madrid",
+     "type": "airport",
+     "name": "Adolfo Su\u00e1rez Madrid-Barajas Airport",
+     "id": "arp_mad_es"
+    }
+   ]
+  }
+ },
+ "MAD": {
+  "status": 200,
+  "body": {
+   "data": [
+    {
+     "city_name": null,
+     "icao_code": null,
+     "iata_city_code": "MAD",
+     "iata_country_code": "ES",
+     "airports": [
+      {
+       "city_name": "Madrid",
+       "icao_code": "LEMD",
+       "iata_city_code": "MAD",
+       "iata_country_code": "ES",
+       "iata_code": "MAD",
+       "latitude": 40.49923,
+       "longitude": -3.567169,
+       "time_zone": "Europe/Madrid",
+       "type": "airport",
+       "name": "Adolfo Su\u00e1rez Madrid-Barajas Airport",
+       "id": "arp_mad_es"
+      },
+      {
+       "city_name": "Madrid",
+       "icao_code": "LETO",
+       "iata_city_code": "MAD",
+       "iata_country_code": "ES",
+       "iata_code": "TOJ",
+       "latitude": 40.487654,
+       "longitude": -3.457359,
+       "time_zone": "Europe/Madrid",
+       "type": "airport",
+       "name": "Madrid\u2013Torrej\u00f3n Airport",
+       "id": "arp_toj_es"
+      }
+     ],
+     "iata_code": "MAD",
+     "latitude": null,
+     "longitude": null,
+     "city": null,
+     "time_zone": null,
+     "type": "city",
+     "name": "Madrid",
+     "id": "cit_mad_es"
+    },
+    {
+     "city_name": "Madrid",
+     "icao_code": "LEMD",
+     "iata_city_code": "MAD",
+     "iata_country_code": "ES",
+     "airports": null,
+     "iata_code": "MAD",
+     "latitude": 40.49923,
+     "longitude": -3.567169,
+     "city": {
+      "city_name": null,
+      "icao_code": null,
+      "iata_city_code": "MAD",
+      "iata_country_code": "ES",
+      "iata_code": "MAD",
+      "latitude": null,
+      "longitude": null,
+      "time_zone": null,
+      "type": "city",
+      "name": "Madrid",
+      "id": "cit_mad_es"
+     },
+     "time_zone": "Europe/Madrid",
+     "type": "airport",
+     "name": "Adolfo Su\u00e1rez Madrid-Barajas Airport",
+     "id": "arp_mad_es"
+    },
+    {
+     "city_name": "Funchal",
+     "icao_code": "LPMA",
+     "iata_city_code": "FNC",
+     "iata_country_code": "PT",
+     "airports": null,
+     "iata_code": "FNC",
+     "latitude": 32.696849,
+     "longitude": -16.775187,
+     "city": null,
+     "time_zone": "Atlantic/Madeira",
+     "type": "airport",
+     "name": "Madeira Airport",
+     "id": "arp_fnc_pt"
+    },
+    {
+     "city_name": "Madurai",
+     "icao_code": "VOMD",
+     "iata_city_code": "IXM",
+     "iata_country_code": "IN",
+     "airports": null,
+     "iata_code": "IXM",
+     "latitude": 9.836459,
+     "longitude": 78.091449,
+     "city": null,
+     "time_zone": "Asia/Kolkata",
+     "type": "airport",
+     "name": "Madurai Airport",
+     "id": "arp_ixm_in"
+    }
+   ]
+  }
+ },
+ "Hanoi": {
+  "status": 200,
+  "body": {
+   "data": [
+    {
+     "city_name": "Hanoi",
+     "icao_code": "VVNB",
+     "iata_country_code": "VN",
+     "airports": null,
+     "iata_city_code": "HAN",
+     "iata_code": "HAN",
+     "latitude": 21.219957,
+     "longitude": 105.805585,
+     "city": null,
+     "time_zone": "Asia/Bangkok",
+     "type": "airport",
+     "name": "Noi Bai International Airport",
+     "id": "arp_han_vn"
+    }
+   ]
+  }
+ },
+ "HAN": {
+  "status": 200,
+  "body": {
+   "data": [
+    {
+     "city_name": "Hanoi",
+     "icao_code": "VVNB",
+     "iata_country_code": "VN",
+     "airports": null,
+     "iata_city_code": "HAN",
+     "iata_code": "HAN",
+     "latitude": 21.219957,
+     "longitude": 105.805585,
+     "city": null,
+     "time_zone": "Asia/Bangkok",
+     "type": "airport",
+     "name": "Noi Bai International Airport",
+     "id": "arp_han_vn"
+    },
+    {
+     "city_name": "Tokyo",
+     "icao_code": "RJTT",
+     "iata_country_code": "JP",
+     "airports": null,
+     "iata_city_code": "TYO",
+     "iata_code": "HND",
+     "latitude": 35.550846,
+     "longitude": 139.779919,
+     "city": {
+      "city_name": null,
+      "icao_code": null,
+      "iata_country_code": "JP",
+      "iata_city_code": "TYO",
+      "iata_code": "TYO",
+      "latitude": null,
+      "longitude": null,
+      "time_zone": null,
+      "type": "city",
+      "name": "Tokyo",
+      "id": "cit_tyo_jp"
+     },
+     "time_zone": "Asia/Tokyo",
+     "type": "airport",
+     "name": "Haneda Airport",
+     "id": "arp_hnd_jp"
+    },
+    {
+     "city_name": "Syracuse",
+     "icao_code": "KSYR",
+     "iata_country_code": "US",
+     "airports": null,
+     "iata_city_code": "SYR",
+     "iata_code": "SYR",
+     "latitude": 43.112564,
+     "longitude": -76.108244,
+     "city": null,
+     "time_zone": "America/New_York",
+     "type": "airport",
+     "name": "Syracuse Hancock International Airport",
+     "id": "arp_syr_us"
+    },
+    {
+     "city_name": "Hannover",
+     "icao_code": "EDDV",
+     "iata_country_code": "DE",
+     "airports": null,
+     "iata_city_code": "HAJ",
+     "iata_code": "HAJ",
+     "latitude": 52.461492,
+     "longitude": 9.687045,
+     "city": null,
+     "time_zone": "Europe/Berlin",
+     "type": "airport",
+     "name": "Hannover Airport",
+     "id": "arp_haj_de"
+    }
+   ]
+  }
+ },
+ "London": {
+  "status": 200,
+  "body": {
+   "data": [
+    {
+     "city_name": null,
+     "icao_code": null,
+     "iata_country_code": "GB",
+     "airports": [
+      {
+       "city_name": "London",
+       "icao_code": "EGKB",
+       "iata_country_code": "GB",
+       "iata_city_code": "LON",
+       "iata_code": "BQH",
+       "latitude": 51.331399,
+       "longitude": 0.030782,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "London Biggin Hill Airport",
+       "id": "arp_bqh_gb"
+      },
+      {
+       "city_name": "London",
+       "icao_code": "EGLC",
+       "iata_country_code": "GB",
+       "iata_city_code": "LON",
+       "iata_code": "LCY",
+       "latitude": 51.505071,
+       "longitude": 0.052398,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "London City Airport",
+       "id": "arp_lcy_gb"
+      },
+      {
+       "city_name": "London",
+       "icao_code": "EGKK",
+       "iata_country_code": "GB",
+       "iata_city_code": "LON",
+       "iata_code": "LGW",
+       "latitude": 51.150882,
+       "longitude": -0.18617,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "Gatwick Airport",
+       "id": "arp_lgw_gb"
+      },
+      {
+       "city_name": "London",
+       "icao_code": "EGLL",
+       "iata_country_code": "GB",
+       "iata_city_code": "LON",
+       "iata_code": "LHR",
+       "latitude": 51.470311,
+       "longitude": -0.458118,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "Heathrow Airport",
+       "id": "arp_lhr_gb"
+      },
+      {
+       "city_name": "London",
+       "icao_code": "EGGW",
+       "iata_country_code": "GB",
+       "iata_city_code": "LON",
+       "iata_code": "LTN",
+       "latitude": 51.875482,
+       "longitude": -0.37004,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "London Luton Airport",
+       "id": "arp_ltn_gb"
+      },
+      {
+       "city_name": "London",
+       "icao_code": "EGMC",
+       "iata_country_code": "GB",
+       "iata_city_code": "LON",
+       "iata_code": "SEN",
+       "latitude": 51.571075,
+       "longitude": 0.697117,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "London Southend Airport",
+       "id": "arp_sen_gb"
+      },
+      {
+       "city_name": "London",
+       "icao_code": "EGSS",
+       "iata_country_code": "GB",
+       "iata_city_code": "LON",
+       "iata_code": "STN",
+       "latitude": 51.885508,
+       "longitude": 0.236933,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "London Stansted Airport",
+       "id": "arp_stn_gb"
+      }
+     ],
+     "iata_city_code": "LON",
+     "iata_code": "LON",
+     "latitude": null,
+     "longitude": null,
+     "city": null,
+     "time_zone": null,
+     "type": "city",
+     "name": "London",
+     "id": "cit_lon_gb"
+    },
+    {
+     "city_name": "London",
+     "icao_code": "EGSS",
+     "iata_country_code": "GB",
+     "airports": null,
+     "iata_city_code": "LON",
+     "iata_code": "STN",
+     "latitude": 51.885508,
+     "longitude": 0.236933,
+     "city": {
+      "city_name": null,
+      "icao_code": null,
+      "iata_country_code": "GB",
+      "iata_city_code": "LON",
+      "iata_code": "LON",
+      "latitude": null,
+      "longitude": null,
+      "time_zone": null,
+      "type": "city",
+      "name": "London",
+      "id": "cit_lon_gb"
+     },
+     "time_zone": "Europe/London",
+     "type": "airport",
+     "name": "London Stansted Airport",
+     "id": "arp_stn_gb"
+    },
+    {
+     "city_name": "London",
+     "icao_code": "EGGW",
+     "iata_country_code": "GB",
+     "airports": null,
+     "iata_city_code": "LON",
+     "iata_code": "LTN",
+     "latitude": 51.875482,
+     "longitude": -0.37004,
+     "city": {
+      "city_name": null,
+      "icao_code": null,
+      "iata_country_code": "GB",
+      "iata_city_code": "LON",
+      "iata_code": "LON",
+      "latitude": null,
+      "longitude": null,
+      "time_zone": null,
+      "type": "city",
+      "name": "London",
+      "id": "cit_lon_gb"
+     },
+     "time_zone": "Europe/London",
+     "type": "airport",
+     "name": "London Luton Airport",
+     "id": "arp_ltn_gb"
+    },
+    {
+     "city_name": "London",
+     "icao_code": "EGLC",
+     "iata_country_code": "GB",
+     "airports": null,
+     "iata_city_code": "LON",
+     "iata_code": "LCY",
+     "latitude": 51.505071,
+     "longitude": 0.052398,
+     "city": {
+      "city_name": null,
+      "icao_code": null,
+      "iata_country_code": "GB",
+      "iata_city_code": "LON",
+      "iata_code": "LON",
+      "latitude": null,
+      "longitude": null,
+      "time_zone": null,
+      "type": "city",
+      "name": "London",
+      "id": "cit_lon_gb"
+     },
+     "time_zone": "Europe/London",
+     "type": "airport",
+     "name": "London City Airport",
+     "id": "arp_lcy_gb"
+    }
+   ]
+  }
+ },
+ "LON": {
+  "status": 200,
+  "body": {
+   "data": [
+    {
+     "city_name": null,
+     "icao_code": null,
+     "iata_city_code": "LON",
+     "iata_country_code": "GB",
+     "airports": [
+      {
+       "city_name": "London",
+       "icao_code": "EGKB",
+       "iata_city_code": "LON",
+       "iata_country_code": "GB",
+       "iata_code": "BQH",
+       "latitude": 51.331399,
+       "longitude": 0.030782,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "London Biggin Hill Airport",
+       "id": "arp_bqh_gb"
+      },
+      {
+       "city_name": "London",
+       "icao_code": "EGLC",
+       "iata_city_code": "LON",
+       "iata_country_code": "GB",
+       "iata_code": "LCY",
+       "latitude": 51.505071,
+       "longitude": 0.052398,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "London City Airport",
+       "id": "arp_lcy_gb"
+      },
+      {
+       "city_name": "London",
+       "icao_code": "EGKK",
+       "iata_city_code": "LON",
+       "iata_country_code": "GB",
+       "iata_code": "LGW",
+       "latitude": 51.150882,
+       "longitude": -0.18617,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "Gatwick Airport",
+       "id": "arp_lgw_gb"
+      },
+      {
+       "city_name": "London",
+       "icao_code": "EGLL",
+       "iata_city_code": "LON",
+       "iata_country_code": "GB",
+       "iata_code": "LHR",
+       "latitude": 51.470311,
+       "longitude": -0.458118,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "Heathrow Airport",
+       "id": "arp_lhr_gb"
+      },
+      {
+       "city_name": "London",
+       "icao_code": "EGGW",
+       "iata_city_code": "LON",
+       "iata_country_code": "GB",
+       "iata_code": "LTN",
+       "latitude": 51.875482,
+       "longitude": -0.37004,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "London Luton Airport",
+       "id": "arp_ltn_gb"
+      },
+      {
+       "city_name": "London",
+       "icao_code": "EGMC",
+       "iata_city_code": "LON",
+       "iata_country_code": "GB",
+       "iata_code": "SEN",
+       "latitude": 51.571075,
+       "longitude": 0.697117,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "London Southend Airport",
+       "id": "arp_sen_gb"
+      },
+      {
+       "city_name": "London",
+       "icao_code": "EGSS",
+       "iata_city_code": "LON",
+       "iata_country_code": "GB",
+       "iata_code": "STN",
+       "latitude": 51.885508,
+       "longitude": 0.236933,
+       "time_zone": "Europe/London",
+       "type": "airport",
+       "name": "London Stansted Airport",
+       "id": "arp_stn_gb"
+      }
+     ],
+     "iata_code": "LON",
+     "latitude": null,
+     "longitude": null,
+     "city": null,
+     "time_zone": null,
+     "type": "city",
+     "name": "London",
+     "id": "cit_lon_gb"
+    },
+    {
+     "city_name": "London",
+     "icao_code": "EGSS",
+     "iata_city_code": "LON",
+     "iata_country_code": "GB",
+     "airports": null,
+     "iata_code": "STN",
+     "latitude": 51.885508,
+     "longitude": 0.236933,
+     "city": {
+      "city_name": null,
+      "icao_code": null,
+      "iata_city_code": "LON",
+      "iata_country_code": "GB",
+      "iata_code": "LON",
+      "latitude": null,
+      "longitude": null,
+      "time_zone": null,
+      "type": "city",
+      "name": "London",
+      "id": "cit_lon_gb"
+     },
+     "time_zone": "Europe/London",
+     "type": "airport",
+     "name": "London Stansted Airport",
+     "id": "arp_stn_gb"
+    },
+    {
+     "city_name": "London",
+     "icao_code": "EGGW",
+     "iata_city_code": "LON",
+     "iata_country_code": "GB",
+     "airports": null,
+     "iata_code": "LTN",
+     "latitude": 51.875482,
+     "longitude": -0.37004,
+     "city": {
+      "city_name": null,
+      "icao_code": null,
+      "iata_city_code": "LON",
+      "iata_country_code": "GB",
+      "iata_code": "LON",
+      "latitude": null,
+      "longitude": null,
+      "time_zone": null,
+      "type": "city",
+      "name": "London",
+      "id": "cit_lon_gb"
+     },
+     "time_zone": "Europe/London",
+     "type": "airport",
+     "name": "London Luton Airport",
+     "id": "arp_ltn_gb"
+    },
+    {
+     "city_name": "London",
+     "icao_code": "EGLL",
+     "iata_city_code": "LON",
+     "iata_country_code": "GB",
+     "airports": null,
+     "iata_code": "LHR",
+     "latitude": 51.470311,
+     "longitude": -0.458118,
+     "city": {
+      "city_name": null,
+      "icao_code": null,
+      "iata_city_code": "LON",
+      "iata_country_code": "GB",
+      "iata_code": "LON",
+      "latitude": null,
+      "longitude": null,
+      "time_zone": null,
+      "type": "city",
+      "name": "London",
+      "id": "cit_lon_gb"
+     },
+     "time_zone": "Europe/London",
+     "type": "airport",
+     "name": "Heathrow Airport",
+     "id": "arp_lhr_gb"
+    }
+   ]
+  }
+ },
+ "Ho Chi Minh City": {
+  "status": 200,
+  "body": {
+   "data": [
+    {
+     "airports": null,
+     "iata_country_code": "VN",
+     "iata_city_code": "SGN",
+     "city_name": "Ho Chi Minh City",
+     "icao_code": "VVTS",
+     "iata_code": "SGN",
+     "latitude": 10.818631,
+     "longitude": 106.655412,
+     "city": null,
+     "time_zone": "Asia/Ho_Chi_Minh",
+     "type": "airport",
+     "name": "Tan Son Nhat International Airport",
+     "id": "arp_sgn_vn"
+    }
+   ]
+  }
+ },
+ "SGN": {
+  "status": 200,
+  "body": {
+   "data": [
+    {
+     "city_name": "Ho Chi Minh City",
+     "icao_code": "VVTS",
+     "iata_city_code": "SGN",
+     "iata_country_code": "VN",
+     "airports": null,
+     "iata_code": "SGN",
+     "latitude": 10.818631,
+     "longitude": 106.655412,
+     "city": null,
+     "time_zone": "Asia/Ho_Chi_Minh",
+     "type": "airport",
+     "name": "Tan Son Nhat International Airport",
+     "id": "arp_sgn_vn"
+    }
+   ]
+  }
+ },
+ "Singapore": {
+  "status": 200,
+  "body": {
+   "data": [
+    {
+     "city_name": null,
+     "icao_code": null,
+     "iata_country_code": "SG",
+     "airports": [
+      {
+       "city_name": "Singapore",
+       "icao_code": "WSAP",
+       "iata_country_code": "SG",
+       "iata_city_code": "SIN",
+       "iata_code": "QPG",
+       "latitude": 1.359288,
+       "longitude": 103.910629,
+       "time_zone": "Asia/Singapore",
+       "type": "airport",
+       "name": "Paya Lebar Air Base",
+       "id": "arp_qpg_sg"
+      },
+      {
+       "city_name": "Singapore",
+       "icao_code": "WSSS",
+       "iata_country_code": "SG",
+       "iata_city_code": "SIN",
+       "iata_code": "SIN",
+       "latitude": 1.356115,
+       "longitude": 103.985127,
+       "time_zone": "Asia/Singapore",
+       "type": "airport",
+       "name": "Singapore Changi Airport",
+       "id": "arp_sin_sg"
+      },
+      {
+       "city_name": "Singapore",
+       "icao_code": "WSAT",
+       "iata_country_code": "SG",
+       "iata_city_code": "SIN",
+       "iata_code": "TGA",
+       "latitude": 1.385789,
+       "longitude": 103.708617,
+       "time_zone": "Asia/Singapore",
+       "type": "airport",
+       "name": "Tengah Air Base",
+       "id": "arp_tga_sg"
+      },
+      {
+       "city_name": "Singapore",
+       "icao_code": "WSSL",
+       "iata_country_code": "SG",
+       "iata_city_code": "SIN",
+       "iata_code": "XSP",
+       "latitude": 1.416952,
+       "longitude": 103.86819,
+       "time_zone": "Asia/Singapore",
+       "type": "airport",
+       "name": "Seletar Airport",
+       "id": "arp_xsp_sg"
+      }
+     ],
+     "iata_city_code": "SIN",
+     "iata_code": "SIN",
+     "latitude": null,
+     "longitude": null,
+     "city": null,
+     "time_zone": null,
+     "type": "city",
+     "name": "Singapore",
+     "id": "cit_sin_sg"
+    },
+    {
+     "city_name": "Singapore",
+     "icao_code": "WSSS",
+     "iata_country_code": "SG",
+     "airports": null,
+     "iata_city_code": "SIN",
+     "iata_code": "SIN",
+     "latitude": 1.356115,
+     "longitude": 103.985127,
+     "city": {
+      "city_name": null,
+      "icao_code": null,
+      "iata_country_code": "SG",
+      "iata_city_code": "SIN",
+      "iata_code": "SIN",
+      "latitude": null,
+      "longitude": null,
+      "time_zone": null,
+      "type": "city",
+      "name": "Singapore",
+      "id": "cit_sin_sg"
+     },
+     "time_zone": "Asia/Singapore",
+     "type": "airport",
+     "name": "Singapore Changi Airport",
+     "id": "arp_sin_sg"
+    },
+    {
+     "city_name": "Singapore",
+     "icao_code": "WSSL",
+     "iata_country_code": "SG",
+     "airports": null,
+     "iata_city_code": "SIN",
+     "iata_code": "XSP",
+     "latitude": 1.416952,
+     "longitude": 103.86819,
+     "city": {
+      "city_name": null,
+      "icao_code": null,
+      "iata_country_code": "SG",
+      "iata_city_code": "SIN",
+      "iata_code": "SIN",
+      "latitude": null,
+      "longitude": null,
+      "time_zone": null,
+      "type": "city",
+      "name": "Singapore",
+      "id": "cit_sin_sg"
+     },
+     "time_zone": "Asia/Singapore",
+     "type": "airport",
+     "name": "Seletar Airport",
+     "id": "arp_xsp_sg"
+    }
+   ]
+  }
+ }
+}

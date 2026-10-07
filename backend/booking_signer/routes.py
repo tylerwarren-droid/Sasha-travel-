@@ -608,3 +608,5 @@ async def _start_retention() -> None:
     mailbox.start()   # S-82 · the 6-hourly read-only sync (SASHA_MAILBOX_LOOP; only once Google is configured)
     from . import paid_watch as _pw
     _pw.start()   # Sasha 183 · a paid booking always lands: any payment still waiting is settled every 15 s (and survives restarts)
+    from scripts import live_suite as _ls
+    _ls.start()   # Sasha 198 · the live Duffel suite every 6 h, in its own process: alerts, never blocks a deploy

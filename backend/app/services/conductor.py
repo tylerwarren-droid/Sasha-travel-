@@ -1266,6 +1266,22 @@ _DATES199 = re.compile(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|d
                        r"weekend|year)|this\s+(?:weekend|month)|in\s+\d+\s+weeks?|christmas|easter|new year)\b", re.I)
 
 
+_PLACE200 = re.compile(r"^\s*(?:to\s+|maybe\s+|probably\s+|i think\s+|somewhere like\s+)?([A-Z][a-zà-ÿ]+(?:\s+[A-Z][a-zà-ÿ]+){0,2})\s*[.!?]?\s*$")
+_NOT_PLACE200 = {"hi", "hello", "hey", "yes", "no", "yeah", "nope", "thanks", "ok", "okay", "sure", "great", "sasha", "help", "stop", "reset"}
+
+
+def _place_answer(message: str) -> bool:
+    """Sasha 200 · a bare place ("Vietnam", "Hoi An") — the answer to the avatar's "Where are you dreaming of going?"."""
+    m = _PLACE200.match(message or "")
+    return bool(m) and m[1].split()[0].lower() not in _NOT_PLACE200
+
+
+def _greeting_only(history) -> bool:
+    """Nothing but a greeting has been said by Sasha so far (the chat's "What can I help you with?", the avatar's hello)."""
+    said = [str(m.get("content") or "") for m in (history or []) if isinstance(m, dict) and m.get("role") == "assistant"]
+    return all(len(t.split()) <= 16 and "pulling together an itinerary" not in t for t in said)
+
+
 def _intake_started(history) -> bool:
     """The opening (or any intake question) has been said in this conversation."""
     return any(isinstance(m, dict) and m.get("role") == "assistant" and "pulling together an itinerary" in (m.get("content") or "")
@@ -2300,8 +2316,9 @@ async def conduct(
                                                                               {"role": "assistant", "content": _trip["response"]}]}
     # Sasha 199 · THE OPENING (after the products' own hook): a trip first mentioned ("I want to go to Vietnam") → the founder's line, and wait — never
     # "Let me plan an itinerary" at once. Not when a plan exists, the intake already began, or he hands it over ("just plan it").
-    if not payload and not force_intent and _TRIP199.search(user_message or "") and not _NOT_TRIP199.search(user_message or "") \
-            and not _intake_started(conversation_history) and not _recent_a:
+    _first200 = not any(isinstance(m, dict) and m.get("role") == "user" for m in conversation_history or [])
+    if not payload and not force_intent and (_TRIP199.search(user_message or "") or (_first200 and _place_answer(user_message))) \
+            and not _NOT_TRIP199.search(user_message or "") and not _intake_started(conversation_history) and _greeting_only(conversation_history):
         _has_plan199 = bool(session_id and await chat_store.latest_itinerary_for_session(session_id))
         if not _has_plan199:
             return _say196(S199_OPEN)

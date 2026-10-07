@@ -137,6 +137,11 @@ async def guided(a: str, conduct) -> None:
         t = _said(r)
         lines.append(t)
         return t == CD.S199_OPEN or (all(len(x.split()) <= 15 for x in re.split(r"(?<=[.?!])\s+", t)) and t.count("?") <= 1)
+    r0 = await conduct("Vietnam", [{"role": "assistant", "content": "Hi, I'm Sasha, your travel concierge. Where are you dreaming of going?"}],
+                       user_id=a, signed_in=True, session_id="core-g0-" + uuid.uuid4().hex[:6])
+    ok("GUIDED 0a: “Vietnam”, answering the avatar's greeting → the opening (never a plan at once)", _said(r0) == CD.S199_OPEN
+       and not r0.get("itinerary"), _said(r0)[:90])
+    h = [{"role": "assistant", "content": "What can I help you with?"}]   # the chat's own greeting, as live
     r = await say("I want to go to Vietnam")
     ok("GUIDED 0: a trip first mentioned → the founder's opening, and she WAITS (no plan, no question about details)",
        _said(r) == CD.S199_OPEN and not r.get("itinerary") and not r.get("bookings"), _said(r)[:90])

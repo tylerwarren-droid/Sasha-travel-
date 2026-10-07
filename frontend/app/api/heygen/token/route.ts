@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
+import { CONTEXT_ID } from '@/lib/avatar-context.mjs'   // Sasha 200 · one place for the avatar's context
 
 // Never let a token request be cached — every session needs a fresh JWT.
 export const dynamic = 'force-dynamic'
 
 const AVATAR_ID = 'ab0765ad-69de-41fb-9f8a-bd01c3c52d6f'
-const CONTEXT_ID = '10b5933f-d54a-4305-9f88-333b628a1d09'
 const VOICE_ID = '62bbb4b2-bb26-4727-bc87-cfb2bd4e0cc8'
 const SUPPORTED_LANGS = new Set(['en', 'vi', 'ko', 'zh', 'ja', 'fr', 'es', 'de', 'hi'])
 
@@ -48,9 +48,8 @@ export async function GET(request: Request) {
       context_id: CONTEXT_ID, voice_id: VOICE_ID, language: lang,
       voice_settings: { provider: 'elevenLabs', speed: 1.0 },
     },
-    // No dynamic_variables: the opening line now ASKS for the guest's name (client feedback
-    // 2026-08-11 — never greet a stranger as the hardcoded demo profile). The conductor's
-    // prompt carries the matching "ask, then remember" directive.
+    // No dynamic_variables. Sasha 200: the context's opening line is a greeting only and its prompt never plans or books
+    // (lib/avatar-context.mjs) — the conductor's guided script asks the name and leads the trip.
     is_sandbox: false,
   }
 

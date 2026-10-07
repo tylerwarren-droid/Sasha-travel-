@@ -29,6 +29,13 @@ async def run_once() -> dict:
         out = b"FAIL \xc2\xb7 the live suite ran over 15 minutes and was stopped"
     text = out.decode("utf-8", "replace")
     fails = [ln for ln in text.splitlines() if ln.startswith("FAIL")]
+    try:   # Sasha 200 · the avatar's own opening and prompt, as expected (lib/avatar-context.mjs)
+        from scripts import check_avatar_context as CAC
+        c = await asyncio.to_thread(CAC.check)
+        if not c["ok"]:
+            fails.append(f"FAIL · the avatar's context — {c['why']} (opening now: {c.get('opening_text')!r})")
+    except Exception as e:
+        fails.append(f"FAIL · the avatar's context could not be checked: {type(e).__name__}")
     summary = next((ln for ln in text.splitlines() if ln.startswith("flight suite:")), "flight suite: no summary line")
     return {"ok": p.returncode == 0 and not fails, "summary": summary, "fails": fails}
 

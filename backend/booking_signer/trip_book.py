@@ -69,10 +69,26 @@ async def bundle(account: str, origin: str) -> dict:
     search = SEARCH or T.search
     # Sasha 182 · 8, not 3: the cheapest test fares are often ones Duffel's test system won't book (China Eastern: 422), and
     # with three of them the bundle refused "no test fare … will book" while Iberia and Duffel Airways were bookable
-    out_s, back_s = await asyncio.gather(search(origin, first_city, (start - timedelta(days=1)).isoformat(), adults=party, limit=8),
-                                         search(last_city, origin, (last + timedelta(days=1)).isoformat(), adults=party, limit=8))
+    out_s = back_s = None
+    if not ((p.get("plan") or {}).get("chosen_flight") or {}).get("provider_offer_id"):
+        out_s, back_s = await asyncio.gather(search(origin, first_city, (start - timedelta(days=1)).isoformat(), adults=party, limit=8),
+                                             search(last_city, origin, (last + timedelta(days=1)).isoformat(), adults=party, limit=8))
     flights = []
-    for s in (out_s, back_s):
+    chosen = (p.get("plan") or {}).get("chosen_flight")
+    if chosen and chosen.get("provider_offer_id"):
+        # Sasha 196 · the flight HE picked (added to the itinerary earlier) — never flights offered again
+        st, j = await T.HTTP("GET", f"/air/offers/{chosen['provider_offer_id']}")
+        oid = chosen["provider_offer_id"]
+        if st != 200:
+            new = await T.refreshed(oid)
+            if new:
+                oid = new
+                st, j = await T.HTTP("GET", f"/air/offers/{new}")
+        if st != 200:
+            return {"why": f"the {chosen.get('name')} flight you picked has gone — shall I look again?"}
+        flights.append(T.card_of(j["data"]))
+        out_s = back_s = None
+    for s in ((out_s, back_s) if not flights else ()):
         if "why" in s:
             return {"why": f"the flights couldn't be priced — {s['why']}"}
         c = await _orderable([c for c in s["cards"] if c.get("currency") == "EUR"])
@@ -94,7 +110,7 @@ async def bundle(account: str, origin: str) -> dict:
     lines.append("Each goes in your itinerary on its day, marked TEST, with its reference.")
     sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
     b = {"stays": ss, "flights": flights, "lines": lines, "sha256": sha, "eur": round(total, 2), "party": party, "title": p.get("title"), "tz": tz,
-         "origin": origin, "at": datetime.now().timestamp(), "trip_id": p.get("trip_id"),
+         "origin": origin, "at": datetime.now().timestamp(), "trip_id": p.get("trip_id"), "chosen": bool(chosen),
          # Sasha 189 · the card shows this, briefly (the yes stays bound to the full lines above)
          "summary": {"hotels": len(ss), "cities": [st["city"] for st in ss], "party": party, "eur": round(total, 2),
                      "flights": [f"{c['owner']} {c['flights']} · {c['from']}→{c['to']} · {str(c.get('departs') or '')[:10]}" for c in flights]}}
@@ -103,6 +119,7 @@ async def bundle(account: str, origin: str) -> dict:
 
 
 import re  # noqa: E402
+from . import sentences as SN  # noqa: E402
 
 ASK = re.compile(r"^\s*(?:(?:ok(?:ay)?|yes|great|perfect|lovely|now|and)[,!. ]+)*(?:please\s+|let'?s\s+|can you\s+)?"
                  r"book\s+(?:it(?:\s+all)?|everything|(?:the|my|this)\s+(?:whole\s+|entire\s+)?trip|the\s+(?:hotels?|stays?)\s+and\s+(?:the\s+)?flights?|"
@@ -238,8 +255,16 @@ async def book_paid(account: str, sid: str) -> dict:
         await T.RECORD(account, c, o["booking_reference"] or "")
         done.append(f"✈️ {c['owner']} {c['flights']} {c['from']}→{c['to']} · {o['booking_reference']}{note}")
     nh, nf = sum(1 for d in done if d.startswith("🏨")), sum(1 for d in done if d.startswith("✈️"))
-    say = (f"✅ Booked — {nh} hotel{'s' if nh != 1 else ''} and {nf} flight{'s' if nf != 1 else ''}, "
-           "each in your trip with its reference.")   # Sasha 189 · brief; the references are on the trip
+    say = "✅ Booked — everything's in your itinerary."   # Sasha 196 · the founder's words
+    try:   # the venue bookings (restaurant, spa) are shown apart: booked with the venue, not part of this payment
+        from . import itinerary_q as IQ
+        theirs = [r for r in await IQ._rows(account) if r.get("status") in ("confirmed", "guest_booked", "link_sent", "requested")
+                  and str(r.get("trip_id")) == str(b.get("trip_id")) and r.get("type") not in ("flight", "hotel")]
+        if theirs:
+            say += "\nAlready booked with the venue: " + "; ".join(f"{str(r.get('venue') or '')[:40]} ({SN.day_words(r['date']) if r.get('date') else ''}"
+                                                                   f"{' ' + r['time'] if r.get('time') else ''})" for r in theirs[:4])
+    except Exception as e:
+        log.info("[trip_book] venue bookings not listed: %s", type(e).__name__)
     if failed:
         say += "\nNot booked: " + "; ".join(failed)
     out = {"status": "booked" if done else "failed", "say": say, "booked": done, "failed": failed}

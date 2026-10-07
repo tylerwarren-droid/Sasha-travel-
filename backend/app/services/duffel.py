@@ -250,6 +250,14 @@ def _normalise_offer(offer: dict, *, origin_query: str, destination_query: str,
     detail_bits = [" / ".join(route_parts), " / ".join(durations), stops]
     if operating:
         detail_bits.append("Operated by " + ", ".join(operating))
+    # Sasha 196 · the departure time, so "morning" can be honoured and said
+    _dep = ""
+    try:
+        _dep = str(((slices[0].get("segments") or [{}])[0].get("departing_at") or ""))[11:16]
+    except Exception:
+        _dep = ""
+    if _dep:
+        detail_bits.insert(0, f"dep {_dep}")
     detail = " · ".join(x for x in detail_bits if x)
 
     currency = str(offer.get("total_currency") or "").upper()
@@ -269,6 +277,7 @@ def _normalise_offer(offer: dict, *, origin_query: str, destination_query: str,
         "book_url": _google_flights_link(origin_query, destination_query, departure_date),
         "provider": "duffel",
         "provider_offer_id": offer.get("id"),
+        "dep": _dep,
         "provider_amount": amount,
         "currency": currency,
         "party_size": party_size,

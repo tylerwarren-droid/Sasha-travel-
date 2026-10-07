@@ -209,7 +209,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
   const [flightPick, setFlightPick] = useState<{ offerId: string; n: number } | null>(null)  // Sasha 182
   const [productMedia, setProductMedia] = useState<{ caption: string; url: string; link?: string }[]>([])
   const openedRef = useRef(false)
-  const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number; provider?: string; provider_offer_id?: string; live_mode?: boolean }[] }[]>([])
+  const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; trip_pick?: boolean; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number; provider?: string; provider_offer_id?: string; live_mode?: boolean }[] }[]>([])
   // Photos Sasha surfaced, keyed by the index of the assistant message that produced them.
   const [photosByMsg, setPhotosByMsg] = useState<Record<number, Photo[]>>({})
   // Opening state: real Vietnam destinations, each with its own live photo. Before this the
@@ -852,7 +852,10 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
                           <div className="o1">{o.name}</div>
                           <div className="o2">{[o.detail, o.price].filter(Boolean).join(' · ')}</div>
                         </div>
-                        {o.provider === 'duffel' && o.provider_offer_id && o.live_mode === false ? (
+                        {(b as { trip_pick?: boolean }).trip_pick ? (
+                          /* Sasha 196 · in the guided trip: CHOOSE adds this flight to the itinerary (not booked, not paid) */
+                          <button type="button" className="price" onClick={() => { sendMessage(`the ${o.name} one`) }}>Choose</button>
+                        ) : o.provider === 'duffel' && o.provider_offer_id && o.live_mode === false ? (
                           /* Sasha 132 · a Duffel TEST offer: booked as a TEST booking, end to end */
                           <FlightBookTest offerId={o.provider_offer_id} />
                         ) : o.offer_id && (o.amount_usd ?? 0) > 0 ? (

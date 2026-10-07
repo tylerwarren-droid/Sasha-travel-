@@ -111,29 +111,34 @@ async def main() -> int:
         ok("W2 honesty: “I'm ready to pay” with nothing open never claims a booking",
            not re.search(r"booked|payment('s)? (has )?gone through|secure payment form", r3.get("response") or "", re.I), (r3.get("response") or "")[:90])
 
-        # W3 · web: plan → its flights → a pick from the plan's own list → "book it, flying from Madrid" → the whole trip
+        # W3 · web, the guided trip (Sasha 196): plan → flights asked about → a pick ADDED (not booked) → "book it, flying from Madrid"
+        #      → ONE total with THAT flight → paid → booked
         sid = "suite-w3-" + uuid.uuid4().hex[:6]
         h = []
-        for m in ("plan me 8 days in Vietnam from 12 November for 2 of us", "from Madrid, a mix of culture and beaches"):
+        for m in ("plan me 8 days in Vietnam from 12 November for 2 of us", "culture and beaches", "from Madrid"):
             rr = await conduct(m, h, user_id=a, signed_in=True, session_id=sid)
-            if m.startswith("plan me"):   # Sasha 194 · the origin is asked, and a new trip starts clean (no old lists or prices)
-                ok("W3 plan: asks where from (Madrid suggested)", "flying from" in (rr.get("response") or ""), (rr.get("response") or "")[:90])
-                ok("W3 plan: a clean start — no flight list, offer or price before the plan", not rr.get("bookings")
-                   and "€" not in (rr.get("response") or ""), "")
+            if m.startswith("plan me"):
+                ok("W3 plan: one question first, and a clean start (no flights, offers or prices)", "?" in (rr.get("response") or "")
+                   and not rr.get("bookings") and "€" not in (rr.get("response") or ""), (rr.get("response") or "")[:90])
             h = rr.get("messages") or h
-        card = next((b for b in rr.get("bookings") or [] if b.get("_provider") == "duffel"), None)
-        ok("W3 plan: built, with flights to consider", bool(rr.get("itinerary")) and bool(card), (rr.get("response") or "")[:90])
+        ok("W3 plan: built, flights asked about (never assumed)", bool(rr.get("itinerary")) and "Shall we look at flights?" in (rr.get("response") or ""),
+           (rr.get("response") or "")[:120])
+        rr = await conduct("yes please", h, user_id=a, signed_in=True, session_id=sid)
+        h = rr.get("messages") or h
+        card = next((b for b in rr.get("bookings") or [] if b.get("trip_pick")), None)
         al = _airline(card)
         rp = await conduct(f"Can I book the {al} flight, please? I like that one.", h, user_id=a, signed_in=True, session_id=sid)
-        ok(f"W3 plan: “Can I book the {al} flight, please?” → its read-back", bool(rp.get("flight_pick")), (rp.get("response") or "")[:90])
+        h = rp.get("messages") or h
+        ok(f"W3 plan: “Can I book the {al} flight, please?” → added to the itinerary (not booked yet)",
+           f"I've added the {al} flight to your itinerary" in (rp.get("response") or ""), (rp.get("response") or "")[:110])
         rb = await conduct("book it, flying from Madrid", h, user_id=a, signed_in=True, session_id=sid)
-        ok("W3 plan: “book it, flying from Madrid” → one total for the whole trip",
-           bool(rb.get("trip_book")) and "€" in (rb.get("response") or ""), (rb.get("response") or "")[:120])
+        ok(f"W3 plan: “book it, flying from Madrid” → ONE total with the {al} flight",
+           bool(rb.get("trip_book")) and f"the {al} flight" in (rb.get("response") or ""), (rb.get("response") or "")[:120])
         if rb.get("trip_book"):
             await _pay_and_settle(a, TB.prepare, TB.pay, {"from": "Madrid"}, "W3 whole trip")
             rows = await IQ._rows(a)
-            ok("W3: the trip's flights and hotels are in the guest's list", sum(1 for x in rows if "TEST" in str(x.get("venue") or "")
-                                                                                    or str(x.get("booking_reference") or "").startswith("TEST-")) >= 3,
+            ok("W3: the trip's flight and hotels are in the guest's list", sum(1 for x in rows if "TEST" in str(x.get("venue") or "")
+                                                                                   or str(x.get("booking_reference") or "").startswith("TEST-")) >= 3,
                f"{len(rows)} rows")
 
         # W4 · a named destination is Sasha's, never the relocation's

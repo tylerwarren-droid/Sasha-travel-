@@ -34,16 +34,25 @@ PATH = "/api/booking/travel/duffel/webhook"
 TELL = None   # tests replace it: (account, words) → None
 
 
-def verify(secret: str, header: str, body: bytes, now: Optional[float] = None) -> bool:
+def why_not(secret: str, header: str, body: bytes, now: Optional[float] = None) -> Optional[str]:
+    """None when the signature is Duffel's; else why not (said in the log — never a value)."""
     try:
-        parts = dict(p.split("=", 1) for p in (header or "").split(","))
+        parts = dict(p.strip().split("=", 1) for p in (header or "").split(","))
         t, sig = parts["t"], parts["v1"]
+        ts = int(t)
     except (ValueError, KeyError):
-        return False
-    if abs((now or time.time()) - int(t)) > 300:
-        return False
+        return f"malformed header (keys: {sorted(k.split('=')[0].strip() for k in (header or '').split(',') if k)})"
+    ts_s = ts / 1000 if ts > 10 ** 11 else ts   # seconds, or milliseconds
+    if abs((now or time.time()) - ts_s) > 300:
+        return f"stale timestamp ({int((now or time.time()) - ts_s)} s off)"
     want = hmac.new(secret.encode(), t.encode() + b"." + body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(want, sig)
+    if not hmac.compare_digest(want, sig.lower()):
+        return f"mismatch (secret {len(secret)} chars, signature {len(sig)} chars, body {len(body)} bytes)"
+    return None
+
+
+def verify(secret: str, header: str, body: bytes, now: Optional[float] = None) -> bool:
+    return why_not(secret, header, body, now) is None
 
 
 async def _rows_of_order(order_id: str):
@@ -98,8 +107,9 @@ async def webhook(request: Request):
     if not secret:
         return JSONResponse({"ok": False, "rule": "webhook_not_configured"}, status_code=503)
     body = await request.body()
-    if not verify(secret, request.headers.get("x-duffel-signature", ""), body):
-        log.warning("[duffel_webhook] refused: bad or stale signature")
+    why = why_not(secret, request.headers.get("x-duffel-signature", ""), body)
+    if why:
+        log.warning("[duffel_webhook] refused: %s", why)
         return JSONResponse({"ok": False, "rule": "bad_signature"}, status_code=401)
     try:
         event = json.loads(body)

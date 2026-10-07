@@ -9,6 +9,10 @@ import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal, SIGN_IN_TO_BOOK } from '@/lib/booking-client'
 import { setPendingYes } from '@/lib/chat-booking-bus'
 
+/** Sasha 186 · the card's answers look and act like buttons on every panel (they read as plain text in the chat) */
+const YES_BTN = { background: '#E8B923', color: '#111', border: 0, borderRadius: 8, padding: '6px 14px', fontWeight: 600, cursor: 'pointer' } as const
+const NO_BTN = { background: 'transparent', color: 'inherit', border: '1px solid rgba(255,255,255,.35)', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' } as const
+
 type Phase = { k: 'idle' } | { k: 'reading' } | { k: 'readback'; lines: string[]; sha: string } | { k: 'paying'; url: string; sid: string; phone?: boolean }
   | { k: 'booked'; say: string } | { k: 'error'; say: string }
 
@@ -53,14 +57,14 @@ export function FlightBookTest({ offerId: firstOffer, autoStart = false }: { off
     }, 3000)
     return () => clearInterval(t)
   }, [p, offerId])
-  if (p.k === 'idle') return <button className="price" onClick={() => { prepare() }}>Book it (TEST)</button>
+  if (p.k === 'idle') return <button className="price" style={YES_BTN} onClick={() => { prepare() }}>Book it (TEST)</button>
   if (p.k === 'reading') return <span className="o2">Reading the offer…</span>
   if (p.k === 'readback') return (
     <div className="o2" style={{ maxWidth: 420 }}>
       {note && <div style={{ marginBottom: 4 }}>{note}</div>}
       <ul>{p.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
-      <button className="price" onClick={() => { yes(p.sha) }}>Yes, book it (TEST)</button>{' '}
-      <button className="viewlink" onClick={() => setP({ k: 'idle' })}>No</button>
+      <button className="price" style={YES_BTN} onClick={() => { yes(p.sha) }}>Yes, book it (TEST)</button>{' '}
+      <button className="viewlink" style={NO_BTN} onClick={() => setP({ k: 'idle' })}>No</button>
     </div>
   )
   if (p.k === 'paying') return p.phone

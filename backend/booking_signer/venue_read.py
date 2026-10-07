@@ -416,7 +416,7 @@ FIND_FIELDS = ("places.id,places.displayName,places.formattedAddress,places.inte
                "places.rating,places.userRatingCount,places.priceLevel,places.location,places.regularOpeningHours,"
                # Sasha 156 · the listing's first photo's NAME (Pro-tier field, inside the Enterprise SKU already paid):
                # the card's fallback picture when the venue's own site names none — resolved per shown card (google_photos)
-               "places.photos")
+               "places.photos,places.types")
 #: S-68 · search wider, show fewer: 20 is Text Search's cap; the chat shows 3–5 of them
 FIND_MAX = 20
 SHOW_MAX = 5
@@ -600,6 +600,52 @@ _ADULT = re.compile(r"er[oó]tic|tantra|sensual|happy\s*ending|nuru|body\s*to\s*
                     r"masajes?\s+(?:para\s+)?(?:hombres|caballeros)\s+(?:er|sens)|lingam", re.I)
 
 
+#: Sasha 186 · a cuisine/type word → what a matching place's Google type or name contains (folded, lower case)
+CUISINES = {
+    "indian": ("indian", "india", "curry", "tandoor", "masala", "punjab", "nepal", "biryani"),
+    "japanese": ("japanese", "japan", "japones", "sushi", "ramen", "izakaya", "udon", "yakitori"),
+    "sushi": ("sushi", "japanese", "japones"),
+    "ramen": ("ramen", "japanese", "noodle"),
+    "chinese": ("chinese", "china", "chino", "dim sum", "dumpling", "szechuan", "cantonese", "pekin"),
+    "thai": ("thai", "tailand", "siam", "bangkok"),
+    "vietnamese": ("vietnam", "pho", "banh"),
+    "korean": ("korean", "korea", "corean", "seoul", "kimchi", "bibimbap"),
+    "italian": ("italian", "italia", "trattoria", "pizz", "pasta", "osteria"),
+    "pizza": ("pizz", "italian", "italia"),
+    "mexican": ("mexican", "mexic", "taco", "taquer", "cantina"),
+    "peruvian": ("peruvian", "peru", "ceviche", "nikkei"),
+    "french": ("french", "franc", "bistro", "brasserie"),
+    "greek": ("greek", "grieg", "gyro"),
+    "lebanese": ("lebanese", "liban", "lebanon"),
+    "vegan": ("vegan", "plant based", "plant-based", "vegetarian", "vegetarian"),
+    "vegetarian": ("vegetarian", "vegan", "veggie"),
+    "tapas": ("tapas", "spanish", "taberna", "tasca", "bar"),
+    "steak": ("steak", "grill", "asador", "parrilla", "carne", "brasa", "churrasc"),
+    "seafood": ("seafood", "marisc", "fish", "pescado", "oyster", "ostra"),
+    "burger": ("burger", "hamburgues"),
+    "brunch": ("brunch", "breakfast", "cafe", "coffee", "bakery", "desayun"),
+}
+_CUISINE_RX = re.compile(r"\b(indian|india|japanese|sushi|ramen|chinese|thai|vietnamese|korean|italian|pizza|pizzeria|mexican|peruvian|"
+                         r"french|greek|lebanese|vegan|vegetarian|tapas|steak(?:house)?|seafood|burgers?|brunch|indio|japon[eé]s|chino|"
+                         r"italiano|mexicano|vegano|vegetariano|marisco)\b", re.I)
+_CUISINE_ALIAS = {"india": "indian", "indio": "indian", "japonés": "japanese", "japones": "japanese", "chino": "chinese",
+                  "italiano": "italian", "mexicano": "mexican", "vegano": "vegan", "vegetariano": "vegetarian", "pizzeria": "pizza",
+                  "steakhouse": "steak", "burgers": "burger", "marisco": "seafood"}
+
+
+def _fold_c(s: str) -> str:
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFKD", (s or "").lower()) if not unicodedata.combining(ch)).replace("_", " ")
+
+
+def cuisine_of(what: Optional[str]) -> Optional[str]:
+    m = _CUISINE_RX.search(what or "")
+    if not m:
+        return None
+    w = _fold_c(m[1]).lower()
+    return _CUISINE_ALIAS.get(w, w)
+
+
 async def find_venues(http: Http, *, what: str, where: Optional[str], country: Optional[str], now: datetime,
                       near: Optional[str] = None, open_at: Optional[str] = None, named: bool = False) -> dict:
     """S-65 · "Find venues": a kind of place in a place ("tattoo studio", "Nairobi, KE") → up to twenty candidates (S-68; the chat shows `show` of them), each
@@ -656,6 +702,7 @@ async def find_venues(http: Http, *, what: str, where: Optional[str], country: O
                     "country": c, "phone": (to_e164(raw, c) if raw else None) or raw, "website": pl.get("websiteUri"),
                     "type": (pl.get("primaryTypeDisplayName") or {}).get("text"), "status": pl.get("businessStatus"),
                     "listing_url": f"https://www.google.com/maps/place/?q=place_id:{pl['id']}", **_ranking_facts(pl),
+                    "types": [t for t in (pl.get("types") or []) if isinstance(t, str)][:12],
                     **({"gphoto": g} if (g := _gphoto(pl)) else {})})
         out[-1]["books"] = how_she_books(out[-1])   # S-68 step 5
     # Sasha 175 (EU 172) · never an adult listing ("Erotic Madrid Masajes", "Tantra massage" came back for "a massage near Sol"),
@@ -671,6 +718,19 @@ async def find_venues(http: Http, *, what: str, where: Optional[str], country: O
         seen_keys.add(k)
         kept.append(c)
     out = kept
+    # Sasha 186 · THE CUISINE IS HONOURED: "Indian food" returned a Spanish place. A cuisine/type word in the request keeps only
+    # places whose Google type or name says it; none left → no cards, and the reply says so and offers to widen
+    cz = cuisine_of(what)
+    no_match = None
+    if cz and not named:
+        words = CUISINES[cz]
+        def _is(c: dict) -> bool:
+            blob = _fold_c(f"{c.get('name') or ''} {c.get('type') or ''} {' '.join(c.get('types') or [])}")
+            return any(w in blob for w in words)
+        hits = [c for c in out if _is(c)]
+        if not hits and out:
+            no_match = cz
+        out = hits
     if when is not None:
         from .hours import from_places_periods, open_at as _open_at
         for c in out:
@@ -688,6 +748,7 @@ async def find_venues(http: Http, *, what: str, where: Optional[str], country: O
     ranking = rank(out, open_at=when.strftime("%Y-%m-%dT%H:%M") if when is not None else None,
                    near_found=bool(origin and origin["found"]))
     return {"query": body["textQuery"], "candidates": out, "show": SHOW_MAX, "ranking": ranking,
+            **({"cuisine": cz} if cz else {}), **({"no_match": no_match} if no_match else {}),
             **({"near": {k: origin[k] for k in ("asked", "found", "why") if k in origin}} if origin is not None else {}),
             **({"open_at": when.strftime("%Y-%m-%dT%H:%M")} if when is not None else {}),
             "source": {"url": PLACES_URL, "query": body["textQuery"], "result": f"HTTP 200 — {len(out)} listing(s)",

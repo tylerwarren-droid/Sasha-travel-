@@ -303,7 +303,7 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
   const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string; payload?: string; opening?: boolean }) => {
     const media = attachments
     if (!content.trim() && media.length) content = media.length === 1 ? '📷 (photo)' : `📷 (${media.length} photos)`
-    if (!opts?.opening && !opts?.payload && !media.length && takeChatText(content)) { setMessages(prev => [...prev, { role: 'user', content }]); return }  // S-66 chat booking
+    if (!opts?.opening && !opts?.payload && !media.length && takeChatText(content)) { setMessages(prev => [...prev, { role: 'user', content }]); setInput(''); return }  // S-66 chat booking; Sasha 186 · the typed yes clears
     await refreshGuestAuth()  // S-62 step 7 · a signed-in guest's chat is filed under their own account
     if (!content.trim() && !opts?.opening) return   // CR 16 · a product tab's opening turn is empty on purpose
     if (media.length) setAttachments([])

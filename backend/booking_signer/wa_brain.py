@@ -46,6 +46,8 @@ def placeless(body: str) -> Optional[dict]:
     # Sasha 174 · or said BARE, as a voice note does: "a spa for two on the 13th at 4 in the afternoon" (no city: the trip's)
     bare = re.match(r"^\s*(?:(?:an?|some|una?|el|la)\s+)?(?:[a-záéíóúñ]+\s+){0,2}?(?:spa|massage|masaje|dinner|lunch|brunch|"
                     r"restaurant|table|cena|mesa|tattoo|cooking class|class)s?\b", t, re.I)
+    # Sasha 186 · a cuisine said bare ("Indian food tonight", "sushi for 2 tonight") is a restaurant request too
+    bare = bare or (cu and re.match(r"^\s*(?:(?:some|an?|una?)\s+)?\w+\s+(?:food|restaurant|place|dinner|lunch|tonight|for\s+\d)\b", t, re.I))
     if not (_WANT.search(t) or bare) or not (_PLACE.search(t) or cu or bare) or _SAID_WHERE.search(t) or _NOT_PLACE.search(t):
         return None
     low = t.lower()

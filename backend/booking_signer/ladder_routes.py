@@ -138,7 +138,8 @@ async def read_venue(request: Request):
         body = {"name": "Sasha Test Venue", "city": body.get("city") or "Madrid", "country": "ES", "website": test_venue_url()}
     if body is None:
         return _refuse(400, "read_malformed", "send {name, city, country?, website?} as a JSON object")
-    if body.get("place_id") and standin(account_for(request)) and not body.get("real_venue"):   # Sasha 175 · the founder's platform run reads real venues
+    if body.get("place_id") and standin(account_for(request)) and not body.get("real_venue") \
+            and not is_restaurant(body.get("asked_for")):   # Sasha 175 · the platform run reads real venues; Sasha 186 · restaurants are real
         # Sasha 169 · THE DEMO STAND-IN (founder only, SASHA_DEMO_STANDIN=1): a real listing picked → OUR test venue's own page
         # is read and sent to instead, and its name says so everywhere — the real place is never contacted
         from .form_rung import test_venue_url
@@ -195,6 +196,16 @@ REHEARSAL_ID = "sasha-test-venue"
 _FIND_CACHE: dict = {}   # Sasha 171 · (account, request) → (when, the cards) — the phone and the laptop see the same
 
 
+#: Sasha 186 · REAL RESTAURANTS for the founder: the demo stand-in stays for spas, tattoo studios and the rest, never a restaurant
+_RESTAURANT = re.compile(r"\b(restaurant|restaurante|dinner|lunch|brunch|breakfast|table|eat|food|cuisine|tapas|sushi|ramen|steak|"
+                         r"pizza|pizzeria|bistro|tavern|taberna|cena|comida|mesa|grill|seafood|burger|curry|indian|japanese|italian|"
+                         r"chinese|thai|mexican|french|korean|vietnamese|peruvian|greek|lebanese|vegan|vegetarian|cafe|caf[eé])\b", re.I)
+
+
+def is_restaurant(asked_for) -> bool:
+    return bool(_RESTAURANT.search(str(asked_for or "")))
+
+
 def standin(account: Optional[str]) -> bool:
     """Sasha 169 · the founder's demo: every send goes to OUR test venue, standing in for the place he picked (labelled TEST)."""
     import os
@@ -222,6 +233,8 @@ def _with_rehearsal(account: str, out: dict) -> dict:
     from .form_rung import test_venue_url
     if not rehearsal(account) or not isinstance(out, dict) or not (out.get("candidates") or []):
         return out   # Sasha 175 (EU 172) · never as filler: an empty search says it found nothing
+    if (out.get("cuisine") or is_restaurant(out.get("query"))) and standin(account):
+        return out   # Sasha 186 · real restaurants for the founder: our test venue is never a restaurant card
     card = {"place_id": REHEARSAL_ID, "name": "Sasha Test Venue (ours — rehearsal, not a real restaurant)", "country": "ES",
             "website": test_venue_url(), "rating": None, "rating_count": None, "distance_m": None}
     rk = dict(out.get("ranking") or {})

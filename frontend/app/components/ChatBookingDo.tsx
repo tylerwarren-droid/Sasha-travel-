@@ -10,6 +10,10 @@ import { useEffect, useState } from 'react'
 import { bookingReq, contactReq, refusal } from '@/lib/booking-client'
 import { setPendingYes } from '@/lib/chat-booking-bus'
 
+/** Sasha 186 · the card's answers look and act like buttons on every panel (they read as plain text in the chat) */
+const YES_BTN = { background: '#E8B923', color: '#111', border: 0, borderRadius: 8, padding: '6px 14px', fontWeight: 600, cursor: 'pointer' } as const
+const NO_BTN = { background: 'transparent', color: 'inherit', border: '1px solid rgba(255,255,255,.35)', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' } as const
+
 type Route = 'form' | 'email'
 type Phase = { k: 'details' } | { k: 'preparing' } | { k: 'readback'; id: string; sha: string; lines: string[]; sentence: string }
   | { k: 'sending' } | { k: 'done'; say: string } | { k: 'stopped'; say: string }
@@ -121,7 +125,7 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line 
       {!named0 && <input placeholder="Your name" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} style={{ ...input, marginTop: 6 }} />}
       {needPhone && <div style={{ marginTop: 6 }}>And a mobile number they can reach you on?</div>}
       {needPhone && <input placeholder="+34 600 000 000" type="tel" value={d.phone} onChange={(e) => setD({ ...d, phone: e.target.value })} style={{ ...input, marginTop: 4 }} />}
-      <div style={{ marginTop: 8 }}><button className="price" disabled={!complete} onClick={() => { prepare() }}>Continue</button></div>
+      <div style={{ marginTop: 8 }}><button className="price" style={YES_BTN} disabled={!complete} onClick={() => { prepare() }}>Continue</button></div>
     </div>
   )
   // Sasha 169 · the founder's demo stand-in (SASHA_DEMO_STANDIN): said first, every time — the place picked is never contacted
@@ -132,8 +136,8 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line 
       <div>{line || p.sentence}</div>
       {line ? <div style={{ fontSize: 12.5, opacity: 0.75 }}>{quote ? d.want : `${d.party} people · ${dayWords(d.date)} at ${d.time}`}</div> : null}
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button className="price" onClick={() => { yes() }}>{route === 'form' ? 'Book it' : 'Yes'}</button>
-        <button className="viewlink" onClick={() => setP({ k: 'stopped', say: 'OK — nothing was sent.' })}>No</button>
+        <button className="price" style={YES_BTN} onClick={() => { yes() }}>{route === 'form' ? 'Book it' : 'Yes'}</button>
+        <button className="viewlink" style={NO_BTN} onClick={() => setP({ k: 'stopped', say: 'OK — nothing was sent.' })}>No</button>
       </div>
     </div>
   )

@@ -1530,6 +1530,10 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
     if luxe:   # Sasha 104 · "luxury": Google's €€€ and €€€€ first, best rated within; the rest after, never dropped
         order = sorted(order, key=lambda pid: not ((cands.get(pid) or {}).get("price_level") or 0) >= 3)
     shown = [cands[i] for i in order if i in cands][:3]
+    if not shown and j.get("no_match"):   # Sasha 186 · the cuisine is honoured: never another kind of place in its place
+        out.text(f"I found no {j['no_match'].title()} places in {f.get('where')} — Google's results there weren't {j['no_match'].title()}. "
+                 f"Shall I widen it (say “restaurants in {f.get('where')}”) or try another area?")
+        return
     if not shown:
         out.text(f"I found no {f.get('what')} in {f.get('where')}. Try another area or kind of place.")
         return
@@ -1542,7 +1546,7 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
     photos, late = await _photos_within(shown, ctx.get("photo_wait") or photo_wait())   # Sasha 169 · the voice page waits longer (no late photos)
     if ctx.get("third_card"):   # Sasha 126 · the combo's spa set: OUR demo spa as the third card
         shown = shown[:2] + [ctx["third_card"]]
-    elif rehearsal(account) and not ctx.get("no_test_card"):   # Sasha 117 · the dress rehearsal books OUR test venue; the card says so
+    elif rehearsal(account) and not ctx.get("no_test_card") and not _real_restaurant(f, account):   # Sasha 186 · restaurants are real   # Sasha 117 · the dress rehearsal books OUR test venue; the card says so
         shown = shown[:2] + [TEST_CARD]                   # still three: WhatsApp shows at most three reply buttons
     what = f.get("what") or ""
     out.text(_header(f, luxe))   # Sasha 158 · one sentence; how they were found and ranked is not the guest's business
@@ -1562,6 +1566,18 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
                             "draft": draft.get("parts") or {},
                             "cards": [{"place_id": c["place_id"], "name": c.get("name"), "country": c.get("country"),
                                        "address": c.get("address"), "type": c.get("type")} for c in shown]}   # Sasha 169 · "the one by the river"
+
+
+def _founder_demo(account) -> bool:
+    """The founder's demo is on (SASHA_DEMO_STANDIN): only then does a read-back say which kind it is (guests unchanged)."""
+    from .ladder_routes import standin
+    return standin(account)
+
+
+def _real_restaurant(f: dict, account=None) -> bool:
+    """Sasha 186 · in the founder's demo (stand-in on) his restaurants are real: no test card beside them (spas, studios keep it)."""
+    from .ladder_routes import is_restaurant
+    return is_restaurant((f or {}).get("what")) and _founder_demo(account)
 
 
 TEST_CARD = {"place_id": "sasha-test-venue", "name": "Sasha Test Venue", "country": "ES"}
@@ -1674,7 +1690,7 @@ async def _stream_cards(ctx: dict, f: dict, shown: List[dict], cands: dict, rank
     tasks = {c["place_id"]: asyncio.ensure_future(_photo_of(c)) for c in shown if c.get("website") or c.get("gphoto")}
     if ctx.get("third_card"):
         shown = shown[:2] + [ctx["third_card"]]
-    elif rehearsal(account) and not ctx.get("no_test_card"):
+    elif rehearsal(account) and not ctx.get("no_test_card") and not _real_restaurant(f, account):   # Sasha 186 · restaurants are real
         shown = shown[:2] + [TEST_CARD]
     what = f.get("what") or ""
     out.text(_header(f, luxe))   # Sasha 158 · one sentence; how they were found and ranked is not the guest's business
@@ -2615,6 +2631,9 @@ async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: st
     else:
         out.text("What I'll " + ("say" if rung == "call" else "send") + ":\n" +
                  "\n".join("• " + _BULLET.sub("", ln) for ln in guest_lines(rung, read_back["lines"])))   # Sasha 117 · one bullet
+    if kind == "confirm" and "(TEST stand-in)" not in (venue or "") and _founder_demo(ctx.get("account")) \
+            and "Sasha Test Venue" not in (venue or ""):   # Sasha 186 · said plainly which it is: a REAL booking
+        sentence = f"✅ Real booking: {venue} itself gets this — it's not a test.\n{sentence}"
     if kind == "confirm" and "(TEST stand-in)" in (venue or ""):   # Sasha 169 · the stand-in, said first
         place = "spa" if re.search(r"spa|massage|wellness", venue, re.I) else "studio" if re.search(r"tattoo|ink|piercing", venue, re.I) else "restaurant"
         sentence = f"🧪 Demo: our test venue stands in; the {place} isn't contacted.\n{sentence.replace(' (TEST stand-in)', '')}"

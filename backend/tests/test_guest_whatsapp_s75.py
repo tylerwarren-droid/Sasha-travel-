@@ -628,7 +628,7 @@ class OnPostgresStore(unittest.TestCase):
             c = await asyncpg.connect(TBL.PG_URL)
             try:
                 sql = (pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql" / "020_guest_channels.sql").read_text()
-                await c.execute("drop table if exists guest_channels, guest_link_codes, guest_wa_state")
+                await c.execute("drop table if exists guest_channels, guest_link_codes, guest_wa_state, guest_inbound_sids")
                 await c.execute(sql[sql.index("begin;"):sql.index("-- VERIFY")])
             finally:
                 await c.close()
@@ -662,8 +662,25 @@ class OnPostgresStore(unittest.TestCase):
                 self.assertEqual((await st.channel_for(GW.wa_key("+447700900999")))["opted_out_at"], NOW)
                 state = {"history": [{"role": "user", "content": "dinner"}], "pending": {"kind": "cards", "nonce": "ab"},
                          "last_inbound_at": NOW, "link_tries": ["2026-10-02T12:00:00+00:00"]}
-                await st.put_state("a" * 64, state)
-                self.assertEqual(await st.get_state("a" * 64), state)
+                # Sasha 206 (R1) · before 034 there is no last_to column: the state round-trips with last_to empty
+                GW._LAST_TO_COLUMN = None
+                await st.put_state("a" * 64, {**state, "last_to": "+14155238886"})
+                self.assertEqual(await st.get_state("a" * 64), {**state, "last_to": None})
+                # … and with 034 applied, the number the guest last wrote to is kept
+                import asyncpg
+                import pathlib
+                sql034 = (pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql" / "034_guest_wa_last_to_and_sids.sql").read_text()
+                c2 = await asyncpg.connect(TBL.PG_URL)
+                try:
+                    await c2.execute(sql034[sql034.index("begin;"):sql034.index("commit;") + len("commit;")])
+                finally:
+                    await c2.close()
+                GW._LAST_TO_COLUMN = None
+                await st.put_state("a" * 64, {**state, "last_to": "+14155238886"})
+                self.assertEqual(await st.get_state("a" * 64), {**state, "last_to": "+14155238886"})
+                await st.put_state("a" * 64, {**state, "last_to": None})            # a later save without it never erases it
+                self.assertEqual((await st.get_state("a" * 64))["last_to"], "+14155238886")
+                GW._LAST_TO_COLUMN = None
                 self.assertEqual((await st.unlink(acct))["account_id"], acct)
                 self.assertIsNone(await st.channel_of_account(acct))
             finally:

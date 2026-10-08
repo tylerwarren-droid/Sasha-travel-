@@ -32,8 +32,13 @@ IDEMPOTENCY_RETENTION_H = 24               # Part 1 I10
 COST_UNITS = {"free": 0, "read": 0, "search": 1, "message": 1, "act_prepare": 2, "act": 5}   # Part 4 M2 — placeholders (Tyler prices)
 DEFAULT_BUDGET_UNITS = int(os.getenv("AGAPI_DEFAULT_BUDGET_UNITS", "5000"))   # per key per month (M4)
 DEFAULT_RATE_PER_MIN = int(os.getenv("AGAPI_DEFAULT_RATE_PER_MIN", "120"))   # per key per minute (M5)
-DEFAULT_SCOPES = ["travel.*", "venues.*", "trip.*", "approvals.*", "acts.*", "evidence.*", "users.*", "usage.*", "sandbox.*", "webhooks.*"]
-SCOPES_ADDED = {"webhooks.*": "CR 59"}     # keys issued with the earlier default get these on startup (additive)
+DEFAULT_SCOPES = ["travel.*", "venues.*", "trip.*", "approvals.*", "acts.*", "evidence.*", "users.*", "usage.*", "sandbox.*", "webhooks.*",
+                  "messages.*", "calendar.*"]
+SCOPES_ADDED = {"webhooks.*": "CR 59", "messages.*": "CR 60", "calendar.*": "CR 60"}   # keys issued earlier gain these (additive)
+
+# CR 60 · Sasha's own sending address (never the user's mailbox). TYLER DECIDES the real one; in test mode nothing is sent.
+EMAIL_FROM = os.getenv("AGAPI_EMAIL_FROM", "Sasha (sandbox) <sasha@sandbox.agapi.kanoe.ai>")
+REPLY_DOMAIN = os.getenv("AGAPI_REPLY_DOMAIN", "sandbox.agapi.kanoe.ai")
 
 
 def pepper() -> bytes:

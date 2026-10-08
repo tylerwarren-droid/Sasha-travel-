@@ -60,7 +60,7 @@ def _migrate_scopes(store: Store) -> None:
     earlier = set(config.DEFAULT_SCOPES) - set(config.SCOPES_ADDED)
     for k in store.q("select key_id, scopes from api_keys where state = 'active'"):
         have = set(loads(k["scopes"]))
-        if have == earlier:
+        if earlier <= have <= set(config.DEFAULT_SCOPES) and have != set(config.DEFAULT_SCOPES):
             store.x("update api_keys set scopes = ? where key_id = ?", dumps(sorted(have | set(config.SCOPES_ADDED))), k["key_id"])
 
 
@@ -341,6 +341,17 @@ async def admin(action: str, req: Request):
 
 
 _demo.bind(db, lambda *a, **k: execute(*a, **k))
+
+
+@app.get("/ics/{token}.ics")
+async def ics_file(token: str):
+    """CR 60 · the event file behind "Apple / any calendar" — key-less, by an unguessable token, nothing personal beyond the event."""
+    from fastapi.responses import Response
+    row = db().one("select ics, act_id from calendar_files where token_hash = ?", hashlib.sha256(token.encode()).hexdigest())
+    if not row:
+        return PlainTextResponse("Not found", status_code=404)
+    return Response(row["ics"], media_type="text/calendar; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{row["act_id"]}.ics"', "Cache-Control": "no-store"})
 
 
 @app.get("/health")

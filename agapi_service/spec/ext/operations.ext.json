@@ -1,5 +1,5 @@
 {
-  "version": "kanoe-sandbox-ext.1",
+  "version": "kanoe-sandbox-ext.2",
   "note": "CR 59: additive only — new operations, and acts.status's output with an optional evidence_id. EU 201's operations.json is unchanged (spec/v1).",
   "add": [
     {
@@ -43,6 +43,48 @@
         "invalid_input",
         "idempotency_key_required",
         "idempotency_conflict"
+      ],
+      "cost_class": "free",
+      "extension": true
+    },
+    {
+      "operation": "messages.send_email",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": true,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/send_email_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/send_email_out",
+      "errors": [
+        "approval_required",
+        "approval_not_found",
+        "approval_same_turn",
+        "approval_expired",
+        "approval_void",
+        "approval_consumed",
+        "approval_untrusted_origin",
+        "no_explicit_yes",
+        "idempotency_key_required",
+        "idempotency_in_flight",
+        "idempotency_conflict",
+        "not_found",
+        "invalid_input",
+        "upstream_unreachable",
+        "upstream_refused",
+        "outcome_unknown"
+      ],
+      "cost_class": "message",
+      "extension": true
+    },
+    {
+      "operation": "calendar.add_event",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/add_event_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/add_event_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
       ],
       "cost_class": "free",
       "extension": true

@@ -21,7 +21,7 @@ router = APIRouter()
 _store = None
 _execute = None
 DEMO_ACCOUNT = "VC-demo"
-STEPS = ["find", "hold", "ask", "question", "yes", "pay", "confirmed", "cancel", "outage"]
+STEPS = ["find", "hold", "ask", "question", "yes", "pay", "confirmed", "calendar", "email", "cancel", "outage"]
 
 
 def bind(get_store, execute) -> None:
@@ -91,7 +91,7 @@ async def step(name: str, req: Request):
     if name not in STEPS:
         return JSONResponse(_r("red", "No such step."), status_code=404)
     need = STEPS[:STEPS.index(name)]
-    missing = [x for x in need if x not in s["done"] and x not in ("question", "outage")]
+    missing = [x for x in need if x not in s["done"] and x not in ("question", "outage", "calendar", "email")]
     if missing:
         return JSONResponse(_r("red", f"First: {missing[0].capitalize()}."), status_code=409)
     out = await _STEP[name](store, s)
@@ -177,6 +177,35 @@ async def _confirmed(store, s):
                       {"ok": ver["result"]["valid"], "text": "Proof verified — tamper-evident"}])
 
 
+async def _calendar(store, s):
+    st, b = await _op(store, "calendar.add_event", {"act_id": s["act"]})
+    if not b["ok"]:
+        return _r("error", b["error"]["message"])
+    r = b["result"]
+    return _r("green", "In the traveller's calendar — one tap, any calendar app.", [r["event"]["title"]],
+              links=[["Google Calendar", r["links"]["google"]], ["Outlook", r["links"]["outlook"]], ["Apple / any (.ics)", r["links"]["apple"]]],
+              checks=[{"ok": True, "text": "No approval needed — nothing left the traveller's account"},
+                      {"ok": True, "text": f"Event fingerprint {r['event_sha256'][7:19]}…"}])
+
+
+async def _email(store, s):
+    inp = {"end_user": s["uid"], "to": {"address": "marta@example.com", "name": "Marta"}, "subject": "Our trip to London",
+           "body": "Hi Marta,\nWe land at Gatwick at 09:00 on the 12th — booked and confirmed.\nSee you soon!\nAna"}
+    st, b = await _op(store, "messages.send_email", inp)
+    if b["ok"] or b["error"]["code"] != "approval_required":
+        return _r("error", "Unexpected.")
+    rb, lines = b["error"]["details"]["read_back_id"], b["error"]["details"]["read_back"]["lines"]
+    _, a = await _op(store, "sandbox.simulate_approval", {"read_back_id": rb, "said": "Yes, send it."})
+    st, c = await _op(store, "messages.send_email", inp, approval=a["result"]["approval_id"])
+    if not c["ok"]:
+        return _r("error", c["error"]["message"])
+    m = c["result"]["message"]
+    return _r("green", "Emailed from Sasha's address — never the traveller's mailbox. It needed its own yes.", lines[1:4],
+              phone={"kind": "say", "said": "Yes, send it.", "ok": True},
+              checks=[{"ok": True, "text": "The exact message was shown first — any change needs a new yes"},
+                      {"ok": True, "text": "Sandbox: captured, never sent"}, {"ok": True, "text": f"Proof: message {m['body_sha256'][7:19]}…"}])
+
+
 async def _cancel(store, s):
     st, b = await _op(store, "trip.cancel", {"act_id": s["act"]})
     if b["ok"] or b["error"]["code"] != "approval_required":
@@ -202,6 +231,7 @@ async def _outage(store, s):
 
 
 _STEP = {"find": _find, "hold": _hold, "ask": _ask, "question": _question, "yes": _yes, "pay": _pay, "confirmed": _confirmed,
+         "calendar": _calendar, "email": _email,
          "cancel": _cancel, "outage": _outage}
 
 
@@ -235,6 +265,8 @@ cursor:pointer;text-align:left;min-height:4.2rem;display:flex;gap:.6rem;align-it
 .checks{display:flex;flex-direction:column;gap:.45rem;margin-top:.9rem}.chk{display:flex;gap:.6rem;align-items:center;font-weight:600;
 padding:.6rem .8rem;border-radius:12px;background:var(--okbg);color:var(--ok)}.chk.bad{background:var(--nobg);color:var(--no)}
 .chk .i{font-size:1.25rem;width:1.4rem;text-align:center}
+.links{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.7rem}.links a{padding:.55rem .85rem;border-radius:10px;border:1px solid var(--line);
+color:var(--fg);text-decoration:none;font-weight:600}.links a:hover{background:var(--line)}
 .phone{width:100%;background:var(--phone);border-radius:46px;padding:14px;height:760px;position:sticky;top:1rem;box-shadow:0 20px 50px rgba(0,0,0,.18)}
 .screen{background:var(--screen);border-radius:34px;height:100%;overflow:hidden;display:flex;flex-direction:column}
 .bar{display:flex;justify-content:space-between;padding:.7rem 1.4rem .3rem;font-size:.8rem;font-weight:600;color:var(--fg)}
@@ -252,14 +284,16 @@ iframe{flex:1;border:0;width:100%;background:var(--screen)}.empty{flex:1;display
 <div class="feed" id="feed"></div><div class="empty" id="empty">Nothing yet.</div><iframe id="frame" title="Traveller's phone" hidden></iframe></div></aside></main>
 <script>
 const STEPS=[["find","Find"],["hold","Hold"],["ask","Ask for approval"],["question","“Yes — what are my cancellation terms?”"],
-["yes","“Yes, book it.”"],["pay","Pay (test)"],["confirmed","Confirmed + proof"],["cancel","Cancel"],["outage","Source down"]];
+["yes","“Yes, book it.”"],["pay","Pay (test)"],["confirmed","Confirmed + proof"],["calendar","Add to calendar"],
+["email","Email the plan to Marta"],["cancel","Cancel"],["outage","Source down"]];
 let done=[],busy=false;const $=id=>document.getElementById(id);
-function draw(){$("steps").innerHTML=STEPS.map(([k,l],i)=>{const d=done.includes(k);const nxt=!d&&STEPS.slice(0,i).every(([p])=>done.includes(p)||p==="question"||p==="outage")&&!busy;
+function draw(){$("steps").innerHTML=STEPS.map(([k,l],i)=>{const d=done.includes(k);const nxt=!d&&STEPS.slice(0,i).every(([p])=>done.includes(p)||["question","outage","calendar","email"].includes(p))&&!busy;
 return `<button class="step ${d?(k==="question"?"red":"done"):""} ${nxt&&!d?"next":""}" data-k="${k}" ${busy?"disabled":""}><span class="n">${d?(k==="question"?"✕":"✓"):i+1}</span>${l}</button>`}).join("");
 document.querySelectorAll(".step").forEach(b=>b.onclick=()=>run(b.dataset.k));}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c])}
 function show(r){const c=$("out");c.innerHTML=`<p class="cap ${r.tone==="green"?"green":r.tone==="red"||r.tone==="error"?"red":""}">${esc(r.caption)}</p>`+
 `<div class="lines">${(r.partner||[]).map(l=>`<p>${esc(l)}</p>`).join("")}</div>`+
+(r.links?`<div class="links">${r.links.map(([t,u])=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>`).join("")}</div>`:"")+
 `<div class="checks">${(r.checks||[]).map(k=>`<div class="chk ${k.ok&&!k.red?"":"bad"}"><span class="i">${k.ok&&!k.red?"✓":"✕"}</span>${esc(k.text)}</div>`).join("")}</div>`;
 const p=r.phone;if(!p)return;if(p.sms)bubble(p.sms,false);if(p.kind==="say"){bubble(p.said,true,!p.ok);}
 if(p.kind==="page"){$("empty").hidden=true;const f=$("frame");f.hidden=false;f.src=p.url;if(p.autosubmit){f.onload=()=>{f.onload=null;setTimeout(()=>{try{f.contentDocument.querySelector("form").submit()}catch(e){}},1400)}}}}

@@ -50,6 +50,8 @@ create table if not exists usage_records (request_id text not null, key_id text 
 create index if not exists usage_by_key on usage_records (key_id, at);
 create table if not exists messages (account text not null, end_user text, to_ text not null, channel text not null, sent_at text not null,
   body text not null, approval_link text);
+create table if not exists calendar_files (token_hash text primary key, account text not null, act_id text not null, ics text not null,
+  created_at text not null);
 create table if not exists webhook_endpoints (account text not null, id text not null, url text not null, secret text not null,
   state text not null, created_at text not null, primary key (account, id));
 create table if not exists webhook_deliveries (id text primary key, account text not null, endpoint_id text not null, event text not null,

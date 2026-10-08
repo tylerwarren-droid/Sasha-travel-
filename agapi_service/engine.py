@@ -309,7 +309,9 @@ def _evidence(ctx: Ctx, operation: str, act_id: str, intent_id: str, inp: dict, 
     eid = R.new_id("evd")
     ev: Dict[str, Any] = {"evidence_id": eid, "basis": "measured", "states_no_conclusion": True, "operation": operation,
                           "act_id": act_id, "intent_id": intent_id, "input_digest": R.sha256(inp),
-                          "produced_at": ts()[:19] + "Z", "outcome": outcome, "sources": sources}
+                          "produced_at": ts()[:19] + "Z", "sources": sources}
+    if outcome is not None:
+        ev["outcome"] = outcome
     if apv:
         ev["approval"] = {"approval_id": apv["id"], "read_back_sha256": apv["read_back_sha256"], "payload_sha256": apv["payload_sha256"],
                           "approved_at": apv["approved_at"], "method": apv["method"], **({"said": apv["said"]} if apv["said"] else {})}
@@ -724,9 +726,94 @@ async def users_verify_destination(ctx: Ctx, inp: dict):
     return end_user_out(ctx.store, ctx.account, inp["end_user_id"]), 200, None
 
 
+# ── CR 60 · S2's first powers (the logic is backend/agapi/powers.py — the same module Sasha's tools use) ─────────────────
+
+def _powers():
+    from agapi import powers as P
+    return P
+
+
+async def messages_send_email(ctx: Ctx, inp: dict):
+    """From Sasha's own address to one person the user names. No Approval → approval_required with the exact message to show;
+    with the end user's Approval of exactly that message → sent once (test mode: captured, never sent) → Evidence."""
+    P = _powers()
+    _end_user(ctx, inp["end_user"])
+    try:
+        msg = P.email_message(config.EMAIL_FROM, inp["to"]["address"], inp["to"].get("name"), inp["subject"], inp["body"])
+    except P.Refused as e:
+        raise AgapiError("invalid_input", e.message, {"path": e.path, "rule": e.rule})
+    lines, psha = P.email_read_back(msg), R.sha256(msg)
+    rb = ctx.store.one("select r.* from read_backs r join intents i on i.account = r.account and i.id = r.intent_id where r.account = ? "
+                       "and i.operation = 'messages.send_email' and i.state = 'open' and i.end_user = ? and r.payload_sha256 = ? "
+                       "order by r.created_at desc", ctx.account, inp["end_user"], psha)
+    if not rb or _rb_state(rb) in ("expired", "void"):
+        iid = R.new_id("int")
+        ctx.store.x("insert into intents (account, id, operation, end_user, state, created_at) values (?, ?, 'messages.send_email', ?, 'open', ?)",
+                    ctx.account, iid, inp["end_user"], ts())
+        rb = _new_read_back(ctx, iid, "messages.send_email", lines, msg, None, inp["end_user"], True)   # an email can't be unsent
+    it = ctx.store.one("select * from intents where account = ? and id = ?", ctx.account, rb["intent_id"])
+    apv = _check_and_consume(ctx, rb, {"intent_id": it["id"], "operation": "messages.send_email", "lines": lines, "payload": msg}, 1)
+    aid, sent_at = R.new_id("act"), ts()
+    provider_id = "sbx_msg_" + secrets.token_hex(10)
+    reply_to = f"reply+{aid.lower()}@{config.REPLY_DOMAIN}"
+    ctx.store.x("insert into messages (account, end_user, to_, channel, sent_at, body, approval_link) values (?, ?, ?, 'email', ?, ?, ?)",
+                ctx.account, None, msg["to"]["address"], sent_at,
+                f"From: {msg['from']}\nReply-To: {reply_to}\nSubject: {msg['subject']}\n\n{msg['body']}", None)
+    ctx.up.add("email_provider_sandbox", __import__("time").perf_counter(), True)
+    words = "Accepted for delivery by the mail service (sandbox: captured, never sent)."
+    retrieved = sent_at[:19] + "Z"
+    outcome = {"kind": "CONFIRMED", "reference": provider_id, "target_words": R.wrap(words, "email_provider_sandbox", retrieved)}
+    _new_act(ctx, aid, it, "email", None, outcome)
+    body_sha = P.email_body_sha256(msg)
+    eid = _evidence(ctx, "messages.send_email", aid, it["id"], inp, outcome, apv,
+                    [{"service": "email_provider_sandbox", "retrieved_at": retrieved, "sha256": body_sha,
+                      "snippet": R.wrap(f"Message {provider_id} · subject: {msg['subject']}", "email_provider_sandbox", retrieved)}])
+    _confirm(ctx.store, ctx.account, aid, it["id"], eid)
+    to = {"address": R.wrap(msg["to"]["address"], "user_named", retrieved, cap=254)}
+    if msg["to"].get("name"):
+        to["name"] = R.wrap(msg["to"]["name"], "user_named", retrieved, cap=300)
+    return {"act_id": aid, "intent_id": it["id"], "outcome": outcome, "evidence_id": eid,
+            "message": {"from": msg["from"], "to": to, "subject": msg["subject"], "body_sha256": body_sha, "sent_at": sent_at}}, 201, eid
+
+
+async def calendar_add_event(ctx: Ctx, inp: dict):
+    """A CONFIRMED act as a calendar event: an .ics + "Add to calendar" links. Free and Approval-less: nothing leaves the account."""
+    P = _powers()
+    act = ctx.store.one("select * from acts where account = ? and id = ? and kind = 'complete'", ctx.account, inp["act_id"])
+    if not act:
+        raise AgapiError("not_found", "No such booking for this account.", {"act_id": inp["act_id"]})
+    out = loads(act["outcome"])
+    if out["kind"] != "CONFIRMED":
+        raise AgapiError("invalid_input", f"Only a confirmed booking goes in the calendar; this one is {out['kind']}.",
+                         {"path": "/act_id", "rule": "act_not_confirmed"})
+    held = loads(ctx.store.one("select items from holds where account = ? and id = ?", ctx.account, act["hold_id"])["items"])
+    it, uid, ref = held["items"][0], f"{act['id'].lower()}@agapi.kanoe", out.get("reference")
+    o = _offer(ctx, it["kind"], it["ref"])
+    try:
+        if it["kind"] == "flight":
+            ev = P.event_for_flight(uid, o["carrier"]["name"]["text"], o["flight_numbers"], o["from"], o["to"], o["departs"], o["arrives"], ref)
+        elif it["kind"] == "venue":
+            ev = P.event_for_table(uid, o["name"]["text"], (o.get("address") or {}).get("text"), it["at"], it["party"], ref)
+        else:
+            ev = P.event_for_stay(uid, o["name"]["text"], (o.get("area") or {}).get("text"), it["at"], it["nights"], ref)
+    except P.Refused as e:
+        raise AgapiError("invalid_input", e.message, {"path": e.path, "rule": e.rule})
+    dtstamp = act["updated_at"][:19].replace("-", "").replace(":", "") + "Z"
+    text, esha = P.ics(ev, dtstamp), P.sha256(ev)
+    token, th = _token()
+    ctx.store.x("insert into calendar_files (token_hash, account, act_id, ics, created_at) values (?, ?, ?, ?, ?)",
+                th, ctx.account, act["id"], text, ts())
+    url = f"{config.PUBLIC_URL}/ics/{token}.ics"
+    retrieved = ts()[:19] + "Z"
+    eid = _evidence(ctx, "calendar.add_event", act["id"], act["intent_id"], inp, None, None,
+                    [{"service": "agapi_calendar", "retrieved_at": retrieved, "sha256": esha}])
+    return {"event": ev, "event_sha256": esha, "ics": text, "links": P.calendar_links(ev, url), "evidence_id": eid}, 200, eid
+
+
 OPS = {"travel.find_flights": find_flights, "travel.find_stays": find_stays, "venues.find_venues": find_venues,
        "trip.hold": trip_hold, "approvals.request": approvals_request, "trip.complete": trip_complete, "trip.cancel": trip_cancel,
        "acts.status": acts_status, "evidence.get": evidence_get, "evidence.verify": evidence_verify,
        "users.register": users_register, "usage.get": usage_get, "sandbox.simulate_approval": sandbox_simulate_approval,
        "sandbox.messages": sandbox_messages,
-       "approvals.status": approvals_status, "webhooks.register": webhooks_register, "users.verify_destination": users_verify_destination}
+       "approvals.status": approvals_status, "webhooks.register": webhooks_register, "users.verify_destination": users_verify_destination,
+       "messages.send_email": messages_send_email, "calendar.add_event": calendar_add_event}

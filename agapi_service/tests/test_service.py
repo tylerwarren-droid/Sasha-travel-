@@ -447,7 +447,8 @@ class Extensions(Base):
     def test_eus_tables_are_untouched(self):
         from agapi_service.registry import eu_operations
         self.assertEqual(len(eu_operations()), 14)
-        self.assertEqual(set(operations()) - set(eu_operations()), {"approvals.status", "webhooks.register", "users.verify_destination"})
+        self.assertEqual(set(operations()) - set(eu_operations()), {"approvals.status", "webhooks.register", "users.verify_destination",
+                                                                    "messages.send_email", "calendar.add_event"})
         self.assertTrue(eu_operations()["acts.status"]["output"].endswith("tools.schema.json#/$defs/status_out"))
 
 
@@ -474,12 +475,14 @@ class DemoConsole(Base):
         pay = out["pay"]["phone"]["url"]
         self.assertEqual(self.client.post("/demo/api/step/confirmed").json()["tone"], "error")    # not paid yet — said so
         self.assertIn("Booked", self.client.post(pay).text)                                       # the traveller taps Pay (test)
-        for k in ("confirmed", "cancel", "outage"):
+        for k in ("confirmed", "calendar", "email", "cancel", "outage"):
             out[k] = self.client.post(f"/demo/api/step/{k}").json()
             seen.append(json.dumps(out[k]))
             self.assertEqual(out[k]["tone"], "green", out[k])
         self.assertTrue(all(c["ok"] for c in out["confirmed"]["checks"]))
         self.assertIn("refund", out["cancel"]["caption"])
+        self.assertEqual([t for t, _ in out["calendar"]["links"]], ["Google Calendar", "Outlook", "Apple / any (.ics)"])
+        self.assertIn("never the traveller's mailbox", out["email"]["caption"])
         self.assertIn("never", out["outage"]["caption"].lower())
         self.assertFalse(any(demo_key in x for x in seen))                                        # never exposed
         self.assertNotRegex(" ".join(seen), r"agp_test_[A-Za-z0-9]{32}")

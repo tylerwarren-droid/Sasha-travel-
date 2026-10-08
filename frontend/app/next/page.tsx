@@ -1627,6 +1627,8 @@ export default function NextPage() {
         .mt-app.phone .mt-rail{position:fixed;left:0;right:0;bottom:0;width:100%;height:36dvh;max-height:none;border-radius:20px 20px 0 0;
           transition:height .28s cubic-bezier(.2,.8,.2,1);z-index:40;padding-top:18px;box-shadow:0 -12px 40px rgba(0,0,0,.55);
           background:#0e0d14;display:flex;flex-direction:column}
+        .mt-app.phone .mt-avatar[data-mode="hero"]{z-index:35}   /* below the sheet: raised, the sheet covers her */
+        .mt-app.phone .mt-avatar[data-mode="pip"]{z-index:45}
         .mt-app.phone.sheet-open .mt-rail{height:88dvh}
         .mt-sheethandle{position:absolute;top:0;left:0;right:0;height:22px;border:0;background:transparent;display:flex;justify-content:center;align-items:center;cursor:pointer;z-index:2}
         .mt-sheethandle span{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,.35)}

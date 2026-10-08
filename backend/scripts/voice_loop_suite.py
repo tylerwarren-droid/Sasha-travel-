@@ -176,7 +176,10 @@ def judge(name: str, turns: list, ends_paid: bool) -> dict:
     if said_digits:
         fail.append(f"figures spoken aloud: {said_digits[:1]}")
     done_deal = [x for t in turns for x in [t["text"]] + [u for _, u in t["spoken"]]
-                 if re.search(r"(?i)I'?ve put together your|here'?s what I'?ve put together|I'?ve put your (?:\w+ )?trip together", x or "")]
+                 if re.search(r"(?i)I'?ve put together your|here'?s what I'?ve put together|I'?ve put your (?:\w+ )?trip together", x or "")
+                 # Sasha 214 · since 213 a line that already OFFERS it is left as said ("Here's what I've put together for you,
+                 # Tyler! It's a trip for your consideration") — offered, not done; only "your trip" stays a failure
+                 and not (re.search(r"(?i)for your consideration", x or "") and not re.search(r"(?i)put together your|put your (?:\w+ )?trip together", x or ""))]
     if done_deal:
         fail.append(f"a proposal said as done: {done_deal[0][:120]}")
     for t in turns:

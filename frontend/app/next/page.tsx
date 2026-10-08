@@ -1144,7 +1144,7 @@ export default function NextPage() {
               {!uiPreview && (
                 // Sasha 184 · the start control is ALWAYS there; only the first-time welcome ("Meet Sasha") is hidden for a
                 // returning account or once closed (Sasha 183 hid the whole block: Sasha "disappeared" for the founder)
-                <div className="mt-startwrap" style={{ position: 'relative' }}>
+                <div className="mt-startwrap">{/* Sasha 215 · S2: at the foot of the stage, never over her face */}
                   {!meetHidden && (
                     <button type="button" aria-label="Close the welcome" onClick={() => { setMeetHidden(true); try { localStorage.setItem('sasha.meet.closed', '1') } catch { /* fine */ } }}
                       style={{ position: 'absolute', top: -6, right: -6, width: 28, height: 28, borderRadius: 999, border: '1px solid rgba(255,255,255,.3)', background: 'rgba(0,0,0,.45)', color: '#fff', cursor: 'pointer', zIndex: 4 }}>✕</button>

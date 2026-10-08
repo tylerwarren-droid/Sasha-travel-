@@ -27,7 +27,9 @@ export async function GET(): Promise<Response> {
     if (!url) return new Response('no preview', { status: 404 })
     const img = await fetch(url)
     if (!img.ok || !img.body) return new Response('no preview', { status: 404 })
-    return new Response(img.body, { status: 200, headers: { 'content-type': img.headers.get('content-type') ?? 'image/jpeg',
+    const said = img.headers.get('content-type') ?? ''
+    const type = said.startsWith('image/') ? said : /\.png(\?|$)/i.test(url) ? 'image/png' : /\.jpe?g(\?|$)/i.test(url) ? 'image/jpeg' : 'image/webp'
+    return new Response(img.body, { status: 200, headers: { 'content-type': type,
       'cache-control': 'public, max-age=86400, s-maxage=86400' } })
   } catch {
     return new Response('no preview', { status: 404 })

@@ -1136,7 +1136,7 @@ export default function NextPage() {
                   on — so the call starts where the eye already is. (public/sasha-preview.jpg
                   is the LiveAvatar preview for the configured avatar; refresh it if the avatar
                   changes.) */}
-              <img className="mt-standby" src="/api/heygen/preview" alt="Sasha" onError={e => { e.currentTarget.style.display = 'none' }} style={{ opacity: uiPreview || meetHidden ? 1 : .55, filter: uiPreview || meetHidden ? 'none' : 'saturate(.7)' }} />
+              <img className="mt-standby mt-standby-photo" src="/api/heygen/preview" alt="Sasha" onError={e => { e.currentTarget.style.display = 'none' }} />
               <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 22%, transparent 58%, rgba(0,0,0,.85) 100%)' }} />
               <div className="mt-ov-top absolute top-0 left-0 right-0 flex items-center" style={{ padding: '14px 16px', zIndex: 3 }}>
                 <span className="mt-standbypill"><span className="mt-standbydot" /> {uiPreview ? 'Preview' : 'Standby'}</span>
@@ -1593,6 +1593,7 @@ export default function NextPage() {
         .mt-ring2{width:880px;height:880px;border-color:rgba(255,255,255,.04);box-shadow:none}
         .mt-avatar[data-mode="pip"] .mt-ring{width:260px;height:260px}
         .mt-avatar[data-mode="pip"] .mt-ring2{width:360px;height:360px}
+        .mt-standby-photo{left:0 !important;transform:none !important;width:100% !important;height:100% !important;object-fit:cover;object-position:center 20%;mix-blend-mode:normal !important;opacity:1}   /* Sasha 215 · S2: her own still, full and calm */
         .mt-standby{position:absolute;left:50%;bottom:0;transform:translateX(-50%);height:92%;width:auto;max-width:none;mix-blend-mode:screen;pointer-events:none;transition:opacity .4s}
         .mt-standbypill{display:inline-flex;align-items:center;gap:8px;font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:rgba(255,255,255,.7);background:rgba(0,0,0,.35);padding:7px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px)}
         .mt-standbydot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.35);display:inline-block}

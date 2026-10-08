@@ -113,6 +113,8 @@ async def one(name: str, lines: list, timing: list) -> dict:
                     tr["text"] = ev["text"]
             history += [{"role": "user", "content": said}, {"role": "assistant", "content": tr["text"]}]
             turns.append(tr)
+        if "trip" not in name and not any(((r.get("preset") or {}).get("cards") or r.get("card") or r.get("cards")) for tr in turns for r in tr["renders"]):
+            fail.append("a venue conversation that put no cards on screen (a failed search is a failure, never a pass)")
         for tr in turns:
             key = (tr["state"] or {}).get("turn")
             on_screen = set()
@@ -219,6 +221,8 @@ def _pct(xs: list, p: float):
 
 
 async def main() -> int:
+    from scripts import places_fake   # Sasha 213 · NO live Google Places from a suite (it costs money) — the founder's say-so only
+    places_fake.install()
     if os.getenv("SASHA_FLIGHT_SUITE", "") == "skip":
         print("say-show suite SKIPPED (SASHA_FLIGHT_SUITE=skip) — this deploy is not covered")
         return 0

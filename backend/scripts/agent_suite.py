@@ -155,6 +155,8 @@ async def quiver_cases() -> None:
 
 
 async def main() -> int:
+    from scripts import places_fake   # Sasha 213 · NO live Google Places from a suite (it costs money) — the founder's say-so only
+    places_fake.install()
     if os.getenv("SASHA_FLIGHT_SUITE", "") == "skip":
         print("agent suite SKIPPED (SASHA_FLIGHT_SUITE=skip) — this deploy is not covered")
         return 0

@@ -621,6 +621,7 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
               setBookingFind({ ...ev.find, draft: null, preset: ev.preset, ribbon: ev.ribbon ?? null, focus: ev.focus ?? null, turn: ev.turn })
               setHighlight(ev.focus ? [ev.focus] : []); claim('venues', ev.turn); if (tab !== 'chat') onMarkUnseen?.('chat')
             }
+            else if (ev.kind === 'focus' && ev.focus) setHighlight([ev.focus])   // Sasha 213 · a pick: the cards stay, that one highlighted
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) { setReadBack({ lines: ev.read_back, total: ev.total_eur }); claim('readback', ev.turn) }
             else if (ev.kind === 'trip') window.dispatchEvent(new Event('sasha-plan-refresh'))
           }

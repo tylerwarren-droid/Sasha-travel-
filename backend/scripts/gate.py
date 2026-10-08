@@ -25,6 +25,8 @@ async def _clean_orphans(since) -> None:
 
 
 async def main() -> int:
+    from scripts import places_fake   # Sasha 213 · NO live Google Places from a suite (it costs money) — the founder's say-so only
+    places_fake.install()
     from datetime import datetime, timezone
     since = datetime.now(timezone.utc)
     if os.getenv("SASHA_GATE_DUFFEL", "fixtures") != "live":

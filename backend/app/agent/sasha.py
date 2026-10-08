@@ -97,7 +97,7 @@ RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues":
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
           "save_travellers": "inline", "hold_booking": "read_back", "book": "trip", "get_status": "trip", "get_trip": "trip",
           "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
-KINDS = {"flights", "flight_chosen", "total", "stays", "venues", "read_back", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
+KINDS = {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 
 
 def render(tool: str, res: dict, args: dict) -> Optional[dict]:
@@ -425,7 +425,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     screen = _SCREEN.get(session or "-") or {}
     tstate: Dict[str, Any] = {"cards": list(screen.get("cards") or []), "ribbon": screen.get("ribbon"),
                               "names": list(screen.get("names") or []), "allowed": set(screen.get("names") or []), "dropped": [],
-                              "new": False}
+                              "new": False, "tool_names": set()}
 
     def system_now() -> list:
         # Sasha 205 · PROMPT CACHING: her persona is the same every call (cached); the rest is per turn
@@ -543,20 +543,26 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             if r.get("ok") and u.name in _CHANGES_TRIP:
                 yield {"type": "trip_changed"}
             if r.get("ok"):
-                _names_in(r["result"], tstate["allowed"])
+                _names_in(r["result"], tstate["tool_names"])
+                tstate["allowed"] |= tstate["tool_names"]
                 ev = render(u.name, r["result"], args)
-                if ev:
+                if ev and ev.get("focus") and ev["focus"] in {c.get("place_id") for c in tstate["cards"]}:
+                    # a PICK from the cards on screen: the cards stay, the picked one is highlighted (never the others removed)
+                    tstate["focus"] = ev["focus"]
+                    ev = {"type": "render", "kind": "focus", "focus": ev["focus"]}
+                elif ev:
                     names = _card_names(ev)
                     if names:   # this turn's results REPLACE the screen (never shown beside older ones)
                         if not tstate["new"]:
                             tstate.update(cards=[], names=[], ribbon=None, new=True)
+                            tstate["allowed"] = set(tstate["tool_names"])   # what left the screen may no longer be named
                         tstate["names"] += names
                         tstate["allowed"] |= set(names)
                     if ev.get("kind") == "venues" and ev.get("preset"):
                         tstate["cards"] = [c for c in ev["preset"].get("cards") or [] if c.get("place_id")]
                         tstate["ribbon"] = ev.get("ribbon")
-                    ev = {**ev, "turn": turn_key}
-                    yield ev
+                if ev:
+                    yield {**ev, "turn": turn_key}
             results.append({"type": "tool_result", "tool_use_id": u.id, "content": json.dumps(model_result(r), default=str)[:12000]})
         msgs.append({"role": "user", "content": results})
     text = " ".join(said).strip()
@@ -589,6 +595,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     # Sasha 213 · the turn's ONE state: its cards, its ribbon, and the card(s) she named — highlighted
     said_k = set(_key(text))
     hl = [c["place_id"] for c in tstate["cards"] if c.get("name") and set(_key(c["name"])) and set(_key(c["name"])) <= said_k]
+    if tstate.get("focus") and tstate["focus"] not in hl:
+        hl.insert(0, tstate["focus"])
     _SCREEN[session or "-"] = {"cards": tstate["cards"], "ribbon": tstate["ribbon"], "names": tstate["names"]}
     yield {"type": "state", "turn": turn_key, "cards": [c["place_id"] for c in tstate["cards"]], "ribbon": tstate["ribbon"],
            "names": tstate["names"], "carried": not tstate["new"], "highlight": hl,

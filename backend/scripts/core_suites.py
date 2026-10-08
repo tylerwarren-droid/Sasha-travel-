@@ -129,8 +129,11 @@ async def spa(a: str) -> None:
         out = await LR._online_only(a, await __import__("booking_signer.venue_read", fromlist=["find_venues"]).find_venues(
             LR.HTTP, what="spa", where="Madrid", country="ES", now=LR.NOW()), body)
         c = out.get("candidates") or []
-        ok("SPA live: real spas, each bookable online (platform or own page)", bool(c) and all(x.get("online") for x in c),
-           " | ".join(f"{x.get('name')} ({x.get('online')})" for x in c[:3]))
+        if getattr(LR.HTTP, "_places_fake", False):   # Sasha 213 · reads REAL spas' sites: live-only, never on the replay
+            print("   SKIPPED · SPA live: real spas bookable online — live Google Places only (SASHA_TEST_PLACES=live, the founder's say-so)", flush=True)
+        else:
+            ok("SPA live: real spas, each bookable online (platform or own page)", bool(c) and all(x.get("online") for x in c),
+               " | ".join(f"{x.get('name')} ({x.get('online')})" for x in c[:3]))
         ok("SPA live: never our test venue among real spas", not any(x.get("place_id") == LR.REHEARSAL_ID for x in c), "")
     finally:
         LR.standin = real_s
@@ -298,6 +301,8 @@ async def spaces(a: str, conduct) -> None:
 
 
 async def main() -> int:
+    from scripts import places_fake   # Sasha 213 · NO live Google Places from a suite (it costs money) — the founder's say-so only
+    places_fake.install()
     if os.getenv("SASHA_FLIGHT_SUITE", "") == "skip":
         print("core suites SKIPPED (SASHA_FLIGHT_SUITE=skip) — this deploy is not covered")
         return 0

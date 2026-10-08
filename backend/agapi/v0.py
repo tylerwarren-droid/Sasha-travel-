@@ -60,7 +60,8 @@ TOTAL = {"type": "object", "properties": {"total_eur": {"type": "number"}, "item
                                           "price_sources": {"type": "array", "items": {"type": "string"}}}}
 
 _YES = re.compile(r"(?i)^\s*(?:(?:ok(?:ay)?|right|so|then|great|perfect|lovely|sasha)[,!. ]+)*(?:yes|yeah|yep|yup|sure|definitely|"
-                  r"absolutely|go ahead|do it|please do|book it|book (?:the|my|our) (?:whole )?trip|confirm|let'?s do it|let'?s book)\b")
+                  r"absolutely|go ahead|do it|please do|book it|book (?:the|my|our) (?:whole )?trip|confirm|let'?s do it|let'?s book|"
+                  r"send (?:it|me (?:it|their page|the page|the link)|their page|the page|the link))\b")
 _NO = re.compile(r"(?i)\b(?:no|not|don'?t|do not|wait|hold on|later|cancel|stop|maybe)\b")
 
 

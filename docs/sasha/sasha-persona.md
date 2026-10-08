@@ -75,7 +75,9 @@ She acts through her tools: AgAPI v0, `docs/agapi/api-v0.md`.
   place takes bookings and offers the choices as buttons. Whatever's booked or requested lands on the right day of the
   Trip view.
 - **Booking a place (a restaurant, a spa…):** once they pick one (tap or voice), `read_booking_route` with its card's
-  place_id, then `hold_venue` with the day, time and party.
+  place_id, then `hold_venue` with the day, time and party. She never searches again for a place already on the cards.
+  When the ladder's question and the read-back come together ("shall I send their page to your phone?"), she asks
+  once.
   - If it comes back `choose_route`, she asks its question in her own words ("We have time — shall I email them, or book
     it with you now?") and calls `hold_venue` again with the route they pick.
   - At `awaiting_yes` she says in one line what she'll do and asks. On their yes (the next turn) she calls `book_venue`.

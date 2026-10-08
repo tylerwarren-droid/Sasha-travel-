@@ -209,6 +209,32 @@ export default function NextPage() {
   useEffect(() => {
     try { if (new URLSearchParams(window.location.search).get('tab') === 'trip') handleTabChange('trip') } catch { /* no URL: nothing */ }
   }, [handleTabChange])
+  // Sasha 214 · THE PHONE: portrait, her face on top, one mic button, the cards as a bottom sheet — the same page, agent and
+  // turn state as the desktop (no second logic path); only the layout and the human step's device change
+  const [isPhone, setIsPhone] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px), (pointer: coarse) and (max-width: 920px) and (orientation: portrait)')
+    const on = () => setIsPhone(mq.matches)
+    on(); mq.addEventListener?.('change', on)
+    return () => mq.removeEventListener?.('change', on)
+  }, [])
+  const [thinking, setThinking] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [handover, setHandover] = useState<string | null>(null)
+  const unlockAudio = useCallback(() => {
+    // iOS: audio and the mic only start inside a tap — unlocked here, in the tap that starts the call
+    try { const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }); const C = AC.AudioContext || AC.webkitAudioContext; if (C) { const c = new C(); void c.resume().then(() => c.close()).catch(() => {}) } } catch { /* fine */ }
+    try { void navigator.mediaDevices?.getUserMedia({ audio: true }).then(st => st.getTracks().forEach(t => t.stop())).catch(() => {}) } catch { /* fine */ }
+  }, [])
+  const onPay = useCallback((url: string) => {
+    // a phone pays on the SAME device (Apple Pay on Stripe's page); the desktop keeps the hand-off to the phone
+    if (isPhone) window.open(url, '_blank', 'noopener')
+  }, [isPhone])
+  const onHandover = useCallback((url: string, external: boolean) => {
+    if (!isPhone) return
+    if (external) window.open(url, '_blank', 'noopener')   // a platform's page: the guest's own browser
+    else setHandover(url)                                  // our Tap to finish: a sheet over her, then back to her
+  }, [isPhone])
   const [started, setStarted] = useState(false)
   // Sasha 156 · a plain TEXT chat that needs no call: typing opens the conversation without the avatar, the mic or the
   // camera (the call stays one tap away, as before)
@@ -881,9 +907,10 @@ export default function NextPage() {
   }, [started, voiceReady])
   const startWith = useCallback((opener?: string) => {
     if (verifying || booked || itemBooked) return
+    unlockAudio()
     if (opener) pendingOpenerRef.current = opener
     handleStart()
-  }, [verifying, booked, itemBooked, handleStart])
+  }, [verifying, booked, itemBooked, handleStart, unlockAudio])
   const newChat = useCallback(() => {
     // Mindtrip's "New chat": a clean slate. Ending the live session first releases the
     // avatar; handleStart already resets messages/plan/tabs.
@@ -906,7 +933,7 @@ export default function NextPage() {
   const statusLabel = micMuted ? 'Not listening' : isAvatarSpeaking ? 'Sasha is speaking' : isListening ? 'Listening…' : voiceConnected ? 'Mic live' : micError ? 'Mic unavailable' : 'Connecting…'
 
   return (
-    <main className="mt-app">
+    <main className={`mt-app${isPhone ? ' phone' : ''}${isPhone && sheetOpen ? ' sheet-open' : ''}`}>
 
       {/* ── LEFT NAV ── */}
       <aside className="mt-side">
@@ -972,6 +999,13 @@ export default function NextPage() {
 
       {/* ── RIGHT — the conversation (transcript, cards, composer); the welcome before the call ── */}
       <aside className="mt-rail">
+        {isPhone && (   /* Sasha 214 · the bottom sheet's handle: tap (or swipe up) for the cards and the chat */
+          <button type="button" className="mt-sheethandle" aria-label={sheetOpen ? 'Lower the cards' : 'Raise the cards'} onClick={() => setSheetOpen(o => !o)}
+            onTouchStart={e => { (e.currentTarget as HTMLElement).dataset.y = String(e.touches[0].clientY) }}
+            onTouchEnd={e => { const y0 = Number((e.currentTarget as HTMLElement).dataset.y || 0); const dy = e.changedTouches[0].clientY - y0; if (dy < -30) setSheetOpen(true); if (dy > 30) setSheetOpen(false) }}>
+            <span />
+          </button>
+        )}
         <div className="mt-wshead">
           <div className="mt-head">
             <span className="mt-head-ic"><Sparkles size={15} strokeWidth={1.8} /></span>
@@ -987,6 +1021,10 @@ export default function NextPage() {
         {stageLive ? (
           <SashaChat
             agent
+            phone={isPhone}
+            onTurnBusy={setThinking}
+            onPay={onPay}
+            onHandover={onHandover}
             user={DEMO_USER}
             onSashaResponse={handleSashaResponse}
             onListeningChange={setIsListening}
@@ -1163,7 +1201,7 @@ export default function NextPage() {
         </div>
 
         {/* user camera PiP */}
-        <div className="mt-ov-hero absolute overflow-hidden" style={{ right: 16, bottom: 96, width: 148, height: 104, borderRadius: 16, border: '2px solid rgba(255,255,255,.25)', boxShadow: '0 14px 40px -10px rgba(0,0,0,.8)', zIndex: 4, background: '#15151f' }}>
+        <div className="mt-ov-hero mt-cam absolute overflow-hidden" style={{ right: 16, bottom: 96, width: 148, height: 104, borderRadius: 16, border: '2px solid rgba(255,255,255,.25)', boxShadow: '0 14px 40px -10px rgba(0,0,0,.8)', zIndex: 4, background: '#15151f' }}>
           <video
             ref={userVideoRef}
             autoPlay
@@ -1181,6 +1219,20 @@ export default function NextPage() {
           <span style={{ position: 'absolute', left: 7, bottom: 6, fontSize: 10, fontWeight: 600, letterSpacing: '.05em', background: 'rgba(0,0,0,.55)', padding: '3px 7px', borderRadius: 6, backdropFilter: 'blur(4px)' }}>You</span>
         </div>
 
+        {isPhone && (() => {   /* Sasha 214 · ONE big mic button, ONE clear state; tap while she speaks = interrupt her */
+          const st = isAvatarSpeaking ? 'speaking' : thinking ? 'thinking' : micMuted ? 'muted' : (voiceConnected || isListening) ? 'listening' : micError ? 'off' : 'starting'
+          const words: Record<string, string> = { speaking: 'Sasha is speaking — tap to interrupt', thinking: 'Thinking…', listening: 'Listening — just talk',
+            muted: 'Muted — tap to talk', off: `${micError || 'Mic off'} — type below`, starting: 'Starting the mic…' }
+          return (
+            <div className="mt-bigmic-wrap">
+              <button type="button" className={`mt-bigmic ${st}`} aria-label={words[st]}
+                onClick={() => { if (st === 'speaking') handleInterrupt(); else if (st === 'muted' || st === 'listening') setMicMuted(m => !m) }}>
+                {st === 'speaking' ? <span className="la-load"><i /><i /><i /></span> : st === 'thinking' ? <span className="mt-spin" /> : st === 'muted' ? <MicOff size={30} /> : <Mic size={30} />}
+              </button>
+              <div className="mt-bigmic-label">{words[st]}</div>
+            </div>
+          )
+        })()}
         {/* bottom: live caption + mic status */}
         <div className="mt-ov-hero absolute left-0 right-0 bottom-0 flex flex-col gap-3" style={{ padding: 18, zIndex: 3 }}>
           {caption && (
@@ -1189,7 +1241,7 @@ export default function NextPage() {
           {/* Call controls. Wraps as whole pills rather than letting any single pill
               squeeze and break its label across two lines, which is what happened once the
               mic picker joined the row in the narrow call panel. */}
-          <div className="flex items-center" style={{ gap: 8, flexWrap: 'nowrap', overflow: 'hidden' }}>
+          <div className="flex items-center mt-ctrls" style={{ gap: 8, flexWrap: 'nowrap', overflow: 'hidden' }}>
             {/* Muted wins over every other state: the mic is genuinely closed, so a
                 leftover "Listening…" equaliser would be actively lying to the guest. */}
             {micMuted ? (
@@ -1564,7 +1616,47 @@ export default function NextPage() {
           .mt-navbtn{justify-content:center;padding:9px}
           .mt-rail{width:46vw}
         }
+        /* ── Sasha 214 · THE PHONE (portrait): her face fills the top two-thirds; the conversation and the cards are a bottom
+           sheet; one big mic button; the desktop's rail, nav and pills step aside ── */
+        .mt-app.phone{display:block;height:100dvh;overflow:hidden}
+        .mt-app.phone .mt-side,.mt-app.phone .mt-top,.mt-app.phone .mt-wshead,.mt-app.phone .mt-cam,.mt-app.phone .mt-ctrls{display:none!important}
+        .mt-app.phone .mt-center{position:fixed;inset:0 0 auto 0;height:66dvh;padding:0;margin:0}
+        .mt-app.phone .mt-stage{position:absolute;inset:0;border-radius:0;margin:0}
+        .mt-app.phone .mt-rail{position:fixed;left:0;right:0;bottom:0;width:100%;height:36dvh;max-height:none;border-radius:20px 20px 0 0;
+          transition:height .28s cubic-bezier(.2,.8,.2,1);z-index:30;padding-top:18px;box-shadow:0 -12px 40px rgba(0,0,0,.55)}
+        .mt-app.phone.sheet-open .mt-rail{height:88dvh}
+        .mt-sheethandle{position:absolute;top:0;left:0;right:0;height:22px;border:0;background:transparent;display:flex;justify-content:center;align-items:center;cursor:pointer;z-index:2}
+        .mt-sheethandle span{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,.35)}
+        .mt-app.phone .mt-avatar[data-mode="hero"]{border-radius:0}
+        .mt-bigmic-wrap{position:absolute;left:0;right:0;bottom:18px;display:flex;flex-direction:column;align-items:center;gap:8px;z-index:6}
+        .mt-bigmic{width:78px;height:78px;border-radius:50%;border:0;display:grid;place-items:center;color:#fff;cursor:pointer;
+          box-shadow:0 10px 30px rgba(0,0,0,.5);transition:transform .15s,background .2s}
+        .mt-bigmic:active{transform:scale(.94)}
+        .mt-bigmic.listening{background:linear-gradient(135deg,#10b981,#059669);animation:pulse 1.6s ease-in-out infinite}
+        .mt-bigmic.speaking{background:linear-gradient(135deg,#DAA520,#B8860B)}
+        .mt-bigmic.thinking{background:linear-gradient(135deg,#6366f1,#4f46e5)}
+        .mt-bigmic.muted,.mt-bigmic.off{background:rgba(248,113,113,.9)}
+        .mt-bigmic.starting{background:rgba(255,255,255,.18)}
+        .mt-bigmic-label{font-size:13px;font-weight:600;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.8);text-align:center;padding:0 16px}
+        .mt-spin{width:26px;height:26px;border-radius:50%;border:3px solid rgba(255,255,255,.35);border-top-color:#fff;animation:spin 0.9s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        /* the cards: swipe sideways, one per view */
+        .mt-app.phone .lw-cardBody{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:10px;-webkit-overflow-scrolling:touch}
+        .mt-app.phone .lw-cardBody .lw-opt{flex:0 0 82%;scroll-snap-align:center}
+        .mt-app.phone ol[style]{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;padding-left:0!important;list-style:none}
+        .mt-app.phone ol[style] > li{flex:0 0 84%;scroll-snap-align:center}
+        .mt-app.phone .mt-startwrap{padding-bottom:32px}
+        .mt-hsheet{position:fixed;inset:6dvh 0 0 0;z-index:60;background:#0f0f16;border-radius:18px 18px 0 0;display:flex;flex-direction:column;box-shadow:0 -20px 60px rgba(0,0,0,.7)}
+        .mt-hsheet-bar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;color:#fff;font-size:14px}
+        .mt-hsheet-bar button{border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:13px}
+        .mt-hsheet iframe{flex:1;border:0;width:100%;background:#fff}
       `}</style>
+      {isPhone && handover && (   /* Sasha 214 · Tap to finish in a sheet over her (the CAPTCHA, terms, their button) — then back to her */
+        <div className="mt-hsheet" role="dialog" aria-label="Finish the booking">
+          <div className="mt-hsheet-bar"><b>Finish the booking</b><button type="button" onClick={() => setHandover(null)}>Back to Sasha</button></div>
+          <iframe src={handover} title="Finish the booking" allow="clipboard-write" />
+        </div>
+      )}
     </main>
   )
 }

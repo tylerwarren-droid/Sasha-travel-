@@ -349,7 +349,7 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
             raise _err("not_opened", (j or {}).get("say") or GW.refusal_words(j, status))
         sent = bool((j.get("phone") or {}).get("sent"))
         return {"status": "tap_to_finish", "venue": venue, "when": held["summary"], "itinerary": where, "on_phone": sent,
-                **({} if sent else {"open": j.get("view_url")})}
+                **({} if sent else {"open": j.get("view_url")}), **({"view_url": j["view_url"]} if j.get("view_url") else {})}
     if rung == "page":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/links/{held['id']}/opened", {"read_back_sha256": held["sha"]})
         if status != 200:
@@ -361,7 +361,7 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
                                     url, held["id"], venue, held["when"])
         sent = "sent" in out and "not" not in out
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where,
-                "platform": held.get("platform"), **({} if sent else {"open": url})}
+                "platform": held.get("platform"), **({} if sent else {"open": url}), **({"page_url": url} if url else {})}
     if rung == "email":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/emails/{held['id']}/send", {"read_back_sha256": held["sha"], "approval": how}, timeout=60)
         if status != 200 or j.get("status") != "sent":

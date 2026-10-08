@@ -56,6 +56,11 @@ interface SashaChatProps {
   emptyState?: React.ReactNode
   initialMessage?: string
   avatarSpeaking?: boolean
+  /** Sasha 214 · the phone layout: a turn in flight (the mic button's "thinking"), the human step on THIS device, a compact total */
+  phone?: boolean
+  onTurnBusy?: (busy: boolean) => void
+  onPay?: (url: string) => void
+  onHandover?: (url: string, external: boolean) => void
   onInterrupt?: () => void
   presetPrompts?: string[]
   onSetGate?: (gate: (value: boolean) => void) => void
@@ -166,7 +171,7 @@ function interimLineFor(intents: string[], variant: number): string {
 }
 
 
-export default function SashaChat({ agent = false, user, productMode, skinClassName, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onMicDevices, onBooked, onAwaitPayment, onBookItem, onConfirmCard, onPaySavedCard, onPayNewCard, paidWith, onItineraryId, bookingRef, hideTabs = false, chatHero = null, panelPortal = null, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache }: SashaChatProps) {
+export default function SashaChat({ agent = false, phone = false, onTurnBusy, onPay, onHandover, user, productMode, skinClassName, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onMicDevices, onBooked, onAwaitPayment, onBookItem, onConfirmCard, onPaySavedCard, onPayNewCard, paidWith, onItineraryId, bookingRef, hideTabs = false, chatHero = null, panelPortal = null, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache }: SashaChatProps) {
   const tab = activeTab
   const [localMessages, setLocalMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
@@ -574,6 +579,7 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
     // before the spinner. The reply's bubble is added with its first words, not before.
     let reply = ''
     let placed = false
+    onTurnBusy?.(true)
     const show = (t: string) => {
       if (!(t || '').trim()) return
       const first = !placed
@@ -621,7 +627,9 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
               setBookingFind({ ...ev.find, draft: null, preset: ev.preset, ribbon: ev.ribbon ?? null, focus: ev.focus ?? null, turn: ev.turn })
               setHighlight(ev.focus ? [ev.focus] : []); claim('venues', ev.turn); if (tab !== 'chat') onMarkUnseen?.('chat')
             }
-            else if (ev.kind === 'focus' && ev.focus) setHighlight([ev.focus])   // Sasha 213 · a pick: the cards stay, that one highlighted
+            else if (ev.kind === 'focus' && ev.focus) setHighlight([ev.focus])
+            else if (ev.kind === 'pay' && ev.url) onPay?.(String(ev.url))   // Sasha 214 · a phone pays here, on the same device
+            else if (ev.kind === 'handover' && ev.url) { if (ev.focus) setHighlight([ev.focus]); onHandover?.(String(ev.url), !!ev.external) }   // their page / Tap to finish   // Sasha 213 · a pick: the cards stay, that one highlighted
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) { setReadBack({ lines: ev.read_back, total: ev.total_eur }); claim('readback', ev.turn) }
             else if (ev.kind === 'trip') window.dispatchEvent(new Event('sasha-plan-refresh'))
           }
@@ -639,6 +647,8 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
       }
     } catch {
       show(reply || 'I lost the connection for a moment — could you say that again?')
+    } finally {
+      onTurnBusy?.(false)
     }
   }
 
@@ -949,6 +959,11 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
               <button key={i} className="lw-chip" onClick={() => { sendMessage(q.title, { payload: q.payload, force: true }) }}>{q.title}</button>
             ))}
           </div>
+        )}
+        {phone && tripTotal && (   /* Sasha 214 · the phone: the trip total as a small pill that opens the basket (the Trip view) */
+          <button type="button" className="lw-totalpill" onClick={() => onTabChange?.('trip')}>
+            🧾 €{Math.round(tripTotal.total_eur).toLocaleString()} all in · see the trip ›
+          </button>
         )}
         {readBack && onScreen('readback') && (
           <div className="lw-card">{/* Sasha 213 · the read-back she just gave — from her own hold, never a second quote */}
@@ -1324,6 +1339,7 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
         .lw-meta{flex:1;min-width:0}
         .lw-k{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.4)}
         .lw-h{font-size:16px;font-weight:600;margin-top:3px;letter-spacing:-.01em;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .lw-totalpill{position:sticky;top:0;z-index:5;align-self:center;margin:4px auto 8px;display:block;padding:7px 14px;border-radius:999px;border:1px solid rgba(218,165,32,.5);background:rgba(20,16,6,.92);color:#E8B923;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
         .lw-ribbon{font-size:9.5px;font-weight:700;letter-spacing:.1em;color:#1a1205;background:linear-gradient(135deg,#E8B923,#DAA520);flex-shrink:0;padding:5px 10px;border-radius:8px;display:flex;align-items:center;gap:5px;box-shadow:0 4px 14px -4px rgba(218,165,32,.6)}
         .lw-cardBody{padding:0 18px 16px}
         .lw-photohero{position:relative;height:230px;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.08)}

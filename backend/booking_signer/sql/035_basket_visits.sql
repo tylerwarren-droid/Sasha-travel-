@@ -1,5 +1,6 @@
 -- CR 54 · CAMPUS VISITS IN THE TRIP BASKET (docs/sasha/mes-as-skills-design.md §2.4). DRAFT — NOT APPLIED.
--- ⛔ APPLY AFTER DEPLOY <sha of the main commit that ships backend/booking_signer/basket_visits.py> — the founder runs it in the
+-- ⛔ APPLY AFTER DEPLOY 82e1675 (CR 54: the commit that ships backend/booking_signer/basket_visits.py; apply only once a
+--    Railway deploy containing it shows SUCCESS) — the founder runs it in the
 --    Supabase SQL editor; this tab never applies it. Before it is applied, CampusMe's visit tools refuse honestly ("the
 --    tour's visits can't be saved yet") — nothing else changes.
 -- Needs 033_trip_basket.sql. Idempotent. Widens two checks; nothing is deleted, no row changes, no other table is touched.

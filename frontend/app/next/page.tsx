@@ -939,8 +939,9 @@ export default function NextPage() {
       <aside className="mt-side">
         <div className="mt-brand">
           <LogoMark height={44} className="mt-logo" />
-          <div className="mt-brand-sub"><span aria-hidden>🌍</span><b>Travel anywhere</b></div>
-          <div className="mt-brand-sub">Sasha · AI travel concierge</div>
+          {/* Sasha 215 · S2: more than travel */}
+          <div className="mt-brand-sub"><span aria-hidden>✨</span><b>Whatever you need</b></div>
+          <div className="mt-brand-sub">Sasha · your personal concierge</div>
         </div>
         <nav className="mt-nav" aria-label="Workspace">
           {NAV.map(n => (
@@ -968,7 +969,6 @@ export default function NextPage() {
             <option value="es">🇪🇸 Español</option>
           </select>
           {started && <button className="mt-end" onClick={handleEndSession} title="End the live avatar session to stop using credits">■ End session</button>}
-          <div className="mt-partner">Ministry of Tourism Partner</div>
         </div>
       </aside>
 

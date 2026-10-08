@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -158,9 +159,14 @@ class Spa(TG.Base):
             self.assertEqual((sends, self.spa_calls), ([], []))           # nothing sent, nothing opened before the ONE yes
             self.say("Yes, book both", payload=yes[0][1])
             said = "\n".join(self.bodies())
-            self.assertIn("✅ 1) Booked: Botavara Chamberí, Tuesday 6 October at 21:00, 2 people.", said)
+            # Sasha 208 · "Tuesday" is the next Tuesday on the real clock: the date is read, never pinned (a pinned
+            # "6 October" rotted the week after it was written) — and both bookings must be on that same Tuesday
+            day = r"Tuesday (\d{1,2} [A-Z][a-z]+)"
+            m1 = re.search(r"✅ 1\) Booked: Botavara Chamberí, " + day + r" at 21:00, 2 people\.", said)
+            m2 = re.search(r"✅ 2\) Booked: a 60-minute relaxing massage at Kanoe Demo Spa, " + day + r" at 18:00\. Ref KDS-", said)
+            self.assertTrue(m1 and m2, said)
+            self.assertEqual(m1.group(1), m2.group(1))
             self.assertIn("Their reference: TV-FE41E1", said)
-            self.assertRegex(said, r"✅ 2\) Booked: a 60-minute relaxing massage at Kanoe Demo Spa, Tuesday \d+ \w+ at 18:00\. Ref KDS-")
             self.assertEqual(len(sends), 1)
             self.assertEqual(sends[0]["read_back_sha256"], "f" * 64)
             self.assertEqual(self.spa_calls, ["/demo-spa/login", "/demo-spa/book"])

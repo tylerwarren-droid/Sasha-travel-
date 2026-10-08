@@ -265,18 +265,27 @@ async def search_venues(ctx: Ctx, a: dict) -> dict:
 
 
 async def _search_venues(ctx: Ctx, a: dict) -> dict:
-    from booking_signer import venue_read as V, ladder_routes as LR
-    try:
-        r = await V.find_venues(LR.HTTP, what=a["what"], where=a["where"], country=a.get("country"), now=datetime.now(timezone.utc))
-    except V.FindRefused as e:
-        raise ToolError(e.rule, str(e))
-    out = []
-    for c in (r.get("candidates") or r.get("venues") or [])[:6]:
-        out.append({"name": c.get("name"), "address": c.get("address"), "type": c.get("type"), "rating": c.get("rating"),
-                    "reviews": c.get("reviews") or c.get("rating_count"), "place_id": c.get("place_id"), "website": c.get("website")})
-    return {"venues": out, "note": "Google listings; nothing contacted — the person sees them as photo cards and can pick one by tap or voice",
+    """Sasha 213 · ONE SOURCE: the same booking API search the cards read (/venues/find: its cache, its ranking, the day and
+    time asked), and exactly the cards that will be SHOWN — the model is given those and nothing else, so she can only name
+    what is on screen. The render event carries the same cards (the card never searches again) and the ribbon line."""
+    from booking_signer import guest_whatsapp as GW
+    from agapi import venues as VN
+    body = {k: v for k, v in {"what": a["what"], "where": a["where"], "country": a.get("country"), "open_at": a.get("open_at"),
+                              "near": a.get("near")}.items() if v}
+    status, r = await GW.api(ctx.account, "POST", "/api/booking/venues/find", body)
+    if status != 200:
+        raise ToolError((r or {}).get("rule") or "find_failed", GW.refusal_words(r or {}, status))
+    shown = VN.shown_cards(r)
+    if shown:
+        await VN.photos_for(shown, budget=1.2)   # the top results' photos, prefetched (cached); the rest load lazily
+    VN.remember_cards(ctx.account, shown)
+    ribbon = VN.ribbon_line(a, shown, r)
+    return {"venues": [VN.card_for_model(c) for c in shown], "ribbon": ribbon,
+            "on_screen": "these are EXACTLY the cards on their screen — name only these; nothing contacted",
             "find": {k: v for k, v in {"what": a["what"], "where": a["where"], "country": a.get("country"), "open_at": a.get("open_at"),
-                                       "party": a.get("party")}.items() if v}}
+                                       "party": a.get("party")}.items() if v},
+            "preset": {"all": r.get("candidates") or [], "ranking": r.get("ranking"), "show": r.get("show") or 5,
+                       "near": r.get("near"), "cards": shown}}
 
 
 # ── Sasha 205 · the prefetch: the slow work starts while she's still chatting ──────────────────────────────────────────────

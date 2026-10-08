@@ -87,8 +87,16 @@ const cityOf = (address: string | null | undefined): string | undefined => {
   return c && c.length >= 2 ? c : undefined
 }
 
-export default function ChatBooking({ find }: { find: Find }) {
-  const [state, setState] = useState<State>({ phase: 'finding' })
+// Sasha 213 · ONE TURN, ONE STATE: on /next the agent's own search result IS the cards (`preset`) — this card never searches
+// again (a second search showed other places than the ones she named); its ribbon line comes from that same result; the
+// card she named is highlighted; and a tap goes to HER (onPickSay), never into a parallel booking flow.
+type Preset = { all: Candidate[]; cards: Candidate[]; ranking?: Ranking | null; show?: number; near?: Near | null }
+export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay }:
+  { find: Find; preset?: Preset; ribbon?: string | null; highlight?: string[]; onPickSay?: (text: string) => void }) {
+  const [state, setState] = useState<State>(() => preset
+    ? { phase: 'found', cards: preset.cards, all: preset.all?.length ? preset.all : preset.cards, ranking: preset.ranking ?? undefined,
+        chip: preset.ranking?.default ?? 'rated', show: preset.show ?? preset.cards.length, near: preset.near ?? undefined }
+    : { phase: 'finding' })
   // Sasha 172 · booked on the OTHER device: the same day and time appears in the plan (from WhatsApp) — this choice closes
   const [elsewhere, setElsewhere] = useState<string | null>(null)
   useEffect(() => {
@@ -127,6 +135,7 @@ export default function ChatBooking({ find }: { find: Find }) {
   useEffect(() => { stateRef.current = state }, [state])
 
   useEffect(() => {
+    if (preset) return   // Sasha 213 · the turn's own cards: no second search
     let off = false
     ;(async () => {
       setState({ phase: 'finding' })
@@ -207,6 +216,7 @@ export default function ChatBooking({ find }: { find: Find }) {
   }, [shownIds])
 
   async function pick(c: Candidate) {
+    if (onPickSay) { onPickSay(`${c.name ?? 'That one'}, please`); return }   // Sasha 213 · the agent books it, one flow
     const cards = 'cards' in stateRef.current ? stateRef.current.cards : []
     setState({ phase: 'reading', cards, pick: c })
     try {
@@ -223,6 +233,7 @@ export default function ChatBooking({ find }: { find: Find }) {
 
   // "the second one" typed in the chat picks a card; anything else is not ours (the conductor gets it)
   useEffect(() => {
+    if (onPickSay) return   // Sasha 213 · on /next everything typed goes to Sasha — no parallel pick
     setChatBookingHandler((text: string) => {
       if (takeTypedYes(text)) return true   // step 9 · a typed yes to the pending read-back card
       const s = stateRef.current
@@ -253,7 +264,8 @@ export default function ChatBooking({ find }: { find: Find }) {
   return (
     <div style={box}>
       {/* Sasha 158 · one sentence was said in the chat already; the card says nothing about how it was found */}
-      {cards.length === 0
+      {ribbon ? <div className="lw-ribbon-line" style={{ fontSize: 12.5, fontWeight: 600, margin: '0 0 8px', opacity: 0.85 }}>{ribbon}</div> : null}
+      {cards.length === 0 && !ribbon
         ? <div>{find.named ? `I couldn't find ${find.what}.` : `I couldn't find any ${find.what} in ${find.where}.`} Try another name or place?</div>
         : null}
       <ol ref={listRef} style={{ margin: 0, paddingLeft: 18 }}>
@@ -264,8 +276,15 @@ export default function ChatBooking({ find }: { find: Find }) {
           const near = state.phase === 'found' && state.near?.found
           const facts = [c.rating_words ?? 'no rating', near ? (c.distance ?? 'distance not known') : null, c.price_words ?? 'price level not listed']
           return (
-            <li key={c.place_id} style={{ marginBottom: 10, opacity: grey ? 0.55 : 1 }}>
-              {(() => {
+            <li key={c.place_id} data-place={c.place_id} style={{ marginBottom: 10, opacity: grey ? 0.55 : 1,
+              ...(highlight?.includes(c.place_id) ? { outline: '2px solid #c9a227', outlineOffset: 4, borderRadius: 8 } : {}) }}>
+              {(c as { photo?: string }).photo && !badPhoto[`p:${c.place_id}`] ? (   /* Sasha 213 · prefetched with the search */
+                // eslint-disable-next-line @next/next/no-img-element -- the prefetched photo (the venue's own, else Google's)
+                <img src={(c as { photo?: string }).photo} alt={c.name ?? 'This place'} loading="eager" referrerPolicy="no-referrer"
+                  onError={() => setBadPhoto((m) => ({ ...m, [`p:${c.place_id}`]: true }))}
+                  style={{ width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 8, display: 'block', margin: '2px 0 6px' }} />
+              ) : null}
+              {(c as { photo?: string }).photo && !badPhoto[`p:${c.place_id}`] ? null : (() => {
                 // Sasha 88 · the venue's own share picture, from its website — linked to the site; none when it has none
                 const st = styles[c.place_id]
                 const ph = st && st !== 'reading' ? st.photo : undefined

@@ -2,7 +2,9 @@ import asyncio
 
 from fastapi import APIRouter
 from pydantic import BaseModel
-from app.services.foto_agent import search_photos, get_golf_course_photos, get_hotel_photos, get_destination_photo, extract_visual_context
+from app.services.foto_agent import search_photos, get_golf_course_photos, get_hotel_photos, get_destination_photo, extract_visual_context, FALLBACK_PHOTOS
+
+FALLBACK_URLS = {p.get("url") for p in FALLBACK_PHOTOS}
 from typing import Optional
 
 router = APIRouter()
@@ -18,6 +20,17 @@ OPENING_DESTINATIONS = [
     {"location": "Sapa",        "blurb": "Rice terraces and hill trekking"},
     {"location": "Phu Quoc",    "blurb": "Island beaches and seafood"},
 ]
+
+# Sasha 213 · ONE IDENTITY: /next is a concierge for anywhere — its opening gallery is the world, not one country
+WORLD_DESTINATIONS = [
+    {"location": "Lisbon",          "blurb": "Trams, tiles and miradouros",        "q": "Lisbon travel"},
+    {"location": "Kyoto",           "blurb": "Temples, gardens and tea",            "q": "Kyoto temple travel"},
+    {"location": "Patagonia",       "blurb": "Glaciers and granite peaks",          "q": "Patagonia mountains"},
+    {"location": "Marrakech",       "blurb": "Souks, riads and the Atlas",          "q": "Marrakech travel"},
+    {"location": "Amalfi Coast",    "blurb": "Cliff towns over the sea",            "q": "Amalfi coast"},
+    {"location": "Galápagos",       "blurb": "Wildlife like nowhere else",          "q": "Galapagos islands"},
+]
+
 
 class PhotoRequest(BaseModel):
     query: str
@@ -47,7 +60,7 @@ async def visual_context(request: VisualContextRequest):
 
 
 @router.get("/photos/destinations")
-async def destinations():
+async def destinations(scope: str = ""):
     """One photo per iconic Vietnam destination — the opening state of the workspace.
 
     Fans out concurrently rather than serially so the panel fills in one round trip. Each
@@ -57,7 +70,9 @@ async def destinations():
     """
     async def one(d: dict) -> dict:
         try:
-            shots = await search_photos(f"{d['location']} Vietnam travel", count=1)
+            shots = await search_photos(d.get("q") or f"{d['location']} Vietnam travel", count=1)
+            if d.get("q") and FALLBACK_URLS & {x.get("url") for x in shots}:
+                shots = []   # never a stand-in picture of somewhere else
         except Exception:
             shots = []
         shot = shots[0] if shots else {}
@@ -70,6 +85,6 @@ async def destinations():
             "unsplash_url": shot.get("unsplash_url", ""),
         }
 
-    items = await asyncio.gather(*[one(d) for d in OPENING_DESTINATIONS])
+    items = await asyncio.gather(*[one(d) for d in (WORLD_DESTINATIONS if scope == "world" else OPENING_DESTINATIONS)])
     # Drop any that came back with no image at all rather than rendering a broken tile.
     return {"destinations": [i for i in items if i["url"]]}

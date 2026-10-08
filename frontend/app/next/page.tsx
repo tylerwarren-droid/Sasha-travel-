@@ -7,7 +7,6 @@ import SashaChat, { WorkspaceTab } from '../components/SashaChat'
 import type { MicDevicesInfo } from '../components/VoiceButton'
 import type { Idea } from '../components/workspace/IdeasPanel'
 import type { RichItinerary } from '../components/ItineraryDays'
-import VnFlag from '../components/VnFlag'
 import LogoMark from '../components/portal/LogoMark'
 import { stripMarkdown } from '@/lib/markdown'
 import { apiUrl, apiHeaders } from '@/lib/api'
@@ -17,35 +16,36 @@ import { PAYMENTS_ENABLED, SAVED_CARD_LAST4 } from '@/lib/flags'
 import { buildItineraryHtml, buildItineraryText } from '@/lib/itineraryDoc'
 import { User, Itinerary } from '@/types'
 
-const PRESET_PROMPTS = ['Plan a 7 day trip', 'Tell me about Hoi An', 'Best golf courses', 'Phu Quoc beaches']
+// Sasha 213 · ONE IDENTITY: a concierge for anywhere — no destination is assumed
+const PRESET_PROMPTS = ['Plan a 7 day trip', 'Somewhere warm in November', 'A long weekend in Europe', 'A table for two tonight']
 // Sample plan for `?ui=preview` (layout QA of the Trip board without a backend). Illustrative
 // numbers; the flag is never set in normal use.
 const PREVIEW_PLAN: RichItinerary = {
-  title: 'Hoi An & Da Nang · 7 days',
-  summary: 'Lantern season in the old town, a cooking class in Tra Que, then Da Nang beaches and the Golden Bridge.',
+  title: 'Lisbon & Porto · 7 days',
+  summary: 'Trams and miradouros in Lisbon, then port lodges and the Douro valley from Porto.',
   estimated_total_usd: 4860,
   travellers: 2,
   cost_breakdown: { hotels: 1890, experiences: 1240, meals: 860, transport: 870, travellers: 2 },
   days: [
-    { day: 1, city: 'Hoi An', title: 'Arrive Da Nang, evening in Hoi An', description: 'Private transfer from the airport, check in by the river, first lantern walk.', image: 'https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=900', hotel: { name: 'Anantara Hoi An Resort', book_url: '', rating: 9.1, reviews: 2140, tag: 'Riverside' }, activities: [{ time: '18:00', name: 'Lantern walk along the Thu Bon', blurb: 'The old town lights up at dusk.', book_url: '' }] },
-    { day: 2, city: 'Hoi An', title: 'Old town walk, cooking class', description: '', image: null, hotel: null, activities: [{ time: '09:00', name: 'Heritage walk with a local guide', blurb: '', book_url: '' }, { time: '15:00', name: 'Tra Que village cooking class', blurb: '', book_url: '' }] },
-    { day: 3, city: 'Hoi An', title: 'My Son sanctuary at sunrise', description: '', image: null, hotel: null, activities: [] },
-    { day: 4, city: 'Da Nang', title: 'Ba Na Hills & Golden Bridge', description: '', image: null, hotel: { name: 'InterContinental Danang Sun Peninsula', book_url: '', rating: 9.4, reviews: 3280 }, activities: [] },
-    { day: 5, city: 'Da Nang', title: 'My Khe beach, seafood by the sea', description: '', image: null, hotel: null, activities: [] },
-    { day: 6, city: 'Da Nang', title: 'Son Tra peninsula & Linh Ung pagoda', description: '', image: null, hotel: null, activities: [] },
-    { day: 7, city: 'Da Nang', title: 'Slow morning, fly home', description: '', image: null, hotel: null, activities: [] },
+    { day: 1, city: 'Lisbon', title: 'Arrive, sunset at a miradouro', description: 'Check in in Alfama, first evening above the river.', image: null, hotel: { name: 'Sample hotel', book_url: '', rating: 9.1, reviews: 2140 }, activities: [{ time: '18:00', name: 'Miradouro walk', blurb: 'The city lights up at dusk.', book_url: '' }] },
+    { day: 2, city: 'Lisbon', title: 'Belém and a fado night', description: '', image: null, hotel: null, activities: [] },
+    { day: 3, city: 'Sintra', title: 'Palaces in the hills', description: '', image: null, hotel: null, activities: [] },
+    { day: 4, city: 'Porto', title: 'Train north, the Ribeira', description: '', image: null, hotel: { name: 'Sample hotel', book_url: '', rating: 9.4, reviews: 3280 }, activities: [] },
+    { day: 5, city: 'Porto', title: 'Port lodges in Gaia', description: '', image: null, hotel: null, activities: [] },
+    { day: 6, city: 'Douro', title: 'The valley by boat', description: '', image: null, hotel: null, activities: [] },
+    { day: 7, city: 'Porto', title: 'Slow morning, fly home', description: '', image: null, hotel: null, activities: [] },
   ],
 }
 // Welcome-screen destination gallery (approved design, board 1). Same curated Unsplash set the
 // backend's foto_agent falls back to, so the imagery matches what Sasha later surfaces. The three
 // unnamed shots are captioned by theme rather than guessed at as places.
 const WELCOME_OPENERS: { location: string; blurb: string; ask: string; url: string }[] = [
-  { location: 'Ha Long Bay', blurb: 'Limestone karsts, overnight junks', ask: 'Tell me about Ha Long Bay', url: 'https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
-  { location: 'Hoi An', blurb: 'Lantern-lit old town', ask: 'Tell me about Hoi An', url: 'https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
-  { location: 'Mu Cang Chai', blurb: 'Rice terraces in gold', ask: 'Tell me about Mu Cang Chai', url: 'https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
-  { location: 'Island hopping', blurb: 'Boats, coves and slow days', ask: 'Where should we go island hopping in Vietnam?', url: 'https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
-  { location: 'River valleys', blurb: 'Water between the peaks', ask: 'Show me Vietnam\'s river valleys', url: 'https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
-  { location: 'Beach days', blurb: 'White sand, warm sea', ask: 'Which Vietnam beaches would you pick?', url: 'https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
+  { location: 'Dramatic coastlines', blurb: 'Cliffs, coves and boats', ask: 'Where can we see dramatic coastlines?', url: 'https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
+  { location: 'Old towns', blurb: 'Lantern-lit streets', ask: 'Find me a magical old town for a few days', url: 'https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
+  { location: 'Mountain walks', blurb: 'Terraces and big views', ask: 'Where are the best places to hike this autumn?', url: 'https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
+  { location: 'Island hopping', blurb: 'Boats, coves and slow days', ask: 'Where should we go island hopping?', url: 'https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
+  { location: 'River valleys', blurb: 'Water between the peaks', ask: 'Show me beautiful river valleys', url: 'https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
+  { location: 'Beach days', blurb: 'White sand, warm sea', ask: 'Which beaches would you pick for November?', url: 'https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
 ]
 
 const DEMO_USER: User = {
@@ -62,8 +62,8 @@ const DEMO_USER: User = {
     { key: 'experience.type', value: 'culture_and_food', source: 'explicit', confidence: 1.0, is_active: true },
   ],
   past_trips: [
-    { title: 'Vietnam — Hanoi and Ha Long Bay', return_date: 'Summer 2024' },
-    { title: 'Vietnam — Hoi An and Da Nang', return_date: 'Spring 2023' },
+    { title: 'Japan — Kyoto and Tokyo', return_date: 'Summer 2024' },
+    { title: 'Portugal — Lisbon and the Douro', return_date: 'Spring 2023' },
   ],
   ota_affinity: ['culture', 'adventure']
 }
@@ -80,7 +80,7 @@ function micLabel(label: string, i: number): string {
 }
 
 const INITIAL_ITINERARY: Itinerary = {
-  title: 'Vietnam Discovery',
+  title: 'Your trip',
   ota_channel: 'culture',
   status: 'draft',
   total_fiat: 0,
@@ -301,7 +301,7 @@ export default function NextPage() {
     fetch(apiUrl('/api/photos/search'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: 'Vietnam landscape travel', count: 4 })
+      body: JSON.stringify({ query: 'travel landscape', count: 4 })
     })
       .then(r => r.json())
       .then(data => { if (data.photos?.length > 0) { setPhotos(data.photos); setActivePhoto(0) } })
@@ -682,7 +682,7 @@ export default function NextPage() {
         // No trip payload to render the full confirmation with — the booked modal requires
         // richItinerary, so calling handleBooked here would end the session behind a modal
         // that never appears (dead page until reload). Show the compact confirmation instead.
-        setItemBooked({ ref: data.booking_ref, label: 'Your Vietnam trip', amount: data.amount_usd, paidWith: paidWith ?? null })
+        setItemBooked({ ref: data.booking_ref, label: 'Your trip', amount: data.amount_usd, paidWith: paidWith ?? null })
       }
     } catch {
       setReserveError('Could not complete the reservation — please try again.')
@@ -769,7 +769,7 @@ export default function NextPage() {
   const shareItinerary = useCallback(async () => {
     if (!richItinerary) return
     const text = buildItineraryText(richItinerary, booked?.ref, booked?.paidWith ?? null)
-    const title = richItinerary.title || 'My Vietnam itinerary'
+    const title = richItinerary.title || 'My itinerary'
     try { if (navigator.share) { await navigator.share({ title, text }); return } } catch {}
     try { await navigator.clipboard.writeText(text); setShareToast('Itinerary copied to clipboard') }
     catch { setShareToast('Could not share automatically') }
@@ -901,7 +901,7 @@ export default function NextPage() {
   const wsSubtitle = !started ? 'What Sasha is doing for you'
     : isAvatarSpeaking ? 'Speaking with you…'
     : richItinerary ? `Planning · ${richItinerary.title}`
-    : photos.length > 0 ? `Exploring ${photos[activePhoto]?.location || photos[activePhoto]?.description || 'Vietnam'}`
+    : photos.length > 0 ? `Exploring ${photos[activePhoto]?.location || photos[activePhoto]?.description || 'the world'}`
     : 'What Sasha is doing for you'
   const statusLabel = micMuted ? 'Not listening' : isAvatarSpeaking ? 'Sasha is speaking' : isListening ? 'Listening…' : voiceConnected ? 'Mic live' : micError ? 'Mic unavailable' : 'Connecting…'
 
@@ -912,7 +912,7 @@ export default function NextPage() {
       <aside className="mt-side">
         <div className="mt-brand">
           <LogoMark height={44} className="mt-logo" />
-          <div className="mt-brand-sub"><VnFlag size={13} /><b>Discover Vietnam</b></div>
+          <div className="mt-brand-sub"><span aria-hidden>🌍</span><b>Travel anywhere</b></div>
           <div className="mt-brand-sub">Sasha · AI travel concierge</div>
         </div>
         <nav className="mt-nav" aria-label="Workspace">
@@ -926,7 +926,7 @@ export default function NextPage() {
         <button className="mt-newchat" onClick={newChat}><Plus size={14} strokeWidth={2.2} /> New chat</button>
         {/* Sasha 195 · the other pages, back beside Sasha */}
         <nav aria-label="More" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px', margin: '12px 4px 0', fontSize: 12.5 }}>
-          {[['Deck', '/deck'], ['Demo', '/demo'], ['Vietnam', '/vietnam'], ['Phú Quốc', '/phuquoc']].map(([t, h]) => (
+          {[['Deck', '/deck'], ['Demo', '/demo']].map(([t, h]) => (
             <a key={h} href={h} style={{ color: 'rgba(255,255,255,.7)', textDecoration: 'underline', textUnderlineOffset: 3 }}>{t}</a>
           ))}
         </nav>

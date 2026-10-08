@@ -206,7 +206,15 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
   // options without one (activities, restaurants, fallbacks) keep the external deep-link.
   // Sasha 212 · ONE TOTAL: the all-in figure, its parts marked quoted / estimated (on the card only — she says one figure)
   const [tripTotal, setTripTotal] = useState<{ total_eur: number; flights_eur: number; flights_are: string; stays_eur: number; stays_are: string } | null>(null)
-  const [bookingFind, setBookingFind] = useState<{ what: string; where: string; country?: string; draft?: unknown } | null>(null)  // S-66 chat booking
+  const [bookingFind, setBookingFind] = useState<{ what: string; where: string; country?: string; draft?: unknown; preset?: any; ribbon?: string | null; focus?: string | null; turn?: string } | null>(null)  // S-66 chat booking
+  // Sasha 213 · ONE TURN, ONE STATE: what's on screen is ONE turn's results — the latest turn that produced any. A group of
+  // cards from another (older, superseded) turn is never shown beside it; the card she named is highlighted.
+  const [screenTurn, setScreenTurn] = useState<string | null>(null)
+  const [groupTurn, setGroupTurn] = useState<Record<string, string>>({})
+  const [highlight, setHighlight] = useState<string[]>([])
+  const [readBack, setReadBack] = useState<{ lines: string[]; total?: number | null } | null>(null)
+  const onScreen = (g: string) => !agent || !screenTurn || groupTurn[g] === screenTurn
+  const claim = (g: string, t?: string) => { if (!t) return; setScreenTurn(t); setGroupTurn(m => ({ ...m, [g]: t })) }
   const [bookingCancel, setBookingCancel] = useState<{ venue: string; n: number } | null>(null)  // Sasha 96 chat cancel (Stage B)
   // CR 16 · a product's buttons and pictures for the current turn
   const [quickReplies, setQuickReplies] = useState<{ title: string; payload: string }[]>([])
@@ -226,7 +234,7 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
 
   useEffect(() => {
     let cancelled = false
-    fetch(apiUrl('/api/photos/destinations'), { headers: apiHeaders() })
+    fetch(apiUrl(agent ? '/api/photos/destinations?scope=world' : '/api/photos/destinations'), { headers: apiHeaders() })   // Sasha 213 · /next: anywhere
       .then(r => r.json())
       .then(d => { if (!cancelled && d?.destinations?.length) setOpeners(d.destinations) })
       .catch(() => {})   // silent: the opener is decoration, never block the chat on it
@@ -601,18 +609,22 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
           else if (ev.type === 'tool') { tools.push(ev.name); if (ev.name === 'propose_trip') setBuilding(false) }
           else if (ev.type === 'trip_changed') window.dispatchEvent(new Event('sasha-plan-refresh'))
           else if (ev.type === 'render') {   // Sasha 205 · every tool result has its renderer, by kind (agent/sasha.py RENDER)
-            if (ev.total) setTripTotal(ev.total)   // the proposal, a swapped flight, or get_total
+            if (ev.total) { setTripTotal(ev.total); claim('total', ev.turn) }   // the proposal, a swapped flight, or get_total
             if (ev.kind === 'total') { /* the total card above is the whole renderer */ }
-            if (ev.kind === 'flights' && Array.isArray(ev.cards) && ev.cards.length) { setBookings(ev.cards); if (tab !== 'chat') onMarkUnseen?.('chat') }   // Sasha 210 · the proposal's flights, a card per leg
-            else if ((ev.kind === 'flights' || ev.kind === 'stays') && ev.card) { setBookings([ev.card]); if (tab !== 'chat') onMarkUnseen?.('chat') }
+            if (ev.kind === 'flights' && Array.isArray(ev.cards) && ev.cards.length) { setBookings(ev.cards); claim('flights', ev.turn); if (tab !== 'chat') onMarkUnseen?.('chat') }   // Sasha 210 · the proposal's flights, a card per leg
+            else if ((ev.kind === 'flights' || ev.kind === 'stays') && ev.card) { setBookings([ev.card]); claim('flights', ev.turn); if (tab !== 'chat') onMarkUnseen?.('chat') }
             else if (ev.kind === 'flight_chosen' && ev.offer_id) {   // Sasha 210 · another flight picked (tap or voice): the card says which is in the trip
               setBookings(prev => prev.map(b => b.options.some(o => o.provider_offer_id === ev.offer_id)
                 ? { ...b, options: b.options.map(o => ({ ...o, chosen: o.provider_offer_id === ev.offer_id })) } : b))
             }
-            else if ((ev.kind === 'venues' || ev.kind === 'venue_route') && ev.find) { setBookingFind({ ...ev.find, draft: null }); if (tab !== 'chat') onMarkUnseen?.('chat') }
-            else if (ev.kind === 'read_back' && ev.trip_book) setTripBook({ from: String(ev.trip_book.from ?? 'Madrid'), n: Date.now() })
+            else if (ev.kind === 'venues' && ev.find) {   // Sasha 213 · the search's OWN cards and ribbon (no second search)
+              setBookingFind({ ...ev.find, draft: null, preset: ev.preset, ribbon: ev.ribbon ?? null, focus: ev.focus ?? null, turn: ev.turn })
+              setHighlight(ev.focus ? [ev.focus] : []); claim('venues', ev.turn); if (tab !== 'chat') onMarkUnseen?.('chat')
+            }
+            else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) { setReadBack({ lines: ev.read_back, total: ev.total_eur }); claim('readback', ev.turn) }
             else if (ev.kind === 'trip') window.dispatchEvent(new Event('sasha-plan-refresh'))
           }
+          else if (ev.type === 'state') { if (Array.isArray(ev.highlight) && ev.highlight.length) setHighlight(ev.highlight) }   // Sasha 213 · the card(s) she named
           else if (ev.type === 'replace') { reply = ev.text; show(reply); if (ev.speak) onSashaResponse?.(ev.say || ev.text) }   // Sasha 210 · only what she hasn't said
           else if (ev.type === 'done') {
             reply = ev.text || reply; show(reply); window.dispatchEvent(new Event('sasha-plan-refresh'))
@@ -881,7 +893,7 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
               {/* Photos Sasha surfaced on THIS turn, captioned with the place they're of. */}
               {photosByMsg[i]?.length > 0 && (
                 <div className="lw-msgshots">
-                  <div className="lw-msgshots-loc">{photosByMsg[i][0]?.location || 'Vietnam'}</div>
+                  <div className="lw-msgshots-loc">{photosByMsg[i][0]?.location || (agent ? '' : 'Vietnam')}</div>
                   <div className="lw-msgshots-row">
                     {photosByMsg[i].slice(0, 3).map((p, pi) => (
                       <a
@@ -892,7 +904,7 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
                         rel="noopener noreferrer"
                         title={p.description || p.location}
                       >
-                        <img src={p.thumb || p.url} alt={p.location || p.description || 'Vietnam'} loading="lazy" />
+                        <img src={p.thumb || p.url} alt={p.location || p.description || (agent ? 'Travel photo' : 'Vietnam')} loading="lazy" />
                         <span className="lw-msgshot-by">📷 {p.photographer}</span>
                       </a>
                     ))}
@@ -937,7 +949,14 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
             ))}
           </div>
         )}
-        {tripTotal && (
+        {readBack && onScreen('readback') && (
+          <div className="lw-card">{/* Sasha 213 · the read-back she just gave — from her own hold, never a second quote */}
+            <div className="lw-cardHd"><span className="lw-ci gold">✅</span><div className="lw-meta"><div className="lw-k">Ready to book</div>
+              <div className="lw-h">{readBack.total ? `€${Math.round(readBack.total).toLocaleString()} all in · TEST` : 'Your trip · TEST'}</div></div></div>
+            <div className="lw-cardBody">{readBack.lines.map((l, i) => <div key={i} className="o2" style={{ padding: '2px 0' }}>{l}</div>)}</div>
+          </div>
+        )}
+        {tripTotal && onScreen('total') && (
           <div className="lw-card">{/* Sasha 212 · one total, its parts marked */}
             <div className="lw-cardHd"><span className="lw-ci gold">🧾</span>
               <div className="lw-meta"><div className="lw-k">Your trip, all in</div>
@@ -948,16 +967,17 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
             </div>
           </div>
         )}
-        {bookingFind && <ChatBooking key={`${bookingFind.what}|${bookingFind.where}`} find={bookingFind} />}
+        {bookingFind && onScreen('venues') && <ChatBooking key={`${bookingFind.turn ?? ''}|${bookingFind.what}|${bookingFind.where}`} find={bookingFind}
+          preset={bookingFind.preset} ribbon={bookingFind.ribbon} highlight={highlight} onPickSay={agent ? (t: string) => sendMessage(t) : undefined} />}
         {flightPick && <div className="o2" style={{ marginTop: 6 }}><FlightBookTest key={flightPick.n} offerId={flightPick.offerId} autoStart /></div>}{/* Sasha 182 · the flight picked by words: its read-back at once */}
         {tripBook && <TripBookTest key={tripBook.n} from={tripBook.from} />}{/* Sasha 169 · the whole trip, TEST, one tap */}
         {bookingCancel && <ChatCancel key={bookingCancel.n} venue={bookingCancel.venue} />}{/* Sasha 96 chat cancel (Stage B) */}
         {/* Sasha 153 · after a booking only: the private guest may add an email to keep it across devices */}
         <KeepAcrossDevices />
-        {(hotels.length > 0 || bookings.length > 0 || bookingLinks.length > 0) && (
+        {(hotels.length > 0 || (bookings.length > 0 && onScreen('flights')) || bookingLinks.length > 0) && (
           <>
             <div ref={resultsRef} className="lw-when">Found for you</div>
-            {bookings.map((b, bi) => {
+            {(onScreen('flights') ? bookings : []).map((b, bi) => {
               const meta: Record<string, { icon: string; label: string; ci: string }> = {
                 flight: { icon: '✈️', label: 'Flights', ci: 'blue' },
                 cab: { icon: '🚕', label: 'Airport transfers', ci: 'gold' },

@@ -69,11 +69,80 @@ async def _read(ctx, a: dict) -> dict:
     if "(TEST stand-in)" in str(rd.get("venue") or ""):
         venue = rd["venue"]
     rungs = {r["rung"]: r for r in rd.get("rungs") or [] if r.get("available")}
-    out = {"read_id": rd["read_id"], "country": rd.get("country"), "venue": venue, "facts": rd.get("facts") or [],
+    out = {"read_id": rd["read_id"], "country": rd.get("country"), "venue": venue, "facts": rd.get("facts") or [], "place_id": a.get("place_id"),
            "rungs": {k2: {"fact_index": r.get("fact_index"), "value": r.get("value")} for k2, r in rungs.items()},
            **GW._hours_of(rd, datetime.now(timezone.utc)), "say": rd.get("say")}
     _READS.setdefault(ctx.account, {})[k] = out
     return out
+
+
+# ── Sasha 213 · ONE TURN, ONE STATE: the cards on screen are the cards she was given ─────────────────────────────────────
+_SHOWN: Dict[str, Dict[str, dict]] = {}   # account → place_id → the card as shown (the pick and the booking show THAT card)
+
+
+def shown_cards(r: dict) -> List[dict]:
+    """The cards the person sees: the server's ranking's default order, its `show` count — what ChatBooking shows."""
+    all_ = [c for c in (r.get("candidates") or []) if c.get("place_id")]
+    rk = r.get("ranking") or {}
+    order = (rk.get("orders") or {}).get(rk.get("default") or "rated")
+    by = {c["place_id"]: c for c in all_}
+    cards = [by[i] for i in order if i in by] if order else all_
+    return cards[: int(r.get("show") or 5)]
+
+
+def area_of(c: dict) -> str:
+    parts = [p.strip() for p in str(c.get("address") or "").split(",") if p.strip()]
+    return re.sub(r"^\d{4,5}\s*", "", parts[-2]) if len(parts) >= 3 else (parts[0] if parts else "")
+
+
+def card_for_model(c: dict) -> dict:
+    return {"name": c.get("name"), "place_id": c.get("place_id"), "area": area_of(c), "type": c.get("type"),
+            "rating": c.get("rating"), "reviews": c.get("rating_count"), **({"open_then": c["open_at"]} if c.get("open_at") else {})}
+
+
+def remember_cards(account: str, cards: List[dict]) -> None:
+    m = _SHOWN.setdefault(account, {})
+    for c in cards:
+        m[c["place_id"]] = c
+    while len(m) > 60:
+        m.pop(next(iter(m)))
+
+
+def card_of(account: str, place_id: Optional[str], name: Optional[str] = None) -> Optional[dict]:
+    m = _SHOWN.get(account) or {}
+    if place_id and place_id in m:
+        return m[place_id]
+    n = (name or "").strip().lower()
+    return next((c for c in reversed(list(m.values())) if n and (c.get("name") or "").strip().lower() == n), None)
+
+
+def ribbon_line(a: dict, shown: List[dict], r: dict) -> str:
+    """The one line over the cards — from the SAME result as the cards and her words."""
+    what, where = (a.get("what") or "places").strip(), (a.get("where") or "").strip()
+    when = ""
+    if a.get("open_at"):
+        try:
+            from booking_signer import sentences as SN
+            when = f" · {SN.day_words(a['open_at'][:10])} {a['open_at'][11:16]}"
+        except Exception:
+            when = ""
+    if not shown:
+        return f"No {what} found in {where}{when}" if not r.get("no_match") else f"No {r['no_match']} places found in {where}{when}"
+    return f"{len(shown)} {what} in {where}{when}"
+
+
+async def photos_for(cards: List[dict], budget: float = 1.2) -> None:
+    """The top results' photos, fetched now (each venue's own picture, else Google's), cached by the photo layer; a card
+    whose photo misses the budget shows without it and gets it lazily."""
+    GW = _API()
+    try:
+        got, _late = await GW._photos_within(cards, budget)
+    except Exception as e:
+        log.info("[venues] photos: %s", type(e).__name__)
+        got = {}
+    for c in cards:
+        if got.get(c["place_id"]):
+            c["photo"] = got[c["place_id"]]
 
 
 def _routes_of(rd: dict) -> List[str]:
@@ -84,7 +153,8 @@ def _routes_of(rd: dict) -> List[str]:
 
 async def read_booking_route(ctx, a: dict) -> dict:
     rd = await _read(ctx, a)
-    return {"venue": rd["venue"], "routes": _routes_of(rd), "how": rd.get("say"),
+    card = card_of(ctx.account, a.get("place_id"), a.get("name"))   # Sasha 213 · the picked card is what's on screen
+    return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of(rd), "how": rd.get("say"),
             "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
 
 
@@ -119,6 +189,19 @@ async def hold_venue(ctx, a: dict) -> dict:
     at = res["when"]["at"]
     now = datetime.now(timezone.utc)
     route = a.get("route")
+    card = card_of(ctx.account, a.get("place_id"), a.get("name"))   # Sasha 213 · this venue's card, highlighted on screen
+    return _with_card(card, await _hold_inner(ctx, a, rd, res, at, now, route))
+
+
+def _with_card(card: Optional[dict], out: dict) -> dict:
+    if card and isinstance(out, dict):
+        out["card"] = card
+    return out
+
+
+async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Optional[str]) -> dict:
+    from booking_signer import guest_accounts as GA, guest_receipt as GR
+    GW = _API()
     msg_routes = [x for x in _routes_of(rd) if x in ("whatsapp", "instagram")]
     if route in ("whatsapp", "instagram") or (not route and msg_routes and set(_routes_of(rd)) <= {"whatsapp", "instagram"}):
         # Sasha 212 · a place that books only by a message (a tattoo studio on Instagram, a bar on WhatsApp): Sasha DRAFTS it
@@ -199,6 +282,7 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
     prev = _HELD.get(ctx.account)
     at = prev["at"] if prev and prev.get("sha") == read_back["sha256"] else datetime.now(timezone.utc)
     _HELD[ctx.account] = {"rung": rung, "id": rid, "sha": read_back["sha256"], "at": at, "venue": rd["venue"], "summary": GW.summary(res),
+                          "place_id": rd.get("place_id"),
                           "when": res["when"]["at"], "party": res["how_many"]["count"], **(extra or {})}
     lines = GW.guest_lines(rung, read_back.get("lines") or [])
     return {"status": "awaiting_yes", "venue": GW.plain_venue(rd["venue"]), "route": rung, "when": GW.summary(res),
@@ -227,6 +311,14 @@ async def book_venue(ctx, a: dict) -> dict:
     how = {"how": "voice", "said": said}
     venue, rung = GW.plain_venue(held["venue"]), held["rung"]
     _HELD.pop(ctx.account, None)
+    out = await _book_inner(ctx, held, how, venue, rung)
+    card = card_of(ctx.account, held.get("place_id"), venue)
+    return _with_card(card, out)
+
+
+async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict:
+    from booking_signer import slot_link as SL, wa_brain as WB
+    GW = _API()
     where = await WB.trip_day_words(ctx.account, held["when"][:10], venue)
     if rung == "form":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/forms/{held['id']}/send", {"read_back_sha256": held["sha"], "approval": how}, timeout=120)

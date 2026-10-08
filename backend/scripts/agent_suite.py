@@ -138,8 +138,12 @@ async def render_cases() -> None:
     missing = sorted(set(API.BY_NAME) - set(AG.RENDER))
     ok("AGENT RENDER: every tool's result has a renderer (venues → photo cards, flights/stays → cards, trip → the Trip view…)",
        not missing and set(AG.RENDER.values()) <= AG.KINDS, f"missing {missing}")
-    ev = AG.render("search_venues", {"venues": [], "find": {"what": "dinner", "where": "Hoi An"}}, {"what": "dinner", "where": "Hoi An"})
-    ok("AGENT RENDER: search_venues opens the photo venue cards", (ev or {}).get("kind") == "venues" and ev["find"]["where"] == "Hoi An", str(ev))
+    card = {"place_id": "ChIJ-gate-1", "name": "Casa Gate", "address": "Calle Mayor 1, 28013 Madrid, Spain", "rating": 4.6}
+    res = {"venues": [{"name": "Casa Gate"}], "ribbon": "1 dinner in Madrid", "find": {"what": "dinner", "where": "Madrid"},
+           "preset": {"all": [card], "cards": [card], "show": 1}}
+    ev = AG.render("search_venues", res, {"what": "dinner", "where": "Madrid"})
+    ok("AGENT RENDER (Sasha 213): search_venues' cards ARE its result (no second search) — the same cards, the same ribbon",
+       (ev or {}).get("kind") == "venues" and ev["preset"]["cards"] == [card] and ev["ribbon"] == "1 dinner in Madrid", str(ev)[:200])
 
 
 async def quiver_cases() -> None:

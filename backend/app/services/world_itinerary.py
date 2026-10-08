@@ -103,10 +103,13 @@ async def _photos(cands: List[dict]) -> Dict[str, str]:
 
 
 async def _place_photo(query: str) -> Optional[str]:
-    from app.services.foto_agent import search_photos
+    """A picture OF this place — or none. Sasha 213: the photo layer's stand-in set is one country's pictures (it served
+    Vietnam photos for an Ecuador trip when Unsplash failed): never used here."""
+    from app.services.foto_agent import search_photos, FALLBACK_PHOTOS
     try:
         got = await search_photos(query, count=1)
-        return (got or [{}])[0].get("url")
+        url = (got or [{}])[0].get("url")
+        return None if url in {p.get("url") for p in FALLBACK_PHOTOS} else url
     except Exception:
         return None
 

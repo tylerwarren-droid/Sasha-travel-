@@ -93,11 +93,11 @@ def guard_check(text: str, allowed: set, anything_booked: bool) -> List[str]:
 
 
 # Sasha 205 · EVERY tool result has a renderer in the UI, by type (tests/test_agapi_guards.py holds it)
-RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues": "venues", "read_booking_route": "venue_route",
+RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues": "venues", "read_booking_route": "venues",
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
           "save_travellers": "inline", "hold_booking": "read_back", "book": "trip", "get_status": "trip", "get_trip": "trip",
-          "get_total": "total", "hold_venue": "inline", "book_venue": "trip", "cancel_venue": "trip"}
-KINDS = {"flights", "flight_chosen", "total", "stays", "venues", "venue_route", "read_back", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
+          "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
+KINDS = {"flights", "flight_chosen", "total", "stays", "venues", "read_back", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 
 
 def render(tool: str, res: dict, args: dict) -> Optional[dict]:
@@ -120,14 +120,15 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": kind, "card": flight_card(res, args)}
     if kind == "stays":
         return {"type": "render", "kind": kind, "card": stays_card(res)}
-    if kind == "venues" and res.get("find"):
-        return {"type": "render", "kind": kind, "find": res["find"]}
-    if kind == "venue_route":
-        return {"type": "render", "kind": kind, "find": {"what": res.get("venue") or args.get("name"), "where": args.get("city"), "named": True,
-                                                         **({"country": args["country"]} if args.get("country") else {}),
-                                                         **({"open_at": args["at"]} if args.get("at") else {})}}
-    if kind == "read_back":
-        return {"type": "render", "kind": kind, "trip_book": {"from": args.get("origin") or "Madrid"}}
+    if kind == "venues" and res.get("preset"):   # Sasha 213 · the search's OWN cards — the card never searches again
+        return {"type": "render", "kind": kind, "find": res["find"], "preset": res["preset"], "ribbon": res.get("ribbon")}
+    if kind == "venues" and res.get("card"):   # Sasha 213 · a pick / a booking: THAT card, highlighted — nothing else
+        c = res["card"]
+        return {"type": "render", "kind": kind, "find": {"what": args.get("what") or c.get("name"), "where": args.get("city") or ""},
+                "preset": {"all": [c], "cards": [c], "show": 1}, "focus": c.get("place_id"),
+                "ribbon": f"{c.get('name')}" + (f" · {res['when']}" if res.get("when") else "")}
+    if kind == "read_back":   # Sasha 213 · the read-back she just gave, from her own hold — never a second quote
+        return {"type": "render", "kind": kind, "read_back": [l for l in res.get("read_back") or []], "total_eur": res.get("total_eur")}
     return None
 
 
@@ -262,6 +263,84 @@ def as_offer(text: str) -> str:
     return text
 
 
+# ── Sasha 213 · SHE ONLY NAMES WHAT'S ON SCREEN ─────────────────────────────────────────────────────────────────────────
+# Every place she names must be a card (or an item on screen) in THIS turn's state; a name from her own knowledge ("my
+# favourite spa") is caught before it's spoken. The names are found by a small model only when a line could name a place.
+_VENUE_CUE = re.compile(r"(?i)\b(restaurants?|bars?|caf[eé]s?|bistro|taberna|tavern|spas?|hammam|baths|hotels?|hostels?|resorts?|"
+                        r"studios?|tattoo|salons?|clubs?|places?|spots?|favou?rites?|pick|try|recommend|go for|book|table|massage|stay at)\b")
+NAMES_MODEL = os.getenv("SASHA_NAMES_MODEL", "claude-haiku-4-5")
+_KEEP_NAMES = {"sasha", "kanoe", "google", "google maps", "apple pay", "stripe", "whatsapp", "instagram"}
+
+
+def _key(t: str) -> List[str]:
+    import unicodedata
+    t = unicodedata.normalize("NFD", t or "")
+    t = "".join(ch for ch in t if not unicodedata.combining(ch)).lower()
+    return [w for w in re.findall(r"[a-z0-9]+", t) if w not in ("the", "la", "el", "le", "de", "del", "and", "y", "restaurant", "restaurante", "hotel", "spa")]
+
+
+def name_matches(name: str, allowed: set) -> bool:
+    k = set(_key(name))
+    if not k or name.strip().lower() in _KEEP_NAMES:
+        return True
+    for a in allowed:
+        ak = set(_key(a))
+        if ak and (k <= ak or ak <= k or len(k & ak) / max(1, min(len(k), len(ak))) >= 0.67):
+            return True
+    return False
+
+
+async def named_places(text: str) -> List[str]:
+    """The specific businesses a line names (restaurants, hotels, spas, studios, bars…) — never cities, areas, streets,
+    airlines, dishes or people. [] when the line can't name one."""
+    if not text or not _VENUE_CUE.search(text) or not re.search(r"[A-Z][\w'’&.-]+", text[1:]):
+        return []
+    from app.services.llm import client
+    try:
+        r = await client.messages.create(model=NAMES_MODEL, max_tokens=200, system=(
+            "List the names of SPECIFIC businesses named in the text: restaurants, bars, cafés, hotels, hostels, spas, baths, "
+            "salons, tattoo studios, shops, tour operators. NOT cities, neighbourhoods, streets, squares, countries, airlines, "
+            "dishes, cuisines, people or generic words. Reply with a JSON array of strings only, [] if none."),
+            messages=[{"role": "user", "content": text[:1500]}])
+        raw = "".join(getattr(b, "text", "") for b in r.content).strip()
+        got = json.loads(raw[raw.find("["): raw.rfind("]") + 1]) if "[" in raw else []
+        return [str(x) for x in got if isinstance(x, str) and x.strip()][:12]
+    except Exception as e:
+        log.info("[agent] names not checked: %s", type(e).__name__)
+        return []
+
+
+# the SCREEN per conversation: what the person sees until a turn with new results replaces it (a turn that only talks
+# keeps it) — so "on screen this turn" is exactly what's in front of them
+_SCREEN: Dict[str, dict] = {}
+
+
+def _card_names(ev: dict) -> List[str]:
+    out = [c.get("name") for c in ((ev.get("preset") or {}).get("cards") or [])]
+    for card in (ev.get("cards") or []) + ([ev["card"]] if ev.get("card") else []):
+        out += [o.get("name") for o in card.get("options") or []]
+    return [x for x in out if x]
+
+
+def drop_names(text: str, names: List[str]) -> str:
+    keys = [set(_key(n)) for n in names]
+    keep = [x for x in re.split(r"(?<=[.!?])\s+", text or "") if x.strip() and not any(k and k <= set(_key(x)) for k in keys)]
+    return " ".join(keep)
+
+
+def _names_in(obj: Any, out: set) -> None:
+    """Every name a tool result puts on screen this turn (cards, stays, the picked venue, airlines, platforms)."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k in ("name", "stay", "venue", "airline", "owner", "platform", "title") and isinstance(v, str) and v.strip():
+                out.add(v.strip())
+            else:
+                _names_in(v, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            _names_in(v, out)
+
+
 def spoken_prose(text: str) -> str:
     """Sasha 210 · she's speaking: no markdown, and a list becomes plain sentences (never "dash, bold, Hotels")."""
     out = []
@@ -280,7 +359,8 @@ def drop_internal(text: str) -> str:
 
 _TEST_TAG = [(re.compile(r"\s*\((?:Duffel )?TEST[^)]*\)"), ""), (re.compile(r",?\s*marked TEST,?"), ","), (re.compile(r"\bDuffel TEST\b"), "Duffel"),
              (re.compile(r"\bTEST\s+"), ""), (re.compile(r"\s*\bTEST\b"), "")]
-_MODEL_DROP_KEYS = {"note", "notes", "prices", "test", "prefetched", "flight_note", "total_note", "breakdown"}   # Sasha 212 · one total
+_MODEL_DROP_KEYS = {"note", "notes", "prices", "test", "prefetched", "flight_note", "total_note", "breakdown",   # Sasha 212 · one total
+                    "preset", "find", "card", "ribbon"}   # Sasha 213 · the screen's copy; she gets the cards as `venues` only
 
 
 def clean_for_model(obj: Any) -> Any:
@@ -314,6 +394,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     as ONE utterance (no gaps between her phrases); `voice` is shared with turn_with_quiver: the acknowledgement she said
     while this turn worked ({"filler"}), and its request to speak what's ready ({"flush_now"})."""
     from app.services.llm import client
+    # Sasha 212 · an "Overloaded" (529) from the model is waited out (backoff, up to 5 tries) — it ended a whole conversation
+    client = client.with_options(max_retries=5) if hasattr(client, "with_options") else client
     voice = voice if voice is not None else {}
     t0 = time.perf_counter()
     first_text_ms = None
@@ -338,6 +420,12 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     held = False          # a sentence failed the claim/price guard: nothing more is spoken this turn (the rewrite replaces it)
     booked_now = None
     internal_log: List[str] = []
+    # Sasha 213 · ONE TURN, ONE STATE: what's on screen this turn (cards, ribbon) and the names she may say — from THIS
+    # turn's tool results only
+    screen = _SCREEN.get(session or "-") or {}
+    tstate: Dict[str, Any] = {"cards": list(screen.get("cards") or []), "ribbon": screen.get("ribbon"),
+                              "names": list(screen.get("names") or []), "allowed": set(screen.get("names") or []), "dropped": [],
+                              "new": False}
 
     def system_now() -> list:
         # Sasha 205 · PROMPT CACHING: her persona is the same every call (cached); the rest is per turn
@@ -370,6 +458,12 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         text = as_offer(" ".join(out))
         if not text:
             return ""
+        unknown = [n for n in await named_places(text) if not name_matches(n, tstate["allowed"])]
+        if unknown:   # Sasha 213 · a place not on screen this turn is never named — the sentence goes, before it's spoken
+            tstate["dropped"] += unknown
+            text = drop_names(text, unknown) or ("They're on your cards — tap one, or tell me which you like." if tstate["cards"] else "")
+            if not text:
+                return ""
         first_of_turn = not said
         o = opener_of(text)
         if o and ((first_of_turn and voice.get("filler")) or o in used_openers):
@@ -449,8 +543,19 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             if r.get("ok") and u.name in _CHANGES_TRIP:
                 yield {"type": "trip_changed"}
             if r.get("ok"):
+                _names_in(r["result"], tstate["allowed"])
                 ev = render(u.name, r["result"], args)
                 if ev:
+                    names = _card_names(ev)
+                    if names:   # this turn's results REPLACE the screen (never shown beside older ones)
+                        if not tstate["new"]:
+                            tstate.update(cards=[], names=[], ribbon=None, new=True)
+                        tstate["names"] += names
+                        tstate["allowed"] |= set(names)
+                    if ev.get("kind") == "venues" and ev.get("preset"):
+                        tstate["cards"] = [c for c in ev["preset"].get("cards") or [] if c.get("place_id")]
+                        tstate["ribbon"] = ev.get("ribbon")
+                    ev = {**ev, "turn": turn_key}
                     yield ev
             results.append({"type": "tool_result", "tool_use_id": u.id, "content": json.dumps(model_result(r), default=str)[:12000]})
         msgs.append({"role": "user", "content": results})
@@ -481,6 +586,15 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         text = cut[: max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! ")) + 1] or cut
         guard_log.append(f"trimmed to {len(text)} characters")
         yield {"type": "replace", "text": text, "speak": False}
+    # Sasha 213 · the turn's ONE state: its cards, its ribbon, and the card(s) she named — highlighted
+    said_k = set(_key(text))
+    hl = [c["place_id"] for c in tstate["cards"] if c.get("name") and set(_key(c["name"])) and set(_key(c["name"])) <= said_k]
+    _SCREEN[session or "-"] = {"cards": tstate["cards"], "ribbon": tstate["ribbon"], "names": tstate["names"]}
+    yield {"type": "state", "turn": turn_key, "cards": [c["place_id"] for c in tstate["cards"]], "ribbon": tstate["ribbon"],
+           "names": tstate["names"], "carried": not tstate["new"], "highlight": hl,
+           **({"names_dropped": tstate["dropped"]} if tstate["dropped"] else {})}
+    if tstate["dropped"]:
+        guard_log.append(f"names not on screen dropped: {tstate['dropped']}")
     ms = {"first_text": first_text_ms, "total": int((time.perf_counter() - t0) * 1000), "first_model": FAST_MODEL,
           "models": sorted({x["model"] for x in step_ms}), "steps": step_ms}
     log.info("[agent] turn %s ms first-text=%s total=%s tools=%s guard=%s", session, ms["first_text"], ms["total"],

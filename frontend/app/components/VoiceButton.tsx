@@ -576,6 +576,10 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
           if (data.type === 'Results') {
             const fragment = data.channel?.alternatives?.[0]?.transcript || ''
             if (fragment) micLog(data.is_final ? 'final' : 'partial', { text: fragment, speech_final: !!data.speech_final })
+            // Sasha 214 · words are arriving, so Deepgram is alive: the watchdog's "speech with no transcript" clock rests.
+            // It ran from the first SpeechStarted until a SUBMIT, so a guest who kept talking through the declarative hold
+            // (two statements 2.5 s apart) tripped the 8 s restart on a healthy socket and lost the held words (B3 harness).
+            if (fragment) heardAtRef.current = 0
             if (data.is_final === true) {
               // Accumulate is_final fragments; the hold below decides when the turn is over.
               if (fragment) {

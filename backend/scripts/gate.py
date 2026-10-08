@@ -8,7 +8,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from scripts import flight_suite as F, core_suites as C, basket_suite as BS, agent_suite as AS  # noqa: E402
+from scripts import flight_suite as F, core_suites as C, basket_suite as BS, agent_suite as AS, whatsapp_suite as WS  # noqa: E402
 
 
 async def _clean_orphans(since) -> None:
@@ -34,8 +34,9 @@ async def main() -> int:
     c = await BS.main()   # Sasha 198 · the trip basket (grows R2 → R10)
     d = await AS.main()   # Sasha 203 · the agent's tools (AgAPI v0) in the real database
     await _clean_orphans(since)
-    print(f"\nDEPLOY GATE: {'PASS' if not (a or b or c or d) else 'FAIL'}")
-    return 1 if (a or b or c or d) else 0
+    e = await __import__("asyncio").to_thread(WS.main)   # Sasha 206 · WhatsApp: spaces, R1, R2, the guest pipeline (offline)
+    print(f"\nDEPLOY GATE: {'PASS' if not (a or b or c or d or e) else 'FAIL'}")
+    return 1 if (a or b or c or d or e) else 0
 
 
 if __name__ == "__main__":

@@ -1,3 +1,5 @@
+> ⚠ **SUPERSEDED (EU 186, 8 Oct 2026)** by `docs/sasha/whatsapp-architecture.md`, which is written from the code at `41d924e`. This document is out of date (see that file's §6). Kept for history.
+
 # S-71 — Sasha on WhatsApp, through Twilio: what the founder must do, minimised
 
 *Sasha tab, 1 Oct 2026 (Sasha 79). It builds on S-61 (the Meta verification walk, written by the EU session) and

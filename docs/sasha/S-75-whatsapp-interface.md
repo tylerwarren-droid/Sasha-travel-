@@ -1,3 +1,5 @@
+> ⚠ **SUPERSEDED (EU 186, 8 Oct 2026)** by `docs/sasha/whatsapp-architecture.md`, which is written from the code at `41d924e`. This document is out of date (see that file's §6). Kept for history.
+
 # S-75 · Sasha on WhatsApp for guests: build-ready
 
 *EU session, 2 Oct 2026 (EU 113). Written for the Sasha tab, which owns this repo's git. **Read-only**: Sasha's code was

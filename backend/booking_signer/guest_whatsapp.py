@@ -189,7 +189,8 @@ class MemoryGuestStore:
 
     async def put_state(self, key: str, st: dict) -> None:
         # only what guest_wa_state's columns hold: anything else is lost in production, so it is lost here too
-        self.state[key] = copy.deepcopy({k: st.get(k) for k in ("history", "pending", "last_inbound_at", "link_tries")})
+        # (Sasha 206 · last_to is a column since 034_guest_wa_last_to_and_sids.sql)
+        self.state[key] = copy.deepcopy({k: st.get(k) for k in ("history", "pending", "last_inbound_at", "link_tries", "last_to")})
 
     async def delete_account(self, account: str) -> Dict[str, int]:
         keys = [k for k, c in self.channels.items() if c["account_id"] == account]
@@ -273,10 +274,27 @@ class PostgresGuestStore:
         d = dict(r)
         return {"history": json.loads(d["history"]) if isinstance(d["history"], str) else d["history"],
                 "pending": json.loads(d["pending"]) if isinstance(d["pending"], str) else d["pending"],
-                "last_inbound_at": d["last_inbound_at"],
+                "last_inbound_at": d["last_inbound_at"], "last_to": d.get("last_to"),   # Sasha 206 · once 034 has added the column
                 "link_tries": json.loads(d["link_tries"]) if isinstance(d["link_tries"], str) else d["link_tries"]}
 
     async def put_state(self, key, st):
+        global _LAST_TO_COLUMN
+        if _LAST_TO_COLUMN is not False:   # Sasha 206 (EU 186 R1) · the number they last wrote to, kept (034 adds the column)
+            try:
+                await self._run(lambda c: c.execute(
+                    "insert into guest_wa_state (wa_id_sha256, history, pending, last_inbound_at, link_tries, last_to, updated_at) "
+                    "values ($1, $2, $3, $4, $5, $6, now()) on conflict (wa_id_sha256) do update set history = excluded.history, "
+                    "pending = excluded.pending, last_inbound_at = excluded.last_inbound_at, link_tries = excluded.link_tries, "
+                    "last_to = coalesce(excluded.last_to, guest_wa_state.last_to), updated_at = now()",
+                    key, st.get("history") or [], st.get("pending"), st.get("last_inbound_at"), st.get("link_tries") or [], st.get("last_to")))
+                _LAST_TO_COLUMN = True
+                return
+            except Exception as e:
+                if "last_to" not in str(e):
+                    raise
+                _LAST_TO_COLUMN = False
+                log.error("[guest_whatsapp] guest_wa_state has no last_to column yet — apply 034_guest_wa_last_to_and_sids.sql; "
+                          "until then messages Sasha starts go from the permanent sender")
         await self._run(lambda c: c.execute(
             "insert into guest_wa_state (wa_id_sha256, history, pending, last_inbound_at, link_tries, updated_at) "
             "values ($1, $2, $3, $4, $5, now()) on conflict (wa_id_sha256) do update set history = excluded.history, "
@@ -296,6 +314,7 @@ class PostgresGuestStore:
 
 
 STORE: Any = None   # routes.py sets the Postgres store; tests set a memory one
+_LAST_TO_COLUMN: Optional[bool] = None   # Sasha 206 · does guest_wa_state have last_to yet (034)? None = not tried
 
 
 # ── sending: Twilio, spaced, only inside the 24-hour window, never to an opted-out guest ────────────────────────────
@@ -466,7 +485,22 @@ def refusal_words(j: dict, status: int) -> str:
 # ── the webhook's entry: who wrote? ─────────────────────────────────────────────────────────────────────────────────
 
 _TASKS: set = set()
+# Sasha 206 (EU 186 R3) · the per-number lock is IN-PROCESS, and that is safe because WhatsApp is served by ONE process: uvicorn
+# with no --workers (railway.json startCommand) on ONE replica (railway.json numReplicas: 1; the live log shows a single
+# "Started server process [1]"). check_single_worker() logs an error at startup if that ever changes — then this must become a
+# Postgres advisory lock per account (pg_advisory_xact_lock), as sasha-rebuild-plan.md §2.2 sets out.
 _TURN_LOCKS: Dict[str, asyncio.Lock] = {}
+
+
+def check_single_worker() -> bool:
+    """True when this process is the only one serving WhatsApp, as the in-process lock needs; logs an error otherwise."""
+    many = [f"{k}={os.getenv(k)}" for k in ("WEB_CONCURRENCY", "UVICORN_WORKERS", "GUNICORN_WORKERS") if (os.getenv(k) or "1").strip() not in ("", "1")]
+    if many:
+        log.error("[guest_whatsapp] MORE THAN ONE WORKER (%s): the per-number turn lock is in-process — two turns for one guest could "
+                  "run at once. Make it a Postgres advisory lock before scaling (EU 186 R3).", ", ".join(many))
+        return False
+    log.info("[guest_whatsapp] one worker: the per-number turn lock holds (EU 186 R3)")
+    return True
 
 
 def _spawn(coro) -> None:
@@ -479,6 +513,40 @@ def _twiml_message(text: str) -> str:
     return f"<Message>{escape(text)}</Message>"
 
 
+_SEEN_SIDS: Dict[str, float] = {}   # Sasha 206 · the in-memory fallback until 034 adds guest_inbound_sids
+_SIDS_TABLE: Optional[bool] = None
+
+
+async def first_time(sid: str) -> bool:
+    """True the first time a MessageSid is seen (or when there is none to go by); False for a repeat — in the database once
+    034 has run (across restarts), else in this process."""
+    global _SIDS_TABLE
+    if not sid:
+        return True
+    run = getattr(STORE, "_run", None)
+    if run is not None and _SIDS_TABLE is not False:
+        try:
+            new = await run(lambda c: c.fetchval("insert into guest_inbound_sids (message_sid) values ($1) on conflict do nothing "
+                                                 "returning message_sid", sid))
+            _SIDS_TABLE = True
+            return new is not None
+        except Exception as e:
+            if "guest_inbound_sids" not in str(e) and "message_sid" not in str(e):
+                log.error("[guest_whatsapp] MessageSid not checked: %s: %s", type(e).__name__, e)
+                return True   # never drop a guest's message over the check itself
+            _SIDS_TABLE = False
+            log.error("[guest_whatsapp] guest_inbound_sids does not exist yet — apply 034_guest_wa_last_to_and_sids.sql; "
+                      "de-duplicating in memory until then")
+    import time as _t
+    now = _t.time()
+    for k in [k for k, at in _SEEN_SIDS.items() if now - at > 86400]:
+        del _SEEN_SIDS[k]
+    if sid in _SEEN_SIDS:
+        return False
+    _SEEN_SIDS[sid] = now
+    return True
+
+
 async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
     """None: not ours — the venue path runs exactly as before. A string: the TwiML inside <Response> (often empty: the
     guest's turn runs in the background and answers through the API, a message every three seconds)."""
@@ -488,11 +556,14 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
         return None
     key = wa_key(sender)
     ch = await STORE.channel_for(key)
+    if not ch and await venue_call_for(sender):
+        return None                        # a venue that is not a linked guest: the venue path (de-duplicated there), never a reply
+    if not await first_time(p.get("MessageSid") or ""):   # Sasha 206 (EU 186 R2) · a guest's Twilio retry never runs a turn twice
+        log.info("[guest_whatsapp] a repeated MessageSid — already handled, nothing run")
+        return ""
     if ch:
         _spawn(_turn(ch, to, p))
         return ""
-    if await venue_call_for(sender):
-        return None                        # a venue that is not a linked guest: the venue path, never a reply
     now = NOW()
     st = await STORE.get_state(key)
     m = _LINK.match(p.get("Body") or "")

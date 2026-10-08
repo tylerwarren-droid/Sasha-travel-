@@ -38,40 +38,43 @@ class OneSasha(TG.Base):
             self.say(t)
         self.assertEqual(self.bodies()[-1], "Your passport number?")
 
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
-
-    def test_relocation_then_flights_then_back_to_relocation(self):
+    # Sasha 206 (EU 186, R4) · rewritten to STRICT SPACES (Sasha 194): inside a space everything is the space's; "sasha" leaves;
+    # the space's own word comes back to exactly where it was. They run in the deploy gate (scripts/gate.py, WHATSAPP SPACES).
+    def test_inside_relocation_a_flight_sentence_stays_relocations_then_sasha_then_back(self):
         self.to_passport()
+        self.say("book me flights to Madrid on 1 March")
+        self.assertIn("letters and digits", self.bodies()[-1])                # still relocation's: it re-asks its question
+        self.assertNotIn(GW.ASK_ONE, self.bodies())                           # Sasha's flow did NOT take it
+        self.say("sasha")                                                     # her word: out of the space
         n = len(GW.SENDER.sent)
         self.say("book me flights to Madrid on 1 March")
-        sasha = "\n".join(s["body"] for s in GW.SENDER.sent[n:])
-        self.assertEqual(sasha, GW.ASK_ONE)                                   # Sasha's own flow answered, in the same chat
-        self.assertIsNone(self.st()["pending"])                               # her pending is hers again
-        self.assertNotIn("Relocation", json.dumps(self.st()["history"], ensure_ascii=False))   # never in her history
-        self.assertEqual(run(PW.context(GW.wa_key(TG.GUEST)))["city"], "Madrid")              # read-only, for her parsers
-        self.say("EXAMPLE000")                                                # an answer to relocation's own question
+        self.assertEqual("\n".join(s["body"] for s in GW.SENDER.sent[n:]), GW.ASK_ONE)   # now Sasha's own flow answers
+        self.assertNotIn("Relocation", json.dumps(self.st()["history"], ensure_ascii=False))
+        self.say("relocation")                                                # and relocation is where it was
+        self.assertTrue(self.said().split("\n")[-1].startswith("Back to your EX-01.") or "Back to your EX-01." in self.said())
+        self.say("EXAMPLE000")
         self.assertEqual(self.bodies()[-1], "Your first surname, exactly as on your passport?")
         self.assertEqual(self.st()["pending"]["facts"]["applicant"]["passport_number"]["value"], "EXAMPLE000")
 
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
-
     def test_the_keyword_alone_says_where_we_were(self):
         self.to_passport()
+        self.say("sasha")
         self.say("I need a flight from London to Madrid on 1 March")
         self.say("relocation")
-        self.assertTrue(self.bodies()[-1].startswith("Back to your EX-01. ") and self.bodies()[-1].endswith("Your passport number?"))
-
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
+        last = [b for b in self.bodies() + [c for c, _ in GW.SENDER.contents] if b.startswith("Back to your EX-01.")]
+        self.assertTrue(last and last[-1].endswith("Your passport number?"), last[-1:] or self.bodies()[-3:])
 
     def test_sashas_own_question_keeps_its_answers(self):
         self.to_passport()
+        self.say("sasha")                                                     # out of the space first (strict)
         self.say("dinner for 2 in Chamberí on Saturday at 21:00")            # Sasha: cards, her own pending
         self.assertEqual(self.st()["pending"]["kind"], "cards")
         self.say("1")                                                         # her card, not a passport number
         self.assertNotIn("first surname", self.bodies()[-1])
         self.assertIn("/api/booking/venues/read", self.api_paths())
         self.say("relocation")                                                # and relocation is exactly where it was
-        self.assertTrue(self.bodies()[-1].startswith("Back to your EX-01. ") and self.bodies()[-1].endswith("Your passport number?"))
+        last = [b for b in self.bodies() + [c for c, _ in GW.SENDER.contents] if b.startswith("Back to your EX-01.")]
+        self.assertTrue(last and last[-1].endswith("Your passport number?"), last[-1:])
 
     def test_a_product_answer_is_never_taken_by_sasha(self):
         self.to_passport()

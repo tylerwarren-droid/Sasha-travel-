@@ -62,9 +62,8 @@ class Campus(TC.Fixtures):
         super().setUp()
         self.link()
 
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
-
     def test_pick_on_the_laptop_whats_next_on_the_phone(self):
+        web(self, "campus")                                                    # Sasha 206 · strict spaces: CampusMe by its word first
         r = web(self, "campus visits at Yale on October 14 for my son")
         self.assertIn("Campus Tour", r["response"])
         r = web(self, "1")                                                     # a Yale session picked on the laptop
@@ -72,7 +71,7 @@ class Campus(TC.Fixtures):
         self.say("what's next for the Yale visit?")
         self.assertTrue(self.bodies()[-1].startswith("Back to your campus visits."))
         self.assertTrue(self.bodies()[-1].endswith(nxt.split("\n\n")[-1]))
-        self.assertEqual(wa_pend(self)["product"], "campus")                   # the phone can answer it now
+        self.assertEqual(run(PWEB.current_space(TG.ACCOUNT)), "campus")        # strict spaces: the account is IN CampusMe — the phone answers it
 
 
 class Espana(TG.Base):
@@ -142,15 +141,13 @@ class BookingInsideAProduct(TR.Flow):
         self.assertTrue((self.bodies() + [c for c, _ in GW.SENDER.contents])[-1].startswith("Back to your EX-01.")
                         or GW.SENDER.contents[-1][0].startswith("Back to your EX-01."))   # CR 52 · the say-back carries its buttons
 
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
-
+    # Sasha 206 · strict spaces (194): on the web the products' hook answers nothing for a request that is Sasha's — the conductor
+    # gives her the product's context through in_context (as ConductHook pins); these three now hold that, on the web tab
     def test_the_same_on_the_web_tab(self):
         self.to_entry()
-        r = web(self, "book me a 60-minute massage near my hotel on arrival")
-        self.assertEqual(r["handoff"], "book me a 60-minute massage in Madrid near Calle de Ejemplo 12 on 2027-03-01")
-        self.assertIn("(your entry date)", r["response"])
-
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
+        r = run(PWEB.in_context(TG.ACCOUNT, "book me a 60-minute massage near my hotel on arrival", signed_in=True, now=self.now))
+        self.assertEqual(r["sentence"], "book me a 60-minute massage in Madrid near Calle de Ejemplo 12 on 2027-03-01")
+        self.assertIn("(your entry date)", r["line"])
 
     def test_a_booked_hotel_is_the_place(self):
         from products import itinerary as IT
@@ -161,19 +158,17 @@ class BookingInsideAProduct(TR.Flow):
         IT.hotel_on = hotel
         try:
             self.to_entry()
-            r = web(self, "book me a 60-minute massage near my hotel on arrival")
-            self.assertEqual(r["handoff"], "book me a 60-minute massage in Madrid near Hotel Ejemplo Gran Vía on 2027-03-01")
-            self.assertIn("near your hotel, Hotel Ejemplo Gran Vía", r["response"])
+            r = run(PWEB.in_context(TG.ACCOUNT, "book me a 60-minute massage near my hotel on arrival", signed_in=True, now=self.now))
+            self.assertEqual(r["sentence"], "book me a 60-minute massage in Madrid near Hotel Ejemplo Gran Vía on 2027-03-01")
+            self.assertIn("near your hotel, Hotel Ejemplo Gran Vía", r["line"])
         finally:
             IT.hotel_on = saved
-
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
 
     def test_espana_has_no_date_to_invent(self):
         self.say("españa")
         self.say("1")
-        r = web(self, "book me a 60-minute massage near my hotel on arrival")
-        self.assertEqual(r["handoff"], "book me a 60-minute massage in Madrid")
+        r = run(PWEB.in_context(TG.ACCOUNT, "book me a 60-minute massage near my hotel on arrival", signed_in=True, now=self.now))
+        self.assertEqual(r["sentence"], "book me a 60-minute massage in Madrid")
 
 
 class ConductHook(BookingInsideAProduct):

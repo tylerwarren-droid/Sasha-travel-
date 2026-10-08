@@ -197,10 +197,14 @@ async def _tell(account: str, r: dict) -> None:
         ch = await GW.STORE.channel_of_account(account) if GW.STORE else None
         if ch:
             st = await GW.STORE.get_state(ch["wa_id_sha256"])
-            if st.get("last_to"):
-                await GW.deliver(ch, st["last_to"], GW.Out().text(str(r.get("say") or "")), st.get("last_inbound_at"))
+            # Sasha 206 (EU 186 R1) · from the number they last wrote to, else the permanent sender — it used to need last_to,
+            # which was never saved, so the payment-result and Duffel-change messages were never sent
+            res = await GW.deliver(ch, GW.sender_for(st), GW.Out().text(str(r.get("say") or "")), st.get("last_inbound_at"))
+            log.info("[paid_watch] told on WhatsApp: %s", res)
+        else:
+            log.info("[paid_watch] not told on WhatsApp: no WhatsApp linked to the account")
     except Exception as e:
-        log.info("[paid_watch] not told on WhatsApp: %s", type(e).__name__)
+        log.warning("[paid_watch] not told on WhatsApp: %s: %s", type(e).__name__, e)
 
 
 async def sweep(account: Optional[str] = None) -> int:

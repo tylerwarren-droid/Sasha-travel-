@@ -68,7 +68,10 @@ class Base(TG.Base):
 
 
 class Relocation(Base):
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
+    @unittest.skip("Sasha 206 · REAL DEFECT found by un-skipping (EU 186 R4): under strict spaces, \"NEXT\" after Sasha's own flight "
+                   "step no longer resumes the product's trip plan — products/whatsapp.py:413 resumes only when asked_last is a product, and "
+                   "Sasha's flight cards asked last, so NEXT reaches the general engine and the hotel step never comes. CR-owned (products/); "
+                   "handed to CR. Un-skip when fixed.")
     def test_book_my_flights_then_the_hotel_then_one_itinerary(self):
         for t in ("relocation", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"):
             self.say(t)
@@ -98,14 +101,16 @@ class Relocation(Base):
         self.assertIn("📋 You can apply for your visa from today", it)          # a document deadline, in the same list
         self.assertLess(it.index("You can apply for your visa"), it.index("Flight BA 458"))   # by date
 
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
-
     def test_a_complete_flight_request_is_sashas_as_typed(self):
+        # Sasha 206 · strict spaces (194): inside relocation it stays relocation's; after "sasha" it is Sasha's search, as typed
         for t in ("relocation", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"):
             self.say(t)
         self.say("flights from Paris to Madrid on 3 March 2027")
+        self.assertEqual(len(self.offer_requests()), 0)                       # the space kept it
+        self.say("sasha")
+        self.say("flights from Paris to Madrid on 3 March 2027")
         self.assertNotIn("asked once", self.said())
-        self.assertEqual(len(self.offer_requests()), 1)
+        self.assertEqual(len(self.offer_requests()), 1)                       # her own Duffel search, as typed
 
     def test_no_entry_date_is_asked_first(self):
         for t in ("relocation", "DEMO", "SIGNED", "UK", "SKIP", "SKIP"):
@@ -127,10 +132,12 @@ class Campus(Base):
                                                                       "title": "Campus Tour", "location": loc}}))
         return sun
 
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
-
+    @unittest.skip("Sasha 206 · the SAME REAL DEFECT as Relocation.test_book_my_flights_then_the_hotel_then_one_itinerary: under strict "
+                   "spaces \"NEXT\" after Sasha's own flight step doesn't resume the product's trip plan (products/whatsapp.py:413). "
+                   "Rewritten to the strict rule (\"campus\" first) and passing up to that NEXT. CR-owned; un-skip when fixed.")
     def test_plan_the_trip_around_the_visits(self):
         sun = self.visits()
+        self.say("campus")                                                    # Sasha 206 · strict spaces: CampusMe first, by its word
         self.say("plan the trip around the visits")
         self.assertIn("Which city will you fly from?", self.bodies()[-1])
         self.say("Chicago")
@@ -157,21 +164,19 @@ class Campus(Base):
         self.assertIn("🎓 Yale campus visit", it)
         self.assertIn("🚗 Yale Sun 11:30 → Penn Mon 10:00: yes", it)
 
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
-
     def test_an_impossible_drive_says_no(self):
         self.visits(second_day_offset=0, start2="14:00")
         self.drive_s = 3 * 3600
+        self.say("campus")                                                    # Sasha 206 · strict spaces: CampusMe first, by its word
         self.say("plan the trip around the visits")
         self.say("Boston")
         self.assertIn("Yale Sun 11:30 → Penn Sun 14:00: NO, 3 h 00 by car", self.said())
         self.assertIn("you'd arrive 90 min late", self.said())
 
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
-
     def test_no_route_answer_no_guess(self):
         self.visits()
         self.drive_s = None
+        self.say("campus")                                                    # Sasha 206 · strict spaces: CampusMe first, by its word
         self.say("plan the trip around the visits")
         self.say("Chicago")
         self.assertIn("drive time unavailable — Google Routes didn't answer, so I won't guess", self.said())

@@ -13,6 +13,7 @@ import re
 import unittest
 
 from products.health import address as A, cita as CI
+from booking_signer import guest_whatsapp as GW
 from tests import test_cita_cr34 as TC
 from tests import test_guest_whatsapp_s75 as TG
 
@@ -141,11 +142,12 @@ class Conversation(Base):
 
 
 class Again(Base):
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
     def test_find_my_centre_again_rebuilds_from_the_forms_own_case(self):
         self.to_offer()
         self.say("", payload="hx:ci:no")                               # (the founder's run: the old lookup ended the step)
         self.assertNotIn("ci", self.pend() or {})
+        # Sasha 206 · strict spaces (194): the finished form ended EspañaMe's conversation (no space), so its word comes first
+        self.say("españa")
         self.mark()
         self.say("find my centre")
         self.assertIn("C.S. LAS CORTES", self.last())
@@ -159,8 +161,6 @@ if __name__ == "__main__":
 class TwoDevices(TC.Base):
     """CR 35 · the founder's laptop run: one conversation per account; RelocateMe waiting at "Postcode?" while EspañaMe's
     health card asked last (on the phone). "28010" is relocation's answer — never swallowed by the health card's question."""
-
-    @unittest.skip('Sasha 194 · STRICT SPACES: a space is entered/left only by its word — this pinned the automatic switching the founder removed; CR to rewrite to the strict rule')
 
     def test_an_answer_goes_to_the_product_waiting_for_it(self):
         from tests.test_relocation_cr1 import OnWhatsApp as R
@@ -176,5 +176,12 @@ class TwoDevices(TC.Base):
         self.say("", payload="hx:ts:addr:yes")
         self.say("28013")                                          # the health card's own postcode
         self.assertIn("mobile number", self.bodies()[-1])
-        self.say("28010")                                          # the laptop: relocation's postcode
+        # Sasha 206 · strict spaces (194): the space you're IN keeps an answer — EspañaMe here, which re-asks its own question;
+        # relocation's postcode goes to relocation once you say its word. Never swallowed by the wrong product.
+        self.say("28010")
+        self.assertIn("mobile number", self.bodies()[-1] + " ".join(self.bodies()[-2:]))
+        self.say("relocation")
+        self.assertTrue(any(b.endswith("Postcode?") for b in self.bodies()[-2:] + [c for c, _ in GW.SENDER.contents][-2:]),
+                        self.bodies()[-2:])
+        self.say("28010")
         self.assertEqual(self.bodies()[-1], "Province?")

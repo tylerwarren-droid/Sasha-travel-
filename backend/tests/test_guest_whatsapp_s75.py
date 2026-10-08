@@ -88,6 +88,7 @@ class FakeApi:
 
 class Base(unittest.TestCase):
     def setUp(self):
+        GW._SEEN_SIDS.clear()   # Sasha 206 · each test's MessageSids are its own
         asyncio.set_event_loop(asyncio.new_event_loop())
         self.env = mock.patch.dict(os.environ, {"SASHA_GUEST_WHATSAPP_TO": SANDBOX, "SASHA_EMAILS": "", "SASHA_WEB_URL": "https://sasha.test"})
         self.env.start()

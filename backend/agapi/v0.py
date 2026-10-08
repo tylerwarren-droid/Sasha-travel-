@@ -727,6 +727,7 @@ async def book(ctx: Ctx, a: dict) -> dict:
         raise ToolError("read_back_changed" if "different words" in got["why"] else "not_bookable", got["why"])
     sent = str(got.get("phone") or "").startswith("sent")
     return {"status": "awaiting_payment", "payment": "sent_to_phone" if sent else "link", **({} if sent else {"payment_url": got["url"]}),
+            "checkout_url": got["url"],   # Sasha 214 · for the page (a phone pays on the same device); never shown to the model
             "session_id": got["session_id"], "total_eur": got["eur"], "booked": False}
 
 

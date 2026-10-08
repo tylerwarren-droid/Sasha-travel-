@@ -50,6 +50,7 @@ const DG_LANG: Record<string, string> = {
 // Public env key is a DEV fallback only. In production the backend mints a short-lived,
 // scoped key (see getDeepgramKey) so a long-lived key never sits in the browser.
 import { keyOrFail, RECONNECTS_BEFORE_SAYING } from '@/lib/mic-fail.mjs'   // Sasha 215 · the mic never fails silently
+import { micLog } from '@/lib/mic-log'   // Sasha 213 · the mic's state machine, logged
 
 const PUBLIC_DEEPGRAM_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || ''
 
@@ -60,6 +61,7 @@ async function getDeepgramKey(): Promise<string> {
   try {
     const res = await fetch(apiUrl('/api/voice/deepgram-key'), { method: 'POST', headers: apiHeaders() })
     status = res.status
+    micLog('key', { status: res.status })
     if (res.ok) key = ((await res.json())?.key as string) || ''
   } catch { /* unreachable: status 0 */ }
   return keyOrFail(status, key, PUBLIC_DEEPGRAM_KEY).key
@@ -194,6 +196,7 @@ const KEYTERMS = ['Chamberí', 'Malasaña', 'Chueca', 'Lavapiés', 'La Latina', 
   .map((k) => `&keyterm=${encodeURIComponent(k)}`).join('')
 
 export default function VoiceButton({ onTranscript, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices }: VoiceButtonProps) {
+  const droppedMutedRef = useRef(false)   // Sasha 213 · log the muted spell once, not per frame
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -314,6 +317,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
     connectingRef.current = true
     manualStopRef.current = false  // a fresh connect attempt re-enables reconnect
     console.log('[DG] connecting...')
+    micLog('connect')
     if (!dgReconnectAttemptsRef.current) reportMicError(null)   // Sasha 215 · a reconnect keeps the error on screen until it opens
     setIsConnecting(true)
     try {
@@ -366,6 +370,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         }
       } catch { /* enumerate/re-acquire is best-effort */ }
       streamRef.current = stream
+      micLog('permission', { granted: true, device: stream.getAudioTracks()[0]?.label || '' })
       // Mid-session mic death (the "froze at minute N" failure): a Continuity iPhone that
       // sleeps, locks, or walks out of range kills its audio track SILENTLY — no WS close,
       // no error, the guest just stops being heard and the demo looks frozen. Route track
@@ -395,6 +400,8 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       const ctx = new AudioContext()
       audioCtxRef.current = ctx
       await ctx.resume()
+      micLog('audiocontext', { state: ctx.state, sampleRate: ctx.sampleRate })
+      ctx.onstatechange = () => micLog('audiocontext', { state: ctx.state })   // iOS suspends it when the page loses audio focus
       console.log('[DG] AudioContext sampleRate:', ctx.sampleRate)
 
       const dgLang = DG_LANG[languageRef.current || 'en'] || 'en-US'
@@ -434,6 +441,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
           return
         }
         console.log('[DG] connected')
+        micLog('socket_open')
         clearTimeout(connectTimeoutRef.current)
         setIsConnecting(false)
         setIsConnected(true)
@@ -463,7 +471,8 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
           // frame loop only honoured the speak-gate — so a build whose classify was slow/failed
           // left the mic genuinely streaming under a "Not listening" label. Enforce it here so
           // the mic is truly deaf whenever muted, independent of the speak-gate's timing.
-          if (mutedRef.current) return
+          if (mutedRef.current) { if (!droppedMutedRef.current) { droppedMutedRef.current = true; micLog('dropping', { why: 'muted while a turn runs' }) } return }
+          if (droppedMutedRef.current) { droppedMutedRef.current = false; micLog('listening', { after: 'muted' }) }
           if (micGatedRef.current) {
             // Gate ON = avatar is speaking. DROP every frame so the avatar's audio
             // bleeding into the mic is never streamed to Deepgram. This is the core
@@ -477,6 +486,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
                 if (loudFramesRef.current >= BARGE_IN_FRAMES) {
                   loudFramesRef.current = 0
                   console.log('[BARGE-IN]', rms.toFixed(3), '> thr', BARGE_IN_RMS, '— interrupting avatar')
+                  micLog('barge_in', { rms: Number(rms.toFixed(3)) })
                   onInterruptRef.current?.()
                   micGatedRef.current = false  // open mic; gate setter fires async
                 }
@@ -513,6 +523,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         try {
           const data = JSON.parse(event.data)
           if (data.type === 'SpeechStarted') {
+            micLog('speech_start')
             if (!heardAtRef.current) heardAtRef.current = Date.now()   // Sasha 192 · the watchdog's clock
             clearTimeout(pendingFire)   // guest resumed — this turn isn't over
             setIsSpeaking(true)
@@ -530,6 +541,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
               const overlap = tWords.filter(w => bWords.has(w)).length / tWords.length
               if (overlap >= 0.6) {
                 console.log('[ECHO] discarded (within echo window):', text)
+                micLog('dropped', { why: 'echo of her own words', text })
                 return true
               }
             }
@@ -539,11 +551,12 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
           const fireTranscript = (final: string) => {
             setIsSpeaking(false)
             onSpeakingChangeRef.current?.(false)
-            if (final === lastFinal && Date.now() - lastFinalAt < 5000) return
+            if (final === lastFinal && Date.now() - lastFinalAt < 5000) { micLog('dropped', { why: 'repeat within 5 s', text: final }); return }
             lastFinal = final
             lastFinalAt = Date.now()
             if (isEcho(final)) return
             heardAtRef.current = 0; lastAliveRef.current = Date.now(); setNotCaught(false)   // Sasha 192 · heard: the watchdog rests
+            micLog('submitted', { text: final })
             onTranscriptRef.current?.(final)
           }
 
@@ -563,6 +576,11 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
 
           if (data.type === 'Results') {
             const fragment = data.channel?.alternatives?.[0]?.transcript || ''
+            if (fragment) micLog(data.is_final ? 'final' : 'partial', { text: fragment, speech_final: !!data.speech_final })
+            // Sasha 214 · words are arriving, so Deepgram is alive: the watchdog's "speech with no transcript" clock rests.
+            // It ran from the first SpeechStarted until a SUBMIT, so a guest who kept talking through the declarative hold
+            // (two statements 2.5 s apart) tripped the 8 s restart on a healthy socket and lost the held words (B3 harness).
+            if (fragment) heardAtRef.current = 0
             if (data.is_final === true) {
               // Accumulate is_final fragments; the hold below decides when the turn is over.
               if (fragment) {
@@ -579,6 +597,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
             }
           }
           // UtteranceEnd fallback — fires if speech_final never came
+          if (data.type === 'UtteranceEnd') micLog('utterance_end', { pending: transcriptRef.current.length })
           if (data.type === 'UtteranceEnd' && transcriptRef.current.length >= 3) {
             scheduleFire()
           }
@@ -595,6 +614,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       ws.onclose = (e) => {
         clearTimeout(pendingFire)
         console.log('[DG] closed:', e.code, e.reason)
+        micLog('socket_close', { code: e.code, reason: e.reason })
         const wasActiveSocket = wsRef.current === ws
         if (!wasActiveSocket) return  // superseded socket — ignore
         wsRef.current = null
@@ -633,6 +653,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       setIsConnecting(false)
       // Name the actual failure. "Could not access microphone" sent people hunting for a
       // permission problem when the real cause was another app holding the device.
+      micLog('error', { name: err?.name, message: String(err?.message || '').slice(0, 120) })
       if (err.name === 'NotAllowedError') reportMicError('Mic permission denied')
       else if (err.name === 'NotFoundError') reportMicError('No microphone found')
       else if (err.name === 'NotReadableError') reportMicError('Mic is in use by another app')

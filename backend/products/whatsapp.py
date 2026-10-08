@@ -410,20 +410,23 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         if asked_last != "trip":
             from . import store as ST
             await ST.STORE.drop_conversation(_key(ch), "trip")
-    if not target and not payload and (not STRICT or asked_last in ("relocation", "campus", "trip")):
+    if not target and not payload:
         # CR 13 · "book my flights" / "plan the trip around the visits": the products' context, acted on by Sasha's travel
         from . import trip as TP
-        waiting = [w for w, _ in await _waiting(ch, now)]
-        if TP.wants_plan(body):
+        in_product = not STRICT or asked_last in ("relocation", "campus", "trip")
+        waiting = [w for w, _ in await _waiting(ch, now) if in_product or w == "trip"]
+        if in_product and TP.wants_plan(body):
             plan_for = await TP.which(ch["account_id"], body, asked_last, waiting)
             if plan_for:
                 target, entering = "trip", True
                 if asked_last != "trip":
                     from . import store as ST
                     await ST.STORE.drop_conversation(_key(ch), "trip")   # a new plan starts afresh
-        elif "trip" in waiting and asked_last != "trip":
+        elif "trip" in waiting and asked_last != "trip" and (in_product or not TP.wants_plan(body)):
             saved = await _resume(ch, "trip")
-            if saved and TP.claims(saved, body, payload, media):
+            # strict (Sasha 194): with Sasha's own flow asking, only the plan's OWN words bring it back — "NEXT" / "stop
+            # the plan" on the step it handed to Sasha (its flights); nothing else typed there enters it
+            if saved and (in_product or saved.get("step") == "handed") and TP.claims(saved, body, payload, media):
                 target = "trip"                                   # "NEXT" — even after Sasha's own flow asked last
     if not target and asked_last:
         # 2 · the product asked last: its answer, Sasha's request, or a plain re-ask

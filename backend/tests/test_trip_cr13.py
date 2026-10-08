@@ -68,10 +68,6 @@ class Base(TG.Base):
 
 
 class Relocation(Base):
-    @unittest.skip("Sasha 206 · REAL DEFECT found by un-skipping (EU 186 R4): under strict spaces, \"NEXT\" after Sasha's own flight "
-                   "step no longer resumes the product's trip plan — products/whatsapp.py:413 resumes only when asked_last is a product, and "
-                   "Sasha's flight cards asked last, so NEXT reaches the general engine and the hotel step never comes. CR-owned (products/); "
-                   "handed to CR. Un-skip when fixed.")
     def test_book_my_flights_then_the_hotel_then_one_itinerary(self):
         for t in ("relocation", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"):
             self.say(t)
@@ -132,9 +128,6 @@ class Campus(Base):
                                                                       "title": "Campus Tour", "location": loc}}))
         return sun
 
-    @unittest.skip("Sasha 206 · the SAME REAL DEFECT as Relocation.test_book_my_flights_then_the_hotel_then_one_itinerary: under strict "
-                   "spaces \"NEXT\" after Sasha's own flight step doesn't resume the product's trip plan (products/whatsapp.py:413). "
-                   "Rewritten to the strict rule (\"campus\" first) and passing up to that NEXT. CR-owned; un-skip when fixed.")
     def test_plan_the_trip_around_the_visits(self):
         sun = self.visits()
         self.say("campus")                                                    # Sasha 206 · strict spaces: CampusMe first, by its word

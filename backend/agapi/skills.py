@@ -93,9 +93,7 @@ async def call(ctx: V0.Ctx, skill: Optional[str], name: str, args: dict) -> dict
     m = _module(skill)
     if m:
         return await m.call(ctx, name, args)
-    if name not in V0.BY_NAME:
-        return {"ok": False, "error": {"code": "unknown_tool", "message": f"no tool {name} here"}}
-    return await V0.call(ctx, name, args)
+    return await V0.call(ctx, name, args)      # Sasha: exactly today's path (v0 refuses a tool it doesn't have)
 
 
 def offer(skill: str) -> dict:

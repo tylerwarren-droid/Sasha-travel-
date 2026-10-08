@@ -308,6 +308,18 @@ class Guards(Base):
         self.assertEqual(C.guard_check("Nothing to pay — visits are free to register.", self.results, []), [])
 
 
+class BasketBooking(Base):
+    def test_visits_never_reach_book_it_or_its_read_back(self):
+        """Sasha 211's basket_book.quote/current read BK.to_book(items(..., ("suggested", "chosen"))): a visit, in ANY state, is
+        never among them — so "book it", its total and its read-back sha256 are the same with a tour on the account."""
+        self.tour(("Yale", "Brown", "Princeton"))
+        rows = run(BV.items(ACCOUNT))
+        travel = [{"id": "f1", "kind": "flight", "state": "chosen"}, {"id": "s1", "kind": "stay", "state": "suggested"}]
+        for state in BV.STATES:
+            vs = [dict(r, state=state) for r in rows]
+            self.assertEqual(BK.to_book(travel + vs), BK.to_book(travel), state)
+        self.assertNotIn("chosen", BV.STATES)                                       # no path ever makes a visit "chosen"
+
 class Skills(Base):
     def test_opened_and_closed_only_by_the_word_or_the_tap(self):
         t = run(K.resolve(ACCOUNT, "plan a trip to visit Yale"))

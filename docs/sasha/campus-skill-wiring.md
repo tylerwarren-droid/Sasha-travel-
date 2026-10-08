@@ -8,7 +8,24 @@ Everything else is already on branch `cr/campusme-skill`, and none of it is impo
 - `booking_signer/basket_visits.py`
 - `booking_signer/sql/035_basket_visits.sql`
 
-**Size:** 2 files: `sasha.py` with 9 hunks (about 30 lines added, 4 changed) and one changed line in `tests/test_agapi_guards.py`. There are no new routes and no changes to the frontend contract beyond one optional request field (`tap`).
+**Size:** 2 files.
+- `sasha.py`: the 9 changes below, which are 18 exact anchors (43 lines added, 13 changed).
+- `tests/test_agapi_guards.py`: one changed line.
+
+**One step:**
+```
+cd backend && python -m scripts.wire_campus_skill --check   # every anchor found once? (writes nothing)
+cd backend && python -m scripts.wire_campus_skill           # applies all of it; refuses, writing NOTHING, if any anchor moved
+```
+**Re-checked on 8 Oct 2026 against main `74c14ab`**, i.e. after Sasha 211 (`hold_venue`, `book_venue` and `cancel_venue` are in `RENDER`, `_CHANGES_TRIP` and the approval line). Every anchor was found once. With the wiring applied, the whole suite passed: 1,547 run, 0 failed, including the voice checks (`test_quiver_timing`).
+- For Sasha, with no skill open, calls go to `API.call` exactly as today: `skills.call` delegates without filtering.
+- The 211 approval line (`book`, `book_venue`, `cancel_venue`) is untouched. Those tools aren't in the campus skill, so the model can't call them inside it.
+
+**Visits never reach "book it".** `basket_book.quote` / `current()` read `BK.to_book(items(..., ("suggested", "chosen")))`.
+- `to_book` keeps only `chosen` rows and `suggested` stays.
+- A visit is never `chosen` (no path sets it), and its other states aren't read there.
+- So the lines, the total and the read-back sha256 are identical with a tour on the account, pinned by `tests/test_campus_skill_cr54.py · BasketBooking`.
+- `basket_book` line 120 reads `items(account, trip)` only to see whether stays exist (`kind == "stay"`). There are no new routes and no changes to the frontend contract beyond one optional request field (`tap`).
 
 ## Before merging
 

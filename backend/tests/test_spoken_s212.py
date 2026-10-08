@@ -40,6 +40,8 @@ class Offered(unittest.TestCase):
                      "I've planned your Japan itinerary for you two."):
             self.assertIn("for your consideration", AG.as_offer(done), done)
         self.assertEqual(AG.as_offer("I've booked a table."), "I've booked a table.")
+        self.assertEqual(AG.as_offer("Here's what I've put together for your consideration, Alex."),
+                         "Here's what I've put together for your consideration, Alex.")   # never twice
 
 
 class PaymentWords(unittest.TestCase):

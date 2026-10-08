@@ -247,7 +247,7 @@ def internal_sentences(text: str) -> List[str]:
 # Sasha 212 · a proposal is OFFERED, never presented as done: "I've put together your Ecuador trip" → "I've put a trip
 # together for your consideration"
 _DONE_DEAL = [
-    (re.compile(r"(?i)\b(?:here'?s|here is) what I'?ve put together(?: for you(?: two| both)?)?"), "Here's a trip I've put together for your consideration"),
+    (re.compile(r"(?i)\b(?:here'?s|here is) what I'?ve put together(?: for you(?: two| both)?\b)?"), "Here's a trip I've put together for your consideration"),
     (re.compile(r"(?i)\bI'?ve put (?:together )?(?:your|the) (?:[\w'’-]+ ){0,4}?(?:trip|itinerary|holiday)(?: together)?(?: for you(?: two| both)?)?"),
      "I've put a trip together for your consideration"),
     (re.compile(r"(?i)\bI'?ve (?:planned|built|created|sorted|arranged) (?:your|the) (?:[\w'’-]+ ){0,4}?(?:trip|itinerary|holiday)(?: for you(?: two| both)?)?"),
@@ -258,6 +258,8 @@ _DONE_DEAL = [
 
 
 def as_offer(text: str) -> str:
+    if re.search(r"(?i)for your consideration", text or ""):   # already offered: never said twice
+        return text
     for rx, to in _DONE_DEAL:
         text = rx.sub(to, text, count=1)
     return text

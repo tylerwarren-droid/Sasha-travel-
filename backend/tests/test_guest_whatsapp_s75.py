@@ -672,6 +672,10 @@ class OnPostgresStore(unittest.TestCase):
                 sql034 = (pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql" / "034_guest_wa_last_to_and_sids.sql").read_text()
                 c2 = await asyncpg.connect(TBL.PG_URL)
                 try:
+                    # a plain Postgres has no Supabase roles; 034 revokes from them by name (CR found it on a real Postgres)
+                    for role in ("anon", "authenticated"):
+                        await c2.execute(f"do $$ begin if not exists (select 1 from pg_roles where rolname = '{role}') then "
+                                         f"create role {role} nologin; end if; end $$")
                     await c2.execute(sql034[sql034.index("begin;"):sql034.index("commit;") + len("commit;")])
                 finally:
                     await c2.close()

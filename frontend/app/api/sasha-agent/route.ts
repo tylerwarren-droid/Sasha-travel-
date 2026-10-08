@@ -1,7 +1,6 @@
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { API_URL, CLIENT_KEY } from '@/lib/api'
-import { COOKIE, valid } from '@/lib/founder-session'
+import { API_URL } from '@/lib/api'
+import { agentHeaders } from '@/lib/agent-auth'
 
 /**
  * Sasha 203 · /next — the founder's pass-through to Sasha's AGENT (backend /api/agent/turn), STREAMED: the agent's events
@@ -12,14 +11,10 @@ export const maxDuration = 120   // an agent turn can call several tools
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request): Promise<Response> {
-  const store = await cookies()
-  if (!valid(store.get(COOKIE)?.value)) {
-    return NextResponse.json({ ok: false, rule: 'founder_session_required', message: 'Sasha’s agent (/next) is the founder’s own session for now.' }, { status: 401 })
-  }
-  const key = (process.env.SASHA_BOOKING_KEY ?? '').trim()
-  if (!key) return NextResponse.json({ ok: false, rule: 'booking_key_not_configured' }, { status: 503 })
-  const headers: Record<string, string> = { 'content-type': 'application/json', 'x-sasha-session': 'founder', 'x-sasha-booking-key': key }
-  if (CLIENT_KEY) headers['X-Client-Key'] = CLIENT_KEY
+  // Sasha 213 · the founder's session, or a signed-in guest's own (their token, verified by the backend) — else 401
+  const who = await agentHeaders()
+  if (!who) return NextResponse.json({ ok: false, rule: 'sign_in_required', message: 'Please sign in first — /sign-in.' }, { status: 401 })
+  const headers: Record<string, string> = { 'content-type': 'application/json', ...who }
   let r: Response
   try {
     r = await fetch(`${API_URL}/api/agent/turn`, { method: 'POST', headers, body: await request.text(), cache: 'no-store' })

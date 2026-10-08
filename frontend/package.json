@@ -7,7 +7,7 @@
     "prebuild": "node scripts/check-outcome-surfaces.mjs && node scripts/check-voice-watchdog.mjs",
     "build": "next build",
     "start": "next start",
-    "test": "node --test scripts/site-tabs.test.mjs scripts/agapi-hub.test.mjs scripts/agent-bubble.test.mjs scripts/mic-fail.test.mjs"
+    "test": "node --test scripts/site-tabs.test.mjs scripts/agapi-hub.test.mjs scripts/agent-bubble.test.mjs scripts/mic-fail.test.mjs scripts/downsample.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.26.0",

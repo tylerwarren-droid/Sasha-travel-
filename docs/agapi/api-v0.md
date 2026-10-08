@@ -228,7 +228,7 @@ Restaurants, spas or other places in a city (Google listings; nothing contacted)
 
 Start getting the trip ready in the background the moment destination, dates and party are known (and again once the origin is): the itinerary, then both legs' flights. Returns at once — keep chatting; propose_trip with the same details picks it up.
 
-**Errors:** `start_date_invalid`, `missing_input`, `internal`
+**Errors:** `start_date_invalid`, `book_not_replan`, `missing_input`, `internal`
 
 **Input**
 
@@ -288,7 +288,7 @@ Start getting the trip ready in the background the moment destination, dates and
 
 THE PROPOSAL: a day-by-day itinerary with somewhere to stay each night, a flight that fits on each leg (there and back) already chosen, and the whole trip's total. Replaces the account's current proposal. Nothing is booked.
 
-**Errors:** `start_date_invalid`, `size_invalid`, `plan_failed`, `plan_not_saved`, `missing_input`, `internal`
+**Errors:** `start_date_invalid`, `size_invalid`, `plan_failed`, `plan_not_saved`, `book_not_replan`, `missing_input`, `internal`
 
 **Input**
 

@@ -144,7 +144,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
                 "preset": {"all": [c], "cards": [c], "show": 1}, "focus": c.get("place_id"),
                 "ribbon": f"{c.get('name')}" + (f" · {res['when']}" if res.get("when") else "")}
     if kind == "read_back":   # Sasha 213 · the read-back she just gave, from her own hold — never a second quote
-        return {"type": "render", "kind": kind, "read_back": [l for l in res.get("read_back") or []], "total_eur": res.get("total_eur")}
+        return {"type": "render", "kind": kind, "read_back": [l for l in res.get("read_back") or []], "total_eur": res.get("total_eur"),
+                **({"total": res["breakdown"]} if res.get("breakdown") else {})}   # Sasha 215 · the re-quote refreshes the pill
     return None
 
 

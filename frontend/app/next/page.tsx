@@ -18,7 +18,7 @@ import { shouldSay } from '@/lib/mic-fail.mjs'   // Sasha 215 · the mic never f
 import { User, Itinerary } from '@/types'
 
 // Sasha 213 · ONE IDENTITY: a concierge for anywhere — no destination is assumed
-const PRESET_PROMPTS = ['Plan a 7 day trip', 'Somewhere warm in November', 'A long weekend in Europe', 'A table for two tonight']
+const PRESET_PROMPTS = ['What can you do?', 'A table for two tonight', 'A spa on Saturday', 'Plan a trip']   // Sasha 215 · S2: travel is one of them
 // Sample plan for `?ui=preview` (layout QA of the Trip board without a backend). Illustrative
 // numbers; the flag is never set in normal use.
 const PREVIEW_PLAN: RichItinerary = {
@@ -37,17 +37,6 @@ const PREVIEW_PLAN: RichItinerary = {
     { day: 7, city: 'Porto', title: 'Slow morning, fly home', description: '', image: null, hotel: null, activities: [] },
   ],
 }
-// Welcome-screen destination gallery (approved design, board 1). Same curated Unsplash set the
-// backend's foto_agent falls back to, so the imagery matches what Sasha later surfaces. The three
-// unnamed shots are captioned by theme rather than guessed at as places.
-const WELCOME_OPENERS: { location: string; blurb: string; ask: string; url: string }[] = [
-  { location: 'Dramatic coastlines', blurb: 'Cliffs, coves and boats', ask: 'Where can we see dramatic coastlines?', url: 'https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
-  { location: 'Old towns', blurb: 'Lantern-lit streets', ask: 'Find me a magical old town for a few days', url: 'https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
-  { location: 'Mountain walks', blurb: 'Terraces and big views', ask: 'Where are the best places to hike this autumn?', url: 'https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
-  { location: 'Island hopping', blurb: 'Boats, coves and slow days', ask: 'Where should we go island hopping?', url: 'https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
-  { location: 'River valleys', blurb: 'Water between the peaks', ask: 'Show me beautiful river valleys', url: 'https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
-  { location: 'Beach days', blurb: 'White sand, warm sea', ask: 'Which beaches would you pick for November?', url: 'https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
-]
 
 const DEMO_USER: User = {
   display_name: 'Jon Peters',
@@ -1088,21 +1077,10 @@ export default function NextPage() {
         ) : (
           <div className="mt-welcome-wrap">
             <div className="mt-welcome-scroll">
-              <div className="mt-when">Where to?</div>
-              <div className="mt-openers">
-                {WELCOME_OPENERS.map((o, i) => (
-                  <button key={o.location} className="mt-opener" onClick={() => startWith(o.ask)} style={{ animationDelay: `${i * 60}ms` }} title={o.ask}>
-                    <img src={o.url} alt={o.location} loading="lazy" />
-                    <span className="g" />
-                    <span className="c"><b>{o.location}</b><span>{o.blurb}</span></span>
-                  </button>
-                ))}
-              </div>
-              <div className="mt-when">Or just ask</div>
-              <div className="mt-chips">
-                {PRESET_PROMPTS.map(pr => (
-                  <button key={pr} className="mt-chip" onClick={() => startWith(pr)}>{pr}</button>
-                ))}
+              {/* Sasha 215 · S2 — Sasha is more than travel: no destination gallery, no stand-in photos. Her, and her line. */}
+              <div className="mt-hello">
+                <div className="mt-hello-line">Hey there — what can I do for you?</div>
+                <div className="mt-hello-sub">A table tonight, a spa on Saturday, a question, or a whole trip. Talk to her, or type below.</div>
               </div>
               {verifying && <div className="text-center text-sm" style={{ color: '#DAA520', marginTop: 10 }}>Confirming your payment…</div>}
             </div>
@@ -1158,7 +1136,7 @@ export default function NextPage() {
                   on — so the call starts where the eye already is. (public/sasha-preview.jpg
                   is the LiveAvatar preview for the configured avatar; refresh it if the avatar
                   changes.) */}
-              <img className="mt-standby" src="/sasha-preview.jpg" alt="" style={{ opacity: uiPreview || meetHidden ? 1 : .55, filter: uiPreview || meetHidden ? 'none' : 'saturate(.7)' }} />
+              <img className="mt-standby" src="/api/heygen/preview" alt="Sasha" onError={e => { e.currentTarget.style.display = 'none' }} style={{ opacity: uiPreview || meetHidden ? 1 : .55, filter: uiPreview || meetHidden ? 'none' : 'saturate(.7)' }} />
               <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 22%, transparent 58%, rgba(0,0,0,.85) 100%)' }} />
               <div className="mt-ov-top absolute top-0 left-0 right-0 flex items-center" style={{ padding: '14px 16px', zIndex: 3 }}>
                 <span className="mt-standbypill"><span className="mt-standbydot" /> {uiPreview ? 'Preview' : 'Standby'}</span>
@@ -1171,7 +1149,7 @@ export default function NextPage() {
                     <button type="button" aria-label="Close the welcome" onClick={() => { setMeetHidden(true); try { localStorage.setItem('sasha.meet.closed', '1') } catch { /* fine */ } }}
                       style={{ position: 'absolute', top: -6, right: -6, width: 28, height: 28, borderRadius: 999, border: '1px solid rgba(255,255,255,.3)', background: 'rgba(0,0,0,.45)', color: '#fff', cursor: 'pointer', zIndex: 4 }}>✕</button>
                   )}
-                  {!meetHidden && <div className="mt-eyebrow">AI Travel Concierge</div>}
+                  {!meetHidden && <div className="mt-eyebrow">Your personal concierge</div>}
                   {!meetHidden && <div className="mt-bigname">Meet Sasha</div>}
                   <button className="mt-startbtn" onClick={() => startWith()}><Play size={16} strokeWidth={2.2} fill="#fff" /> {meetHidden ? 'Talk to Sasha' : 'Tap to start your call'}</button>
                   {!meetHidden && <div className="mt-hint">Audio plays automatically once you start</div>}
@@ -1577,6 +1555,9 @@ export default function NextPage() {
         .mt-rail .lw-chip{display:none}
         .mt-wshead{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.25)}
         .mt-welcome-wrap{flex:1;min-height:0;display:flex;flex-direction:column}
+        .mt-hello{margin:auto 0;padding:24px 8px;text-align:center}
+        .mt-hello-line{font-family:'Playfair Display',Georgia,serif;font-size:26px;font-weight:600;color:#fff;line-height:1.25}
+        .mt-hello-sub{margin-top:10px;font-size:14px;color:rgba(255,255,255,.6);line-height:1.5}
         .mt-welcome-scroll{flex:1;min-height:0;overflow-y:auto;padding:16px 16px 12px;display:flex;flex-direction:column;gap:12px}
         .mt-when{display:flex;align-items:center;gap:12px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.35)}
         .mt-when::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(255,255,255,.12),transparent)}

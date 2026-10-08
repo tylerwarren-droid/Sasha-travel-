@@ -16,6 +16,13 @@ from scripts.flight_suite import RESULTS, ok  # noqa: E402
 
 VIETNAM = re.compile(r"(?i)\b(vietnam\w*|hanoi|ha ?long|hoi ?an|da ?nang|saigon|ho chi minh|mekong|hu[eế]\b|sapa|phu ?quoc|nha trang|"
                      r"da ?lat|ninh binh|mui ne|con dao)\b")
+# Sasha 215 (c) · Vietnam may be ONE of two or three suggestions, never the only one: a line naming it passes only when it
+# also names another destination
+OTHERS = re.compile(r"(?i)\b(thailand|bangkok|chiang mai|cambodia|siem reap|laos|malaysia|penang|kuala lumpur|singapore|indonesia|bali|java|"
+                    r"philippines|japan|tokyo|kyoto|osaka|korea|seoul|taiwan|taipei|china|hong kong|india|sri lanka|nepal|maldives|"
+                    r"portugal|lisbon|porto|spain|italy|greece|france|croatia|turkey|istanbul|morocco|marrakech|egypt|kenya|tanzania|"
+                    r"zanzibar|south africa|mexico|oaxaca|peru|cusco|colombia|ecuador|costa rica|brazil|argentina|chile|caribbean|"
+                    r"canaries|canary islands|madeira|azores|mauritius|seychelles|fiji|australia|new zealand|iceland|norway|scotland)\b")
 C = [
     ("hello", ["Hi Sasha!", "What can you do?"]),
     ("no idea", ["I want a holiday but I've no idea where.", "Somewhere warm in November, two of us."]),
@@ -60,9 +67,10 @@ async def one(name: str, lines: list) -> dict:
                     text = ev["text"]
             history += [{"role": "user", "content": said}, {"role": "assistant", "content": text}]
             if not VIETNAM.search(said):
-                hit = [m.group(0) for x in [text] + shown for m in [VIETNAM.search(x or "")] if m]
+                # Vietnam alone — in what she says, or on screen — is a default; beside other places it's one suggestion
+                hit = [m.group(0) for x in [text] + shown for m in [VIETNAM.search(x or "")] if m and not OTHERS.search(x or "")]
                 if hit:
-                    fail.append(f"“{said[:40]}” → Vietnam named: {hit[:2]} · {text[:100]}")
+                    fail.append(f"“{said[:40]}” → Vietnam named alone: {hit[:2]} · {text[:100]}")
     finally:
         try:
             await GW.STORE.delete_account(a)

@@ -51,6 +51,7 @@ const DG_LANG: Record<string, string> = {
 // scoped key (see getDeepgramKey) so a long-lived key never sits in the browser.
 import { keyOrFail, RECONNECTS_BEFORE_SAYING } from '@/lib/mic-fail.mjs'   // Sasha 215 · the mic never fails silently
 import { micLog } from '@/lib/mic-log'   // Sasha 213 · the mic's state machine, logged
+import { makeDownsampler, sendRate } from '@/lib/downsample.mjs'   // Sasha 215 (d) · the mic at 16 kHz
 
 const PUBLIC_DEEPGRAM_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || ''
 
@@ -406,7 +407,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
 
       const dgLang = DG_LANG[languageRef.current || 'en'] || 'en-US'
       const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${ctx.sampleRate}&channels=1&model=nova-3&language=${dgLang}&smart_format=true&interim_results=true&endpointing=150&utterance_end_ms=1000&vad_events=true${KEYTERMS}`,
+        `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${sendRate(ctx.sampleRate)}&channels=1&model=nova-3&language=${dgLang}&smart_format=true&interim_results=true&endpointing=150&utterance_end_ms=1000&vad_events=true${KEYTERMS}`,
         ['token', dgKey]
       )
       wsRef.current = ws
@@ -462,6 +463,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         await ctx.audioWorklet.addModule('/pcm-capture.js')
         const source = ctx.createMediaStreamSource(stream)
         const node = new AudioWorkletNode(ctx, 'pcm-capture')
+        const downsample = makeDownsampler(ctx.sampleRate)   // per connection: its carry never crosses sockets
         workletNodeRef.current = node
 
         node.port.onmessage = (e) => {
@@ -498,10 +500,12 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
           }
           loudFramesRef.current = 0
           if (ws.readyState !== WebSocket.OPEN) return
-          // Convert float32 to int16 PCM before sending
-          const int16 = new Int16Array(float32.length)
-          for (let i = 0; i < float32.length; i++) {
-            const s = Math.max(-1, Math.min(1, float32[i]))
+          // Convert float32 to int16 PCM before sending — Sasha 215 (d): at 16 kHz (a third of the upload at 48 kHz)
+          const pcm = downsample(float32)
+          if (!pcm.length) return
+          const int16 = new Int16Array(pcm.length)
+          for (let i = 0; i < pcm.length; i++) {
+            const s = Math.max(-1, Math.min(1, pcm[i]))
             int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
           }
           ws.send(int16.buffer)

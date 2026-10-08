@@ -1,7 +1,7 @@
 """AgAPI v0 — THE CONTRACT. Every tool an agent (Sasha's, or any outside client later: REST, MCP) may call, in ONE place:
 its agent, its input/output JSON schemas, its errors, and the guards that hold whatever the caller says.
 
-    Magellan  finds        search_flights · search_stays · search_venues · propose_trip · swap_stay
+    Magellan  finds        search_flights · search_stays · search_venues · prepare_trip · propose_trip · swap_stay
     Sherlock  checks       check_offer · read_booking_route
     Austen    acts         choose_offer · save_travellers · hold_booking · book   (idempotency_key required; book needs a yes)
     Pacioli   records      get_status · get_trip · get_total
@@ -23,6 +23,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -189,7 +190,59 @@ async def search_venues(ctx: Ctx, a: dict) -> dict:
     for c in (r.get("candidates") or r.get("venues") or [])[:6]:
         out.append({"name": c.get("name"), "address": c.get("address"), "type": c.get("type"), "rating": c.get("rating"),
                     "reviews": c.get("reviews") or c.get("rating_count"), "place_id": c.get("place_id"), "website": c.get("website")})
-    return {"venues": out, "note": "Google listings; nothing contacted"}
+    return {"venues": out, "note": "Google listings; nothing contacted — the person sees them as photo cards and can pick one by tap or voice",
+            "find": {k: v for k, v in {"what": a["what"], "where": a["where"], "country": a.get("country"), "open_at": a.get("open_at"),
+                                       "party": a.get("party")}.items() if v}}
+
+
+# ── Sasha 205 · the prefetch: the slow work starts while she's still chatting ──────────────────────────────────────────────
+_PREP: Dict[str, dict] = {}   # account → {"key", "origin", "itin": Task, "flights": {origin: Task}, "at"}
+
+
+def _prep_key(a: dict) -> tuple:
+    return ((a.get("destination") or "").strip().lower(), a.get("start_date"), int(a.get("nights") or 7), int(a.get("party") or 2))
+
+
+async def _build(a: dict) -> dict:
+    from app.services.itinerary_agent import build_itinerary
+    start = date.fromisoformat(a["start_date"])
+    nights, party = int(a.get("nights") or 7), int(a.get("party") or 2)
+    msg = (f"Plan a {nights + 1}-day trip to {a['destination']} from {start.day} {start.strftime('%B %Y')} for {party} people."
+           + (f" Interests: {a['interests']}." if a.get("interests") else ""))
+    itin = await build_itinerary(msg, [])
+    return {"itin": itin, "msg": msg}
+
+
+async def _search_legs(origin: str, days: List[dict], start: date, nights: int, party: int) -> dict:
+    import asyncio as _aio
+    from booking_signer import travel as T
+    first_city = (next((d.get("city") for d in days if d.get("city")), "") or "").split(",")[0]
+    last_city = (next((d.get("city") for d in reversed(days) if d.get("city")), first_city) or "").split(",")[0]
+    legs = [("out", origin, airport_of(first_city), (start - timedelta(days=1)).isoformat()),
+            ("back", airport_of(last_city), origin, (start + timedelta(days=nights)).isoformat())]
+    found = await _aio.gather(*[T.search(o, d, day, adults=party, limit=12) for _, o, d, day in legs])
+    return {"legs": legs, "found": found}
+
+
+async def prepare_trip(ctx: Ctx, a: dict) -> dict:
+    """Start the itinerary (and, once the origin is known, both legs' flight searches) in the background; returns at once."""
+    import asyncio as _aio
+    try:
+        date.fromisoformat(a["start_date"])
+    except (KeyError, ValueError):
+        raise ToolError("start_date_invalid", "start_date is YYYY-MM-DD")
+    key = _prep_key(a)
+    p = _PREP.get(ctx.account)
+    if not p or p["key"] != key:
+        p = _PREP[ctx.account] = {"key": key, "itin": _aio.create_task(_build(a)), "flights": {}, "args": dict(a)}
+    origin = (a.get("origin") or "").strip()
+    if origin and origin.lower() not in p["flights"]:
+        async def legs(itin_task=p["itin"], o=origin):
+            built = await itin_task
+            days = (built.get("itin") or {}).get("days") or []
+            return await _search_legs(o, days, date.fromisoformat(a["start_date"]), int(a.get("nights") or 7), int(a.get("party") or 2))
+        p["flights"][origin.lower()] = _aio.create_task(legs())
+    return {"preparing": ["itinerary"] + (["flights"] if origin else []), "note": "keep chatting; propose_trip will pick this up"}
 
 
 async def propose_trip(ctx: Ctx, a: dict) -> dict:
@@ -203,9 +256,24 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
     nights, party = int(a.get("nights") or 7), int(a.get("party") or 2)
     if not 1 <= nights <= 30 or not 1 <= party <= 9:
         raise ToolError("size_invalid", "nights 1–30, party 1–9")
-    msg = (f"Plan a {nights + 1}-day trip to {a['destination']} from {start.day} {start.strftime('%B %Y')} for {party} people."
-           + (f" Interests: {a['interests']}." if a.get("interests") else ""))
-    itin = await build_itinerary(msg, [])
+    origin = a.get("origin") or "Madrid"
+    prep = _PREP.get(ctx.account)
+    used_prefetch = {"itinerary": False, "flights": False}
+    built, legs_task = None, None
+    if prep and prep["key"] == _prep_key(a):   # Sasha 205 · the work prepared during the intake
+        try:
+            built = await prep["itin"]
+            used_prefetch["itinerary"] = True
+            if origin.lower() not in prep["flights"]:
+                await prepare_trip(ctx, {**prep["args"], "origin": origin})
+            legs_task = prep["flights"][origin.lower()]
+        except Exception as e:   # a prepared task failed: build it now instead
+            log.info("[agapi] prefetch unusable (%s) — building now", type(e).__name__)
+            _PREP.pop(ctx.account, None)
+            built, legs_task = None, None
+    if built is None:
+        built = await _build(a)
+    itin, msg = built["itin"], built["msg"]
     if not itin or not itin.get("days"):
         raise ToolError("plan_failed", "the itinerary couldn't be built just now — try again")
     itin["party"] = party
@@ -214,15 +282,18 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
         raise ToolError("plan_not_saved", "the itinerary couldn't be saved on the account")
     days = itin["days"]
     first_city = (next((d.get("city") for d in days if d.get("city")), a["destination"]) or "").split(",")[0]
-    last_city = (next((d.get("city") for d in reversed(days) if d.get("city")), first_city) or "").split(",")[0]
-    origin = a.get("origin") or "Madrid"
     await BK.unchoose_flights(ctx.account, trip_id)
     flights, why = {}, []
-    import asyncio as _aio
-    legs = [("out", origin, airport_of(first_city), (start - timedelta(days=1)).isoformat()),
-            ("back", airport_of(last_city), origin, (start + timedelta(days=nights)).isoformat())]   # home on the last day, after midday
-    found = await _aio.gather(*[T.search(o, d, day, adults=party, limit=12) for _, o, d, day in legs])
-    for (leg, o, d, day), r in zip(legs, found):   # out AND back: a flight that fits on each leg, chosen
+    searched = None
+    if legs_task is not None:
+        try:
+            searched = await legs_task
+            used_prefetch["flights"] = True
+        except Exception as e:
+            log.info("[agapi] prefetched flights unusable (%s) — searching now", type(e).__name__)
+    if searched is None:
+        searched = await _search_legs(origin, days, start, nights, party)
+    for (leg, o, d, day), r in zip(searched["legs"], searched["found"]):   # out AND back: a flight that fits on each leg (home after midday)
         if "why" in r:
             why.append(f"{leg}: {r['why']}")
             continue
@@ -237,7 +308,7 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
             "days": [{"day": d.get("day"), "city": d.get("city"), "stay": hotel(d), "title": d.get("title")} for d in days],
             "flight_out": flights.get("out"), "flight_back": flights.get("back"), **({"flight_note": "; ".join(why)} if why else {}),
             "total_eur": q.get("eur") if "eur" in q else None, **({"total_note": q.get("why")} if "why" in q else {}),
-            "prices": "stays at the TEST hotel rate, the flight at its Duffel TEST fare — nothing is booked"}
+            "prices": "stays at the TEST hotel rate, the flight at its Duffel TEST fare — nothing is booked", "prefetched": used_prefetch}
 
 
 async def swap_stay(ctx: Ctx, a: dict) -> dict:
@@ -334,11 +405,19 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
     have, need = len(await PX.saved(ctx.account)), _party(p)
     if have < need:
         raise ToolError("travellers_missing", f"the airline needs each traveller's full name, title and date of birth — {have} of {need} on file")
+    held = _HELD.get(ctx.account)
+    if held and held.get("result") and (datetime.now(timezone.utc) - held["at"]).total_seconds() < 120:   # Sasha 205 · just checked
+        import hashlib as _h
+        cur = await BB.current(ctx.account)
+        if cur and _h.sha256("\n".join(BB.lines_of(cur["rows"], cur["party"])).encode()).hexdigest() == held["sha"]:
+            return {**held["result"], "reused": "checked under two minutes ago and nothing has changed"}
     q = await BB.quote(ctx.account, a.get("origin") or "Madrid")
     if "why" in q:
         raise ToolError("not_bookable", q["why"])
-    return {"read_back": [l for l in q["lines"] if not l.startswith("Note:")], "notes": [l for l in q["lines"] if l.startswith("Note:")],
-            "read_back_sha256": q["sha256"], "total_eur": q["eur"], "status": "not booked — waiting for the yes"}
+    res = {"read_back": [l for l in q["lines"] if not l.startswith("Note:")], "notes": [l for l in q["lines"] if l.startswith("Note:")],
+           "read_back_sha256": q["sha256"], "total_eur": q["eur"], "status": "not booked — waiting for the yes"}
+    _HELD[ctx.account] = {"sha": q["sha256"], "at": datetime.now(timezone.utc), "result": res}   # Sasha 205 · book() uses it as is
+    return res
 
 
 async def book(ctx: Ctx, a: dict) -> dict:
@@ -348,7 +427,13 @@ async def book(ctx: Ctx, a: dict) -> dict:
     said = ((a.get("approval") or {}).get("said")) or ""
     if not explicit_yes(said):
         raise ToolError("no_explicit_yes", "booking needs the person's explicit yes in this turn — ask them, then call book")
-    got = await BB.pay(ctx.account, a.get("read_back_sha256") or "")
+    sha = a.get("read_back_sha256") or ""
+    held = _HELD.get(ctx.account)
+    if not sha and held and (datetime.now(timezone.utc) - held["at"]).total_seconds() < 1800:
+        sha = held["sha"]   # Sasha 205 · the read-back they just heard (pay() still refuses if anything changed since)
+    if not sha:
+        raise ToolError("no_read_back", "call hold_booking first — the yes is bound to a read-back")
+    got = await BB.pay(ctx.account, sha)
     if "why" in got:
         raise ToolError("read_back_changed" if "different words" in got["why"] else "not_bookable", got["why"])
     sent = str(got.get("phone") or "").startswith("sent")
@@ -406,9 +491,19 @@ TOOLS: List[dict] = [
     _t("search_stays", "Magellan", search_stays, "Places to stay in a city, best match first (estimates; TEST bookings).",
        {"city": {"type": "string"}, "preference": {"type": "string", "description": "e.g. on the beach, boutique"}}, ["city"],
        {"type": "object", "properties": {"stays": {"type": "array"}}}, ["city_not_covered"]),
-    _t("search_venues", "Magellan", search_venues, "Restaurants, spas or other places in a city (Google listings; nothing contacted).",
-       {"what": {"type": "string"}, "where": {"type": "string"}, "country": {"type": "string", "pattern": "^[A-Z]{2}$"}}, ["what", "where"],
+    _t("search_venues", "Magellan", search_venues, "Restaurants, spas or other places in a city (Google listings; nothing contacted). "
+       "The person sees them as photo cards and picks one by tap or voice; booking it goes through that venue's own route.",
+       {"what": {"type": "string"}, "where": {"type": "string"}, "country": {"type": "string", "pattern": "^[A-Z]{2}$"},
+        "open_at": {"type": "string", "description": "the local date-time wanted, YYYY-MM-DDTHH:MM (on the trip's day)"},
+        "party": {"type": "integer", "minimum": 1, "maximum": 20}}, ["what", "where"],
        {"type": "object", "properties": {"venues": {"type": "array"}}}, ["what_invalid", "where_invalid", "places_not_configured"]),
+    _t("prepare_trip", "Magellan", prepare_trip, "Start getting the trip ready in the background the moment destination, dates "
+       "and party are known (and again once the origin is): the itinerary, then both legs' flights. Returns at once — keep "
+       "chatting; propose_trip with the same details picks it up.",
+       {"destination": {"type": "string"}, "start_date": DATE, "nights": {"type": "integer", "minimum": 1, "maximum": 30},
+        "party": {"type": "integer", "minimum": 1, "maximum": 9}, "interests": {"type": "string"}, "origin": {"type": "string"}},
+       ["destination", "start_date", "nights", "party"],
+       {"type": "object", "properties": {"preparing": {"type": "array"}}}, ["start_date_invalid"]),
     _t("propose_trip", "Magellan", propose_trip, "THE PROPOSAL: a day-by-day itinerary with somewhere to stay each night, a flight "
        "that fits on each leg (there and back) already chosen, and the whole trip's total. Replaces the account's current proposal. Nothing is booked.",
        {"destination": {"type": "string"}, "start_date": DATE, "nights": {"type": "integer", "minimum": 1, "maximum": 30},
@@ -440,12 +535,12 @@ TOOLS: List[dict] = [
        "sha256 the yes binds to. No money moves; nothing is booked.", {"origin": {"type": "string"}}, [],
        {"type": "object", "properties": {"read_back": {"type": "array"}, "read_back_sha256": {"type": "string"}, "total_eur": {"type": "number"}}},
        ["no_trip", "travellers_missing", "not_bookable"], austen=True),
-    _t("book", "Austen", book, "After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back, sent "
-       "to their phone. Nothing is booked until it is paid — get_status says when.",
+    _t("book", "Austen", book, "After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back they "
+       "just heard (the last hold_booking, unless read_back_sha256 is given), sent to their phone. Nothing is booked until it is paid — get_status says when.",
        {"read_back_sha256": {"type": "string"}, "approval": {"type": "object", "properties": {"said": {"type": "string"}},
                                                                "description": "the person's own words (filled by the caller from the real message)"}},
-       ["read_back_sha256"], {"type": "object", "properties": {"status": {"const": "awaiting_payment"}, "booked": {"const": False}}},
-       ["no_explicit_yes", "read_back_changed", "not_bookable"], austen=True),
+       [], {"type": "object", "properties": {"status": {"const": "awaiting_payment"}, "booked": {"const": False}}},
+       ["no_explicit_yes", "no_read_back", "read_back_changed", "not_bookable"], austen=True),
     _t("get_status", "Pacioli", get_status, "What is booked, failed, cancelled or awaiting payment — the ONLY source for booked/paid/confirmed.",
        {}, [], {"type": "object", "properties": {"booked": {"type": "array"}, "anything_booked": {"type": "boolean"}}}, ["no_trip"]),
     _t("get_trip", "Pacioli", get_trip, "The trip as it stands: days and stays, the chosen flights, each item's state.", {}, [],
@@ -453,6 +548,7 @@ TOOLS: List[dict] = [
     _t("get_total", "Pacioli", get_total, "The whole trip's total from the basket (what booking would charge).", {}, [], TOTAL, ["no_trip"]),
 ]
 BY_NAME = {t["name"]: t for t in TOOLS}
+_HELD: Dict[str, dict] = {}   # account → the last read-back's sha256 (hold_booking), for book
 _IDEM: Dict[str, dict] = {}
 
 
@@ -468,6 +564,7 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
     if miss:
         return {"ok": False, "error": {"code": "missing_input", "message": f"missing: {', '.join(miss)}"}}
     key = None
+    t_call = time.perf_counter()
     if t["idempotent"]:
         key = f"{ctx.account}:{name}:{args['idempotency_key']}"
         if key in _IDEM:
@@ -479,7 +576,7 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
     except Exception as e:
         log.error("[agapi] %s failed: %s: %s", name, type(e).__name__, e)
         res = {"ok": False, "error": {"code": "internal", "message": f"{name} failed ({type(e).__name__}) — nothing was changed by this call"}}
-    ctx.calls.append({"tool": name, "ok": res["ok"], "agent": t["agent"]})
+    ctx.calls.append({"tool": name, "ok": res["ok"], "agent": t["agent"], "ms": int((time.perf_counter() - t_call) * 1000)})
     if key and res["ok"]:
         _IDEM[key] = res
         try:

@@ -25,7 +25,7 @@ One contract for every client.
 
 | Agent | Role | Tools |
 |---|---|---|
-| **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `propose_trip`, `swap_stay` |
+| **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay` |
 | **Sherlock** | checks | `check_offer`, `read_booking_route` |
 | **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book` |
 | **Pacioli** | records — the only source of booked/paid | `get_status`, `get_trip`, `get_total` |
@@ -173,7 +173,7 @@ Places to stay in a city, best match first (estimates; TEST bookings).
 
 ### `search_venues`
 
-Restaurants, spas or other places in a city (Google listings; nothing contacted).
+Restaurants, spas or other places in a city (Google listings; nothing contacted). The person sees them as photo cards and picks one by tap or voice; booking it goes through that venue's own route.
 
 **Errors:** `what_invalid`, `where_invalid`, `places_not_configured`, `missing_input`, `internal`
 
@@ -192,6 +192,15 @@ Restaurants, spas or other places in a city (Google listings; nothing contacted)
   "country": {
    "type": "string",
    "pattern": "^[A-Z]{2}$"
+  },
+  "open_at": {
+   "type": "string",
+   "description": "the local date-time wanted, YYYY-MM-DDTHH:MM (on the trip's day)"
+  },
+  "party": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 20
   }
  },
  "required": [
@@ -209,6 +218,65 @@ Restaurants, spas or other places in a city (Google listings; nothing contacted)
  "type": "object",
  "properties": {
   "venues": {
+   "type": "array"
+  }
+ }
+}
+```
+
+### `prepare_trip`
+
+Start getting the trip ready in the background the moment destination, dates and party are known (and again once the origin is): the itinerary, then both legs' flights. Returns at once — keep chatting; propose_trip with the same details picks it up.
+
+**Errors:** `start_date_invalid`, `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "destination": {
+   "type": "string"
+  },
+  "start_date": {
+   "type": "string",
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+  },
+  "nights": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 30
+  },
+  "party": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 9
+  },
+  "interests": {
+   "type": "string"
+  },
+  "origin": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "destination",
+  "start_date",
+  "nights",
+  "party"
+ ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "preparing": {
    "type": "array"
   }
  }
@@ -734,9 +802,9 @@ The read-back before booking: every item re-checked and priced, the total, and t
 
 ### `book`
 
-After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back, sent to their phone. Nothing is booked until it is paid — get_status says when.
+After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back they just heard (the last hold_booking, unless read_back_sha256 is given), sent to their phone. Nothing is booked until it is paid — get_status says when.
 
-**Errors:** `no_explicit_yes`, `read_back_changed`, `not_bookable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+**Errors:** `no_explicit_yes`, `no_read_back`, `read_back_changed`, `not_bookable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 
 **Input**
 
@@ -764,7 +832,6 @@ After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exac
   }
  },
  "required": [
-  "read_back_sha256",
   "idempotency_key"
  ],
  "additionalProperties": false

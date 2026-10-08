@@ -43,6 +43,16 @@ avatar, the web chat and WhatsApp.
    - A watchdog logs every line HeyGen's AI says on its own, and alerts the founder on any fact or promise word: booked,
      confirmed, €, price, flight numbers, email, partner.
 
+## Amendments
+
+- **Sasha 205 (8 Oct), the founder: "a character, not a rulebook".** On `/next` (the agent):
+  - Rule 3's "≤15 words" and "one question" are style notes, not limits. A safety trim stays, for very long replies only.
+  - Rule 2's fixed quiver becomes short, varied acknowledgements, written from what the person just said. They never
+    contain a price, booking or confirmation, and never repeat in a conversation.
+  - The hard rules stay in code: no booking without the person's own yes, € only from tools, booked/paid only from
+    Pacioli.
+  - The current Sasha keeps the script until the founder approves the swap.
+
 ## How each rule is held
 
 Phase one (Sasha 201 a) is done. Parts b–d wait for the founder's feedback after he tests phase one.

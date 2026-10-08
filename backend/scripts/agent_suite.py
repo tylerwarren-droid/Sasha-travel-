@@ -26,8 +26,19 @@ async def cases(a: str) -> None:
     from booking_signer import basket as BK, basket_book as BB
     ctx = API.Ctx(account=a, mode="test")
     start = (date.today() + timedelta(days=60)).isoformat()
+    t0 = time.perf_counter()
+    pr = await API.call(ctx, "prepare_trip", {"destination": "Vietnam", "start_date": start, "nights": 6, "party": 2, "origin": "Madrid"})
+    t_prep = time.perf_counter() - t0
+    await asyncio.sleep(0)
+    await asyncio.sleep(float(os.getenv("AGENT_SUITE_PREP_WAIT", "6")))   # the intake goes on while it prepares
+    t1 = time.perf_counter()
     r = await API.call(ctx, "propose_trip", {"destination": "Vietnam", "start_date": start, "nights": 6, "party": 2,
                                              "interests": "food and beaches", "origin": "Madrid"})
+    t_prop = time.perf_counter() - t1
+    print(f"   timing · propose_trip after prepare: {t_prop:.2f}s (this host)", flush=True)
+    ok("AGENT 0 (Sasha 205): prepare_trip returns at once, and propose_trip USES the prepared itinerary and flights",
+       pr.get("ok") and t_prep < 0.5 and (r.get("result") or {}).get("prefetched") == {"itinerary": True, "flights": True},
+       f"prepare {t_prep:.2f}s · propose {t_prop:.2f}s · {(r.get('result') or {}).get('prefetched')} · {r.get('error')}")
     res = r.get("result") or {}
     t = await API.call(ctx, "get_total", {})
     q = await BB.quote(a, "Madrid")
@@ -69,12 +80,23 @@ async def cases(a: str) -> None:
        st.get("ok") and not st["result"]["anything_booked"] and AG.guard_check("Great — it's all booked!", set(), st["result"]["anything_booked"]))
 
 
+async def render_cases() -> None:
+    """Sasha 205 · every tool's result type has a renderer in the /next UI."""
+    from agapi import v0 as API
+    from app.agent import sasha as AG
+    missing = sorted(set(API.BY_NAME) - set(AG.RENDER))
+    ok("AGENT RENDER: every tool's result has a renderer (venues → photo cards, flights/stays → cards, trip → the Trip view…)",
+       not missing and set(AG.RENDER.values()) <= AG.KINDS, f"missing {missing}")
+    ev = AG.render("search_venues", {"venues": [], "find": {"what": "dinner", "where": "Hoi An"}}, {"what": "dinner", "where": "Hoi An"})
+    ok("AGENT RENDER: search_venues opens the photo venue cards", (ev or {}).get("kind") == "venues" and ev["find"]["where"] == "Hoi An", str(ev))
+
+
 async def quiver_cases() -> None:
-    """Sasha 204 · never silent — a scripted model, real timing: a quiver line before a slow tool's result, at ~0.9 s of silence,
-    and none when the answer is quick."""
+    """Sasha 204/205 · never silent — a scripted model, real timing: an acknowledgement before a slow tool's result and at ~0.9 s
+    of silence, none when the answer is quick; and acknowledgements never repeat and never carry a fact."""
     from app.agent.fakes import quiver_checks
     for name, (good, detail) in (await quiver_checks()).items():
-        ok(f"AGENT QUIVER: {name}", good, detail[:180])
+        ok(f"AGENT FILLER: {name}", good, detail[:180])
 
 
 async def main() -> int:
@@ -92,6 +114,7 @@ async def main() -> int:
     try:
         await cases(a)
         await quiver_cases()
+        await render_cases()
     except Exception as e:
         ok("the agent suite itself", False, f"{type(e).__name__}: {e}")
     finally:

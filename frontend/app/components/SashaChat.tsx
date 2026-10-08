@@ -38,6 +38,8 @@ const TABS: { id: WorkspaceTab; label: string }[] = [
 ]
 
 interface SashaChatProps {
+  /** Sasha 205 · /next only: this chat talks to Sasha's AGENT (AgAPI v0, streamed) instead of the conductor. Off = unchanged. */
+  agent?: boolean
   user: User
   /** CR 16 · the product tab this chat opens in ("relocation" | "campus" | "espana"): sent as product_mode on the opening turn */
   productMode?: string
@@ -163,7 +165,7 @@ function interimLineFor(intents: string[], variant: number): string {
 }
 
 
-export default function SashaChat({ user, productMode, skinClassName, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onMicDevices, onBooked, onAwaitPayment, onBookItem, onConfirmCard, onPaySavedCard, onPayNewCard, paidWith, onItineraryId, bookingRef, hideTabs = false, chatHero = null, panelPortal = null, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache }: SashaChatProps) {
+export default function SashaChat({ agent = false, user, productMode, skinClassName, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onMicDevices, onBooked, onAwaitPayment, onBookItem, onConfirmCard, onPaySavedCard, onPayNewCard, paidWith, onItineraryId, bookingRef, hideTabs = false, chatHero = null, panelPortal = null, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache }: SashaChatProps) {
   const tab = activeTab
   const [localMessages, setLocalMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
@@ -351,6 +353,17 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
     // the long silent stretch has a visible owner instead of looking like a hang.
     stickToBottomRef.current = true   // a deliberate send always re-pins
     const turnId = ++turnSeqRef.current
+    if (agent) {   // Sasha 205 · the agent path (/next): streamed, spoken in phrases, the Trip view refreshed as tools return
+      try {
+        await agentTurn(content, historyBeforeMessage, turnId)
+      } finally {
+        setIsLoading(false)
+        inFlightRef.current = false
+        setBuilding(false)
+        if (tabBeforeBuildRef.current !== null) tabBeforeBuildRef.current = null
+      }
+      return
+    }
     const showBuilding = () => {
       if (tabBeforeBuildRef.current === null) tabBeforeBuildRef.current = tab
       setBuilding(true); onTabChange?.('trip')
@@ -513,6 +526,66 @@ export default function SashaChat({ user, productMode, skinClassName, onSashaRes
       setBuilding(false)
       // Sasha 202 · the pacing line is said; the proposal is asked for straight away (no one waits to type). Never shown.
       if (continueWith) { const h = continueWith; setTimeout(() => { sendRef.current(CONTINUE_TURN, { opening: true, history: h }) }, 30) }
+    }
+  }
+
+  // Sasha 205 · ONE TURN WITH SASHA'S AGENT (/api/sasha-agent → backend /api/agent/turn, server-sent events). The reply is
+  // shown as it streams; phrases go to the avatar through onSashaResponse (the page queues them behind what she's saying);
+  // a short acknowledgement goes through onThinking (spoken only when she's quiet); flight searches arrive as the same
+  // Live Workspace card; every trip change refreshes the Trip view at once (the 'sasha-plan-refresh' event).
+  const agentTurn = async (content: string, history: any[], turnId: number) => {
+    const plain = (history || []).filter((m: any) => (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim())
+      .map((m: any) => ({ role: m.role, content: String(m.content) }))
+    setMessages(prev => [...prev, { role: 'assistant', content: '' }])
+    let reply = ''
+    const show = (t: string) => setMessages(prev => [...prev.slice(0, -1), { role: 'assistant', content: t }])
+    const live = () => turnSeqRef.current === turnId
+    const t0 = performance.now(); let firstSound: number | null = null; let firstKind = ''; const tools: string[] = []
+    const heard = (kind: string) => { if (firstSound === null) { firstSound = performance.now() - t0; firstKind = kind } }
+    try {
+      const r = await fetch('/api/sasha-agent', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ message: content, history: plain, session_id: chatSessionIdRef.current }) })
+      if (!r.ok || !r.body) {
+        const j = await r.json().catch(() => ({}))
+        show(r.status === 401 ? 'Please sign in first — this is your own session for now.' : `I couldn't reach my server (${j.rule ?? r.status}).`)
+        return
+      }
+      const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = ''
+      for (;;) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buf += dec.decode(value, { stream: true })
+        let i
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const line = buf.slice(0, i).replace(/^data: /, ''); buf = buf.slice(i + 2)
+          let ev: any
+          try { ev = JSON.parse(line) } catch { continue }
+          if (!live()) continue
+          if (ev.type === 'text') { reply += ev.delta; show(reply) }
+          else if (ev.type === 'say') { heard('answer'); onSashaResponse?.(ev.text) }
+          else if (ev.type === 'filler') { heard('filler'); onThinking?.(ev.text) }
+          else if (ev.type === 'tool_start' && ev.name === 'propose_trip') { if (tabBeforeBuildRef.current === null) tabBeforeBuildRef.current = tab; setBuilding(true); onTabChange?.('trip') }
+          else if (ev.type === 'tool') { tools.push(ev.name); if (ev.name === 'propose_trip') setBuilding(false) }
+          else if (ev.type === 'trip_changed') window.dispatchEvent(new Event('sasha-plan-refresh'))
+          else if (ev.type === 'render') {   // Sasha 205 · every tool result has its renderer, by kind (agent/sasha.py RENDER)
+            if ((ev.kind === 'flights' || ev.kind === 'stays') && ev.card) { setBookings([ev.card]); if (tab !== 'chat') onMarkUnseen?.('chat') }
+            else if ((ev.kind === 'venues' || ev.kind === 'venue_route') && ev.find) { setBookingFind({ ...ev.find, draft: null }); if (tab !== 'chat') onMarkUnseen?.('chat') }
+            else if (ev.kind === 'read_back' && ev.trip_book) setTripBook({ from: String(ev.trip_book.from ?? 'Madrid'), n: Date.now() })
+            else if (ev.kind === 'trip') window.dispatchEvent(new Event('sasha-plan-refresh'))
+          }
+          else if (ev.type === 'replace') { reply = ev.text; show(reply); if (ev.speak) onSashaResponse?.(ev.text) }
+          else if (ev.type === 'done') {
+            reply = ev.text || reply; show(reply); window.dispatchEvent(new Event('sasha-plan-refresh'))
+            const body = { session: chatSessionIdRef.current, first_sound_ms: firstSound === null ? null : Math.round(firstSound),
+              full_answer_ms: Math.round(performance.now() - t0), first_sound_kind: firstKind || null, engine_first_text_ms: ev.ms?.first_text ?? null, tools }
+            console.log('[NEXT timing]', body)
+            fetch('/api/sasha-agent/timing', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {})
+          }
+          else if (ev.type === 'error') { reply = ev.message; show(reply); onSashaResponse?.(ev.message) }
+        }
+      }
+    } catch {
+      show(reply || 'I lost the connection for a moment — could you say that again?')
     }
   }
 

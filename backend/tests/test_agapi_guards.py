@@ -77,11 +77,30 @@ class ReplyGuard(unittest.TestCase):
         self.assertFalse(AG.guard_check("The whole trip comes to about €1,468.", {1468.14}, False))
         self.assertFalse(AG.guard_check("Your total is €1,468.14.", {1468.14}, False))
 
-    def test_pace_short_lines_one_question(self):
-        self.assertIsNone(AG.too_long("Here's what I've put together, with a flight that fits. Want to see other flights?"))
-        self.assertTrue(AG.too_long("Which dates? And how many of you?"))
-        self.assertTrue(AG.too_long("One. Two. Three. Four."))
-        self.assertTrue(AG.too_long("I've put together nine days that go from Hanoi and Ha Long Bay to Hue, Hoi An, Saigon and the Mekong Delta in one go."))
+    def test_fillers_never_carry_a_fact_and_never_repeat(self):
+        used = []
+        for line in ("Ooh, Hoi An at lantern time — let me see what's around then.", "Right, let me see."):
+            self.assertTrue(AG.filler_ok(line, used), line)
+            used.append(line)
+        self.assertFalse(AG.filler_ok("Right, let me see.", used))                       # never twice
+        for bad in ("That's about €1,468.", "I've booked it!", "Your payment went through.", "Prices are great in May.",
+                    "Flights from 300 euros.", "I'll confirm it now.", "Shall I look?", "I promise it's lovely."):
+            self.assertFalse(AG.filler_ok(bad, []), bad)                                  # never a fact or a question
+
+    def test_a_filler_written_twice_is_replaced_by_an_unused_safe_line(self):
+        import app.services.llm as LLM
+        from app.agent import fakes
+        real = LLM.client
+        LLM.client = fakes.client([], filler="Ooh, lovely — let me look.")
+        try:
+            a = asyncio.run(AG.make_filler("Vietnam!", "think", "t-dup"))
+            b = asyncio.run(AG.make_filler("Vietnam!", "think", "t-dup"))
+        finally:
+            LLM.client = real
+            AG._USED.pop("t-dup", None)
+        self.assertEqual(a, "Ooh, lovely — let me look.")
+        self.assertNotEqual(AG._norm(a), AG._norm(b))
+        self.assertTrue(AG.filler_ok(b, []))
 
     def test_the_last_resort_strips_only_the_bad_sentence(self):
         out = AG.guard_strip("Good choice. The total is €9,999. Shall I book it?", ["price: €9,999 did not come from a tool"])
@@ -155,6 +174,19 @@ class NeverSilent(unittest.TestCase):
         from app.agent.fakes import quiver_checks
         for name, (good, detail) in asyncio.run(quiver_checks()).items():
             self.assertTrue(good, f"{name}: {detail}")
+
+
+class EveryResultIsRendered(unittest.TestCase):
+    def test_each_tools_result_type_has_a_renderer(self):
+        import os
+        from agapi import v0 as API
+        self.assertEqual(set(AG.RENDER), set(API.BY_NAME) - {n for n in API.BY_NAME if n.startswith("_t_")}, "a tool without a renderer")
+        self.assertTrue(set(AG.RENDER.values()) <= AG.KINDS)
+        chat = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "app", "components", "SashaChat.tsx")
+        if os.path.exists(chat):
+            src = open(chat, encoding="utf-8").read()
+            for kind in AG.KINDS - {"inline"}:
+                self.assertIn(f"ev.kind === '{kind}'", src, f"the /next UI doesn't render '{kind}'")
 
 
 class TheDocIsTheContract(unittest.TestCase):

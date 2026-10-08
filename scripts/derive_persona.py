@@ -38,11 +38,10 @@ def avatar_prompt(p: dict) -> str:
 
 
 def agent_system() -> str:
-    """Sasha 203 · the /next agent's system prompt: the charter and her persona (without its JSON block), as written."""
-    charter = open(os.path.join(ROOT, "docs", "sasha", "charter.md"), encoding="utf-8").read()
-    charter = charter.split("## How each rule is held")[0].strip()
-    persona = re.sub(r"## The source.*", "", open(SOURCE, encoding="utf-8").read(), flags=re.S).strip()
-    return f"{charter}\n\n---\n\n{persona}"
+    """Sasha 205 · the /next agent's system prompt: WHO SHE IS — the persona's character, style, way of working and hard rules
+    (from "## Who she is" up to its JSON block). The charter stays the reference document; its rules are held in code."""
+    prose = re.sub(r"## The source.*", "", open(SOURCE, encoding="utf-8").read(), flags=re.S)
+    return ("## Who she is" + prose.split("## Who she is", 1)[1]).rstrip()
 
 
 def render_py(p: dict, sha: str) -> str:

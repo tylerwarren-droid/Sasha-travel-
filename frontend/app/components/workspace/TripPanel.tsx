@@ -68,7 +68,8 @@ function useJourneys(): Journeys | null {
     }
     pull()
     const t = setInterval(pull, 6000)
-    return () => { off = true; clearInterval(t) }
+    window.addEventListener('sasha-plan-refresh', pull)   // Sasha 205 · /next's agent changed the trip: show it now, not in 6 s
+    return () => { off = true; clearInterval(t); window.removeEventListener('sasha-plan-refresh', pull) }
   }, [])
   return j
 }
@@ -128,7 +129,8 @@ function useServerPlan(tripId: string | null, onPlans?: (p: PlanRef[]) => void):
     }
     pull()
     const t = setInterval(pull, 6000)
-    return () => { off = true; clearInterval(t) }
+    window.addEventListener('sasha-plan-refresh', pull)   // Sasha 205 · /next's agent changed the trip: show it now, not in 6 s
+    return () => { off = true; clearInterval(t); window.removeEventListener('sasha-plan-refresh', pull) }
   }, [tripId])  // eslint-disable-line react-hooks/exhaustive-deps
   return plan
 }

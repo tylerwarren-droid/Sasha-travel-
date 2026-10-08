@@ -283,6 +283,46 @@ async def docs():
     return HTMLResponse(gen.docs_page(config.PUBLIC_URL))
 
 
+# ── issuing by hand, remotely (Part 4 K6) — signed with the service's own pepper, so no second secret exists ────────────
+
+@app.post("/admin/{action}")
+async def admin(action: str, req: Request):
+    """AgAPI-Admin-Signature: t=<unix>,n=<nonce>,v1=<hex HMAC-SHA256(pepper, "<t>.<n>.<raw body>")>. Stale after 5 minutes; a nonce
+    is used once. `key` {name, label?} → {account, key_id, prefix, key} — the key appears in THIS response only. `list` → prefixes."""
+    store = db()
+    raw = (await req.body()).decode()
+    m = re.fullmatch(r"t=(\d+),n=([A-Za-z0-9_-]{16,64}),v1=([0-9a-f]{64})", (req.headers.get("agapi-admin-signature") or "").strip())
+    if not m or abs(int(time.time()) - int(m.group(1))) > 300:
+        return JSONResponse({"ok": False}, status_code=401)
+    want = hmac.new(config.pepper(), f"{m.group(1)}.{m.group(2)}.{raw}".encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(want, m.group(3)):
+        return JSONResponse({"ok": False}, status_code=401)
+    store.x("create table if not exists admin_nonces (n text primary key, at text not null)")
+    if store.x("insert or ignore into admin_nonces (n, at) values (?, ?)", m.group(2), ts()) != 1:
+        return JSONResponse({"ok": False, "why": "nonce reused"}, status_code=401)
+    body = json.loads(raw or "{}")
+    if action == "key":
+        name = str(body.get("name") or "").strip()[:80]
+        if not name:
+            return JSONResponse({"ok": False, "why": "name"}, status_code=400)
+        row = store.one("select id from accounts where name = ?", name)
+        acct = row["id"] if row else create_account(store, name)
+        try:
+            k = create_key(store, acct, str(body.get("label") or name)[:80])
+        except ValueError as e:
+            return JSONResponse({"ok": False, "why": str(e)}, status_code=409)
+        kr = store.one("select key_id, prefix from api_keys where secret_hmac = ?", key_hmac(k))
+        return JSONResponse({"ok": True, "account": acct, "key_id": kr["key_id"], "prefix": kr["prefix"], "key": k},
+                            headers={"Cache-Control": "no-store"})
+    if action == "list":
+        out = []
+        for a in store.q("select * from accounts order by created_at"):
+            out.append({"account": a["id"], "name": a["name"], "keys": store.q("select key_id, prefix, label, state, created_at, last_used_at "
+                                                                               "from api_keys where account = ?", a["id"])})
+        return JSONResponse({"ok": True, "accounts": out})
+    return JSONResponse({"ok": False}, status_code=404)
+
+
 @app.get("/health")
 async def health():
     return {"ok": True, "mode": config.MODE, "spec": config.SPEC_DRAFT}

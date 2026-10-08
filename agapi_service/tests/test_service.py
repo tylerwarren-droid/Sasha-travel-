@@ -371,6 +371,30 @@ class Generated(Base):
         self.assertIn("There is no approve operation", self.client.get("/docs").text)
 
 
+class Admin(Base):
+    def sign(self, body, t=None, n=None):
+        import hashlib, hmac, secrets, time
+        from agapi_service import config
+        t, n = t or int(time.time()), n or secrets.token_urlsafe(16)
+        return f"t={t},n={n},v1=" + hmac.new(config.pepper(), f"{t}.{n}.{body}".encode(), hashlib.sha256).hexdigest()
+
+    def test_signed_key_issuing_and_its_refusals(self):
+        body = json.dumps({"name": "Falguni"})
+        r = self.client.post("/admin/key", content=body, headers={"AgAPI-Admin-Signature": self.sign(body)})
+        k = r.json()["key"]
+        self.assertRegex(k, r"^agp_test_[A-Za-z0-9]{32}$")
+        self.assertTrue(self.ok("acts.status", key=k) is not None)
+        self.assertEqual(self.client.post("/admin/key", content=body).status_code, 401)                       # unsigned
+        self.assertEqual(self.client.post("/admin/key", content=body, headers={"AgAPI-Admin-Signature": self.sign(body, t=1)}).status_code, 401)
+        sig = self.sign(body, n="same-nonce-123456789")
+        self.assertEqual(self.client.post("/admin/key", content=body, headers={"AgAPI-Admin-Signature": sig}).status_code, 200)
+        self.assertEqual(self.client.post("/admin/key", content=body, headers={"AgAPI-Admin-Signature": sig}).status_code, 401)  # replay
+        tampered = self.sign(body).replace("v1=", "v1=0")[:-1]
+        self.assertEqual(self.client.post("/admin/key", content=body, headers={"AgAPI-Admin-Signature": tampered}).status_code, 401)
+        lst = self.client.post("/admin/list", content="{}", headers={"AgAPI-Admin-Signature": self.sign("{}")}).json()
+        self.assertNotIn(k, json.dumps(lst))                                                                     # never a secret
+
+
 class ZeroLiveCalls(Base):
     def test_outbound_refused(self):
         for url in ("https://api.duffel.com/air/airlines", "https://places.googleapis.com/v1/places:searchText", "https://api.stripe.com/v1"):

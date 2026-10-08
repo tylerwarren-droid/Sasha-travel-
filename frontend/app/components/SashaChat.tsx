@@ -611,7 +611,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
           if (ev.type === 'text') { reply += ev.delta; show(reply) }
           else if (ev.type === 'say') { heard('answer'); onSashaResponse?.(ev.text) }
           else if (ev.type === 'filler') { heard('filler'); onThinking?.(ev.text) }
-          else if (ev.type === 'tool_start' && ev.name === 'propose_trip') { if (tabBeforeBuildRef.current === null) tabBeforeBuildRef.current = tab; setBuilding(true); onTabChange?.('trip') }
+          else if (ev.type === 'tool_start' && ev.name === 'propose_trip') { if (tabBeforeBuildRef.current === null) tabBeforeBuildRef.current = tab; setBuilding(true); if (!phone) onTabChange?.('trip') }   // Sasha 214 · on a phone she stays on screen; the trip opens from the pill
           else if (ev.type === 'tool') { tools.push(ev.name); if (ev.name === 'propose_trip') setBuilding(false) }
           else if (ev.type === 'trip_changed') window.dispatchEvent(new Event('sasha-plan-refresh'))
           else if (ev.type === 'render') {   // Sasha 205 · every tool result has its renderer, by kind (agent/sasha.py RENDER)

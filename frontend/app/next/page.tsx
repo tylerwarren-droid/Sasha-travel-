@@ -873,14 +873,16 @@ export default function NextPage() {
     if (!el) return
     const r = el.getBoundingClientRect()
     if (r.width <= 0) return
-    if (avatarPip) {
+    if (avatarPip && isPhone) {   // Sasha 214 · a phone: a small portrait tile in the corner, the view stays readable
+      setAvatarBox({ top: r.top + 12, left: r.right - 96 - 12, width: 96, height: 128 })
+    } else if (avatarPip) {
       const W = Math.max(200, Math.min(300, Math.round(r.width * 0.34)))
       const H = Math.round(W * 0.66)
       setAvatarBox({ top: r.bottom - H - 12, left: r.right - W - 12, width: W, height: H })
     } else {
       setAvatarBox({ top: r.top, left: r.left, width: r.width, height: r.height })
     }
-  }, [avatarPip])
+  }, [avatarPip, isPhone])
   useLayoutEffect(() => {
     measureAvatar()
     const raf = requestAnimationFrame(measureAvatar)
@@ -1646,6 +1648,9 @@ export default function NextPage() {
         .mt-app.phone ol[style]{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;padding-left:0!important;list-style:none}
         .mt-app.phone ol[style] > li{flex:0 0 84%;scroll-snap-align:center}
         .mt-app.phone .mt-startwrap{padding-bottom:32px}
+        .mt-app.phone .mt-avatar[data-mode="pip"] .mt-startwrap,.mt-app.phone .mt-avatar[data-mode="pip"] .mt-ov-top,
+        .mt-app.phone .mt-avatar[data-mode="pip"] .mt-bigmic-wrap,.mt-app.phone .mt-avatar[data-mode="pip"] .mt-ov-hero{display:none!important}
+        .mt-app.phone .mt-avatar[data-mode="pip"]{border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.6)}
         .mt-hsheet{position:fixed;inset:6dvh 0 0 0;z-index:60;background:#0f0f16;border-radius:18px 18px 0 0;display:flex;flex-direction:column;box-shadow:0 -20px 60px rgba(0,0,0,.7)}
         .mt-hsheet-bar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;color:#fff;font-size:14px}
         .mt-hsheet-bar button{border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:13px}

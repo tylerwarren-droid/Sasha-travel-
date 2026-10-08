@@ -1,0 +1,555 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json",
+  "title": "AgAPI v1 product surface",
+  "$defs": {
+    "api_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key_id",
+        "account",
+        "mode",
+        "prefix",
+        "scopes",
+        "created_at",
+        "state"
+      ],
+      "properties": {
+        "key_id": {
+          "type": "string",
+          "pattern": "^key_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "account": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/account_id"
+        },
+        "mode": {
+          "enum": [
+            "test",
+            "live"
+          ]
+        },
+        "prefix": {
+          "type": "string",
+          "pattern": "^agp_(test|live)_[A-Za-z0-9]{6}$",
+          "description": "The first characters only, for display. The secret is shown ONCE at creation and stored only as an HMAC."
+        },
+        "scopes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^([a-z][a-z0-9_]*\\.\\*|[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*)$"
+          }
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "period",
+            "cost_units"
+          ],
+          "properties": {
+            "period": {
+              "enum": [
+                "month"
+              ]
+            },
+            "cost_units": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "rate_limit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "per_minute"
+          ],
+          "properties": {
+            "per_minute": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "created_at": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        },
+        "last_used_at": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+            }
+          ]
+        },
+        "state": {
+          "enum": [
+            "active",
+            "revoked"
+          ]
+        },
+        "revoked_at": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+            }
+          ]
+        }
+      }
+    },
+    "end_user": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user_id",
+        "account",
+        "external_ref",
+        "destinations",
+        "created_at"
+      ],
+      "properties": {
+        "end_user_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/end_user_id"
+        },
+        "account": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/account_id"
+        },
+        "external_ref": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "The customer's own id for this user. AgAPI stores no profile beyond what approvals need."
+        },
+        "destinations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "channel",
+              "value",
+              "verified"
+            ],
+            "properties": {
+              "channel": {
+                "enum": [
+                  "sms",
+                  "whatsapp",
+                  "email"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 320
+              },
+              "verified": {
+                "type": "boolean",
+                "description": "Possession proven by AgAPI (a one-time code). Approvals are only presented to verified destinations."
+              }
+            }
+          }
+        },
+        "sdk_devices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "device_id",
+              "public_key",
+              "registered_at"
+            ],
+            "properties": {
+              "device_id": {
+                "type": "string"
+              },
+              "public_key": {
+                "type": "string",
+                "description": "Ed25519 public key (base64url), generated on the device."
+              },
+              "registered_at": {
+                "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+              }
+            }
+          }
+        },
+        "created_at": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "usage_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_id",
+        "key_id",
+        "account",
+        "mode",
+        "operation",
+        "cost_class",
+        "cost_units",
+        "replayed",
+        "at"
+      ],
+      "properties": {
+        "request_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/request_id"
+        },
+        "key_id": {
+          "type": "string",
+          "pattern": "^key_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "account": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/account_id"
+        },
+        "mode": {
+          "enum": [
+            "test",
+            "live"
+          ]
+        },
+        "operation": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/operation"
+        },
+        "cost_class": {
+          "enum": [
+            "search",
+            "read",
+            "message",
+            "act_prepare",
+            "act",
+            "free"
+          ]
+        },
+        "cost_units": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "replayed": {
+          "type": "boolean",
+          "description": "A replay is always 0 cost_units."
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "error_code": {
+          "type": "string"
+        },
+        "at": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "usage_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "account",
+        "from",
+        "to",
+        "by_operation",
+        "total_cost_units",
+        "budget_remaining"
+      ],
+      "properties": {
+        "account": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/account_id"
+        },
+        "from": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        },
+        "to": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        },
+        "by_operation": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "operation",
+              "calls",
+              "cost_units"
+            ],
+            "properties": {
+              "operation": {
+                "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/operation"
+              },
+              "calls": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "cost_units": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "total_cost_units": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "budget_remaining": {
+          "type": "integer"
+        }
+      }
+    },
+    "webhook_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "webhook_id",
+        "event",
+        "created_at",
+        "account",
+        "mode",
+        "data"
+      ],
+      "properties": {
+        "webhook_id": {
+          "type": "string",
+          "pattern": "^whk_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "event": {
+          "enum": [
+            "approval.presented",
+            "approval.given",
+            "approval.expired",
+            "approval.void",
+            "act.confirmed",
+            "act.awaiting_payment",
+            "act.refused",
+            "act.failed",
+            "act.unknown",
+            "act.cancelled"
+          ]
+        },
+        "created_at": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        },
+        "account": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/account_id"
+        },
+        "mode": {
+          "enum": [
+            "test",
+            "live"
+          ]
+        },
+        "data": {
+          "description": "IDs and states only. Never personal data, never upstream text: the customer fetches details with its key.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "intent_id"
+          ],
+          "properties": {
+            "intent_id": {
+              "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/intent_id"
+            },
+            "read_back_id": {
+              "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/read_back_id"
+            },
+            "approval_id": {
+              "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/approval_id"
+            },
+            "act_id": {
+              "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/act_id"
+            },
+            "evidence_id": {
+              "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/evidence_id"
+            },
+            "outcome_kind": {
+              "enum": [
+                "CONFIRMED",
+                "REQUESTED",
+                "AWAITING_PAYMENT",
+                "REFUSED",
+                "FAILED",
+                "UNREACHABLE",
+                "UNKNOWN"
+              ]
+            },
+            "void_reason": {
+              "type": "string"
+            },
+            "reference": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "simulate_approval_in": {
+      "description": "TEST MODE ONLY. Simulates the end user's yes on a sandbox destination. The Approval carries device.channel 'sandbox_simulated', which is invalid in live mode.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "read_back_id",
+        "said"
+      ],
+      "properties": {
+        "read_back_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/read_back_id"
+        },
+        "said": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "after_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1800,
+          "description": "Simulated delay after presentation (AP3 is still enforced: a separate simulated turn)."
+        }
+      }
+    },
+    "simulate_approval_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approval_id",
+        "state"
+      ],
+      "properties": {
+        "approval_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/approval_id"
+        },
+        "state": {
+          "enum": [
+            "valid",
+            "void",
+            "expired"
+          ]
+        },
+        "decision": {
+          "type": "string"
+        }
+      }
+    },
+    "sandbox_messages_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "end_user_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/end_user_id"
+        },
+        "since": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "sandbox_messages_out": {
+      "description": "TEST MODE ONLY. Everything AgAPI would have sent to an end user; nothing leaves the sandbox.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "messages"
+      ],
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "to",
+              "channel",
+              "sent_at",
+              "body"
+            ],
+            "properties": {
+              "to": {
+                "type": "string"
+              },
+              "channel": {
+                "type": "string"
+              },
+              "sent_at": {
+                "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+              },
+              "body": {
+                "type": "string"
+              },
+              "approval_link": {
+                "type": "string",
+                "format": "uri"
+              }
+            }
+          }
+        }
+      }
+    },
+    "users_register_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "external_ref"
+      ],
+      "properties": {
+        "external_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "destinations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "channel",
+              "value"
+            ],
+            "properties": {
+              "channel": {
+                "enum": [
+                  "sms",
+                  "whatsapp",
+                  "email"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 320
+              }
+            }
+          }
+        }
+      }
+    },
+    "users_register_out": {
+      "$ref": "#/$defs/end_user"
+    },
+    "usage_get_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        },
+        "to": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "usage_get_out": {
+      "$ref": "#/$defs/usage_summary"
+    }
+  }
+}

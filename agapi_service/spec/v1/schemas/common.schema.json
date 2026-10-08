@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agapi.kanoe.dev/v1/schemas/common.schema.json",
+  "title": "AgAPI v1 common definitions",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$",
+      "description": "RFC 3339, UTC, 'Z' suffix."
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "intent_id": {
+      "type": "string",
+      "pattern": "^int_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "read_back_id": {
+      "type": "string",
+      "pattern": "^rb_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "approval_id": {
+      "type": "string",
+      "pattern": "^apv_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "hold_id": {
+      "type": "string",
+      "pattern": "^hold_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "act_id": {
+      "type": "string",
+      "pattern": "^act_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "evidence_id": {
+      "type": "string",
+      "pattern": "^evd_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "account_id": {
+      "type": "string",
+      "pattern": "^acct_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "end_user_id": {
+      "type": "string",
+      "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "turn_id": {
+      "type": "string",
+      "pattern": "^trn_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{16,128}$"
+    },
+    "operation": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+(-draft\\.[0-9]+)?$"
+    },
+    "money": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount_minor",
+        "currency"
+      ],
+      "properties": {
+        "amount_minor": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "complete",
+        "answered",
+        "unavailable"
+      ],
+      "description": "Part 1 §5.1 R2. items:[] is a valid claim only when complete is true.",
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "answered": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unavailable": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "code"
+            ],
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "code": {
+                "enum": [
+                  "upstream_unreachable",
+                  "upstream_timeout",
+                  "upstream_rate_limited",
+                  "upstream_failed",
+                  "upstream_refused"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "substitution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "asked",
+        "used",
+        "reason"
+      ],
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "asked": {},
+        "used": {},
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "agent",
+        "ms"
+      ],
+      "properties": {
+        "operation": {
+          "$ref": "#/$defs/operation"
+        },
+        "agent": {
+          "enum": [
+            "magellan",
+            "sherlock",
+            "austen",
+            "pacioli"
+          ]
+        },
+        "ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cost_units": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "upstream": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "service",
+              "ms",
+              "ok"
+            ],
+            "properties": {
+              "service": {
+                "type": "string"
+              },
+              "ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "code": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

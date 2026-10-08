@@ -1,0 +1,92 @@
+{
+  "version": "1.0-draft.4",
+  "rule": "Part 2 §4: body_sha256 = sha256(canonical(evidence without body_sha256))",
+  "cases": [
+    {
+      "id": "EV-1",
+      "description": "a valid evidence object",
+      "evidence": {
+        "evidence_id": "evd_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+        "basis": "measured",
+        "states_no_conclusion": true,
+        "operation": "trip.complete",
+        "act_id": "act_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+        "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+        "input_digest": "sha256:596a8cd17d98389bd28a7cf34b77752e1e59ae2f49b3048c782024035f115c96",
+        "produced_at": "2026-10-08T14:05:03Z",
+        "outcome": {
+          "kind": "CONFIRMED",
+          "reference": "ABC123",
+          "target_words": {
+            "text": "Your booking ABC123 is confirmed.",
+            "source": "duffel",
+            "retrieved_at": "2026-10-08T14:05:02Z"
+          }
+        },
+        "approval": {
+          "approval_id": "apv_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+          "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+          "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+          "approved_at": "2026-10-08T14:02:00Z",
+          "method": "voice",
+          "said": "Yes, book it."
+        },
+        "sources": [
+          {
+            "service": "duffel",
+            "retrieved_at": "2026-10-08T14:05:02Z",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "body_sha256": "sha256:1db18aa377e56b0110cf3f5724cd6cedd752d4449c5122032424ed4fc82c0e5e"
+      },
+      "expect": {
+        "valid": true,
+        "recomputed_body_sha256": "sha256:1db18aa377e56b0110cf3f5724cd6cedd752d4449c5122032424ed4fc82c0e5e"
+      }
+    },
+    {
+      "id": "EV-2",
+      "description": "one character of the reference changed → invalid",
+      "evidence": {
+        "evidence_id": "evd_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+        "basis": "measured",
+        "states_no_conclusion": true,
+        "operation": "trip.complete",
+        "act_id": "act_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+        "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+        "input_digest": "sha256:596a8cd17d98389bd28a7cf34b77752e1e59ae2f49b3048c782024035f115c96",
+        "produced_at": "2026-10-08T14:05:03Z",
+        "outcome": {
+          "kind": "CONFIRMED",
+          "reference": "ABC124",
+          "target_words": {
+            "text": "Your booking ABC123 is confirmed.",
+            "source": "duffel",
+            "retrieved_at": "2026-10-08T14:05:02Z"
+          }
+        },
+        "approval": {
+          "approval_id": "apv_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+          "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+          "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+          "approved_at": "2026-10-08T14:02:00Z",
+          "method": "voice",
+          "said": "Yes, book it."
+        },
+        "sources": [
+          {
+            "service": "duffel",
+            "retrieved_at": "2026-10-08T14:05:02Z",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "body_sha256": "sha256:1db18aa377e56b0110cf3f5724cd6cedd752d4449c5122032424ed4fc82c0e5e"
+      },
+      "expect": {
+        "valid": false,
+        "recomputed_body_sha256": "sha256:aed142a548eb43c34475d28d151abff54881691e80f9f12859b34f3a98ee6042"
+      }
+    }
+  ]
+}

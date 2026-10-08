@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agapi.kanoe.dev/v1/schemas/request.schema.json",
+  "title": "AgAPI v1 request (transport-neutral)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agapi",
+    "operation",
+    "input"
+  ],
+  "properties": {
+    "agapi": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/version"
+    },
+    "operation": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/operation"
+    },
+    "request_id": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/request_id"
+    },
+    "idempotency_key": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/idempotency_key"
+    },
+    "approval_id": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/approval_id"
+    },
+    "input": {
+      "type": "object",
+      "description": "The operation's input schema (Part 2) applies; additionalProperties false there."
+    }
+  }
+}

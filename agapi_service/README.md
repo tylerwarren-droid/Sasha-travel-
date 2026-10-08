@@ -1,80 +1,50 @@
-# AgAPI sandbox service (CR 57)
+# AgAPI sandbox (CR 57 → CR 58: AgAPI v1)
 
-A private, **test-mode-only** AgAPI that a VC or a first partner can call:
+A private, **test-mode-only** implementation of **AgAPI v1** (EU 201 Parts 1–4, `1.0-draft.4`). The normative files are vendored in `spec/v1/`, copied from the AD repo's `docs/agapi/v1`, with checksums in `SHA256SUMS`. **The JSON wins over the prose.**
 
-**find → hold → request_approval → (the end user approves on their phone) → book → status → proof → cancel**
+It is a separate small service. It reuses Sasha's own search code (`backend/booking_signer`, plus `scripts/duffel_fake` and `places_fake` on recorded fixtures) but **not** the agent loop. It makes **0 live calls**: every outbound connection is refused except to a registered webhook endpoint.
 
-It is a separate small service. It reuses Sasha's engines from `backend/`:
-- Duffel search and order: `booking_signer.travel`;
-- venue and stay search: `booking_signer.venue_read`;
-- canonical JSON: `booking_signer.canonical`.
-
-It does **not** use the agent loop or any Sasha service.
-
-**What stays out of the real world:**
-- Searches answer from recorded fixtures: `backend/scripts/duffel_fake.py` (Duffel TEST, recorded 7 Oct 2026) and `places_fake.py` (fictional places).
-- Payments are simulated (Stripe test, shown as `mode: "simulated"`).
-- Venues are never contacted.
-- **Every outbound connection is refused** in-process (`providers.block_network`), so there are 0 live calls.
-
-## Run it locally
+## Run
 
 ```
-cd ~/Developer/Sasha-travel-cr52                     # the repo root (branch cr/agapi-api)
-bash agapi_service/walkthrough.sh                     # starts it, mints a key, runs the 10 calls, stops
-python -m unittest agapi_service.tests.test_sandbox   # 23 tests (+1 waiting for EU 201 Part 3)
+python -m unittest agapi_service.tests.test_vectors agapi_service.tests.test_service   # from the repo root
+bash agapi_service/walkthrough.sh                                                       # local end-to-end
+python -m agapi_service.admin key "Partner name"                                        # a key, printed ONCE
+python -m uvicorn agapi_service.app:app --port 8787
 ```
 
-To run it by hand:
-- `python -m agapi_service.keys "Partner name"` prints a key once; it is stored hashed.
-- `python -m uvicorn agapi_service.app:app --port 8787`
-- The docs are at `http://127.0.0.1:8787/docs`.
+The generated docs are served at `/docs`, `/openapi.json` (OpenAPI 3.1), `/mcp.json` (an MCP manifest) and `/collection.http`.
 
-## Endpoints (draft v1, tracking EU 201)
+## What's implemented
 
-| | |
-|---|---|
-| `POST /v1/find` | flights · venues · stays → offers; fetched text as `{untrusted, text, source}` |
-| `POST /v1/holds` | the read-back (lines + facts) and its `read_back_sha256`; nothing sent. Also `{cancel_booking_id}` |
-| `POST /v1/approvals` | request_approval → an Approval + `approve_url` (sandbox: a page, no SMS) |
-| `GET /v1/approvals/{id}` | pending · approved · declined · expired · void · consumed |
-| `POST /v1/bookings` | book `{hold_id, approval_id}` |
-| `POST /v1/bookings/{id}/cancel` | cancel `{hold_id, approval_id}` (the cancellation's own hold and approval) |
-| `GET /v1/bookings/{id}` | status (written only from proof) |
-| `GET /v1/bookings/{id}/proof` | the hash-chained events + `chain_valid` |
-| `GET /v1/usage` | today's calls and finds against the key's budget |
-| `POST /v1/sandbox/bookings/{id}/venue_reply` | simulate a venue's answer (untrusted data) |
+- **Envelope** (Part 1 §1). `POST /v1/{operation}`, body = the input. Headers: `AgAPI-Version`, `AgAPI-Request-Id`, `Idempotency-Key` and `AgAPI-Approval-Id`. Every response is `{agapi, request_id, ok, result|error, replayed?, evidence_id?, trace}`.
+- **Ids:** `<prefix>_<ULID>`.
+- **Errors:** the 32 registry codes, with HTTP status, retryable and store_for_replay taken from `error-codes.json`.
+- **All 14 operations** in `operations.json`. Inputs are validated against EU's JSON Schemas (`additionalProperties: false`).
+- **Canonical JSON and hashes** (§4), including the §4.1 refusals.
+- **ReadBack and Approval** with AP1–AP10, checked in the normative order (`rules.decide`). There is **no approve operation**. An Approval comes only from:
+  - the key-less approval link (`/a/{token}`): GET presents the read-back and never approves; POST "Yes, go ahead" approves, with the CSRF token from the GET; single use, 15 minutes;
+  - or, in test mode only, `sandbox.simulate_approval` (channel `sandbox_simulated`, in a separate turn).
+- **Expiry** (Tyler): a read-back is approvable for 30 minutes after it's presented (15 for irreversible acts, AP4), and an Approval is usable for 15 minutes.
+- **Idempotency** (§7): durable; claim → act → store; transient failures release the key and the Approval; `outcome_unknown` keeps the key in flight until `acts.status` resolves it; 24-hour retention.
+- **Outages are never "no results":** coverage on every find, and `upstream_*` errors. Magic refs: `off_test_sold_out`, `off_test_timeout_before`, `off_test_timeout_after`, `off_test_price_jump` and `src_test_down`.
+- **`untrusted_text`** on every fetched string: cleaned, capped, and flagged `instruction_like`, never removed.
+- **Evidence** with `body_sha256`, plus `evidence.verify`.
+- **Keys** `agp_test_` + 32 base62: shown once, stored as HMAC(pepper), the prefix displayed, scopes, at most 2 active.
+- **End users:** destinations verified by one-time code (`/v/{token}`); sandbox destinations only; every message captured (`sandbox.messages`).
+- **Webhooks:** ids and states only, `AgAPI-Signature`, at-least-once delivery with back-off for 24 hours.
+- **Metering:** `cost_units` per class, no charge for replays or outages; monthly budget (402) and per-minute rate limit (429); `RateLimit-*` and `AgAPI-Budget-Remaining` headers; `usage.get`.
+- **Payments:** `payment_link` is the only sandbox payment method (Stripe test, simulated, on `/pay/{token}`). **No real venue is ever contacted in test mode.**
 
-## The rules (enforced in code, tested)
+## Stricter than the spec (reported to EU)
 
-- **Keys:** `agk_test_<id>_<secret>`. Only an HMAC (with the server's pepper) is stored, and live keys are refused.
-- **The Approval**, the draft of EU 200 §2, replaced by EU 201 Part 1 when it lands. Booking and cancelling need an Approval that:
-  - was given **by the end user on their own device** (the approval page), never by an API key;
-  - came **after the read-back was shown** (`presented_at` ≤ `decided_at`);
-  - is for **exactly that read-back** (its sha256; a change voids it);
-  - is **unexpired** (15 min) and **unused** (one approval = one action, consumed atomically).
+- **The explicit yes:** a question word or a request for options vetoes it (`rules.QUESTION_VETO`). Under the v1 lists alone, "Yes — what are my cancellation terms?" is a yes. All 26 vectors pass with or without the veto.
 
-  A typed answer counts only if it is a plain yes. **A question is never a yes:** "Yes — what are my cancellation terms?" is refused (CR 56).
-- **Idempotency:** durable, per key. The same `Idempotency-Key` with the same body returns the first answer, even after a restart; a different body returns 409. An outage is never cached.
-- **Outages:** `503 {type: "unavailable", code: "duffel_unreachable" | "places_unreachable", retryable: true}`, never "no results".
-  - An outage while booking hands the approval back unused.
-  - Simulate one with `AgAPI-Sandbox-Simulate: duffel_down | places_down`.
-- **Metering:** per key, per UTC day (calls and finds). Over budget returns `429 daily_budget_reached`.
-- **Proof:** Pacioli is the only writer of a booking's status. Each event's sha256 covers the previous one.
+## Deploy (Railway service `agapi-sandbox`, Tyler's approval)
 
-## Deploying (only on Tyler's word, as a NEW Railway service; never Sasha's)
-
-- **Root:** the repo, so `backend/` is importable.
-- **Start:** `python -m uvicorn agapi_service.app:app --host 0.0.0.0 --port $PORT`.
-- **Requirements:** `backend/requirements.txt`; nothing else is needed.
-- **Environment:**
-  - `AGAPI_KEY_PEPPER` (required when deployed; the service refuses to start without it);
-  - `AGAPI_PUBLIC_URL` (for the approval links);
-  - `AGAPI_DB` (a path on a Railway volume; Postgres when it outgrows SQLite).
-- **No** Sasha secrets: no Duffel, Places, Stripe or Anthropic keys are needed or used.
-
-## Waiting on EU's spec (tab_messages "EU 201")
-
-- **Part 1, the Approval object:** replace the draft fields and states in `core.py` with EU's exactly.
-- **Part 2, the endpoints, the request and response schemas, and the error-code registry:** rename or reshape to match, and generate the docs from EU's schema.
-- **Part 3, the conformance vectors:** canonical JSON → sha256, and approval valid / void / expired / same-turn. They go into `tests/test_sandbox.py · ConformanceVectors`, which is skipped until they're posted.
+- Built from `agapi_service/Dockerfile` with the repo root as context. **The build runs the vectors and the tests.**
+- Variables:
+  - `AGAPI_KEY_PEPPER`, generated on Railway and never printed;
+  - `AGAPI_DB=/data/sandbox.db` (a Railway volume at `/data`);
+  - `AGAPI_PUBLIC_URL` (the service's domain).
+- **No Sasha keys.**

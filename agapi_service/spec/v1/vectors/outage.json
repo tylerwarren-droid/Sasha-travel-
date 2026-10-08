@@ -1,0 +1,175 @@
+{
+  "version": "1.0-draft.3",
+  "rule": "Part 1 §5.1",
+  "cases": [
+    {
+      "id": "O-1",
+      "description": "all answered, items",
+      "sources": [
+        {
+          "source": "duffel",
+          "ok": true,
+          "items": [
+            1,
+            2
+          ]
+        }
+      ],
+      "expect": {
+        "ok": true,
+        "coverage": {
+          "complete": true,
+          "answered": [
+            "duffel"
+          ],
+          "unavailable": []
+        },
+        "item_count": 2
+      }
+    },
+    {
+      "id": "O-2",
+      "description": "all answered, none found: a real 'no results'",
+      "sources": [
+        {
+          "source": "hotels_db",
+          "ok": true,
+          "items": []
+        },
+        {
+          "source": "google_places",
+          "ok": true,
+          "items": []
+        }
+      ],
+      "expect": {
+        "ok": true,
+        "coverage": {
+          "complete": true,
+          "answered": [
+            "hotels_db",
+            "google_places"
+          ],
+          "unavailable": []
+        },
+        "item_count": 0
+      }
+    },
+    {
+      "id": "O-3",
+      "description": "one of two unreachable: partial, never complete",
+      "sources": [
+        {
+          "source": "hotels_db",
+          "ok": true,
+          "items": [
+            1
+          ]
+        },
+        {
+          "source": "google_places",
+          "ok": false,
+          "code": "upstream_unreachable"
+        }
+      ],
+      "expect": {
+        "ok": true,
+        "coverage": {
+          "complete": false,
+          "answered": [
+            "hotels_db"
+          ],
+          "unavailable": [
+            {
+              "source": "google_places",
+              "code": "upstream_unreachable"
+            }
+          ]
+        },
+        "item_count": 1
+      }
+    },
+    {
+      "id": "O-4",
+      "description": "the only source unreachable: an ERROR, never 'no results'",
+      "sources": [
+        {
+          "source": "google_places",
+          "ok": false,
+          "code": "upstream_unreachable"
+        }
+      ],
+      "expect": {
+        "ok": false,
+        "code": "upstream_unreachable"
+      }
+    },
+    {
+      "id": "O-5",
+      "description": "all failed, mixed: the registry order (unreachable > timeout > rate_limited > failed)",
+      "sources": [
+        {
+          "source": "a",
+          "ok": false,
+          "code": "upstream_failed"
+        },
+        {
+          "source": "b",
+          "ok": false,
+          "code": "upstream_timeout"
+        }
+      ],
+      "expect": {
+        "ok": false,
+        "code": "upstream_timeout"
+      }
+    },
+    {
+      "id": "O-6",
+      "description": "all refused: upstream_refused",
+      "sources": [
+        {
+          "source": "duffel",
+          "ok": false,
+          "code": "upstream_refused"
+        }
+      ],
+      "expect": {
+        "ok": false,
+        "code": "upstream_refused"
+      }
+    },
+    {
+      "id": "O-7",
+      "description": "one answered empty, one failed: partial with 0 items (NOT 'no results')",
+      "sources": [
+        {
+          "source": "hotels_db",
+          "ok": true,
+          "items": []
+        },
+        {
+          "source": "google_places",
+          "ok": false,
+          "code": "upstream_timeout"
+        }
+      ],
+      "expect": {
+        "ok": true,
+        "coverage": {
+          "complete": false,
+          "answered": [
+            "hotels_db"
+          ],
+          "unavailable": [
+            {
+              "source": "google_places",
+              "code": "upstream_timeout"
+            }
+          ]
+        },
+        "item_count": 0
+      }
+    }
+  ]
+}

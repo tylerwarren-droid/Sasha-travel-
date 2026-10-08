@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agapi.kanoe.dev/v1/schemas/approval.schema.json",
+  "title": "AgAPI v1 Approval",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "approval_id",
+    "read_back_id",
+    "intent_id",
+    "account",
+    "read_back_sha256",
+    "payload_sha256",
+    "method",
+    "approved_by",
+    "approved_at",
+    "approved_turn_id",
+    "device",
+    "expires_at",
+    "irreversible",
+    "state"
+  ],
+  "properties": {
+    "approval_id": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/approval_id"
+    },
+    "read_back_id": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/read_back_id"
+    },
+    "intent_id": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/intent_id"
+    },
+    "account": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/account_id"
+    },
+    "read_back_sha256": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/sha256"
+    },
+    "payload_sha256": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/sha256"
+    },
+    "method": {
+      "enum": [
+        "tap",
+        "voice",
+        "signature"
+      ]
+    },
+    "said": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Voice (and typed chat, if Tyler allows): the person's own words, verbatim."
+    },
+    "approved_by": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/end_user_id"
+    },
+    "approved_at": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+    },
+    "approved_turn_id": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/turn_id"
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "channel"
+      ],
+      "properties": {
+        "channel": {
+          "enum": [
+            "link",
+            "sdk",
+            "sasha_voice",
+            "sasha_chat",
+            "sandbox_simulated"
+          ],
+          "description": "sandbox_simulated is valid ONLY in test mode (Part 4 §3); a live act refuses it with approval_untrusted_origin."
+        },
+        "attestation": {
+          "type": "string"
+        }
+      }
+    },
+    "expires_at": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+    },
+    "irreversible": {
+      "type": "boolean"
+    },
+    "state": {
+      "enum": [
+        "valid",
+        "consumed",
+        "expired",
+        "void"
+      ]
+    },
+    "consumed_by_request_id": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/request_id"
+        }
+      ]
+    },
+    "void_reason": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "enum": [
+            "payload_changed",
+            "read_back_changed",
+            "intent_changed",
+            "superseded",
+            "irreversible_batch"
+          ]
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "voice"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "said"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "device": {
+            "properties": {
+              "channel": {
+                "const": "sdk"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "device": {
+            "required": [
+              "channel",
+              "attestation"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

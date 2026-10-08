@@ -1,0 +1,40 @@
+{
+  "version": "1.0-draft.4",
+  "rule": "Part 4 §4",
+  "cases": [
+    {
+      "id": "W-1",
+      "secret": "whsec_test_vector_secret_not_a_real_key",
+      "t": 1791468300,
+      "raw_body": "{\"webhook_id\":\"whk_01J9Z3ZP0G6D8X2Q4R5S6T7V8W\",\"event\":\"act.confirmed\"}",
+      "expect": {
+        "header": "t=1791468300,v1=1fd28463a982b07f8cf7badb115fe386238d1ebca05b491c193bf27a6eef54e8",
+        "valid": true
+      }
+    },
+    {
+      "id": "W-2",
+      "description": "body changed by one byte → invalid",
+      "secret": "whsec_test_vector_secret_not_a_real_key",
+      "t": 1791468300,
+      "raw_body": "{\"webhook_id\":\"whk_01J9Z3ZP0G6D8X2Q4R5S6T7V8W\",\"event\":\"act.confirmeD\"}",
+      "header": "t=1791468300,v1=1fd28463a982b07f8cf7badb115fe386238d1ebca05b491c193bf27a6eef54e8",
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "W-3",
+      "description": "timestamp older than 5 minutes at receipt → reject even if the MAC matches",
+      "secret": "whsec_test_vector_secret_not_a_real_key",
+      "t": 1791468300,
+      "raw_body": "{\"webhook_id\":\"whk_01J9Z3ZP0G6D8X2Q4R5S6T7V8W\",\"event\":\"act.confirmed\"}",
+      "header": "t=1791468300,v1=1fd28463a982b07f8cf7badb115fe386238d1ebca05b491c193bf27a6eef54e8",
+      "received_at_unix": 1791468601,
+      "expect": {
+        "valid": false,
+        "reason": "stale"
+      }
+    }
+  ]
+}

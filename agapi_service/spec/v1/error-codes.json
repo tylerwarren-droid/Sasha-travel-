@@ -1,0 +1,462 @@
+{
+  "version": "1.0-draft.2",
+  "codes": [
+    {
+      "code": "invalid_request",
+      "http": 400,
+      "category": "request",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "The body or headers are not a valid AgAPI request.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "invalid_input",
+      "http": 422,
+      "category": "request",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The input fails the operation's schema (unknown field, wrong type, missing field).",
+      "details_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "code": "unknown_operation",
+      "http": 404,
+      "category": "request",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "No such operation in this version.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "version_unsupported",
+      "http": 400,
+      "category": "request",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "The requested AgAPI-Version is not served.",
+      "details_schema": {
+        "type": "object",
+        "properties": {
+          "supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "code": "not_found",
+      "http": 404,
+      "category": "request",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "The referenced object does not exist for this account.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "unauthenticated",
+      "http": 401,
+      "category": "auth",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "No valid credential.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "forbidden",
+      "http": 403,
+      "category": "auth",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "The credential may not perform this operation on this object.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "mode_not_available",
+      "http": 403,
+      "category": "auth",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "The key's mode (test/live) does not allow this operation.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "rate_limited",
+      "http": 429,
+      "category": "limits",
+      "retryable": true,
+      "store_for_replay": false,
+      "meaning": "Too many requests for this key; see retry_after_s.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "budget_exhausted",
+      "http": 402,
+      "category": "limits",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "The key's or account's budget for this period is spent.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "idempotency_key_required",
+      "http": 400,
+      "category": "idempotency",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "An Austen operation was called without an idempotency key.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "idempotency_in_flight",
+      "http": 409,
+      "category": "idempotency",
+      "retryable": true,
+      "store_for_replay": false,
+      "meaning": "The same key is still being processed (or its outcome is unknown); retry after retry_after_s.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "idempotency_conflict",
+      "http": 409,
+      "category": "idempotency",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "The same key was used with a different request.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "already_completed",
+      "http": 409,
+      "category": "idempotency",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "This intent's act is already CONFIRMED.",
+      "details_schema": {
+        "type": "object",
+        "required": [
+          "act_id"
+        ],
+        "properties": {
+          "act_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "code": "approval_required",
+      "http": 409,
+      "category": "approval",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "The act needs an Approval; details.read_back carries the lines to present.",
+      "details_schema": {
+        "type": "object",
+        "properties": {
+          "read_back_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "code": "approval_not_found",
+      "http": 404,
+      "category": "approval",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "No such Approval for this account.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "approval_same_turn",
+      "http": 409,
+      "category": "approval",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The yes was given in the same turn as the read-back (AP3).",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "approval_expired",
+      "http": 409,
+      "category": "approval",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The read-back or the Approval expired (AP4).",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "approval_void",
+      "http": 409,
+      "category": "approval",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "Something changed since the read-back; the Approval is void and is never corrected (AP1/AP2/AP8).",
+      "details_schema": {
+        "type": "object",
+        "required": [
+          "void_reason"
+        ],
+        "properties": {
+          "void_reason": {
+            "enum": [
+              "payload_changed",
+              "read_back_changed",
+              "intent_changed",
+              "superseded",
+              "irreversible_batch"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "code": "approval_consumed",
+      "http": 409,
+      "category": "approval",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The Approval already authorised an act (AP7).",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "approval_untrusted_origin",
+      "http": 403,
+      "category": "approval",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "The Approval did not come from the end user's own device or was not given by the presented end user (AP5/AP9).",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "no_explicit_yes",
+      "http": 422,
+      "category": "approval",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The words given are not an explicit yes under the registry rule (AP6).",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "upstream_unreachable",
+      "http": 503,
+      "category": "upstream",
+      "retryable": true,
+      "store_for_replay": false,
+      "meaning": "An outside service could not be reached. Never reported as 'no results'.",
+      "details_schema": {
+        "type": "object",
+        "required": [
+          "service"
+        ],
+        "properties": {
+          "service": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "code": "upstream_timeout",
+      "http": 504,
+      "category": "upstream",
+      "retryable": true,
+      "store_for_replay": false,
+      "meaning": "An outside service did not answer in time (before any act could have taken effect).",
+      "details_schema": {
+        "type": "object",
+        "required": [
+          "service"
+        ],
+        "properties": {
+          "service": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "code": "upstream_rate_limited",
+      "http": 503,
+      "category": "upstream",
+      "retryable": true,
+      "store_for_replay": false,
+      "meaning": "An outside service rate-limited us.",
+      "details_schema": {
+        "type": "object",
+        "required": [
+          "service"
+        ],
+        "properties": {
+          "service": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "code": "upstream_failed",
+      "http": 502,
+      "category": "upstream",
+      "retryable": true,
+      "store_for_replay": false,
+      "meaning": "An outside service answered with an error or an unreadable body.",
+      "details_schema": {
+        "type": "object",
+        "required": [
+          "service"
+        ],
+        "properties": {
+          "service": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "code": "upstream_refused",
+      "http": 422,
+      "category": "upstream",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The outside service answered and said no (sold out, offer expired, form rejected).",
+      "details_schema": {
+        "type": "object",
+        "required": [
+          "service"
+        ],
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "code": "outcome_unknown",
+      "http": 502,
+      "category": "outcome",
+      "retryable": false,
+      "store_for_replay": false,
+      "meaning": "The act may have taken effect but its answer was lost. Call status before retrying; the idempotency key stays in flight.",
+      "details_schema": {
+        "type": "object",
+        "required": [
+          "act_id"
+        ],
+        "properties": {
+          "act_id": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "code": "internal",
+      "http": 500,
+      "category": "internal",
+      "retryable": true,
+      "store_for_replay": false,
+      "meaning": "An AgAPI fault. Nothing was changed by this call (only used when that is true).",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "hold_expired",
+      "http": 409,
+      "category": "domain",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The hold's prices or inventory expired; hold again (a new read-back and Approval follow).",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "travellers_missing",
+      "http": 422,
+      "category": "domain",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The provider needs each traveller's full name, title and date of birth.",
+      "details_schema": {
+        "type": "object",
+        "properties": {
+          "have": {
+            "type": "integer"
+          },
+          "need": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    {
+      "code": "not_cancellable",
+      "http": 409,
+      "category": "domain",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The provider does not allow cancelling this act now.",
+      "details_schema": {
+        "type": "object"
+      }
+    }
+  ]
+}

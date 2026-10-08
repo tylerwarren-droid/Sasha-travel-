@@ -110,7 +110,17 @@ async def _total(ctx: Ctx, p: dict) -> dict:
         raise ToolError("not_priced", q["why"])
     rows = BK.to_book(await BK.items(ctx.account, p["trip_id"], ("suggested", "chosen")))
     return {"total_eur": q["eur"], "items": len(rows), "flights_chosen": sum(1 for r in rows if r["kind"] == "flight"),
-            "price_sources": sorted({r.get("price_source") or "unpriced" for r in rows})}
+            "price_sources": sorted({r.get("price_source") or "unpriced" for r in rows}), "breakdown": breakdown(rows, q["eur"])}
+
+
+def breakdown(rows: List[dict], total: float) -> dict:
+    """Sasha 212 · ONE TOTAL, its parts on the card only: the flights (quoted) and the stays (an estimate or a test rate) —
+    for the card, never for her to say as separate totals (the model never sees it)."""
+    fl = round(sum(float(r.get("price_amount") or 0) for r in rows if r["kind"] == "flight"), 2)
+    st = round(sum(float(r.get("price_amount") or 0) for r in rows if r["kind"] == "stay"), 2)
+    srcs = {r.get("price_source") for r in rows if r["kind"] == "stay"}
+    return {"total_eur": total, "flights_eur": fl, "flights_are": "quoted", "stays_eur": st,
+            "stays_are": "estimates" if "estimate" in srcs else "test rate" if "placeholder" in srcs else "quoted"}
 
 
 # Sasha 203 · where each place in a trip flies from: its airport (a plan can end in the Mekong Delta, which has none)
@@ -241,7 +251,20 @@ async def search_stays(ctx: Ctx, a: dict) -> dict:
             "note": "estimates from Sasha's hotel list; a booking is a TEST booking (no hotel contacted)"}
 
 
+_LAST_FIND: Dict[str, tuple] = {}   # account → (the search, when, its result): a place already on the cards is never searched again
+
+
 async def search_venues(ctx: Ctx, a: dict) -> dict:
+    key = ((a.get("what") or "").strip().lower(), (a.get("where") or "").strip().lower(), a.get("open_at"))
+    last = _LAST_FIND.get(ctx.account)
+    if last and last[0][:2] == key[:2] and time.time() - last[1] < 1200:   # Sasha 212 · the same search again: the cards stand
+        return {"venues": last[2]["venues"], "note": "these are already on their cards — pick from them; no new search"}
+    res = await _search_venues(ctx, a)
+    _LAST_FIND[ctx.account] = (key, time.time(), res)
+    return res
+
+
+async def _search_venues(ctx: Ctx, a: dict) -> dict:
     from booking_signer import venue_read as V, ladder_routes as LR
     try:
         r = await V.find_venues(LR.HTTP, what=a["what"], where=a["where"], country=a.get("country"), now=datetime.now(timezone.utc))
@@ -381,7 +404,8 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
         options[leg] = _options(cards, best)
     q = await BB.quote(ctx.account, origin)
     hotel = lambda d: (d.get("hotel") or {}).get("name") if isinstance(d.get("hotel"), dict) else d.get("hotel")
-    return {"trip_id": trip_id, "title": itin.get("title"),
+    rows_now = BK.to_book(await BK.items(ctx.account, trip_id, ("suggested", "chosen"))) if "eur" in q else []
+    return {**({"breakdown": breakdown(rows_now, q["eur"])} if "eur" in q else {}), "trip_id": trip_id, "title": itin.get("title"),
             "days": [{"day": d.get("day"), "city": d.get("city"), "stay": hotel(d), "title": d.get("title")} for d in days],
             "flight_out": flights.get("out"), "flight_back": flights.get("back"), **({"flight_note": "; ".join(why)} if why else {}),
             "flight_options": options, "party": party,
@@ -717,11 +741,12 @@ TOOLS: List[dict] = [
        ["no_explicit_yes", "no_read_back", "read_back_changed", "not_bookable"], austen=True),
     _t("hold_venue", "Austen", hold_venue, "Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own question "
        "first when it has one (status choose_route: ask it, then call again with the route they pick), else the read-back the "
-       "yes binds to (status awaiting_yes: say it in a line and ask them to go ahead). WhatsApp-only venues: the drafted "
-       "message. Nothing is sent.",
+       "yes binds to (status awaiting_yes: say it in a line and ask them to go ahead). A place that books only by a WhatsApp "
+       "or Instagram message (status draft_message): read the drafted message and offer to send it to their phone — they "
+       "send it; it is never booked until the place replies. Nothing is sent.",
        {**VENUE_PROPS, "what": {"type": "string", "description": "e.g. dinner, a table, a massage"}, "day": DATE,
         "time": {"type": "string", "description": "HH:MM, the venue's local time"}, "party": {"type": "integer", "minimum": 1, "maximum": 20},
-        "route": {"enum": ["form", "page", "email", "call", "whatsapp", "no"], "description": "the route they chose (from choose_route)"}},
+        "route": {"enum": ["form", "page", "email", "call", "whatsapp", "instagram", "no"], "description": "the route they chose (from choose_route)"}},
        ["name", "city", "day", "time", "party"], {"type": "object", "properties": {"status": {"type": "string"}, "read_back": {"type": "array"}}},
        ["read_failed", "when_invalid", "contact_missing", "no_route"], austen=True),
     _t("book_venue", "Austen", book_venue, "After the person's explicit yes in THIS turn, to what hold_venue read back in an earlier "

@@ -78,7 +78,8 @@ async def _read(ctx, a: dict) -> dict:
 
 def _routes_of(rd: dict) -> List[str]:
     r = rd.get("rungs") or {}
-    return [x for x, k in (("form", "form"), ("page", "link"), ("email", "email"), ("call", "phone"), ("whatsapp", "whatsapp")) if k in r]
+    return [x for x, k in (("form", "form"), ("page", "link"), ("email", "email"), ("call", "phone"), ("whatsapp", "whatsapp"),
+                           ("instagram", "instagram")) if k in r]
 
 
 async def read_booking_route(ctx, a: dict) -> dict:
@@ -118,14 +119,29 @@ async def hold_venue(ctx, a: dict) -> dict:
     at = res["when"]["at"]
     now = datetime.now(timezone.utc)
     route = a.get("route")
-    if route == "whatsapp" or (not route and _routes_of(rd) == ["whatsapp"]):
-        num = re.sub(r"\D", "", str((rd["rungs"].get("whatsapp") or {}).get("value") or ""))
-        msg = (f"Hola, quería reservar para {res['how_many']['count']} personas el {at[:10]} a las {at[11:16]}, a nombre de "
-               f"{res['who']['name']}. ¿Tienen sitio? Gracias." if rd.get("country") == "ES" else
-               f"Hello, I'd like to book for {res['how_many']['count']} on {at[:10]} at {at[11:16]}, under {res['who']['name']}. "
-               f"Do you have space? Thank you.")
-        return {"status": "draft_message", "venue": rd["venue"], "route": "whatsapp", "message": msg,
-                **({"open_in_whatsapp": f"https://wa.me/{num}?text={quote(msg)}"} if num else {})}
+    msg_routes = [x for x in _routes_of(rd) if x in ("whatsapp", "instagram")]
+    if route in ("whatsapp", "instagram") or (not route and msg_routes and set(_routes_of(rd)) <= {"whatsapp", "instagram"}):
+        # Sasha 212 · a place that books only by a message (a tattoo studio on Instagram, a bar on WhatsApp): Sasha DRAFTS it
+        # for their phone — they send it; nothing is booked until the place answers them
+        ch = route if route in ("whatsapp", "instagram") else msg_routes[0]
+        val = str((rd["rungs"].get(ch) or {}).get("value") or "")
+        n = res['how_many']['count']
+        when_words = f"{n} {'person' if n == 1 else 'people'}"
+        msg = (f"Hola, quería pedir cita para {n} {'persona' if n == 1 else 'personas'} el {at[:10]} a las {at[11:16]}, a nombre de {res['who']['name']}. "
+               f"¿Tienen disponibilidad? Gracias." if rd.get("country") == "ES" else
+               f"Hello, I'd like to book for {when_words} on {at[:10]} at {at[11:16]}, under {res['who']['name']}. "
+               f"Do you have availability? Thank you.")
+        link = (f"https://wa.me/{re.sub(r'[^0-9]', '', val)}?text={quote(msg)}" if ch == "whatsapp" and re.sub(r"\D", "", val)
+                else f"https://ig.me/m/{val}" if ch == "instagram" and val else None)
+        prev = _HELD.get(ctx.account)
+        sha = hashlib.sha256(f"draft|{ch}|{rd['venue']}|{msg}".encode()).hexdigest()
+        _HELD[ctx.account] = {"rung": "draft", "id": ch, "sha": sha, "at": prev["at"] if prev and prev.get("sha") == sha else now,
+                              "venue": rd["venue"], "summary": GW.summary(res), "when": at, "party": res["how_many"]["count"],
+                              "message": msg, "link": link, "channel": ch}
+        return {"status": "draft_message", "venue": GW.plain_venue(rd["venue"]), "route": ch, "message": msg,
+                **({"open_in_" + ch: link} if link else {}),
+                "what_happens": f"they book only by a {('WhatsApp' if ch == 'whatsapp' else 'Instagram')} message: on their yes, "
+                                "Sasha sends the drafted message to their phone and they send it; it is NOT booked until the place replies"}
     if not route:
         lad = GW.ladder_of(rd, res, now)
         if lad and lad.get("options"):
@@ -222,6 +238,19 @@ async def book_venue(ctx, a: dict) -> dict:
                 "venue": venue, "when": held["summary"], "itinerary": where, **({"reference": ref} if ref else {}),
                 "line": (f"✅ Booked: {venue}, {held['summary']}." + (f" Their reference: {ref}." if ref else "")) if result == "confirmed"
                 else "Sent — it's Requested until their confirmation comes back."}
+    if rung == "draft":   # Sasha 212 · the drafted message goes to THEIR phone; they send it — never "booked"
+        sent = False
+        try:
+            ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE else None
+            if ch:
+                where_ = "WhatsApp" if held["channel"] == "whatsapp" else "Instagram"
+                out = await GW._tell(ch, f"✍️ For {venue} — send this on {where_}{': ' + held['link'] if held.get('link') else ''}\n\n{held['message']}")
+                sent = "sent" in out and "not" not in out
+        except Exception as e:
+            log.warning("[venues] the draft was not sent to the phone: %s", type(e).__name__)
+        return {"status": "draft_on_phone" if sent else "draft_message", "venue": venue, "when": held["summary"], "booked": False,
+                "message": held["message"], **({"open": held["link"]} if held.get("link") and not sent else {}),
+                "line": "It's not booked until they reply to you."}
     if rung == "handover":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/forms/{held['id']}/handover", {}, timeout=120)
         if status != 200:

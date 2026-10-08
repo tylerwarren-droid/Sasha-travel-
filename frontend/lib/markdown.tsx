@@ -21,14 +21,17 @@ export function stripMarkdown(input: string): string {
 // raw HTML.
 function renderInline(text: string, keyBase: string): React.ReactNode[] {
   const out: React.ReactNode[] = []
-  const re = /(\*\*[^*]+\*\*|\*[^*\n]+\*|_[^_\n]+_|`[^`]+`)/g
+  const re = /(\[[^\]]+\]\(https:\/\/[^)\s]+\)|\*\*[^*]+\*\*|\*[^*\n]+\*|_[^_\n]+_|`[^`]+`)/g
   let last = 0
   let m: RegExpExecArray | null
   let n = 0
   while ((m = re.exec(text))) {
     if (m.index > last) out.push(text.slice(last, m.index))
     const t = m[0]
-    if (t.startsWith('**')) {
+    if (t.startsWith('[')) {   // Sasha 212 · an https link only (the itinerary card): a real <a>, never raw HTML
+      const lm = t.match(/^\[([^\]]+)\]\((https:\/\/[^)\s]+)\)$/)
+      out.push(lm ? <a key={`${keyBase}-${n}`} href={lm[2]} className="underline font-semibold text-white" rel="noopener noreferrer">{lm[1]}</a> : t)
+    } else if (t.startsWith('**')) {
       out.push(<strong key={`${keyBase}-${n}`} className="font-semibold text-white">{t.slice(2, -2)}</strong>)
     } else if (t.startsWith('`')) {
       out.push(<code key={`${keyBase}-${n}`} className="px-1 rounded bg-white/10 text-[0.85em]">{t.slice(1, -1)}</code>)

@@ -11,7 +11,8 @@ Checked in every conversation:
   · the payment link reaching the phone — one Stripe checkout link to the guest's number, only after their yes
   · and (what reading the first run's transcripts found): no sentence said twice in a turn, no list read out, and a tapped
     flight swapped straight in (choose_offer, no new search)
-The models are real (not deterministic): a conversation that fails is run ONCE more, and the log says so.
+The models are real (not deterministic). Sasha 212: each conversation runs ONCE — the conversation-7 "flake" was the
+database pooler running out of session slots (fixed in store.py), not chance; VOICE_LOOP_ATTEMPTS can allow more, off by default.
 """
 from __future__ import annotations
 
@@ -169,6 +170,21 @@ def judge(name: str, turns: list, ends_paid: bool) -> dict:
         if t["user"].startswith("the ") and " flight " in t["user"] and not (any(x.startswith("choose_offer") and "!" not in x for x in t["tools"])
                                                                           and not any(x.startswith("search_flights") for x in t["tools"])):
             fail.append(f"a tapped flight wasn't swapped straight in: {t['tools']}")
+    # Sasha 212 · C: what she SAYS has no raw figures (the chat keeps them); D: a proposal is offered, never "your trip" done;
+    # B: one total — a turn that states the total states ONE figure (never the flights and the hotels as separate totals)
+    said_digits = [u for t in turns for k, u in t["spoken"] if re.search(r"\d", u)]
+    if said_digits:
+        fail.append(f"figures spoken aloud: {said_digits[:1]}")
+    done_deal = [x for t in turns for x in [t["text"]] + [u for _, u in t["spoken"]]
+                 if re.search(r"(?i)I'?ve put together your|here'?s what I'?ve put together|I'?ve put your (?:\w+ )?trip together", x or "")]
+    if done_deal:
+        fail.append(f"a proposal said as done: {done_deal[0][:120]}")
+    for t in turns:
+        if any(x.split("!")[0] in ("propose_trip", "get_total", "hold_booking") and "!" not in x for x in t["tools"]):
+            amounts = {round(float(m.replace(",", ""))) for m in re.findall(r"€\s?(\d[\d,]*(?:\.\d+)?)", t["text"] or "")}
+            if len(amounts) > 1:
+                fail.append(f"more than one total in a turn: {sorted(amounts)} · {t['text'][:120]}")
+                break
     claims = [t["text"] for t in turns if AG._claims(t["text"] or "")]
     if claims:
         fail.append(f"claimed booked with nothing paid: {claims[:1]}")
@@ -246,17 +262,18 @@ async def main() -> int:
     async def run(i, s):
         async with sem:
             r = None
-            for attempt in (1, 2):
+            attempts = max(1, int(os.getenv("VOICE_LOOP_ATTEMPTS", "1")))   # Sasha 212 · ONE run: a flake is found, not retried
+            for attempt in range(1, attempts + 1):
                 try:
                     r = await one(*s, n=100 + i * 2 + attempt, captured=captured)
                 except Exception as e:
                     r = {"name": s[0], "fail": [f"the run failed: {type(e).__name__}: {e}"], "turns": []}
                 if not r["fail"]:
                     break
-                if attempt == 1:
+                if attempt < attempts:
                     first = r
                     print(f"   voice loop {s[0]}: failed once ({'; '.join(r['fail'])[:160]}) — running it again", flush=True)
-            r["retried"] = attempt == 2
+            r["retried"] = attempt > 1
             if r["retried"]:
                 r["first"] = first
             return r

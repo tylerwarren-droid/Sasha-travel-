@@ -83,7 +83,7 @@ class ReadRefused(Exception):
 
 @dataclass
 class Fact:
-    kind: str                  #: phone | email | whatsapp | booking_form | platform | address | website | hours
+    kind: str                  #: phone | email | whatsapp | instagram | booking_form | platform | address | website | hours
     value: str                 #: E.164 / address / wa.me digits / form action / platform name
     source_kind: str           #: site | places
     source_url: str
@@ -198,6 +198,25 @@ def _ld_values(node: Any, key: str) -> List[str]:
     return out
 
 
+_IG_NOT_HANDLES = {"p", "reel", "reels", "explore", "stories", "accounts", "tv", "about", "developer", "legal", "direct"}
+
+
+def instagram_of(url: str) -> Optional[str]:
+    """Sasha 212 · an Instagram profile link → its handle ("inkmadrid"); many studios book only by a DM there. Recorded,
+    never fetched (it's not their site, and Instagram is no booking platform)."""
+    try:
+        u = urlsplit(url or "")
+    except ValueError:
+        return None
+    if (u.hostname or "").lower() not in ("instagram.com", "www.instagram.com", "m.instagram.com", "instagr.am", "ig.me"):
+        return None
+    parts = [x for x in (u.path or "").split("/") if x]
+    if (u.hostname or "").lower() == "ig.me" and len(parts) >= 2 and parts[0] == "m":
+        parts = parts[1:]
+    h = parts[0] if parts else ""
+    return h if re.fullmatch(r"[A-Za-z0-9._]{1,30}", h) and h.lower() not in _IG_NOT_HANDLES else None
+
+
 def platform_of(url: str) -> Optional[str]:
     host = (urlsplit(url).hostname or "").lower()
     return next((name for k, name in PLATFORMS.items() if k in host), None)
@@ -249,6 +268,9 @@ def facts_from_html(html: str, url: str, country: Optional[str], fetched_at: str
                 d = re.sub(r"\D", "", parse_qs(u.query)["phone"][0])
                 if 8 <= len(d) <= 15:
                     add("whatsapp", "+" + d, f'<a href="{h}">{text}</a>')
+            ig = instagram_of(u.geturl()) if u.hostname else None
+            if ig:   # Sasha 212 · a studio's Instagram: a route by DM (drafted for them; never fetched)
+                add("instagram", ig, f'<a href="{h}">{text}</a>')
             plat = platform_of(u.geturl()) if u.hostname else None
             if plat:
                 add("platform", plat, f'<a href="{h}">{text}</a>', {"link": u.geturl()})
@@ -347,6 +369,8 @@ async def _get(http: Http, url: str, resolve: Resolve) -> Any:
         public_url(url, resolve)
         if platform_of(url):
             raise ReadRefused("platform_not_fetched", f"{url} is a booking platform; it is recorded, never fetched")
+        if instagram_of(url):
+            raise ReadRefused("instagram_not_fetched", f"{url} is their Instagram; it is recorded, never fetched")
         r = await http("GET", url, headers={"user-agent": USER_AGENT, "accept": "text/html"})
         if r.status_code in (301, 302, 303, 307, 308) and r.headers.get("location"):
             url = urljoin(url, r.headers["location"])
@@ -378,6 +402,10 @@ async def read_site(http: Http, url: str, country: Optional[str], now: datetime,
     if plat:
         sources.append({"url": url, "result": "not fetched — a booking platform"})
         return [Fact("platform", plat, "site", url, "the link given for them", url, now.isoformat(), "", {"link": url})], sources
+    ig = instagram_of(url)
+    if ig:   # Sasha 212 · their listing's "website" is their Instagram: recorded as the DM route, never fetched
+        sources.append({"url": url, "result": "not fetched — their Instagram"})
+        return [Fact("instagram", ig, "site", url, "their Instagram", url, now.isoformat(), "")], sources
     queue, done = [url], set()
     while queue and len(done) < 1 + MAX_EXTRA_PAGES:
         page = queue.pop(0)

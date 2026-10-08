@@ -877,7 +877,7 @@ After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exac
 
 ### `hold_venue`
 
-Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own question first when it has one (status choose_route: ask it, then call again with the route they pick), else the read-back the yes binds to (status awaiting_yes: say it in a line and ask them to go ahead). WhatsApp-only venues: the drafted message. Nothing is sent.
+Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own question first when it has one (status choose_route: ask it, then call again with the route they pick), else the read-back the yes binds to (status awaiting_yes: say it in a line and ask them to go ahead). A place that books only by a WhatsApp or Instagram message (status draft_message): read the drafted message and offer to send it to their phone — they send it; it is never booked until the place replies. Nothing is sent.
 
 **Errors:** `read_failed`, `when_invalid`, `contact_missing`, `no_route`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 
@@ -930,6 +930,7 @@ Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own 
     "email",
     "call",
     "whatsapp",
+    "instagram",
     "no"
    ],
    "description": "the route they chose (from choose_route)"

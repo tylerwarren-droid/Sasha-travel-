@@ -90,6 +90,45 @@ async def cases(a: str) -> None:
     st = await API.call(ctx, "get_status", {})
     ok("AGENT 7 (Pacioli): before payment nothing is booked — and the reply guard catches “it's all booked”",
        st.get("ok") and not st["result"]["anything_booked"] and AG.guard_check("Great — it's all booked!", set(), st["result"]["anything_booked"]))
+    await paid_cases(a, yes)
+
+
+async def paid_cases(a: str, yes: dict) -> None:
+    """Sasha 212 · PAY → EVENT → UTTERANCE → EMAIL: the payment is simulated (Stripe says paid); everything after it is real —
+    paid_watch.settle books it (Duffel replayed), Pacioli records it, the open page hears ONE event with what she says (no
+    figures in the spoken words) and the itinerary card, and the confirmation email is queued (captured, not sent)."""
+    import re as _re
+    from booking_signer import guest_receipt as GR, live_events as LE, paid_watch as PW, test_deposit as TD
+    sid = ((yes or {}).get("result") or {}).get("session_id")
+    real = (TD.session_paid, LE.SEND, GR.address_of)
+    mails = []
+
+    async def paid(_sid):
+        return True
+
+    async def capture(msg):
+        mails.append(msg)
+        return {"sent": True}
+
+    async def addr(_acct):
+        return "gate@example.com"
+    q = LE.subscribe(a)
+    TD.session_paid, LE.SEND, GR.address_of = paid, capture, addr
+    try:
+        r = await PW.settle(sid) if sid else None
+    finally:
+        TD.session_paid, LE.SEND, GR.address_of = real
+        LE.unsubscribe(a, q)
+    evs = []
+    while not q.empty():
+        evs.append(q.get_nowait())
+    ev = evs[0] if evs else {}
+    ok("AGENT 8 (Sasha 212): paid → booked by Pacioli → ONE event to the open page → she says it (no figures spoken) → the email queued",
+       (r or {}).get("status") == "booked" and len(evs) == 1 and ev.get("type") == "booked" and "you're booked" in ev.get("text", "")
+       and "gate@example.com" in ev.get("text", "") and not _re.search(r"\d", ev.get("spoken", "").replace("gate at example dot com", ""))
+       and (ev.get("card") or {}).get("url", "").endswith("/next?tab=trip") and len(mails) == 1 and mails[0]["to"] == "gate@example.com"
+       and "TEST" in mails[0]["subject"] and ev["card"]["url"] in mails[0]["text"],
+       f"settle {(r or {}).get('status')} · events {[e.get('type') for e in evs]} · mails {len(mails)} · {ev.get('text', '')[:120]}")
 
 
 async def render_cases() -> None:

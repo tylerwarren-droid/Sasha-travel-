@@ -29,6 +29,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from agapi import v0 as API
+from app.agent import spoken as SP
 from app.services import persona as P
 
 log = logging.getLogger("agent.sasha")
@@ -95,8 +96,8 @@ def guard_check(text: str, allowed: set, anything_booked: bool) -> List[str]:
 RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues": "venues", "read_booking_route": "venue_route",
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
           "save_travellers": "inline", "hold_booking": "read_back", "book": "trip", "get_status": "trip", "get_trip": "trip",
-          "get_total": "inline", "hold_venue": "inline", "book_venue": "trip", "cancel_venue": "trip"}
-KINDS = {"flights", "flight_chosen", "stays", "venues", "venue_route", "read_back", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
+          "get_total": "total", "hold_venue": "inline", "book_venue": "trip", "cancel_venue": "trip"}
+KINDS = {"flights", "flight_chosen", "total", "stays", "venues", "venue_route", "read_back", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 
 
 def render(tool: str, res: dict, args: dict) -> Optional[dict]:
@@ -108,10 +109,13 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         cards = [flight_card({"flights": opts[leg], "leg": leg}, {"origin": (opts[leg][0] or {}).get("from"),
                                                                   "destination": (opts[leg][0] or {}).get("to"), "passengers": res.get("party")})
                  for leg in ("out", "back") if opts.get(leg)]
-        return {"type": "render", "kind": kind, "cards": cards} if cards else None
+        return {"type": "render", "kind": kind, "cards": cards, **({"total": res["breakdown"]} if res.get("breakdown") else {})} if cards else None
+    if kind == "total":   # Sasha 212 · one figure, its parts marked quoted / estimated — on the card
+        return {"type": "render", "kind": kind, "total": res["breakdown"]} if res.get("breakdown") else None
     if kind == "flight_chosen":
         ch = res.get("chosen") or {}
-        return {"type": "render", "kind": kind, "offer_id": ch.get("offer_id")} if ch.get("offer_id") else None
+        return {"type": "render", "kind": kind, "offer_id": ch.get("offer_id"),
+                **({"total": res["breakdown"]} if res.get("breakdown") else {})} if ch.get("offer_id") else None
     if kind == "flights":
         return {"type": "render", "kind": kind, "card": flight_card(res, args)}
     if kind == "stays":
@@ -208,6 +212,8 @@ _INTERNAL = re.compile(
     r"\bexpired\b|\boffer id\b|\bre-?quot|\btimed? out\b|\bread-?back\b|"
     r"\bcorrection\b|\bi (?:said|told you|mentioned) (?:before|earlier)|\bi misspoke\b|\bi was wrong\b|\bscratch that\b|"
     r"\bshould have (?:said|mentioned|told you)|\bforgot to (?:say|mention|tell)|"
+    # Sasha 212 · her notes to herself between tools ("Retrying with preparation first.", "Trip exists now; retry the hold.")
+    r"\bretr(?:y|ies|ying|ied)\b|\b[a-z]+_[a-z]+(?:_[a-z]+)*\b|\btrip exists\b|\btake back\b|\bcorrect what i said\b|"
     r"(?:\bnot|n['’]t)\s+(?:actually\s+|really\s+)?(?:a\s+)?real\b|\btests?\b|\bdemo\b|\bsandbox\b|\bplaceholder\b|\bpretend\b|\bno real\b|"
     r"\bnothing (?:is|will be|gets|'s|has been) (?:actually |really )?(?:charged|taken|paid|reserved)\b|\bwon'?t (?:actually |really )?be charged\b")
 
@@ -237,6 +243,25 @@ def internal_sentences(text: str) -> List[str]:
     return [x for x in re.split(r"(?<=[.!?])\s+", text or "") if x.strip() and _INTERNAL.search(x)]
 
 
+# Sasha 212 · a proposal is OFFERED, never presented as done: "I've put together your Ecuador trip" → "I've put a trip
+# together for your consideration"
+_DONE_DEAL = [
+    (re.compile(r"(?i)\b(?:here'?s|here is) what I'?ve put together(?: for you(?: two| both)?)?"), "Here's a trip I've put together for your consideration"),
+    (re.compile(r"(?i)\bI'?ve put (?:together )?(?:your|the) (?:[\w'’-]+ ){0,4}?(?:trip|itinerary|holiday)(?: together)?(?: for you(?: two| both)?)?"),
+     "I've put a trip together for your consideration"),
+    (re.compile(r"(?i)\bI'?ve (?:planned|built|created|sorted|arranged) (?:your|the) (?:[\w'’-]+ ){0,4}?(?:trip|itinerary|holiday)(?: for you(?: two| both)?)?"),
+     "I've put a trip together for your consideration"),
+    (re.compile(r"(?i)\bI'?ve put together (\d+|[a-z]+(?:-[a-z]+)?) days\b"), r"I've put \1 days together for your consideration"),
+    (re.compile(r"(?i)\bI'?ve put (?:your )?trip together\b"), "I've put a trip together for your consideration"),
+]
+
+
+def as_offer(text: str) -> str:
+    for rx, to in _DONE_DEAL:
+        text = rx.sub(to, text, count=1)
+    return text
+
+
 def spoken_prose(text: str) -> str:
     """Sasha 210 · she's speaking: no markdown, and a list becomes plain sentences (never "dash, bold, Hotels")."""
     out = []
@@ -255,7 +280,7 @@ def drop_internal(text: str) -> str:
 
 _TEST_TAG = [(re.compile(r"\s*\((?:Duffel )?TEST[^)]*\)"), ""), (re.compile(r",?\s*marked TEST,?"), ","), (re.compile(r"\bDuffel TEST\b"), "Duffel"),
              (re.compile(r"\bTEST\s+"), ""), (re.compile(r"\s*\bTEST\b"), "")]
-_MODEL_DROP_KEYS = {"note", "notes", "prices", "test", "prefetched", "flight_note", "total_note"}
+_MODEL_DROP_KEYS = {"note", "notes", "prices", "test", "prefetched", "flight_note", "total_note", "breakdown"}   # Sasha 212 · one total
 
 
 def clean_for_model(obj: Any) -> Any:
@@ -342,7 +367,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 held = True
                 break
             out.append(x)
-        text = " ".join(out)
+        text = as_offer(" ".join(out))
         if not text:
             return ""
         first_of_turn = not said
@@ -370,7 +395,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             return []
         spoken_any = True
         said.append(text)
-        return [{"type": "text", "delta": text + " "}, {"type": "say", "text": text}]
+        # Sasha 212 · the chat shows the digits; the avatar says them as a person would (no raw figures)
+        return [{"type": "text", "delta": text + " "}, {"type": "say", "text": SP.speakable(text)}]
 
     last_tools: set = set()
     for step in range(MAX_STEPS):
@@ -449,7 +475,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         rest = " ".join(x for x in re.split(r"(?<=[.!?])\s+", new) if x.strip() and _norm(x) not in already) if spoken else new
         text = f"{spoken} {rest}".strip() if spoken else new
         guard_log += [f"rewritten{' then stripped: ' + '; '.join(bad2) if bad2 else ''}"]
-        yield {"type": "replace", "text": text, "speak": bool(held and rest), "say": rest}
+        yield {"type": "replace", "text": text, "speak": bool(held and rest), "say": SP.speakable(rest)}
     if len(text) > TRIM_CHARS:   # Sasha 205 · the safety trim: a very long reply ends at a sentence
         cut = text[:TRIM_CHARS]
         text = cut[: max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! ")) + 1] or cut
@@ -603,6 +629,41 @@ async def _start_warm() -> None:
     import asyncio
     if os.getenv("DATABASE_URL", "").strip() and os.getenv("SASHA_AGENT_WARM", "1") == "1":
         asyncio.create_task(_keep_warm())
+
+
+@router.get("/events")
+async def agent_events(request: Request):
+    """Sasha 212 · the open /next page's live channel (server-sent events): a settled payment ("booked" / "booking_failed")
+    reaches it the moment Pacioli records it. `since` = the last event id the page heard (a reconnect hears nothing twice)."""
+    import asyncio
+    from app.services.chat_account import chat_account, signed_in
+    from booking_signer import live_events as LE
+    account = await chat_account(request)
+    if not signed_in(account):
+        return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
+    try:
+        since = int(request.query_params.get("since") or 0)
+    except ValueError:
+        since = 0
+
+    def frame(ev: dict) -> str:
+        return f"id: {ev['id']}\ndata: {json.dumps({k: v for k, v in ev.items() if k != '_at'}, default=str)}\n\n"
+
+    async def stream():
+        q = LE.subscribe(account)
+        try:
+            for ev in LE.recent(account, since):
+                yield frame(ev)
+            while True:
+                try:
+                    yield frame(await asyncio.wait_for(q.get(), timeout=20))
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+                if await request.is_disconnected():
+                    break
+        finally:
+            LE.unsubscribe(account, q)
+    return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.post("/timing")

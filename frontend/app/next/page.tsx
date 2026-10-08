@@ -205,6 +205,10 @@ export default function NextPage() {
     if (tab !== 'chat') setTextOnly(true)
     setUnseenTabs(u => u.filter(t => t !== tab))
   }, [])
+  // Sasha 212 · ?tab=trip (the confirmation email's and the "booked" card's itinerary link) opens the Trip view
+  useEffect(() => {
+    try { if (new URLSearchParams(window.location.search).get('tab') === 'trip') handleTabChange('trip') } catch { /* no URL: nothing */ }
+  }, [handleTabChange])
   const [started, setStarted] = useState(false)
   // Sasha 156 · a plain TEXT chat that needs no call: typing opens the conversation without the avatar, the mic or the
   // camera (the call stays one tap away, as before)

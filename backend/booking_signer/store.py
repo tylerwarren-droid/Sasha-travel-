@@ -18,11 +18,14 @@ not survive a redeploy without a volume) and inside backend/app/, which every CT
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from typing import Any, Dict, List, Optional
 
 from .verify import PairedDevice
+
+log = logging.getLogger("booking_signer.store")
 
 #: The booking signer's own tables, and the model-A tables it writes. `status()` reports any that are missing.
 TABLES = ("booking_pairing_challenges", "booking_devices", "booking_intents", "booking_tasks", "booking_reports",
@@ -207,6 +210,21 @@ def _pooler_connection_class():
     return _PoolerConnection
 
 
+async def _acquire(pool):
+    """Sasha 212 · a connection, waiting briefly when the pooler is FULL (EMAXCONNSESSION: all of its 15 session slots taken by
+    other processes) — the connection is not yet made, so nothing has run: waiting is safe. Never retries a query."""
+    import asyncio
+    import asyncpg
+    for attempt in range(6):
+        try:
+            return await pool.acquire()
+        except asyncpg.exceptions.InternalServerError as e:
+            if "EMAXCONN" not in str(e) or attempt == 5:
+                raise
+            log.warning("[store] the database pooler is full — waiting (%d)", attempt + 1)
+            await asyncio.sleep(0.25 * (2 ** attempt))   # 0.25 … 4 s, ~7.75 s in all
+
+
 class PostgresStore:
     """asyncpg against DATABASE_URL. The pool is created on first use, never at import, so a missing or wrong
     DATABASE_URL cannot stop Sasha's backend from starting — it makes the booking routes answer 503."""
@@ -230,8 +248,11 @@ class PostgresStore:
             # ⚠ the TRANSACTION pooler (6543) cannot hold prepared statements; this deployment's 5432 is the SESSION pooler (statement_cache)
             # Sasha 149 · min_size=1: one connection always open (a new one is ~5 round trips to eu-west-1); and
             # _PoolerConnection: no session reset on release — one round trip fewer on EVERY query (444 → ~300 ms from sfo)
+            # Sasha 212 · the SESSION pooler pins one of its 15 server connections per open client connection, shared by every
+            # process (the live server, the deploy gate, scripts): an idle connection is given back after 30 s, never held
             self._pool = await asyncpg.create_pool(self._url(), min_size=1, max_size=4, statement_cache_size=statement_cache(self._url()),
-                                                   init=_init, connection_class=_pooler_connection_class())
+                                                   init=_init, connection_class=_pooler_connection_class(),
+                                                   max_inactive_connection_lifetime=float(os.getenv("SASHA_DB_IDLE_S", "30")))
         return self._pool
 
     async def close(self) -> None:
@@ -243,8 +264,11 @@ class PostgresStore:
         import asyncpg
         try:
             pool = await self._p()
-            async with pool.acquire() as conn:
+            conn = await _acquire(pool)
+            try:
                 return await fn(conn)
+            finally:
+                await pool.release(conn)
         except (asyncpg.exceptions.UndefinedTableError, asyncpg.exceptions.UndefinedColumnError) as e:
             raise StorageUnavailable("storage_not_provisioned", f"{e} — run backend/booking_signer/sql/001_booking_storage.sql") from None
         except asyncpg.exceptions.UniqueViolationError as e:

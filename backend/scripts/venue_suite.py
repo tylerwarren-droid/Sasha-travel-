@@ -99,7 +99,7 @@ class FakeApi:
 async def routes_offline(a: str) -> None:
     from agapi import v0 as API, venues as VN
     from booking_signer import guest_accounts as GA, guest_whatsapp as GW, wa_brain as WB
-    real = (GW.api, GW.tap_platform, VN._read, GA.founder, WB.trip_day_words)
+    real = (GW.api, GW.tap_platform, VN._read, GA.founder, WB.trip_day_words, GW._tell, GW.STORE)
     taps = []
     fake = FakeApi()
 
@@ -115,7 +115,17 @@ async def routes_offline(a: str) -> None:
 
     async def where(account, day, venue):
         return "It's in your bookings"
+    told = []
+
+    async def tell(ch, text, template=None):
+        told.append(text)
+        return "sent (captured)"
+
+    class _Store:
+        async def channel_of_account(self, acct):
+            return {"wa_id_sha256": "x" * 64}
     GW.api, GW.tap_platform, WB.trip_day_words = fake, tap, where
+    GW._tell, GW.STORE = tell, _Store()
     GA.founder = lambda acct: True
     soon = (datetime.now() + timedelta(hours=20)).strftime("%Y-%m-%d %H:%M").split()
     later = (date.today() + timedelta(days=6)).isoformat()
@@ -162,6 +172,27 @@ async def routes_offline(a: str) -> None:
         ok("VENUE ROUTE · WhatsApp-only: the drafted message (they send it), nothing sent by Sasha",
            w.get("ok") and w["result"]["status"] == "draft_message" and "wa.me/34600000211" in w["result"].get("open_in_whatsapp", ""),
            str(w.get("error") or w.get("result"))[:200])
+        # Sasha 212 · a SPA on a platform (Fresha): its page to the phone; a spa with its own form behind a CAPTCHA: Tap to finish
+        VN._read = read_with({"link": {"value": "Fresha"}})
+        nt = len(taps)
+        h, b = await two_turns({"day": later, "time": "11:00", "route": "page", "what": "a massage", "name": "Spa Gate"}, "vo-spa1")
+        ok("VENUE ROUTE · a spa on Fresha: its page to the phone on the yes (she never books on a platform)",
+           b.get("ok") and b["result"]["status"] == "page_on_phone" and len(taps) == nt + 1, str(b.get("error") or b.get("result"))[:160])
+        VN._read = read_with({"form": {}}, facts=[{"kind": "challenge", "value": "captcha"}])
+        h, b = await two_turns({"day": later, "time": "11:00", "route": "form", "what": "a massage", "name": "Spa Gate"}, "vo-spa2")
+        ok("VENUE ROUTE · a spa's own form behind a CAPTCHA: Sasha fills it, the CAPTCHA → Tap to finish on the phone",
+           b.get("ok") and b["result"]["status"] == "tap_to_finish", str(b.get("error") or b.get("result"))[:160])
+        # Sasha 212 · a TATTOO studio that books only on Instagram: the message drafted for the phone, never "booked"
+        VN._read = read_with({"instagram": {"value": "inkgate.madrid"}})
+        sent0 = list(told)
+        h = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "17:00", "what": "a tattoo consultation",
+                                                              "name": "Ink Gate", "idempotency_key": "vo-tat-h"})
+        b = await API.call(_ctx(a, "Yes, send it"), "book_venue", {"approval": {"said": "Yes, send it"}, "idempotency_key": "vo-tat-b"})
+        res = b.get("result") or {}
+        ok("VENUE ROUTE · a tattoo studio on Instagram only: the message drafted, sent to THEIR phone on the yes — never booked",
+           h.get("ok") and h["result"]["status"] == "draft_message" and h["result"].get("open_in_instagram") == "https://ig.me/m/inkgate.madrid"
+           and b.get("ok") and res.get("status") == "draft_on_phone" and res.get("booked") is False and "confirmed" not in str(res)
+           and len(told) == len(sent0) + 1 and "Instagram" in told[-1], f"{h.get('result') or h.get('error')} · {res or b.get('error')}")
         n0 = len(fake.calls)
         VN._read = read_with({"email": {}})
         await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "route": "email", "idempotency_key": "vo-n"})
@@ -169,7 +200,7 @@ async def routes_offline(a: str) -> None:
         ok("VENUE ROUTE · “no, wait” never sends", (nb.get("error") or {}).get("code") == "no_explicit_yes"
            and not any(p.endswith("/send") for _, p, _ in fake.calls[n0:]), str(nb.get("error")))
     finally:
-        GW.api, GW.tap_platform, VN._read, GA.founder, WB.trip_day_words = real
+        GW.api, GW.tap_platform, VN._read, GA.founder, WB.trip_day_words, GW._tell, GW.STORE = real
         VN._HELD.pop(a, None)
 
 

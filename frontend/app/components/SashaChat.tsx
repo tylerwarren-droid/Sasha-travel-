@@ -9,6 +9,7 @@ import { Loader2 } from 'lucide-react'
 import { User, Itinerary } from '@/types'
 import VoiceButton, { MicDevicesInfo } from './VoiceButton'
 import { renderMarkdown } from '@/lib/markdown'
+import { placeReply, visible } from '@/lib/agent-bubble.mjs'   // Sasha 212 · never an empty bubble
 import { apiUrl, apiHeaders } from '@/lib/api'
 import { MAX_PHOTOS, imagesOf, toJpeg, type Attachment } from '@/lib/photo-attach'
 import type { RichItinerary } from './ItineraryDays'
@@ -203,6 +204,8 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
   // turn — real options from live web search. Hotel/flight/cab options carry a server-priced
   // `offer_id` (+ amount_usd) so they can be booked & paid through Stripe like the whole trip;
   // options without one (activities, restaurants, fallbacks) keep the external deep-link.
+  // Sasha 212 · ONE TOTAL: the all-in figure, its parts marked quoted / estimated (on the card only — she says one figure)
+  const [tripTotal, setTripTotal] = useState<{ total_eur: number; flights_eur: number; flights_are: string; stays_eur: number; stays_are: string } | null>(null)
   const [bookingFind, setBookingFind] = useState<{ what: string; where: string; country?: string; draft?: unknown } | null>(null)  // S-66 chat booking
   const [bookingCancel, setBookingCancel] = useState<{ venue: string; n: number } | null>(null)  // Sasha 96 chat cancel (Stage B)
   // CR 16 · a product's buttons and pictures for the current turn
@@ -529,6 +532,28 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
     }
   }
 
+  // Sasha 212 · PAYMENT → SASHA KNOWS: the live channel. A payment completed on the phone is booked by the server; the
+  // moment Pacioli records it, this page hears it (the person does nothing) and she says it once, with the itinerary link.
+  useEffect(() => {
+    if (!agent || typeof window === 'undefined' || typeof EventSource === 'undefined') return
+    const seenKey = 'sasha.next.events.last'
+    let last = 0
+    try { last = Number(sessionStorage.getItem(seenKey) || 0) } catch { /* private window: start from now */ }
+    const es = new EventSource(`/api/sasha-agent/events?since=${last}`)
+    es.onmessage = (m) => {
+      let ev: any
+      try { ev = JSON.parse(m.data) } catch { return }
+      if (!ev || !ev.id || ev.id <= last || (ev.type !== 'booked' && ev.type !== 'booking_failed')) return
+      last = ev.id
+      try { sessionStorage.setItem(seenKey, String(ev.id)) } catch { /* fine */ }
+      const link = ev.card?.url ? `\n\n[Open your full itinerary →](${ev.card.url})` : ''
+      setMessages(prev => [...prev, { role: 'assistant', content: `${ev.text}${link}` }])
+      onSashaResponse?.(ev.spoken || ev.text)
+      window.dispatchEvent(new Event('sasha-plan-refresh'))
+    }
+    return () => es.close()
+  }, [agent])
+
   // Sasha 205 · ONE TURN WITH SASHA'S AGENT (/api/sasha-agent → backend /api/agent/turn, server-sent events). The reply is
   // shown as it streams; phrases go to the avatar through onSashaResponse (the page queues them behind what she's saying);
   // a short acknowledgement goes through onThinking (spoken only when she's quiet); flight searches arrive as the same
@@ -536,9 +561,17 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
   const agentTurn = async (content: string, history: any[], turnId: number) => {
     const plain = (history || []).filter((m: any) => (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim())
       .map((m: any) => ({ role: m.role, content: String(m.content) }))
-    setMessages(prev => [...prev, { role: 'assistant', content: '' }])
+    // Sasha 212 · NEVER AN EMPTY BUBBLE: her text now arrives with her voice (one utterance per step), so a turn that starts
+    // with a tool (propose_trip after "Flying from London.") left this placeholder empty for the whole tool run — rendered
+    // before the spinner. The reply's bubble is added with its first words, not before.
     let reply = ''
-    const show = (t: string) => setMessages(prev => [...prev.slice(0, -1), { role: 'assistant', content: t }])
+    let placed = false
+    const show = (t: string) => {
+      if (!(t || '').trim()) return
+      const first = !placed
+      placed = true
+      setMessages(prev => placeReply(prev, t, first) as typeof prev)
+    }
     const live = () => turnSeqRef.current === turnId
     const t0 = performance.now(); let firstSound: number | null = null; let firstKind = ''; const tools: string[] = []
     const heard = (kind: string) => { if (firstSound === null) { firstSound = performance.now() - t0; firstKind = kind } }
@@ -568,6 +601,8 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
           else if (ev.type === 'tool') { tools.push(ev.name); if (ev.name === 'propose_trip') setBuilding(false) }
           else if (ev.type === 'trip_changed') window.dispatchEvent(new Event('sasha-plan-refresh'))
           else if (ev.type === 'render') {   // Sasha 205 · every tool result has its renderer, by kind (agent/sasha.py RENDER)
+            if (ev.total) setTripTotal(ev.total)   // the proposal, a swapped flight, or get_total
+            if (ev.kind === 'total') { /* the total card above is the whole renderer */ }
             if (ev.kind === 'flights' && Array.isArray(ev.cards) && ev.cards.length) { setBookings(ev.cards); if (tab !== 'chat') onMarkUnseen?.('chat') }   // Sasha 210 · the proposal's flights, a card per leg
             else if ((ev.kind === 'flights' || ev.kind === 'stays') && ev.card) { setBookings([ev.card]); if (tab !== 'chat') onMarkUnseen?.('chat') }
             else if (ev.kind === 'flight_chosen' && ev.offer_id) {   // Sasha 210 · another flight picked (tap or voice): the card says which is in the trip
@@ -824,7 +859,7 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
           ) : null
         ))}
         {/* Sasha 143 · a product tab's opening turn is an empty user line in the server's history: never a bubble (the index is kept for the photos) */}
-        {messages.map((msg, i) => msg.role === 'user' && !String(msg.content ?? '').trim() ? null : (
+        {messages.map((msg, i) => !visible(msg) ? null : (   /* Sasha 212 · never an empty bubble, hers or theirs */
           <div key={i} ref={i === messages.length - 1 ? lastMsgRef : undefined} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`} style={{ flex: '0 0 auto' }}>
             {/* Compact transcript (client feedback 2026-08-11): the conversation stays
                 readable but cedes space to the photos/cards below each message. */}
@@ -900,6 +935,17 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
             {quickReplies.map((q, i) => (
               <button key={i} className="lw-chip" onClick={() => { sendMessage(q.title, { payload: q.payload, force: true }) }}>{q.title}</button>
             ))}
+          </div>
+        )}
+        {tripTotal && (
+          <div className="lw-card">{/* Sasha 212 · one total, its parts marked */}
+            <div className="lw-cardHd"><span className="lw-ci gold">🧾</span>
+              <div className="lw-meta"><div className="lw-k">Your trip, all in</div>
+                <div className="lw-h">€{Math.round(tripTotal.total_eur).toLocaleString()} for everything · TEST</div></div></div>
+            <div className="lw-cardBody">
+              <div className="lw-opt"><div className="od"><div className="o1">Flights</div><div className="o2">€{tripTotal.flights_eur.toLocaleString(undefined, { maximumFractionDigits: 2 })} · {tripTotal.flights_are}</div></div></div>
+              <div className="lw-opt"><div className="od"><div className="o1">Stays</div><div className="o2">€{tripTotal.stays_eur.toLocaleString(undefined, { maximumFractionDigits: 2 })} · {tripTotal.stays_are}</div></div></div>
+            </div>
           </div>
         )}
         {bookingFind && <ChatBooking key={`${bookingFind.what}|${bookingFind.where}`} find={bookingFind} />}

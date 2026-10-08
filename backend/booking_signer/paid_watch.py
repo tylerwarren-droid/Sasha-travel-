@@ -187,6 +187,12 @@ async def settle(sid: str) -> Optional[dict]:
         return {"status": "booking"}
     TD.note(sid, r.get("status") == "booked", str(r.get("say") or "")[:300])
     await _tell(payload["account"], r)
+    try:   # Sasha 212 · the open /next page hears it at once, and the confirmation email goes (booked only)
+        from . import live_events as LE, plan_store as PS
+        p = await PS.latest(payload["account"]) if payload.get("kind") == "trip" else None
+        await LE.on_settled(payload["account"], r, (p or {}).get("title"))
+    except Exception as e:
+        log.error("[paid_watch] the page was not told: %s: %s", type(e).__name__, e)
     return r
 
 

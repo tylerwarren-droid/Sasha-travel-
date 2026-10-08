@@ -104,6 +104,11 @@ def choose(read: dict, host_of=lambda u: None, account: Optional[str] = None) ->
         # ⚠ sent from the USER's own WhatsApp: Sasha writes it, they press send; the reply comes to them
         rungs.append(Rung("whatsapp", True, i, wa["value"], wa["source_label"], None))
 
+    i, ig = first("instagram")
+    if ig:
+        # Sasha 212 · a DM on Instagram, from the USER's own account: Sasha writes it, they send it; never "booked"
+        rungs.append(Rung("instagram", True, i, ig["value"], ig["source_label"], None))
+
     return {"rungs": [r.__dict__ for r in rungs], "say": say(rungs, read.get("name") or "They")}
 
 
@@ -133,6 +138,8 @@ def say(rungs: List[Rung], name: str) -> str:
         offers.append("I can email and we wait" if offers else "I'll email them and we wait")
     if by.get("whatsapp"):
         offers.append("you can WhatsApp them — I'll write the message" if offers else "I'll write a WhatsApp message for you to send")
+    if by.get("instagram"):
+        offers.append("you can message them on Instagram — I'll write it" if offers else "I'll write an Instagram message for you to send")
     if not offers:
         reasons = [r.why_not for r in rungs if r.why_not]
         found = ", ".join(sorted({r.rung for r in rungs})) or "nothing I can use"

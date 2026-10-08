@@ -93,7 +93,7 @@ async def quiver_checks() -> dict:
         len(q) == 1 and tool and q[0][0] < tool[0] and 1.3 <= q[0][0] <= 2.1 and AG.filler_ok(q[0][1]["text"], []),
         f"filler {q[:1]} · tool at {tool and tool[0]}")
     out["the answer CONTINUES the acknowledgement: no second opener, and the model is told what she said"] = (
-        says(evs) == ["The whole trip comes to about €1,468."] and len(seen) == 2 and q
+        says(evs) == ["The whole trip comes to about one thousand five hundred euros."] and len(seen) == 2 and q
         and q[0][1]["text"] in json.dumps(seen[1]["system"], ensure_ascii=False), f"{says(evs)}")
     evs = await run([[Block(type="text", text="Lovely to meet you. Where would you like to go?")]], [1.9], "Hi Sasha, I'm Tyler")
     q = [(t, e) for t, e in evs if e["type"] == "filler"]

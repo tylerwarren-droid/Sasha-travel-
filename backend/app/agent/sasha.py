@@ -130,8 +130,10 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
 def stays_card(res: dict) -> dict:
     """search_stays' result as a Live Workspace card, each to CHOOSE (the Choose button says "the <name> one")."""
     return {"type": "hotel", "trip_pick": True, "title": f"Places to stay · {res.get('city')}",
-            "options": [{"name": h["name"], "detail": " · ".join(x for x in [f"{h.get('stars')}★" if h.get("stars") else "", h.get("about") or ""] if x),
-                         "price": f"about €{h['estimate_eur_per_night']:,}/night (estimate)" if h.get("estimate_eur_per_night") else ""}
+            "options": [{"name": h["name"], "detail": " · ".join(x for x in [f"{h.get('stars')}★" if h.get("stars") else "",
+                                                                       f"★ {h['rating']} ({h.get('reviews') or 0} Google reviews)" if h.get("rating") else "",
+                                                                       h.get("about") or ""] if x),
+                         "price": f"est. €{h['estimate_eur_per_night']:,}/night" if h.get("estimate_eur_per_night") else ""}
                         for h in res.get("stays") or []]}
 
 
@@ -205,6 +207,7 @@ _INTERNAL = re.compile(
     r"\bapologi[sz]e for the confusion|\bsorry (?:about|for) (?:that|the) (?:confusion|mix)|\blet me (?:try|check|do) (?:that|this|it) again\b|"
     r"\bexpired\b|\boffer id\b|\bre-?quot|\btimed? out\b|\bread-?back\b|"
     r"\bcorrection\b|\bi (?:said|told you|mentioned) (?:before|earlier)|\bi misspoke\b|\bi was wrong\b|\bscratch that\b|"
+    r"\bshould have (?:said|mentioned|told you)|\bforgot to (?:say|mention|tell)|"
     r"(?:\bnot|n['’]t)\s+(?:actually\s+|really\s+)?(?:a\s+)?real\b|\btests?\b|\bdemo\b|\bsandbox\b|\bplaceholder\b|\bpretend\b|\bno real\b|"
     r"\bnothing (?:is|will be|gets|'s|has been) (?:actually |really )?(?:charged|taken|paid|reserved)\b|\bwon'?t (?:actually |really )?be charged\b")
 

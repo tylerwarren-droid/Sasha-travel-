@@ -22,6 +22,7 @@ import sys
 import time
 import uuid
 from datetime import date, datetime, timedelta, timezone
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.flight_suite import RESULTS, ok  # noqa: E402
@@ -47,12 +48,22 @@ SCENARIOS = [
     ("9 · make it three of us", [ALL_IN_ONE, "Actually, make it three of us.", "Book it.", "Yes."], THREE, True),
     ("10 · taps the flight home, total, book it", [ALL_IN_ONE, TAP_BACK, "What's the total now?", "Book it.", "Yes."], TWO, True),
 ]
+# Sasha 211 · ANY COUNTRY: the full loop for each (the plan in that country, real hotels with ESTIMATED prices, flights)
+def _country_line(where: str, days: int, love: str) -> str:
+    return f"Hi, I'm Tyler. Two of us, {days} days around {where} from {WHEN}, {love}, flying from Madrid."
+
+
+COUNTRIES = [("Ecuador", 12, "nature and food", "EC"), ("Japan", 10, "temples and food", "JP"),
+             ("Morocco", 8, "markets and the desert", "MA"), ("Portugal", 7, "wine and the coast", "PT"),
+             ("Vietnam", 8, "beaches and food", "VN")]
+SCENARIOS += [(f"{11 + i} · {c}, the full loop", [_country_line(c, d, love), "Book it.", "Yes."], TWO, True, code)
+              for i, (c, d, love, code) in enumerate(COUNTRIES)]
 _ASKS_TRAVELLERS = re.compile(r"(?i)full names?|dates? of birth|birthdays?|titles?\b|passport names?|names? (?:and|&) (?:dates|birth)")
 _YESLINE = re.compile(r"(?i)^(?:yes|ok, go ahead)")
 _EUR = re.compile(r"€\s?\d")
 
 
-async def one(name: str, steps: list, travellers: str, ends_paid: bool, n: int, captured: dict) -> dict:
+async def one(name: str, steps: list, travellers: str, ends_paid: bool, country: Optional[str] = None, *, n: int, captured: dict) -> dict:
     from booking_signer import guest_accounts as GA, guest_whatsapp as GW
     from app.agent import sasha as AG
     g, why = await GA.create_guest("voice-loop")
@@ -104,9 +115,23 @@ async def one(name: str, steps: list, travellers: str, ends_paid: bool, n: int, 
             t["links"] = [m for m in captured[GW.wa_key(number)][sent_before:] if "checkout.stripe.com" in m]
             history += [{"role": "user", "content": said}, {"role": "assistant", "content": t["text"]}]
             turns.append(t)
+        plan = None
+        if country:   # Sasha 211 · the plan is in THAT country, and its stays are real hotels with estimates (or Vietnam's list)
+            from booking_signer import plan_store as PS
+            plan = ((await PS.latest(a)) or {}).get("plan") or {}
     finally:
         await cleanup(a)
-    return judge(name, turns, ends_paid)
+    r = judge(name, turns, ends_paid)
+    if country:
+        days = plan.get("days") or []
+        hotels = [d.get("hotel") for d in days[:-1] if isinstance(d.get("hotel"), dict)]
+        world = country != "VN"
+        if not days or (world and (plan.get("country_code") != country or not hotels or not all(h.get("est") and h.get("source") == "google" for h in hotels))):
+            r["fail"].append(f"the plan isn't {country} with real hotels and estimates: {plan.get('country_code')} · "
+                             f"{[(h or {}).get('name') for h in hotels][:3]}")
+        if not world and any(h.get("source") == "google" for h in hotels):
+            r["fail"].append("Vietnam didn't use its own planner")
+    return r
 
 
 def judge(name: str, turns: list, ends_paid: bool) -> dict:

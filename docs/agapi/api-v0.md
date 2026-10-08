@@ -133,7 +133,7 @@ Flights between two places on a day, cheapest first (TEST fares). Shown flights 
 
 ### `search_stays`
 
-Places to stay in a city, best match first (estimates; TEST bookings).
+Places to stay in a city, best rated first: real hotels (Google), each with an ESTIMATED nightly price.
 
 **Errors:** `city_not_covered`, `missing_input`, `internal`
 
@@ -246,7 +246,8 @@ Start getting the trip ready in the background the moment destination, dates and
   "nights": {
    "type": "integer",
    "minimum": 1,
-   "maximum": 30
+   "maximum": 30,
+   "description": "NIGHTS away: \"10 days\" is 9 nights, \"a week\" is 7"
   },
   "party": {
    "type": "integer",
@@ -305,7 +306,8 @@ THE PROPOSAL: a day-by-day itinerary with somewhere to stay each night, a flight
   "nights": {
    "type": "integer",
    "minimum": 1,
-   "maximum": 30
+   "maximum": 30,
+   "description": "NIGHTS away: \"10 days\" is 9 nights, \"a week\" is 7"
   },
   "party": {
    "type": "integer",

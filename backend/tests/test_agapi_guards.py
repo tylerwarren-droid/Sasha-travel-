@@ -124,6 +124,7 @@ class ReplyGuard(unittest.TestCase):
                          "Here's what I'd book: Hotels: five, Hanoi to Saigon. Iberia out on the 21st.")
         self.assertEqual(AG.drop_internal("One correction to what I said before: it's Qatar home. The total is €3,676.22."),
                          "The total is €3,676.22.")
+        self.assertEqual(AG.drop_internal("One thing I should have said earlier: the hotels are estimates. The total is €3."), "The total is €3.")
 
     def test_the_last_resort_strips_only_the_bad_sentence(self):
         out = AG.guard_strip("Good choice. The total is €9,999. Shall I book it?", ["price: €9,999 did not come from a tool"])

@@ -407,9 +407,13 @@ export default function TripPanel({
                               <div className="lw-hotel-k">{continuing ? 'Continuing your stay' : 'Overnight'}</div>
                               <div className="lw-hotel-name">{showHotel.name}</div>
                               {showHotel.rating && (
-                                <div className="lw-hotel-rating">★ {showHotel.rating}/10 · {(showHotel.reviews ?? 0).toLocaleString()} reviews{showHotel.tag ? ` · ${showHotel.tag}` : ''}</div>
+                                (showHotel as { source?: string }).source === 'google'   /* Sasha 211 · Google's own 1–5 rating, as its listing says */
+                                  ? <div className="lw-hotel-rating">★ {showHotel.rating} · {(showHotel.reviews ?? 0).toLocaleString()} Google reviews</div>
+                                  : <div className="lw-hotel-rating">★ {showHotel.rating}/10 · {(showHotel.reviews ?? 0).toLocaleString()} reviews{showHotel.tag ? ` · ${showHotel.tag}` : ''}</div>
                               )}
-                              {showHotel.price_from ? (
+                              {(showHotel as { price_label?: string }).price_label ? (   /* Sasha 211 · an ESTIMATE, labelled as one */
+                                <div className="lw-hotel-price">{(showHotel as { price_label?: string }).price_label}{continuing ? ' · same stay' : ''}</div>
+                              ) : showHotel.price_from ? (
                                 <div className="lw-hotel-price">${Number(showHotel.price_from).toLocaleString()}/night{continuing ? ' · same stay' : ''}</div>
                               ) : null}
                             </div>

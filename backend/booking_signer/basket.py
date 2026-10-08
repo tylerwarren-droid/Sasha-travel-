@@ -329,7 +329,8 @@ async def sync_stays(account: str, trip_id: str, days: List[dict], start: Option
         if runs and runs[-1]["name"] == name:
             runs[-1]["nights"] += 1
         else:
-            runs.append({"name": name, "city": d.get("city") or "", "day": on_day, "nights": 1, "rate": rate})
+            runs.append({"name": name, "city": d.get("city") or "", "day": on_day, "nights": 1, "rate": rate,
+                         "est": bool(isinstance(h, dict) and h.get("est"))})
     kept = {(r["snapshot"].get("name"), r["day"]) for r in await items(account, trip_id, ("chosen", "pending_payment", "booked"))
             if r["kind"] == "stay"}
     found = []
@@ -341,7 +342,8 @@ async def sync_stays(account: str, trip_id: str, days: List[dict], start: Option
                       "starts_at": r["day"] + "T15:00:00+00:00", "ends_at": end + "T11:00:00+00:00",
                       "price_amount": round(r["rate"] * r["nights"] * usd_eur, 2) if r["rate"] else None,
                       "price_currency": "EUR" if r["rate"] else None, "price_source": "estimate" if r["rate"] else None,
-                      "snapshot": {"name": r["name"], "city": r["city"], "nights": r["nights"], "checkout": end}})
+                      "snapshot": {"name": r["name"], "city": r["city"], "nights": r["nights"], "checkout": end,
+                                   **({"est": True} if r.get("est") else {})}})
     return await suggest(account, trip_id, "stay", found)
 
 

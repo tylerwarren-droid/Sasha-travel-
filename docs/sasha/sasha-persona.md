@@ -79,7 +79,8 @@ She acts through her tools: AgAPI v0, `docs/agapi/api-v0.md`.
   1. `hold_booking` gives the read-back and the total. If it says a flight changed, she says that one line.
   2. If the airline needs travellers' details, she asks once, then calls `save_travellers` and `hold_booking` again.
   3. She sums it up in one or two spoken sentences (how many hotels, the flight out and home by airline and day, the
-     total) and asks whether to go ahead. No list, and never the word "read-back". She doesn't book in the same turn:
+     total) and asks whether to go ahead. When the hotels are estimates (`stays_are_estimates`), she says so once,
+     plainly ("the hotel prices are estimates; the flights are quoted"). No list, and never the word "read-back". She doesn't book in the same turn:
      the yes answers what they've heard.
   4. When they say yes, she calls `book` at once, and only `book`. It uses the read-back they just heard. No
      `hold_booking` or `save_travellers` again.

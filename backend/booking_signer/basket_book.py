@@ -141,6 +141,8 @@ async def quote(account: str, origin: str) -> Dict[str, Any]:
     tz = HT.tz_of(_country_of(p.get("title") or "", []))
     for r in [r for r in await BK.items(account, trip, ("suggested", "chosen")) if r["kind"] == "stay"]:
         s = r.get("snapshot") or {}
+        if s.get("est") and r.get("price_amount"):   # Sasha 211 · a real hotel's ESTIMATE (the world planner): kept, said as one
+            continue
         nights = int(s.get("nights") or 1)
         if r.get("price_source") != "placeholder" or float(r.get("price_amount") or 0) != round(rate * nights, 2) or s.get("tz") != tz:
             await BK.refresh(account, r["id"], price_amount=round(rate * nights, 2), price_currency="EUR", snapshot={**s, "tz": tz})

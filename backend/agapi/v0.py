@@ -212,11 +212,25 @@ async def search_flights(ctx: Ctx, a: dict) -> dict:
     return {"leg": leg, "date": day, "flights": [_flight_out(c) for c in cards], "note": "Duffel TEST fares — nothing is held until book"}
 
 
+_STAYS: Dict[str, Dict[str, List[dict]]] = {}   # account → city → the Google hotels last shown (swap_stay picks from them)
+
+
 async def search_stays(ctx: Ctx, a: dict) -> dict:
     from app.services.hotels_db import VIETNAM_HOTELS
     city = next((k for k in VIETNAM_HOTELS if k.lower() == (a.get("city") or "").strip().lower()), None)
-    if not city:
-        raise ToolError("city_not_covered", f"v0 has stays for Vietnam's cities only ({', '.join(list(VIETNAM_HOTELS)[:8])}, …)")
+    if not city:   # Sasha 211 · anywhere: real hotels from Google, the nightly price an ESTIMATE (labelled)
+        from app.services.world_itinerary import hotels_in
+        from booking_signer import plan_store as PS
+        p = await PS.latest(ctx.account)
+        pl = (p or {}).get("plan") or {}
+        want = (a.get("city") or "").strip()
+        hs = await hotels_in(ctx.account, want, pl.get("country") or "", pl.get("country_code"), (a.get("preference") or "")[:30])
+        if not hs:
+            raise ToolError("no_stays", f"no hotels found in {want}")
+        _STAYS.setdefault(ctx.account, {})[want.lower()] = hs
+        return {"city": want, "stays": [{"name": h["name"], "about": h.get("address"), "rating": h.get("rating"),
+                                         "reviews": h.get("rating_count"), "estimate_eur_per_night": h["est_eur"]} for h in hs],
+                "prices": "nightly prices are estimates"}
     pref = (a.get("preference") or "").lower()
     hs = VIETNAM_HOTELS[city]
     if pref:
@@ -249,23 +263,33 @@ def _prep_key(a: dict) -> tuple:
     return ((a.get("destination") or "").strip().lower(), a.get("start_date"), int(a.get("nights") or 7), int(a.get("party") or 2))
 
 
-async def _build(a: dict) -> dict:
-    from app.services.itinerary_agent import build_itinerary
+def is_vietnam(destination: str) -> bool:
+    """Sasha 211 · Vietnam has its own curated planner; every other country is planned by the world planner."""
+    from app.services.hotels_db import VIETNAM_HOTELS
+    d = (destination or "").strip().lower()
+    return "vietnam" in d or any(d.startswith(c.lower()) for c in VIETNAM_HOTELS)
+
+
+async def _build(a: dict, account: Optional[str] = None) -> dict:
     start = date.fromisoformat(a["start_date"])
     nights, party = int(a.get("nights") or 7), int(a.get("party") or 2)
     msg = (f"Plan a {nights + 1}-day trip to {a['destination']} from {start.day} {start.strftime('%B %Y')} for {party} people."
            + (f" Interests: {a['interests']}." if a.get("interests") else ""))
+    if not is_vietnam(a.get("destination") or ""):   # Sasha 211 · ANY country: real Google hotels, estimates labelled
+        from app.services.world_itinerary import build_world
+        return {"itin": await build_world(a, account), "msg": msg}
+    from app.services.itinerary_agent import build_itinerary
     itin = await build_itinerary(msg, [])
     return {"itin": itin, "msg": msg}
 
 
-async def _search_legs(origin: str, days: List[dict], start: date, nights: int, party: int) -> dict:
+async def _search_legs(origin: str, days: List[dict], start: date, nights: int, party: int, airports: Optional[dict] = None) -> dict:
     import asyncio as _aio
-    from booking_signer import travel as T
     first_city = (next((d.get("city") for d in days if d.get("city")), "") or "").split(",")[0]
     last_city = (next((d.get("city") for d in reversed(days) if d.get("city")), first_city) or "").split(",")[0]
-    legs = [("out", origin, airport_of(first_city), (start - timedelta(days=1)).isoformat()),
-            ("back", airport_of(last_city), origin, (start + timedelta(days=nights)).isoformat())]
+    ap = airports or {}   # Sasha 211 · the world planner names the airports (a last night by the sea has none of its own)
+    legs = [("out", origin, ap.get("arrive") or airport_of(first_city), (start - timedelta(days=1)).isoformat()),
+            ("back", ap.get("depart") or airport_of(last_city), origin, (start + timedelta(days=nights)).isoformat())]
     got = await _aio.gather(*[_search_healed(o, d, day, party) for _, o, d, day in legs])
     legs = [(leg, o, d, used) for (leg, o, d, _), (_, used) in zip(legs, got)]
     return {"legs": legs, "found": [r for r, _ in got]}
@@ -281,13 +305,14 @@ async def prepare_trip(ctx: Ctx, a: dict) -> dict:
     key = _prep_key(a)
     p = _PREP.get(ctx.account)
     if not p or p["key"] != key:
-        p = _PREP[ctx.account] = {"key": key, "itin": _aio.create_task(_build(a)), "flights": {}, "args": dict(a)}
+        p = _PREP[ctx.account] = {"key": key, "itin": _aio.create_task(_build(a, ctx.account)), "flights": {}, "args": dict(a)}
     origin = (a.get("origin") or "").strip()
     if origin and origin.lower() not in p["flights"]:
         async def legs(itin_task=p["itin"], o=origin):
             built = await itin_task
-            days = (built.get("itin") or {}).get("days") or []
-            return await _search_legs(o, days, date.fromisoformat(a["start_date"]), int(a.get("nights") or 7), int(a.get("party") or 2))
+            itin = built.get("itin") or {}
+            return await _search_legs(o, itin.get("days") or [], date.fromisoformat(a["start_date"]), int(a.get("nights") or 7),
+                                      int(a.get("party") or 2), itin.get("airports"))
         p["flights"][origin.lower()] = _aio.create_task(legs())
     return {"preparing": ["itinerary"] + (["flights"] if origin else []), "note": "keep chatting; propose_trip will pick this up"}
 
@@ -319,7 +344,7 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
             _PREP.pop(ctx.account, None)
             built, legs_task = None, None
     if built is None:
-        built = await _build(a)
+        built = await _build(a, ctx.account)
     itin, msg = built["itin"], built["msg"]
     if not itin or not itin.get("days"):
         raise ToolError("plan_failed", "the itinerary couldn't be built just now — try again")
@@ -339,7 +364,7 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
         except Exception as e:
             log.info("[agapi] prefetched flights unusable (%s) — searching now", type(e).__name__)
     if searched is None:
-        searched = await _search_legs(origin, days, start, nights, party)
+        searched = await _search_legs(origin, days, start, nights, party, itin.get("airports"))
     options: Dict[str, List[dict]] = {}
     for (leg, o, d, day), r in zip(searched["legs"], searched["found"]):   # out AND back: a flight that fits on each leg (home after midday)
         if "why" in r:   # Sasha 210 · a prepared search that failed is searched again (and the nearest days) before saying so
@@ -363,6 +388,27 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
             "prices": "stays at the TEST hotel rate, the flight at its Duffel TEST fare — nothing is booked", "prefetched": used_prefetch}
 
 
+async def _swap_world(ctx: Ctx, p: dict, city: str, name: str) -> dict:
+    """Sasha 211 · a world plan's hotel in one city → the chosen Google hotel (from the last search there, else searched by name)."""
+    from app.services.world_itinerary import hotels_in, hotel_entry
+    from booking_signer import plan_store as PS
+    plan = json.loads(json.dumps(p.get("plan") or {}, default=str))
+    shown = _STAYS.get(ctx.account, {}).get(city.lower()) or await hotels_in(ctx.account, city, plan.get("country") or "", plan.get("country_code"))
+    h = next((x for x in shown if x["name"].lower() == name.lower()), None) or next((x for x in shown if name.lower() in x["name"].lower()), None)
+    if h is None:
+        raise ToolError("stay_not_found", f"{name} isn't among the hotels found in {city} — search_stays first")
+    days = plan.get("days") or []
+    for i, d in enumerate(days[:-1]):
+        if (d.get("city") or "").lower().startswith(city.lower()):
+            d["hotel"] = hotel_entry(h, d.get("city") or city)
+    start = p.get("start")
+    start = date.fromisoformat(str(start)[:10]) if start else None
+    msg = (f"Plan a {len(days)}-day trip to {plan.get('country') or city} from {start.day} {start.strftime('%B %Y')} for {plan.get('party') or 2} people."
+           if start else f"change the hotel in {city}")
+    await PS.save(ctx.account, plan, msg, datetime.now(timezone.utc))
+    return {"city": city, "stay": h["name"], "estimate_eur_per_night": h["est_eur"], **(await _total(ctx, await _plan(ctx)))}
+
+
 async def swap_stay(ctx: Ctx, a: dict) -> dict:
     from app.services.itinerary_agent import build_itinerary
     from booking_signer import plan_store as PS
@@ -371,6 +417,8 @@ async def swap_stay(ctx: Ctx, a: dict) -> dict:
     city = a["city"]
     if not any((d.get("city") or "").lower().startswith(city.lower()) for d in plan.get("days") or []):
         raise ToolError("city_not_in_trip", f"{city} isn't in this trip")
+    if plan.get("planner") == "world":
+        return await _swap_world(ctx, p, city, a["stay_name"])
     new = await build_itinerary(f"change the hotel in {city} to {a['stay_name']}", [], current_itinerary=plan,
                                 hotel_swap={"name": a["stay_name"], "city": city})
     if not new or not new.get("days"):
@@ -490,7 +538,8 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
         q = await BB.quote(ctx.account, a.get("origin") or "Madrid")
     if "why" in q:
         raise ToolError("not_bookable", q["why"])
-    res = {**({"changed": changed} if changed else {}), "read_back": [l for l in q["lines"] if not l.startswith("Note:")], "notes": [l for l in q["lines"] if l.startswith("Note:")],
+    est = any(l.rstrip(")").endswith("(estimate") for l in q["lines"])   # Sasha 211 · real hotels priced as estimates
+    res = {**({"changed": changed} if changed else {}), **({"stays_are_estimates": True} if est else {}), "read_back": [l for l in q["lines"] if not l.startswith("Note:")], "notes": [l for l in q["lines"] if l.startswith("Note:")],
            "read_back_sha256": q["sha256"], "total_eur": q["eur"], "status": "not booked — waiting for the yes"}
     prev = _HELD.get(ctx.account)   # Sasha 210 · the same words read back again keep the time they were first said
     at = prev["at"] if prev and prev.get("sha") == q["sha256"] else datetime.now(timezone.utc)
@@ -593,7 +642,7 @@ TOOLS: List[dict] = [
                                                   "passengers": {"type": "integer", "minimum": 1, "maximum": 9},
                                                   "preferences": {"type": "string", "description": "e.g. direct, morning"}},
        ["origin", "destination", "date"], {"type": "object", "properties": {"flights": {"type": "array", "items": FLIGHT}}}, ["no_flights"]),
-    _t("search_stays", "Magellan", search_stays, "Places to stay in a city, best match first (estimates; TEST bookings).",
+    _t("search_stays", "Magellan", search_stays, "Places to stay in a city, best rated first: real hotels (Google), each with an ESTIMATED nightly price.",
        {"city": {"type": "string"}, "preference": {"type": "string", "description": "e.g. on the beach, boutique"}}, ["city"],
        {"type": "object", "properties": {"stays": {"type": "array"}}}, ["city_not_covered"]),
     _t("search_venues", "Magellan", search_venues, "Restaurants, spas or other places in a city (Google listings; nothing contacted). "
@@ -605,13 +654,13 @@ TOOLS: List[dict] = [
     _t("prepare_trip", "Magellan", prepare_trip, "Start getting the trip ready in the background the moment destination, dates "
        "and party are known (and again once the origin is): the itinerary, then both legs' flights. Returns at once — keep "
        "chatting; propose_trip with the same details picks it up.",
-       {"destination": {"type": "string"}, "start_date": DATE, "nights": {"type": "integer", "minimum": 1, "maximum": 30},
+       {"destination": {"type": "string"}, "start_date": DATE, "nights": {"type": "integer", "minimum": 1, "maximum": 30, "description": "NIGHTS away: \"10 days\" is 9 nights, \"a week\" is 7"},
         "party": {"type": "integer", "minimum": 1, "maximum": 9}, "interests": {"type": "string"}, "origin": {"type": "string"}},
        ["destination", "start_date", "nights", "party"],
        {"type": "object", "properties": {"preparing": {"type": "array"}}}, ["start_date_invalid"]),
     _t("propose_trip", "Magellan", propose_trip, "THE PROPOSAL: a day-by-day itinerary with somewhere to stay each night, a flight "
        "that fits on each leg (there and back) already chosen, and the whole trip's total. Replaces the account's current proposal. Nothing is booked.",
-       {"destination": {"type": "string"}, "start_date": DATE, "nights": {"type": "integer", "minimum": 1, "maximum": 30},
+       {"destination": {"type": "string"}, "start_date": DATE, "nights": {"type": "integer", "minimum": 1, "maximum": 30, "description": "NIGHTS away: \"10 days\" is 9 nights, \"a week\" is 7"},
         "party": {"type": "integer", "minimum": 1, "maximum": 9}, "interests": {"type": "string"},
         "origin": {"type": "string", "description": "where they fly from"}},
        ["destination", "start_date", "nights", "party", "origin"],

@@ -536,5 +536,25 @@ class BookNeverReplans(unittest.TestCase):
         self.assertEqual(ev["total"]["total_eur"], 2479.28)
 
 
+
+class NeverTwice(unittest.TestCase):
+    def test_a_sentence_is_never_said_twice_in_a_turn(self):
+        import app.services.llm as LLM
+        from app.agent import sasha as AG
+        steps = [[Block(type="text", text="Flight out: Iberia on the twenty-first. It's quoted. Flight home: Qatar on the thirtieth. It's quoted.")]]
+        evs = []
+
+        async def go():
+            async for ev in AG.turn(ACCOUNT, "read it to me", [], "s215-twice"):
+                evs.append(ev)
+
+        async def call(ctx, name, args):
+            return {"ok": True, "result": {"anything_booked": False}}
+        with mock.patch.object(LLM, "client", client(steps)), mock.patch.object(API, "call", call):
+            run(go())
+        done = next(e for e in evs if e["type"] == "done")
+        self.assertEqual(done["text"].count("It's quoted."), 1, done["text"])
+
+
 if __name__ == "__main__":
     unittest.main()

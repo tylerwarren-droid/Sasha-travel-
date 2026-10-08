@@ -450,6 +450,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     used_openers = _OPENERS.setdefault(session or "-", set())
     used_openers |= _history_openers(history)
     said: List[str] = []      # what she says (cleaned) — the reply
+    said_norms: set = set()   # Sasha 215 · each sentence she's said this turn, normalised
     raw: List[str] = []       # what the model wrote — the guards read it
     turn_key = hashlib.sha256(f"{session}:{len(history or [])}:{message}".encode()).hexdigest()[:16]
     tools = tools_for_model()
@@ -486,6 +487,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         for x in [p.strip() for p in re.split(r"(?<=[.!?])\s+", spoken_prose(chunk)) if p.strip()]:
             if held:
                 break
+            if _norm(x) and _norm(x) in said_norms:   # Sasha 215 · never a sentence twice in a turn ("It's quoted." after each flight)
+                continue
             if _INTERNAL.search(x):
                 internal_log.append(x[:80])
                 continue
@@ -495,6 +498,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 held = True
                 break
             out.append(x)
+            said_norms.add(_norm(x))
         text = as_offer(" ".join(out))
         if not text:
             return ""

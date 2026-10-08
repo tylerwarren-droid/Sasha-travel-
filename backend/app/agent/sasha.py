@@ -41,7 +41,7 @@ SPLIT_AFTER_S = float(os.getenv("SASHA_SPLIT_AFTER_S", "3.0"))      # Sasha 210 
 TRIM_CHARS = int(os.getenv("SASHA_TRIM_CHARS", "1200"))               # Sasha 205 · the only length limit: a safety trim
 _WEIGH = {"search_flights", "search_stays", "search_venues", "read_booking_route"}
 MAX_STEPS = 8
-_CHANGES_TRIP = {"propose_trip", "swap_stay", "choose_offer", "search_flights", "hold_booking", "book"}
+_CHANGES_TRIP = {"propose_trip", "swap_stay", "choose_offer", "search_flights", "hold_booking", "book", "book_venue", "cancel_venue"}
 _CLAIM = re.compile(r"(?i)\b(?:(?:is|are|been|all|now|it's|you're|you are|i've|i have|has been|have been|successfully|now)\s+(?:booked|paid|confirmed)"
                     r"|booking (?:is )?confirmed|payment (?:has )?(?:gone through|been received|received)|✅\s*booked|confirmation (?:email|number))")
 _EUR = re.compile(r"€\s?(\d[\d,]*(?:\.\d+)?)")
@@ -95,7 +95,7 @@ def guard_check(text: str, allowed: set, anything_booked: bool) -> List[str]:
 RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues": "venues", "read_booking_route": "venue_route",
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
           "save_travellers": "inline", "hold_booking": "read_back", "book": "trip", "get_status": "trip", "get_trip": "trip",
-          "get_total": "inline"}
+          "get_total": "inline", "hold_venue": "inline", "book_venue": "trip", "cancel_venue": "trip"}
 KINDS = {"flights", "flight_chosen", "stays", "venues", "venue_route", "read_back", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 
 
@@ -413,7 +413,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             t = API.BY_NAME.get(u.name)
             if t and t["idempotent"]:
                 args["idempotency_key"] = f"{turn_key}:{u.name}:{hashlib.sha256(json.dumps(u.input, sort_keys=True).encode()).hexdigest()[:12]}"
-            if u.name == "book":
+            if u.name in ("book", "book_venue", "cancel_venue"):
                 args["approval"] = {"said": message}   # the REAL words of this turn — never the model's
             r = await API.call(ctx, u.name, args)
             if r.get("ok"):

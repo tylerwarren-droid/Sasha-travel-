@@ -441,17 +441,8 @@ async def check_offer(ctx: Ctx, a: dict) -> dict:
 
 
 async def read_booking_route(ctx: Ctx, a: dict) -> dict:
-    from booking_signer import venue_read as V, ladder_routes as LR, ladder as L
-    try:
-        read = await V.read_venue(LR.HTTP, name=a["name"], city=a["city"], country=a.get("country"), website=a.get("website"),
-                                  now=datetime.now(timezone.utc), place_id=a.get("place_id"))
-    except V.ReadRefused as e:
-        raise ToolError(e.rule, str(e))
-    read = read.to_json() if hasattr(read, "to_json") else dict(read)
-    chosen = L.choose(read, account=ctx.account)
-    lad = LR._ladder_for(read, chosen["rungs"], a.get("at"), a.get("party"))
-    return {"venue": (read.get("listing") or {}).get("name") or a["name"], "routes": [r.get("rung") or r.get("kind") for r in chosen["rungs"]],
-            "how": (lad or {}).get("line") or chosen.get("say")}
+    from agapi import venues as VN   # Sasha 211 · through the booking API (its read_id is what the routes book from)
+    return await VN.read_booking_route(ctx, a)
 
 
 # ── Austen ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -598,15 +589,37 @@ async def book(ctx: Ctx, a: dict) -> dict:
 # ── Pacioli ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 async def get_status(ctx: Ctx, a: dict) -> dict:
-    from booking_signer import basket as BK, paid_watch as PW
-    p = await _plan(ctx)
+    from booking_signer import basket as BK, paid_watch as PW, plan_store as PS
+    p = await PS.latest(ctx.account)
+    if not p:   # Sasha 211 · no trip: the venue bookings still have their status
+        from agapi import venues as VN
+        vb = await VN.venue_bookings(ctx.account)
+        return {"venues": vb, "anything_booked": any(b["status"] == "confirmed" for b in vb), "booked": [], "failed": [],
+                "cancelled": [], "awaiting_payment": 0}
     await PW.sweep(ctx.account)   # a payment waiting is settled first (Pacioli writes the outcome)
     rows = await BK.items(ctx.account, p["trip_id"], ("pending_payment", "booked", "failed", "cancelled"))
-    return {"booked": [r["status_line"] for r in rows if r["state"] == "booked"],
+    from agapi import venues as VN   # Sasha 211 · the venues too: Requested / Confirmed, from proof only
+    vb = await VN.venue_bookings(ctx.account)
+    return {"venues": vb, "anything_booked": any(r["state"] == "booked" for r in rows) or any(b["status"] == "confirmed" for b in vb),
+            "booked": [r["status_line"] for r in rows if r["state"] == "booked"],
             "failed": [r["status_line"] for r in rows if r["state"] == "failed"],
             "cancelled": [r["status_line"] for r in rows if r["state"] == "cancelled"],
-            "awaiting_payment": sum(1 for r in rows if r["state"] == "pending_payment"),
-            "anything_booked": any(r["state"] == "booked" for r in rows)}
+            "awaiting_payment": sum(1 for r in rows if r["state"] == "pending_payment")}
+
+
+async def hold_venue(ctx: Ctx, a: dict) -> dict:
+    from agapi import venues as VN
+    return await VN.hold_venue(ctx, a)
+
+
+async def book_venue(ctx: Ctx, a: dict) -> dict:
+    from agapi import venues as VN
+    return await VN.book_venue(ctx, a)
+
+
+async def cancel_venue(ctx: Ctx, a: dict) -> dict:
+    from agapi import venues as VN
+    return await VN.cancel_venue(ctx, a)
 
 
 async def get_trip(ctx: Ctx, a: dict) -> dict:
@@ -634,6 +647,9 @@ def _t(name: str, agent: str, fn: Callable[[Ctx, dict], Awaitable[dict]], descri
     return {"name": name, "agent": agent, "fn": fn, "description": description, "input_schema": inp, "output_schema": output,
             "errors": errors, "idempotent": austen}
 
+
+VENUE_PROPS = {"name": {"type": "string"}, "city": {"type": "string"}, "country": {"type": "string"}, "place_id": {"type": "string"},
+               "website": {"type": "string"}, "type": {"type": "string", "description": "the card's type, e.g. Seafood restaurant"}}
 
 TOOLS: List[dict] = [
     _t("search_flights", "Magellan", search_flights, "Flights between two places on a day, cheapest first (TEST fares). Shown "
@@ -671,9 +687,9 @@ TOOLS: List[dict] = [
        {"city": {"type": "string"}, "stay_name": {"type": "string"}}, ["city", "stay_name"], TOTAL, ["no_trip", "city_not_in_trip", "swap_failed", "not_priced"]),
     _t("check_offer", "Sherlock", check_offer, "Is this flight offer still available, and at what price?", {"offer_id": {"type": "string"}},
        ["offer_id"], {"type": "object", "properties": {"available": {"type": "boolean"}, "price_eur": {"type": "number"}}}, []),
-    _t("read_booking_route", "Sherlock", read_booking_route, "How a venue takes bookings (its own page, email, phone…) and how Sasha would book it.",
-       {"name": {"type": "string"}, "city": {"type": "string"}, "country": {"type": "string"}, "place_id": {"type": "string"},
-        "website": {"type": "string"}, "at": {"type": "string", "description": "ISO local date-time wanted"}, "party": {"type": "integer"}},
+    _t("read_booking_route", "Sherlock", read_booking_route, "How a venue takes bookings (its own form, a platform page, email, phone, "
+       "WhatsApp) — read from its site and listing. Use the venue card's place_id.",
+       {**VENUE_PROPS, "what": {"type": "string", "description": "what they want, e.g. dinner"}},
        ["name", "city"], {"type": "object", "properties": {"routes": {"type": "array"}, "how": {"type": "string"}}}, ["name_invalid", "city_invalid"]),
     _t("choose_offer", "Austen", choose_offer, "Put another flight into the trip, replacing the flight on that leg. Returns the new total. "
        "Give its offer_id, OR describe one of the trip's options (the proposal's flight cards, a search's): its leg and the airline "
@@ -698,6 +714,24 @@ TOOLS: List[dict] = [
                                                                "description": "the person's own words (filled by the caller from the real message)"}},
        [], {"type": "object", "properties": {"status": {"const": "awaiting_payment"}, "booked": {"const": False}}},
        ["no_explicit_yes", "no_read_back", "read_back_changed", "not_bookable"], austen=True),
+    _t("hold_venue", "Austen", hold_venue, "Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own question "
+       "first when it has one (status choose_route: ask it, then call again with the route they pick), else the read-back the "
+       "yes binds to (status awaiting_yes: say it in a line and ask them to go ahead). WhatsApp-only venues: the drafted "
+       "message. Nothing is sent.",
+       {**VENUE_PROPS, "what": {"type": "string", "description": "e.g. dinner, a table, a massage"}, "day": DATE,
+        "time": {"type": "string", "description": "HH:MM, the venue's local time"}, "party": {"type": "integer", "minimum": 1, "maximum": 20},
+        "route": {"enum": ["form", "page", "email", "call", "whatsapp", "no"], "description": "the route they chose (from choose_route)"}},
+       ["name", "city", "day", "time", "party"], {"type": "object", "properties": {"status": {"type": "string"}, "read_back": {"type": "array"}}},
+       ["read_failed", "when_invalid", "contact_missing", "no_route"], austen=True),
+    _t("book_venue", "Austen", book_venue, "After the person's explicit yes in THIS turn, to what hold_venue read back in an earlier "
+       "turn: the booking, by its route — their form (any human step goes to their phone as Tap to finish), the platform's page "
+       "to their phone, the email, or the call. Its status says what's true: confirmed only on the venue's own confirmation.",
+       {"approval": {"type": "object", "properties": {"said": {"type": "string"}}}}, [],
+       {"type": "object", "properties": {"status": {"type": "string"}}}, ["no_explicit_yes", "nothing_held", "read_back_first", "not_sent"], austen=True),
+    _t("cancel_venue", "Austen", cancel_venue, "Cancel a venue booking, back the way it was made. First call: the read-back (say it, ask); "
+       "after their explicit yes in a LATER turn, call again to send it.",
+       {"trip_item_id": {"type": "string"}, "venue": {"type": "string"}, "approval": {"type": "object", "properties": {"said": {"type": "string"}}}},
+       [], {"type": "object", "properties": {"status": {"type": "string"}}}, ["booking_unknown", "no_explicit_yes", "not_cancelled"], austen=True),
     _t("get_status", "Pacioli", get_status, "What is booked, failed, cancelled or awaiting payment — the ONLY source for booked/paid/confirmed.",
        {}, [], {"type": "object", "properties": {"booked": {"type": "array"}, "anything_booked": {"type": "boolean"}}}, ["no_trip"]),
     _t("get_trip", "Pacioli", get_trip, "The trip as it stands: days and stays, the chosen flights, each item's state.", {}, [],

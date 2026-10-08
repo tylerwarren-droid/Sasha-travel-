@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts import flight_suite as F, core_suites as C, basket_suite as BS, agent_suite as AS, whatsapp_suite as WS, postgres_suite as PG, \
-    voice_loop_suite as VS  # noqa: E402
+    voice_loop_suite as VS, venue_suite as VN  # noqa: E402
 
 
 async def _clean_orphans(since) -> None:
@@ -35,11 +35,12 @@ async def main() -> int:
     c = await BS.main()   # Sasha 198 · the trip basket (grows R2 → R10)
     d = await AS.main()   # Sasha 203 · the agent's tools (AgAPI v0) in the real database
     v = await VS.main()   # Sasha 210 · ten scripted voice conversations: plan → flights → "book it" → the payment link on the phone
+    w = await VN.main()   # Sasha 211 · venue bookings on the agent, every route (our test venue for real; the rest stand-in)
     await _clean_orphans(since)
     e = await __import__("asyncio").to_thread(WS.main)   # Sasha 206 · WhatsApp: spaces, R1, R2, the guest pipeline (offline)
     f = await __import__("asyncio").to_thread(PG.main)   # Sasha 207 · the stores on a real, throwaway Postgres (never production)
-    print(f"\nDEPLOY GATE: {'PASS' if not (a or b or c or d or v or e or f) else 'FAIL'}")
-    return 1 if (a or b or c or d or v or e or f) else 0
+    print(f"\nDEPLOY GATE: {'PASS' if not (a or b or c or d or v or w or e or f) else 'FAIL'}")
+    return 1 if (a or b or c or d or v or w or e or f) else 0
 
 
 if __name__ == "__main__":

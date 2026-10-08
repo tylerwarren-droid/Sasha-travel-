@@ -27,7 +27,7 @@ One contract for every client.
 |---|---|---|
 | **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay` |
 | **Sherlock** | checks | `check_offer`, `read_booking_route` |
-| **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book` |
+| **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue` |
 | **Pacioli** | records — the only source of booked/paid | `get_status`, `get_trip`, `get_total` |
 
 ## Magellan
@@ -520,7 +520,7 @@ Is this flight offer still available, and at what price?
 
 ### `read_booking_route`
 
-How a venue takes bookings (its own page, email, phone…) and how Sasha would book it.
+How a venue takes bookings (its own form, a platform page, email, phone, WhatsApp) — read from its site and listing. Use the venue card's place_id.
 
 **Errors:** `name_invalid`, `city_invalid`, `missing_input`, `internal`
 
@@ -545,12 +545,13 @@ How a venue takes bookings (its own page, email, phone…) and how Sasha would b
   "website": {
    "type": "string"
   },
-  "at": {
+  "type": {
    "type": "string",
-   "description": "ISO local date-time wanted"
+   "description": "the card's type, e.g. Seafood restaurant"
   },
-  "party": {
-   "type": "integer"
+  "what": {
+   "type": "string",
+   "description": "what they want, e.g. dinner"
   }
  },
  "required": [
@@ -869,6 +870,200 @@ After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exac
   },
   "booked": {
    "const": false
+  }
+ }
+}
+```
+
+### `hold_venue`
+
+Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own question first when it has one (status choose_route: ask it, then call again with the route they pick), else the read-back the yes binds to (status awaiting_yes: say it in a line and ask them to go ahead). WhatsApp-only venues: the drafted message. Nothing is sent.
+
+**Errors:** `read_failed`, `when_invalid`, `contact_missing`, `no_route`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "name": {
+   "type": "string"
+  },
+  "city": {
+   "type": "string"
+  },
+  "country": {
+   "type": "string"
+  },
+  "place_id": {
+   "type": "string"
+  },
+  "website": {
+   "type": "string"
+  },
+  "type": {
+   "type": "string",
+   "description": "the card's type, e.g. Seafood restaurant"
+  },
+  "what": {
+   "type": "string",
+   "description": "e.g. dinner, a table, a massage"
+  },
+  "day": {
+   "type": "string",
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+  },
+  "time": {
+   "type": "string",
+   "description": "HH:MM, the venue's local time"
+  },
+  "party": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 20
+  },
+  "route": {
+   "enum": [
+    "form",
+    "page",
+    "email",
+    "call",
+    "whatsapp",
+    "no"
+   ],
+   "description": "the route they chose (from choose_route)"
+  },
+  "idempotency_key": {
+   "type": "string",
+   "minLength": 8,
+   "maxLength": 128,
+   "description": "Idempotency key: the same key returns the first result."
+  }
+ },
+ "required": [
+  "name",
+  "city",
+  "day",
+  "time",
+  "party",
+  "idempotency_key"
+ ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "status": {
+   "type": "string"
+  },
+  "read_back": {
+   "type": "array"
+  }
+ }
+}
+```
+
+### `book_venue`
+
+After the person's explicit yes in THIS turn, to what hold_venue read back in an earlier turn: the booking, by its route — their form (any human step goes to their phone as Tap to finish), the platform's page to their phone, the email, or the call. Its status says what's true: confirmed only on the venue's own confirmation.
+
+**Errors:** `no_explicit_yes`, `nothing_held`, `read_back_first`, `not_sent`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "approval": {
+   "type": "object",
+   "properties": {
+    "said": {
+     "type": "string"
+    }
+   }
+  },
+  "idempotency_key": {
+   "type": "string",
+   "minLength": 8,
+   "maxLength": 128,
+   "description": "Idempotency key: the same key returns the first result."
+  }
+ },
+ "required": [
+  "idempotency_key"
+ ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "status": {
+   "type": "string"
+  }
+ }
+}
+```
+
+### `cancel_venue`
+
+Cancel a venue booking, back the way it was made. First call: the read-back (say it, ask); after their explicit yes in a LATER turn, call again to send it.
+
+**Errors:** `booking_unknown`, `no_explicit_yes`, `not_cancelled`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "trip_item_id": {
+   "type": "string"
+  },
+  "venue": {
+   "type": "string"
+  },
+  "approval": {
+   "type": "object",
+   "properties": {
+    "said": {
+     "type": "string"
+    }
+   }
+  },
+  "idempotency_key": {
+   "type": "string",
+   "minLength": 8,
+   "maxLength": 128,
+   "description": "Idempotency key: the same key returns the first result."
+  }
+ },
+ "required": [
+  "idempotency_key"
+ ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "status": {
+   "type": "string"
   }
  }
 }

@@ -69,14 +69,28 @@ def estimate_usd(country: Optional[str], cand: dict) -> int:
     return int(round(base * f / 5.0) * 5)
 
 
-async def hotels_in(account: Optional[str], city: str, country_name: str, country_code: Optional[str], prefer: str = "") -> List[dict]:
-    """Real hotels in a city (Google Places, best rated first): name, Google's rating and count, area, photo, est. price."""
+class StaysDown(Exception):
+    """Sasha 215 · the hotel search (Google Places, through the booking API) didn't answer — raised only when `strict`."""
+
+
+async def hotels_in(account: Optional[str], city: str, country_name: str, country_code: Optional[str], prefer: str = "",
+                    strict: bool = False) -> List[dict]:
+    """Real hotels in a city (Google Places, best rated first): name, Google's rating and count, area, photo, est. price.
+    `strict`: the search not answering raises StaysDown (never read as "no hotels")."""
     from booking_signer import guest_whatsapp as GW
     where = f"{city}, {country_name}" if country_name and "," not in city else city
     what = f"{prefer} hotel".strip()[:60] if prefer else "hotel"
-    status, j = await GW.api(account, "POST", "/api/booking/venues/find", {"what": what, "where": where[:80]})
+    try:
+        status, j = await GW.api(account, "POST", "/api/booking/venues/find", {"what": what, "where": where[:80]})
+    except Exception as e:
+        if strict:
+            raise StaysDown(type(e).__name__) from e
+        log.info("[world] no hotels for %s: %s", where, type(e).__name__)
+        return []
     if status != 200:
         log.info("[world] no hotels for %s: HTTP %s", where, status)
+        if strict and (status >= 500 or status in (0, 408, 429)):
+            raise StaysDown(f"HTTP {status}")
         return []
     cands = [c for c in (j or {}).get("candidates") or [] if c.get("name") and c.get("place_id") != "sasha-test-venue"
              and (c.get("status") in (None, "OPERATIONAL"))]

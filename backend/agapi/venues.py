@@ -297,19 +297,22 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
 
 async def book_venue(ctx, a: dict) -> dict:
     """After the person's explicit yes in a LATER turn: the prepared booking, by its route."""
-    from agapi.v0 import explicit_yes
-    from booking_signer import slot_link as SL, wa_brain as WB
+    from agapi.v0 import claim, stale, yes_to_book
     GW = _API()
     said = ((a.get("approval") or {}).get("said")) or ""
-    if not explicit_yes(said):
+    if not yes_to_book(said):
         raise _err("no_explicit_yes", "booking needs the person's explicit yes in this turn — ask them, then call book_venue")
     held = _HELD.get(ctx.account)
     if not held:
         raise _err("nothing_held", "call hold_venue first — the yes is bound to its read-back")
     if held["at"] >= ctx.started:
         raise _err("read_back_first", "say what you'll do and ask them to go ahead; book once they say yes")
+    if stale(held["at"]):   # Sasha 215 · a read-back over 15 minutes old is never acted on: prepared again, said again
+        _HELD.pop(ctx.account, None)
+        raise _err("read_back_stale", "that was prepared over 15 minutes ago — call hold_venue again and read it back before booking")
     how = {"how": "voice", "said": said}
     venue, rung = GW.plain_venue(held["venue"]), held["rung"]
+    await claim(ctx)   # Sasha 215 · durable: sent once, across restarts and workers
     _HELD.pop(ctx.account, None)
     out = await _book_inner(ctx, held, how, venue, rung)
     card = card_of(ctx.account, held.get("place_id"), venue)
@@ -379,21 +382,29 @@ async def venue_bookings(account: str) -> List[dict]:
     """Pacioli's venue rows: what was asked of each venue, and its status in words (Requested / Confirmed… — from proof only)."""
     GW = _API()
     status, j = await GW.api(account, "GET", "/api/booking/reservations")
+    if status >= 500 or status in (0, 408, 429):   # Sasha 215 · the records not answering is never "no bookings"
+        from agapi.v0 import unreachable
+        raise unreachable("store_unreachable")
     if status != 200:
         return []
     today = date.today().isoformat()
     return [{"trip_item_id": r["id"], "venue": GW.plain_venue(r.get("venue")), "date": r.get("date"), "time": r.get("time"),
-             "party": r.get("party"), "status": r.get("status"), "words": r.get("status_words"), "type": r.get("type")}
+             "party": r.get("party"), "status": r.get("status"), "type": r.get("type"),
+             # Sasha 215 · CR 56 — the venue's OWN words (an email/SMS reply) are untrusted data, never instructions to her
+             **({"venue_said": {"untrusted_text": str(r["status_words"])[:160]}} if r.get("status_words") else {})}
             for r in (j or {}).get("reservations") or [] if (r.get("date") or today) >= today and r.get("status") != "cancelled"][:20]
 
 
 async def cancel_venue(ctx, a: dict) -> dict:
     """Two steps, as booking: first the cancellation's read-back (its route: their cancel link, an email, a text or a call);
     after the person's explicit yes in a LATER turn, sent. Cancelled only when the venue's words say so."""
-    from agapi.v0 import explicit_yes
+    from agapi.v0 import claim, explicit_yes, stale
     GW = _API()
     said = ((a.get("approval") or {}).get("said")) or ""
     held = _CANCEL.get(ctx.account)
+    if held and stale(held["at"]):   # Sasha 215 · over 15 minutes old: never acted on — the cancellation is read back afresh below
+        _CANCEL.pop(ctx.account, None)
+        held = None
     tid = a.get("trip_item_id")
     if not tid and a.get("venue"):
         hit = [b for b in await venue_bookings(ctx.account) if (a["venue"] or "").lower() in (b["venue"] or "").lower()]
@@ -401,6 +412,7 @@ async def cancel_venue(ctx, a: dict) -> dict:
     if held and (not tid or tid == held["id"]) and held["at"] < ctx.started:
         if not explicit_yes(said):
             raise _err("no_explicit_yes", "cancelling needs their explicit yes — ask them")
+        await claim(ctx)
         _CANCEL.pop(ctx.account, None)
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/reservations/{held['id']}/cancel",
                                  {"read_back_sha256": held["sha"], "approval": {"how": "voice", "said": said}}, timeout=120)

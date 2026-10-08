@@ -14,6 +14,7 @@ import { accountUrl, guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // S
 import { bookingPeek } from '@/lib/booking-client'
 import { PAYMENTS_ENABLED, SAVED_CARD_LAST4 } from '@/lib/flags'
 import { buildItineraryHtml, buildItineraryText } from '@/lib/itineraryDoc'
+import { shouldSay } from '@/lib/mic-fail.mjs'   // Sasha 215 · the mic never fails silently
 import { User, Itinerary } from '@/types'
 
 // Sasha 213 · ONE IDENTITY: a concierge for anywhere — no destination is assumed
@@ -608,6 +609,14 @@ export default function NextPage() {
       }
     }, watchdogMs)
   }, [])
+
+  // Sasha 215 · CR 56 #9 — a mic failure is SAID as well as shown, once per kind (lib/mic-fail.mjs)
+  const micSaidRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const line = shouldSay(micError, micSaidRef.current)
+    if (line && speakFnRef.current) { micSaidRef.current.add(line); speakNow(line) }
+  }, [micError])   // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const handleSashaFinished = useCallback(() => {
     // A real answer was queued behind an interim line — voice it now instead of releasing, so

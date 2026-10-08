@@ -40,12 +40,70 @@ class Ctx:
     session: Optional[str] = None
     calls: List[dict] = field(default_factory=list)   # what was called this turn (for the caller's guards and logs)
     started: datetime = field(default_factory=lambda: datetime.now(timezone.utc))   # Sasha 210 · when this turn began
+    idem: Optional[str] = None         # Sasha 215 · the acting call's durable key (call() sets it; claim() takes it once)
+    claimed: Optional[str] = None      # the claim this call holds, released if the act is refused before anything is sent
 
 
 class ToolError(Exception):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code, self.message = code, message
+
+
+# Sasha 215 · CR 56 #4 — an OUTSIDE SERVICE DOWN is said as an outage, in these words, never as a fact about the person ("no
+# trip", "no hotels", "can't find your city"). The agent loop has her say the message as it stands (never improvised round).
+UNREACHABLE = {
+    "store_unreachable": "I can't reach your saved trip right now — our records aren't answering. Nothing was changed; try me again in a minute.",
+    "airline_unreachable": "I can't reach the airline's booking system right now. Your flights are unchanged; try me again in a minute.",
+    "stays_unreachable": "The hotel search is down right now, so I can't show you places to stay. Try me again in a minute.",
+    "venues_unreachable": "The search for places is down right now. Try me again in a minute.",
+    "payments_unreachable": "I can't reach the payment system right now, so no payment link was sent. Try me again in a minute.",
+}
+
+
+def unreachable(code: str) -> ToolError:
+    return ToolError(code, UNREACHABLE[code])
+
+
+_CLAIMED: set = set()   # only when NO database is configured at all (a unit test, a laptop) — production always claims in Postgres
+
+
+async def claim(ctx: "Ctx") -> None:
+    """Sasha 215 · EU 200 — DURABLE IDEMPOTENCY: an act (a payment sent, a booking or cancellation sent) runs once for its key,
+    across restarts and workers: the key is claimed in Postgres (basket_events is unique on source + event_id) BEFORE the act.
+    Already claimed → already_done; the records unreachable → nothing is sent."""
+    if not ctx.idem:
+        return
+    from booking_signer import basket as BK
+    eid = hashlib.sha256(ctx.idem.encode()).hexdigest()[:40]
+    if BK._run() is None:
+        if eid in _CLAIMED:
+            raise ToolError("already_done", "this was already sent once and is never sent twice — get_status says where it stands")
+        _CLAIMED.add(eid)
+        ctx.claimed = eid
+        return
+    try:
+        new = await BK.event("agapi", eid, "claim", {"key": ctx.idem}, verified=True)
+    except Exception as e:
+        log.error("[agapi] claim not recorded — nothing sent: %s: %s", type(e).__name__, e)
+        raise ToolError("store_unreachable", "I can't reach our booking records right now, so I haven't sent anything. Try me again in a minute.")
+    if not new:
+        raise ToolError("already_done", "this was already sent once and is never sent twice — get_status says where it stands")
+    ctx.claimed = eid
+
+
+async def _unclaim(ctx: "Ctx") -> None:
+    eid, ctx.claimed = ctx.claimed, None
+    if not eid:
+        return
+    from booking_signer import basket as BK
+    if BK._run() is None:
+        _CLAIMED.discard(eid)
+        return
+    try:
+        await BK.unclaim("agapi", eid)
+    except Exception as e:
+        log.error("[agapi] claim not released (the next yes will say already_done): %s: %s", type(e).__name__, e)
 
 
 ERR = {"type": "object", "properties": {"ok": {"const": False}, "error": {"type": "object", "properties": {
@@ -62,20 +120,49 @@ TOTAL = {"type": "object", "properties": {"total_eur": {"type": "number"}, "item
 _YES = re.compile(r"(?i)^\s*(?:(?:ok(?:ay)?|right|so|then|great|perfect|lovely|sasha)[,!. ]+)*(?:yes|yeah|yep|yup|sure|definitely|"
                   r"absolutely|go ahead|do it|please do|book it|book (?:the|my|our) (?:whole )?trip|confirm|let'?s do it|let'?s book|"
                   r"send (?:it|me (?:it|their page|the page|the link)|their page|the page|the link))\b")
-_NO = re.compile(r"(?i)\b(?:no|not|don'?t|do not|wait|hold on|later|cancel|stop|maybe)\b")
+_NO = re.compile(r"(?i)\b(?:no|not|don'?t|do not|wait|hold on|later|stop|maybe)\b")
+# Sasha 215 · CR 56 #1 — a QUESTION or a request for options is never a yes, whatever word it starts with: "Yes — what are my
+# cancellation terms?", "Sure, find me dinner options", "ok so what are the options?"
+_ASKING = re.compile(r"\?|(?i:\b(?:what|how|which|why|when|where|who|whether|options?|alternatives?|terms|polic(?:y|ies)|"
+                     r"refund\w*|cost\w*|price\w*|fees?|charges?|show|find|look|search|list|tell me|explain|compare|details?|"
+                     r"more about|instead|other|else|first)\b)")
+_CANCEL_WORD = re.compile(r"(?i)\bcancel\w*")
 
 
 def explicit_yes(said: Optional[str]) -> bool:
-    """An explicit yes in the person's own words — "Yes, book it", "Then book it.", "go ahead" — and no no/wait/not in it."""
+    """An explicit yes in the person's own words — "Yes, book it", "Then book it.", "go ahead", "yes, cancel it" — with no
+    no/wait/not in it, and never a question or a request for options (Sasha 215). WHICH act it agrees to is the caller's:
+    a booking refuses a yes that talks about cancelling (yes_to_book), a cancellation takes it."""
     t = (said or "").strip()
-    return bool(t) and bool(_YES.search(t)) and not _NO.search(t)
+    return bool(t) and bool(_YES.search(t)) and not _NO.search(t) and not _ASKING.search(t)
+
+
+def yes_to_book(said: Optional[str]) -> bool:
+    """A yes to BOOK: an explicit yes that isn't about cancelling ("yes, cancel it" never books)."""
+    return explicit_yes(said) and not _CANCEL_WORD.search(said or "")
+
+
+READ_BACK_TTL_S = 900   # Sasha 215 · a prepared booking or cancellation is acted on within 15 minutes of its read-back, never later
+
+
+def stale(at: Optional[datetime]) -> bool:
+    return at is None or (datetime.now(timezone.utc) - at).total_seconds() > READ_BACK_TTL_S
 
 
 # ── shared reads ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+async def _latest(ctx: Ctx) -> Optional[dict]:
+    """The account's plan, or None when it has none — and an OUTAGE (the store not answering) said as one, never as "no trip"."""
+    from booking_signer import plan_store as PS
+    try:
+        return await PS.latest(ctx.account, strict=True)
+    except PS.StoreDown:
+        raise unreachable("store_unreachable")
+
+
 async def _plan(ctx: Ctx) -> dict:
     from booking_signer import plan_store as PS
-    p = await PS.latest(ctx.account)
+    p = await _latest(ctx)
     if not p:
         raise ToolError("no_trip", "there is no trip on this account yet — propose_trip first")
     return p
@@ -184,6 +271,8 @@ async def _search_healed(origin: str, dest: str, day: str, party: int, limit: in
             return r, d
         if k == 0 and "why" in r and "token" in r["why"]:
             break   # not configured: no retry will help
+        if r.get("outage"):
+            return r, day   # Sasha 215 · Duffel not answering (already retried): said as an outage, never "the nearest day"
     return r if "why" in r else {"why": "no flights in euros"}, day
 
 
@@ -204,6 +293,8 @@ async def search_flights(ctx: Ctx, a: dict) -> dict:
     party = int(a.get("passengers") or 2)
     leg = a.get("leg") or "out"
     r, day = await _search_healed(airport_of(a["origin"]), airport_of(a["destination"]), a["date"], party)
+    if r.get("outage"):
+        raise unreachable("airline_unreachable")
     if "why" in r:
         raise ToolError("no_flights", r["why"])
     a = {**a, "date": day}   # Sasha 210 · the nearest day with flights, when the day asked had none
@@ -217,7 +308,7 @@ async def search_flights(ctx: Ctx, a: dict) -> dict:
         cards = [c for c in cards if str(c.get("departs"))[11:13] >= "17"] or cards
     cards = cards[:6]
     from booking_signer import plan_store as PS
-    p = await PS.latest(ctx.account)
+    p = await _latest(ctx)
     if p:   # the flights shown are the trip's suggestions (the basket), so choose_offer can take any of them
         await _suggest_flights(ctx, p["trip_id"], cards, a["origin"], a["destination"], a["date"], party, leg)
     return {"leg": leg, "date": day, "flights": [_flight_out(c) for c in cards], "note": "Duffel TEST fares — nothing is held until book"}
@@ -230,12 +321,14 @@ async def search_stays(ctx: Ctx, a: dict) -> dict:
     from app.services.hotels_db import VIETNAM_HOTELS
     city = next((k for k in VIETNAM_HOTELS if k.lower() == (a.get("city") or "").strip().lower()), None)
     if not city:   # Sasha 211 · anywhere: real hotels from Google, the nightly price an ESTIMATE (labelled)
-        from app.services.world_itinerary import hotels_in
-        from booking_signer import plan_store as PS
-        p = await PS.latest(ctx.account)
+        from app.services.world_itinerary import StaysDown, hotels_in
+        p = await _latest(ctx)
         pl = (p or {}).get("plan") or {}
         want = (a.get("city") or "").strip()
-        hs = await hotels_in(ctx.account, want, pl.get("country") or "", pl.get("country_code"), (a.get("preference") or "")[:30])
+        try:
+            hs = await hotels_in(ctx.account, want, pl.get("country") or "", pl.get("country_code"), (a.get("preference") or "")[:30], strict=True)
+        except StaysDown:   # Sasha 215 · the hotel search down is never "no hotels"
+            raise unreachable("stays_unreachable")
         if not hs:
             raise ToolError("no_stays", f"no hotels found in {want}")
         _STAYS.setdefault(ctx.account, {})[want.lower()] = hs
@@ -424,10 +517,14 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
 
 async def _swap_world(ctx: Ctx, p: dict, city: str, name: str) -> dict:
     """Sasha 211 · a world plan's hotel in one city → the chosen Google hotel (from the last search there, else searched by name)."""
-    from app.services.world_itinerary import hotels_in, hotel_entry
+    from app.services.world_itinerary import StaysDown, hotels_in, hotel_entry
     from booking_signer import plan_store as PS
     plan = json.loads(json.dumps(p.get("plan") or {}, default=str))
-    shown = _STAYS.get(ctx.account, {}).get(city.lower()) or await hotels_in(ctx.account, city, plan.get("country") or "", plan.get("country_code"))
+    try:
+        shown = _STAYS.get(ctx.account, {}).get(city.lower()) or await hotels_in(ctx.account, city, plan.get("country") or "",
+                                                                                 plan.get("country_code"), strict=True)
+    except StaysDown:
+        raise unreachable("stays_unreachable")
     h = next((x for x in shown if x["name"].lower() == name.lower()), None) or next((x for x in shown if name.lower() in x["name"].lower()), None)
     if h is None:
         raise ToolError("stay_not_found", f"{name} isn't among the hotels found in {city} — search_stays first")
@@ -467,7 +564,10 @@ async def swap_stay(ctx: Ctx, a: dict) -> dict:
 
 async def check_offer(ctx: Ctx, a: dict) -> dict:
     from booking_signer import travel as T
-    st, j = await T.HTTP("GET", f"/air/offers/{a['offer_id']}")
+    try:
+        st, j = await T.call_duffel("GET", f"/air/offers/{a['offer_id']}")
+    except T.DuffelDown:   # Sasha 215 · not answering is not "unavailable"
+        raise unreachable("airline_unreachable")
     if st != 200:
         return {"available": False, "reason": T._err(j, st)}
     o = j["data"]
@@ -557,10 +657,14 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
         if cur and _h.sha256("\n".join(BB.lines_of(cur["rows"], cur["party"])).encode()).hexdigest() == held["sha"]:
             return {**held["result"], "reused": "checked under two minutes ago and nothing has changed"}
     q = await BB.quote(ctx.account, a.get("origin") or "Madrid")
+    if q.get("outage"):   # Sasha 215 · CR 56 #3 — the airline not answering: said, and the chosen flights are never swapped
+        raise unreachable("airline_unreachable")
     changed: List[str] = []
     if "why" in q and "no longer offered" in q["why"]:   # Sasha 210 · a flight gone: the closest one on that leg put in, then said
         changed = await _replace_gone_flights(ctx, p)
         q = await BB.quote(ctx.account, a.get("origin") or "Madrid")
+        if q.get("outage"):
+            raise unreachable("airline_unreachable")
     if "why" in q:
         raise ToolError("not_bookable", q["why"])
     est = any(l.rstrip(")").endswith("(estimate") for l in q["lines"])   # Sasha 211 · real hotels priced as estimates
@@ -579,7 +683,7 @@ async def _replace_gone_flights(ctx: Ctx, p: dict) -> List[str]:
     party, out = _party(p), []
     for r in [x for x in await BK.items(ctx.account, p["trip_id"], ("chosen",)) if x["kind"] == "flight"]:
         v = await BB._validate_flight(ctx.account, r, party)
-        if "why" not in v:
+        if "why" not in v or v.get("outage"):   # Sasha 215 · only a flight Duffel SAID is gone is ever replaced
             continue
         c = BB._card(r)
         day = str(c.get("departs") or r.get("day") or "")[:10]
@@ -602,17 +706,23 @@ async def book(ctx: Ctx, a: dict) -> dict:
     (Pacioli: get_status)."""
     from booking_signer import basket_book as BB
     said = ((a.get("approval") or {}).get("said")) or ""
-    if not explicit_yes(said):
+    if not yes_to_book(said):
         raise ToolError("no_explicit_yes", "booking needs the person's explicit yes in this turn — ask them, then call book")
     sha = a.get("read_back_sha256") or ""
     held = _HELD.get(ctx.account)
     if held and (not sha or sha == held["sha"]) and held["at"] >= ctx.started:   # Sasha 210 · the yes answers a read-back they HEARD
         raise ToolError("read_back_first", "say the read-back's total and ask them to go ahead; book once they say yes")
-    if not sha and held and (datetime.now(timezone.utc) - held["at"]).total_seconds() < 1800:
-        sha = held["sha"]   # Sasha 205 · the read-back they just heard (pay() still refuses if anything changed since)
-    if not sha:
-        raise ToolError("no_read_back", "call hold_booking first — the yes is bound to a read-back")
+    # Sasha 215 · the yes is bound to a read-back they heard in the last 15 minutes — never to an older one, never to none
+    if not held or (sha and sha != held["sha"]):
+        raise ToolError("no_read_back", "call hold_booking first — the yes is bound to a read-back they've just heard")
+    if stale(held["at"]):
+        _HELD.pop(ctx.account, None)
+        raise ToolError("read_back_stale", "that read-back is over 15 minutes old — call hold_booking again and read it back before booking")
+    sha = held["sha"]   # pay() still refuses if anything changed since
+    await claim(ctx)   # Sasha 215 · durable: this payment is sent once, across restarts and workers
     got = await BB.pay(ctx.account, sha)
+    if got.get("unrecorded"):   # Sasha 215 · CR 56 #2 — no record, no link: said as it is
+        raise ToolError("payments_unreachable", got["why"])
     if "why" in got:
         raise ToolError("read_back_changed" if "different words" in got["why"] else "not_bookable", got["why"])
     sent = str(got.get("phone") or "").startswith("sent")
@@ -624,7 +734,7 @@ async def book(ctx: Ctx, a: dict) -> dict:
 
 async def get_status(ctx: Ctx, a: dict) -> dict:
     from booking_signer import basket as BK, paid_watch as PW, plan_store as PS
-    p = await PS.latest(ctx.account)
+    p = await _latest(ctx)
     if not p:   # Sasha 211 · no trip: the venue bookings still have their status
         from agapi import venues as VN
         vb = await VN.venue_bookings(ctx.account)
@@ -691,7 +801,7 @@ TOOLS: List[dict] = [
                                                   "leg": {"enum": ["out", "back"], "description": "out (there) or back (home); default out"},
                                                   "passengers": {"type": "integer", "minimum": 1, "maximum": 9},
                                                   "preferences": {"type": "string", "description": "e.g. direct, morning"}},
-       ["origin", "destination", "date"], {"type": "object", "properties": {"flights": {"type": "array", "items": FLIGHT}}}, ["no_flights"]),
+       ["origin", "destination", "date"], {"type": "object", "properties": {"flights": {"type": "array", "items": FLIGHT}}}, ["no_flights", "airline_unreachable"]),
     _t("search_stays", "Magellan", search_stays, "Places to stay in a city, best rated first: real hotels (Google), each with an ESTIMATED nightly price.",
        {"city": {"type": "string"}, "preference": {"type": "string", "description": "e.g. on the beach, boutique"}}, ["city"],
        {"type": "object", "properties": {"stays": {"type": "array"}}}, ["city_not_covered"]),
@@ -720,7 +830,7 @@ TOOLS: List[dict] = [
     _t("swap_stay", "Magellan", swap_stay, "Change where they stay in one city of the trip (take a name from search_stays). Returns the new total.",
        {"city": {"type": "string"}, "stay_name": {"type": "string"}}, ["city", "stay_name"], TOTAL, ["no_trip", "city_not_in_trip", "swap_failed", "not_priced"]),
     _t("check_offer", "Sherlock", check_offer, "Is this flight offer still available, and at what price?", {"offer_id": {"type": "string"}},
-       ["offer_id"], {"type": "object", "properties": {"available": {"type": "boolean"}, "price_eur": {"type": "number"}}}, []),
+       ["offer_id"], {"type": "object", "properties": {"available": {"type": "boolean"}, "price_eur": {"type": "number"}}}, ["airline_unreachable"]),
     _t("read_booking_route", "Sherlock", read_booking_route, "How a venue takes bookings (its own form, a platform page, email, phone, "
        "WhatsApp) — read from its site and listing. Use the venue card's place_id.",
        {**VENUE_PROPS, "what": {"type": "string", "description": "what they want, e.g. dinner"}},
@@ -741,13 +851,14 @@ TOOLS: List[dict] = [
     _t("hold_booking", "Austen", hold_booking, "The read-back before booking: every item re-checked and priced, the total, and the "
        "sha256 the yes binds to. No money moves; nothing is booked.", {"origin": {"type": "string"}}, [],
        {"type": "object", "properties": {"read_back": {"type": "array"}, "read_back_sha256": {"type": "string"}, "total_eur": {"type": "number"}}},
-       ["no_trip", "travellers_missing", "not_bookable"], austen=True),
+       ["no_trip", "travellers_missing", "not_bookable", "airline_unreachable", "store_unreachable"], austen=True),
     _t("book", "Austen", book, "After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back they "
        "just heard (the last hold_booking, unless read_back_sha256 is given), sent to their phone. Nothing is booked until it is paid — get_status says when.",
        {"read_back_sha256": {"type": "string"}, "approval": {"type": "object", "properties": {"said": {"type": "string"}},
                                                                "description": "the person's own words (filled by the caller from the real message)"}},
        [], {"type": "object", "properties": {"status": {"const": "awaiting_payment"}, "booked": {"const": False}}},
-       ["no_explicit_yes", "no_read_back", "read_back_changed", "not_bookable"], austen=True),
+       ["no_explicit_yes", "no_read_back", "read_back_stale", "read_back_changed", "not_bookable", "already_done", "payments_unreachable",
+        "store_unreachable"], austen=True),
     _t("hold_venue", "Austen", hold_venue, "Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own question "
        "first when it has one (status choose_route: ask it, then call again with the route they pick), else the read-back the "
        "yes binds to (status awaiting_yes: say it in a line and ask them to go ahead). A place that books only by a WhatsApp "
@@ -762,11 +873,11 @@ TOOLS: List[dict] = [
        "turn: the booking, by its route — their form (any human step goes to their phone as Tap to finish), the platform's page "
        "to their phone, the email, or the call. Its status says what's true: confirmed only on the venue's own confirmation.",
        {"approval": {"type": "object", "properties": {"said": {"type": "string"}}}}, [],
-       {"type": "object", "properties": {"status": {"type": "string"}}}, ["no_explicit_yes", "nothing_held", "read_back_first", "not_sent"], austen=True),
+       {"type": "object", "properties": {"status": {"type": "string"}}}, ["no_explicit_yes", "nothing_held", "read_back_first", "read_back_stale", "not_sent", "already_done", "store_unreachable"], austen=True),
     _t("cancel_venue", "Austen", cancel_venue, "Cancel a venue booking, back the way it was made. First call: the read-back (say it, ask); "
        "after their explicit yes in a LATER turn, call again to send it.",
        {"trip_item_id": {"type": "string"}, "venue": {"type": "string"}, "approval": {"type": "object", "properties": {"said": {"type": "string"}}}},
-       [], {"type": "object", "properties": {"status": {"type": "string"}}}, ["booking_unknown", "no_explicit_yes", "not_cancelled"], austen=True),
+       [], {"type": "object", "properties": {"status": {"type": "string"}}}, ["booking_unknown", "no_explicit_yes", "not_cancelled", "already_done", "store_unreachable"], austen=True),
     _t("get_status", "Pacioli", get_status, "What is booked, failed, cancelled or awaiting payment — the ONLY source for booked/paid/confirmed.",
        {}, [], {"type": "object", "properties": {"booked": {"type": "array"}, "anything_booked": {"type": "boolean"}}}, ["no_trip"]),
     _t("get_trip", "Pacioli", get_trip, "The trip as it stands: days and stays, the chosen flights, each item's state.", {}, [],
@@ -775,7 +886,9 @@ TOOLS: List[dict] = [
 ]
 BY_NAME = {t["name"]: t for t in TOOLS}
 _HELD: Dict[str, dict] = {}   # account → the last read-back's sha256 (hold_booking), for book
-_IDEM: Dict[str, dict] = {}
+_IDEM: Dict[str, dict] = {}   # the fast path in this process; claim() is the durable one (Sasha 215)
+ACTS = {"book", "book_venue", "cancel_venue"}   # spend, send or cancel: claimed once, durably, before they act
+READS = {"search_flights", "search_stays", "search_venues", "check_offer", "read_booking_route", "get_status", "get_trip", "get_total"}
 
 
 async def call(ctx: Ctx, name: str, args: dict) -> dict:
@@ -795,14 +908,26 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
         key = f"{ctx.account}:{name}:{args['idempotency_key']}"
         if key in _IDEM:
             return {**_IDEM[key], "replayed": True}
+    ctx.idem, ctx.claimed = (key if name in ACTS else None), None
     try:
         res = {"ok": True, "result": await t["fn"](ctx, args)}
     except ToolError as e:
         res = {"ok": False, "error": {"code": e.code, "message": e.message}}
+        if e.code != "already_done":
+            await _unclaim(ctx)   # refused before anything was sent: the next yes may act
     except Exception as e:
         log.error("[agapi] %s failed: %s: %s", name, type(e).__name__, e)
-        res = {"ok": False, "error": {"code": "internal", "message": f"{name} failed ({type(e).__name__}) — nothing was changed by this call"}}
-    ctx.calls.append({"tool": name, "ok": res["ok"], "agent": t["agent"], "ms": int((time.perf_counter() - t_call) * 1000)})
+        # Sasha 215 · CR 56 #5 — "nothing was changed" only when it's TRUE: a read changes nothing; anything else may have
+        # got partway (the plan replaced, a payment session opened, a message sent) and is checked before anything is said
+        res = {"ok": False, "error": {"code": "internal", "message": (
+            f"{name} failed ({type(e).__name__}) — a lookup only, so nothing was changed" if name in READS else
+            f"{name} failed partway ({type(e).__name__}) — it may or may not have taken effect: check get_status / get_trip "
+            "before saying anything was or wasn't done")}}
+    ctx.idem = ctx.claimed = None
+    out = res.get("result") if res["ok"] else None
+    ctx.calls.append({"tool": name, "ok": res["ok"], "agent": t["agent"], "ms": int((time.perf_counter() - t_call) * 1000),
+                      **({"status": out.get("status")} if isinstance(out, dict) and out.get("status") else {}),
+                      **({"code": res["error"]["code"]} if not res["ok"] else {})})
     if key and res["ok"]:
         _IDEM[key] = res
         try:

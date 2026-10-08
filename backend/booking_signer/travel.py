@@ -48,12 +48,42 @@ def _err(j: Any, s: int) -> str:
     return ((j or {}).get("errors") or [{}])[0].get("message") or f"HTTP {s}"
 
 
-async def place(q: str) -> Optional[dict]:
-    """'Madrid' → {code: MAD, name, tz} — Duffel's own place suggestions (a city first, else an airport); an IATA code as is."""
+class DuffelDown(Exception):
+    """Sasha 215 · CR 56 #3/#4 — Duffel didn't answer (a 5xx, a 429, a timeout, the network): an OUTAGE, never "no such city",
+    "no flights" or "that flight is gone"."""
+
+
+def down_status(s: int) -> bool:
+    return s >= 500 or s in (0, 408, 429)
+
+
+async def call_duffel(method: str, path: str, body: Optional[dict] = None, params: Optional[dict] = None):
+    """HTTP, with an outage RAISED as DuffelDown (retried once first)."""
+    for k in range(2):
+        try:
+            s, j = await HTTP(method, path, body, params) if params is not None else await HTTP(method, path, body)
+        except Exception as e:   # timeout, connection refused, DNS
+            if k:
+                raise DuffelDown(type(e).__name__) from e
+            continue
+        if down_status(s):
+            if k:
+                raise DuffelDown(f"HTTP {s}")
+            continue
+        return s, j
+    raise DuffelDown("no answer")
+
+
+async def place(q: str, strict: bool = False) -> Optional[dict]:
+    """'Madrid' → {code: MAD, name, tz} — Duffel's own place suggestions (a city first, else an airport); an IATA code as is.
+    `strict`: Duffel not answering raises DuffelDown (never read as "no such place")."""
     q = (q or "").strip()
     if re.fullmatch(r"[A-Za-z]{3}", q):
         q = q.upper()
-    s, j = await HTTP("GET", "/places/suggestions", params={"query": q})
+    if strict:
+        s, j = await call_duffel("GET", "/places/suggestions", None, {"query": q})
+    else:
+        s, j = await HTTP("GET", "/places/suggestions", params={"query": q})
     if s != 200:
         return None
     rows = j.get("data") or []
@@ -94,12 +124,16 @@ async def search(origin: str, dest: str, day: str, adults: int = 1, limit: int =
     """{cards: [...3 cheapest...]} or {why}. TEST mode only."""
     if not token():
         return {"why": "flights need a Duffel TEST token (duffel_test_…), and none is set"}
-    a, b = await place(origin), await place(dest)
-    if not a or not b:
-        return {"why": f"I couldn't find {'where you fly from' if not a else 'where you fly to'} as a city or airport"}
-    s, j = await HTTP("POST", "/air/offer_requests?return_offers=true&supplier_timeout=20000",
-                      {"data": {"slices": [{"origin": a["code"], "destination": b["code"], "departure_date": day}],
-                                "passengers": [{"type": "adult"} for _ in range(max(1, adults))], "cabin_class": "economy"}})
+    try:   # Sasha 215 · an outage is said as one: {"why", "outage": True}
+        a, b = await place(origin, strict=True), await place(dest, strict=True)
+        if not a or not b:
+            return {"why": f"I couldn't find {'where you fly from' if not a else 'where you fly to'} as a city or airport"}
+        s, j = await call_duffel("POST", "/air/offer_requests?return_offers=true&supplier_timeout=20000",
+                                 {"data": {"slices": [{"origin": a["code"], "destination": b["code"], "departure_date": day}],
+                                           "passengers": [{"type": "adult"} for _ in range(max(1, adults))], "cabin_class": "economy"}})
+    except DuffelDown as e:
+        log.warning("[travel] Duffel down on search: %s", e)
+        return {"why": "the airline's system isn't answering right now", "outage": True}
     if s not in (200, 201):
         return {"why": f"Duffel (test) refused the search: {_err(j, s)}"}
     if (j.get("data") or {}).get("live_mode"):

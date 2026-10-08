@@ -91,12 +91,12 @@ class TheYes(unittest.TestCase):
         for said in ("Yes, book it", "Yes please", "go ahead", "Then book it."):
             self.assertTrue(API.explicit_yes(said), said)
 
-    @unittest.expectedFailure   # CR 56 GAP 3 (fails SAFE, but loops): "cancel" is in the no-words, so a cancellation's own yes is refused
+    # Sasha 215 · FIXED (was a CR 56 known gap: CR 56 GAP 3 (fails SAFE, but loops): "cancel" is in the no-words, so a cancellation's own )
     def test_yes_cancel_it_confirms_a_cancellation(self):
         for said in ("yes, cancel it", "Yes please cancel", "go ahead and cancel"):
             self.assertTrue(API.explicit_yes(said), said)
 
-    @unittest.expectedFailure   # CR 56 GAP 1 · fix before the demo: a question or a request for options is never a yes
+    # Sasha 215 · FIXED (was a CR 56 known gap: CR 56 GAP 1 · fix before the demo: a question or a request for options is never a yes)
     def test_a_yes_that_is_really_a_question_is_not_a_yes(self):
         for said in ("Yes — what are my cancellation terms?", "Sure, find me dinner options", "ok so what are the options?",
                      "yes, what would cancelling cost?"):
@@ -136,14 +136,14 @@ class Tools(Base):
         self.assertEqual(r["error"]["code"], "no_explicit_yes")
         pay.assert_not_called()
 
-    @unittest.expectedFailure   # CR 56 GAP 2 · fix before the demo: a read-back older than its window can't be acted on
+    # Sasha 215 · FIXED (was a CR 56 known gap: CR 56 GAP 2 · fix before the demo: a read-back older than its window can't be acted on)
     def test_a_stale_prepared_cancellation_is_never_acted_on(self):
         self.prepared_cancel(minutes_ago=180)                                      # prepared three hours ago
         r = run(API.call(self.ctx("yes"), "cancel_venue", {"trip_item_id": "item-1", "approval": {"said": "yes"},
                                                           "idempotency_key": "k-stale-1"}))
         self.assertEqual(self.venue.acts(), [], r)
 
-    @unittest.expectedFailure   # CR 56 GAP 1 in practice: today this CANCELS
+    # Sasha 215 · FIXED (was a CR 56 known gap: CR 56 GAP 1 in practice: today this CANCELS)
     def test_yes_then_a_question_never_cancels(self):
         self.prepared_cancel()
         said = "Yes — what are my cancellation terms?"

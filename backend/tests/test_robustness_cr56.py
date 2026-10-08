@@ -17,12 +17,12 @@ class Spending(unittest.TestCase):
         from app.agent import sasha as AG
         self.assertLessEqual(AG.MAX_STEPS, 8)
 
-    @unittest.expectedFailure   # CR 56 · the agent's own route is outside the rate limiter: "/api/agents" doesn't match "/api/agent/…"
+    # Sasha 215 · FIXED (was a CR 56 known gap: CR 56 · the agent's own route is outside the rate limiter: "/api/agents" doesn't match "/a)
     def test_the_agent_route_is_rate_limited(self):
         from app.middleware import ratelimit as RL
         self.assertTrue(any("/api/agent/turn".startswith(p) for p in RL._PROTECTED_PREFIXES))
 
-    @unittest.expectedFailure   # CR 56 · no per-account daily budget for the agent (model steps / paid tool calls)
+    # Sasha 215 · FIXED (was a CR 56 known gap: CR 56 · no per-account daily budget for the agent (model steps / paid tool calls))
     def test_there_is_a_per_account_daily_budget(self):
         from app.agent import sasha as AG
         self.assertTrue(hasattr(AG, "DAILY_BUDGET") or hasattr(API, "DAILY_BUDGET"))
@@ -60,7 +60,7 @@ class OutsideServicesDown(unittest.TestCase):
     ROW = {"id": "r1", "kind": "flight", "state": "chosen", "snapshot": {"id": "off_1", "amount": "120.00", "currency": "EUR",
                                                                         "owner": "Iberia", "flights": "IB 3166"}}
 
-    @unittest.expectedFailure   # CR 56 · a Duffel 5xx on the offer check reads as "no longer offered" → _replace_gone_flights SWAPS it
+    # Sasha 215 · FIXED (was a CR 56 known gap: CR 56 · a Duffel 5xx on the offer check reads as "no longer offered" → _replace_gone_fligh)
     def test_duffel_down_is_never_read_as_the_flight_gone(self):
         from unittest import mock
         from booking_signer import basket_book as BB, travel as T
@@ -70,7 +70,7 @@ class OutsideServicesDown(unittest.TestCase):
             v = run(BB._validate_flight("acct", self.ROW, 1))
         self.assertNotIn("no longer offered", v.get("why", ""), v)
 
-    @unittest.expectedFailure   # CR 56 · the payment is sent even when its restart-safe record wasn't written → paid, never booked
+    # Sasha 215 · FIXED (was a CR 56 known gap: CR 56 · the payment is sent even when its restart-safe record wasn't written → paid, never)
     def test_no_payment_link_without_its_record(self):
         from unittest import mock
         from booking_signer import basket_book as BB, basket as BK, guest_whatsapp as GW, paid_watch as PWT, test_deposit as TD
@@ -88,7 +88,7 @@ class OutsideServicesDown(unittest.TestCase):
         tap.assert_not_called()
         self.assertIn("why", got)
 
-    @unittest.expectedFailure   # CR 56 · a database outage reads as "there is no trip on this account yet"
+    # Sasha 215 · FIXED (was a CR 56 known gap: CR 56 · a database outage reads as "there is no trip on this account yet")
     def test_database_down_is_never_read_as_no_trip(self):
         from unittest import mock
         from booking_signer import plan_store as PS
@@ -100,7 +100,7 @@ class OutsideServicesDown(unittest.TestCase):
 
 
 class Injection(unittest.TestCase):
-    @unittest.expectedFailure   # CR 56 · a venue's own words reach the model through get_status (status_words) unmarked
+    # Sasha 215 · FIXED (was a CR 56 known gap: CR 56 · a venue's own words reach the model through get_status (status_words) unmarked)
     def test_venue_words_reach_the_model_marked_as_untrusted(self):
         import inspect
         from agapi import venues as VN

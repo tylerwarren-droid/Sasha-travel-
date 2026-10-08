@@ -41,7 +41,9 @@ async def main() -> int:
     await _clean_orphans(since)
     e = await __import__("asyncio").to_thread(WS.main)   # Sasha 206 · WhatsApp: spaces, R1, R2, the guest pipeline (offline)
     f = await __import__("asyncio").to_thread(PG.main)   # Sasha 207 · the stores on a real, throwaway Postgres (never production)
-    print(f"\nDEPLOY GATE: {'PASS' if not (a or b or c or d or v or w or e or f) else 'FAIL'}")
+    from scripts import demo_safety_suite as DS   # Sasha 215 · CR 56 + the safety items: the yes, outages, once-only acts (offline)
+    s = await __import__("asyncio").to_thread(DS.main)
+    print(f"\nDEPLOY GATE: {'PASS' if not (a or b or c or d or v or w or e or f or s) else 'FAIL'}")
     return 1 if (a or b or c or d or v or w or e or f) else 0
 
 

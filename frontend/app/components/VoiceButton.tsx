@@ -49,19 +49,20 @@ const DG_LANG: Record<string, string> = {
 
 // Public env key is a DEV fallback only. In production the backend mints a short-lived,
 // scoped key (see getDeepgramKey) so a long-lived key never sits in the browser.
+import { keyOrFail, RECONNECTS_BEFORE_SAYING } from '@/lib/mic-fail.mjs'   // Sasha 215 · the mic never fails silently
+
 const PUBLIC_DEEPGRAM_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || ''
 
-// Ask the backend for an ephemeral STT key; fall back to the public env key if the proxy
-// isn't configured (501) or is unreachable, so local dev keeps working.
+// Ask the backend for an ephemeral STT key. Sasha 215 · the public env key ONLY when the backend says the proxy isn't
+// configured (501, local dev) — any other failure is said, never a silent fallback to an empty key (CR 56 #9).
 async function getDeepgramKey(): Promise<string> {
+  let status = 0, key = ''
   try {
     const res = await fetch(apiUrl('/api/voice/deepgram-key'), { method: 'POST', headers: apiHeaders() })
-    if (res.ok) {
-      const data = await res.json()
-      if (data?.key) return data.key as string
-    }
-  } catch { /* fall through to public key */ }
-  return PUBLIC_DEEPGRAM_KEY
+    status = res.status
+    if (res.ok) key = ((await res.json())?.key as string) || ''
+  } catch { /* unreachable: status 0 */ }
+  return keyOrFail(status, key, PUBLIC_DEEPGRAM_KEY).key
 }
 
 // Barge-in tuning. The mic is fully muted while the avatar speaks — that is what
@@ -313,7 +314,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
     connectingRef.current = true
     manualStopRef.current = false  // a fresh connect attempt re-enables reconnect
     console.log('[DG] connecting...')
-    reportMicError(null)
+    if (!dgReconnectAttemptsRef.current) reportMicError(null)   // Sasha 215 · a reconnect keeps the error on screen until it opens
     setIsConnecting(true)
     try {
       // Mint the ephemeral STT key in parallel with mic acquisition — no added latency.
@@ -440,6 +441,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         connectedRef.current = true; lastAliveRef.current = Date.now()   // Sasha 192
         connectingRef.current = false; hadConnectedRef.current = true    // Sasha 197
         dgReconnectAttemptsRef.current = 0   // healthy connection — reset backoff
+        reportMicError(null)                 // Sasha 215 · open again: the error goes
 
         // KeepAlive runs for the lifetime of the session — not gated, always on
         keepAliveIntervalRef.current = setInterval(() => {
@@ -616,6 +618,8 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         // after a user/unmount stop, and only while we still want to be listening.
         if (manualStopRef.current || !readyToListenRef.current) return
         const attempt = (dgReconnectAttemptsRef.current = Math.min(dgReconnectAttemptsRef.current + 1, 6))
+        // Sasha 215 · reconnecting again and again without ever opening is a dead mic: shown and said, not retried in silence
+        if (attempt >= RECONNECTS_BEFORE_SAYING) reportMicError('Voice service unavailable')
         const backoff = Math.min(500 * 2 ** (attempt - 1), 8000)  // 0.5s → 8s cap
         console.log(`[DG] unexpected close — reconnecting in ${backoff}ms (attempt ${attempt})`)
         clearTimeout(dgReconnectTimerRef.current)

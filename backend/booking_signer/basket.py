@@ -227,6 +227,17 @@ async def hold(account: str, trip_id: str, session_id: str) -> List[Dict[str, An
     return out
 
 
+async def release(account: str, trip_id: str, session_id: str) -> int:
+    """Sasha 215 · a payment that was never offered (its record failed): the items it held go back to chosen."""
+    async def fn(conn):
+        return await conn.execute("update trip_basket_items set state = 'chosen', paid_session = null, updated_at = now() "
+                                  "where account_id = $1 and trip_id = $2 and paid_session = $3 and state = 'pending_payment'",
+                                  uuid.UUID(account), uuid.UUID(trip_id), session_id)
+    n = int(str(await _go(fn)).split()[-1] or 0)
+    _log(AUSTEN, "%d item(s) released from unoffered payment %s", n, session_id[:14])
+    return n
+
+
 async def remove(account: str, item_id: str) -> bool:
     """The ✕: one row, and only one not yet held or booked."""
     async def fn(conn):
@@ -297,6 +308,21 @@ async def event(source: str, event_id: str, event_type: str, payload: Any, *, ve
     new = await _go(fn)
     _log(PACIOLI, "event %s %s %s", source, event_type, "recorded" if new else "already recorded")
     return new is not None
+
+
+async def unclaim(source: str, event_id: str) -> None:
+    """Sasha 215 · a claim taken for an act that was then refused BEFORE anything was sent (no yes, the API said no): released,
+    so the person's next yes can act. A claim whose act ran, or may have run, is never released."""
+    async def fn(conn):
+        await conn.execute("delete from basket_events where source = $1 and event_id = $2 and event_type = 'claim'", source, event_id)
+    await _go(fn)
+
+
+async def count_events(source: str, prefix: str) -> int:
+    """Sasha 215 · how many events of a source start with this id (the agent's turns per account per day)."""
+    async def fn(conn):
+        return await conn.fetchval("select count(*) from basket_events where source = $1 and starts_with(event_id, $2)", source, prefix)
+    return int(await _go(fn) or 0)
 
 
 # ── R3 · the plan's stays in the basket, and the view rendered from it ─────────────────────────────────────────────────────

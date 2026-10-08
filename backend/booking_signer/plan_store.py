@@ -134,7 +134,11 @@ def _names(r, d: dict) -> List[str]:
     return [c for c in (d.get("cities") or []) if c] + words
 
 
-async def latest(account: Optional[str], hint: Optional[str] = None) -> Optional[dict]:
+class StoreDown(Exception):
+    """Sasha 215 · the plan store didn't answer (raised only to a caller that asked for `strict`)."""
+
+
+async def latest(account: Optional[str], hint: Optional[str] = None, strict: bool = False) -> Optional[dict]:
     """The account's plan: the one the guest's words name (a city or a word of its title, e.g. "Hoi An", "Vietnam"), else the
     one touched most recently. Sasha 169: an account can hold several (a move to Madrid and a Vietnam holiday) — the newest
     CREATED one hijacked "show me my itinerary" while the other was being worked on."""
@@ -150,6 +154,8 @@ async def latest(account: Optional[str], hint: Optional[str] = None) -> Optional
         rows = await run(fn)
     except Exception as e:
         log.info("[plan_store] no plan read: %s", type(e).__name__)
+        if strict:   # Sasha 215 · CR 56 #4 — an outage is never read as "no trip"
+            raise StoreDown(type(e).__name__) from e
         return None
     if not rows:
         return None

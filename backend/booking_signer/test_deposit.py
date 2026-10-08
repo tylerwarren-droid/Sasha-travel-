@@ -110,6 +110,16 @@ async def checkout(amount: str, currency: str, label: str, ref: str) -> Dict[str
     return {"id": j["id"], "url": j["url"]}
 
 
+async def expire(session_id: str) -> bool:
+    """Sasha 215 · a checkout that must never be paid (its booking record wasn't written): expired at Stripe, so the page refuses."""
+    if not key():
+        return False
+    s, j = await HTTP("POST", f"/checkout/sessions/{session_id}/expire", {})
+    if s != 200:
+        log.error("[test_deposit] session %s not expired: HTTP %s", session_id[:16], s)
+    return s == 200
+
+
 async def session_paid(session_id: str) -> Optional[dict]:
     s, cs = await HTTP("GET", f"/checkout/sessions/{session_id}", {})
     if s != 200 or cs.get("livemode") or cs.get("status") != "complete" or cs.get("payment_status") != "paid":

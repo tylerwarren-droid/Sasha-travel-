@@ -68,7 +68,12 @@ _PROTECTED_PREFIXES = (
     "/search",            # RateHawk — partner credential, throttleable
     "/bookings",          # RateHawk booking writes
     "/api/cards",         # writes attacker input to disk
+    "/api/agent/",        # Sasha 215 · CR 56 #7 — the /next agent (Claude + Duffel + Places + Stripe); was outside the limiter
 )
+# Sasha 215 · the agent's routes are behind sign-in and come through the /next proxy (ONE caller IP for everyone), so the
+# shared secret and the per-IP bucket don't apply; the route limits per ACCOUNT (and a daily budget), and its POSTs count
+# against the global ceiling here
+_ACCOUNT_LIMITED = ("/api/agent/",)
 # Warm-up is a cheap 1-token ping the frontend fires before the user authenticates anything;
 # it must not require the secret (but it IS still rate-limited).
 _AUTH_EXEMPT = {"/api/agents/warmup"}
@@ -139,6 +144,14 @@ class RateLimitAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
         if not path.startswith(_PROTECTED_PREFIXES) or request.method == "OPTIONS":
+            return await call_next(request)
+        if path.startswith(_ACCOUNT_LIMITED):
+            if request.method == "POST" and GLOBAL_RATE_LIMIT_RPM > 0:
+                allowed, retry = _take_token("__global__", GLOBAL_RATE_LIMIT_RPM)
+                if not allowed:
+                    logger.warning("GLOBAL rate limit hit (%d rpm) — path=%s", GLOBAL_RATE_LIMIT_RPM, path)
+                    return JSONResponse({"detail": "The demo is busy right now — please try again in a moment."},
+                                        status_code=429, headers={"Retry-After": str(retry)})
             return await call_next(request)
 
         # 1. Shared-secret gate (only when configured, only on writes, warmup exempt).

@@ -36,7 +36,7 @@ One contract for every client.
 
 Flights between two places on a day, cheapest first (TEST fares). Shown flights become the trip's suggestions for that leg.
 
-**Errors:** `no_flights`, `missing_input`, `internal`
+**Errors:** `no_flights`, `airline_unreachable`, `missing_input`, `internal`
 
 **Input**
 
@@ -483,7 +483,7 @@ Change where they stay in one city of the trip (take a name from search_stays). 
 
 Is this flight offer still available, and at what price?
 
-**Errors:** `missing_input`, `internal`
+**Errors:** `airline_unreachable`, `missing_input`, `internal`
 
 **Input**
 
@@ -777,7 +777,7 @@ Save the travellers the airline needs (asked once, kept on the account).
 
 The read-back before booking: every item re-checked and priced, the total, and the sha256 the yes binds to. No money moves; nothing is booked.
 
-**Errors:** `no_trip`, `travellers_missing`, `not_bookable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+**Errors:** `no_trip`, `travellers_missing`, `not_bookable`, `airline_unreachable`, `store_unreachable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 
 **Input**
 
@@ -825,7 +825,7 @@ The read-back before booking: every item re-checked and priced, the total, and t
 
 After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back they just heard (the last hold_booking, unless read_back_sha256 is given), sent to their phone. Nothing is booked until it is paid — get_status says when.
 
-**Errors:** `no_explicit_yes`, `no_read_back`, `read_back_changed`, `not_bookable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+**Errors:** `no_explicit_yes`, `no_read_back`, `read_back_stale`, `read_back_changed`, `not_bookable`, `already_done`, `payments_unreachable`, `store_unreachable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 
 **Input**
 
@@ -974,7 +974,7 @@ Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own 
 
 After the person's explicit yes in THIS turn, to what hold_venue read back in an earlier turn: the booking, by its route — their form (any human step goes to their phone as Tap to finish), the platform's page to their phone, the email, or the call. Its status says what's true: confirmed only on the venue's own confirmation.
 
-**Errors:** `no_explicit_yes`, `nothing_held`, `read_back_first`, `not_sent`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+**Errors:** `no_explicit_yes`, `nothing_held`, `read_back_first`, `read_back_stale`, `not_sent`, `already_done`, `store_unreachable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 
 **Input**
 
@@ -1021,7 +1021,7 @@ After the person's explicit yes in THIS turn, to what hold_venue read back in an
 
 Cancel a venue booking, back the way it was made. First call: the read-back (say it, ask); after their explicit yes in a LATER turn, call again to send it.
 
-**Errors:** `booking_unknown`, `no_explicit_yes`, `not_cancelled`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+**Errors:** `booking_unknown`, `no_explicit_yes`, `not_cancelled`, `already_done`, `store_unreachable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 
 **Input**
 

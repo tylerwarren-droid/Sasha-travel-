@@ -39,20 +39,31 @@ async def _same_flight(account: str, r: Dict[str, Any], party: int) -> Optional[
     search = SEARCH or T.search
     try:
         res = await search(c.get("from") or "", c.get("to") or "", str(c.get("departs") or r.get("day") or "")[:10], adults=party, limit=50)
-    except Exception as e:
+    except Exception as e:   # Sasha 215 · a failed re-search is an outage — never "the flight is gone"
         log.warning("[basket_book] re-search failed: %s: %s", type(e).__name__, e)
-        return None
+        raise T.DuffelDown(type(e).__name__) from e
+    if res.get("outage"):
+        raise T.DuffelDown(res.get("why") or "")
     return next((x for x in res.get("cards") or [] if x.get("flights") == c.get("flights") and x.get("owner") == c.get("owner")), None)
 
 
 async def _validate_flight(account: str, r: Dict[str, Any], party: int) -> Dict[str, Any]:
-    """{row, note} or {why}."""
+    """{row, note} or {why} — and {why, outage: True} when the airline can't be reached: Sasha 215 · CR 56 #3, a 5xx or a
+    timeout is NEVER "no longer offered" (which swaps the person's chosen flight); the flight stays exactly as it was."""
     from . import travel as T
     c = _card(r)
-    st, j = await T.HTTP("GET", f"/air/offers/{c['id']}")
+    outage = {"why": f"I can't reach the airline to re-check your {c.get('owner')} flight right now — it's unchanged", "outage": True}
+    try:
+        st, j = await T.call_duffel("GET", f"/air/offers/{c['id']}")
+    except T.DuffelDown as e:
+        log.warning("[basket_book] offer check: Duffel down (%s) — the flight is kept, said as an outage", e)
+        return outage
     if st == 200 and str(j["data"]["total_amount"]) == str(c.get("amount")) and j["data"]["total_currency"] == c.get("currency"):
         return {"row": r, "note": ""}
-    again = await _same_flight(account, r, party)
+    try:
+        again = await _same_flight(account, r, party)
+    except T.DuffelDown:
+        return outage
     if again is None:
         return {"why": f"the {c.get('owner')} flight {c.get('flights')} you picked is no longer offered — shall I look again?"}
     diff = float(again["amount"]) - float(c.get("amount") or 0)
@@ -133,7 +144,7 @@ async def quote(account: str, origin: str) -> Dict[str, Any]:
     for r in [r for r in await BK.items(account, trip, ("chosen",)) if r["kind"] == "flight"]:
         v = await _validate_flight(account, r, party)
         if "why" in v:
-            return {"why": v["why"]}
+            return {"why": v["why"], **({"outage": True} if v.get("outage") else {})}
         if v["note"]:
             notes[r["id"]] = v["note"]
     rate = HT.rate_eur()
@@ -201,8 +212,22 @@ async def pay(account: str, read_back_sha256: str) -> Dict[str, Any]:
     if "why" in got:
         return {"why": got["why"]}
     await BK.hold(account, cur["trip_id"], got["id"])
-    await PWT.remember(account, "trip", got["id"], {"basket": cur["trip_id"], "sha256": sha},
-                       f"{cur['title'] or 'Your trip'} — {what}", None, "Europe/Madrid")
+    # Sasha 215 · CR 56 #2 — PAID-NEVER-BOOKED IS IMPOSSIBLE: the restart-safe record that books it after payment is written
+    # FIRST; without it no link is sent (the Stripe session is expired so it can never be paid) and she says so
+    rec = await PWT.remember(account, "trip", got["id"], {"basket": cur["trip_id"], "sha256": sha},
+                             f"{cur['title'] or 'Your trip'} — {what}", None, "Europe/Madrid")
+    if not rec:
+        log.error("[basket_book] payment record not written for %s — no link sent", got["id"])
+        try:
+            await TD.expire(got["id"])
+        except Exception as e:
+            log.error("[basket_book] the unrecorded session was not expired: %s: %s", type(e).__name__, e)
+        try:
+            await BK.release(account, cur["trip_id"], got["id"])
+        except Exception as e:
+            log.error("[basket_book] the held items were not released: %s: %s", type(e).__name__, e)
+        return {"why": "I couldn't save the payment record, so I haven't sent a payment link — nothing was charged. Try me again in a minute.",
+                "unrecorded": True}
     phone = await GW.tap_to_pay(account, f"€{t['amount']:.2f}", f"{cur['title'] or 'your trip'} — {what} (TEST)", got["url"])
     return {"url": got["url"], "session_id": got["id"], "phone": phone, "eur": t["amount"]}
 

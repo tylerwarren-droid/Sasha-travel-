@@ -70,7 +70,7 @@ class Base(unittest.TestCase):
 
     def user(self, ref="u1", phone="+15005550006"):
         u = self.ok("users.register", {"external_ref": ref, "destinations": [{"channel": "sms", "value": phone}]})
-        self.assertFalse(u["destinations"][0]["verified"])
+        self.assertFalse(u["destinations"][0]["verified"], u)
         msg = [m for m in self.ok("sandbox.messages", {"end_user_id": u["end_user_id"]})["messages"] if "verification code" in m["body"]][-1]
         code = re.search(r"code is (\d{6})", msg["body"]).group(1)
         link = re.search(r"(http\S+/v/\S+)", msg["body"]).group(1).split("://", 1)[1].split("/", 1)[1]
@@ -163,7 +163,8 @@ class FlightFlow(Base):
         ev = self.ok("evidence.get", {"evidence_id": act["evidence_id"]})
         self.assertEqual(ev["approval"]["approval_id"], apv)
         self.assertTrue(self.ok("evidence.verify", {"evidence": ev})["valid"])
-        ev["outcome"]["reference"] = ev["outcome"]["reference"][:-1] + "X"
+        ref = ev["outcome"]["reference"]
+        ev["outcome"]["reference"] = ref[:-1] + ("Y" if ref.endswith("X") else "X")      # always a real one-character change
         self.assertFalse(self.ok("evidence.verify", {"evidence": ev})["valid"])
         # cancel: its own read-back (AP10) and its own Approval
         r, c = self.call("trip.cancel", {"act_id": b["result"]["act_id"]}, expect="approval_required")
@@ -171,7 +172,7 @@ class FlightFlow(Base):
         self.assertTrue(c["error"]["details"]["read_back"]["lines"][0].startswith("Cancel: "))
         r, c = self.call("trip.cancel", {"act_id": b["result"]["act_id"]}, approval=apv, expect="approval_untrusted_origin"
                          if False else None)
-        self.assertFalse(c["ok"])                                                                   # the booking's yes can't cancel
+        self.assertFalse(c["ok"], c)                                                                # the booking's yes can't cancel
         sim = self.ok("sandbox.simulate_approval", {"read_back_id": crb, "said": "Yes, cancel it."}) if False else None
         cap = self.tap_yes(crb)
         r, c = self.call("trip.cancel", {"act_id": b["result"]["act_id"]}, approval=cap)
@@ -393,6 +394,97 @@ class Admin(Base):
         self.assertEqual(self.client.post("/admin/key", content=body, headers={"AgAPI-Admin-Signature": tampered}).status_code, 401)
         lst = self.client.post("/admin/list", content="{}", headers={"AgAPI-Admin-Signature": self.sign("{}")}).json()
         self.assertNotIn(k, json.dumps(lst))                                                                     # never a secret
+
+
+class Extensions(Base):
+    """CR 59 — the sandbox's additive extensions (spec/ext): EU's own operations and schemas are untouched."""
+
+    def test_approvals_status_after_a_real_tap(self):
+        uid = self.user()
+        h = self.venue_hold(uid)
+        rbid = h["read_back"]["read_back_id"]
+        st = self.ok("approvals.status", {"read_back_id": rbid})
+        self.assertEqual((st["read_back_state"], st["approval"]), ("created", None))
+        apv = self.tap_yes(rbid)                                       # a REAL tap on the link page — no webhook endpoint at all
+        st = self.ok("approvals.status", {"read_back_id": rbid})
+        self.assertEqual((st["read_back_state"], st["approval"]["approval_id"], st["approval"]["channel"], st["approval"]["method"]),
+                         ("approved", apv, "link", "tap"))
+        self.ok("trip.complete", {"hold_id": h["hold_id"]}, approval=st["approval"]["approval_id"])
+        self.assertEqual(self.ok("approvals.status", {"read_back_id": rbid})["approval"]["state"], "consumed")
+        self.call("approvals.status", {"read_back_id": R.new_id("rb")}, expect="not_found")
+
+    def test_acts_status_carries_the_latest_evidence(self):
+        uid = self.user()
+        h = self.flight_hold(uid)
+        apv = self.ok("sandbox.simulate_approval", {"read_back_id": h["read_back"]["read_back_id"], "said": "Yes, book it."})["approval_id"]
+        r = self.ok("trip.complete", {"hold_id": h["hold_id"]}, approval=apv)
+        first = self.ok("acts.status", {"act_id": r["act_id"]})["acts"][0]
+        self.assertEqual(first["evidence_id"], r["evidence_id"])
+        pay = "/" + r["outcome"]["payment_url"].split("://", 1)[1].split("/", 1)[1]
+        self.client.post(pay)
+        after = self.ok("acts.status", {"act_id": r["act_id"]})["acts"][0]
+        self.assertNotEqual(after["evidence_id"], r["evidence_id"])                  # the CONFIRMED proof, without a webhook
+        self.assertEqual(self.ok("evidence.get", {"evidence_id": after["evidence_id"]})["outcome"]["kind"], "CONFIRMED")
+
+    def test_webhooks_register(self):
+        r = self.ok("webhooks.register", {"url": "https://hooks.partner.example/agapi"})
+        self.assertTrue(r["secret"].startswith("whsec_") and r["endpoint_id"].startswith("wep_"))
+        self.assertNotIn(r["secret"], json.dumps(self.ok("approvals.status", {"read_back_id": self.venue_hold(self.user())["read_back"]["read_back_id"]})))
+        for bad in ("http://hooks.partner.example/x", "https://127.0.0.1/x", "https://10.0.0.5/x", "https://db.railway.internal/x"):
+            self.call("webhooks.register", {"url": bad}, expect="invalid_input")
+        self.ok("webhooks.register", {"url": "https://hooks2.partner.example/agapi"})
+        self.call("webhooks.register", {"url": "https://hooks3.partner.example/agapi"}, expect="invalid_input")   # 2 active at most
+
+    def test_users_verify_destination(self):
+        u = self.ok("users.register", {"external_ref": "otp-api", "destinations": [{"channel": "sms", "value": "+15005550123"}]})
+        code = re.search(r"code is (\d{6})", self.ok("sandbox.messages", {"end_user_id": u["end_user_id"]})["messages"][-1]["body"]).group(1)
+        wrong = "000000" if code != "000000" else "111111"
+        self.call("users.verify_destination", {"end_user_id": u["end_user_id"], "channel": "sms", "value": "+15005550123", "code": wrong},
+                  expect="invalid_input")
+        v = self.ok("users.verify_destination", {"end_user_id": u["end_user_id"], "channel": "sms", "value": "+1 500 555 0123", "code": code})
+        self.assertTrue(v["destinations"][0]["verified"])
+
+    def test_eus_tables_are_untouched(self):
+        from agapi_service.registry import eu_operations
+        self.assertEqual(len(eu_operations()), 14)
+        self.assertEqual(set(operations()) - set(eu_operations()), {"approvals.status", "webhooks.register", "users.verify_destination"})
+        self.assertTrue(eu_operations()["acts.status"]["output"].endswith("tools.schema.json#/$defs/status_out"))
+
+
+class DemoConsole(Base):
+    """CR 59 · /demo: every step through the real pipeline as the VC-demo account; the key is never in a page or a response."""
+
+    def test_the_whole_demo_in_order(self):
+        demo_key = A.create_key(self.store, A.create_account(self.store, "VC-demo"), "VC-demo")
+        page = self.client.get("/demo").text
+        self.assertIn("Reset", page)
+        self.assertEqual(self.client.post("/demo/api/step/find").status_code, 409)              # Reset first
+        r = self.client.post("/demo/api/reset")
+        self.assertEqual(r.status_code, 200, r.text)
+        seen = [page, r.text]
+        self.assertEqual(self.client.post("/demo/api/step/pay").json()["caption"], "First: Find.")
+        out = {}
+        for k in ("find", "hold", "ask", "question", "yes", "pay"):
+            out[k] = self.client.post(f"/demo/api/step/{k}").json()
+            seen.append(json.dumps(out[k]))
+        self.assertEqual(out["question"]["tone"], "red")
+        self.assertIn("never a yes", out["question"]["caption"])
+        self.assertEqual(out["yes"]["tone"], "green")
+        self.assertEqual(self.client.get(out["ask"]["phone"]["url"]).status_code, 200)            # the phone shows the real page
+        pay = out["pay"]["phone"]["url"]
+        self.assertEqual(self.client.post("/demo/api/step/confirmed").json()["tone"], "error")    # not paid yet — said so
+        self.assertIn("Booked", self.client.post(pay).text)                                       # the traveller taps Pay (test)
+        for k in ("confirmed", "cancel", "outage"):
+            out[k] = self.client.post(f"/demo/api/step/{k}").json()
+            seen.append(json.dumps(out[k]))
+            self.assertEqual(out[k]["tone"], "green", out[k])
+        self.assertTrue(all(c["ok"] for c in out["confirmed"]["checks"]))
+        self.assertIn("refund", out["cancel"]["caption"])
+        self.assertIn("never", out["outage"]["caption"].lower())
+        self.assertFalse(any(demo_key in x for x in seen))                                        # never exposed
+        self.assertNotRegex(" ".join(seen), r"agp_test_[A-Za-z0-9]{32}")
+        r2 = self.client.post("/demo/api/reset").json()                                           # one click, fresh
+        self.assertEqual(r2["tone"], "neutral")
 
 
 class ZeroLiveCalls(Base):

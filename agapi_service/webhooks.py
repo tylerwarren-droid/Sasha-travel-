@@ -84,6 +84,11 @@ def add_endpoint(store: Store, account: str, url: str) -> tuple:
     import secrets
     if not url.startswith("https://") and not url.startswith("http://127.0.0.1") and not url.startswith("http://localhost"):
         raise ValueError("a webhook endpoint is https")
+    host = (urlsplit(url).hostname or "").lower()
+    if host in ("localhost", "127.0.0.1", "::1") or host.endswith(".internal") or host.endswith(".local") or \
+            __import__("re").fullmatch(r"(10|127|169\.254|192\.168)(\.\d+){1,3}|172\.(1[6-9]|2\d|3[01])(\.\d+){2}", host):
+        if url.startswith("https://"):
+            raise ValueError("a webhook endpoint is a public https host")   # never our own network (SSRF)
     eid, secret = R.new_id("whk").replace("whk_", "wep_"), "whsec_" + secrets.token_urlsafe(32)
     store.x("insert into webhook_endpoints (account, id, url, secret, state, created_at) values (?, ?, ?, ?, 'active', ?)",
             account, eid, url, secret, ts())

@@ -1,0 +1,54 @@
+{
+  "version": "kanoe-sandbox-ext.1",
+  "note": "CR 59: additive only — new operations, and acts.status's output with an optional evidence_id. EU 201's operations.json is unchanged (spec/v1).",
+  "add": [
+    {
+      "operation": "approvals.status",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/approvals_status_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/approvals_status_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "read",
+      "extension": true
+    },
+    {
+      "operation": "webhooks.register",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/webhooks_register_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/webhooks_register_out",
+      "errors": [
+        "invalid_input",
+        "idempotency_key_required",
+        "idempotency_conflict"
+      ],
+      "cost_class": "free",
+      "extension": true
+    },
+    {
+      "operation": "users.verify_destination",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/users_verify_destination_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/end_user",
+      "errors": [
+        "not_found",
+        "invalid_input",
+        "idempotency_key_required",
+        "idempotency_conflict"
+      ],
+      "cost_class": "free",
+      "extension": true
+    }
+  ],
+  "override_output": {
+    "acts.status": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/status_out"
+  }
+}

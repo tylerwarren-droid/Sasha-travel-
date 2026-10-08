@@ -517,7 +517,8 @@ async def acts_status(ctx: Ctx, inp: dict):
         if loads(r["outcome"])["kind"] == "UNKNOWN":
             resolve_unknown(ctx, r)
     rows = [ctx.store.one("select * from acts where account = ? and id = ?", ctx.account, r["id"]) for r in rows]
-    return {"acts": [{"act_id": r["id"], "intent_id": r["intent_id"], "outcome": loads(r["outcome"]), "updated_at": r["updated_at"]}
+    return {"acts": [{"act_id": r["id"], "intent_id": r["intent_id"], "outcome": loads(r["outcome"]), "updated_at": r["updated_at"],
+                      **({"evidence_id": r["evidence_id"]} if r["evidence_id"] else {})}   # CR 59 (finding 4): the latest proof
                      for r in rows],
             "coverage": {"complete": True, "answered": ["agapi_ledger"], "unavailable": []}}, 200, None
 
@@ -672,8 +673,60 @@ async def sandbox_messages(ctx: Ctx, inp: dict):
                           **({"approval_link": r["approval_link"]} if r["approval_link"] else {})} for r in rows]}, 200, None
 
 
+# ── CR 59 · sandbox extensions (spec/ext): additive, proposed to EU ─────────────────────────────────────────────────────
+
+async def approvals_status(ctx: Ctx, inp: dict):
+    """Finding 3: after a real tap, the partner learns the Approval (its id and state) without a webhook endpoint."""
+    rb = ctx.store.one("select * from read_backs where account = ? and id = ?", ctx.account, inp["read_back_id"])
+    if not rb:
+        raise AgapiError("not_found", "No such read-back for this account.")
+    a = ctx.store.one("select * from approvals where account = ? and read_back_id = ? order by approved_at desc", ctx.account, rb["id"])
+    apv = None
+    if a:
+        state = a["state"]
+        if state == "valid" and a["expires_at"] < ts():
+            state = "expired"
+        apv = {"approval_id": a["id"], "state": state, "approved_at": a["approved_at"], "method": a["method"],
+               "channel": loads(a["device"])["channel"], "expires_at": a["expires_at"], "void_reason": a["void_reason"]}
+    return {"read_back_id": rb["id"], "read_back_state": _rb_state(rb), "presented_at": rb["presented_at"], "approval": apv}, 200, None
+
+
+async def webhooks_register(ctx: Ctx, inp: dict):
+    """Finding 5: the partner registers its own endpoint; the whsec_ secret is in this response only. At most 2 active."""
+    if len(ctx.store.q("select id from webhook_endpoints where account = ? and state = 'active'", ctx.account)) >= 2:
+        raise AgapiError("invalid_input", "Two webhook endpoints are already active for this account.", {"path": "/url", "rule": "max_active"})
+    try:
+        eid, secret = W.add_endpoint(ctx.store, ctx.account, inp["url"])
+    except ValueError as e:
+        raise AgapiError("invalid_input", f"{str(e).capitalize()}.", {"path": "/url", "rule": "public_https"})
+    row = ctx.store.one("select * from webhook_endpoints where account = ? and id = ?", ctx.account, eid)
+    return {"endpoint_id": eid, "url": row["url"], "secret": secret, "created_at": row["created_at"]}, 201, None
+
+
+async def users_verify_destination(ctx: Ctx, inp: dict):
+    """Finding 5: the end user's one-time code, relayed by the partner's own app (the key-less /v/{token} page stays)."""
+    _end_user(ctx, inp["end_user_id"])
+    v = _norm_dest(inp["value"])
+    d = ctx.store.one("select * from destinations where account = ? and end_user = ? and channel = ? and value = ?",
+                      ctx.account, inp["end_user_id"], inp["channel"], v)
+    if not d:
+        raise AgapiError("not_found", "No such destination for this end user; users.register it first.")
+    if not d["verified"]:
+        if d["attempts"] >= 5 or (d["otp_expires_at"] or "") < ts():
+            raise AgapiError("invalid_input", "That code has expired; register the destination again for a new one.",
+                             {"path": "/code", "rule": "expired"})
+        if not hmac.compare_digest(d["otp_hmac"] or "", _otp_hmac(inp["code"])):
+            ctx.store.x("update destinations set attempts = attempts + 1 where account = ? and end_user = ? and channel = ? and value = ?",
+                        ctx.account, inp["end_user_id"], inp["channel"], v)
+            raise AgapiError("invalid_input", "That code isn't right.", {"path": "/code", "rule": "mismatch"})
+        ctx.store.x("update destinations set verified = 1, otp_hmac = null where account = ? and end_user = ? and channel = ? and value = ?",
+                    ctx.account, inp["end_user_id"], inp["channel"], v)
+    return end_user_out(ctx.store, ctx.account, inp["end_user_id"]), 200, None
+
+
 OPS = {"travel.find_flights": find_flights, "travel.find_stays": find_stays, "venues.find_venues": find_venues,
        "trip.hold": trip_hold, "approvals.request": approvals_request, "trip.complete": trip_complete, "trip.cancel": trip_cancel,
        "acts.status": acts_status, "evidence.get": evidence_get, "evidence.verify": evidence_verify,
        "users.register": users_register, "usage.get": usage_get, "sandbox.simulate_approval": sandbox_simulate_approval,
-       "sandbox.messages": sandbox_messages}
+       "sandbox.messages": sandbox_messages,
+       "approvals.status": approvals_status, "webhooks.register": webhooks_register, "users.verify_destination": users_verify_destination}

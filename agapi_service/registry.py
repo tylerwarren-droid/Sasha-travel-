@@ -17,9 +17,28 @@ def errors() -> Dict[str, dict]:
     return {c["code"]: c for c in json.loads((SPEC / "error-codes.json").read_text())["codes"]}
 
 
+EXT = SPEC.parent / "ext"
+
+
+@lru_cache(maxsize=1)
+def eu_operations() -> Dict[str, dict]:
+    """EU 201's operation table, exactly as vendored."""
+    return {o["operation"]: o for o in json.loads((SPEC / "operations.json").read_text())["operations"]}
+
+
 @lru_cache(maxsize=1)
 def operations() -> Dict[str, dict]:
-    return {o["operation"]: o for o in json.loads((SPEC / "operations.json").read_text())["operations"]}
+    """EU's table + the Kanoe sandbox extensions (spec/ext/operations.ext.json, CR 59) — additive only: new operations, and an
+    output override that only ADDS an optional field."""
+    ops = {k: dict(v) for k, v in eu_operations().items()}
+    ext = json.loads((EXT / "operations.ext.json").read_text())
+    for o in ext["add"]:
+        if o["operation"] in ops:
+            raise RuntimeError(f"extension would replace EU's {o['operation']}")
+        ops[o["operation"]] = o
+    for name, ref in ext.get("override_output", {}).items():
+        ops[name]["output"] = ref
+    return ops
 
 
 class AgapiError(Exception):
@@ -59,7 +78,7 @@ class AgapiError(Exception):
 @lru_cache(maxsize=1)
 def _registry() -> Registry:
     reg = Registry()
-    for f in (SPEC / "schemas").rglob("*.json"):
+    for f in list((SPEC / "schemas").rglob("*.json")) + list(EXT.glob("*.schema.json")):
         doc = json.loads(f.read_text())
         reg = reg.with_resource(doc["$id"], Resource.from_contents(doc))
     return reg

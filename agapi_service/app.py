@@ -39,6 +39,8 @@ def use_store(store: Store) -> None:
 
 surface.bind(db)
 app.include_router(surface.router)
+from . import demo as _demo  # noqa: E402  (CR 59 · the VC demo console)
+app.include_router(_demo.router)
 _LOOP: Optional[asyncio.Task] = None
 
 
@@ -47,9 +49,19 @@ async def _startup() -> None:
     global _LOOP
     config.pepper()                    # refuses to start deployed without AGAPI_KEY_PEPPER
     PV.install()
+    _migrate_scopes(db())
     W.allow_endpoint_hosts(db())
     if _LOOP is None:
         _LOOP = asyncio.create_task(W.loop(db))
+
+
+def _migrate_scopes(store: Store) -> None:
+    """A key that holds exactly an earlier default set of scopes gains the scopes added since (additive; nothing removed)."""
+    earlier = set(config.DEFAULT_SCOPES) - set(config.SCOPES_ADDED)
+    for k in store.q("select key_id, scopes from api_keys where state = 'active'"):
+        have = set(loads(k["scopes"]))
+        if have == earlier:
+            store.x("update api_keys set scopes = ? where key_id = ?", dumps(sorted(have | set(config.SCOPES_ADDED))), k["key_id"])
 
 
 # ── keys (Part 4 K1–K7) ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -149,11 +161,17 @@ def _scope(store: Store, account: str, op_name: str, inp: dict) -> str:
 
 @app.post("/v1/{op_name}")
 async def call(op_name: str, req: Request):
+    return await execute(op_name, {k.lower(): v for k, v in req.headers.items()}, await req.body())
+
+
+async def execute(op_name: str, headers: dict, raw: bytes, principal: Optional[dict] = None) -> JSONResponse:
+    """The whole pipeline for one request — the HTTP route and the /demo console both come through here. `principal` (the demo
+    console only) is a key's row resolved server-side; the key itself is never held or shown."""
     t0 = time.perf_counter()
     store = db()
-    rid_h = (req.headers.get("agapi-request-id") or "").strip()
+    rid_h = (headers.get("agapi-request-id") or "").strip()
     request_id = rid_h if re.fullmatch(r"req_[0-9A-HJKMNP-TV-Z]{26}", rid_h) else R.new_id("req")
-    version = (req.headers.get("agapi-version") or config.CONTRACT).strip()
+    version = (headers.get("agapi-version") or config.CONTRACT).strip()
     key, op, replayed, claimed = None, None, False, None
     ctx: Optional[E.Ctx] = None
 
@@ -169,7 +187,7 @@ async def call(op_name: str, req: Request):
     try:
         if version not in config.SUPPORTED:
             raise AgapiError("version_unsupported", "That AgAPI-Version isn't served here.", {"supported": list(config.SUPPORTED)})
-        key = _auth(store, req.headers.get("authorization"))
+        key = principal or _auth(store, headers.get("authorization"))
         op = operations().get(op_name)
         if not op:
             raise AgapiError("unknown_operation", f"There is no operation {op_name} in AgAPI v1.")
@@ -181,7 +199,6 @@ async def call(op_name: str, req: Request):
             raise AgapiError("rate_limited", "Too many requests for this key; slow down.", retry_after_s=30)
         if config.COST_UNITS[op["cost_class"]] > 0 and E.budget_remaining(store, key) <= 0:
             raise AgapiError("budget_exhausted", "This key's budget for the month is spent.")
-        raw = await req.body()
         try:
             inp = json.loads(raw) if raw.strip() else {}
         except json.JSONDecodeError:
@@ -193,8 +210,8 @@ async def call(op_name: str, req: Request):
         except R.Refused as e:
             raise AgapiError("invalid_input", f"The input can't be canonicalised ({e}).", {"path": "/", "rule": "canonical"})
         check_input(op_name, inp)
-        idem = req.headers.get("idempotency-key")
-        approval_id = (req.headers.get("agapi-approval-id") or "").strip() or None
+        idem = headers.get("idempotency-key")
+        approval_id = (headers.get("agapi-approval-id") or "").strip() or None
         if approval_id and not re.fullmatch(r"apv_[0-9A-HJKMNP-TV-Z]{26}", approval_id):
             raise AgapiError("invalid_request", "AgAPI-Approval-Id is an apv_ id.")
         if op["idempotent"]:
@@ -321,6 +338,9 @@ async def admin(action: str, req: Request):
                                                                                "from api_keys where account = ?", a["id"])})
         return JSONResponse({"ok": True, "accounts": out})
     return JSONResponse({"ok": False}, status_code=404)
+
+
+_demo.bind(db, lambda *a, **k: execute(*a, **k))
 
 
 @app.get("/health")

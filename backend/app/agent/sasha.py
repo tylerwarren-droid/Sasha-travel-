@@ -35,8 +35,8 @@ log = logging.getLogger("agent.sasha")
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 MODEL = os.getenv("SASHA_AGENT_MODEL", "claude-opus-5-5")               # tools and planning
 FAST_MODEL = os.getenv("SASHA_AGENT_FAST_MODEL", "claude-sonnet-5-5")   # Sasha 204 · the first step of a turn (plain conversation)
-QUIVER_AFTER_S = float(os.getenv("SASHA_QUIVER_AFTER_S", "0.9"))      # nothing said by then → one short acknowledgement
-FILLER_MODEL = os.getenv("SASHA_FILLER_MODEL", "claude-haiku-4-5")      # Sasha 205 · the acknowledgements, written fresh
+QUIVER_AFTER_S = float(os.getenv("SASHA_QUIVER_AFTER_S", "1.5"))      # Sasha 210 · nothing ready by then → one short acknowledgement
+SPLIT_AFTER_S = float(os.getenv("SASHA_SPLIT_AFTER_S", "3.0"))      # Sasha 210 · a step still writing by then: its whole sentences go out
 TRIM_CHARS = int(os.getenv("SASHA_TRIM_CHARS", "1200"))               # Sasha 205 · the only length limit: a safety trim
 _WEIGH = {"search_flights", "search_stays", "search_venues", "read_booking_route"}
 MAX_STEPS = 8
@@ -70,10 +70,18 @@ def _amounts(obj: Any, out: set) -> None:
             out.add(round(float(m.replace(",", "")), 2))
 
 
+_CONDITIONAL = re.compile(r"(?i)\b(?:once|when|after|as soon as|until|the moment)\b[^.!?]*\b(?:pa(?:y|id)|tap|go(?:ne)? through)|\bnot (?:yet )?(?:booked|paid|confirmed)|\bnothing'?s? (?:is )?(?:booked|paid|confirmed)")
+
+
+def _claims(text: str) -> bool:
+    """A booked/paid/confirmed claim — not a sentence saying it WILL be, once they pay (Sasha 210), nor saying it isn't yet."""
+    return any(_CLAIM.search(x) and not _CONDITIONAL.search(x) for x in re.split(r"(?<=[.!?])\s+", text or ""))
+
+
 def guard_check(text: str, allowed: set, anything_booked: bool) -> List[str]:
     """What's wrong with a reply, if anything: unproven claims, prices no tool gave."""
     bad = []
-    if _CLAIM.search(text or "") and not anything_booked:
+    if _claims(text) and not anything_booked:
         bad.append("claim: it says booked/paid/confirmed but Pacioli has nothing booked")
     for m in _EUR.findall(text or ""):
         v = float(m.replace(",", ""))
@@ -84,16 +92,25 @@ def guard_check(text: str, allowed: set, anything_booked: bool) -> List[str]:
 
 # Sasha 205 · EVERY tool result has a renderer in the UI, by type (tests/test_agapi_guards.py holds it)
 RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues": "venues", "read_booking_route": "venue_route",
-          "prepare_trip": "inline", "propose_trip": "trip", "swap_stay": "trip", "choose_offer": "trip", "check_offer": "inline",
+          "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
           "save_travellers": "inline", "hold_booking": "read_back", "book": "trip", "get_status": "trip", "get_trip": "trip",
           "get_total": "inline"}
-KINDS = {"flights", "stays", "venues", "venue_route", "read_back", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
+KINDS = {"flights", "flight_chosen", "stays", "venues", "venue_route", "read_back", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 
 
 def render(tool: str, res: dict, args: dict) -> Optional[dict]:
     """The UI event for a tool's result: {"type": "render", "kind", …payload} — or None for "inline" (it's in her words) and
     "trip" (the trip_changed event already refreshes the Trip view)."""
     kind = RENDER.get(tool, "inline")
+    if tool == "propose_trip":   # Sasha 210 · the proposal arrives WITH its flights: a card per leg, the chosen one marked
+        opts = res.get("flight_options") or {}
+        cards = [flight_card({"flights": opts[leg], "leg": leg}, {"origin": (opts[leg][0] or {}).get("from"),
+                                                                  "destination": (opts[leg][0] or {}).get("to"), "passengers": res.get("party")})
+                 for leg in ("out", "back") if opts.get(leg)]
+        return {"type": "render", "kind": kind, "cards": cards} if cards else None
+    if kind == "flight_chosen":
+        ch = res.get("chosen") or {}
+        return {"type": "render", "kind": kind, "offer_id": ch.get("offer_id")} if ch.get("offer_id") else None
     if kind == "flights":
         return {"type": "render", "kind": kind, "card": flight_card(res, args)}
     if kind == "stays":
@@ -122,23 +139,27 @@ def flight_card(res: dict, args: dict) -> dict:
     each to CHOOSE — the Choose button says "the <airline> one" to her."""
     fl = res.get("flights") or []
     party = int(args.get("passengers") or 2)
+    leg = res.get("leg") or args.get("leg") or "out"
     opts = []
     for f in fl:
         hm = f["duration_minutes"]
+        dep = str(f["departs"])[11:16]
         opts.append({"name": f["airline"], "provider": "duffel", "provider_offer_id": f["offer_id"],
-                     "detail": " · ".join(x for x in [f"dep {str(f['departs'])[11:16]}", f"{f['from']}-{f['to']}", f"{hm // 60}h {hm % 60:02d}m",
+                     "detail": " · ".join(x for x in [f.get("tag") or "", f"dep {dep}", f"{f['from']}-{f['to']}", f"{hm // 60}h {hm % 60:02d}m",
                                                        "nonstop" if not f["stops"] else f"{f['stops']} stop{'s' if f['stops'] > 1 else ''}",
                                                        f["flights"]] if x),
-                     "price": f"€{f['price_eur']:,.2f} total for {party} (TEST)", "dep": str(f["departs"])[11:16]})
-    return {"type": "flight", "_provider": "duffel", "trip_pick": True, "options": opts,
-            "title": f"Flights · {args.get('origin')} → {args.get('destination')}" + (" (home)" if res.get("leg") == "back" else "")}
+                     "price": f"€{f['price_eur']:,.2f} total for {party} · TEST", "dep": dep, "chosen": bool(f.get("chosen")),
+                     # Sasha 210 · a tap says exactly which flight (two options can share an airline)
+                     "pick": f"the {f['airline']} flight {'home' if leg == 'back' else 'out'} at {dep}"})
+    return {"type": "flight", "_provider": "duffel", "trip_pick": True, "options": opts, "leg": leg,
+            "title": f"Flights · {args.get('origin')} → {args.get('destination')}" + (" (home)" if leg == "back" else "")}
 
 
 def guard_strip(text: str, bad: List[str]) -> str:
     """Last resort: drop the offending sentences, say why honestly."""
     out = []
     for s in re.split(r"(?<=[.!?])\s+", text or ""):
-        if _CLAIM.search(s) and any(b.startswith("claim") for b in bad):
+        if _claims(s) and any(b.startswith("claim") for b in bad):
             out.append("Not booked yet — I'll tell you the moment it is.")
         elif _EUR.search(s) and any(b.startswith("price") for b in bad):
             out.append("The panel shows the prices.")
@@ -161,9 +182,98 @@ async def _basket_amounts(ctx: API.Ctx) -> set:
     return out
 
 
-async def turn(account: str, message: str, history: List[dict], session: Optional[str]) -> AsyncIterator[dict]:
-    """One turn: the model, its tools, the guards. Yields events (see the module doc)."""
+# ── Sasha 210 · ONE VOICE: openers never repeated, the acknowledgement continued, never her internals or a test disclaimer ──
+
+# an OPENER is an interjection at the start of an utterance ("Lovely —", "Great!", "Ooh,", "Great choice!") — never twice in
+# a conversation, and never right after the acknowledgement she has just said (the answer CONTINUES it)
+OPENER_WORDS = ("lovely|great|perfect|wonderful|brilliant|fantastic|amazing|awesome|ooh|oh|ah|okay|ok|right|sure|absolutely|nice|"
+                "gorgeous|excellent|fab|fabulous|alright|yes|yay|splendid|marvellous|superb|beautiful|good|cool|wow|hello|hi|hey|well|so")
+_OPENER = re.compile(r"(?i)^\s*(?P<w>" + OPENER_WORDS + r")\b(?:\s+(?:choice|stuff|news|timing|idea|call|question|thinking|pick|plan|one|"
+                     r"lovely|great|perfect|then|there))?\s*(?:[,!.…:;]+|\s*[—–]|\s-\s)\s*")
+# an acknowledgement never starts the way her answers do (so the answer that follows it never sounds like a second greeting)
+_ANSWER_STYLE = {"lovely", "great", "perfect", "wonderful", "brilliant", "fantastic", "amazing", "awesome", "absolutely", "excellent",
+                 "gorgeous", "nice", "good", "sure", "okay", "ok", "hello", "hi", "hey"}
+_OPENERS: Dict[str, set] = {}   # session → the openers already said (fillers and answers)
+
+# her internals — her process, errors, the system — and test disclaimers: never in what she says (the cards carry a TEST tag)
+_INTERNAL = re.compile(
+    r"(?i)\bi (?:got|was|am|'m|get) (?:a (?:bit|little) )?(?:mixed|muddled|confused|tangled)|\bmix(?:ed)?[- ]?up\b|"
+    r"\bi don'?t want to (?:pass on|give you|tell you) (?:bad|wrong|incorrect|outdated)|\bbad info|"
+    r"\b(?:technical|system|server)\s+(?:issue|problem|error|glitch|hiccup|trouble)|\bglitch|\berror\b|\bhiccup|\bsnag\b|"
+    r"\bmy (?:tools?|system|search tool|database)\b|\bthe (?:tool|system|api|database|backend|server)\b|\btool(?:s)?\b|"
+    r"\bapologi[sz]e for the confusion|\bsorry (?:about|for) (?:that|the) (?:confusion|mix)|\blet me (?:try|check|do) (?:that|this|it) again\b|"
+    r"\bexpired\b|\boffer id\b|\bre-?quot|\btimed? out\b|\bread-?back\b|"
+    r"(?:\bnot|n['’]t)\s+(?:actually\s+|really\s+)?(?:a\s+)?real\b|\btests?\b|\bdemo\b|\bsandbox\b|\bplaceholder\b|\bpretend\b|\bno real\b|"
+    r"\bnothing (?:is|will be|gets|'s|has been) (?:actually |really )?(?:charged|taken|paid|reserved)\b|\bwon'?t (?:actually |really )?be charged\b")
+
+
+def opener_of(text: str) -> Optional[str]:
+    m = _OPENER.match(text or "")
+    return ({"okay": "ok"}.get(m.group("w").lower(), m.group("w").lower())) if m else None
+
+
+def strip_openers(text: str) -> str:
+    """Every interjection at the start ("Ooh, lovely — let me look." → "Let me look.")."""
+    t = text or ""
+    for _ in range(3):
+        m = _OPENER.match(t)
+        if not m or not t[m.end():].strip():
+            break
+        t = t[m.end():]
+    t = t.lstrip()
+    return t[:1].upper() + t[1:] if t else t
+
+
+def _history_openers(history: List[dict]) -> set:
+    return {o for m in history or [] if m.get("role") == "assistant" for o in [opener_of(str(m.get("content") or ""))] if o}
+
+
+def internal_sentences(text: str) -> List[str]:
+    return [x for x in re.split(r"(?<=[.!?])\s+", text or "") if x.strip() and _INTERNAL.search(x)]
+
+
+def drop_internal(text: str) -> str:
+    keep = [x for x in re.split(r"(?<=[.!?])\s+", text or "") if x.strip() and not _INTERNAL.search(x)]
+    return " ".join(keep)
+
+
+_TEST_TAG = [(re.compile(r"\s*\((?:Duffel )?TEST[^)]*\)"), ""), (re.compile(r",?\s*marked TEST,?"), ","), (re.compile(r"\bDuffel TEST\b"), "Duffel"),
+             (re.compile(r"\bTEST\s+"), ""), (re.compile(r"\s*\bTEST\b"), "")]
+_MODEL_DROP_KEYS = {"note", "notes", "prices", "test", "prefetched", "flight_note", "total_note"}
+
+
+def clean_for_model(obj: Any) -> Any:
+    """A tool result as the MODEL sees it: no TEST notes or disclaimers (the person sees the TEST tag on the cards and the
+    checkout), nothing internal — so she can't say it."""
+    if isinstance(obj, dict):
+        return {k: clean_for_model(v) for k, v in obj.items() if k not in _MODEL_DROP_KEYS}
+    if isinstance(obj, list):
+        return [clean_for_model(v) for v in obj if not (isinstance(v, str) and v.lstrip().startswith("⚠"))]
+    if isinstance(obj, str):
+        for rx, to in _TEST_TAG:
+            obj = rx.sub(to, obj)
+        return obj.replace(" ,", ",").strip()
+    return obj
+
+
+_ERROR_HINT = ("This is for you only — never mention it, never explain your process. Fix it with your tools if you can (another "
+               "search, the nearest date, a re-check); if it truly can't be done, say ONE short plain line and offer the next step.")
+
+
+def model_result(r: dict) -> dict:
+    if r.get("ok"):
+        return {"ok": True, "result": clean_for_model(r["result"])}
+    e = r.get("error") or {}
+    return {"ok": False, "error": {"code": e.get("code"), "message": clean_for_model(e.get("message") or "")}, "how_to_handle": _ERROR_HINT}
+
+
+async def turn(account: str, message: str, history: List[dict], session: Optional[str],
+               voice: Optional[dict] = None) -> AsyncIterator[dict]:
+    """One turn: the model, its tools, the guards. Yields events (see the module doc). Sasha 210 · each model step is spoken
+    as ONE utterance (no gaps between her phrases); `voice` is shared with turn_with_quiver: the acknowledgement she said
+    while this turn worked ({"filler"}), and its request to speak what's ready ({"flush_now"})."""
     from app.services.llm import client
+    voice = voice if voice is not None else {}
     t0 = time.perf_counter()
     first_text_ms = None
     ctx = API.Ctx(account=account, mode="test", user_said=message, session=session)
@@ -174,79 +284,112 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     for m in history or []:   # amounts she already said (from earlier tool results) stay sayable
         if m.get("role") == "assistant":
             _amounts(str(m.get("content") or ""), allowed)
-    said: List[str] = []
+    used_openers = _OPENERS.setdefault(session or "-", set())
+    used_openers |= _history_openers(history)
+    said: List[str] = []      # what she says (cleaned) — the reply
+    raw: List[str] = []       # what the model wrote — the guards read it
     turn_key = hashlib.sha256(f"{session}:{len(history or [])}:{message}".encode()).hexdigest()[:16]
-    # Sasha 205 · PROMPT CACHING: her persona and the tool schemas are the same every call — cached, the model starts sooner
-    system = [{"type": "text", "text": P.AGENT_SYSTEM, "cache_control": {"type": "ephemeral"}},
-              {"type": "text", "text": system_prompt(datetime.now(timezone.utc))[len(P.AGENT_SYSTEM):]}]
     tools = tools_for_model()
     tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     step_ms: List[dict] = []
-    pending = ""          # Sasha 204 · text not yet a full sentence
-    spoken_any = False    # Sasha 205 · has a phrase gone out this turn
-    held = False          # a sentence failed the guard: nothing more is spoken this turn (the rewrite replaces it)
+    pending = ""          # this step's text, not yet spoken
+    spoken_any = False
+    held = False          # a sentence failed the claim/price guard: nothing more is spoken this turn (the rewrite replaces it)
     booked_now = None
+    internal_log: List[str] = []
 
-    async def sentences(flush: bool = False):
-        """Sasha 205 · natural PHRASES to speak: complete sentences, gathered until there are two or ~25 words (or the step
-        ends / a tool starts) — each checked (claims, prices) before it may be spoken."""
-        nonlocal pending, held, booked_now, spoken_any
-        parts = re.split(r"(?<=[.!?])\s+", pending)
-        done, rest = (parts, "") if flush else (parts[:-1], parts[-1])
-        if not flush and len(done) < 2 and sum(len(x.split()) for x in done) < 25 and spoken_any:
-            return []   # wait for a fuller phrase (the FIRST sentence goes at once: she starts speaking as soon as she can)
-        pending = rest
+    def system_now() -> list:
+        # Sasha 205 · PROMPT CACHING: her persona is the same every call (cached); the rest is per turn
+        extra = system_prompt(datetime.now(timezone.utc))[len(P.AGENT_SYSTEM):]
+        if used_openers:
+            extra += (f"\n\nOpeners you've already used in this conversation — never start with them again: "
+                      f"{', '.join(sorted(used_openers))}.")
+        if voice.get("filler"):
+            extra += (f"\n\nWhile you worked you already said aloud: “{voice['filler']}”. Carry straight on from it — no greeting, "
+                      "no reaction word, never its opening words again.")
+        return [{"type": "text", "text": P.AGENT_SYSTEM, "cache_control": {"type": "ephemeral"}}, {"type": "text", "text": extra}]
+
+    async def speakable(chunk: str) -> str:
+        """The part of this chunk she may say: claims and prices checked (a failure holds the rest of the turn), her internals
+        and test disclaimers dropped, an opener she's used — or any opener right after her acknowledgement — taken off."""
+        nonlocal held, booked_now
         out = []
-        for x in [p.strip() for p in done if p.strip()]:
+        for x in [p.strip() for p in re.split(r"(?<=[.!?])\s+", chunk) if p.strip()]:
             if held:
+                break
+            if _INTERNAL.search(x):
+                internal_log.append(x[:80])
                 continue
-            if _CLAIM.search(x) and booked_now is None:
+            if _claims(x) and booked_now is None:
                 booked_now = await _anything_booked(ctx)
             if guard_check(x, allowed, bool(booked_now)):
                 held = True
-                continue
+                break
             out.append(x)
-        if out:
-            spoken_any = True
-        return [" ".join(out)] if out else []
+        text = " ".join(out)
+        if not text:
+            return ""
+        first_of_turn = not said
+        o = opener_of(text)
+        if o and ((first_of_turn and voice.get("filler")) or o in used_openers):
+            text = strip_openers(text)
+            o = opener_of(text)
+        if o:
+            used_openers.add(o)
+        return text
 
-    steps_run = 0
+    async def flush(only_sentences: bool = False):
+        """Speak what's pending — all of it (a tool starts, the step ends), or (asked to, because nothing has been said for a
+        while) its complete sentences."""
+        nonlocal pending, spoken_any
+        if only_sentences:
+            parts = re.split(r"(?<=[.!?])\s+", pending)
+            if len(parts) < 2:
+                return []
+            chunk, pending = " ".join(parts[:-1]), parts[-1]
+        else:
+            chunk, pending = pending, ""
+        text = await speakable(chunk)
+        if not text:
+            return []
+        spoken_any = True
+        said.append(text)
+        return [{"type": "text", "delta": text + " "}, {"type": "say", "text": text}]
+
     last_tools: set = set()
     for step in range(MAX_STEPS):
-        steps_run = step + 1
         # Sasha 205 · the fast model talks and summarises (incl. a proposal, a total, a booking); the big one only weighs
         # search results (flights, stays, venues) to choose among them
         model = MODEL if last_tools & _WEIGH else FAST_MODEL
         t_step, ttft = time.perf_counter(), None
-        async with client.messages.stream(model=model, max_tokens=900, system=system, tools=tools, messages=msgs) as s:
+        async with client.messages.stream(model=model, max_tokens=900, system=system_now(), tools=tools, messages=msgs) as s:
             async for ev in s:
                 if ttft is None and ev.type in ("text", "content_block_start"):
                     ttft = int((time.perf_counter() - t_step) * 1000)
                 if ev.type == "text":
                     if first_text_ms is None:
                         first_text_ms = int((time.perf_counter() - t0) * 1000)
-                    said.append(ev.text)
-                    yield {"type": "text", "delta": ev.text}
+                    voice["text_started"] = True
+                    raw.append(ev.text)
                     pending += ev.text
-                    for x in await sentences():
-                        yield {"type": "say", "text": x}
+                    if voice.get("flush_now") and not spoken_any and time.perf_counter() - t0 > SPLIT_AFTER_S:
+                        for e in await flush(only_sentences=True):
+                            yield e
                 elif ev.type == "content_block_start" and getattr(ev.content_block, "type", "") == "tool_use":
-                    for x in await sentences(flush=True):
-                        yield {"type": "say", "text": x}
+                    for e in await flush():
+                        yield e
                     yield {"type": "tool_start", "name": ev.content_block.name}
             final = await s.get_final_message()
         u_ = getattr(final, "usage", None)
         step_ms.append({"model": model, "first_token": ttft, "ms": int((time.perf_counter() - t_step) * 1000),
                         "cached": getattr(u_, "cache_read_input_tokens", None)})
-        for x in await sentences(flush=True):
-            yield {"type": "say", "text": x}
+        for e in await flush():
+            yield e
         msgs.append({"role": "assistant", "content": [b.model_dump(exclude_none=True) for b in final.content]})
         uses = [b for b in final.content if b.type == "tool_use"]
         if not uses:
             break
-        if said and not said[-1].endswith((" ", "\n")):
-            said.append(" ")
-            yield {"type": "text", "delta": " "}
+        raw.append(" ")
         results = []
         last_tools = {u.name for u in uses}
         for u in uses:
@@ -267,21 +410,30 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 ev = render(u.name, r["result"], args)
                 if ev:
                     yield ev
-            results.append({"type": "tool_result", "tool_use_id": u.id, "content": json.dumps(r, default=str)[:12000]})
+            results.append({"type": "tool_result", "tool_use_id": u.id, "content": json.dumps(model_result(r), default=str)[:12000]})
         msgs.append({"role": "user", "content": results})
-    text = "".join(said).strip()
+    text = " ".join(said).strip()
     allowed |= await _basket_amounts(ctx)
-    bad = guard_check(text, allowed, await _anything_booked(ctx))
-    guard_log = list(bad)
+    bad = guard_check("".join(raw), allowed, await _anything_booked(ctx))
+    guard_log = list(bad) + [f"internal dropped: {x}" for x in internal_log]
     if bad:   # once: back to the model to rewrite — honestly (Sasha 205: no length rewrite; a safety trim below)
-        msgs.append({"role": "user", "content": "[guard] Your last reply can't be sent: " + "; ".join(guard_log)
-                     + ". Rewrite it in the same voice using only facts and prices from tool results. Reply with the rewritten text only."})
-        r = await client.messages.create(model=FAST_MODEL, max_tokens=400, system=system, messages=msgs)
-        new = "".join(b.text for b in r.content if b.type == "text").strip()
+        spoken = " ".join(said).strip()
+        msgs.append({"role": "user", "content": "[guard] Your last reply can't be sent: " + "; ".join(bad)
+                     + ". Rewrite it in the same voice using only facts and prices from tool results."
+                     + (f" You have ALREADY said aloud: “{spoken}”. Reply with ONLY what you say next, carrying on from it (nothing "
+                        "it already says) — or an empty reply if that's enough." if spoken else " Reply with the rewritten text only.")})
+        r = await client.messages.create(model=FAST_MODEL, max_tokens=400, system=system_now(), messages=msgs)
+        new = drop_internal("".join(b.text for b in r.content if b.type == "text").strip())
         bad2 = guard_check(new, allowed, await _anything_booked(ctx))
-        text = new if not bad2 else guard_strip(new, bad2)
+        new = new if not bad2 else guard_strip(new, bad2)
+        if said and opener_of(new):
+            new = strip_openers(new)
+        # Sasha 210 · what she said stays said: the rewrite only carries on from it (never a sentence twice)
+        already = {_norm(x) for t_ in said for x in re.split(r"(?<=[.!?])\s+", t_)}
+        rest = " ".join(x for x in re.split(r"(?<=[.!?])\s+", new) if x.strip() and _norm(x) not in already) if spoken else new
+        text = f"{spoken} {rest}".strip() if spoken else new
         guard_log += [f"rewritten{' then stripped: ' + '; '.join(bad2) if bad2 else ''}"]
-        yield {"type": "replace", "text": text, "speak": bool(bad) or held}   # Sasha 204 · re-spoken only if facts were wrong
+        yield {"type": "replace", "text": text, "speak": bool(held and rest), "say": rest}
     if len(text) > TRIM_CHARS:   # Sasha 205 · the safety trim: a very long reply ends at a sentence
         cut = text[:TRIM_CHARS]
         text = cut[: max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! ")) + 1] or cut
@@ -294,9 +446,6 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     yield {"type": "done", "text": text, "guard": guard_log, "tools": ctx.calls, "ms": ms}
 
 
-QUIVER = list(P.QUIVER)   # the safe fallback pool (sasha-persona.md)
-FALLBACK = QUIVER + ["Ooh, lovely.", "Right, let me see.", "Good thinking.", "Leave it with me a second.", "Let me have a look.",
-                     "Mm, let me check that.", "Nice — one second.", "On it.", "Let me take a look.", "Great, give me a moment."]
 _FACTY = re.compile(r"(?i)[\d€$£]|\b(book(?:ed|ing)?|reserv\w*|confirm\w*|paid|payment|pay|price\w*|cost\w*|ticket\w*|cheap\w*|"
                     r"expensive|deal|guarantee\w*|promise\w*|euros?|dollars?|free)\b")
 _USED: Dict[str, List[str]] = {}   # session → the acknowledgements already said (never twice in a conversation)
@@ -306,114 +455,101 @@ def _norm(t: str) -> str:
     return re.sub(r"[^a-z ]", "", (t or "").lower()).strip()
 
 
-def filler_ok(line: str, used: List[str]) -> bool:
-    """Sasha 205 · an acknowledgement may be said: short, no fact (no number, price, booking, confirmation, promise), new."""
+def filler_ok(line: str, used: List[str], openers: Optional[set] = None) -> bool:
+    """Sasha 205/210 · an acknowledgement may be said: short, no fact (no number, price, booking, confirmation, promise), new,
+    never her internals or a disclaimer, never opening the way her answers do, never with an opener already used."""
     t = (line or "").strip()
-    return bool(t) and len(t.split()) <= 16 and not _FACTY.search(t) and "?" not in t and _norm(t) not in {_norm(u) for u in used}
+    o = opener_of(t)
+    first = (re.match(r"[A-Za-z']+", t) or [""])[0].lower()
+    return (bool(t) and len(t.split()) <= 16 and not _FACTY.search(t) and "?" not in t and not _INTERNAL.search(t)
+            and first not in _ANSWER_STYLE and not (o and o in (openers or set()))
+            and _norm(t) not in {_norm(u) for u in used})
 
 
-def _fallback(used: List[str]) -> str:
-    for line in FALLBACK:
-        if filler_ok(line, used):
-            return line
-    return ""   # every safe line used: say nothing rather than repeat
+# Sasha 210 · the acknowledgement fits what she's doing — short and plain, never a promise or a performance
+FILLERS = {
+    "propose_trip": ["Let me put that together.", "Give me a moment to pull it all together.", "Let me sketch that out.", "Bear with me while I put it together."],
+    "search_flights": ["Let me look at the flights.", "Let me see what's flying.", "One moment, checking the flights."],
+    "choose_offer": ["Let me swap that in.", "One moment, changing that.", "Swapping that in now."],
+    "swap_stay": ["Let me change that.", "Changing the stay now."],
+    "search_stays": ["Let me look at places to stay.", "Let me see where you could stay."],
+    "hold_booking": ["Let me check everything.", "One moment while I check it all.", "Let me go over everything."],
+    "save_travellers": ["Noting those down.", "One moment, saving those."],
+    "book": ["Sending it to your phone.", "On its way to your phone now."],
+    "get_total": ["Let me add it up.", "One moment, adding it up."],
+    "get_status": ["Let me check.", "Let me take a look."],
+    "get_trip": ["Let me take a look.", "Let me check."],
+    "search_venues": ["Let me find some places.", "Let me see what's around."],
+    "": ["One moment.", "Let me see.", "Mm, let me think.", "Bear with me a second.", "Let me have a look."],
+}
 
 
 async def make_filler(message: str, doing: str, session: Optional[str]) -> str:
-    """A short spoken acknowledgement written fresh from what the person just said (and what she's about to do) — checked:
-    never a fact, never twice. Falls back to an unused safe line; empty if even those are spent."""
-    from app.services.llm import client
+    """The acknowledgement for what she's about to do (a tool's name, or "" while she thinks): never twice in a
+    conversation, never an opener she's used; empty when every fitting line is spent (silence over repetition)."""
     used = _USED.setdefault(session or "-", [])
-    line = ""
-    try:
-        r = await client.messages.create(
-            model=FILLER_MODEL, max_tokens=40,
-            system=("You are Sasha, a warm, witty travel concierge, speaking. Write ONE short spoken acknowledgement (at most 12 words) "
-                    "reacting to what the traveller just said, as you start on it. It can be playful and specific to the place or the "
-                    "moment. Never a number, price, date, booking, payment, confirmation or promise. Not a question. Reply with the line only."
-                    + (f" Don't reuse any of these: {' | '.join(used[-12:])}" if used else "")),
-            messages=[{"role": "user", "content": f"Traveller: {message[:400]}\nYou're about to: {doing}"}])
-        line = "".join(b.text for b in r.content if getattr(b, "type", "") == "text").strip().strip('"')
-    except Exception as e:
-        log.info("[agent] filler not written: %s", type(e).__name__)
-    if not filler_ok(line, used):
-        line = _fallback(used)
-    if line:
-        used.append(line)
-        del used[:-60]
-    return line
-
-
-def _doing(why: str, tool: Optional[str]) -> str:
-    return {"propose_trip": "put the whole trip together", "prepare_trip": "start getting the trip ready",
-            "search_flights": "look at flights", "search_stays": "look at places to stay", "swap_stay": "change a hotel",
-            "choose_offer": "swap the flight", "hold_booking": "check everything before booking", "book": "send the payment link",
-            "get_total": "add it all up", "get_trip": "look at their trip", "search_venues": "look for places",
-            }.get(tool or "", "think about it")
+    openers = _OPENERS.setdefault(session or "-", set())
+    for line in FILLERS.get(doing or "", []) + FILLERS[""]:
+        if filler_ok(line, used, openers):
+            used.append(line)
+            del used[:-60]
+            return line
+    return ""
 
 
 async def turn_with_quiver(account: str, message: str, history: List[dict], session: Optional[str]) -> AsyncIterator[dict]:
-    """turn(), never silent: a short acknowledgement (written fresh, never a fact, never twice) if nothing is said within
-    QUIVER_AFTER_S, or when a tool starts with nothing just said — at most two per turn."""
+    """turn(), never silent — and ONE voice (Sasha 210): if nothing is ready to say after QUIVER_AFTER_S, what she has
+    written so far is spoken if it holds a full sentence; otherwise ONE short acknowledgement (written fresh, never a fact,
+    never twice, never an opener she's used), which the answer then continues (turn() is told it was said)."""
     import asyncio
     q: "asyncio.Queue" = asyncio.Queue()
+    voice: dict = {}
+    sess = session or "-"
 
     async def produce():
         try:
-            async for ev in turn(account, message, history, session):
+            async for ev in turn(account, message, history, session, voice):
                 await q.put(ev)
         except Exception as e:
             log.error("[agent] turn failed: %s: %s", type(e).__name__, e)
-            await q.put({"type": "error", "message": "I hit a snag just now — could you say that again?"})
+            await q.put({"type": "error", "message": "Sorry — could you say that once more?"})
         await q.put(None)
     task = asyncio.create_task(produce())
-    first_filler = asyncio.create_task(make_filler(message, "think about it", session))   # written while she thinks
     t0 = time.perf_counter()
-    last_say, fillers, first_sound = None, 0, None
-    tool_filler: Optional["asyncio.Task"] = None
+    first_sound, decided = None, False
     try:
         while True:
-            if tool_filler is not None and tool_filler.done():
-                line, tool_filler = tool_filler.result(), None
-                if line and fillers < 2 and (last_say is None or time.perf_counter() - last_say > 3):
-                    fillers += 1
-                    last_say = time.perf_counter()
-                    first_sound = first_sound or int((last_say - t0) * 1000)
-                    yield {"type": "filler", "text": line, "why": "tool"}
-            wait = 0.1 if tool_filler is not None else (
-                None if (last_say is not None or fillers) else max(0.05, QUIVER_AFTER_S - (time.perf_counter() - t0)))
+            wait = None if decided else max(0.05, QUIVER_AFTER_S - (time.perf_counter() - t0))
             try:
                 ev = await asyncio.wait_for(q.get(), timeout=wait)
             except asyncio.TimeoutError:
-                if tool_filler is not None or last_say is not None or fillers:
+                decided = True
+                if voice.get("text_started"):   # she's already writing: her own words go out as soon as a sentence is whole
+                    voice["flush_now"] = True
                     continue
-                try:   # nothing said yet: the first sound is the acknowledgement (give it a moment more if still being written)
-                    line = await asyncio.wait_for(asyncio.shield(first_filler), timeout=0.6)
-                except asyncio.TimeoutError:
-                    line = _fallback(_USED.setdefault(session or "-", []))
-                    if line:
-                        _USED[session or "-"].append(line)
-                fillers += 1
-                if line:
-                    last_say = time.perf_counter()
-                    first_sound = first_sound or int((last_say - t0) * 1000)
+                line = await make_filler(message, voice.get("tool") or "", session)   # nothing written yet: what she's doing, said plainly
+                if line and not voice.get("spoke"):
+                    voice["filler"] = line
+                    o = opener_of(line)
+                    if o:
+                        _OPENERS.setdefault(sess, set()).add(o)
+                    first_sound = first_sound or int((time.perf_counter() - t0) * 1000)
                     yield {"type": "filler", "text": line, "why": "silence"}
                 continue
             if ev is None:
                 break
-            now = time.perf_counter()
+            if ev["type"] == "tool_start":
+                voice["tool"] = ev.get("name")
             if ev["type"] == "say":
-                last_say = now
-                first_sound = first_sound or int((now - t0) * 1000)
-            elif ev["type"] == "tool_start" and fillers < 2 and tool_filler is None and (last_say is None or now - last_say > 3):
-                tool_filler = asyncio.create_task(make_filler(message, _doing("tool", ev.get("name")), session))
+                decided = True
+                voice["spoke"] = True
+                first_sound = first_sound or int((time.perf_counter() - t0) * 1000)
             if ev["type"] == "done":
-                ev = {**ev, "ms": {**(ev.get("ms") or {}), "first_sound_server": first_sound, "fillers": fillers}}
+                ev = {**ev, "ms": {**(ev.get("ms") or {}), "first_sound_server": first_sound, "fillers": int(bool(voice.get("filler")))}}
             yield ev
     finally:
-        for t in (task, first_filler, tool_filler):
-            if t is not None and not t.done():
-                t.cancel()
+        if not task.done():
+            task.cancel()
 
 
 TIMINGS: List[dict] = []
@@ -471,8 +607,8 @@ async def agent_turn(request: Request):
                 yield f"data: {json.dumps(ev, default=str)}\n\n"
         except Exception as e:
             log.error("[agent] turn failed: %s: %s", type(e).__name__, e)
-            yield f"data: {json.dumps({'type': 'error', 'message': 'I hit a snag just now — could you say that again?'})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Sorry — could you say that once more?'})}\n\n"
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-__all__ = ["router", "turn", "turn_with_quiver", "make_filler", "filler_ok", "flight_card", "stays_card", "render", "RENDER", "KINDS", "FAST_MODEL", "guard_check", "guard_strip", "tools_for_model", "system_prompt", "MODEL"]
+__all__ = ["router", "turn", "turn_with_quiver", "make_filler", "filler_ok", "opener_of", "strip_openers", "clean_for_model", "drop_internal", "flight_card", "stays_card", "render", "RENDER", "KINDS", "FAST_MODEL", "guard_check", "guard_strip", "tools_for_model", "system_prompt", "MODEL"]

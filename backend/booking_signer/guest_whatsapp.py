@@ -2946,7 +2946,8 @@ async def tap_to_pay(account: Optional[str], amount: str, what: str, url: str) -
     ch = await STORE.channel_of_account(account)
     if not ch:
         return "not sent: no WhatsApp linked to this account"
-    out = await _tell(ch, f"💳 Tap to pay {amount} for {what} (TEST — nothing is charged): {url}",
+    tag = "" if "TEST" in what else " · TEST"   # Sasha 210 · a small TEST tag on the checkout message, never a spoken disclaimer
+    out = await _tell(ch, f"💳 Tap to pay {amount} for {what}{tag}: {url}",
                       ("tap_to_pay", {1: what.split(",")[0], 2: what, 3: amount, 4: url}))
     if "sent" in out and "not" not in out:
         _TAPPED.add(url)

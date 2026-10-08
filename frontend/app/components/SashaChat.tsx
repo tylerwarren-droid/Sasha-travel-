@@ -213,7 +213,7 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
   const [flightPick, setFlightPick] = useState<{ offerId: string; n: number } | null>(null)  // Sasha 182
   const [productMedia, setProductMedia] = useState<{ caption: string; url: string; link?: string }[]>([])
   const openedRef = useRef(false)
-  const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; trip_pick?: boolean; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number; provider?: string; provider_offer_id?: string; live_mode?: boolean }[] }[]>([])
+  const [bookings, setBookings] = useState<{ type: string; title: string; dest?: string; trip_pick?: boolean; leg?: string; options: { name: string; detail?: string; price?: string; book_url: string; offer_id?: string; amount_usd?: number; provider?: string; provider_offer_id?: string; live_mode?: boolean; chosen?: boolean; pick?: string }[] }[]>([])
   // Photos Sasha surfaced, keyed by the index of the assistant message that produced them.
   const [photosByMsg, setPhotosByMsg] = useState<Record<number, Photo[]>>({})
   // Opening state: real Vietnam destinations, each with its own live photo. Before this the
@@ -568,12 +568,17 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
           else if (ev.type === 'tool') { tools.push(ev.name); if (ev.name === 'propose_trip') setBuilding(false) }
           else if (ev.type === 'trip_changed') window.dispatchEvent(new Event('sasha-plan-refresh'))
           else if (ev.type === 'render') {   // Sasha 205 · every tool result has its renderer, by kind (agent/sasha.py RENDER)
-            if ((ev.kind === 'flights' || ev.kind === 'stays') && ev.card) { setBookings([ev.card]); if (tab !== 'chat') onMarkUnseen?.('chat') }
+            if (ev.kind === 'flights' && Array.isArray(ev.cards) && ev.cards.length) { setBookings(ev.cards); if (tab !== 'chat') onMarkUnseen?.('chat') }   // Sasha 210 · the proposal's flights, a card per leg
+            else if ((ev.kind === 'flights' || ev.kind === 'stays') && ev.card) { setBookings([ev.card]); if (tab !== 'chat') onMarkUnseen?.('chat') }
+            else if (ev.kind === 'flight_chosen' && ev.offer_id) {   // Sasha 210 · another flight picked (tap or voice): the card says which is in the trip
+              setBookings(prev => prev.map(b => b.options.some(o => o.provider_offer_id === ev.offer_id)
+                ? { ...b, options: b.options.map(o => ({ ...o, chosen: o.provider_offer_id === ev.offer_id })) } : b))
+            }
             else if ((ev.kind === 'venues' || ev.kind === 'venue_route') && ev.find) { setBookingFind({ ...ev.find, draft: null }); if (tab !== 'chat') onMarkUnseen?.('chat') }
             else if (ev.kind === 'read_back' && ev.trip_book) setTripBook({ from: String(ev.trip_book.from ?? 'Madrid'), n: Date.now() })
             else if (ev.kind === 'trip') window.dispatchEvent(new Event('sasha-plan-refresh'))
           }
-          else if (ev.type === 'replace') { reply = ev.text; show(reply); if (ev.speak) onSashaResponse?.(ev.text) }
+          else if (ev.type === 'replace') { reply = ev.text; show(reply); if (ev.speak) onSashaResponse?.(ev.say || ev.text) }   // Sasha 210 · only what she hasn't said
           else if (ev.type === 'done') {
             reply = ev.text || reply; show(reply); window.dispatchEvent(new Event('sasha-plan-refresh'))
             const body = { session: chatSessionIdRef.current, first_sound_ms: firstSound === null ? null : Math.round(firstSound),
@@ -933,7 +938,9 @@ export default function SashaChat({ agent = false, user, productMode, skinClassN
                         </div>
                         {(b as { trip_pick?: boolean }).trip_pick ? (
                           /* Sasha 196 · in the guided trip: CHOOSE adds this flight to the itinerary (not booked, not paid) */
-                          <button type="button" className="price" onClick={() => { sendMessage(`the ${o.name} one`) }}>Choose</button>
+                          o.chosen
+                            ? <span className="price" aria-label="In your trip">✓ In your trip</span>
+                            : <button type="button" className="price" onClick={() => { sendMessage(o.pick || `the ${o.name} one`) }}>Choose</button>
                         ) : o.provider === 'duffel' && o.provider_offer_id && o.live_mode === false ? (
                           /* Sasha 132 · a Duffel TEST offer: booked as a TEST booking, end to end */
                           <FlightBookTest offerId={o.provider_offer_id} />

@@ -46,6 +46,13 @@ async def cases(a: str) -> None:
        r.get("ok") and res.get("days") and res.get("flight_out") and res.get("flight_back")
        and abs(res["total_eur"] - q["eur"]) < 0.01 and abs(t["result"]["total_eur"] - q["eur"]) < 0.01,
        str({k: res.get(k) for k in ("total_eur",)}) + f" quote {q.get('eur')} · {r.get('error')}")
+    fo = res.get("flight_options") or {}
+    ev = AG.render("propose_trip", res, {})
+    ok("AGENT 1b (Sasha 210): the proposal arrives WITH a range of flights per leg (3–5, tagged), the chosen one marked — as cards",
+       all(3 <= len(fo.get(leg) or []) <= 5 and sum(1 for f in fo[leg] if f["chosen"]) == 1
+           and fo[leg][[f["chosen"] for f in fo[leg]].index(True)]["offer_id"] == res[f"flight_{leg}"]["offer_id"] for leg in ("out", "back"))
+       and len((ev or {}).get("cards") or []) == 2 and all(any(o["chosen"] for o in c["options"]) for c in ev["cards"]),
+       f"{ {k: len(v) for k, v in fo.items()} }")
     out = await API.call(ctx, "search_flights", {"origin": "Madrid", "destination": "Hanoi",
                                                  "date": (date.fromisoformat(start) - timedelta(days=1)).isoformat(), "passengers": 2, "leg": "out"})
     other = next((f for f in (out.get("result") or {}).get("flights") or [] if f["airline"] != res["flight_out"]["airline"]), None)
@@ -65,6 +72,11 @@ async def cases(a: str) -> None:
     sha = (h.get("result") or {}).get("read_back_sha256")
     ok("AGENT 4 (Sherlock via hold_booking): the read-back and its total; nothing held yet",
        h.get("ok") and sha and not await BK.items(a, res["trip_id"], ("pending_payment",)), str(h.get("error")))
+    same = await API.call(ctx, "book", {"idempotency_key": "agent-suite-b-same", "approval": {"said": "Book it."}})
+    ok("AGENT 4b (Sasha 210): “book it” and the read-back in ONE turn → no payment yet: the yes answers a read-back they heard",
+       (same.get("error") or {}).get("code") == "read_back_first" and not await BK.items(a, res["trip_id"], ("pending_payment",)),
+       str(same.get("error")))
+    ctx = API.Ctx(account=a, mode="test")   # Sasha 210 · the yes comes in the NEXT turn, after the read-back was said
     no = await API.call(ctx, "book", {"read_back_sha256": sha, "idempotency_key": "agent-suite-b0",
                                       "approval": {"said": "No. What's the total with the flight and lodging?"}})
     ok("AGENT 5: book without an explicit yes → refused; nothing held",

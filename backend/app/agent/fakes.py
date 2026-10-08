@@ -3,6 +3,7 @@ real SDK streams them (text deltas, a tool_use block start), with optional delay
 from __future__ import annotations
 
 import asyncio
+import json
 import types
 
 
@@ -36,13 +37,15 @@ class _Stream:
         return types.SimpleNamespace(content=self.blocks)
 
 
-def client(steps, delays=None, filler="Ooh, lovely — let me look."):
+def client(steps, delays=None, filler="Ooh, lovely — let me look.", seen=None):
     """steps: [[Block, …], …] — one list per model call; delays: seconds before each call's first event; `filler`: what
-    the acknowledgement writer (messages.create) answers."""
+    the acknowledgement writer (messages.create) answers; `seen`: a list that gets each model call's arguments."""
     steps, delays = list(steps), list(delays or [])
 
     class Msgs:
         def stream(self, **kw):
+            if seen is not None:
+                seen.append(kw)
             return _Stream(steps.pop(0), delays.pop(0) if delays else 0.0)
 
         async def create(self, **kw):
@@ -54,8 +57,10 @@ def client(steps, delays=None, filler="Ooh, lovely — let me look."):
 
 
 async def quiver_checks() -> dict:
-    """The gate's timing checks — {name: (ok, detail)}: a tool slower than 1 s gets a quiver before its result; a slow first
-    answer gets a quiver at ~0.9 s; a quick answer gets none."""
+    """The gate's voice checks (Sasha 204/205 → 210 · ONE VOICE) — {name: (ok, detail)}: an acknowledgement only when nothing
+    is ready after ~1.5 s, and the answer then continues it (no second opener; the next model step is told what was said);
+    a quick answer gets none; each model step is ONE utterance; her internals and test disclaimers are never said; an opener
+    is never used twice in a conversation."""
     import time
     import app.services.llm as LLM
     from agapi import v0 as API
@@ -66,31 +71,48 @@ async def quiver_checks() -> dict:
     async def slow_call(ctx, name, args):
         if name in ("get_status", "get_total", "get_trip"):
             return {"ok": True, "result": {"anything_booked": False, "total_eur": 1468.14}}
-        await asyncio.sleep(1.5)
-        return {"ok": True, "result": {"total_eur": 1468.14}}
+        await asyncio.sleep(1.8)
+        return {"ok": True, "result": {"total_eur": 1468.14, "note": "Duffel TEST fares — nothing is held until book"}}
 
-    async def run(steps, delays, message):
-        LLM.client, API.call = client(steps, delays), slow_call
+    async def run(steps, delays, message, history=None, seen=None, session=None):
+        LLM.client, API.call = client(steps, delays, seen=seen), slow_call
         t0, evs = time.perf_counter(), []
         try:
-            async for ev in AG.turn_with_quiver("00000000-0000-4000-8000-000000000001", message, [], f"gate-{time.time()}"):
+            async for ev in AG.turn_with_quiver("00000000-0000-4000-8000-000000000001", message, history or [], session or f"gate-{time.time()}"):
                 evs.append((round(time.perf_counter() - t0, 2), ev))
         finally:
             LLM.client, API.call = real_client, real_call
         return evs
+    says = lambda evs: [e["text"] for _, e in evs if e["type"] == "say"]
+    seen: list = []
     evs = await run([[Block(type="tool_use", id="t1", name="get_total_slow", input={})],
-                     [Block(type="text", text="The whole trip comes to about €1,468.")]], [0.2, 0], "What's the total?")
+                     [Block(type="text", text="Lovely — the whole trip comes to about €1,468.")]], [0.2, 0], "What's the total?", seen=seen)
     q = [(t, e) for t, e in evs if e["type"] == "filler"]
     tool = next(((t, e) for t, e in evs if e["type"] == "tool"), None)
-    out["a tool slower than 1 s gets an acknowledgement before its result (never a fact)"] = (
-        bool(q) and tool and q[0][0] < tool[0] and q[0][0] <= 1.2 and AG.filler_ok(q[0][1]["text"], []), f"filler {q[:1]} · tool at {tool and tool[0]}")
-    evs = await run([[Block(type="text", text="Lovely to meet you. Where would you like to go?")]], [1.6], "Hi Sasha, I'm Tyler")
+    out["nothing ready after ~1.5 s → ONE acknowledgement, before the slow tool's result (never a fact)"] = (
+        len(q) == 1 and tool and q[0][0] < tool[0] and 1.3 <= q[0][0] <= 2.1 and AG.filler_ok(q[0][1]["text"], []),
+        f"filler {q[:1]} · tool at {tool and tool[0]}")
+    out["the answer CONTINUES the acknowledgement: no second opener, and the model is told what she said"] = (
+        says(evs) == ["The whole trip comes to about €1,468."] and len(seen) == 2 and q
+        and q[0][1]["text"] in json.dumps(seen[1]["system"], ensure_ascii=False), f"{says(evs)}")
+    evs = await run([[Block(type="text", text="Lovely to meet you. Where would you like to go?")]], [1.9], "Hi Sasha, I'm Tyler")
     q = [(t, e) for t, e in evs if e["type"] == "filler"]
-    out["a slow first answer gets an acknowledgement at ~0.9 s (never a fact)"] = (
-        bool(q) and 0.7 <= q[0][0] <= 1.6 and AG.filler_ok(q[0][1]["text"], []), str(q[:1]))
-    evs = await run([[Block(type="text", text="Lovely to meet you. Where would you like to go?")]], [0.1], "Hi Sasha")
-    out["a quick answer gets no acknowledgement"] = (not any(e["type"] == "filler" for _, e in evs) and any(e["type"] == "say" for _, e in evs),
-                                                     str([e["type"] for _, e in evs]))
+    out["a slow first answer gets an acknowledgement at ~1.5 s (never a fact, never opening like an answer)"] = (
+        bool(q) and 1.3 <= q[0][0] <= 2.1 and AG.filler_ok(q[0][1]["text"], []), str(q[:1]))
+    evs = await run([[Block(type="text", text="Lovely to meet you, Tyler. "), Block(type="text", text="Where would you like to go? "),
+                      Block(type="text", text="Somewhere warm, or somewhere with mountains?")]], [0.1], "Hi Sasha")
+    out["a quick answer gets no acknowledgement, and the whole step is ONE utterance (no gaps between her phrases)"] = (
+        not any(e["type"] == "filler" for _, e in evs) and len(says(evs)) == 1, str([e["type"] for _, e in evs]))
+    evs = await run([[Block(type="text", text="I got a bit mixed up there, sorry. Here's your trip, with a flight that fits. "
+                                               "These are test bookings, so nothing is charged. Have a look at the other flights if you like.")]],
+                    [0.1], "Show me")
+    said = " ".join(says(evs))
+    out["her internals and test disclaimers are never said"] = (
+        said == "Here's your trip, with a flight that fits. Have a look at the other flights if you like.", said)
+    sess = f"gate-openers-{time.time()}"
+    evs = await run([[Block(type="text", text="Great! Where are you flying from?")]], [0.1], "Vietnam",
+                    history=[{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Great — who's coming with you?"}], session=sess)
+    out["an opener is never used twice in a conversation"] = (says(evs) == ["Where are you flying from?"], str(says(evs)))
     sess = "gate-fillers"
     lines = [await AG.make_filler("Hoi An!", "think", sess) for _ in range(8)]
     AG._USED.pop(sess, None)

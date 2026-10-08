@@ -579,7 +579,7 @@ How a venue takes bookings (its own page, email, phone…) and how Sasha would b
 
 ### `choose_offer`
 
-Put a flight from search_flights into the trip, replacing the flight on that leg. Returns the new total.
+Put another flight into the trip, replacing the flight on that leg. Returns the new total. Give its offer_id, OR describe one of the trip's options (the proposal's flight cards, a search's): its leg and the airline and/or departure time a tap or the person named ("the British Airways flight out at 08:30"), or pick cheapest/fastest.
 
 **Errors:** `no_trip`, `offer_not_in_trip`, `not_choosable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 
@@ -592,6 +592,25 @@ Put a flight from search_flights into the trip, replacing the flight on that leg
   "offer_id": {
    "type": "string"
   },
+  "leg": {
+   "enum": [
+    "out",
+    "back"
+   ]
+  },
+  "airline": {
+   "type": "string"
+  },
+  "departs": {
+   "type": "string",
+   "description": "HH:MM"
+  },
+  "pick": {
+   "enum": [
+    "cheapest",
+    "fastest"
+   ]
+  },
   "idempotency_key": {
    "type": "string",
    "minLength": 8,
@@ -600,7 +619,6 @@ Put a flight from search_flights into the trip, replacing the flight on that leg
   }
  },
  "required": [
-  "offer_id",
   "idempotency_key"
  ],
  "additionalProperties": false

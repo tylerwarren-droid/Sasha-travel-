@@ -87,20 +87,37 @@ class ReplyGuard(unittest.TestCase):
                     "Flights from 300 euros.", "I'll confirm it now.", "Shall I look?", "I promise it's lovely."):
             self.assertFalse(AG.filler_ok(bad, []), bad)                                  # never a fact or a question
 
-    def test_a_filler_written_twice_is_replaced_by_an_unused_safe_line(self):
-        import app.services.llm as LLM
-        from app.agent import fakes
-        real = LLM.client
-        LLM.client = fakes.client([], filler="Ooh, lovely — let me look.")
-        try:
-            a = asyncio.run(AG.make_filler("Vietnam!", "think", "t-dup"))
-            b = asyncio.run(AG.make_filler("Vietnam!", "think", "t-dup"))
-        finally:
-            LLM.client = real
-            AG._USED.pop("t-dup", None)
-        self.assertEqual(a, "Ooh, lovely — let me look.")
-        self.assertNotEqual(AG._norm(a), AG._norm(b))
-        self.assertTrue(AG.filler_ok(b, []))
+    def test_s210_the_acknowledgement_fits_what_she_does_and_is_never_said_twice(self):
+        lines = [asyncio.run(AG.make_filler("Vietnam!", "propose_trip", "t-dup")) for _ in range(12)]
+        AG._USED.pop("t-dup", None)
+        AG._OPENERS.pop("t-dup", None)
+        self.assertEqual(lines[0], "Let me put that together.")
+        said = [x for x in lines if x]
+        self.assertEqual(len(said), len({AG._norm(x) for x in said}))                   # never twice
+        self.assertTrue(all(AG.filler_ok(x, []) for x in said))                         # never a fact, never an answer's opener
+        self.assertEqual(lines[-1], "")                                                  # every fitting line spent: silence
+
+    def test_s210_the_model_never_sees_test_notes_or_disclaimers(self):
+        r = AG.clean_for_model({"read_back": ["⚠ TEST bookings — no hotel or airline is contacted, nothing is reserved and nothing is charged. For 2.",
+                                              "Total €1468.14 (TEST) — ONE tap to pay on your phone: Apple Pay or a saved card on Stripe's TEST page.",
+                                              "Each goes in your itinerary on its day, marked TEST, with its reference."],
+                                "note": "Duffel TEST fares — nothing is held until book", "total_eur": 1468.14})
+        self.assertNotIn("note", r)
+        self.assertEqual(len(r["read_back"]), 2)
+        self.assertNotIn("TEST", " ".join(r["read_back"]))
+        self.assertIn("€1468.14", r["read_back"][0])
+        self.assertEqual(r["total_eur"], 1468.14)
+
+    def test_s210_openers_and_internals(self):
+        self.assertEqual(AG.opener_of("Lovely — Vietnam in November!"), "lovely")
+        self.assertEqual(AG.opener_of("Great choice! It's swapped."), "great")
+        self.assertIsNone(AG.opener_of("Lovely to meet you."))                 # a word, not an interjection: kept
+        self.assertEqual(AG.strip_openers("Ooh, lovely — let me look."), "Let me look.")
+        self.assertEqual(AG.drop_internal("I don't want to pass on bad info. That flight's gone — here's the closest one."),
+                         "That flight's gone — here's the closest one.")
+        for bad in ("Just so you know, these aren't real bookings.", "It's a test, so nothing is charged.", "My search tool timed out.",
+                    "The demo spa is ours."):
+            self.assertEqual(AG.drop_internal(bad), "", bad)
 
     def test_the_last_resort_strips_only_the_bad_sentence(self):
         out = AG.guard_strip("Good choice. The total is €9,999. Shall I book it?", ["price: €9,999 did not come from a tool"])

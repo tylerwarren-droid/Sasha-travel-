@@ -39,6 +39,7 @@ class Ctx:
     user_said: Optional[str] = None    # the person's own words this turn (Sasha's agent fills it; REST: approval.said)
     session: Optional[str] = None
     calls: List[dict] = field(default_factory=list)   # what was called this turn (for the caller's guards and logs)
+    started: datetime = field(default_factory=lambda: datetime.now(timezone.utc))   # Sasha 210 · when this turn began
 
 
 class ToolError(Exception):
@@ -131,6 +132,47 @@ def _best(cards: List[dict], earliest: str = "07:00") -> Optional[dict]:
     return min(pool, key=lambda c: float(c.get("amount") or 9e9)) if pool else None
 
 
+def _options(cards: List[dict], chosen: Optional[dict], n: int = 5) -> List[dict]:
+    """Sasha 210 · the proposal's range of flights for a leg: the one chosen (Sasha's pick), the cheapest, the fastest, then the
+    next by price — up to n, each tagged; the chosen one marked."""
+    if not cards:
+        return []
+    picks: List[tuple] = []
+    if chosen:
+        picks.append((chosen, "Sasha's pick"))
+    picks.append((min(cards, key=lambda c: float(c.get("amount") or 9e9)), "Cheapest"))
+    picks.append((min(cards, key=lambda c: int(c.get("minutes") or 9e9)), "Fastest"))
+    picks += [(c, "") for c in sorted(cards, key=lambda c: float(c.get("amount") or 9e9))]
+    out, seen = [], set()
+    for c, tag in picks:
+        if c.get("id") in seen:
+            continue
+        seen.add(c.get("id"))
+        out.append({**_flight_out(c), "tag": tag, "chosen": bool(chosen) and c.get("id") == chosen.get("id")})
+        if len(out) >= n:
+            break
+    return out
+
+
+async def _search_healed(origin: str, dest: str, day: str, party: int, limit: int = 12) -> tuple:
+    """Sasha 210 · a leg's search that resolves its own problems: tried again once, then the nearest days (±1, ±2).
+    → (result, the day used)."""
+    from booking_signer import travel as T
+    d0 = date.fromisoformat(day)
+    r = {}
+    for k, shift in enumerate((0, 0, 1, -1, 2, -2)):
+        d = (d0 + timedelta(days=shift)).isoformat()
+        try:
+            r = await T.search(origin, dest, d, adults=party, limit=limit)
+        except Exception as e:
+            r = {"why": f"{type(e).__name__}"}
+        if "why" not in r and [c for c in r.get("cards") or [] if c.get("currency") == "EUR"]:
+            return r, d
+        if k == 0 and "why" in r and "token" in r["why"]:
+            break   # not configured: no retry will help
+    return r if "why" in r else {"why": "no flights in euros"}, day
+
+
 async def _suggest_flights(ctx: Ctx, trip_id: str, cards: List[dict], origin: str, dest: str, day: str, party: int,
                            leg: str = "out") -> List[str]:
     from booking_signer import basket as BK
@@ -147,9 +189,10 @@ async def search_flights(ctx: Ctx, a: dict) -> dict:
     from booking_signer import travel as T
     party = int(a.get("passengers") or 2)
     leg = a.get("leg") or "out"
-    r = await T.search(airport_of(a["origin"]), airport_of(a["destination"]), a["date"], adults=party, limit=12)
+    r, day = await _search_healed(airport_of(a["origin"]), airport_of(a["destination"]), a["date"], party)
     if "why" in r:
         raise ToolError("no_flights", r["why"])
+    a = {**a, "date": day}   # Sasha 210 · the nearest day with flights, when the day asked had none
     cards = [c for c in r["cards"] if c.get("currency") == "EUR"] or r["cards"]
     pref = (a.get("preferences") or "").lower()
     if "direct" in pref or "nonstop" in pref:
@@ -163,7 +206,7 @@ async def search_flights(ctx: Ctx, a: dict) -> dict:
     p = await PS.latest(ctx.account)
     if p:   # the flights shown are the trip's suggestions (the basket), so choose_offer can take any of them
         await _suggest_flights(ctx, p["trip_id"], cards, a["origin"], a["destination"], a["date"], party, leg)
-    return {"leg": leg, "flights": [_flight_out(c) for c in cards], "note": "Duffel TEST fares — nothing is held until book"}
+    return {"leg": leg, "date": day, "flights": [_flight_out(c) for c in cards], "note": "Duffel TEST fares — nothing is held until book"}
 
 
 async def search_stays(ctx: Ctx, a: dict) -> dict:
@@ -220,8 +263,9 @@ async def _search_legs(origin: str, days: List[dict], start: date, nights: int, 
     last_city = (next((d.get("city") for d in reversed(days) if d.get("city")), first_city) or "").split(",")[0]
     legs = [("out", origin, airport_of(first_city), (start - timedelta(days=1)).isoformat()),
             ("back", airport_of(last_city), origin, (start + timedelta(days=nights)).isoformat())]
-    found = await _aio.gather(*[T.search(o, d, day, adults=party, limit=12) for _, o, d, day in legs])
-    return {"legs": legs, "found": found}
+    got = await _aio.gather(*[_search_healed(o, d, day, party) for _, o, d, day in legs])
+    legs = [(leg, o, d, used) for (leg, o, d, _), (_, used) in zip(legs, got)]
+    return {"legs": legs, "found": [r for r, _ in got]}
 
 
 async def prepare_trip(ctx: Ctx, a: dict) -> dict:
@@ -293,7 +337,10 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
             log.info("[agapi] prefetched flights unusable (%s) — searching now", type(e).__name__)
     if searched is None:
         searched = await _search_legs(origin, days, start, nights, party)
+    options: Dict[str, List[dict]] = {}
     for (leg, o, d, day), r in zip(searched["legs"], searched["found"]):   # out AND back: a flight that fits on each leg (home after midday)
+        if "why" in r:   # Sasha 210 · a prepared search that failed is searched again (and the nearest days) before saying so
+            r, day = await _search_healed(o, d, day, party)
         if "why" in r:
             why.append(f"{leg}: {r['why']}")
             continue
@@ -302,11 +349,13 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
         best = _best(cards, "12:00" if leg == "back" else "07:00")
         await BK.choose(ctx.account, ids[cards.index(best)])
         flights[leg] = _flight_out(best)
+        options[leg] = _options(cards, best)
     q = await BB.quote(ctx.account, origin)
     hotel = lambda d: (d.get("hotel") or {}).get("name") if isinstance(d.get("hotel"), dict) else d.get("hotel")
     return {"trip_id": trip_id, "title": itin.get("title"),
             "days": [{"day": d.get("day"), "city": d.get("city"), "stay": hotel(d), "title": d.get("title")} for d in days],
             "flight_out": flights.get("out"), "flight_back": flights.get("back"), **({"flight_note": "; ".join(why)} if why else {}),
+            "flight_options": options, "party": party,
             "total_eur": q.get("eur") if "eur" in q else None, **({"total_note": q.get("why")} if "why" in q else {}),
             "prices": "stays at the TEST hotel rate, the flight at its Duffel TEST fare — nothing is booked", "prefetched": used_prefetch}
 
@@ -359,9 +408,9 @@ async def read_booking_route(ctx: Ctx, a: dict) -> dict:
 async def choose_offer(ctx: Ctx, a: dict) -> dict:
     from booking_signer import basket as BK
     p = await _plan(ctx)
-    row = await BK.by_ref(ctx.account, p["trip_id"], a["offer_id"])
+    row = await BK.by_ref(ctx.account, p["trip_id"], a["offer_id"]) if a.get("offer_id") else await _find_option(ctx, p, a)
     if not row:
-        raise ToolError("offer_not_in_trip", "that flight isn't one shown for this trip — search_flights first")
+        raise ToolError("offer_not_in_trip", "no flight like that among this trip's options — search_flights for that leg first")
     leg = (row.get("slice_key") or "out:").split(":", 1)[0]
     for other in await BK.items(ctx.account, p["trip_id"], ("chosen",)):   # one flight per LEG (searches of the leg may differ)
         if other["kind"] == "flight" and other["id"] != row["id"] and (other.get("slice_key") or "").split(":", 1)[0] == leg:
@@ -374,6 +423,26 @@ async def choose_offer(ctx: Ctx, a: dict) -> dict:
     except BK.BasketError as e:
         raise ToolError("not_choosable", str(e))
     return {"chosen": _flight_out(row.get("snapshot") or {}, row), **(await _total(ctx, p))}
+
+
+async def _find_option(ctx: Ctx, p: dict, a: dict) -> Optional[dict]:
+    """Sasha 210 · a flight among the trip's options (the proposal's cards, a search's) by what the person said or tapped:
+    the leg, and the airline and/or departure time ("the British Airways flight out at 08:30"), or the cheapest / fastest."""
+    from booking_signer import basket as BK
+    leg = a.get("leg") or "out"
+    rows = [r for r in await BK.items(ctx.account, p["trip_id"], ("suggested", "chosen"))
+            if r["kind"] == "flight" and (r.get("slice_key") or "out:").split(":", 1)[0] == leg]
+    snap = lambda r: r.get("snapshot") or {}
+    if a.get("airline"):
+        rows = [r for r in rows if (a["airline"].lower() in str(snap(r).get("owner") or "").lower())] or []
+    if a.get("departs"):
+        hh = str(a["departs"]).strip()[:5].replace(".", ":").zfill(5)
+        rows = [r for r in rows if str(snap(r).get("departs") or "")[11:16] == hh]
+    if not rows:
+        return None
+    if a.get("pick") == "fastest":
+        return min(rows, key=lambda r: int(snap(r).get("minutes") or 9e9))
+    return min(rows, key=lambda r: float(r.get("price_amount") or 9e9))   # "cheapest", or the cheapest of the ones described
 
 
 async def save_travellers(ctx: Ctx, a: dict) -> dict:
@@ -412,12 +481,43 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
         if cur and _h.sha256("\n".join(BB.lines_of(cur["rows"], cur["party"])).encode()).hexdigest() == held["sha"]:
             return {**held["result"], "reused": "checked under two minutes ago and nothing has changed"}
     q = await BB.quote(ctx.account, a.get("origin") or "Madrid")
+    changed: List[str] = []
+    if "why" in q and "no longer offered" in q["why"]:   # Sasha 210 · a flight gone: the closest one on that leg put in, then said
+        changed = await _replace_gone_flights(ctx, p)
+        q = await BB.quote(ctx.account, a.get("origin") or "Madrid")
     if "why" in q:
         raise ToolError("not_bookable", q["why"])
-    res = {"read_back": [l for l in q["lines"] if not l.startswith("Note:")], "notes": [l for l in q["lines"] if l.startswith("Note:")],
+    res = {**({"changed": changed} if changed else {}), "read_back": [l for l in q["lines"] if not l.startswith("Note:")], "notes": [l for l in q["lines"] if l.startswith("Note:")],
            "read_back_sha256": q["sha256"], "total_eur": q["eur"], "status": "not booked — waiting for the yes"}
-    _HELD[ctx.account] = {"sha": q["sha256"], "at": datetime.now(timezone.utc), "result": res}   # Sasha 205 · book() uses it as is
+    prev = _HELD.get(ctx.account)   # Sasha 210 · the same words read back again keep the time they were first said
+    at = prev["at"] if prev and prev.get("sha") == q["sha256"] else datetime.now(timezone.utc)
+    _HELD[ctx.account] = {"sha": q["sha256"], "at": at, "result": res}   # Sasha 205 · book() uses it as is
     return res
+
+
+async def _replace_gone_flights(ctx: Ctx, p: dict) -> List[str]:
+    """Each chosen flight Duffel no longer offers → the closest departure on the same leg and day, chosen in its place.
+    → one plain line per change ("Iberia at 10:35 is gone — Iberia at 11:50 is in its place.")."""
+    from booking_signer import basket as BK, basket_book as BB
+    party, out = _party(p), []
+    for r in [x for x in await BK.items(ctx.account, p["trip_id"], ("chosen",)) if x["kind"] == "flight"]:
+        v = await BB._validate_flight(ctx.account, r, party)
+        if "why" not in v:
+            continue
+        c = BB._card(r)
+        day = str(c.get("departs") or r.get("day") or "")[:10]
+        res, used = await _search_healed(c.get("from") or "", c.get("to") or "", day, party)
+        cards = [x for x in res.get("cards") or [] if x.get("currency") == "EUR"]
+        if not cards:
+            continue
+        want = str(c.get("departs") or "")[11:16] or "12:00"
+        mins = lambda hhmm: int(hhmm[:2]) * 60 + int(hhmm[3:5]) if len(hhmm) >= 5 else 720
+        near = min(cards, key=lambda x: abs(mins(str(x.get("departs") or "")[11:16]) - mins(want)))
+        leg, rest = ((r.get("slice_key") or "out:").split(":", 1) + [""])[:2]
+        ids = await _suggest_flights(ctx, p["trip_id"], [near], c.get("from") or "", c.get("to") or "", used, party, leg or "out")
+        await choose_offer(ctx, {"offer_id": near["id"]})
+        out.append(f"{c.get('owner')} at {want} is gone — {near.get('owner')} at {str(near.get('departs') or '')[11:16]} is in its place.")
+    return out
 
 
 async def book(ctx: Ctx, a: dict) -> dict:
@@ -429,6 +529,8 @@ async def book(ctx: Ctx, a: dict) -> dict:
         raise ToolError("no_explicit_yes", "booking needs the person's explicit yes in this turn — ask them, then call book")
     sha = a.get("read_back_sha256") or ""
     held = _HELD.get(ctx.account)
+    if held and (not sha or sha == held["sha"]) and held["at"] >= ctx.started:   # Sasha 210 · the yes answers a read-back they HEARD
+        raise ToolError("read_back_first", "say the read-back's total and ask them to go ahead; book once they say yes")
     if not sha and held and (datetime.now(timezone.utc) - held["at"]).total_seconds() < 1800:
         sha = held["sha"]   # Sasha 205 · the read-back they just heard (pay() still refuses if anything changed since)
     if not sha:
@@ -521,8 +623,11 @@ TOOLS: List[dict] = [
        {"name": {"type": "string"}, "city": {"type": "string"}, "country": {"type": "string"}, "place_id": {"type": "string"},
         "website": {"type": "string"}, "at": {"type": "string", "description": "ISO local date-time wanted"}, "party": {"type": "integer"}},
        ["name", "city"], {"type": "object", "properties": {"routes": {"type": "array"}, "how": {"type": "string"}}}, ["name_invalid", "city_invalid"]),
-    _t("choose_offer", "Austen", choose_offer, "Put a flight from search_flights into the trip, replacing the flight on that leg. Returns the new total.",
-       {"offer_id": {"type": "string"}}, ["offer_id"], {"type": "object", "properties": {"chosen": FLIGHT, **TOTAL["properties"]}},
+    _t("choose_offer", "Austen", choose_offer, "Put another flight into the trip, replacing the flight on that leg. Returns the new total. "
+       "Give its offer_id, OR describe one of the trip's options (the proposal's flight cards, a search's): its leg and the airline "
+       "and/or departure time a tap or the person named (\"the British Airways flight out at 08:30\"), or pick cheapest/fastest.",
+       {"offer_id": {"type": "string"}, "leg": {"enum": ["out", "back"]}, "airline": {"type": "string"},
+        "departs": {"type": "string", "description": "HH:MM"}, "pick": {"enum": ["cheapest", "fastest"]}}, [], {"type": "object", "properties": {"chosen": FLIGHT, **TOTAL["properties"]}},
        ["no_trip", "offer_not_in_trip", "not_choosable"], austen=True),
     _t("save_travellers", "Austen", save_travellers, "Save the travellers the airline needs (asked once, kept on the account).",
        {"travellers": {"type": "array", "items": {"type": "object", "properties": {

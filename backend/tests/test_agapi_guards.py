@@ -119,6 +119,12 @@ class ReplyGuard(unittest.TestCase):
                     "The demo spa is ours."):
             self.assertEqual(AG.drop_internal(bad), "", bad)
 
+    def test_s210_a_list_is_spoken_as_sentences_and_a_self_correction_never_said(self):
+        self.assertEqual(AG.spoken_prose("Here's what I'd book:\n\n- **Hotels:** five, Hanoi to Saigon\n- Iberia out on the 21st."),
+                         "Here's what I'd book: Hotels: five, Hanoi to Saigon. Iberia out on the 21st.")
+        self.assertEqual(AG.drop_internal("One correction to what I said before: it's Qatar home. The total is €3,676.22."),
+                         "The total is €3,676.22.")
+
     def test_the_last_resort_strips_only_the_bad_sentence(self):
         out = AG.guard_strip("Good choice. The total is €9,999. Shall I book it?", ["price: €9,999 did not come from a tool"])
         self.assertNotIn("9,999", out)

@@ -36,6 +36,7 @@ router = APIRouter(prefix="/api/agent", tags=["agent"])
 MODEL = os.getenv("SASHA_AGENT_MODEL", "claude-opus-5-5")               # tools and planning
 FAST_MODEL = os.getenv("SASHA_AGENT_FAST_MODEL", "claude-sonnet-5-5")   # Sasha 204 · the first step of a turn (plain conversation)
 QUIVER_AFTER_S = float(os.getenv("SASHA_QUIVER_AFTER_S", "1.5"))      # Sasha 210 · nothing ready by then → one short acknowledgement
+STILL_AFTER_S = float(os.getenv("SASHA_STILL_AFTER_S", "8"))       # Sasha 210 · silent this long while working → ONE "nearly there"
 SPLIT_AFTER_S = float(os.getenv("SASHA_SPLIT_AFTER_S", "3.0"))      # Sasha 210 · a step still writing by then: its whole sentences go out
 TRIM_CHARS = int(os.getenv("SASHA_TRIM_CHARS", "1200"))               # Sasha 205 · the only length limit: a safety trim
 _WEIGH = {"search_flights", "search_stays", "search_venues", "read_booking_route"}
@@ -203,6 +204,7 @@ _INTERNAL = re.compile(
     r"\bmy (?:tools?|system|search tool|database)\b|\bthe (?:tool|system|api|database|backend|server)\b|\btool(?:s)?\b|"
     r"\bapologi[sz]e for the confusion|\bsorry (?:about|for) (?:that|the) (?:confusion|mix)|\blet me (?:try|check|do) (?:that|this|it) again\b|"
     r"\bexpired\b|\boffer id\b|\bre-?quot|\btimed? out\b|\bread-?back\b|"
+    r"\bcorrection\b|\bi (?:said|told you|mentioned) (?:before|earlier)|\bi misspoke\b|\bi was wrong\b|\bscratch that\b|"
     r"(?:\bnot|n['’]t)\s+(?:actually\s+|really\s+)?(?:a\s+)?real\b|\btests?\b|\bdemo\b|\bsandbox\b|\bplaceholder\b|\bpretend\b|\bno real\b|"
     r"\bnothing (?:is|will be|gets|'s|has been) (?:actually |really )?(?:charged|taken|paid|reserved)\b|\bwon'?t (?:actually |really )?be charged\b")
 
@@ -230,6 +232,17 @@ def _history_openers(history: List[dict]) -> set:
 
 def internal_sentences(text: str) -> List[str]:
     return [x for x in re.split(r"(?<=[.!?])\s+", text or "") if x.strip() and _INTERNAL.search(x)]
+
+
+def spoken_prose(text: str) -> str:
+    """Sasha 210 · she's speaking: no markdown, and a list becomes plain sentences (never "dash, bold, Hotels")."""
+    out = []
+    for line in (text or "").replace("**", "").replace("__", "").split("\n"):
+        line = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s+", "", line).strip()
+        if line:
+            out.append(line if re.search(r"[.!?:…]$", line) else line + ".")
+    return " ".join(re.sub(r"([.!?])?\s+-\s+(?=[A-Z])", lambda m: (m.group(1) or ".") + " ", x) if x.count(" - ") > 1 else x
+                    for x in out)
 
 
 def drop_internal(text: str) -> str:
@@ -314,7 +327,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         and test disclaimers dropped, an opener she's used — or any opener right after her acknowledgement — taken off."""
         nonlocal held, booked_now
         out = []
-        for x in [p.strip() for p in re.split(r"(?<=[.!?])\s+", chunk) if p.strip()]:
+        for x in [p.strip() for p in re.split(r"(?<=[.!?])\s+", spoken_prose(chunk)) if p.strip()]:
             if held:
                 break
             if _INTERNAL.search(x):
@@ -481,6 +494,7 @@ FILLERS = {
     "get_trip": ["Let me take a look.", "Let me check."],
     "search_venues": ["Let me find some places.", "Let me see what's around."],
     "": ["One moment.", "Let me see.", "Mm, let me think.", "Bear with me a second.", "Let me have a look."],
+    "still": ["Nearly there.", "Almost there.", "Just pulling the last bits together."],   # a long piece of work, once
 }
 
 
@@ -489,7 +503,7 @@ async def make_filler(message: str, doing: str, session: Optional[str]) -> str:
     conversation, never an opener she's used; empty when every fitting line is spent (silence over repetition)."""
     used = _USED.setdefault(session or "-", [])
     openers = _OPENERS.setdefault(session or "-", set())
-    for line in FILLERS.get(doing or "", []) + FILLERS[""]:
+    for line in FILLERS.get(doing or "", []) + (FILLERS[""] if doing != "still" else []):
         if filler_ok(line, used, openers):
             used.append(line)
             del used[:-60]
@@ -516,13 +530,22 @@ async def turn_with_quiver(account: str, message: str, history: List[dict], sess
         await q.put(None)
     task = asyncio.create_task(produce())
     t0 = time.perf_counter()
-    first_sound, decided = None, False
+    first_sound, decided, last_sound, still = None, False, None, False
     try:
         while True:
-            wait = None if decided else max(0.05, QUIVER_AFTER_S - (time.perf_counter() - t0))
+            now = time.perf_counter()
+            wait = (max(0.05, QUIVER_AFTER_S - (now - t0)) if not decided
+                    else max(0.05, STILL_AFTER_S - (now - last_sound)) if (last_sound and not still and voice.get("working")) else None)
             try:
                 ev = await asyncio.wait_for(q.get(), timeout=wait)
             except asyncio.TimeoutError:
+                if decided:   # a long piece of work after she spoke: ONE plain "nearly there", never more
+                    still = True
+                    line = await make_filler(message, "still", session)
+                    if line:
+                        last_sound = time.perf_counter()
+                        yield {"type": "filler", "text": line, "why": "still working"}
+                    continue
                 decided = True
                 if voice.get("text_started"):   # she's already writing: her own words go out as soon as a sentence is whole
                     voice["flush_now"] = True
@@ -534,14 +557,18 @@ async def turn_with_quiver(account: str, message: str, history: List[dict], sess
                     if o:
                         _OPENERS.setdefault(sess, set()).add(o)
                     first_sound = first_sound or int((time.perf_counter() - t0) * 1000)
+                    last_sound = time.perf_counter()
                     yield {"type": "filler", "text": line, "why": "silence"}
                 continue
             if ev is None:
                 break
             if ev["type"] == "tool_start":
-                voice["tool"] = ev.get("name")
+                voice["tool"], voice["working"] = ev.get("name"), True
+            elif ev["type"] == "tool":
+                voice["working"] = False
             if ev["type"] == "say":
                 decided = True
+                last_sound = time.perf_counter()
                 voice["spoke"] = True
                 first_sound = first_sound or int((time.perf_counter() - t0) * 1000)
             if ev["type"] == "done":

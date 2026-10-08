@@ -113,6 +113,15 @@ async def quiver_checks() -> dict:
     evs = await run([[Block(type="text", text="Great! Where are you flying from?")]], [0.1], "Vietnam",
                     history=[{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Great — who's coming with you?"}], session=sess)
     out["an opener is never used twice in a conversation"] = (says(evs) == ["Where are you flying from?"], str(says(evs)))
+    real_still, AG.STILL_AFTER_S = AG.STILL_AFTER_S, 1.0   # (8 s live; 1 s here, the same rule)
+    try:
+        evs = await run([[Block(type="text", text="Let me put that together. "), Block(type="tool_use", id="t1", name="propose_trip_slow", input={})],
+                         [Block(type="text", text="Here's your trip, with a flight that fits.")]], [0.2, 0], "Plan it")
+    finally:
+        AG.STILL_AFTER_S = real_still
+    st = [(t, e) for t, e in evs if e["type"] == "filler"]
+    out["long work after she spoke → ONE plain “nearly there”, never more"] = (
+        len(st) == 1 and st[0][1]["why"] == "still working" and st[0][1]["text"] in AG.FILLERS["still"], str(st))
     sess = "gate-fillers"
     lines = [await AG.make_filler("Hoi An!", "think", sess) for _ in range(8)]
     AG._USED.pop(sess, None)

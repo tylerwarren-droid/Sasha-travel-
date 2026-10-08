@@ -102,6 +102,9 @@ async def _total(ctx: Ctx, p: dict) -> dict:
     chosen flights re-checked). One source, so a total never changes between asking and booking."""
     from booking_signer import basket as BK, basket_book as BB
     q = await BB.quote(ctx.account, "Madrid")
+    if "why" in q and "no longer offered" in q["why"]:   # Sasha 210 · a gone flight is replaced here too, never handed to her
+        await _replace_gone_flights(ctx, p)
+        q = await BB.quote(ctx.account, "Madrid")
     if "why" in q:
         raise ToolError("not_priced", q["why"])
     rows = BK.to_book(await BK.items(ctx.account, p["trip_id"], ("suggested", "chosen")))

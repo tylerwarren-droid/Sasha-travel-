@@ -61,7 +61,9 @@ C = [  # (name, lines) — venue-heavy: the place where words and cards drifted
     ("restaurant then change", ["A seafood restaurant in Madrid tonight for 2.", "Actually, make it Italian instead."]),
     ("two cities", ["A wine bar in Lisbon on Friday at 7.", "And one in Porto on Saturday at 7?"]),
 ]
-_STALE_WORDS = re.compile(r"(?i)\b(?:couldn'?t find|none (?:fit|found)|no (?:places|restaurants|spas|bars|hotels|cafés|studios)\b)")
+# "no places found" said while cards are on screen (never a sentence about something else: "I couldn't find a way to book")
+_STALE_WORDS = re.compile(r"(?i)\b(?:couldn'?t find (?:any|a single|anywhere)\b|none (?:fit|found|match)|no (?:places|restaurants|spas|bars|hotels|"
+                          r"cafés|cafes|studios|options)\s+(?:found|fit|match|that)|nothing (?:came up|fits|matches))")
 
 
 async def extract_names(text: str) -> list:

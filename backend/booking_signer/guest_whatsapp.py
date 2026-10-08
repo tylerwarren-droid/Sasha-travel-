@@ -274,33 +274,18 @@ class PostgresGuestStore:
         d = dict(r)
         return {"history": json.loads(d["history"]) if isinstance(d["history"], str) else d["history"],
                 "pending": json.loads(d["pending"]) if isinstance(d["pending"], str) else d["pending"],
-                "last_inbound_at": d["last_inbound_at"], "last_to": d.get("last_to"),   # Sasha 206 · once 034 has added the column
+                "last_inbound_at": d["last_inbound_at"], "last_to": d.get("last_to"),   # Sasha 206/207 · 034
                 "link_tries": json.loads(d["link_tries"]) if isinstance(d["link_tries"], str) else d["link_tries"]}
 
     async def put_state(self, key, st):
-        global _LAST_TO_COLUMN
-        if _LAST_TO_COLUMN is not False:   # Sasha 206 (EU 186 R1) · the number they last wrote to, kept (034 adds the column)
-            try:
-                await self._run(lambda c: c.execute(
-                    "insert into guest_wa_state (wa_id_sha256, history, pending, last_inbound_at, link_tries, last_to, updated_at) "
-                    "values ($1, $2, $3, $4, $5, $6, now()) on conflict (wa_id_sha256) do update set history = excluded.history, "
-                    "pending = excluded.pending, last_inbound_at = excluded.last_inbound_at, link_tries = excluded.link_tries, "
-                    "last_to = coalesce(excluded.last_to, guest_wa_state.last_to), updated_at = now()",
-                    key, st.get("history") or [], st.get("pending"), st.get("last_inbound_at"), st.get("link_tries") or [], st.get("last_to")))
-                _LAST_TO_COLUMN = True
-                return
-            except Exception as e:
-                if "last_to" not in str(e):
-                    raise
-                _LAST_TO_COLUMN = False
-                log.error("[guest_whatsapp] guest_wa_state has no last_to column yet — apply 034_guest_wa_last_to_and_sids.sql; "
-                          "until then messages Sasha starts go from the permanent sender")
+        # Sasha 207 · last_to (034, applied 8 Oct 2026) — the number they last wrote to; a save without it never erases it
         await self._run(lambda c: c.execute(
-            "insert into guest_wa_state (wa_id_sha256, history, pending, last_inbound_at, link_tries, updated_at) "
-            "values ($1, $2, $3, $4, $5, now()) on conflict (wa_id_sha256) do update set history = excluded.history, "
-            "pending = excluded.pending, last_inbound_at = excluded.last_inbound_at, link_tries = excluded.link_tries, updated_at = now()",
+            "insert into guest_wa_state (wa_id_sha256, history, pending, last_inbound_at, link_tries, last_to, updated_at) "
+            "values ($1, $2, $3, $4, $5, $6, now()) on conflict (wa_id_sha256) do update set history = excluded.history, "
+            "pending = excluded.pending, last_inbound_at = excluded.last_inbound_at, link_tries = excluded.link_tries, "
+            "last_to = coalesce(excluded.last_to, guest_wa_state.last_to), updated_at = now()",
             # the pool's jsonb codec encodes: pass the values themselves (Sasha 104 · a json.dumps here stored a JSON string)
-            key, st.get("history") or [], st.get("pending"), st.get("last_inbound_at"), st.get("link_tries") or []))
+            key, st.get("history") or [], st.get("pending"), st.get("last_inbound_at"), st.get("link_tries") or [], st.get("last_to")))
 
     async def delete_account(self, account):
         async def go(c):
@@ -314,7 +299,6 @@ class PostgresGuestStore:
 
 
 STORE: Any = None   # routes.py sets the Postgres store; tests set a memory one
-_LAST_TO_COLUMN: Optional[bool] = None   # Sasha 206 · does guest_wa_state have last_to yet (034)? None = not tried
 
 
 # ── sending: Twilio, spaced, only inside the 24-hour window, never to an opted-out guest ────────────────────────────
@@ -513,30 +497,23 @@ def _twiml_message(text: str) -> str:
     return f"<Message>{escape(text)}</Message>"
 
 
-_SEEN_SIDS: Dict[str, float] = {}   # Sasha 206 · the in-memory fallback until 034 adds guest_inbound_sids
-_SIDS_TABLE: Optional[bool] = None
+_SEEN_SIDS: Dict[str, float] = {}   # the memory store's (tests); the Postgres store uses guest_inbound_sids (034)
 
 
 async def first_time(sid: str) -> bool:
-    """True the first time a MessageSid is seen (or when there is none to go by); False for a repeat — in the database once
-    034 has run (across restarts), else in this process."""
-    global _SIDS_TABLE
+    """True the first time a MessageSid is seen (or when there is none to go by); False for a repeat — in guest_inbound_sids
+    on the Postgres store (Sasha 207 · 034 applied: across restarts), in this process on the memory store."""
     if not sid:
         return True
     run = getattr(STORE, "_run", None)
-    if run is not None and _SIDS_TABLE is not False:
+    if run is not None:
         try:
             new = await run(lambda c: c.fetchval("insert into guest_inbound_sids (message_sid) values ($1) on conflict do nothing "
                                                  "returning message_sid", sid))
-            _SIDS_TABLE = True
             return new is not None
         except Exception as e:
-            if "guest_inbound_sids" not in str(e) and "message_sid" not in str(e):
-                log.error("[guest_whatsapp] MessageSid not checked: %s: %s", type(e).__name__, e)
-                return True   # never drop a guest's message over the check itself
-            _SIDS_TABLE = False
-            log.error("[guest_whatsapp] guest_inbound_sids does not exist yet — apply 034_guest_wa_last_to_and_sids.sql; "
-                      "de-duplicating in memory until then")
+            log.error("[guest_whatsapp] MessageSid not checked: %s: %s", type(e).__name__, e)
+            return True   # never drop a guest's message over the check itself
     import time as _t
     now = _t.time()
     for k in [k for k, at in _SEEN_SIDS.items() if now - at > 86400]:

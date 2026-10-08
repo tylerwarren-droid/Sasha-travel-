@@ -616,7 +616,8 @@ class Progress(Base):
 
 @unittest.skipUnless(TBL.PG_URL, "BOOKING_TEST_DATABASE_URL is not set — the Postgres half did NOT run")
 class OnPostgresStore(unittest.TestCase):
-    """sql/020 as written: a code once, a link replacing the account's old one, STOP, the state round trip."""
+    """sql/020 + 034 as written: a code once, a link replacing the account's old one, STOP, the state round trip (with last_to),
+    one turn per MessageSid in guest_inbound_sids."""
 
     @classmethod
     def setUpClass(cls):
@@ -630,6 +631,12 @@ class OnPostgresStore(unittest.TestCase):
                 sql = (pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql" / "020_guest_channels.sql").read_text()
                 await c.execute("drop table if exists guest_channels, guest_link_codes, guest_wa_state, guest_inbound_sids")
                 await c.execute(sql[sql.index("begin;"):sql.index("-- VERIFY")])
+                # a plain Postgres has no Supabase roles; 034 revokes from them by name (CR found it on a real Postgres)
+                for role in ("anon", "authenticated"):
+                    await c.execute(f"do $$ begin if not exists (select 1 from pg_roles where rolname = '{role}') then "
+                                    f"create role {role} nologin; end if; end $$")
+                sql034 = (pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql" / "034_guest_wa_last_to_and_sids.sql").read_text()
+                await c.execute(sql034[sql034.index("begin;"):sql034.index("commit;") + len("commit;")])
             finally:
                 await c.close()
         asyncio.run(apply())
@@ -662,29 +669,22 @@ class OnPostgresStore(unittest.TestCase):
                 self.assertEqual((await st.channel_for(GW.wa_key("+447700900999")))["opted_out_at"], NOW)
                 state = {"history": [{"role": "user", "content": "dinner"}], "pending": {"kind": "cards", "nonce": "ab"},
                          "last_inbound_at": NOW, "link_tries": ["2026-10-02T12:00:00+00:00"]}
-                # Sasha 206 (R1) · before 034 there is no last_to column: the state round-trips with last_to empty
-                GW._LAST_TO_COLUMN = None
-                await st.put_state("a" * 64, {**state, "last_to": "+14155238886"})
-                self.assertEqual(await st.get_state("a" * 64), {**state, "last_to": None})
-                # … and with 034 applied, the number the guest last wrote to is kept
-                import asyncpg
-                import pathlib
-                sql034 = (pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql" / "034_guest_wa_last_to_and_sids.sql").read_text()
-                c2 = await asyncpg.connect(TBL.PG_URL)
-                try:
-                    # a plain Postgres has no Supabase roles; 034 revokes from them by name (CR found it on a real Postgres)
-                    for role in ("anon", "authenticated"):
-                        await c2.execute(f"do $$ begin if not exists (select 1 from pg_roles where rolname = '{role}') then "
-                                         f"create role {role} nologin; end if; end $$")
-                    await c2.execute(sql034[sql034.index("begin;"):sql034.index("commit;") + len("commit;")])
-                finally:
-                    await c2.close()
-                GW._LAST_TO_COLUMN = None
+                # Sasha 206/207 (R1) · the number the guest last wrote to is kept (034)
                 await st.put_state("a" * 64, {**state, "last_to": "+14155238886"})
                 self.assertEqual(await st.get_state("a" * 64), {**state, "last_to": "+14155238886"})
                 await st.put_state("a" * 64, {**state, "last_to": None})            # a later save without it never erases it
                 self.assertEqual((await st.get_state("a" * 64))["last_to"], "+14155238886")
-                GW._LAST_TO_COLUMN = None
+                # Sasha 207 (R2) · one turn per MessageSid, in guest_inbound_sids — across processes, not in memory
+                old = GW.STORE
+                GW.STORE = st
+                try:
+                    sid = "SM" + "c" * 32
+                    self.assertTrue(await GW.first_time(sid))
+                    GW._SEEN_SIDS.clear()                                         # a restart: memory is gone, the table is not
+                    self.assertFalse(await GW.first_time(sid))
+                    self.assertTrue(await GW.first_time("SM" + "d" * 32))
+                finally:
+                    GW.STORE = old
                 self.assertEqual((await st.unlink(acct))["account_id"], acct)
                 self.assertIsNone(await st.channel_of_account(acct))
             finally:

@@ -38,10 +38,13 @@ create table if not exists events (id integer primary key autoincrement, operato
   line text not null, evidence_id text, at text not null);
 create table if not exists idempotency (operator_id text not null, op text not null, idem_key text not null, request_sha256 text not null,
   response text, status int, primary key (operator_id, op, idem_key));
+create table if not exists cancellations (id text primary key, bundle_id text not null, lines text not null, payload text not null,
+  read_back_sha256 text not null, state text not null, created_at text not null, updated_at text not null);
 create table if not exists captured (id integer primary key autoincrement, channel text not null, to_ text not null, body text not null,
   real int not null default 0, at text not null);
 """
 
+ADDED = [("bundles", "notes"), ("bundles", "evidence_id"), ("operators", "sandbox_end_user")]
 _LOCK = threading.RLock()
 
 
@@ -53,6 +56,9 @@ class Store:
         with _LOCK:
             self.db.execute("pragma journal_mode=wal")
             self.db.executescript(SCHEMA)
+            for table, col in ADDED:   # CR 65 · columns added to a database made before them (the live volume) — additive only
+                if col not in {r[1] for r in self.db.execute(f"pragma table_info({table})")}:
+                    self.db.execute(f"alter table {table} add column {col} text")
 
     def q(self, sql: str, *a) -> List[Dict[str, Any]]:
         with _LOCK:

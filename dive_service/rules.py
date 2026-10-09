@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 SPEC = Path(__file__).resolve().parent / "spec"
 VENDOR = SPEC / "vendor"
 _B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-PREFIXES = ("opr", "sup", "chn", "prd", "pkg", "bnd", "leg", "opk", "rb", "apv", "evd", "req", "drf", "vfy")   # EU 212's 8 + DIVE's own
+PREFIXES = ("opr", "sup", "chn", "prd", "pkg", "bnd", "leg", "opk", "rb", "apv", "evd", "req", "drf", "vfy", "cnl", "rpl")   # EU 212's 8 + DIVE's own
 
 
 class Refused(ValueError):
@@ -205,7 +205,7 @@ LEG_STATES = ("pending", "held", "requested", "confirmed", "declined", "no_answe
 FINAL_BAD = ("declined", "no_answer")
 LEG_MOVES = {"pending": {"requested", "held", "confirmed", "unreachable", "released", "declined"},
              "held": {"booked", "released"},
-             "requested": {"confirmed", "declined", "no_answer", "unreachable", "released"},
+             "requested": {"confirmed", "declined", "no_answer", "unreachable", "released", "requested"},   # CR 65: asked again
              "unreachable": {"requested", "unreachable", "released", "confirmed", "declined"},
              "confirmed": {"released", "cancelled"},
              "booked": {"cancelled"},

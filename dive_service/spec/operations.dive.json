@@ -293,13 +293,104 @@
    "cost_class": "act",
    "requires_approval": true,
    "idempotent": true,
-   "surface": "generated",
+   "surface": "both",
    "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bookings_cancel_in",
    "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bookings_cancel_out",
    "errors": [
     "approval_required",
     "approval_void",
     "not_found"
+   ],
+   "since": "1.2-draft",
+   "act_kind": "cancel"
+  },
+  {
+   "operation": "legs.accept_partial",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/legs_accept_partial_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bundle",
+   "errors": [
+    "not_found",
+    "invalid_input"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "legs.treat_as_no",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/legs_treat_as_no_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bundle",
+   "errors": [
+    "not_found",
+    "invalid_input"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "legs.ask_again",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/legs_ask_again_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bundle",
+   "errors": [
+    "not_found",
+    "invalid_input"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "legs.ask_by_phone",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/legs_ask_by_phone_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bundle",
+   "errors": [
+    "not_found",
+    "invalid_input"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "legs.record_answer",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/legs_record_answer_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bundle",
+   "errors": [
+    "not_found",
+    "invalid_input"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "bookings.offer_another_time",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bookings_offer_another_time_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bundle",
+   "errors": [
+    "not_found",
+    "invalid_input"
    ],
    "since": "1.2-draft"
   }

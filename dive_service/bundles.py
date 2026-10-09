@@ -395,8 +395,15 @@ def leg_out(s: Store, l: dict) -> dict:
 def bundle_out(s: Store, b: dict) -> dict:
     op = s.one("select * from operators where id = ?", b["operator_id"])
     state = b["state"]
-    sentence = _view(s, op, b)[1] if state in ("in_progress", "failed", "confirmed") else (
-        "Waiting for your yes on your phone." if state in ("quoted", "approved") else "Your booking is cancelled. Nothing more will be charged.")
+    notes = loads(b.get("notes")) or {}
+    if state in ("in_progress", "failed", "confirmed"):
+        sentence = _view(s, op, b)[1]
+    elif state in ("quoted", "approved"):
+        sentence = "Waiting for your yes on your phone."
+    elif state == "replaced":   # CR 65 · Accept N: a new read-back for fewer people went to them
+        sentence = f"{notes.get('why', 'A supplier can take fewer of you')}. We've sent you a new read-back to approve. Nothing has been charged."
+    else:
+        sentence = "Your booking is cancelled. Nothing more will be charged."
     out = {"bundle_id": b["id"], "package_id": b["package_id"], "party": b["party"], "starts_at": b["starts_at"],
            "legs": [leg_out(s, l) for l in s.q("select * from legs where bundle_id = ? order by seq", b["id"])], "total": loads(b["total"]),
            "read_back_id": b["read_back_id"], "read_back": {"lines": loads(b["lines"]), "read_back_sha256": b["read_back_sha256"]},
@@ -406,4 +413,11 @@ def bundle_out(s: Store, b: dict) -> dict:
     apv = s.one("select id, state from approvals where bundle_id = ? order by approved_at desc", b["id"])
     if apv:
         out["approval"] = {"approval_id": apv["id"], "state": apv["state"]}
+    if notes:
+        out["notes"] = notes
+    c = s.one("select * from cancellations where bundle_id = ? and state in ('open', 'done') order by created_at desc", b["id"])
+    if c:
+        ca = s.one("select id, state from approvals where bundle_id = ? order by approved_at desc", c["id"])
+        out["cancellation"] = {"cancellation_id": c["id"], "state": c["state"], "lines": loads(c["lines"]),
+                               **({"approval": {"approval_id": ca["id"], "state": ca["state"]}} if ca else {})}
     return out

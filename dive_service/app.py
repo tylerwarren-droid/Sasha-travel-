@@ -111,7 +111,7 @@ async def generated_api(slug: str, op: str, req: Request):
         _check_schema(op, v)
         o = OPS.operator(s, slug)
         idem = req.headers.get("idempotency-key")
-        if op in ("bookings.quote", "bookings.confirm"):
+        if op in ("bookings.quote", "bookings.confirm", "bookings.cancel"):
             if not idem or len(idem) < 16:
                 raise DiveError("idempotency_key_required", "This operation needs an Idempotency-Key header (16+ characters).")
             rsha = R.sha256(v)
@@ -120,12 +120,12 @@ async def generated_api(slug: str, op: str, req: Request):
                 if row["request_sha256"] != rsha:
                     raise DiveError("idempotency_conflict", "That Idempotency-Key was used with a different request.")
                 return JSONResponse({**json.loads(row["response"]), "replayed": True}, row["status"])
-        if op == "bookings.confirm":
-            res = await OPS.bookings_confirm(s, o, v, key["key_id"], (req.headers.get("agapi-approval-id") or "").strip() or None)
+        if op in ("bookings.confirm", "bookings.cancel"):
+            res = await OPS.GENERATED[op](s, o, v, key["key_id"], (req.headers.get("agapi-approval-id") or "").strip() or None)
         else:
             res = await OPS.GENERATED[op](s, o, v, key["key_id"])
         body = _env(rid, True, res)
-        if op in ("bookings.quote", "bookings.confirm"):
+        if op in ("bookings.quote", "bookings.confirm", "bookings.cancel"):
             s.x("insert into idempotency (operator_id, op, idem_key, request_sha256, response, status) values (?, ?, ?, ?, ?, ?)",
                 key["key_id"], op, idem, R.sha256(v), json.dumps(body), 200)
         return JSONResponse(body)
@@ -233,10 +233,15 @@ async def approve_get(slug: str, token: str):
     l = s.one("select * from approval_links where token_hash = ?", R.text_sha256(token))
     if not l or l["used_at"] or l["expires_at"] < ts():
         return page("Link not active", "<h1>This link isn't active</h1><p>It was used, it expired, or it never existed.</p>", status=404)
-    b = s.one("select * from bundles where id = ?", l["bundle_id"])
+    c = s.one("select * from cancellations where id = ?", l["bundle_id"])
+    b = s.one("select * from bundles where id = ?", c["bundle_id"] if c else l["bundle_id"])
     csrf = secrets.token_urlsafe(16)
     s.x("update approval_links set csrf = ? where token_hash = ?", csrf, R.text_sha256(token))
-    lines = "".join(f"<p>{_h(x)}</p>" for x in loads(b["lines"]))
+    lines = "".join(f"<p>{_h(x)}</p>" for x in loads(c["lines"] if c else b["lines"]))
+    if c:   # CR 65 · the cancellation's own read-back
+        return page("Cancel", f"""<h1>Cancel your booking?</h1><div class="card">{lines}</div><form method="post"><input type="hidden" name="csrf" value="{csrf}">
+<button class="go big" title="Cancels exactly this booking; each supplier is told.">Yes, cancel it</button></form>
+<p class="mut">Nothing happens until you tap.</p>""")
     return page("Approve", f"""<h1>Your booking</h1><div class="card">{lines}</div><form method="post"><input type="hidden" name="csrf" value="{csrf}">
 <button class="go big" title="Books exactly the lines above — nothing else.">Yes, book it</button></form>
 <p class="mut">Nothing happens until you tap. Each supplier is asked after your yes.</p>""")
@@ -252,6 +257,18 @@ async def approve_post(slug: str, token: str, req: Request):
         return page("Link not active", "<h1>This link isn't active</h1>", status=404)
     if s.x("update approval_links set used_at = ? where token_hash = ? and used_at is null", ts(), th) != 1:
         return page("Link not active", "<h1>This link was already used</h1>", status=409)
+    c = s.one("select * from cancellations where id = ?", l["bundle_id"])
+    if c:   # CR 65 · the customer's yes to the CANCELLATION (act_kind cancel); the operator's own page goes straight on
+        from . import actions as AC
+        b = s.one("select * from bundles where id = ?", c["bundle_id"])
+        o = s.one("select * from operators where id = ?", b["operator_id"])
+        aid = AC.approve_cancellation(s, c, method="tap")
+        if not b["key_id"]:
+            try:
+                await AC.cancel(s, o, b["id"], aid)
+            except DiveError as e:
+                return page("Not cancelled", f"<h1>Not cancelled</h1><p>{_h(e.message)}</p>", status=409)
+        return RedirectResponse(f"/o/{slug}/b/{b['id']}", status_code=303)
     b = s.one("select * from bundles where id = ?", l["bundle_id"])
     o = s.one("select * from operators where id = ?", b["operator_id"])
     aid = BN.approve(s, b, method="tap")

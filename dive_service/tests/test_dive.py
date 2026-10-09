@@ -407,5 +407,128 @@ class TheDemo(Base):
         self.assertIn("Waiting for", st["customer_sentence"])
 
 
+class Actions(Base):
+    """CR 65 · the operator's actions on a booking and the cancellation (EU 212 surfaces.md A3, bundles.md §3)."""
+
+    def booking(self, party=4, wd=1, onboard=True):
+        if onboard:
+            self.onboard()
+        key = self.key()
+        pid = self.gen(key, "packages.list", {}).json()["result"]["packages"][0]["package_id"]
+        b = self.gen(key, "bookings.quote", {"package_id": pid, "date": self.next_wd(wd), "start_time": "09:00", "party": party,
+                                             "customer": {"name": "Marta Ruiz", "phone": "+15005550101"}}, idem=f"q-{os.urandom(8).hex()}").json()["result"]
+        apv = BN.approve(self.store, self.store.one("select * from bundles where id = ?", b["bundle_id"]))
+        c = self.gen(key, "bookings.confirm", {"bundle_id": b["bundle_id"]}, idem=f"c-{os.urandom(8).hex()}", approval=apv).json()["result"]
+        return key, c, {l["supplier"]: l for l in c["legs"]}
+
+    def tap(self, phone_link_text="cancellation"):
+        body = [m["body"] for m in self.store.q("select body from captured where channel = 'sms' order by id desc") if phone_link_text in m["body"]][0]
+        path = "/" + body.rsplit(" ", 1)[-1].split("://", 1)[1].split("/", 1)[1]
+        page = self.client.get(path).text
+        csrf = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+        r = self.client.post(path, data={"csrf": csrf}, follow_redirects=False)
+        return page, r
+
+    def test_accept_3_requotes_for_3_and_asks_the_customer_again(self):
+        key, c, legs = self.booking()
+        out = self.op("sandbox.supplier_reply", {"leg_id": legs["Aegean Boats"]["leg_id"], "text": "yes but only 3 seats"})
+        self.assertEqual(out["parse"], "unclear")
+        from dive_service import actions as AC
+        self.assertEqual(AC.suggested_party("yes but only 3 seats", 4), 3)
+        self.assertEqual(self.op("legs.accept_partial", {"leg_id": legs["Aegean Boats"]["leg_id"], "party": 4}, expect_ok=False)["error"]["code"], "invalid_input")
+        r = self.op("legs.accept_partial", {"leg_id": legs["Aegean Boats"]["leg_id"], "party": 3})
+        self.assertEqual(r["state"], "replaced")
+        self.assertTrue(any("3 divers" in l for l in r["new_read_back"]))                          # a NEW read-back for 3
+        self.assertTrue(any("Call Taverna Agios" in t for t in r["todo"]))                         # the form booking: said plainly
+        old = self.gen(key, "bookings.status", {"bundle_id": c["bundle_id"]}).json()["result"]
+        self.assertEqual(old["state"], "replaced")
+        self.assertIn("can take 3 of 4. We've sent you a new read-back", old["customer_sentence"])
+        self.assertTrue(all(l["state"] in ("released",) for l in old["legs"]))
+        new = self.store.one("select * from bundles where id = ?", r["new_bundle_id"])
+        self.assertEqual((new["party"], new["state"]), (3, "quoted"))                              # nothing goes until the new yes
+        self.assertTrue(any("approve your booking" in m["body"] for m in self.store.q("select body from captured where channel = 'sms'")))
+
+    def test_treat_as_no_and_ask_again(self):
+        key, c, legs = self.booking()
+        self.op("sandbox.supplier_reply", {"leg_id": legs["Kyma Gear"]["leg_id"], "text": "maybe?"})
+        n_before = len(self.sb.sent)
+        r = self.op("legs.ask_again", {"leg_id": legs["Kyma Gear"]["leg_id"]})
+        self.assertEqual({l["supplier"]: l["state"] for l in r["legs"]}["Kyma Gear"], "requested")
+        self.assertNotIn("parse", {l["supplier"]: l for l in r["legs"]}["Kyma Gear"])           # a fresh answer window
+        self.op("sandbox.supplier_reply", {"leg_id": legs["Aegean Boats"]["leg_id"], "text": "ok?"})
+        r = self.op("legs.treat_as_no", {"leg_id": legs["Aegean Boats"]["leg_id"], "by": "Nikos (operator)"})
+        self.assertEqual(r["state"], "failed")
+        self.assertIn("Aegean Boats can't take your group", r["customer_sentence"])
+        ev = json.loads(self.store.one("select body from evidence where id = ?", {l["supplier"]: l for l in r["legs"]}["Aegean Boats"]["evidence_id"])["body"])
+        self.assertEqual([x["service"] for x in ev["sources"]], ["whatsapp_reply", "operator_decision"])
+        self.assertEqual(ev["sources"][0]["snippet"]["text"], "ok?")                             # their words, and the operator's decision
+        self.assertEqual(self.op("legs.treat_as_no", {"leg_id": legs["Kyma Gear"]["leg_id"]}, expect_ok=False)["error"]["details"]["rule"], "not_unclear")
+
+    def test_ask_by_phone_record_answer_and_offer_another_time(self):
+        key, c, legs = self.booking()
+        self.op("legs.ask_by_phone", {"leg_id": legs["Aegean Boats"]["leg_id"], "by": "Nikos"})
+        self.op("sandbox.supplier_reply", {"leg_id": legs["Kyma Gear"]["leg_id"], "text": "YES"})
+        r = self.op("legs.record_answer", {"leg_id": legs["Aegean Boats"]["leg_id"], "answer": "yes", "note": "Spoke to Kostas at 10:12", "by": "Nikos"})
+        self.assertEqual(r["state"], "confirmed")
+        boat = {l["supplier"]: l for l in r["legs"]}["Aegean Boats"]
+        ev = json.loads(self.store.one("select body from evidence where id = ?", boat["evidence_id"])["body"])
+        self.assertEqual((ev["sources"][0]["service"], ev["sources"][0]["snippet"]["source"]), ("manual", "operator:Nikos"))
+        self.assertIn("Spoke to Kostas", ev["sources"][0]["snippet"]["text"])
+        self.assertEqual(self.op("legs.record_answer", {"leg_id": legs["Aegean Boats"]["leg_id"], "answer": "maybe", "by": "N"}, expect_ok=False)["error"]["code"], "invalid_input")
+        # a booking that failed (no answer): the late phone yes is recorded, never revives it; Offer another time goes on
+        key2, c2, legs2 = self.booking(wd=3, onboard=False)
+        self.store.x("update legs set answer_by = ? where id = ?", "2000-01-01T00:00:00.000000Z", legs2["Aegean Boats"]["leg_id"])
+        st = self.gen(key2, "bookings.status", {"bundle_id": c2["bundle_id"]}).json()["result"]
+        self.assertEqual(st["state"], "failed")
+        self.assertIn("didn't confirm in time", st["customer_sentence"])
+        late = self.op("legs.record_answer", {"leg_id": legs2["Aegean Boats"]["leg_id"], "answer": "yes", "note": "called back", "by": "Nikos"})
+        self.assertEqual((late["state"], late["late_answer"]["next"]), ("failed", "offer_another_time"))
+        self.assertEqual(self.op("bookings.offer_another_time", {"bundle_id": c["bundle_id"], "date": self.next_wd(5), "start_time": "09:00"}, expect_ok=False)["error"]["code"], "invalid_input")
+        off = self.op("bookings.offer_another_time", {"bundle_id": c2["bundle_id"], "date": self.next_wd(5), "start_time": "09:00"})
+        self.assertEqual(self.store.one("select state from bundles where id = ?", off["new_bundle_id"])["state"], "quoted")
+
+    def test_cancel_has_its_own_read_back_and_the_customers_yes_then_each_supplier_is_told(self):
+        key, c, legs = self.booking()
+        self.op("sandbox.supplier_reply", {"leg_id": legs["Kyma Gear"]["leg_id"], "text": "YES"})
+        self.op("sandbox.supplier_reply", {"leg_id": legs["Aegean Boats"]["leg_id"], "text": "ΝΑΙ"})
+        r = self.gen(key, "bookings.cancel", {"bundle_id": c["bundle_id"]}, idem="cancel-1-0000000001").json()
+        self.assertEqual(r["error"]["code"], "approval_required")
+        lines = r["error"]["details"]["read_back"]["lines"]
+        self.assertTrue(lines[0].startswith("Cancel: Blue Kyma Diving · Discover Mykonos"))
+        self.assertIn("• Aegean Boats is told on WhatsApp", lines)
+        self.assertIn("• Taverna Agios is told by phone (their form can't cancel)", lines)
+        # the booking's yes can't cancel: a yes is for one read-back
+        old = self.store.one("select id from approvals where bundle_id = ?", c["bundle_id"])["id"]
+        self.assertEqual(self.gen(key, "bookings.cancel", {"bundle_id": c["bundle_id"]}, idem="cancel-1-0000000002", approval=old).json()["error"]["code"], "approval_void")
+        page, _ = self.tap("cancellation")
+        self.assertIn("Yes, cancel it", page)
+        st = self.gen(key, "bookings.status", {"bundle_id": c["bundle_id"]}).json()["result"]
+        apv = st["cancellation"]["approval"]["approval_id"]
+        n = len(self.sb.sent)
+        done = self.gen(key, "bookings.cancel", {"bundle_id": c["bundle_id"]}, idem="cancel-1-0000000003", approval=apv).json()["result"]
+        self.assertEqual(done["state"], "cancelled")
+        self.assertEqual(done["customer_sentence"], "Your booking is cancelled. Nothing more will be charged.")
+        self.assertEqual({l["supplier"]: l["state"] for l in done["legs"]}, {"Aegean Boats": "cancelled", "Kyma Gear": "cancelled", "Taverna Agios": "cancelled", "Hotel Kyma View": "cancelled"})
+        self.assertIn("ακυρώθηκε", self.sb.sent[-1]["text"])                                     # the boat, told in Greek on WhatsApp
+        self.assertTrue(any("cancelled by the customer" in m["body"] for m in self.store.q("select body from captured where channel = 'email'")))
+        bev = json.loads(self.store.one("select body from evidence where id = ?", done["evidence_id"])["body"])
+        self.assertEqual((bev["operation"], bev["approval"]["method"]), ("bookings.cancel", "tap"))
+        todo = [e["line"] for e in self.store.q("select line from events where kind = 'todo'")]
+        self.assertTrue(any("Call Taverna Agios to cancel" in t for t in todo))
+        self.assertEqual(self.gen(key, "bookings.cancel", {"bundle_id": c["bundle_id"]}, idem="cancel-1-0000000003", approval=apv).json()["replayed"], True)
+        from dive_service import actions as AC
+        self.assertTrue(R.explicit_yes_any("Yes, cancel it", "cancel")[0])                       # 1.1 act_kind: a typed yes to a cancellation
+        self.assertEqual(self.store.one("select count(*) n from captured where real = 1")["n"], 0)
+
+    def test_a_cancellation_read_back_that_changed_is_void(self):
+        key, c, legs = self.booking()
+        r = self.gen(key, "bookings.cancel", {"bundle_id": c["bundle_id"]}, idem="cancel-2-0000000001").json()
+        self.tap("cancellation")
+        self.op("sandbox.supplier_reply", {"leg_id": legs["Kyma Gear"]["leg_id"], "text": "YES"})     # a leg changed after the yes
+        st = self.gen(key, "bookings.status", {"bundle_id": c["bundle_id"]}).json()["result"]
+        apv = st["cancellation"]["approval"]["approval_id"]
+        self.assertEqual(self.gen(key, "bookings.cancel", {"bundle_id": c["bundle_id"]}, idem="cancel-2-0000000002", approval=apv).json()["error"]["code"], "bundle_changed")
+
+
 if __name__ == "__main__":
     unittest.main()

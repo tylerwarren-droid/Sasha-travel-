@@ -26,6 +26,8 @@ from .store import Store, dumps, loads, ts
 TEMPLATES = {
     "request": {"en": "{operator} booking request: {what}, {when}. Ref {ref}. Reply YES or NO.",
                 "el": "Αίτημα κράτησης {operator}: {what}, {when}. Κωδ. {ref}. Απαντήστε ΝΑΙ ή ΟΧΙ."},
+    "cancel": {"en": "{operator}: booking {ref} ({what}, {when}) is cancelled by the customer. Sorry, and thank you.",
+               "el": "{operator}: η κράτηση {ref} ({what}, {when}) ακυρώθηκε από τον πελάτη. Συγγνώμη και ευχαριστούμε."},
     "release": {"en": "{operator}: booking {ref} is cancelled — the group isn't coming. Sorry, and thank you.",
                 "el": "{operator}: η κράτηση {ref} ακυρώνεται. Συγγνώμη και ευχαριστούμε."},
 }

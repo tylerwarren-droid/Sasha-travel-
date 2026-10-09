@@ -325,11 +325,51 @@ async def sandbox_reset(s, o, inp, _):
     return {"reset": True, "suppliers": len(sups), "bookings": len(bids)}
 
 
-OPS = {"operators.put": operators_put, "sandbox.reset": sandbox_reset, "suppliers.draft_from_site": suppliers_draft_from_site, "suppliers.put": suppliers_put,
+async def legs_accept_partial(s, o, inp, _):
+    from . import actions as AC
+    return await AC.accept_partial(s, o, inp["leg_id"], int(inp["party"]))
+
+
+async def legs_treat_as_no(s, o, inp, _):
+    from . import actions as AC
+    return await AC.treat_as_no(s, o, inp["leg_id"], inp.get("by") or "the operator")
+
+
+async def legs_ask_again(s, o, inp, _):
+    from . import actions as AC
+    return await AC.ask_again(s, o, inp["leg_id"])
+
+
+async def legs_ask_by_phone(s, o, inp, _):
+    from . import actions as AC
+    return await AC.ask_by_phone(s, o, inp["leg_id"], inp.get("by") or "the operator")
+
+
+async def legs_record_answer(s, o, inp, _):
+    from . import actions as AC
+    return await AC.record_answer(s, o, inp["leg_id"], inp["answer"], inp.get("note") or "", inp["by"])
+
+
+async def bookings_offer_another_time(s, o, inp, _):
+    from . import actions as AC
+    return await AC.offer_another_time(s, o, inp["bundle_id"], inp["date"], inp["start_time"])
+
+
+async def bookings_cancel(s, o, inp, key_id, approval_id=None):
+    from . import actions as AC
+    b = s.one("select * from bundles where id = ? and operator_id = ?", inp.get("bundle_id"), o["id"])
+    if key_id and b and b["key_id"] != key_id:
+        raise DiveError("not_found", "No such booking for this key.")
+    return await AC.cancel(s, o, inp["bundle_id"], approval_id)
+
+
+OPS = {"operators.put": operators_put, "sandbox.reset": sandbox_reset, "legs.accept_partial": legs_accept_partial,
+       "legs.treat_as_no": legs_treat_as_no, "legs.ask_again": legs_ask_again, "legs.ask_by_phone": legs_ask_by_phone,
+       "legs.record_answer": legs_record_answer, "bookings.offer_another_time": bookings_offer_another_time, "bookings.cancel": bookings_cancel, "suppliers.draft_from_site": suppliers_draft_from_site, "suppliers.put": suppliers_put,
        "suppliers.list": suppliers_list, "channels.put": channels_put, "channels.verify": channels_verify, "products.put": products_put,
        "products.list": products_list, "packages.put": packages_put, "packages.list": packages_list, "packages.from_fixture": packages_from_fixture,
        "operator_api.publish": operator_api_publish, "operator_keys.issue": operator_keys_issue, "operator_keys.revoke": operator_keys_revoke,
        "sandbox.supplier_reply": sandbox_supplier_reply}
 GENERATED = {"packages.list": packages_list, "packages.get": packages_get, "availability.check": availability_check,
              "bookings.quote": bookings_quote, "bookings.confirm": bookings_confirm, "bookings.status": bookings_status,
-             "approvals.request": approvals_request}
+             "approvals.request": approvals_request, "bookings.cancel": bookings_cancel}

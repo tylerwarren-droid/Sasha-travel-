@@ -57,6 +57,20 @@ autocomplete="current-password"></label><p><button class="go" title="Opens the c
                 return JSONResponse({"ok": True, "result": {"messages": s.q("select channel, to_, body, real, at from captured order by id desc limit 30")}})
             if op == "bookings.test_quote":   # the TEST drawer's prepared booking (the failure beat): Thursday, 4 divers
                 return JSONResponse({"ok": True, "result": await _test_quote(s, o, v)})
+            if op == "bookings.cancel":       # CR 65 · from the console: the cancellation read-back goes to the CUSTOMER to approve
+                try:
+                    return JSONResponse({"ok": True, "result": await OPS.run(s, o, op, v)})
+                except DiveError as e:
+                    if e.code != "approval_required":
+                        raise
+                    return JSONResponse({"ok": True, "result": {"state": "sent_to_customer", "read_back": e.details["read_back"]}})
+            if op == "drawer.state":          # CR 65 · the test drawer: verifications waiting + the customer's phone (captured links)
+                waiting = [{"channel_id": c["id"], "supplier": c["name"], "kind": c["kind"]} for c in s.q(
+                    "select c.id, c.kind, x.name from channels c join suppliers x on x.id = c.supplier_id where x.operator_id = ? and c.verified = 0 "
+                    "and c.verify_state like '%\"sent\"%'", o["id"])]
+                phone = [{"text": m["body"].rsplit(":", 1)[0] if "http" in m["body"] else m["body"], "link": m["body"].rsplit(" ", 1)[-1], "at": m["at"]}
+                         for m in s.q("select body, at from captured where channel = 'sms' order by id desc limit 6")]
+                return JSONResponse({"ok": True, "result": {"verifications": waiting, "phone": phone}})
             return JSONResponse({"ok": True, "result": await OPS.run(s, o, op, v)})
         except DiveError as e:
             return JSONResponse({"ok": False, "error": e.body()}, e.http)
@@ -85,9 +99,15 @@ async def _test_quote(s, o, v):
 
 _PAGE = r"""<style>.rail{display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0 1rem}.rail button.on{background:var(--acc);color:#fff}
 .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}.legs p{margin:.35rem 0}.k{font-family:ui-monospace,monospace;font-size:.85rem;overflow-wrap:anywhere}
-.badge{border:1px solid var(--line);border-radius:99px;padding:.1rem .6rem;font-size:.75rem;letter-spacing:.06em}</style>
+.badge{border:1px solid var(--line);border-radius:99px;padding:.1rem .6rem;font-size:.75rem;letter-spacing:.06em}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:1rem;z-index:9}
+.sheet{background:var(--card);border-radius:16px;max-width:42rem;width:100%;max-height:85vh;overflow:auto;padding:1rem 1.2rem}
+.sheet dl{display:grid;grid-template-columns:auto 1fr;gap:.25rem .8rem;font-size:.92rem}.sheet dt{color:var(--mut)}.sheet dd{margin:0;overflow-wrap:anywhere}
+.mini{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin:.3rem 0 .6rem}.mini input,.mini select{width:auto}</style>
 <div class="row" style="justify-content:space-between"><h1 style="margin:.2rem 0">{name}</h1><span class="badge">TEST</span></div>
-<div class="rail" id="rail"></div><div id="view"></div><div id="msg" class="mut"></div>
+<div class="rail" id="rail"></div><div id="msg" class="mut" data-testid="msg"></div><div id="view"></div>
+<div id="proof" class="overlay" hidden data-testid="proof-panel"><div class="sheet"><div class="row" style="justify-content:space-between"><b>Proof</b>
+<button title="Close the proof" onclick="$('proof').hidden=true" data-testid="proof-close">Close</button></div><div id="proofbody"></div></div></div>
 <script>
 const TABS=[["suppliers","Suppliers"],["packages","Packages"],["bookings","Bookings"],["activity","Activity"],["api","API & keys"],["drawer","Test drawer"]];
 let tab="suppliers",timer=null;const $=id=>document.getElementById(id);
@@ -115,15 +135,18 @@ r.packages.map(p=>`<div class="card"><b>${esc(p.title)}</b> · €${p.price.amou
 <p class="mut">${esc(p.description||"")}</p><p class="mut">${p.components.map(c=>esc(c.label)+(c.required?"":" (optional)")).join(" · ")}</p>
 ${p.published?'':`<button class="go" title="Publishes your API and its docs page with this package." onclick="publish()">Publish</button>`}</div>`).join("")},
 async bookings(){const r=await api("bookings.list");$("view").innerHTML=r.bookings.map(b=>{const st=b.state;
+const waiting=b.legs.filter(l=>["requested","pending","unreachable"].includes(l.state)).length;
 const chip=st==="confirmed"?'<span class="chip ok big">✓ Confirmed</span>':st==="failed"?'<span class="chip no big">✕ Couldn’t confirm</span>':
-`<span class="chip amb">${b.legs.filter(l=>["requested","pending","unreachable"].includes(l.state)).length?"Waiting for "+b.legs.filter(l=>["requested","pending","unreachable"].includes(l.state)).length+" supplier(s)":esc(st.replace("_"," "))}</span>`;
-return `<div class="card"><div class="row" style="justify-content:space-between"><b>${esc(b.customer)} · ${when(b.starts_at)} · ${b.party}</b>${chip}</div>
-<p class="mut">${esc(b.customer_sentence)}</p><div class="legs">`+b.legs.map(l=>{const ans=l.parse==="yes"?'<span class="chip ok">✓ their yes</span>':l.parse==="no"?'<span class="chip no">✕ their no</span>':l.parse==="unclear"?'<span class="chip amb">unclear — yours to decide</span>':"";
-const cd=l.state==="requested"&&l.answer_by?` · answer by ${when(l.answer_by)}`:"";
-return `<p><b>${esc(l.title)}</b> · ${esc(l.supplier)} · ${esc(l.channel_kind.replace("_"," "))} · ${esc(l.state.replace("_"," "))}${cd} ${ans}
-${l.reply?` <span class="q">“${esc(l.reply.text)}”</span>`:""} ${l.evidence_id?`<button title="What we sent, what they answered, when — and a check that the record matches." onclick="proof('${l.evidence_id}')">Proof</button>`:""}</p>`}).join("")+
-`</div>${b.evidence_id?`<button title="The whole booking's record." onclick="proof('${b.evidence_id}')">Booking proof</button>`:""}</div>`}).join("")||'<p class="mut">No bookings yet.</p>';
-timer=setTimeout(()=>tab==="bookings"&&VIEWS.bookings().catch(()=>{}),3000)},
+st==="cancelled"?'<span class="chip amb">Cancelled</span>':st==="replaced"?'<span class="chip amb">Replaced — new read-back sent</span>':
+`<span class="chip amb">${waiting?"Waiting for "+waiting+" supplier(s)":esc(st.replace("_"," "))}</span>`;
+const todo=((b.notes||{}).todo||[]).map(t=>`<p class="chip amb">To do: ${esc(t)}</p>`).join("");
+const act=["confirmed","in_progress"].includes(st)?`<button data-testid="cancel-${b.bundle_id}" title="Sends the customer a cancellation to approve, then cancels with each supplier." onclick="cancelB('${b.bundle_id}')">Cancel booking</button>`:
+["failed","replaced","cancelled"].includes(st)?`<span class="mini"><input type="date" id="d-${b.bundle_id}"><select id="t-${b.bundle_id}"><option>09:00</option><option>10:00</option></select>
+<button data-testid="offer-${b.bundle_id}" title="Builds a new quote for the customer. They approve it on their phone." onclick="offer('${b.bundle_id}')">Offer another time</button></span>`:"";
+return `<div class="card" data-testid="booking" data-state="${st}"><div class="row" style="justify-content:space-between"><b>${esc(b.customer)} · ${when(b.starts_at)} · ${b.party}</b>${chip}</div>
+<p class="mut" data-testid="sentence">${esc(b.customer_sentence)}</p>${todo}<div class="legs">`+b.legs.map(l=>legRow(b,l)).join("")+
+`</div><div class="row">${b.evidence_id?`<button title="The whole booking's record." onclick="proof('${b.evidence_id}')" data-testid="booking-proof">Booking proof</button>`:""}${act}</div></div>`}).join("")||'<p class="mut">No bookings yet.</p>';
+timer=setTimeout(()=>tab==="bookings"&&!document.querySelector("#view input:focus,#view select:focus")&&VIEWS.bookings().catch(()=>{}),3000)},
 async activity(){const r=await api("activity.list");$("view").innerHTML='<div class="card">'+r.items.map(i=>`<p>${when(i.at)} · ${esc(i.line)}
 ${i.evidence_id?`<button title="Opens the record and checks it." onclick="proof('${i.evidence_id}')">Proof</button>`:""}</p>`).join("")+'</div>';timer=setTimeout(()=>tab==="activity"&&VIEWS.activity().catch(()=>{}),4000)},
 async api(){$("view").innerHTML=`<div class="card"><p>Your API: <span class="k">${location.origin}/o/{slug}/v1</span> · Docs: <span class="k">${location.origin}/o/{slug}/docs</span></p>
@@ -131,14 +154,33 @@ async api(){$("view").innerHTML=`<div class="card"><p>Your API: <span class="k">
 <a class="btn" href="/o/{slug}/book" target="_blank" title="Your customers' booking page">Open my booking page</a>
 <button title="Creates a key for a partner or your own website. Shown once." onclick="issue()">Issue a key</button></div><p id="key" class="k"></p></div>`},
 async drawer(){const r=await api("bookings.list");const open=r.bookings.flatMap(b=>b.legs.filter(l=>l.state==="requested").map(l=>({...l,b})));
-const cap=await api("captured.list");
+const ds=await api("drawer.state");const cap=await api("captured.list");
 $("view").innerHTML=`<div class="card"><p class="mut">Test mode: in test we can play the supplier. Nothing here reaches a real phone.</p>
-<button class="go" title="Prepares the Thursday booking for the failure beat and sends its requests." onclick="testQuote()">Prepare the Thursday booking</button></div>`+
-open.map(l=>`<div class="card"><b>${esc(l.supplier)}</b> · ${esc(l.title)} · ${esc(l.b.customer)} ${when(l.b.starts_at)}<div class="row">
-<button title="Plays the supplier answering YES" onclick="reply('${l.leg_id}','YES')">Supplier: YES</button><button title="Plays the supplier answering ΝΑΙ (Greek yes)" onclick="reply('${l.leg_id}','ΝΑΙ')">ΝΑΙ</button>
-<button title="Plays the supplier answering NO, full" onclick="reply('${l.leg_id}','NO, full')">Supplier: NO, full</button>
-<button title="Plays an unclear answer — it goes to you, never guessed" onclick="reply('${l.leg_id}','yes but only 3 seats')">“yes but only 3”</button></div></div>`).join("")+
+<button class="go" data-testid="test-quote" title="Prepares the Thursday booking for the failure beat and sends its requests." onclick="testQuote()">Prepare the Thursday booking</button></div>`+
+ds.verifications.map(v=>`<div class="card"><b>${esc(v.supplier)}</b> · verification sent by ${esc(v.kind)}<div class="row">
+<button data-testid="verify-yes-${v.channel_id}" title="Plays the supplier answering YES to the verification" onclick="vreply('${v.channel_id}','YES')">Supplier: YES</button></div></div>`).join("")+
+open.map(l=>`<div class="card" data-testid="drawer-leg" data-supplier="${esc(l.supplier)}"><b>${esc(l.supplier)}</b> · ${esc(l.title)} · ${esc(l.b.customer)} ${when(l.b.starts_at)}<div class="row">
+<button data-testid="yes-${l.leg_id}" title="Plays the supplier answering YES" onclick="reply('${l.leg_id}','YES')">Supplier: YES</button><button data-testid="nai-${l.leg_id}" title="Plays the supplier answering ΝΑΙ (Greek yes)" onclick="reply('${l.leg_id}','ΝΑΙ')">ΝΑΙ</button>
+<button data-testid="no-${l.leg_id}" title="Plays the supplier answering NO, full" onclick="reply('${l.leg_id}','NO, full')">Supplier: NO, full</button>
+<button data-testid="unclear-${l.leg_id}" title="Plays an unclear answer — it goes to you, never guessed" onclick="reply('${l.leg_id}','yes but only 3 seats')">“yes but only 3”</button></div></div>`).join("")+
+`<div class="card"><b>The customer's phone</b>`+ds.phone.map((m,i)=>`<p><a data-testid="phone-link-${i}" href="${esc(m.link)}" target="_blank" title="Opens the customer's phone screen">${esc(m.text)}</a> <span class="mut">${when(m.at)}</span></p>`).join("")+`</div>`+
 `<div class="card"><b>What would have gone out (captured)</b>`+cap.messages.map(m=>`<p class="mut">${when(m.at)} · ${esc(m.channel)} → ${esc(m.to_)} ${m.real?'<span class="chip no">REAL</span>':''}<br>${esc(m.body)}</p>`).join("")+`</div>`}};
+function legRow(b,l){const ans=l.parse==="yes"?'<span class="chip ok">✓ their yes</span>':l.parse==="no"?'<span class="chip no">✕ their no</span>':l.parse==="unclear"?'<span class="chip amb">unclear — yours to decide</span>':"";
+const cd=l.state==="requested"&&l.answer_by?` · answer by ${when(l.answer_by)}`:"";
+let tools="";if(l.parse==="unclear"&&l.state==="requested"){const m=(l.reply&&l.reply.text||"").match(/\b(\d{1,2})\b/);const n=m&&+m[1]<b.party?+m[1]:b.party-1;
+tools=`<span class="mini"><button class="go" data-testid="accept-${l.leg_id}" title="Re-quotes for ${n} and asks the customer" onclick="act('legs.accept_partial',{leg_id:'${l.leg_id}',party:${n}})">Accept ${n}</button>
+<button data-testid="treatno-${l.leg_id}" title="Records a no" onclick="act('legs.treat_as_no',{leg_id:'${l.leg_id}',by:'the operator'})">Treat as no</button>
+<button data-testid="askagain-${l.leg_id}" title="Sends the question again" onclick="act('legs.ask_again',{leg_id:'${l.leg_id}'})">Ask again</button></span>`}
+else if(["requested","no_answer","unreachable"].includes(l.state)){tools=`<span class="mini"><button data-testid="phone-${l.leg_id}" title="Mark that you'll call them; record their answer here afterwards." onclick="act('legs.ask_by_phone',{leg_id:'${l.leg_id}',by:'the operator'})">Ask again by phone</button>
+<select id="ra-${l.leg_id}"><option value="yes">They said yes</option><option value="no">They said no</option></select><input id="rn-${l.leg_id}" placeholder="Note (who, when)" maxlength="300">
+<button data-testid="record-${l.leg_id}" title="Enter what the supplier told you by phone. It's saved as your record, with your name." onclick="record('${l.leg_id}')">Record answer</button></span>`}
+return `<p data-testid="leg" data-supplier="${esc(l.supplier)}" data-state="${l.state}"><b>${esc(l.title)}</b> · ${esc(l.supplier)} · ${esc(l.channel_kind.replace("_"," "))} · ${esc(l.state.replace("_"," "))}${cd} ${ans}
+${l.reply?` <span class="q">“${esc(l.reply.text)}”</span>`:""} ${l.evidence_id?`<button data-testid="proof-${l.leg_id}" title="What we sent, what they answered, when — and a check that the record matches." onclick="proof('${l.evidence_id}')">Proof</button>`:""}</p>${tools}`}
+async function act(op,body){await api(op,body);VIEWS.bookings()}
+async function record(id){await api("legs.record_answer",{leg_id:id,answer:$("ra-"+id).value,note:$("rn-"+id).value,by:"the operator"});VIEWS.bookings()}
+async function offer(id){const d=$("d-"+id).value;if(!d){$("msg").textContent="Choose a date to offer.";return}const r=await api("bookings.offer_another_time",{bundle_id:id,date:d,start_time:$("t-"+id).value});
+$("msg").textContent="A new read-back went to the customer.";VIEWS.bookings()}
+async function cancelB(id){const r=await api("bookings.cancel",{bundle_id:id});$("msg").textContent=r.state==="sent_to_customer"?"The cancellation went to the customer to approve.":"Cancelled.";VIEWS.bookings()}
 async function find(){$("view").innerHTML='<p class="big">Reading the site…</p>';try{await api("suppliers.draft_from_site")}catch(e){}VIEWS.suppliers()}
 async function setSup(id,st){await api("suppliers.put",{supplier_id:id,status:st});VIEWS.suppliers()}
 function chanForm(s){const c=s.contacts||{};const opts=[c.whatsapp?["whatsapp",c.whatsapp]:null,c.email?["email",c.email]:null,c.web_form?["web_form",c.web_form]:null,
@@ -151,7 +193,13 @@ async function publish(){const r=await api("operator_api.publish");$("msg").text
 async function issue(){const r=await api("operator_keys.issue",{label:"Partner key"});$("key").textContent="Shown once: "+r.key}
 async function testQuote(){await api("bookings.test_quote");go("bookings")}
 async function reply(id,t){await api("sandbox.supplier_reply",{leg_id:id,text:t});VIEWS.drawer()}
+async function vreply(id,t){await api("sandbox.supplier_reply",{channel_id:id,text:t});VIEWS.drawer()}
 async function proof(id){const r=await api("evidence.get",{evidence_id:id});const e=r.evidence;
-alert((r.verified?"✓ The record matches.":"✕ Doesn't match.")+"\n\n"+e.operation+" · "+e.produced_at+"\n"+e.sources.map(s=>s.service+" · "+(s.snippet?s.snippet.text:"")+" · "+s.sha256.slice(0,23)+"…").join("\n")+(e.approval?"\nApproved by the customer: "+e.approval.method+" at "+e.approval.approved_at:""))}
+const src=e.sources.map(x=>`<dt>${esc(x.service)}</dt><dd>${x.snippet?"“"+esc(x.snippet.text)+"”"+(x.snippet.instruction_like?' <span class="chip no">instruction-like: not acted on</span>':""):""}<br><span class="k">${esc(x.sha256)}</span></dd>`).join("");
+const ap=e.approval?`<dt>Approved</dt><dd>by the customer (${esc(e.approval.method)}) at ${when(e.approval.approved_at)}${e.approval.said?" — “"+esc(e.approval.said)+"”":""}<br><span class="k">read-back ${esc(e.approval.read_back_sha256)}</span></dd>`:"";
+$("proofbody").innerHTML=`<p class="big ${r.verified?'':'no'}" data-testid="proof-verdict">${r.verified?"✓ The record matches.":"✕ Doesn't match."}</p>
+<dl><dt>What</dt><dd>${esc(e.operation)}${e.outcome?" · "+esc(e.outcome.kind)+(e.outcome.reference?" · "+esc(e.outcome.reference):""):""}</dd><dt>When</dt><dd>${when(e.produced_at)}</dd>${ap}${src}
+<dt>Fingerprint</dt><dd class="k">${esc(e.body_sha256)}</dd></dl><p><button class="go" data-testid="proof-verify" title="Recomputes the record's fingerprint now" onclick="proof('${id}')">Verify</button></p>`;
+$("proof").hidden=false}
 rail();go("suppliers");
 </script>"""

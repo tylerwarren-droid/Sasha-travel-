@@ -138,10 +138,12 @@ class TheKeep(Base):
         self.assertEqual(run(KEEP.approve(ACCT, ["a read-back WITHOUT the passport line"], "Yes, book it.", "cs_1")), 0)
         self.assertEqual(run(KEEP.approve(ACCT, heard, "Yes, book it.", "cs_2")), 1)
 
-        async def order(sid):
+        async def order(sid):   # a round trip: two orders, both carry the passport, one Activity row
             async with KEEP.fill(ACCT, sid) as kept:
                 docs = kept.duffel()
                 kept.result("UHQ9B1" if docs else None, bool(docs))
+                assert kept.duffel() == docs
+                kept.result("ZX81QA" if docs else None, bool(docs))
                 return docs
         self.assertEqual(run(order("cs_other")), [])                                                  # another payment: nothing
         self.assertEqual(run(order("cs_2")), [{"type": "passport", "unique_identifier": "PAA123456", "issuing_country_code": "ES",
@@ -149,7 +151,7 @@ class TheKeep(Base):
         self.assertEqual(run(order("cs_2")), [])                                                      # used once
         used = [a for a in REC.ACTS if a["kind"] == "keep_use"]
         self.assertEqual(len(used), 1)
-        self.assertEqual((used[0]["about"], used[0]["proof"]["reference"], used[0]["proof"]["said"]), ("Passport ES ••••456", "UHQ9B1", "Yes, book it."))
+        self.assertEqual((used[0]["about"], used[0]["proof"]["reference"], used[0]["proof"]["said"]), ("Passport ES ••••456", "UHQ9B1, ZX81QA", "Yes, book it."))
         self.assertTrue(REC.verified(used[0]))
         self.assertNowhere("PAA123456")
 

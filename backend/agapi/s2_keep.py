@@ -330,7 +330,7 @@ class Fill:
 
     def __init__(self, docs: List[dict]) -> None:
         self._docs = docs
-        self.reference: Optional[str] = None
+        self.references: List[str] = []
         self.ok = False
 
     def duffel(self) -> List[dict]:
@@ -349,7 +349,10 @@ class Fill:
         return [d["masked"] for d in self._docs]
 
     def result(self, reference: Optional[str], ok: bool) -> None:
-        self.reference, self.ok = reference, ok
+        """Once per order in the payment (a round trip is two): the item is 'used' if any order took it."""
+        if ok and reference:
+            self.references.append(reference)
+        self.ok = self.ok or ok
 
     def _drop(self) -> None:
         for d in self._docs:
@@ -359,10 +362,10 @@ class Fill:
 
 @asynccontextmanager
 async def fill(account: str, session_id: str):
-    """AT THE MOMENT OF USE (basket_book, after payment): the approved items for this payment, opened, then dropped.
+    """AT THE MOMENT OF USE (basket_book, after payment): the approved items for this payment, opened, then dropped — around
+    the payment's whole loop of orders (a round trip is two flights; both carry the passport):
         async with KEEP.fill(account, sid) as kept:
-            o = await T.order(c, …, documents=kept.duffel())
-            kept.result(o.get("booking_reference"), "why" not in o)"""
+            for each flight:  o = await T.order(c, …, documents=kept.duffel());  kept.result(o.get("booking_reference"), "why" not in o)"""
     try:
         st = _store()
         fills = [f for f in await st.fills_of(account, ("approved",)) if f.get("session_id") == session_id and f["expires_at"] > NOW()]
@@ -386,7 +389,7 @@ async def fill(account: str, session_id: str):
             await st.set_fill(f["id"], state="used" if kept.ok else "failed", used_at=NOW())
             if kept.ok:
                 await st.touch(it["id"])
-                await _activity(account, "keep_use", it, {"reference": kept.reference, "said": f.get("said"),
+                await _activity(account, "keep_use", it, {"reference": ", ".join(kept.references), "said": f.get("said"),
                                                           "read_back_sha256": f.get("read_back_sha256"), "item": it["masked"]})
 
 

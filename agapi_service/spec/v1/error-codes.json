@@ -247,7 +247,8 @@
               "read_back_changed",
               "intent_changed",
               "superseded",
-              "irreversible_batch"
+              "irreversible_batch",
+              "keep_not_approved"
             ]
           }
         }

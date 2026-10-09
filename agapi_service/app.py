@@ -298,9 +298,13 @@ async def collection():
 
 
 @app.get("/", response_class=HTMLResponse)
-@app.get("/docs", response_class=HTMLResponse)
 async def docs():
+    """The earlier one-page docs (kept; also at /docs/reference). /docs is the docs SITE (CR 66, docs_site.py)."""
     return HTMLResponse(gen.docs_page(config.PUBLIC_URL))
+
+
+from . import docs_site as _docs_site   # noqa: E402 · CR 66 · AgAPI's public docs, EU 211's table of contents
+app.include_router(_docs_site.router)
 
 
 # ── issuing by hand, remotely (Part 4 K6) — signed with the service's own pepper, so no second secret exists ────────────

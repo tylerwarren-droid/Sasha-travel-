@@ -1030,6 +1030,9 @@ async def activity_list(ctx: Ctx, inp: dict):
             about = _about(ctx, mine[ev["act_id"]], e["created_at"][:19] + "Z")
             row = P.activity_entry("calendar", "done", e["created_at"], ref=e["id"], proof=e["id"])
             rows.append({**row, **({"about": about} if about else {}), "verified": _verified(ctx, e["id"])})
+    for k in ctx.store.q("select * from keep_events where account = ? and end_user = ? order by at desc limit 200", ctx.account, inp["end_user"]):
+        row = P.activity_entry(k["kind"], "done", k["at"], ref=k["id"], proof=k["evidence_id"])   # 1.2: the Keep's rows are back (kinds widened)
+        rows.append({**row, "about": R.wrap(k["masked"], "keep_mask", k["at"][:19] + "Z", cap=200), "verified": _verified(ctx, k["evidence_id"])})
     for r in _replies(ctx, inp["end_user"]):
         at = r["received_at"][:19] + "Z"
         row = P.activity_entry("whatsapp_reply", "done", r["received_at"], ref=r["id"])

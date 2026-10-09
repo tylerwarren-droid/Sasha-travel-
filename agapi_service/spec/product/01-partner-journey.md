@@ -32,9 +32,10 @@ as the JSON body. The answer is always the same envelope: `{ agapi, request_id, 
 ```bash
 BASE=https://agapi-sandbox-production.up.railway.app
 H=(-H "Authorization: Bearer $AGAPI_KEY" -H "Content-Type: application/json" -H "AgAPI-Version: 1.1")
+key() { uuidgen | tr -d '-'; }   # a NEW Idempotency-Key per action, per run (32 chars). Reuse one only to retry the same request
 
 # 1. Register your end user (once per user). Sandbox numbers are +1 500 555 0xxx; messages are captured, never sent.
-curl -s "${H[@]}" -H "Idempotency-Key: user-marta-0000001" $BASE/v1/users.register \
+curl -s "${H[@]}" -H "Idempotency-Key: $(key)" $BASE/v1/users.register \
   -d '{"external_ref":"marta-123","destinations":[{"channel":"sms","value":"+15005550101"}]}'
 #   → result.end_user_id = usr_…
 
@@ -44,17 +45,17 @@ curl -s "${H[@]}" $BASE/v1/travel.find_flights \
 #   → result.offers[0].offer_ref
 
 # 3. Hold it. AgAPI re-checks the price and returns the READ-BACK: the exact lines your user will approve.
-curl -s "${H[@]}" -H "Idempotency-Key: hold-marta-000000001" $BASE/v1/trip.hold \
+curl -s "${H[@]}" -H "Idempotency-Key: $(key)" $BASE/v1/trip.hold \
   -d '{"end_user":"usr_…","items":[{"kind":"flight","ref":"off_…"}],
        "travellers":[{"given_name":"Marta","family_name":"Ruiz","born_on":"1990-04-02","title":"ms"}]}'
 #   → result.hold_id, result.read_back.read_back_id, result.read_back.lines
 
 # 4. Test mode: simulate your user's yes, said in a separate turn.
-curl -s "${H[@]}" $BASE/v1/sandbox.simulate_approval -d '{"read_back_id":"rb_…","said":"Yes, book it."}'
+curl -s "${H[@]}" -H "Idempotency-Key: $(key)" $BASE/v1/sandbox.simulate_approval -d '{"read_back_id":"rb_…","said":"Yes, book it."}'
 #   → result.approval_id = apv_…
 
 # 5. Complete: the one call that acts. It needs the approval and an idempotency key.
-curl -s "${H[@]}" -H "Idempotency-Key: book-marta-000000001" -H "AgAPI-Approval-Id: apv_…" \
+curl -s "${H[@]}" -H "Idempotency-Key: $(key)" -H "AgAPI-Approval-Id: apv_…" \
   $BASE/v1/trip.complete -d '{"hold_id":"hold_…","payment":{"method":"payment_link"}}'
 #   → result.outcome.kind = CONFIRMED | AWAITING_PAYMENT …, evidence_id
 
@@ -87,7 +88,7 @@ const found = await agapi("travel.find_flights", { origin: { query: "Madrid", ia
 const hold  = await agapi("trip.hold", { end_user: user.end_user_id, items: [{ kind: "flight", ref: found.offers[0].offer_ref }],
                 travellers: [{ given_name: "Marta", family_name: "Ruiz", born_on: "1990-04-02", title: "ms" }] }, { "Idempotency-Key": key() });
 console.log(hold.read_back.lines.join("\n"));            // show THESE lines to your user, verbatim
-const yes   = await agapi("sandbox.simulate_approval", { read_back_id: hold.read_back.read_back_id, said: "Yes, book it." });
+const yes   = await agapi("sandbox.simulate_approval", { read_back_id: hold.read_back.read_back_id, said: "Yes, book it." }, { "Idempotency-Key": key() });
 const done  = await agapi("trip.complete", { hold_id: hold.hold_id, payment: { method: "payment_link" } },
                 { "Idempotency-Key": key(), "AgAPI-Approval-Id": yes.approval_id });
 console.log(done.outcome.kind, done.evidence_id);
@@ -115,13 +116,17 @@ found = agapi("travel.find_flights", {"origin": {"query": "Madrid", "iata": "MAD
 hold  = agapi("trip.hold", {"end_user": user["end_user_id"], "items": [{"kind": "flight", "ref": found["offers"][0]["offer_ref"]}],
                             "travellers": [{"given_name": "Marta", "family_name": "Ruiz", "born_on": "1990-04-02", "title": "ms"}]}, **{"Idempotency-Key": key()})
 print("\n".join(hold["read_back"]["lines"]))
-yes   = agapi("sandbox.simulate_approval", {"read_back_id": hold["read_back"]["read_back_id"], "said": "Yes, book it."})
+yes   = agapi("sandbox.simulate_approval", {"read_back_id": hold["read_back"]["read_back_id"], "said": "Yes, book it."}, **{"Idempotency-Key": key()})
 done  = agapi("trip.complete", {"hold_id": hold["hold_id"], "payment": {"method": "payment_link"}},
               **{"Idempotency-Key": key(), "AgAPI-Approval-Id": yes["approval_id"]})
 print(done["outcome"]["kind"], done["evidence_id"])
 ev = agapi("evidence.get", {"evidence_id": done["evidence_id"]})
 print(agapi("evidence.verify", {"evidence": ev})["valid"])   # True
 ```
+
+**Errata (EU 213, found by CR 64's CI, which runs these snippets byte for byte):**
+- **(a)** `sandbox.simulate_approval` is idempotent in `operations.json`, so it needs an `Idempotency-Key`. All three snippets now send one.
+- **(b)** The curl snippet used fixed keys, so a second run hit `idempotency_conflict` at `trip.hold`. Every key is now generated per run (`key()`).
 
 ⚠ **Before publishing, verify each snippet** against the sandbox with a test key. Field names come from the v1.1
 schemas, but no key was used to run them (EU uses no accounts). TO FILE for CR: run all three in CI against the
@@ -130,7 +135,7 @@ sandbox.
 ## Step 5: the real approval, instead of the simulation
 
 ```bash
-curl -s "${H[@]}" -H "Idempotency-Key: ask-marta-0000000001" $BASE/v1/approvals.request \
+curl -s "${H[@]}" -H "Idempotency-Key: $(key)" $BASE/v1/approvals.request \
   -d '{"read_back_id":"rb_…","channel":"link_sms"}'
 curl -s "${H[@]}" $BASE/v1/sandbox.messages -d '{"end_user_id":"usr_…"}'     # the captured SMS with the link
 # open the link: the exact read-back lines → [Yes, go ahead]
@@ -145,7 +150,7 @@ curl -s "${H[@]}" $BASE/v1/approvals.status -d '{"read_back_id":"rb_…"}'  # �
 ## Step 6: webhooks
 
 ```bash
-curl -s "${H[@]}" -H "Idempotency-Key: hook-0000000000000001" $BASE/v1/webhooks.register \
+curl -s "${H[@]}" -H "Idempotency-Key: $(key)" $BASE/v1/webhooks.register \
   -d '{"url":"https://partner.example/agapi/hooks"}'     # → secret whsec_… (shown once)
 ```
 

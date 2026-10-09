@@ -770,8 +770,13 @@
                   "whatsapp",
                   "whatsapp_reply",
                   "calendar",
-                  "cancellation"
-                ]
+                  "cancellation",
+                  "keep_save",
+                  "keep_use",
+                  "keep_show",
+                  "keep_delete"
+                ],
+                "description": "1.2 adds keep_save/keep_use/keep_show/keep_delete. Callers MUST tolerate unknown kinds (Part 1 E4)."
               },
               "state": {
                 "enum": [

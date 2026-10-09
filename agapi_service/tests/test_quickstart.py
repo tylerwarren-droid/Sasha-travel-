@@ -5,12 +5,9 @@ evd_…) are filled from the previous step's answer, as a reader would. Each mus
 
 The Docker build runs this (curl, jq and Node 22 are in the image), so a snippet that drifts from the sandbox stops the deploy.
 
-FOUND BY RUNNING THEM (CR 64, reported to EU): all three call sandbox.simulate_approval WITHOUT an Idempotency-Key, which EU's own
-operations.json requires (idempotent: true) → step 4 fails with idempotency_key_required. Each test therefore checks BOTH: the
-published snippet fails exactly there (when EU fixes the doc, that assertion fails — drop the erratum), and the snippet with that
-ONE header added reaches a verified proof.
-SECOND FINDING: the curl snippet's Idempotency-Keys are FIXED strings, so a partner who runs it twice gets idempotency_conflict at
-trip.hold (a fresh offer id, the same key). The corrected run here therefore uses its own account (keys are scoped per account).
+History: CR 64 found two errata by running them (simulate_approval without an Idempotency-Key; the curl snippet's fixed keys colliding
+on a second run). EU 213 fixed both (`key()` per action, per run). CR 66 flipped the pins: the PUBLISHED snippets must now reach a
+verified proof as they are — and the curl one must run TWICE on the same account (a partner re-running the quickstart).
 
     python -m unittest agapi_service.tests.test_quickstart -v      (from the repo root)
 """
@@ -32,19 +29,6 @@ from agapi_service import config  # noqa: F401  (puts backend/ on the path)
 
 DOC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "spec", "product", "01-partner-journey.md")
 PROD = "https://agapi-sandbox-production.up.railway.app"
-
-
-ERRATUM = "idempotency_key_required"   # sandbox.simulate_approval without an Idempotency-Key (EU's quickstart, 1.1)
-FIX = {"python": ('"said": "Yes, book it."})', '"said": "Yes, book it."}, **{"Idempotency-Key": key()})'),
-       "ts": ('said: "Yes, book it." });', 'said: "Yes, book it." }, { "Idempotency-Key": key() });'),
-       "bash": ('$BASE/v1/sandbox.simulate_approval', '-H "Idempotency-Key: yes-marta-0000000001" $BASE/v1/sandbox.simulate_approval')}
-
-
-def fixed(lang: str) -> str:
-    a, b = FIX[lang]
-    body = snippets()[lang]
-    assert body.count(a) == 1, f"the {lang} snippet changed — re-check the erratum"
-    return body.replace(a, b)
 
 
 def snippets() -> dict:
@@ -91,10 +75,7 @@ class Quickstart(unittest.TestCase):
         return subprocess.run([sys.executable, "-c", body.replace(PROD, self.base)], env=self.env, capture_output=True, text=True, timeout=120)
 
     def test_python(self):
-        r = self.run_python(snippets()["python"])
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn(ERRATUM, r.stderr)                                # as published: step 4 (fix the doc → drop the erratum)
-        r = self.run_python(fixed("python"))
+        r = self.run_python(snippets()["python"])                       # as published (EU 213), verbatim
         self.assertEqual(r.returncode, 0, r.stderr[-2000:])
         out = r.stdout.strip().splitlines()
         self.assertTrue(out[-2].startswith(("AWAITING_PAYMENT evd_", "CONFIRMED evd_")), out)
@@ -112,23 +93,14 @@ class Quickstart(unittest.TestCase):
             with open(path, "w") as f:
                 f.write(body.replace(PROD, self.base))
             return subprocess.run([node, "--experimental-strip-types", "--no-warnings", path], env=self.env, capture_output=True, text=True, timeout=120)
-        r = run(snippets()["ts"], "published.mts")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn(ERRATUM, r.stderr)                                # as published: step 4
-        r = run(fixed("ts"), "fixed.mts")
+        r = run(snippets()["ts"], "published.mts")                     # as published (EU 213), verbatim
         self.assertEqual(r.returncode, 0, r.stderr[-2000:])
         out = r.stdout.strip().splitlines()
         self.assertEqual(out[-1], "true", out)
 
     def test_curl(self):
-        with self.assertRaises(AssertionError) as e:                   # as published: step 4
-            self.curl(snippets()["bash"], self.key)
-        self.assertIn(ERRATUM, str(e.exception))
-        with self.assertRaises(AssertionError) as e:                   # run again on the same account: the fixed keys collide
-            self.curl(fixed("bash"), self.key)
-        self.assertIn("idempotency_conflict", str(e.exception))
-        from agapi_service import app as A
-        self.curl(fixed("bash"), A.create_key(self.store, A.create_account(self.store, "Quickstart CI 2"), "quickstart-2"))
+        self.curl(snippets()["bash"], self.key)                         # as published (EU 213), verbatim
+        self.curl(snippets()["bash"], self.key)                         # and AGAIN on the same account: per-run keys never collide
 
     def curl(self, body, key):
         if not shutil.which("curl"):
@@ -143,7 +115,7 @@ class Quickstart(unittest.TestCase):
             os.chmod(shim, 0o755)
             path = os.path.join(work, "bin") + os.pathsep + path
         lines = body.replace(PROD, self.base).split("\n")
-        pre = "\n".join(l for l in lines if l.startswith(("BASE=", "H=")))
+        pre = "\n".join(l for l in lines if l.startswith(("BASE=", "H=", "key()")))   # EU 213's key() helper too
         cmds, cur = [], []
         for l in lines:   # each curl command (with its continuation lines) is one step
             if l.startswith("curl "):

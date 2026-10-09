@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "operations": [
     {
       "operation": "travel.find_flights",
@@ -427,6 +427,86 @@
       ],
       "cost_class": "free",
       "since": "1.1"
+    },
+    {
+      "operation": "keep.put",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_put_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_put_out",
+      "errors": [
+        "invalid_input",
+        "upstream_unreachable",
+        "idempotency_key_required",
+        "idempotency_conflict",
+        "idempotency_in_flight"
+      ],
+      "cost_class": "free",
+      "since": "1.2"
+    },
+    {
+      "operation": "keep.list",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_list_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_list_out",
+      "errors": [
+        "invalid_input",
+        "not_found"
+      ],
+      "cost_class": "read",
+      "since": "1.2"
+    },
+    {
+      "operation": "keep.use",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_use_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_use_out",
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "already_completed",
+        "upstream_unreachable",
+        "idempotency_key_required",
+        "idempotency_conflict",
+        "idempotency_in_flight"
+      ],
+      "cost_class": "free",
+      "since": "1.2"
+    },
+    {
+      "operation": "keep.delete",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_delete_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_delete_out",
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "upstream_unreachable",
+        "idempotency_key_required"
+      ],
+      "cost_class": "free",
+      "since": "1.2"
+    },
+    {
+      "operation": "keep.activity",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_activity_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_activity_out",
+      "errors": [
+        "invalid_input",
+        "not_found"
+      ],
+      "cost_class": "read",
+      "since": "1.2"
     }
   ]
 }

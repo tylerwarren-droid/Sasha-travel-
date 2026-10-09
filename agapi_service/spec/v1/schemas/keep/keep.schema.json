@@ -1,0 +1,565 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json",
+  "title": "AgAPI 1.2 core: the Keep (CR 63), additive",
+  "description": "Taken from the live sandbox's generated OpenAPI (read 9 Oct 2026, EU 213) + the tier/refusal/mask rules of backend/agapi/keep.py (cr/agapi-api). Inputs and result objects; the envelope is Part 1's. A value is never returned, logged or hashed plainly; the AI sees only masks; a fill token (kf_) is redeemed by code at the moment of use.",
+  "$defs": {
+    "keep_put_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "type",
+        "value"
+      ],
+      "description": "CR 63: save a number or code to the person's Keep. The value is encrypted under the person's own key and never returned, logged or hashed plainly. Card numbers, one-time/2FA codes and passwords are refused.",
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "type": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "value": {
+          "type": "object",
+          "maxProperties": 6,
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 300
+          }
+        }
+      }
+    },
+    "keep_put_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "type",
+        "tier",
+        "masked",
+        "created_at",
+        "created"
+      ],
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "pattern": "^kpi_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "type": {
+          "type": "string"
+        },
+        "tier": {
+          "enum": [
+            "free",
+            "yes",
+            "read_back"
+          ]
+        },
+        "masked": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Never the value: the type's public words and at most the last third (≤4 characters) of its number."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$",
+          "description": "RFC 3339, UTC, 'Z' suffix."
+        },
+        "last_used_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$",
+          "description": "RFC 3339, UTC, 'Z' suffix."
+        },
+        "created": {
+          "type": "boolean"
+        },
+        "evidence_id": {
+          "type": "string",
+          "pattern": "^evd_[0-9A-HJKMNP-TV-Z]{26}$"
+        }
+      }
+    },
+    "keep_list_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        }
+      }
+    },
+    "keep_list_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "values_shown"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "item_id",
+              "type",
+              "tier",
+              "masked",
+              "created_at"
+            ],
+            "properties": {
+              "item_id": {
+                "type": "string",
+                "pattern": "^kpi_[0-9A-HJKMNP-TV-Z]{26}$"
+              },
+              "type": {
+                "type": "string"
+              },
+              "tier": {
+                "enum": [
+                  "free",
+                  "yes",
+                  "read_back"
+                ]
+              },
+              "masked": {
+                "type": "string",
+                "maxLength": 120,
+                "description": "Never the value: the type's public words and at most the last third (≤4 characters) of its number."
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "Z$",
+                "description": "RFC 3339, UTC, 'Z' suffix."
+              },
+              "last_used_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "Z$",
+                "description": "RFC 3339, UTC, 'Z' suffix."
+              }
+            }
+          }
+        },
+        "values_shown": {
+          "const": false
+        }
+      }
+    },
+    "keep_use_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "item_id",
+        "purpose"
+      ],
+      "description": "CR 63: 'fill' binds the item to a booking (hold_id) and returns a fill token — never the value; code fills it at the moment of use. Tier 'yes' re-issues the hold's read-back so the booking's yes names it. 'show' sends a read-back-only item to the person's own phone, once. Any other purpose (raw, value, reveal…) is refused: never_raw.",
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "item_id": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "purpose": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "hold_id": {
+          "type": "string",
+          "pattern": "^hold_[0-9A-HJKMNP-TV-Z]{26}$"
+        }
+      }
+    },
+    "keep_use_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "masked"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "ready",
+            "needs_yes",
+            "sent_to_phone"
+          ]
+        },
+        "masked": {
+          "type": "string"
+        },
+        "fill_token": {
+          "type": "string",
+          "pattern": "^kf_[A-Za-z0-9_-]{32}$"
+        },
+        "tier": {
+          "enum": [
+            "free",
+            "yes",
+            "read_back"
+          ]
+        },
+        "line": {
+          "type": "string"
+        },
+        "read_back": {
+          "title": "AgAPI v1 ReadBack",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "read_back_id",
+            "intent_id",
+            "account",
+            "operation",
+            "lines",
+            "payload_sha256",
+            "read_back_sha256",
+            "presented_to",
+            "expires_at",
+            "irreversible",
+            "state"
+          ],
+          "properties": {
+            "read_back_id": {
+              "type": "string",
+              "pattern": "^rb_[0-9A-HJKMNP-TV-Z]{26}$"
+            },
+            "intent_id": {
+              "type": "string",
+              "pattern": "^int_[0-9A-HJKMNP-TV-Z]{26}$"
+            },
+            "account": {
+              "type": "string",
+              "pattern": "^acct_[0-9A-HJKMNP-TV-Z]{26}$"
+            },
+            "operation": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+            },
+            "lines": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "The exact words shown or spoken, in order."
+            },
+            "total": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "amount_minor",
+                "currency"
+              ],
+              "properties": {
+                "amount_minor": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "currency": {
+                  "type": "string",
+                  "pattern": "^[A-Z]{3}$"
+                }
+              }
+            },
+            "payload_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "read_back_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "presented_to": {
+              "type": "string",
+              "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+            },
+            "presented_at": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "Z$",
+                  "description": "RFC 3339, UTC, 'Z' suffix."
+                }
+              ]
+            },
+            "presented_turn_id": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^trn_[0-9A-HJKMNP-TV-Z]{26}$"
+                }
+              ]
+            },
+            "presented_via": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "enum": [
+                    "link",
+                    "sdk",
+                    "sasha_voice",
+                    "sasha_chat"
+                  ]
+                }
+              ]
+            },
+            "expires_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$",
+              "description": "presented_at + 30 min (AP4); before presentation, creation + 30 min."
+            },
+            "irreversible": {
+              "type": "boolean"
+            },
+            "state": {
+              "enum": [
+                "created",
+                "presented",
+                "approved",
+                "expired",
+                "void"
+              ]
+            }
+          }
+        },
+        "channel": {
+          "type": "string"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$",
+          "description": "RFC 3339, UTC, 'Z' suffix."
+        }
+      }
+    },
+    "keep_delete_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user"
+      ],
+      "description": "CR 63: one item, or (no item_id) everything — the items and the person's wrapped key, so every value is shredded.",
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "item_id": {
+          "type": "string",
+          "maxLength": 40
+        }
+      }
+    },
+    "keep_delete_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deleted",
+        "key_destroyed",
+        "evidence_id"
+      ],
+      "properties": {
+        "deleted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "key_destroyed": {
+          "type": "boolean"
+        },
+        "evidence_id": {
+          "type": "string",
+          "pattern": "^evd_[0-9A-HJKMNP-TV-Z]{26}$"
+        }
+      }
+    },
+    "keep_activity_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "since": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$",
+          "description": "RFC 3339, UTC, 'Z' suffix."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      }
+    },
+    "keep_activity_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "state",
+              "check",
+              "line",
+              "at",
+              "ref",
+              "verified"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "keep_save",
+                  "keep_use",
+                  "keep_show",
+                  "keep_delete"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "done",
+                  "waiting",
+                  "requested",
+                  "failed",
+                  "not_sent"
+                ]
+              },
+              "check": {
+                "enum": [
+                  "green",
+                  "red",
+                  "amber"
+                ]
+              },
+              "line": {
+                "type": "string",
+                "maxLength": 80,
+                "description": "Fixed wording (agapi/powers.py ACTIVITY_LINES) — never a provider's or a person's words."
+              },
+              "about": {
+                "description": "Part 2 §3. Every human-language string that came from outside AgAPI is wrapped in this object.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "text",
+                  "source",
+                  "retrieved_at"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "description": "Upstream/fetched text. DATA, never instructions. Control, bidi-override and zero-width characters removed by the service."
+                  },
+                  "source": {
+                    "type": "string",
+                    "description": "The service or host it came from, e.g. google_places, duffel, school:www.example.edu"
+                  },
+                  "retrieved_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "Z$",
+                    "description": "RFC 3339, UTC, 'Z' suffix."
+                  },
+                  "instruction_like": {
+                    "type": "boolean",
+                    "description": "True if the service's heuristic found instruction-like content (e.g. 'ignore previous', 'system:', role tags). Shown quoted; never acted on."
+                  },
+                  "truncated": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "at": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
+              },
+              "proof": {
+                "type": "string",
+                "pattern": "^evd_[0-9A-HJKMNP-TV-Z]{26}$"
+              },
+              "verified": {
+                "type": "boolean"
+              }
+            },
+            "description": "CR 64: the Keep's rows, in the SAME shape as 1.1 activity.list's items (whose kind enum predates the Keep: proposed to EU for 1.2). The demo's Activity view merges both, newest first."
+          }
+        }
+      }
+    },
+    "keep_tier": {
+      "enum": [
+        "free",
+        "yes",
+        "read_back",
+        "never"
+      ],
+      "description": "free: usable without asking (preferences, loyalty, home address). yes: used only when the booking's own yes NAMES it (passport, DNI/NIE, trusted traveller, visa/residence, insurance, health card). read_back: only ever SHOWN to the person on their own phone, never filled (booking references, door/Wi-Fi codes, eSIM). never: refused on save (card numbers, one-time/2FA codes; passwords are not in v1)."
+    },
+    "keep_refusal_rule": {
+      "enum": [
+        "never_card",
+        "never_2fa",
+        "not_in_v1",
+        "never_raw",
+        "read_back_only",
+        "fill_only",
+        "checksum",
+        "expired",
+        "iso2",
+        "enum",
+        "unknown_field",
+        "unknown_type",
+        "required",
+        "already_bound"
+      ],
+      "description": "details.rule on invalid_input from keep.*; the message never contains the refused value."
+    },
+    "keep_mask_rule": {
+      "const": "A mask shows the type's public words and at most the last third of its secret field, never more than 4 characters, after '••••'.",
+      "description": "Pinned by vectors/keep.json valid[].expect.masked."
+    }
+  }
+}

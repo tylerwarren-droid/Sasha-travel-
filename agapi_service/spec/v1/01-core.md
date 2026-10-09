@@ -88,6 +88,8 @@ Always this shape, **including errors**, with every HTTP status (§5.2):
 | `whk_` | a webhook delivery (Part 4) |
 | `whe_` | a webhook endpoint (Part 4 `webhooks.register`, v1.0) |
 | `rpl_` | a reply to a message Sasha/AgAPI sent (v1.1, `messages.replies`) |
+| `kpi_` | a Keep item (v1.2) |
+| `kf_` | a Keep fill token: redeemed by code at the moment of use, never the value (v1.2) |
 
 ## 3. Versioning
 

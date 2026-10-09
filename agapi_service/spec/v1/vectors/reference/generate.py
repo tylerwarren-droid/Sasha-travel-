@@ -118,3 +118,18 @@ w("webhook-signature.json",{"version":"1.0","rule":"Part 4 §4","cases":[
   {"id":"W-2","description":"body changed by one byte → invalid","secret":sec,"t":1791468300,"raw_body":raw.replace("confirmed","confirmeD"),"header":sig,"expect":{"valid":False}},
   {"id":"W-3","description":"timestamp older than 5 minutes at receipt → reject even if the MAC matches","secret":sec,"t":1791468300,"raw_body":raw,"header":sig,"received_at_unix":1791468300+301,"expect":{"valid":False,"reason":"stale"}}]})
 print("evidence",2,"webhook",3)
+
+# ── 1.2 the Keep: EU's reference against CR's frozen vectors/keep.json (not regenerated; byte-identical to CR's) ──
+KJ=json.load(open("keep.json"))
+for x in KJ["valid"]:
+    m=R.keep_mask(x["type"],x["expect"]["normalised"])
+    if m!=x["expect"]["masked"]: raise SystemExit(f"keep mask mismatch {x['id']}: {m!r} vs {x['expect']['masked']!r}")
+    if R.KEEP_TIER[x["type"]]!=x["expect"]["tier"]: raise SystemExit(f"keep tier mismatch {x['id']}")
+for x in KJ["use"]:
+    r=R.keep_use_refusal(x["type"],x["purpose"])
+    if r!=x["expect"]["refused"]: raise SystemExit(f"keep use mismatch {x['id']}: {r} vs {x['expect']['refused']}")
+for x in KJ["use_line"]:
+    if R.keep_use_line(x["masked"],x["purpose"])!=x["line"]: raise SystemExit(f"keep use_line mismatch {x['masked']}")
+for x in KJ["refused"]:
+    if x["type"] in ("card","credit_card","otp","2fa","password","rocket") and x["type"] in R.KEEP_TIER: raise SystemExit("never-type has a tier")
+print("keep valid",len(KJ["valid"]),"use",len(KJ["use"]),"use_line",len(KJ["use_line"]),"(EU reference agrees; refused",len(KJ["refused"]),"+ envelope",len(KJ["envelope"]),"are CR-run)")

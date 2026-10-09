@@ -386,7 +386,8 @@ class Generated(Base):
         for t in m["tools"]:   # envelope fields are never model inputs (evidence.verify's evidence may CONTAIN an approval record)
             self.assertFalse({"approval_id", "idempotency_key"} & set(t["inputSchema"].get("properties", {})), t["name"])
         self.assertIn("sandbox.simulate_approval", self.client.get("/collection.http").text)
-        self.assertIn("There is no approve operation", self.client.get("/docs").text)
+        self.assertIn("There is no approve operation", self.client.get("/docs/reference").text)        # the one-page docs, kept
+        self.assertIn("There is no approve operation", self.client.get("/docs/concepts/approvals").text)   # the docs site (CR 66)
 
 
 class Admin(Base):
@@ -471,12 +472,11 @@ class Extensions(Base):
 
     def test_eus_tables_are_untouched(self):
         from agapi_service.registry import eu_operations
-        self.assertEqual(len(eu_operations()), 24)                                      # v1.1 (EU 211): +6, adopted from CR 60–62
+        self.assertEqual(len(eu_operations()), 29)                                      # v1.2 (EU 213): +5, the Keep, adopted from CR 63
         for op in ("messages.send_email", "messages.send_whatsapp", "messages.replies", "activity.list", "calendar.add_event",
-                   "sandbox.simulate_reply"):
-            self.assertEqual(operations()[op]["output"], eu_operations()[op]["output"], op)   # now on EU's own schemas
-        self.assertEqual(set(operations()) - set(eu_operations()),
-                         {"keep.put", "keep.list", "keep.use", "keep.delete", "keep.activity"})   # CR 63: the Keep, proposed to EU
+                   "sandbox.simulate_reply", "keep.put", "keep.list", "keep.use", "keep.delete", "keep.activity"):
+            self.assertEqual(operations()[op]["output"], eu_operations()[op]["output"], op)   # on EU's own schemas
+        self.assertEqual(set(operations()) - set(eu_operations()), set())                # every sandbox extension is now AgAPI
         self.assertEqual(operations()["acts.status"]["output"], eu_operations()["acts.status"]["output"])
 
 

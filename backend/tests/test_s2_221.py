@@ -116,7 +116,7 @@ class DemoSetting(unittest.TestCase):
         from booking_signer import ladder_routes as LR
         src = inspect.getsource(LR.read_venue)
         self.assertIn('body.pop("s2_demo", False)', src)
-        self.assertIn("_s2_demo_account(account_for(request))", src)
+        self.assertIn("if s2_demo and _s2_demo_account(account_for(request)):", src)   # card or no card
 
 
 if __name__ == "__main__":

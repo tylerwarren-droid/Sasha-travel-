@@ -75,7 +75,7 @@ function Speaker() {
 
 function VenueCards({ cards, choose }: { cards: Extract<Card, { k: 'venues' }>['cards']; choose: (name: string) => void }) {
   return (
-    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 2px 8px', scrollSnapType: 'x mandatory' }}>
+    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', maxWidth: '100%', padding: '4px 2px 8px', scrollSnapType: 'x mandatory' }}>
       {cards.map(c => (
         <div key={c.place_id} style={{ minWidth: 230, maxWidth: 230, background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, overflow: 'hidden', scrollSnapAlign: 'start' }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- a remote venue photo, sized by the card */}
@@ -229,7 +229,7 @@ export default function S2App() {
     </main>)
 
   return (
-    <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, margin: '0 auto' }}>
+    <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, width: '100%', margin: '0 auto', overflowX: 'hidden' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', paddingTop: 'max(56px, calc(env(safe-area-inset-top) + 44px))' }}>{/* room for the site's sign-in badge above */}
         <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
         <nav style={{ display: 'flex', gap: 6 }}>
@@ -240,19 +240,19 @@ export default function S2App() {
       </header>
       {tab === 'activity' ? <Activity /> : (
         <>
-          <section style={{ flex: 1, overflowY: 'auto', padding: '0 16px 12px' }}>
+          <section style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, padding: '0 16px 12px' }}>
             {msgs.length === 0 ? (
               <div style={{ textAlign: 'center', paddingTop: '18vh' }}>
                 <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Playfair Display',Georgia,serif", lineHeight: 1.25 }}>{GREETING}</div>
                 <p style={{ color: C.dim, marginTop: 10 }}>A table tonight, a spa on Saturday, an email to someone, a booking in your calendar.</p>
               </div>
             ) : msgs.map((m, i) => (
-              <div key={i} style={{ margin: '10px 0', display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              <div key={i} style={{ margin: '10px 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
                 {m.text || m.role === 'user' ? (
                   <div style={{ maxWidth: '88%', padding: '10px 14px', borderRadius: 18, background: m.role === 'user' ? 'linear-gradient(135deg,#6d4aff,#9b4dff)' : C.card, border: m.role === 'user' ? 'none' : `1px solid ${C.line}`, lineHeight: 1.45 }}>
                     {m.text}</div>
                 ) : <div style={{ color: C.dim, padding: '8px 4px' }}>…</div>}
-                {m.cards.length ? <div style={{ width: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => send(`${t}, please.`)} />)}</div> : null}
+                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => send(`${t}, please.`)} />)}</div> : null}
               </div>))}
             <div ref={end} />
           </section>

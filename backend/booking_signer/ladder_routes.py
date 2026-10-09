@@ -157,7 +157,7 @@ async def read_venue(request: Request):
     # founder-mode fixture) a real restaurant or spa picked on /s2 is read and booked at OUR test venue — nothing real is contacted;
     # its name carries the stand-in tag internally, which every screen and the model strip
     s2_demo = bool(body.pop("s2_demo", False)) if isinstance(body, dict) else False
-    if s2_demo and body.get("place_id") and _s2_demo_account(account_for(request)):
+    if s2_demo and _s2_demo_account(account_for(request)):   # with or without a card picked: nothing real is ever read or contacted
         from .form_rung import test_venue_url
         quote = re.search(r"tattoo|piercing|custom|commission|portrait|bespoke|tailor|quote", str(body.get("asked_for") or ""), re.I)
         body = {"name": standin_name(body.get("name")), "city": body.get("city") or "Madrid", "country": "ES",

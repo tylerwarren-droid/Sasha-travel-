@@ -65,6 +65,8 @@ async def _read(ctx, a: dict) -> dict:
             "website": a.get("website"), "asked_for": asked}
     if s2:   # Sasha 221 · /s2 only: the server applies the S2 demo setting when this account has it (never on /next)
         body["s2_demo"] = True
+        if not body.get("place_id"):   # a card named but not passed by id: the card on screen is the pick
+            body["place_id"] = (card_of(ctx.account, None, a.get("name")) or {}).get("place_id")
     status, rd = await GW.api(ctx.account, "POST", "/api/booking/venues/read", {k2: v for k2, v in body.items() if v})
     if status != 200:
         raise _err((rd or {}).get("rule") or "read_failed", GW.refusal_words(rd or {}, status))

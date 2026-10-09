@@ -39,7 +39,7 @@ class DemoInABrowser(unittest.TestCase):
             if "/fixtures/taverna" in url:   # the taverna's form (dry-run): served by the fake, never the network
                 return 200, '<form id="booking-form"><input name="date"><select name="time"></select><select name="party_size"></select><input name="name"></form>'
             return await real_fetch(url)
-        cls.patches = [mock.patch.object(SB, "TRANSPORT", FakeSandbox()), mock.patch.object(config, "SANDBOX_KEY", "agp_test_" + "x" * 32),
+        cls.patches = [mock.patch.object(SB, "TRANSPORT", FakeSandbox(latency=0.3)), mock.patch.object(config, "SANDBOX_KEY", "agp_test_" + "x" * 32),
                        mock.patch.object(config, "PUBLIC_URL", cls.base), mock.patch.object(ON, "FETCH", fetch),
                        mock.patch.object(CH, "POST_FORM", FakeTaverna()), mock.patch.object(CH, "send_time", lambda now_utc, quiet, tz=None: now_utc)]
         for p in cls.patches:

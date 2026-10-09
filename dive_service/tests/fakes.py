@@ -14,10 +14,14 @@ def now():
 
 
 class FakeSandbox:
-    def __init__(self):
+    def __init__(self, latency: float = 0.0):
         self.users, self.windows, self.replies, self.approvals, self.sent, self.down = {}, {}, [], {}, [], False
+        self.latency = latency        # the browser test plays a real round trip's delay, so a race shows up here, not live
 
     async def __call__(self, op, body, headers):
+        if self.latency:
+            import asyncio
+            await asyncio.sleep(self.latency)
         if self.down:
             raise ConnectionError("sandbox down")
         assert headers["Authorization"].startswith("Bearer agp_test_")

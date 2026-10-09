@@ -133,6 +133,7 @@ def run(base: str, token: str, log=print, headless: bool = True) -> None:
         # 4:00–4:40 · the failure beat: Thursday, the boat says NO
         page.click("text=Test drawer")
         page.click("[data-testid=test-quote]")
+        expect(page.locator("[data-testid=booking]")).to_have_count(2, timeout=T)          # it lands on Bookings with Thursday in it
         page.click("text=Test drawer")
         _answer(page, "Kyma Gear", "Supplier: YES")
         _answer(page, "Aegean Boats", "NO, full")

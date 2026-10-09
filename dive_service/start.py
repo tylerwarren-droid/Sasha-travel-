@@ -11,7 +11,7 @@ import html
 from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import config, model as M, ops as OPS
+from . import channels as CH, config, model as M, ops as OPS
 from .model import DiveError
 
 SLUG = "blue-kyma"
@@ -33,6 +33,40 @@ def _state(s) -> dict:
     bs = s.q("select state, evidence_id from bundles where operator_id = ? order by created_at desc", o["id"])
     phone = s.one("select count(*) n from captured where channel = 'sms'")["n"]
     return {"suppliers": len(sups), "verified": ver, "published": pub, "bookings": len(bs), "latest": bs[0]["state"] if bs else None, "phone": phone}
+
+
+def _local(t: str) -> str:
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    d = datetime.fromisoformat(t.replace("Z", "+00:00")).astimezone(ZoneInfo(config.TIMEZONE))
+    return d.strftime("%a %H:%M"), (d + timedelta(hours=24)).strftime("%a %H:%M")
+
+
+def _arrivals(s) -> str:
+    """CR 67 · the live check: did Jon's hi and the gear inbox's email reach DIVE? (times only, never a number or an address)"""
+    w = config.switches()
+    out = []
+    if w["whatsapp_hook"]:
+        last = s.one("select address, received_at t from inbound where channel = 'whatsapp' order by id desc limit 1")
+        if last:
+            is_open = CH.window_open(s, last["address"])
+            out.append(f'<p data-testid="wa-window">Jon’s WhatsApp: last message {_local(last["t"])[0]} Mykonos · the 24-hour window is '
+                       + (f'open until {_local(last["t"])[1]}' if is_open else '<b>closed</b>: ask Jon to send hi') + '</p>')
+        else:
+            out.append('<p data-testid="wa-window">Jon’s WhatsApp: <b>nothing received yet</b>. Ask Jon to send hi.</p>')
+    if w["email_hook"]:
+        t = s.one("select max(received_at) t from inbound where channel = 'email'")["t"]
+        out.append(f'<p data-testid="mail-in">Gear inbox: last email received {_local(t)[0]} Mykonos</p>' if t else
+                   '<p data-testid="mail-in">Gear inbox: <b>nothing received yet</b>.</p>')
+    return "".join(out)
+
+
+def _switches() -> str:
+    """CR 67 · what is real right now (booleans only)."""
+    w = config.switches()
+    on = lambda b: '<span class="chip no">REAL</span>' if b else '<span class="chip ok">simulated</span>'
+    return (f'<p data-testid="switches">Boat WhatsApp: {on(w["whatsapp_real"])} · Gear email: {on(w["email_real"])}'
+            f'{"" if w["whatsapp_real"] or w["email_real"] else " · nothing on this demo sends a real message"}</p>')
 
 
 # (time, the step, the link, what to click there, what to say) — EU 212 demo-script.md, in test mode
@@ -75,7 +109,7 @@ BEATS = [
 ]
 
 
-def _page(st: dict, note: str) -> str:
+def _page(st: dict, note: str, s=None) -> str:
     e = html.escape
     rows = []
     for i, (t, name, link, do, say) in enumerate(BEATS, 1):
@@ -91,7 +125,7 @@ def _page(st: dict, note: str) -> str:
 <div class="row" style="justify-content:space-between"><h1 style="margin:.2rem 0">Run the DIVE demo</h1><span class="badge">TEST</span></div>
 <p class="mut">Five minutes, ten steps. Each step is one link. Nothing on this page sends a real message.</p>
 {note}
-<div class="card"><b>Where things stand</b><p data-testid="state">{now}</p>
+<div class="card"><b>Where things stand</b><p data-testid="state">{now}</p>{_switches()}{_arrivals(s) if s is not None else ""}
 <form method="post" action="/start/reset"><button class="go" data-testid="reset" title="Empties the console: no suppliers, packages, bookings, keys or activity. The operator stays Blue Kyma Diving (demo).">Reset demo</button>
 <span class="mut"> Before each run. Takes a second.</span></form></div>
 {''.join(rows)}
@@ -112,7 +146,7 @@ def bind(app, db, ok):
         if (r := door(req)):
             return r
         note = '<p class="chip ok big" data-testid="reset-done">✓ Reset. The console is empty and ready for step 1.</p>' if done == "reset" else ""
-        return page("Run the DIVE demo", _page(_state(db()), note))
+        return page("Run the DIVE demo", _page(_state(db()), note, db()))
 
     @app.post("/start/reset")
     async def reset(req: Request):

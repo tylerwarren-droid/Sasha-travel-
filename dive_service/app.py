@@ -310,6 +310,8 @@ from . import console as _console   # noqa: E402
 _console.bind(app, db, _console_ok)
 from . import start as _start   # noqa: E402   CR 66 · Tyler's start page
 _start.bind(app, db, _console_ok)
+from . import hooks as _hooks   # noqa: E402   CR 67 · the real channels' replies (404 until switched on)
+_hooks.bind(app, db)
 
 
 @app.on_event("startup")
@@ -329,4 +331,5 @@ async def _loop():
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "service": "dive", "mode": config.MODE, "sandbox": config.SANDBOX_URL, "sandbox_key_set": bool(config.SANDBOX_KEY)}
+    return {"ok": True, "service": "dive", "mode": config.MODE, "sandbox": config.SANDBOX_URL, "sandbox_key_set": bool(config.SANDBOX_KEY),
+            "switches": config.switches()}     # CR 67 · booleans and counts only, never a value

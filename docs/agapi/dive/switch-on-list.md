@@ -1,152 +1,176 @@
 # DIVE · the switch-on list for rehearsal day
 
-*CR 66. Docs only: nothing was changed or switched on to write this. Today DIVE sends **0 real messages**.*
+*CR 66 wrote this list; CR 67 built everything it needs. **Today it is all OFF.** With none of the variables below set,
+DIVE behaves exactly as before: messages are captured, never sent, and the test drawer plays the suppliers.
+**0 real messages** until you paste the keys.*
 
 Two things become real on rehearsal day:
 
-- **The boat's WhatsApp** to Jon's phone: 2 messages in, 2 replies out.
-- **The gear shop's email** to an inbox we own.
+- **The boat's WhatsApp**, to Jon's phone. In the demo Jon gets 2 messages and sends 2 replies.
+- **The gear shop's email**, to an inbox we own.
 
-Below is exactly what you provide, in order, with direct links. Wherever a key or secret is involved, **you paste it
-into Railway yourself**. Never paste it in chat or in a message to a tab.
+Each one switches on **only when all of its variables are present**. Half of them means off. It only ever messages an
+**allow-listed** number or address: anyone else stays simulated, exactly as today.
 
-Where the keys go (DIVE's own settings on Railway):
+**Where you paste every key:** DIVE's variables on Railway (DIVE's own service, never Sasha's):
 https://railway.com/project/8d53b07a-eff6-4206-98b1-220a67a2915a/service/bd0252c7-4168-4719-b8d5-09d7e51b6640/variables
+
+There, click **New Variable**, paste the name and the value, and repeat for each one. Then click **Deploy** (Railway
+asks you to apply the changes). It takes about 2 minutes. **Never paste a key in chat or in a message to a tab.**
 
 ---
 
 ## 1 · The real WhatsApp to Jon's phone
 
-### Can Sasha's existing number be used? **No. A second number is needed.**
+### Why Sasha's number can't be used
 
-Sasha's number is +44 7915 914215, "KANOE", on Twilio. It can't be reused, for three reasons:
+Sasha's number is +44 7915 914215, "KANOE".
 
-1. **Jon's replies would land in Sasha, not DIVE.**
-   - A WhatsApp number has exactly one "a message came in" address. Sasha's is her own webhook
-     (`/api/booking/twilio/sms`), which files every reply into her venue pipeline.
-   - Jon's "ΝΑΙ" would go there, and DIVE would never see it.
-   - Sending it on to DIVE means changing Sasha's inbound code. The isolation rule forbids that ("DIVE must not touch S1,
-     S2 or Sasha").
-2. **The boat would see "KANOE" as the sender**, not the operator, on a booking request in Blue Kyma's name.
-3. **Twilio's shared test number (+1 415 523 8886) is taken as well.** On Sasha's Twilio account it is already wired
-   to Sasha's guest service, with the same one-webhook problem.
+1. **A WhatsApp number has one "a message came in" address.** Sasha's is her own webhook, so Jon's "ΝΑΙ" would land
+   in Sasha's venue pipeline, never in DIVE. Changing that means touching Sasha, which the isolation rule forbids.
+2. **The boat would see "KANOE" as the sender** of a booking request in Blue Kyma's name.
+3. **Twilio's shared test number (+1 415 523 8886) is taken too.** On Sasha's Twilio account it is already wired to
+   Sasha's guest service.
 
-### Two ways to get the second number
+So DIVE gets its **own Twilio account**. For rehearsal day: its free WhatsApp Sandbox (option A). For a real pilot:
+its own WhatsApp sender (option B, at the end of this section).
 
-| | **A · A separate Twilio account with its own WhatsApp Sandbox** (recommended for rehearsal day) | **B · A real WhatsApp sender on Kanoe's existing Meta business** (for a real partner pilot) |
-|---|---|---|
-| What Jon sees | Twilio's shared sandbox number, +1 415 523 8886 | A number of our own, with a display name such as "Kanoe Demo" |
-| Meta setup | **None** | A new sender under Kanoe's already-verified Meta business, plus Meta's display-name review |
-| Time | About 15 minutes | Usually 1 to 2 days: a number, the sender sign-up, Meta's review |
-| Cost | Free (sandbox) | A Twilio number (a few dollars a month) plus per-message fees |
-| Catch | Jon must send "join …" first, and the sandbox forgets him after 3 days | A fictional name like "Blue Kyma" is likely to be refused as a display name: it must relate to Kanoe's business |
+### A · Rehearsal day: what you do, in order (about 15 minutes)
 
-**Steps for A, in order:**
+1. **Create a separate Twilio account for DIVE** at https://www.twilio.com/try-twilio. You do this; I never create
+   accounts.
+   - Use an email that is **not** Sasha's.
+   - Not a subaccount of Sasha's: DIVE needs its own sandbox and its own webhook.
+2. **Open its WhatsApp Sandbox:** https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn
+   - Note the join phrase it shows ("join " plus two words).
+3. **Jon joins from his phone.** He sends that phrase to **+1 415 523 8886** on WhatsApp.
+   - The sandbox forgets him after 3 days, so do this within 3 days of the run.
+4. **Point the sandbox at DIVE**, on https://console.twilio.com/us1/develop/sms/settings/whatsapp-sandbox:
+   - **When a message comes in:** `https://agapi-dive-demo-production.up.railway.app/hooks/twilio/whatsapp`, method **POST**
+   - Click **Save**.
+5. **Paste on Railway** (the link at the top). Both keys are on the account's home page, https://console.twilio.com:
 
-1. **Create a separate Twilio account for DIVE.** You do this; I never create accounts.
-   - Sign up at https://www.twilio.com/try-twilio with an email that is **not** Sasha's.
-   - It must not be a subaccount of Sasha's account: DIVE needs its own WhatsApp Sandbox and its own webhook.
-2. **Open its WhatsApp Sandbox.**
-   - Go to https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn
-   - Note the join phrase it shows (two words: "join something-something").
-3. **Jon joins from his phone.**
-   - He sends that join phrase to **+1 415 523 8886** on WhatsApp.
-   - This also opens the 24-hour window for free-text messages (see "The 24-hour rule" below).
-4. **Point the sandbox's "When a message comes in" at DIVE.** This is on the sandbox's settings tab:
-   https://console.twilio.com/us1/develop/sms/settings/whatsapp-sandbox
-   - Set it to `https://agapi-dive-demo-production.up.railway.app/hooks/twilio/whatsapp`, method POST.
-   - **This address is not built yet.** See "Still to build" below.
-5. **Put the new account's two keys on DIVE's Railway variables** (the link at the top). You paste them; never in chat:
-   - `DIVE_TWILIO_ACCOUNT_SID` = the Account SID (on the account's home page, https://console.twilio.com)
-   - `DIVE_TWILIO_AUTH_TOKEN` = the Auth Token (same page; click to reveal)
-   - `DIVE_WHATSAPP_ALLOW` = Jon's number in international format, for example `+3069…`. DIVE will refuse to WhatsApp any
-     other number.
-6. **Tell the CR tab "go for WhatsApp on <the rehearsal date>".** Only then is `DIVE_REAL_WHATSAPP=1` set.
+   | Name | Value |
+   |---|---|
+   | `DIVE_TWILIO_ACCOUNT_SID` | the **Account SID** (starts with AC) |
+   | `DIVE_TWILIO_AUTH_TOKEN` | the **Auth Token** (click to reveal). It also proves each webhook really comes from Twilio. |
+   | `DIVE_WHATSAPP_ALLOW` | Jon's number, international format with no spaces, e.g. `+30690…`. The **only** number DIVE will WhatsApp for real, and the only one whose messages it reads. |
+   | `DIVE_REAL_WHATSAPP` | `1`. **The on switch. Paste it last.** Delete it to switch WhatsApp off again; the keys can stay. |
 
-**Steps for B, in order** (only when there's a real pilot):
+   - Blue Kyma's (fake) website then lists Jon's number for Aegean Boats on its own.
+   - (`DIVE_WHATSAPP_FROM` is only for option B. Without it, DIVE sends from the sandbox number.)
 
-1. Do step 1 of A: the separate Twilio account.
-2. Buy a number that can receive a text or a call for Meta's code. In that account:
-   https://console.twilio.com/us1/develop/phone-numbers/manage/search
-3. Create the WhatsApp sender: https://console.twilio.com/us1/develop/sms/senders/whatsapp-senders →
-   **Create new sender** → pick the number → **Continue with Facebook**.
-   - Log in, choose **Kanoe's existing business portfolio** (already verified for Sasha), then a **new** WhatsApp
-     Business Account for DIVE, so Sasha's quality rating is never shared.
-4. Set the display name, e.g. "Kanoe Demo". Meta reviews it, which usually takes hours, up to 2 days.
-5. Approve the first-contact template again for this account. Templates belong to a WhatsApp Business Account, so the
-   one Sasha has doesn't carry over.
-   - This is only needed if DIVE ever writes to a supplier who hasn't written first.
-6. Steps 4 to 6 of A, with the sender's webhook instead of the sandbox's.
+### Jon says hi on the morning of the run
 
-### The 24-hour rule (both A and B)
+- WhatsApp only allows a message **within 24 hours of the person's last message to us**.
+- So **on the morning of each run (rehearsal day and demo day), Jon sends "hi"** to +1 415 523 8886.
+- **"The day before" is not enough** if the run is more than 24 hours later.
+- The start page shows it arrived, and until when the window is open. Without his hi, DIVE refuses to send and shows
+  "outside WhatsApp's 24-hour window: ask them to send 'hi' first". That is never shown as a no.
 
-- Free text, such as the booking request in Greek, can only be sent within **24 hours of Jon's last message**.
-- **"The day before" is only safe if it's less than 24 hours before the run.** Have Jon send "hi" on the **morning of
-  the run** (and again on demo day).
-- In the demo itself Jon gets **2** messages (the verification and the booking request) and sends **2** (YES and ΝΑΙ).
-  Nothing goes to anyone else.
+### If Jon writes STOP
+
+- DIVE sends him **nothing more**, real or not.
+- The booking is **not** marked as a no. The console says "Aegean Boats sent STOP … Not a no: ask them by phone".
+- When he writes **START**, messages are back on.
+
+### B · A real WhatsApp sender, for a pilot (about 1 to 2 days)
+
+1. Do step 1 of A.
+2. Buy a number in that account: https://console.twilio.com/us1/develop/phone-numbers/manage/search
+3. Create the sender: https://console.twilio.com/us1/develop/sms/senders/whatsapp-senders → **Create new sender** → the
+   number → **Continue with Facebook**.
+   - Choose **Kanoe's existing business portfolio** (verified for Sasha).
+   - Choose a **new** WhatsApp Business Account, so Sasha's quality rating is never shared.
+4. Set a display name, e.g. "Kanoe Demo". Meta reviews it, which takes hours, up to 2 days. A fictional "Blue Kyma" is
+   likely to be refused.
+5. Point the sender's webhook at the same address as A step 4.
+6. Paste the same four variables as A, plus `DIVE_WHATSAPP_FROM` = the new number.
 
 ---
 
 ## 2 · The real gear email
 
-**Already built:** DIVE sends the gear shop's email for real only when all three of these are true:
+### Why not Sasha's Resend account
 
-- a sending key is set;
-- a "from" address is set;
-- the address it's going to is on the allow-list.
+- Sasha sends from `booking.kanoe.ai`.
+- Resend sends **every** email received on an account to that account's webhooks. In a shared account, the gear
+  shop's replies would reach Sasha, and her guests' replies would reach DIVE.
+- So DIVE gets its **own Resend account and its own subdomain**.
+- DIVE also ignores any mail not addressed to its own domain, and any sender not on its allow-list. It never even reads
+  those.
 
-Otherwise it captures the email and says so. Today none of the three is set, so 0 emails go out.
+### What you do, in order (about 20 minutes, most of it waiting for DNS)
 
-### What you provide, in order
+1. **A separate Resend account for DIVE:** https://resend.com/signup. You do this.
+2. **Its domain:** https://resend.com/domains → **Add domain** → `dive.kanoe.ai`.
+   - Turn on **receiving** for it.
+   - Add the records Resend shows (for sending, plus an **MX** record for receiving) at kanoe.ai's DNS provider. They
+     are new records for the new subdomain only. **Nothing about demo.kanoe.ai changes.**
+   - Wait for **Verified**.
+3. **One key:** https://resend.com/api-keys → **Create API key** → permission **Full access**.
+   - DIVE needs it to send the email **and** to read the reply's text: Resend's notification doesn't include the words.
+   - The account holds only DIVE, so full access reaches nothing else.
+   - (If you'd rather split it: a **Sending access** key as `DIVE_RESEND_API_KEY`, plus a **Full access** key as
+     `DIVE_RESEND_READ_KEY`.)
+4. **The reply webhook:** https://resend.com/webhooks → **Add endpoint**:
+   - URL `https://agapi-dive-demo-production.up.railway.app/hooks/resend/inbound`
+   - event **email.received**
+   - Then open it and copy its **Signing secret** (starts with whsec_).
+5. **The gear inbox:** a mailbox **we own** that you can open on the second screen.
+   - A fresh address made for the demo, e.g. a new Gmail you create.
+   - Not the founder's own mailbox, and never a real business.
+6. **Paste on Railway** (the link at the top):
 
-1. **A sending domain for DIVE, in a separate Resend account.**
-   - Sasha already sends from `booking.kanoe.ai`, and Resend delivers every reply received on her account to her own
-     webhook (`/api/booking/email/inbound`).
-   - Sharing her account would mix the gear shop's replies into Sasha's mail, and Sasha's guests' replies into DIVE's.
-     That breaks the isolation rule.
-   - So: sign up for a separate Resend account (https://resend.com/signup; you do this), then add a **new subdomain**
-     there, for example `dive.kanoe.ai`, at https://resend.com/domains → **Add domain**.
-   - Resend shows DNS records (for sending, plus an MX record for receiving). Add them at kanoe.ai's DNS provider.
-     **Nothing about demo.kanoe.ai changes:** these are new records for a new subdomain only.
-   - Wait for **Verified**, usually minutes.
-2. **The sending key.** At https://resend.com/api-keys → **Create API key**:
-   - permission **Sending access**, domain `dive.kanoe.ai`;
-   - paste it into DIVE's Railway variables (the link at the top) as `DIVE_RESEND_API_KEY`;
-   - also set `DIVE_EMAIL_FROM` = `Blue Kyma Diving (demo) <bookings@dive.kanoe.ai>`.
-3. **The allow-listed inbox: the gear shop's mailbox.**
-   - Use a mailbox **we own** that you can open on the second screen. Not the founder's own mailbox, and never a real
-     business.
-   - A fresh address made for the demo is best (for example a new Gmail you create).
-   - Set `DIVE_EMAIL_ALLOW` = that address. DIVE refuses to email anything else for real.
-4. **The inbound reply webhook**, so the gear shop's "YES" reaches DIVE:
-   - At https://resend.com/webhooks → **Add endpoint**:
-     - URL `https://agapi-dive-demo-production.up.railway.app/hooks/resend/inbound`
-     - event **email.received**
-   - Copy its signing secret into DIVE's Railway variables as `DIVE_RESEND_WEBHOOK_SECRET`.
-   - **This address is not built yet.** See "Still to build" below.
-5. **Tell the CR tab "go for the gear email"**, with the date.
+   | Name | Value |
+   |---|---|
+   | `DIVE_RESEND_API_KEY` | the key from step 3 |
+   | `DIVE_EMAIL_FROM` | `Blue Kyma Diving (demo) <bookings@dive.kanoe.ai>` |
+   | `DIVE_EMAIL_ALLOW` | the gear inbox from step 5. The **only** address DIVE emails for real, and the only sender it reads. |
+   | `DIVE_RESEND_WEBHOOK_SECRET` | the signing secret from step 4. It proves each email notice really comes from Resend. |
+
+   Blue Kyma's (fake) website then lists the gear inbox for Kyma Gear on its own.
+
+- The gear shop's reply counts **only for what they typed above the quoted request**. Our "Reply YES or NO" below it is
+  never read as their answer.
+- STOP / START work as on WhatsApp.
 
 ---
 
-## Still to build (the CR tab, about 1 day, after your go — not started)
+## 3 · The 2-minute live check (sends nothing)
 
-As CR 66 asked, nothing below was built or switched on.
+Do this after pasting the keys and once Railway has redeployed:
 
-| Piece | Why |
+1. Open https://agapi-dive-demo-production.up.railway.app/start
+   - "Where things stand" says **Boat WhatsApp: REAL · Gear email: REAL**.
+   - If either still says "simulated", a variable is missing or misspelled. Compare the names with the tables above.
+2. Click **Reset demo**.
+3. **Jon sends "hi"** to +1 415 523 8886.
+   - Reload /start: **"Jon's WhatsApp: last message … · the 24-hour window is open until …"**.
+   - If it still says "nothing received yet", check the sandbox's webhook address (1 · A, step 4).
+4. **From the gear inbox, email "hi"** to `bookings@dive.kanoe.ai`.
+   - Reload /start: **"Gear inbox: last email received …"**.
+   - If not: check the Resend webhook (2, step 4) and that the domain shows Verified with receiving on.
+5. Click **Reset demo** again (Jon's window stays open). You're ready: run the demo from step 2 of
+   [run-the-demo.md](run-the-demo.md), with Jon and the gear inbox answering for real instead of the test drawer.
+
+So far nothing was sent to anyone. In the run itself:
+
+- Jon gets 2 WhatsApps: the verification and the booking request.
+- The gear inbox gets 2 emails: the verification and the request.
+
+To switch WhatsApp off at any moment, delete `DIVE_REAL_WHATSAPP`. To switch the email off, delete `DIVE_EMAIL_ALLOW`.
+Then **Deploy**.
+
+---
+
+## What CR 67 built (all on `cr/dive`, in `dive_service/` only)
+
+| Piece | What it does |
 |---|---|
-| DIVE's own WhatsApp sender | Today DIVE's WhatsApp goes through the AgAPI sandbox, which never sends; that's how 0 real messages is guaranteed. The real send is a Twilio call from DIVE with the new account's keys, only to `DIVE_WHATSAPP_ALLOW`, only when `DIVE_REAL_WHATSAPP=1`. |
-| `/hooks/twilio/whatsapp` | Receives Jon's replies, checks Twilio's signature, and files the reply on the waiting leg or verification. It is the same reply path the test drawer uses today. |
-| `/hooks/resend/inbound` | Receives the gear shop's reply, checks Resend's signature, and matches it to the leg by its reply address. |
-| The fake site's contacts | Today the fake Blue Kyma site lists made-up contacts (`gear@kyma-gear.example` and a test boat number). On the day it must list Jon's number and the allow-listed inbox. They will come from Railway variables, not from code. |
-| A dry run with real keys and 0 sends | First every gate is checked with the allow-lists empty. Then one real message each, on rehearsal day only. |
-
-## Your checklist
-
-- [ ] A or B for WhatsApp (A recommended), and the rehearsal date
-- [ ] The separate Twilio account, its two keys on Railway, Jon's number as `DIVE_WHATSAPP_ALLOW`
-- [ ] Jon joins the sandbox (A), and says "hi" the morning of each run
-- [ ] The separate Resend account, `dive.kanoe.ai` verified, the sending key and the from address on Railway
-- [ ] The gear inbox we own, as `DIVE_EMAIL_ALLOW`
-- [ ] The Resend inbound webhook and its secret on Railway
-- [ ] "Go" to the CR tab: it builds the pieces above, dry-runs, then switches on for that date only
+| DIVE's own WhatsApp sender | A Twilio call from DIVE's own account, only to `DIVE_WHATSAPP_ALLOW`, only inside the 24-hour window, never after STOP. Anything else goes the simulated way, as before. |
+| `/hooks/twilio/whatsapp` | Checks Twilio's signature (a wrong one is refused). Reads only the allow-listed number. Each reply goes through the same classifier as the test drawer, then to the waiting verification or booking leg. A repeated delivery is read once. |
+| The real gear email | Unchanged: real only with the key, the from address and an allow-listed address. It now also stops after STOP. |
+| `/hooks/resend/inbound` | Checks Resend's signature (a wrong or stale one is refused). Reads only DIVE's domain and the allow-listed sender, and only what they typed above the quote. Matched to the booking by its reference, then through the classifier. |
+| The fake site's contacts | Read from the variables: the one allow-listed number and inbox. Otherwise `DIVE_BOAT_WHATSAPP` / `DIVE_GEAR_EMAIL`, otherwise the made-up ones. |
+| /start and /health | Show what is real, and when Jon's hi and the gear email arrived. Times and yes/no only, never a number, an address or a key. |

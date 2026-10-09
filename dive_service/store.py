@@ -42,6 +42,10 @@ create table if not exists cancellations (id text primary key, bundle_id text no
   read_back_sha256 text not null, state text not null, created_at text not null, updated_at text not null);
 create table if not exists captured (id integer primary key autoincrement, channel text not null, to_ text not null, body text not null,
   real int not null default 0, at text not null);
+-- CR 67 · what arrived on the REAL channels (signed webhooks, allow-listed senders only) and who said STOP
+create table if not exists inbound (id integer primary key autoincrement, channel text not null, address text not null, provider_id text unique not null,
+  text text not null, subject text, received_at text not null);
+create table if not exists opt_outs (channel text not null, address text not null, at text not null, said text, primary key (channel, address));
 """
 
 ADDED = [("bundles", "notes"), ("bundles", "evidence_id"), ("operators", "sandbox_end_user")]

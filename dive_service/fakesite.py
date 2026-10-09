@@ -15,6 +15,20 @@ BOAT_WA = "+447700900321"           # the boat's WhatsApp on the site (a fixture
 GEAR_EMAIL = "gear@kyma-gear.example"
 
 
+def boat_wa() -> str:
+    """CR 67 · the number the site lists: DIVE_BOAT_WHATSAPP, else the ONE allow-listed number (Jon's), else the fixture."""
+    if config.BOAT_WHATSAPP:
+        return config.norm_number(config.BOAT_WHATSAPP)
+    return next(iter(config.WHATSAPP_ALLOW)) if len(config.WHATSAPP_ALLOW) == 1 else BOAT_WA
+
+
+def gear_email() -> str:
+    """CR 67 · DIVE_GEAR_EMAIL, else the ONE allow-listed inbox (ours), else the fixture."""
+    if config.GEAR_EMAIL:
+        return config.GEAR_EMAIL.lower()
+    return next(iter(config.EMAIL_ALLOW)) if len(config.EMAIL_ALLOW) == 1 else GEAR_EMAIL
+
+
 def _page(title: str, body: str) -> HTMLResponse:
     return HTMLResponse(f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>{html.escape(title)} · Blue Kyma Diving</title>
@@ -35,6 +49,7 @@ async def home():
 @router.get("/fake/blue-kyma/partners", response_class=HTMLResponse)
 async def partners():
     taverna = f"{config.SANDBOX_URL}/fixtures/taverna"
+    BOAT_WA, GEAR_EMAIL = boat_wa(), html.escape(gear_email())     # CR 67 · from the variables (the fixtures when none is set)
     return _page("Our partners", f"""<h2>The people we dive with</h2><section id="partners"><ul>
 <li><strong>Aegean Boats</strong> takes every Blue Kyma group out to the reefs. Skipper Nikos answers on WhatsApp
  <a href="https://wa.me/{BOAT_WA.lstrip('+')}">{BOAT_WA}</a> or by email <a href="mailto:bookings@aegean-boats.example">bookings@aegean-boats.example</a>.</li>

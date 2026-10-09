@@ -5,8 +5,9 @@ is a fixed template with slots.
   whatsapp  through the AgAPI sandbox's public API (messages.send_whatsapp → messages.replies). AgAPI 1.1 has no way to send a
             supplier message under a BUNDLE's approval, so in TEST mode DIVE bridges each send with sandbox.simulate_approval
             ("TEST BRIDGE", logged on the evidence) — the gap EU's 1.2 must close. The sandbox captures; it never sends.
+            CR 67: REAL through DIVE's own Twilio account only when switched on AND the number is allow-listed (hooks.py).
   email     a REAL send only with a sending key AND an allow-listed address (Tyler: "our own addresses only"); otherwise captured,
-            and said so. Replies: recorded by the operator / sandbox.supplier_reply (inbound mail is not built yet).
+            and said so. Replies: recorded by the operator / sandbox.supplier_reply; CR 67: /hooks/resend/inbound when switched on.
   web_form  the one known form (the taverna's, the sandbox's public fixture): fields filled, the confirmation page read (#reference),
             the page hashed. A refusal ON the page is the supplier's answer (declined); a page that can't be read is unreachable.
   feed      the fixture hotel feed `feed:sandbox-hotels` (instant: search → hold → book), inside DIVE.
@@ -53,6 +54,8 @@ async def _operator_end_user(s: Store, operator: dict) -> Optional[str]:
 
 async def whatsapp_send(s: Store, operator: dict, number: str, name: str, text: Optional[str]) -> Dict[str, Any]:
     """→ {ok, reference, sent_at, kind (text|template), sandbox_evidence_id, bridge} or {ok: False, unreachable, why}."""
+    if config.whatsapp_real_to(number):          # CR 67 · REAL only when switched on AND the number is allow-listed
+        return await _whatsapp_real(s, number, text)
     uid = await _operator_end_user(s, operator)
     if not uid:
         return {"ok": False, "unreachable": True, "why": "the AgAPI sandbox didn't answer"}
@@ -84,9 +87,105 @@ def _sent(res: dict) -> Dict[str, Any]:
 
 
 async def whatsapp_replies(s: Store, operator: dict, number: str) -> list:
+    """Newest first: the sandbox's replies (test) and — CR 67 — what arrived on the real hook from this number (signed, allow-listed)."""
     uid = await _operator_end_user(s, operator)
     r = await SB.call("messages.replies", {"end_user": uid, "number": number}) if uid else {"ok": False}
-    return r["result"]["replies"] if r.get("ok") else []
+    out = r["result"]["replies"] if r.get("ok") else []
+    real = [{"reply_id": x["provider_id"], "received_at": x["received_at"], "text": R.wrap(x["text"], "whatsapp_supplier", x["received_at"][:19] + "Z")}
+            for x in s.q("select * from inbound where channel = 'whatsapp' and address = ? order by id desc limit 20", config.norm_number(number))]
+    return sorted(out + real, key=lambda x: x["received_at"], reverse=True) if real else out
+
+
+# ── CR 67 · REAL sends and what comes back (OFF unless switched on; docs/agapi/dive/switch-on-list.md) ─────────────────────
+
+STOP_WORDS = {"stop", "stopall", "unsubscribe", "end", "quit", "στοπ", "σταματηστε"}
+START_WORDS = {"start", "unstop", "yes start"}
+WINDOW_S = 24 * 3600
+
+
+def _first_words(text: str) -> str:
+    import unicodedata
+    t = "".join(c for c in unicodedata.normalize("NFD", (text or "").strip().lower()) if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^\w ]+", " ", t).strip()
+
+
+def is_stop(text: str) -> bool:
+    """A STOP is 'no more messages to me' — never a supplier's no to a booking (the leg is not declined)."""
+    return _first_words(text) in STOP_WORDS
+
+
+def is_start(text: str) -> bool:
+    return _first_words(text) in START_WORDS
+
+
+def opted_out(s: Store, channel: str, address: str) -> bool:
+    return bool(s.one("select 1 from opt_outs where channel = ? and address = ?", channel, _addr(channel, address)))
+
+
+def _addr(channel: str, address: str) -> str:
+    return config.norm_number(address) if channel == "whatsapp" else (address or "").strip().lower()
+
+
+def window_open(s: Store, number: str) -> bool:
+    """WhatsApp's 24-hour rule: free text only within 24 h of THEIR last message (Jon says hi on the morning of the run)."""
+    last = s.one("select max(received_at) t from inbound where channel = 'whatsapp' and address = ?", config.norm_number(number))["t"]
+    from .store import now, parse_ts
+    return bool(last) and (now() - parse_ts(last)).total_seconds() < WINDOW_S
+
+
+async def _http(method: str, url: str, *, headers: Optional[dict] = None, data: Optional[dict] = None,
+                auth: Optional[Tuple[str, str]] = None) -> Tuple[int, Any]:
+    import httpx
+    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as c:
+        r = await c.request(method, url, headers=headers, data=data, auth=auth)
+    try:
+        return r.status_code, r.json()
+    except ValueError:
+        return r.status_code, {}
+
+
+HTTP: Callable[..., Awaitable[Tuple[int, Any]]] = _http     # tests replace it: no request leaves a test
+
+
+async def _whatsapp_real(s: Store, number: str, text: Optional[str]) -> Dict[str, Any]:
+    n = config.norm_number(number)
+    if opted_out(s, "whatsapp", n):
+        return {"ok": False, "unreachable": True, "why": "they sent STOP: no more WhatsApp to them (not a no — ask by phone)"}
+    if not text:
+        return {"ok": False, "unreachable": True, "why": "a first message needs an approved template; ask them to message first"}
+    if not window_open(s, n):
+        return {"ok": False, "unreachable": True, "why": "outside WhatsApp's 24-hour window: ask them to send 'hi' first"}
+    try:
+        st, body = await HTTP("POST", f"https://api.twilio.com/2010-04-01/Accounts/{config.TWILIO_SID}/Messages.json",
+                              data={"From": "whatsapp:" + config.norm_number(config.WHATSAPP_FROM), "To": "whatsapp:" + n, "Body": text[:1500]},
+                              auth=(config.TWILIO_SID, config.TWILIO_TOKEN))
+    except Exception as e:
+        return {"ok": False, "unreachable": True, "why": type(e).__name__}
+    if st not in (200, 201) or not str((body or {}).get("sid") or "").startswith(("SM", "MM")):
+        return {"ok": False, "unreachable": True, "why": f"Twilio answered HTTP {st}" + (f" ({body.get('code')})" if isinstance(body, dict) and body.get("code") else "")}
+    s.x("insert into captured (channel, to_, body, real, at) values ('whatsapp', ?, ?, 1, ?)", n, text, ts())
+    return {"ok": True, "reference": body["sid"], "sent_at": ts()[:19] + "Z", "kind": "text", "body_sha256": R.text_sha256(text),
+            "real": True, "bridge": None}
+
+
+async def email_received_text(provider_id: str) -> Optional[str]:
+    """Resend's email.received carries no body: read it (a key that can read received mail; DIVE's own Resend account)."""
+    key = config.RESEND_READ_KEY or config.RESEND_KEY
+    st, body = await HTTP("GET", f"https://api.resend.com/emails/receiving/{provider_id}", headers={"Authorization": f"Bearer {key}"})
+    return (body or {}).get("text") if st == 200 and isinstance(body, dict) else None
+
+
+_QUOTE = re.compile(r"^\s*(>|On .{0,200}wrote:\s*$|Στις .{0,200}έγραψε|-{2,}\s*Original Message|From:\s|Sent from my )", re.I)
+
+
+def top_reply(text: str) -> str:
+    """Only what they typed: the quoted request below ('Reply YES or NO') must never be read as their answer."""
+    out = []
+    for line in (text or "").replace("\r\n", "\n").split("\n"):
+        if _QUOTE.match(line):
+            break
+        out.append(line)
+    return "\n".join(out).strip()
 
 
 async def whatsapp_simulate_reply(number: str, text: str) -> Dict[str, Any]:
@@ -98,6 +197,8 @@ async def whatsapp_simulate_reply(number: str, text: str) -> Dict[str, Any]:
 async def email_send(s: Store, to: str, subject: str, text: str) -> Dict[str, Any]:
     """REAL only with a key AND an allow-listed address; otherwise captured (and the result says so)."""
     to_l = to.strip().lower()
+    if opted_out(s, "email", to_l):              # CR 67 · they wrote STOP: nothing more to them, real or captured
+        return {"ok": False, "unreachable": True, "why": "they asked us to stop emailing (not a no — ask by phone)"}
     if config.RESEND_KEY and config.EMAIL_FROM and to_l in config.EMAIL_ALLOW:
         try:
             import httpx

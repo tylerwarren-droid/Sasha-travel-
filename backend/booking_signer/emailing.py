@@ -271,6 +271,9 @@ Http = Callable[..., Awaitable[Any]]
 async def send(http: Http, email: Mapping[str, Any]) -> Sent:
     """⛔ `sent` is True ONLY when Resend answered HTTP 200 with an email id. Everything else is not sent, with Resend's
     own words. "Sent" means accepted for delivery — not delivered, and not booked."""
+    from .guest_accounts import GUEST_DOMAIN
+    if str(email.get("to") or "").strip().lower().endswith("@" + GUEST_DOMAIN):   # Sasha 221b · a guest's placeholder: no mailbox
+        return Sent(False, None, None, None, "a guest account's placeholder address has no mailbox — never emailed")   # (it spent the daily quota)
     key = _env(KEY_VAR)
     payload = {"from": email["from"], "to": [email["to"]], "subject": email["subject"], "text": email["text"]}
     if email.get("bcc"):

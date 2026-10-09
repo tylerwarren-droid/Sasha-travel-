@@ -119,5 +119,18 @@ class DemoSetting(unittest.TestCase):
         self.assertIn("if s2_demo and _s2_demo_account(account_for(request)):", src)   # card or no card
 
 
+class GuestPlaceholderNeverEmailed(unittest.TestCase):
+    def test_a_guest_placeholder_address_is_never_sent_to(self):   # Sasha 221b · 200 test confirmations spent the daily quota
+        from booking_signer import emailing as E
+        calls = []
+
+        async def http(*a, **k):
+            calls.append(a)
+            raise AssertionError("no request")
+        got = run(E.send(http, {"from": "x@booking.kanoe.ai", "to": "guest-abc@guests.kanoe.ai", "subject": "s", "text": "t"}))
+        self.assertFalse(got.sent)
+        self.assertEqual(calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()

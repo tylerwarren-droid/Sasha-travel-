@@ -544,12 +544,41 @@ class StartPage(Base):
         self.assertEqual(r.status_code, 303)
         self.assertEqual(len(self.op("suppliers.list")["suppliers"]), 4)                       # no token: nothing was reset
         self.assertIn('name="next" value="/start"', self.client.get("/console/login?next=/start").text)
-        self.assertNotIn('name="next"', self.client.get("/console/login?next=https://evil.example").text)
+        self.assertIn('name="next" value="/start"', self.client.get("/console/login?next=https://evil.example").text)   # never theirs
         r = self.client.post("/console/login", data={"token": "dive-local", "next": "/start"}, follow_redirects=False)
         self.assertEqual(r.headers["location"], "/start")
         self.assertEqual(self.client.get("/start", follow_redirects=False).status_code, 200)   # the cookie opens it
         r = self.client.post("/console/login", data={"token": "dive-local", "next": "https://evil.example"}, follow_redirects=False)
+        self.assertEqual(r.headers["location"], "/start")                                       # never an outside address
+
+    def test_login_the_way_tyler_does_it(self):
+        """CR · login fix: a pasted token with a newline, spaces or an invisible character works; a wrong or empty one says so."""
+        for pasted in ("dive-local\n", "  dive-local \r\n", "\ufeffdive-local\u200b", "\tdive-local"):
+            c = type(self.client)(A.app)
+            r = c.post("/console/login", data={"token": pasted}, follow_redirects=False)
+            self.assertEqual((r.status_code, r.headers["location"]), (303, "/start"), repr(pasted))
+            ck = r.headers["set-cookie"].lower()
+            self.assertIn("samesite=lax", ck)
+            self.assertIn("path=/", ck)
+            self.assertIn("httponly", ck)
+            self.assertIn("Run the DIVE demo", c.get("/start").text)                           # the cookie opens /start
+            self.assertEqual(c.get("/console/login", follow_redirects=False).headers["location"], "/start")   # signed in: straight on
+        c = type(self.client)(A.app)
+        r = c.post("/console/login", data={"token": "dive-locaX"}, follow_redirects=False)
+        self.assertEqual(r.status_code, 401)
+        self.assertIn("That token doesn’t match", r.text)                                       # never a silent reload
+        self.assertNotIn("set-cookie", {k.lower() for k in r.headers})
+        r = c.post("/console/login", data={"token": " \n"}, follow_redirects=False)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Paste the console token first", r.text)
+        self.assertEqual(c.post("/console/login", data={"token": "Ωmega"}, follow_redirects=False).status_code, 401)   # non-ASCII: no crash
+        r = c.get("/console", follow_redirects=False)
+        self.assertEqual(r.headers["location"], "/console/login?next=/console")
+        r = c.post("/console/login", data={"token": "dive-local", "next": "/console"}, follow_redirects=False)
         self.assertEqual(r.headers["location"], "/console")
+        with mock.patch.object(config, "deployed", lambda: True), mock.patch.object(config, "CONSOLE_TOKEN", "t" * 32):
+            r = type(self.client)(A.app, base_url="https://testserver").post("/console/login", data={"token": "t" * 32 + "\n"}, follow_redirects=False)
+            self.assertIn("secure", r.headers["set-cookie"].lower())                            # behind Railway's HTTPS
 
     def test_ten_steps_each_a_link_that_resolves(self):
         self.onboard()

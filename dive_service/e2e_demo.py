@@ -74,7 +74,10 @@ def _script(base: str, token: str, log, ctx, page) -> None:
                              "site_url": base + "/fake/blue-kyma"})
         # CR 66 · Tyler's door: the start page (behind the console token) → [Reset demo] → step 2's link, #find
         page.goto(f"{base}/start")
-        page.fill("input[name=token]", token)
+        page.fill("input[name=token]", "not-the-token")                                    # CR · login fix: a wrong token says so
+        page.click("text=Open the console")
+        expect(page.locator("[data-testid=login-error]")).to_contain_text("That token doesn’t match", timeout=T)
+        page.fill("input[name=token]", "  " + token + "\n")                               # pasted the way Tyler does: spaces, a newline
         page.click("text=Open the console")
         expect(page.locator("h1")).to_have_text("Run the DIVE demo")
         expect(page.locator("[data-testid=beat]")).to_have_count(10)

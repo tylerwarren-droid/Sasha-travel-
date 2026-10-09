@@ -15,21 +15,38 @@ from .store import loads, ts
 
 
 def bind(app, db, ok):
-    @app.get("/console/login", response_class=HTMLResponse)
-    async def login_page(next: str = ""):
+    def _login_form(nxt: str, note: str = "", status: int = 200):
         from .app import page
-        nxt = '<input type="hidden" name="next" value="/start">' if next == "/start" else ""   # CR 66: back to Tyler's start page
-        return page("Console", """<h1>Operator console</h1><form class="card" method="post"><label>Console token<input type="password" name="token"
-autocomplete="current-password"></label>""" + nxt + """<p><button class="go" title="Opens the console for this browser">Open the console</button></p></form>""")
+        hidden = f'<input type="hidden" name="next" value="{nxt}">'
+        return page("Console", f"""<h1>Operator console</h1>{note}<form class="card" method="post" action="/console/login"><label>Console token<input type="password" name="token"
+autocomplete="current-password" autofocus></label>{hidden}<p><button class="go" title="Opens the console for this browser">Open the console</button></p></form>
+<p class="mut">The token is in Keychain Access: search for “DIVE console token”.</p>""", status=status)
+
+    def _next(v) -> str:   # only our own two pages: never an address from outside
+        return "/console" if str(v or "") == "/console" else "/start"
+
+    @app.get("/console/login", response_class=HTMLResponse)
+    async def login_page(req: Request, next: str = ""):
+        if ok(req):                                      # already signed in: straight on (CR · login fix)
+            return RedirectResponse(_next(next), status_code=303)
+        return _login_form(_next(next))
 
     @app.post("/console/login")
     async def login(req: Request):
+        """CR · login fix: the pasted token is trimmed (a newline, spaces, an invisible character from a copy); a wrong or empty one
+        says so on the page — never a silent reload; the cookie is SameSite=Lax, Secure when deployed, path / (survives Railway's proxy
+        and a link opened from another site); then /start."""
         f = dict((await req.form()).items())
         tok = config.CONSOLE_TOKEN or ("" if config.deployed() else "dive-local")
-        if not tok or not hmac.compare_digest(str(f.get("token") or ""), tok):
-            return RedirectResponse("/console/login", status_code=303)
-        r = RedirectResponse("/start" if f.get("next") == "/start" else "/console", status_code=303)
-        r.set_cookie("dive_console", tok, httponly=True, samesite="strict", secure=config.deployed(), max_age=12 * 3600)
+        got = str(f.get("token") or "").replace("\u200b", "").replace("\ufeff", "").strip()
+        nxt = _next(f.get("next"))
+        if not got:
+            return _login_form(nxt, '<p class="chip no big" data-testid="login-error">Paste the console token first.</p>', 400)
+        if not tok or not hmac.compare_digest(got.encode(), tok.encode()):
+            return _login_form(nxt, '<p class="chip no big" data-testid="login-error">That token doesn’t match. Copy it again from Keychain '
+                                    'Access (“DIVE console token”, Show password) and paste it here.</p>', 401)
+        r = RedirectResponse(nxt, status_code=303)
+        r.set_cookie("dive_console", tok, httponly=True, samesite="lax", secure=config.deployed(), path="/", max_age=12 * 3600)
         return r
 
     @app.post("/console/api/{op}")
@@ -79,7 +96,7 @@ autocomplete="current-password"></label>""" + nxt + """<p><button class="go" tit
     @app.get("/console", response_class=HTMLResponse)
     async def console(req: Request):
         if not ok(req):
-            return RedirectResponse("/console/login", status_code=303)
+            return RedirectResponse("/console/login?next=/console", status_code=303)
         from .app import page
         o = OPS.operator(db())
         return page("Console · " + o["name"], _PAGE.replace("{name}", o["name"]).replace("{slug}", o["slug"]), footer=o["footer"] or config.FOOTER)

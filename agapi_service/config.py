@@ -11,7 +11,7 @@ if str(BACKEND) not in sys.path:          # Sasha's search engines (booking_sign
     sys.path.insert(0, str(BACKEND))
 
 CONTRACT = "1.0"                           # what a response says when the caller doesn't ask (AgAPI-Version)
-SPEC_DRAFT = "1.0-draft.4"                 # EU 201 Parts 1–4, vendored in spec/v1 (see spec/v1/SHA256SUMS)
+SPEC_DRAFT = "1.0"                         # EU 201 Parts 1–4, FROZEN v1.0 (EU 205), vendored in spec/v1 (SHA256SUMS)
 SUPPORTED = ("1.0", "1.0-draft.1", "1.0-draft.2", "1.0-draft.3", "1.0-draft.4")
 MODE = "test"
 

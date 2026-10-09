@@ -291,7 +291,8 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
     # until then Stripe's own page, opened on the SAME device — never a dead end
     import os as _os
     got = await TD.checkout(f"{t['amount']:.2f}", "EUR", f"TEST — {cur['title'] or 'your trip'}: {what}", sha[:16],
-                            embedded=(where == "here" and _os.getenv("SASHA_PAY_EMBEDDED", "") == "1"), where=where)
+                            embedded=(where == "here" and _os.getenv("SASHA_PAY_EMBEDDED", "") == "1"), where=where,
+                            name=f"{cur['title'] or 'Your trip'}: {what}" if where == "here" else None)   # Sasha 222 · the pay card's line
     if "why" in got:
         return {"why": got["why"]}
     await BK.hold(account, cur["trip_id"], got["id"])
@@ -333,7 +334,8 @@ async def _moved(account: str, mv: Dict[str, Any], where: str) -> Dict[str, Any]
     what = f"{n_st} hotel{'s' if n_st != 1 else ''} + {n_fl} flight{'s' if n_fl != 1 else ''}"
     import os as _os
     got = await TD.checkout(f"{amount:.2f}", "EUR", f"TEST — {title or 'your trip'}: {what}", sha[:16],
-                            embedded=(where == "here" and _os.getenv("SASHA_PAY_EMBEDDED", "") == "1"), where=where)
+                            embedded=(where == "here" and _os.getenv("SASHA_PAY_EMBEDDED", "") == "1"), where=where,
+                            name=f"{title or 'Your trip'}: {what}" if where == "here" else None)   # Sasha 222 · the pay card's line
     if "why" in got:
         return {"why": got["why"]}
     await BK.hold_ids(account, mv["trip_id"], [r["id"] for r in rows], got["id"])

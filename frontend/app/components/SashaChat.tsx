@@ -999,7 +999,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             <div className="lw-cardHd"><span className="lw-ci gold">✅</span><div className="lw-meta"><div className="lw-k">Ready to book</div>
               <div className="lw-h">{readBack.total ? `€${Math.round(readBack.total).toLocaleString()} all in` : 'Your trip'}</div></div></div>
             )}
-            <div className="lw-cardBody" style={readBack.what ? { display: 'block' } : undefined}>{readBack.lines.map((l, i) => <div key={i} className="o2" style={{ padding: '2px 0' }}>{untag(l)}</div>)}</div>
+            <div className="lw-cardBody" style={readBack.what ? { display: 'block' } : undefined}>{readBack.lines.filter(l => !/^\s*⚠\s*TEST bookings\b/.test(l)).map((l, i) => <div key={i} className="o2" style={{ padding: '2px 0' }}>{untag(l)}</div>)}</div>
           </div>
         )}
         {tripTotal && onScreen('total') && (

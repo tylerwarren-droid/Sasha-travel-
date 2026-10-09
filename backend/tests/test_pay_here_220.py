@@ -198,6 +198,7 @@ class OnePaymentPerBasket(unittest.TestCase):
         self.assertEqual((co.call_args.kwargs.get("embedded"), co.call_args.kwargs.get("where")), (True, "here"))
         tap.assert_not_called()
         self.assertEqual((got["where"], got["client_secret"]), ("here", "sec_e"))
+        self.assertEqual(co.call_args.kwargs.get("name"), "Trip: 0 hotels + 1 flight")   # Sasha 222 · no "TEST payment — TEST —" on the card
 
 
 class NewReadBackSupersedes(unittest.TestCase):

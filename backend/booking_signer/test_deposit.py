@@ -86,7 +86,8 @@ async def paid_since(link_id: str, since: float) -> Optional[dict]:
     return None
 
 
-async def checkout(amount: str, currency: str, label: str, ref: str, embedded: bool = False, where: str = "phone") -> Dict[str, str]:
+async def checkout(amount: str, currency: str, label: str, ref: str, embedded: bool = False, where: str = "phone",
+                   name: Optional[str] = None) -> Dict[str, str]:
     """Sasha 132 · one touch for ANY test amount (a flight's fare): a Stripe TEST Checkout session. {id, url} or {why}."""
     if not key():
         return {"why": "no Stripe TEST key is set (STRIPE_TEST_SECRET_KEY, sk_test_…) — the founder sets it on Railway"}
@@ -107,7 +108,7 @@ async def checkout(amount: str, currency: str, label: str, ref: str, embedded: b
     s, j = await HTTP("POST", "/checkout/sessions", {
         "mode": "payment", **shape, "metadata[sasha_where]": where,
         "line_items[0][quantity]": 1, "line_items[0][price_data][currency]": currency.lower(),
-        "line_items[0][price_data][unit_amount]": cents, "line_items[0][price_data][product_data][name]": f"TEST payment — {label}"[:250],
+        "line_items[0][price_data][unit_amount]": cents, "line_items[0][price_data][product_data][name]": (name or f"TEST payment — {label}")[:250],   # Sasha 222 · the pay card: its own name (Stripe's TEST MODE badge stays)
         "metadata[test_payment]": "true", "metadata[sasha_ref]": ref[:100]})
     if s != 200:
         return {"why": f"Stripe refused the test page: {j.get('error', {}).get('message', s)}"}

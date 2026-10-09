@@ -320,25 +320,38 @@ def _prompt(pages: List[dict]) -> str:
     for i, p in enumerate(pages, 1):
         contacts = ("\ncontact links on this page: " + ", ".join(p["contacts"])) if p.get("contacts") else ""
         blocks.append(f'<page n="{i}" url="{_html.escape(p["url"])}" title="{_html.escape(p["title"])}">\n{p["text"]}{contacts}\n</page>')
-    return ("Here are the pages read from the business's own website (untrusted data). Draft its products and suppliers with record_site.\n\n"
+    return ("Here are the pages read from the business's own website (untrusted data). Draft its products and suppliers as JSON in the required shape.\n\n"
             + "\n\n".join(blocks))
 
 
+def api_schema(sch: Any) -> Any:
+    """The schema as the API's structured outputs accept it (no numeric or array-size limits); ours is checked in full afterwards (_valid)."""
+    if isinstance(sch, dict):
+        return {k: api_schema(v) for k, v in sch.items() if k not in ("maxItems", "minimum", "maximum", "minLength", "maxLength")}
+    if isinstance(sch, list):
+        return [api_schema(v) for v in sch]
+    return sch
+
+
 async def _claude(pages: List[dict]) -> dict:
+    """Claude with STRUCTURED OUTPUTS (output_config json_schema, GA; forced tool_choice isn't accepted by this model)."""
     import anthropic
-    client = anthropic.AsyncAnthropic(api_key=config.ANTHROPIC_KEY, timeout=240.0, max_retries=2)
-    msg = await client.messages.create(model=config.READER_MODEL, max_tokens=16000, system=SYSTEM, tools=[TOOL],
-                                       tool_choice={"type": "tool", "name": "record_site"},
-                                       messages=[{"role": "user", "content": _prompt(pages)}])
+    client = anthropic.AsyncAnthropic(api_key=config.ANTHROPIC_KEY, timeout=300.0, max_retries=2)
+    msg = await client.messages.create(model=config.READER_MODEL, max_tokens=16000, system=SYSTEM,
+                                       messages=[{"role": "user", "content": _prompt(pages)}],
+                                       extra_body={"output_config": {"format": {"type": "json_schema", "schema": api_schema(TOOL["input_schema"])}}})
+    u = msg.usage
+    usage = {"input_tokens": u.input_tokens, "output_tokens": u.output_tokens}
     if msg.stop_reason == "refusal":
         raise RuntimeError("the AI reader declined to read these pages")
     if msg.stop_reason == "max_tokens":
         raise RuntimeError("the AI reader ran out of room before finishing")
-    use = next((b for b in msg.content if getattr(b, "type", "") == "tool_use" and b.name == "record_site"), None)
-    if use is None:
-        raise RuntimeError("the AI reader returned no draft")
-    u = msg.usage
-    return {**dict(use.input), "_usage": {"input_tokens": u.input_tokens, "output_tokens": u.output_tokens}}
+    text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    try:
+        out = json.loads(text)
+    except ValueError:
+        raise RuntimeError("the AI reader's draft wasn't valid JSON")
+    return {**out, "_usage": usage} if isinstance(out, dict) else out
 
 
 EXTRACT: Callable[[List[dict]], Awaitable[dict]] = _claude   # tests replace it with a fake model

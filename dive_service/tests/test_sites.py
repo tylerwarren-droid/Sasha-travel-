@@ -9,7 +9,9 @@ simulated — 0 messages, emails, calls or form submissions.
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
+import unittest
 import re
 from unittest import mock
 
@@ -182,6 +184,44 @@ class Ground(Sites):
         prompt = RD._prompt(self.model.calls[0])
         self.assertIn('<page n="1" url="https://www.reef-demo.example/"', prompt)               # site text goes in as data
         self.assertIn("UNTRUSTED", RD.SYSTEM)
+
+    def test_the_schema_sent_to_the_api_has_no_unsupported_limits(self):
+        sent = json.dumps(RD.api_schema(RD.TOOL["input_schema"]))
+        for k in ("maxItems", "minimum", "maximum"):
+            self.assertNotIn(f'"{k}"', sent)
+        self.assertIn('"maxItems"', json.dumps(RD.TOOL["input_schema"]))                       # still checked on our side
+        def objects(x):
+            if isinstance(x, dict):
+                if x.get("type") == "object":
+                    yield x
+                for v in x.values():
+                    yield from objects(v)
+            elif isinstance(x, list):
+                for v in x:
+                    yield from objects(v)
+        self.assertTrue(all(o.get("additionalProperties") is False for o in objects(RD.api_schema(RD.TOOL["input_schema"]))))
+
+    @unittest.skipUnless(importlib.util.find_spec("anthropic"), "the anthropic SDK isn't installed here (it is in the image)")
+    def test_the_real_call_uses_structured_outputs(self):
+        sent = {}
+
+        class Msg:
+            stop_reason, usage = "end_turn", type("U", (), {"input_tokens": 1000, "output_tokens": 200})()
+            content = [type("T", (), {"type": "text", "text": json.dumps(DRAFT)})()]
+
+        class Client:
+            def __init__(self, **k):
+                self.messages = self
+
+            async def create(self, **k):
+                sent.update(k)
+                return Msg()
+        import anthropic
+        with mock.patch.object(anthropic, "AsyncAnthropic", Client), mock.patch.object(config, "ANTHROPIC_KEY", "k"):
+            out = asyncio.run(RD._claude([{"url": SITE + "/", "title": "t", "text": "x", "contacts": []}]))
+        self.assertNotIn("tool_choice", sent)
+        self.assertEqual(sent["extra_body"]["output_config"]["format"]["type"], "json_schema")
+        self.assertEqual((out["_usage"], out["products"][0]["title"]), ({"input_tokens": 1000, "output_tokens": 200}, "Two boat dives"))
 
     def test_a_malformed_draft_is_dropped_never_guessed(self):
         bad = {"operator": {"name": "X", "summary": ""}, "products": [{"title": "no quote"}, DRAFT["products"][0]], "suppliers": "nope", "instruction_like": []}

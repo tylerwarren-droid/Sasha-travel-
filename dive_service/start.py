@@ -129,6 +129,10 @@ def _page(st: dict, note: str, s=None) -> str:
 <form method="post" action="/start/reset"><button class="go" data-testid="reset" title="Empties the console: no suppliers, packages, bookings, keys or activity. The operator stays Blue Kyma Diving (demo).">Reset demo</button>
 <span class="mut"> Before each run. Takes a second.</span></form></div>
 {''.join(rows)}
+<div class="card" data-testid="try-real"><b>Try a real website</b>
+<p>Paste a real operator’s website: AgAPI reads its public pages, drafts their products and suppliers, and you edit it into a private test API.
+Nobody is contacted; nothing is ever sent.</p><p><a href="/sites" class="btn go" data-testid="try-real-link" title="Opens the real-website demo">Try a real website</a>
+<span class="k">{e(config.PUBLIC_URL + "/sites")}</span></p></div>
 <div class="card"><b>Also open</b><p><a href="/console" target="_blank" rel="noopener">The console</a> ·
 <a href="/o/blue-kyma/docs" target="_blank" rel="noopener">Blue Kyma's API docs</a> ·
 <a href="{e(config.SANDBOX_URL)}/docs" target="_blank" rel="noopener">AgAPI's docs</a> ·

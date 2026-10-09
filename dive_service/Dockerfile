@@ -9,8 +9,8 @@ WORKDIR /srv
 COPY dive_service/requirements.txt /srv/dive_service/requirements.txt
 RUN pip install --no-cache-dir -r /srv/dive_service/requirements.txt playwright==1.47.0
 COPY dive_service /srv/dive_service
-RUN rm -f /srv/dive_service/dive.db* && python -m unittest -v dive_service.tests.test_dive dive_service.tests.test_switch_on dive_service.tests.test_e2e 2>&1 | tail -40 \
-    && python -m unittest dive_service.tests.test_dive dive_service.tests.test_switch_on dive_service.tests.test_e2e && touch /srv/tests-passed
+RUN rm -f /srv/dive_service/dive.db* && python -m unittest -v dive_service.tests.test_dive dive_service.tests.test_switch_on dive_service.tests.test_sites dive_service.tests.test_e2e 2>&1 | tail -40 \
+    && python -m unittest dive_service.tests.test_dive dive_service.tests.test_switch_on dive_service.tests.test_sites dive_service.tests.test_e2e && touch /srv/tests-passed
 
 # Stage 2 (the service): slim — no browser. It needs stage 1's marker, so a failed test stops the build.
 FROM python:3.12-slim

@@ -312,6 +312,8 @@ from . import start as _start   # noqa: E402   CR 66 · Tyler's start page
 _start.bind(app, db, _console_ok)
 from . import hooks as _hooks   # noqa: E402   CR 67 · the real channels' replies (404 until switched on)
 _hooks.bind(app, db)
+from . import sites as _sites   # noqa: E402   CR 68 · "Try a real website" (private, test mode, sends nothing)
+_sites.bind(app, db, _console_ok)
 
 
 @app.on_event("startup")

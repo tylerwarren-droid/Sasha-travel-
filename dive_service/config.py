@@ -36,6 +36,10 @@ RESEND_WEBHOOK_SECRET = os.getenv("DIVE_RESEND_WEBHOOK_SECRET", "").strip()   # 
 BOAT_WHATSAPP = os.getenv("DIVE_BOAT_WHATSAPP", "").strip()         # the fake site's boat number (default: the one allow-listed number)
 GEAR_EMAIL = os.getenv("DIVE_GEAR_EMAIL", "").strip()               # the fake site's gear address (default: the one allow-listed inbox)
 
+# CR 68 · the AI reader for a real operator's website: DIVE's OWN Anthropic key (off without it; the pages are still read and said so)
+ANTHROPIC_KEY = os.getenv("DIVE_ANTHROPIC_API_KEY", "").strip()
+READER_MODEL = os.getenv("DIVE_READER_MODEL", "claude-opus-5-5").strip()
+
 
 def norm_number(n: str) -> str:
     return re.sub(r"[^\d+]", "", n or "")

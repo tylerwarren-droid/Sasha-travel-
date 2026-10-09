@@ -45,6 +45,14 @@ create table if not exists captured (id integer primary key autoincrement, chann
 -- CR 67 · what arrived on the REAL channels (signed webhooks, allow-listed senders only) and who said STOP
 create table if not exists inbound (id integer primary key autoincrement, channel text not null, address text not null, provider_id text unique not null,
   text text not null, subject text, received_at text not null);
+-- CR 68 · demos built from a REAL operator's public website: private, test mode, nothing ever sent to anyone
+create table if not exists site_ops (id text primary key, slug text unique not null, url text not null, host text not null, name text not null,
+  state text not null, progress text, why text, coverage text, summary text, published int not null default 0, model text, created_at text not null,
+  updated_at text not null);
+create table if not exists site_items (id text primary key, site_id text not null, kind text not null, status text not null, data text not null,
+  source_url text, quote text, quote_found int not null default 0, instruction_like int not null default 0, confidence int not null,
+  added_by text not null, channel text, created_at text not null);
+create table if not exists site_bookings (id text primary key, site_id text not null, item_id text not null, body text not null, created_at text not null);
 create table if not exists login_links (token_hash text primary key, created_at text not null, expires_at text not null, used_at text);
 create table if not exists opt_outs (channel text not null, address text not null, at text not null, said text, primary key (channel, address));
 """

@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 SPEC = Path(__file__).resolve().parent / "spec"
 VENDOR = SPEC / "vendor"
 _B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-PREFIXES = ("opr", "sup", "chn", "prd", "pkg", "bnd", "leg", "opk", "rb", "apv", "evd", "req", "drf", "vfy", "cnl", "rpl")   # EU 212's 8 + DIVE's own
+PREFIXES = ("opr", "sup", "chn", "prd", "pkg", "bnd", "leg", "opk", "rb", "apv", "evd", "req", "drf", "vfy", "cnl", "rpl", "sit", "sbq")   # EU 212's 8 + DIVE's own
 
 
 class Refused(ValueError):

@@ -117,24 +117,36 @@ FLIGHT = {"type": "object", "properties": {
 TOTAL = {"type": "object", "properties": {"total_eur": {"type": "number"}, "items": {"type": "integer"},
                                           "price_sources": {"type": "array", "items": {"type": "string"}}}}
 
-_YES = re.compile(r"(?i)^\s*(?:(?:ok(?:ay)?|right|so|then|great|perfect|lovely|sasha)[,!. ]+)*(?:yes|yeah|yep|yup|sure|definitely|"
-                  r"absolutely|go ahead|do it|please do|book it|book (?:the|my|our) (?:whole )?trip|confirm|let'?s do it|let'?s book|"
-                  r"send (?:it|me (?:it|their page|the page|the link)|their page|the page|the link))\b")
-_NO = re.compile(r"(?i)\b(?:no|not|don'?t|do not|wait|hold on|later|stop|maybe)\b")
-# Sasha 215 · CR 56 #1 — a QUESTION or a request for options is never a yes, whatever word it starts with: "Yes — what are my
-# cancellation terms?", "Sure, find me dinner options", "ok so what are the options?"
-_ASKING = re.compile(r"\?|(?i:\b(?:what|how|which|why|when|where|who|whether|options?|alternatives?|terms|polic(?:y|ies)|"
-                     r"refund\w*|cost\w*|price\w*|fees?|charges?|show|find|look|search|list|tell me|explain|compare|details?|"
-                     r"more about|instead|other|else|first)\b)")
 _CANCEL_WORD = re.compile(r"(?i)\bcancel\w*")
 
 
-def explicit_yes(said: Optional[str]) -> bool:
-    """An explicit yes in the person's own words — "Yes, book it", "Then book it.", "go ahead", "yes, cancel it" — with no
-    no/wait/not in it, and never a question or a request for options (Sasha 215). WHICH act it agrees to is the caller's:
-    a booking refuses a yes that talks about cancelling (yes_to_book), a cancellation takes it."""
-    t = (said or "").strip()
-    return bool(t) and bool(_YES.search(t)) and not _NO.search(t) and not _ASKING.search(t)
+# CR 61 · the yes is AgAPI v1.0's AP6 (agapi/v1.py, EU's frozen lists — English and Spanish), plus Sasha's own deliberate, additive
+# choices (reported to EU as proposed additions; none contradicts a v1.0 vector — scripts/agapi_v1_conformance.py checks 38/38):
+#   · "cancel" (es "cancela") doesn't veto HERE — "yes, cancel it" confirms a cancellation (Sasha 215); yes_to_book still refuses it
+#   · a few more affirmatives Sasha's people say ("book the whole trip", "send me their page")
+#   · a few more vetoes (refund/cost/price/fees/details/compare/explain/instead/other/else/first …): stricter is always safe
+_SASHA_YES = ("book the whole trip", "book my whole trip", "book our whole trip", "send it", "send me it", "send me their page",
+              "send me the page", "send me the link", "send their page", "send the page", "send the link")
+_SASHA_VETO = re.compile(r"(?i)\b(?:whether|alternatives?|polic(?:y|ies)|refund\w*|cost\w*|price\w*|fees?|charges?|show|look|"
+                         r"explain|compare|details?|more about|instead|other|else|first)\b")
+_CANCEL_NEGATIONS = {"cancel", "cancela"}
+
+
+def explicit_yes(said: Optional[str], lang: Optional[str] = None) -> bool:
+    """An explicit yes in the person's own words — "Yes, book it", "Then book it.", "Sí, adelante", "go ahead", "yes, cancel it" —
+    with no negation, and never a question or a request for options (AgAPI v1.0 AP6 + Sasha 215). `lang` None: any language
+    (a veto in either language vetoes). WHICH act it agrees to is the caller's: yes_to_book refuses a yes about cancelling."""
+    from agapi import v1 as V1
+    t = V1.normalise(said or "")
+    if not t or _SASHA_VETO.search(t):
+        return False
+    langs = V1.languages()
+    use = [lang] if lang else list(langs)
+    for code in use:
+        L = langs[code]
+        if any(V1._has(t, n) for n in L["negations"] + L.get("questions_and_requests", []) if n not in _CANCEL_NEGATIONS):
+            return False
+    return any(V1.affirmative(t, langs[code], _SASHA_YES if code == "en" else ()) for code in use)
 
 
 def yes_to_book(said: Optional[str]) -> bool:

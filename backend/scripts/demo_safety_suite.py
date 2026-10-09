@@ -14,7 +14,8 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.flight_suite import RESULTS, ok  # noqa: E402
 
-MODULES = ["tests.test_demo_safety_cr56", "tests.test_robustness_cr56", "tests.test_safety_215"]   # Sasha 215 · the safety items too
+MODULES = ["tests.test_demo_safety_cr56", "tests.test_robustness_cr56", "tests.test_safety_215",
+           "tests.test_s2_powers", "tests.test_s2_216"]   # Sasha 216 · an email is never sent on a question   # Sasha 215 · the safety items too
 
 _RUNNER = """
 import json, sys, unittest, io

@@ -421,9 +421,33 @@ async def _search_legs(origin: str, days: List[dict], start: date, nights: int, 
     return {"legs": legs, "found": [r for r, _ in got]}
 
 
+# Sasha 215 (f) · "BOOK IT" NEVER RE-PLANS (voice loop run 20, Portugal: on "book it" she proposed again — a new route, a
+# second total in the booking turn). A turn whose words only ask to book what's proposed can't plan: what's on screen is booked.
+_BOOK_WORDS = re.compile(r"(?i)\b(?:book|reserve|pay)\b")
+_YES_ONLY = re.compile(r"(?i)^\s*(?:(?:ok(?:ay)?|right|so|then|great|perfect|lovely)[,!. ]+)*(?:yes|yeah|yep|sure|go ahead|do it|"
+                       r"please do|let'?s do it|confirm)(?:[,!. ]+(?:please|thanks|thank you|go ahead))*[.! ]*$")
+_CHANGE_ASK = re.compile(r"(?i)\b(?:change|instead|but|another|different|other|add|remove|swap|more|fewer|less|three|four|five|six|"
+                         r"\d+|of us|people|nights?|days?|dates?|from|to|in|cheaper|earlier|later|first|second|table|dinner|lunch)\b")
+
+
+def book_only(said: Optional[str]) -> bool:
+    """The person's words this turn ask to BOOK, and nothing else ("Book it.", "Yes, book the whole trip", "Let's book")."""
+    t = (said or "").strip()
+    return bool(t) and len(t.split()) <= 8 and bool(_BOOK_WORDS.search(t)) and not _CHANGE_ASK.search(t)
+
+
+async def _never_replan(ctx: Ctx) -> None:
+    """Refused: a plan already on the account and words that only ask to book it — or a bare yes answering its read-back."""
+    said = ctx.user_said or ""
+    if (_YES_ONLY.match(said) and ctx.account in _HELD) or (book_only(said) and await _latest(ctx)):
+        raise ToolError("book_not_replan", "they asked to BOOK what's proposed — never plan again: call hold_booking (and book "
+                                           "on their yes); the trip and its total stay exactly as they heard them")
+
+
 async def prepare_trip(ctx: Ctx, a: dict) -> dict:
     """Start the itinerary (and, once the origin is known, both legs' flight searches) in the background; returns at once."""
     import asyncio as _aio
+    await _never_replan(ctx)
     try:
         date.fromisoformat(a["start_date"])
     except (KeyError, ValueError):
@@ -447,6 +471,7 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
     """The itinerary with somewhere to stay each night AND a flight that fits, chosen — and the total. Nothing booked."""
     from app.services.itinerary_agent import build_itinerary
     from booking_signer import basket as BK, basket_book as BB, plan_store as PS, travel as T
+    await _never_replan(ctx)
     try:
         start = date.fromisoformat(a["start_date"])
     except (KeyError, ValueError):
@@ -668,7 +693,10 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
     if "why" in q:
         raise ToolError("not_bookable", q["why"])
     est = any(l.rstrip(")").endswith("(estimate") for l in q["lines"])   # Sasha 211 · real hotels priced as estimates
-    res = {**({"changed": changed} if changed else {}), **({"stays_are_estimates": True} if est else {}), "read_back": [l for l in q["lines"] if not l.startswith("Note:")], "notes": [l for l in q["lines"] if l.startswith("Note:")],
+    from booking_signer import basket as BK
+    rows_now = BK.to_book(await BK.items(ctx.account, p["trip_id"], ("suggested", "chosen")))
+    res = {"breakdown": breakdown(rows_now, q["eur"]),   # Sasha 215 · the re-quote reaches the page: the pill and the total card refresh
+           **({"changed": changed} if changed else {}), **({"stays_are_estimates": True} if est else {}), "read_back": [l for l in q["lines"] if not l.startswith("Note:")], "notes": [l for l in q["lines"] if l.startswith("Note:")],
            "read_back_sha256": q["sha256"], "total_eur": q["eur"], "status": "not booked — waiting for the yes"}
     prev = _HELD.get(ctx.account)   # Sasha 210 · the same words read back again keep the time they were first said
     at = prev["at"] if prev and prev.get("sha") == q["sha256"] else datetime.now(timezone.utc)
@@ -727,6 +755,7 @@ async def book(ctx: Ctx, a: dict) -> dict:
         raise ToolError("read_back_changed" if "different words" in got["why"] else "not_bookable", got["why"])
     sent = str(got.get("phone") or "").startswith("sent")
     return {"status": "awaiting_payment", "payment": "sent_to_phone" if sent else "link", **({} if sent else {"payment_url": got["url"]}),
+            "checkout_url": got["url"],   # Sasha 214 · for the page (a phone pays on the same device); never shown to the model
             "session_id": got["session_id"], "total_eur": got["eur"], "booked": False}
 
 
@@ -817,7 +846,7 @@ TOOLS: List[dict] = [
        {"destination": {"type": "string"}, "start_date": DATE, "nights": {"type": "integer", "minimum": 1, "maximum": 30, "description": "NIGHTS away: \"10 days\" is 9 nights, \"a week\" is 7"},
         "party": {"type": "integer", "minimum": 1, "maximum": 9}, "interests": {"type": "string"}, "origin": {"type": "string"}},
        ["destination", "start_date", "nights", "party"],
-       {"type": "object", "properties": {"preparing": {"type": "array"}}}, ["start_date_invalid"]),
+       {"type": "object", "properties": {"preparing": {"type": "array"}}}, ["start_date_invalid", "book_not_replan"]),
     _t("propose_trip", "Magellan", propose_trip, "THE PROPOSAL: a day-by-day itinerary with somewhere to stay each night, a flight "
        "that fits on each leg (there and back) already chosen, and the whole trip's total. Replaces the account's current proposal. Nothing is booked.",
        {"destination": {"type": "string"}, "start_date": DATE, "nights": {"type": "integer", "minimum": 1, "maximum": 30, "description": "NIGHTS away: \"10 days\" is 9 nights, \"a week\" is 7"},
@@ -826,7 +855,7 @@ TOOLS: List[dict] = [
        ["destination", "start_date", "nights", "party", "origin"],
        {"type": "object", "properties": {"trip_id": {"type": "string"}, "days": {"type": "array"}, "flight_out": FLIGHT, "flight_back": FLIGHT,
                                          "total_eur": {"type": "number"}}},
-       ["start_date_invalid", "size_invalid", "plan_failed", "plan_not_saved"]),
+       ["start_date_invalid", "size_invalid", "plan_failed", "plan_not_saved", "book_not_replan"]),
     _t("swap_stay", "Magellan", swap_stay, "Change where they stay in one city of the trip (take a name from search_stays). Returns the new total.",
        {"city": {"type": "string"}, "stay_name": {"type": "string"}}, ["city", "stay_name"], TOTAL, ["no_trip", "city_not_in_trip", "swap_failed", "not_priced"]),
     _t("check_offer", "Sherlock", check_offer, "Is this flight offer still available, and at what price?", {"offer_id": {"type": "string"}},
@@ -885,10 +914,14 @@ TOOLS: List[dict] = [
     _t("get_total", "Pacioli", get_total, "The whole trip's total from the basket (what booking would charge).", {}, [], TOTAL, ["no_trip"]),
 ]
 BY_NAME = {t["name"]: t for t in TOOLS}
+from agapi import s2_tools as _S2   # noqa: E402 · CR 60 / Sasha 216 · email from Sasha's address + calendar (agapi/powers.py)
+TOOLS += _S2.tools()
+BY_NAME.update({t["name"]: t for t in TOOLS})
 _HELD: Dict[str, dict] = {}   # account → the last read-back's sha256 (hold_booking), for book
 _IDEM: Dict[str, dict] = {}   # the fast path in this process; claim() is the durable one (Sasha 215)
-ACTS = {"book", "book_venue", "cancel_venue"}   # spend, send or cancel: claimed once, durably, before they act
-READS = {"search_flights", "search_stays", "search_venues", "check_offer", "read_booking_route", "get_status", "get_trip", "get_total"}
+ACTS = {"book", "book_venue", "cancel_venue", "send_email"}   # spend, send or cancel: claimed once, durably, before they act
+READS = {"search_flights", "search_stays", "search_venues", "check_offer", "read_booking_route", "get_status", "get_trip", "get_total",
+         "add_to_calendar"}
 
 
 async def call(ctx: Ctx, name: str, args: dict) -> dict:

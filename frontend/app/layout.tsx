@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { WhoBadge } from './components/SignedInLine'   // Sasha 158 · "Signed in as Tyler" or "Guest", on every page
@@ -22,7 +22,12 @@ export const metadata: Metadata = {
   description: PREVIEW.description,
   openGraph: { ...PREVIEW, siteName: "Sasha by Kanoe", type: "website", url: "/" },
   twitter: { card: "summary", ...PREVIEW },
+  // Sasha 214 · Add to Home Screen on iPhone: full-screen, its own icon and name
+  appleWebApp: { capable: true, title: "Sasha", statusBarStyle: "black-translucent" },
+  icons: { apple: [{ url: "/pwa-icon/180", sizes: "180x180", type: "image/png" }] },
 };
+
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#0b0b12" };
 
 export default function RootLayout({
   children,

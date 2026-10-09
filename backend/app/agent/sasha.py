@@ -104,15 +104,23 @@ def guard_check(text: str, allowed: set, anything_booked: bool) -> List[str]:
 # Sasha 205 · EVERY tool result has a renderer in the UI, by type (tests/test_agapi_guards.py holds it)
 RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues": "venues", "read_booking_route": "venues",
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
-          "save_travellers": "inline", "hold_booking": "read_back", "book": "trip", "get_status": "trip", "get_trip": "trip",
+          "save_travellers": "inline", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
           "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
-KINDS = {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
+RENDER.update({"send_email": "read_back", "add_to_calendar": "inline"})   # CR 60 / Sasha 216 · the email read back on its card
+KINDS = {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 
 
 def render(tool: str, res: dict, args: dict) -> Optional[dict]:
     """The UI event for a tool's result: {"type": "render", "kind", …payload} — or None for "inline" (it's in her words) and
     "trip" (the trip_changed event already refreshes the Trip view)."""
     kind = RENDER.get(tool, "inline")
+    # Sasha 214 · the human step on the SAME device (a phone): the checkout, their booking page, Tap to finish — the page
+    # decides (a phone opens it over her; the desktop keeps the phone hand-off)
+    if kind == "pay":
+        return {"type": "render", "kind": "pay", "url": res["checkout_url"]} if res.get("checkout_url") else None
+    if tool == "book_venue" and (res.get("view_url") or res.get("page_url")):
+        return {"type": "render", "kind": "handover", "url": res.get("view_url") or res.get("page_url"),
+                "external": not res.get("view_url"), **({"focus": (res.get("card") or {}).get("place_id")} if res.get("card") else {})}
     if tool == "propose_trip":   # Sasha 210 · the proposal arrives WITH its flights: a card per leg, the chosen one marked
         opts = res.get("flight_options") or {}
         cards = [flight_card({"flights": opts[leg], "leg": leg}, {"origin": (opts[leg][0] or {}).get("from"),
@@ -136,8 +144,12 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": kind, "find": {"what": args.get("what") or c.get("name"), "where": args.get("city") or ""},
                 "preset": {"all": [c], "cards": [c], "show": 1}, "focus": c.get("place_id"),
                 "ribbon": f"{c.get('name')}" + (f" · {res['when']}" if res.get("when") else "")}
+    if kind == "read_back" and not res.get("read_back"):   # Sasha 216 · a sent email has nothing to read back
+        return None
     if kind == "read_back":   # Sasha 213 · the read-back she just gave, from her own hold — never a second quote
-        return {"type": "render", "kind": kind, "read_back": [l for l in res.get("read_back") or []], "total_eur": res.get("total_eur")}
+        return {"type": "render", "kind": kind, "read_back": [l for l in res.get("read_back") or []], "total_eur": res.get("total_eur"),
+                **({"what": "email", "live": bool(res.get("live"))} if tool == "send_email" else {}),   # Sasha 216 · its own card words
+                **({"total": res["breakdown"]} if res.get("breakdown") else {})}   # Sasha 215 · the re-quote refreshes the pill
     return None
 
 
@@ -371,7 +383,8 @@ def drop_internal(text: str) -> str:
 _TEST_TAG = [(re.compile(r"\s*\((?:Duffel )?TEST[^)]*\)"), ""), (re.compile(r",?\s*marked TEST,?"), ","), (re.compile(r"\bDuffel TEST\b"), "Duffel"),
              (re.compile(r"\bTEST\s+"), ""), (re.compile(r"\s*\bTEST\b"), "")]
 _MODEL_DROP_KEYS = {"note", "notes", "prices", "test", "prefetched", "flight_note", "total_note", "breakdown",   # Sasha 212 · one total
-                    "preset", "find", "card", "ribbon"}   # Sasha 213 · the screen's copy; she gets the cards as `venues` only
+                    "preset", "find", "card", "ribbon",   # Sasha 213 · the screen's copy; she gets the cards as `venues` only
+                    "checkout_url", "view_url", "page_url"}   # Sasha 214 · links for the page, never words for her
 
 
 def clean_for_model(obj: Any) -> Any:
@@ -441,6 +454,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     used_openers = _OPENERS.setdefault(session or "-", set())
     used_openers |= _history_openers(history)
     said: List[str] = []      # what she says (cleaned) — the reply
+    said_norms: set = set()   # Sasha 215 · each sentence she's said this turn, normalised
     raw: List[str] = []       # what the model wrote — the guards read it
     turn_key = hashlib.sha256(f"{session}:{len(history or [])}:{message}".encode()).hexdigest()[:16]
     tools = tools_for_model()
@@ -477,6 +491,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         for x in [p.strip() for p in re.split(r"(?<=[.!?])\s+", spoken_prose(chunk)) if p.strip()]:
             if held:
                 break
+            if _norm(x) and _norm(x) in said_norms:   # Sasha 215 · never a sentence twice in a turn ("It's quoted." after each flight)
+                continue
             if _INTERNAL.search(x):
                 internal_log.append(x[:80])
                 continue
@@ -486,6 +502,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 held = True
                 break
             out.append(x)
+            said_norms.add(_norm(x))
         text = as_offer(" ".join(out))
         if not text:
             return ""
@@ -568,8 +585,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 continue
             if t and t["idempotent"]:
                 args["idempotency_key"] = f"{turn_key}:{u.name}:{hashlib.sha256(json.dumps(u.input, sort_keys=True).encode()).hexdigest()[:12]}"
-            if u.name in ("book", "book_venue", "cancel_venue"):
-                args["approval"] = {"said": message}   # the REAL words of this turn — never the model's
+            if u.name in ("book", "book_venue", "cancel_venue", "send_email"):
+                args["approval"] = {"said": message}   # the REAL words of this turn — never the model's (CR 60: the email's too)
             r = await API.call(ctx, u.name, args)
             if r.get("ok"):
                 _amounts(r["result"], allowed)
@@ -913,6 +930,16 @@ async def over_budget(account: str) -> Optional[str]:
     except Exception as e:   # the count unreachable never blocks a turn; it's logged
         log.error("[agent] daily budget not counted: %s: %s", type(e).__name__, e)
     return None
+
+
+@router.get("/ics/{token}.ics")   # CR 60 / Sasha 216 · the event is IN the signed link: any worker, any deploy; nothing else read
+async def agent_ics(token: str):
+    from fastapi.responses import Response
+    from agapi import s2_tools as S2
+    text = S2.ics_from_token(token)
+    if not text:
+        return JSONResponse({"ok": False}, status_code=404)
+    return Response(text, media_type="text/calendar; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="sasha.ics"'})
 
 
 @router.post("/turn")

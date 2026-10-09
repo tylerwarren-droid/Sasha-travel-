@@ -4,6 +4,38 @@
 import { useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 
+// Sasha 215 (b) / 216 · the sign-in email carries a 6-digit code as well as the link once its Supabase template has
+// {{ .Token }} (the founder's yes, 9 Oct). The box says "if your email shows a code", so it's true whether or not the
+// template has been changed yet; NEXT_PUBLIC_SIGNIN_CODE=0 hides it.
+const CODE_IN_EMAIL = process.env.NEXT_PUBLIC_SIGNIN_CODE === '1'
+
+function CodeEntry({ to, next }: { to: string; next: string }) {
+  const [code, setCode] = useState('')
+  const [why, setWhy] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  async function verify(e: React.FormEvent) {
+    e.preventDefault()
+    setBusy(true); setWhy(null)
+    try {
+      const r = await fetch('/auth/code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: to, code, next }) })
+      const j = await r.json().catch(() => ({}))
+      if (j?.ok) { window.location.href = j.next || next; return }
+      setWhy(j?.why || `it didn\u2019t work (HTTP ${r.status})`)
+    } catch (err) { setWhy((err as Error).message) }
+    setBusy(false)
+  }
+  return (
+    <form onSubmit={verify}>
+      <p>We&rsquo;ve emailed <strong>{to}</strong> a sign-in link. Open it on this device — or, if the email shows a 6-digit code, type it here (that works in the Home Screen app too).</p>
+      <label htmlFor="code">The 6-digit code</label>
+      <input id="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,7}" maxLength={7} required value={code}
+        onChange={(e) => setCode(e.target.value)} style={{ display: 'block', width: '100%', padding: 8, margin: '6px 0 10px', fontSize: 20, letterSpacing: 4 }} />
+      <button type="submit" disabled={busy} style={{ padding: '8px 14px' }}>{busy ? 'Signing in…' : 'Sign in'}</button>
+      {why && <p role="alert" style={{ color: '#9a1c1c' }}>Not signed in: {why}.</p>}
+    </form>
+  )
+}
+
 export default function SignInForm({ next }: { next: string }) {
   const [email, setEmail] = useState('')
   const [state, setState] = useState<{ phase: 'idle' | 'sending' } | { phase: 'sent'; to: string } | { phase: 'failed'; why: string }>({ phase: 'idle' })
@@ -25,7 +57,7 @@ export default function SignInForm({ next }: { next: string }) {
     }
   }
 
-  if (state.phase === 'sent') return <p>We&rsquo;ve emailed a sign-in link to <strong>{state.to}</strong>. Open it on this device to continue.</p>
+  if (state.phase === 'sent') return CODE_IN_EMAIL ? <CodeEntry to={state.to} next={next} /> : <p>We&rsquo;ve emailed a sign-in link to <strong>{state.to}</strong>. Open it on this device to continue.</p>
   return (
     <form onSubmit={send}>
       <label htmlFor="email">Your email</label>

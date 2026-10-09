@@ -497,5 +497,64 @@ class Spending(unittest.TestCase):
         self.assertLessEqual(AG.TURN_DEADLINE_S, 110)
 
 
+
+# ── (f) · "book it" never re-plans ─────────────────────────────────────────────────────────────────────────────────────
+
+class BookNeverReplans(unittest.TestCase):
+    def call(self, said, tool="propose_trip", has_plan=True, read_back=False):
+        args = {"destination": "Portugal", "start_date": "2026-11-22", "nights": 7, "party": 2, "origin": "Madrid"}
+        if read_back:
+            API._HELD[ACCOUNT] = {"sha": "a" * 64, "at": datetime.now(timezone.utc), "result": {}}
+        try:
+            with mock.patch.object(API, "_latest", mock.AsyncMock(return_value={"trip_id": "t1"} if has_plan else None)), \
+                    mock.patch("app.services.itinerary_agent.build_itinerary", mock.AsyncMock(side_effect=RuntimeError("planned"))), \
+                    mock.patch.object(API, "_build", mock.AsyncMock(side_effect=RuntimeError("planned"))), \
+                    mock.patch.object(API, "_search_legs", mock.AsyncMock(side_effect=RuntimeError("planned"))):
+                return run(API.call(API.Ctx(account=ACCOUNT, user_said=said), tool, args))
+        finally:
+            API._HELD.pop(ACCOUNT, None)
+
+    def test_book_it_never_plans_again(self):
+        for said in ("Book it.", "Yes, book the whole trip", "Let's book", "book it"):
+            for tool in ("propose_trip", "prepare_trip"):
+                self.assertEqual(self.call(said, tool)["error"]["code"], "book_not_replan", (said, tool))
+
+    def test_a_bare_yes_to_a_read_back_never_plans(self):
+        self.assertEqual(self.call("Yes, go ahead", read_back=True)["error"]["code"], "book_not_replan")
+
+    def test_a_change_still_plans(self):
+        for said in ("Book it for three of us", "Book it in March instead", "Can we add a night in Porto and book it?"):
+            self.assertNotEqual((self.call(said).get("error") or {}).get("code"), "book_not_replan", said)
+
+    def test_a_first_trip_on_yes_still_plans(self):
+        self.assertNotEqual((self.call("Yes", has_plan=False).get("error") or {}).get("code"), "book_not_replan")
+        self.assertNotEqual((self.call("Book it", has_plan=False).get("error") or {}).get("code"), "book_not_replan")
+
+    def test_the_read_back_refreshes_the_total_on_the_page(self):
+        from app.agent import sasha as AG
+        ev = AG.render("hold_booking", {"read_back": ["x"], "total_eur": 2479.28, "breakdown": {"total_eur": 2479.28}}, {})
+        self.assertEqual(ev["total"]["total_eur"], 2479.28)
+
+
+
+class NeverTwice(unittest.TestCase):
+    def test_a_sentence_is_never_said_twice_in_a_turn(self):
+        import app.services.llm as LLM
+        from app.agent import sasha as AG
+        steps = [[Block(type="text", text="Flight out: Iberia on the twenty-first. It's quoted. Flight home: Qatar on the thirtieth. It's quoted.")]]
+        evs = []
+
+        async def go():
+            async for ev in AG.turn(ACCOUNT, "read it to me", [], "s215-twice"):
+                evs.append(ev)
+
+        async def call(ctx, name, args):
+            return {"ok": True, "result": {"anything_booked": False}}
+        with mock.patch.object(LLM, "client", client(steps)), mock.patch.object(API, "call", call):
+            run(go())
+        done = next(e for e in evs if e["type"] == "done")
+        self.assertEqual(done["text"].count("It's quoted."), 1, done["text"])
+
+
 if __name__ == "__main__":
     unittest.main()

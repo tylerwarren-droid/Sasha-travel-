@@ -18,7 +18,7 @@ import { shouldSay } from '@/lib/mic-fail.mjs'   // Sasha 215 · the mic never f
 import { User, Itinerary } from '@/types'
 
 // Sasha 213 · ONE IDENTITY: a concierge for anywhere — no destination is assumed
-const PRESET_PROMPTS = ['Plan a 7 day trip', 'Somewhere warm in November', 'A long weekend in Europe', 'A table for two tonight']
+const PRESET_PROMPTS = ['What can you do?', 'A table for two tonight', 'A spa on Saturday', 'Plan a trip']   // Sasha 215 · S2: travel is one of them
 // Sample plan for `?ui=preview` (layout QA of the Trip board without a backend). Illustrative
 // numbers; the flag is never set in normal use.
 const PREVIEW_PLAN: RichItinerary = {
@@ -37,17 +37,6 @@ const PREVIEW_PLAN: RichItinerary = {
     { day: 7, city: 'Porto', title: 'Slow morning, fly home', description: '', image: null, hotel: null, activities: [] },
   ],
 }
-// Welcome-screen destination gallery (approved design, board 1). Same curated Unsplash set the
-// backend's foto_agent falls back to, so the imagery matches what Sasha later surfaces. The three
-// unnamed shots are captioned by theme rather than guessed at as places.
-const WELCOME_OPENERS: { location: string; blurb: string; ask: string; url: string }[] = [
-  { location: 'Dramatic coastlines', blurb: 'Cliffs, coves and boats', ask: 'Where can we see dramatic coastlines?', url: 'https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
-  { location: 'Old towns', blurb: 'Lantern-lit streets', ask: 'Find me a magical old town for a few days', url: 'https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
-  { location: 'Mountain walks', blurb: 'Terraces and big views', ask: 'Where are the best places to hike this autumn?', url: 'https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600' },
-  { location: 'Island hopping', blurb: 'Boats, coves and slow days', ask: 'Where should we go island hopping?', url: 'https://images.unsplash.com/photo-1528127269322-539801943592?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
-  { location: 'River valleys', blurb: 'Water between the peaks', ask: 'Show me beautiful river valleys', url: 'https://images.unsplash.com/photo-1609412058473-c199497c3c5d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
-  { location: 'Beach days', blurb: 'White sand, warm sea', ask: 'Which beaches would you pick for November?', url: 'https://images.unsplash.com/photo-1691927644490-e1a24b366a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600&h=400' },
-]
 
 const DEMO_USER: User = {
   display_name: 'Jon Peters',
@@ -210,6 +199,32 @@ export default function NextPage() {
   useEffect(() => {
     try { if (new URLSearchParams(window.location.search).get('tab') === 'trip') handleTabChange('trip') } catch { /* no URL: nothing */ }
   }, [handleTabChange])
+  // Sasha 214 · THE PHONE: portrait, her face on top, one mic button, the cards as a bottom sheet — the same page, agent and
+  // turn state as the desktop (no second logic path); only the layout and the human step's device change
+  const [isPhone, setIsPhone] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px), (pointer: coarse) and (max-width: 920px) and (orientation: portrait)')
+    const on = () => setIsPhone(mq.matches)
+    on(); mq.addEventListener?.('change', on)
+    return () => mq.removeEventListener?.('change', on)
+  }, [])
+  const [thinking, setThinking] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [handover, setHandover] = useState<string | null>(null)
+  const unlockAudio = useCallback(() => {
+    // iOS: audio and the mic only start inside a tap — unlocked here, in the tap that starts the call
+    try { const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }); const C = AC.AudioContext || AC.webkitAudioContext; if (C) { const c = new C(); void c.resume().then(() => c.close()).catch(() => {}) } } catch { /* fine */ }
+    try { void navigator.mediaDevices?.getUserMedia({ audio: true }).then(st => st.getTracks().forEach(t => t.stop())).catch(() => {}) } catch { /* fine */ }
+  }, [])
+  const onPay = useCallback((url: string) => {
+    // a phone pays on the SAME device (Apple Pay on Stripe's page); the desktop keeps the hand-off to the phone
+    if (isPhone) window.open(url, '_blank', 'noopener')
+  }, [isPhone])
+  const onHandover = useCallback((url: string, external: boolean) => {
+    if (!isPhone) return
+    if (external) window.open(url, '_blank', 'noopener')   // a platform's page: the guest's own browser
+    else setHandover(url)                                  // our Tap to finish: a sheet over her, then back to her
+  }, [isPhone])
   const [started, setStarted] = useState(false)
   // Sasha 156 · a plain TEXT chat that needs no call: typing opens the conversation without the avatar, the mic or the
   // camera (the call stays one tap away, as before)
@@ -856,14 +871,16 @@ export default function NextPage() {
     if (!el) return
     const r = el.getBoundingClientRect()
     if (r.width <= 0) return
-    if (avatarPip) {
+    if (avatarPip && isPhone) {   // Sasha 214 · a phone: a small portrait tile in the corner, the view stays readable
+      setAvatarBox({ top: r.top + 12, left: r.right - 96 - 12, width: 96, height: 128 })
+    } else if (avatarPip) {
       const W = Math.max(200, Math.min(300, Math.round(r.width * 0.34)))
       const H = Math.round(W * 0.66)
       setAvatarBox({ top: r.bottom - H - 12, left: r.right - W - 12, width: W, height: H })
     } else {
       setAvatarBox({ top: r.top, left: r.left, width: r.width, height: r.height })
     }
-  }, [avatarPip])
+  }, [avatarPip, isPhone])
   useLayoutEffect(() => {
     measureAvatar()
     const raf = requestAnimationFrame(measureAvatar)
@@ -890,9 +907,10 @@ export default function NextPage() {
   }, [started, voiceReady])
   const startWith = useCallback((opener?: string) => {
     if (verifying || booked || itemBooked) return
+    unlockAudio()
     if (opener) pendingOpenerRef.current = opener
     handleStart()
-  }, [verifying, booked, itemBooked, handleStart])
+  }, [verifying, booked, itemBooked, handleStart, unlockAudio])
   const newChat = useCallback(() => {
     // Mindtrip's "New chat": a clean slate. Ending the live session first releases the
     // avatar; handleStart already resets messages/plan/tabs.
@@ -915,14 +933,15 @@ export default function NextPage() {
   const statusLabel = micMuted ? 'Not listening' : isAvatarSpeaking ? 'Sasha is speaking' : isListening ? 'Listening…' : voiceConnected ? 'Mic live' : micError ? 'Mic unavailable' : 'Connecting…'
 
   return (
-    <main className="mt-app">
+    <main className={`mt-app${isPhone ? ' phone' : ''}${isPhone && sheetOpen ? ' sheet-open' : ''}`}>
 
       {/* ── LEFT NAV ── */}
       <aside className="mt-side">
         <div className="mt-brand">
           <LogoMark height={44} className="mt-logo" />
-          <div className="mt-brand-sub"><span aria-hidden>🌍</span><b>Travel anywhere</b></div>
-          <div className="mt-brand-sub">Sasha · AI travel concierge</div>
+          {/* Sasha 215 · S2: more than travel */}
+          <div className="mt-brand-sub"><span aria-hidden>✨</span><b>Whatever you need</b></div>
+          <div className="mt-brand-sub">Sasha · your personal concierge</div>
         </div>
         <nav className="mt-nav" aria-label="Workspace">
           {NAV.map(n => (
@@ -950,7 +969,6 @@ export default function NextPage() {
             <option value="es">🇪🇸 Español</option>
           </select>
           {started && <button className="mt-end" onClick={handleEndSession} title="End the live avatar session to stop using credits">■ End session</button>}
-          <div className="mt-partner">Ministry of Tourism Partner</div>
         </div>
       </aside>
 
@@ -981,6 +999,13 @@ export default function NextPage() {
 
       {/* ── RIGHT — the conversation (transcript, cards, composer); the welcome before the call ── */}
       <aside className="mt-rail">
+        {isPhone && (   /* Sasha 214 · the bottom sheet's handle: tap (or swipe up) for the cards and the chat */
+          <button type="button" className="mt-sheethandle" aria-label={sheetOpen ? 'Lower the cards' : 'Raise the cards'} onClick={() => setSheetOpen(o => !o)}
+            onTouchStart={e => { (e.currentTarget as HTMLElement).dataset.y = String(e.touches[0].clientY) }}
+            onTouchEnd={e => { const y0 = Number((e.currentTarget as HTMLElement).dataset.y || 0); const dy = e.changedTouches[0].clientY - y0; if (dy < -30) setSheetOpen(true); if (dy > 30) setSheetOpen(false) }}>
+            <span />
+          </button>
+        )}
         <div className="mt-wshead">
           <div className="mt-head">
             <span className="mt-head-ic"><Sparkles size={15} strokeWidth={1.8} /></span>
@@ -996,6 +1021,10 @@ export default function NextPage() {
         {stageLive ? (
           <SashaChat
             agent
+            phone={isPhone}
+            onTurnBusy={setThinking}
+            onPay={onPay}
+            onHandover={onHandover}
             user={DEMO_USER}
             onSashaResponse={handleSashaResponse}
             onListeningChange={setIsListening}
@@ -1048,21 +1077,10 @@ export default function NextPage() {
         ) : (
           <div className="mt-welcome-wrap">
             <div className="mt-welcome-scroll">
-              <div className="mt-when">Where to?</div>
-              <div className="mt-openers">
-                {WELCOME_OPENERS.map((o, i) => (
-                  <button key={o.location} className="mt-opener" onClick={() => startWith(o.ask)} style={{ animationDelay: `${i * 60}ms` }} title={o.ask}>
-                    <img src={o.url} alt={o.location} loading="lazy" />
-                    <span className="g" />
-                    <span className="c"><b>{o.location}</b><span>{o.blurb}</span></span>
-                  </button>
-                ))}
-              </div>
-              <div className="mt-when">Or just ask</div>
-              <div className="mt-chips">
-                {PRESET_PROMPTS.map(pr => (
-                  <button key={pr} className="mt-chip" onClick={() => startWith(pr)}>{pr}</button>
-                ))}
+              {/* Sasha 215 · S2 — Sasha is more than travel: no destination gallery, no stand-in photos. Her, and her line. */}
+              <div className="mt-hello">
+                <div className="mt-hello-line">Hey there — what can I do for you?</div>
+                <div className="mt-hello-sub">A table tonight, a spa on Saturday, a question, or a whole trip. Talk to her, or type below.</div>
               </div>
               {verifying && <div className="text-center text-sm" style={{ color: '#DAA520', marginTop: 10 }}>Confirming your payment…</div>}
             </div>
@@ -1118,7 +1136,7 @@ export default function NextPage() {
                   on — so the call starts where the eye already is. (public/sasha-preview.jpg
                   is the LiveAvatar preview for the configured avatar; refresh it if the avatar
                   changes.) */}
-              <img className="mt-standby" src="/sasha-preview.jpg" alt="" style={{ opacity: uiPreview || meetHidden ? 1 : .55, filter: uiPreview || meetHidden ? 'none' : 'saturate(.7)' }} />
+              <img className="mt-standby mt-standby-photo" src="/api/heygen/preview" alt="Sasha" onError={e => { e.currentTarget.style.display = 'none' }} />
               <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 22%, transparent 58%, rgba(0,0,0,.85) 100%)' }} />
               <div className="mt-ov-top absolute top-0 left-0 right-0 flex items-center" style={{ padding: '14px 16px', zIndex: 3 }}>
                 <span className="mt-standbypill"><span className="mt-standbydot" /> {uiPreview ? 'Preview' : 'Standby'}</span>
@@ -1126,12 +1144,12 @@ export default function NextPage() {
               {!uiPreview && (
                 // Sasha 184 · the start control is ALWAYS there; only the first-time welcome ("Meet Sasha") is hidden for a
                 // returning account or once closed (Sasha 183 hid the whole block: Sasha "disappeared" for the founder)
-                <div className="mt-startwrap" style={{ position: 'relative' }}>
+                <div className="mt-startwrap">{/* Sasha 215 · S2: at the foot of the stage, never over her face */}
                   {!meetHidden && (
                     <button type="button" aria-label="Close the welcome" onClick={() => { setMeetHidden(true); try { localStorage.setItem('sasha.meet.closed', '1') } catch { /* fine */ } }}
                       style={{ position: 'absolute', top: -6, right: -6, width: 28, height: 28, borderRadius: 999, border: '1px solid rgba(255,255,255,.3)', background: 'rgba(0,0,0,.45)', color: '#fff', cursor: 'pointer', zIndex: 4 }}>✕</button>
                   )}
-                  {!meetHidden && <div className="mt-eyebrow">AI Travel Concierge</div>}
+                  {!meetHidden && <div className="mt-eyebrow">Your personal concierge</div>}
                   {!meetHidden && <div className="mt-bigname">Meet Sasha</div>}
                   <button className="mt-startbtn" onClick={() => startWith()}><Play size={16} strokeWidth={2.2} fill="#fff" /> {meetHidden ? 'Talk to Sasha' : 'Tap to start your call'}</button>
                   {!meetHidden && <div className="mt-hint">Audio plays automatically once you start</div>}
@@ -1172,7 +1190,7 @@ export default function NextPage() {
         </div>
 
         {/* user camera PiP */}
-        <div className="mt-ov-hero absolute overflow-hidden" style={{ right: 16, bottom: 96, width: 148, height: 104, borderRadius: 16, border: '2px solid rgba(255,255,255,.25)', boxShadow: '0 14px 40px -10px rgba(0,0,0,.8)', zIndex: 4, background: '#15151f' }}>
+        <div className="mt-ov-hero mt-cam absolute overflow-hidden" style={{ right: 16, bottom: 96, width: 148, height: 104, borderRadius: 16, border: '2px solid rgba(255,255,255,.25)', boxShadow: '0 14px 40px -10px rgba(0,0,0,.8)', zIndex: 4, background: '#15151f' }}>
           <video
             ref={userVideoRef}
             autoPlay
@@ -1190,6 +1208,20 @@ export default function NextPage() {
           <span style={{ position: 'absolute', left: 7, bottom: 6, fontSize: 10, fontWeight: 600, letterSpacing: '.05em', background: 'rgba(0,0,0,.55)', padding: '3px 7px', borderRadius: 6, backdropFilter: 'blur(4px)' }}>You</span>
         </div>
 
+        {isPhone && (() => {   /* Sasha 214 · ONE big mic button, ONE clear state; tap while she speaks = interrupt her */
+          const st = isAvatarSpeaking ? 'speaking' : thinking ? 'thinking' : micMuted ? 'muted' : (voiceConnected || isListening) ? 'listening' : micError ? 'off' : 'starting'
+          const words: Record<string, string> = { speaking: 'Sasha is speaking — tap to interrupt', thinking: 'Thinking…', listening: 'Listening — just talk',
+            muted: 'Muted — tap to talk', off: `${micError || 'Mic off'} — type below`, starting: 'Starting the mic…' }
+          return (
+            <div className="mt-bigmic-wrap">
+              <button type="button" className={`mt-bigmic ${st}`} aria-label={words[st]}
+                onClick={() => { if (st === 'speaking') handleInterrupt(); else if (st === 'muted' || st === 'listening') setMicMuted(m => !m) }}>
+                {st === 'speaking' ? <span className="la-load"><i /><i /><i /></span> : st === 'thinking' ? <span className="mt-spin" /> : st === 'muted' ? <MicOff size={30} /> : <Mic size={30} />}
+              </button>
+              <div className="mt-bigmic-label">{words[st]}</div>
+            </div>
+          )
+        })()}
         {/* bottom: live caption + mic status */}
         <div className="mt-ov-hero absolute left-0 right-0 bottom-0 flex flex-col gap-3" style={{ padding: 18, zIndex: 3 }}>
           {caption && (
@@ -1198,7 +1230,7 @@ export default function NextPage() {
           {/* Call controls. Wraps as whole pills rather than letting any single pill
               squeeze and break its label across two lines, which is what happened once the
               mic picker joined the row in the narrow call panel. */}
-          <div className="flex items-center" style={{ gap: 8, flexWrap: 'nowrap', overflow: 'hidden' }}>
+          <div className="flex items-center mt-ctrls" style={{ gap: 8, flexWrap: 'nowrap', overflow: 'hidden' }}>
             {/* Muted wins over every other state: the mic is genuinely closed, so a
                 leftover "Listening…" equaliser would be actively lying to the guest. */}
             {micMuted ? (
@@ -1523,6 +1555,9 @@ export default function NextPage() {
         .mt-rail .lw-chip{display:none}
         .mt-wshead{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.25)}
         .mt-welcome-wrap{flex:1;min-height:0;display:flex;flex-direction:column}
+        .mt-hello{margin:auto 0;padding:24px 8px;text-align:center}
+        .mt-hello-line{font-family:'Playfair Display',Georgia,serif;font-size:26px;font-weight:600;color:#fff;line-height:1.25}
+        .mt-hello-sub{margin-top:10px;font-size:14px;color:rgba(255,255,255,.6);line-height:1.5}
         .mt-welcome-scroll{flex:1;min-height:0;overflow-y:auto;padding:16px 16px 12px;display:flex;flex-direction:column;gap:12px}
         .mt-when{display:flex;align-items:center;gap:12px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.35)}
         .mt-when::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(255,255,255,.12),transparent)}
@@ -1558,6 +1593,7 @@ export default function NextPage() {
         .mt-ring2{width:880px;height:880px;border-color:rgba(255,255,255,.04);box-shadow:none}
         .mt-avatar[data-mode="pip"] .mt-ring{width:260px;height:260px}
         .mt-avatar[data-mode="pip"] .mt-ring2{width:360px;height:360px}
+        .mt-standby-photo{left:0 !important;transform:none !important;width:100% !important;height:100% !important;object-fit:cover;object-position:center 20%;mix-blend-mode:normal !important;opacity:1}   /* Sasha 215 · S2: her own still, full and calm */
         .mt-standby{position:absolute;left:50%;bottom:0;transform:translateX(-50%);height:92%;width:auto;max-width:none;mix-blend-mode:screen;pointer-events:none;transition:opacity .4s}
         .mt-standbypill{display:inline-flex;align-items:center;gap:8px;font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:rgba(255,255,255,.7);background:rgba(0,0,0,.35);padding:7px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px)}
         .mt-standbydot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.35);display:inline-block}
@@ -1573,7 +1609,53 @@ export default function NextPage() {
           .mt-navbtn{justify-content:center;padding:9px}
           .mt-rail{width:46vw}
         }
+        /* ── Sasha 214 · THE PHONE (portrait): her face fills the top two-thirds; the conversation and the cards are a bottom
+           sheet; one big mic button; the desktop's rail, nav and pills step aside ── */
+        .mt-app.phone{display:block;height:100dvh;overflow:hidden}
+        .mt-app.phone .mt-side,.mt-app.phone .mt-top,.mt-app.phone .mt-wshead,.mt-app.phone .mt-cam,.mt-app.phone .mt-ctrls{display:none!important}
+        .mt-app.phone .mt-center{position:fixed;inset:0 0 auto 0;height:66dvh;padding:0;margin:0}
+        .mt-app.phone .mt-stage{position:absolute;inset:0;border-radius:0;margin:0}
+        .mt-app.phone .mt-rail{position:fixed;left:0;right:0;bottom:0;width:100%;height:36dvh;max-height:none;border-radius:20px 20px 0 0;
+          transition:height .28s cubic-bezier(.2,.8,.2,1);z-index:40;padding-top:18px;box-shadow:0 -12px 40px rgba(0,0,0,.55);
+          background:#0e0d14;display:flex;flex-direction:column}
+        .mt-app.phone .mt-avatar[data-mode="hero"]{z-index:35}   /* below the sheet: raised, the sheet covers her */
+        .mt-app.phone .mt-avatar[data-mode="pip"]{z-index:45}
+        .mt-app.phone.sheet-open .mt-rail{height:88dvh}
+        .mt-sheethandle{position:absolute;top:0;left:0;right:0;height:22px;border:0;background:transparent;display:flex;justify-content:center;align-items:center;cursor:pointer;z-index:2}
+        .mt-sheethandle span{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,.35)}
+        .mt-app.phone .mt-avatar[data-mode="hero"]{border-radius:0}
+        .mt-bigmic-wrap{position:absolute;left:0;right:0;bottom:18px;display:flex;flex-direction:column;align-items:center;gap:8px;z-index:6}
+        .mt-bigmic{width:78px;height:78px;border-radius:50%;border:0;display:grid;place-items:center;color:#fff;cursor:pointer;
+          box-shadow:0 10px 30px rgba(0,0,0,.5);transition:transform .15s,background .2s}
+        .mt-bigmic:active{transform:scale(.94)}
+        .mt-bigmic.listening{background:linear-gradient(135deg,#10b981,#059669);animation:pulse 1.6s ease-in-out infinite}
+        .mt-bigmic.speaking{background:linear-gradient(135deg,#DAA520,#B8860B)}
+        .mt-bigmic.thinking{background:linear-gradient(135deg,#6366f1,#4f46e5)}
+        .mt-bigmic.muted,.mt-bigmic.off{background:rgba(248,113,113,.9)}
+        .mt-bigmic.starting{background:rgba(255,255,255,.18)}
+        .mt-bigmic-label{font-size:13px;font-weight:600;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.8);text-align:center;padding:0 16px}
+        .mt-spin{width:26px;height:26px;border-radius:50%;border:3px solid rgba(255,255,255,.35);border-top-color:#fff;animation:spin 0.9s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        /* the cards: swipe sideways, one per view */
+        .mt-app.phone .lw-cardBody{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:10px;-webkit-overflow-scrolling:touch}
+        .mt-app.phone .lw-cardBody .lw-opt{flex:0 0 82%;scroll-snap-align:center}
+        .mt-app.phone ol[style]{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;padding-left:0!important;list-style:none}
+        .mt-app.phone ol[style] > li{flex:0 0 84%;scroll-snap-align:center}
+        .mt-app.phone .mt-startwrap{padding-bottom:32px}
+        .mt-app.phone .mt-avatar[data-mode="pip"] .mt-startwrap,.mt-app.phone .mt-avatar[data-mode="pip"] .mt-ov-top,
+        .mt-app.phone .mt-avatar[data-mode="pip"] .mt-bigmic-wrap,.mt-app.phone .mt-avatar[data-mode="pip"] .mt-ov-hero{display:none!important}
+        .mt-app.phone .mt-avatar[data-mode="pip"]{border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.6)}
+        .mt-hsheet{position:fixed;inset:6dvh 0 0 0;z-index:60;background:#0f0f16;border-radius:18px 18px 0 0;display:flex;flex-direction:column;box-shadow:0 -20px 60px rgba(0,0,0,.7)}
+        .mt-hsheet-bar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;color:#fff;font-size:14px}
+        .mt-hsheet-bar button{border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:13px}
+        .mt-hsheet iframe{flex:1;border:0;width:100%;background:#fff}
       `}</style>
+      {isPhone && handover && (   /* Sasha 214 · Tap to finish in a sheet over her (the CAPTCHA, terms, their button) — then back to her */
+        <div className="mt-hsheet" role="dialog" aria-label="Finish the booking">
+          <div className="mt-hsheet-bar"><b>Finish the booking</b><button type="button" onClick={() => setHandover(null)}>Back to Sasha</button></div>
+          <iframe src={handover} title="Finish the booking" allow="clipboard-write" />
+        </div>
+      )}
     </main>
   )
 }

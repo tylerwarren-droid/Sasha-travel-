@@ -38,6 +38,9 @@ _DEFAULT_ORIGINS = [
     "https://project.kanoe.ai",
 ]
 _EXTRA_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+# Sasha 216 · the founder's yes: sasha-heygen's BRANCH previews (sasha-heygen-git-<branch>-applied-diligence.vercel.app) — their
+# mic key, agent calls and photos were CORS-blocked (the mic only worked through a public-key fallback, gone since 215)
+PREVIEW_ORIGINS = r"^https://sasha-heygen-git-[a-z0-9-]+-applied-diligence\.vercel\.app$"
 
 # Starlette applies the LAST-added middleware OUTERMOST. We want CORS outermost so that even
 # rejected requests (429/401 from the rate limiter) come back with CORS headers — otherwise
@@ -48,6 +51,7 @@ app.add_middleware(TenantMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_DEFAULT_ORIGINS + _EXTRA_ORIGINS,
+    allow_origin_regex=PREVIEW_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

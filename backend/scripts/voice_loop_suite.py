@@ -188,6 +188,13 @@ def judge(name: str, turns: list, ends_paid: bool) -> dict:
             if len(amounts) > 1:
                 fail.append(f"more than one total in a turn: {sorted(amounts)} · {t['text'][:120]}")
                 break
+    # Sasha 215 (f) · "book it" never re-plans: a turn that only asks to book plans nothing (run 20, Portugal: a new route and
+    # a second total in the booking turn)
+    from agapi.v0 import book_only
+    replans = [t for t in turns if book_only(t["user"]) and any(x.split("!")[0] in ("propose_trip", "prepare_trip") and "!" not in x
+                                                               for x in t["tools"])]
+    if replans:
+        fail.append(f"'{replans[0]['user'][:30]}' re-planned the trip: {replans[0]['tools']}")
     claims = [t["text"] for t in turns if AG._claims(t["text"] or "")]
     if claims:
         fail.append(f"claimed booked with nothing paid: {claims[:1]}")

@@ -215,7 +215,9 @@ async def expire_once() -> int:
         async with conn.transaction():
             n = await conn.fetchval("with d as (delete from product_cases where expires_at <= now() returning 1) select count(*) from d")
             await conn.execute("insert into retention_log (run_id, ran_at, rule, table_name, rows_affected, cutoff, note) "
-                               "values ($1, now(), 'cr1_product_cases_30d', 'product_cases', $2, now(), 'CR 1 · cases expire after 30 days')",
+                               # Sasha 216 · retention_log_rule_check allows only bodies / bookings / consent / all (checked live):
+                               # 'cr1_product_cases_30d' failed it and rolled the delete back every day — the rule's name is in the note
+                               "values ($1, now(), 'all', 'product_cases', $2, now(), 'cr1_product_cases_30d · CR 1 · cases expire after 30 days')",
                                uuid.uuid4(), n)
             return n
     return await STORE._run(fn)

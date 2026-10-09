@@ -65,9 +65,9 @@ class Email(Base):
     def test_a_yes_in_a_later_turn_sends_it_once_captured_for_a_guest(self):
         self.read_back_earlier()
         r = self.call("Yes, send it.", key="k2")
-        self.assertEqual(r["result"]["status"], "sent", r)
+        self.assertEqual(r["result"]["status"], "not_sent", r)               # CR 61: a guest's email is captured, and SAID so
         self.assertEqual(len(S.OUTBOX), 1)
-        self.assertIn("never sent", r["result"]["outcome"]["target_words"])   # a guest's email is captured, not sent
+        self.assertIn("Not sent", r["result"]["outcome"]["target_words"])
 
     def test_never_in_the_same_turn_as_its_read_back(self):
         r = self.call("Yes, email Marta our flight times")
@@ -76,7 +76,7 @@ class Email(Base):
 
     def test_sent_once_across_a_restart(self):
         self.read_back_earlier()
-        self.assertEqual(self.call("Yes, send it.", key="same")["result"]["status"], "sent")
+        self.assertEqual(self.call("Yes, send it.", key="same")["result"]["status"], "not_sent")   # CR 61 (a guest: captured)
         API._IDEM.clear()
         self.read_back_earlier()
         self.assertEqual(self.call("Yes, send it.", key="same")["error"]["code"], "already_done")

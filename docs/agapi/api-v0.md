@@ -1144,7 +1144,8 @@ Email someone the person names, FROM SASHA'S OWN ADDRESS (never their mailbox). 
   "status": {
    "enum": [
     "awaiting_yes",
-    "sent"
+    "sent",
+    "not_sent"
    ]
   }
  }

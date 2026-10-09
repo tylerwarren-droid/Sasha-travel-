@@ -375,6 +375,21 @@ def spoken_prose(text: str) -> str:
                     for x in out)
 
 
+def names_masked(text: str, names: set) -> str:
+    """Sasha 217 · the line with the names of the places on screen blanked, for the internals check only: a venue called
+    "Sasha Test Venue" or "The Test Kitchen" is a name, not a test disclaimer — "✅ Booked: Sasha Test Venue…" was dropped."""
+    out = text or ""
+    keys = set()
+    for n in names or ():
+        n = str(n).strip()
+        if n:
+            keys.add(n)
+            keys.add(re.sub(r"\s*\([^)]*\)\s*$", "", n).strip())   # "Casa Marea (test)" → "Casa Marea"
+    for n in sorted((k for k in keys if len(k) >= 3), key=len, reverse=True):
+        out = re.sub(re.escape(n), "the place", out, flags=re.I)
+    return out
+
+
 def drop_internal(text: str) -> str:
     keep = [x for x in re.split(r"(?<=[.!?])\s+", text or "") if x.strip() and not _INTERNAL.search(x)]
     return " ".join(keep)
@@ -493,7 +508,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 break
             if _norm(x) and _norm(x) in said_norms:   # Sasha 215 · never a sentence twice in a turn ("It's quoted." after each flight)
                 continue
-            if _INTERNAL.search(x):
+            if _INTERNAL.search(names_masked(x, tstate["allowed"])):   # Sasha 217 · a place's own name is never "internal"
                 internal_log.append(x[:80])
                 continue
             if _claims(x) and booked_now is None:

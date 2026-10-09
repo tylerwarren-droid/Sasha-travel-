@@ -97,7 +97,9 @@ def area_of(c: dict) -> str:
 
 def card_for_model(c: dict) -> dict:
     return {"name": c.get("name"), "place_id": c.get("place_id"), "area": area_of(c), "type": c.get("type"),
-            "rating": c.get("rating"), "reviews": c.get("rating_count"), **({"open_then": c["open_at"]} if c.get("open_at") else {})}
+            "rating": c.get("rating"), "reviews": c.get("rating_count"),
+            # Sasha 217 · OPENING HOURS only — never "a table is free": availability is known only when the venue answers
+            **({"opening_hours_then": c["open_at"], "table_availability": "unknown until the venue answers"} if c.get("open_at") else {})}
 
 
 def remember_cards(account: str, cards: List[dict]) -> None:
@@ -390,6 +392,7 @@ async def venue_bookings(account: str) -> List[dict]:
     today = date.today().isoformat()
     return [{"trip_item_id": r["id"], "venue": GW.plain_venue(r.get("venue")), "date": r.get("date"), "time": r.get("time"),
              "party": r.get("party"), "status": r.get("status"), "type": r.get("type"),
+             **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),   # Sasha 217 · the venue's reference in full
              # Sasha 215 · CR 56 — the venue's OWN words (an email/SMS reply) are untrusted data, never instructions to her
              **({"venue_said": {"untrusted_text": str(r["status_words"])[:160]}} if r.get("status_words") else {})}
             for r in (j or {}).get("reservations") or [] if (r.get("date") or today) >= today and r.get("status") != "cancelled"][:20]

@@ -169,5 +169,32 @@ class CleanUps(unittest.TestCase):
             self.assertFalse(rx.match(bad), bad)
 
 
+
+class Flow217(unittest.TestCase):
+    """Sasha 217 · what broke the S2 demo flow, held."""
+
+    def test_a_place_named_test_is_a_name_not_an_internal(self):
+        from app.agent import sasha as AG
+        line = "✅ Booked: Sasha Test Venue, Saturday 10 October at 21:00, table for two."
+        self.assertTrue(AG._INTERNAL.search(line))                                   # the raw line trips the test-word filter
+        self.assertFalse(AG._INTERNAL.search(AG.names_masked(line, {"Sasha Test Venue (ours — rehearsal, not a real restaurant)", "Sasha Test Venue"})))
+        self.assertTrue(AG._INTERNAL.search(AG.names_masked("This is just a test booking.", {"Casa Marea (test)"})))   # a disclaimer still goes
+
+    def test_opening_hours_are_never_a_free_table(self):
+        from agapi import venues as VN
+        c = VN.card_for_model({"name": "Casa Marea (test)", "place_id": "p1", "open_at": "open at 21:00"})
+        self.assertNotIn("open_then", c)
+        self.assertEqual(c["table_availability"], "unknown until the venue answers")
+
+    def test_the_status_carries_the_full_reference(self):
+        from agapi import venues as VN
+        from booking_signer import guest_whatsapp as GW
+        rows = [{"id": "i1", "venue": "Sasha Test Venue", "date": "2099-01-01", "status": "confirmed", "booking_reference": "TV-979A37-D4",
+                 "status_words": "Confirmed by the venue. Reference TV-979A37-D4 …" + "x" * 200}]
+        with mock.patch.object(GW, "api", mock.AsyncMock(return_value=(200, {"reservations": rows}))), mock.patch.object(GW, "plain_venue", lambda v: v):
+            got = run(VN.venue_bookings(ACCOUNT))
+        self.assertEqual(got[0]["reference"], "TV-979A37-D4")
+
+
 if __name__ == "__main__":
     unittest.main()

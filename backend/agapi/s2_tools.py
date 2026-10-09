@@ -119,7 +119,7 @@ async def add_to_calendar(ctx, a: dict) -> dict:
             if not (r.get("date") and r.get("time") and r.get("timezone")):
                 raise ToolError("no_time", "that booking has no confirmed date, time and time zone")
             ev = P.event_for_table(f"{bid}@sasha.kanoe", GW.plain_venue(r.get("venue")), r.get("address"),
-                                   _offset_iso(r["date"], r["time"], r["timezone"]), int(r.get("party") or 2), r.get("reference"))
+                                   _offset_iso(r["date"], r["time"], r["timezone"]), int(r.get("party") or 2), r.get("booking_reference") or r.get("reference"))   # Sasha 217
     if ev is None:
         from booking_signer import basket as BK, plan_store as PS
         p = await PS.latest(ctx.account)

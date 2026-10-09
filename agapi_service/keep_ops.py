@@ -163,9 +163,9 @@ async def keep_use(ctx, inp: dict):
                     "values (?, ?, ?, ?, 'show', null, null, 'bound', ?, ?)", ctx.account, th, it["id"], inp["end_user"], later(SHOW_TTL_MIN), ts())
         url = f"{config.PUBLIC_URL}/k/{token}"
         d = dests[0]
-        ctx.store.x("insert into messages (account, end_user, to_, channel, sent_at, body, approval_link) values (?, ?, ?, ?, ?, ?, ?)",
-                    ctx.account, inp["end_user"], d["value"], d["channel"], ts(),
-                    f"Your saved {it['masked']} — open to see it (once, {SHOW_TTL_MIN} minutes): {url}", None)
+        from . import adapters as AD   # CR 69 · the message goes through the messaging adapter (test: captured; live: phase 2)
+        AD.messenger(d["channel"], getattr(ctx, "mode", "test")).deliver(ctx.store, ctx.account, inp["end_user"], d["value"], d["channel"],
+                                                                         f"Your saved {it['masked']} — open to see it (once, {SHOW_TTL_MIN} minutes): {url}", None)
         return {"state": "sent_to_phone", "masked": it["masked"], "channel": d["channel"], "expires_at": later(SHOW_TTL_MIN)}, 200, None
     if not inp.get("hold_id"):
         raise AgapiError("invalid_input", "A saved item is filled into a booking: say which hold (hold_id).", {"path": "/hold_id", "rule": "required"})

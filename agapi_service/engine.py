@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, providers as PV, rules as R, webhooks as W
+from . import adapters as AD   # CR 69 · every provider call goes through an adapter (test: simulated; live: phase 2)
 from .registry import AgapiError
 from .store import Store, dumps, later, loads, now, parse_ts, ts
 from . import keep_ops as KO
@@ -24,6 +25,7 @@ class Ctx:
         self.store, self.key, self.account = store, key, key["account"]
         self.request_id, self.approval_id, self.idem_key = request_id, approval_id, idem_key
         self.up = PV.Upstream()
+        self.mode = key.get("mode", "test")               # CR 69 · test → simulated adapters; live → refused until phase 2
         self.unknown_act: Optional[str] = None           # outcome_unknown keeps the idempotency key in flight on this act
         self.consumed: Optional[str] = None              # an Approval this request consumed (released on a transient failure)
 
@@ -62,15 +64,15 @@ async def _find(ctx: Ctx, sources: List[dict], kind: str, key: str, ref_field: s
 
 
 async def find_flights(ctx: Ctx, inp: dict):
-    return await _find(ctx, await PV.find_flights(inp, ctx.up), "flight", "offers", "offer_ref")
+    return await _find(ctx, await AD.get("flights", ctx.mode).search(inp, ctx.up), "flight", "offers", "offer_ref")
 
 
 async def find_stays(ctx: Ctx, inp: dict):
-    return await _find(ctx, await PV.find_stays(inp, ctx.up), "stay", "stays", "stay_ref")
+    return await _find(ctx, await AD.get("places", ctx.mode).find_stays(inp, ctx.up), "stay", "stays", "stay_ref")
 
 
 async def find_venues(ctx: Ctx, inp: dict):
-    return await _find(ctx, await PV.find_venues(inp, ctx.up), "venue", "venues", "venue_ref")
+    return await _find(ctx, await AD.get("places", ctx.mode).find_venues(inp, ctx.up), "venue", "venues", "venue_ref")
 
 
 # ── the read-back: built the same way at hold time and at act time (so any change voids the Approval) ────────────────────
@@ -94,7 +96,7 @@ async def _priced(ctx: Ctx, items: List[dict], travellers: List[dict], *, at_act
             if len(travellers) < need:
                 raise AgapiError("travellers_missing", "The airline needs each traveller's full name, title and date of birth.",
                                  {"have": len(travellers), "need": need})
-            o, checked = await PV.recheck_flight(o, ctx.up, need)
+            o, checked = await AD.get("flights", ctx.mode).recheck(o, ctx.up, need)
             price = dict(o["price"])
             if at_act and o.get("_magic") == "off_test_price_jump":
                 price["amount_minor"] += 1500           # Part 4 §5: the fare moved since the read-back → payload_changed
@@ -238,9 +240,8 @@ async def approvals_request(ctx: Ctx, inp: dict):
     ctx.store.x("insert into approval_links (token_hash, account, read_back_id, end_user, channel, destination, expires_at, created_at) "
                 "values (?, ?, ?, ?, ?, ?, ?, ?)", h, ctx.account, rb["id"], rb["presented_to"], inp["channel"], dest["value"], expires, sent)
     url = f"{config.PUBLIC_URL}/a/{token}"
-    ctx.store.x("insert into messages (account, end_user, to_, channel, sent_at, body, approval_link) values (?, ?, ?, ?, ?, ?, ?)",
-                ctx.account, rb["presented_to"], dest["value"], _DEST[inp["channel"]], sent,
-                f"Please review and approve this request: {url} (single use, expires in {config.LINK_TTL_MIN} minutes).", url)
+    AD.messenger(_DEST[inp["channel"]], ctx.mode).deliver(ctx.store, ctx.account, rb["presented_to"], dest["value"], _DEST[inp["channel"]],
+                                                         f"Please review and approve this request: {url} (single use, expires in {config.LINK_TTL_MIN} minutes).", url)
     return {"read_back_id": rb["id"], "presentation": {"channel": inp["channel"], "sent_at": sent, "link_expires_at": expires}}, 200, None
 
 
@@ -379,7 +380,7 @@ async def trip_complete(ctx: Ctx, inp: dict):
             raise
     if total["amount_minor"] > 0:
         token, h = _token()
-        outcome = {"kind": "AWAITING_PAYMENT", "payment_url": f"{config.PUBLIC_URL}/pay/{token}"}
+        outcome = {"kind": "AWAITING_PAYMENT", "payment_url": AD.get("payments", ctx.mode).payment_link(token)}
         _new_act(ctx, aid, it, "complete", hold["id"], outcome, pay_hash=h)
         eid = _evidence(ctx, "trip.complete", aid, it["id"], inp, outcome, apv, [])
         ctx.store.x("update acts set evidence_id = ? where account = ? and id = ?", eid, ctx.account, aid)
@@ -388,7 +389,7 @@ async def trip_complete(ctx: Ctx, inp: dict):
         return {"act_id": aid, "intent_id": it["id"], "outcome": outcome, "evidence_id": eid}, 201, eid
     try:
         await KO.fill_for_act(ctx.store, ctx.account, hold, apv, aid, it["id"], "sandbox_" + priced[0]["kind"], ctx.up)   # CR 63
-        res = await PV.book_fixture(priced[0]["kind"], priced[0], ctx.up) if len(priced) == 1 else await _book_all(ctx, priced)
+        res = await AD.get("venue_ladder", ctx.mode).book(priced[0]["kind"], priced[0], ctx.up) if len(priced) == 1 else await _book_all(ctx, priced)
     except PV._Unknown as u:
         _unknown(ctx, aid, it, hold, inp, apv, u.service, None)
     except AgapiError as e:
@@ -418,7 +419,7 @@ def _unknown(ctx: Ctx, aid: str, it: dict, hold: dict, inp: dict, apv: dict, ser
 
 
 async def _book_all(ctx: Ctx, priced: List[dict]) -> dict:
-    got = [await PV.book_fixture(p["kind"], p, ctx.up) for p in priced]
+    got = [await AD.get("venue_ladder", ctx.mode).book(p["kind"], p, ctx.up) for p in priced]
     return {"reference": " · ".join(g["reference"] for g in got), "service": got[0]["service"],
             "words": " ".join(g["words"] for g in got), "sha256": R.sha256([g["sha256"] for g in got])}
 
@@ -451,9 +452,9 @@ async def pay(store: Store, act: dict) -> dict:
         await KO.fill_for_act(store, act["account"], hold, apv, act["id"], act["intent_id"], "duffel" if flights else "sandbox_" +
                               held["items"][0]["kind"], ctx.up)   # CR 63: at the moment of use, under the booking's yes
         if flights:
-            res = await PV.order_flight(_offer(ctx, "flight", flights[0]["ref"]), held["travellers"], ctx.up)
+            res = await AD.get("flights", ctx.mode).order(_offer(ctx, "flight", flights[0]["ref"]), held["travellers"], ctx.up)
         else:
-            res = await PV.book_fixture(priced[0]["kind"], priced[0], ctx.up)
+            res = await AD.get("venue_ladder", ctx.mode).book(priced[0]["kind"], priced[0], ctx.up)
         outcome = _confirmed(res)
         sources = [{"service": "stripe_test", "retrieved_at": ts()[:19] + "Z", "sha256": R.sha256({"paid": act["id"]})}, _source(res)]
     except AgapiError as e:
@@ -503,7 +504,8 @@ async def trip_cancel(ctx: Ctx, inp: dict):
     apv = _check_and_consume(ctx, rb, current, 1)
     cid = R.new_id("act")
     try:
-        res = await PV.cancel_fixture("duffel" if "Flight" in original[0] else "sandbox_venue", act["id"], ctx.up)
+        res = await (AD.get("flights", ctx.mode) if "Flight" in original[0] else AD.get("venue_ladder", ctx.mode)).cancel(
+            "duffel" if "Flight" in original[0] else "sandbox_venue", act["id"], ctx.up)
     except PV._Unknown as u:
         _unknown(ctx, cid, it, {"id": None}, inp, apv, u.service, None)
     outcome = _confirmed(res)
@@ -603,9 +605,8 @@ async def users_register(ctx: Ctx, inp: dict):
                     "created_at) values (?, ?, ?, ?, 0, ?, ?, ?, ?)", ctx.account, u["id"], d["channel"], v, _otp_hmac(code),
                     later(config.OTP_TTL_MIN), th, ts())
         url = f"{config.PUBLIC_URL}/v/{token}"
-        ctx.store.x("insert into messages (account, end_user, to_, channel, sent_at, body, approval_link) values (?, ?, ?, ?, ?, ?, ?)",
-                    ctx.account, u["id"], v, d["channel"], ts(),
-                    f"Your Kanoe verification code is {code}. Enter it at {url} (expires in {config.OTP_TTL_MIN} minutes).", None)
+        AD.messenger(d["channel"], ctx.mode).deliver(ctx.store, ctx.account, u["id"], v, d["channel"],
+                                                     f"Your Kanoe verification code is {code}. Enter it at {url} (expires in {config.OTP_TTL_MIN} minutes).", None)
     return end_user_out(ctx.store, ctx.account, u["id"]), status, None
 
 
@@ -782,9 +783,8 @@ async def messages_send_email(ctx: Ctx, inp: dict):
     aid, sent_at = R.new_id("act"), ts()
     provider_id = "sbx_msg_" + secrets.token_hex(10)
     reply_to = f"reply+{aid.lower()}@{config.REPLY_DOMAIN}"
-    ctx.store.x("insert into messages (account, end_user, to_, channel, sent_at, body, approval_link) values (?, ?, ?, 'email', ?, ?, ?)",
-                ctx.account, None, msg["to"]["address"], sent_at,
-                f"From: {msg['from']}\nReply-To: {reply_to}\nSubject: {msg['subject']}\n\n{msg['body']}", None)
+    AD.get("email", ctx.mode).deliver(ctx.store, ctx.account, None, msg["to"]["address"], "email",
+                                      f"From: {msg['from']}\nReply-To: {reply_to}\nSubject: {msg['subject']}\n\n{msg['body']}", None)
     ctx.up.add("email_provider_sandbox", __import__("time").perf_counter(), True)
     words = "Accepted for delivery by the mail service (sandbox: captured, never sent)."
     retrieved = sent_at[:19] + "Z"
@@ -827,9 +827,7 @@ async def calendar_add_event(ctx: Ctx, inp: dict):
     dtstamp = act["updated_at"][:19].replace("-", "").replace(":", "") + "Z"
     text, esha = P.ics(ev, dtstamp), P.sha256(ev)
     token, th = _token()
-    ctx.store.x("insert into calendar_files (token_hash, account, act_id, ics, created_at) values (?, ?, ?, ?, ?)",
-                th, ctx.account, act["id"], text, ts())
-    url = f"{config.PUBLIC_URL}/ics/{token}.ics"
+    url = AD.get("calendar", ctx.mode).publish(ctx.store, ctx.account, act["id"], text, token, th)
     retrieved = ts()[:19] + "Z"
     eid = _evidence(ctx, "calendar.add_event", act["id"], act["intent_id"], inp, None, None,
                     [{"service": "agapi_calendar", "retrieved_at": retrieved, "sha256": esha}])
@@ -883,8 +881,7 @@ async def messages_send_whatsapp(ctx: Ctx, inp: dict):
     apv = _check_and_consume(ctx, rb, {"intent_id": it["id"], "operation": "messages.send_whatsapp", "lines": lines, "payload": msg}, 1)
     aid, sent_at = R.new_id("act"), ts()
     provider_id = "sbx_wamid_" + secrets.token_hex(12)
-    ctx.store.x("insert into messages (account, end_user, to_, channel, sent_at, body, approval_link) values (?, ?, ?, 'whatsapp', ?, ?, ?)",
-                ctx.account, None, number, sent_at, msg["text"], None)
+    AD.get("whatsapp", ctx.mode).deliver(ctx.store, ctx.account, None, number, "whatsapp", msg["text"], None)
     if c:
         ctx.store.x("update wa_contacts set name = coalesce(?, name) where account = ? and number = ?", msg["to"].get("name"), ctx.account, number)
     else:
@@ -997,6 +994,21 @@ def _verified(ctx: Ctx, eid: Optional[str]) -> bool:
     return hmac.compare_digest(R.evidence_body_sha256(ev), ev.get("body_sha256", ""))
 
 
+async def magellan_read_site(ctx: Ctx, inp: dict):
+    """CR 69 · a Kanoe extension (for EU to formalize in 1.3): read a business's own public website → offers, partners, contacts and booking
+    channels, each quoting its source. Reads only; sends nothing. An unreadable site is an error whose details say why."""
+    from . import magellan as MG
+    import time as _t
+    t0 = _t.perf_counter()
+    try:
+        out = await MG.read_site(inp["url"], inp.get("purpose", "operator"))
+    except MG.Unreadable as u:
+        ctx.up.add("magellan_web", t0, False, u.rule)
+        raise u.as_error()
+    ctx.up.add("magellan_web", t0, True)
+    return out, 200, None
+
+
 async def activity_list(ctx: Ctx, inp: dict):
     """Everything Sasha did for this end user, newest first — from Pacioli's records only (acts, evidence, replies). Each row:
     our own one-line words, a green/red/amber check, what it's about (untrusted), and its proof (evidence_id, verified)."""
@@ -1062,4 +1074,5 @@ OPS = {"travel.find_flights": find_flights, "travel.find_stays": find_stays, "ve
        "approvals.status": approvals_status, "webhooks.register": webhooks_register, "users.verify_destination": users_verify_destination,
        "messages.send_email": messages_send_email, "calendar.add_event": calendar_add_event, "webhooks.revoke": webhooks_revoke,
        "messages.send_whatsapp": messages_send_whatsapp, "messages.replies": messages_replies, "activity.list": activity_list,
-       "sandbox.simulate_reply": sandbox_simulate_reply, "keep.activity": keep_activity, **KO.OPS}
+       "sandbox.simulate_reply": sandbox_simulate_reply, "keep.activity": keep_activity, **KO.OPS,
+       "magellan.read_site": magellan_read_site}   # CR 69 · a Kanoe extension (EU: 1.3)

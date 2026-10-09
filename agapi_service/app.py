@@ -17,7 +17,7 @@ from typing import Optional
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
-from . import config, engine as E, gen, providers as PV, rules as R, surface, webhooks as W
+from . import adapters as AD, config, engine as E, gen, providers as PV, rules as R, surface, webhooks as W
 from .registry import AgapiError, check_input, operations
 from .store import Store, dumps, later, loads, now, ts
 
@@ -51,8 +51,14 @@ _LOOP: Optional[asyncio.Task] = None
 async def _startup() -> None:
     global _LOOP
     config.pepper()                    # refuses to start deployed without AGAPI_KEY_PEPPER
+    if db().kind == "postgres" and config.IMPORT_SQLITE:   # CR 69 · the one-time move of the volume's SQLite rows into Postgres
+        from .store import import_sqlite
+        import logging
+        counts = import_sqlite(config.DB_PATH, db())
+        logging.getLogger("agapi").warning("sqlite → postgres import: %s", counts if counts is not None else "already done (or no SQLite file)")
     PV.install()
     _migrate_scopes(db())
+    ensure_products(db())              # CR 69
     W.allow_endpoint_hosts(db())
     if _LOOP is None:
         _LOOP = asyncio.create_task(W.loop(db))
@@ -77,17 +83,34 @@ def key_hmac(full_key: str) -> str:
     return hmac.new(config.pepper(), full_key.encode(), hashlib.sha256).hexdigest()
 
 
-def create_key(store: Store, account: str, label: str) -> str:
-    """→ the key, shown ONCE (agp_test_ + 32 base62); stored only as HMAC(pepper, key). At most 2 active per account per mode (K5)."""
+def create_key(store: Store, account: str, label: str, mode: str = "test", scopes: Optional[list] = None) -> str:
+    """→ the key, shown ONCE (agp_test_/agp_live_ + 32 base62); stored only as HMAC(pepper, key). At most 2 active per account per mode (K5).
+    CR 69: live keys exist (separate from test); every provider a live key could reach refuses until phase 2 connects it."""
     import secrets
-    active = store.q("select key_id from api_keys where account = ? and mode = 'test' and state = 'active'", account)
+    if mode not in ("test", "live"):
+        raise ValueError("mode is test or live")
+    active = store.q("select key_id from api_keys where account = ? and mode = ? and state = 'active'", account, mode)
     if len(active) >= 2:
-        raise ValueError("this account already has 2 active test keys — revoke one first (K5)")
-    full = "agp_test_" + "".join(secrets.choice(_B62) for _ in range(32))
+        raise ValueError(f"this account already has 2 active {mode} keys — revoke one first (K5)")
+    full = f"agp_{mode}_" + "".join(secrets.choice(_B62) for _ in range(32))
     store.x("insert into api_keys (key_id, account, mode, prefix, secret_hmac, scopes, budget_units, rate_per_min, label, state, created_at) "
-            "values (?, ?, 'test', ?, ?, ?, ?, ?, ?, 'active', ?)", R.new_id("key"), account, full[:15], key_hmac(full),
-            dumps(config.DEFAULT_SCOPES), config.DEFAULT_BUDGET_UNITS, config.DEFAULT_RATE_PER_MIN, label, ts())
+            "values (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)", R.new_id("key"), account, mode, full[:15], key_hmac(full),
+            dumps(scopes or config.DEFAULT_SCOPES), config.DEFAULT_BUDGET_UNITS, config.DEFAULT_RATE_PER_MIN, label, ts())
     return full
+
+
+def ensure_products(store: Store) -> None:
+    """CR 69 · one account per product (sasha, ad, dive, campusme); DIVE's existing 'DIVE-demo' account is dive's; every other account is a
+    partner. Additive: nothing is renamed or removed."""
+    for p in config.PRODUCTS:
+        if store.one("select 1 as y from accounts where product = ?", p):
+            continue
+        dive = store.one("select id from accounts where name = 'DIVE-demo' and product is null") if p == "dive" else None
+        if dive:
+            store.x("update accounts set product = 'dive' where id = ?", dive["id"])
+        else:
+            store.x("insert into accounts (id, name, created_at, product) values (?, ?, ?, ?)", R.new_id("acct"), f"{p} (product)", ts(), p)
+    store.x("update accounts set product = 'partner' where product is null")
 
 
 def create_account(store: Store, name: str) -> str:
@@ -148,10 +171,10 @@ def _charge(op: dict, ok: bool, code: Optional[str], replayed: bool) -> int:
 
 
 def _record(store: Store, key: dict, request_id: str, op_name: str, op: Optional[dict], units: int, replayed: bool, ok: bool,
-            code: Optional[str]) -> None:
-    store.x("insert into usage_records (request_id, key_id, account, mode, operation, cost_class, cost_units, replayed, ok, error_code, at) "
-            "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", request_id, key["key_id"], key["account"], key["mode"], op_name,
-            (op or {}).get("cost_class", "free"), units, int(replayed), int(ok), code, ts())
+            code: Optional[str], ms: Optional[int] = None) -> None:
+    store.x("insert into usage_records (request_id, key_id, account, mode, operation, cost_class, cost_units, replayed, ok, error_code, at, ms) "
+            "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", request_id, key["key_id"], key["account"], key["mode"], op_name,
+            (op or {}).get("cost_class", "free"), units, int(replayed), int(ok), code, ts(), ms)
     store.x("update api_keys set last_used_at = ? where key_id = ?", ts(), key["key_id"])
 
 
@@ -183,7 +206,8 @@ async def execute(op_name: str, headers: dict, raw: bytes, principal: Optional[d
         trace = {"operation": op_name, "agent": op["agent"], "ms": int((time.perf_counter() - t0) * 1000),
                  "upstream": ctx.up.calls if ctx else [], "cost_units": _charge(op, False, e.code, False)} if op else None
         if key and op:
-            _record(store, key, request_id, op_name, op, trace["cost_units"] if trace else 0, False, False, e.code)
+            _record(store, key, request_id, op_name, op, trace["cost_units"] if trace else 0, False, False, e.code,
+                    int((time.perf_counter() - t0) * 1000))
         return JSONResponse(_env(version if version in config.SUPPORTED else config.CONTRACT, request_id, body, trace),
                             status_code=e.http, headers=_headers(store, key, retry_after=e.retry_after_s))
 
@@ -198,6 +222,8 @@ async def execute(op_name: str, headers: dict, raw: bytes, principal: Optional[d
             raise AgapiError("forbidden", "This key's scopes don't include that operation.")
         if op.get("test_only") and key["mode"] != "test":
             raise AgapiError("mode_not_available", "That operation exists in test mode only.")
+        if key["mode"] == "live":
+            AD.require_live(op_name)       # CR 69 · refused BEFORE anything happens until phase 2 connects the provider
         if _per_minute(store, key) >= key["rate_per_min"]:
             raise AgapiError("rate_limited", "Too many requests for this key; slow down.", retry_after_s=30)
         if config.COST_UNITS[op["cost_class"]] > 0 and E.budget_remaining(store, key) <= 0:
@@ -239,7 +265,7 @@ async def execute(op_name: str, headers: dict, raw: bytes, principal: Optional[d
                                      {"act_id": row["act_id"]} if row["act_id"] else None, retry_after_s=2)
                 body = loads(row["response"])
                 trace = {"operation": op_name, "agent": op["agent"], "ms": int((time.perf_counter() - t0) * 1000), "upstream": [], "cost_units": 0}
-                _record(store, key, request_id, op_name, op, 0, True, body["ok"], (body.get("error") or {}).get("code"))
+                _record(store, key, request_id, op_name, op, 0, True, body["ok"], (body.get("error") or {}).get("code"), trace["ms"])
                 return JSONResponse(_env(version, request_id, {**body, "replayed": True}, trace), status_code=row["status"],
                                     headers=_headers(store, key, replayed=True))
             claimed = (key["account"], scope, idem)
@@ -250,7 +276,7 @@ async def execute(op_name: str, headers: dict, raw: bytes, principal: Optional[d
         if claimed:
             store.x("update idempotency set state = 'done', status = ?, response = ? where account = ? and scope = ? and idem_key = ?",
                     status, dumps(body), *claimed)
-        _record(store, key, request_id, op_name, op, units, False, True, None)
+        _record(store, key, request_id, op_name, op, units, False, True, None, int((time.perf_counter() - t0) * 1000))
         trace = {"operation": op_name, "agent": op["agent"], "ms": int((time.perf_counter() - t0) * 1000), "upstream": ctx.up.calls,
                  "cost_units": units}
         return JSONResponse(_env(version, request_id, body, trace), status_code=status, headers=_headers(store, key))
@@ -327,12 +353,21 @@ async def admin(action: str, req: Request):
     body = json.loads(raw or "{}")
     if action == "key":
         name = str(body.get("name") or "").strip()[:80]
+        product = str(body.get("product") or "").strip()
+        if not name and product in config.PRODUCTS:        # CR 69 · a product's own account
+            row = store.one("select id, name from accounts where product = ?", product)
+            name = row["name"] if row else ""
         if not name:
             return JSONResponse({"ok": False, "why": "name"}, status_code=400)
         row = store.one("select id from accounts where name = ?", name)
         acct = row["id"] if row else create_account(store, name)
+        mode = str(body.get("mode") or "test")
+        scopes = body.get("scopes")
+        allowed = set(config.DEFAULT_SCOPES) | {config.METRICS_SCOPE, "magellan.*"}
+        if scopes is not None and (not isinstance(scopes, list) or not scopes or not set(scopes) <= allowed):
+            return JSONResponse({"ok": False, "why": "scopes"}, status_code=400)
         try:
-            k = create_key(store, acct, str(body.get("label") or name)[:80])
+            k = create_key(store, acct, str(body.get("label") or name)[:80], mode, scopes)
         except ValueError as e:
             return JSONResponse({"ok": False, "why": str(e)}, status_code=409)
         kr = store.one("select key_id, prefix from api_keys where secret_hmac = ?", key_hmac(k))
@@ -363,4 +398,49 @@ async def ics_file(token: str):
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "mode": config.MODE, "spec": config.SPEC_DRAFT}
+    return {"ok": True, "mode": config.MODE, "spec": config.SPEC_DRAFT, "store": db().kind}   # CR 69 · + which store (additive)
+
+
+def _pct(xs: list, p: float) -> Optional[int]:
+    """Nearest-rank percentile (p in 0–100) of a list of ms."""
+    if not xs:
+        return None
+    s = sorted(xs)
+    import math
+    return s[max(0, min(len(s) - 1, math.ceil(p / 100 * len(s)) - 1))]
+
+
+@app.get("/metrics")
+async def metrics(req: Request, hours: int = 24):
+    """CR 69 · per-operation timing for Falguni: count, p50/p95 ms, errors, units — behind a key that holds metrics.* (no other key)."""
+    store = db()
+    try:
+        key = _auth(store, req.headers.get("authorization"))
+    except AgapiError as e:
+        return JSONResponse({"ok": False, "error": e.body()}, status_code=e.http)
+    if config.METRICS_SCOPE not in loads(key["scopes"]):
+        return JSONResponse({"ok": False, "error": {"code": "forbidden", "message": "This key can't read metrics.", "retryable": False}}, status_code=403)
+    hours = max(1, min(int(hours), 24 * 31))
+    since = ts(now() - __import__("datetime").timedelta(hours=hours))
+    rows = store.q("select u.operation, u.ms, u.ok, u.replayed, u.cost_units, u.mode, a.product from usage_records u "
+                   "left join accounts a on a.id = u.account where u.at >= ?", since)
+    ops: dict = {}
+    for r in rows:
+        o = ops.setdefault(r["operation"], {"calls": 0, "errors": 0, "replayed": 0, "units": 0, "_ms": []})
+        o["calls"] += 1
+        o["errors"] += 0 if r["ok"] else 1
+        o["replayed"] += r["replayed"]
+        o["units"] += r["cost_units"]
+        if r["ms"] is not None:
+            o["_ms"].append(r["ms"])
+    out = {k: {**{x: v[x] for x in ("calls", "errors", "replayed", "units")}, "p50_ms": _pct(v["_ms"], 50), "p95_ms": _pct(v["_ms"], 95),
+               "timed": len(v["_ms"])} for k, v in sorted(ops.items())}
+    by = {}
+    for r in rows:
+        by.setdefault(r["product"] or "partner", 0)
+        by[r["product"] or "partner"] += 1
+    allms = [r["ms"] for r in rows if r["ms"] is not None]
+    return JSONResponse({"ok": True, "window_hours": hours, "since": since, "store": store.kind, "calls": len(rows),
+                         "p50_ms": _pct(allms, 50), "p95_ms": _pct(allms, 95), "by_product": by, "by_mode": {
+                             m: sum(1 for r in rows if r["mode"] == m) for m in ("test", "live")},
+                         "operations": out, "adapters": AD.status()}, headers={"Cache-Control": "no-store"})

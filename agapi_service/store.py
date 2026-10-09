@@ -1,8 +1,12 @@
-"""Durable state: SQLite (a Railway volume in the sandbox; Postgres when it outgrows it). Every object row is keyed by its account,
+"""Durable state: SQLite (a Railway volume in the sandbox) — or, CR 69, Postgres when AGAPI_DATABASE_URL is set (a Railway Postgres in the
+agapi-sandbox project; the same SQL, translated in one place: ? placeholders, insert-or-replace/ignore → on conflict). Every object row is keyed by its account,
 so two customers never see — or collide with — each other's ids, keys or idempotency claims."""
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
+import re
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
@@ -74,9 +78,55 @@ create table if not exists wa_replies (account text not null, id text not null, 
 
 _LOCK = threading.RLock()
 
+# CR 69 · columns added after a database was made (both engines; additive only): (table, column, type)
+ADDED = [("usage_records", "ms", "int"), ("accounts", "product", "text")]
+
+
+_PK: Dict[str, List[str]] = {}
+
+
+def _primary_keys() -> Dict[str, List[str]]:
+    """Each table's primary key, read from the schema itself (for insert-or-replace → on conflict (pk) do update)."""
+    if not _PK:
+        for name, body in re.findall(r"create table if not exists (\w+) \((.*?)\);", _SCHEMA, re.S):
+            m = re.search(r"primary key \(([^)]*)\)", body)
+            cols = [c.strip() for c in m.group(1).split(",")] if m else [c.split()[0] for c in body.split(",") if "primary key" in c][:1]
+            _PK[name] = cols
+    return _PK
+
+
+def pg_sql(sql: str) -> str:
+    """SQLite's dialect, as Postgres reads it. Only what this service uses: ? → %s (a literal % doubled first), insert or ignore,
+    insert or replace (an upsert on the table's primary key), blob → bytea."""
+    out = sql.replace("%", "%%")
+    m = re.match(r"\s*insert or (ignore|replace) into (\w+) \(([^)]*)\)(.*)$", out, re.S | re.I)
+    if m:
+        kind, table, cols, rest = m.group(1).lower(), m.group(2), [c.strip() for c in m.group(3).split(",")], m.group(4).rstrip().rstrip(";")
+        out = f"insert into {table} ({', '.join(cols)}){rest}"
+        if kind == "ignore":
+            out += " on conflict do nothing"
+        else:
+            pk = _primary_keys().get(table) or []
+            upd = [c for c in cols if c not in pk]
+            out += f" on conflict ({', '.join(pk)}) do " + (("update set " + ", ".join(f"{c} = excluded.{c}" for c in upd)) if upd else "nothing")
+    out = re.sub(r"\bblob\b", "bytea", out)
+    return out.replace("?", "%s")
+
 
 class Store:
-    def __init__(self, path: Optional[str] = None):
+    def __init__(self, path: Optional[str] = None, url: Optional[str] = None):
+        url = url if url is not None else config.DATABASE_URL
+        self.kind = "postgres" if url else "sqlite"
+        if url:   # CR 69 · production: Postgres. A test's Store(path) gets its OWN schema, so tests stay isolated on one server.
+            self.path = path
+            self.schema = ("t_" + hashlib.sha256(path.encode()).hexdigest()[:16]) if path else None
+            self._url = url
+            self._connect()
+            self._script(_SCHEMA)
+            self.x("alter table webhook_endpoints add column if not exists events text")
+            for table, col, typ in ADDED:
+                self.x(f"alter table {table} add column if not exists {col} {typ}")
+            return
         self.path = path or config.DB_PATH
         self.db = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
         self.db.row_factory = sqlite3.Row
@@ -88,8 +138,44 @@ class Store:
                 self.db.execute(col)
             except sqlite3.OperationalError:
                 pass
+        for table, col, typ in ADDED:                                          # CR 69 columns, additive
+            if col not in {r[1] for r in self.db.execute(f"pragma table_info({table})")}:
+                self.db.execute(f"alter table {table} add column {col} {typ}")
+
+    # ── Postgres ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    def _connect(self) -> None:
+        import psycopg
+        from psycopg.rows import dict_row
+        self.db = psycopg.connect(self._url, autocommit=True, row_factory=dict_row, connect_timeout=10)
+        if self.schema:
+            self.db.execute(f"create schema if not exists {self.schema}")
+            self.db.execute(f"set search_path to {self.schema}")
+
+    def _script(self, script: str) -> None:
+        with _LOCK:
+            for stmt in [x.strip() for x in script.split(";") if x.strip()]:
+                self.db.execute(pg_sql(stmt).replace("%%", "%"))
+
+    def _pg(self, sql: str, a):
+        import psycopg
+        with _LOCK:
+            for attempt in (1, 2):
+                try:
+                    return self.db.execute(pg_sql(sql), a)
+                except psycopg.OperationalError:
+                    if attempt == 2 or self._in_tx:
+                        raise
+                    logging.getLogger("agapi").warning("postgres connection lost; reconnecting")
+                    self._connect()
+
+    _in_tx = False
 
     def q(self, sql: str, *a) -> List[Dict[str, Any]]:
+        if self.kind == "postgres":
+            with _LOCK:
+                cur = self._pg(sql, a)
+                return [dict(r) for r in cur.fetchall()] if cur.description else []
         with _LOCK:
             return [dict(r) for r in self.db.execute(sql, a).fetchall()]
 
@@ -98,8 +184,31 @@ class Store:
         return r[0] if r else None
 
     def x(self, sql: str, *a) -> int:
+        if self.kind == "postgres":
+            with _LOCK:
+                return self._pg(sql, a).rowcount
         with _LOCK:
             return self.db.execute(sql, a).rowcount
+
+    def raw_dump(self) -> bytes:
+        """Every byte this store holds (tests prove a secret is NOWHERE): SQLite → the file (+ its WAL); Postgres → every row of every
+        table in this store's schema, each value as text or raw bytes."""
+        if self.kind == "sqlite":
+            self.x("pragma wal_checkpoint(full)")
+            raw = b""
+            for suffix in ("", "-wal", "-shm"):
+                try:
+                    with open(self.path + suffix, "rb") as f:
+                        raw += f.read()
+                except FileNotFoundError:
+                    pass
+            return raw
+        out = []
+        for t in [r["table_name"] for r in self.q("select table_name from information_schema.tables where table_schema = current_schema()")]:
+            for row in self.q(f"select * from {t}"):
+                for v in row.values():
+                    out.append(bytes(v) if isinstance(v, (bytes, memoryview)) else str(v).encode())
+        return b"\n".join(out)
 
     def tx(self):
         store = self
@@ -107,12 +216,14 @@ class Store:
         class _T:
             def __enter__(self):
                 _LOCK.acquire()
-                store.db.execute("begin immediate")
+                store.db.execute("begin" if store.kind == "postgres" else "begin immediate")
+                store._in_tx = True
 
             def __exit__(self, et, ev, tb):
                 try:
                     store.db.execute("rollback" if et else "commit")
                 finally:
+                    store._in_tx = False
                     _LOCK.release()
                 return False
         return _T()
@@ -146,3 +257,39 @@ def dumps(o: Any) -> str:
 
 def loads(s: Optional[str]) -> Any:
     return json.loads(s) if s else None
+
+
+# ── CR 69 · the one-time move of the SQLite data into Postgres (the same rows; the SQLite file is left as it was) ────────
+
+def import_sqlite(sqlite_path: str, pg: "Store") -> Optional[Dict[str, Any]]:
+    """Copies every table's rows from the SQLite file into an EMPTY Postgres, once (marker: agapi_migrations 'sqlite_import'), and
+    checks the counts match table by table. → the counts, or None if already done / nothing to import."""
+    import os
+    pg.x("create table if not exists agapi_migrations (name text primary key, at text not null, detail text not null)")
+    if pg.one("select 1 as y from agapi_migrations where name = 'sqlite_import'") or not os.path.exists(sqlite_path):
+        return None
+    src = sqlite3.connect(sqlite_path)
+    src.row_factory = sqlite3.Row
+    tables = [r[0] for r in src.execute("select name from sqlite_master where type = 'table' and name not like 'sqlite_%'")]
+    counts: Dict[str, Any] = {}
+    with pg.tx():
+        for t in tables:
+            if not pg.one("select 1 as y from information_schema.tables where table_name = ? and table_schema = current_schema()", t):
+                pg.x(f"create table {t} (" + ", ".join(f"{r[1]} {r[2] or 'text'}" for r in src.execute(f"pragma table_info({t})")) + ")")
+            have = {r["column_name"] for r in pg.q("select column_name from information_schema.columns where table_name = ? and "
+                                                     "table_schema = current_schema()", t)}
+            cols = [r[1] for r in src.execute(f"pragma table_info({t})") if r[1] in have]
+            if pg.one(f"select count(*) as n from {t}")["n"]:
+                raise RuntimeError(f"postgres table {t} isn't empty — the import runs only into an empty database")
+            n = 0
+            for row in src.execute(f"select {', '.join(cols)} from {t}"):
+                pg.x(f"insert into {t} ({', '.join(cols)}) values ({', '.join('?' for _ in cols)})", *[row[c] for c in cols])
+                n += 1
+            counts[t] = n
+        for t, n in counts.items():
+            got = pg.one(f"select count(*) as n from {t}")["n"]
+            if got != n:
+                raise RuntimeError(f"{t}: {n} rows read, {got} in postgres")
+        pg.x("insert into agapi_migrations (name, at, detail) values ('sqlite_import', ?, ?)", ts(), dumps({"from": sqlite_path, "counts": counts}))
+    src.close()
+    return counts

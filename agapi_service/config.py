@@ -16,6 +16,12 @@ SUPPORTED = ("1.2", "1.1", "1.0", "1.0-draft.1", "1.0-draft.2", "1.0-draft.3", "
 MODE = "test"
 
 DB_PATH = os.getenv("AGAPI_DB", str(ROOT / "agapi_service" / "sandbox.db"))
+DATABASE_URL = os.getenv("AGAPI_DATABASE_URL", "").strip()   # CR 69 · a Railway Postgres; unset = SQLite (as before)
+IMPORT_SQLITE = os.getenv("AGAPI_IMPORT_SQLITE", "") == "1"    # CR 69 · once, on Railway: copy AGAPI_DB's rows into the empty Postgres
+# CR 69 · magellan.read_site's AI reader: AgAPI's own key (without it the operation says so) and the price it's logged at (USD/Mtok in, out)
+ANTHROPIC_KEY = os.getenv("AGAPI_ANTHROPIC_API_KEY", "").strip()
+READER_MODEL = os.getenv("AGAPI_READER_MODEL", "claude-opus-5-5").strip()
+READER_PRICE = tuple(float(x) for x in (os.getenv("AGAPI_READER_PRICE", "4,20").split(",") + ["0"])[:2])   # Opus 5.5's published price   # CR 69 · a Railway Postgres; unset = SQLite (as before)
 PUBLIC_URL = os.getenv("AGAPI_PUBLIC_URL", "http://127.0.0.1:8787").rstrip("/")
 KEY_PEPPER = os.getenv("AGAPI_KEY_PEPPER", "")
 
@@ -29,12 +35,15 @@ HOLD_TTL_MIN = 30
 OTP_TTL_MIN = 10
 IDEMPOTENCY_RETENTION_H = 24               # Part 1 I10
 
-COST_UNITS = {"free": 0, "read": 0, "search": 1, "message": 1, "act_prepare": 2, "act": 5}   # Part 4 M2 — placeholders (Tyler prices)
+COST_UNITS = {"free": 0, "read": 0, "search": 1, "message": 1, "act_prepare": 2, "act": 5, "site_read": 10}   # CR 69 · site_read: magellan.read_site   # Part 4 M2 — placeholders (Tyler prices)
 DEFAULT_BUDGET_UNITS = int(os.getenv("AGAPI_DEFAULT_BUDGET_UNITS", "5000"))   # per key per month (M4)
 DEFAULT_RATE_PER_MIN = int(os.getenv("AGAPI_DEFAULT_RATE_PER_MIN", "120"))   # per key per minute (M5)
+# CR 69 · one account per product (plus the partners'); test and live keys separate (agp_test_ / agp_live_)
+PRODUCTS = ("sasha", "ad", "dive", "campusme")
+METRICS_SCOPE = "metrics.*"                # /metrics (p50/p95 per operation) — only a key that holds this scope (Falguni's)
 DEFAULT_SCOPES = ["travel.*", "venues.*", "trip.*", "approvals.*", "acts.*", "evidence.*", "users.*", "usage.*", "sandbox.*", "webhooks.*",
-                  "messages.*", "calendar.*", "activity.*", "keep.*"]
-SCOPES_ADDED = {"webhooks.*": "CR 59", "messages.*": "CR 60", "calendar.*": "CR 60", "activity.*": "CR 62", "keep.*": "CR 63"}   # keys issued earlier gain these (additive)
+                  "messages.*", "calendar.*", "activity.*", "keep.*", "magellan.*"]
+SCOPES_ADDED = {"webhooks.*": "CR 59", "messages.*": "CR 60", "calendar.*": "CR 60", "activity.*": "CR 62", "keep.*": "CR 63", "magellan.*": "CR 69"}   # keys issued earlier gain these (additive)
 
 # CR 60 · Sasha's own sending address (never the user's mailbox). TYLER DECIDES the real one; in test mode nothing is sent.
 EMAIL_FROM = os.getenv("AGAPI_EMAIL_FROM", "Sasha (sandbox) <sasha@sandbox.agapi.kanoe.ai>")

@@ -23,7 +23,7 @@ from .store import ts
 
 MAGIC = ("off_test_sold_out", "off_test_timeout_before", "off_test_timeout_after", "off_test_price_jump")
 _INSTALLED = False
-ALLOWED_HOSTS: set = set()      # webhook endpoint hosts (added as endpoints are registered)
+ALLOWED_HOSTS: set = {"api.anthropic.com"}   # webhook endpoint hosts (added as endpoints are registered) + CR 69: magellan's AI reader
 
 
 class Upstream:
@@ -51,7 +51,8 @@ def block_network() -> None:
     ra, rs = httpx.AsyncClient.send, httpx.Client.send
 
     async def asend(self, request, *a, **k):
-        guard(request.url)
+        if not request.extensions.get("agapi_magellan"):   # CR 69 · magellan.read_site's own reads (public pages only, checked there)
+            guard(request.url)
         return await ra(self, request, *a, **k)
 
     def ssend(self, request, *a, **k):

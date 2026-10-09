@@ -126,8 +126,7 @@ class Keys(Base):
         row = self.store.one("select * from api_keys where account = ?", self.account)
         self.assertNotEqual(row["secret_hmac"], self.key)
         self.assertEqual(row["prefix"], self.key[:15])
-        with open(self.path, "rb") as f:
-            self.assertNotIn(self.key.encode(), f.read())
+        self.assertNotIn(self.key.encode(), self.store.raw_dump())   # CR 69 · either engine: every byte stored
 
     def test_auth_scopes_and_live(self):
         self.call("acts.status", key="agp_test_" + "x" * 32, expect="unauthenticated")
@@ -341,7 +340,7 @@ class Metering(Base):
         self.assertIn(("venues.find_venues", 1, 0), [(r["operation"], r["cost_units"], r["replayed"]) for r in rec])
         self.assertIn(("trip.hold", 2, 0), [(r["operation"], r["cost_units"], r["replayed"]) for r in rec])
         self.call("venues.find_venues", {"what": "x", "where": {"query": "src_test_down"}})
-        self.assertEqual(self.store.q("select cost_units from usage_records order by rowid desc limit 1")[0]["cost_units"], 0)
+        self.assertEqual(self.store.q("select cost_units from usage_records order by at desc limit 1")[0]["cost_units"], 0)
         u = self.ok("usage.get", {"from": "2026-01-01T00:00:00Z", "to": "2099-01-01T00:00:00Z"})
         self.assertGreater(u["total_cost_units"], 0)
         self.store.x("update api_keys set budget_units = 1 where account = ?", self.account)
@@ -476,7 +475,7 @@ class Extensions(Base):
         for op in ("messages.send_email", "messages.send_whatsapp", "messages.replies", "activity.list", "calendar.add_event",
                    "sandbox.simulate_reply", "keep.put", "keep.list", "keep.use", "keep.delete", "keep.activity"):
             self.assertEqual(operations()[op]["output"], eu_operations()[op]["output"], op)   # on EU's own schemas
-        self.assertEqual(set(operations()) - set(eu_operations()), set())                # every sandbox extension is now AgAPI
+        self.assertEqual(set(operations()) - set(eu_operations()), {"magellan.read_site"})   # CR 69: the one Kanoe extension (EU: 1.3)
         self.assertEqual(operations()["acts.status"]["output"], eu_operations()["acts.status"]["output"])
 
 

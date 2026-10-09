@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json",
-  "title": "Kanoe sandbox extensions to AgAPI v1.0 (CR 60) — ADDITIVE ONLY: messages.send_email, calendar.add_event",
+  "title": "Kanoe sandbox extensions to AgAPI v1.0 (CR 60) — ADDITIVE ONLY: messages.send_email, calendar.add_event · CR 69: magellan.read_site",
   "$defs": {
     "activity_item": {
       "type": "object",
@@ -342,6 +342,435 @@
           "type": "array",
           "items": {
             "$ref": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/activity_item"
+          }
+        }
+      }
+    },
+    "site_quote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "source",
+        "retrieved_at"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "retrieved_at": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "instruction_like": {
+          "type": "boolean"
+        }
+      }
+    },
+    "read_site_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "purpose": {
+          "enum": [
+            "operator",
+            "venue",
+            "registry"
+          ]
+        }
+      }
+    },
+    "read_site_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "purpose",
+        "operator",
+        "offers",
+        "partners",
+        "contacts",
+        "booking_channels",
+        "instruction_like",
+        "coverage",
+        "reader"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "purpose": {
+          "enum": [
+            "operator",
+            "venue",
+            "registry"
+          ]
+        },
+        "operator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "summary"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            }
+          }
+        },
+        "offers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "title",
+              "kind",
+              "source_url",
+              "quote",
+              "quote_found",
+              "instruction_like",
+              "confidence",
+              "low_confidence",
+              "notes"
+            ],
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "price_text": {
+                "type": "string"
+              },
+              "price_amount": {
+                "type": "number"
+              },
+              "currency": {
+                "type": "string"
+              },
+              "price_unit": {
+                "type": "string"
+              },
+              "duration_text": {
+                "type": "string"
+              },
+              "times_text": {
+                "type": "string"
+              },
+              "group_size_text": {
+                "type": "string"
+              },
+              "includes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "how_to_book": {
+                "type": "string"
+              },
+              "source_url": {
+                "type": "string"
+              },
+              "quote": {
+                "$ref": "#/$defs/site_quote"
+              },
+              "quote_found": {
+                "type": "boolean"
+              },
+              "instruction_like": {
+                "type": "boolean"
+              },
+              "confidence": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "low_confidence": {
+                "type": "boolean"
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "partners": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "kind",
+              "role",
+              "contacts",
+              "source_url",
+              "quote",
+              "quote_found",
+              "instruction_like",
+              "confidence",
+              "low_confidence",
+              "notes"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              },
+              "contacts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "source_url": {
+                "type": "string"
+              },
+              "quote": {
+                "$ref": "#/$defs/site_quote"
+              },
+              "quote_found": {
+                "type": "boolean"
+              },
+              "instruction_like": {
+                "type": "boolean"
+              },
+              "confidence": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "low_confidence": {
+                "type": "boolean"
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "contacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "value",
+              "source_url"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "email",
+                  "phone",
+                  "whatsapp"
+                ]
+              },
+              "value": {
+                "type": "string"
+              },
+              "source_url": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "booking_channels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "value",
+              "source_url",
+              "quote",
+              "quote_found",
+              "instruction_like",
+              "confidence",
+              "low_confidence",
+              "notes"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "form",
+                  "email",
+                  "phone",
+                  "whatsapp",
+                  "platform"
+                ]
+              },
+              "value": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "source_url": {
+                "type": "string"
+              },
+              "quote": {
+                "$ref": "#/$defs/site_quote"
+              },
+              "quote_found": {
+                "type": "boolean"
+              },
+              "instruction_like": {
+                "type": "boolean"
+              },
+              "confidence": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "low_confidence": {
+                "type": "boolean"
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "instruction_like": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source_url",
+              "quote",
+              "found"
+            ],
+            "properties": {
+              "source_url": {
+                "type": "string"
+              },
+              "quote": {
+                "$ref": "#/$defs/site_quote"
+              },
+              "found": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "start",
+            "pages_read",
+            "limit",
+            "urls",
+            "failed",
+            "skipped_by_robots",
+            "more_links_unread"
+          ],
+          "properties": {
+            "start": {
+              "type": "string"
+            },
+            "pages_read": {
+              "type": "integer"
+            },
+            "limit": {
+              "type": "integer"
+            },
+            "urls": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "failed": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "url",
+                  "why"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  },
+                  "why": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "skipped_by_robots": {
+              "type": "integer"
+            },
+            "more_links_unread": {
+              "type": "integer"
+            }
+          }
+        },
+        "reader": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "model"
+          ],
+          "properties": {
+            "model": {
+              "type": "string"
+            },
+            "input_tokens": {
+              "type": "integer"
+            },
+            "output_tokens": {
+              "type": "integer"
+            },
+            "usd": {
+              "type": "number"
+            }
           }
         }
       }

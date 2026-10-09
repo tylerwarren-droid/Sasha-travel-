@@ -47,13 +47,7 @@ class Keep(Base):
 
     def everywhere(self) -> str:
         """Every byte the sandbox wrote: the whole database file, plus the logs."""
-        self.store.x("pragma wal_checkpoint(full)")
-        raw = open(self.path, "rb").read()
-        for suffix in ("-wal", "-shm"):
-            try:
-                raw += open(self.path + suffix, "rb").read()
-            except FileNotFoundError:
-                pass
+        raw = self.store.raw_dump()      # CR 69 · SQLite: the file + WAL (as before); Postgres: every row of every table
         return raw.decode("latin-1") + "\n".join(self.logs)
 
     def assertNowhere(self, *values):

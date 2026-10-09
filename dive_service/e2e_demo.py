@@ -25,6 +25,14 @@ def _wd(w: int, after: int = 2) -> str:
     return d.isoformat()
 
 
+def _answer(page, supplier: str, button: str) -> None:
+    """The drawer plays a supplier's answer; the step ends when that leg stops waiting (it leaves the drawer) — never a fixed pause."""
+    card = page.locator(f"[data-testid=drawer-leg][data-supplier='{supplier}']")
+    expect(card).to_have_count(1, timeout=T)
+    card.locator("button", has_text=button).click()
+    expect(card).to_have_count(0, timeout=T)
+
+
 def run(base: str, token: str, log=print, headless: bool = True) -> None:
     base = base.rstrip("/")
     with sync_playwright() as p:
@@ -64,11 +72,13 @@ def run(base: str, token: str, log=print, headless: bool = True) -> None:
             page.locator(".card", has_text=n).locator("button", has_text=use).click()
             expect(page.locator(".card", has_text=n).locator("button", has_text="Send verification")).to_have_count(1, timeout=T)
             page.locator(".card", has_text=n).locator("button", has_text="Send verification").click()
-            page.wait_for_timeout(300)
+            expect(page.locator("[data-testid=msg]")).to_contain_text(n, timeout=T)       # its answer — never a fixed pause
         page.click("text=Test drawer")
         for n in ("Aegean Boats", "Kyma Gear"):
-            page.locator(".card", has_text=n).locator("button", has_text="Supplier: YES").click()
-            page.wait_for_timeout(300)
+            card = page.locator(".card", has_text=f"{n} · verification sent")
+            expect(card).to_have_count(1, timeout=T)
+            card.locator("button", has_text="Supplier: YES").click()
+            expect(card).to_have_count(0, timeout=T)                                       # verified: it leaves the drawer
         page.click("text=Suppliers")
         expect(page.locator("text=✓ verified")).to_have_count(4, timeout=T)
         step("verification: the boat and the gear shop replied YES (played in the drawer); the form dry-run and the feed search passed — 4 ✓ verified")
@@ -106,10 +116,8 @@ def run(base: str, token: str, log=print, headless: bool = True) -> None:
         page.click("text=Bookings")
         expect(page.locator("[data-testid=leg][data-supplier='Taverna Agios'][data-state=confirmed]")).to_have_count(1, timeout=T)
         page.click("text=Test drawer")
-        page.locator("[data-testid=drawer-leg][data-supplier='Kyma Gear']").locator("button", has_text="Supplier: YES").click()
-        page.wait_for_timeout(300)
-        page.locator("[data-testid=drawer-leg][data-supplier='Aegean Boats']").locator("button", has_text="ΝΑΙ").click()
-        page.wait_for_timeout(300)
+        _answer(page, "Kyma Gear", "Supplier: YES")
+        _answer(page, "Aegean Boats", "ΝΑΙ")
         page.click("text=Bookings")
         expect(page.locator("[data-testid=booking][data-state=confirmed]")).to_have_count(1, timeout=T)
         expect(phone.locator("#out")).to_contain_text("All confirmed. Here's your plan.", timeout=T)
@@ -126,10 +134,8 @@ def run(base: str, token: str, log=print, headless: bool = True) -> None:
         page.click("text=Test drawer")
         page.click("[data-testid=test-quote]")
         page.click("text=Test drawer")
-        page.locator("[data-testid=drawer-leg][data-supplier='Kyma Gear']").locator("button", has_text="Supplier: YES").click()
-        page.wait_for_timeout(300)
-        page.locator("[data-testid=drawer-leg][data-supplier='Aegean Boats']").locator("button", has_text="NO, full").click()
-        page.wait_for_timeout(300)
+        _answer(page, "Kyma Gear", "Supplier: YES")
+        _answer(page, "Aegean Boats", "NO, full")
         page.click("text=Bookings")
         failed = page.locator("[data-testid=booking][data-state=failed]")
         expect(failed).to_have_count(1, timeout=T)

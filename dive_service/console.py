@@ -118,8 +118,8 @@ function rail(){$("rail").innerHTML=TABS.map(([k,l])=>`<button class="${k===tab?
 function go(k){tab=k;rail();clearTimeout(timer);VIEWS[k]().catch(e=>{})}
 const when=s=>s?new Date(s).toLocaleString([], {day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}).toUpperCase():"";
 const VIEWS={
-async suppliers(){const r=await api("suppliers.list");const conf=r.suppliers.filter(s=>s.status==="confirmed"),dr=r.suppliers.filter(s=>s.status==="draft");
-$("view").innerHTML=`<div class="card row"><b>Suppliers · ${conf.length} confirmed · ${dr.length} drafts</b>
+async suppliers(){const my="suppliers";const r=await api("suppliers.list");const conf=r.suppliers.filter(s=>s.status==="confirmed"),dr=r.suppliers.filter(s=>s.status==="draft");
+if(tab===my)$("view").innerHTML=`<div class="card row"><b>Suppliers · ${conf.length} confirmed · ${dr.length} drafts</b>
 <button class="go" title="Reads your website and lists the businesses it mentions. You confirm each one." onclick="find()">Find suppliers on my site</button></div>`+
 dr.map(s=>`<div class="card"><b>${esc(s.name)}</b> · ${esc(s.kind.replace("_"," "))} <span class="mut">(${s.confidence}%)</span>
 <p class="q">Found on ${esc(s.evidence_of_source.source.replace("site:",""))}: “${esc(s.evidence_of_source.text)}”${s.evidence_of_source.instruction_like?' <span class="chip no" title="This text tries to instruct an AI. It was not acted on.">instruction-like: ignored</span>':''}</p>
@@ -129,12 +129,12 @@ conf.map(s=>`<div class="card"><b>${esc(s.name)}</b> · ${esc(s.kind.replace("_"
 <span class="chip ${c.verified?'ok':'amb'}">${esc(c.kind.replace("_"," "))} ${c.verified?'✓ verified '+when(c.verified_at):'· not verified'}</span> <span class="k">${esc(c.address)}</span>
 ${c.verified?'':`<button title="Sends one message asking them to reply YES to receive your booking requests." onclick="verify('${c.channel_id}')">Send verification</button>`}</p>`).join(""):
 `<p class="mut">No channel yet.</p>`)+`</div><div class="row">${chanForm(s)}</div></div>`).join("")},
-async packages(){const r=await api("packages.list");$("view").innerHTML=(r.packages.length?"":`<div class="card row"><span>No package yet.</span>
+async packages(){const my="packages";const r=await api("packages.list");if(tab===my)$("view").innerHTML=(r.packages.length?"":`<div class="card row"><span>No package yet.</span>
 <button class="go" title="Builds Discover Mykonos from your confirmed suppliers (dive + boat, gear, lunch, hotel)." onclick="fixture()">Create “Discover Mykonos”</button></div>`)+
 r.packages.map(p=>`<div class="card"><b>${esc(p.title)}</b> · €${p.price.amount_minor/100} per diver · <span class="chip ${p.published?'ok':'amb'}">${p.published?'Published':'Draft'}</span>
 <p class="mut">${esc(p.description||"")}</p><p class="mut">${p.components.map(c=>esc(c.label)+(c.required?"":" (optional)")).join(" · ")}</p>
 ${p.published?'':`<button class="go" title="Publishes your API and its docs page with this package." onclick="publish()">Publish</button>`}</div>`).join("")},
-async bookings(){const r=await api("bookings.list");$("view").innerHTML=r.bookings.map(b=>{const st=b.state;
+async bookings(){const my="bookings";const r=await api("bookings.list");if(tab===my)$("view").innerHTML=r.bookings.map(b=>{const st=b.state;
 const waiting=b.legs.filter(l=>["requested","pending","unreachable"].includes(l.state)).length;
 const chip=st==="confirmed"?'<span class="chip ok big">✓ Confirmed</span>':st==="failed"?'<span class="chip no big">✕ Couldn’t confirm</span>':
 st==="cancelled"?'<span class="chip amb">Cancelled</span>':st==="replaced"?'<span class="chip amb">Replaced — new read-back sent</span>':
@@ -147,15 +147,15 @@ return `<div class="card" data-testid="booking" data-state="${st}"><div class="r
 <p class="mut" data-testid="sentence">${esc(b.customer_sentence)}</p>${todo}<div class="legs">`+b.legs.map(l=>legRow(b,l)).join("")+
 `</div><div class="row">${b.evidence_id?`<button title="The whole booking's record." onclick="proof('${b.evidence_id}')" data-testid="booking-proof">Booking proof</button>`:""}${act}</div></div>`}).join("")||'<p class="mut">No bookings yet.</p>';
 timer=setTimeout(()=>tab==="bookings"&&!document.querySelector("#view input:focus,#view select:focus")&&VIEWS.bookings().catch(()=>{}),3000)},
-async activity(){const r=await api("activity.list");$("view").innerHTML='<div class="card">'+r.items.map(i=>`<p>${when(i.at)} · ${esc(i.line)}
+async activity(){const my="activity";const r=await api("activity.list");if(tab===my)$("view").innerHTML='<div class="card">'+r.items.map(i=>`<p>${when(i.at)} · ${esc(i.line)}
 ${i.evidence_id?`<button title="Opens the record and checks it." onclick="proof('${i.evidence_id}')">Proof</button>`:""}</p>`).join("")+'</div>';timer=setTimeout(()=>tab==="activity"&&VIEWS.activity().catch(()=>{}),4000)},
-async api(){$("view").innerHTML=`<div class="card"><p>Your API: <span class="k">${location.origin}/o/{slug}/v1</span> · Docs: <span class="k">${location.origin}/o/{slug}/docs</span></p>
+async api(){const my="api";if(tab===my)$("view").innerHTML=`<div class="card"><p>Your API: <span class="k">${location.origin}/o/{slug}/v1</span> · Docs: <span class="k">${location.origin}/o/{slug}/docs</span></p>
 <div class="row"><a class="btn" href="/o/{slug}/docs" target="_blank" title="Your API's documentation, under your name">Open my docs</a>
 <a class="btn" href="/o/{slug}/book" target="_blank" title="Your customers' booking page">Open my booking page</a>
 <button title="Creates a key for a partner or your own website. Shown once." onclick="issue()">Issue a key</button></div><p id="key" class="k"></p></div>`},
-async drawer(){const r=await api("bookings.list");const open=r.bookings.flatMap(b=>b.legs.filter(l=>l.state==="requested").map(l=>({...l,b})));
+async drawer(){const my="drawer";const r=await api("bookings.list");const open=r.bookings.flatMap(b=>b.legs.filter(l=>l.state==="requested").map(l=>({...l,b})));
 const ds=await api("drawer.state");const cap=await api("captured.list");
-$("view").innerHTML=`<div class="card"><p class="mut">Test mode: in test we can play the supplier. Nothing here reaches a real phone.</p>
+if(tab===my)$("view").innerHTML=`<div class="card"><p class="mut">Test mode: in test we can play the supplier. Nothing here reaches a real phone.</p>
 <button class="go" data-testid="test-quote" title="Prepares the Thursday booking for the failure beat and sends its requests." onclick="testQuote()">Prepare the Thursday booking</button></div>`+
 ds.verifications.map(v=>`<div class="card"><b>${esc(v.supplier)}</b> · verification sent by ${esc(v.kind)}<div class="row">
 <button data-testid="verify-yes-${v.channel_id}" title="Plays the supplier answering YES to the verification" onclick="vreply('${v.channel_id}','YES')">Supplier: YES</button></div></div>`).join("")+
@@ -179,17 +179,17 @@ ${l.reply?` <span class="q">“${esc(l.reply.text)}”</span>`:""} ${l.evidence_
 async function act(op,body){await api(op,body);VIEWS.bookings()}
 async function record(id){await api("legs.record_answer",{leg_id:id,answer:$("ra-"+id).value,note:$("rn-"+id).value,by:"the operator"});VIEWS.bookings()}
 async function offer(id){const d=$("d-"+id).value;if(!d){$("msg").textContent="Choose a date to offer.";return}const r=await api("bookings.offer_another_time",{bundle_id:id,date:d,start_time:$("t-"+id).value});
-$("msg").textContent="A new read-back went to the customer.";VIEWS.bookings()}
-async function cancelB(id){const r=await api("bookings.cancel",{bundle_id:id});$("msg").textContent=r.state==="sent_to_customer"?"The cancellation went to the customer to approve.":"Cancelled.";VIEWS.bookings()}
+await VIEWS.bookings();$("msg").textContent="A new read-back went to the customer."}
+async function cancelB(id){const r=await api("bookings.cancel",{bundle_id:id});await VIEWS.bookings();$("msg").textContent=r.state==="sent_to_customer"?"The cancellation went to the customer to approve.":"Cancelled."}
 async function find(){$("view").innerHTML='<p class="big">Reading the site…</p>';try{await api("suppliers.draft_from_site")}catch(e){}VIEWS.suppliers()}
 async function setSup(id,st){await api("suppliers.put",{supplier_id:id,status:st});VIEWS.suppliers()}
 function chanForm(s){const c=s.contacts||{};const opts=[c.whatsapp?["whatsapp",c.whatsapp]:null,c.email?["email",c.email]:null,c.web_form?["web_form",c.web_form]:null,
 s.kind==="hotel_feed"?["feed","feed:sandbox-hotels#Hotel Kyma View"]:null].filter(Boolean);
 return opts.filter(([k])=>!s.channels.some(x=>x.kind===k)).map(([k,a])=>`<button title="Adds ${k.replace("_"," ")} (${esc(a)}) as how bookings reach them." onclick="addChan('${s.supplier_id}','${k}','${esc(a)}')">Use ${k.replace("_"," ")}</button>`).join("")}
 async function addChan(id,k,a){await api("channels.put",{supplier_id:id,kind:k,address:a});VIEWS.suppliers()}
-async function verify(id){const r=await api("channels.verify",{channel_id:id});$("msg").textContent=r.say;VIEWS.suppliers()}
+async function verify(id){const r=await api("channels.verify",{channel_id:id});await VIEWS.suppliers();$("msg").textContent=r.say}
 async function fixture(){await api("packages.from_fixture");VIEWS.packages()}
-async function publish(){const r=await api("operator_api.publish");$("msg").textContent="Published: "+r.base_url;VIEWS.packages()}
+async function publish(){const r=await api("operator_api.publish");await VIEWS.packages();$("msg").textContent="Published: "+r.base_url}
 async function issue(){const r=await api("operator_keys.issue",{label:"Partner key"});$("key").textContent="Shown once: "+r.key}
 async function testQuote(){await api("bookings.test_quote");go("bookings")}
 async function reply(id,t){await api("sandbox.supplier_reply",{leg_id:id,text:t});VIEWS.drawer()}

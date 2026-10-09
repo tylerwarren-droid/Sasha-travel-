@@ -399,6 +399,9 @@ async def search_venues(ctx: Ctx, a: dict) -> dict:
     key = ((a.get("what") or "").strip().lower(), (a.get("where") or "").strip().lower(), a.get("open_at"))
     last = _LAST_FIND.get(ctx.account)
     if last and last[0][:2] == key[:2] and time.time() - last[1] < 1200:   # Sasha 212 · the same search again: the cards stand
+        if ctx.surface == "s2" and last[2].get("preset"):   # Sasha 221 · /s2: a fresh page (a reload, a rehearsal) shows those SAME cards again — still no new search
+            return {**{k: last[2][k] for k in ("venues", "find", "preset", "ribbon") if k in last[2]},
+                    "note": "these are already on their cards — pick from them; no new search"}
         return {"venues": last[2]["venues"], "note": "these are already on their cards — pick from them; no new search"}
     res = await _search_venues(ctx, a)
     _LAST_FIND[ctx.account] = (key, time.time(), res)

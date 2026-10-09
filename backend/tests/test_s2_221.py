@@ -84,6 +84,25 @@ class DemoSetting(unittest.TestCase):
         self.assertNotIn("s2_demo", calls[0])
         self.assertTrue(calls[1]["s2_demo"])
 
+    def test_a_repeat_search_shows_the_same_cards_on_s2_only(self):
+        import time
+        from app.agent import sasha as AG
+        a = {"what": "dinner", "where": "Sol"}
+        first = {"venues": [{"name": "Casa Gate"}], "find": {"what": "dinner", "where": "Sol"}, "ribbon": "r",
+                 "preset": {"all": [{"place_id": "p1"}], "cards": [{"place_id": "p1"}], "show": 5}}
+        API._LAST_FIND[ACCOUNT] = (("dinner", "sol", None), time.time(), first)
+        try:
+            with mock.patch.object(API, "_search_venues", mock.AsyncMock(side_effect=AssertionError("no new search"))):
+                s1 = run(API.search_venues(API.Ctx(account=ACCOUNT), a))
+                s2 = run(API.search_venues(API.Ctx(account=ACCOUNT, surface="s2"), a))
+        finally:
+            API._LAST_FIND.pop(ACCOUNT, None)
+        self.assertEqual(set(s1), {"venues", "note"})   # S1 exactly as before
+        self.assertIsNone(AG.render("search_venues", s1, a))
+        ev = AG.render("search_venues", s2, a)
+        self.assertEqual(ev["kind"], "venues")
+        self.assertEqual(ev["preset"]["cards"], [{"place_id": "p1"}])
+
     def test_who_has_the_demo_setting(self):
         from booking_signer import ladder_routes as LR, guest_accounts as GA
         with mock.patch.object(GA, "founder", lambda a: a == "f"), mock.patch.dict("os.environ", {"SASHA_S2_DEMO_ACCOUNTS": "fixture-1"}):

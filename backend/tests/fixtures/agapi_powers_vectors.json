@@ -236,5 +236,359 @@
         }
       }
     }
-  ]
+  ],
+  "whatsapp": [
+    {
+      "id": "WA-1 free text inside the window",
+      "input": {
+        "from": "+15005550100",
+        "to": {
+          "number": "+44 7700 900123",
+          "name": "Marta"
+        },
+        "text": "Running 10 minutes late — order me the croquetas!"
+      },
+      "expect": {
+        "message": {
+          "from": "+15005550100",
+          "to": {
+            "number": "+447700900123",
+            "name": "Marta"
+          },
+          "kind": "text",
+          "text": "Running 10 minutes late — order me the croquetas!"
+        },
+        "read_back": [
+          "Send this WhatsApp from +15005550100 (Sasha's number — not your phone).",
+          "To: Marta (+447700900123)",
+          "Running 10 minutes late — order me the croquetas!",
+          "Once sent it can't be unsent. Their reply comes to Sasha, and you'll see it word for word."
+        ],
+        "payload_sha256": "sha256:820d356e7538124cdf1370dc07de89f3d14a0219db836ce1fa5d11b64ec1dd70",
+        "body_sha256": "sha256:8d5925216b0153fcfcf975f0152153dba15b0c49726c092b94eaa941afe7853e"
+      }
+    },
+    {
+      "id": "WA-2 first contact: the approved template",
+      "input": {
+        "from": "+15005550100",
+        "to": {
+          "number": "0044 7700 900123",
+          "name": "Marta"
+        },
+        "template": "kanoe_on_behalf_v1",
+        "on_behalf_of": "Ana"
+      },
+      "expect": {
+        "message": {
+          "from": "+15005550100",
+          "to": {
+            "number": "+447700900123",
+            "name": "Marta"
+          },
+          "kind": "template",
+          "template": {
+            "name": "kanoe_on_behalf_v1",
+            "language": "en",
+            "params": [
+              "Marta",
+              "Ana"
+            ]
+          },
+          "text": "Hi Marta, this is Sasha, an assistant writing for Ana. Ana asked me to send you a message here. Reply YES to receive it, or STOP and I won't write again."
+        },
+        "read_back": [
+          "Send this WhatsApp from +15005550100 (Sasha's number — not your phone).",
+          "To: Marta (+447700900123)",
+          "WhatsApp's approved first message (they haven't written to Sasha in the last 24 hours):",
+          "Hi Marta, this is Sasha, an assistant writing for Ana. Ana asked me to send you a message here. Reply YES to receive it, or STOP and I won't write again.",
+          "Your own note isn't sent now: only after they reply, and after you say yes to it again.",
+          "Once sent it can't be unsent. Their reply comes to Sasha, and you'll see it word for word."
+        ],
+        "payload_sha256": "sha256:aa4c4856cc7818558d3d217fa5ea34e1d4151896e7c51dabc8829330f4d2b230",
+        "body_sha256": "sha256:7f001cbfc3880ec6d7d2db3c7cd3853d95c35417d8ad4252cb40a8cad1d5873a"
+      }
+    },
+    {
+      "id": "WA-3 first contact without a name",
+      "input": {
+        "from": "+15005550100",
+        "to": {
+          "number": "+34 600 000 001"
+        },
+        "template": "kanoe_on_behalf_v1",
+        "on_behalf_of": "Ana García"
+      },
+      "expect": {
+        "message": {
+          "from": "+15005550100",
+          "to": {
+            "number": "+34600000001"
+          },
+          "kind": "template",
+          "template": {
+            "name": "kanoe_on_behalf_v1",
+            "language": "en",
+            "params": [
+              "there",
+              "Ana García"
+            ]
+          },
+          "text": "Hi there, this is Sasha, an assistant writing for Ana García. Ana García asked me to send you a message here. Reply YES to receive it, or STOP and I won't write again."
+        },
+        "read_back": [
+          "Send this WhatsApp from +15005550100 (Sasha's number — not your phone).",
+          "To: +34600000001",
+          "WhatsApp's approved first message (they haven't written to Sasha in the last 24 hours):",
+          "Hi there, this is Sasha, an assistant writing for Ana García. Ana García asked me to send you a message here. Reply YES to receive it, or STOP and I won't write again.",
+          "Your own note isn't sent now: only after they reply, and after you say yes to it again.",
+          "Once sent it can't be unsent. Their reply comes to Sasha, and you'll see it word for word."
+        ],
+        "payload_sha256": "sha256:f278cfac095b8b6a21b8e6795487e698629109cf80e6295d782e2b293b919c84",
+        "body_sha256": "sha256:c039720fc72df4498b47bf5e276fabd9dfd9b083c4e4f2ff31156d39cb290878"
+      }
+    },
+    {
+      "id": "WA-4 multi-line text",
+      "input": {
+        "from": "+15005550100",
+        "to": {
+          "number": "+447700900123"
+        },
+        "text": "Table at 21:00\n\nSee you there"
+      },
+      "expect": {
+        "message": {
+          "from": "+15005550100",
+          "to": {
+            "number": "+447700900123"
+          },
+          "kind": "text",
+          "text": "Table at 21:00\n\nSee you there"
+        },
+        "read_back": [
+          "Send this WhatsApp from +15005550100 (Sasha's number — not your phone).",
+          "To: +447700900123",
+          "Table at 21:00",
+          "·",
+          "See you there",
+          "Once sent it can't be unsent. Their reply comes to Sasha, and you'll see it word for word."
+        ],
+        "payload_sha256": "sha256:e3875ce2ba0c50fb4a865260b3bf028172cb7af8d4fb10bb67058dd6773dadad",
+        "body_sha256": "sha256:78c697a4179b73d4fbb333cb60bc360acc4e230a0af9f9bcd2e115f4ffd29428"
+      }
+    }
+  ],
+  "whatsapp_refused": [
+    {
+      "id": "WAR-1 not international",
+      "input": {
+        "to": {
+          "number": "07700 900123"
+        },
+        "text": "hi"
+      },
+      "expect": {
+        "path": "/to/number",
+        "rule": "e164"
+      }
+    },
+    {
+      "id": "WAR-2 neither text nor template",
+      "input": {
+        "to": {
+          "number": "+447700900123"
+        }
+      },
+      "expect": {
+        "path": "/text",
+        "rule": "one_of"
+      }
+    },
+    {
+      "id": "WAR-3 both",
+      "input": {
+        "to": {
+          "number": "+447700900123"
+        },
+        "text": "hi",
+        "template": "kanoe_on_behalf_v1",
+        "on_behalf_of": "Ana"
+      },
+      "expect": {
+        "path": "/text",
+        "rule": "one_of"
+      }
+    },
+    {
+      "id": "WAR-4 unknown template",
+      "input": {
+        "to": {
+          "number": "+447700900123"
+        },
+        "template": "marketing_v9",
+        "on_behalf_of": "Ana"
+      },
+      "expect": {
+        "path": "/template",
+        "rule": "unknown_template"
+      }
+    },
+    {
+      "id": "WAR-5 a brace in a name",
+      "input": {
+        "to": {
+          "number": "+447700900123"
+        },
+        "template": "kanoe_on_behalf_v1",
+        "on_behalf_of": "Ana {{1}}"
+      },
+      "expect": {
+        "path": "/on_behalf_of",
+        "rule": "param"
+      }
+    },
+    {
+      "id": "WAR-6 too long",
+      "input": {
+        "to": {
+          "number": "+447700900123"
+        },
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "expect": {
+        "path": "/text",
+        "rule": "text"
+      }
+    }
+  ],
+  "whatsapp_window": [
+    {
+      "id": "WIN-1 never wrote",
+      "last_inbound_at": null,
+      "now": "2026-10-09T10:00:00Z",
+      "open": false
+    },
+    {
+      "id": "WIN-2 23h59m ago",
+      "last_inbound_at": "2026-10-08T10:01:00Z",
+      "now": "2026-10-09T10:00:00Z",
+      "open": true
+    },
+    {
+      "id": "WIN-3 exactly 24h",
+      "last_inbound_at": "2026-10-08T10:00:00Z",
+      "now": "2026-10-09T10:00:00Z",
+      "open": true
+    },
+    {
+      "id": "WIN-4 24h01m ago",
+      "last_inbound_at": "2026-10-08T09:59:00Z",
+      "now": "2026-10-09T10:00:00Z",
+      "open": false
+    },
+    {
+      "id": "WIN-5 offsets",
+      "last_inbound_at": "2026-10-08T12:30:00+02:00",
+      "now": "2026-10-09T10:29:00Z",
+      "open": true
+    }
+  ],
+  "activity": [
+    {
+      "id": "ACT-1",
+      "input": {
+        "kind": "booking",
+        "state": "done",
+        "at": "2026-11-20T21:00:00+01:00",
+        "ref": "act_1",
+        "proof": "evd_1"
+      },
+      "expect": {
+        "kind": "booking",
+        "state": "done",
+        "check": "green",
+        "line": "Booked",
+        "at": "2026-11-20T20:00:00.000000Z",
+        "ref": "act_1",
+        "proof": "evd_1"
+      }
+    },
+    {
+      "id": "ACT-2",
+      "input": {
+        "kind": "booking",
+        "state": "waiting",
+        "at": "2026-10-09T10:00:00.123456Z",
+        "ref": "act_2"
+      },
+      "expect": {
+        "kind": "booking",
+        "state": "waiting",
+        "check": "amber",
+        "line": "Waiting for payment",
+        "at": "2026-10-09T10:00:00.123456Z",
+        "ref": "act_2"
+      }
+    },
+    {
+      "id": "ACT-3",
+      "input": {
+        "kind": "email",
+        "state": "not_sent",
+        "at": "2026-10-09T10:00:00Z",
+        "ref": "act_3"
+      },
+      "expect": {
+        "kind": "email",
+        "state": "not_sent",
+        "check": "red",
+        "line": "Email not sent",
+        "at": "2026-10-09T10:00:00.000000Z",
+        "ref": "act_3"
+      }
+    },
+    {
+      "id": "ACT-4",
+      "input": {
+        "kind": "cancellation",
+        "state": "failed",
+        "at": "2026-10-09T10:00:00Z",
+        "ref": "act_4",
+        "proof": "evd_4"
+      },
+      "expect": {
+        "kind": "cancellation",
+        "state": "failed",
+        "check": "red",
+        "line": "Cancellation failed",
+        "at": "2026-10-09T10:00:00.000000Z",
+        "ref": "act_4",
+        "proof": "evd_4"
+      }
+    },
+    {
+      "id": "ACT-5",
+      "input": {
+        "kind": "whatsapp_reply",
+        "state": "done",
+        "at": "2026-10-09T10:00:00Z",
+        "ref": "rpl_5"
+      },
+      "expect": {
+        "kind": "whatsapp_reply",
+        "state": "done",
+        "check": "green",
+        "line": "They replied on WhatsApp",
+        "at": "2026-10-09T10:00:00.000000Z",
+        "ref": "rpl_5"
+      }
+    }
+  ],
+  "whatsapp_template": {
+    "name": "kanoe_on_behalf_v1",
+    "language": "en",
+    "params": 2,
+    "body": "Hi {{1}}, this is Sasha, an assistant writing for {{2}}. {{2}} asked me to send you a message here. Reply YES to receive it, or STOP and I won't write again."
+  }
 }

@@ -78,6 +78,7 @@ async def send_email(ctx, a: dict) -> dict:
     if not live_for(ctx.account):   # CR 61 · captured, and SAID so: never status "sent" for a message that didn't leave
         provider_id = "test_msg_" + secrets.token_hex(10)
         OUTBOX.append({"account": ctx.account, "message": msg, "provider_id": provider_id, "sent_at": sent_at})
+        await _activity(ctx.account, "not_sent", msg, sha, said, None, sent_at)   # CR 62 · in the Activity view, as not sent
         return {"status": "not_sent", "outcome": {"kind": "NOT_SENT", "reference": provider_id,
                                                    "target_words": "Not sent: real email isn't open on this account yet. Nothing left Sasha."},
                 "say": "Tell them plainly it was NOT sent: real email isn't open on their account yet. Never say it was sent.",
@@ -87,6 +88,7 @@ async def send_email(ctx, a: dict) -> dict:
         from booking_signer.ladder_routes import HTTP
         got = await EM.send(HTTP, {"from": msg["from"], "to": msg["to"]["address"], "subject": msg["subject"], "text": msg["body"]})
         if not got.sent:
+            await _activity(ctx.account, "failed", msg, sha, said, None, sent_at)
             raise ToolError("upstream_refused" if got.http_status else "upstream_unreachable", got.why or "the mail service didn't accept it")
         provider_id, words = got.provider_id, "Accepted for delivery by the mail service."
     try:
@@ -95,9 +97,21 @@ async def send_email(ctx, a: dict) -> dict:
                        {"provider_id": provider_id, "body_sha256": P.email_body_sha256(msg), "read_back_sha256": sha}, verified=True)
     except Exception as e:
         log.info("[s2] email proof not recorded: %s", type(e).__name__)
+    await _activity(ctx.account, "done", msg, sha, said, provider_id, sent_at)
     return {"status": "sent", "outcome": {"kind": "CONFIRMED", "reference": provider_id, "target_words": words},
             "message": {"from": msg["from"], "to": msg["to"], "subject": msg["subject"], "body_sha256": P.email_body_sha256(msg),
                         "sent_at": sent_at}}
+
+
+async def _activity(account: str, state: str, msg: dict, sha: str, said: str, provider_id: Optional[str], at: str) -> None:
+    """CR 62 · the email's row in the Activity view, with its proof (never raises: the email's own outcome stands)."""
+    try:
+        from agapi import s2_records as REC
+        await REC.record(account, "email", state, {"reference": provider_id, "at": at, "said": (said or "")[:300], "read_back_sha256": sha,
+                                                   "body_sha256": P.email_body_sha256(msg), "subject": msg["subject"]},
+                         msg["to"].get("name") or msg["to"]["address"])
+    except Exception as e:
+        log.info("[s2] email activity not recorded: %s", type(e).__name__)
 
 
 def _offset_iso(day: str, hhmm: str, tz: str) -> str:
@@ -138,6 +152,12 @@ async def add_to_calendar(ctx, a: dict) -> dict:
     text = P.ics(ev, dtstamp)
     token = ics_token(text)
     base = os.getenv("SASHA_PUBLIC_API_URL", "https://sasha-travel-production.up.railway.app").rstrip("/")
+    try:   # CR 62 · in the Activity view: the event's sha256 is its proof (nothing left the account)
+        from agapi import s2_records as REC
+        await REC.record(ctx.account, "calendar", "done", {"reference": P.sha256(ev), "at": dtstamp, "event_sha256": P.sha256(ev),
+                                                           "booking_id": bid}, ev["title"])
+    except Exception as e:
+        log.info("[s2] calendar activity not recorded: %s", type(e).__name__)
     return {"event": ev, "event_sha256": P.sha256(ev), "ics": text, "links": P.calendar_links(ev, f"{base}/api/agent/ics/{token}.ics")}
 
 
@@ -166,7 +186,8 @@ def ics_from_token(token: str) -> Optional[str]:
 
 
 def tools() -> List[dict]:
-    """The two tools in Sasha's v0 table shape (agapi/v0.py _t) — appended by the wiring note, not here."""
+    """CR 60's two tools in Sasha's v0 table shape (agapi/v0.py _t). CR 62's send_whatsapp and get_activity are registered by the
+    wiring note (s2_whatsapp.tools(), activity.tools()), with their renderers."""
     from agapi.v0 import _t
     msg_props = {"to": {"type": "object", "additionalProperties": False, "required": ["address"],
                         "properties": {"address": {"type": "string", "maxLength": 254}, "name": {"type": "string", "maxLength": 120}}},

@@ -240,7 +240,7 @@ async def approvals_request(ctx: Ctx, inp: dict):
     ctx.store.x("insert into approval_links (token_hash, account, read_back_id, end_user, channel, destination, expires_at, created_at) "
                 "values (?, ?, ?, ?, ?, ?, ?, ?)", h, ctx.account, rb["id"], rb["presented_to"], inp["channel"], dest["value"], expires, sent)
     url = f"{config.PUBLIC_URL}/a/{token}"
-    AD.messenger(_DEST[inp["channel"]], ctx.mode).deliver(ctx.store, ctx.account, rb["presented_to"], dest["value"], _DEST[inp["channel"]],
+    await AD.messenger(_DEST[inp["channel"]], ctx.mode).adeliver(ctx.store, ctx.account, rb["presented_to"], dest["value"], _DEST[inp["channel"]],
                                                          f"Please review and approve this request: {url} (single use, expires in {config.LINK_TTL_MIN} minutes).", url)
     return {"read_back_id": rb["id"], "presentation": {"channel": inp["channel"], "sent_at": sent, "link_expires_at": expires}}, 200, None
 
@@ -595,7 +595,7 @@ async def users_register(ctx: Ctx, inp: dict):
     for d in inp.get("destinations") or []:
         v = _norm_dest(d["value"])
         ok = _SANDBOX_EMAIL.match(v) if d["channel"] == "email" else _SANDBOX_PHONE.match(v)
-        if not ok:
+        if not ok and ctx.mode == "test":   # CR 70 · live: the allow-list (adapters.precheck_live) decides, before this call began
             raise AgapiError("invalid_input", "The sandbox accepts sandbox destinations only: +1 500 555 0xxx numbers or …@example.test.",
                              {"path": "/destinations", "rule": "sandbox_destinations_only"})
         if ctx.store.one("select 1 from destinations where account = ? and end_user = ? and channel = ? and value = ?",
@@ -606,7 +606,7 @@ async def users_register(ctx: Ctx, inp: dict):
                     "created_at) values (?, ?, ?, ?, 0, ?, ?, ?, ?)", ctx.account, u["id"], d["channel"], v, _otp_hmac(code),
                     later(config.OTP_TTL_MIN), th, ts())
         url = f"{config.PUBLIC_URL}/v/{token}"
-        AD.messenger(d["channel"], ctx.mode).deliver(ctx.store, ctx.account, u["id"], v, d["channel"],
+        await AD.messenger(d["channel"], ctx.mode).adeliver(ctx.store, ctx.account, u["id"], v, d["channel"],
                                                      f"Your Kanoe verification code is {code}. Enter it at {url} (expires in {config.OTP_TTL_MIN} minutes).", None)
     return end_user_out(ctx.store, ctx.account, u["id"]), status, None
 
@@ -784,10 +784,12 @@ async def messages_send_email(ctx: Ctx, inp: dict):
     aid, sent_at = R.new_id("act"), ts()
     provider_id = "sbx_msg_" + secrets.token_hex(10)
     reply_to = f"reply+{aid.lower()}@{config.REPLY_DOMAIN}"
-    AD.get("email", ctx.mode).deliver(ctx.store, ctx.account, None, msg["to"]["address"], "email",
-                                      f"From: {msg['from']}\nReply-To: {reply_to}\nSubject: {msg['subject']}\n\n{msg['body']}", None)
-    ctx.up.add("email_provider_sandbox", __import__("time").perf_counter(), True)
-    words = "Accepted for delivery by the mail service (sandbox: captured, never sent)."
+    sent_id = await AD.get("email", ctx.mode).adeliver(ctx.store, ctx.account, None, msg["to"]["address"], "email",
+                                                       f"From: {msg['from']}\nReply-To: {reply_to}\nSubject: {msg['subject']}\n\n{msg['body']}", None)
+    ctx.up.add("email_provider_sandbox" if ctx.mode == "test" else "resend", __import__("time").perf_counter(), True)
+    provider_id = sent_id or provider_id                                       # CR 70 · live: Resend's own email id
+    words = "Accepted for delivery by the mail service (sandbox: captured, never sent)." if not sent_id else \
+        f"Accepted for delivery by the mail service (Resend id {sent_id})."
     retrieved = sent_at[:19] + "Z"
     outcome = {"kind": "CONFIRMED", "reference": provider_id, "target_words": R.wrap(words, "email_provider_sandbox", retrieved)}
     _new_act(ctx, aid, it, "email", None, outcome)
@@ -882,7 +884,8 @@ async def messages_send_whatsapp(ctx: Ctx, inp: dict):
     apv = _check_and_consume(ctx, rb, {"intent_id": it["id"], "operation": "messages.send_whatsapp", "lines": lines, "payload": msg}, 1)
     aid, sent_at = R.new_id("act"), ts()
     provider_id = "sbx_wamid_" + secrets.token_hex(12)
-    AD.get("whatsapp", ctx.mode).deliver(ctx.store, ctx.account, None, number, "whatsapp", msg["text"], None)
+    wa_id = await AD.get("whatsapp", ctx.mode).adeliver(ctx.store, ctx.account, None, number, "whatsapp", msg["text"], None)
+    provider_id = wa_id or provider_id                                         # CR 70 · live: the provider's own message id
     if c:
         ctx.store.x("update wa_contacts set name = coalesce(?, name) where account = ? and number = ?", msg["to"].get("name"), ctx.account, number)
     else:
@@ -890,7 +893,7 @@ async def messages_send_whatsapp(ctx: Ctx, inp: dict):
                     ctx.account, number, inp["end_user"], msg["to"].get("name"), sent_at)
     ctx.up.add("whatsapp_provider_sandbox", __import__("time").perf_counter(), True)
     retrieved = sent_at[:19] + "Z"
-    words = "Accepted by WhatsApp's provider (sandbox: captured, never sent)."
+    words = "Accepted by WhatsApp's provider (sandbox: captured, never sent)." if not wa_id else f"Accepted by WhatsApp's provider (id {wa_id})."
     outcome = {"kind": "CONFIRMED", "reference": provider_id, "target_words": R.wrap(words, "whatsapp_provider_sandbox", retrieved)}
     _new_act(ctx, aid, it, "whatsapp", None, outcome, target=number)   # target_act = the recipient's number for a WhatsApp act
     body_sha = P.whatsapp_body_sha256(msg)

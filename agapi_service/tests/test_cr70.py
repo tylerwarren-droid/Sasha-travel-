@@ -292,6 +292,88 @@ class PaymentsLive(Live):
         self.assertEqual((out["ok"], out["livemode"]), (True, False))
 
 
+
+class FakeResend:
+    """Resend: POST /emails → an id (or `status`); every request kept."""
+
+    def __init__(self, status=200):
+        self.calls, self.status = [], status
+
+    async def __call__(self, method, url, headers=None, json=None, **kw):
+        from scripts import places_fake
+        self.calls.append({"url": url, "json": json, "auth": (headers or {}).get("authorization", "")[:7]})
+        if not json:
+            return places_fake._R(422, {"name": "validation_error", "message": "Missing `to` field."})
+        if self.status != 200:
+            return places_fake._R(self.status, {"name": "internal_server_error", "message": "boom"})
+        return places_fake._R(200, {"id": f"re_{len(self.calls):06d}"})
+
+
+OURS, THEIRS = "tyler-test@kanoe.example", "someone@else.example"
+
+
+class EmailAndCalendarLive(Live):
+    connected = {"places", "flights", "payments", "calendar", "email"}
+
+    def setUp(self):
+        super().setUp()
+        self.resend = FakeResend()
+        for p in (mock.patch.object(AL, "http", self.resend), mock.patch.object(config, "EMAIL_ALLOW", {OURS}),
+                  mock.patch.object(config, "EMAIL_FROM", "Sasha <sasha@booking.kanoe.example>"),
+                  mock.patch.dict("os.environ", {"SASHA_RESEND_API_KEY": "re_recorded"})):
+            p.start()
+            self.addCleanup(p.stop)
+        self.uid = self.ok("users.register", {"external_ref": "mail-1"}, key=self.live)["end_user_id"]
+
+    def approve(self, read_back_id):
+        return PaymentsLive.approve(self, read_back_id)
+
+    def email(self, to):
+        return {"end_user": self.uid, "to": {"address": to, "name": "Tyler"}, "subject": "Our trip", "body": "Hi,\nWe land at 09:00.\nAna"}
+
+    def test_an_address_not_on_the_allow_list_is_refused_before_anything(self):
+        r, b = self.call("messages.send_email", self.email(THEIRS), key=self.live, expect="upstream_refused")
+        self.assertEqual(b["error"]["details"]["reason"], "not_allow_listed")
+        self.assertEqual(self.store.one("select count(*) as n from read_backs")["n"], 0)          # no read-back, nothing to approve
+        self.assertEqual(self.resend.calls, [])
+
+    def test_an_allow_listed_email_is_sent_by_resend_only_after_the_yes(self):
+        r, b = self.call("messages.send_email", self.email(OURS), key=self.live, expect="approval_required")
+        self.assertEqual(self.resend.calls, [])                                                  # nothing before the yes
+        apv = self.approve(b["error"]["details"]["read_back_id"])
+        out = self.ok("messages.send_email", self.email(OURS), key=self.live, approval=apv)
+        sent = self.resend.calls[-1]
+        self.assertEqual(sent["url"], "https://api.resend.com/emails")
+        self.assertEqual((sent["json"]["to"], sent["json"]["from"], sent["json"]["subject"]), ([OURS], "Sasha <sasha@booking.kanoe.example>", "Our trip"))
+        self.assertEqual(sent["json"]["text"], "Hi,\nWe land at 09:00.\nAna")                     # the headers aren't in the body
+        self.assertEqual(out["outcome"]["reference"], "re_000001")                               # Resend's own id
+        self.assertIn("Resend id re_000001", out["outcome"]["target_words"]["text"])
+        self.assertNotIn("captured, never sent", out["outcome"]["target_words"]["text"])
+
+    def test_resend_refusing_is_said_and_nothing_is_claimed(self):
+        r, b = self.call("messages.send_email", self.email(OURS), key=self.live, expect="approval_required")
+        apv = self.approve(b["error"]["details"]["read_back_id"])
+        with mock.patch.object(AL, "http", FakeResend(status=500)):
+            r, b = self.call("messages.send_email", self.email(OURS), key=self.live, approval=apv, expect="upstream_failed")
+        self.assertEqual(self.store.one("select count(*) as n from acts")["n"], 0)
+
+    def test_a_verification_code_goes_only_to_an_allow_listed_address(self):
+        self.call("users.register", {"external_ref": "mail-2", "destinations": [{"channel": "email", "value": THEIRS}]}, key=self.live,
+                  expect="upstream_refused")
+        self.assertIsNone(self.store.one("select id from end_users where external_ref = 'mail-2'"))
+        self.ok("users.register", {"external_ref": "mail-3", "destinations": [{"channel": "email", "value": OURS}]}, key=self.live)
+        self.assertEqual(self.resend.calls[-1]["json"]["subject"], "Your Kanoe verification code")
+        self.assertIn("verification code is", self.resend.calls[-1]["json"]["text"])
+
+    def test_the_smoke_checks_send_nothing(self):
+        out = asyncio.run(AL.ADAPTERS["email"].smoke())
+        self.assertEqual((out["ok"], out["sent"], out["status"]), (True, False, 422))
+        self.assertEqual(self.resend.calls[-1]["json"], {})                                      # an EMPTY request: Resend can't send it
+        cal = asyncio.run(AL.ADAPTERS["calendar"].smoke())
+        self.assertTrue(cal["ok"])
+        self.assertTrue(isinstance(AL.ADAPTERS["calendar"], AD.SimCalendar))                     # the same .ics code as the sandbox
+
+
 def Base_sign(body: str) -> str:
     import hashlib, hmac, secrets, time
     t, n = int(time.time()), secrets.token_urlsafe(16)

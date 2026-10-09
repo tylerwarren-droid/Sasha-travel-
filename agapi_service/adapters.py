@@ -57,6 +57,12 @@ class Messenger:
     def deliver(self, store: Store, account: str, end_user: Optional[str], to: str, channel: str, body: str, link: Optional[str]) -> None:
         raise NotImplementedError
 
+    async def adeliver(self, store: Store, account: str, end_user: Optional[str], to: str, channel: str, body: str,
+                       link: Optional[str]) -> Optional[str]:
+        """CR 70 · the engine's call (awaitable, so a real send never blocks). → the provider's message id, or None (captured)."""
+        self.deliver(store, account, end_user, to, channel, body, link)
+        return None
+
 
 class Calendar:
     def publish(self, store: Store, account: str, act_id: str, ics: str, token: str, token_hash: str) -> str: raise NotImplementedError
@@ -168,6 +174,34 @@ def kinds_for(op_name: str, inp: Optional[dict] = None, store: Optional[Store] =
     except Exception:
         pass
     return full
+
+
+def precheck_live(op_name: str, inp: dict, store: Store, account: str) -> None:
+    """CR 70 · BEFORE anything is approved or consumed: a live send goes only to an allow-listed address or number."""
+    from . import config
+    targets = []
+    if op_name == "messages.send_email":
+        targets = [("email", ((inp.get("to") or {}).get("address") or ""))]
+    elif op_name == "messages.send_whatsapp":
+        targets = [("whatsapp", (inp.get("to") or {}).get("number") or "")]
+    elif op_name == "users.register":
+        targets = [("email" if d.get("channel") == "email" else "whatsapp", d.get("value") or "") for d in inp.get("destinations") or []]
+    elif op_name == "approvals.request":
+        rb = store.one("select presented_to from read_backs where account = ? and id = ?", account, inp.get("read_back_id"))
+        ch = inp.get("channel") or ""
+        if rb:
+            want = "email" if "email" in ch else "sms"
+            d = store.one("select value from destinations where account = ? and end_user = ? and channel = ? and verified = 1",
+                          account, rb["presented_to"], want)
+            if d:
+                targets = [("email" if want == "email" else "whatsapp", d["value"])]
+    for kind, value in targets:
+        ok = value.strip().lower() in config.EMAIL_ALLOW if kind == "email" else \
+            "".join(c for c in value if c.isdigit() or c == "+") in config.WHATSAPP_ALLOW
+        if not ok:
+            raise AgapiError("upstream_refused", f"AgAPI live sends {'email' if kind == 'email' else 'messages'} only to allow-listed "
+                             f"{'addresses' if kind == 'email' else 'numbers'} for now; nothing was sent or approved.",
+                             {"service": kind, "reason": "not_allow_listed"})
 
 
 def require_live(op_name: str, inp: Optional[dict] = None, store: Optional[Store] = None, account: Optional[str] = None) -> None:

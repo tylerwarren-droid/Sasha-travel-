@@ -24,6 +24,9 @@ DB_SCHEMA = os.getenv("AGAPI_DB_SCHEMA", "").strip()            # agapi-live: "l
 CONNECTED_LIVE = {k.strip() for k in os.getenv("AGAPI_CONNECTED_LIVE", "").split(",") if k.strip()}   # only on agapi-live
 PLACES_DAILY_CAP = int(os.getenv("AGAPI_PLACES_DAILY_CAP", "100"))   # AgAPI live's own cap: Sasha shares Google's daily Text Search quota
 # the only hosts the live service may reach (every other outbound call stays refused); magellan's marked reads as before
+# CR 70 · live sends go ONLY to these (comma-separated; empty = nothing is sent live). Tyler's own addresses / numbers.
+EMAIL_ALLOW = {a.strip().lower() for a in os.getenv("AGAPI_EMAIL_ALLOW", "").split(",") if a.strip()}
+WHATSAPP_ALLOW = {"".join(ch for ch in a if ch.isdigit() or ch == "+") for a in os.getenv("AGAPI_WHATSAPP_ALLOW", "").split(",") if a.strip()}
 LIVE_HOSTS = {"places.googleapis.com", "api.duffel.com", "api.stripe.com", "api.resend.com", "api.twilio.com", "api.bland.ai", "api.anthropic.com"}    # CR 69 · once, on Railway: copy AGAPI_DB's rows into the empty Postgres
 # CR 69 · magellan.read_site's AI reader: AgAPI's own key (without it the operation says so) and the price it's logged at (USD/Mtok in, out)
 ANTHROPIC_KEY = os.getenv("AGAPI_ANTHROPIC_API_KEY", "").strip()

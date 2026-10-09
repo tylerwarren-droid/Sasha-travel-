@@ -252,6 +252,7 @@ async def execute(op_name: str, headers: dict, raw: bytes, principal: Optional[d
         check_input(op_name, inp)
         if _live_inp:
             AD.require_live(op_name, inp, store, key["account"])   # CR 70 · the items decide which providers a live act needs
+            AD.precheck_live(op_name, inp, store, key["account"])  # CR 70 · live sends only to allow-listed addresses/numbers
         idem = headers.get("idempotency-key")
         approval_id = (headers.get("agapi-approval-id") or "").strip() or None
         if approval_id and not re.fullmatch(r"apv_[0-9A-HJKMNP-TV-Z]{26}", approval_id):

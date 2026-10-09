@@ -1,6 +1,6 @@
 {
-  "version": "kanoe-sandbox-ext.4",
-  "note": "Additive only. CR 61: approvals.status, webhooks.register and users.verify_destination (and evidence_id on acts.status) were ADOPTED into AgAPI v1.0 (EU 205) — they now run on EU's own schemas; only messages.send_email and calendar.add_event remain sandbox extensions. CR 62: messages.send_whatsapp, messages.replies, activity.list (+ sandbox.simulate_reply).",
+  "version": "kanoe-sandbox-ext.5",
+  "note": "Additive only. CR 61: approvals.status, webhooks.register and users.verify_destination (and evidence_id on acts.status) were ADOPTED into AgAPI v1.0 (EU 205) — they now run on EU's own schemas; only messages.send_email and calendar.add_event remain sandbox extensions. CR 62: messages.send_whatsapp, messages.replies, activity.list (+ sandbox.simulate_reply). CR 63: the Keep — keep.put, keep.list, keep.use, keep.delete.",
   "add": [
     {
       "operation": "messages.send_email",
@@ -107,6 +107,65 @@
       "requires_approval": false,
       "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/simulate_reply_in",
       "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/simulate_reply_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "free",
+      "extension": true
+    },
+    {
+      "operation": "keep.put",
+      "agent": "austen",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/keep_put_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/keep_put_out",
+      "errors": [
+        "not_found",
+        "invalid_input",
+        "upstream_unreachable"
+      ],
+      "cost_class": "free",
+      "extension": true
+    },
+    {
+      "operation": "keep.list",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/keep_list_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/keep_list_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "read",
+      "extension": true
+    },
+    {
+      "operation": "keep.use",
+      "agent": "austen",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/keep_use_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/keep_use_out",
+      "errors": [
+        "not_found",
+        "invalid_input",
+        "already_completed",
+        "upstream_unreachable"
+      ],
+      "cost_class": "free",
+      "extension": true
+    },
+    {
+      "operation": "keep.delete",
+      "agent": "austen",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/keep_delete_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/keep_delete_out",
       "errors": [
         "not_found",
         "invalid_input"

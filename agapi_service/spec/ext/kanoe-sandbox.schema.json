@@ -477,7 +477,11 @@
             "whatsapp",
             "whatsapp_reply",
             "calendar",
-            "cancellation"
+            "cancellation",
+            "keep_save",
+            "keep_use",
+            "keep_show",
+            "keep_delete"
           ]
         },
         "state": {
@@ -534,6 +538,254 @@
         },
         "coverage": {
           "type": "object"
+        }
+      }
+    },
+    "keep_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "type",
+        "tier",
+        "masked",
+        "created_at"
+      ],
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "pattern": "^kpi_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "type": {
+          "type": "string"
+        },
+        "tier": {
+          "enum": [
+            "free",
+            "yes",
+            "read_back"
+          ]
+        },
+        "masked": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Never the value: the type's public words and at most the last third (≤4 characters) of its number."
+        },
+        "created_at": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        },
+        "last_used_at": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "keep_put_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "type",
+        "value"
+      ],
+      "description": "CR 63: save a number or code to the person's Keep. The value is encrypted under the person's own key and never returned, logged or hashed plainly. Card numbers, one-time/2FA codes and passwords are refused.",
+      "properties": {
+        "end_user": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/end_user_id"
+        },
+        "type": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "value": {
+          "type": "object",
+          "maxProperties": 6,
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 300
+          }
+        }
+      }
+    },
+    "keep_put_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "type",
+        "tier",
+        "masked",
+        "created_at",
+        "created"
+      ],
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "pattern": "^kpi_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "type": {
+          "type": "string"
+        },
+        "tier": {
+          "enum": [
+            "free",
+            "yes",
+            "read_back"
+          ]
+        },
+        "masked": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Never the value: the type's public words and at most the last third (≤4 characters) of its number."
+        },
+        "created_at": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        },
+        "last_used_at": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        },
+        "created": {
+          "type": "boolean"
+        },
+        "evidence_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/evidence_id"
+        }
+      }
+    },
+    "keep_list_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user"
+      ],
+      "properties": {
+        "end_user": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/end_user_id"
+        }
+      }
+    },
+    "keep_list_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "values_shown"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/keep_item"
+          }
+        },
+        "values_shown": {
+          "const": false
+        }
+      }
+    },
+    "keep_use_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "item_id",
+        "purpose"
+      ],
+      "description": "CR 63: 'fill' binds the item to a booking (hold_id) and returns a fill token — never the value; code fills it at the moment of use. Tier 'yes' re-issues the hold's read-back so the booking's yes names it. 'show' sends a read-back-only item to the person's own phone, once. Any other purpose (raw, value, reveal…) is refused: never_raw.",
+      "properties": {
+        "end_user": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/end_user_id"
+        },
+        "item_id": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "purpose": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "hold_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/hold_id"
+        }
+      }
+    },
+    "keep_use_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "masked"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "ready",
+            "needs_yes",
+            "sent_to_phone"
+          ]
+        },
+        "masked": {
+          "type": "string"
+        },
+        "fill_token": {
+          "type": "string",
+          "pattern": "^kf_[A-Za-z0-9_-]{32}$"
+        },
+        "tier": {
+          "enum": [
+            "free",
+            "yes",
+            "read_back"
+          ]
+        },
+        "line": {
+          "type": "string"
+        },
+        "read_back": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/hold_out/properties/read_back"
+        },
+        "channel": {
+          "type": "string"
+        },
+        "expires_at": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "keep_delete_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user"
+      ],
+      "description": "CR 63: one item, or (no item_id) everything — the items and the person's wrapped key, so every value is shredded.",
+      "properties": {
+        "end_user": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/end_user_id"
+        },
+        "item_id": {
+          "type": "string",
+          "maxLength": 40
+        }
+      }
+    },
+    "keep_delete_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deleted",
+        "key_destroyed",
+        "evidence_id"
+      ],
+      "properties": {
+        "deleted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "key_destroyed": {
+          "type": "boolean"
+        },
+        "evidence_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/evidence_id"
         }
       }
     }

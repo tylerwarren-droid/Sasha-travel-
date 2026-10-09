@@ -286,6 +286,16 @@ class _Unknown(Exception):
         self.service = service
 
 
+async def send_documents(service: str, kind: str, values: Dict[str, str], up: Upstream) -> Dict[str, Any]:
+    """CR 63 · the provider receiving a saved item at the moment of use (sandbox: accepted, NOTHING kept — not even a hash).
+    Tests patch this to see what a provider would get."""
+    t0 = time.perf_counter()
+    up.add(service + "_documents", t0, True)
+    ref = "DOC" + hashlib.sha256(f"{service}{time.time()}{os.urandom(8).hex()}".encode()).hexdigest()[:8].upper()
+    return {"reference": ref, "service": service + "_documents",
+            "words": f"Travel details received for the booking, reference {ref} (sandbox: nothing kept)."}
+
+
 async def book_fixture(kind: str, item: dict, up: Upstream) -> Dict[str, Any]:
     """A fixture stay or venue: nothing is ever sent to a real venue in test mode. Confirmed by the fixture, said so."""
     t0 = time.perf_counter()

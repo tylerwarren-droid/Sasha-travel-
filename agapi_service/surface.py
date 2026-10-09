@@ -143,6 +143,30 @@ async def verify_post(token: str, req: Request):
     return _page("Verified", "<p class='st'>Thank you — approvals can now be sent here.</p>")
 
 
+@router.get("/k/{token}", response_class=HTMLResponse)
+async def keep_get(token: str):
+    """CR 63 · a read-back-only item, shown to the end user on their own phone: GET never opens it (an unfurler can't)."""
+    from . import keep_ops as KO
+    f = _store().one("select * from keep_fills where token_hash = ? and purpose = 'show'", R.sha256({"keep_token": token}))
+    if not f or f["state"] != "bound" or f["expires_at"] < ts():
+        return _page("This link isn't active", "<p>It was opened already, expired, or never existed.</p>", 404)
+    it = _store().one("select masked from keep_items where account = ? and id = ?", f["account"], f["item_id"])
+    return _page("From your Keep", f"""<div class="card"><p class="st">{html.escape(it['masked'] if it else 'Saved item')}</p>
+<p class="mut">Shown once, here only. Sasha never sees it.</p></div><form method="post"><button class="ok">Show it</button></form>""")
+
+
+@router.post("/k/{token}", response_class=HTMLResponse)
+async def keep_post(token: str):
+    from . import keep_ops as KO
+    got = await KO.show_value(_store(), token)
+    if not got:
+        return _page("This link isn't active", "<p>It was opened already, expired, or never existed.</p>", 404)
+    rows = "".join(f"<p><span class='mut'>{html.escape(k.replace('_', ' ').capitalize())}</span><br><span class='st'>{html.escape(v)}</span></p>"
+                   for k, v in got["values"].items())
+    got = None
+    return _page("From your Keep", f"<div class='card'>{rows}</div><p class='mut'>This link now stops working.</p>")
+
+
 @router.get("/pay/{token}", response_class=HTMLResponse)
 async def pay_get(token: str):
     store = _store()

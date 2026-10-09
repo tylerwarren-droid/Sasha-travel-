@@ -5,7 +5,9 @@ Partner pane (big buttons, one per step) beside a phone pane (the end user's own
   Find → Hold → Ask → "Yes — what are my cancellation terms?" (refused) → "Yes, book it." → Pay (test) → Confirmed + proof
   → Cancel (its own yes) → Source down (an outage, never "no results").    Reset: one click, a fresh session.
 CR 62: WhatsApp Marta (first contact = the approved template that ASKS) → Marta replies → the note, its own yes → Activity
-(the traveller's view of everything done, each row with its proof)."""
+(the traveller's view of everything done, each row with its proof).
+CR 63: Keep — save a passport (the AI only ever sees "Passport ES ••••456") → a booking fills it after the yes that names it →
+Activity shows the use, with its proof."""
 from __future__ import annotations
 
 import json
@@ -26,8 +28,8 @@ _store = None
 _execute = None
 DEMO_ACCOUNT = "VC-demo"
 STEPS = ["find", "hold", "ask", "question", "yes", "pay", "confirmed", "calendar", "email", "whatsapp", "reply", "cancel", "activity",
-         "outage"]
-OPTIONAL = ("question", "outage", "calendar", "email", "whatsapp", "activity")   # "reply" needs "whatsapp"
+         "keep", "outage"]
+OPTIONAL = ("question", "outage", "calendar", "email", "whatsapp", "activity", "keep")   # "reply" needs "whatsapp"
 
 
 def bind(get_store, execute) -> None:
@@ -274,6 +276,42 @@ async def _activity(store, s):
                       {"ok": True, "text": "Read only, from the ledger — never from what anyone said"}])
 
 
+async def _keep(store, s):
+    """CR 63 · a passport saved to the Keep, filled into a booking only after the yes that names it, proven in Activity."""
+    from . import engine as E
+    _, k = await _op(store, "keep.put", {"end_user": s["uid"], "type": "passport",
+                                          "value": {"number": "PAA123456", "country": "ES", "expires_on": "2031-05-01"}})
+    if not k["ok"]:
+        return _r("error", k["error"]["message"])
+    item = k["result"]
+    day = (date.today() + timedelta(days=42)).isoformat()
+    _, f = await _op(store, "travel.find_flights", {"origin": {"query": "Madrid"}, "destination": {"query": "London"}, "date": day, "passengers": 1})
+    offer = min(f["result"]["offers"][:3], key=lambda o: o["price"]["amount_minor"])["offer_ref"]
+    _, h = await _op(store, "trip.hold", {"end_user": s["uid"], "items": [{"kind": "flight", "ref": offer}],
+                                          "travellers": [{"given_name": "Ana", "family_name": "Ejemplo", "born_on": "1990-01-01", "title": "ms"}]})
+    _, u = await _op(store, "keep.use", {"end_user": s["uid"], "item_id": item["item_id"], "purpose": "fill", "hold_id": h["result"]["hold_id"]})
+    if not u["ok"]:
+        return _r("error", u["error"]["message"])
+    use = u["result"]
+    _, raw = await _op(store, "keep.use", {"end_user": s["uid"], "item_id": item["item_id"], "purpose": "raw"})
+    apv = await _yes_to(store, use["read_back"]["read_back_id"], "Yes, book it.")
+    _, c = await _op(store, "trip.complete", {"hold_id": h["result"]["hold_id"], "payment": {"method": "payment_link"}}, approval=apv)
+    if not c["ok"]:
+        return _r("error", c["error"]["message"])
+    act = store.one("select * from acts where id = ?", c["result"]["act_id"])
+    store.x("update acts set pay_token_hash = null where id = ?", act["id"])
+    paid = await E.pay(store, act)                                          # the traveller pays (test) → the airline order, the fill
+    _, a = await _op(store, "activity.list", {"end_user": s["uid"]})
+    used = [i for i in a["result"]["items"] if i["kind"] == "keep_use"]
+    return _r("green", "Saved to the Keep, filled into the booking only after the yes that named it — Sasha never saw the number.",
+              [f"Sasha sees: {item['masked']}", use["line"], f"Booked — {paid.get('reference', '')}"],
+              phone={"kind": "page", "url": "/demo/activity"},
+              checks=[{"ok": not raw["ok"] and raw["error"]["details"].get("rule") == "never_raw", "text": "Asked for the raw number: refused"},
+                      {"ok": use["line"] in use["read_back"]["lines"], "text": "The booking's read-back names the passport — one yes covers both"},
+                      {"ok": paid["kind"] == "CONFIRMED" and bool(used), "text": "Filled at the moment of booking — and in Activity"},
+                      {"ok": bool(used) and used[0]["verified"], "text": "Its proof verifies"}])
+
+
 async def _cancel(store, s):
     st, b = await _op(store, "trip.cancel", {"act_id": s["act"]})
     if b["ok"] or b["error"]["code"] != "approval_required":
@@ -299,7 +337,7 @@ async def _outage(store, s):
 
 
 _STEP = {"find": _find, "hold": _hold, "ask": _ask, "question": _question, "yes": _yes, "pay": _pay, "confirmed": _confirmed,
-         "calendar": _calendar, "email": _email, "whatsapp": _whatsapp, "reply": _reply, "activity": _activity,
+         "calendar": _calendar, "email": _email, "whatsapp": _whatsapp, "reply": _reply, "activity": _activity, "keep": _keep,
          "cancel": _cancel, "outage": _outage}
 
 
@@ -403,9 +441,9 @@ iframe{flex:1;border:0;width:100%;background:var(--screen)}.empty{flex:1;display
 const STEPS=[["find","Find"],["hold","Hold"],["ask","Ask for approval"],["question","“Yes — what are my cancellation terms?”"],
 ["yes","“Yes, book it.”"],["pay","Pay (test)"],["confirmed","Confirmed + proof"],["calendar","Add to calendar"],
 ["email","Email the plan to Marta"],["whatsapp","WhatsApp Marta (first contact)"],["reply","Marta replies → the note"],
-["cancel","Cancel"],["activity","Activity + proof"],["outage","Source down"]];
+["cancel","Cancel"],["activity","Activity + proof"],["keep","Keep: passport → booking"],["outage","Source down"]];
 let done=[],busy=false;const $=id=>document.getElementById(id);
-function draw(){$("steps").innerHTML=STEPS.map(([k,l],i)=>{const d=done.includes(k);const nxt=!d&&STEPS.slice(0,i).every(([p])=>done.includes(p)||["question","outage","calendar","email","whatsapp","activity"].includes(p)||(p==="reply"&&!done.includes("whatsapp")))&&!busy;
+function draw(){$("steps").innerHTML=STEPS.map(([k,l],i)=>{const d=done.includes(k);const nxt=!d&&STEPS.slice(0,i).every(([p])=>done.includes(p)||["question","outage","calendar","email","whatsapp","activity","keep"].includes(p)||(p==="reply"&&!done.includes("whatsapp")))&&!busy;
 return `<button class="step ${d?(k==="question"?"red":"done"):""} ${nxt&&!d?"next":""}" data-k="${k}" ${busy?"disabled":""}><span class="n">${d?(k==="question"?"✕":"✓"):i+1}</span>${l}</button>`}).join("");
 document.querySelectorAll(".step").forEach(b=>b.onclick=()=>run(b.dataset.k));}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c])}

@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from . import config, providers as PV, rules as R, webhooks as W
 from .registry import AgapiError
 from .store import Store, dumps, later, loads, now, parse_ts, ts
+from . import keep_ops as KO
 
 
 class Ctx:
@@ -308,7 +309,8 @@ def _evidence(ctx: Ctx, operation: str, act_id: str, intent_id: str, inp: dict, 
               sources: List[dict]) -> str:
     eid = R.new_id("evd")
     ev: Dict[str, Any] = {"evidence_id": eid, "basis": "measured", "states_no_conclusion": True, "operation": operation,
-                          "act_id": act_id, "intent_id": intent_id, "input_digest": R.sha256(inp),
+                          **({"act_id": act_id} if act_id else {}), **({"intent_id": intent_id} if intent_id else {}),
+                          "input_digest": R.sha256(inp),
                           "produced_at": ts()[:19] + "Z", "sources": sources}
     if outcome is not None:
         ev["outcome"] = outcome
@@ -345,8 +347,9 @@ async def trip_complete(ctx: Ctx, inp: dict):
     # re-derive from the CURRENT state (AP1): a moved price, a gone offer, a changed traveller all void the Approval
     priced, lines = await _priced(ctx, held["items"], held["travellers"], at_act=True)
     total = _total(priced)
-    current = {"intent_id": it["id"], "operation": rb["operation"], "lines": lines + _closing(total, bool(rb["irreversible"])),
-               "payload": _payload(priced, total)}
+    current = {"intent_id": it["id"], "operation": rb["operation"],
+               "lines": lines + KO.keep_lines(ctx.store, ctx.account, hold["id"]) + _closing(total, bool(rb["irreversible"])),
+               "payload": {**_payload(priced, total), **KO.keep_payload(ctx.store, ctx.account, hold["id"])}}   # CR 63: the Keep's lines
     apv = _check_and_consume(ctx, rb, current, len(priced))
     if hold["expires_at"] < ts():
         release_approval(ctx.store, ctx.account, apv["id"])
@@ -378,6 +381,7 @@ async def trip_complete(ctx: Ctx, inp: dict):
                                                                 "outcome_kind": "AWAITING_PAYMENT"})
         return {"act_id": aid, "intent_id": it["id"], "outcome": outcome, "evidence_id": eid}, 201, eid
     try:
+        await KO.fill_for_act(ctx.store, ctx.account, hold, apv, aid, it["id"], "sandbox_" + priced[0]["kind"], ctx.up)   # CR 63
         res = await PV.book_fixture(priced[0]["kind"], priced[0], ctx.up) if len(priced) == 1 else await _book_all(ctx, priced)
     except PV._Unknown as u:
         _unknown(ctx, aid, it, hold, inp, apv, u.service, None)
@@ -435,7 +439,11 @@ async def pay(store: Store, act: dict) -> dict:
     held = loads(hold["items"])
     priced = [dict(i, price=None) for i in held["items"]]
     flights = [i for i in held["items"] if i["kind"] == "flight"]
+    apv = store.one("select * from approvals where account = ? and consumed_by_request_id is not null and intent_id = ? order by approved_at desc",
+                    act["account"], act["intent_id"])
     try:
+        await KO.fill_for_act(store, act["account"], hold, apv, act["id"], act["intent_id"], "duffel" if flights else "sandbox_" +
+                              held["items"][0]["kind"], ctx.up)   # CR 63: at the moment of use, under the booking's yes
         if flights:
             res = await PV.order_flight(_offer(ctx, "flight", flights[0]["ref"]), held["travellers"], ctx.up)
         else:
@@ -447,8 +455,6 @@ async def pay(store: Store, act: dict) -> dict:
         sources = []
     store.x("update acts set outcome = ?, pay_token_hash = null, updated_at = ? where account = ? and id = ?", dumps(outcome), ts(),
             act["account"], act["id"])
-    apv = store.one("select * from approvals where account = ? and consumed_by_request_id is not null and intent_id = ? order by approved_at desc",
-                    act["account"], act["intent_id"])
     eid = _evidence(ctx, "trip.complete", act["id"], act["intent_id"], {"act_id": act["id"], "payment": {"method": "payment_link"}},
                     outcome, apv, sources)
     if outcome["kind"] == "CONFIRMED":
@@ -1014,6 +1020,9 @@ async def activity_list(ctx: Ctx, inp: dict):
             about = _about(ctx, mine[ev["act_id"]], e["created_at"][:19] + "Z")
             row = P.activity_entry("calendar", "done", e["created_at"], ref=e["id"], proof=e["id"])
             rows.append({**row, **({"about": about} if about else {}), "verified": _verified(ctx, e["id"])})
+    for k in ctx.store.q("select * from keep_events where account = ? and end_user = ? order by at desc limit 200", ctx.account, inp["end_user"]):
+        row = P.activity_entry(k["kind"], "done", k["at"], ref=k["id"], proof=k["evidence_id"])   # CR 63: every save, use, show, deletion
+        rows.append({**row, "about": R.wrap(k["masked"], "keep_mask", k["at"][:19] + "Z", cap=200), "verified": _verified(ctx, k["evidence_id"])})
     for r in _replies(ctx, inp["end_user"]):
         at = r["received_at"][:19] + "Z"
         row = P.activity_entry("whatsapp_reply", "done", r["received_at"], ref=r["id"])
@@ -1030,4 +1039,4 @@ OPS = {"travel.find_flights": find_flights, "travel.find_stays": find_stays, "ve
        "approvals.status": approvals_status, "webhooks.register": webhooks_register, "users.verify_destination": users_verify_destination,
        "messages.send_email": messages_send_email, "calendar.add_event": calendar_add_event, "webhooks.revoke": webhooks_revoke,
        "messages.send_whatsapp": messages_send_whatsapp, "messages.replies": messages_replies, "activity.list": activity_list,
-       "sandbox.simulate_reply": sandbox_simulate_reply}
+       "sandbox.simulate_reply": sandbox_simulate_reply, **KO.OPS}

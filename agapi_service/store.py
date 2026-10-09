@@ -57,6 +57,15 @@ create table if not exists webhook_endpoints (account text not null, id text not
 create table if not exists webhook_deliveries (id text primary key, account text not null, endpoint_id text not null, event text not null,
   body text not null, created_at text not null, attempts int not null default 0, next_at text not null, state text not null,
   last_status int);
+create table if not exists keep_keys (account text not null, end_user text not null, wrapped_dek blob not null, kek_version text not null,
+  created_at text not null, primary key (account, end_user));
+create table if not exists keep_items (account text not null, id text not null, end_user text not null, type text not null, tier text not null,
+  masked text not null, fingerprint text not null, nonce blob not null, ciphertext blob not null, created_at text not null,
+  last_used_at text, primary key (account, id));
+create table if not exists keep_fills (account text not null, token_hash text primary key, item_id text not null, end_user text not null,
+  purpose text not null, hold_id text, line text, state text not null, expires_at text not null, created_at text not null, used_at text);
+create table if not exists keep_events (account text not null, id text not null, end_user text not null, kind text not null,
+  item_id text not null, masked text not null, evidence_id text, at text not null, primary key (account, id));
 create table if not exists wa_contacts (account text not null, number text not null, end_user text not null, name text,
   first_contact_at text not null, last_inbound_at text, opted_out_at text, primary key (account, number));
 create table if not exists wa_replies (account text not null, id text not null, number text not null, body text not null,

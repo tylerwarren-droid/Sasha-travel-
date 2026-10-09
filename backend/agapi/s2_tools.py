@@ -8,6 +8,13 @@ Sasha tab's (docs/sasha/s2-powers-wiring.md); nothing here is imported by the ag
                     Any change to to/subject/body → a new read-back. TEST mode: captured (OUTBOX), never sent.
     add_to_calendar [Pacioli] a CONFIRMED booking (a table, a flight) → an .ics + Google/Outlook/Apple links. Free, no yes: nothing
                     leaves the person's account.
+
+CR 61 (Tyler's answers to CR 60):
+    · personal emails go from SASHA_EMAIL_FROM for now (a separate mail subdomain later);
+    · REAL sending only when SASHA_S2_EMAIL_LIVE=1 AND the account is the founder's or allow-listed (SASHA_S2_EMAIL_ACCOUNTS, else
+      the existing real-contact list SASHA_REAL_CONTACT_ACCOUNTS — Jon's). Everyone else: captured, never sent, and SAID so
+      (status "not_sent" — never "sent" for a message that didn't leave);
+    · calendar links survive deploys: the sasha_calendar_links table (booking_signer/sql/036_calendar_links.sql); memory until it exists.
 """
 from __future__ import annotations
 
@@ -26,7 +33,8 @@ log = logging.getLogger("agapi.s2")
 YES_WINDOW = timedelta(minutes=15)                         # AgAPI v1 AP4 for an irreversible act
 _HELD: Dict[str, dict] = {}                                # account → the message read back (sha, when it was said, the message)
 OUTBOX: List[dict] = []                                    # TEST mode: every email Sasha would have sent (never sent)
-ICS: Dict[str, dict] = {}                                  # token hash → {account, ics} (served by the route in the wiring note)
+ICS: Dict[str, dict] = {}                                  # token hash → {account, ics, expires} — the fallback until 036 is applied
+LINK_KEEP = timedelta(days=30)                             # a calendar link works until 30 days after the event ends
 
 # CR 56 / CR 58: the v0 explicit_yes lets a question through ("Yes — what are my cancellation terms?"). For sending, a question
 # word or a request for options vetoes the yes — the same list as the AgAPI sandbox (agapi_service/rules.py QUESTION_VETO).
@@ -37,6 +45,15 @@ _QUESTION = re.compile(r"(?i)\?|¿|\b(?:what|how|which|when|where|why|who|option
 
 def _sender() -> str:
     return os.getenv("SASHA_EMAIL_FROM", "").strip() or "Sasha <sasha@kanoe.ai>"
+
+
+def live_email(account: Optional[str]) -> bool:
+    """CR 61 · a REAL send: the switch on, and the founder's account or an allow-listed one (Jon's). Off for everyone else."""
+    if os.getenv("SASHA_S2_EMAIL_LIVE", "") != "1" or not account:
+        return False
+    from booking_signer import guest_accounts as GA
+    listed = {a.strip().lower() for a in os.getenv("SASHA_S2_EMAIL_ACCOUNTS", "").split(",") if a.strip()} or GA.extra_accounts()
+    return GA.founder(account) or account.lower() in listed
 
 
 def strict_yes(said: Optional[str]) -> bool:
@@ -64,10 +81,14 @@ async def send_email(ctx, a: dict) -> dict:
         raise ToolError("no_explicit_yes", "sending needs their explicit yes to exactly this message — a question isn't a yes")
     _HELD.pop(ctx.account, None)
     sent_at = now.isoformat(timespec="seconds").replace("+00:00", "Z")
-    if getattr(ctx, "mode", "test") == "test" or os.getenv("SASHA_S2_EMAIL_LIVE", "") != "1":
-        provider_id, words = "test_msg_" + secrets.token_hex(10), "Accepted for delivery (test mode: captured, never sent)."
+    if not live_email(ctx.account):   # CR 61: not the founder / Jon, or the switch is off → captured, and said plainly
+        provider_id = "test_msg_" + secrets.token_hex(10)
         OUTBOX.append({"account": ctx.account, "message": msg, "provider_id": provider_id, "sent_at": sent_at})
-    else:   # ⛔ live: only when Tyler switches it on (SASHA_S2_EMAIL_LIVE=1) — the S-36 rung's Resend send, its answer READ
+        return {"status": "not_sent", "outcome": {"kind": "NOT_SENT", "reference": provider_id,
+                                                   "target_words": "Not sent: real email isn't open on this account yet. Nothing left Sasha."},
+                "say": "Tell them plainly it was NOT sent — real email is only open on the founder's account for now.",
+                "message": {"from": msg["from"], "to": msg["to"], "subject": msg["subject"], "body_sha256": P.email_body_sha256(msg)}}
+    else:   # ⛔ live: SASHA_S2_EMAIL_LIVE=1 and the founder's or Jon's account — the S-36 rung's Resend send, its answer READ
         from booking_signer import emailing as EM
         from booking_signer.ladder_routes import HTTP
         got = await EM.send(HTTP, {"from": msg["from"], "to": msg["to"]["address"], "subject": msg["subject"], "text": msg["body"]})
@@ -121,9 +142,50 @@ async def add_to_calendar(ctx, a: dict) -> dict:
         raise ToolError("booking_unknown", "no confirmed table or flight with that id — get_status lists them")
     dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     text, token = P.ics(ev, dtstamp), secrets.token_urlsafe(24)
-    ICS[hashlib.sha256(token.encode()).hexdigest()] = {"account": ctx.account, "ics": text}
+    await _keep_link(hashlib.sha256(token.encode()).hexdigest(), ctx.account, P.sha256(ev), text,
+                     datetime.fromisoformat(ev["ends_at"].replace("Z", "+00:00")) + LINK_KEEP)
     base = os.getenv("SASHA_PUBLIC_API_URL", "https://sasha-travel-production.up.railway.app").rstrip("/")
     return {"event": ev, "event_sha256": P.sha256(ev), "ics": text, "links": P.calendar_links(ev, f"{base}/api/agent/ics/{token}.ics")}
+
+
+# ── CR 61 · calendar links that survive a deploy ───────────────────────────────────────────────────────────────────────────
+
+def _db():
+    from booking_signer import plan_store as PS
+    return PS._run()
+
+
+async def _keep_link(token_sha: str, account: str, event_sha: str, text: str, expires: datetime) -> None:
+    """The table when it exists (036); otherwise memory, said in the log. Never raises: the links are returned inline either way."""
+    run = _db()
+    if run is not None:
+        try:
+            async def put(conn):
+                await conn.execute("insert into sasha_calendar_links (token_sha256, account_id, event_sha256, ics, expires_at) "
+                                   "values ($1, $2::uuid, $3, $4, $5) on conflict (token_sha256) do nothing",
+                                   token_sha, account, event_sha, text, expires)
+            await run(put)
+            return
+        except Exception as e:   # 036 not applied yet (UndefinedTable), or no database: memory, as CR 60
+            log.info("[s2] calendar link kept in memory (%s)", type(e).__name__)
+    ICS[token_sha] = {"account": account, "ics": text, "expires": expires}
+
+
+async def ics_for(token: str) -> Optional[str]:
+    """The .ics behind a link, or None (unknown or expired). The route in the wiring note serves it."""
+    token_sha, now = hashlib.sha256((token or "").encode()).hexdigest(), datetime.now(timezone.utc)
+    run = _db()
+    if run is not None:
+        try:
+            async def get(conn):
+                return await conn.fetchval("select ics from sasha_calendar_links where token_sha256 = $1 and expires_at > now()", token_sha)
+            text = await run(get)
+            if text:
+                return text
+        except Exception as e:
+            log.info("[s2] calendar link lookup fell back to memory (%s)", type(e).__name__)
+    f = ICS.get(token_sha)
+    return f["ics"] if f and f["expires"] > now else None
 
 
 def tools() -> List[dict]:
@@ -138,7 +200,7 @@ def tools() -> List[dict]:
         _t("send_email", "Austen", send_email, "Email someone the person names, FROM SASHA'S OWN ADDRESS (never their mailbox). The first call "
            "returns the exact message to read back; say it, ask 'shall I send it?', and call again with the SAME message after their yes "
            "in a later turn. Any change is a new read-back. A question is never a yes.", msg_props, ["to", "subject", "body"],
-           {"type": "object", "properties": {"status": {"enum": ["awaiting_yes", "sent"]}}}, ["invalid_input", "no_explicit_yes",
+           {"type": "object", "properties": {"status": {"enum": ["awaiting_yes", "sent", "not_sent"]}}}, ["invalid_input", "no_explicit_yes",
                                                                                               "upstream_refused", "upstream_unreachable"], austen=True),
         _t("add_to_calendar", "Pacioli", add_to_calendar, "Put a CONFIRMED booking (a table or a flight; ids from get_status) in the person's "
            "calendar: returns 'Add to calendar' links (Google, Outlook, Apple) and an .ics. No yes needed — nothing leaves their account.",

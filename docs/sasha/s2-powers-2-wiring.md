@@ -51,6 +51,10 @@ Without it, a recipient's reply would create a guest account for them (Sasha 153
 > "I can WhatsApp someone for you from my own number: I'll read you the exact message and send it only after your yes. If they haven't written to me before, WhatsApp only lets me send a short approved note asking if they'd like your message — yours goes once they reply."
 > "Asked what she's done ('what have you done for me today?'), she calls `get_activity` and says only what it lists; the full list with proof is on the Activity screen."
 
+Then regenerate the contract doc: `cd backend && python -m scripts.agapi_doc` (`docs/agapi/api-v0.md` lists every tool; the guards test fails until it's run).
+
+**Proven:** CR 62 applied exactly these edits on a throwaway branch. The full suite passed (1634), `GET /api/agent/activity` answered 403 when not signed in (mounted once, at the right path), and the hook was in `dispatch`.
+
 Optional: a link to `/activity` on `/you` (one line, `<a href="/activity">Everything Sasha did for you</a>`).
 
 ## Rules held in code (not by her words)

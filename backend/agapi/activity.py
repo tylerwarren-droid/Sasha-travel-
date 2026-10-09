@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse
 from agapi import powers as P, s2_records as REC
 
 log = logging.getLogger("agapi.activity")
-router = APIRouter(prefix="/api/agent")
+router = APIRouter()   # included into the agent router (prefix /api/agent) by the wiring note → /api/agent/activity
 
 VENUE = {"confirmed": ("booking", "done"), "guest_booked": ("booking", "done"), "requested": ("booking", "requested"),
          "attempting": ("booking", "requested"), "link_sent": ("booking", "requested"), "unclear": ("booking", "requested"),

@@ -525,7 +525,15 @@ class DemoConsole(Base):
         seen.append(phone)
         self.assertFalse(any(demo_key in x for x in seen))                                        # never exposed
         self.assertNotRegex(" ".join(seen), r"agp_test_[A-Za-z0-9]{32}")
+        self.store.x("update api_keys set rate_per_min = 1000")   # a second whole run in the same minute (a person clicks; 120/min is theirs)
         r2 = self.client.post("/demo/api/reset").json()                                           # one click, fresh
+        for k in ("find", "hold", "ask", "yes"):                                                  # CR 63 · a SECOND run: Marta's window
+            self.client.post(f"/demo/api/step/{k}")                                               # from run 1 must not break run 2
+        pay2 = self.client.post("/demo/api/step/pay").json()["phone"]["url"]
+        self.client.post(pay2)
+        for k in ("confirmed", "email", "whatsapp", "reply"):
+            again = self.client.post(f"/demo/api/step/{k}").json()
+            self.assertEqual(again["tone"], "green", (k, again))
         self.assertEqual(r2["tone"], "neutral")
 
 

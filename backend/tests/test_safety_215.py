@@ -124,7 +124,7 @@ class TheYes(Base):
 
     def test_yes_cancel_it_cancels_and_never_books(self):
         for said in ("yes, cancel it", "Yes please cancel", "go ahead and cancel"):
-            self.assertTrue(API.explicit_yes(said), said)
+            self.assertTrue(API.yes_to_cancel(said), said)                 # CR 64 · AgAPI 1.1: act-aware
             self.assertFalse(API.yes_to_book(said), said)
 
     def test_yes_cancel_it_sends_a_prepared_cancellation(self):

@@ -398,7 +398,7 @@ async def venue_bookings(account: str) -> List[dict]:
 async def cancel_venue(ctx, a: dict) -> dict:
     """Two steps, as booking: first the cancellation's read-back (its route: their cancel link, an email, a text or a call);
     after the person's explicit yes in a LATER turn, sent. Cancelled only when the venue's words say so."""
-    from agapi.v0 import claim, explicit_yes, stale
+    from agapi.v0 import claim, stale, yes_to_cancel
     GW = _API()
     said = ((a.get("approval") or {}).get("said")) or ""
     held = _CANCEL.get(ctx.account)
@@ -410,7 +410,7 @@ async def cancel_venue(ctx, a: dict) -> dict:
         hit = [b for b in await venue_bookings(ctx.account) if (a["venue"] or "").lower() in (b["venue"] or "").lower()]
         tid = hit[0]["trip_item_id"] if hit else None
     if held and (not tid or tid == held["id"]) and held["at"] < ctx.started:
-        if not explicit_yes(said):
+        if not yes_to_cancel(said):   # 1.1 act-aware: "Yes, cancel it" approves THIS cancellation
             raise _err("no_explicit_yes", "cancelling needs their explicit yes — ask them")
         await claim(ctx)
         _CANCEL.pop(ctx.account, None)

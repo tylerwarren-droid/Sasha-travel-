@@ -31,7 +31,7 @@ def main() -> int:
         return 2
     from agapi import v0, v1
     readme = (root / "README.md").read_text(encoding="utf-8") if (root / "README.md").exists() else ""
-    print(f"AgAPI v1.0 conformance — Sasha (backend/agapi) against {root}" + ("  [README: v1.0 FINAL]" if "v1.0 FINAL" in readme else ""))
+    print(f"AgAPI v1.1 conformance — Sasha (backend/agapi) against {root}" + ("  [README: v1.0 FINAL]" if "v1.0 FINAL" in readme else ""))
     results, fails = [], []
 
     def file(name):
@@ -46,6 +46,11 @@ def main() -> int:
     results.append(("approval-language.json (pinned copy == frozen file)", int(same), 1, hashlib.sha256(eu_lang).hexdigest()))
     if not same:
         fails.append("approval-language.json: Sasha's pinned copy differs from EU's frozen file")
+    eu_acts = (vec / "approval-language-acts.json").read_bytes()   # 1.1
+    same = eu_acts == (v1.SPEC / "approval-language-acts.json").read_bytes()
+    results.append(("approval-language-acts.json (pinned copy == 1.1 file)", int(same), 1, hashlib.sha256(eu_acts).hexdigest()))
+    if not same:
+        fails.append("approval-language-acts.json: Sasha's pinned copy differs from EU's 1.1 file")
 
     d, h = file("canonical")
     ok = 0
@@ -70,7 +75,7 @@ def main() -> int:
     d, h = file("explicit-yes")
     ok = 0
     for c in d["cases"]:
-        got = v0.explicit_yes(c["said"], c["lang"])
+        got = v0.explicit_yes(c["said"], c["lang"], c.get("act_kind"))   # 1.1: act_kind
         ok += got == c["explicit_yes"]
         if got != c["explicit_yes"]:
             fails.append(f"explicit-yes [{c['lang']}] {c['said']!r}: {got}, expected {c['explicit_yes']}")
@@ -102,7 +107,7 @@ def main() -> int:
         print(f"    FAIL · {f}")
     passed = sum(r[1] for r in results[1:])
     total = sum(r[2] for r in results[1:])
-    print(f"\nSasha AgAPI v1.0 conformance: {passed}/{total} vectors" + (" — PASS" if not fails else f" — FAIL ({len(fails)})"))
+    print(f"\nSasha AgAPI v1.1 conformance: {passed}/{total} vectors" + (" — PASS" if not fails else f" — FAIL ({len(fails)})"))
     return 1 if fails else 0
 
 

@@ -94,7 +94,7 @@ class TheYes(unittest.TestCase):
     # Sasha 215 · FIXED (was a CR 56 known gap: CR 56 GAP 3 (fails SAFE, but loops): "cancel" is in the no-words, so a cancellation's own )
     def test_yes_cancel_it_confirms_a_cancellation(self):
         for said in ("yes, cancel it", "Yes please cancel", "go ahead and cancel"):
-            self.assertTrue(API.explicit_yes(said), said)
+            self.assertTrue(API.yes_to_cancel(said), said)                 # CR 64 · AgAPI 1.1: act-aware — a yes to THE cancellation
 
     # Sasha 215 · FIXED (was a CR 56 known gap: CR 56 GAP 1 · fix before the demo: a question or a request for options is never a yes)
     def test_a_yes_that_is_really_a_question_is_not_a_yes(self):

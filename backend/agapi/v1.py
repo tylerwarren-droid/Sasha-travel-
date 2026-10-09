@@ -17,8 +17,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
-LANGUAGE_FILE = Path(__file__).resolve().parent / "spec" / "approval-language.json"
-LANGUAGE_SHA256 = "b4992034e2757c96d1bf074d964546d133bb5e7a7b0fdab7b01e571b27da3dfd"   # EU's frozen v1.0 file, byte for byte
+SPEC = Path(__file__).resolve().parent / "spec"
+LANGUAGE_FILE = SPEC / "approval-language.json"
+LANGUAGE_SHA256 = "b4992034e2757c96d1bf074d964546d133bb5e7a7b0fdab7b01e571b27da3dfd"   # EU's frozen v1.0 file, byte for byte (unchanged in 1.1)
+ACTS_SHA256 = "e8c8c2edc71ee93965a0fa2476f73107b843a0521e0bdc82ec6e455faf03dd5f"   # 1.1 (EU 211): approval-language-acts.json, byte for byte
 MAX_INT = 2**53 - 1
 _KEY = re.compile(r"^[a-z0-9_]+$")
 
@@ -93,13 +95,11 @@ def languages() -> dict:
     return json.loads(raw.decode("utf-8"))["languages"]
 
 
-def normalise(s: str) -> str:
-    """EU's normalisation, with ONE errata fix (CR 61, reported to EU): apostrophes are DELETED, not turned into spaces. EU's frozen
-    rule makes "don't" → "don t", which no negation matches — so "Yes, don't book it" passes as a yes in EU's own reference — and
-    "let's do it" → "let s do it", which no affirmative matches. Deleted, they become "dont" and "lets", both in EU's lists.
-    No v1.0 vector changes its expected answer (38/38 still pass)."""
+def normalise(s: str, apostrophe: str = "") -> str:
+    """EU's normalisation. apostrophe="" DELETES it ("don't" → "dont": 1.0.1, the CR 61 errata EU adopted); apostrophe=" " SPLITS it
+    ("what's" → "what s": 1.1). A veto is checked in BOTH forms (vetoed()); affirmatives in the deleted form."""
     s = unicodedata.normalize("NFC", s or "").lower()
-    s = re.sub(r"['‘’]", "", s)
+    s = re.sub(r"['‘’]", apostrophe, s)
     s = re.sub(r"[¡¿!?.,;:\"“”()—–]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
@@ -118,11 +118,30 @@ def affirmative(t: str, L: dict, extra: Tuple[str, ...] = ()) -> bool:
     return any(rest == a or rest.startswith(a + " ") for a in sorted(list(L["affirmatives"]) + list(extra), key=len, reverse=True))
 
 
-def explicit_yes(said: Optional[str], lang: str = "en") -> bool:
-    """AP6 exactly as frozen: an affirmative (after leading fillers), and NO negation, question or request anywhere."""
+def acts() -> dict:
+    """1.1 · approval-language-acts.json (EU's file, sha256-pinned): the words a given act's own yes may contain."""
+    raw = (SPEC / "approval-language-acts.json").read_bytes()
+    if hashlib.sha256(raw).hexdigest() != ACTS_SHA256:
+        raise RuntimeError("agapi/spec/approval-language-acts.json is not EU's 1.1 file")
+    return json.loads(raw)["acts"]
+
+
+def exempt(act_kind: Optional[str], lang: str) -> set:
+    """1.1 AP6 act-aware: for a cancellation's own yes ("cancel"), its own word stops vetoing. None → nothing exempt (1.0.1)."""
+    return set(acts().get(act_kind, {}).get(lang, {}).get("exempt_negations", [])) if act_kind else set()
+
+
+def vetoed(said: str, L: dict, skip=frozenset()) -> bool:
+    """1.1: any negation (bar `skip`) or question/request, in EITHER apostrophe form — "Yes, but what's the refund?" is not a yes."""
+    forms = (normalise(said or ""), normalise(said or "", " "))
+    return any(_has(f, n) for n in [x for x in L["negations"] if x not in skip] + L.get("questions_and_requests", []) for f in forms)
+
+
+def explicit_yes(said: Optional[str], lang: str = "en", act_kind: Optional[str] = None) -> bool:
+    """AP6 as in 1.1: an affirmative (after leading fillers), and NO veto in either apostrophe form (bar the act's exemptions)."""
     L = languages()[lang]
     t = normalise(said or "")
-    if not t or any(_has(t, n) for n in L["negations"] + L.get("questions_and_requests", [])):
+    if not t or vetoed(said, L, exempt(act_kind, lang)):
         return False
     return affirmative(t, L)
 
@@ -143,7 +162,7 @@ def decide(case: dict, test_mode: bool = False) -> Tuple[str, Optional[str]]:
     if rb["presented_at"] is None or a["approved_turn_id"] == rb["presented_turn_id"] or not (a["approved_at"] > rb["presented_at"]):
         return "approval_same_turn", None
     if a["method"] == "voice" or (a["device"]["channel"] == "sasha_chat" and a.get("said") is not None):
-        if not explicit_yes(a.get("said"), case.get("lang", "en")):
+        if not explicit_yes(a.get("said"), case.get("lang", "en"), case.get("act_kind")):
             return "no_explicit_yes", None
     if a["approved_at"] > rb["expires_at"] or now > a["expires_at"]:
         return "approval_expired", None

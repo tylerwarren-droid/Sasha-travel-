@@ -31,8 +31,13 @@ class TheYes(unittest.TestCase):
 
     def test_sashas_deliberate_additions(self):
         self.assertTrue(API.explicit_yes("Perfect, book the whole trip"))          # an extra affirmative
-        self.assertTrue(API.explicit_yes("yes, cancel it"))                        # cancel confirms a cancellation…
+        self.assertFalse(API.explicit_yes("yes, cancel it"))                       # 1.1: "cancel" vetoes a plain yes…
+        self.assertTrue(API.yes_to_cancel("yes, cancel it"))                       # …but confirms a cancellation (act_kind)…
+        self.assertFalse(API.yes_to_cancel("don't cancel it"))
         self.assertFalse(API.yes_to_book("yes, cancel it"))                        # …and never books
+        for said in ("Yes, but what's the refund?", "Sure — what’s the total?"):    # 1.1: the apostrophe hole
+            self.assertFalse(API.explicit_yes(said), said)
+        self.assertTrue(API.explicit_yes("OK, let's do it"))
         self.assertFalse(API.explicit_yes("yes, but first the price"))             # an extra veto (stricter is safe)
 
     def test_the_pinned_language_file(self):

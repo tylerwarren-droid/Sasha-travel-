@@ -129,10 +129,10 @@ _SASHA_YES = ("book the whole trip", "book my whole trip", "book our whole trip"
               "send me the page", "send me the link", "send their page", "send the page", "send the link")
 _SASHA_VETO = re.compile(r"(?i)\b(?:whether|alternatives?|polic(?:y|ies)|refund\w*|cost\w*|price\w*|fees?|charges?|show|look|"
                          r"explain|compare|details?|more about|instead|other|else|first)\b")
-_CANCEL_NEGATIONS = {"cancel", "cancela"}
+_CANCEL_NEGATIONS = {"cancel", "cancela"}   # CR 61's blanket exemption — superseded by 1.1's act_kind (yes_to_cancel); kept for importers
 
 
-def explicit_yes(said: Optional[str], lang: Optional[str] = None) -> bool:
+def explicit_yes(said: Optional[str], lang: Optional[str] = None, act_kind: Optional[str] = None) -> bool:
     """An explicit yes in the person's own words — "Yes, book it", "Then book it.", "Sí, adelante", "go ahead", "yes, cancel it" —
     with no negation, and never a question or a request for options (AgAPI v1.0 AP6 + Sasha 215). `lang` None: any language
     (a veto in either language vetoes). WHICH act it agrees to is the caller's: yes_to_book refuses a yes about cancelling."""
@@ -142,11 +142,15 @@ def explicit_yes(said: Optional[str], lang: Optional[str] = None) -> bool:
         return False
     langs = V1.languages()
     use = [lang] if lang else list(langs)
-    for code in use:
-        L = langs[code]
-        if any(V1._has(t, n) for n in L["negations"] + L.get("questions_and_requests", []) if n not in _CANCEL_NEGATIONS):
+    for code in use:   # 1.1: vetoes in both apostrophe forms; "cancel" vetoes UNLESS this is a cancellation's own yes (act_kind)
+        if V1.vetoed(said or "", langs[code], V1.exempt(act_kind, code)):
             return False
     return any(V1.affirmative(t, langs[code], _SASHA_YES if code == "en" else ()) for code in use)
+
+
+def yes_to_cancel(said: Optional[str]) -> bool:
+    """CR 64 · AgAPI 1.1 act-aware AP6: "Yes, cancel it" is a yes — to a cancellation, and only to one."""
+    return explicit_yes(said, act_kind="cancel")
 
 
 def yes_to_book(said: Optional[str]) -> bool:

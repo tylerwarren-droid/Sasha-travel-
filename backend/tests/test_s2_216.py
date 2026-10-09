@@ -216,5 +216,45 @@ class Flow217(unittest.TestCase):
         self.assertIn("TV-1", r["result"]["event"]["details"])
 
 
+    def test_a_place_on_screen_named_is_picked_never_searched_again(self):
+        from agapi import venues as VN
+        VN.remember_cards(ACCOUNT, [{"place_id": "sasha-test-venue", "name": "Sasha Test Venue (ours — rehearsal, not a real restaurant)"},
+                                    {"place_id": "p2", "name": "La Mesa Larga (test)"}])
+        try:
+            for said in ("The Sasha Test Venue", "sasha test venue", "La Mesa Larga"):
+                self.assertIsNotNone(VN.named_on_screen(ACCOUNT, said), said)
+            for said in ("dinner", "seafood restaurant", "tapas near Sol", "a table"):
+                self.assertIsNone(VN.named_on_screen(ACCOUNT, said), said)
+            with mock.patch("booking_signer.guest_whatsapp.api", mock.AsyncMock()) as api:
+                r = run(API.call(API.Ctx(account=ACCOUNT), "search_venues", {"what": "The Sasha Test Venue", "where": "Sol, Madrid"}))
+            self.assertEqual(r["error"]["code"], "already_on_screen")
+            self.assertIn("sasha-test-venue", r["error"]["message"])
+            api.assert_not_called()
+        finally:
+            VN._SHOWN.pop(ACCOUNT, None)
+
+
+    def test_the_same_booking_held_again_keeps_the_read_back_they_heard(self):
+        from agapi import venues as VN
+        at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        out = {"status": "awaiting_yes", "venue": "Sasha Test Venue", "route": "form", "read_back": ["I'll send their form…"]}
+        VN._HELD[ACCOUNT] = {"rung": "form", "id": "f1", "sha": "s" * 64, "at": at, "venue": "Sasha Test Venue", "place_id": "sasha-test-venue",
+                             "when": "2099-10-10T21:00", "party": 2, "summary": "Sat 21:00", "out": out}
+        try:
+            with mock.patch.object(VN, "_read", mock.AsyncMock(side_effect=AssertionError("never read again"))):
+                r = run(API.call(API.Ctx(account=ACCOUNT, user_said="Yes, go ahead."), "hold_venue",
+                                 {"name": "The Sasha Test Venue", "city": "Madrid", "day": "2099-10-10", "time": "21:00", "party": 2,
+                                  "place_id": "sasha-test-venue", "idempotency_key": "h-again"}))
+            self.assertTrue(r["ok"], r)
+            self.assertEqual(r["result"]["read_back"], out["read_back"])
+            self.assertEqual(VN._HELD[ACCOUNT]["at"], at)                                  # the clock kept: the yes can book
+            with mock.patch.object(VN, "_read", mock.AsyncMock(side_effect=RuntimeError("a new hold"))):   # another time → a new hold
+                r2 = run(API.call(API.Ctx(account=ACCOUNT), "hold_venue", {"name": "Sasha Test Venue", "city": "Madrid", "day": "2099-10-10",
+                                                                         "time": "20:00", "party": 2, "idempotency_key": "h-other"}))
+            self.assertFalse(r2["ok"])
+        finally:
+            VN._HELD.pop(ACCOUNT, None)
+
+
 if __name__ == "__main__":
     unittest.main()

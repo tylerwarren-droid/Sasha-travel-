@@ -410,6 +410,10 @@ async def _search_venues(ctx: Ctx, a: dict) -> dict:
     what is on screen. The render event carries the same cards (the card never searches again) and the ribbon line."""
     from booking_signer import guest_whatsapp as GW
     from agapi import venues as VN
+    picked = VN.named_on_screen(ctx.account, a.get("what"))
+    if picked:   # Sasha 217 · a place already on their cards is PICKED, never searched for again (it brought other places)
+        raise ToolError("already_on_screen", f"{picked.get('name')} is on their screen — that's their pick: call read_booking_route "
+                                             f"with place_id {picked.get('place_id')} (never search for it again)")
     body = {k: v for k, v in {"what": a["what"], "where": a["where"], "country": a.get("country"), "open_at": a.get("open_at"),
                               "near": a.get("near")}.items() if v}
     status, r = await GW.api(ctx.account, "POST", "/api/booking/venues/find", body)
@@ -886,7 +890,7 @@ TOOLS: List[dict] = [
        {"what": {"type": "string"}, "where": {"type": "string"}, "country": {"type": "string", "pattern": "^[A-Z]{2}$"},
         "open_at": {"type": "string", "description": "the local date-time wanted, YYYY-MM-DDTHH:MM (on the trip's day)"},
         "party": {"type": "integer", "minimum": 1, "maximum": 20}}, ["what", "where"],
-       {"type": "object", "properties": {"venues": {"type": "array"}}}, ["what_invalid", "where_invalid", "places_not_configured"]),
+       {"type": "object", "properties": {"venues": {"type": "array"}}}, ["what_invalid", "where_invalid", "places_not_configured", "already_on_screen"]),
     _t("prepare_trip", "Magellan", prepare_trip, "Start getting the trip ready in the background the moment destination, dates "
        "and party are known (and again once the origin is): the itinerary, then both legs' flights. Returns at once — keep "
        "chatting; propose_trip with the same details picks it up.",

@@ -175,7 +175,7 @@ Places to stay in a city, best rated first: real hotels (Google), each with an E
 
 Restaurants, spas or other places in a city (Google listings; nothing contacted). The person sees them as photo cards and picks one by tap or voice; booking it goes through that venue's own route.
 
-**Errors:** `what_invalid`, `where_invalid`, `places_not_configured`, `missing_input`, `internal`
+**Errors:** `what_invalid`, `where_invalid`, `places_not_configured`, `already_on_screen`, `missing_input`, `internal`
 
 **Input**
 

@@ -110,6 +110,24 @@ def remember_cards(account: str, cards: List[dict]) -> None:
         m.pop(next(iter(m)))
 
 
+def _base(name: str) -> str:
+    n = re.sub(r"\s*\([^)]*\)\s*", " ", (name or "").lower())
+    n = re.sub(r"[^\w\s]", " ", n)
+    return re.sub(r"\s+", " ", re.sub(r"^\s*(?:the|el|la|los|las)\s+", "", n)).strip()
+
+
+def named_on_screen(account: str, words: Optional[str]) -> Optional[dict]:
+    """Sasha 217 · a card on their screen that these words NAME ("The Sasha Test Venue" → the card "Sasha Test Venue (ours …)")."""
+    w = _base(words or "")
+    if len(w) < 4:
+        return None
+    for c in reversed(list((_SHOWN.get(account) or {}).values())):
+        b = _base(c.get("name") or "")
+        if len(b) >= 4 and (b == w or (len(w) >= 6 and (b in w or w in b))):
+            return c
+    return None
+
+
 def card_of(account: str, place_id: Optional[str], name: Optional[str] = None) -> Optional[dict]:
     m = _SHOWN.get(account) or {}
     if place_id and place_id in m:
@@ -185,7 +203,17 @@ async def _reservation(ctx, a: dict, rd: dict) -> dict:
 async def hold_venue(ctx, a: dict) -> dict:
     """Prepare the booking by its route → the read-back (or the ladder's question first). Nothing is sent."""
     from booking_signer import guest_accounts as GA, guest_receipt as GR
+    from agapi.v0 import stale
     GW = _API()
+    held = _HELD.get(ctx.account)
+    # Sasha 217 · THE SAME BOOKING held again (she re-holds on the yes turn): the read-back they already heard, as it is. A new hold
+    # made a new form with a new sha256, so the yes was "read back first" again — and the booking looped, never sent.
+    if held and held.get("out") and held["at"] < ctx.started and not stale(held["at"]) \
+            and (not a.get("route") or a.get("route") == held.get("rung")) \
+            and str(held.get("when") or "")[:16] == f"{a.get('day')}T{a.get('time')}"[:16] and int(held.get("party") or 0) == int(a.get("party") or 0) \
+            and ((a.get("place_id") and a.get("place_id") == held.get("place_id")) or _base(a.get("name") or "") == _base(held.get("venue") or "")):
+        card = card_of(ctx.account, a.get("place_id") or held.get("place_id"), a.get("name"))
+        return _with_card(card, {**held["out"], "same_read_back": "they've heard this — on their yes, call book_venue (never hold again)"})
     rd = await _read(ctx, a)
     res = await _reservation(ctx, a, rd)
     at = res["when"]["at"]
@@ -287,7 +315,7 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
                           "place_id": rd.get("place_id"),
                           "when": res["when"]["at"], "party": res["how_many"]["count"], **(extra or {})}
     lines = GW.guest_lines(rung, read_back.get("lines") or [])
-    return {"status": "awaiting_yes", "venue": GW.plain_venue(rd["venue"]), "route": rung, "when": GW.summary(res),
+    out = {"status": "awaiting_yes", "venue": GW.plain_venue(rd["venue"]), "route": rung, "when": GW.summary(res),
             "read_back": lines, "what_happens": {
                 "form": "Sasha sends their own booking form",
                 "handover": "Sasha fills their booking page; if it needs a human step (a CAPTCHA, terms, the final button) "
@@ -295,6 +323,8 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
                 "page": f"their {extra.get('platform') or 'booking'} page goes to their phone; they press book there" if extra else "",
                 "email": "Sasha emails them; it's a request until they reply",
                 "call": "Sasha calls them; it's booked only if they say yes on the call"}.get(rung, "")}
+    _HELD[ctx.account]["out"] = out   # Sasha 217 · the same booking held again gets these words, unchanged
+    return out
 
 
 async def book_venue(ctx, a: dict) -> dict:

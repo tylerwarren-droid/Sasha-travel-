@@ -256,5 +256,12 @@ class Flow217(unittest.TestCase):
             VN._HELD.pop(ACCOUNT, None)
 
 
+    def test_the_calendar_links_are_on_a_card(self):
+        from app.agent import sasha as AG
+        ev = AG.render("add_to_calendar", {"event": {"title": "Dinner at Sasha Test Venue", "starts_at": "2099-10-10T19:00:00Z"},
+                                           "links": {"google": "g", "outlook": "o", "apple": "a", "ics": "a"}}, {})
+        self.assertEqual((ev["kind"], sorted(ev["links"])), ("calendar", ["apple", "google", "outlook"]))
+
+
 if __name__ == "__main__":
     unittest.main()

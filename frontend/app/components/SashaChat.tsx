@@ -217,6 +217,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   const [screenTurn, setScreenTurn] = useState<string | null>(null)
   const [groupTurn, setGroupTurn] = useState<Record<string, string>>({})
   const [highlight, setHighlight] = useState<string[]>([])
+  const [calendar, setCalendar] = useState<{ title?: string; starts_at?: string; links: Record<string, string> } | null>(null)   // Sasha 217
   const [readBack, setReadBack] = useState<{ lines: string[]; total?: number | null; what?: string; live?: boolean; status?: string } | null>(null)
   const onScreen = (g: string) => !agent || !screenTurn || groupTurn[g] === screenTurn
   const claim = (g: string, t?: string) => { if (!t) return; setScreenTurn(t); setGroupTurn(m => ({ ...m, [g]: t })) }
@@ -630,6 +631,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             else if (ev.kind === 'focus' && ev.focus) setHighlight([ev.focus])
             else if (ev.kind === 'pay' && ev.url) onPay?.(String(ev.url))   // Sasha 214 · a phone pays here, on the same device
             else if (ev.kind === 'handover' && ev.url) { if (ev.focus) setHighlight([ev.focus]); onHandover?.(String(ev.url), !!ev.external) }   // their page / Tap to finish   // Sasha 213 · a pick: the cards stay, that one highlighted
+            else if (ev.kind === 'calendar' && ev.links) { setCalendar({ title: ev.title, starts_at: ev.starts_at, links: ev.links }); claim('calendar', ev.turn) }
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) { setReadBack({ lines: ev.read_back, total: ev.total_eur, what: ev.what, live: ev.live, status: ev.status }); claim('readback', ev.turn) }
             else if (ev.kind === 'trip') window.dispatchEvent(new Event('sasha-plan-refresh'))
           }
@@ -964,6 +966,17 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
           <button type="button" className="lw-totalpill" onClick={() => onTabChange?.('trip')}>
             🧾 €{Math.round(tripTotal.total_eur).toLocaleString()} all in · see the trip ›
           </button>
+        )}
+        {calendar && onScreen('calendar') && (
+          <div className="lw-card">{/* Sasha 217 · the confirmed booking in their calendar: one tap each (nothing leaves their account) */}
+            <div className="lw-cardHd"><span className="lw-ci gold">📅</span><div className="lw-meta"><div className="lw-k">Add to your calendar</div>
+              <div className="lw-h">{calendar.title || 'Your booking'}</div></div></div>
+            <div className="lw-cardBody" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {(['google', 'outlook', 'apple'] as const).filter(k => calendar.links[k]).map(k => (
+                <a key={k} className="lw-chip" href={calendar.links[k]} target="_blank" rel="noreferrer">{k === 'google' ? 'Google' : k === 'outlook' ? 'Outlook' : 'Apple / other'}</a>
+              ))}
+            </div>
+          </div>
         )}
         {readBack && onScreen('readback') && (
           <div className="lw-card">{/* Sasha 213 · the read-back she just gave — from her own hold, never a second quote */}

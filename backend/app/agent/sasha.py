@@ -106,8 +106,9 @@ RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues":
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
           "save_travellers": "inline", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
           "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
-RENDER.update({"send_email": "read_back", "add_to_calendar": "inline", "send_whatsapp": "read_back", "get_activity": "inline"})   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
-KINDS = {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
+RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_whatsapp": "read_back", "get_activity": "inline"})   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
+KINDS_S2 = {"calendar"}   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
+KINDS = KINDS_S2 | {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 
 
 def render(tool: str, res: dict, args: dict) -> Optional[dict]:
@@ -144,6 +145,10 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": kind, "find": {"what": args.get("what") or c.get("name"), "where": args.get("city") or ""},
                 "preset": {"all": [c], "cards": [c], "show": 1}, "focus": c.get("place_id"),
                 "ribbon": f"{c.get('name')}" + (f" · {res['when']}" if res.get("when") else "")}
+    if tool == "add_to_calendar" and res.get("links"):   # Sasha 217 · Google / Outlook / Apple, one tap each
+        ev = res.get("event") or {}
+        return {"type": "render", "kind": "calendar", "title": ev.get("title"), "starts_at": ev.get("starts_at"),
+                "links": {k: v for k, v in res["links"].items() if k in ("google", "outlook", "apple")}}
     if tool in ("send_email", "send_whatsapp") and res.get("status") in ("sent", "not_sent"):   # Sasha 217 · the card becomes the outcome
         m = res.get("message") or {}
         to = m.get("to") or {}

@@ -550,6 +550,125 @@
     },
     "usage_get_out": {
       "$ref": "#/$defs/usage_summary"
+    },
+    "webhooks_register_in": {
+      "description": "https only. The service refuses loopback, private (RFC 1918 / RFC 4193), link-local and cloud-metadata hosts, after DNS resolution (webhook_url_refused). At most 2 active endpoints per account and mode (webhook_limit_reached).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://",
+          "maxLength": 2048
+        },
+        "events": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/webhook_event/properties/event"
+          },
+          "description": "Default: all events."
+        }
+      }
+    },
+    "webhooks_register_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoint_id",
+        "url",
+        "secret",
+        "created_at"
+      ],
+      "properties": {
+        "endpoint_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/webhook_endpoint_id"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "secret": {
+          "type": "string",
+          "pattern": "^whsec_[A-Za-z0-9]{32,}$",
+          "description": "Shown ONCE, in this response only; stored as an HMAC."
+        },
+        "created_at": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "webhooks_revoke_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoint_id"
+      ],
+      "properties": {
+        "endpoint_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/webhook_endpoint_id"
+        }
+      }
+    },
+    "webhooks_revoke_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoint_id",
+        "revoked_at"
+      ],
+      "properties": {
+        "endpoint_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/webhook_endpoint_id"
+        },
+        "revoked_at": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "users_verify_destination_in": {
+      "description": "The one-time code AgAPI sent to that destination, relayed by the partner's app. 5 attempts per code; codes expire after 10 minutes. The key-less code page remains the default.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user_id",
+        "channel",
+        "value",
+        "code"
+      ],
+      "properties": {
+        "end_user_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/end_user_id"
+        },
+        "channel": {
+          "enum": [
+            "sms",
+            "whatsapp",
+            "email"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 320
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[0-9]{6}$"
+        }
+      }
+    },
+    "users_verify_destination_out": {
+      "$ref": "#/$defs/end_user"
     }
   }
 }

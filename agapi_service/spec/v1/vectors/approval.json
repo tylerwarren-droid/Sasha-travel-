@@ -1,5 +1,5 @@
 {
-  "version": "1.0-draft.3",
+  "version": "1.0",
   "order": [
     "approval_not_found",
     "approval_untrusted_origin",

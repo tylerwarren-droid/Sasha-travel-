@@ -490,8 +490,10 @@ async def trip_cancel(ctx: Ctx, inp: dict):
     current = {"intent_id": it["id"], "operation": "trip.cancel", "lines": lines, "payload": payload}
     apv = _check_and_consume(ctx, rb, current, 1)
     cid = R.new_id("act")
-    res = {"reference": "CXL" + secrets.token_hex(3).upper(), "service": "duffel" if "Flight" in original[0] else "sandbox_venue",
-           "words": "Cancellation confirmed (sandbox fixture; nothing real was booked or charged).", "sha256": R.sha256({"cancel": act["id"]})}
+    try:
+        res = await PV.cancel_fixture("duffel" if "Flight" in original[0] else "sandbox_venue", act["id"], ctx.up)
+    except PV._Unknown as u:
+        _unknown(ctx, cid, it, {"id": None}, inp, apv, u.service, None)
     outcome = _confirmed(res)
     _new_act(ctx, cid, it, "cancel", None, outcome, target=act["id"], refund=refund)
     if kind == "AWAITING_PAYMENT":
@@ -689,20 +691,33 @@ async def approvals_status(ctx: Ctx, inp: dict):
         if state == "valid" and a["expires_at"] < ts():
             state = "expired"
         apv = {"approval_id": a["id"], "state": state, "approved_at": a["approved_at"], "method": a["method"],
-               "channel": loads(a["device"])["channel"], "expires_at": a["expires_at"], "void_reason": a["void_reason"]}
+               "expires_at": a["expires_at"], "void_reason": a["void_reason"]}
     return {"read_back_id": rb["id"], "read_back_state": _rb_state(rb), "presented_at": rb["presented_at"], "approval": apv}, 200, None
 
 
 async def webhooks_register(ctx: Ctx, inp: dict):
-    """Finding 5: the partner registers its own endpoint; the whsec_ secret is in this response only. At most 2 active."""
+    """v1.0 (EU 205): the partner registers its own endpoint; the whsec_ secret is in this response only. At most 2 active."""
     if len(ctx.store.q("select id from webhook_endpoints where account = ? and state = 'active'", ctx.account)) >= 2:
-        raise AgapiError("invalid_input", "Two webhook endpoints are already active for this account.", {"path": "/url", "rule": "max_active"})
+        raise AgapiError("webhook_limit_reached", "This account already has 2 active webhook endpoints; revoke one first.")
     try:
-        eid, secret = W.add_endpoint(ctx.store, ctx.account, inp["url"])
+        eid, secret = W.add_endpoint(ctx.store, ctx.account, inp["url"], inp.get("events"))
     except ValueError as e:
-        raise AgapiError("invalid_input", f"{str(e).capitalize()}.", {"path": "/url", "rule": "public_https"})
+        raise AgapiError("webhook_url_refused", f"{str(e).capitalize()}.")
     row = ctx.store.one("select * from webhook_endpoints where account = ? and id = ?", ctx.account, eid)
-    return {"endpoint_id": eid, "url": row["url"], "secret": secret, "created_at": row["created_at"]}, 201, None
+    out = {"endpoint_id": eid, "url": row["url"], "secret": secret, "created_at": row["created_at"]}
+    if inp.get("events"):
+        out["events"] = inp["events"]
+    return out, 201, None
+
+
+async def webhooks_revoke(ctx: Ctx, inp: dict):
+    row = ctx.store.one("select * from webhook_endpoints where account = ? and id = ? and state = 'active'", ctx.account, inp["endpoint_id"])
+    if not row:
+        raise AgapiError("not_found", "No active webhook endpoint with that id for this account.")
+    at = ts()
+    ctx.store.x("update webhook_endpoints set state = 'revoked' where account = ? and id = ?", ctx.account, row["id"])
+    ctx.store.x("update webhook_deliveries set state = 'failed' where account = ? and endpoint_id = ? and state = 'pending'", ctx.account, row["id"])
+    return {"endpoint_id": row["id"], "revoked_at": at}, 200, None
 
 
 async def users_verify_destination(ctx: Ctx, inp: dict):
@@ -715,12 +730,11 @@ async def users_verify_destination(ctx: Ctx, inp: dict):
         raise AgapiError("not_found", "No such destination for this end user; users.register it first.")
     if not d["verified"]:
         if d["attempts"] >= 5 or (d["otp_expires_at"] or "") < ts():
-            raise AgapiError("invalid_input", "That code has expired; register the destination again for a new one.",
-                             {"path": "/code", "rule": "expired"})
+            raise AgapiError("destination_code_expired", "That code has expired or its attempts are used up; register the destination again.")
         if not hmac.compare_digest(d["otp_hmac"] or "", _otp_hmac(inp["code"])):
             ctx.store.x("update destinations set attempts = attempts + 1 where account = ? and end_user = ? and channel = ? and value = ?",
                         ctx.account, inp["end_user_id"], inp["channel"], v)
-            raise AgapiError("invalid_input", "That code isn't right.", {"path": "/code", "rule": "mismatch"})
+            raise AgapiError("destination_code_invalid", "That code isn't right.", {"attempts_remaining": max(0, 4 - d["attempts"])})
         ctx.store.x("update destinations set verified = 1, otp_hmac = null where account = ? and end_user = ? and channel = ? and value = ?",
                     ctx.account, inp["end_user_id"], inp["channel"], v)
     return end_user_out(ctx.store, ctx.account, inp["end_user_id"]), 200, None
@@ -816,4 +830,4 @@ OPS = {"travel.find_flights": find_flights, "travel.find_stays": find_stays, "ve
        "users.register": users_register, "usage.get": usage_get, "sandbox.simulate_approval": sandbox_simulate_approval,
        "sandbox.messages": sandbox_messages,
        "approvals.status": approvals_status, "webhooks.register": webhooks_register, "users.verify_destination": users_verify_destination,
-       "messages.send_email": messages_send_email, "calendar.add_event": calendar_add_event}
+       "messages.send_email": messages_send_email, "calendar.add_event": calendar_add_event, "webhooks.revoke": webhooks_revoke}

@@ -1,5 +1,5 @@
 {
-  "version": "1.0-draft.3",
+  "version": "1.0",
   "rule": "approval-language.json",
   "cases": [
     {
@@ -131,6 +131,66 @@
       "lang": "es",
       "said": "todavía no",
       "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "Yes — what are my cancellation terms?",
+      "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "Sure, find me dinner options",
+      "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "yes, can you check the price first",
+      "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "Yes, show me the hotel",
+      "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "ok, which seat is it",
+      "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "Yes, book it.",
+      "explicit_yes": true
+    },
+    {
+      "lang": "en",
+      "said": "Go ahead and book it",
+      "explicit_yes": true
+    },
+    {
+      "lang": "es",
+      "said": "Sí, ¿qué condiciones tiene?",
+      "explicit_yes": false
+    },
+    {
+      "lang": "es",
+      "said": "Vale, búscame opciones",
+      "explicit_yes": false
+    },
+    {
+      "lang": "es",
+      "said": "sí, ¿puedes mirar el precio?",
+      "explicit_yes": false
+    },
+    {
+      "lang": "es",
+      "said": "Sí, adelante.",
+      "explicit_yes": true
+    },
+    {
+      "lang": "es",
+      "said": "Vale, hazlo",
+      "explicit_yes": true
     }
   ]
 }

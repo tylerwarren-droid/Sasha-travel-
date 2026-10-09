@@ -21,7 +21,8 @@ _DATA_KEYS = ("intent_id", "read_back_id", "approval_id", "act_id", "evidence_id
 
 
 def emit(store: Store, account: str, event: str, data: dict) -> None:
-    eps = store.q("select * from webhook_endpoints where account = ? and state = 'active'", account)
+    eps = [e for e in store.q("select * from webhook_endpoints where account = ? and state = 'active'", account)
+           if not e.get("events") or event in json.loads(e["events"])]
     if not eps:
         return
     payload = {"webhook_id": R.new_id("whk"), "event": event, "created_at": ts()[:19] + "Z", "account": account, "mode": config.MODE,
@@ -40,6 +41,9 @@ async def deliver_due(store: Store) -> int:
         ep = store.one("select * from webhook_endpoints where account = ? and id = ?", d["account"], d["endpoint_id"])
         if not ep or ep["state"] != "active":
             store.x("update webhook_deliveries set state = 'failed' where id = ?", d["id"])
+            continue
+        if not public_host(ep["url"]):            # DNS may have changed since registration: never deliver to a private address
+            store.x("update webhook_deliveries set state = 'failed', last_status = null where id = ?", d["id"])
             continue
         t = int(time.time())
         status = None
@@ -79,18 +83,43 @@ async def loop(get_store) -> None:
         await asyncio.sleep(5)
 
 
-def add_endpoint(store: Store, account: str, url: str) -> tuple:
-    """→ (endpoint id, the secret — shown ONCE)."""
-    import secrets
-    if not url.startswith("https://") and not url.startswith("http://127.0.0.1") and not url.startswith("http://localhost"):
-        raise ValueError("a webhook endpoint is https")
+_PRIVATE = __import__("ipaddress")
+
+
+def _resolve(host: str):
+    """The host's addresses (tests replace this). An unresolvable host is refused: a webhook must reach a real public host."""
+    import socket
+    return {ai[4][0] for ai in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)}
+
+
+def public_host(url: str) -> bool:
+    """https, and every address it resolves to is public: never loopback, private (RFC 1918/4193), link-local, multicast,
+    reserved or cloud metadata (169.254.169.254) — checked at registration AND before every delivery (DNS can change)."""
+    if not url.startswith("https://"):
+        return False
     host = (urlsplit(url).hostname or "").lower()
-    if host in ("localhost", "127.0.0.1", "::1") or host.endswith(".internal") or host.endswith(".local") or \
-            __import__("re").fullmatch(r"(10|127|169\.254|192\.168)(\.\d+){1,3}|172\.(1[6-9]|2\d|3[01])(\.\d+){2}", host):
-        if url.startswith("https://"):
-            raise ValueError("a webhook endpoint is a public https host")   # never our own network (SSRF)
-    eid, secret = R.new_id("whk").replace("whk_", "wep_"), "whsec_" + secrets.token_urlsafe(32)
-    store.x("insert into webhook_endpoints (account, id, url, secret, state, created_at) values (?, ?, ?, ?, 'active', ?)",
-            account, eid, url, secret, ts())
+    if not host or host == "localhost" or host.endswith((".internal", ".local", ".localhost")):
+        return False
+    try:
+        addrs = _resolve(host)
+    except Exception:
+        return False
+    for a in addrs:
+        ip = _PRIVATE.ip_address(a.split("%")[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+            return False
+    return bool(addrs)
+
+
+def add_endpoint(store: Store, account: str, url: str, events=None) -> tuple:
+    """→ (endpoint id whe_…, the secret whsec_… — shown ONCE)."""
+    import secrets
+    import string
+    if not public_host(url):
+        raise ValueError("the webhook URL must be https on a public host (not loopback, private, link-local or metadata)")
+    eid = R.new_id("whk").replace("whk_", "whe_")
+    secret = "whsec_" + "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40))
+    store.x("insert into webhook_endpoints (account, id, url, secret, state, created_at, events) values (?, ?, ?, ?, 'active', ?, ?)",
+            account, eid, url, secret, ts(), json.dumps(events) if events else None)
     allow_endpoint_hosts(store)
     return eid, secret

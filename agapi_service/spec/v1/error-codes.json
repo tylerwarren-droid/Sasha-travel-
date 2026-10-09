@@ -1,5 +1,5 @@
 {
-  "version": "1.0-draft.2",
+  "version": "1.0",
   "codes": [
     {
       "code": "invalid_request",
@@ -454,6 +454,50 @@
       "retryable": false,
       "store_for_replay": true,
       "meaning": "The provider does not allow cancelling this act now.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "destination_code_invalid",
+      "http": 422,
+      "category": "domain",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The one-time code does not match (attempts remaining in details).",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "destination_code_expired",
+      "http": 409,
+      "category": "domain",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The one-time code expired or its attempts are used up; request a new code.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "webhook_url_refused",
+      "http": 422,
+      "category": "domain",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The webhook URL is not https, or resolves to a loopback, private, link-local or metadata address.",
+      "details_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "code": "webhook_limit_reached",
+      "http": 409,
+      "category": "domain",
+      "retryable": false,
+      "store_for_replay": true,
+      "meaning": "The account already has 2 active webhook endpoints in this mode; revoke one first.",
       "details_schema": {
         "type": "object"
       }

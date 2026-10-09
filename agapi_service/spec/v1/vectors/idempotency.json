@@ -1,7 +1,7 @@
 {
-  "version": "1.0-draft.3",
+  "version": "1.0",
   "rule": "Part 1 §7",
-  "note": "Each case starts from an empty key store. 'upstream' is the scripted provider behaviour for that step. Counters: upstream_calls (calls to the provider), charged (a metering charge, Part 4).",
+  "note": "Each case starts from an empty key store. 'upstream' is the scripted provider behaviour for that step. Counters: upstream_calls (calls to the provider), charged (a metering charge, Part 4). A step without 'operation' is trip.complete. Scope (Part 1 I3, v1.0): (account, operation, idempotency_key).",
   "cases": [
     {
       "id": "I-1",
@@ -42,7 +42,7 @@
     },
     {
       "id": "I-2",
-      "description": "the same key, a different input → idempotency_conflict",
+      "description": "the same key, the same operation, a different input → idempotency_conflict (I3 v1.0: the intent is not part of the scope)",
       "steps": [
         {
           "caller": "acct_A·key_A",
@@ -379,6 +379,42 @@
           "expect": {
             "status": 400,
             "code": "idempotency_key_required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "I-12",
+      "description": "the same key on a DIFFERENT operation is a different key (I3 scope includes the operation): no conflict, no replay",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "confirmed",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "replayed": false,
+            "upstream_calls": 1
+          }
+        },
+        {
+          "caller": "acct_A·key_A",
+          "operation": "trip.cancel",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "act_id": "<act_id from step 1>"
+          },
+          "approval": "valid",
+          "upstream": "cancelled",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "replayed": false,
+            "upstream_calls": 1
           }
         }
       ]

@@ -1,5 +1,5 @@
 {
-  "version": "1.0-draft.4",
+  "version": "1.0",
   "operations": [
     {
       "operation": "travel.find_flights",
@@ -246,6 +246,65 @@
       "output": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/sandbox_messages_out",
       "errors": [
         "mode_not_available"
+      ],
+      "cost_class": "free"
+    },
+    {
+      "operation": "approvals.status",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/approvals_status_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/approvals_status_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "read"
+    },
+    {
+      "operation": "webhooks.register",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/webhooks_register_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/webhooks_register_out",
+      "errors": [
+        "invalid_input",
+        "webhook_url_refused",
+        "webhook_limit_reached",
+        "idempotency_key_required",
+        "idempotency_conflict"
+      ],
+      "cost_class": "free"
+    },
+    {
+      "operation": "webhooks.revoke",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/webhooks_revoke_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/webhooks_revoke_out",
+      "errors": [
+        "not_found",
+        "idempotency_key_required"
+      ],
+      "cost_class": "free"
+    },
+    {
+      "operation": "users.verify_destination",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/users_verify_destination_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/users_verify_destination_out",
+      "errors": [
+        "not_found",
+        "invalid_input",
+        "destination_code_invalid",
+        "destination_code_expired",
+        "rate_limited",
+        "idempotency_key_required"
       ],
       "cost_class": "free"
     }

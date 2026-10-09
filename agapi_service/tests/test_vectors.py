@@ -45,21 +45,15 @@ class ExplicitYes(unittest.TestCase):
         cases = load("explicit-yes")["cases"]
         for c in cases:
             with self.subTest(f"{c['lang']}: {c['said']}"):
-                self.assertEqual(R.explicit_yes(c["said"], c["lang"], strict=False), c["explicit_yes"])   # EU's rule exactly
-                self.assertEqual(R.explicit_yes(c["said"], c["lang"]), c["explicit_yes"])                # + our stricter veto
-        self.assertEqual(len(cases), 26)
+                self.assertEqual(R.explicit_yes(c["said"], c["lang"]), c["explicit_yes"])
+        self.assertEqual(len(cases), 38)                                  # v1.0: +12 question/request cases
 
-    def test_the_spec_alone_lets_a_question_through_our_veto_does_not(self):
-        for said in ("Yes — what are my cancellation terms?", "Sure, find me dinner options", "yes, can you show me others"):
-            self.assertTrue(R.explicit_yes(said, "en", strict=False), said)     # ⚠ reported to EU (CR 58)
-            self.assertFalse(R.explicit_yes(said, "en"), said)
-        self.assertFalse(R.explicit_yes("Sí, ¿qué opciones hay?", "es"))
-
-    def test_tylers_decision_vale_is_a_yes_and_a_question_is_not(self):
-        self.assertTrue(R.explicit_yes("Vale", "es"))
-        self.assertFalse(R.explicit_yes("vale, espera", "es"))
-        self.assertFalse(R.explicit_yes("What are my cancellation terms?", "en"))
-        self.assertFalse(R.explicit_yes("Find me dinner options", "en"))
+    def test_the_lists_come_from_the_frozen_file(self):
+        L = json.loads((V / "approval-language.json").read_text(encoding="utf-8"))
+        self.assertEqual(L["version"], "1.0")
+        self.assertIn("questions_and_requests", L["languages"]["en"])
+        self.assertTrue(R.explicit_yes("Vale", "es"))                    # Tyler: "vale" alone is a yes
+        self.assertFalse(R.explicit_yes("Yes — what are my cancellation terms?", "en"))
 
 
 class Approval(unittest.TestCase):

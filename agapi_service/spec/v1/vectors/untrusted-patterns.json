@@ -1,5 +1,5 @@
 {
-  "version": "1.0-draft.3",
+  "version": "1.0",
   "rule": "Part 2 §3. A match sets instruction_like: true. The text is kept and shown quoted; nothing is removed for matching. Case-insensitive.",
   "patterns": [
     "ignore (all |any |the )?(previous|prior|above|earlier)",

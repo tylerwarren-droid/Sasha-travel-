@@ -54,14 +54,14 @@ def read_back_sha256(account, intent_id, operation, lines, payload_sha256):
 # ── AP6 explicit yes ────────────────────────────────────────────────────────────────────────
 def _norm(s):
     s = unicodedata.normalize("NFC", s).lower()
-    s = re.sub(r"[¡¿!?.,;:\"'“”‘’()]", " ", s)
+    s = re.sub(r"[¡¿!?.,;:\"'“”‘’()—–]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
 def explicit_yes(said, lang):
     L = json.load(open(__file__.rsplit("/", 2)[0] + "/approval-language.json"))["languages"][lang]
     t = _norm(said or "")
     if not t: return False
-    for neg in L["negations"]:
+    for neg in L["negations"] + L.get("questions_and_requests", []):
         if re.search(r"(?<!\w)" + re.escape(neg) + r"(?!\w)", t): return False
     rest = t
     changed = True

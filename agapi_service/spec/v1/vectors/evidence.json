@@ -1,5 +1,5 @@
 {
-  "version": "1.0-draft.4",
+  "version": "1.0",
   "rule": "Part 2 §4: body_sha256 = sha256(canonical(evidence without body_sha256))",
   "cases": [
     {

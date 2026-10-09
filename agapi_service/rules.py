@@ -101,27 +101,18 @@ def _lang() -> dict:
 
 def _norm_said(s: str) -> str:
     s = unicodedata.normalize("NFC", s).lower()
-    s = re.sub(r"[¡¿!?.,;:\"'“”‘’()]", " ", s)
+    s = re.sub(r"[¡¿!?.,;:\"'“”‘’()—–]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
 
-# CR 56/58 · STRICTER THAN THE SPEC (additive, proposed to EU for approval-language.json): under the v1 lists "Yes — what are my
-# cancellation terms?" and "Sure, find me dinner options" ARE an explicit yes ("yes"/"sure" affirmative; no listed negation). A
-# question word or a request for options anywhere vetoes the yes here. None of the 26 Part 3 vectors contains one (tested).
-QUESTION_VETO = {"en": ["what", "how", "which", "when", "where", "why", "who", "options", "option", "terms", "policy", "find",
-                        "search", "show me", "look up", "tell me", "can you", "could you", "would you", "is it", "are there", "list"],
-                 "es": ["qué", "cómo", "cuál", "cuáles", "cuándo", "dónde", "por qué", "opciones", "condiciones", "política", "busca",
-                        "buscar", "búscame", "muéstrame", "enséñame", "dime", "puedes", "podrías"]}
-
-
-def explicit_yes(said: Optional[str], lang: str = "en", strict: bool = True) -> bool:
-    """AP6, server-side, never a model: an affirmative phrase (after leading fillers) and NO negation anywhere.
-    strict (the default here): also no question word or request for options (QUESTION_VETO) — a question is never a yes."""
+def explicit_yes(said: Optional[str], lang: str = "en") -> bool:
+    """AP6 (v1.0), server-side, never a model: an affirmative phrase (after leading fillers) and NO negation, question or request for
+    options anywhere — every list read from approval-language.json (questions_and_requests: CR 59 finding 1, adopted by EU 205)."""
     L = _lang()[lang]
     t = _norm_said(said or "")
     if not t:
         return False
-    for neg in L["negations"] + (QUESTION_VETO.get(lang, []) if strict else []):
+    for neg in L["negations"] + L.get("questions_and_requests", []):
         if re.search(r"(?<!\w)" + re.escape(neg) + r"(?!\w)", t):
             return False
     rest, changed = t, True
@@ -137,7 +128,7 @@ def explicit_yes_any(said: Optional[str]) -> Tuple[bool, Optional[str]]:
     """No language given (the sandbox's simulate_approval): a yes in some language AND no negation in ANY of them."""
     t = _norm_said(said or "")
     for code, L in _lang().items():
-        if any(re.search(r"(?<!\w)" + re.escape(n) + r"(?!\w)", t) for n in L["negations"] + QUESTION_VETO.get(code, [])):
+        if any(re.search(r"(?<!\w)" + re.escape(n) + r"(?!\w)", t) for n in L["negations"] + L.get("questions_and_requests", [])):
             return False, None
     for code in _lang():
         if explicit_yes(said, code):

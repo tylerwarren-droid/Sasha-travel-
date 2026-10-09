@@ -53,7 +53,7 @@ create table if not exists messages (account text not null, end_user text, to_ t
 create table if not exists calendar_files (token_hash text primary key, account text not null, act_id text not null, ics text not null,
   created_at text not null);
 create table if not exists webhook_endpoints (account text not null, id text not null, url text not null, secret text not null,
-  state text not null, created_at text not null, primary key (account, id));
+  state text not null, created_at text not null, events text, primary key (account, id));
 create table if not exists webhook_deliveries (id text primary key, account text not null, endpoint_id text not null, event text not null,
   body text not null, created_at text not null, attempts int not null default 0, next_at text not null, state text not null,
   last_status int);
@@ -70,6 +70,11 @@ class Store:
         self.db.execute("pragma journal_mode=wal")
         self.db.execute("pragma busy_timeout=5000")
         self.db.executescript(_SCHEMA)
+        for col in ("alter table webhook_endpoints add column events text",):   # v1.0 columns on a database made before them
+            try:
+                self.db.execute(col)
+            except sqlite3.OperationalError:
+                pass
 
     def q(self, sql: str, *a) -> List[Dict[str, Any]]:
         with _LOCK:

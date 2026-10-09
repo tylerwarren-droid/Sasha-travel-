@@ -297,6 +297,14 @@ async def book_fixture(kind: str, item: dict, up: Upstream) -> Dict[str, Any]:
     return {"reference": ref, "service": service, "words": words, "sha256": _sha({"ref": ref, "item": item["ref"]})}
 
 
+async def cancel_fixture(service: str, act_id: str, up: Upstream) -> Dict[str, Any]:
+    """The provider's cancellation (sandbox fixture: nothing real was booked, so nothing real is cancelled)."""
+    t0 = time.perf_counter()
+    up.add(service, t0, True)
+    return {"reference": "CXL" + hashlib.sha256(f"{act_id}{time.time()}".encode()).hexdigest()[:6].upper(), "service": service,
+            "words": "Cancellation confirmed (sandbox fixture; nothing real was booked or charged).", "sha256": _sha({"cancel": act_id})}
+
+
 def resolve_unknown(service: str) -> Dict[str, Any]:
     """off_test_timeout_after: the act DID happen; status finds it (Part 1 I8)."""
     ref = "SBX" + hashlib.sha256(f"unknown{time.time()}".encode()).hexdigest()[:5].upper()

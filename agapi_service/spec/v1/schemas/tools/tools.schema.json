@@ -830,8 +830,36 @@
               },
               "updated_at": {
                 "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+              },
+              "evidence_id": {
+                "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/evidence_id"
               }
-            }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "outcome": {
+                      "properties": {
+                        "kind": {
+                          "const": "CONFIRMED"
+                        }
+                      }
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "act_id",
+                    "intent_id",
+                    "outcome",
+                    "updated_at",
+                    "evidence_id"
+                  ]
+                }
+              }
+            ],
+            "description": "v1.0 (CR 59 finding 4): evidence_id is present whenever the act has Pacioli evidence, and REQUIRED for CONFIRMED."
           }
         },
         "coverage": {
@@ -991,6 +1019,113 @@
         },
         "reason": {
           "type": "string"
+        }
+      }
+    },
+    "approvals_status_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "read_back_id"
+      ],
+      "properties": {
+        "read_back_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/read_back_id"
+        }
+      }
+    },
+    "approvals_status_out": {
+      "description": "v1.0 (CR 59 finding 3): lets a partner without a webhook learn the approval after a real tap. Never exposes said, the device attestation or the approver's identity.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "read_back_id",
+        "read_back_state",
+        "presented_at",
+        "approval"
+      ],
+      "properties": {
+        "read_back_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/read_back_id"
+        },
+        "read_back_state": {
+          "enum": [
+            "created",
+            "presented",
+            "approved",
+            "expired",
+            "void"
+          ]
+        },
+        "presented_at": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+            }
+          ]
+        },
+        "approval": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "approval_id",
+                "state",
+                "approved_at",
+                "method",
+                "expires_at"
+              ],
+              "properties": {
+                "approval_id": {
+                  "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/approval_id"
+                },
+                "state": {
+                  "enum": [
+                    "valid",
+                    "consumed",
+                    "expired",
+                    "void"
+                  ]
+                },
+                "approved_at": {
+                  "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+                },
+                "method": {
+                  "enum": [
+                    "tap",
+                    "voice",
+                    "signature"
+                  ]
+                },
+                "expires_at": {
+                  "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+                },
+                "void_reason": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "enum": [
+                        "payload_changed",
+                        "read_back_changed",
+                        "intent_changed",
+                        "superseded",
+                        "irreversible_batch"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
         }
       }
     }

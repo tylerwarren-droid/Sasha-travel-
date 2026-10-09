@@ -32,8 +32,25 @@ def idem(tag="k"):
     return f"{tag}-{_n[0]:06d}-test-idempotency"[:60]
 
 
+_DNS = {"hooks.partner.example": "93.184.216.34", "hooks2.partner.example": "93.184.216.35", "hooks3.partner.example": "93.184.216.36",
+        "metadata.partner.example": "169.254.169.254", "rebind.partner.example": "192.168.1.10"}
+
+
+def _fake_resolve(host):
+    if host in _DNS:
+        return {_DNS[host]}
+    import ipaddress
+    try:
+        return {str(ipaddress.ip_address(host))}
+    except ValueError:
+        raise OSError("NXDOMAIN")
+
+
 class Base(unittest.TestCase):
     def setUp(self):
+        self._dns = mock.patch.object(W, "_resolve", _fake_resolve)
+        self._dns.start()
+        self.addCleanup(self._dns.stop)
         self.path = os.path.join(tempfile.mkdtemp(), "sandbox.db")
         self.store = Store(self.path)
         A.use_store(self.store)
@@ -407,8 +424,8 @@ class Extensions(Base):
         self.assertEqual((st["read_back_state"], st["approval"]), ("created", None))
         apv = self.tap_yes(rbid)                                       # a REAL tap on the link page — no webhook endpoint at all
         st = self.ok("approvals.status", {"read_back_id": rbid})
-        self.assertEqual((st["read_back_state"], st["approval"]["approval_id"], st["approval"]["channel"], st["approval"]["method"]),
-                         ("approved", apv, "link", "tap"))
+        self.assertEqual((st["read_back_state"], st["approval"]["approval_id"], st["approval"]["method"]), ("approved", apv, "tap"))
+        self.assertNotIn("channel", st["approval"])                                   # v1.0: never the device or the approver
         self.ok("trip.complete", {"hold_id": h["hold_id"]}, approval=st["approval"]["approval_id"])
         self.assertEqual(self.ok("approvals.status", {"read_back_id": rbid})["approval"]["state"], "consumed")
         self.call("approvals.status", {"read_back_id": R.new_id("rb")}, expect="not_found")
@@ -426,30 +443,37 @@ class Extensions(Base):
         self.assertNotEqual(after["evidence_id"], r["evidence_id"])                  # the CONFIRMED proof, without a webhook
         self.assertEqual(self.ok("evidence.get", {"evidence_id": after["evidence_id"]})["outcome"]["kind"], "CONFIRMED")
 
-    def test_webhooks_register(self):
+    def test_webhooks_register_and_revoke(self):
         r = self.ok("webhooks.register", {"url": "https://hooks.partner.example/agapi"})
-        self.assertTrue(r["secret"].startswith("whsec_") and r["endpoint_id"].startswith("wep_"))
+        self.assertRegex(r["secret"], r"^whsec_[A-Za-z0-9]{32,}$")
+        self.assertRegex(r["endpoint_id"], r"^whe_[0-9A-HJKMNP-TV-Z]{26}$")
         self.assertNotIn(r["secret"], json.dumps(self.ok("approvals.status", {"read_back_id": self.venue_hold(self.user())["read_back"]["read_back_id"]})))
-        for bad in ("http://hooks.partner.example/x", "https://127.0.0.1/x", "https://10.0.0.5/x", "https://db.railway.internal/x"):
-            self.call("webhooks.register", {"url": bad}, expect="invalid_input")
-        self.ok("webhooks.register", {"url": "https://hooks2.partner.example/agapi"})
-        self.call("webhooks.register", {"url": "https://hooks3.partner.example/agapi"}, expect="invalid_input")   # 2 active at most
+        self.call("webhooks.register", {"url": "http://hooks.partner.example/x"}, expect="invalid_input")          # the schema: https only
+        for bad in ("https://127.0.0.1/x", "https://10.0.0.5/x", "https://db.railway.internal/x", "https://metadata.partner.example/x",
+                    "https://rebind.partner.example/x", "https://nowhere.partner.example/x"):
+            self.call("webhooks.register", {"url": bad}, expect="webhook_url_refused")
+        r2 = self.ok("webhooks.register", {"url": "https://hooks2.partner.example/agapi", "events": ["act.confirmed"]})
+        self.assertEqual(r2["events"], ["act.confirmed"])
+        self.call("webhooks.register", {"url": "https://hooks3.partner.example/agapi"}, expect="webhook_limit_reached")
+        self.assertEqual(self.ok("webhooks.revoke", {"endpoint_id": r["endpoint_id"]})["endpoint_id"], r["endpoint_id"])
+        self.call("webhooks.revoke", {"endpoint_id": r["endpoint_id"]}, expect="not_found")
+        self.ok("webhooks.register", {"url": "https://hooks3.partner.example/agapi"})                                # room again
 
     def test_users_verify_destination(self):
         u = self.ok("users.register", {"external_ref": "otp-api", "destinations": [{"channel": "sms", "value": "+15005550123"}]})
         code = re.search(r"code is (\d{6})", self.ok("sandbox.messages", {"end_user_id": u["end_user_id"]})["messages"][-1]["body"]).group(1)
         wrong = "000000" if code != "000000" else "111111"
-        self.call("users.verify_destination", {"end_user_id": u["end_user_id"], "channel": "sms", "value": "+15005550123", "code": wrong},
-                  expect="invalid_input")
+        r, b = self.call("users.verify_destination", {"end_user_id": u["end_user_id"], "channel": "sms", "value": "+15005550123", "code": wrong},
+                         expect="destination_code_invalid")
+        self.assertEqual(b["error"]["details"]["attempts_remaining"], 4)
         v = self.ok("users.verify_destination", {"end_user_id": u["end_user_id"], "channel": "sms", "value": "+1 500 555 0123", "code": code})
         self.assertTrue(v["destinations"][0]["verified"])
 
     def test_eus_tables_are_untouched(self):
         from agapi_service.registry import eu_operations
-        self.assertEqual(len(eu_operations()), 14)
-        self.assertEqual(set(operations()) - set(eu_operations()), {"approvals.status", "webhooks.register", "users.verify_destination",
-                                                                    "messages.send_email", "calendar.add_event"})
-        self.assertTrue(eu_operations()["acts.status"]["output"].endswith("tools.schema.json#/$defs/status_out"))
+        self.assertEqual(len(eu_operations()), 18)                                      # v1.0 (EU 205): our 3 extensions adopted
+        self.assertEqual(set(operations()) - set(eu_operations()), {"messages.send_email", "calendar.add_event"})
+        self.assertEqual(operations()["acts.status"]["output"], eu_operations()["acts.status"]["output"])
 
 
 class DemoConsole(Base):
@@ -527,6 +551,16 @@ class IdempotencyVectors(Base):
             return await c.post("/v1/trip.complete", json={"hold_id": "hold_" + "0" * 26},
                                 headers={"Idempotency-Key": step["idempotency_key"]})
         acct, key = self.accounts[caller]
+        if step.get("operation") == "trip.cancel":
+            act = acts["first_act"]
+            setup = await c.post("/v1/trip.cancel", json={"act_id": act}, headers={"Authorization": f"Bearer {key}",
+                                                                                   "Idempotency-Key": "setup-cancel-key-0001"})
+            rb = setup.json()["error"]["details"]["read_back_id"]
+            sim = await c.post("/v1/sandbox.simulate_approval", json={"read_back_id": rb, "said": "Yes, go ahead."},
+                               headers={"Authorization": f"Bearer {key}", "Idempotency-Key": "setup-simulate-0001"})
+            self.upstream_calls = 0
+            return await c.post("/v1/trip.cancel", json={"act_id": act}, headers={
+                "Authorization": f"Bearer {key}", "Idempotency-Key": step["idempotency_key"], "AgAPI-Approval-Id": sim.json()["result"]["approval_id"]})
         if step.get("operation") == "acts.status":
             return await c.post("/v1/acts.status", json={"act_id": acts["unknown"]}, headers={"Authorization": f"Bearer {key}"})
         hold, apv = self._hold(caller, step["input"]["hold_id"])
@@ -534,6 +568,14 @@ class IdempotencyVectors(Base):
         if step["idempotency_key"]:
             h["Idempotency-Key"] = step["idempotency_key"]
         return await c.post("/v1/trip.complete", json={"hold_id": hold}, headers=h)
+
+    def _script_cancel(self):
+        real, test = PV.cancel_fixture, self
+
+        async def scripted(service, act_id, up):
+            test.upstream_calls += 1
+            return await real(service, act_id, up)
+        return scripted
 
     def _script(self, behaviour):
         real = PV.book_fixture
@@ -559,14 +601,14 @@ class IdempotencyVectors(Base):
                 self.store.x("delete from idempotency")
                 self.alias.clear()
                 asyncio.run(self._run_case(case))
-        self.assertEqual(len(cases), 11)
+        self.assertEqual(len(cases), 12)                                   # v1.0: + I-12
 
     async def _run_case(self, case):
         transport = httpx.ASGITransport(app=A.app)
         acts, results = {}, {}
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
             for i, step in enumerate(case["steps"], 1):
-                if step["caller"] != "anonymous" and step.get("operation") != "acts.status":
+                if step["caller"] != "anonymous" and step.get("operation") not in ("acts.status", "trip.cancel"):
                     self._hold(step["caller"], step["input"]["hold_id"])                      # set up outside the counted call
                 e = step["expect"]
                 self.upstream_calls = 0
@@ -575,7 +617,8 @@ class IdempotencyVectors(Base):
                     rate = self.accounts[step["caller"]]
                     self.store.x("update api_keys set rate_per_min = 0 where account = ?", rate[0])
                 before = self.store.one("select count(*) as n from idempotency")["n"]
-                with mock.patch.object(PV, "book_fixture", self._script(step["upstream"])):
+                with mock.patch.object(PV, "book_fixture", self._script(step["upstream"])), \
+                        mock.patch.object(PV, "cancel_fixture", self._script_cancel()):
                     if e.get("sent_while_step_1_running"):
                         continue
                     if i == 1 and step["upstream"] == "slow_confirmed":
@@ -610,6 +653,8 @@ class IdempotencyVectors(Base):
             self.assertEqual(body["result"]["acts"][0]["outcome"]["kind"], e["outcome"])
         if e.get("retry_after_s") == ">=1":
             self.assertGreaterEqual(body["error"]["retry_after_s"], 1)
+        if i == 1 and body.get("ok") and "act_id" in (body.get("result") or {}):
+            acts.setdefault("first_act", body["result"]["act_id"])
         if e.get("code") == "outcome_unknown":
             acts["unknown"] = body["error"]["details"]["act_id"]
         if e.get("code") == "already_completed":

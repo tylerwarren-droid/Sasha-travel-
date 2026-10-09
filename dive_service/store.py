@@ -57,7 +57,7 @@ create table if not exists login_links (token_hash text primary key, created_at 
 create table if not exists opt_outs (channel text not null, address text not null, at text not null, said text, primary key (channel, address));
 """
 
-ADDED = [("bundles", "notes"), ("bundles", "evidence_id"), ("operators", "sandbox_end_user")]
+ADDED = [("bundles", "notes"), ("bundles", "evidence_id"), ("operators", "sandbox_end_user"), ("site_ops", "usage")]
 _LOCK = threading.RLock()
 
 

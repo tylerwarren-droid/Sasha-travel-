@@ -39,6 +39,8 @@ GEAR_EMAIL = os.getenv("DIVE_GEAR_EMAIL", "").strip()               # the fake s
 # CR 68 · the AI reader for a real operator's website: DIVE's OWN Anthropic key (off without it; the pages are still read and said so)
 ANTHROPIC_KEY = os.getenv("DIVE_ANTHROPIC_API_KEY", "").strip()
 READER_MODEL = os.getenv("DIVE_READER_MODEL", "claude-opus-5-5").strip()
+# USD per million tokens (input, output) — Anthropic's published price for Claude Opus 5.5 (checked 9 Oct 2026); override if it changes
+READER_PRICE = tuple(float(x) for x in (os.getenv("DIVE_READER_PRICE", "4,20").split(",") + ["0"])[:2])
 
 
 def norm_number(n: str) -> str:

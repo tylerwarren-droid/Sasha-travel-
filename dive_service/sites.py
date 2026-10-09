@@ -67,6 +67,11 @@ async def run_read(s, sid: str) -> None:
         _upd(s, sid, state=got["state"], why=got["why"])
         return
     d = got["draft"]
+    if got.get("usage"):
+        _upd(s, sid, usage=dumps(got["usage"]))
+        import logging
+        logging.getLogger("dive.sites").warning("AI reader %s: %s pages, %s in / %s out tokens, $%.4f", row["host"], got["coverage"]["pages_read"],
+                                                got["usage"]["input_tokens"], got["usage"]["output_tokens"], got["usage"]["usd"])
     s.x("delete from site_items where site_id = ? and added_by = 'reader' and status = 'draft'", sid)   # a re-read replaces only untouched drafts
     for k, rows in (("product", d["products"]), ("supplier", d["suppliers"])):
         for x in rows:
@@ -227,6 +232,9 @@ def _editor(s, srow: dict, note: str = "") -> str:
         out.append(f'<p class="mut" data-testid="coverage">Read {cov["pages_read"]} of at most {cov["limit"]} pages{failed}'
                    f'{" · " + str(cov["skipped_by_robots"]) + " skipped (robots.txt)" if cov.get("skipped_by_robots") else ""}'
                    f'{" · more pages not read (limit)" if cov.get("more_links_unread") else ""}</p>')
+    if srow.get("usage"):
+        u = loads(srow["usage"])
+        out.append(f'<p class="mut" data-testid="cost">AI reader ({e(u["model"])}): {u["input_tokens"]:,} tokens in, {u["output_tokens"]:,} out · about ${u["usd"]:.2f}</p>')
     if summ.get("summary"):
         out.append(f'<p>{e(summ["summary"])}</p>')
     for f in summ.get("instruction_like") or []:
@@ -327,6 +335,24 @@ they work with, and you edit it into a <b>private test API</b>. Nobody is contac
         if done.startswith("key:"):
             note = f'<p class="chip ok" data-testid="key">Test key, shown once: <span class="k">{e(done[4:])}</span></p>'
         return pg(srow["name"] + " · demo", _editor(db(), srow, note), srow["host"])
+
+    @app.get("/sites/{slug}/state.json")
+    async def state_json(slug: str, req: Request):
+        """The demo as data (behind the console token): what was read, found, with what confidence, and what it cost."""
+        if not ok(req):
+            return JSONResponse({"error": "unauthenticated"}, 401)
+        s = db()
+        srow = site(s, slug)
+        if not srow:
+            return JSONResponse({"error": "not_found"}, 404)
+        return JSONResponse({k: srow[k] for k in ("slug", "url", "host", "name", "state", "why", "published", "model")} |
+                            {"coverage": loads(srow["coverage"]) if srow["coverage"] else None, "usage": loads(srow["usage"]) if srow.get("usage") else None,
+                             "summary": loads(srow["summary"]) if srow["summary"] else None,
+                             "products": [{**r["data"], "status": r["status"], "confidence": r["confidence"], "quote_found": bool(r["quote_found"]),
+                                           "source_url": r["source_url"], "quote": r["quote"]} for r in items(s, srow["id"], "product")],
+                             "suppliers": [{**r["data"], "status": r["status"], "confidence": r["confidence"], "quote_found": bool(r["quote_found"]),
+                                            "instruction_like": bool(r["instruction_like"]), "source_url": r["source_url"], "quote": r["quote"]}
+                                           for r in items(s, srow["id"], "supplier")]}, headers={"X-Robots-Tag": "noindex"})
 
     @app.post("/sites/{slug}/items/{item_id}")
     async def edit_item(slug: str, item_id: str, req: Request):

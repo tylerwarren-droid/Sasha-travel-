@@ -55,7 +55,7 @@ def fake_model(draft):
 
     async def extract(pages):
         calls.append(pages)
-        return draft
+        return {**draft, "_usage": {"input_tokens": 41000, "output_tokens": 3000}}
     extract.calls = calls
     return extract
 
@@ -217,6 +217,10 @@ class Editor(Sites):
         self.assertIn("wasn’t found word for word", p.replace("&#x27;", "’").replace("wasn't", "wasn’t"))
         self.assertIn("Instruction-like text on their site, ignored", p)
         self.assertIn("Read 4 of at most 15 pages", p)
+        self.assertIn("41,000 tokens in, 3,000 out · about $0.22", p)                          # 41k × $4 + 3k × $20 per million
+        j = self.client.get(f"/sites/{slug}/state.json", headers=CONSOLE).json()
+        self.assertEqual((j["usage"]["usd"], len(j["coverage"]["urls"]), len(j["products"]), len(j["suppliers"])), (0.224, 4, 3, 3))
+        self.assertEqual(self.client.get(f"/sites/{slug}/state.json").status_code, 401)
         # the operator edits: confirms, fixes a price, marks Not ours, sets a channel (unverified), adds what's missing
         two, night, boat = self.item(slug, "Two boat dives"), self.item(slug, "Night dive"), self.item(slug, "Kalafati Boats")
         self.client.post(f"/sites/{slug}/items/{two['id']}", data={"action": "confirm", "title": "Two boat dives", "price_text": "€175 per person"}, headers=CONSOLE)

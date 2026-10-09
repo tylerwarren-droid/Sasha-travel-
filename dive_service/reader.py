@@ -266,7 +266,7 @@ async def crawl(start: str, *, progress: Optional[Callable[[str], None]] = None,
         await asyncio.sleep(GAP_S)
     if not pages:
         raise Unreadable("no_text", f"{sp.hostname}'s pages had no readable text (perhaps the site draws everything with JavaScript). Not 'nothing found'.")
-    return {"pages": pages, "coverage": {"start": start, "pages_read": len(pages), "limit": max_pages, "failed": failed[:10],
+    return {"pages": pages, "coverage": {"start": start, "pages_read": len(pages), "urls": [p["url"] for p in pages], "limit": max_pages, "failed": failed[:10],
                                          "skipped_by_robots": blocked, "robots": "allowed", "more_links_unread": len([q for q in queue if q[2] not in seen])}}
 
 
@@ -337,7 +337,8 @@ async def _claude(pages: List[dict]) -> dict:
     use = next((b for b in msg.content if getattr(b, "type", "") == "tool_use" and b.name == "record_site"), None)
     if use is None:
         raise RuntimeError("the AI reader returned no draft")
-    return dict(use.input)
+    u = msg.usage
+    return {**dict(use.input), "_usage": {"input_tokens": u.input_tokens, "output_tokens": u.output_tokens}}
 
 
 EXTRACT: Callable[[List[dict]], Awaitable[dict]] = _claude   # tests replace it with a fake model
@@ -417,8 +418,19 @@ async def read_site(url: str, *, progress: Optional[Callable[[str], None]] = Non
                 "why": f"Read {got['coverage']['pages_read']} pages. The AI reader is off until DIVE_ANTHROPIC_API_KEY is set on DIVE's Railway service."}
     say(f"The AI reader is drafting from {got['coverage']['pages_read']} pages")
     try:
-        draft = _valid(await EXTRACT(got["pages"]))
+        raw = await EXTRACT(got["pages"])
+        usage = cost(raw.pop("_usage", None) if isinstance(raw, dict) else None)
+        draft = _valid(raw)
     except Exception as e:
         return {"state": "ai_failed", "coverage": got["coverage"], "pages": got["pages"],
                 "why": f"Read {got['coverage']['pages_read']} pages, but the AI reader failed ({str(e)[:160] or type(e).__name__}). Not 'nothing found': try again."}
-    return {"state": "read", "coverage": got["coverage"], "pages": got["pages"], "draft": ground(draft, got["pages"])}
+    return {"state": "read", "coverage": got["coverage"], "pages": got["pages"], "draft": ground(draft, got["pages"]), "usage": usage}
+
+
+def cost(u: Optional[dict]) -> Optional[dict]:
+    """The AI reader's tokens and what they cost (USD, at READER_PRICE per million tokens) — logged per site."""
+    if not u:
+        return None
+    pin, pout = config.READER_PRICE
+    usd = (u["input_tokens"] * pin + u["output_tokens"] * pout) / 1_000_000
+    return {**u, "model": config.READER_MODEL, "usd": round(usd, 4), "price_per_mtok": [pin, pout]}

@@ -6,6 +6,7 @@
  * booking on its day in the Trip panel. The yes is bound to the read-back's hash on the server; nothing is booked before
  * Stripe records the TEST payment.
  */
+import { untag } from '@/lib/no-test-label.mjs'   // Sasha 218
 import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal, SIGN_IN_TO_BOOK } from '@/lib/booking-client'
 import { setPendingYes } from '@/lib/chat-booking-bus'
@@ -64,7 +65,6 @@ export function TripBookTest({ from }: { from: string }) {
       {/* Sasha 189 · brief: the package in four lines and a small TEST tag (the yes still binds the full read-back) */}
       {p.sum ? (
         <div>
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', background: '#E8B923', color: '#111', borderRadius: 4, padding: '1px 5px' }}>TEST</span>
           <div style={{ marginTop: 6 }}>🏨 {p.sum.hotels} hotels · {Array.from(new Set(p.sum.cities)).join(' → ')}</div>
           {p.sum.flights.map((f, i) => <div key={i}>✈️ {f}</div>)}
           <div style={{ marginTop: 4, fontWeight: 600 }}>Total €{p.sum.eur.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} for {p.sum.party}</div>
@@ -78,7 +78,7 @@ export function TripBookTest({ from }: { from: string }) {
   )
   if (p.k === 'paying') return p.phone
     ? <div className="o2" style={box}>📱 Sent to your phone — tap to pay with Apple Pay. · or <a href={p.url} target="_blank" rel="noopener noreferrer">pay here</a></div>
-    : <div className="o2" style={box}>Pay the TEST total on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged). I&rsquo;ll book everything the moment it&rsquo;s paid…</div>
+    : <div className="o2" style={box}>Pay the total on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged). I&rsquo;ll book everything the moment it&rsquo;s paid…</div>
   if (p.k === 'no') return <div className="o2" style={box}>OK — nothing was booked.</div>
-  return <div className="o2" style={{ ...box, whiteSpace: 'pre-line' }}>{p.k === 'booked' && <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', background: '#E8B923', color: '#111', borderRadius: 4, padding: '1px 5px', marginRight: 6 }}>TEST</span>}{p.say}</div>   // Sasha 190 · the tag on the card, not in the words
+  return <div className="o2" style={{ ...box, whiteSpace: 'pre-line' }}>{untag(p.say)}</div>   // Sasha 218 · no TEST tag on the card
 }

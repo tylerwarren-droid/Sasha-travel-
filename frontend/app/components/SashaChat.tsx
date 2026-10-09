@@ -10,6 +10,7 @@ import { User, Itinerary } from '@/types'
 import VoiceButton, { MicDevicesInfo } from './VoiceButton'
 import { renderMarkdown } from '@/lib/markdown'
 import { placeReply, visible } from '@/lib/agent-bubble.mjs'   // Sasha 212 · never an empty bubble
+import { untag, untagDeep } from '@/lib/no-test-label.mjs'   // Sasha 218 · no visible TEST label on /next (display only)
 import { apiUrl, apiHeaders } from '@/lib/api'
 import { MAX_PHOTOS, imagesOf, toJpeg, type Attachment } from '@/lib/photo-attach'
 import type { RichItinerary } from './ItineraryDays'
@@ -558,6 +559,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
       let ev: any
       try { ev = JSON.parse(m.data) } catch { return }
       if (!ev || !ev.id || ev.id <= last || (ev.type !== 'booked' && ev.type !== 'booking_failed')) return
+      ev = untagDeep(ev)   // Sasha 218
       last = ev.id
       try { sessionStorage.setItem(seenKey, String(ev.id)) } catch { /* fine */ }
       const link = ev.card?.url ? `\n\n[Open your full itinerary →](${ev.card.url})` : ''
@@ -609,6 +611,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
           let ev: any
           try { ev = JSON.parse(line) } catch { continue }
           if (!live()) continue
+          if (ev.type === 'render' || ev.type === 'state') ev = untagDeep(ev)   // Sasha 218 · the cards and their ribbon, no TEST label
           if (ev.type === 'text') { reply += ev.delta; show(reply) }
           else if (ev.type === 'say') { heard('answer'); onSashaResponse?.(ev.text) }
           else if (ev.type === 'filler') { heard('filler'); onThinking?.(ev.text) }
@@ -984,19 +987,19 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
           <div className="lw-card">{/* Sasha 213 · the read-back she just gave — from her own hold, never a second quote */}
             {readBack.what ? (   /* Sasha 216/217 · an email or a WhatsApp Sasha will send from her own address or number, on their yes */
               <div className="lw-cardHd"><span className="lw-ci gold">{readBack.what === 'whatsapp' ? '💬' : '✉️'}</span><div className="lw-meta"><div className="lw-k">{readBack.status === 'sent' ? 'Sent' : readBack.status === 'not_sent' ? 'Not sent' : 'Ready to send · on your yes'}</div>
-                <div className="lw-h">{readBack.live ? (readBack.what === 'whatsapp' ? "From Sasha's own number" : "From Sasha's own address") : 'Kept here · not sent (test)'}</div></div></div>
+                <div className="lw-h">{readBack.live ? (readBack.what === 'whatsapp' ? "From Sasha's own number" : "From Sasha's own address") : 'Kept here · not sent'}</div></div></div>
             ) : (
             <div className="lw-cardHd"><span className="lw-ci gold">✅</span><div className="lw-meta"><div className="lw-k">Ready to book</div>
-              <div className="lw-h">{readBack.total ? `€${Math.round(readBack.total).toLocaleString()} all in · TEST` : 'Your trip · TEST'}</div></div></div>
+              <div className="lw-h">{readBack.total ? `€${Math.round(readBack.total).toLocaleString()} all in` : 'Your trip'}</div></div></div>
             )}
-            <div className="lw-cardBody" style={readBack.what ? { display: 'block' } : undefined}>{readBack.lines.map((l, i) => <div key={i} className="o2" style={{ padding: '2px 0' }}>{l}</div>)}</div>
+            <div className="lw-cardBody" style={readBack.what ? { display: 'block' } : undefined}>{readBack.lines.map((l, i) => <div key={i} className="o2" style={{ padding: '2px 0' }}>{untag(l)}</div>)}</div>
           </div>
         )}
         {tripTotal && onScreen('total') && (
           <div className="lw-card">{/* Sasha 212 · one total, its parts marked */}
             <div className="lw-cardHd"><span className="lw-ci gold">🧾</span>
               <div className="lw-meta"><div className="lw-k">Your trip, all in</div>
-                <div className="lw-h">€{Math.round(tripTotal.total_eur).toLocaleString()} for everything · TEST</div></div></div>
+                <div className="lw-h">€{Math.round(tripTotal.total_eur).toLocaleString()} for everything</div></div></div>
             <div className="lw-cardBody">
               <div className="lw-opt"><div className="od"><div className="o1">Flights</div><div className="o2">€{tripTotal.flights_eur.toLocaleString(undefined, { maximumFractionDigits: 2 })} · {tripTotal.flights_are}</div></div></div>
               <div className="lw-opt"><div className="od"><div className="o1">Stays</div><div className="o2">€{tripTotal.stays_eur.toLocaleString(undefined, { maximumFractionDigits: 2 })} · {tripTotal.stays_are}</div></div></div>

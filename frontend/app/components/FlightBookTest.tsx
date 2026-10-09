@@ -57,7 +57,7 @@ export function FlightBookTest({ offerId: firstOffer, autoStart = false }: { off
     }, 3000)
     return () => clearInterval(t)
   }, [p, offerId])
-  if (p.k === 'idle') return <button className="price" style={YES_BTN} onClick={() => { prepare() }}>Book it (TEST)</button>
+  if (p.k === 'idle') return <button className="price" style={YES_BTN} onClick={() => { prepare() }}>Book it</button>
   if (p.k === 'reading') return <span className="o2">Reading the offer…</span>
   if (p.k === 'readback') return (
     <div className="o2" style={{ maxWidth: 420 }}>
@@ -69,6 +69,6 @@ export function FlightBookTest({ offerId: firstOffer, autoStart = false }: { off
   )
   if (p.k === 'paying') return p.phone
     ? <span className="o2">Sent to your phone — tap to pay with Apple Pay. · or <a href={p.url} target="_blank" rel="noopener noreferrer">pay here</a></span>
-    : <span className="o2">Pay the TEST fare on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged). I&rsquo;ll book it the moment it&rsquo;s paid…</span>
+    : <span className="o2">Pay the fare on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged). I&rsquo;ll book it the moment it&rsquo;s paid…</span>
   return <span className="o2">{p.say}</span>
 }

@@ -62,7 +62,7 @@ export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 
     const view = String(r.json.view_url)
     setP({ k: 'live', done, view, hid: String(r.json.handover_id), t: new URL(view).searchParams.get('t') ?? '', say: String(r.json.say) })
   }
-  if (p.k === 'idle') return <button className="price" onClick={() => setP({ k: 'form' })}>Reserve (TEST)</button>
+  if (p.k === 'idle') return <button className="price" onClick={() => setP({ k: 'form' })}>Reserve</button>
   if (p.k === 'form') return (
     <div className="o2" style={{ maxWidth: 420, flexBasis: '100%' }}>
       <div>Test booking: no hotel contacted.</div>
@@ -81,8 +81,8 @@ export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 
   )
   // Sasha 161 · past the button, the step takes its own full line in the card (it never squeezes the hotel's details)
   if (p.k === 'paying') return p.phone
-    ? <span className="o2" style={{ flexBasis: '100%' }}>Waiting for you to confirm on your phone… (TEST — nothing is charged) · or <a href={p.url} target="_blank" rel="noopener noreferrer">pay here</a></span>
-    : <span className="o2">Pay the TEST price on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged, no hotel is contacted)…</span>
+    ? <span className="o2" style={{ flexBasis: '100%' }}>Waiting for you to confirm on your phone… (nothing is charged) · or <a href={p.url} target="_blank" rel="noopener noreferrer">pay here</a></span>
+    : <span className="o2">Pay the price on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged, no hotel is contacted)…</span>
   if (p.k === 'done') return (
     <span className="o2" style={{ flexBasis: '100%' }}>✅ {p.say}{p.sid ? <>{' '}<button className="price" onClick={() => { finishLive(p.say, p.sid!) }}>Finish on the hotel&rsquo;s page (live) →</button></> : null}</span>
   )

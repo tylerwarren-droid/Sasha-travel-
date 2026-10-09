@@ -62,7 +62,7 @@ class DemoInABrowser(unittest.TestCase):
     def test_the_five_minute_script_and_the_failure_beat(self):
         from dive_service import e2e_demo
         steps = []
-        e2e_demo.run(self.base, "dive-local", log=steps.append)
+        e2e_demo.run(self.base, "dive-local", log=steps.append, slow_ms=250)
         self.assertEqual(len(steps), 8, steps)
         self.assertIn("failure beat", steps[-2])
 

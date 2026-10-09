@@ -107,7 +107,7 @@ _PAGE = r"""<style>.rail{display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0 1r
 <div class="row" style="justify-content:space-between"><h1 style="margin:.2rem 0">{name}</h1><span class="badge">TEST</span></div>
 <div class="rail" id="rail"></div><div id="msg" class="mut" data-testid="msg"></div><div id="view"></div>
 <div id="proof" class="overlay" hidden data-testid="proof-panel"><div class="sheet"><div class="row" style="justify-content:space-between"><b>Proof</b>
-<button title="Close the proof" onclick="$('proof').hidden=true" data-testid="proof-close">Close</button></div><div id="proofbody"></div></div></div>
+<button title="Close the proof" onclick="proofOpen=null;$('proof').hidden=true" data-testid="proof-close">Close</button></div><div id="proofbody"></div></div></div>
 <script>
 const TABS=[["suppliers","Suppliers"],["packages","Packages"],["bookings","Bookings"],["activity","Activity"],["api","API & keys"],["drawer","Test drawer"]];
 let tab="suppliers",timer=null;const $=id=>document.getElementById(id);
@@ -199,7 +199,11 @@ const src=e.sources.map(x=>`<dt>${esc(x.service)}</dt><dd>${x.snippet?"“"+esc(
 const ap=e.approval?`<dt>Approved</dt><dd>by the customer (${esc(e.approval.method)}) at ${when(e.approval.approved_at)}${e.approval.said?" — “"+esc(e.approval.said)+"”":""}<br><span class="k">read-back ${esc(e.approval.read_back_sha256)}</span></dd>`:"";
 $("proofbody").innerHTML=`<p class="big ${r.verified?'':'no'}" data-testid="proof-verdict">${r.verified?"✓ The record matches.":"✕ Doesn't match."}</p>
 <dl><dt>What</dt><dd>${esc(e.operation)}${e.outcome?" · "+esc(e.outcome.kind)+(e.outcome.reference?" · "+esc(e.outcome.reference):""):""}</dd><dt>When</dt><dd>${when(e.produced_at)}</dd>${ap}${src}
-<dt>Fingerprint</dt><dd class="k">${esc(e.body_sha256)}</dd></dl><p><button class="go" data-testid="proof-verify" title="Recomputes the record's fingerprint now" onclick="proof('${id}')">Verify</button></p>`;
-$("proof").hidden=false}
+<dt>Fingerprint</dt><dd class="k">${esc(e.body_sha256)}</dd></dl><p><button class="go" data-testid="proof-verify" title="Recomputes the record's fingerprint now" onclick="verifyAgain('${id}')">Verify</button></p>`;
+proofOpen=id;$("proof").hidden=false}
+let proofOpen=null;
+async function verifyAgain(id){const v=document.querySelector("[data-testid=proof-verdict]");v.textContent="Checking…";v.className="big";
+const r=await api("evidence.get",{evidence_id:id});if(proofOpen!==id||$("proof").hidden)return;   // closed meanwhile: a late answer never reopens it
+v.textContent=r.verified?"✓ The record matches.":"✕ Doesn't match.";v.className="big"+(r.verified?"":" no")}
 rail();go("suppliers");
 </script>"""

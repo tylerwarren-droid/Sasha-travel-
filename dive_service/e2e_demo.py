@@ -33,12 +33,32 @@ def _answer(page, supplier: str, button: str) -> None:
     expect(card).to_have_count(0, timeout=T)
 
 
-def run(base: str, token: str, log=print, headless: bool = True) -> None:
+def run(base: str, token: str, log=print, headless: bool = True, slow_ms: int = 0) -> None:
+    """On a failure, a screenshot of every open page goes to $DIVE_E2E_SHOTS (if set), so a live failure is seen, not guessed."""
     base = base.rstrip("/")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
         ctx = browser.new_context()
+        if slow_ms:   # the build plays the network's delay on every console call, so a race shows up there, not live
+            def _slow(route):
+                time.sleep(slow_ms / 1000)
+                route.continue_()
+            ctx.route("**/console/api/**", _slow)
         page = ctx.new_page()
+        try:
+            _script(base, token, log, ctx, page)
+        except Exception:
+            shots = os.environ.get("DIVE_E2E_SHOTS")
+            if shots:
+                for i, pg in enumerate(ctx.pages):
+                    pg.screenshot(path=os.path.join(shots, f"fail-{i}.png"), full_page=True)
+            raise
+        finally:
+            browser.close()
+
+
+def _script(base: str, token: str, log, ctx, page) -> None:
+    if True:
         auth = {"Authorization": f"Bearer {token}", "content-type": "application/json"}
 
         def op(name, body=None):
@@ -127,8 +147,10 @@ def run(base: str, token: str, log=print, headless: bool = True) -> None:
         expect(page.locator("[data-testid=proof-verdict]")).to_have_text("✓ The record matches.", timeout=T)
         expect(page.locator("[data-testid=proof-panel]")).to_contain_text("ΝΑΙ")
         page.click("[data-testid=proof-verify]")
-        expect(page.locator("[data-testid=proof-verdict]")).to_have_text("✓ The record matches.", timeout=T)
+        expect(page.locator("[data-testid=proof-verdict]")).not_to_have_text("Checking…", timeout=T)    # the fresh check's answer
+        expect(page.locator("[data-testid=proof-verdict]")).to_have_text("✓ The record matches.")
         page.click("[data-testid=proof-close]")
+        expect(page.locator("[data-testid=proof-panel]")).to_be_hidden()
         step("the boat's proof: what we sent, their ΝΑΙ, the hashes — Verify: ✓ The record matches.")
         # 4:00–4:40 · the failure beat: Thursday, the boat says NO
         page.click("text=Test drawer")
@@ -149,7 +171,6 @@ def run(base: str, token: str, log=print, headless: bool = True) -> None:
         cap = page.request.post(f"{base}/console/api/captured.list", headers=auth, data="{}").json()["result"]["messages"]
         assert not [m for m in cap if m["real"]], "a REAL message went out"
         step("0 messages to a real number or inbox")
-        browser.close()
 
 
 def main() -> int:

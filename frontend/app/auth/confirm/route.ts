@@ -7,7 +7,14 @@
 import { NextResponse } from 'next/server'
 import { guestClient, guestSignInOpen, safeNext, supabaseConfigured } from '@/lib/guest-session'
 
+/** A link PREVIEW (iMessage, WhatsApp, Slack…) fetches the URL before the person taps it — it must not spend the one-time token. */
+const PREVIEW = /facebookexternalhit|facebot|twitterbot|whatsapp|slackbot|telegrambot|discordbot|linkedinbot|skypeuripreview|applebot|googlebot|bingbot|embedly|preview/i
+
 export async function GET(request: Request) {
+  if (PREVIEW.test(request.headers.get('user-agent') ?? '')) {
+    return new Response('<!doctype html><title>Sign in to Sasha</title><meta property="og:title" content="Sign in to Sasha"><p>Open this link to sign in to Sasha.</p>',
+      { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } })
+  }
   const url = new URL(request.url)
   const next = safeNext(url.searchParams.get('next') ?? '/you')
   const back = (why: string) => NextResponse.redirect(new URL(`/sign-in?error=${encodeURIComponent(why)}&next=${encodeURIComponent(next)}`, url.origin))

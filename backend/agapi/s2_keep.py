@@ -474,7 +474,7 @@ def tools() -> List[dict]:
            "booking reference on THEIR screen. Never returns the value, whatever you ask.",
            {"item_id": {"type": "string"}, "purpose": {"type": "string", "description": "fill or show"}}, ["item_id", "purpose"],
            {"type": "object", "properties": {"state": {"enum": ["needs_yes", "ready", "on_their_screen"]}}},
-           ["not_found", "never_raw", "read_back_only", "fill_only", "keep_closed", "keep_unreachable"]),
+           ["not_found", "never_raw", "read_back_only", "fill_only", "keep_closed", "keep_unreachable"], austen=True),   # every Austen tool is keyed
     ]
 
 

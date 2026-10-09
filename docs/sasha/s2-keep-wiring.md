@@ -90,6 +90,14 @@ router.include_router(_KEEP_router)   # with: from agapi.s2_keep import router a
 
 Then regenerate the contract doc: `cd backend && python -m scripts.agapi_doc`.
 
+**Proven.** CR 63 applied exactly these edits on a throwaway branch. The full suite passed (1654), including `tests/test_keep_wired_s63.py`. That file is on this branch and **skipped until the wiring is in**, then it runs by itself. It checks four things:
+- `travel.order` puts the passport on the account holder's passenger;
+- `book_paid` fills both flights of a round trip, with one Activity row ("REF1, REF2");
+- `/next` answers a typed passport or password with the fixed reply, and the model is never called;
+- `hold_booking` names the bound passport in what she reads out.
+
+That run also caught a contract slip: every Austen tool takes an idempotency key, and `keep_use` now does.
+
 ## After the merge (the founder)
 1. Deploy, apply **036** (CR 62) if it isn't applied yet, then **037**. Until 037 runs, the Keep says it's closed.
 2. `SASHA_VAULT_KMS_KEY` and `SASHA_VAULT_GCP_SA_JSON` are already S-78's. If they're set on Railway, the Keep uses them; if not, it stays closed.

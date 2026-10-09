@@ -81,6 +81,8 @@ class Base(unittest.TestCase):
             self.assertNotIn(hashlib.sha256(v.encode()).hexdigest(), blob)
 
     def call(self, tool, args, account=ACCT):
+        if tool == "keep_use":
+            args = {**args, "idempotency_key": f"k-{uuid.uuid4().hex}"}   # the loop fills it in production
         return run(API.call(API.Ctx(account=account), tool, args))
 
 
@@ -127,7 +129,7 @@ class TheKeep(Base):
         self.assertEqual(self.call("keep_use", {"item_id": item, "purpose": "show"})["error"]["code"], "fill_only")
         self.assertEqual(self.call("keep_use", {"item_id": str(uuid.uuid4()), "purpose": "fill"})["error"]["code"], "not_found")
         t = {x["name"]: x for x in KEEP.tools()}
-        self.assertEqual(set(API.schema_for_model(t["keep_use"])["input_schema"]["properties"]), {"item_id", "purpose"})
+        self.assertEqual(set(API.schema_for_model(t["keep_use"])["input_schema"]["properties"]), {"item_id", "purpose"})   # no key, no value
 
     def test_a_passport_fills_the_order_only_under_the_yes_that_heard_it(self):
         item = run(KEEP.put(ACCT, "passport", PASSPORT))["item_id"]
@@ -214,7 +216,7 @@ class ChatGuard(unittest.TestCase):
     def test_a_new_binding_voids_a_reused_read_back(self):
         with mock.patch.object(KEEP, "bind", mock.AsyncMock(return_value={"state": "needs_yes", "line": "x", "masked": "m"})):
             API._HELD[ACCT] = {"sha": "s"}
-            run(API.call(API.Ctx(account=ACCT), "keep_use", {"item_id": "i", "purpose": "fill"}))
+            run(API.call(API.Ctx(account=ACCT), "keep_use", {"item_id": "i", "purpose": "fill", "idempotency_key": "k-bind-1"}))
             self.assertNotIn(ACCT, API._HELD)
 
 

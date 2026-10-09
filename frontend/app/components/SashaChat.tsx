@@ -973,7 +973,9 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
               <div className="lw-h">{calendar.title || 'Your booking'}</div></div></div>
             <div className="lw-cardBody" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {(['google', 'outlook', 'apple'] as const).filter(k => calendar.links[k]).map(k => (
-                <a key={k} className="lw-chip" href={calendar.links[k]} target="_blank" rel="noreferrer">{k === 'google' ? 'Google' : k === 'outlook' ? 'Outlook' : 'Apple / other'}</a>
+                <a key={k} className="lw-callink" href={calendar.links[k]} target="_blank" rel="noreferrer"
+                  style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 999, border: '1px solid rgba(218,165,32,.5)', color: '#E8B923', fontSize: 13.5, fontWeight: 600, textDecoration: 'none' }}>
+                  {k === 'google' ? 'Google' : k === 'outlook' ? 'Outlook' : 'Apple / other'}</a>
               ))}
             </div>
           </div>

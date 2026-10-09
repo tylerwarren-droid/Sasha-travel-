@@ -196,6 +196,102 @@ class Flights(Live):
         self.assertEqual((out["ok"], out["token"]), (True, "test"))
 
 
+
+class FakeStripe:
+    """Stripe TEST: Checkout sessions made, read back; `paid` flips a session to complete/paid. Every request kept."""
+
+    def __init__(self, livemode=False):
+        self.calls, self.sessions, self.livemode = [], {}, livemode
+
+    async def __call__(self, method, path, data=None):
+        self.calls.append((method, path, dict(data or {})))
+        if method == "POST" and path == "/checkout/sessions":
+            sid = f"cs_test_{len(self.sessions) + 1:020d}"
+            self.sessions[sid] = {"id": sid, "url": f"https://checkout.stripe.com/c/pay/{sid}", "livemode": self.livemode, "status": "open",
+                                  "payment_status": "unpaid", "amount_total": data["line_items[0][price_data][unit_amount]"],
+                                  "currency": data["line_items[0][price_data][currency]"], "metadata": {k: v for k, v in data.items() if k.startswith("metadata")}}
+            return 200, self.sessions[sid]
+        if method == "GET" and path.startswith("/checkout/sessions/"):
+            return 200, self.sessions[path.rsplit("/", 1)[1]]
+        if method == "GET" and path == "/balance":
+            return 200, {"object": "balance", "livemode": self.livemode}
+        raise AssertionError((method, path))
+
+    def pay(self, sid):
+        self.sessions[sid].update(status="complete", payment_status="paid", payment_intent="pi_test_x")
+
+
+class PaymentsLive(Live):
+    """Stripe in TEST mode: a live flight booking pays on Stripe's TEST page and settles only from Stripe's own record."""
+    connected = {"places", "flights", "payments"}
+
+    def setUp(self):
+        super().setUp()
+        self.stripe = FakeStripe()
+        for p in (mock.patch("booking_signer.test_deposit.HTTP", self.stripe), mock.patch.dict("os.environ", {"STRIPE_TEST_SECRET_KEY": "sk_test_recorded"})):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def approve(self, read_back_id):
+        from agapi_service import engine as E
+        key = self.store.one("select * from api_keys where mode = 'live'")
+        ctx = E.Ctx(self.store, key, "req_" + "1" * 26, None, None)
+        return asyncio.run(E.sandbox_simulate_approval(ctx, {"read_back_id": read_back_id, "said": "Yes, book it."}))[0]["approval_id"]
+
+    def booked(self):
+        uid = self.ok("users.register", {"external_ref": "pay-1"}, key=self.live)["end_user_id"]
+        ref = self.ok("travel.find_flights", FLIGHTS, key=self.live)["offers"][0]["offer_ref"]
+        h = self.ok("trip.hold", {"end_user": uid, "items": [{"kind": "flight", "ref": ref}], "travellers": [TRAVELLER]}, key=self.live)
+        apv = self.approve(h["read_back"]["read_back_id"])
+        return self.ok("trip.complete", {"hold_id": h["hold_id"], "payment": {"method": "payment_link"}}, key=self.live, approval=apv)
+
+    def test_a_live_booking_pays_on_stripes_test_page_and_settles_from_stripes_record(self):
+        out = self.booked()
+        self.assertEqual(out["outcome"]["kind"], "AWAITING_PAYMENT")
+        url = out["outcome"]["payment_url"]
+        self.assertTrue(url.startswith("https://checkout.stripe.com/c/pay/cs_test_"))              # Stripe's page, test mode
+        sid = url.rsplit("/", 1)[1]
+        made = [c for c in self.stripe.calls if c[1] == "/checkout/sessions"][0][2]
+        self.assertEqual(made["metadata[test_payment]"], "true")
+        self.assertIn("/pay/return/", made["success_url"])                                         # back to AgAPI, not to Sasha
+        row = self.store.one("select * from pay_sessions")
+        token_path = "/" + made["success_url"].split("://", 1)[1].split("/", 1)[1].split("?")[0]
+        # the sandbox's simulated pay page does nothing on the live service
+        self.assertEqual(self.client.post(token_path.replace("/pay/return/", "/pay/")).status_code, 404)
+        self.assertIn("Checking the payment", self.client.get(token_path + f"?s={sid}").text)      # not paid yet: nothing happens
+        self.assertEqual(self.ok("acts.status", {"act_id": out["act_id"]}, key=self.live)["acts"][0]["outcome"]["kind"], "AWAITING_PAYMENT")
+        self.stripe.pay(sid)
+        page = self.client.get(token_path + f"?s={sid}").text
+        self.assertIn("Booked — reference", page)                                                  # Duffel TEST order (recorded)
+        st = self.ok("acts.status", {"act_id": out["act_id"]}, key=self.live)["acts"][0]
+        self.assertEqual(st["outcome"]["kind"], "CONFIRMED")
+        self.assertIsNotNone(self.store.one("select settled_at from pay_sessions")["settled_at"])
+        from agapi_service.adapters_live import payments as LP
+        self.assertIsNone(asyncio.run(LP.settle(self.store, row["token_hash"])))                  # once only (the poller can't book twice)
+
+    def test_a_live_stripe_key_or_a_livemode_answer_is_refused(self):
+        with mock.patch.dict("os.environ", {"STRIPE_TEST_SECRET_KEY": "sk_live_xxx"}):
+            r = self.booked_refusal()
+        self.assertEqual(r["error"]["code"], "upstream_unreachable")
+        with mock.patch("booking_signer.test_deposit.HTTP", FakeStripe(livemode=True)):
+            r = self.booked_refusal()
+        self.assertEqual(r["error"]["code"], "upstream_failed")
+
+    def booked_refusal(self):
+        uid = self.ok("users.register", {"external_ref": "pay-r"}, key=self.live)["end_user_id"]
+        ref = self.ok("travel.find_flights", FLIGHTS, key=self.live)["offers"][0]["offer_ref"]
+        h = self.ok("trip.hold", {"end_user": uid, "items": [{"kind": "flight", "ref": ref}], "travellers": [TRAVELLER]}, key=self.live)
+        apv = self.approve(h["read_back"]["read_back_id"])
+        r, b = self.call("trip.complete", {"hold_id": h["hold_id"], "payment": {"method": "payment_link"}}, key=self.live, approval=apv)
+        self.assertFalse(b["ok"])
+        return b
+
+    def test_the_smoke_check_reads_the_test_balance_only(self):
+        out = asyncio.run(AL.ADAPTERS["payments"].smoke())
+        self.assertEqual(self.stripe.calls, [("GET", "/balance", {})])
+        self.assertEqual((out["ok"], out["livemode"]), (True, False))
+
+
 def Base_sign(body: str) -> str:
     import hashlib, hmac, secrets, time
     t, n = int(time.time()), secrets.token_urlsafe(16)

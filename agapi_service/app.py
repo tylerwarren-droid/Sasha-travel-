@@ -59,7 +59,9 @@ async def _startup() -> None:
     PV.install_live() if config.LIVE_SERVICE else PV.install()   # CR 70 · agapi-live: no fixtures, only the live providers' hosts
     if config.LIVE_SERVICE:
         from . import adapters_live
+        from .adapters_live import payments as _LPAY
         adapters_live.bind(db)
+        asyncio.create_task(_LPAY.poll(db))    # CR 70 · Stripe TEST sessions settle from Stripe's own record
     _migrate_scopes(db())
     ensure_products(db())              # CR 69
     W.allow_endpoint_hosts(db())

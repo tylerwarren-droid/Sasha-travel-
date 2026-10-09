@@ -49,6 +49,9 @@ class VenueLadder:
 class Payments:
     def payment_link(self, token: str) -> str: raise NotImplementedError
 
+    async def link_for(self, store: Store, account: str, act_id: str, token: str, total: dict, label: str) -> str:   # CR 70
+        return self.payment_link(token)
+
 
 class Messenger:
     def deliver(self, store: Store, account: str, end_user: Optional[str], to: str, channel: str, body: str, link: Optional[str]) -> None:

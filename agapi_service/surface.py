@@ -169,6 +169,8 @@ async def keep_post(token: str):
 
 @router.get("/pay/{token}", response_class=HTMLResponse)
 async def pay_get(token: str):
+    if config.LIVE_SERVICE:   # CR 70 · live: payment happens only on Stripe's (TEST) page and settles from Stripe's record
+        return _page("Pay on Stripe's page", "<p>This booking's payment page is Stripe's. Use the link you were sent.</p>", 404)
     store = _store()
     act = store.one("select * from acts where pay_token_hash = ?", _h(token))
     if not act:
@@ -181,8 +183,26 @@ async def pay_get(token: str):
 <form method="post"><button class="ok">Pay (test)</button></form>""")
 
 
+@router.get("/pay/return/{token}", response_class=HTMLResponse)
+async def pay_return(token: str, s: str = "", cancelled: str = ""):
+    """CR 70 · where Stripe (TEST) sends the payer back on agapi-live: the act settles only if Stripe's own record says paid."""
+    from .adapters_live import payments as LPAY
+    store = _store()
+    if cancelled:
+        return _page("Not paid", "<p class='st'>You left the payment page. Nothing was charged; the link still works for its time.</p>")
+    outcome = await LPAY.settle(store, _h(token))
+    if outcome is None:
+        return _page("Checking the payment", "<p class='st'>Stripe hasn't confirmed this payment yet (test mode — no money moves). "
+                     "This page will show the booking once it does.</p><meta http-equiv='refresh' content='5'>")
+    if outcome["kind"] == "CONFIRMED":
+        return _page("Paid", f"<p class='st'>Booked — reference {html.escape(outcome['reference'])}.</p>")
+    return _page("Not booked", f"<p class='st'>The provider answered: {html.escape(outcome['kind'].lower())}. Nothing was charged.</p>")
+
+
 @router.post("/pay/{token}", response_class=HTMLResponse)
 async def pay_post(token: str):
+    if config.LIVE_SERVICE:   # CR 70 · never a simulated payment on the live service
+        return _page("Pay on Stripe's page", "<p>Nothing was charged here. Use the Stripe link you were sent.</p>", 404)
     store = _store()
     with store.tx():
         act = store.one("select * from acts where pay_token_hash = ?", _h(token))

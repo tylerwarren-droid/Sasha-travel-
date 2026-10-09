@@ -380,7 +380,8 @@ async def trip_complete(ctx: Ctx, inp: dict):
             raise
     if total["amount_minor"] > 0:
         token, h = _token()
-        outcome = {"kind": "AWAITING_PAYMENT", "payment_url": AD.get("payments", ctx.mode).payment_link(token)}
+        outcome = {"kind": "AWAITING_PAYMENT", "payment_url": await AD.get("payments", ctx.mode).link_for(
+            ctx.store, ctx.account, aid, token, total, (loads(rb["lines"]) or ["AgAPI booking"])[0][:200])}   # CR 70: live → a Stripe TEST page
         _new_act(ctx, aid, it, "complete", hold["id"], outcome, pay_hash=h)
         eid = _evidence(ctx, "trip.complete", aid, it["id"], inp, outcome, apv, [])
         ctx.store.x("update acts set evidence_id = ? where account = ? and id = ?", eid, ctx.account, aid)
@@ -441,7 +442,7 @@ def _confirm(store: Store, account: str, act_id: str, intent_id: str, evidence_i
 
 async def pay(store: Store, act: dict) -> dict:
     """The end user paid on the payment link (sandbox: Stripe test, simulated) → the provider act, then Pacioli."""
-    ctx = Ctx(store, {"account": act["account"], "key_id": "pay_page"}, R.new_id("req"), None, None)
+    ctx = Ctx(store, {"account": act["account"], "key_id": "pay_page", "mode": "live" if config.LIVE_SERVICE else "test"}, R.new_id("req"), None, None)   # CR 70
     hold = store.one("select * from holds where account = ? and id = ?", act["account"], act["hold_id"])
     held = loads(hold["items"])
     priced = [dict(i, price=None) for i in held["items"]]

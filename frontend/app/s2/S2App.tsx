@@ -27,6 +27,17 @@ type Ev = Record<string, any>
 type Item = { kind: string; state: string; check: 'green' | 'red' | 'amber'; line: string; at: string; ref: string }
 
 const GREETING = 'Hey there — what can I do for you?'
+
+/** The cards the person sees — as the backend's own shown_cards (agapi/venues.py): the ranking's default order, its `show` count. */
+function shownCards(preset: Ev): Extract<Card, { k: 'venues' }>['cards'] {
+  if (Array.isArray(preset.cards) && preset.cards.length) return preset.cards
+  const all = (Array.isArray(preset.all) ? preset.all : []).filter((c: Ev) => c && c.place_id)
+  const rk = preset.ranking || {}
+  const order: string[] | undefined = (rk.orders || {})[rk.default || 'rated']
+  const by = new Map(all.map((c: Ev) => [c.place_id, c]))
+  const cards = order ? order.map(i => by.get(i)).filter(Boolean) : all
+  return (cards as Extract<Card, { k: 'venues' }>['cards']).slice(0, Number(preset.show) || 5)
+}
 const C = { bg: '#0b0b10', card: '#16151d', line: 'rgba(255,255,255,.1)', gold: '#E8B923', dim: 'rgba(255,255,255,.6)' }
 
 function useSignedIn(): boolean | null {
@@ -72,9 +83,9 @@ function VenueCards({ cards, choose }: { cards: Extract<Card, { k: 'venues' }>['
           <div style={{ padding: 12 }}>
             <div style={{ fontWeight: 700 }}>{untag(c.name)}</div>
             <div style={{ fontSize: 13, color: C.dim, marginTop: 2 }}>
-              {c.rating ? `★ ${c.rating}${c.rating_count ? ` (${c.rating_count.toLocaleString()})` : ''} · ` : ''}{untag(c.area || c.type || '')}
+              {c.rating ? `★ ${c.rating}${c.rating_count ? ` (${Number(c.rating_count).toLocaleString()})` : ''} · ` : ''}{untag(c.area || c.type || '')}
             </div>
-            {c.open_at ? <div style={{ fontSize: 12.5, color: C.dim, marginTop: 2 }}>{untag(c.open_at)}</div> : null}
+            {typeof c.open_at === 'string' ? <div style={{ fontSize: 12.5, color: C.dim, marginTop: 2 }}>{untag(c.open_at)}</div> : null}
             <button onClick={() => choose(untag(c.name))} style={{ marginTop: 10, padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 700 }}>Choose</button>
           </div>
         </div>
@@ -192,7 +203,7 @@ export default function S2App() {
           else if (ev.type === 'done') { reply = ev.text || reply; patch(m => ({ ...m, text: untag(reply), cards: /^✅\s*Booked/m.test(reply) ? [...m.cards, { k: 'booked', line: (reply.match(/✅[^\n]*/) || [''])[0] }] : m.cards })) }
           else if (ev.type === 'render') {
             const add = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k), c] }))
-            if (ev.kind === 'venues' && ev.preset?.cards?.length) add({ k: 'venues', cards: ev.preset.cards })
+            if (ev.kind === 'venues' && ev.preset) { const cs = shownCards(ev.preset); if (cs.length) add({ k: 'venues', cards: cs }) }
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur })
             else if (ev.kind === 'calendar' && ev.links) add({ k: 'calendar', title: ev.title, links: ev.links })
             else if (ev.kind === 'pay_here') add({ k: 'pay', client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid })
@@ -219,7 +230,7 @@ export default function S2App() {
 
   return (
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, margin: '0 auto' }}>
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', paddingTop: 'max(14px, env(safe-area-inset-top))' }}>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', paddingTop: 'max(56px, calc(env(safe-area-inset-top) + 44px))' }}>{/* room for the site's sign-in badge above */}
         <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
         <nav style={{ display: 'flex', gap: 6 }}>
           {(['sasha', 'activity'] as const).map(t => (

@@ -80,7 +80,7 @@ async def send_email(ctx, a: dict) -> dict:
         OUTBOX.append({"account": ctx.account, "message": msg, "provider_id": provider_id, "sent_at": sent_at})
         return {"status": "not_sent", "outcome": {"kind": "NOT_SENT", "reference": provider_id,
                                                    "target_words": "Not sent: real email isn't open on this account yet. Nothing left Sasha."},
-                "say": "Tell them plainly it was NOT sent — real email is open only on the founder's account for now.",
+                "say": "Tell them plainly it was NOT sent: real email isn't open on their account yet. Never say it was sent.",
                 "message": {"from": msg["from"], "to": msg["to"], "subject": msg["subject"], "body_sha256": P.email_body_sha256(msg)}}
     else:   # ⛔ live: only the founder and the allow-listed accounts (Sasha 216) — the S-36 rung's Resend send, its answer READ
         from booking_signer import emailing as EM

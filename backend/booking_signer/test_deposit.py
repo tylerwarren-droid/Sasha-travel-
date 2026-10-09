@@ -86,7 +86,7 @@ async def paid_since(link_id: str, since: float) -> Optional[dict]:
     return None
 
 
-async def checkout(amount: str, currency: str, label: str, ref: str, embedded: bool = False) -> Dict[str, str]:
+async def checkout(amount: str, currency: str, label: str, ref: str, embedded: bool = False, where: str = "phone") -> Dict[str, str]:
     """Sasha 132 · one touch for ANY test amount (a flight's fare): a Stripe TEST Checkout session. {id, url} or {why}."""
     if not key():
         return {"why": "no Stripe TEST key is set (STRIPE_TEST_SECRET_KEY, sk_test_…) — the founder sets it on Railway"}
@@ -100,10 +100,11 @@ async def checkout(amount: str, currency: str, label: str, ref: str, embedded: b
     back = f"{public_base()}/api/booking/test-pay"
     # Sasha 220 · "pay HERE": Stripe Embedded Checkout (the card inside the conversation; Apple Pay / Google Pay where the device
     # has them) — no redirect; the page hears the outcome from Pacioli, never from the browser
-    where = ({"ui_mode": "embedded", "redirect_on_completion": "never"} if embedded else
+    # (Stripe renamed the mode: "embedded" is refused now — "embedded_page", checked live in TEST on 9 Oct)
+    shape = ({"ui_mode": "embedded_page", "redirect_on_completion": "never"} if embedded else
              {"success_url": f"{back}/done?s={{CHECKOUT_SESSION_ID}}", "cancel_url": f"{back}/back?s={{CHECKOUT_SESSION_ID}}"})
     s, j = await HTTP("POST", "/checkout/sessions", {
-        "mode": "payment", **where,
+        "mode": "payment", **shape, "metadata[sasha_where]": where,
         "line_items[0][quantity]": 1, "line_items[0][price_data][currency]": currency.lower(),
         "line_items[0][price_data][unit_amount]": cents, "line_items[0][price_data][product_data][name]": f"TEST payment — {label}"[:250],
         "metadata[test_payment]": "true", "metadata[sasha_ref]": ref[:100]})
@@ -123,7 +124,8 @@ async def session_state(session_id: str) -> Optional[dict]:
     if s != 200 or cs.get("livemode"):
         return None
     return {"status": cs.get("status"), "paid": cs.get("payment_status") == "paid", "url": cs.get("url"),
-            "client_secret": cs.get("client_secret"), "embedded": cs.get("ui_mode") == "embedded",
+            "client_secret": cs.get("client_secret"), "embedded": str(cs.get("ui_mode") or "").startswith("embedded"),
+            "where": (cs.get("metadata") or {}).get("sasha_where") or ("here" if str(cs.get("ui_mode") or "").startswith("embedded") else "phone"),
             "amount": (cs.get("amount_total") or 0) / 100}
 
 

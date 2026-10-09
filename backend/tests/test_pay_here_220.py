@@ -148,18 +148,18 @@ class OnePaymentPerBasket(unittest.TestCase):
         ex.assert_not_called(), rel.assert_not_called()
 
     def test_the_same_place_again_is_the_same_session(self):
-        out, ex, _, _ = self.resume({"status": "open", "paid": False, "embedded": True, "client_secret": "sec", "amount": 100.0}, "here")
+        out, ex, _, _ = self.resume({"status": "open", "paid": False, "embedded": True, "where": "here", "client_secret": "sec", "amount": 100.0}, "here")
         self.assertEqual((out["session_id"], out["client_secret"], out["resumed"]), ("cs_test_1", "sec", True))
         ex.assert_not_called()
 
     def test_the_phone_again_resends_the_same_link(self):
-        out, ex, _, tap = self.resume({"status": "open", "paid": False, "embedded": False, "url": "https://x", "amount": 100.0}, "phone")
+        out, ex, _, tap = self.resume({"status": "open", "paid": False, "embedded": False, "where": "phone", "url": "https://x", "amount": 100.0}, "phone")
         self.assertEqual(out["url"], "https://x")
         tap.assert_awaited_once()
         ex.assert_not_called()
 
     def test_the_other_place_expires_the_open_one_first(self):
-        out, ex, rel, _ = self.resume({"status": "open", "paid": False, "embedded": True, "amount": 100.0}, "phone")
+        out, ex, rel, _ = self.resume({"status": "open", "paid": False, "embedded": True, "where": "here", "amount": 100.0}, "phone")
         self.assertIsNone(out)                                                 # the caller opens the new one
         ex.assert_awaited_once_with("cs_test_1")
         rel.assert_awaited_once()
@@ -178,13 +178,32 @@ class OnePaymentPerBasket(unittest.TestCase):
         cur = {"rows": [row], "party": 1, "trip_id": "t1", "title": "Trip"}
         sha = hashlib.sha256("\n".join(BB.lines_of(cur["rows"], 1)).encode()).hexdigest()
         co, tap = mock.AsyncMock(return_value={"id": "cs_test_e", "url": None, "client_secret": "sec_e", "embedded": True}), mock.AsyncMock()
-        with mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=None)), mock.patch.object(BB, "current", mock.AsyncMock(return_value=cur)), \
+        with mock.patch.dict("os.environ", {"SASHA_PAY_EMBEDDED": "1"}), \
+                mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=None)), mock.patch.object(BB, "current", mock.AsyncMock(return_value=cur)), \
                 mock.patch.object(TD, "checkout", co), mock.patch.object(BK, "hold", mock.AsyncMock()), \
                 mock.patch.object(PWT, "remember", mock.AsyncMock(return_value="rec")), mock.patch.object(GW, "tap_to_pay", tap):
             got = run(BB.pay("acct", sha, "here"))
-        self.assertEqual(co.call_args.kwargs.get("embedded"), True)
+        self.assertEqual((co.call_args.kwargs.get("embedded"), co.call_args.kwargs.get("where")), (True, "here"))
         tap.assert_not_called()
         self.assertEqual((got["where"], got["client_secret"]), ("here", "sec_e"))
+
+
+class HereWithoutTheKey(unittest.TestCase):
+    def test_here_is_stripes_own_page_on_this_device_until_the_key_is_set(self):
+        import hashlib
+        from booking_signer import basket_book as BB, basket as BK, guest_whatsapp as GW, paid_watch as PWT, test_deposit as TD
+        row = {"id": "r1", "kind": "flight", "state": "chosen", "price_amount": 120.0, "price_currency": "EUR", "day": "2026-11-12",
+               "snapshot": {"id": "off_1", "amount": "120.00", "currency": "EUR", "owner": "Iberia", "flights": "IB 3166"}}
+        cur = {"rows": [row], "party": 1, "trip_id": "t1", "title": "Trip"}
+        sha = hashlib.sha256("\n".join(BB.lines_of(cur["rows"], 1)).encode()).hexdigest()
+        co = mock.AsyncMock(return_value={"id": "cs_test_h", "url": "https://checkout.stripe.test/h", "embedded": False})
+        with mock.patch.dict("os.environ", {"SASHA_PAY_EMBEDDED": ""}), \
+                mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=None)), mock.patch.object(BB, "current", mock.AsyncMock(return_value=cur)), \
+                mock.patch.object(TD, "checkout", co), mock.patch.object(BK, "hold", mock.AsyncMock()), \
+                mock.patch.object(PWT, "remember", mock.AsyncMock(return_value="rec")), mock.patch.object(GW, "tap_to_pay", mock.AsyncMock()) as tap:
+            got = run(BB.pay("acct", sha, "here"))
+        self.assertEqual((co.call_args.kwargs.get("embedded"), got["url"]), (False, "https://checkout.stripe.test/h"))
+        tap.assert_not_called()
 
 
 class LateWebhook(unittest.TestCase):

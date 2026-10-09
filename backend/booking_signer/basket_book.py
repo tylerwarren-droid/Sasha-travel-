@@ -216,7 +216,7 @@ async def _resume(account: str, pend: Dict[str, Any], where: str) -> Optional[Di
     settled = await PWT.settle(sid)
     if (st and st["paid"]) or (settled and settled.get("status") in ("booked", "booking", "failed")):
         return {"already_paid": True, "session_id": sid, "eur": (st or {}).get("amount")}
-    if st and st["status"] == "open" and st["embedded"] == (where == "here"):
+    if st and st["status"] == "open" and st.get("where") == where:
         if where == "here":
             return {"where": "here", "session_id": sid, "client_secret": st.get("client_secret"), "url": st.get("url"), "eur": st["amount"],
                     "resumed": True}
@@ -252,7 +252,11 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
     t = BK.total(cur["rows"])
     n_st, n_fl = sum(1 for r in cur["rows"] if r["kind"] == "stay"), sum(1 for r in cur["rows"] if r["kind"] == "flight")
     what = f"{n_st} hotel{'s' if n_st != 1 else ''} + {n_fl} flight{'s' if n_fl != 1 else ''}"
-    got = await TD.checkout(f"{t['amount']:.2f}", "EUR", f"TEST — {cur['title'] or 'your trip'}: {what}", sha[:16], embedded=(where == "here"))
+    # Sasha 220 · "here" is the embedded card once the page has Stripe's publishable key (SASHA_PAY_EMBEDDED=1, set with it);
+    # until then Stripe's own page, opened on the SAME device — never a dead end
+    import os as _os
+    got = await TD.checkout(f"{t['amount']:.2f}", "EUR", f"TEST — {cur['title'] or 'your trip'}: {what}", sha[:16],
+                            embedded=(where == "here" and _os.getenv("SASHA_PAY_EMBEDDED", "") == "1"), where=where)
     if "why" in got:
         return {"why": got["why"]}
     await BK.hold(account, cur["trip_id"], got["id"])

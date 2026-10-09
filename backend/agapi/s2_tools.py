@@ -75,9 +75,13 @@ async def send_email(ctx, a: dict) -> dict:
     await claim(ctx)   # Sasha 216 · durable: this message is sent once, across restarts and workers
     _HELD.pop(ctx.account, None)
     sent_at = now.isoformat(timespec="seconds").replace("+00:00", "Z")
-    if not live_for(ctx.account):
-        provider_id, words = "test_msg_" + secrets.token_hex(10), "Accepted for delivery (test mode: captured, never sent)."
+    if not live_for(ctx.account):   # CR 61 · captured, and SAID so: never status "sent" for a message that didn't leave
+        provider_id = "test_msg_" + secrets.token_hex(10)
         OUTBOX.append({"account": ctx.account, "message": msg, "provider_id": provider_id, "sent_at": sent_at})
+        return {"status": "not_sent", "outcome": {"kind": "NOT_SENT", "reference": provider_id,
+                                                   "target_words": "Not sent: real email isn't open on this account yet. Nothing left Sasha."},
+                "say": "Tell them plainly it was NOT sent — real email is open only on the founder's account for now.",
+                "message": {"from": msg["from"], "to": msg["to"], "subject": msg["subject"], "body_sha256": P.email_body_sha256(msg)}}
     else:   # ⛔ live: only the founder and the allow-listed accounts (Sasha 216) — the S-36 rung's Resend send, its answer READ
         from booking_signer import emailing as EM
         from booking_signer.ladder_routes import HTTP
@@ -173,7 +177,7 @@ def tools() -> List[dict]:
         _t("send_email", "Austen", send_email, "Email someone the person names, FROM SASHA'S OWN ADDRESS (never their mailbox). The first call "
            "returns the exact message to read back; say it, ask 'shall I send it?', and call again with the SAME message after their yes "
            "in a later turn. Any change is a new read-back. A question is never a yes.", msg_props, ["to", "subject", "body"],
-           {"type": "object", "properties": {"status": {"enum": ["awaiting_yes", "sent"]}}}, ["invalid_input", "no_explicit_yes",
+           {"type": "object", "properties": {"status": {"enum": ["awaiting_yes", "sent", "not_sent"]}}}, ["invalid_input", "no_explicit_yes",
                                                                                               "upstream_refused", "upstream_unreachable"], austen=True),
         _t("add_to_calendar", "Pacioli", add_to_calendar, "Put a CONFIRMED booking (a table or a flight; ids from get_status) in the person's "
            "calendar: returns 'Add to calendar' links (Google, Outlook, Apple) and an .ics. No yes needed — nothing leaves their account.",

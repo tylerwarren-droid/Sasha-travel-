@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -73,7 +74,8 @@ class Email(unittest.TestCase):
         self.assertEqual(r["error"]["code"], "no_explicit_yes")
         self.assertEqual(S.OUTBOX, [])
         r = self.turn("Yes, send it.", started=self.later())
-        self.assertEqual(r["result"]["status"], "sent", r)
+        self.assertEqual(r["result"]["status"], "not_sent", r)               # CR 61: never "sent" for a message that didn't leave
+        self.assertEqual(r["result"]["outcome"]["kind"], "NOT_SENT")
         self.assertTrue(r["result"]["outcome"]["reference"].startswith("test_msg_"))
         self.assertEqual(len(S.OUTBOX), 1)                                   # captured, never sent
         r = self.turn("Yes, send it.", started=self.later() + timedelta(seconds=5))
@@ -99,6 +101,48 @@ class Email(unittest.TestCase):
         t = {x["name"]: x for x in S.tools()}
         self.assertNotIn("approval", API.schema_for_model(t["send_email"])["input_schema"]["properties"])
         self.assertNotIn("idempotency_key", API.schema_for_model(t["send_email"])["input_schema"]["properties"])
+
+
+FOUNDER, JON, OTHER = ("00000000-0000-4000-8000-0000000000f0", "00000000-0000-4000-8000-0000000000a1",
+                        "00000000-0000-4000-8000-0000000000b2")
+
+
+class LiveEmailAllowList(unittest.TestCase):
+    """CR 61 · Tyler: real sending ON for the founder and Jon's allow-listed account only; off for everyone else."""
+
+    def env(self, **over):
+        e = {"SASHA_S2_EMAIL_LIVE": "1", "FOUNDER_ACCOUNT_ID": FOUNDER, "SASHA_REAL_CONTACT_ACCOUNTS": JON}
+        e.update(over)
+        return mock.patch.dict(os.environ, e)
+
+    def test_who_may_send_for_real(self):
+        with self.env():
+            self.assertEqual([S.live_for(a) for a in (FOUNDER, JON, JON.upper(), OTHER, None, "")], [True, True, True, False, False, False])
+        with self.env(SASHA_S2_EMAIL_LIVE="0"):                                       # the kill switch: nobody
+            self.assertEqual([S.live_for(a) for a in (FOUNDER, JON, OTHER)], [False, False, False])
+
+    def send(self, account):
+        S._HELD.clear()
+        S.OUTBOX.clear()
+        got = mock.MagicMock(sent=True, provider_id="re_123", http_status=200, why=None)
+        with self.env(), mock.patch("booking_signer.basket.event", mock.AsyncMock()), \
+                mock.patch("agapi.v0.claim", mock.AsyncMock()), \
+                mock.patch("booking_signer.emailing.send", mock.AsyncMock(return_value=got)) as em:
+            t0 = datetime.now(timezone.utc)
+            run(API.call(API.Ctx(account=account, user_said="email Marta", started=t0), "send_email",
+                         {**Email.MSG, "idempotency_key": f"a-{account}-{t0.timestamp()}", "approval": {"said": "email Marta"}}))
+            t1 = t0 + timedelta(seconds=5)
+            r = run(API.call(API.Ctx(account=account, user_said="Yes, send it.", started=t1), "send_email",
+                             {**Email.MSG, "idempotency_key": f"b-{account}-{t1.timestamp()}", "approval": {"said": "Yes, send it."}}))
+            return r.get("result") or r, em.await_count
+
+    def test_the_founder_and_jon_send_for_real_a_guest_never(self):
+        for who in (FOUNDER, JON):
+            r, sends = self.send(who)
+            self.assertEqual((r["status"], r["outcome"]["reference"], sends, S.OUTBOX), ("sent", "re_123", 1, []), r)
+        r, sends = self.send(OTHER)
+        self.assertEqual((r["status"], sends, len(S.OUTBOX)), ("not_sent", 0, 1), r)
+        self.assertIn("Not sent", r["outcome"]["target_words"])
 
 
 class Calendar(unittest.TestCase):

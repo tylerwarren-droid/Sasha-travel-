@@ -59,3 +59,8 @@ async def agent_ics(token: str):
   2. "Yes — what will it say?" is refused.
   3. "Yes, send it." sends it (captured in test).
 - "put my dinner in my calendar" returns three links.
+
+## CR 61 follow-up (after Sasha 216's merge)
+- **Merged state.** This branch now contains `sasha/216` (fa36619). Sasha 216 already did Tyler's two CR 61 decisions in its own way: live email for the founder and `SASHA_REAL_CONTACT_ACCOUNTS` (Jon), with `SASHA_S2_EMAIL_LIVE=0` as the kill switch; and calendar links that survive deploys by carrying the signed `.ics` inside the link (`ics_token` / `ics_from_token`), with no table. CR 61's table draft (fdc5312) was dropped in favour of the signed links.
+- **One addition: honesty for a captured email.** A guest's email (not the founder's or Jon's) used to come back as `status: "sent"` with "Accepted for delivery (test mode…)". It now comes back as `status: "not_sent"`, `outcome.kind: "NOT_SENT"`, "Not sent: real email isn't open on this account yet. Nothing left Sasha." So she never says "sent" for a message that didn't leave.
+- **Tests.** `tests/test_s2_powers.py` LiveEmailAllowList covers who may send (founder, Jon, case-insensitive; nobody else; nobody with `=0`). It also checks that the founder and Jon really send, once, and that a guest is told "not sent".

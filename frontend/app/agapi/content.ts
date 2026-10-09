@@ -74,7 +74,7 @@ export const PITCHES: Pitch[] = [
       { mark: 'test', text: 'Hotels: “Reserve (TEST)”, or a real room request to the hotel (✅). Flights: TEST bookings.' },
       // CR 50 · each line confirmed true and live by the Sasha tab (7 Oct): no real Apple Pay tap has completed a whole trip yet
       { mark: 'test', text: 'Laptop books, phone pays: a whole Vietnam trip priced and read back on the laptop; one Apple Pay tap is sent to the phone (TEST).' },
-      { mark: 'test', text: 'A tattoo-studio request: found, sent by email (our test venue stands in), and filed under Requests.' },
+      { mark: 'test', text: 'A tattoo-studio request: found, sent by email, and filed under Requests.' },
     ],
     agents: [
       { agent: 'MaSh', mark: 'built', text: 'Finds each venue’s own route on its own site, and obtains its answer in writing: an email to Sasha’s own address, matched to the booking.' },

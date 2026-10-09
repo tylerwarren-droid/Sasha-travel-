@@ -86,7 +86,7 @@ async def paid_since(link_id: str, since: float) -> Optional[dict]:
     return None
 
 
-async def checkout(amount: str, currency: str, label: str, ref: str) -> Dict[str, str]:
+async def checkout(amount: str, currency: str, label: str, ref: str, embedded: bool = False) -> Dict[str, str]:
     """Sasha 132 · one touch for ANY test amount (a flight's fare): a Stripe TEST Checkout session. {id, url} or {why}."""
     if not key():
         return {"why": "no Stripe TEST key is set (STRIPE_TEST_SECRET_KEY, sk_test_…) — the founder sets it on Railway"}
@@ -98,8 +98,12 @@ async def checkout(amount: str, currency: str, label: str, ref: str) -> Dict[str
     # booking's status once known. Stripe fills {CHECKOUT_SESSION_ID} itself.
     from .form_rung import public_base
     back = f"{public_base()}/api/booking/test-pay"
+    # Sasha 220 · "pay HERE": Stripe Embedded Checkout (the card inside the conversation; Apple Pay / Google Pay where the device
+    # has them) — no redirect; the page hears the outcome from Pacioli, never from the browser
+    where = ({"ui_mode": "embedded", "redirect_on_completion": "never"} if embedded else
+             {"success_url": f"{back}/done?s={{CHECKOUT_SESSION_ID}}", "cancel_url": f"{back}/back?s={{CHECKOUT_SESSION_ID}}"})
     s, j = await HTTP("POST", "/checkout/sessions", {
-        "mode": "payment", "success_url": f"{back}/done?s={{CHECKOUT_SESSION_ID}}", "cancel_url": f"{back}/back?s={{CHECKOUT_SESSION_ID}}",
+        "mode": "payment", **where,
         "line_items[0][quantity]": 1, "line_items[0][price_data][currency]": currency.lower(),
         "line_items[0][price_data][unit_amount]": cents, "line_items[0][price_data][product_data][name]": f"TEST payment — {label}"[:250],
         "metadata[test_payment]": "true", "metadata[sasha_ref]": ref[:100]})
@@ -107,7 +111,20 @@ async def checkout(amount: str, currency: str, label: str, ref: str) -> Dict[str
         return {"why": f"Stripe refused the test page: {j.get('error', {}).get('message', s)}"}
     if j.get("livemode"):
         return {"why": "Stripe answered in LIVE mode — refused"}
-    return {"id": j["id"], "url": j["url"]}
+    return {"id": j["id"], "url": j.get("url"), **({"client_secret": j["client_secret"]} if j.get("client_secret") else {}),
+            "embedded": bool(embedded)}
+
+
+async def session_state(session_id: str) -> Optional[dict]:
+    """Sasha 220 · a checkout as Stripe holds it now: open / complete / expired, paid or not, and how it's paid (embedded's secret)."""
+    if not key():
+        return None
+    s, cs = await HTTP("GET", f"/checkout/sessions/{session_id}", {})
+    if s != 200 or cs.get("livemode"):
+        return None
+    return {"status": cs.get("status"), "paid": cs.get("payment_status") == "paid", "url": cs.get("url"),
+            "client_secret": cs.get("client_secret"), "embedded": cs.get("ui_mode") == "embedded",
+            "amount": (cs.get("amount_total") or 0) / 100}
 
 
 async def expire(session_id: str) -> bool:

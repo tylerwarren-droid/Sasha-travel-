@@ -107,7 +107,7 @@ RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues":
           "save_travellers": "inline", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
           "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
 RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_whatsapp": "read_back", "get_activity": "inline"})   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
-KINDS_S2 = {"calendar"}   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
+KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
 KINDS = KINDS_S2 | {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 
 
@@ -118,6 +118,12 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
     # Sasha 214 · the human step on the SAME device (a phone): the checkout, their booking page, Tap to finish — the page
     # decides (a phone opens it over her; the desktop keeps the phone hand-off)
     if kind == "pay":
+        # Sasha 220 · "here": the pay card in the conversation (Stripe Embedded Checkout; Stripe's own page when the page has no
+        # publishable key); "already paid": said on the card; "phone": the WhatsApp link only, as before (nothing on the page)
+        if res.get("payment") == "here" and res.get("checkout"):
+            return {"type": "render", "kind": "pay_here", **{k: v for k, v in res["checkout"].items() if v}, "total_eur": res.get("total_eur")}
+        if res.get("status") == "already_paid":
+            return {"type": "render", "kind": "pay_here", "already_paid": True, "session_id": res.get("session_id")}
         return {"type": "render", "kind": "pay", "url": res["checkout_url"]} if res.get("checkout_url") else None
     if tool == "book_venue" and (res.get("view_url") or res.get("page_url")):
         return {"type": "render", "kind": "handover", "url": res.get("view_url") or res.get("page_url"),
@@ -412,7 +418,7 @@ _TEST_TAG = [(re.compile(r"\s*\((?:Duffel )?TEST[^)]*\)"), ""), (re.compile(r",?
              (re.compile(r"\bTEST\s+"), ""), (re.compile(r"\s*\bTEST\b"), "")]
 _MODEL_DROP_KEYS = {"note", "notes", "prices", "test", "prefetched", "flight_note", "total_note", "breakdown",   # Sasha 212 · one total
                     "preset", "find", "card", "ribbon",   # Sasha 213 · the screen's copy; she gets the cards as `venues` only
-                    "checkout_url", "view_url", "page_url"}   # Sasha 214 · links for the page, never words for her
+                    "checkout_url", "view_url", "page_url", "checkout", "client_secret"}   # Sasha 220 · the pay card's, never hers   # Sasha 214 · links for the page, never words for her
 
 
 def clean_for_model(obj: Any) -> Any:

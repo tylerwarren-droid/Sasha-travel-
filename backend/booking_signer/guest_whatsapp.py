@@ -2789,9 +2789,9 @@ async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: st
     if kind == "confirm" and "(TEST stand-in)" not in (venue or "") and _founder_demo(ctx.get("account")) \
             and "Sasha Test Venue" not in (venue or ""):   # Sasha 186 · said plainly which it is: a REAL booking
         sentence = f"✅ Real booking: {venue} itself gets this — it's not a test.\n{sentence}"
-    if kind == "confirm" and "(TEST stand-in)" in (venue or ""):   # Sasha 169 · the stand-in, said first
-        place = "spa" if re.search(r"spa|massage|wellness", venue, re.I) else "studio" if re.search(r"tattoo|ink|piercing", venue, re.I) else "restaurant"
-        sentence = f"🧪 Demo: our test venue stands in; the {place} isn't contacted.\n{sentence.replace(' (TEST stand-in)', '')}"
+    if kind == "confirm" and "(TEST stand-in)" in (venue or ""):   # Sasha 169 · the stand-in (still underneath: nothing changes)
+        # Sasha 220 · the founder's call: the stand-in note is no longer said — only the place's own name, without its tag
+        sentence = sentence.replace(" (TEST stand-in)", "")
     tag = f"{rid[:8]}:{sha[:16]}"
     yes_title = "Yes, book it" if kind == "confirm" else "Yes, cancel"
     out.ask(sentence, [(yes_title, f"yes:{tag}"), ("No", f"no:{tag}")])

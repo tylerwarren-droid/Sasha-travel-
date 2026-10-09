@@ -195,20 +195,64 @@ async def current(account: str) -> Optional[Dict[str, Any]]:
     return {"rows": rows, "party": party, "trip_id": p["trip_id"], "title": p.get("title")}
 
 
-async def pay(account: str, read_back_sha256: str) -> Dict[str, Any]:
-    """The yes → one Stripe TEST checkout for exactly the rows read back → every item held with the session (Austen)."""
+async def in_progress(account: str) -> Optional[Dict[str, Any]]:
+    """Sasha 220 · the basket's payment already under way (its items held with a Stripe session): {sid, trip_id, rows} or None."""
+    from . import plan_store as PS
+    p = await PS.latest(account)
+    if not p:
+        return None
+    rows = await BK.items(account, p["trip_id"], ("pending_payment",))
+    sids = {r.get("paid_session") for r in rows if r.get("paid_session")}
+    return {"sid": sorted(sids)[0], "trip_id": p["trip_id"], "rows": rows} if len(sids) == 1 else None
+
+
+async def _resume(account: str, pend: Dict[str, Any], where: str) -> Optional[Dict[str, Any]]:
+    """Sasha 220 · ONE PAYMENT PER BASKET. A payment already under way: paid → "already paid" (never a second charge); the same
+    channel again → the same session (its link resent, or its card again); the other channel → the open session is EXPIRED at
+    Stripe first (so it can never also be paid), its items released, and None (the caller opens the new one)."""
     from . import guest_whatsapp as GW, test_deposit as TD, paid_watch as PWT
+    sid = pend["sid"]
+    st = await TD.session_state(sid)
+    settled = await PWT.settle(sid)
+    if (st and st["paid"]) or (settled and settled.get("status") in ("booked", "booking", "failed")):
+        return {"already_paid": True, "session_id": sid, "eur": (st or {}).get("amount")}
+    if st and st["status"] == "open" and st["embedded"] == (where == "here"):
+        if where == "here":
+            return {"where": "here", "session_id": sid, "client_secret": st.get("client_secret"), "url": st.get("url"), "eur": st["amount"],
+                    "resumed": True}
+        phone = await GW.tap_to_pay(account, f"€{st['amount']:.2f}", "your trip (TEST)", st["url"])
+        return {"where": "phone", "session_id": sid, "url": st["url"], "phone": phone, "eur": st["amount"], "resumed": True}
+    if st and st["status"] == "open" and not await TD.expire(sid):   # the switch: the old one can never also be paid
+        st = await TD.session_state(sid)
+        if st and st["paid"]:
+            return {"already_paid": True, "session_id": sid, "eur": st.get("amount")}
+        return {"why": "I couldn't close the first payment page, so I haven't opened another — nothing was charged twice. Try me again in a minute."}
+    await BK.release(account, pend["trip_id"], sid)
+    return None
+
+
+async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict[str, Any]:
+    """The yes → one Stripe TEST checkout for exactly the rows read back → every item held with the session (Austen). Sasha 220:
+    `where` — "phone": the link to their WhatsApp, as before; "here": an embedded checkout for the page they're on."""
+    from . import guest_whatsapp as GW, test_deposit as TD, paid_watch as PWT
+    pend = await in_progress(account)
+    switched = False
+    if pend:
+        resumed = await _resume(account, pend, where)
+        if resumed is not None:
+            return resumed
+        switched = not read_back_sha256   # the rows just released are the ones their yes paid for: moved, not re-agreed
     cur = await current(account)
     if not cur or not cur["rows"]:
         return {"why": "there's nothing in this trip to book — ask me to price it again"}
     lines = lines_of(cur["rows"], cur["party"])
     sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
-    if sha != read_back_sha256:
+    if sha != read_back_sha256 and not switched:
         return {"why": "the yes was to different words — prepare it again"}
     t = BK.total(cur["rows"])
     n_st, n_fl = sum(1 for r in cur["rows"] if r["kind"] == "stay"), sum(1 for r in cur["rows"] if r["kind"] == "flight")
     what = f"{n_st} hotel{'s' if n_st != 1 else ''} + {n_fl} flight{'s' if n_fl != 1 else ''}"
-    got = await TD.checkout(f"{t['amount']:.2f}", "EUR", f"TEST — {cur['title'] or 'your trip'}: {what}", sha[:16])
+    got = await TD.checkout(f"{t['amount']:.2f}", "EUR", f"TEST — {cur['title'] or 'your trip'}: {what}", sha[:16], embedded=(where == "here"))
     if "why" in got:
         return {"why": got["why"]}
     await BK.hold(account, cur["trip_id"], got["id"])
@@ -228,8 +272,10 @@ async def pay(account: str, read_back_sha256: str) -> Dict[str, Any]:
             log.error("[basket_book] the held items were not released: %s: %s", type(e).__name__, e)
         return {"why": "I couldn't save the payment record, so I haven't sent a payment link — nothing was charged. Try me again in a minute.",
                 "unrecorded": True}
+    if where == "here":   # Sasha 220 · the card on the page they're on; nothing to their phone
+        return {"where": "here", "session_id": got["id"], "client_secret": got.get("client_secret"), "url": got.get("url"), "eur": t["amount"]}
     phone = await GW.tap_to_pay(account, f"€{t['amount']:.2f}", f"{cur['title'] or 'your trip'} — {what} (TEST)", got["url"])
-    return {"url": got["url"], "session_id": got["id"], "phone": phone, "eur": t["amount"]}
+    return {"url": got["url"], "session_id": got["id"], "phone": phone, "eur": t["amount"], "where": "phone"}
 
 
 async def book_paid(account: str, sid: str) -> Dict[str, Any]:

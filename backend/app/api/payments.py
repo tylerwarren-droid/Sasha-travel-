@@ -406,5 +406,10 @@ async def stripe_webhook(request: Request):
             return {"received": True}
         print(f"[payments] PAID id={obj.get('id')} itinerary={(obj.get('metadata') or {}).get('itinerary_id','')}")
         await _confirm_paid_session(obj)   # (booking, email_sent) — nothing to return to Stripe
+        try:   # Sasha 220 · a basket's payment (here or on the phone): settled by Pacioli, ONCE — a late or repeated webhook books nothing twice
+            from booking_signer import paid_watch as PWT
+            await PWT.settle(obj.get("id") or "")
+        except Exception as e:
+            print(f"[payments] basket settle after the webhook failed: {type(e).__name__}: {e}")
 
     return {"received": True}

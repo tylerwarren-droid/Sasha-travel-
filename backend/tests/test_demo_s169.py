@@ -269,7 +269,9 @@ class StandInQuestion(unittest.TestCase):
         asyncio.run(GW._ask_yes(c, "handover", "f1", {"sha256": "a" * 64, "lines": []}, "Shall I?", "Hanoi Spa - Massage (TEST stand-in)"))
         self.assertEqual(c["st"]["pending"]["kind"], "confirm")
         self.assertEqual(c["out"].items[-1][2][0][0], "Yes, book it")
-        self.assertIn("the spa isn't contacted", c["out"].items[-1][1])
+        # Sasha 220 · the stand-in note is no longer said (the founder's call); the name shows without its tag
+        self.assertNotIn("isn't contacted", c["out"].items[-1][1])
+        self.assertNotIn("(TEST stand-in)", c["out"].items[-1][1])
 
 
 class PlatformEmailsBookOnTheirOwn(unittest.TestCase):

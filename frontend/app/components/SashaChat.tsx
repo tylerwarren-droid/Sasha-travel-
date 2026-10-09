@@ -10,7 +10,8 @@ import { User, Itinerary } from '@/types'
 import VoiceButton, { MicDevicesInfo } from './VoiceButton'
 import { renderMarkdown } from '@/lib/markdown'
 import { placeReply, visible } from '@/lib/agent-bubble.mjs'   // Sasha 212 · never an empty bubble
-import { untag, untagDeep } from '@/lib/no-test-label.mjs'   // Sasha 218 · no visible TEST label on /next (display only)
+import { untag, untagDeep } from '@/lib/no-test-label.mjs'
+import { PayHere } from './PayHere'   // Sasha 220 · pay here, in the conversation   // Sasha 218 · no visible TEST label on /next (display only)
 import { apiUrl, apiHeaders } from '@/lib/api'
 import { MAX_PHOTOS, imagesOf, toJpeg, type Attachment } from '@/lib/photo-attach'
 import type { RichItinerary } from './ItineraryDays'
@@ -218,6 +219,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   const [screenTurn, setScreenTurn] = useState<string | null>(null)
   const [groupTurn, setGroupTurn] = useState<Record<string, string>>({})
   const [highlight, setHighlight] = useState<string[]>([])
+  const [payHere, setPayHere] = useState<{ client_secret?: string; url?: string; total_eur?: number; already_paid?: boolean; n: number } | null>(null)   // Sasha 220
   const [calendar, setCalendar] = useState<{ title?: string; starts_at?: string; links: Record<string, string> } | null>(null)   // Sasha 217
   const [readBack, setReadBack] = useState<{ lines: string[]; total?: number | null; what?: string; live?: boolean; status?: string } | null>(null)
   const onScreen = (g: string) => !agent || !screenTurn || groupTurn[g] === screenTurn
@@ -634,6 +636,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             else if (ev.kind === 'focus' && ev.focus) setHighlight([ev.focus])
             else if (ev.kind === 'pay' && ev.url) onPay?.(String(ev.url))   // Sasha 214 · a phone pays here, on the same device
             else if (ev.kind === 'handover' && ev.url) { if (ev.focus) setHighlight([ev.focus]); onHandover?.(String(ev.url), !!ev.external) }   // their page / Tap to finish   // Sasha 213 · a pick: the cards stay, that one highlighted
+            else if (ev.kind === 'pay_here') { setPayHere(p => ({ client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid, n: (p?.n ?? 0) + 1 })); claim('pay', ev.turn) }
             else if (ev.kind === 'calendar' && ev.links) { setCalendar({ title: ev.title, starts_at: ev.starts_at, links: ev.links }); claim('calendar', ev.turn) }
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) { setReadBack({ lines: ev.read_back, total: ev.total_eur, what: ev.what, live: ev.live, status: ev.status }); claim('readback', ev.turn) }
             else if (ev.kind === 'trip') window.dispatchEvent(new Event('sasha-plan-refresh'))
@@ -969,6 +972,9 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
           <button type="button" className="lw-totalpill" onClick={() => onTabChange?.('trip')}>
             🧾 €{Math.round(tripTotal.total_eur).toLocaleString()} all in · see the trip ›
           </button>
+        )}
+        {payHere && onScreen('pay') && (
+          <PayHere key={payHere.n} clientSecret={payHere.client_secret} url={payHere.url} totalEur={payHere.total_eur} alreadyPaid={payHere.already_paid} />
         )}
         {calendar && onScreen('calendar') && (
           <div className="lw-card">{/* Sasha 217 · the confirmed booking in their calendar: one tap each (nothing leaves their account) */}

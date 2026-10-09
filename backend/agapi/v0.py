@@ -780,33 +780,93 @@ async def _replace_gone_flights(ctx: Ctx, p: dict) -> List[str]:
     return out
 
 
+# Sasha 220 · WHERE THEY PAY — "here" (a card in the conversation: Stripe Embedded Checkout, Apple Pay / Google Pay where the
+# device has them) or "phone" (the WhatsApp link, exactly as before). Read from the person's OWN words in code, never the model's;
+# asked once when they have WhatsApp (no WhatsApp → here, never a dead end); remembered for the conversation; switchable.
+_HERE = re.compile(r"(?i)\b(?:(?:pay\s+)?here|right here|on here|this (?:screen|device|page|phone|laptop|computer)|in (?:the )?chat|"
+                   r"on (?:the|this) (?:laptop|computer|screen)|on screen)\b")
+_PHONE = re.compile(r"(?i)\b(?:(?:on|to) my (?:phone|mobile)|my phone|whatsapp|text me|(?:send|text) (?:it|me) (?:to my phone|the link)|"
+                    r"on (?:the )?phone)\b")
+_PAY_CHOICE: Dict[tuple, str] = {}    # (account, conversation) → "here" | "phone"
+_PAY_ASKED: Dict[str, dict] = {}      # account → {sha, at}: "Pay here, or on your phone?" asked after their yes, awaiting the answer
+PAY_ASK = "Pay here, or on your phone?"
+_PAY_NOT = re.compile(r"(?i)\b(?:no|not|don'?t|do not|wait|hold on|later|stop|cancel\w*)\b")   # "not here", "wait" — never the answer
+
+
+def pay_words(said: Optional[str]) -> Optional[str]:
+    """ "here" / "phone" when the words choose (this device first: "on this phone" is HERE), else None."""
+    t = said or ""
+    if _HERE.search(t):
+        return "here"
+    if _PHONE.search(t):
+        return "phone"
+    return None
+
+
+async def _whatsapp_linked(account: str) -> bool:
+    try:
+        from booking_signer import guest_whatsapp as GW
+        return bool(GW.STORE and await GW.STORE.channel_of_account(account))
+    except Exception:
+        return False
+
+
 async def book(ctx: Ctx, a: dict) -> dict:
-    """The yes → ONE Stripe TEST payment for exactly the read-back; the link goes to the phone. Booked only after payment
-    (Pacioli: get_status)."""
+    """The yes → ONE Stripe TEST payment for exactly the read-back — here (an embedded checkout) or on their phone (the WhatsApp
+    link). Booked only after payment (Pacioli: get_status)."""
     from booking_signer import basket_book as BB
     said = ((a.get("approval") or {}).get("said")) or ""
-    if not yes_to_book(said):
+    chose = pay_words(said)
+    key = (ctx.account, ctx.session or "-")
+    asked = _PAY_ASKED.get(ctx.account)
+    answering = bool(asked and chose and not stale(asked["at"]) and not _PAY_NOT.search(said) and "?" not in said)
+    switching = bool(chose and not answering and await BB.in_progress(ctx.account))
+    if not (yes_to_book(said) or answering or switching):
         raise ToolError("no_explicit_yes", "booking needs the person's explicit yes in this turn — ask them, then call book")
+    if switching:   # a payment under way, moved to the other place (or the same one again): never a second payment
+        got = await BB.pay(ctx.account, "", chose)
+        _PAY_CHOICE[key] = chose
+        return await _paid_out(ctx, got, chose)
     sha = a.get("read_back_sha256") or ""
     held = _HELD.get(ctx.account)
-    if held and (not sha or sha == held["sha"]) and held["at"] >= ctx.started:   # Sasha 210 · the yes answers a read-back they HEARD
-        raise ToolError("read_back_first", "say the read-back's total and ask them to go ahead; book once they say yes")
+    if not answering:
+        if held and (not sha or sha == held["sha"]) and held["at"] >= ctx.started:   # Sasha 210 · the yes answers a read-back they HEARD
+            raise ToolError("read_back_first", "say the read-back's total and ask them to go ahead; book once they say yes")
     # Sasha 215 · the yes is bound to a read-back they heard in the last 15 minutes — never to an older one, never to none
-    if not held or (sha and sha != held["sha"]):
+    if not held or (sha and sha != held["sha"]) or (answering and asked["sha"] != held["sha"]):
         raise ToolError("no_read_back", "call hold_booking first — the yes is bound to a read-back they've just heard")
     if stale(held["at"]):
         _HELD.pop(ctx.account, None)
         raise ToolError("read_back_stale", "that read-back is over 15 minutes old — call hold_booking again and read it back before booking")
     sha = held["sha"]   # pay() still refuses if anything changed since
+    where = chose or _PAY_CHOICE.get(key)
+    if where is None:
+        if await _whatsapp_linked(ctx.account):   # asked ONCE; their answer (next turn) pays — the yes is already given
+            _PAY_ASKED[ctx.account] = {"sha": sha, "at": datetime.now(timezone.utc)}
+            return {"status": "choose_payment", "ask": PAY_ASK, "booked": False,
+                    "say": "Ask exactly this, once, and wait: their answer pays (no yes needed again)."}
+        where = "here"   # no WhatsApp: here, never a dead end
+    _PAY_ASKED.pop(ctx.account, None)
+    _PAY_CHOICE[key] = where
     await claim(ctx)   # Sasha 215 · durable: this payment is sent once, across restarts and workers
-    got = await BB.pay(ctx.account, sha)
+    got = await BB.pay(ctx.account, sha, where)
+    return await _paid_out(ctx, got, where)
+
+
+async def _paid_out(ctx: Ctx, got: dict, where: str) -> dict:
     if got.get("unrecorded"):   # Sasha 215 · CR 56 #2 — no record, no link: said as it is
         raise ToolError("payments_unreachable", got["why"])
+    if got.get("already_paid"):   # Sasha 220 · one payment per basket: never charged twice
+        return {"status": "already_paid", "booked": False, "session_id": got.get("session_id"),
+                "say": "It's already paid — nothing more to pay. It's booked once Stripe's confirmation is recorded (get_status says)."}
     if "why" in got:
         raise ToolError("read_back_changed" if "different words" in got["why"] else "not_bookable", got["why"])
+    if where == "here":
+        return {"status": "awaiting_payment", "payment": "here", "session_id": got["session_id"], "total_eur": got["eur"], "booked": False,
+                "checkout": {k: got.get(k) for k in ("client_secret", "url", "session_id")},   # for the page; never shown to the model
+                "say": "The card is on their screen: they pay there (Apple Pay / Google Pay where their device has them)."}
     sent = str(got.get("phone") or "").startswith("sent")
     return {"status": "awaiting_payment", "payment": "sent_to_phone" if sent else "link", **({} if sent else {"payment_url": got["url"]}),
-            "checkout_url": got["url"],   # Sasha 214 · for the page (a phone pays on the same device); never shown to the model
             "session_id": got["session_id"], "total_eur": got["eur"], "booked": False}
 
 

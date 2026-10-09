@@ -234,7 +234,8 @@ async def _resume(account: str, pend: Dict[str, Any], where: str) -> Optional[Di
             return {"already_paid": True, "session_id": sid, "eur": st.get("amount")}
         return {"why": "I couldn't close the first payment page, so I haven't opened another — nothing was charged twice. Try me again in a minute."}
     await BK.release(account, pend["trip_id"], sid)
-    return None
+    # the payment MOVES: exactly the rows that were held, for exactly the amount they were held for (never re-picked from the basket)
+    return {"move": {"rows": pend["rows"], "trip_id": pend["trip_id"], "amount": (st or {}).get("amount")}}
 
 
 async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict[str, Any]:
@@ -242,12 +243,11 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
     `where` — "phone": the link to their WhatsApp, as before; "here": an embedded checkout for the page they're on."""
     from . import guest_whatsapp as GW, test_deposit as TD, paid_watch as PWT
     pend = await in_progress(account)
-    switched = False
     if pend:
         resumed = await _resume(account, pend, where)
-        if resumed is not None:
+        if "move" not in resumed:
             return resumed
-        switched = not read_back_sha256   # the rows just released are the ones their yes paid for: moved, not re-agreed
+        return await _moved(account, resumed["move"], where)
     cur = await current(account)
     if (not cur or not cur["rows"]) and await _all_booked(account):   # Sasha 220 · paid and booked already: never a second charge
         return {"already_paid": True}
@@ -255,7 +255,7 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
         return {"why": "there's nothing in this trip to book — ask me to price it again"}
     lines = lines_of(cur["rows"], cur["party"])
     sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
-    if sha != read_back_sha256 and not switched:
+    if sha != read_back_sha256:
         return {"why": "the yes was to different words — prepare it again"}
     t = BK.total(cur["rows"])
     n_st, n_fl = sum(1 for r in cur["rows"] if r["kind"] == "stay"), sum(1 for r in cur["rows"] if r["kind"] == "flight")
@@ -288,6 +288,38 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
         return {"where": "here", "session_id": got["id"], "client_secret": got.get("client_secret"), "url": got.get("url"), "eur": t["amount"]}
     phone = await GW.tap_to_pay(account, f"€{t['amount']:.2f}", f"{cur['title'] or 'your trip'} — {what} (TEST)", got["url"])
     return {"url": got["url"], "session_id": got["id"], "phone": phone, "eur": t["amount"], "where": "phone"}
+
+
+async def _moved(account: str, mv: Dict[str, Any], where: str) -> Dict[str, Any]:
+    """Sasha 220 · the same payment, moved here ↔ phone: the SAME rows, the SAME amount (refused if it would differ)."""
+    from . import guest_whatsapp as GW, test_deposit as TD, paid_watch as PWT, plan_store as PS
+    rows = [{**r, "state": "chosen"} for r in mv["rows"]]
+    amount = round(sum(float(r["price_amount"]) for r in rows if r.get("price_amount") is not None), 2)
+    if mv.get("amount") is not None and abs(amount - float(mv["amount"])) > 0.01:
+        log.error("[basket_book] a moved payment would change its amount (%.2f → %.2f) — refused", mv["amount"], amount)
+        return {"why": "the payment's total would change if I moved it, so I haven't — ask me to read it back again"}
+    p = await PS.latest(account)
+    party = max(1, min(9, int(((p or {}).get("plan") or {}).get("party") or 2)))
+    title = (p or {}).get("title")
+    sha = hashlib.sha256("\n".join(lines_of(rows, party)).encode()).hexdigest()
+    n_st, n_fl = sum(1 for r in rows if r["kind"] == "stay"), sum(1 for r in rows if r["kind"] == "flight")
+    what = f"{n_st} hotel{'s' if n_st != 1 else ''} + {n_fl} flight{'s' if n_fl != 1 else ''}"
+    import os as _os
+    got = await TD.checkout(f"{amount:.2f}", "EUR", f"TEST — {title or 'your trip'}: {what}", sha[:16],
+                            embedded=(where == "here" and _os.getenv("SASHA_PAY_EMBEDDED", "") == "1"), where=where)
+    if "why" in got:
+        return {"why": got["why"]}
+    await BK.hold_ids(account, mv["trip_id"], [r["id"] for r in rows], got["id"])
+    rec = await PWT.remember(account, "trip", got["id"], {"basket": mv["trip_id"], "sha256": sha}, f"{title or 'Your trip'} — {what}",
+                             None, "Europe/Madrid")
+    if not rec:
+        await TD.expire(got["id"])
+        await BK.release(account, mv["trip_id"], got["id"])
+        return {"why": "I couldn't save the payment record, so I haven't moved the payment — nothing was charged.", "unrecorded": True}
+    if where == "here":
+        return {"where": "here", "session_id": got["id"], "client_secret": got.get("client_secret"), "url": got.get("url"), "eur": amount, "moved": True}
+    phone = await GW.tap_to_pay(account, f"€{amount:.2f}", f"{title or 'your trip'} — {what} (TEST)", got["url"])
+    return {"where": "phone", "url": got["url"], "session_id": got["id"], "phone": phone, "eur": amount, "moved": True}
 
 
 async def book_paid(account: str, sid: str) -> Dict[str, Any]:

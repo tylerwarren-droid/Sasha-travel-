@@ -114,6 +114,18 @@ class Book(unittest.TestCase):
         self.assertEqual(r["error"]["code"], "no_explicit_yes")
         self.assertEqual(self.calls, [])
 
+    def test_phone_with_no_whatsapp_pays_here(self):
+        with self.linked(False):
+            r = self.book("Yes, on my phone please.")
+        self.assertEqual(r["result"]["payment"], "here")
+        self.assertEqual([w for _, w in self.calls], ["here"])
+
+    def test_moving_to_the_phone_with_no_whatsapp_keeps_it_here(self):
+        with self.linked(False), mock.patch("booking_signer.basket_book.in_progress", mock.AsyncMock(return_value={"sid": "cs_test_h"})):
+            r = self.book("Actually, send it to my phone instead.", key="k7")
+        self.assertEqual(r["result"]["status"], "no_whatsapp")
+        self.assertEqual(self.calls, [])
+
     def test_switching_moves_the_same_payment(self):
         with self.linked(), mock.patch("booking_signer.basket_book.in_progress", mock.AsyncMock(return_value={"sid": "cs_test_h"})):
             r = self.book("Actually, send it to my phone.", key="k9")
@@ -139,7 +151,7 @@ class OnePaymentPerBasket(unittest.TestCase):
         with mock.patch.object(TD, "session_state", mock.AsyncMock(side_effect=states)), mock.patch.object(TD, "expire", ex), \
                 mock.patch.object(PWT, "settle", mock.AsyncMock(return_value=None)), mock.patch.object(BK, "release", rel), \
                 mock.patch.object(GW, "tap_to_pay", tap):
-            out = run(BB._resume(ACCOUNT, {"sid": "cs_test_1", "trip_id": "t1"}, where))
+            out = run(BB._resume(ACCOUNT, {"sid": "cs_test_1", "trip_id": "t1", "rows": []}, where))
         return out, ex, rel, tap
 
     def test_paid_is_already_paid_never_a_second_charge(self):
@@ -160,7 +172,7 @@ class OnePaymentPerBasket(unittest.TestCase):
 
     def test_the_other_place_expires_the_open_one_first(self):
         out, ex, rel, _ = self.resume({"status": "open", "paid": False, "embedded": True, "where": "here", "amount": 100.0}, "phone")
-        self.assertIsNone(out)                                                 # the caller opens the new one
+        self.assertIn("move", out)                                             # the caller moves the SAME rows to a new one
         ex.assert_awaited_once_with("cs_test_1")
         rel.assert_awaited_once()
 
@@ -186,6 +198,32 @@ class OnePaymentPerBasket(unittest.TestCase):
         self.assertEqual((co.call_args.kwargs.get("embedded"), co.call_args.kwargs.get("where")), (True, "here"))
         tap.assert_not_called()
         self.assertEqual((got["where"], got["client_secret"]), ("here", "sec_e"))
+
+
+class Moved(unittest.TestCase):
+    ROWS = [{"id": "00000000-0000-4000-8000-0000000000a1", "kind": "flight", "state": "pending_payment", "price_amount": 300.0,
+             "price_currency": "EUR", "day": "2026-11-12", "snapshot": {"id": "off_1", "amount": "300.00", "currency": "EUR", "owner": "Iberia", "flights": "IB 1"}},
+            {"id": "00000000-0000-4000-8000-0000000000a2", "kind": "stay", "state": "pending_payment", "price_amount": 460.04,
+             "price_currency": "EUR", "day": "2026-11-12", "snapshot": {"name": "Hotel Patio", "nights": 4}}]
+
+    def move(self, amount):
+        from booking_signer import basket_book as BB, basket as BK, guest_whatsapp as GW, paid_watch as PWT, test_deposit as TD, plan_store as PS
+        co, hold = mock.AsyncMock(return_value={"id": "cs_test_new", "url": "https://checkout.stripe.test/n"}), mock.AsyncMock(return_value=[])
+        with mock.patch.object(TD, "checkout", co), mock.patch.object(BK, "hold_ids", hold), mock.patch.object(PS, "latest", mock.AsyncMock(return_value={"plan": {"party": 2}, "title": "Lisbon"})), \
+                mock.patch.object(PWT, "remember", mock.AsyncMock(return_value="rec")), mock.patch.object(GW, "tap_to_pay", mock.AsyncMock(return_value="sent")):
+            out = run(BB._moved(ACCOUNT, {"rows": self.ROWS, "trip_id": "00000000-0000-4000-8000-0000000000b1", "amount": amount}, "phone"))
+        return out, co, hold
+
+    def test_the_same_rows_for_the_same_amount(self):
+        out, co, hold = self.move(760.04)
+        self.assertEqual(out["eur"], 760.04)
+        self.assertEqual(co.call_args.args[0], "760.04")
+        self.assertEqual(sorted(hold.call_args.args[2]), sorted(r["id"] for r in self.ROWS))
+
+    def test_a_moved_payment_never_changes_its_amount(self):
+        out, co, _ = self.move(923.37)
+        self.assertIn("why", out)
+        co.assert_not_called()
 
 
 class AfterBooking(unittest.TestCase):

@@ -227,6 +227,17 @@ async def hold(account: str, trip_id: str, session_id: str) -> List[Dict[str, An
     return out
 
 
+async def hold_ids(account: str, trip_id: str, ids: List[str], session_id: str) -> List[Dict[str, Any]]:
+    """Sasha 220 · a payment MOVED (here ↔ phone): exactly these items held with the new session — never re-chosen from the basket."""
+    async def fn(conn):
+        return await conn.fetch("update trip_basket_items set state = 'pending_payment', paid_session = $4, updated_at = now() "
+                                "where account_id = $1 and trip_id = $2 and id = any($3::uuid[]) and state in ('suggested','chosen') returning *",
+                                uuid.UUID(account), uuid.UUID(trip_id), [uuid.UUID(i) for i in ids], session_id)
+    out = [_row(r) for r in await _go(fn)]
+    _log(AUSTEN, "%d item(s) moved to payment %s", len(out), session_id[:14])
+    return out
+
+
 async def release(account: str, trip_id: str, session_id: str) -> int:
     """Sasha 215 · a payment that was never offered (its record failed): the items it held go back to chosen."""
     async def fn(conn):

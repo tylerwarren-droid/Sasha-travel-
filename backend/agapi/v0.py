@@ -823,6 +823,12 @@ async def book(ctx: Ctx, a: dict) -> dict:
     switching = bool(chose and not answering and await BB.in_progress(ctx.account))
     if not (yes_to_book(said) or answering or switching):
         raise ToolError("no_explicit_yes", "booking needs the person's explicit yes in this turn — ask them, then call book")
+    linked = await _whatsapp_linked(ctx.account)
+    if chose == "phone" and not linked:   # no WhatsApp: never "on your phone" — here, and said why
+        if switching:
+            return {"status": "no_whatsapp", "booked": False, "say": "There's no WhatsApp linked to this account, so the payment stays "
+                    "here on their screen. They can link WhatsApp to pay on their phone."}
+        chose = "here"
     if switching:   # a payment under way, moved to the other place (or the same one again): never a second payment
         got = await BB.pay(ctx.account, "", chose)
         _PAY_CHOICE[key] = chose
@@ -841,7 +847,7 @@ async def book(ctx: Ctx, a: dict) -> dict:
     sha = held["sha"]   # pay() still refuses if anything changed since
     where = chose or _PAY_CHOICE.get(key)
     if where is None:
-        if await _whatsapp_linked(ctx.account):   # asked ONCE; their answer (next turn) pays — the yes is already given
+        if linked:   # asked ONCE; their answer (next turn) pays — the yes is already given
             _PAY_ASKED[ctx.account] = {"sha": sha, "at": datetime.now(timezone.utc)}
             return {"status": "choose_payment", "ask": PAY_ASK, "booked": False,
                     "say": "Ask exactly this, once, and wait: their answer pays (no yes needed again)."}

@@ -228,7 +228,11 @@ async def execute(op_name: str, headers: dict, raw: bytes, principal: Optional[d
         if config.LIVE_SERVICE and key["mode"] != "live":   # CR 70 · agapi-live serves live keys only
             raise AgapiError("mode_not_available", "This is AgAPI live: use a live key here (test keys go to the sandbox).")
         if key["mode"] == "live":
-            AD.require_live(op_name)       # CR 69 · refused BEFORE anything happens until phase 2 connects the provider
+            if op_name not in ("trip.hold", "trip.complete", "users.register"):   # CR 70: checked by their input, just below
+                AD.require_live(op_name)   # CR 69 · refused BEFORE anything happens until phase 2 connects the provider
+            _live_inp = True               # CR 70 · re-checked item-aware once the input is read (below)
+        else:
+            _live_inp = False
         if _per_minute(store, key) >= key["rate_per_min"]:
             raise AgapiError("rate_limited", "Too many requests for this key; slow down.", retry_after_s=30)
         if config.COST_UNITS[op["cost_class"]] > 0 and E.budget_remaining(store, key) <= 0:
@@ -244,6 +248,8 @@ async def execute(op_name: str, headers: dict, raw: bytes, principal: Optional[d
         except R.Refused as e:
             raise AgapiError("invalid_input", f"The input can't be canonicalised ({e}).", {"path": "/", "rule": "canonical"})
         check_input(op_name, inp)
+        if _live_inp:
+            AD.require_live(op_name, inp, store, key["account"])   # CR 70 · the items decide which providers a live act needs
         idem = headers.get("idempotency-key")
         approval_id = (headers.get("agapi-approval-id") or "").strip() or None
         if approval_id and not re.fullmatch(r"apv_[0-9A-HJKMNP-TV-Z]{26}", approval_id):
@@ -414,7 +420,7 @@ async def ics_file(token: str):
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "mode": config.MODE, "spec": config.SPEC_DRAFT, "store": db().kind,
+    return {"ok": True, "mode": "live" if config.LIVE_SERVICE else config.MODE, "spec": config.SPEC_DRAFT, "store": db().kind,
             **({"service": "live", "connected": sorted(AD.CONNECTED_LIVE)} if config.LIVE_SERVICE else {})}   # CR 70 · additive   # CR 69 · + which store (additive)
 
 

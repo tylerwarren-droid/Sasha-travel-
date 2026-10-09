@@ -21,6 +21,7 @@ async def http(method: str, url: str, headers: Optional[dict] = None, json: Any 
         return await c.request(method, url, headers=headers, json=json, data=data)
 
 
+from .flights import LiveFlights  # noqa: E402
 from .places import LivePlaces  # noqa: E402
 
-ADAPTERS: Dict[str, Any] = {"places": LivePlaces()}
+ADAPTERS: Dict[str, Any] = {"places": LivePlaces(), "flights": LiveFlights()}

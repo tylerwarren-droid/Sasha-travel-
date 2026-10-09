@@ -140,6 +140,62 @@ class Places(Live):
         self.assertEqual(self.rec.calls, [])
 
 
+
+FLIGHTS = {"origin": {"query": "Madrid"}, "destination": {"query": "London"}, "date": "2026-11-12", "passengers": 1}
+TRAVELLER = {"title": "ms", "given_name": "Ana", "family_name": "Ruiz", "born_on": "1990-04-02", "gender": "f"}
+
+
+class Flights(Live):
+    """Duffel, live = the sandbox's own flight functions on the real transport (here: Sasha's recorded Duffel TEST answers)."""
+    connected = {"places", "flights"}
+
+    def test_a_live_search_has_the_sandboxs_shape(self):
+        sb = None
+        with mock.patch.object(config, "LIVE_SERVICE", False):
+            sb = self.ok("travel.find_flights", FLIGHTS)
+        got = self.ok("travel.find_flights", FLIGHTS, key=self.live)
+        stable = lambda os_: [(o["flight_numbers"], o["from"], o["to"], o["price"]) for o in os_]   # offer ids are fresh per search
+        self.assertEqual(stable(got["offers"]), stable(sb["offers"]))
+        self.assertTrue(got["offers"])
+
+    def test_a_flight_hold_needs_flights_only_and_a_venue_hold_still_waits_for_the_ladder(self):
+        uid = self.ok("users.register", {"external_ref": "live-1"}, key=self.live)["end_user_id"]    # no destinations: nothing sent
+        self.call("users.register", {"external_ref": "live-2", "destinations": [{"channel": "sms", "value": "+15005550006"}]},
+                  key=self.live, expect="mode_not_available")                                     # a code would be sent: not yet
+        ref = self.ok("travel.find_flights", FLIGHTS, key=self.live)["offers"][0]["offer_ref"]
+        h = self.ok("trip.hold", {"end_user": uid, "items": [{"kind": "flight", "ref": ref}], "travellers": [TRAVELLER]}, key=self.live)
+        self.assertTrue(h["read_back"]["lines"])
+        v = self.sandbox_answer["venues"][0]
+        r, b = self.call("trip.hold", {"end_user": uid, "items": [{"kind": "venue", "ref": v["venue_ref"], "at": "2026-11-20T20:30:00+01:00", "party": 2}]},
+                         key=self.live, expect="mode_not_available")
+        self.assertEqual(b["error"]["details"]["provider"], "venue_ladder")
+        # completing it needs payments (not connected yet): refused BEFORE the yes is used
+        r, b = self.call("trip.complete", {"hold_id": h["hold_id"]}, key=self.live, expect="mode_not_available")
+        self.assertEqual(b["error"]["details"]["provider"], "payments")
+        self.assertEqual(self.store.one("select count(*) as n from acts")["n"], 0)
+
+    def test_no_real_money_and_no_pretend_cancel(self):
+        ad = AL.ADAPTERS["flights"]
+        with mock.patch("booking_signer.travel.token", lambda: "duffel_live_xxx"):
+            with self.assertRaises(Exception) as x:
+                asyncio.run(ad.order({"offer_ref": "off_x", "_card": {}}, [TRAVELLER], PV.Upstream()))
+        self.assertEqual((x.exception.code, x.exception.details["reason"]), ("upstream_refused", "test_mode_only"))
+        with self.assertRaises(Exception) as x:
+            asyncio.run(ad.cancel("duffel", "act_x", PV.Upstream()))
+        self.assertEqual(x.exception.code, "not_cancellable")
+
+    def test_the_smoke_check_reads_reference_data_only(self):
+        seen = []
+
+        async def http(method, path, body=None, params=None):
+            seen.append((method, path, params))
+            return 200, {"data": [{"id": "arl_x", "name": "X"}]}
+        with mock.patch("booking_signer.travel.HTTP", http), mock.patch("booking_signer.travel.token", lambda: "duffel_test_abc"):
+            out = asyncio.run(AL.ADAPTERS["flights"].smoke())
+        self.assertEqual(seen, [("GET", "/air/airlines", {"limit": 1})])                       # no offer request, no order
+        self.assertEqual((out["ok"], out["token"]), (True, "test"))
+
+
 def Base_sign(body: str) -> str:
     import hashlib, hmac, secrets, time
     t, n = int(time.time()), secrets.token_urlsafe(16)

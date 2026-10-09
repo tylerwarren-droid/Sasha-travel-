@@ -141,9 +141,35 @@ def messenger(channel: str, mode: str) -> Messenger:
     return get("email" if channel == "email" else "whatsapp", mode)
 
 
-def require_live(op_name: str) -> None:
+_ITEM_KIND = {"flight": "flights", "venue": "venue_ladder", "stay": "stays"}
+
+
+def kinds_for(op_name: str, inp: Optional[dict] = None, store: Optional[Store] = None, account: Optional[str] = None) -> Tuple[str, ...]:
+    """CR 70 · item-aware: a flight-only hold needs flights, not the venue ladder too. trip.complete/cancel read the hold/act's items;
+    anything unknown falls back to every kind the operation can reach."""
+    full = OP_PROVIDERS.get(op_name, ())
+    try:
+        items = None
+        if op_name == "users.register":                     # a code is sent only to destinations given
+            return tuple(sorted({"email" if d.get("channel") == "email" else "whatsapp" for d in (inp or {}).get("destinations") or []})) if inp is not None else full
+        if op_name == "trip.hold":
+            items = [i.get("kind") for i in (inp or {}).get("items") or []]
+        elif op_name == "trip.complete" and store is not None:
+            from .store import loads
+            h = store.one("select items from holds where account = ? and id = ?", account, (inp or {}).get("hold_id"))
+            held = loads(h["items"]) if h else None
+            items = [i.get("kind") for i in (held.get("items") if isinstance(held, dict) else held) or []] if held else None
+        if items:
+            ks = tuple(sorted({_ITEM_KIND.get(k, "venue_ladder") for k in items}))
+            return ks + (("payments",) if op_name == "trip.complete" else ())
+    except Exception:
+        pass
+    return full
+
+
+def require_live(op_name: str, inp: Optional[dict] = None, store: Optional[Store] = None, account: Optional[str] = None) -> None:
     """A live key: refused before anything happens if the operation can reach a provider that isn't connected."""
-    for kind in OP_PROVIDERS.get(op_name, ()):
+    for kind in kinds_for(op_name, inp, store, account):
         if kind not in CONNECTED_LIVE:
             raise not_connected(kind)
 

@@ -249,6 +249,18 @@ async def release(account: str, trip_id: str, session_id: str) -> int:
     return n
 
 
+async def cancel_held(account: str, trip_id: str, session_id: str) -> int:
+    """Sasha 221b · a payment SUPERSEDED by a new read-back (its Stripe session already expired): the items it held are cancelled —
+    never paid, never booked, and never back in the read-back."""
+    async def fn(conn):
+        return await conn.execute("update trip_basket_items set state = 'cancelled', paid_session = null, updated_at = now() "
+                                  "where account_id = $1 and trip_id = $2 and paid_session = $3 and state = 'pending_payment'",
+                                  uuid.UUID(account), uuid.UUID(trip_id), session_id)
+    n = int(str(await _go(fn)).split()[-1] or 0)
+    _log(AUSTEN, "%d item(s) cancelled with superseded payment %s", n, session_id[:14])
+    return n
+
+
 async def remove(account: str, item_id: str) -> bool:
     """The ✕: one row, and only one not yet held or booked."""
     async def fn(conn):

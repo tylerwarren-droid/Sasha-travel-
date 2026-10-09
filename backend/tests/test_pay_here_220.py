@@ -200,6 +200,47 @@ class OnePaymentPerBasket(unittest.TestCase):
         self.assertEqual((got["where"], got["client_secret"]), ("here", "sec_e"))
 
 
+class NewReadBackSupersedes(unittest.TestCase):
+    """Sasha 221b (found live): a payment under way for OLD rows, then a NEW read-back and its yes → the old session expired, its
+    items cancelled, and the card is for what was just read back — never the old amount."""
+    ROW = {"id": "r2", "kind": "flight", "state": "chosen", "price_amount": 156.15, "price_currency": "EUR", "day": "2026-11-19",
+           "snapshot": {"id": "off_2", "amount": "156.15", "currency": "EUR", "owner": "easyJet", "flights": "U2 7652"}}
+
+    def pay(self, old_state, sha=None, expire_ok=True):
+        import hashlib
+        from booking_signer import basket_book as BB, basket as BK, paid_watch as PWT, test_deposit as TD, guest_whatsapp as GW
+        cur = {"rows": [self.ROW], "party": 2, "trip_id": "t1", "title": "Lisbon"}
+        sha = sha or hashlib.sha256("\n".join(BB.lines_of(cur["rows"], 2)).encode()).hexdigest()
+        pend = {"sid": "cs_test_old", "trip_id": "t1", "rows": [{"id": "r1", "kind": "stay", "state": "pending_payment", "price_amount": 446.98}]}
+        co = mock.AsyncMock(return_value={"id": "cs_test_new", "url": None, "client_secret": "sec_new", "embedded": True})
+        ex, cancel, resume = mock.AsyncMock(return_value=expire_ok), mock.AsyncMock(return_value=1), mock.AsyncMock(return_value={"where": "here", "session_id": "cs_test_old", "eur": 446.98})
+        with mock.patch.dict("os.environ", {"SASHA_PAY_EMBEDDED": "1"}), \
+                mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=pend)), mock.patch.object(BB, "current", mock.AsyncMock(return_value=cur)), \
+                mock.patch.object(BB, "_resume", resume), mock.patch.object(TD, "session_state", mock.AsyncMock(return_value=old_state)), \
+                mock.patch.object(TD, "expire", ex), mock.patch.object(PWT, "settle", mock.AsyncMock(return_value=None)), \
+                mock.patch.object(BK, "cancel_held", cancel), mock.patch.object(TD, "checkout", co), mock.patch.object(BK, "hold", mock.AsyncMock()), \
+                mock.patch.object(PWT, "remember", mock.AsyncMock(return_value="rec")), mock.patch.object(GW, "tap_to_pay", mock.AsyncMock()):
+            out = run(BB.pay(ACCOUNT, sha, "here"))
+        return out, co, ex, cancel, resume
+
+    def test_the_card_is_for_the_new_read_back_and_the_old_one_is_expired(self):
+        out, co, ex, cancel, resume = self.pay({"status": "open", "paid": False, "where": "here", "amount": 446.98})
+        self.assertEqual((out["session_id"], out["eur"]), ("cs_test_new", 156.15))
+        self.assertEqual(co.call_args.args[0], "156.15")
+        ex.assert_awaited_once_with("cs_test_old"), cancel.assert_awaited_once()
+        resume.assert_not_called()
+
+    def test_an_old_payment_already_paid_never_opens_a_second(self):
+        out, co, _, cancel, _ = self.pay({"status": "complete", "paid": True, "amount": 446.98})
+        self.assertIn("why", out)
+        co.assert_not_called(), cancel.assert_not_called()
+
+    def test_the_same_read_back_again_still_resumes(self):   # 220 unchanged: a yes that isn't the rows now chosen → the payment under way
+        out, co, ex, _, resume = self.pay({"status": "open", "paid": False, "where": "here", "amount": 446.98}, sha="0" * 64)
+        resume.assert_awaited_once()
+        co.assert_not_called(), ex.assert_not_called()
+
+
 class Moved(unittest.TestCase):
     ROWS = [{"id": "00000000-0000-4000-8000-0000000000a1", "kind": "flight", "state": "pending_payment", "price_amount": 300.0,
              "price_currency": "EUR", "day": "2026-11-12", "snapshot": {"id": "off_1", "amount": "300.00", "currency": "EUR", "owner": "Iberia", "flights": "IB 1"}},

@@ -212,6 +212,26 @@ async def in_progress(account: str) -> Optional[Dict[str, Any]]:
     return {"sid": sorted(sids)[0], "trip_id": p["trip_id"], "rows": rows} if len(sids) == 1 else None
 
 
+async def _supersede(account: str, pend: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Sasha 221b · a payment under way for rows that are NO LONGER what was read back: expired at Stripe first (so it can never be
+    paid), its items cancelled → None (the caller opens the checkout for the new read-back). Paid already → refused: never two."""
+    from . import test_deposit as TD, paid_watch as PWT
+    sid = pend["sid"]
+    st = await TD.session_state(sid)
+    settled = await PWT.settle(sid)
+    if (st and st["paid"]) or (settled and settled.get("status") in ("booked", "booking", "failed")):
+        return {"why": "your earlier payment for this trip has already gone through, so I haven't opened a second one — "
+                       "let me confirm what that booked first"}
+    if st and st["status"] == "open" and not await TD.expire(sid):
+        st = await TD.session_state(sid)
+        if st and st["paid"]:
+            return {"why": "your earlier payment for this trip has just gone through, so I haven't opened a second one"}
+        return {"why": "I couldn't close the earlier payment page, so I haven't opened another — nothing was charged. Try me again in a minute."}
+    await BK.cancel_held(account, pend["trip_id"], sid)
+    log.info("[basket_book] payment %s superseded by a new read-back — expired, its items cancelled", sid[:14])
+    return None
+
+
 async def _resume(account: str, pend: Dict[str, Any], where: str) -> Optional[Dict[str, Any]]:
     """Sasha 220 · ONE PAYMENT PER BASKET. A payment already under way: paid → "already paid" (never a second charge); the same
     channel again → the same session (its link resent, or its card again); the other channel → the open session is EXPIRED at
@@ -243,6 +263,13 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
     `where` — "phone": the link to their WhatsApp, as before; "here": an embedded checkout for the page they're on."""
     from . import guest_whatsapp as GW, test_deposit as TD, paid_watch as PWT
     pend = await in_progress(account)
+    if pend:   # Sasha 221b · the yes is to a NEW read-back (the rows now chosen, word for word): the old payment never stands in for it
+        cur = await current(account)
+        if cur and cur["rows"] and hashlib.sha256("\n".join(lines_of(cur["rows"], cur["party"])).encode()).hexdigest() == read_back_sha256:
+            dropped = await _supersede(account, pend)
+            if dropped:
+                return dropped
+            pend = None
     if pend:
         resumed = await _resume(account, pend, where)
         if "move" not in resumed:

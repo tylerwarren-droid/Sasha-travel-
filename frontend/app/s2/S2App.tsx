@@ -24,7 +24,13 @@ type Card =
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
 type Ev = Record<string, any>
-type Item = { kind: string; state: string; check: 'green' | 'red' | 'amber'; line: string; at: string; ref: string }
+type Item = { kind: string; state: string; check: 'green' | 'red' | 'amber'; line: string; at: string; ref: string; about?: string; proof?: { reference?: string } }
+
+/** The first n sentences — a card's headline, not her whole reply. */
+function firstSentences(t: string, n: number): string {
+  const parts = t.match(/[^.!?]+[.!?]+(\s|$)/g)
+  return parts ? parts.slice(0, n).join('').trim() : t
+}
 
 const GREETING = 'Hey there — what can I do for you?'
 
@@ -106,7 +112,7 @@ function Box({ k, h, children, tone }: { k: string; h?: string; children?: React
 
 function CardView({ c, choose }: { c: Card; choose: (t: string) => void }) {
   if (c.k === 'venues') return <VenueCards cards={c.cards} choose={choose} />
-  if (c.k === 'booked') return <Box k="Booked" h={untag(c.line.replace(/^✅\s*/, ''))} tone="rgba(126,226,168,.5)" />
+  if (c.k === 'booked') return <Box k="Booked" h={firstSentences(untag(c.line.replace(/^✅\s*/, '').replace(/^Booked:\s*/i, '')), 2)} tone="rgba(126,226,168,.5)" />
   if (c.k === 'calendar') return (
     <Box k="Add to your calendar" h={untag(c.title || 'Your booking')}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -115,12 +121,12 @@ function CardView({ c, choose }: { c: Card; choose: (t: string) => void }) {
             {x === 'google' ? 'Google' : x === 'outlook' ? 'Outlook' : 'Apple / other'}</a>))}
       </div>
     </Box>)
-  if (c.k === 'pay') return <PayHere clientSecret={c.client_secret} url={c.url} totalEur={c.total_eur} alreadyPaid={c.already_paid} />
+  if (c.k === 'pay') return <div style={{ background: C.card, border: `1px solid ${C.gold}`, borderRadius: 16, padding: 14, marginTop: 8 }}><PayHere clientSecret={c.client_secret} url={c.url} totalEur={c.total_eur} alreadyPaid={c.already_paid} /></div>
   const head = c.what ? (c.status === 'sent' ? 'Sent' : c.status === 'not_sent' ? 'Not sent' : 'Ready to send · on your yes')
     : (c.total ? `Ready to book · €${Math.round(c.total).toLocaleString()} all in` : 'Ready to book · on your yes')
   return (
     <Box k={head} h={c.what === 'email' ? (c.live ? "From Sasha's own address" : 'Kept here · not sent') : c.what === 'whatsapp' ? "From Sasha's own number" : undefined}>
-      {c.lines.map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
+      {c.lines.filter(l => !/^\s*⚠/.test(l)).map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
     </Box>)
 }
 
@@ -138,7 +144,8 @@ function Activity() {
         <li key={i.ref + i.line} style={{ display: 'flex', gap: 12, padding: '12px 0', borderBottom: `1px solid ${C.line}` }}>
           <span style={{ width: 34, height: 34, flex: 'none', borderRadius: '50%', display: 'grid', placeItems: 'center', background: tone[i.check] || C.gold, color: '#111', fontWeight: 800 }}>
             {i.check === 'green' ? '✓' : i.check === 'red' ? '✕' : '…'}</span>
-          <div><div style={{ fontWeight: 600 }}>{i.line}</div>
+          <div><div style={{ fontWeight: 600 }}>{i.line}{i.about ? ` · ${i.about}` : ''}</div>
+            {i.proof?.reference ? <div style={{ fontSize: 12.5, color: C.dim }}>Ref {i.proof.reference}</div> : null}
             <div style={{ fontSize: 12.5, color: C.dim }}>{new Date(i.at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div></div>
         </li>))}
     </ul>

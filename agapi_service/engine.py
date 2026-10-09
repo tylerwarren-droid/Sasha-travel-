@@ -858,6 +858,11 @@ async def messages_send_whatsapp(ctx: Ctx, inp: dict):
                          {"path": "/to/number", "rule": "recipient_opted_out"})
     now = ts()
     free = bool(c) and P.window_open(c["last_inbound_at"], now)
+    if ctx.mode == "live":   # CR 70 · live: Twilio's own record of their last message (AgAPI doesn't hold the inbound)
+        free = await AD.get("whatsapp", "live").window_open(number)
+        if not free and not config.WA_ONBEHALF_SID:
+            raise AgapiError("upstream_refused", "They haven't written to Sasha in the last 24 hours, and the first-contact template isn't "
+                             "configured for live yet; nothing was sent or approved.", {"service": "whatsapp", "reason": "template_not_configured"})
     try:
         if free:
             if not inp.get("text"):

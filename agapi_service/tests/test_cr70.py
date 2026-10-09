@@ -374,6 +374,92 @@ class EmailAndCalendarLive(Live):
         self.assertTrue(isinstance(AL.ADAPTERS["calendar"], AD.SimCalendar))                     # the same .ics code as the sandbox
 
 
+
+JON, STRANGER, SENDER = "+447700900123", "+447700900999", "+14155238886"
+
+
+class FakeTwilio:
+    """Twilio's REST reads: the account, and the messages a number sent us (`inbound_hours_ago` None = none)."""
+
+    def __init__(self, inbound_hours_ago=1):
+        self.calls, self.inbound_hours_ago = [], inbound_hours_ago
+
+    async def __call__(self, method, url, headers=None, json=None, **kw):
+        from datetime import datetime, timedelta, timezone
+        from scripts import places_fake
+        self.calls.append((method, url))
+        assert method == "GET", "the adapter's own reads are GETs; sends go through Sasha's senders"
+        if url.endswith(".json") and "/Messages.json" not in url:
+            return places_fake._R(200, {"status": "active"})
+        msgs = []
+        if self.inbound_hours_ago is not None:
+            when = datetime.now(timezone.utc) - timedelta(hours=self.inbound_hours_ago)
+            msgs = [{"direction": "inbound", "date_sent": when.strftime("%a, %d %b %Y %H:%M:%S +0000")}]
+        return places_fake._R(200, {"messages": msgs})
+
+
+class WhatsAppLive(Live):
+    connected = {"places", "flights", "payments", "calendar", "email", "whatsapp"}
+
+    def setUp(self):
+        super().setUp()
+        self.twilio, self.wa_sent, self.sms_sent = FakeTwilio(), [], []
+
+        async def wa_send(_self, frm, to, *, body="", media=None, content_sid=None, variables=None):
+            self.wa_sent.append((frm, to, body))
+            return "sent"
+
+        async def sms(to, body, switch="SASHA_SMS_TO_GUEST"):
+            self.sms_sent.append((to, body))
+            return "sms sent"
+        for p in (mock.patch.object(AL, "http", self.twilio), mock.patch.object(config, "WHATSAPP_ALLOW", {JON}),
+                  mock.patch("booking_signer.guest_whatsapp.Sender.send", wa_send), mock.patch("booking_signer.guest_receipt.send_sms", sms),
+                  mock.patch.dict("os.environ", {"SASHA_GUEST_WHATSAPP_TO": SENDER, "TWILIO_ACCOUNT_SID": "AC" + "0" * 32, "TWILIO_AUTH_TOKEN": "t" * 32})):
+            p.start()
+            self.addCleanup(p.stop)
+        self.uid = self.ok("users.register", {"external_ref": "wa-1"}, key=self.live)["end_user_id"]
+
+    def approve(self, read_back_id):
+        return PaymentsLive.approve(self, read_back_id)
+
+    def wa(self, number, text="Hi Jon, the boat is at 09:00."):
+        return {"end_user": self.uid, "to": {"number": number, "name": "Jon"}, "text": text}
+
+    def test_a_number_not_on_the_allow_list_is_refused_before_anything(self):
+        r, b = self.call("messages.send_whatsapp", self.wa(STRANGER), key=self.live, expect="upstream_refused")
+        self.assertEqual(b["error"]["details"]["reason"], "not_allow_listed")
+        self.assertEqual((self.store.one("select count(*) as n from read_backs")["n"], self.wa_sent), (0, []))
+
+    def test_inside_the_window_sashas_sender_sends_only_after_the_yes(self):
+        r, b = self.call("messages.send_whatsapp", self.wa(JON), key=self.live, expect="approval_required")
+        self.assertEqual(self.wa_sent, [])
+        self.assertTrue(any("/Messages.json?From=whatsapp:" + JON in c[1] for c in self.twilio.calls))   # the window: Twilio's record
+        out = self.ok("messages.send_whatsapp", self.wa(JON), key=self.live, approval=self.approve(b["error"]["details"]["read_back_id"]))
+        self.assertEqual(self.wa_sent, [(SENDER, JON, "Hi Jon, the boat is at 09:00.")])
+        self.assertTrue(out["outcome"]["reference"].startswith("twilio_"))
+        self.assertNotIn("captured, never sent", out["outcome"]["target_words"]["text"])
+
+    def test_outside_the_window_without_the_template_nothing_is_read_back(self):
+        with mock.patch.object(AL, "http", FakeTwilio(inbound_hours_ago=30)):
+            r, b = self.call("messages.send_whatsapp", self.wa(JON), key=self.live, expect="upstream_refused")
+        self.assertEqual(b["error"]["details"]["reason"], "template_not_configured")
+        self.assertEqual((self.store.one("select count(*) as n from read_backs")["n"], self.wa_sent), (0, []))
+
+    def test_a_code_by_sms_goes_only_to_an_allow_listed_number(self):
+        self.call("users.register", {"external_ref": "wa-2", "destinations": [{"channel": "sms", "value": STRANGER}]}, key=self.live,
+                  expect="upstream_refused")
+        self.ok("users.register", {"external_ref": "wa-3", "destinations": [{"channel": "sms", "value": JON}]}, key=self.live)
+        self.assertEqual(len(self.sms_sent), 1)
+        self.assertEqual(self.sms_sent[0][0], JON)
+        self.assertIn("verification code is", self.sms_sent[0][1])
+
+    def test_the_smoke_check_sends_nothing(self):
+        out = asyncio.run(AL.ADAPTERS["whatsapp"].smoke())
+        self.assertEqual((out["ok"], out["sent"], out["template"]), (True, False, False))
+        self.assertEqual((self.wa_sent, self.sms_sent), ([], []))
+        self.assertTrue(all(m == "GET" for m, _ in self.twilio.calls))
+
+
 def Base_sign(body: str) -> str:
     import hashlib, hmac, secrets, time
     t, n = int(time.time()), secrets.token_urlsafe(16)

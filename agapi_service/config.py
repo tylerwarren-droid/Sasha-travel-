@@ -27,6 +27,7 @@ PLACES_DAILY_CAP = int(os.getenv("AGAPI_PLACES_DAILY_CAP", "100"))   # AgAPI liv
 # CR 70 · live sends go ONLY to these (comma-separated; empty = nothing is sent live). Tyler's own addresses / numbers.
 EMAIL_ALLOW = {a.strip().lower() for a in os.getenv("AGAPI_EMAIL_ALLOW", "").split(",") if a.strip()}
 WHATSAPP_ALLOW = {"".join(ch for ch in a if ch.isdigit() or ch == "+") for a in os.getenv("AGAPI_WHATSAPP_ALLOW", "").split(",") if a.strip()}
+WA_ONBEHALF_SID = os.getenv("AGAPI_WA_ONBEHALF_SID", "").strip()   # CR 70 · Meta's approved first-contact template (live); unset = refused
 LIVE_HOSTS = {"places.googleapis.com", "api.duffel.com", "api.stripe.com", "api.resend.com", "api.twilio.com", "api.bland.ai", "api.anthropic.com"}    # CR 69 · once, on Railway: copy AGAPI_DB's rows into the empty Postgres
 # CR 69 · magellan.read_site's AI reader: AgAPI's own key (without it the operation says so) and the price it's logged at (USD/Mtok in, out)
 ANTHROPIC_KEY = os.getenv("AGAPI_ANTHROPIC_API_KEY", "").strip()

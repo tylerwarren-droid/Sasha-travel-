@@ -24,8 +24,9 @@ async def http(method: str, url: str, headers: Optional[dict] = None, json: Any 
 from .calendar import LiveCalendar  # noqa: E402
 from .email import LiveEmail  # noqa: E402
 from .flights import LiveFlights  # noqa: E402
+from .whatsapp import LiveWhatsApp  # noqa: E402
 from .payments import LivePayments  # noqa: E402
 from .places import LivePlaces  # noqa: E402
 
 ADAPTERS: Dict[str, Any] = {"places": LivePlaces(), "flights": LiveFlights(), "payments": LivePayments(), "calendar": LiveCalendar(),
-                           "email": LiveEmail()}
+                           "email": LiveEmail(), "whatsapp": LiveWhatsApp()}

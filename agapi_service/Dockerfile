@@ -11,5 +11,5 @@ COPY backend/app /srv/backend/app
 COPY backend/scripts /srv/backend/scripts
 COPY backend/agapi/__init__.py backend/agapi/powers.py /srv/backend/agapi/
 COPY agapi_service /srv/agapi_service
-RUN rm -f /srv/agapi_service/sandbox.db* && python -m unittest agapi_service.tests.test_vectors agapi_service.tests.test_service agapi_service.tests.test_powers
+RUN rm -f /srv/agapi_service/sandbox.db* && python -m unittest agapi_service.tests.test_vectors agapi_service.tests.test_service agapi_service.tests.test_powers agapi_service.tests.test_cr62
 CMD ["sh", "-c", "exec python -m uvicorn agapi_service.app:app --host 0.0.0.0 --port ${PORT:-8080} --proxy-headers --forwarded-allow-ips='*'"]

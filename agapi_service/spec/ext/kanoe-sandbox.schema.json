@@ -203,6 +203,339 @@
           "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/evidence_id"
         }
       }
+    },
+    "send_whatsapp_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "to"
+      ],
+      "description": "CR 62: from Sasha's WhatsApp number to one person the user names. Inside WhatsApp's 24-hour window (they wrote to Sasha): `text`, the user's own words. Outside it: the approved first-contact template, which needs `on_behalf_of` (the user's name) and asks the recipient whether they want the message; `text` is then not sent. approval_id and idempotency_key are envelope fields.",
+      "properties": {
+        "end_user": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/end_user_id"
+        },
+        "to": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "number"
+          ],
+          "properties": {
+            "number": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 24
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 120
+            }
+          }
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "on_behalf_of": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        }
+      }
+    },
+    "send_whatsapp_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "act_id",
+        "intent_id",
+        "outcome",
+        "evidence_id",
+        "message"
+      ],
+      "properties": {
+        "act_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/act_id"
+        },
+        "intent_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/intent_id"
+        },
+        "outcome": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/act_outcome"
+        },
+        "evidence_id": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/evidence_id"
+        },
+        "message": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "from",
+            "to",
+            "kind",
+            "body_sha256",
+            "sent_at"
+          ],
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "number"
+              ],
+              "properties": {
+                "number": {
+                  "$ref": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/untrusted_text"
+                },
+                "name": {
+                  "$ref": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/untrusted_text"
+                }
+              }
+            },
+            "kind": {
+              "enum": [
+                "text",
+                "template"
+              ]
+            },
+            "template": {
+              "type": "string"
+            },
+            "body_sha256": {
+              "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/sha256"
+            },
+            "sent_at": {
+              "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+            }
+          }
+        }
+      }
+    },
+    "replies_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user"
+      ],
+      "properties": {
+        "end_user": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/end_user_id"
+        },
+        "number": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 24
+        }
+      }
+    },
+    "replies_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "replies"
+      ],
+      "properties": {
+        "replies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reply_id",
+              "from",
+              "text",
+              "received_at"
+            ],
+            "properties": {
+              "reply_id": {
+                "type": "string",
+                "pattern": "^rpl_[0-9A-HJKMNP-TV-Z]{26}$"
+              },
+              "from": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "number"
+                ],
+                "properties": {
+                  "number": {
+                    "$ref": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/untrusted_text"
+                  },
+                  "name": {
+                    "$ref": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/untrusted_text"
+                  }
+                }
+              },
+              "text": {
+                "$ref": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/untrusted_text"
+              },
+              "received_at": {
+                "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+              }
+            }
+          }
+        }
+      }
+    },
+    "simulate_reply_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "number",
+        "text"
+      ],
+      "description": "Test mode only: the person Sasha wrote to answers on WhatsApp. Opens their 24-hour window; STOP is final.",
+      "properties": {
+        "number": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 24
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      }
+    },
+    "simulate_reply_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reply_id",
+        "received_at",
+        "opted_out",
+        "window_open_until"
+      ],
+      "properties": {
+        "reply_id": {
+          "type": "string"
+        },
+        "received_at": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        },
+        "opted_out": {
+          "type": "boolean"
+        },
+        "window_open_until": {
+          "oneOf": [
+            {
+              "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "activity_list_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user"
+      ],
+      "description": "CR 62: everything Sasha did for this end user, newest first, from Pacioli's records only.",
+      "properties": {
+        "end_user": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/end_user_id"
+        },
+        "since": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      }
+    },
+    "activity_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "state",
+        "check",
+        "line",
+        "at",
+        "ref",
+        "verified"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "booking",
+            "payment",
+            "email",
+            "whatsapp",
+            "whatsapp_reply",
+            "calendar",
+            "cancellation"
+          ]
+        },
+        "state": {
+          "enum": [
+            "done",
+            "waiting",
+            "requested",
+            "failed",
+            "not_sent"
+          ]
+        },
+        "check": {
+          "enum": [
+            "green",
+            "red",
+            "amber"
+          ]
+        },
+        "line": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Fixed wording (agapi/powers.py ACTIVITY_LINES) — never a provider's or a person's words."
+        },
+        "about": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/untrusted_text"
+        },
+        "at": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "proof": {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/evidence_id"
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      }
+    },
+    "activity_list_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "coverage"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/activity_item"
+          }
+        },
+        "coverage": {
+          "type": "object"
+        }
+      }
     }
   }
 }

@@ -48,8 +48,33 @@ class Vectors(unittest.TestCase):
                 self.assertTrue(text.endswith("\r\n") and "\n" not in text.replace("\r\n", ""))
                 self.assertEqual(P.calendar_links(ev, c["ics_url"]), c["expect"]["links"])
 
+    def test_whatsapp(self):   # CR 62
+        self.assertEqual(VEC["whatsapp_template"], P.ON_BEHALF)                      # the words submitted to Meta, frozen
+        for c in VEC["whatsapp"]:
+            with self.subTest(c["id"]):
+                i = c["input"]
+                m = P.whatsapp_message(i["from"], i["to"]["number"], i["to"].get("name"), text=i.get("text"),
+                                       template=i.get("template"), on_behalf_of=i.get("on_behalf_of"))
+                self.assertEqual((m, P.whatsapp_read_back(m)), (c["expect"]["message"], c["expect"]["read_back"]))
+                self.assertEqual((P.sha256(m), R.sha256(m)), (c["expect"]["payload_sha256"],) * 2)
+                self.assertEqual(P.whatsapp_body_sha256(m), c["expect"]["body_sha256"])
+        for c in VEC["whatsapp_refused"]:
+            with self.subTest(c["id"]), self.assertRaises(P.Refused) as e:
+                i = c["input"]
+                P.whatsapp_message("+15005550100", i["to"]["number"], i["to"].get("name"), text=i.get("text"),
+                                   template=i.get("template"), on_behalf_of=i.get("on_behalf_of"))
+            self.assertEqual((e.exception.path, e.exception.rule), (c["expect"]["path"], c["expect"]["rule"]))
+        for c in VEC["whatsapp_window"]:
+            self.assertIs(P.window_open(c["last_inbound_at"], c["now"]), c["open"], c["id"])
+
+    def test_activity(self):   # CR 62
+        for c in VEC["activity"]:
+            i = dict(c["input"])
+            self.assertEqual(P.activity_entry(i.pop("kind"), i.pop("state"), i.pop("at"), **i), c["expect"], c["id"])
+
     def test_counts(self):
         self.assertEqual((len(VEC["email"]), len(VEC["email_refused"]), len(VEC["calendar"])), (3, 4, 3))
+        self.assertEqual((len(VEC["whatsapp"]), len(VEC["whatsapp_refused"]), len(VEC["whatsapp_window"]), len(VEC["activity"])), (4, 6, 5, 5))
 
 
 class SendEmail(Base):

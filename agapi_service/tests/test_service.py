@@ -472,7 +472,9 @@ class Extensions(Base):
     def test_eus_tables_are_untouched(self):
         from agapi_service.registry import eu_operations
         self.assertEqual(len(eu_operations()), 18)                                      # v1.0 (EU 205): our 3 extensions adopted
-        self.assertEqual(set(operations()) - set(eu_operations()), {"messages.send_email", "calendar.add_event"})
+        self.assertEqual(set(operations()) - set(eu_operations()), {"messages.send_email", "calendar.add_event",
+                                                                     "messages.send_whatsapp", "messages.replies", "activity.list",
+                                                                     "sandbox.simulate_reply"})                     # CR 60 + CR 62
         self.assertEqual(operations()["acts.status"]["output"], eu_operations()["acts.status"]["output"])
 
 
@@ -499,7 +501,8 @@ class DemoConsole(Base):
         pay = out["pay"]["phone"]["url"]
         self.assertEqual(self.client.post("/demo/api/step/confirmed").json()["tone"], "error")    # not paid yet — said so
         self.assertIn("Booked", self.client.post(pay).text)                                       # the traveller taps Pay (test)
-        for k in ("confirmed", "calendar", "email", "cancel", "outage"):
+        self.assertEqual(self.client.post("/demo/api/step/reply").json()["caption"], "First: Whatsapp.")    # CR 62: the order holds
+        for k in ("confirmed", "calendar", "email", "whatsapp", "reply", "cancel", "activity", "outage"):
             out[k] = self.client.post(f"/demo/api/step/{k}").json()
             seen.append(json.dumps(out[k]))
             self.assertEqual(out[k]["tone"], "green", out[k])
@@ -508,6 +511,15 @@ class DemoConsole(Base):
         self.assertEqual([t for t, _ in out["calendar"]["links"]], ["Google Calendar", "Outlook", "Apple / any (.ics)"])
         self.assertIn("never the traveller's mailbox", out["email"]["caption"])
         self.assertIn("never", out["outage"]["caption"].lower())
+        for k in ("whatsapp", "reply", "activity"):                                               # CR 62
+            self.assertTrue(all(c["ok"] for c in out[k]["checks"]), out[k])
+        phone = self.client.get("/demo/activity").text                                            # the traveller's Activity view
+        for line in ("Cancelled", "WhatsApp sent", "They replied on WhatsApp", "Email sent", "Added to your calendar", "Paid", "Booked",
+                     "✓ Verified", "Proof"):
+            self.assertIn(line, phone)
+        self.assertNotIn("✕ Does not verify", phone)
+        self.assertNotIn("Ignore all previous", phone)                                            # her words never in the view
+        seen.append(phone)
         self.assertFalse(any(demo_key in x for x in seen))                                        # never exposed
         self.assertNotRegex(" ".join(seen), r"agp_test_[A-Za-z0-9]{32}")
         r2 = self.client.post("/demo/api/reset").json()                                           # one click, fresh

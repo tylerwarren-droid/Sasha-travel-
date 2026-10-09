@@ -1,6 +1,6 @@
 {
-  "version": "kanoe-sandbox-ext.3",
-  "note": "Additive only. CR 61: approvals.status, webhooks.register and users.verify_destination (and evidence_id on acts.status) were ADOPTED into AgAPI v1.0 (EU 205) — they now run on EU's own schemas; only messages.send_email and calendar.add_event remain sandbox extensions.",
+  "version": "kanoe-sandbox-ext.4",
+  "note": "Additive only. CR 61: approvals.status, webhooks.register and users.verify_destination (and evidence_id on acts.status) were ADOPTED into AgAPI v1.0 (EU 205) — they now run on EU's own schemas; only messages.send_email and calendar.add_event remain sandbox extensions. CR 62: messages.send_whatsapp, messages.replies, activity.list (+ sandbox.simulate_reply).",
   "add": [
     {
       "operation": "messages.send_email",
@@ -37,6 +37,76 @@
       "requires_approval": false,
       "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/add_event_in",
       "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/add_event_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "free",
+      "extension": true
+    },
+    {
+      "operation": "messages.send_whatsapp",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": true,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/send_whatsapp_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/send_whatsapp_out",
+      "errors": [
+        "approval_required",
+        "approval_not_found",
+        "approval_same_turn",
+        "approval_expired",
+        "approval_void",
+        "approval_consumed",
+        "approval_untrusted_origin",
+        "no_explicit_yes",
+        "idempotency_key_required",
+        "idempotency_in_flight",
+        "idempotency_conflict",
+        "not_found",
+        "invalid_input",
+        "upstream_unreachable",
+        "upstream_refused",
+        "outcome_unknown"
+      ],
+      "cost_class": "message",
+      "extension": true
+    },
+    {
+      "operation": "messages.replies",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/replies_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/replies_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "read",
+      "extension": true
+    },
+    {
+      "operation": "activity.list",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/activity_list_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/activity_list_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "read",
+      "extension": true
+    },
+    {
+      "operation": "sandbox.simulate_reply",
+      "agent": "austen",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/simulate_reply_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/simulate_reply_out",
       "errors": [
         "not_found",
         "invalid_input"

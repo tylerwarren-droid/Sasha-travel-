@@ -57,6 +57,10 @@ create table if not exists webhook_endpoints (account text not null, id text not
 create table if not exists webhook_deliveries (id text primary key, account text not null, endpoint_id text not null, event text not null,
   body text not null, created_at text not null, attempts int not null default 0, next_at text not null, state text not null,
   last_status int);
+create table if not exists wa_contacts (account text not null, number text not null, end_user text not null, name text,
+  first_contact_at text not null, last_inbound_at text, opted_out_at text, primary key (account, number));
+create table if not exists wa_replies (account text not null, id text not null, number text not null, body text not null,
+  received_at text not null, primary key (account, id));
 """
 
 _LOCK = threading.RLock()

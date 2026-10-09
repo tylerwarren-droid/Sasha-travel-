@@ -168,3 +168,127 @@ def event_for_stay(uid: str, name: str, address: Optional[str], check_in: str, n
     s = _utc(check_in)
     return event(uid, f"Stay at {name} ({nights} night{'s' if nights != 1 else ''})", s.isoformat(),
                  (s + timedelta(days=nights)).isoformat(), address, "Check-in" + (f" · reference {reference}" if reference else ""))
+
+
+# ── CR 62 · WhatsApp to someone the user names ───────────────────────────────────────────────────────────────────────────
+# WhatsApp's rule: a business may write free text only inside 24 hours of the person's own last message to it. To start a
+# conversation (a new number, or a quiet one) it must send a template Meta has APPROVED. Ours asks the recipient whether they
+# want the message at all: the user's own words go only after they reply (which also opens the window). Nobody is sent a
+# stranger's free text, and the user's note never rides on an old yes.
+
+E164_RE = re.compile(r"^\+[1-9][0-9]{7,14}$")
+WA_TEXT_MAX, WA_PARAM_MAX = 1000, 60
+WA_WINDOW = timedelta(hours=24)
+
+#: The first-contact template, word for word what is submitted to Meta (category UTILITY). {{1}} the recipient's name,
+#: {{2}} the user's name. The sandbox treats it as approved; Sasha only once its ContentSid is configured (Tyler submits it).
+ON_BEHALF = {"name": "kanoe_on_behalf_v1", "language": "en", "params": 2,
+             "body": "Hi {{1}}, this is Sasha, an assistant writing for {{2}}. {{2}} asked me to send you a message here. "
+                     "Reply YES to receive it, or STOP and I won't write again."}
+TEMPLATES = {ON_BEHALF["name"]: ON_BEHALF}
+
+NO_FREE_TEXT = ("WhatsApp doesn't let me send a free-text message to someone who hasn't written to me in the last 24 hours. "
+                "I can send them a short approved message asking if they'd like your note, and send your words once they reply.")
+NO_TEMPLATE_YET = ("I can't start a WhatsApp conversation with a new number yet: the approved first message isn't set up. "
+                   "I can email them instead, or you can message them yourself.")
+
+
+def _phone(number: str) -> str:
+    n = re.sub(r"[\s().-]", "", number or "")
+    if n.startswith("00"):
+        n = "+" + n[2:]
+    if not E164_RE.match(n):
+        raise Refused("/to/number", "e164", "That isn't a full international mobile number (like +44 7700 900123).")
+    return n
+
+
+def _param(s: str, path: str) -> str:
+    s = re.sub(r"\s+", " ", _clean(s or "")).strip()
+    if not s or len(s) > WA_PARAM_MAX or any(c in s for c in "{}"):
+        raise Refused(path, "param", f"A name in the message is 1–{WA_PARAM_MAX} characters, one line.")
+    return s
+
+
+def window_open(last_inbound_at: Optional[str], now: str) -> bool:
+    """Inside WhatsApp's 24-hour customer-service window: the recipient wrote to Sasha within the last 24 hours."""
+    if not last_inbound_at:
+        return False
+    return _utc(now) - _utc(last_inbound_at) <= WA_WINDOW
+
+
+def whatsapp_message(from_: str, to_number: str, to_name: Optional[str], *, text: Optional[str] = None,
+                     template: Optional[str] = None, on_behalf_of: Optional[str] = None) -> Dict:
+    """The exact WhatsApp, validated. EITHER free text (only inside the window — the caller checks) OR the approved
+    first-contact template rendered with the two names. → the payload that is sent (and hashed for the read-back)."""
+    number = _phone(to_number)
+    name = _clean((to_name or "").strip())
+    if any(c in name for c in "\r\n<>\"{}") or len(name) > NAME_MAX:
+        raise Refused("/to/name", "name", "The recipient's name can't contain line breaks, quotes or brackets.")
+    to = {"number": number, **({"name": name} if name else {})}
+    if (text is None) == (template is None):
+        raise Refused("/text", "one_of", "A WhatsApp is either your own words or the approved first message — one of the two.")
+    if text is not None:
+        body = _clean(text.replace("\r\n", "\n").replace("\r", "\n")).strip()
+        if not body or len(body) > WA_TEXT_MAX:
+            raise Refused("/text", "text", f"The message is 1–{WA_TEXT_MAX} characters.")
+        return {"from": from_, "to": to, "kind": "text", "text": body}
+    t = TEMPLATES.get(template or "")
+    if not t:
+        raise Refused("/template", "unknown_template", "That isn't an approved WhatsApp template.")
+    params = [_param(name or "there", "/to/name"), _param(on_behalf_of or "", "/on_behalf_of")]
+    body = t["body"]
+    for i, p in enumerate(params, 1):
+        body = body.replace("{{%d}}" % i, p)
+    return {"from": from_, "to": to, "kind": "template", "template": {"name": t["name"], "language": t["language"], "params": params},
+            "text": body}
+
+
+def whatsapp_read_back(msg: Dict) -> List[str]:
+    """What the user is shown — the WHOLE message, word for word, before any yes."""
+    to = msg["to"]
+    who = f"{to['name']} ({to['number']})" if to.get("name") else to["number"]
+    lines = [f"Send this WhatsApp from {msg['from']} (Sasha's number — not your phone).", f"To: {who}"]
+    if msg["kind"] == "template":
+        lines.append("WhatsApp's approved first message (they haven't written to Sasha in the last 24 hours):")
+    lines += [ln if ln.strip() else "·" for ln in msg["text"].split("\n")]
+    if msg["kind"] == "template":
+        lines.append("Your own note isn't sent now: only after they reply, and after you say yes to it again.")
+    lines.append("Once sent it can't be unsent. Their reply comes to Sasha, and you'll see it word for word.")
+    return lines
+
+
+def whatsapp_body_sha256(msg: Dict) -> str:
+    return text_sha256(msg["text"])
+
+
+# ── CR 62 · the Activity view: one line per thing Sasha did, in our words only ───────────────────────────────────────────
+# `line` is always one of the fixed sentences below (never a provider's or a person's words); the venue or the recipient
+# travels separately as `about` (untrusted text). check: green ✓ done · red ✗ failed / not sent · amber … waiting.
+
+ACTIVITY_LINES = {
+    ("booking", "done"): "Booked", ("booking", "waiting"): "Waiting for payment", ("booking", "failed"): "Booking failed",
+    ("booking", "requested"): "Asked them — waiting for their answer",
+    ("payment", "done"): "Paid", ("payment", "failed"): "Payment failed",
+    ("email", "done"): "Email sent", ("email", "not_sent"): "Email not sent", ("email", "failed"): "Email failed",
+    ("whatsapp", "done"): "WhatsApp sent", ("whatsapp", "not_sent"): "WhatsApp not sent", ("whatsapp", "failed"): "WhatsApp failed",
+    ("whatsapp_reply", "done"): "They replied on WhatsApp",
+    ("calendar", "done"): "Added to your calendar",
+    ("cancellation", "done"): "Cancelled", ("cancellation", "failed"): "Cancellation failed",
+    ("cancellation", "waiting"): "Cancellation asked — waiting for their answer",
+}
+CHECK = {"done": "green", "failed": "red", "not_sent": "red", "waiting": "amber", "requested": "amber"}
+
+
+def activity_entry(kind: str, state: str, at: str, *, ref: str, proof: Optional[str] = None) -> Dict:
+    """One row of the Activity view. `ref` = the id behind it (an act, a booking); `proof` = its evidence id, if any."""
+    line = ACTIVITY_LINES.get((kind, state))
+    if line is None:
+        raise Refused("/state", "activity", f"No activity line for {kind} {state}.")
+    return {"kind": kind, "state": state, "check": CHECK[state], "line": line,
+            "at": _utc(at).isoformat(timespec="microseconds").replace("+00:00", "Z"),   # exact, so newest-first is never a tie
+            "ref": ref, **({"proof": proof} if proof else {})}
+
+
+def activity_sorted(rows: List[Dict]) -> List[Dict]:
+    """Newest first; equal times keep a stable order by ref."""
+    return sorted(rows, key=lambda r: (r["at"], r["ref"]), reverse=True)

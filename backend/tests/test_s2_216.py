@@ -263,5 +263,34 @@ class Flow217(unittest.TestCase):
         self.assertEqual((ev["kind"], sorted(ev["links"])), ("calendar", ["apple", "google", "outlook"]))
 
 
+
+class InputGuard(unittest.TestCase):
+    """Sasha 217 · CR 63 — a password, PIN or card number typed on /next never reaches the model."""
+
+    def client(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.agent import sasha as AG
+        app = FastAPI()
+        app.include_router(AG.router)
+        return TestClient(app), AG
+
+    def test_a_card_number_or_pin_is_refused_before_the_model(self):
+        c, AG = self.client()
+        with mock.patch("app.services.chat_account.chat_account", mock.AsyncMock(return_value=ACCOUNT)), \
+                mock.patch("app.services.chat_account.signed_in", lambda a: True), \
+                mock.patch.object(AG, "turn_with_quiver", side_effect=AssertionError("the model must never see it")):
+            for said in ("my card is 4242 4242 4242 4242", "my PIN is 4821", "password: hunter22"):
+                r = c.post("/api/agent/turn", json={"message": said})
+                self.assertEqual(r.status_code, 200)
+                self.assertIn("don't type", r.text, said)
+                self.assertNotIn("4242 4242", r.text)
+
+    def test_secrets_in_history_are_blanked(self):
+        from booking_signer.vault import guard as G
+        h = G.clean_history([{"role": "user", "content": "my PIN is 4821"}, {"role": "assistant", "content": "ok"}])
+        self.assertNotIn("4821", str(h))
+
+
 if __name__ == "__main__":
     unittest.main()

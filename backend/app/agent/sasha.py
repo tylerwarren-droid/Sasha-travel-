@@ -984,6 +984,20 @@ async def agent_turn(request: Request):
     message = str(body.get("message") or "").strip()[:4000]
     if not message:
         return JSONResponse({"ok": False, "rule": "empty"}, status_code=400)
+    # Sasha 217 · CR 63 — the S-78 input guard on /next too: a password, PIN or card number never reaches the model (nor its
+    # history, which the browser sends back next turn); the fixed reply is said, and nothing is kept
+    from booking_signer.vault import guard as G
+    kind = G.looks_like_secret(message)
+    if kind:
+        line = G.CARD_REPLY if kind == "card" else G.SECRET_REPLY
+        log.warning("[agent] a %s was typed on /next — blanked, never sent to the model", kind)
+
+        async def refused():
+            yield f"data: {json.dumps({'type': 'text', 'delta': line})}\n\n"
+            yield f"data: {json.dumps({'type': 'say', 'text': line})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'text': line, 'guard': ['input guard: ' + kind], 'tools': []})}\n\n"
+        return StreamingResponse(refused(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    body["history"] = G.clean_history(body.get("history") or [])
     over = await over_budget(account)
 
     async def events():

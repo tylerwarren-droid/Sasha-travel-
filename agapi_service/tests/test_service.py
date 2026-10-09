@@ -535,6 +535,10 @@ class DemoConsole(Base):
             again = self.client.post(f"/demo/api/step/{k}").json()
             self.assertEqual(again["tone"], "green", (k, again))
         self.assertEqual(r2["tone"], "neutral")
+        self.store.x("update api_keys set rate_per_min = 0")                                      # rate-limited: said, never a 500
+        page = self.client.get("/demo/activity")
+        self.assertEqual((page.status_code, "couldn't be read" in page.text), (200, True))
+        self.assertEqual(self.client.post("/demo/api/step/email").json()["tone"], "error")
 
 
 class ZeroLiveCalls(Base):

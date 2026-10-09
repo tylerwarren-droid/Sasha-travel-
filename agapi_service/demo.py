@@ -358,14 +358,23 @@ async def activity_page(req: Request):
     s = _session(store, req.cookies.get("agapi_demo"))
     if not s:
         return HTMLResponse("<p>Press Reset.</p>", status_code=409)
+    from . import rules as R
     _, a = await _op(store, "activity.list", {"end_user": s["uid"]})
+    if not a.get("ok"):   # a refused call (e.g. rate_limited) is said on the page — never a 500
+        return HTMLResponse(_ACTIVITY.replace("{rows}", "<li class='amber'><span class='c'>…</span><div><b>Your activity couldn't be read "
+                                              "just now</b><span class='about'>Try again in a moment — nothing is lost.</span></div></li>"),
+                            headers={"Cache-Control": "no-store"})
     rows = []
     for i in a["result"]["items"]:
         proof = ""
         if i.get("proof"):
             _, ev = await _op(store, "evidence.get", {"evidence_id": i["proof"]})
+            if not ev.get("ok"):
+                proof = "<details><summary>Proof</summary><p class='v'>The proof couldn't be loaded just now — try again.</p></details>"
+                i = {**i, "_skip": True}
+        if i.get("proof") and not i.get("_skip"):
             e = ev["result"]
-            _, v = await _op(store, "evidence.verify", {"evidence": e})
+            v = {"result": {"valid": R.evidence_body_sha256(e) == e.get("body_sha256")}}   # the same check as evidence.verify, in place
             apv = e.get("approval") or {}
             facts = [("Reference", (e.get("outcome") or {}).get("reference") or (e["sources"][0].get("sha256", "")[:19] + "…")),
                      ("When", e["produced_at"].replace("T", " ")[:16] + " UTC"),

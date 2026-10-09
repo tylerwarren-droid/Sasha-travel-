@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react'
 import { bookingReq, contactReq, refusal } from '@/lib/booking-client'
 import { setPendingYes } from '@/lib/chat-booking-bus'
+import { untag } from '@/lib/no-test-label.mjs'   // Sasha 219 · the name as shown: no stand-in or TEST label (sent as it is)
 
 /** Sasha 186 · the card's answers look and act like buttons on every panel (they read as plain text in the chat) */
 const YES_BTN = { background: '#E8B923', color: '#111', border: 0, borderRadius: 8, padding: '6px 14px', fontWeight: 600, cursor: 'pointer' } as const
@@ -30,6 +31,7 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line,
   line?: string | null; auto?: boolean
   draft: { when?: { at?: string }; how_many?: { count?: number } } | null
 }) {
+  const shown = untag(venue)   // Sasha 219 · display only
   const at = openAt || draft?.when?.at || ''
   const quote = route === 'email' && NO_SLOT.test(what)
   const [d, setD] = useState({ date: at.slice(0, 10), time: at.slice(11, 16), party: draft?.how_many?.count ?? 2, name: '', phone: '',
@@ -65,7 +67,7 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line,
         what: { activity: 'a table', activity_venue_lang: 'una mesa', category: 'restaurant' },
         when: { mode: 'at', at: `${d.date}T${d.time}` }, how_many: { count: d.party, unit: 'people' } }
       r = await bookingReq('/api/booking/forms', { read_id: readId, reservation })
-      sentence = `I'll book ${venue} for ${d.party} on ${dayWords(d.date)} at ${d.time}.`
+      sentence = `I'll book ${shown} for ${d.party} on ${dayWords(d.date)} at ${d.time}.`
       if (r.ok) {
         const b = r.json.read_back as { lines: string[]; sha256: string }
         return setP({ k: 'readback', id: String(r.json.form_id), sha: b.sha256, lines: b.lines, sentence })
@@ -74,8 +76,8 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line,
       r = await bookingReq('/api/booking/emails', quote
         ? { read_id: readId, name: d.name.trim(), quote: { what: d.want.trim(), dates: d.dates.trim() } }
         : { read_id: readId, date: d.date, time: d.time, party: d.party, name: d.name.trim(), auto_plan: true })
-      sentence = quote ? `I'll send ${venue} your request and ask for a date and a quote.`
-        : `I'll ask ${venue} for a table for ${d.party} on ${dayWords(d.date)} at ${d.time}.`
+      sentence = quote ? `I'll send ${shown} your request and ask for a date and a quote.`
+        : `I'll ask ${shown} for a table for ${d.party} on ${dayWords(d.date)} at ${d.time}.`
       if (r.ok) {
         const b = r.json.read_back as { lines: string[]; sha256: string }
         return setP({ k: 'readback', id: String(r.json.email_id), sha: b.sha256, lines: b.lines, sentence })
@@ -97,7 +99,7 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line,
     if (route === 'form' && reading.result === 'confirmed')
       return setP({ k: 'done', say: `Done — booked${r.json.booking_reference ? ` (their ref ${String(r.json.booking_reference)})` : ''}. It's in your itinerary.` })
     if (route === 'email' && r.json.status !== 'sent') return setP({ k: 'stopped', say: String(r.json.say ?? 'It was not sent.') })
-    setP({ k: 'done', say: route === 'email' ? `Done — I've emailed ${venue.replace(/ \(TEST stand-in\)$/, '')}. I'll update you as soon as I hear back.`
+    setP({ k: 'done', say: route === 'email' ? `Done — I've emailed ${shown}. I'll update you as soon as I hear back.`
       : "Done — I've asked them and I'll confirm here as soon as they reply." })
   }
 
@@ -116,7 +118,7 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line,
   if (p.k === 'details') return (
     <div style={box}>
       {quote ? <>
-        <div>What would you like {venue} to do?</div>
+        <div>What would you like {shown} to do?</div>
         <textarea value={d.want} onChange={(e) => setD({ ...d, want: e.target.value })} rows={3} style={{ ...input, width: '100%', marginTop: 4 }} />
         <input placeholder="Dates that suit you (optional)" value={d.dates} onChange={(e) => setD({ ...d, dates: e.target.value })} style={{ ...input, width: '100%', marginTop: 4 }} />
       </> : (at && d.date && d.time) ? null : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
@@ -132,10 +134,8 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line,
     </div>
   )
   // Sasha 169 · the founder's demo stand-in (SASHA_DEMO_STANDIN): said first, every time — the place picked is never contacted
-  const standIn = / \(TEST stand-in\)$/.test(venue) ? venue.replace(/ \(TEST stand-in\)$/, '') : null
   if (p.k === 'readback') return (
     <div style={box}>
-      {standIn && <div style={{ color: '#E8B923', marginBottom: 4 }}>🧪 TEST: {standIn} — our test venue stands in; {standIn} is not contacted.</div>}
       <div>{line || p.sentence}</div>
       {line ? <div style={{ fontSize: 12.5, opacity: 0.75 }}>{quote ? d.want : `${d.party} people · ${dayWords(d.date)} at ${d.time}`}</div> : null}
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>

@@ -12,13 +12,14 @@ const PATTERNS = [
   [/\bTEST\s+(?=[a-z€$£\d])/g, ''],                // "TEST payment", "TEST fare", "TEST €…"
   [/\s+\bTEST\b(?=[.,;:!]|$)/g, ''],               // a trailing "… TEST"
   [/\s*\(test\)/g, ''],                            // a fixture place "Casa Marea (test)"
+  [/\s*\((?:our )?test venue stood in\)/gi, ''],    // Sasha 219 · the stand-in note, on a venue's name (display only)
 ]
 const SKIP_KEYS = new Set(['url', 'href', 'links', 'id', 'place_id', 'offer_id', 'trip_id', 'session_id', 'checkout_url', 'view_url',
                            'page_url', 'turn', 'kind', 'type', 'what', 'status', 'focus', 'highlight'])
 
 /** One string, its TEST labels removed (and the spacing they leave tidied). */
 export function untag(s) {
-  if (typeof s !== 'string' || !/test/i.test(s)) return s
+  if (typeof s !== 'string' || !/test/i.test(s)) return s   // (every pattern above contains "test")
   let t = s
   for (const [rx, to] of PATTERNS) t = t.replace(rx, to)
   return t.replace(/\s{2,}/g, ' ').replace(/\s+([.,;:!)])/g, '$1').replace(/,\s*,/g, ',').trim()

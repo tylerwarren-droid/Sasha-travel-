@@ -14,6 +14,9 @@ test('the labels go, the words around them stay', () => {
     ['Casa Marea (test)', 'Casa Marea'],
     ['Book it (TEST)', 'Book it'],
     ['Kept here · not sent (test)', 'Kept here · not sent'],
+    ['Casa Lucio (our test venue stood in)', 'Casa Lucio'],   // Sasha 219
+    ['21:00 · Casa Lucio (test venue stood in)', '21:00 · Casa Lucio'],
+    ['Casa Lucio (TEST stand-in)', 'Casa Lucio'],
   ]
   for (const [a, b] of cases) assert.equal(untag(a), b, a)
 })

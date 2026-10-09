@@ -89,7 +89,7 @@ function JourneyList({ title, rows }: { title: string; rows: JRow[] | null }) {
             <div style={{ fontWeight: 600, marginBottom: 4 }}>{d ? dayHead(d) : 'No day set yet'}</div>
             {rs.map((r) => (
               <div key={r.id} style={{ marginBottom: 6 }}>
-                <div>{r.time ? `${r.time} · ` : ''}{r.venue.replace(/ \(TEST stand-in\)$/, ' (test venue stood in)')}</div>
+                <div>{r.time ? `${r.time} · ` : ''}{r.venue.replace(/ \(TEST stand-in\)$/, '')}</div>
                 <div className="lw-note-s">{r.status_words ?? r.status}{r.booking_reference ? ` · ref ${r.booking_reference}` : ''}</div>
               </div>
             ))}

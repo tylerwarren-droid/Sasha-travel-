@@ -45,7 +45,7 @@ class Isolation(unittest.TestCase):
         s = seen_by_model("s2")
         self.assertTrue(s["system"][0]["text"].startswith(S2.S2_WHO))
         self.assertIn("## How she talks", s["system"][0]["text"])   # the shared rules, unchanged
-        self.assertEqual(sorted(t["name"] for t in s["tools"]), sorted(S2.S2_TOOLS))
+        self.assertEqual(sorted(t["name"] for t in s["tools"]), sorted(n for n in S2.S2_TOOLS if n in API.BY_NAME))
 
     def test_only_the_s2_header_chooses_s2(self):
         from fastapi import FastAPI

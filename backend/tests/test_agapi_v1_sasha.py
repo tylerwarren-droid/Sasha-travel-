@@ -31,7 +31,8 @@ class TheYes(unittest.TestCase):
 
     def test_sashas_deliberate_additions(self):
         self.assertTrue(API.explicit_yes("Perfect, book the whole trip"))          # an extra affirmative
-        self.assertTrue(API.explicit_yes("yes, cancel it"))                        # cancel confirms a cancellation…
+        self.assertFalse(API.explicit_yes("yes, cancel it"))                       # AgAPI 1.1: not a GENERAL yes…
+        self.assertTrue(API.yes_to_cancel("yes, cancel it"))                       # …it confirms a cancellation (act_kind cancel)…
         self.assertFalse(API.yes_to_book("yes, cancel it"))                        # …and never books
         self.assertFalse(API.explicit_yes("yes, but first the price"))             # an extra veto (stricter is safe)
 

@@ -144,6 +144,13 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": kind, "find": {"what": args.get("what") or c.get("name"), "where": args.get("city") or ""},
                 "preset": {"all": [c], "cards": [c], "show": 1}, "focus": c.get("place_id"),
                 "ribbon": f"{c.get('name')}" + (f" · {res['when']}" if res.get("when") else "")}
+    if tool in ("send_email", "send_whatsapp") and res.get("status") in ("sent", "not_sent"):   # Sasha 217 · the card becomes the outcome
+        m = res.get("message") or {}
+        to = m.get("to") or {}
+        who = (f"{to.get('name')} <{to.get('address')}>" if to.get("name") and to.get("address") else to.get("address") or to.get("name")
+               if isinstance(to, dict) else str(to or ""))
+        return {"type": "render", "kind": "read_back", "what": "email" if tool == "send_email" else "whatsapp", "status": res["status"],
+                "live": res["status"] == "sent", "read_back": [x for x in (f"To: {who}" if who else "", f"Subject: {m['subject']}" if m.get("subject") else "") if x]}
     if kind == "read_back" and not res.get("read_back"):   # Sasha 216 · a sent email has nothing to read back
         return None
     if kind == "read_back":   # Sasha 213 · the read-back she just gave, from her own hold — never a second quote

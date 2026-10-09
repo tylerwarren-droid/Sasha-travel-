@@ -39,6 +39,13 @@ def main() -> int:
         d = json.loads(raw.decode("utf-8"))
         return d, hashlib.sha256(raw).hexdigest()
 
+    # Sasha 217 · AgAPI 1.1 · the pinned acts file == EU's
+    if (vec / "approval-language-acts.json").exists():
+        eu_acts = (vec / "approval-language-acts.json").read_bytes()
+        same_acts = eu_acts == v0.ACTS_FILE.read_bytes()
+        results.append(("approval-language-acts.json (pinned copy == EU's file)", int(same_acts), 1, hashlib.sha256(eu_acts).hexdigest()))
+        if not same_acts:
+            fails.append("approval-language-acts.json: Sasha's pinned copy differs from EU's file")
     # pinned language file == EU's
     eu_lang = (vec / "approval-language.json").read_bytes()
     pinned = v1.LANGUAGE_FILE.read_bytes()
@@ -70,7 +77,7 @@ def main() -> int:
     d, h = file("explicit-yes")
     ok = 0
     for c in d["cases"]:
-        got = v0.explicit_yes(c["said"], c["lang"])
+        got = v0.explicit_yes(c["said"], c["lang"], c.get("act_kind"))   # AgAPI 1.1 · act-aware
         ok += got == c["explicit_yes"]
         if got != c["explicit_yes"]:
             fails.append(f"explicit-yes [{c['lang']}] {c['said']!r}: {got}, expected {c['explicit_yes']}")

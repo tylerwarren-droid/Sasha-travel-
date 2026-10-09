@@ -112,7 +112,7 @@ class Base(unittest.TestCase):
 
 class TheYes(Base):
     def test_questions_and_requests_for_options_are_never_a_yes(self):
-        for said in ("Yes — what are my cancellation terms?", "Sure, find me dinner options", "ok so what are the options?",
+        for said in ("Sure — what’s the total?", "Yes, but what's the refund?", "Yes, cancel it — wait", "Yes — what are my cancellation terms?", "Sure, find me dinner options", "ok so what are the options?",
                      "yes, what would cancelling cost?", "Yes. Is it refundable", "yes, show me the other ones",
                      "Yes, tell me more about the second", "go ahead and compare them", "yes how much is it"):
             self.assertFalse(API.explicit_yes(said), said)
@@ -124,7 +124,8 @@ class TheYes(Base):
 
     def test_yes_cancel_it_cancels_and_never_books(self):
         for said in ("yes, cancel it", "Yes please cancel", "go ahead and cancel"):
-            self.assertTrue(API.explicit_yes(said), said)
+            self.assertTrue(API.yes_to_cancel(said), said)   # Sasha 217 · AgAPI 1.1: only a cancellation takes it
+            self.assertFalse(API.explicit_yes(said), said)
             self.assertFalse(API.yes_to_book(said), said)
 
     def test_yes_cancel_it_sends_a_prepared_cancellation(self):

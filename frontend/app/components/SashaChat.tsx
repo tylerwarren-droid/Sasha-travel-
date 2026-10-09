@@ -217,7 +217,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   const [screenTurn, setScreenTurn] = useState<string | null>(null)
   const [groupTurn, setGroupTurn] = useState<Record<string, string>>({})
   const [highlight, setHighlight] = useState<string[]>([])
-  const [readBack, setReadBack] = useState<{ lines: string[]; total?: number | null; what?: string; live?: boolean } | null>(null)
+  const [readBack, setReadBack] = useState<{ lines: string[]; total?: number | null; what?: string; live?: boolean; status?: string } | null>(null)
   const onScreen = (g: string) => !agent || !screenTurn || groupTurn[g] === screenTurn
   const claim = (g: string, t?: string) => { if (!t) return; setScreenTurn(t); setGroupTurn(m => ({ ...m, [g]: t })) }
   const [bookingCancel, setBookingCancel] = useState<{ venue: string; n: number } | null>(null)  // Sasha 96 chat cancel (Stage B)
@@ -630,7 +630,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             else if (ev.kind === 'focus' && ev.focus) setHighlight([ev.focus])
             else if (ev.kind === 'pay' && ev.url) onPay?.(String(ev.url))   // Sasha 214 · a phone pays here, on the same device
             else if (ev.kind === 'handover' && ev.url) { if (ev.focus) setHighlight([ev.focus]); onHandover?.(String(ev.url), !!ev.external) }   // their page / Tap to finish   // Sasha 213 · a pick: the cards stay, that one highlighted
-            else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) { setReadBack({ lines: ev.read_back, total: ev.total_eur, what: ev.what, live: ev.live }); claim('readback', ev.turn) }
+            else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) { setReadBack({ lines: ev.read_back, total: ev.total_eur, what: ev.what, live: ev.live, status: ev.status }); claim('readback', ev.turn) }
             else if (ev.kind === 'trip') window.dispatchEvent(new Event('sasha-plan-refresh'))
           }
           else if (ev.type === 'state') { if (Array.isArray(ev.highlight) && ev.highlight.length) setHighlight(ev.highlight) }   // Sasha 213 · the card(s) she named
@@ -967,14 +967,14 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
         )}
         {readBack && onScreen('readback') && (
           <div className="lw-card">{/* Sasha 213 · the read-back she just gave — from her own hold, never a second quote */}
-            {readBack.what === 'email' ? (   /* Sasha 216 · an email Sasha will send from her own address, on their yes */
-              <div className="lw-cardHd"><span className="lw-ci gold">✉️</span><div className="lw-meta"><div className="lw-k">Ready to send · on your yes</div>
-                <div className="lw-h">{readBack.live ? "From Sasha's own address" : "From Sasha's address · TEST: kept, not sent"}</div></div></div>
+            {readBack.what ? (   /* Sasha 216/217 · an email or a WhatsApp Sasha will send from her own address or number, on their yes */
+              <div className="lw-cardHd"><span className="lw-ci gold">{readBack.what === 'whatsapp' ? '💬' : '✉️'}</span><div className="lw-meta"><div className="lw-k">{readBack.status === 'sent' ? 'Sent' : readBack.status === 'not_sent' ? 'Not sent' : 'Ready to send · on your yes'}</div>
+                <div className="lw-h">{readBack.live ? (readBack.what === 'whatsapp' ? "From Sasha's own number" : "From Sasha's own address") : 'Kept here · not sent (test)'}</div></div></div>
             ) : (
             <div className="lw-cardHd"><span className="lw-ci gold">✅</span><div className="lw-meta"><div className="lw-k">Ready to book</div>
               <div className="lw-h">{readBack.total ? `€${Math.round(readBack.total).toLocaleString()} all in · TEST` : 'Your trip · TEST'}</div></div></div>
             )}
-            <div className="lw-cardBody">{readBack.lines.map((l, i) => <div key={i} className="o2" style={{ padding: '2px 0' }}>{l}</div>)}</div>
+            <div className="lw-cardBody" style={readBack.what ? { display: 'block' } : undefined}>{readBack.lines.map((l, i) => <div key={i} className="o2" style={{ padding: '2px 0' }}>{l}</div>)}</div>
           </div>
         )}
         {tripTotal && onScreen('total') && (

@@ -95,7 +95,9 @@ class Email(Base):
         from app.agent import sasha as AG
         ev = AG.render("send_email", {"status": "awaiting_yes", "read_back": ["To: Marta"], "live": False}, {})
         self.assertEqual((ev["kind"], ev["what"], ev["live"]), ("read_back", "email", False))
-        self.assertIsNone(AG.render("send_email", {"status": "sent"}, {}))
+        done = AG.render("send_email", {"status": "not_sent", "message": {"to": {"address": "marta@example.com", "name": "Marta"},
+                                                                         "subject": "Dinner plan"}}, {})
+        self.assertEqual((done["status"], done["live"], done["read_back"]), ("not_sent", False, ["To: Marta <marta@example.com>", "Subject: Dinner plan"]))   # Sasha 217 · the card becomes the outcome
 
     def test_a_turn_with_a_forged_yes_on_a_question_sends_nothing(self):
         import app.services.llm as LLM

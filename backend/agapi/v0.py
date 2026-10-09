@@ -24,6 +24,7 @@ import json
 import logging
 import re
 import time
+from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -122,31 +123,65 @@ _CANCEL_WORD = re.compile(r"(?i)\bcancel\w*")
 
 # CR 61 · the yes is AgAPI v1.0's AP6 (agapi/v1.py, EU's frozen lists — English and Spanish), plus Sasha's own deliberate, additive
 # choices (reported to EU as proposed additions; none contradicts a v1.0 vector — scripts/agapi_v1_conformance.py checks 38/38):
-#   · "cancel" (es "cancela") doesn't veto HERE — "yes, cancel it" confirms a cancellation (Sasha 215); yes_to_book still refuses it
+#   · "cancel" (es "cancela") vetoes a general yes (EU's vectors) but not yes_to_cancel — "yes, cancel it" confirms a cancellation
 #   · a few more affirmatives Sasha's people say ("book the whole trip", "send me their page")
 #   · a few more vetoes (refund/cost/price/fees/details/compare/explain/instead/other/else/first …): stricter is always safe
 _SASHA_YES = ("book the whole trip", "book my whole trip", "book our whole trip", "send it", "send me it", "send me their page",
               "send me the page", "send me the link", "send their page", "send the page", "send the link")
 _SASHA_VETO = re.compile(r"(?i)\b(?:whether|alternatives?|polic(?:y|ies)|refund\w*|cost\w*|price\w*|fees?|charges?|show|look|"
                          r"explain|compare|details?|more about|instead|other|else|first)\b")
-_CANCEL_NEGATIONS = {"cancel", "cancela"}
 
 
-def explicit_yes(said: Optional[str], lang: Optional[str] = None) -> bool:
-    """An explicit yes in the person's own words — "Yes, book it", "Then book it.", "Sí, adelante", "go ahead", "yes, cancel it" —
-    with no negation, and never a question or a request for options (AgAPI v1.0 AP6 + Sasha 215). `lang` None: any language
-    (a veto in either language vetoes). WHICH act it agrees to is the caller's: yes_to_book refuses a yes about cancelling."""
+_RAW_QUESTION = re.compile(r"[?¿]")   # Sasha 217 · read on the RAW words (normalisation strips the mark)
+ACTS_FILE = Path(__file__).resolve().parent / "spec" / "approval-language-acts.json"   # AgAPI 1.1 · EU's act-aware AP6 file
+ACTS_SHA256 = "e8c8c2edc71ee93965a0fa2476f73107b843a0521e0bdc82ec6e455faf03dd5f"
+
+
+def _exempt(act_kind: Optional[str]) -> set:
+    """AgAPI 1.1 · the negations that stop vetoing for this act (cancel: "cancel", "cancela") — EU's file, sha256-pinned."""
+    if not act_kind:
+        return set()
+    raw = ACTS_FILE.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != ACTS_SHA256:
+        raise RuntimeError("agapi/spec/approval-language-acts.json is not EU's file — refusing to judge a yes with other lists")
+    acts = json.loads(raw.decode("utf-8")).get("acts", {}).get(act_kind) or {}
+    return {w for L in acts.values() for w in L.get("exempt_negations", [])}
+
+
+def _split(said: str) -> str:
+    """AgAPI 1.1 · the apostrophe's OTHER form: split ("what's" → "what s"), so a veto matches either way."""
+    import unicodedata as _u
+    s = _u.normalize("NFC", said or "").lower()
+    s = re.sub(r"['‘’]", " ", s)
+    s = re.sub(r"[¡¿!?.,;:\"“”()—–]", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def explicit_yes(said: Optional[str], lang: Optional[str] = None, act_kind: Optional[str] = None) -> bool:
+    """An explicit yes in the person's own words — "Yes, book it", "Then book it.", "Sí, adelante", "go ahead" — with no negation,
+    and never a question or a request for options: AgAPI 1.1's AP6 (EU's lists; vetoes in both apostrophe forms; act-aware —
+    act_kind "cancel" exempts "cancel"/"cancela" only) + Sasha's additions (a "?" vetoes anything longer than a bare yes like
+    "¿sí?"; more vetoes; a few more affirmatives). `lang` None: any language (a veto in either language vetoes)."""
     from agapi import v1 as V1
     t = V1.normalise(said or "")
-    if not t or _SASHA_VETO.search(t):
+    if not t or _SASHA_VETO.search(t) or _SASHA_VETO.search(_split(said or "")):
         return False
+    if _RAW_QUESTION.search(said or "") and len(t.split()) > 2:
+        return False
+    exempt = _exempt(act_kind)
     langs = V1.languages()
     use = [lang] if lang else list(langs)
+    forms = {t, _split(said or "")}
     for code in use:
         L = langs[code]
-        if any(V1._has(t, n) for n in L["negations"] + L.get("questions_and_requests", []) if n not in _CANCEL_NEGATIONS):
+        if any(V1._has(f, n) for f in forms for n in L["negations"] + L.get("questions_and_requests", []) if n not in exempt):
             return False
     return any(V1.affirmative(t, langs[code], _SASHA_YES if code == "en" else ()) for code in use)
+
+
+def yes_to_cancel(said: Optional[str]) -> bool:
+    """Sasha 215 / AgAPI 1.1 · "yes, cancel it" / "sí, cancela" confirms a CANCELLATION that was read back — only there."""
+    return explicit_yes(said, act_kind="cancel")
 
 
 def yes_to_book(said: Optional[str]) -> bool:
@@ -996,4 +1031,4 @@ def schema_for_model(t: dict) -> dict:
     return {"name": t["name"], "description": f"[{t['agent']}] {t['description']}", "input_schema": s}
 
 
-__all__ = ["VERSION", "Ctx", "ToolError", "TOOLS", "BY_NAME", "call", "explicit_yes", "schema_for_model"]
+__all__ = ["VERSION", "Ctx", "ToolError", "TOOLS", "BY_NAME", "call", "explicit_yes", "yes_to_cancel", "schema_for_model"]

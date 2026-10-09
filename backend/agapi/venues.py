@@ -401,7 +401,7 @@ async def venue_bookings(account: str) -> List[dict]:
 async def cancel_venue(ctx, a: dict) -> dict:
     """Two steps, as booking: first the cancellation's read-back (its route: their cancel link, an email, a text or a call);
     after the person's explicit yes in a LATER turn, sent. Cancelled only when the venue's words say so."""
-    from agapi.v0 import claim, explicit_yes, stale
+    from agapi.v0 import claim, stale, yes_to_cancel as explicit_yes   # Sasha 217 · "yes, cancel it" counts HERE only
     GW = _API()
     said = ((a.get("approval") or {}).get("said")) or ""
     held = _CANCEL.get(ctx.account)

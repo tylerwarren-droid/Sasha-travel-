@@ -72,12 +72,22 @@ def _script(base: str, token: str, log, ctx, page) -> None:
 
         op("operators.put", {"slug": "blue-kyma", "name": "Blue Kyma Diving (demo)", "timezone": "Europe/Athens", "languages": ["en", "el"],
                              "site_url": base + "/fake/blue-kyma"})
-        op("sandbox.reset")
-        # the console's door
-        page.goto(f"{base}/console/login")
+        # CR 66 · Tyler's door: the start page (behind the console token) → [Reset demo] → step 2's link, #find
+        page.goto(f"{base}/start")
         page.fill("input[name=token]", token)
         page.click("text=Open the console")
+        expect(page.locator("h1")).to_have_text("Run the DIVE demo")
+        expect(page.locator("[data-testid=beat]")).to_have_count(10)
+        page.click("[data-testid=reset]")
+        expect(page.locator("[data-testid=reset-done]")).to_be_visible(timeout=T)
+        expect(page.locator("[data-testid=state]")).to_contain_text("0 suppliers confirmed · 0 channels verified · package not published · 0 booking(s)")
+        start = page
+        with ctx.expect_page() as find_i:
+            start.click("[data-testid=beat-2]")
+        page = find_i.value
         expect(page.locator("h1")).to_contain_text("Blue Kyma Diving")
+        expect(page.locator("[data-testid=find]")).to_be_focused(timeout=T)
+        step("the start page: 10 steps, each one link; Reset demo → an empty console; step 2 opens the console at Find suppliers")
         # 0:30–1:15 · Find suppliers → 5 drafts → Confirm ×4 / Not ours → channels → verification → the boat's YES
         page.click("text=Find suppliers on my site")
         expect(page.get_by_text("Rival Boats", exact=True)).to_be_visible(timeout=T)
@@ -129,6 +139,9 @@ def _script(base: str, token: str, log, ctx, page) -> None:
         with ctx.expect_page() as phone_i:
             cust.click("text=open it as the customer's phone")
         phone = phone_i.value
+        # CR 66 · the start page's phone link points at this same link (read, not opened: each opening issues a new one-time form code)
+        loc = page.request.get(f"{base}/start/phone", max_redirects=0).headers.get("location", "")
+        assert phone.url.endswith(loc) and "/o/blue-kyma/a/" in loc, "the start page's phone link isn't the newest link on the customer's phone"
         phone.click("text=Yes, book it")
         expect(phone.locator("#out")).to_contain_text("Waiting for", timeout=T)
         step("the customer saw every leg and how it's confirmed, and tapped Yes once on their phone")
@@ -152,8 +165,17 @@ def _script(base: str, token: str, log, ctx, page) -> None:
         page.click("[data-testid=proof-close]")
         expect(page.locator("[data-testid=proof-panel]")).to_be_hidden()
         step("the boat's proof: what we sent, their ΝΑΙ, the hashes — Verify: ✓ The record matches.")
-        # 4:00–4:40 · the failure beat: Thursday, the boat says NO
-        page.click("text=Test drawer")
+        page.goto(f"{base}/start/proof")                                                    # CR 66 · the start page's Proof link
+        expect(page.locator("[data-testid=proof-panel]")).to_be_visible(timeout=T)
+        expect(page.locator("[data-testid=proof-verdict]")).to_have_text("✓ The record matches.", timeout=T)
+        expect(page.locator("[data-testid=proof-panel]")).to_contain_text("CONFIRMED")
+        page.click("[data-testid=proof-close]")
+        step("the start page's Proof link opens the whole booking's proof: ✓ The record matches.")
+        # 4:00–4:40 · the failure beat: Thursday, the boat says NO — opened from the start page's step 9 (#drawer)
+        start.reload()
+        with ctx.expect_page() as drawer_i:
+            start.click("[data-testid=beat-9]")
+        page = drawer_i.value
         page.click("[data-testid=test-quote]")
         expect(page.locator("[data-testid=booking]")).to_have_count(2, timeout=T)          # it lands on Bookings with Thursday in it
         page.click("text=Test drawer")

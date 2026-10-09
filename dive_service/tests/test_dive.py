@@ -530,5 +530,96 @@ class Actions(Base):
         self.assertEqual(self.gen(key, "bookings.cancel", {"bundle_id": c["bundle_id"]}, idem="cancel-2-0000000002", approval=apv).json()["error"]["code"], "bundle_changed")
 
 
+
+class StartPage(Base):
+    """CR 66 · Tyler's start page: behind the console token; 10 steps, each one link that resolves; Reset demo → the starting state;
+    the phone and Proof links land on the newest; nothing is sent."""
+
+    def test_behind_the_console_token(self):
+        for path in ("/start", "/start/phone", "/start/proof"):
+            r = self.client.get(path, follow_redirects=False)
+            self.assertEqual((r.status_code, r.headers["location"]), (303, "/console/login?next=/start"), path)
+        self.onboard()
+        r = self.client.post("/start/reset", follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(len(self.op("suppliers.list")["suppliers"]), 4)                       # no token: nothing was reset
+        self.assertIn('name="next" value="/start"', self.client.get("/console/login?next=/start").text)
+        self.assertNotIn('name="next"', self.client.get("/console/login?next=https://evil.example").text)
+        r = self.client.post("/console/login", data={"token": "dive-local", "next": "/start"}, follow_redirects=False)
+        self.assertEqual(r.headers["location"], "/start")
+        self.assertEqual(self.client.get("/start", follow_redirects=False).status_code, 200)   # the cookie opens it
+        r = self.client.post("/console/login", data={"token": "dive-local", "next": "https://evil.example"}, follow_redirects=False)
+        self.assertEqual(r.headers["location"], "/console")
+
+    def test_ten_steps_each_a_link_that_resolves(self):
+        self.onboard()
+        page = self.client.get("/start", headers=CONSOLE).text
+        self.assertEqual(page.count('data-testid="beat"'), 10)
+        links = re.findall(r'data-testid="beat-\d+"', page)
+        self.assertEqual(len(links), 9)                                                          # the opening is just talk
+        hrefs = re.findall(r'<a class="btn go" href="([^"]+)"', page)
+        self.assertEqual(sorted({h.split("#")[0] for h in hrefs}), ["/console", "/o/blue-kyma/book", "/o/blue-kyma/docs", "/start/phone", "/start/proof"])
+        self.assertEqual({h.split("#")[1] for h in hrefs if "#" in h}, {"find", "drawer", "activity"})
+        for h in sorted(set(hrefs)):
+            self.assertEqual(self.client.get(h.split("#")[0], headers=CONSOLE).status_code, 200, h)
+        for say in ("AgAPI gives them one.", "In test mode we can play the supplier.", "nothing is charged, nothing half-booked"):
+            self.assertIn(say, page)
+        self.assertIn(config.SANDBOX_URL + "/docs", page)                                        # AgAPI's public docs, linked
+        self.assertIn("4 suppliers confirmed · 4 channels verified · package published · 0 booking(s)", page)
+        c = self.client.get("/console", headers=CONSOLE).text
+        self.assertIn('id="findbtn"', c)
+        self.assertIn('h0.startsWith("proof=")', c)
+
+    def test_reset_demo_restores_the_starting_state(self):
+        self.op("operators.put", {"slug": "blue-kyma", "name": "Renamed in a rehearsal", "timezone": "Europe/London", "languages": ["en"],
+                                  "site_url": self.site, "footer": "Some other footer"})
+        self.onboard()
+        self.client.post("/console/api/bookings.test_quote", json={}, headers=CONSOLE)
+        self.assertTrue(self.store.one("select count(*) n from captured")["n"] > 0)
+        r = self.client.post("/start/reset", headers=CONSOLE, follow_redirects=False)
+        self.assertEqual((r.status_code, r.headers["location"]), (303, "/start?done=reset"))
+        row = self.store.one("select * from operators where slug = 'blue-kyma'")
+        self.assertEqual((row["name"], row["timezone"], json.loads(row["languages"]), row["site_url"], row["footer"]),
+                         ("Blue Kyma Diving (demo)", "Europe/Athens", ["en", "el"], self.site, "Blue Kyma API · powered by AgAPI"))
+        self.assertEqual(self.op("suppliers.list")["suppliers"], [])
+        self.assertEqual(self.op("packages.list")["packages"], [])
+        for t in ("bundles", "events", "evidence", "op_keys"):
+            self.assertEqual(self.store.one(f"select count(*) n from {t}")["n"], 0, t)
+        self.assertEqual(self.store.one("select count(*) n from captured")["n"], 0)
+        page = self.client.get("/start?done=reset", headers=CONSOLE).text
+        self.assertIn("✓ Reset. The console is empty and ready for step 1.", page)
+        self.assertIn("0 suppliers confirmed · 0 channels verified · package not published · 0 booking(s)", page)
+        self.onboard()                                                                           # and the demo runs again from there
+
+    def test_reset_on_a_fresh_service_creates_the_operator(self):
+        self.store.x("delete from operators")
+        self.assertEqual(self.client.post("/start/reset", headers=CONSOLE, follow_redirects=False).status_code, 303)
+        self.assertEqual(self.store.one("select name from operators where slug = 'blue-kyma'")["name"], "Blue Kyma Diving (demo)")
+
+    def test_the_phone_and_proof_links_land_on_the_newest(self):
+        self.assertIn("Nothing on the customer", self.client.get("/start/phone", headers=CONSOLE).text)
+        self.assertIn("No booking has proof yet", self.client.get("/start/proof", headers=CONSOLE).text)
+        self.onboard()
+        key = self.key()
+        pid = self.gen(key, "packages.list", {}).json()["result"]["packages"][0]["package_id"]
+        b = self.gen(key, "bookings.quote", {"package_id": pid, "date": self.next_wd(1), "start_time": "09:00", "party": 4,
+                                             "customer": {"name": "Marta Ruiz", "phone": "+15005550101"}}, idem="quote-start-00000001").json()["result"]
+        self.gen(key, "approvals.request", {"bundle_id": b["bundle_id"]})
+        link = self.store.one("select body from captured where channel = 'sms' order by id desc")["body"].rsplit(" ", 1)[-1]
+        r = self.client.get("/start/phone", headers=CONSOLE, follow_redirects=False)
+        self.assertEqual((r.status_code, r.headers["location"]), (303, link[len(config.PUBLIC_URL):]))
+        self.assertIn("Yes, book it", self.client.get(r.headers["location"]).text)
+        self.assertIn("No booking has proof yet", self.client.get("/start/proof", headers=CONSOLE).text)   # not confirmed yet
+        r = self.client.post("/console/api/bookings.test_quote", json={}, headers=CONSOLE).json()["result"]
+        legs = {l["supplier"]: l for l in r["legs"]}
+        self.op("sandbox.supplier_reply", {"leg_id": legs["Kyma Gear"]["leg_id"], "text": "YES"})
+        self.op("sandbox.supplier_reply", {"leg_id": legs["Aegean Boats"]["leg_id"], "text": "ΝΑΙ"})
+        ev = self.store.one("select evidence_id from bundles where id = ?", r["bundle_id"])["evidence_id"]
+        self.assertTrue(ev)
+        r = self.client.get("/start/proof", headers=CONSOLE, follow_redirects=False)
+        self.assertEqual((r.status_code, r.headers["location"]), (303, "/console#proof=" + ev))
+        self.assertEqual(self.store.one("select count(*) n from captured where real = 1")["n"], 0)          # 0 real messages
+
+
 if __name__ == "__main__":
     unittest.main()

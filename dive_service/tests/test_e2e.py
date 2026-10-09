@@ -63,7 +63,7 @@ class DemoInABrowser(unittest.TestCase):
         from dive_service import e2e_demo
         steps = []
         e2e_demo.run(self.base, "dive-local", log=steps.append, slow_ms=250)
-        self.assertEqual(len(steps), 8, steps)
+        self.assertEqual(len(steps), 10, steps)
         self.assertIn("failure beat", steps[-2])
 
 

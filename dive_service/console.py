@@ -16,10 +16,11 @@ from .store import loads, ts
 
 def bind(app, db, ok):
     @app.get("/console/login", response_class=HTMLResponse)
-    async def login_page():
+    async def login_page(next: str = ""):
         from .app import page
+        nxt = '<input type="hidden" name="next" value="/start">' if next == "/start" else ""   # CR 66: back to Tyler's start page
         return page("Console", """<h1>Operator console</h1><form class="card" method="post"><label>Console token<input type="password" name="token"
-autocomplete="current-password"></label><p><button class="go" title="Opens the console for this browser">Open the console</button></p></form>""")
+autocomplete="current-password"></label>""" + nxt + """<p><button class="go" title="Opens the console for this browser">Open the console</button></p></form>""")
 
     @app.post("/console/login")
     async def login(req: Request):
@@ -27,7 +28,7 @@ autocomplete="current-password"></label><p><button class="go" title="Opens the c
         tok = config.CONSOLE_TOKEN or ("" if config.deployed() else "dive-local")
         if not tok or not hmac.compare_digest(str(f.get("token") or ""), tok):
             return RedirectResponse("/console/login", status_code=303)
-        r = RedirectResponse("/console", status_code=303)
+        r = RedirectResponse("/start" if f.get("next") == "/start" else "/console", status_code=303)
         r.set_cookie("dive_console", tok, httponly=True, samesite="strict", secure=config.deployed(), max_age=12 * 3600)
         return r
 
@@ -115,12 +116,12 @@ const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 async function api(op,body){const r=await fetch("/console/api/"+op,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body||{})});
 const j=await r.json();if(!j.ok){$("msg").textContent=j.error.message;throw new Error(j.error.code)}$("msg").textContent="";return j.result}
 function rail(){$("rail").innerHTML=TABS.map(([k,l])=>`<button class="${k===tab?'on':''}" onclick="go('${k}')" title="${l}">${l}</button>`).join("")}
-function go(k){tab=k;rail();clearTimeout(timer);VIEWS[k]().catch(e=>{})}
+function go(k){tab=k;rail();clearTimeout(timer);return VIEWS[k]().catch(e=>{})}
 const when=s=>s?new Date(s).toLocaleString([], {day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}).toUpperCase():"";
 const VIEWS={
 async suppliers(){const my="suppliers";const r=await api("suppliers.list");const conf=r.suppliers.filter(s=>s.status==="confirmed"),dr=r.suppliers.filter(s=>s.status==="draft");
 if(tab===my)$("view").innerHTML=`<div class="card row"><b>Suppliers · ${conf.length} confirmed · ${dr.length} drafts</b>
-<button class="go" title="Reads your website and lists the businesses it mentions. You confirm each one." onclick="find()">Find suppliers on my site</button></div>`+
+<button class="go" id="findbtn" data-testid="find" title="Reads your website and lists the businesses it mentions. You confirm each one." onclick="find()">Find suppliers on my site</button></div>`+
 dr.map(s=>`<div class="card"><b>${esc(s.name)}</b> · ${esc(s.kind.replace("_"," "))} <span class="mut">(${s.confidence}%)</span>
 <p class="q">Found on ${esc(s.evidence_of_source.source.replace("site:",""))}: “${esc(s.evidence_of_source.text)}”${s.evidence_of_source.instruction_like?' <span class="chip no" title="This text tries to instruct an AI. It was not acted on.">instruction-like: ignored</span>':''}</p>
 <div class="row"><button class="go" title="Adds this business as a supplier. Nothing is sent to them yet." onclick="setSup('${s.supplier_id}','confirmed')">Confirm</button>
@@ -205,5 +206,8 @@ let proofOpen=null;
 async function verifyAgain(id){const v=document.querySelector("[data-testid=proof-verdict]");v.textContent="Checking…";v.className="big";
 const r=await api("evidence.get",{evidence_id:id});if(proofOpen!==id||$("proof").hidden)return;   // closed meanwhile: a late answer never reopens it
 v.textContent=r.verified?"✓ The record matches.":"✕ Doesn't match.";v.className="big"+(r.verified?"":" no")}
-rail();go("suppliers");
+// CR 66 · the start page's links: #find, #drawer, #activity… open that tab; #proof=<id> opens that proof over Bookings
+const h0=decodeURIComponent(location.hash.slice(1)),pf=h0.startsWith("proof=")?h0.slice(6):null;
+rail();go(pf?"bookings":h0==="find"?"suppliers":TABS.some(([k])=>k===h0)?h0:"suppliers").then(()=>{if(h0==="find"&&$("findbtn"))$("findbtn").focus();if(pf)proof(pf).catch(()=>{})});
+addEventListener("hashchange",()=>location.reload());   // a start-page link opened over this tab: honour it
 </script>"""

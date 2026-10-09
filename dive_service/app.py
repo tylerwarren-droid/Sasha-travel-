@@ -308,6 +308,8 @@ async def status_json(slug: str, bundle_id: str):
 
 from . import console as _console   # noqa: E402
 _console.bind(app, db, _console_ok)
+from . import start as _start   # noqa: E402   CR 66 · Tyler's start page
+_start.bind(app, db, _console_ok)
 
 
 @app.on_event("startup")

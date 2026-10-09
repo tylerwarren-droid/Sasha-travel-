@@ -83,7 +83,7 @@ async def run_read(s, sid: str) -> None:
                 "values (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, 'reader', ?)", R.new_id("sit"), sid, k, dumps(data), x["source_url"][:400], x["quote"][:600],
                 int(x["quote_found"]), int(x["instruction_like"]), int(x["confidence"]), ts())
     op = d.get("operator") or {}
-    _upd(s, sid, state="read", why=None, name=(op.get("name") or row["host"])[:120], model=config.READER_MODEL,
+    _upd(s, sid, state="read", why=None, name=(op.get("name") or row["host"])[:120], model=(got.get("usage") or {}).get("model") or "AgAPI magellan.read_site",
          summary=dumps({"summary": (op.get("summary") or "")[:600], "location": (op.get("location") or "")[:120],
                         "instruction_like": d.get("instruction_like") or []}))
 

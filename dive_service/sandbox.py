@@ -11,7 +11,7 @@ from . import config
 
 async def _http(op: str, body: dict, headers: dict) -> Tuple[int, dict]:
     import httpx
-    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as c:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(300.0 if op == "magellan.read_site" else 30.0)) as c:   # CR 69: a site read takes minutes
         r = await c.post(f"{config.SANDBOX_URL}/v1/{op}", content=json.dumps(body), headers=headers)
     return r.status_code, r.json()
 

@@ -62,6 +62,16 @@ class FakeSandbox:
         self.windows[b["number"]] = True
         return self.ok({"reply_id": rid, "received_at": now(), "opted_out": False, "window_open_until": now()})
 
+    magellan = None          # CR 69 · a test sets it: a result dict, or ("error", code, rule, why)
+    magellan_calls: list = []
+
+    def magellan_read_site(self, b, h):
+        self.magellan_calls.append(b)
+        m = self.magellan
+        if isinstance(m, tuple):
+            return self.err(m[1], {"rule": m[2], "why": m[3]})
+        return self.ok(m) if m else self.err("upstream_unreachable", {"rule": "ai_off", "why": "The AI reader is off."})
+
     def messages_replies(self, b, h):
         return self.ok({"replies": [{"reply_id": r["reply_id"], "from": {"number": {"text": r["number"]}},
                                      "text": R.wrap(r["text"], "whatsapp_recipient", r["received_at"][:19] + "Z"), "received_at": r["received_at"]}

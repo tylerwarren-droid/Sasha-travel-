@@ -48,6 +48,13 @@ class ExplicitYes(unittest.TestCase):
                 self.assertEqual(R.explicit_yes(c["said"], c["lang"]), c["explicit_yes"])
         self.assertEqual(len(cases), 38)                                  # v1.0: +12 question/request cases
 
+    def test_apostrophe_errata(self):
+        """EU's frozen reference passes "Yes, don't book it" as a yes (the apostrophe becomes a space). Never here."""
+        for said in ("Yes, don't book it", "Yes, don’t book it", "yes, I don't want that"):
+            self.assertFalse(R.explicit_yes(said, "en"), said)
+        for said in ("OK, let's do it", "Perfect, let’s do it"):
+            self.assertTrue(R.explicit_yes(said, "en"), said)
+
     def test_the_lists_come_from_the_frozen_file(self):
         L = json.loads((V / "approval-language.json").read_text(encoding="utf-8"))
         self.assertEqual(L["version"], "1.0")

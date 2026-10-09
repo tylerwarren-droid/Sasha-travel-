@@ -280,7 +280,7 @@ class DemoSafety(Base):
         uid = self.user()
         h = self.venue_hold(uid)
         for said in ("Yes — what are my cancellation terms?", "Sure, find me dinner options", "yeah no", "sí, pero luego",
-                     "What are my cancellation terms?", "vale, espera"):
+                     "What are my cancellation terms?", "vale, espera", "Yes, don't book it", "Yes, don’t book it"):
             with self.subTest(said):
                 self.call("sandbox.simulate_approval", {"read_back_id": h["read_back"]["read_back_id"], "said": said},
                           expect="no_explicit_yes")

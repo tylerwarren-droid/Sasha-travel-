@@ -100,8 +100,12 @@ def _lang() -> dict:
 
 
 def _norm_said(s: str) -> str:
+    """EU's normalisation with ONE errata fix (CR 61, reported to EU): apostrophes are DELETED, not turned into spaces — EU's frozen
+    rule makes "don't" → "don t" (no negation matches it: its own reference passes "Yes, don't book it" as a yes) and "let's" →
+    "let s". Deleted they become "dont" and "lets", both in EU's lists. Every v1.0 vector keeps its expected answer."""
     s = unicodedata.normalize("NFC", s).lower()
-    s = re.sub(r"[¡¿!?.,;:\"'“”‘’()—–]", " ", s)
+    s = re.sub(r"['‘’]", "", s)
+    s = re.sub(r"[¡¿!?.,;:\"“”()—–]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
 

@@ -1,0 +1,480 @@
+{
+  "version": "dive-1.2-draft.1",
+  "rule": "EU 212 bundles.md §3 · leg states → the bundle state + the customer's exact sentence. An outage is never 'unavailable'; a NO is the supplier's only 'no'; nothing is charged for an unconfirmed leg.",
+  "cases": [
+    {
+      "id": "BN-1",
+      "name": "all confirmed, hotel booked",
+      "legs": [
+        {
+          "supplier": "Aegean Boats",
+          "title": "Guided dive + boat",
+          "required": true,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Kyma Gear",
+          "title": "Gear for 4",
+          "required": true,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Taverna Agios",
+          "title": "Lunch",
+          "required": false,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Hotel Kyma View",
+          "title": "Hotel",
+          "required": true,
+          "state": "booked"
+        }
+      ],
+      "context": {
+        "operator": "Blue Kyma",
+        "date": "Tue 21 OCT 2026",
+        "total_without": "€750"
+      },
+      "expect": {
+        "state": "confirmed",
+        "customer_sentence": "All confirmed. Here's your plan."
+      }
+    },
+    {
+      "id": "BN-2",
+      "name": "waiting for two",
+      "legs": [
+        {
+          "supplier": "Aegean Boats",
+          "title": "Guided dive + boat",
+          "required": true,
+          "state": "requested"
+        },
+        {
+          "supplier": "Kyma Gear",
+          "title": "Gear for 4",
+          "required": true,
+          "state": "requested"
+        },
+        {
+          "supplier": "Taverna Agios",
+          "title": "Lunch",
+          "required": false,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Hotel Kyma View",
+          "title": "Hotel",
+          "required": true,
+          "state": "held"
+        }
+      ],
+      "context": {
+        "operator": "Blue Kyma",
+        "date": "Tue 21 OCT 2026",
+        "total_without": "€750"
+      },
+      "expect": {
+        "state": "in_progress",
+        "customer_sentence": "Waiting for Aegean Boats and Kyma Gear to confirm. Nothing is charged until they do."
+      }
+    },
+    {
+      "id": "BN-3",
+      "name": "waiting for one",
+      "legs": [
+        {
+          "supplier": "Aegean Boats",
+          "title": "Guided dive + boat",
+          "required": true,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Kyma Gear",
+          "title": "Gear for 4",
+          "required": true,
+          "state": "requested"
+        },
+        {
+          "supplier": "Taverna Agios",
+          "title": "Lunch",
+          "required": false,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Hotel Kyma View",
+          "title": "Hotel",
+          "required": true,
+          "state": "held"
+        }
+      ],
+      "context": {
+        "operator": "Blue Kyma",
+        "date": "Tue 21 OCT 2026",
+        "total_without": "€750"
+      },
+      "expect": {
+        "state": "in_progress",
+        "customer_sentence": "Waiting for Kyma Gear to confirm. Nothing is charged until they do."
+      }
+    },
+    {
+      "id": "BN-4",
+      "name": "the boat says NO (required)",
+      "legs": [
+        {
+          "supplier": "Aegean Boats",
+          "title": "Guided dive + boat",
+          "required": true,
+          "state": "declined"
+        },
+        {
+          "supplier": "Kyma Gear",
+          "title": "Gear for 4",
+          "required": true,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Taverna Agios",
+          "title": "Lunch",
+          "required": false,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Hotel Kyma View",
+          "title": "Hotel",
+          "required": true,
+          "state": "held"
+        }
+      ],
+      "context": {
+        "operator": "Blue Kyma",
+        "date": "Tue 21 OCT 2026",
+        "total_without": "€750"
+      },
+      "expect": {
+        "state": "failed",
+        "customer_sentence": "Aegean Boats can't take your group on Tue 21 OCT 2026. Nothing has been charged. Blue Kyma will offer you another time."
+      }
+    },
+    {
+      "id": "BN-5",
+      "name": "the boat never answers",
+      "legs": [
+        {
+          "supplier": "Aegean Boats",
+          "title": "Guided dive + boat",
+          "required": true,
+          "state": "no_answer"
+        },
+        {
+          "supplier": "Kyma Gear",
+          "title": "Gear for 4",
+          "required": true,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Taverna Agios",
+          "title": "Lunch",
+          "required": false,
+          "state": "requested"
+        },
+        {
+          "supplier": "Hotel Kyma View",
+          "title": "Hotel",
+          "required": true,
+          "state": "held"
+        }
+      ],
+      "context": {
+        "operator": "Blue Kyma",
+        "date": "Tue 21 OCT 2026",
+        "total_without": "€750"
+      },
+      "expect": {
+        "state": "failed",
+        "customer_sentence": "Aegean Boats didn't confirm in time. Nothing has been charged. Blue Kyma is following up."
+      }
+    },
+    {
+      "id": "BN-6",
+      "name": "unreachable before the deadline: not a no",
+      "legs": [
+        {
+          "supplier": "Aegean Boats",
+          "title": "Guided dive + boat",
+          "required": true,
+          "state": "unreachable"
+        },
+        {
+          "supplier": "Kyma Gear",
+          "title": "Gear for 4",
+          "required": true,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Taverna Agios",
+          "title": "Lunch",
+          "required": false,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Hotel Kyma View",
+          "title": "Hotel",
+          "required": true,
+          "state": "held"
+        }
+      ],
+      "context": {
+        "operator": "Blue Kyma",
+        "date": "Tue 21 OCT 2026",
+        "total_without": "€750"
+      },
+      "expect": {
+        "state": "in_progress",
+        "customer_sentence": "We couldn't reach Aegean Boats just now. This isn't a no. We're trying again."
+      }
+    },
+    {
+      "id": "BN-7",
+      "name": "unreachable at the deadline",
+      "legs": [
+        {
+          "supplier": "Aegean Boats",
+          "title": "Guided dive + boat",
+          "required": true,
+          "state": "unreachable"
+        },
+        {
+          "supplier": "Kyma Gear",
+          "title": "Gear for 4",
+          "required": true,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Taverna Agios",
+          "title": "Lunch",
+          "required": false,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Hotel Kyma View",
+          "title": "Hotel",
+          "required": true,
+          "state": "held"
+        }
+      ],
+      "context": {
+        "operator": "Blue Kyma",
+        "date": "Tue 21 OCT 2026",
+        "total_without": "€750"
+      },
+      "options": {
+        "deadline_passed": true
+      },
+      "expect": {
+        "state": "failed",
+        "customer_sentence": "We couldn't reach Aegean Boats in time. This isn't a no. Nothing has been charged. Blue Kyma is following up."
+      }
+    },
+    {
+      "id": "BN-8",
+      "name": "optional lunch says NO",
+      "legs": [
+        {
+          "supplier": "Aegean Boats",
+          "title": "Guided dive + boat",
+          "required": true,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Kyma Gear",
+          "title": "Gear for 4",
+          "required": true,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Taverna Agios",
+          "title": "Lunch",
+          "required": false,
+          "state": "declined"
+        },
+        {
+          "supplier": "Hotel Kyma View",
+          "title": "Hotel",
+          "required": true,
+          "state": "held"
+        }
+      ],
+      "context": {
+        "operator": "Blue Kyma",
+        "date": "Tue 21 OCT 2026",
+        "total_without": "€750"
+      },
+      "expect": {
+        "state": "in_progress",
+        "customer_sentence": "Everything is confirmed except lunch: Taverna Agios can't take it. Your total would be €750. Confirm without it?"
+      }
+    },
+    {
+      "id": "BN-9",
+      "name": "all confirmed, hotel still held",
+      "legs": [
+        {
+          "supplier": "Aegean Boats",
+          "title": "Guided dive + boat",
+          "required": true,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Kyma Gear",
+          "title": "Gear for 4",
+          "required": true,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Taverna Agios",
+          "title": "Lunch",
+          "required": false,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Hotel Kyma View",
+          "title": "Hotel",
+          "required": true,
+          "state": "held"
+        }
+      ],
+      "context": {
+        "operator": "Blue Kyma",
+        "date": "Tue 21 OCT 2026",
+        "total_without": "€750"
+      },
+      "expect": {
+        "state": "in_progress",
+        "customer_sentence": "Confirming with the suppliers. Nothing is charged until they do."
+      }
+    },
+    {
+      "id": "BN-10",
+      "name": "cancelled after a partial confirm",
+      "legs": [
+        {
+          "supplier": "Aegean Boats",
+          "title": "Guided dive + boat",
+          "required": true,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Kyma Gear",
+          "title": "Gear for 4",
+          "required": true,
+          "state": "requested"
+        },
+        {
+          "supplier": "Taverna Agios",
+          "title": "Lunch",
+          "required": false,
+          "state": "confirmed"
+        },
+        {
+          "supplier": "Hotel Kyma View",
+          "title": "Hotel",
+          "required": true,
+          "state": "held"
+        }
+      ],
+      "context": {
+        "operator": "Blue Kyma",
+        "date": "Tue 21 OCT 2026",
+        "total_without": "€750"
+      },
+      "options": {
+        "cancelled": true
+      },
+      "expect": {
+        "state": "cancelled",
+        "customer_sentence": "Your booking is cancelled. Nothing more will be charged."
+      }
+    },
+    {
+      "id": "BN-11",
+      "name": "gear unreachable while the boat waits",
+      "legs": [
+        {
+          "supplier": "Aegean Boats",
+          "title": "Guided dive + boat",
+          "required": true,
+          "state": "requested"
+        },
+        {
+          "supplier": "Kyma Gear",
+          "title": "Gear for 4",
+          "required": true,
+          "state": "unreachable"
+        },
+        {
+          "supplier": "Taverna Agios",
+          "title": "Lunch",
+          "required": false,
+          "state": "pending"
+        },
+        {
+          "supplier": "Hotel Kyma View",
+          "title": "Hotel",
+          "required": true,
+          "state": "held"
+        }
+      ],
+      "context": {
+        "operator": "Blue Kyma",
+        "date": "Tue 21 OCT 2026",
+        "total_without": "€750"
+      },
+      "expect": {
+        "state": "in_progress",
+        "customer_sentence": "We couldn't reach Kyma Gear just now. This isn't a no. We're trying again."
+      }
+    },
+    {
+      "id": "BN-12",
+      "name": "everything released after a required NO",
+      "legs": [
+        {
+          "supplier": "Aegean Boats",
+          "title": "Guided dive + boat",
+          "required": true,
+          "state": "declined"
+        },
+        {
+          "supplier": "Kyma Gear",
+          "title": "Gear for 4",
+          "required": true,
+          "state": "released"
+        },
+        {
+          "supplier": "Taverna Agios",
+          "title": "Lunch",
+          "required": false,
+          "state": "released"
+        },
+        {
+          "supplier": "Hotel Kyma View",
+          "title": "Hotel",
+          "required": true,
+          "state": "released"
+        }
+      ],
+      "context": {
+        "operator": "Blue Kyma",
+        "date": "Tue 21 OCT 2026",
+        "total_without": "€750"
+      },
+      "expect": {
+        "state": "failed",
+        "customer_sentence": "Aegean Boats can't take your group on Tue 21 OCT 2026. Nothing has been charged. Blue Kyma will offer you another time."
+      }
+    }
+  ]
+}

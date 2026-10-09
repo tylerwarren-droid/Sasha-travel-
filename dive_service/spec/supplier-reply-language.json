@@ -1,0 +1,21 @@
+{
+  "version": "dive-1.2-draft.1",
+  "rule": "EU 212 api.md §New vectors 1 · a supplier's reply → yes | no | unclear. Normalised: NFD, accents and Greek tonos stripped, lower case, apostrophes deleted (as AP6 1.0.1) and split (1.1), punctuation to spaces. Order: no letters (emoji, '?') → unclear · a question → unclear · phrases matched longest first and consumed (so 'no problem' is a yes and its 'no' is gone) · yes AND no → unclear · no → no · yes with a condition word → unclear (a condition is not a yes) · yes → yes · nothing → unclear. Emoji never decide. Unclear goes to the operator; AgAPI never guesses.",
+  "languages": {
+    "en": {
+      "yes": ["yes", "yep", "yeah", "yup", "ok", "okay", "confirmed", "confirm", "sure", "done", "booked", "fine", "perfect", "no problem", "all good", "go ahead", "see you then"],
+      "no": ["no", "nope", "full", "fully booked", "booked up", "sorry", "cannot", "cant", "can not", "unavailable", "not available", "closed", "not", "decline", "declined", "impossible"],
+      "conditions": ["but", "only", "except", "unless", "instead", "however", "maybe", "perhaps", "if", "later", "earlier", "max", "maximum", "provided"]
+    },
+    "el": {
+      "yes": ["ναι", "εντάξει", "οκ", "βεβαίως", "βεβαιως", "σίγουρα", "κλείστηκε", "επιβεβαιώνω", "κανένα πρόβλημα", "μια χαρά"],
+      "no": ["όχι", "οχι", "γεμάτο", "γεμάτοι", "δυστυχώς", "λυπάμαι", "δεν", "αδύνατον", "κλειστά"],
+      "conditions": ["αλλά", "μόνο", "εκτός", "αν", "ίσως", "μάξιμουμ"]
+    },
+    "es": {
+      "yes": ["sí", "si", "vale", "ok", "confirmado", "confirmada", "de acuerdo", "perfecto", "claro", "hecho", "sin problema", "reservado"],
+      "no": ["no", "completo", "lo siento", "imposible", "cerrado", "no podemos", "lleno", "nada"],
+      "conditions": ["pero", "solo", "sólo", "excepto", "salvo", "aunque", "quizás", "quizas", "tal vez", "máximo", "maximo"]
+    }
+  }
+}

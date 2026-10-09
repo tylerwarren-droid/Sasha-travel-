@@ -1,0 +1,1463 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://agapi.kanoe.dev/v1/dive/dive.schema.json",
+ "title": "DIVE (EU 212) — the operator's API on AgAPI · 1.2 draft, in dive_service ONLY (not in AgAPI until Tyler says so)",
+ "$defs": {
+  "untrusted_text": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "text",
+    "source",
+    "retrieved_at"
+   ],
+   "properties": {
+    "text": {
+     "type": "string",
+     "maxLength": 2000
+    },
+    "source": {
+     "type": "string"
+    },
+    "retrieved_at": {
+     "type": "string",
+     "format": "date-time",
+     "pattern": "Z$"
+    },
+    "truncated": {
+     "type": "boolean"
+    },
+    "instruction_like": {
+     "type": "boolean"
+    }
+   }
+  },
+  "money": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "amount_minor",
+    "currency"
+   ],
+   "properties": {
+    "amount_minor": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "currency": {
+     "type": "string",
+     "pattern": "^[A-Z]{3}$"
+    },
+    "unit": {
+     "enum": [
+      "person",
+      "group",
+      "item"
+     ]
+    }
+   }
+  },
+  "timestamp": {
+   "type": "string",
+   "format": "date-time",
+   "pattern": "Z$"
+  },
+  "sha256": {
+   "type": "string",
+   "pattern": "^sha256:[0-9a-f]{64}$"
+  },
+  "operator": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "operator_id",
+    "slug",
+    "name",
+    "timezone",
+    "languages"
+   ],
+   "properties": {
+    "operator_id": {
+     "type": "string",
+     "pattern": "^opr_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "slug": {
+     "type": "string",
+     "pattern": "^[a-z0-9-]{3,40}$"
+    },
+    "name": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 80
+    },
+    "timezone": {
+     "type": "string",
+     "pattern": "^[A-Za-z_]+/[A-Za-z_]+$"
+    },
+    "languages": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "en",
+       "el",
+       "es"
+      ]
+     },
+     "minItems": 1
+    },
+    "site_url": {
+     "type": "string"
+    },
+    "booking_page": {
+     "type": "string"
+    },
+    "footer": {
+     "type": "string"
+    },
+    "mode": {
+     "enum": [
+      "test",
+      "live"
+     ]
+    }
+   }
+  },
+  "supplier": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "supplier_id",
+    "operator_id",
+    "name",
+    "kind",
+    "status",
+    "source"
+   ],
+   "properties": {
+    "supplier_id": {
+     "type": "string",
+     "pattern": "^sup_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "operator_id": {
+     "type": "string",
+     "pattern": "^opr_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "name": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 120
+    },
+    "kind": {
+     "enum": [
+      "dive_shop",
+      "boat",
+      "gear",
+      "restaurant",
+      "hotel_feed",
+      "flight_feed",
+      "other"
+     ]
+    },
+    "status": {
+     "enum": [
+      "draft",
+      "confirmed",
+      "paused",
+      "rejected"
+     ]
+    },
+    "source": {
+     "enum": [
+      "magellan_draft",
+      "manual"
+     ]
+    },
+    "evidence_of_source": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "text",
+      "source",
+      "retrieved_at"
+     ],
+     "properties": {
+      "text": {
+       "type": "string",
+       "maxLength": 2000
+      },
+      "source": {
+       "type": "string"
+      },
+      "retrieved_at": {
+       "type": "string",
+       "format": "date-time",
+       "pattern": "Z$"
+      },
+      "truncated": {
+       "type": "boolean"
+      },
+      "instruction_like": {
+       "type": "boolean"
+      }
+     }
+    },
+    "confidence": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 100
+    },
+    "contacts": {
+     "type": "object"
+    },
+    "channels": {
+     "type": "array",
+     "items": {
+      "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/channel"
+     }
+    }
+   }
+  },
+  "channel": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "channel_id",
+    "supplier_id",
+    "rung",
+    "kind",
+    "address",
+    "verified",
+    "answer_timeout_s",
+    "language"
+   ],
+   "properties": {
+    "channel_id": {
+     "type": "string",
+     "pattern": "^chn_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "supplier_id": {
+     "type": "string",
+     "pattern": "^sup_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "rung": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 4
+    },
+    "kind": {
+     "enum": [
+      "partner_api",
+      "feed",
+      "web_form",
+      "email",
+      "whatsapp"
+     ]
+    },
+    "address": {
+     "type": "string",
+     "maxLength": 300
+    },
+    "verified": {
+     "type": "boolean"
+    },
+    "verified_at": {
+     "type": "string",
+     "format": "date-time",
+     "pattern": "Z$"
+    },
+    "verified_how": {
+     "type": "string"
+    },
+    "answer_timeout_s": {
+     "type": "integer",
+     "minimum": 300,
+     "maximum": 86400
+    },
+    "quiet_hours": {
+     "type": "string",
+     "pattern": "^\\d{2}:\\d{2}-\\d{2}:\\d{2}$"
+    },
+    "language": {
+     "enum": [
+      "en",
+      "el",
+      "es"
+     ]
+    }
+   }
+  },
+  "product": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "product_id",
+    "supplier_id",
+    "title",
+    "unit",
+    "price",
+    "policy"
+   ],
+   "properties": {
+    "product_id": {
+     "type": "string",
+     "pattern": "^prd_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "supplier_id": {
+     "type": "string",
+     "pattern": "^sup_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "title": {
+     "type": "string",
+     "maxLength": 120
+    },
+    "unit": {
+     "enum": [
+      "person",
+      "group",
+      "item"
+     ]
+    },
+    "price": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "amount_minor",
+      "currency"
+     ],
+     "properties": {
+      "amount_minor": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "currency": {
+       "type": "string",
+       "pattern": "^[A-Z]{3}$"
+      },
+      "unit": {
+       "enum": [
+        "person",
+        "group",
+        "item"
+       ]
+      }
+     }
+    },
+    "capacity": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "duration_minutes": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "policy": {
+     "enum": [
+      "instant",
+      "request_confirm",
+      "on_request_only"
+     ]
+    },
+    "cutoff": {
+     "type": "string",
+     "description": "e.g. '18:00 the day before'"
+    }
+   }
+  },
+  "package": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "package_id",
+    "title",
+    "components",
+    "price"
+   ],
+   "properties": {
+    "package_id": {
+     "type": "string",
+     "pattern": "^pkg_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "operator_id": {
+     "type": "string",
+     "pattern": "^opr_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "title": {
+     "type": "string",
+     "maxLength": 120
+    },
+    "description": {
+     "type": "string",
+     "maxLength": 600
+    },
+    "published": {
+     "type": "boolean"
+    },
+    "components": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "product_id",
+       "required",
+       "quantity_rule",
+       "offset_minutes"
+      ],
+      "properties": {
+       "product_id": {
+        "type": "string",
+        "pattern": "^prd_[0-9A-HJKMNP-TV-Z]{26}$"
+       },
+       "required": {
+        "type": "boolean"
+       },
+       "quantity_rule": {
+        "enum": [
+         "per_person",
+         "per_group",
+         "per_item"
+        ]
+       },
+       "offset_minutes": {
+        "type": "integer"
+       },
+       "label": {
+        "type": "string"
+       }
+      }
+     }
+    },
+    "price": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "amount_minor",
+      "currency"
+     ],
+     "properties": {
+      "amount_minor": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "currency": {
+       "type": "string",
+       "pattern": "^[A-Z]{3}$"
+      },
+      "unit": {
+       "enum": [
+        "person",
+        "group",
+        "item"
+       ]
+      }
+     }
+    }
+   }
+  },
+  "leg": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "leg_id",
+    "product_id",
+    "supplier_id",
+    "channel_id",
+    "state",
+    "required"
+   ],
+   "properties": {
+    "leg_id": {
+     "type": "string",
+     "pattern": "^leg_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "product_id": {
+     "type": "string",
+     "pattern": "^prd_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "supplier_id": {
+     "type": "string",
+     "pattern": "^sup_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "channel_id": {
+     "type": "string",
+     "pattern": "^chn_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "required": {
+     "type": "boolean"
+    },
+    "title": {
+     "type": "string"
+    },
+    "supplier": {
+     "type": "string"
+    },
+    "channel_kind": {
+     "type": "string"
+    },
+    "state": {
+     "enum": [
+      "pending",
+      "held",
+      "requested",
+      "confirmed",
+      "declined",
+      "no_answer",
+      "unreachable",
+      "released",
+      "cancelled",
+      "booked"
+     ]
+    },
+    "starts_at": {
+     "type": "string",
+     "format": "date-time",
+     "pattern": "Z$"
+    },
+    "requested_at": {
+     "type": "string",
+     "format": "date-time",
+     "pattern": "Z$"
+    },
+    "answer_by": {
+     "type": "string",
+     "format": "date-time",
+     "pattern": "Z$"
+    },
+    "answered_at": {
+     "type": "string",
+     "format": "date-time",
+     "pattern": "Z$"
+    },
+    "reply_id": {
+     "type": "string"
+    },
+    "reply": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "text",
+      "source",
+      "retrieved_at"
+     ],
+     "properties": {
+      "text": {
+       "type": "string",
+       "maxLength": 2000
+      },
+      "source": {
+       "type": "string"
+      },
+      "retrieved_at": {
+       "type": "string",
+       "format": "date-time",
+       "pattern": "Z$"
+      },
+      "truncated": {
+       "type": "boolean"
+      },
+      "instruction_like": {
+       "type": "boolean"
+      }
+     }
+    },
+    "parse": {
+     "enum": [
+      "yes",
+      "no",
+      "unclear"
+     ]
+    },
+    "evidence_id": {
+     "type": "string",
+     "pattern": "^evd_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "reference": {
+     "type": "string"
+    }
+   }
+  },
+  "bundle": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "bundle_id",
+    "party",
+    "starts_at",
+    "legs",
+    "total",
+    "read_back_id",
+    "state"
+   ],
+   "properties": {
+    "bundle_id": {
+     "type": "string",
+     "pattern": "^bnd_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "package_id": {
+     "type": "string",
+     "pattern": "^pkg_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "party": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 30
+    },
+    "starts_at": {
+     "type": "string",
+     "format": "date-time",
+     "pattern": "Z$"
+    },
+    "legs": {
+     "type": "array",
+     "items": {
+      "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/leg"
+     }
+    },
+    "total": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "amount_minor",
+      "currency"
+     ],
+     "properties": {
+      "amount_minor": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "currency": {
+       "type": "string",
+       "pattern": "^[A-Z]{3}$"
+      },
+      "unit": {
+       "enum": [
+        "person",
+        "group",
+        "item"
+       ]
+      }
+     }
+    },
+    "read_back_id": {
+     "type": "string",
+     "pattern": "^rb_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "read_back": {
+     "type": "object"
+    },
+    "customer_sentence": {
+     "type": "string"
+    },
+    "state": {
+     "enum": [
+      "quoted",
+      "approved",
+      "in_progress",
+      "confirmed",
+      "partially_confirmed",
+      "failed",
+      "cancelled"
+     ]
+    },
+    "evidence_id": {
+     "type": "string",
+     "pattern": "^evd_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "expires_at": {
+     "type": "string",
+     "format": "date-time",
+     "pattern": "Z$"
+    }
+   }
+  },
+  "operators_put_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "slug",
+    "name",
+    "timezone",
+    "languages"
+   ],
+   "properties": {
+    "slug": {
+     "type": "string",
+     "pattern": "^[a-z0-9-]{3,40}$"
+    },
+    "name": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 80
+    },
+    "timezone": {
+     "type": "string",
+     "pattern": "^[A-Za-z_]+/[A-Za-z_]+$"
+    },
+    "languages": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "en",
+       "el",
+       "es"
+      ]
+     },
+     "minItems": 1
+    },
+    "site_url": {
+     "type": "string"
+    },
+    "footer": {
+     "type": "string"
+    }
+   }
+  },
+  "operators_put_out": {
+   "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/operator"
+  },
+  "suppliers_draft_from_site_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [],
+   "properties": {
+    "url": {
+     "type": "string"
+    }
+   }
+  },
+  "suppliers_draft_from_site_out": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "drafts",
+    "coverage"
+   ],
+   "properties": {
+    "drafts": {
+     "type": "array",
+     "items": {
+      "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/supplier"
+     }
+    },
+    "coverage": {
+     "type": "object"
+    }
+   }
+  },
+  "suppliers_put_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [],
+   "properties": {
+    "supplier_id": {
+     "type": "string",
+     "pattern": "^sup_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "name": {
+     "type": "string"
+    },
+    "kind": {
+     "enum": [
+      "dive_shop",
+      "boat",
+      "gear",
+      "restaurant",
+      "hotel_feed",
+      "flight_feed",
+      "other"
+     ]
+    },
+    "status": {
+     "enum": [
+      "confirmed",
+      "paused",
+      "rejected"
+     ]
+    }
+   }
+  },
+  "suppliers_put_out": {
+   "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/supplier"
+  },
+  "suppliers_list_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [],
+   "properties": {
+    "status": {
+     "type": "string"
+    }
+   }
+  },
+  "suppliers_list_out": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "suppliers"
+   ],
+   "properties": {
+    "suppliers": {
+     "type": "array",
+     "items": {
+      "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/supplier"
+     }
+    }
+   }
+  },
+  "channels_put_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "supplier_id",
+    "kind",
+    "address"
+   ],
+   "properties": {
+    "supplier_id": {
+     "type": "string",
+     "pattern": "^sup_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "kind": {
+     "enum": [
+      "partner_api",
+      "feed",
+      "web_form",
+      "email",
+      "whatsapp"
+     ]
+    },
+    "address": {
+     "type": "string"
+    },
+    "language": {
+     "enum": [
+      "en",
+      "el",
+      "es"
+     ]
+    },
+    "answer_timeout_s": {
+     "type": "integer",
+     "minimum": 300,
+     "maximum": 86400
+    },
+    "quiet_hours": {
+     "type": "string",
+     "pattern": "^\\d{2}:\\d{2}-\\d{2}:\\d{2}$"
+    }
+   }
+  },
+  "channels_put_out": {
+   "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/channel"
+  },
+  "channels_verify_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "channel_id"
+   ],
+   "properties": {
+    "channel_id": {
+     "type": "string",
+     "pattern": "^chn_[0-9A-HJKMNP-TV-Z]{26}$"
+    }
+   }
+  },
+  "channels_verify_out": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "channel_id",
+    "state"
+   ],
+   "properties": {
+    "channel_id": {
+     "type": "string",
+     "pattern": "^chn_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "state": {
+     "enum": [
+      "sent",
+      "verified",
+      "failed"
+     ]
+    },
+    "evidence_id": {
+     "type": "string",
+     "pattern": "^evd_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "say": {
+     "type": "string"
+    }
+   }
+  },
+  "products_put_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "supplier_id",
+    "title",
+    "unit",
+    "price",
+    "policy"
+   ],
+   "properties": {
+    "supplier_id": {
+     "type": "string",
+     "pattern": "^sup_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "title": {
+     "type": "string",
+     "maxLength": 120
+    },
+    "unit": {
+     "enum": [
+      "person",
+      "group",
+      "item"
+     ]
+    },
+    "price": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "amount_minor",
+      "currency"
+     ],
+     "properties": {
+      "amount_minor": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "currency": {
+       "type": "string",
+       "pattern": "^[A-Z]{3}$"
+      },
+      "unit": {
+       "enum": [
+        "person",
+        "group",
+        "item"
+       ]
+      }
+     }
+    },
+    "capacity": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "duration_minutes": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "policy": {
+     "enum": [
+      "instant",
+      "request_confirm",
+      "on_request_only"
+     ]
+    },
+    "cutoff": {
+     "type": "string",
+     "description": "e.g. '18:00 the day before'"
+    }
+   }
+  },
+  "products_put_out": {
+   "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/product"
+  },
+  "products_list_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [],
+   "properties": {}
+  },
+  "products_list_out": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "products"
+   ],
+   "properties": {
+    "products": {
+     "type": "array",
+     "items": {
+      "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/product"
+     }
+    }
+   }
+  },
+  "packages_put_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "title",
+    "components",
+    "price"
+   ],
+   "properties": {
+    "title": {
+     "type": "string",
+     "maxLength": 120
+    },
+    "description": {
+     "type": "string",
+     "maxLength": 600
+    },
+    "components": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "product_id",
+       "required",
+       "quantity_rule",
+       "offset_minutes"
+      ],
+      "properties": {
+       "product_id": {
+        "type": "string",
+        "pattern": "^prd_[0-9A-HJKMNP-TV-Z]{26}$"
+       },
+       "required": {
+        "type": "boolean"
+       },
+       "quantity_rule": {
+        "enum": [
+         "per_person",
+         "per_group",
+         "per_item"
+        ]
+       },
+       "offset_minutes": {
+        "type": "integer"
+       },
+       "label": {
+        "type": "string"
+       }
+      }
+     }
+    },
+    "price": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "amount_minor",
+      "currency"
+     ],
+     "properties": {
+      "amount_minor": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "currency": {
+       "type": "string",
+       "pattern": "^[A-Z]{3}$"
+      },
+      "unit": {
+       "enum": [
+        "person",
+        "group",
+        "item"
+       ]
+      }
+     }
+    }
+   }
+  },
+  "packages_put_out": {
+   "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/package"
+  },
+  "packages_list_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [],
+   "properties": {}
+  },
+  "packages_list_out": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "packages"
+   ],
+   "properties": {
+    "packages": {
+     "type": "array",
+     "items": {
+      "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/package"
+     }
+    }
+   }
+  },
+  "operator_api_publish_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [],
+   "properties": {
+    "package_ids": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^pkg_[0-9A-HJKMNP-TV-Z]{26}$"
+     }
+    }
+   }
+  },
+  "operator_api_publish_out": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "base_url",
+    "docs_url",
+    "published"
+   ],
+   "properties": {
+    "base_url": {
+     "type": "string"
+    },
+    "docs_url": {
+     "type": "string"
+    },
+    "published": {
+     "type": "array"
+    }
+   }
+  },
+  "operator_keys_issue_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "label"
+   ],
+   "properties": {
+    "label": {
+     "type": "string",
+     "maxLength": 60
+    }
+   }
+  },
+  "operator_keys_issue_out": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "key_id",
+    "key",
+    "label"
+   ],
+   "properties": {
+    "key_id": {
+     "type": "string"
+    },
+    "key": {
+     "type": "string",
+     "pattern": "^opk_test_[A-Za-z0-9]{32}$"
+    },
+    "label": {
+     "type": "string"
+    }
+   }
+  },
+  "operator_keys_revoke_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "key_id"
+   ],
+   "properties": {
+    "key_id": {
+     "type": "string"
+    }
+   }
+  },
+  "operator_keys_revoke_out": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "key_id",
+    "state"
+   ],
+   "properties": {
+    "key_id": {
+     "type": "string"
+    },
+    "state": {
+     "const": "revoked"
+    }
+   }
+  },
+  "sandbox_supplier_reply_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "text"
+   ],
+   "description": "TEST ONLY: play a supplier's answer — to a booking request (leg_id) or to a channel verification (channel_id).",
+   "properties": {
+    "leg_id": {
+     "type": "string",
+     "pattern": "^leg_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "channel_id": {
+     "type": "string",
+     "pattern": "^chn_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "text": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 2000
+    }
+   },
+   "oneOf": [
+    {
+     "required": [
+      "leg_id"
+     ]
+    },
+    {
+     "required": [
+      "channel_id"
+     ]
+    }
+   ]
+  },
+  "sandbox_supplier_reply_out": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "leg_id",
+    "parse",
+    "leg_state"
+   ],
+   "properties": {
+    "leg_id": {
+     "type": "string",
+     "pattern": "^leg_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "parse": {
+     "enum": [
+      "yes",
+      "no",
+      "unclear"
+     ]
+    },
+    "leg_state": {
+     "type": "string"
+    },
+    "bundle_state": {
+     "type": "string"
+    }
+   }
+  },
+  "packages_get_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "package_id"
+   ],
+   "properties": {
+    "package_id": {
+     "type": "string",
+     "pattern": "^pkg_[0-9A-HJKMNP-TV-Z]{26}$"
+    }
+   }
+  },
+  "packages_get_out": {
+   "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/package"
+  },
+  "availability_check_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "package_id",
+    "date",
+    "party"
+   ],
+   "properties": {
+    "package_id": {
+     "type": "string",
+     "pattern": "^pkg_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "date": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "start_time": {
+     "type": "string",
+     "pattern": "^\\d{2}:\\d{2}$"
+    },
+    "party": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 30
+    }
+   }
+  },
+  "availability_check_out": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "package_id",
+    "legs",
+    "coverage"
+   ],
+   "properties": {
+    "package_id": {
+     "type": "string",
+     "pattern": "^pkg_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "legs": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "product_id",
+       "supplier",
+       "availability"
+      ],
+      "properties": {
+       "product_id": {
+        "type": "string",
+        "pattern": "^prd_[0-9A-HJKMNP-TV-Z]{26}$"
+       },
+       "supplier": {
+        "type": "string"
+       },
+       "availability": {
+        "enum": [
+         "available",
+         "likely",
+         "on_request",
+         "unknown"
+        ]
+       },
+       "words": {
+        "type": "string"
+       }
+      }
+     }
+    },
+    "coverage": {
+     "type": "object"
+    }
+   }
+  },
+  "bookings_quote_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "package_id",
+    "date",
+    "start_time",
+    "party",
+    "customer"
+   ],
+   "properties": {
+    "package_id": {
+     "type": "string",
+     "pattern": "^pkg_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "date": {
+     "type": "string"
+    },
+    "start_time": {
+     "type": "string"
+    },
+    "party": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 30
+    },
+    "options": {
+     "type": "object"
+    },
+    "customer": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "name"
+     ],
+     "properties": {
+      "name": {
+       "type": "string",
+       "maxLength": 80
+      },
+      "phone": {
+       "type": "string"
+      },
+      "email": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "bookings_quote_out": {
+   "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bundle"
+  },
+  "bookings_confirm_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "bundle_id"
+   ],
+   "properties": {
+    "bundle_id": {
+     "type": "string",
+     "pattern": "^bnd_[0-9A-HJKMNP-TV-Z]{26}$"
+    }
+   }
+  },
+  "bookings_confirm_out": {
+   "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bundle"
+  },
+  "bookings_status_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "bundle_id"
+   ],
+   "properties": {
+    "bundle_id": {
+     "type": "string",
+     "pattern": "^bnd_[0-9A-HJKMNP-TV-Z]{26}$"
+    }
+   }
+  },
+  "bookings_status_out": {
+   "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bundle"
+  },
+  "bookings_cancel_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "bundle_id"
+   ],
+   "properties": {
+    "bundle_id": {
+     "type": "string",
+     "pattern": "^bnd_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "legs": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^leg_[0-9A-HJKMNP-TV-Z]{26}$"
+     }
+    }
+   }
+  },
+  "bookings_cancel_out": {
+   "$ref": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bundle"
+  },
+  "sandbox_reset_in": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {},
+   "description": "TEST ONLY: empty the operator's console."
+  }
+ }
+}

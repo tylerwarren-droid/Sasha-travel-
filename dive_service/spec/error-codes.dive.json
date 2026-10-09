@@ -1,0 +1,59 @@
+{
+ "version": "dive-1.2-draft.1",
+ "codes": [
+  {
+   "code": "supplier_declined",
+   "http": 409,
+   "retryable": false,
+   "meaning": "the supplier answered NO: a real answer, the only 'not available'"
+  },
+  {
+   "code": "supplier_no_answer",
+   "http": 200,
+   "retryable": false,
+   "meaning": "no answer by answer_by; NOT a no"
+  },
+  {
+   "code": "supplier_unreachable",
+   "http": 503,
+   "retryable": true,
+   "meaning": "every verified channel failed to deliver: an outage, never 'unavailable'"
+  },
+  {
+   "code": "channel_not_verified",
+   "http": 409,
+   "retryable": false,
+   "meaning": "a booking would use an unverified channel"
+  },
+  {
+   "code": "supplier_not_confirmed",
+   "http": 409,
+   "retryable": false,
+   "meaning": "the supplier is still a draft"
+  },
+  {
+   "code": "package_not_published",
+   "http": 404,
+   "retryable": false,
+   "meaning": ""
+  },
+  {
+   "code": "bundle_changed",
+   "http": 409,
+   "retryable": false,
+   "meaning": "a leg's terms changed after the read-back: the approval is void"
+  },
+  {
+   "code": "past_cutoff",
+   "http": 422,
+   "retryable": false,
+   "meaning": "the product's cut-off has passed"
+  },
+  {
+   "code": "robots_disallowed",
+   "http": 403,
+   "retryable": false,
+   "meaning": "DIVE addition: the site's robots.txt forbids reading it \u2014 nothing was fetched"
+  }
+ ]
+}

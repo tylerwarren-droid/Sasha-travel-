@@ -1,0 +1,364 @@
+{
+  "version": "dive-1.2-draft.1",
+  "rule": "EU 212 bundles.md §1 + AP1: one read-back over every leg, one yes; any leg's terms change → approval_void.",
+  "cases": [
+    {
+      "id": "A3-1 one read-back over 3 legs, approved once: valid",
+      "operator_id": "opr_01M4DIVE0000000000000000OP",
+      "now": "2026-10-09T12:05:00Z",
+      "approval": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "payload_sha256": "sha256:131fc758b91df15a4978cd50595897a44e2da417e09e2a70bdd66dd99a24c47c",
+        "read_back_sha256": "sha256:362c42c9152d3ce47afb6211178a975b1a1e29a7a7eae2b3cae2700a98e7519b",
+        "state": "valid",
+        "expires_at": "2026-10-09T12:15:00Z"
+      },
+      "current": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "lines": [
+          "Blue Kyma Diving · Discover Mykonos",
+          "Tue 21 OCT 2026 · 4 divers (Marta Ruiz + 3)",
+          "1. Guided dive + boat, Paradise Reef: 09:00–13:00 · Aegean Boats · confirmed by the boat within 2 h",
+          "2. Gear for 4 · Kyma Gear · confirmed by email within 2 h",
+          "3. Lunch for 4, 13:30 · Taverna Agios · booked on their form",
+          "Total €660 for 4 · nothing is charged for a leg that isn't confirmed"
+        ],
+        "payload": {
+          "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+          "party": 4,
+          "legs": [
+            {
+              "product_id": "prd_boat",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 32000
+            },
+            {
+              "product_id": "prd_gear",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 12000
+            },
+            {
+              "product_id": "prd_lunch",
+              "starts_at": "2026-10-21T10:30:00Z",
+              "amount_minor": 22000
+            }
+          ],
+          "total": {
+            "amount_minor": 66000,
+            "currency": "EUR"
+          }
+        }
+      },
+      "expect": {
+        "decision": "valid",
+        "void_reason": null
+      }
+    },
+    {
+      "id": "A3-2 a leg's time changed after the yes: void",
+      "operator_id": "opr_01M4DIVE0000000000000000OP",
+      "now": "2026-10-09T12:05:00Z",
+      "approval": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "payload_sha256": "sha256:131fc758b91df15a4978cd50595897a44e2da417e09e2a70bdd66dd99a24c47c",
+        "read_back_sha256": "sha256:362c42c9152d3ce47afb6211178a975b1a1e29a7a7eae2b3cae2700a98e7519b",
+        "state": "valid",
+        "expires_at": "2026-10-09T12:15:00Z"
+      },
+      "current": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "lines": [
+          "Blue Kyma Diving · Discover Mykonos",
+          "Tue 21 OCT 2026 · 4 divers (Marta Ruiz + 3)",
+          "1. Guided dive + boat, Paradise Reef: 10:00–14:00 · Aegean Boats · confirmed by the boat within 2 h",
+          "2. Gear for 4 · Kyma Gear · confirmed by email within 2 h",
+          "3. Lunch for 4, 13:30 · Taverna Agios · booked on their form",
+          "Total €660 for 4 · nothing is charged for a leg that isn't confirmed"
+        ],
+        "payload": {
+          "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+          "party": 4,
+          "legs": [
+            {
+              "product_id": "prd_boat",
+              "starts_at": "2026-10-21T07:00:00Z",
+              "amount_minor": 32000
+            },
+            {
+              "product_id": "prd_gear",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 12000
+            },
+            {
+              "product_id": "prd_lunch",
+              "starts_at": "2026-10-21T10:30:00Z",
+              "amount_minor": 22000
+            }
+          ],
+          "total": {
+            "amount_minor": 66000,
+            "currency": "EUR"
+          }
+        }
+      },
+      "expect": {
+        "decision": "approval_void",
+        "void_reason": "payload_changed"
+      }
+    },
+    {
+      "id": "A3-3 a smaller party: void",
+      "operator_id": "opr_01M4DIVE0000000000000000OP",
+      "now": "2026-10-09T12:05:00Z",
+      "approval": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "payload_sha256": "sha256:131fc758b91df15a4978cd50595897a44e2da417e09e2a70bdd66dd99a24c47c",
+        "read_back_sha256": "sha256:362c42c9152d3ce47afb6211178a975b1a1e29a7a7eae2b3cae2700a98e7519b",
+        "state": "valid",
+        "expires_at": "2026-10-09T12:15:00Z"
+      },
+      "current": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "lines": [
+          "Blue Kyma Diving · Discover Mykonos",
+          "Tue 21 OCT 2026 · 4 divers (Marta Ruiz + 3)",
+          "1. Guided dive + boat, Paradise Reef: 09:00–13:00 · Aegean Boats · confirmed by the boat within 2 h",
+          "2. Gear for 4 · Kyma Gear · confirmed by email within 2 h",
+          "3. Lunch for 4, 13:30 · Taverna Agios · booked on their form",
+          "Total €660 for 4 · nothing is charged for a leg that isn't confirmed"
+        ],
+        "payload": {
+          "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+          "party": 3,
+          "legs": [
+            {
+              "product_id": "prd_boat",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 32000
+            },
+            {
+              "product_id": "prd_gear",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 12000
+            },
+            {
+              "product_id": "prd_lunch",
+              "starts_at": "2026-10-21T10:30:00Z",
+              "amount_minor": 22000
+            }
+          ],
+          "total": {
+            "amount_minor": 66000,
+            "currency": "EUR"
+          }
+        }
+      },
+      "expect": {
+        "decision": "approval_void",
+        "void_reason": "payload_changed"
+      }
+    },
+    {
+      "id": "A3-4 the same payload, a reworded line: void",
+      "operator_id": "opr_01M4DIVE0000000000000000OP",
+      "now": "2026-10-09T12:05:00Z",
+      "approval": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "payload_sha256": "sha256:131fc758b91df15a4978cd50595897a44e2da417e09e2a70bdd66dd99a24c47c",
+        "read_back_sha256": "sha256:362c42c9152d3ce47afb6211178a975b1a1e29a7a7eae2b3cae2700a98e7519b",
+        "state": "valid",
+        "expires_at": "2026-10-09T12:15:00Z"
+      },
+      "current": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "lines": [
+          "Blue Kyma Diving · Discover Mykonos",
+          "Tue 21 OCT 2026 · 4 divers (Marta Ruiz + 3)",
+          "1. Guided dive + boat, Paradise Reef: 09:00–13:00 · Aegean Boats · confirmed by the boat within 2 h",
+          "2. Gear for 4 · Kyma Gear · confirmed by email within 2 h",
+          "3. Lunch for 4, 13:30 · Taverna Agios · booked on their form",
+          "Total €660 for 4"
+        ],
+        "payload": {
+          "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+          "party": 4,
+          "legs": [
+            {
+              "product_id": "prd_boat",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 32000
+            },
+            {
+              "product_id": "prd_gear",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 12000
+            },
+            {
+              "product_id": "prd_lunch",
+              "starts_at": "2026-10-21T10:30:00Z",
+              "amount_minor": 22000
+            }
+          ],
+          "total": {
+            "amount_minor": 66000,
+            "currency": "EUR"
+          }
+        }
+      },
+      "expect": {
+        "decision": "approval_void",
+        "void_reason": "read_back_changed"
+      }
+    },
+    {
+      "id": "A3-5 the yes used once already",
+      "operator_id": "opr_01M4DIVE0000000000000000OP",
+      "now": "2026-10-09T12:05:00Z",
+      "approval": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "payload_sha256": "sha256:131fc758b91df15a4978cd50595897a44e2da417e09e2a70bdd66dd99a24c47c",
+        "read_back_sha256": "sha256:362c42c9152d3ce47afb6211178a975b1a1e29a7a7eae2b3cae2700a98e7519b",
+        "state": "consumed",
+        "expires_at": "2026-10-09T12:15:00Z"
+      },
+      "current": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "lines": [
+          "Blue Kyma Diving · Discover Mykonos",
+          "Tue 21 OCT 2026 · 4 divers (Marta Ruiz + 3)",
+          "1. Guided dive + boat, Paradise Reef: 09:00–13:00 · Aegean Boats · confirmed by the boat within 2 h",
+          "2. Gear for 4 · Kyma Gear · confirmed by email within 2 h",
+          "3. Lunch for 4, 13:30 · Taverna Agios · booked on their form",
+          "Total €660 for 4 · nothing is charged for a leg that isn't confirmed"
+        ],
+        "payload": {
+          "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+          "party": 4,
+          "legs": [
+            {
+              "product_id": "prd_boat",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 32000
+            },
+            {
+              "product_id": "prd_gear",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 12000
+            },
+            {
+              "product_id": "prd_lunch",
+              "starts_at": "2026-10-21T10:30:00Z",
+              "amount_minor": 22000
+            }
+          ],
+          "total": {
+            "amount_minor": 66000,
+            "currency": "EUR"
+          }
+        }
+      },
+      "expect": {
+        "decision": "approval_consumed",
+        "void_reason": null
+      }
+    },
+    {
+      "id": "A3-6 after 15 minutes",
+      "operator_id": "opr_01M4DIVE0000000000000000OP",
+      "now": "2026-10-09T12:16:00Z",
+      "approval": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "payload_sha256": "sha256:131fc758b91df15a4978cd50595897a44e2da417e09e2a70bdd66dd99a24c47c",
+        "read_back_sha256": "sha256:362c42c9152d3ce47afb6211178a975b1a1e29a7a7eae2b3cae2700a98e7519b",
+        "state": "valid",
+        "expires_at": "2026-10-09T12:15:00Z"
+      },
+      "current": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "lines": [
+          "Blue Kyma Diving · Discover Mykonos",
+          "Tue 21 OCT 2026 · 4 divers (Marta Ruiz + 3)",
+          "1. Guided dive + boat, Paradise Reef: 09:00–13:00 · Aegean Boats · confirmed by the boat within 2 h",
+          "2. Gear for 4 · Kyma Gear · confirmed by email within 2 h",
+          "3. Lunch for 4, 13:30 · Taverna Agios · booked on their form",
+          "Total €660 for 4 · nothing is charged for a leg that isn't confirmed"
+        ],
+        "payload": {
+          "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+          "party": 4,
+          "legs": [
+            {
+              "product_id": "prd_boat",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 32000
+            },
+            {
+              "product_id": "prd_gear",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 12000
+            },
+            {
+              "product_id": "prd_lunch",
+              "starts_at": "2026-10-21T10:30:00Z",
+              "amount_minor": 22000
+            }
+          ],
+          "total": {
+            "amount_minor": 66000,
+            "currency": "EUR"
+          }
+        }
+      },
+      "expect": {
+        "decision": "approval_expired",
+        "void_reason": null
+      }
+    },
+    {
+      "id": "A3-7 no approval at all",
+      "operator_id": "opr_01M4DIVE0000000000000000OP",
+      "now": "2026-10-09T12:05:00Z",
+      "approval": null,
+      "current": {
+        "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+        "lines": [
+          "Blue Kyma Diving · Discover Mykonos",
+          "Tue 21 OCT 2026 · 4 divers (Marta Ruiz + 3)",
+          "1. Guided dive + boat, Paradise Reef: 09:00–13:00 · Aegean Boats · confirmed by the boat within 2 h",
+          "2. Gear for 4 · Kyma Gear · confirmed by email within 2 h",
+          "3. Lunch for 4, 13:30 · Taverna Agios · booked on their form",
+          "Total €660 for 4 · nothing is charged for a leg that isn't confirmed"
+        ],
+        "payload": {
+          "bundle_id": "bnd_01M4DIVE0000000000000000BN",
+          "party": 4,
+          "legs": [
+            {
+              "product_id": "prd_boat",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 32000
+            },
+            {
+              "product_id": "prd_gear",
+              "starts_at": "2026-10-21T06:00:00Z",
+              "amount_minor": 12000
+            },
+            {
+              "product_id": "prd_lunch",
+              "starts_at": "2026-10-21T10:30:00Z",
+              "amount_minor": 22000
+            }
+          ],
+          "total": {
+            "amount_minor": 66000,
+            "currency": "EUR"
+          }
+        }
+      },
+      "expect": {
+        "decision": "approval_required",
+        "void_reason": null
+      }
+    }
+  ]
+}

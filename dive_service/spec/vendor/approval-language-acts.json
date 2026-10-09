@@ -1,0 +1,18 @@
+{
+  "version": "1.1",
+  "rule": "Part 1 AP6, v1.1 (CR 61 finding): an act-aware yes. When the read-back being approved is itself a cancellation (act_kind 'cancel'), the listed words stop vetoing, so 'Yes, cancel it' approves the cancellation. Every other negation still vetoes ('Don't cancel it' is not a yes). Without act_kind, AP6 is exactly 1.0.1. approval-language.json is unchanged (byte-identical).",
+  "acts": {
+    "cancel": {
+      "en": {
+        "exempt_negations": [
+          "cancel"
+        ]
+      },
+      "es": {
+        "exempt_negations": [
+          "cancela"
+        ]
+      }
+    }
+  }
+}

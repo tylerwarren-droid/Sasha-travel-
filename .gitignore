@@ -11,3 +11,4 @@ __MACOSX/
 *.db
 *.db-wal
 *.db-shm
+dive_service/dive.db*

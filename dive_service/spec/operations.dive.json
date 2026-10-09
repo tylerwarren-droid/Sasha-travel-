@@ -1,0 +1,307 @@
+{
+ "version": "dive-1.2-draft.1",
+ "note": "EU 212 api.md \u2014 the operator operations (surface operator) and the generated API (surface generated, /o/{slug}/v1). In dive_service only; NOT AgAPI 1.1 and not in the frozen spec.",
+ "operations": [
+  {
+   "operation": "operators.put",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/operators_put_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/operators_put_out",
+   "errors": [
+    "invalid_input"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "suppliers.draft_from_site",
+   "agent": "magellan",
+   "cost_class": "search",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/suppliers_draft_from_site_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/suppliers_draft_from_site_out",
+   "errors": [
+    "invalid_input",
+    "upstream_unreachable",
+    "robots_disallowed"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "suppliers.put",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/suppliers_put_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/suppliers_put_out",
+   "errors": [
+    "invalid_input",
+    "not_found"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "suppliers.list",
+   "agent": "pacioli",
+   "cost_class": "read",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/suppliers_list_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/suppliers_list_out",
+   "errors": [],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "channels.put",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/channels_put_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/channels_put_out",
+   "errors": [
+    "invalid_input",
+    "not_found",
+    "supplier_not_confirmed"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "channels.verify",
+   "agent": "austen",
+   "cost_class": "message",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/channels_verify_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/channels_verify_out",
+   "errors": [
+    "not_found",
+    "supplier_not_confirmed",
+    "upstream_unreachable"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "products.put",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/products_put_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/products_put_out",
+   "errors": [
+    "invalid_input",
+    "not_found"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "products.list",
+   "agent": "pacioli",
+   "cost_class": "read",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/products_list_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/products_list_out",
+   "errors": [],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "packages.put",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/packages_put_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/packages_put_out",
+   "errors": [
+    "invalid_input",
+    "not_found"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "packages.list",
+   "agent": "pacioli",
+   "cost_class": "read",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "both",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/packages_list_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/packages_list_out",
+   "errors": [],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "operator_api.publish",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/operator_api_publish_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/operator_api_publish_out",
+   "errors": [
+    "package_not_published",
+    "channel_not_verified",
+    "supplier_not_confirmed"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "operator_keys.issue",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/operator_keys_issue_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/operator_keys_issue_out",
+   "errors": [
+    "invalid_input"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "operator_keys.revoke",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/operator_keys_revoke_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/operator_keys_revoke_out",
+   "errors": [
+    "not_found"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "sandbox.supplier_reply",
+   "agent": "austen",
+   "cost_class": "free",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "operator",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/sandbox_supplier_reply_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/sandbox_supplier_reply_out",
+   "errors": [
+    "not_found",
+    "invalid_input",
+    "mode_not_available"
+   ],
+   "since": "1.2-draft",
+   "test_only": true
+  },
+  {
+   "operation": "packages.get",
+   "agent": "pacioli",
+   "cost_class": "read",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "generated",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/packages_get_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/packages_get_out",
+   "errors": [
+    "package_not_published"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "availability.check",
+   "agent": "magellan",
+   "cost_class": "search",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "generated",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/availability_check_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/availability_check_out",
+   "errors": [
+    "package_not_published",
+    "past_cutoff",
+    "invalid_input"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "bookings.quote",
+   "agent": "austen",
+   "cost_class": "act_prepare",
+   "requires_approval": false,
+   "idempotent": true,
+   "surface": "generated",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bookings_quote_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bookings_quote_out",
+   "errors": [
+    "package_not_published",
+    "past_cutoff",
+    "channel_not_verified",
+    "supplier_not_confirmed",
+    "invalid_input"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "bookings.confirm",
+   "agent": "austen",
+   "cost_class": "act",
+   "requires_approval": true,
+   "idempotent": true,
+   "surface": "generated",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bookings_confirm_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bookings_confirm_out",
+   "errors": [
+    "approval_required",
+    "approval_void",
+    "approval_consumed",
+    "approval_expired",
+    "bundle_changed",
+    "not_found"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "bookings.status",
+   "agent": "pacioli",
+   "cost_class": "read",
+   "requires_approval": false,
+   "idempotent": false,
+   "surface": "generated",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bookings_status_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bookings_status_out",
+   "errors": [
+    "not_found"
+   ],
+   "since": "1.2-draft"
+  },
+  {
+   "operation": "bookings.cancel",
+   "agent": "austen",
+   "cost_class": "act",
+   "requires_approval": true,
+   "idempotent": true,
+   "surface": "generated",
+   "input": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bookings_cancel_in",
+   "output": "https://agapi.kanoe.dev/v1/dive/dive.schema.json#/$defs/bookings_cancel_out",
+   "errors": [
+    "approval_required",
+    "approval_void",
+    "not_found"
+   ],
+   "since": "1.2-draft"
+  }
+ ]
+}

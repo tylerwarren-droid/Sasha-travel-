@@ -12,12 +12,14 @@ from . import config, providers as PV
 from .registry import AgapiError
 from .store import Store
 
-KINDS = ("flights", "places", "venue_ladder", "payments", "email", "whatsapp", "calendar")
-CONNECTED_LIVE: set = set()          # phase 2 adds a kind here only once its real adapter is behind the interface and tested
+KINDS = ("flights", "places", "venue_ladder", "payments", "email", "whatsapp", "calendar", "stays")
+# phase 2 (CR 70): a kind is connected only on agapi-live (AGAPI_CONNECTED_LIVE) and only once its live adapter passed its tests.
+# The sandbox never sets it, so a live key there is always refused. "stays" (priced hotels) has no real provider in Sasha: never connected.
+CONNECTED_LIVE: set = set(config.CONNECTED_LIVE) if config.LIVE_SERVICE else set()
 
 # which provider kinds each operation can reach (a live key is refused if any of them isn't connected)
 OP_PROVIDERS: Dict[str, Tuple[str, ...]] = {
-    "travel.find_flights": ("flights",), "travel.find_stays": ("places",), "venues.find_venues": ("places",),
+    "travel.find_flights": ("flights",), "travel.find_stays": ("stays",), "venues.find_venues": ("places",),
     "trip.hold": ("flights", "venue_ladder"), "trip.complete": ("flights", "venue_ladder", "payments"),
     "trip.cancel": ("flights", "venue_ladder"), "approvals.request": ("email", "whatsapp"), "users.register": ("email", "whatsapp"),
     "messages.send_email": ("email",), "messages.send_whatsapp": ("whatsapp",), "messages.replies": ("whatsapp",),
@@ -111,9 +113,17 @@ def not_connected(kind: str) -> AgapiError:
                       {"provider": kind, "phase": 2})
 
 
-_SIM = {"flights": SimFlights(), "places": SimPlaces(), "venue_ladder": SimVenueLadder(), "payments": SimPayments(),
+_SIM = {"flights": SimFlights(), "places": SimPlaces(), "stays": SimPlaces(), "venue_ladder": SimVenueLadder(), "payments": SimPayments(),
         "email": SimMessenger(), "whatsapp": SimMessenger(), "calendar": SimCalendar()}
-_LIVE: Dict[str, Any] = {}           # phase 2: {"flights": DuffelFlights(), …}
+_LIVE: Dict[str, Any] = {}           # phase 2: filled by adapters_live (each kind once its adapter exists)
+
+
+def _load_live() -> None:
+    try:
+        from . import adapters_live
+        _LIVE.update(adapters_live.ADAPTERS)
+    except ImportError:
+        pass
 
 
 def get(kind: str, mode: str):
@@ -121,6 +131,8 @@ def get(kind: str, mode: str):
         raise ValueError(kind)
     if mode == "test":
         return _SIM[kind]
+    if not _LIVE:
+        _load_live()
     return _LIVE[kind] if kind in CONNECTED_LIVE and kind in _LIVE else NotConnected(kind)
 
 

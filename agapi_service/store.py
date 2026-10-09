@@ -119,7 +119,7 @@ class Store:
         self.kind = "postgres" if url else "sqlite"
         if url:   # CR 69 · production: Postgres. A test's Store(path) gets its OWN schema, so tests stay isolated on one server.
             self.path = path
-            self.schema = ("t_" + hashlib.sha256(path.encode()).hexdigest()[:16]) if path else None
+            self.schema = ("t_" + hashlib.sha256(path.encode()).hexdigest()[:16]) if path else (config.DB_SCHEMA or None)   # CR 70: agapi-live → "live"
             self._url = url
             self._connect()
             self._script(_SCHEMA)

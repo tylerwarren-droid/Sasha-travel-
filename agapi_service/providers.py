@@ -62,6 +62,16 @@ def block_network() -> None:
     httpx.AsyncClient.send, httpx.Client.send = asend, ssend
 
 
+def install_live() -> None:
+    """CR 70 · agapi-live: NO fixtures; the network guard lets only the live providers' hosts out (config.LIVE_HOSTS)."""
+    global _INSTALLED
+    if _INSTALLED:
+        return
+    ALLOWED_HOSTS.update(config.LIVE_HOSTS)
+    block_network()
+    _INSTALLED = True
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -148,7 +158,8 @@ def _z(s: Optional[str]) -> str:
     return ts(d)
 
 
-async def _places(what: str, where: dict, up: Upstream, source: str = "google_places") -> Tuple[bool, Optional[str], List[dict]]:
+async def _places(what: str, where: dict, up: Upstream, source: str = "google_places", http=None) -> Tuple[bool, Optional[str], List[dict]]:
+    """http: the recorded replay in the sandbox (default); CR 70 · on agapi-live, the real HTTP (adapters_live.places)."""
     from booking_signer import venue_read as V
     from scripts import places_fake
     t0 = time.perf_counter()
@@ -156,10 +167,11 @@ async def _places(what: str, where: dict, up: Upstream, source: str = "google_pl
         up.add(source, t0, False, "upstream_unreachable")
         return False, "upstream_unreachable", []
     try:
-        got = await V.find_venues(places_fake.replay, what=what, where=where["query"], country=where.get("country"),
+        got = await V.find_venues(http or places_fake.replay, what=what, where=where["query"], country=where.get("country"),
                                   now=datetime.now(timezone.utc))
     except V.FindRefused as e:
-        code = "upstream_unreachable" if "unreachable" in str(e) else "upstream_refused" if "refused" in str(e) else "upstream_failed"
+        code = "upstream_unreachable" if "unreachable" in str(e) else "upstream_rate_limited" if "HTTP 429" in str(e) \
+            else "upstream_refused" if "refused" in str(e) else "upstream_failed"     # CR 70: Google's daily quota (429) is a rate limit
         up.add(source, t0, False, code)
         return False, code, []
     except Exception:
@@ -190,8 +202,8 @@ async def find_stays(inp: dict, up: Upstream) -> List[dict]:
     return [{"source": "google_places", "ok": True, "items": items}]
 
 
-async def find_venues(inp: dict, up: Upstream) -> List[dict]:
-    ok, code, cands = await _places(inp["what"], inp["where"], up)
+async def find_venues(inp: dict, up: Upstream, http=None) -> List[dict]:
+    ok, code, cands = await _places(inp["what"], inp["where"], up, http=http)
     if not ok:
         return [{"source": "google_places", "ok": False, "code": code}]
     now_s, items = ts(), []

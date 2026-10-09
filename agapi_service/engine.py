@@ -68,7 +68,7 @@ async def find_flights(ctx: Ctx, inp: dict):
 
 
 async def find_stays(ctx: Ctx, inp: dict):
-    return await _find(ctx, await AD.get("places", ctx.mode).find_stays(inp, ctx.up), "stay", "stays", "stay_ref")
+    return await _find(ctx, await AD.get("stays", ctx.mode).find_stays(inp, ctx.up), "stay", "stays", "stay_ref")
 
 
 async def find_venues(ctx: Ctx, inp: dict):

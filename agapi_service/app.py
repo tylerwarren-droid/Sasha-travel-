@@ -56,7 +56,10 @@ async def _startup() -> None:
         import logging
         counts = import_sqlite(config.DB_PATH, db())
         logging.getLogger("agapi").warning("sqlite → postgres import: %s", counts if counts is not None else "already done (or no SQLite file)")
-    PV.install()
+    PV.install_live() if config.LIVE_SERVICE else PV.install()   # CR 70 · agapi-live: no fixtures, only the live providers' hosts
+    if config.LIVE_SERVICE:
+        from . import adapters_live
+        adapters_live.bind(db)
     _migrate_scopes(db())
     ensure_products(db())              # CR 69
     W.allow_endpoint_hosts(db())
@@ -222,6 +225,8 @@ async def execute(op_name: str, headers: dict, raw: bytes, principal: Optional[d
             raise AgapiError("forbidden", "This key's scopes don't include that operation.")
         if op.get("test_only") and key["mode"] != "test":
             raise AgapiError("mode_not_available", "That operation exists in test mode only.")
+        if config.LIVE_SERVICE and key["mode"] != "live":   # CR 70 · agapi-live serves live keys only
+            raise AgapiError("mode_not_available", "This is AgAPI live: use a live key here (test keys go to the sandbox).")
         if key["mode"] == "live":
             AD.require_live(op_name)       # CR 69 · refused BEFORE anything happens until phase 2 connects the provider
         if _per_minute(store, key) >= key["rate_per_min"]:
@@ -373,6 +378,17 @@ async def admin(action: str, req: Request):
         kr = store.one("select key_id, prefix from api_keys where secret_hmac = ?", key_hmac(k))
         return JSONResponse({"ok": True, "account": acct, "key_id": kr["key_id"], "prefix": kr["prefix"], "key": k},
                             headers={"Cache-Control": "no-store"})
+    if action == "smoke" and config.LIVE_SERVICE:   # CR 70 · a live adapter's smoke check: spends nothing, contacts nobody
+        from . import adapters_live
+        kind = str(body.get("provider") or "")
+        ad = adapters_live.ADAPTERS.get(kind)
+        if not ad or not hasattr(ad, "smoke"):
+            return JSONResponse({"ok": False, "why": "no such live adapter"}, status_code=404)
+        try:
+            out = await ad.smoke()
+        except Exception as e:
+            out = {"ok": False, "why": type(e).__name__}
+        return JSONResponse({"ok": True, "provider": kind, "connected": kind in AD.CONNECTED_LIVE, "smoke": out}, headers={"Cache-Control": "no-store"})
     if action == "list":
         out = []
         for a in store.q("select * from accounts order by created_at"):
@@ -398,7 +414,8 @@ async def ics_file(token: str):
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "mode": config.MODE, "spec": config.SPEC_DRAFT, "store": db().kind}   # CR 69 · + which store (additive)
+    return {"ok": True, "mode": config.MODE, "spec": config.SPEC_DRAFT, "store": db().kind,
+            **({"service": "live", "connected": sorted(AD.CONNECTED_LIVE)} if config.LIVE_SERVICE else {})}   # CR 70 · additive   # CR 69 · + which store (additive)
 
 
 def _pct(xs: list, p: float) -> Optional[int]:

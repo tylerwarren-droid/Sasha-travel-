@@ -17,7 +17,14 @@ MODE = "test"
 
 DB_PATH = os.getenv("AGAPI_DB", str(ROOT / "agapi_service" / "sandbox.db"))
 DATABASE_URL = os.getenv("AGAPI_DATABASE_URL", "").strip()   # CR 69 · a Railway Postgres; unset = SQLite (as before)
-IMPORT_SQLITE = os.getenv("AGAPI_IMPORT_SQLITE", "") == "1"    # CR 69 · once, on Railway: copy AGAPI_DB's rows into the empty Postgres
+IMPORT_SQLITE = os.getenv("AGAPI_IMPORT_SQLITE", "") == "1"
+# CR 70 · the LIVE service (agapi-live): the same image, live keys only, real providers behind the adapters; its own Postgres schema
+LIVE_SERVICE = os.getenv("AGAPI_SERVICE", "").strip() == "live"
+DB_SCHEMA = os.getenv("AGAPI_DB_SCHEMA", "").strip()            # agapi-live: "live" (the sandbox keeps the default schema)
+CONNECTED_LIVE = {k.strip() for k in os.getenv("AGAPI_CONNECTED_LIVE", "").split(",") if k.strip()}   # only on agapi-live
+PLACES_DAILY_CAP = int(os.getenv("AGAPI_PLACES_DAILY_CAP", "100"))   # AgAPI live's own cap: Sasha shares Google's daily Text Search quota
+# the only hosts the live service may reach (every other outbound call stays refused); magellan's marked reads as before
+LIVE_HOSTS = {"places.googleapis.com", "api.duffel.com", "api.stripe.com", "api.resend.com", "api.twilio.com", "api.bland.ai", "api.anthropic.com"}    # CR 69 · once, on Railway: copy AGAPI_DB's rows into the empty Postgres
 # CR 69 · magellan.read_site's AI reader: AgAPI's own key (without it the operation says so) and the price it's logged at (USD/Mtok in, out)
 ANTHROPIC_KEY = os.getenv("AGAPI_ANTHROPIC_API_KEY", "").strip()
 READER_MODEL = os.getenv("AGAPI_READER_MODEL", "claude-opus-5-5").strip()

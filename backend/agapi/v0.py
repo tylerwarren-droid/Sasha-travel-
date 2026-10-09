@@ -42,6 +42,7 @@ class Ctx:
     calls: List[dict] = field(default_factory=list)   # what was called this turn (for the caller's guards and logs)
     started: datetime = field(default_factory=lambda: datetime.now(timezone.utc))   # Sasha 210 · when this turn began
     idem: Optional[str] = None         # Sasha 215 · the acting call's durable key (call() sets it; claim() takes it once)
+    surface: str = "s1"                # Sasha 221 · "s2" only from /s2 (its proxy's header); everything else is S1, as before
     claimed: Optional[str] = None      # the claim this call holds, released if the act is refused before anything is sent
 
 

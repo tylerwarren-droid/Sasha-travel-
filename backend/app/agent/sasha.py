@@ -465,7 +465,7 @@ def model_result(r: dict, name: str = "") -> dict:
 
 
 async def turn(account: str, message: str, history: List[dict], session: Optional[str],
-               voice: Optional[dict] = None) -> AsyncIterator[dict]:
+               voice: Optional[dict] = None, surface: str = "s1") -> AsyncIterator[dict]:
     """One turn: the model, its tools, the guards. Yields events (see the module doc). Sasha 210 · each model step is spoken
     as ONE utterance (no gaps between her phrases); `voice` is shared with turn_with_quiver: the acknowledgement she said
     while this turn worked ({"filler"}), and its request to speak what's ready ({"flush_now"})."""
@@ -476,7 +476,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     voice = voice if voice is not None else {}
     t0 = time.perf_counter()
     first_text_ms = None
-    ctx = API.Ctx(account=account, mode="test", user_said=message, session=session)
+    ctx = API.Ctx(account=account, mode="test", user_said=message, session=session, surface=surface)
     voice["ctx"] = ctx   # Sasha 215 · what already happened this turn, for the line said if the turn fails or runs out of time
     msgs: List[dict] = [{"role": m["role"], "content": str(m.get("content") or "")} for m in (history or [])
                         if m.get("role") in ("user", "assistant") and str(m.get("content") or "").strip()][-40:]
@@ -492,6 +492,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     raw: List[str] = []       # what the model wrote — the guards read it
     turn_key = hashlib.sha256(f"{session}:{len(history or [])}:{message}".encode()).hexdigest()[:16]
     tools = tools_for_model()
+    if surface == "s2":   # Sasha 221 · S2's tool set (/s2 only); S1's list is untouched
+        from app.agent import s2 as S2
+        tools = [t for t in tools if t["name"] in S2.S2_TOOLS]
     tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     step_ms: List[dict] = []
     pending = ""          # this step's text, not yet spoken
@@ -509,13 +512,17 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     def system_now() -> list:
         # Sasha 205 · PROMPT CACHING: her persona is the same every call (cached); the rest is per turn
         extra = system_prompt(datetime.now(timezone.utc))[len(P.AGENT_SYSTEM):]
+        base = P.AGENT_SYSTEM
+        if surface == "s2":   # Sasha 221 · her own opening lines on /s2; S1's text from "How she talks" on, shared
+            from app.agent import s2 as S2
+            base = S2.s2_system()
         if used_openers:
             extra += (f"\n\nOpeners you've already used in this conversation — never start with them again: "
                       f"{', '.join(sorted(used_openers))}.")
         if voice.get("filler"):
             extra += (f"\n\nWhile you worked you already said aloud: “{voice['filler']}”. Carry straight on from it — no greeting, "
                       "no reaction word, never its opening words again.")
-        return [{"type": "text", "text": P.AGENT_SYSTEM, "cache_control": {"type": "ephemeral"}}, {"type": "text", "text": extra}]
+        return [{"type": "text", "text": base, "cache_control": {"type": "ephemeral"}}, {"type": "text", "text": extra}]
 
     async def speakable(chunk: str) -> str:
         """The part of this chunk she may say: claims and prices checked (a failure holds the rest of the turn), her internals
@@ -788,7 +795,8 @@ def what_happened(calls: List[dict], why: str) -> str:
     return line
 
 
-async def turn_with_quiver(account: str, message: str, history: List[dict], session: Optional[str]) -> AsyncIterator[dict]:
+async def turn_with_quiver(account: str, message: str, history: List[dict], session: Optional[str],
+                           surface: str = "s1") -> AsyncIterator[dict]:
     """turn(), never silent — and ONE voice (Sasha 210): if nothing is ready to say after QUIVER_AFTER_S, what she has
     written so far is spoken if it holds a full sentence; otherwise ONE short acknowledgement (written fresh, never a fact,
     never twice, never an opener she's used), which the answer then continues (turn() is told it was said)."""
@@ -799,7 +807,7 @@ async def turn_with_quiver(account: str, message: str, history: List[dict], sess
 
     async def produce():
         try:
-            async for ev in turn(account, message, history, session, voice):
+            async for ev in turn(account, message, history, session, voice, surface):
                 await q.put(ev)
         except Exception as e:
             log.error("[agent] turn failed: %s: %s", type(e).__name__, e)
@@ -1004,6 +1012,8 @@ async def agent_turn(request: Request):
             yield f"data: {json.dumps({'type': 'done', 'text': line, 'guard': ['input guard: ' + kind], 'tools': []})}\n\n"
         return StreamingResponse(refused(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
     body["history"] = G.clean_history(body.get("history") or [])
+    # Sasha 221 · S2 is chosen ONLY by /s2's proxy (its header); without it — /next, every other caller — S1, as before
+    surface = "s2" if request.headers.get("x-sasha-surface", "").strip().lower() == "s2" else "s1"
     over = await over_budget(account)
 
     async def events():
@@ -1011,7 +1021,8 @@ async def agent_turn(request: Request):
             yield f"data: {json.dumps({'type': 'error', 'message': over, 'rule': 'budget'})}\n\n"
             return
         try:
-            async for ev in turn_with_quiver(account, message, body.get("history") or [], str(body.get("session_id") or "")[:64] or None):
+            async for ev in turn_with_quiver(account, message, body.get("history") or [], str(body.get("session_id") or "")[:64] or None,
+                                             surface):
                 yield f"data: {json.dumps(ev, default=str)}\n\n"
         except Exception as e:
             log.error("[agent] turn failed: %s: %s", type(e).__name__, e)

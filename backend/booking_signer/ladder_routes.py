@@ -153,7 +153,16 @@ async def read_venue(request: Request):
         body = {"name": "Sasha Test Venue", "city": body.get("city") or "Madrid", "country": "ES", "website": test_venue_url()}
     if body is None:
         return _refuse(400, "read_malformed", "send {name, city, country?, website?} as a JSON object")
-    if body.get("place_id") and standin(account_for(request)) and not body.get("real_venue") \
+    # Sasha 221 · THE S2 DEMO SETTING (/s2 only — its turns send s2_demo; /next never does): on the founder's account (or a listed
+    # founder-mode fixture) a real restaurant or spa picked on /s2 is read and booked at OUR test venue — nothing real is contacted;
+    # its name carries the stand-in tag internally, which every screen and the model strip
+    s2_demo = bool(body.pop("s2_demo", False)) if isinstance(body, dict) else False
+    if s2_demo and body.get("place_id") and _s2_demo_account(account_for(request)):
+        from .form_rung import test_venue_url
+        quote = re.search(r"tattoo|piercing|custom|commission|portrait|bespoke|tailor|quote", str(body.get("asked_for") or ""), re.I)
+        body = {"name": standin_name(body.get("name")), "city": body.get("city") or "Madrid", "country": "ES",
+                "website": test_venue_url("email" if quote else "plain")}
+    elif body.get("place_id") and standin(account_for(request)) and not body.get("real_venue") \
             and not is_restaurant(body.get("asked_for")):   # Sasha 175 · the platform run reads real venues; Sasha 186 · restaurants are real
         # Sasha 169 · THE DEMO STAND-IN (founder only, SASHA_DEMO_STANDIN=1): a real listing picked → OUR test venue's own page
         # is read and sent to instead, and its name says so everywhere — the real place is never contacted
@@ -227,6 +236,14 @@ def is_restaurant(asked_for) -> bool:
     """Sasha 186/195 · REAL for the founder's demo: restaurants AND spas/beauty (Fresha, Treatwell, Booksy…); a tattoo stays demo."""
     t = str(asked_for or "")
     return not _DEMO_ONLY.search(t) and bool(_RESTAURANT.search(t) or _REAL_BEAUTY.search(t))
+
+
+def _s2_demo_account(account: Optional[str]) -> bool:
+    """Sasha 221 · who has the S2 demo setting: the founder, or an account listed in SASHA_S2_DEMO_ACCOUNTS (a scratch fixture)."""
+    import os
+    from .guest_accounts import founder
+    listed = {a.strip().lower() for a in os.getenv("SASHA_S2_DEMO_ACCOUNTS", "").split(",") if a.strip()}
+    return bool(account) and (founder(account) or account.lower() in listed)
 
 
 def standin(account: Optional[str]) -> bool:

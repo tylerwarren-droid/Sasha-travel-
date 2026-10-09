@@ -1,0 +1,52 @@
+"""Sasha 221 · S2 — SASHA, THE PERSONAL CONCIERGE (project.kanoe.ai/s2). The same engine as S1 (/next): the same loop, tools,
+guards, safety rules and records — with her OWN opening lines (a personal concierge first, travel one of the things she
+does) and, on /s2 only, the demo setting. S2 is chosen ONLY by the /s2 page's proxy (header x-sasha-surface: s2); /next never
+sends it and the default is S1, byte for byte as before.
+
+  S2_WHO          her persona's opening — replaces S1's "## Who she is"; everything after it (style, how she works, the hard rules)
+                  is S1's own text, shared
+  S2_TOOLS        her tool set: places and their bookings, email, the calendar, WhatsApp, Activity, and payment ("Pay here, or on
+                  your phone?") — plus trips, which are one of the things she does
+  demo(account)   the S2 demo setting (Tyler, 9 Oct): on the founder's account — and any listed in SASHA_S2_DEMO_ACCOUNTS (a scratch
+                  "founder-mode" fixture for a live run) — a restaurant or spa booked on /s2 goes to OUR test venue, so a demo
+                  reaches "Booked" with nothing real contacted. /next is untouched: the founder's account there is exactly as before.
+"""
+from __future__ import annotations
+
+import os
+from typing import Optional
+
+from app.services import persona as P
+
+S2_WHO = """## Who she is
+
+Sasha is a personal concierge. People come to her for whatever they need, and she gets it done: a table tonight, a spa on
+Saturday, an email to someone, a booking in the calendar, a question answered, a trip when they want one. She is warm, quick
+and a little witty, the friend who happens to know and who actually does things. She opens by asking how she can help, never
+with a destination or a trip.
+
+- **She does things, and shows what she did.** Every act is read back first, done only on their yes, and recorded: asked
+  "what have you done for me today?", she answers from her records (`get_activity`), never from memory.
+- **She keeps it short.** On a phone, one or two sentences, then the card. The card carries the details.
+- **She suggests.** Asked for ideas, two or three, each with its reason, never just one.
+"""
+
+S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "cancel_venue", "get_status",
+            "send_email", "add_to_calendar", "send_whatsapp", "get_activity",
+            "prepare_trip", "propose_trip", "search_flights", "search_stays", "swap_stay", "choose_offer", "check_offer",
+            "save_travellers", "hold_booking", "book", "get_trip", "get_total")
+
+
+def s2_system() -> str:
+    """S2's whole system text: her own "Who she is", then S1's own text from "## How she talks" on (shared, unchanged)."""
+    rest = P.AGENT_SYSTEM.split("## How she talks", 1)
+    return S2_WHO + "\n## How she talks" + rest[1] if len(rest) == 2 else S2_WHO + "\n" + P.AGENT_SYSTEM
+
+
+def demo(account: Optional[str]) -> bool:
+    """The S2 demo setting (on /s2 only): the founder, or an account listed for a live founder-mode run (one rule: the server's)."""
+    from booking_signer.ladder_routes import _s2_demo_account
+    return _s2_demo_account(account)
+
+
+__all__ = ["S2_WHO", "S2_TOOLS", "s2_system", "demo"]

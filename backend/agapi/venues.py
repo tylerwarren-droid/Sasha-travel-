@@ -55,13 +55,16 @@ def _what(a: dict) -> str:
 async def _read(ctx, a: dict) -> dict:
     """The venue read through the booking API (it keeps a read_id the routes need), remembered per account."""
     GW = _API()
-    k = _key(a)
+    s2 = getattr(ctx, "surface", "s1") == "s2"
+    k = _key(a) + ("|s2" if s2 else "")
     got = _READS.get(ctx.account, {}).get(k)
     if got:
         return got
     asked = " ".join(x for x in (_what(a), a.get("type") or "") if x)[:200]
     body = {"name": a.get("name"), "city": a.get("city"), "country": a.get("country"), "place_id": a.get("place_id"),
             "website": a.get("website"), "asked_for": asked}
+    if s2:   # Sasha 221 · /s2 only: the server applies the S2 demo setting when this account has it (never on /next)
+        body["s2_demo"] = True
     status, rd = await GW.api(ctx.account, "POST", "/api/booking/venues/read", {k2: v for k2, v in body.items() if v})
     if status != 200:
         raise _err((rd or {}).get("rule") or "read_failed", GW.refusal_words(rd or {}, status))

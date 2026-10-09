@@ -18,8 +18,8 @@ def bind(app, db, ok):
     def _login_form(nxt: str, note: str = "", status: int = 200):
         from .app import page
         hidden = f'<input type="hidden" name="next" value="{nxt}">'
-        return page("Console", f"""<h1>Operator console</h1>{note}<form class="card" method="post" action="/console/login"><label>Console token<input type="password" name="token"
-autocomplete="current-password" autofocus></label>{hidden}<p><button class="go" title="Opens the console for this browser">Open the console</button></p></form>
+        return page("Console", f"""<h1>Operator console</h1>{note}<form class="card" method="post" action="/console/login"><label>Console token<input type="password" name="console_token"
+autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore spellcheck="false" autofocus></label>{hidden}<p><button class="go" title="Opens the console for this browser">Open the console</button></p></form>
 <p class="mut">The token is in Keychain Access: search for “DIVE console token”.</p>""", status=status)
 
     def _next(v) -> str:   # only our own two pages: never an address from outside
@@ -38,7 +38,8 @@ autocomplete="current-password" autofocus></label>{hidden}<p><button class="go" 
         and a link opened from another site); then /start."""
         f = dict((await req.form()).items())
         tok = config.CONSOLE_TOKEN or ("" if config.deployed() else "dive-local")
-        got = str(f.get("token") or "").replace("\u200b", "").replace("\ufeff", "").strip()
+        # CR · login 2: a fresh field name, so Chrome won't fill a saved password in ("token" still accepted)
+        got = str(f.get("console_token") or f.get("token") or "").replace("\u200b", "").replace("\ufeff", "").strip()
         nxt = _next(f.get("next"))
         if not got:
             return _login_form(nxt, '<p class="chip no big" data-testid="login-error">Paste the console token first.</p>', 400)
@@ -46,6 +47,30 @@ autocomplete="current-password" autofocus></label>{hidden}<p><button class="go" 
             return _login_form(nxt, '<p class="chip no big" data-testid="login-error">That token doesn’t match. Copy it again from Keychain '
                                     'Access (“DIVE console token”, Show password) and paste it here.</p>', 401)
         r = RedirectResponse(nxt, status_code=303)
+        r.set_cookie("dive_console", tok, httponly=True, samesite="lax", secure=config.deployed(), path="/", max_age=12 * 3600)
+        return r
+
+    @app.post("/console/one-time-link")
+    async def one_time_link(req: Request):
+        """CR · login 2: a sign-in link for Tyler's own browser — minted only with the console token, works ONCE, for 10 minutes.
+        Never printed: the caller opens it straight in the browser."""
+        if not ok(req):
+            return JSONResponse({"ok": False, "error": {"code": "unauthenticated", "message": "The console token is needed."}}, 401)
+        import secrets as _secrets
+        from .store import later
+        t = _secrets.token_urlsafe(32)
+        db().x("insert into login_links (token_hash, created_at, expires_at) values (?, ?, ?)", R.text_sha256(t), ts(), later(10))
+        return JSONResponse({"ok": True, "result": {"url": f"{config.PUBLIC_URL}/console/l/{t}", "expires_in_minutes": 10}})
+
+    @app.get("/console/l/{t}")
+    async def use_link(t: str):
+        s = db()
+        h = R.text_sha256(t)
+        if s.x("update login_links set used_at = ? where token_hash = ? and used_at is null and expires_at > ?", ts(), h, ts()) != 1:
+            return _login_form("/start", '<p class="chip no big" data-testid="login-error">That sign-in link was already used or has expired. '
+                                         'Sign in with the token below.</p>', 410)
+        tok = config.CONSOLE_TOKEN or ("" if config.deployed() else "dive-local")
+        r = RedirectResponse("/start", status_code=303)
         r.set_cookie("dive_console", tok, httponly=True, samesite="lax", secure=config.deployed(), path="/", max_age=12 * 3600)
         return r
 

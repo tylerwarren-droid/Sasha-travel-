@@ -45,6 +45,7 @@ create table if not exists captured (id integer primary key autoincrement, chann
 -- CR 67 · what arrived on the REAL channels (signed webhooks, allow-listed senders only) and who said STOP
 create table if not exists inbound (id integer primary key autoincrement, channel text not null, address text not null, provider_id text unique not null,
   text text not null, subject text, received_at text not null);
+create table if not exists login_links (token_hash text primary key, created_at text not null, expires_at text not null, used_at text);
 create table if not exists opt_outs (channel text not null, address text not null, at text not null, said text, primary key (channel, address));
 """
 

@@ -580,6 +580,36 @@ class StartPage(Base):
             r = type(self.client)(A.app, base_url="https://testserver").post("/console/login", data={"token": "t" * 32 + "\n"}, follow_redirects=False)
             self.assertIn("secure", r.headers["set-cookie"].lower())                            # behind Railway's HTTPS
 
+    def test_chrome_never_fills_a_saved_password_in(self):
+        """CR · login 2: Tyler's Chrome autofilled a saved value ~70 characters long; pasted next to it, it never matched."""
+        f = self.client.get("/console/login").text
+        self.assertIn('name="console_token"', f)
+        self.assertIn('autocomplete="new-password"', f)                                          # Chrome doesn't fill saved passwords here
+        self.assertNotIn('autocomplete="current-password"', f)
+        r = self.client.post("/console/login", data={"console_token": "dive-local"}, follow_redirects=False)
+        self.assertEqual(r.headers["location"], "/start")
+
+    def test_the_one_time_sign_in_link(self):
+        self.assertEqual(self.client.post("/console/one-time-link").status_code, 401)            # minted only with the console token
+        url = self.client.post("/console/one-time-link", headers=CONSOLE).json()["result"]["url"]
+        path = "/" + url.split("://", 1)[1].split("/", 1)[1]
+        self.assertTrue(path.startswith("/console/l/") and len(path) > 40)
+        self.assertNotIn(path.rsplit("/", 1)[1], json.dumps(self.store.q("select * from login_links")))   # only its hash is kept
+        c = type(self.client)(A.app)
+        r = c.get(path, follow_redirects=False)
+        self.assertEqual((r.status_code, r.headers["location"]), (303, "/start"))
+        self.assertIn("samesite=lax", r.headers["set-cookie"].lower())
+        self.assertIn("Run the DIVE demo", c.get("/start").text)                                 # lands on /start, signed in
+        d = type(self.client)(A.app)
+        r = d.get(path, follow_redirects=False)
+        self.assertEqual(r.status_code, 410)                                                     # once only
+        self.assertIn("already used or has expired", r.text)
+        self.assertEqual(d.get("/start", follow_redirects=False).status_code, 303)
+        url2 = self.client.post("/console/one-time-link", headers=CONSOLE).json()["result"]["url"]
+        self.store.x("update login_links set expires_at = '2026-01-01T00:00:00.000000Z' where used_at is null")
+        self.assertEqual(d.get("/" + url2.split("://", 1)[1].split("/", 1)[1], follow_redirects=False).status_code, 410)   # 10 minutes only
+        self.assertEqual(d.get("/console/l/not-a-link", follow_redirects=False).status_code, 410)
+
     def test_ten_steps_each_a_link_that_resolves(self):
         self.onboard()
         page = self.client.get("/start", headers=CONSOLE).text

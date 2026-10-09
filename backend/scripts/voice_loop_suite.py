@@ -78,13 +78,15 @@ async def one(name: str, steps: list, travellers: str, ends_paid: bool, country:
                          "consent_wording_version": c["version"], "consent_text_sha256": c["sha256"]})
     captured[GW.wa_key(number)] = []
     session = f"voice-loop-{uuid.uuid4().hex[:8]}"
-    history, turns, cards, gave = [], [], [], 0
+    history, turns, cards, gave, chose = [], [], [], 0, False
     todo = list(steps)
     try:
-        for _ in range(len(steps) + 3):
+        for _ in range(len(steps) + 4):
             last = history[-1]["content"] if history else ""
             if gave < 2 and history and _ASKS_TRAVELLERS.search(last) and travellers not in (todo[0] if todo else ""):
                 said, gave = travellers, gave + 1
+            elif not chose and history and re.search(r"(?i)pay here,? or on your phone", last):   # Sasha 220 · asked once: the phone
+                said, chose = "On my phone.", True
             elif todo:
                 said = todo.pop(0)
             else:

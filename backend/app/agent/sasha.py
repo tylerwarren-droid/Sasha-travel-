@@ -733,7 +733,7 @@ FILLERS = {
     "search_stays": ["Let me look at places to stay.", "Let me see where you could stay."],
     "hold_booking": ["Let me check everything.", "One moment while I check it all.", "Let me go over everything."],
     "save_travellers": ["Noting those down.", "One moment, saving those."],
-    "book": ["Sending it to your phone.", "On its way to your phone now."],
+    "book": ["Setting up the payment.", "One moment, getting the payment ready."],   # Sasha 220 · it may be here or the phone
     "get_total": ["Let me add it up.", "One moment, adding it up."],
     "get_status": ["Let me check.", "Let me take a look."],
     "get_trip": ["Let me take a look.", "Let me check."],

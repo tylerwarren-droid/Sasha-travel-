@@ -1207,19 +1207,26 @@ async def watch_flight_payment(ch: dict, frm: str, account: str, c: dict, sessio
         if not paid:
             continue
         o = await TR.order(c, name, email, phone)
-        st = await STORE.get_state(ch["wa_id_sha256"])
         if "why" in o:
             TD.note(session_id, False, f"Your test payment went through, but the test flight wasn't booked: {o['why']}.")
-            await deliver(ch, frm, Out().text(f"Your test payment went through, but the test flight wasn't booked: {o['why']}."), st.get("last_inbound_at"))
+            await _tell_if_linked(ch, frm, f"Your test payment went through, but the test flight wasn't booked: {o['why']}.")
             return
         await TR.RECORD(account, c, o["booking_reference"] or "")
         TD.note(session_id, True, f"✅ Booked (TEST): {TR.card_line(c)}. Reference {o['booking_reference']}. In your itinerary and calendar.")
-        await deliver(ch, frm, Out().text(f"✅ Booked (TEST): {TR.card_line(c)}. Reference {o['booking_reference']}. "
-                                          f"It's in your itinerary and on your calendar — {TR.LABEL}."), st.get("last_inbound_at"))
+        await _tell_if_linked(ch, frm, f"✅ Booked (TEST): {TR.card_line(c)}. Reference {o['booking_reference']}. "
+                                       f"It's in your itinerary and on your calendar — {TR.LABEL}.")
         return
-    st = await STORE.get_state(ch["wa_id_sha256"])
-    await deliver(ch, frm, Out().text("The test payment wasn't completed within 10 minutes, so nothing was booked. Ask me again any time."),
-                  st.get("last_inbound_at"))
+    await _tell_if_linked(ch, frm, "The test payment wasn't completed within 10 minutes, so nothing was booked. Ask me again any time.")
+
+
+async def _tell_if_linked(ch: Optional[dict], frm: str, text: str) -> None:
+    """Sasha 216 · the payment watcher's word to their WhatsApp — only when there IS a channel (a watch can outlive it: the
+    channel deleted, or never linked). The booking itself and the payment page's note never depend on it."""
+    if not ch or not ch.get("wa_id_sha256"):
+        log.info("[guest_whatsapp] payment outcome not sent to WhatsApp: no channel")
+        return
+    st = await STORE.get_state(ch["wa_id_sha256"]) or {}
+    await deliver(ch, frm, Out().text(text), st.get("last_inbound_at"))
 
 
 # ── Sasha 126 · the spa membership (Kanoe Demo Spa, ours) and two bookings from one sentence ───────────────────────

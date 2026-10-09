@@ -27,8 +27,8 @@ One contract for every client.
 |---|---|---|
 | **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay` |
 | **Sherlock** | checks | `check_offer`, `read_booking_route` |
-| **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue` |
-| **Pacioli** | records — the only source of booked/paid | `get_status`, `get_trip`, `get_total` |
+| **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue`, `send_email` |
+| **Pacioli** | records — the only source of booked/paid | `get_status`, `get_trip`, `get_total`, `add_to_calendar` |
 
 ## Magellan
 
@@ -1070,6 +1070,87 @@ Cancel a venue booking, back the way it was made. First call: the read-back (say
 }
 ```
 
+### `send_email`
+
+Email someone the person names, FROM SASHA'S OWN ADDRESS (never their mailbox). The first call returns the exact message to read back; say it, ask 'shall I send it?', and call again with the SAME message after their yes in a later turn. Any change is a new read-back. A question is never a yes.
+
+**Errors:** `invalid_input`, `no_explicit_yes`, `upstream_refused`, `upstream_unreachable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "to": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "address"
+   ],
+   "properties": {
+    "address": {
+     "type": "string",
+     "maxLength": 254
+    },
+    "name": {
+     "type": "string",
+     "maxLength": 120
+    }
+   }
+  },
+  "subject": {
+   "type": "string",
+   "minLength": 1,
+   "maxLength": 200
+  },
+  "body": {
+   "type": "string",
+   "minLength": 1,
+   "maxLength": 5000
+  },
+  "approval": {
+   "type": "object",
+   "properties": {
+    "said": {
+     "type": "string"
+    }
+   },
+   "description": "the person's own words (filled by the caller from the real message)"
+  },
+  "idempotency_key": {
+   "type": "string",
+   "minLength": 8,
+   "maxLength": 128,
+   "description": "Idempotency key: the same key returns the first result."
+  }
+ },
+ "required": [
+  "to",
+  "subject",
+  "body",
+  "idempotency_key"
+ ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "status": {
+   "enum": [
+    "awaiting_yes",
+    "sent"
+   ]
+  }
+ }
+}
+```
+
 ## Pacioli
 
 ### `get_status`
@@ -1164,6 +1245,42 @@ The whole trip's total from the basket (what booking would charge).
    "items": {
     "type": "string"
    }
+  }
+ }
+}
+```
+
+### `add_to_calendar`
+
+Put a CONFIRMED booking (a table or a flight; ids from get_status) in the person's calendar: returns 'Add to calendar' links (Google, Outlook, Apple) and an .ics. No yes needed — nothing leaves their account.
+
+**Errors:** `booking_unknown`, `not_confirmed`, `no_time`, `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "booking_id": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "booking_id"
+ ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "links": {
+   "type": "object"
   }
  }
 }

@@ -914,10 +914,14 @@ TOOLS: List[dict] = [
     _t("get_total", "Pacioli", get_total, "The whole trip's total from the basket (what booking would charge).", {}, [], TOTAL, ["no_trip"]),
 ]
 BY_NAME = {t["name"]: t for t in TOOLS}
+from agapi import s2_tools as _S2   # noqa: E402 · CR 60 / Sasha 216 · email from Sasha's address + calendar (agapi/powers.py)
+TOOLS += _S2.tools()
+BY_NAME.update({t["name"]: t for t in TOOLS})
 _HELD: Dict[str, dict] = {}   # account → the last read-back's sha256 (hold_booking), for book
 _IDEM: Dict[str, dict] = {}   # the fast path in this process; claim() is the durable one (Sasha 215)
-ACTS = {"book", "book_venue", "cancel_venue"}   # spend, send or cancel: claimed once, durably, before they act
-READS = {"search_flights", "search_stays", "search_venues", "check_offer", "read_booking_route", "get_status", "get_trip", "get_total"}
+ACTS = {"book", "book_venue", "cancel_venue", "send_email"}   # spend, send or cancel: claimed once, durably, before they act
+READS = {"search_flights", "search_stays", "search_venues", "check_offer", "read_booking_route", "get_status", "get_trip", "get_total",
+         "add_to_calendar"}
 
 
 async def call(ctx: Ctx, name: str, args: dict) -> dict:

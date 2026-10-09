@@ -141,19 +141,12 @@ class Calendar(unittest.TestCase):
             self.assertEqual(run(API.call(self.ctx(), "add_to_calendar", {"booking_id": "nope"}))["error"]["code"], "booking_unknown")
 
 
-def setUpModule():
-    """The adapters ride Sasha's own AgAPI v0 call() — registered for these tests only (the wiring note does it for real)."""
-    for t in S.tools():
-        if t["name"] not in API.BY_NAME:
-            API.TOOLS.append(t)
-            API.BY_NAME[t["name"]] = t
-
-
-def tearDownModule():
-    for name in ("send_email", "add_to_calendar"):
-        t = API.BY_NAME.pop(name, None)
-        if t in API.TOOLS:
-            API.TOOLS.remove(t)
+class Wired(unittest.TestCase):
+    def test_the_powers_are_sashas_tools(self):
+        """Sasha 216 · wired for real (agapi/v0.py registers them) — no longer added and removed around these tests."""
+        for name in ("send_email", "add_to_calendar"):
+            self.assertIn(name, API.BY_NAME)
+        self.assertIn("send_email", API.ACTS)   # claimed once, durably, before it sends
 
 
 if __name__ == "__main__":

@@ -4,8 +4,9 @@
 import { useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 
-// Sasha 215 (b) · the sign-in email carries a 6-digit code as well as the link ONLY once its Supabase template says so
-// ({{ .Token }}) — the founder sets NEXT_PUBLIC_SIGNIN_CODE=1 then. Until then no code box is shown: nothing that isn't there.
+// Sasha 215 (b) / 216 · the sign-in email carries a 6-digit code as well as the link once its Supabase template has
+// {{ .Token }} (the founder's yes, 9 Oct). The box says "if your email shows a code", so it's true whether or not the
+// template has been changed yet; NEXT_PUBLIC_SIGNIN_CODE=0 hides it.
 const CODE_IN_EMAIL = process.env.NEXT_PUBLIC_SIGNIN_CODE === '1'
 
 function CodeEntry({ to, next }: { to: string; next: string }) {
@@ -25,7 +26,7 @@ function CodeEntry({ to, next }: { to: string; next: string }) {
   }
   return (
     <form onSubmit={verify}>
-      <p>We&rsquo;ve emailed <strong>{to}</strong> a sign-in link and a 6-digit code. Type the code here, or open the link on this device.</p>
+      <p>We&rsquo;ve emailed <strong>{to}</strong> a sign-in link. Open it on this device — or, if the email shows a 6-digit code, type it here (that works in the Home Screen app too).</p>
       <label htmlFor="code">The 6-digit code</label>
       <input id="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,7}" maxLength={7} required value={code}
         onChange={(e) => setCode(e.target.value)} style={{ display: 'block', width: '100%', padding: 8, margin: '6px 0 10px', fontSize: 20, letterSpacing: 4 }} />

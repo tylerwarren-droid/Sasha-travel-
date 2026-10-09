@@ -106,6 +106,7 @@ RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues":
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
           "save_travellers": "inline", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
           "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
+RENDER.update({"send_email": "read_back", "add_to_calendar": "inline"})   # CR 60 / Sasha 216 · the email read back on its card
 KINDS = {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 
 
@@ -143,8 +144,11 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": kind, "find": {"what": args.get("what") or c.get("name"), "where": args.get("city") or ""},
                 "preset": {"all": [c], "cards": [c], "show": 1}, "focus": c.get("place_id"),
                 "ribbon": f"{c.get('name')}" + (f" · {res['when']}" if res.get("when") else "")}
+    if kind == "read_back" and not res.get("read_back"):   # Sasha 216 · a sent email has nothing to read back
+        return None
     if kind == "read_back":   # Sasha 213 · the read-back she just gave, from her own hold — never a second quote
         return {"type": "render", "kind": kind, "read_back": [l for l in res.get("read_back") or []], "total_eur": res.get("total_eur"),
+                **({"what": "email", "live": bool(res.get("live"))} if tool == "send_email" else {}),   # Sasha 216 · its own card words
                 **({"total": res["breakdown"]} if res.get("breakdown") else {})}   # Sasha 215 · the re-quote refreshes the pill
     return None
 
@@ -581,8 +585,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 continue
             if t and t["idempotent"]:
                 args["idempotency_key"] = f"{turn_key}:{u.name}:{hashlib.sha256(json.dumps(u.input, sort_keys=True).encode()).hexdigest()[:12]}"
-            if u.name in ("book", "book_venue", "cancel_venue"):
-                args["approval"] = {"said": message}   # the REAL words of this turn — never the model's
+            if u.name in ("book", "book_venue", "cancel_venue", "send_email"):
+                args["approval"] = {"said": message}   # the REAL words of this turn — never the model's (CR 60: the email's too)
             r = await API.call(ctx, u.name, args)
             if r.get("ok"):
                 _amounts(r["result"], allowed)
@@ -926,6 +930,16 @@ async def over_budget(account: str) -> Optional[str]:
     except Exception as e:   # the count unreachable never blocks a turn; it's logged
         log.error("[agent] daily budget not counted: %s: %s", type(e).__name__, e)
     return None
+
+
+@router.get("/ics/{token}.ics")   # CR 60 / Sasha 216 · the event is IN the signed link: any worker, any deploy; nothing else read
+async def agent_ics(token: str):
+    from fastapi.responses import Response
+    from agapi import s2_tools as S2
+    text = S2.ics_from_token(token)
+    if not text:
+        return JSONResponse({"ok": False}, status_code=404)
+    return Response(text, media_type="text/calendar; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="sasha.ics"'})
 
 
 @router.post("/turn")

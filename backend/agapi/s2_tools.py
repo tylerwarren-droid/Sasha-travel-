@@ -26,13 +26,22 @@ log = logging.getLogger("agapi.s2")
 YES_WINDOW = timedelta(minutes=15)                         # AgAPI v1 AP4 for an irreversible act
 _HELD: Dict[str, dict] = {}                                # account → the message read back (sha, when it was said, the message)
 OUTBOX: List[dict] = []                                    # TEST mode: every email Sasha would have sent (never sent)
-ICS: Dict[str, dict] = {}                                  # token hash → {account, ics} (served by the route in the wiring note)
 
 # CR 56 / CR 58: the v0 explicit_yes lets a question through ("Yes — what are my cancellation terms?"). For sending, a question
 # word or a request for options vetoes the yes — the same list as the AgAPI sandbox (agapi_service/rules.py QUESTION_VETO).
 _QUESTION = re.compile(r"(?i)\?|¿|\b(?:what|how|which|when|where|why|who|options?|terms|policy|find|search|show me|look up|tell me|"
                        r"can you|could you|would you|is it|are there|list|qué|cómo|cuál(?:es)?|cuándo|dónde|por qué|opciones|"
                        r"condiciones|política|busca(?:r)?|búscame|muéstrame|enséñame|dime|puedes|podrías)\b")
+
+
+def live_for(account: Optional[str]) -> bool:
+    """Sasha 216 · the founder's decision: an email really goes out only for the founder and the allow-listed accounts
+    (SASHA_REAL_CONTACT_ACCOUNTS — today Jon's); everyone else's is captured (OUTBOX), never sent. SASHA_S2_EMAIL_LIVE=0 stops
+    every live send at once."""
+    from booking_signer import guest_accounts as GA
+    if os.getenv("SASHA_S2_EMAIL_LIVE", "1").strip() == "0" or not account:
+        return False
+    return GA.founder(account) or account.lower() in GA.extra_accounts()
 
 
 def _sender() -> str:
@@ -58,16 +67,18 @@ async def send_email(ctx, a: dict) -> dict:
     if not fresh or held["at"] >= ctx.started:
         if not fresh:   # a new message, or the last read-back went stale: read THIS one back; nothing is sent
             _HELD[ctx.account] = {"sha": sha, "at": now, "msg": msg}
-        return {"status": "awaiting_yes", "read_back": lines, "read_back_sha256": sha,
+        return {"status": "awaiting_yes", "read_back": lines, "read_back_sha256": sha, "live": live_for(ctx.account),   # Sasha 216
                 "say": "Read it back exactly, then ask: shall I send it?"}
     if not strict_yes(said):
         raise ToolError("no_explicit_yes", "sending needs their explicit yes to exactly this message — a question isn't a yes")
+    from agapi.v0 import claim
+    await claim(ctx)   # Sasha 216 · durable: this message is sent once, across restarts and workers
     _HELD.pop(ctx.account, None)
     sent_at = now.isoformat(timespec="seconds").replace("+00:00", "Z")
-    if getattr(ctx, "mode", "test") == "test" or os.getenv("SASHA_S2_EMAIL_LIVE", "") != "1":
+    if not live_for(ctx.account):
         provider_id, words = "test_msg_" + secrets.token_hex(10), "Accepted for delivery (test mode: captured, never sent)."
         OUTBOX.append({"account": ctx.account, "message": msg, "provider_id": provider_id, "sent_at": sent_at})
-    else:   # ⛔ live: only when Tyler switches it on (SASHA_S2_EMAIL_LIVE=1) — the S-36 rung's Resend send, its answer READ
+    else:   # ⛔ live: only the founder and the allow-listed accounts (Sasha 216) — the S-36 rung's Resend send, its answer READ
         from booking_signer import emailing as EM
         from booking_signer.ladder_routes import HTTP
         got = await EM.send(HTTP, {"from": msg["from"], "to": msg["to"]["address"], "subject": msg["subject"], "text": msg["body"]})
@@ -120,10 +131,34 @@ async def add_to_calendar(ctx, a: dict) -> dict:
     if ev is None:
         raise ToolError("booking_unknown", "no confirmed table or flight with that id — get_status lists them")
     dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    text, token = P.ics(ev, dtstamp), secrets.token_urlsafe(24)
-    ICS[hashlib.sha256(token.encode()).hexdigest()] = {"account": ctx.account, "ics": text}
+    text = P.ics(ev, dtstamp)
+    token = ics_token(text)
     base = os.getenv("SASHA_PUBLIC_API_URL", "https://sasha-travel-production.up.railway.app").rstrip("/")
     return {"event": ev, "event_sha256": P.sha256(ev), "ics": text, "links": P.calendar_links(ev, f"{base}/api/agent/ics/{token}.ics")}
+
+
+def _ics_key() -> bytes:
+    k = os.getenv("SASHA_ICS_KEY", "").strip() or os.getenv("SASHA_BOOKING_KEY", "").strip()
+    return hashlib.sha256(("sasha-ics|" + k).encode()).digest()
+
+
+def ics_token(text: str) -> str:
+    """Sasha 216 · the .ics behind the "Apple / any calendar" link, IN the link (compressed) and signed — so it survives deploys and
+    is served by any worker (CR 60's in-memory ICS was per process), and nobody can make our domain serve a file we didn't write."""
+    import base64, hmac, zlib
+    body = base64.urlsafe_b64encode(zlib.compress(text.encode(), 9)).decode().rstrip("=")
+    return body + "." + hmac.new(_ics_key(), body.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def ics_from_token(token: str) -> Optional[str]:
+    import base64, hmac, zlib
+    body, _, sig = (token or "").rpartition(".")
+    if not body or not hmac.compare_digest(sig, hmac.new(_ics_key(), body.encode(), hashlib.sha256).hexdigest()[:32]):
+        return None
+    try:
+        return zlib.decompress(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))).decode()
+    except Exception:
+        return None
 
 
 def tools() -> List[dict]:

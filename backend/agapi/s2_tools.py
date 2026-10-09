@@ -154,8 +154,12 @@ async def add_to_calendar(ctx, a: dict) -> dict:
     base = os.getenv("SASHA_PUBLIC_API_URL", "https://sasha-travel-production.up.railway.app").rstrip("/")
     try:   # CR 62 · in the Activity view: the event's sha256 is its proof (nothing left the account)
         from agapi import s2_records as REC
-        await REC.record(ctx.account, "calendar", "done", {"reference": P.sha256(ev), "at": dtstamp, "event_sha256": P.sha256(ev),
-                                                           "booking_id": bid}, ev["title"])
+        # Sasha 217 · the same booking asked again (she offers it, then hears "put it in my calendar"): the same links, ONE row
+        already = any(r.get("kind") == "calendar" and (r.get("proof") or {}).get("event_sha256") == P.sha256(ev)
+                      for r in await REC.acts(ctx.account))
+        if not already:
+            await REC.record(ctx.account, "calendar", "done", {"reference": P.sha256(ev), "at": dtstamp, "event_sha256": P.sha256(ev),
+                                                               "booking_id": bid}, ev["title"])
     except Exception as e:
         log.info("[s2] calendar activity not recorded: %s", type(e).__name__)
     return {"event": ev, "event_sha256": P.sha256(ev), "ics": text, "links": P.calendar_links(ev, f"{base}/api/agent/ics/{token}.ics")}

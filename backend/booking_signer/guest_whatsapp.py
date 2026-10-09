@@ -559,6 +559,10 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
         await STORE.put_state(key, {"history": [], "pending": None, "last_inbound_at": now, "link_tries": []})
         log.info("[guest_whatsapp] a WhatsApp number was linked to an account")
         return _twiml_message(LINKED)
+    from agapi import s2_whatsapp as S2WA   # CR 62 / Sasha 217 · a reply from someone Sasha wrote to FOR a person: kept, never answered by the model
+    kept = await S2WA.on_contact_message(sender, p.get("Body") or "")
+    if kept is not None:
+        return _twiml_message(kept) if kept else ""
     from . import invitations as IV   # S-80 · Jon opting in to ONE invitation, or stopping it
     joined = await IV.on_invite_message(sender, p.get("Body") or "")
     if joined:

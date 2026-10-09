@@ -196,5 +196,23 @@ class Flow217(unittest.TestCase):
         self.assertEqual(got[0]["reference"], "TV-979A37-D4")
 
 
+    def test_the_same_booking_in_the_calendar_twice_is_one_activity_row(self):
+        from agapi import s2_records as REC
+        from agapi import venues as VN
+        GW = VN._API()
+        rows = [{"id": "bk-9", "venue": "Sasha Test Venue", "status": "confirmed", "date": "2099-10-10", "time": "21:00",
+                 "timezone": "Europe/Madrid", "party": 2, "booking_reference": "TV-1"}]
+        REC.ACTS.clear()
+        with mock.patch.object(GW, "api", mock.AsyncMock(return_value=(200, {"reservations": rows}))), mock.patch.object(GW, "plain_venue", lambda v: v), \
+                mock.patch.object(REC, "_run", lambda: None):
+            for _ in range(2):
+                r = run(API.call(API.Ctx(account=ACCOUNT), "add_to_calendar", {"booking_id": "bk-9"}))
+                self.assertTrue(r["ok"], r)
+            n = len([x for x in run(REC.acts(ACCOUNT)) if x.get("kind") == "calendar"])
+        REC.ACTS.clear()
+        self.assertEqual(n, 1)
+        self.assertIn("TV-1", r["result"]["event"]["details"])
+
+
 if __name__ == "__main__":
     unittest.main()

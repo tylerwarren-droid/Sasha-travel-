@@ -27,8 +27,8 @@ One contract for every client.
 |---|---|---|
 | **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay` |
 | **Sherlock** | checks | `check_offer`, `read_booking_route` |
-| **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue`, `send_email` |
-| **Pacioli** | records — the only source of booked/paid | `get_status`, `get_trip`, `get_total`, `add_to_calendar` |
+| **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue`, `send_email`, `send_whatsapp` |
+| **Pacioli** | records — the only source of booked/paid | `get_status`, `get_trip`, `get_total`, `add_to_calendar`, `get_activity` |
 
 ## Magellan
 
@@ -1152,6 +1152,89 @@ Email someone the person names, FROM SASHA'S OWN ADDRESS (never their mailbox). 
 }
 ```
 
+### `send_whatsapp`
+
+WhatsApp someone the person names, FROM SASHA'S NUMBER (never their phone). The first call returns the exact message to read back; say it, ask 'shall I send it?', and call again with the SAME message after their yes in a later turn. If the recipient hasn't written to Sasha in 24 hours, WhatsApp only allows an approved first message that asks them first (needs on_behalf_of); say that plainly. A question is never a yes.
+
+**Errors:** `invalid_input`, `no_explicit_yes`, `recipient_opted_out`, `upstream_refused`, `upstream_unreachable`, `already_done`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "to": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "number"
+   ],
+   "properties": {
+    "number": {
+     "type": "string",
+     "maxLength": 24,
+     "description": "full international, e.g. +44 7700 900123"
+    },
+    "name": {
+     "type": "string",
+     "maxLength": 120
+    }
+   }
+  },
+  "text": {
+   "type": "string",
+   "minLength": 1,
+   "maxLength": 1000
+  },
+  "on_behalf_of": {
+   "type": "string",
+   "maxLength": 60,
+   "description": "the person's name, for WhatsApp's first message"
+  },
+  "approval": {
+   "type": "object",
+   "properties": {
+    "said": {
+     "type": "string"
+    }
+   },
+   "description": "the person's own words (filled by the caller from the real message)"
+  },
+  "idempotency_key": {
+   "type": "string",
+   "minLength": 8,
+   "maxLength": 128,
+   "description": "Idempotency key: the same key returns the first result."
+  }
+ },
+ "required": [
+  "to",
+  "idempotency_key"
+ ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "status": {
+   "enum": [
+    "awaiting_yes",
+    "sent",
+    "not_sent",
+    "needs_first_contact",
+    "not_possible_yet"
+   ]
+  }
+ }
+}
+```
+
 ## Pacioli
 
 ### `get_status`
@@ -1282,6 +1365,49 @@ Put a CONFIRMED booking (a table or a flight; ids from get_status) in the person
  "properties": {
   "links": {
    "type": "object"
+  }
+ }
+}
+```
+
+### `get_activity`
+
+What Sasha has done for the person — bookings, payments, emails, WhatsApps, calendar adds, cancellations — newest first, from the records (never from memory). For 'what have you done for me today?' use since='today'. Say each in a few words; the full list with proof is on the Activity screen (/activity).
+
+**Errors:** `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "since": {
+   "type": "string",
+   "description": "'today', a date YYYY-MM-DD, or empty for everything"
+  },
+  "limit": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 50
+  }
+ },
+ "required": [],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "activity": {
+   "type": "array"
+  },
+  "anything": {
+   "type": "boolean"
   }
  }
 }

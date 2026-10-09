@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "rule": "approval-language.json",
   "cases": [
     {
@@ -191,6 +191,89 @@
       "lang": "es",
       "said": "Vale, hazlo",
       "explicit_yes": true
+    },
+    {
+      "lang": "en",
+      "said": "Yes, don't book it",
+      "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "OK, let's do it",
+      "explicit_yes": true
+    },
+    {
+      "lang": "en",
+      "said": "yes, don’t book it yet",
+      "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "Let’s book it",
+      "explicit_yes": true
+    },
+    {
+      "lang": "en",
+      "said": "Yes, but what's the refund?",
+      "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "Sure — what’s the total?",
+      "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "Yes, it's fine, book it",
+      "explicit_yes": true
+    },
+    {
+      "lang": "en",
+      "said": "Yes, cancel it.",
+      "act_kind": "cancel",
+      "explicit_yes": true
+    },
+    {
+      "lang": "en",
+      "said": "Yes, cancel it.",
+      "act_kind": null,
+      "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "Don't cancel it",
+      "act_kind": "cancel",
+      "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "Yes, cancel it — wait",
+      "act_kind": "cancel",
+      "explicit_yes": false
+    },
+    {
+      "lang": "en",
+      "said": "Yes, but what's the refund?",
+      "act_kind": "cancel",
+      "explicit_yes": false
+    },
+    {
+      "lang": "es",
+      "said": "Sí, cancela la reserva",
+      "act_kind": "cancel",
+      "explicit_yes": true
+    },
+    {
+      "lang": "es",
+      "said": "Sí, cancela la reserva",
+      "act_kind": null,
+      "explicit_yes": false
+    },
+    {
+      "lang": "es",
+      "said": "No, no la canceles",
+      "act_kind": "cancel",
+      "explicit_yes": false
     }
   ]
 }

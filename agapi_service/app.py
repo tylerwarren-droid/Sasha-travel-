@@ -39,6 +39,9 @@ def use_store(store: Store) -> None:
 
 surface.bind(db)
 app.include_router(surface.router)
+from . import fixtures as _fixtures   # noqa: E402 · CR 64 · DIVE prep: a hosted fake supplier
+_fixtures.bind(db)
+app.include_router(_fixtures.router)
 from . import demo as _demo  # noqa: E402  (CR 59 · the VC demo console)
 app.include_router(_demo.router)
 _LOOP: Optional[asyncio.Task] = None

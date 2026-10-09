@@ -210,6 +210,10 @@
     "webhook_endpoint_id": {
       "type": "string",
       "pattern": "^whe_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "reply_id": {
+      "type": "string",
+      "pattern": "^rpl_[0-9A-HJKMNP-TV-Z]{26}$"
     }
   }
 }

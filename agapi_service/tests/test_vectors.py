@@ -45,8 +45,8 @@ class ExplicitYes(unittest.TestCase):
         cases = load("explicit-yes")["cases"]
         for c in cases:
             with self.subTest(f"{c['lang']}: {c['said']}"):
-                self.assertEqual(R.explicit_yes(c["said"], c["lang"]), c["explicit_yes"])
-        self.assertEqual(len(cases), 38)                                  # v1.0: +12 question/request cases
+                self.assertEqual(R.explicit_yes(c["said"], c["lang"], c.get("act_kind")), c["explicit_yes"])
+        self.assertEqual(len(cases), 53)                                  # v1.1: +11 (apostrophe forms, act_kind)
 
     def test_apostrophe_errata(self):
         """EU's frozen reference passes "Yes, don't book it" as a yes (the apostrophe becomes a space). Never here."""
@@ -54,6 +54,20 @@ class ExplicitYes(unittest.TestCase):
             self.assertFalse(R.explicit_yes(said, "en"), said)
         for said in ("OK, let's do it", "Perfect, let’s do it"):
             self.assertTrue(R.explicit_yes(said, "en"), said)
+
+    def test_the_apostrophe_hole_1_1(self):
+        """1.1 PRIORITY: a veto in EITHER apostrophe form — 1.0.1 let "what's" through ("whats" matched no veto)."""
+        for said in ("Yes, but what's the refund?", "Sure — what’s the total?", "Yes, but what's included?", "OK, where's the hotel?"):
+            self.assertFalse(R.explicit_yes(said, "en"), said)
+            self.assertFalse(R.explicit_yes_any(said)[0], said)
+        self.assertTrue(R.explicit_yes("OK, let's do it", "en"))                                  # the deleted form still says yes
+
+    def test_act_kind_cancel(self):
+        self.assertTrue(R.explicit_yes("Yes, cancel it.", "en", "cancel"))
+        self.assertFalse(R.explicit_yes("Yes, cancel it.", "en"))                                 # without act_kind: 1.0.1 exactly
+        self.assertFalse(R.explicit_yes("Don't cancel it", "en", "cancel"))
+        self.assertTrue(R.explicit_yes_any("Sí, cancela la reserva", "cancel")[0])
+        self.assertFalse(R.explicit_yes_any("Yes, cancel it — wait", "cancel")[0])
 
     def test_the_lists_come_from_the_frozen_file(self):
         L = json.loads((V / "approval-language.json").read_text(encoding="utf-8"))
@@ -99,7 +113,7 @@ class Untrusted(unittest.TestCase):
                 e = c["expect"]
                 got = R.wrap(c["text"], c.get("source", e["source"]), c.get("retrieved_at", e["retrieved_at"]))
                 self.assertEqual(got, e)
-        self.assertEqual(len(cases), 8)
+        self.assertEqual(len(cases), 10)                                  # v1.1: +2 (your/my/these/those)
 
 
 class Evidence(unittest.TestCase):

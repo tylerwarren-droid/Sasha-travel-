@@ -99,26 +99,43 @@ def _lang() -> dict:
     return json.loads((SPEC / "vectors" / "approval-language.json").read_text(encoding="utf-8"))["languages"]
 
 
-def _norm_said(s: str) -> str:
-    """EU's normalisation with ONE errata fix (CR 61, reported to EU): apostrophes are DELETED, not turned into spaces — EU's frozen
-    rule makes "don't" → "don t" (no negation matches it: its own reference passes "Yes, don't book it" as a yes) and "let's" →
-    "let s". Deleted they become "dont" and "lets", both in EU's lists. Every v1.0 vector keeps its expected answer."""
+def _norm_said(s: str, apostrophe: str = "") -> str:
+    """EU's normalisation. apostrophe="" DELETES it ("don't" → "dont": 1.0.1, the CR 61 errata); apostrophe=" " SPLITS it
+    ("what's" → "what s": 1.1). A veto is checked in BOTH forms (1.1), affirmatives in the deleted form."""
     s = unicodedata.normalize("NFC", s).lower()
-    s = re.sub(r"['‘’]", "", s)
+    s = re.sub(r"['‘’]", apostrophe, s)
     s = re.sub(r"[¡¿!?.,;:\"“”()—–]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
 
-def explicit_yes(said: Optional[str], lang: str = "en") -> bool:
-    """AP6 (v1.0), server-side, never a model: an affirmative phrase (after leading fillers) and NO negation, question or request for
-    options anywhere — every list read from approval-language.json (questions_and_requests: CR 59 finding 1, adopted by EU 205)."""
+@lru_cache(maxsize=1)
+def _acts() -> dict:
+    return json.loads((SPEC / "vectors" / "approval-language-acts.json").read_text(encoding="utf-8"))["acts"]
+
+
+def _vetoed(said: str, L: dict, exempt) -> bool:
+    """1.1: any negation (bar the act's exemptions) or question/request, in EITHER apostrophe form — "Yes, but what's the
+    refund?" is NOT a yes (1.0.1 let "what's" through: "whats" matched no veto)."""
+    forms = (_norm_said(said or ""), _norm_said(said or "", " "))
+    for neg in [n for n in L["negations"] if n not in exempt] + L.get("questions_and_requests", []):
+        if any(re.search(r"(?<!\w)" + re.escape(neg) + r"(?!\w)", f) for f in forms):
+            return True
+    return False
+
+
+def _exempt(act_kind: Optional[str], lang: str) -> set:
+    """1.1 AP6 act-aware (CR 61): for a cancellation's own yes, its own word ("cancel" / "cancela") stops vetoing."""
+    return set(_acts().get(act_kind, {}).get(lang, {}).get("exempt_negations", [])) if act_kind else set()
+
+
+def explicit_yes(said: Optional[str], lang: str = "en", act_kind: Optional[str] = None) -> bool:
+    """AP6 (v1.1), server-side, never a model: an affirmative phrase (after leading fillers) and NO negation, question or request for
+    options anywhere — every list read from approval-language.json (byte-identical since 1.0), the act's exemptions from
+    approval-language-acts.json, the vetoes matched in both apostrophe forms."""
     L = _lang()[lang]
     t = _norm_said(said or "")
-    if not t:
+    if not t or _vetoed(said, L, _exempt(act_kind, lang)):
         return False
-    for neg in L["negations"] + L.get("questions_and_requests", []):
-        if re.search(r"(?<!\w)" + re.escape(neg) + r"(?!\w)", t):
-            return False
     rest, changed = t, True
     while changed:
         changed = False
@@ -128,14 +145,13 @@ def explicit_yes(said: Optional[str], lang: str = "en") -> bool:
     return any(rest == a or rest.startswith(a + " ") for a in sorted(L["affirmatives"], key=len, reverse=True))
 
 
-def explicit_yes_any(said: Optional[str]) -> Tuple[bool, Optional[str]]:
-    """No language given (the sandbox's simulate_approval): a yes in some language AND no negation in ANY of them."""
-    t = _norm_said(said or "")
+def explicit_yes_any(said: Optional[str], act_kind: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+    """No language given (the sandbox's simulate_approval): a yes in some language AND no veto in ANY of them (1.1 rules)."""
     for code, L in _lang().items():
-        if any(re.search(r"(?<!\w)" + re.escape(n) + r"(?!\w)", t) for n in L["negations"] + L.get("questions_and_requests", [])):
+        if _vetoed(said or "", L, _exempt(act_kind, code)):
             return False, None
     for code in _lang():
-        if explicit_yes(said, code):
+        if explicit_yes(said, code, act_kind):
             return True, code
     return False, None
 
@@ -185,7 +201,7 @@ def decide(case: dict, *, test_mode: bool = False) -> Tuple[str, Optional[str]]:
     if rb["presented_at"] is None or a["approved_turn_id"] == rb["presented_turn_id"] or not (a["approved_at"] > rb["presented_at"]):
         return "approval_same_turn", None
     if a["method"] == "voice" or (a["device"]["channel"] == "sasha_chat" and a.get("said") is not None):
-        if not explicit_yes(a.get("said"), case.get("lang", "en")):
+        if not explicit_yes(a.get("said"), case.get("lang", "en"), case.get("act_kind")):
             return "no_explicit_yes", None
     if a["approved_at"] > rb["expires_at"] or now > a["expires_at"]:
         return "approval_expired", None

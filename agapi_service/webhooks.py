@@ -17,7 +17,8 @@ from . import config, rules as R
 from .store import Store, now, parse_ts, ts
 
 log = logging.getLogger("agapi.webhooks")
-_DATA_KEYS = ("intent_id", "read_back_id", "approval_id", "act_id", "evidence_id", "outcome_kind", "void_reason", "reference")
+_DATA_KEYS = ("intent_id", "read_back_id", "approval_id", "act_id", "evidence_id", "outcome_kind", "void_reason", "reference",
+              "reply_id")   # 1.1: message.replied
 
 
 def emit(store: Store, account: str, event: str, data: dict) -> None:

@@ -140,7 +140,7 @@ class Keep(Base):
         self.assertEqual(self.got, [])                                                         # not yet: a paid flight books on payment
         self.client.post("/" + act["outcome"]["payment_url"].split("://", 1)[1].split("/", 1)[1])
         self.assertEqual(self.got, [("duffel", "passport", {"number": "PAA123456", "country": "ES", "expires_on": "2031-05-01"})])
-        items = self.ok("activity.list", {"end_user": uid})["items"]
+        items = self.ok("keep.activity", {"end_user": uid})["items"]
         used = [i for i in items if i["kind"] == "keep_use"]
         self.assertEqual(len(used), 1)
         self.assertEqual((used[0]["line"], used[0]["about"]["text"], used[0]["check"]), ("Used from your Keep for a booking",
@@ -190,7 +190,7 @@ class Keep(Base):
         self.assertNotIn("4711#", self.client.get(path).text)                                 # GET never opens it
         self.assertIn("4711#", self.client.post(path).text)                                   # their own tap: shown once
         self.assertEqual(self.client.post(path).status_code, 404)                             # never twice
-        kinds = [i["kind"] for i in self.ok("activity.list", {"end_user": uid})["items"]]
+        kinds = [i["kind"] for i in self.ok("keep.activity", {"end_user": uid})["items"]]
         self.assertIn("keep_show", kinds)
         self.assertNowhere("4711#")
 
@@ -205,7 +205,7 @@ class Keep(Base):
         self.assertIsNone(self.store.one("select 1 from keep_keys where end_user = ?", uid))
         self.assertIsNone(self.store.one("select 1 from keep_items where end_user = ?", uid))
         self.assertEqual(self.ok("keep.list", {"end_user": uid})["items"], [])
-        lines = [i["line"] for i in self.ok("activity.list", {"end_user": uid})["items"]]
+        lines = [i["line"] for i in self.ok("keep.activity", {"end_user": uid})["items"]]
         self.assertEqual(lines.count("Deleted from your Keep"), 2)
         self.assertNowhere(*SECRETS)
 

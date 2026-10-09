@@ -5,3 +5,4 @@ python-multipart==0.0.9
 jsonschema==4.23.0
 tzdata
 cryptography==43.0.3
+requests==2.32.3

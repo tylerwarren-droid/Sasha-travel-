@@ -1,9 +1,9 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "rule": "Part 2 §3. A match sets instruction_like: true. The text is kept and shown quoted; nothing is removed for matching. Case-insensitive.",
   "patterns": [
-    "ignore (all |any |the )?(previous|prior|above|earlier)",
-    "disregard (all |any |the )?(previous|prior|above|earlier)",
+    "ignore (all |any |the |your |my |these |those )?(previous|prior|above|earlier)",
+    "disregard (all |any |the |your |my |these |those )?(previous|prior|above|earlier)",
     "(^|\\W)(system|assistant|developer)\\s*:",
     "<\\|[^|>]{1,40}\\|>",
     "you are now",
@@ -12,5 +12,6 @@
     "\\b(call|invoke|use) (the )?(tool|function)\\b",
     "\\b(send|transfer|wire|pay) (money|funds|\\$|€|£)",
     "\\bbook (the )?(most expensive|all)\\b"
-  ]
+  ],
+  "changelog": "1.1 (CR 62 finding): 'your', 'my', 'these', 'those' allowed between ignore/disregard and previous/prior/above/earlier."
 }

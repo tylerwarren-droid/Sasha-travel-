@@ -10,9 +10,9 @@ BACKEND = ROOT / "backend"
 if str(BACKEND) not in sys.path:          # Sasha's search engines (booking_signer) on recorded fixtures — never the agent loop
     sys.path.insert(0, str(BACKEND))
 
-CONTRACT = "1.0"                           # what a response says when the caller doesn't ask (AgAPI-Version)
-SPEC_DRAFT = "1.0"                         # EU 201 Parts 1–4, FROZEN v1.0 (EU 205), vendored in spec/v1 (SHA256SUMS)
-SUPPORTED = ("1.0", "1.0-draft.1", "1.0-draft.2", "1.0-draft.3", "1.0-draft.4")
+CONTRACT = "1.1"                           # what a response says when the caller doesn't ask (AgAPI-Version) — CR 64: EU 211's 1.1
+SPEC_DRAFT = "1.1"                         # EU 211's v1.1 (additive over 1.0), vendored in spec/v1 (SHA256SUMS)
+SUPPORTED = ("1.1", "1.0", "1.0-draft.1", "1.0-draft.2", "1.0-draft.3", "1.0-draft.4")   # 1.1 is additive: a 1.0 caller is still served
 MODE = "test"
 
 DB_PATH = os.getenv("AGAPI_DB", str(ROOT / "agapi_service" / "sandbox.db"))

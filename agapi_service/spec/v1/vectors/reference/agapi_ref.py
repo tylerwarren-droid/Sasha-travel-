@@ -52,17 +52,25 @@ def read_back_sha256(account, intent_id, operation, lines, payload_sha256):
     return sha256({"account": account, "intent_id": intent_id, "operation": operation, "lines": lines, "payload_sha256": payload_sha256})
 
 # ── AP6 explicit yes ────────────────────────────────────────────────────────────────────────
-def _norm(s):
+def _norm(s, apostrophe=""):
+    """apostrophe="" deletes it ("don't" -> "dont", 1.0.1); apostrophe=" " splits it ("what's" -> "what s", 1.1)."""
     s = unicodedata.normalize("NFC", s).lower()
-    s = re.sub(r"[¡¿!?.,;:\"'“”‘’()—–]", " ", s)
+    s = re.sub(r"['‘’]", apostrophe, s)
+    s = re.sub(r"[¡¿!?.,;:\"“”()—–]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
-def explicit_yes(said, lang):
+def explicit_yes(said, lang, act_kind=None):
     L = json.load(open(__file__.rsplit("/", 2)[0] + "/approval-language.json"))["languages"][lang]
+    exempt = set()
+    if act_kind:  # v1.1 (CR 61): a cancellation's own yes may say "cancel"
+        A = json.load(open(__file__.rsplit("/", 2)[0] + "/approval-language-acts.json"))["acts"]
+        exempt = set(A.get(act_kind, {}).get(lang, {}).get("exempt_negations", []))
     t = _norm(said or "")
     if not t: return False
-    for neg in L["negations"] + L.get("questions_and_requests", []):
-        if re.search(r"(?<!\w)" + re.escape(neg) + r"(?!\w)", t): return False
+    # 1.1: a veto matches in EITHER form, so "don't" (dont) and "what's" (what s) both veto; affirmatives use t
+    forms = (t, _norm(said or "", " "))
+    for neg in [n for n in L["negations"] if n not in exempt] + L.get("questions_and_requests", []):
+        if any(re.search(r"(?<!\w)" + re.escape(neg) + r"(?!\w)", f) for f in forms): return False
     rest = t
     changed = True
     while changed:

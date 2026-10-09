@@ -471,12 +471,28 @@ class Extensions(Base):
 
     def test_eus_tables_are_untouched(self):
         from agapi_service.registry import eu_operations
-        self.assertEqual(len(eu_operations()), 18)                                      # v1.0 (EU 205): our 3 extensions adopted
-        self.assertEqual(set(operations()) - set(eu_operations()), {"messages.send_email", "calendar.add_event",
-                                                                     "messages.send_whatsapp", "messages.replies", "activity.list",
-                                                                     "sandbox.simulate_reply", "keep.put", "keep.list", "keep.use",
-                                                                     "keep.delete"})                                # CR 60 + 62 + 63
+        self.assertEqual(len(eu_operations()), 24)                                      # v1.1 (EU 211): +6, adopted from CR 60–62
+        for op in ("messages.send_email", "messages.send_whatsapp", "messages.replies", "activity.list", "calendar.add_event",
+                   "sandbox.simulate_reply"):
+            self.assertEqual(operations()[op]["output"], eu_operations()[op]["output"], op)   # now on EU's own schemas
+        self.assertEqual(set(operations()) - set(eu_operations()),
+                         {"keep.put", "keep.list", "keep.use", "keep.delete", "keep.activity"})   # CR 63: the Keep, proposed to EU
         self.assertEqual(operations()["acts.status"]["output"], eu_operations()["acts.status"]["output"])
+
+
+class McpDescriptions(Base):
+    def test_every_tool_says_what_it_does(self):
+        """CR 64 · EU's ask: a model reads these. Every operation has a real description (not "[magellan] travel.find_flights")."""
+        from agapi_service import gen
+        m = self.client.get("/mcp.json").json()
+        self.assertEqual({t["title"] for t in m["tools"]}, set(operations()))
+        for t in m["tools"]:
+            self.assertGreaterEqual(len(t["description"]), 60, t["name"])
+            self.assertFalse(t["description"].startswith("["), t["name"])
+        self.assertEqual(set(gen.DESCRIPTIONS), set(operations()))                         # no stale or missing entry
+        by = {t["title"]: t["description"] for t in m["tools"]}
+        self.assertIn("never", by["keep.list"].lower())
+        self.assertIn("own approval", by["trip.cancel"].lower())
 
 
 class DemoConsole(Base):

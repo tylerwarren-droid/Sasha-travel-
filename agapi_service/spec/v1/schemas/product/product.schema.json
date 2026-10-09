@@ -330,7 +330,8 @@
             "act.refused",
             "act.failed",
             "act.unknown",
-            "act.cancelled"
+            "act.cancelled",
+            "message.replied"
           ]
         },
         "created_at": {
@@ -384,6 +385,10 @@
             },
             "reference": {
               "type": "string"
+            },
+            "reply_id": {
+              "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/reply_id",
+              "description": "v1.1, message.replied only: fetch the text with messages.replies. intent_id is the send that opened the conversation."
             }
           }
         }

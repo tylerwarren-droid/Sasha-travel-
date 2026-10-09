@@ -16,11 +16,11 @@
 | File | What it pins | Cases |
 |---|---|---|
 | `vectors/canonical.json` | Part 1 §4.1: input → canonical bytes → sha256; refusals | 10 accepted + 5 refused |
-| `vectors/explicit-yes.json` + `vectors/approval-language.json` | Part 1 AP6: said → explicit yes (EN, ES); v1.0 adds the question/request vetoes | 38 |
+| `vectors/explicit-yes.json` + `vectors/approval-language.json` | Part 1 AP6: said → explicit yes (EN, ES); v1.0 adds the question/request vetoes; 1.0.1 the apostrophe cases; 1.1 `act_kind` (cancel) + the "what's" fix | 53 |
 | `vectors/approval.json` | Part 1 AP1–AP9: the act-time decision, **in the normative check order** | 17 |
 | `vectors/idempotency.json` | Part 1 §7: request sequences → status, replay, upstream calls, charge; v1.0 adds I-12 (scope includes the operation) | 12 |
 | `vectors/outage.json` | Part 1 §5.1: per-source upstream results → an error or coverage | 7 |
-| `vectors/untrusted.json` + `vectors/untrusted-patterns.json` | Part 2 §3: fetched text → cleaned text + `instruction_like` / `truncated` | 8 |
+| `vectors/untrusted.json` + `vectors/untrusted-patterns.json` | Part 2 §3: fetched text → cleaned text + `instruction_like` / `truncated`; 1.1 adds U-9/U-10 | 10 |
 | `vectors/evidence.json` | Part 2 §4: `body_sha256` valid / tampered | 2 |
 | `vectors/webhook-signature.json` | Part 4 W3: HMAC header, tamper, staleness | 3 |
 
@@ -30,7 +30,7 @@
 |---|---|
 | **Canonical JSON, Python reference vs AD `canonical.js` (Node)** | **10/10 accepted cases byte-identical**, with identical sha256. C-1 (key order), C-3 (raw UTF-8: `Café Ñandú 東京 🚀`), C-4 (escapes), C-7 (`1.0`/`-0.0`/`1e3` normalised), C-10 (the read-back shape) included |
 | Canonical refusals | **AD `canonical.js` accepts all 5 refusal cases today** (a fraction, a non-ASCII key, an uppercase key, a lone surrogate, an integer > 2^53−1). With the §4.1 checks added (as in `check_canonical_js.mjs`'s `strict`), all 5 are refused. ⚠ **A gap to fix in the AgAPI service and in Sasha.** AD's own file stays untouched until AD's beta ships (EU 200 §5) |
-| Explicit yes, approval, outage, untrusted, evidence, webhook | **asserted against the reference** by `generate.py` (it stops on any mismatch): canonical 15 · yes 38 · approval 17 · outage 7 · untrusted 8 · evidence 2 · webhook 3, all pass. Webhook W-1/W-2 re-checked in Node: identical |
+| Explicit yes, approval, outage, untrusted, evidence, webhook | **asserted against the reference** by `generate.py` (it stops on any mismatch): canonical 15 · yes 53 · approval 17 · outage 7 · untrusted 8 · evidence 2 · webhook 3, all pass. Webhook W-1/W-2 re-checked in Node: identical |
 | Idempotency | a sequence spec (no single-function reference); I-1–I-11 were passed by CR's sandbox (CR 59); **I-12 is new in v1.0** and pins what CR already implements |
 | **CR's sandbox** (`agapi-sandbox-production`, `cr/agapi-api` @ `b9fa892`) | **all EU vectors pass**, 41/41 tests (CR 59, #565). The 12 new yes vectors were CR's own EN/ES lists, so it passes them by construction; CR re-runs to confirm |
 
@@ -83,7 +83,7 @@ through AgAPI 1.0 rules:**
 | # | File | Cases | What Sasha's code must do |
 |---|---|---|---|
 | 1 | `canonical.json` | **15**: 10 byte-exact + 5 refusals | `canonical(value)` produces the exact bytes and sha256 for C-1–C-10, and **refuses** C-R1–C-R5 (a fraction, a non-ASCII key, an uppercase key, a lone surrogate, an integer > 2^53−1) |
-| 2 | `explicit-yes.json` + `approval-language.json` | **38**, including the 12 new v1.0 cases | AP6 on `said`, EN and ES, loading the lists from `approval-language.json` (not a copy in code): negations **and** `questions_and_requests` veto; "vale" is a yes alone |
+| 2 | `explicit-yes.json` + `approval-language.json` | **53**, including the 12 v1.0 cases, the 4 apostrophe cases (1.0.1) and the 11 v1.1 cases (`act_kind`, "what's") | AP6 on `said`, EN and ES, loading the lists from `approval-language.json` (not a copy in code): negations **and** `questions_and_requests` veto; "vale" is a yes alone |
 | 3 | `approval.json` | **17** | the act-time decision, returning the **first failing rule in the §3 order** |
 | 4 | `outage.json` | **7** | an upstream failure is never "no results"; partial with 0 items (O-7) stays partial; the ranking in §4 |
 

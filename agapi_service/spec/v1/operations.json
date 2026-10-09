@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "operations": [
     {
       "operation": "travel.find_flights",
@@ -307,6 +307,126 @@
         "idempotency_key_required"
       ],
       "cost_class": "free"
+    },
+    {
+      "operation": "messages.send_email",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": true,
+      "input": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/send_email_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/send_email_out",
+      "errors": [
+        "approval_required",
+        "approval_not_found",
+        "approval_same_turn",
+        "approval_expired",
+        "approval_void",
+        "approval_consumed",
+        "approval_untrusted_origin",
+        "no_explicit_yes",
+        "idempotency_key_required",
+        "idempotency_in_flight",
+        "idempotency_conflict",
+        "already_completed",
+        "upstream_unreachable",
+        "upstream_timeout",
+        "upstream_rate_limited",
+        "upstream_failed",
+        "upstream_refused",
+        "outcome_unknown",
+        "invalid_input",
+        "not_found"
+      ],
+      "cost_class": "message",
+      "since": "1.1"
+    },
+    {
+      "operation": "messages.send_whatsapp",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": true,
+      "input": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/send_whatsapp_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/send_whatsapp_out",
+      "errors": [
+        "approval_required",
+        "approval_not_found",
+        "approval_same_turn",
+        "approval_expired",
+        "approval_void",
+        "approval_consumed",
+        "approval_untrusted_origin",
+        "no_explicit_yes",
+        "idempotency_key_required",
+        "idempotency_in_flight",
+        "idempotency_conflict",
+        "already_completed",
+        "upstream_unreachable",
+        "upstream_timeout",
+        "upstream_rate_limited",
+        "upstream_failed",
+        "upstream_refused",
+        "outcome_unknown",
+        "invalid_input",
+        "not_found"
+      ],
+      "cost_class": "message",
+      "since": "1.1"
+    },
+    {
+      "operation": "messages.replies",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/replies_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/replies_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "read",
+      "since": "1.1"
+    },
+    {
+      "operation": "activity.list",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/activity_list_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/activity_list_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "read",
+      "since": "1.1"
+    },
+    {
+      "operation": "calendar.add_event",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/calendar_add_event_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/calendar_add_event_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "free",
+      "since": "1.1"
+    },
+    {
+      "operation": "sandbox.simulate_reply",
+      "agent": "austen",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/simulate_reply_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/simulate_reply_out",
+      "errors": [
+        "invalid_input",
+        "mode_not_available"
+      ],
+      "cost_class": "free",
+      "since": "1.1"
     }
   ]
 }

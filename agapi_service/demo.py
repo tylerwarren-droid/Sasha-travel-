@@ -308,7 +308,7 @@ async def _keep(store, s):
     act = store.one("select * from acts where id = ?", c["result"]["act_id"])
     store.x("update acts set pay_token_hash = null where id = ?", act["id"])
     paid = await E.pay(store, act)                                          # the traveller pays (test) → the airline order, the fill
-    _, a = await _op(store, "activity.list", {"end_user": s["uid"]})
+    _, a = await _op(store, "keep.activity", {"end_user": s["uid"]})   # 1.1: the Keep's rows (activity.list's kinds predate it)
     used = [i for i in a["result"]["items"] if i["kind"] == "keep_use"]
     return _r("green", "Saved to the Keep, filled into the booking only after the yes that named it — Sasha never saw the number.",
               [f"Sasha sees: {item['masked']}", use["line"], f"Booked — {paid.get('reference', '')}"],
@@ -325,12 +325,13 @@ async def _cancel(store, s):
         return _r("error", "Unexpected.")
     crb = b["error"]["details"]["read_back_id"]
     lines = b["error"]["details"]["read_back"]["lines"]
-    _, a = await _op(store, "sandbox.simulate_approval", {"read_back_id": crb, "said": "Yes, go ahead."})
+    _, a = await _op(store, "sandbox.simulate_approval", {"read_back_id": crb, "said": "Yes, cancel it."})   # 1.1: act-aware AP6
     st, c = await _op(store, "trip.cancel", {"act_id": s["act"]}, approval=a["result"]["approval_id"])
     r = c["result"]
     return _r("green", f"Cancelled — refund €{r['refund']['amount_minor'] / 100:.2f}. It needed its own yes.", lines,
-              phone={"kind": "say", "said": "Yes, go ahead.", "ok": True},
+              phone={"kind": "say", "said": "Yes, cancel it.", "ok": True},
               checks=[{"ok": True, "text": "Cancelling needed a new yes — the booking's yes couldn't be reused"},
+                      {"ok": True, "text": "“Yes, cancel it.” is a yes to a cancellation (AgAPI 1.1) — and only to one"},
                       {"ok": r["outcome"]["kind"] == "CONFIRMED", "text": f"Cancellation confirmed — {r['outcome']['reference']}"}])
 
 
@@ -364,8 +365,11 @@ async def activity_page(req: Request):
         return HTMLResponse(_ACTIVITY.replace("{rows}", "<li class='amber'><span class='c'>…</span><div><b>Your activity couldn't be read "
                                               "just now</b><span class='about'>Try again in a moment — nothing is lost.</span></div></li>"),
                             headers={"Cache-Control": "no-store"})
+    _, kept = await _op(store, "keep.activity", {"end_user": s["uid"]})   # the Keep's rows, merged in (same shape)
+    from agapi import powers as P
+    items = P.activity_sorted(a["result"]["items"] + ((kept.get("result") or {}).get("items") or []))
     rows = []
-    for i in a["result"]["items"]:
+    for i in items:
         proof = ""
         if i.get("proof"):
             _, ev = await _op(store, "evidence.get", {"evidence_id": i["proof"]})

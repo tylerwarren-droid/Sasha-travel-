@@ -87,6 +87,7 @@ Always this shape, **including errors**, with every HTTP status (§5.2):
 | `key_` | an API key (Part 4) |
 | `whk_` | a webhook delivery (Part 4) |
 | `whe_` | a webhook endpoint (Part 4 `webhooks.register`, v1.0) |
+| `rpl_` | a reply to a message Sasha/AgAPI sent (v1.1, `messages.replies`) |
 
 ## 3. Versioning
 

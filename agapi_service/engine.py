@@ -249,6 +249,11 @@ def _norm_dest(v: str) -> str:
     return v if "@" in v else "+" + "".join(ch for ch in v if ch.isdigit())
 
 
+def _act_kind(rb: dict) -> Optional[str]:
+    """1.1 AP6 act_kind — from the read-back's OWN operation, never from the caller: only a cancellation is 'cancel'."""
+    return "cancel" if rb.get("operation") == "trip.cancel" else None
+
+
 def _approval_case(ctx: Ctx, rb: dict, apv: Optional[dict], current: dict, acts_in_request: int) -> dict:
     a = None
     if apv:
@@ -259,6 +264,7 @@ def _approval_case(ctx: Ctx, rb: dict, apv: Optional[dict], current: dict, acts_
         if apv["said"] is not None:
             a["said"] = apv["said"]
     return {"account": ctx.account, "lang": (apv or {}).get("lang") or "en", "now": ts(), "acts_in_request": acts_in_request,
+            "act_kind": _act_kind(rb),
             "read_back": {"presented_to": rb["presented_to"], "presented_at": rb["presented_at"],
                           "presented_turn_id": rb["presented_turn_id"], "expires_at": rb["expires_at"]},
             "approval": a, "current": current}
@@ -637,7 +643,7 @@ async def sandbox_simulate_approval(ctx: Ctx, inp: dict):
     if _rb_state(rb) in ("approved", "void"):
         raise AgapiError("approval_same_turn" if _rb_state(rb) == "approved" else "approval_expired",
                          "That read-back has already been answered; hold again for a fresh one.")
-    yes, lang = R.explicit_yes_any(inp["said"])
+    yes, lang = R.explicit_yes_any(inp["said"], _act_kind(rb))   # 1.1: a cancellation's own yes may say "cancel"
     if not yes:
         raise AgapiError("no_explicit_yes", _DECISION_WORDS["no_explicit_yes"])
     after = int(inp.get("after_seconds") or 2)
@@ -939,14 +945,18 @@ async def sandbox_simulate_reply(ctx: Ctx, inp: dict):
     except Exception as e:
         raise AgapiError("invalid_input", getattr(e, "message", str(e)), {"path": "/number", "rule": "e164"})
     c = ctx.store.one("select * from wa_contacts where account = ? and number = ?", ctx.account, number)
-    if not c:
-        raise AgapiError("not_found", "Sasha hasn't written to that number for this account.", {"number": number})
+    if not c:   # 1.1 lists invalid_input for this operation
+        raise AgapiError("invalid_input", "Sasha hasn't written to that number for this account.", {"path": "/number", "rule": "not_messaged"})
     rid, now = R.new_id("rpl"), ts()
     ctx.store.x("insert into wa_replies (account, id, number, body, received_at) values (?, ?, ?, ?, ?)", ctx.account, rid, number,
                 str(inp["text"])[:4096], now)
     stop = bool(_STOP_RE.match(inp["text"]))
     ctx.store.x("update wa_contacts set last_inbound_at = ?, opted_out_at = coalesce(opted_out_at, ?) where account = ? and number = ?",
                 now, now if stop else None, ctx.account, number)
+    opened = ctx.store.one("select intent_id from acts where account = ? and kind = 'whatsapp' and target_act = ? and end_user = ? "
+                           "order by created_at desc", ctx.account, number, c["end_user"])
+    if opened:   # 1.1: message.replied — ids only; the text is fetched with messages.replies
+        W.emit(ctx.store, ctx.account, "message.replied", {"intent_id": opened["intent_id"], "reply_id": rid})
     return {"reply_id": rid, "received_at": now, "opted_out": stop,
             "window_open_until": None if stop else ts(parse_ts(now) + timedelta(hours=24))}, 200, None
 
@@ -1020,15 +1030,25 @@ async def activity_list(ctx: Ctx, inp: dict):
             about = _about(ctx, mine[ev["act_id"]], e["created_at"][:19] + "Z")
             row = P.activity_entry("calendar", "done", e["created_at"], ref=e["id"], proof=e["id"])
             rows.append({**row, **({"about": about} if about else {}), "verified": _verified(ctx, e["id"])})
-    for k in ctx.store.q("select * from keep_events where account = ? and end_user = ? order by at desc limit 200", ctx.account, inp["end_user"]):
-        row = P.activity_entry(k["kind"], "done", k["at"], ref=k["id"], proof=k["evidence_id"])   # CR 63: every save, use, show, deletion
-        rows.append({**row, "about": R.wrap(k["masked"], "keep_mask", k["at"][:19] + "Z", cap=200), "verified": _verified(ctx, k["evidence_id"])})
     for r in _replies(ctx, inp["end_user"]):
         at = r["received_at"][:19] + "Z"
         row = P.activity_entry("whatsapp_reply", "done", r["received_at"], ref=r["id"])
         rows.append({**row, "about": R.wrap(r["name"] or r["number"], "user_named", at, cap=200), "verified": False})
     rows = [r for r in P.activity_sorted(rows) if not since or r["at"] >= since][:limit]
     return {"items": rows, "coverage": {"complete": True, "answered": ["agapi_ledger"], "unavailable": []}}, 200, None
+
+
+async def keep_activity(ctx: Ctx, inp: dict):
+    """CR 63/64 · the Keep's Activity rows (save, use, show, deletion) — the SAME shape as activity.list's items, apart because 1.1's
+    activity.list kinds predate the Keep (proposed to EU for 1.2). Each with its proof."""
+    P = _powers()
+    _end_user(ctx, inp["end_user"])
+    since, limit = inp.get("since") or "", int(inp.get("limit") or 50)
+    rows = []
+    for k in ctx.store.q("select * from keep_events where account = ? and end_user = ? order by at desc limit 200", ctx.account, inp["end_user"]):
+        row = P.activity_entry(k["kind"], "done", k["at"], ref=k["id"], proof=k["evidence_id"])
+        rows.append({**row, "about": R.wrap(k["masked"], "keep_mask", k["at"][:19] + "Z", cap=200), "verified": _verified(ctx, k["evidence_id"])})
+    return {"items": [r for r in P.activity_sorted(rows) if not since or r["at"] >= since][:limit]}, 200, None
 
 
 OPS = {"travel.find_flights": find_flights, "travel.find_stays": find_stays, "venues.find_venues": find_venues,
@@ -1039,4 +1059,4 @@ OPS = {"travel.find_flights": find_flights, "travel.find_stays": find_stays, "ve
        "approvals.status": approvals_status, "webhooks.register": webhooks_register, "users.verify_destination": users_verify_destination,
        "messages.send_email": messages_send_email, "calendar.add_event": calendar_add_event, "webhooks.revoke": webhooks_revoke,
        "messages.send_whatsapp": messages_send_whatsapp, "messages.replies": messages_replies, "activity.list": activity_list,
-       "sandbox.simulate_reply": sandbox_simulate_reply, **KO.OPS}
+       "sandbox.simulate_reply": sandbox_simulate_reply, "keep.activity": keep_activity, **KO.OPS}

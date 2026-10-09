@@ -102,7 +102,8 @@ async def checkout(amount: str, currency: str, label: str, ref: str, embedded: b
     # has them) — no redirect; the page hears the outcome from Pacioli, never from the browser
     # (Stripe renamed the mode: "embedded" is refused now — "embedded_page", checked live in TEST on 9 Oct)
     shape = ({"ui_mode": "embedded_page", "redirect_on_completion": "never"} if embedded else
-             {"success_url": f"{back}/done?s={{CHECKOUT_SESSION_ID}}", "cancel_url": f"{back}/back?s={{CHECKOUT_SESSION_ID}}"})
+             {"success_url": f"{back}/done?s={{CHECKOUT_SESSION_ID}}" + ("&w=here" if where == "here" else ""),
+              "cancel_url": f"{back}/back?s={{CHECKOUT_SESSION_ID}}"})
     s, j = await HTTP("POST", "/checkout/sessions", {
         "mode": "payment", **shape, "metadata[sasha_where]": where,
         "line_items[0][quantity]": 1, "line_items[0][price_data][currency]": currency.lower(),
@@ -183,15 +184,17 @@ async def done(request: Request):
     if not _SID.fullmatch(sid):
         return _page("Test payment", "This link isn't a test payment Sasha made.", "", False)
     out = OUTCOMES.get(sid)
+    here = request.query_params.get("w") == "here"   # Sasha 220 · paid HERE: the conversation hears it, not WhatsApp
+    where_words = "back in your conversation with Sasha" if here else "on WhatsApp"
     if out:
         return _page("Paid (TEST) — " + ("booked (TEST)" if out["ok"] else "not booked"), out["line"],
-                     "The same message is on WhatsApp. You can close this page.", False)
+                     f"The same message is {where_words}. You can close this page.", False)
     paid = await session_paid(sid) if key() else None
     if paid and time.time() - (paid.get("created") or 0) > 600:   # this page can't see it (another process, a redeploy): say so, stop waiting
         return _page("Paid (TEST)", f"Stripe recorded the TEST payment ({paid['currency']} {paid['amount']:.2f}); nothing was charged.",
                      "The booking's result is in your WhatsApp messages from Sasha — this page can't show it. You can close it.", False)
     if paid:
-        return _page("Paid (TEST). Sasha is booking it — check WhatsApp.",
+        return _page("Paid (TEST). Sasha is booking it — " + ("go back to your conversation." if here else "check WhatsApp."),
                      f"Stripe recorded the TEST payment ({paid['currency']} {paid['amount']:.2f}); nothing was charged.",
                      "Waiting for the booking… this page updates by itself.", True)
     return _page("Payment not recorded yet", "Stripe hasn't recorded this TEST payment yet. If you just paid, give it a moment.",

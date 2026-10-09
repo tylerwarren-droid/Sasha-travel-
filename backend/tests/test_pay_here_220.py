@@ -188,6 +188,17 @@ class OnePaymentPerBasket(unittest.TestCase):
         self.assertEqual((got["where"], got["client_secret"]), ("here", "sec_e"))
 
 
+class AfterBooking(unittest.TestCase):
+    def test_a_booked_basket_is_already_paid_never_a_new_payment(self):
+        from booking_signer import basket_book as BB, test_deposit as TD
+        co = mock.AsyncMock()
+        with mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=None)), mock.patch.object(BB, "current", mock.AsyncMock(return_value={"rows": []})), \
+                mock.patch.object(BB, "_all_booked", mock.AsyncMock(return_value=True)), mock.patch.object(TD, "checkout", co):
+            got = run(BB.pay("acct", "", "phone"))
+        self.assertTrue(got["already_paid"])
+        co.assert_not_called()
+
+
 class HereWithoutTheKey(unittest.TestCase):
     def test_here_is_stripes_own_page_on_this_device_until_the_key_is_set(self):
         import hashlib

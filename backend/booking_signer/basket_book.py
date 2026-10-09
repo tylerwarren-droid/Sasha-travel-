@@ -195,6 +195,12 @@ async def current(account: str) -> Optional[Dict[str, Any]]:
     return {"rows": rows, "party": party, "trip_id": p["trip_id"], "title": p.get("title")}
 
 
+async def _all_booked(account: str) -> bool:
+    from . import plan_store as PS
+    p = await PS.latest(account)
+    return bool(p) and bool(await BK.items(account, p["trip_id"], ("booked",)))
+
+
 async def in_progress(account: str) -> Optional[Dict[str, Any]]:
     """Sasha 220 · the basket's payment already under way (its items held with a Stripe session): {sid, trip_id, rows} or None."""
     from . import plan_store as PS
@@ -243,6 +249,8 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
             return resumed
         switched = not read_back_sha256   # the rows just released are the ones their yes paid for: moved, not re-agreed
     cur = await current(account)
+    if (not cur or not cur["rows"]) and await _all_booked(account):   # Sasha 220 · paid and booked already: never a second charge
+        return {"already_paid": True}
     if not cur or not cur["rows"]:
         return {"why": "there's nothing in this trip to book — ask me to price it again"}
     lines = lines_of(cur["rows"], cur["party"])

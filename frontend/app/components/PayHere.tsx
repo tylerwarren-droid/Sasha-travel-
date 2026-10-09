@@ -45,7 +45,7 @@ export function PayHere({ clientSecret, url, totalEur, alreadyPaid }: { clientSe
 
   const head = (k: string, h: string) => (
     <div className="lw-cardHd"><span className="lw-ci gold">💳</span><div className="lw-meta"><div className="lw-k">{k}</div><div className="lw-h">{h}</div></div></div>)
-  if (alreadyPaid) return <div className="lw-card">{head('Already paid', 'Nothing more to pay — it’s booked once Stripe confirms')}</div>
+  if (alreadyPaid) return <div className="lw-card">{head('Paid', 'Nothing more to pay')}</div>
   const total = typeof totalEur === 'number' ? `€${Math.round(totalEur).toLocaleString()} all in` : 'Your trip'
   return (
     <div className="lw-card">

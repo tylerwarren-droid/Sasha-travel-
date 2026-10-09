@@ -562,6 +562,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
       try { ev = JSON.parse(m.data) } catch { return }
       if (!ev || !ev.id || ev.id <= last || (ev.type !== 'booked' && ev.type !== 'booking_failed')) return
       ev = untagDeep(ev)   // Sasha 218
+      if (ev.type === 'booked') setPayHere(p => p ? { ...p, already_paid: true, n: p.n + 1 } : p)   // Sasha 220 · the card says it's paid
       last = ev.id
       try { sessionStorage.setItem(seenKey, String(ev.id)) } catch { /* fine */ }
       const link = ev.card?.url ? `\n\n[Open your full itinerary →](${ev.card.url})` : ''

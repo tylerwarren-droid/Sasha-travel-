@@ -106,8 +106,10 @@ RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues":
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
           "save_travellers": "inline", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
           "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
-RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_whatsapp": "read_back", "get_activity": "inline"})   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
+RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_whatsapp": "read_back", "get_activity": "inline"})
+RENDER.update({"keep_list": "inline", "keep_use": "inline", "keep_add": "keep_capture"})   # Sasha 224 · CR 63 + the photo capture   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
+KINDS_S2_ONLY = {"keep_capture"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
 KINDS = KINDS_S2 | {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 
 
@@ -151,6 +153,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": kind, "find": {"what": args.get("what") or c.get("name"), "where": args.get("city") or ""},
                 "preset": {"all": [c], "cards": [c], "show": 1}, "focus": c.get("place_id"),
                 "ribbon": f"{c.get('name')}" + (f" · {res['when']}" if res.get("when") else "")}
+    if tool == "keep_add" and res.get("status") == "capture_on_screen":   # Sasha 224 · the photo picker on their screen (no value, ever)
+        return {"type": "render", "kind": "keep_capture", "what": res.get("kind")}
     if tool == "add_to_calendar" and res.get("links"):   # Sasha 217 · Google / Outlook / Apple, one tap each
         ev = res.get("event") or {}
         return {"type": "render", "kind": "calendar", "title": ev.get("title"), "starts_at": ev.get("starts_at"),
@@ -492,6 +496,10 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     raw: List[str] = []       # what the model wrote — the guards read it
     turn_key = hashlib.sha256(f"{session}:{len(history or [])}:{message}".encode()).hexdigest()[:16]
     tools = tools_for_model()
+    from agapi.keep_gate import keep_on, s1_on
+    if keep_on(account, surface):   # Sasha 224 · the Keep's tools only where the Keep is on (/s2; /next only behind SASHA_KEEP_S1)
+        tools = tools + [API.schema_for_model(t) for t in API.KEEP_TOOLS
+                         if surface == "s2" or t["name"] != "keep_add"]   # /next has no photo picker: its Keep is added on /keep
     if surface == "s2":   # Sasha 221 · S2's tool set (/s2 only); S1's list is untouched
         from app.agent import s2 as S2
         tools = [t for t in tools if t["name"] in S2.S2_TOOLS]
@@ -516,6 +524,10 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         if surface == "s2":   # Sasha 221 · her own opening lines on /s2; S1's text from "How she talks" on, shared
             from app.agent import s2 as S2
             base = S2.s2_system()
+        if surface != "s2" and s1_on(account):   # Sasha 224 · SASHA_KEEP_S1 (the founder only): the Keep on /next
+            extra += ("\n\nTheir Keep: passport, ID and loyalty numbers can live in their Keep (/keep). You never see them — only masks "
+                      "like 'Passport ES ••••456' (keep_list) — and use one only where it's needed (keep_use), after their yes. Never ask "
+                      "for a document number in the chat; if they offer one, send them to /keep.")
         if used_openers:
             extra += (f"\n\nOpeners you've already used in this conversation — never start with them again: "
                       f"{', '.join(sorted(used_openers))}.")
@@ -976,6 +988,10 @@ async def over_budget(account: str) -> Optional[str]:
 
 from agapi.activity import router as _activity_router   # noqa: E402 · CR 62 · GET /api/agent/activity
 router.include_router(_activity_router)
+from agapi.s2_keep import router as _KEEP_router   # noqa: E402 · Sasha 224 · CR 63 · /api/agent/keep… (the person's own Keep screen)
+from agapi.keep_scan import router as _SCAN_router   # noqa: E402 · Sasha 224 · /api/agent/keep/scan… (add from a photo)
+router.include_router(_SCAN_router)
+router.include_router(_KEEP_router)
 
 
 @router.get("/ics/{token}.ics")   # CR 60 / Sasha 216 · the event is IN the signed link: any worker, any deploy; nothing else read
@@ -1014,6 +1030,16 @@ async def agent_turn(request: Request):
     body["history"] = G.clean_history(body.get("history") or [])
     # Sasha 221 · S2 is chosen ONLY by /s2's proxy (its header); without it — /next, every other caller — S1, as before
     surface = "s2" if request.headers.get("x-sasha-surface", "").strip().lower() == "s2" else "s1"
+    from agapi.keep_gate import keep_on
+    if keep_on(account, surface):   # Sasha 224 · CR 63 — a passport / ID number typed in the chat never reaches the model (Keep on)
+        from agapi import s2_keep as _KEEP
+        _held = _KEEP.chat_guard(message)
+        if _held:
+            async def withheld():
+                yield f"data: {json.dumps({'type': 'say', 'text': _held})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'text': _held, 'guard': ['input_guard']})}\n\n"
+            return StreamingResponse(withheld(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        body["history"] = _KEEP.clean_history(body.get("history") or [])
     over = await over_budget(account)
 
     async def events():

@@ -21,6 +21,7 @@ type Card =
   | { k: 'calendar'; title?: string; links: Record<string, string> }
   | { k: 'pay'; client_secret?: string; url?: string; total_eur?: number; already_paid?: boolean }
   | { k: 'booked'; line: string }
+  | { k: 'keep_capture'; what: 'passport' | 'loyalty' }
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
 type Ev = Record<string, any>
@@ -110,7 +111,63 @@ function Box({ k, h, children, tone }: { k: string; h?: string; children?: React
   )
 }
 
+/** Sasha 224 · the Keep from a photo: the photo is shrunk on the phone, read once by the backend and dropped; back comes a MASKED
+ *  card to confirm — nothing is saved until Confirm, and the number never reaches the chat. */
+async function shrink(file: File): Promise<string> {
+  const bmp = await createImageBitmap(file)
+  const scale = Math.min(1, 1800 / Math.max(bmp.width, bmp.height))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(bmp.width * scale); canvas.height = Math.round(bmp.height * scale)
+  canvas.getContext('2d')?.drawImage(bmp, 0, 0, canvas.width, canvas.height)
+  bmp.close?.()
+  return canvas.toDataURL('image/jpeg', 0.88).split(',')[1] ?? ''
+}
+
+function KeepCapture({ what }: { what: 'passport' | 'loyalty' }) {
+  type Phase = { p: 'pick' } | { p: 'reading' } | { p: 'confirm'; token: string; shown: string[] } | { p: 'saving' } | { p: 'saved'; item: string } | { p: 'error'; why: string }
+  const [ph, setPh] = useState<Phase>({ p: 'pick' })
+  const input = useRef<HTMLInputElement | null>(null)
+  const label = what === 'passport' ? "your passport's photo page" : 'your card, or its Apple Wallet screenshot'
+  async function picked(f?: File | null) {
+    if (!f) return
+    setPh({ p: 'reading' })
+    try {
+      const image = await shrink(f)
+      const r = await fetch('/api/s2-keep/scan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: what, image, media_type: 'image/jpeg' }) })
+      const j = await r.json().catch(() => ({}))
+      setPh(j?.ok ? { p: 'confirm', token: j.token, shown: j.shown || [j.masked] } : { p: 'error', why: j?.message || 'That photo couldn\u2019t be read.' })
+    } catch { setPh({ p: 'error', why: 'That photo couldn\u2019t be read.' }) }
+    if (input.current) input.current.value = ''
+  }
+  async function act(token: string, action: 'confirm' | 'discard') {
+    if (action === 'discard') { fetch(`/api/s2-keep/scan/${encodeURIComponent(token)}/discard`, { method: 'POST' }).catch(() => {}); setPh({ p: 'pick' }); return }
+    setPh({ p: 'saving' })
+    const r = await fetch(`/api/s2-keep/scan/${encodeURIComponent(token)}/confirm`, { method: 'POST' }).catch(() => null)
+    const j = r ? await r.json().catch(() => ({})) : {}
+    setPh(j?.ok ? { p: 'saved', item: j.item } : { p: 'error', why: j?.message || 'It wasn\u2019t saved — try again.' })
+  }
+  const btn = { padding: '9px 16px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 700 } as const
+  return (
+    <Box k={what === 'passport' ? 'Add your passport' : 'Add a loyalty card'} h={ph.p === 'saved' ? `Saved in your Keep: ${untag(ph.item)}` : ph.p === 'confirm' ? 'Is this yours?' : undefined}
+      tone={ph.p === 'saved' ? 'rgba(126,226,168,.5)' : undefined}>
+      <input ref={input} type="file" accept="image/*" hidden onChange={e => picked(e.target.files?.[0])} aria-label="Photo for your Keep" />
+      {ph.p === 'pick' && <><div style={{ fontSize: 14, color: C.dim, margin: '4px 0 10px' }}>A photo of {label}. It&rsquo;s read once and not kept; only a masked number is shown here.</div>
+        <button onClick={() => input.current?.click()} style={{ ...btn, background: C.gold, color: '#111' }}>Take or choose a photo</button></>}
+      {ph.p === 'reading' && <div style={{ fontSize: 14, color: C.dim }}>Reading it…</div>}
+      {ph.p === 'saving' && <div style={{ fontSize: 14, color: C.dim }}>Saving…</div>}
+      {ph.p === 'confirm' && <>{ph.shown.map((l, i) => <div key={i} style={{ fontSize: 15, padding: '2px 0' }}>{untag(l)}</div>)}
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <button onClick={() => act(ph.token, 'confirm')} style={{ ...btn, background: C.gold, color: '#111' }}>Confirm</button>
+          <button onClick={() => act(ph.token, 'discard')} style={btn}>Retake</button></div></>}
+      {ph.p === 'saved' && <div style={{ fontSize: 13.5, color: C.dim }}>Encrypted. Sasha only ever sees the mask.</div>}
+      {ph.p === 'error' && <><div style={{ fontSize: 14, color: '#f19999', margin: '4px 0 10px' }}>{ph.why}</div>
+        <button onClick={() => input.current?.click()} style={btn}>Try another photo</button></>}
+    </Box>
+  )
+}
+
 function CardView({ c, choose }: { c: Card; choose: (t: string) => void }) {
+  if (c.k === 'keep_capture') return <KeepCapture what={c.what} />
   if (c.k === 'venues') return <VenueCards cards={c.cards} choose={choose} />
   if (c.k === 'booked') return <Box k="Booked" h={firstSentences(untag(c.line.replace(/^✅\s*/, '').replace(/^Booked:\s*/i, '')), 2)} tone="rgba(126,226,168,.5)" />
   if (c.k === 'calendar') return (
@@ -213,6 +270,7 @@ export default function S2App() {
             if (ev.kind === 'venues' && ev.preset) { const cs = shownCards(ev.preset); if (cs.length) add({ k: 'venues', cards: cs }) }
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur })
             else if (ev.kind === 'calendar' && ev.links) add({ k: 'calendar', title: ev.title, links: ev.links })
+            else if (ev.kind === 'keep_capture') add({ k: 'keep_capture', what: ev.what === 'loyalty' ? 'loyalty' : 'passport' })
             else if (ev.kind === 'pay_here') add({ k: 'pay', client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid })
           }
         }

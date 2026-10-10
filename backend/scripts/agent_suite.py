@@ -137,7 +137,7 @@ async def render_cases() -> None:
     from app.agent import sasha as AG
     missing = sorted(set(API.BY_NAME) - set(AG.RENDER))
     ok("AGENT RENDER: every tool's result has a renderer (venues → photo cards, flights/stays → cards, trip → the Trip view…)",
-       not missing and set(AG.RENDER.values()) <= AG.KINDS, f"missing {missing}")
+       not missing and set(AG.RENDER.values()) <= AG.KINDS | AG.KINDS_S2_ONLY, f"missing {missing}")   # Sasha 224 · /s2's own kinds (S2App)
     card = {"place_id": "ChIJ-gate-1", "name": "Casa Gate", "address": "Calle Mayor 1, 28013 Madrid, Spain", "rating": 4.6}
     res = {"venues": [{"name": "Casa Gate"}], "ribbon": "1 dinner in Madrid", "find": {"what": "dinner", "where": "Madrid"},
            "preset": {"all": [card], "cards": [card], "show": 1}}

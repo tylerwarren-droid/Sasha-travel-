@@ -326,15 +326,19 @@ class OnPostgres(unittest.TestCase):
             self.assertEqual(go(c.fetchval("select count(*) from keep_keys")) + go(c.fetchval("select count(*) from keep_items")), 0)
 
 
+_ADDED: list = []   # Sasha 224 · once wired, v0 registers them itself: only what THIS module added is taken away again
+
+
 def setUpModule():
     for t in KEEP.tools():
         if t["name"] not in API.BY_NAME:
             API.TOOLS.append(t)
             API.BY_NAME[t["name"]] = t
+            _ADDED.append(t["name"])
 
 
 def tearDownModule():
-    for name in ("keep_list", "keep_use"):
+    for name in _ADDED:
         t = API.BY_NAME.pop(name, None)
         if t in API.TOOLS:
             API.TOOLS.remove(t)

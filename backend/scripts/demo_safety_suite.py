@@ -15,7 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.flight_suite import RESULTS, ok  # noqa: E402
 
 MODULES = ["tests.test_demo_safety_cr56", "tests.test_robustness_cr56", "tests.test_safety_215",
-           "tests.test_s2_powers", "tests.test_s2_216", "tests.test_s2_cr62", "tests.test_pay_here_220", "tests.test_s2_221"]   # Sasha 216 · an email is never sent on a question   # Sasha 215 · the safety items too
+           "tests.test_s2_powers", "tests.test_s2_216", "tests.test_s2_cr62", "tests.test_pay_here_220", "tests.test_s2_221",
+           "tests.test_keep_s63", "tests.test_keep_wired_s63", "tests.test_keep_s224"]   # Sasha 224 · the Keep (/s2; S1 behind SASHA_KEEP_S1)   # Sasha 216 · an email is never sent on a question   # Sasha 215 · the safety items too
 
 _RUNNER = """
 import json, sys, unittest, io

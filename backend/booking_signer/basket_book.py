@@ -351,17 +351,9 @@ async def _moved(account: str, mv: Dict[str, Any], where: str) -> Dict[str, Any]
     return {"where": "phone", "url": got["url"], "session_id": got["id"], "phone": phone, "eur": amount, "moved": True}
 
 
-async def book_paid(account: str, sid: str) -> Dict[str, Any]:
-    """After payment: every held item booked by its provider; Pacioli writes each outcome. Idempotent: a booked row is skipped."""
-    from . import hotel_test as HT, travel as T, trip_book as TB, guest_whatsapp as GW, guest_receipt as GR
-    rows = [r for r in await BK.by_session(sid) if r["account_id"] == account]
-    if not rows:
-        return {"status": "failed", "say": "paid (TEST), but no trip items are held for this payment — nothing booked; ask me again"}
-    _s, cj = await GW.api(account, "GET", "/api/booking/contact")
-    contact = (cj or {}).get("contact") or {}
-    email = await GR.address_of(account)
-    from . import passengers as PX
-    people = await PX.saved(account)   # Sasha 198 R7 · the real travellers (asked once at "book it")
+async def _book_rows(account: str, sid: str, rows: list, contact: dict, email, people, docs, kept) -> None:
+    """book_paid's loop (Sasha 224: moved here unchanged, so the Keep's fill wraps it): every held item booked by its provider."""
+    from . import hotel_test as HT, travel as T, trip_book as TB
     for r in [r for r in rows if r["state"] == "pending_payment"]:
         s = r.get("snapshot") or {}
         if r["kind"] == "stay":
@@ -374,19 +366,51 @@ async def book_paid(account: str, sid: str) -> Dict[str, Any]:
                 await BK.failed(account, r["id"], f"not recorded ({type(e).__name__})")
         elif r["kind"] == "flight":
             c = _card(r)
-            o = await T.order(c, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"), people)
+            o = await T.order(c, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"), people, **({"documents": docs} if docs else {}))
             if "why" in o:   # a TEST fare withdrawn between the quote and the payment: the same flight, priced again
                 again = await TB._same_or_cheaper(c, int(r.get("party") or 2))
                 if again is not None and again.get("flights") == c.get("flights"):
-                    o2 = await T.order(again, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"), people)
+                    o2 = await T.order(again, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"), people, **({"documents": docs} if docs else {}))
                     if "why" not in o2:
                         c, o = again, o2
+            if kept is not None:
+                kept.result(o.get("booking_reference"), "why" not in o)
             if "why" in o:
                 await BK.failed(account, r["id"], o["why"])
                 continue
             tid = await T.RECORD(account, c, o["booking_reference"] or "")
             await BK.booked(account, r["id"], booking_reference=o["booking_reference"] or "", order_id=o.get("order_id"), trip_item_id=tid)
             await BK.event("duffel_order", o.get("order_id") or f"{sid}:{r['id']}", "order.created", o, verified=True, item_id=r["id"])
+
+
+async def book_paid(account: str, sid: str) -> Dict[str, Any]:
+    """After payment: every held item booked by its provider; Pacioli writes each outcome. Idempotent: a booked row is skipped."""
+    from . import hotel_test as HT, travel as T, trip_book as TB, guest_whatsapp as GW, guest_receipt as GR
+    rows = [r for r in await BK.by_session(sid) if r["account_id"] == account]
+    if not rows:
+        return {"status": "failed", "say": "paid (TEST), but no trip items are held for this payment — nothing booked; ask me again"}
+    _s, cj = await GW.api(account, "GET", "/api/booking/contact")
+    contact = (cj or {}).get("contact") or {}
+    email = await GR.address_of(account)
+    from . import passengers as PX
+    people = await PX.saved(account)   # Sasha 198 R7 · the real travellers (asked once at "book it")
+    kept_cm, kept = None, None   # Sasha 224 · CR 63 — the Keep's items APPROVED for this payment: opened here, dropped after the loop.
+    try:                         # Any Keep trouble (closed, 037 not applied) → no documents; the booking itself never fails for it
+        from agapi import s2_keep as KEEP
+        kept_cm = KEEP.fill(account, sid)
+        kept = await kept_cm.__aenter__()
+    except Exception as e:
+        log.info("[basket_book] the Keep wasn't opened for %s: %s", sid[:14], type(e).__name__)
+        kept_cm, kept = None, None
+    docs = (kept.duffel() or None) if kept else None
+    try:
+        await _book_rows(account, sid, rows, contact, email, people, docs, kept)
+    finally:
+        if kept_cm is not None:
+            try:
+                await kept_cm.__aexit__(None, None, None)
+            except Exception as e:
+                log.warning("[basket_book] the Keep's fill wasn't closed cleanly: %s", type(e).__name__)
     rows = await BK.by_session(sid)
     done = [r for r in rows if r["state"] == "booked"]
     bad = [r for r in rows if r["state"] == "failed"]

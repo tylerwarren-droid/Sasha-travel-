@@ -205,7 +205,12 @@ class EveryResultIsRendered(unittest.TestCase):
         import os
         from agapi import v0 as API
         self.assertEqual(set(AG.RENDER), set(API.BY_NAME) - {n for n in API.BY_NAME if n.startswith("_t_")}, "a tool without a renderer")
-        self.assertTrue(set(AG.RENDER.values()) <= AG.KINDS)
+        self.assertTrue(set(AG.RENDER.values()) <= AG.KINDS | AG.KINDS_S2_ONLY)
+        s2 = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "app", "s2", "S2App.tsx")   # Sasha 224 · /s2's own kinds
+        if os.path.exists(s2):
+            src2 = open(s2, encoding="utf-8").read()
+            for kind in AG.KINDS_S2_ONLY:
+                self.assertIn(f"ev.kind === '{kind}'", src2, f"the /s2 UI doesn't render '{kind}'")
         chat = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "app", "components", "SashaChat.tsx")
         if os.path.exists(chat):
             src = open(chat, encoding="utf-8").read()

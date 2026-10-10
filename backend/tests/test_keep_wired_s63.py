@@ -76,7 +76,7 @@ class Wired(unittest.TestCase):
                 mock.patch("app.services.chat_account.signed_in", lambda a: True), \
                 mock.patch.object(AG, "turn_with_quiver", side_effect=AssertionError("the model was called")), \
                 mock.patch.object(AG, "over_budget", mock.AsyncMock(return_value=None)):
-            r = c.post("/api/agent/turn", json={"message": "my passport is PAA123456"})
+            r = c.post("/api/agent/turn", json={"message": "my passport is PAA123456"}, headers={"x-sasha-surface": "s2"})   # Sasha 224 · /s2 first
             self.assertEqual(r.status_code, 200)
             evs = [json.loads(x[6:]) for x in r.text.split("\n\n") if x.startswith("data: ")]
             self.assertEqual([(e["type"], e["text"]) for e in evs], [("say", KEEP.GUARD_REPLY), ("done", KEEP.GUARD_REPLY)])
@@ -94,7 +94,7 @@ class Wired(unittest.TestCase):
                 mock.patch.object(BK, "items", mock.AsyncMock(return_value=[])), mock.patch.object(BK, "to_book", lambda rows: rows), \
                 mock.patch.object(API, "breakdown", lambda rows, eur: {}):
             API._HELD.pop(ACCT, None)
-            r = run(API.call(API.Ctx(account=ACCT), "hold_booking", {"idempotency_key": "k-hold-1"}))
+            r = run(API.call(API.Ctx(account=ACCT, surface="s2"), "hold_booking", {"idempotency_key": "k-hold-1"}))   # Sasha 224 · /s2 first
         self.assertIn("I'll use your saved Passport ES ••••456 for this booking.", r["result"]["read_back"], r)
 
 

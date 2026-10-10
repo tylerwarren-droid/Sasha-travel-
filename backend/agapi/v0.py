@@ -753,6 +753,9 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
     res = {"breakdown": breakdown(rows_now, q["eur"]),   # Sasha 215 · the re-quote reaches the page: the pill and the total card refresh
            **({"changed": changed} if changed else {}), **({"stays_are_estimates": True} if est else {}), "read_back": [l for l in q["lines"] if not l.startswith("Note:")], "notes": [l for l in q["lines"] if l.startswith("Note:")],
            "read_back_sha256": q["sha256"], "total_eur": q["eur"], "status": "not booked — waiting for the yes"}
+    from agapi.keep_gate import keep_on
+    if keep_on(ctx.account, ctx.surface):   # Sasha 224 · CR 63 — a bound passport is NAMED in what she reads out (where the Keep is on)
+        res["read_back"] += await _KEEP.lines(ctx.account)
     prev = _HELD.get(ctx.account)   # Sasha 210 · the same words read back again keep the time they were first said
     at = prev["at"] if prev and prev.get("sha") == q["sha256"] else datetime.now(timezone.utc)
     _HELD[ctx.account] = {"sha": q["sha256"], "at": at, "result": res}   # Sasha 205 · book() uses it as is
@@ -852,7 +855,7 @@ async def book(ctx: Ctx, a: dict) -> dict:
     where = chose or _PAY_CHOICE.get(key)
     if where is None:
         if linked:   # asked ONCE; their answer (next turn) pays — the yes is already given
-            _PAY_ASKED[ctx.account] = {"sha": sha, "at": datetime.now(timezone.utc)}
+            _PAY_ASKED[ctx.account] = {"sha": sha, "at": datetime.now(timezone.utc), "said": said}
             return {"status": "choose_payment", "ask": PAY_ASK, "booked": False,
                     "say": "Ask exactly this, once, and wait: their answer pays (no yes needed again)."}
         where = "here"   # no WhatsApp: here, never a dead end
@@ -860,6 +863,12 @@ async def book(ctx: Ctx, a: dict) -> dict:
     _PAY_CHOICE[key] = where
     await claim(ctx)   # Sasha 215 · durable: this payment is sent once, across restarts and workers
     got = await BB.pay(ctx.account, sha, where)
+    from agapi.keep_gate import keep_on
+    if got.get("session_id") and "why" not in got and keep_on(ctx.account, ctx.surface):   # Sasha 224 · CR 63 — this yes, this payment
+        try:
+            await _KEEP.approve(ctx.account, held["result"]["read_back"], ((asked or {}).get("said") if answering else None) or said, got["session_id"])
+        except Exception as e:
+            log.warning("[keep] approve skipped: %s", type(e).__name__)
     return await _paid_out(ctx, got, where)
 
 
@@ -1040,11 +1049,16 @@ TOOLS += _S2.tools()
 from agapi import s2_whatsapp as _WA, activity as _ACT   # noqa: E402 · CR 62 / Sasha 217 · WhatsApp to someone named + the Activity view
 TOOLS += _WA.tools() + _ACT.tools()
 BY_NAME.update({t["name"]: t for t in TOOLS})
+# Sasha 224 · CR 63's Keep + the photo capture: callable, but NOT in TOOLS (S1's list) — the model is given them only where the Keep
+# is on (agapi.keep_gate: /s2 always; /next only with SASHA_KEEP_S1=1 for the founder). S1 is exactly as before by default.
+from agapi import s2_keep as _KEEP, keep_scan as _SCAN   # noqa: E402 · masks only
+KEEP_TOOLS: List[dict] = _KEEP.tools() + _SCAN.tools()
+BY_NAME.update({t["name"]: t for t in KEEP_TOOLS})
 _HELD: Dict[str, dict] = {}   # account → the last read-back's sha256 (hold_booking), for book
 _IDEM: Dict[str, dict] = {}   # the fast path in this process; claim() is the durable one (Sasha 215)
 ACTS = {"book", "book_venue", "cancel_venue", "send_email", "send_whatsapp"}   # spend, send or cancel: claimed once, durably, before they act
 READS = {"search_flights", "search_stays", "search_venues", "check_offer", "read_booking_route", "get_status", "get_trip", "get_total",
-         "add_to_calendar", "get_activity"}
+         "add_to_calendar", "get_activity", "keep_list"}
 
 
 async def call(ctx: Ctx, name: str, args: dict) -> dict:

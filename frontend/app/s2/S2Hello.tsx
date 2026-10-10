@@ -215,8 +215,8 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
         position: 'fixed', zIndex: 40, transition: 'all .45s ease', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 20%, #2a2440 0%, #14141c 70%)',
         ...(big ? { left: '50%', top: 'calc(env(safe-area-inset-top) + 96px)', width: 'min(86vw, 420px)', aspectRatio: '3 / 4', transform: 'translateX(-50%)', borderRadius: 24, boxShadow: '0 20px 60px rgba(0,0,0,.6)', opacity: phase === 'starting' ? 0 : 1 }
           : { right: 16, bottom: 'calc(env(safe-area-inset-bottom) + 92px)', width: 0, height: 0, borderRadius: '50%', opacity: 0 }) }}>
-        <video ref={video} playsInline autoPlay muted style={{ position: 'absolute', width: 2, height: 2, opacity: 0, pointerEvents: 'none' }} />
-        <canvas ref={canvas} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        <video ref={video} playsInline autoPlay muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0, pointerEvents: 'none' }} />
+        <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 18%', display: 'block' }} />
         {phase === 'tap' && tapFor === 'face' && <button onClick={tapToHear} style={{ position: 'absolute', left: '50%', bottom: 18, transform: 'translateX(-50%)', padding: '12px 20px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700, fontSize: 16 }}>Tap to hear Sasha</button>}
       </div>
       {phase === 'voice' || (phase === 'tap' && tapFor === 'voice') ? (

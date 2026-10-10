@@ -115,7 +115,7 @@ KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the convers
 KINDS_S2_ONLY = {"keep_capture", "capabilities", "plans", "notice"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
 KINDS_S2_ONLY |= {"counter_card", "my_cards", "accident", "claim_status"}   # CR 75 · fine print's cards, rendered by /s2 only
 KINDS = KINDS_S2 | {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
-KINDS |= {"keep_handoff"}   # Sasha 228 · /next's "Add from your phone" (QR + short link → /s2's Add my passport)
+KINDS |= {"keep_handoff"}   # Sasha 228 · /next's "Add from your phone" (QR + short link → /s2's Add my passport): on the read-back's event
 
 
 def _fine_print_tools() -> tuple:
@@ -185,16 +185,14 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
                if isinstance(to, dict) else str(to or ""))
         return {"type": "render", "kind": "read_back", "what": "email" if tool == "send_email" else "whatsapp", "status": res["status"],
                 "live": res["status"] == "sent", "read_back": [x for x in (f"To: {who}" if who else "", f"Subject: {m['subject']}" if m.get("subject") else "") if x]}
-    if tool == "hold_booking" and isinstance(res.get("handoff"), dict) and res["handoff"].get("code"):   # Sasha 228 · S1: "Add from your phone"
-        return {"type": "render", "kind": "keep_handoff", "code": res["handoff"]["code"], "what": res["handoff"].get("kind") or "passport",
-                "expires_at": res["handoff"].get("expires_at")}
     if kind == "read_back" and not res.get("read_back"):   # Sasha 216 · a sent email has nothing to read back
         return None
     if kind == "read_back":   # Sasha 213 · the read-back she just gave, from her own hold — never a second quote
         return {"type": "render", "kind": kind, "read_back": [l for l in res.get("read_back") or []], "total_eur": res.get("total_eur"),
                 **({"what": "email" if tool == "send_email" else "whatsapp", "live": bool(res.get("live"))}
                    if tool in ("send_email", "send_whatsapp") else {}),   # Sasha 216 · its own card words
-                **({"total": res["breakdown"]} if res.get("breakdown") else {})}   # Sasha 215 · the re-quote refreshes the pill
+                **({"total": res["breakdown"]} if res.get("breakdown") else {}),   # Sasha 215 · the re-quote refreshes the pill
+                **({"handoff": (res.get("keep") or {})["handoff"]} if tool == "hold_booking" and (res.get("keep") or {}).get("handoff") else {})}   # Sasha 228 · "Add from your phone", beside it
     return None
 
 
@@ -563,9 +561,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                       "for a document number in the chat; if they offer one, send them to /keep.")
             extra += ("\n\nWhen a tool result has keep.say_first (propose_trip or hold_booking with a flight), say it word for "
                       "word in that same turn, before the read-back: e.g. \"I have your passport (ES ••••456) and will apply it.\" "
-                      "When hold_booking says passport_needed, the 'Add from your phone' card is on their screen: say so briefly and "
-                      "wait. When they've added it from their phone, the page has already said \"Got it — …\": don't say that again — "
-                      "call hold_booking and read back.")
+                      "If their Keep has no passport, the read-back goes ahead as always and the 'Add from your phone' card sits beside "
+                      "it — booking never waits for it. If they add it from their phone, the page has already said \"Got it — …\": "
+                      "don't say that again — call hold_booking and read back.")
         if used_openers:
             extra += (f"\n\nOpeners you've already used in this conversation — never start with them again: "
                       f"{', '.join(sorted(used_openers))}.")

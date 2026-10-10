@@ -654,7 +654,10 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             else if (ev.kind === 'handover' && ev.url) { if (ev.focus) setHighlight([ev.focus]); onHandover?.(String(ev.url), !!ev.external) }   // their page / Tap to finish   // Sasha 213 · a pick: the cards stay, that one highlighted
             else if (ev.kind === 'pay_here') { setPayHere(p => ({ client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid, n: (p?.n ?? 0) + 1 })); claim('pay', ev.turn) }
             else if (ev.kind === 'calendar' && ev.links) { setCalendar({ title: ev.title, starts_at: ev.starts_at, links: ev.links }); claim('calendar', ev.turn) }
-            else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) { setReadBack({ lines: ev.read_back, total: ev.total_eur, what: ev.what, live: ev.live, status: ev.status }); claim('readback', ev.turn) }
+            else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) {
+              setReadBack({ lines: ev.read_back, total: ev.total_eur, what: ev.what, live: ev.live, status: ev.status }); claim('readback', ev.turn)
+              if (ev.handoff?.code) { setHandoff({ code: String(ev.handoff.code), what: String(ev.handoff.kind || 'passport'), expires_at: ev.handoff.expires_at, added: null }); claim('handoff', ev.turn) }   // Sasha 228 · beside the read-back, never instead of it
+            }
             else if (ev.kind === 'trip') window.dispatchEvent(new Event('sasha-plan-refresh'))
             else if (ev.kind === 'keep_handoff' && ev.code) { setHandoff({ code: String(ev.code), what: String(ev.what || 'passport'), expires_at: ev.expires_at, added: null }); claim('handoff', ev.turn) }   // Sasha 228
           }

@@ -146,15 +146,17 @@ class SaidUpFront(_Keep):
         self.assertEqual(len(run(KEEP.lines(ACCT))), 1)                                   # bound once, not again each hold
         self.assertNotIn("XDA123456", json.dumps(k))
 
-    def test_nothing_saved_the_hold_offers_the_phone(self):
+    def test_nothing_saved_the_phone_is_offered_beside_the_read_back(self):
         k = self.passport()
-        self.assertEqual(k["status"], "passport_needed")
+        self.assertEqual(k["say_first"], "Add your passport from your phone and I'll apply it.")
         self.assertIn(k["handoff"]["code"], HO._CODES)
+        self.assertNotIn("status", k)                                                     # never a status that replaces the read-back
         from app.agent import sasha as AG
-        ev = AG.render("hold_booking", k, {})
-        self.assertEqual(ev["kind"], "keep_handoff")
-        self.assertIn("keep_handoff", AG.KINDS)                                           # /next renders it
-        self.assertNotIn("keep_handoff", AG.KINDS_S2_ONLY)
+        res = {"read_back": ["Flight MAD→LIS"], "total_eur": 120.0, "keep": k}
+        ev = AG.render("hold_booking", res, {})
+        self.assertEqual((ev["kind"], ev["read_back"]), ("read_back", ["Flight MAD→LIS"]))   # the read-back as today…
+        self.assertEqual(ev["handoff"]["code"], k["handoff"]["code"])                    # …with the phone card beside it
+        self.assertNotIn("handoff", AG.render("hold_booking", {"read_back": ["x"], "total_eur": 1.0}, {}))
 
     def test_the_plan_says_it_but_never_asks(self):
         self.assertIsNone(self.passport(bind=False))                                      # nothing saved: the hold asks, not the plan

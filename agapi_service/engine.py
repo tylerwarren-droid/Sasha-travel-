@@ -1149,3 +1149,5 @@ from . import subscriptions as _SUBS   # noqa: E402   CR 72 · the subscription 
 OPS.update(_SUBS.OPS)
 from .registers import ops as _REG   # noqa: E402   CR 73 · the registry survey, wave 0 (Kanoe extensions; registry.obtain is OFF)
 OPS.update(_REG.OPS)
+from .fineprint import ops as _CARDS   # noqa: E402   CR 74 · fine print (Kanoe extensions)
+OPS.update(_CARDS.OPS)

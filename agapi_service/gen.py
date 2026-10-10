@@ -119,6 +119,17 @@ DESCRIPTIONS = {
                                        "with the sentence it came from. AgAPI never logs into anyone's account.",
     "subscriptions.cancel": "Cancel one subscription by its planned route, on the person's yes: an email to the merchant, or their cancel "
                                   "page sent to the person's own phone to finish. It stays 'cancel requested' until the merchant confirms.",
+    "cards.products": "The payment-card products whose OFFICIAL benefit terms AgAPI has read (issuer's Guide to Benefits, insurance "
+                      "certificate, rates and fees): terms read date, freshness, and whether a person has checked the first read.",
+    "cards.terms": "One card product's benefits — travel insurance, car-rental cover, purchase protection, FX fee, points, the claims line — "
+                   "every value with the sentence it came from (word for word), its source and the date read. Drifted or stale facts carry a warning.",
+    "cards.intake": "Add one of the person's cards from a PHOTO of it or a phone-Wallet SCREENSHOT: AgAPI keeps the card PRODUCT only "
+                    "(issuer, product, network, country) in their Keep — never a number, not even the last four digits; the image isn't kept.",
+    "cards.mine": "The person's cards ('My cards'): each card product with whether its issuer's official terms have been read, and when.",
+    "cards.ask": "Answer 'what does my card cover for this?' ONLY from that card's quoted official terms: the quotes, their date and source, "
+                 "and yes / no / only-under-a-condition as the terms state it — or 'the terms I've read don't say' with the claims line.",
+    "cards.which": "Which of the person's cards for one purchase: their cards ranked by the FX fee, the cover that applies and the points, "
+                   "each reason quoted from the card's own terms. Information, framed as such — no card is recommended.",
     "registry.countries": "Which jurisdictions the registry covers (wave 0: the certified core) — per country its registers, documents and "
                           "access routes, the automation mix and how fresh its sources are. Every count rests on cited claims.",
     "registry.get": "One jurisdiction's official registers (company, UBO, insolvency…): name, authority, official URL, status — every field "

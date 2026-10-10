@@ -67,6 +67,8 @@ async def _startup() -> None:
     W.allow_endpoint_hosts(db())
     if _LOOP is None:
         _LOOP = asyncio.create_task(W.loop(db))
+        from .fineprint import jobs as _FJ
+        asyncio.create_task(_FJ.loop(db))   # CR 74 · card terms re-read every 60 days + on change (only with AGAPI_FINEPRINT_SCHEDULE=1)
 
 
 def _migrate_scopes(store: Store) -> None:
@@ -423,6 +425,19 @@ async def admin(action: str, req: Request):
         except Exception as e:
             return JSONResponse({"ok": False, "why": f"{type(e).__name__}: {str(e)[:200]}"}, status_code=502)
         return JSONResponse({"ok": True, "read": out}, headers={"Cache-Control": "no-store"})
+    if action in ("card_read", "cards_tick", "review_link") and not config.LIVE_SERVICE:   # CR 74 · fine print: reads run FROM THIS SERVER
+        from .fineprint import jobs as _FJ, review as _FRV
+        if action == "review_link":                       # a one-time link to the accept surface (15 minutes, used once)
+            return JSONResponse({"ok": True, "path": f"/fineprint/review/start/{_FRV.new_code(store)}"}, headers={"Cache-Control": "no-store"})
+        try:
+            if action == "cards_tick":
+                return JSONResponse({"ok": True, "checked": await _FJ.tick(store)})
+            key = str(body.get("key") or "")
+            if key not in _FJ.seeds():
+                return JSONResponse({"ok": False, "why": "no such card"}, status_code=404)
+            return JSONResponse({"ok": True, "read": await _FJ.read_now(store, key)}, headers={"Cache-Control": "no-store"})
+        except Exception as e:
+            return JSONResponse({"ok": False, "why": f"{type(e).__name__}: {str(e)[:200]}"}, status_code=502)
     if action == "list":
         out = []
         for a in store.q("select * from accounts order by created_at"):
@@ -434,6 +449,9 @@ async def admin(action: str, req: Request):
 
 _demo.bind(db, lambda *a, **k: execute(*a, **k))
 from .registers import page as _registry_page   # noqa: E402 · CR 73 · /registry, the registry survey's demo (read-only)
+from .fineprint import review as _card_review   # noqa: E402 · CR 74 · the accept surface for card terms' first reads
+_card_review.bind(db)
+app.include_router(_card_review.router)
 _registry_page.bind(db)
 app.include_router(_registry_page.router)
 

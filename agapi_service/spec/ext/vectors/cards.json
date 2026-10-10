@@ -1,0 +1,554 @@
+{
+ "version": "kanoe-cards.1",
+ "note": "CR 74 · fine print, step 3 (EU 216 §1 the Q&A, §2 best card). which: the purchase + each card's claims → the order (FX cost, then cover, then points), the FX cost, the points, the cover count. answer: the chosen claims + verdict → the exact sentence (built from the quotes, never generated).",
+ "which": [
+  {
+   "name": "a_foreign_car_rental_ranks_the_0pct_card_with_cover_first",
+   "purchase": {
+    "amount_minor": 40000,
+    "currency": "USD",
+    "kind": "car_rental"
+   },
+   "cards": [
+    {
+     "name": "Everyday",
+     "product_country": "ES",
+     "claims": [
+      {
+       "id": "rcl_B1000000000000000000000000",
+       "benefit": "fx_fee",
+       "field": "percent",
+       "value": {
+        "basis_points": 300
+       },
+       "quote": "A foreign transaction fee of 3% applies.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_B2000000000000000000000000",
+       "benefit": "points",
+       "field": "earn_rate",
+       "value": {
+        "rate_x100": 100,
+        "unit": "point",
+        "per": "EUR",
+        "category": "everything_else"
+       },
+       "quote": "You earn 1 point per EUR on all purchases.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    },
+    {
+     "name": "Travel",
+     "product_country": "ES",
+     "claims": [
+      {
+       "id": "rcl_A1000000000000000000000000",
+       "benefit": "fx_fee",
+       "field": "percent",
+       "value": {
+        "basis_points": 0
+       },
+       "quote": "A foreign transaction fee of 0% applies.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_A2000000000000000000000000",
+       "benefit": "points",
+       "field": "earn_rate",
+       "value": {
+        "rate_x100": 200,
+        "unit": "point",
+        "per": "EUR",
+        "category": "travel"
+       },
+       "quote": "You earn 2 points per EUR on travel.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_A3000000000000000000000000",
+       "benefit": "points",
+       "field": "earn_rate",
+       "value": {
+        "rate_x100": 100,
+        "unit": "point",
+        "per": "EUR",
+        "category": "everything_else"
+       },
+       "quote": "You earn 1 point per EUR on everything else.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_A4000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "cover_type",
+       "value": "primary",
+       "quote": "This benefit is primary coverage.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_A5000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "excluded_countries",
+       "value": [
+        "Ireland",
+        "Israel",
+        "Jamaica"
+       ],
+       "quote": "Excluded countries: Ireland, Israel, Jamaica.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_A6000000000000000000000000",
+       "benefit": "claims",
+       "field": "phone",
+       "value": "+34 900 000 000",
+       "quote": "Claims line: +34 900 000 000.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "order": [
+     "Travel",
+     "Everyday"
+    ],
+    "fx_cost_minor": {
+     "Travel": 0,
+     "Everyday": 1200
+    },
+    "points": {
+     "Travel": 800,
+     "Everyday": 400
+    },
+    "cover_quotes": {
+     "Travel": 2,
+     "Everyday": 0
+    }
+   }
+  },
+  {
+   "name": "in_the_cards_own_currency_no_fx_fee_applies",
+   "purchase": {
+    "amount_minor": 10000,
+    "currency": "EUR",
+    "kind": "dining"
+   },
+   "cards": [
+    {
+     "name": "Everyday",
+     "product_country": "ES",
+     "claims": [
+      {
+       "id": "rcl_B1000000000000000000000000",
+       "benefit": "fx_fee",
+       "field": "percent",
+       "value": {
+        "basis_points": 300
+       },
+       "quote": "A foreign transaction fee of 3% applies.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_B2000000000000000000000000",
+       "benefit": "points",
+       "field": "earn_rate",
+       "value": {
+        "rate_x100": 100,
+        "unit": "point",
+        "per": "EUR",
+        "category": "everything_else"
+       },
+       "quote": "You earn 1 point per EUR on all purchases.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    },
+    {
+     "name": "Travel",
+     "product_country": "ES",
+     "claims": [
+      {
+       "id": "rcl_A1000000000000000000000000",
+       "benefit": "fx_fee",
+       "field": "percent",
+       "value": {
+        "basis_points": 0
+       },
+       "quote": "A foreign transaction fee of 0% applies.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_A2000000000000000000000000",
+       "benefit": "points",
+       "field": "earn_rate",
+       "value": {
+        "rate_x100": 200,
+        "unit": "point",
+        "per": "EUR",
+        "category": "travel"
+       },
+       "quote": "You earn 2 points per EUR on travel.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_A3000000000000000000000000",
+       "benefit": "points",
+       "field": "earn_rate",
+       "value": {
+        "rate_x100": 100,
+        "unit": "point",
+        "per": "EUR",
+        "category": "everything_else"
+       },
+       "quote": "You earn 1 point per EUR on everything else.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_A4000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "cover_type",
+       "value": "primary",
+       "quote": "This benefit is primary coverage.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_A5000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "excluded_countries",
+       "value": [
+        "Ireland",
+        "Israel",
+        "Jamaica"
+       ],
+       "quote": "Excluded countries: Ireland, Israel, Jamaica.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_A6000000000000000000000000",
+       "benefit": "claims",
+       "field": "phone",
+       "value": "+34 900 000 000",
+       "quote": "Claims line: +34 900 000 000.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "order": [
+     "Everyday",
+     "Travel"
+    ],
+    "fx_cost_minor": {
+     "Travel": 0,
+     "Everyday": 0
+    },
+    "points": {
+     "Travel": 100,
+     "Everyday": 100
+    }
+   }
+  },
+  {
+   "name": "an_unknown_fx_fee_ranks_last_and_says_so",
+   "purchase": {
+    "amount_minor": 10000,
+    "currency": "GBP",
+    "kind": "dining"
+   },
+   "cards": [
+    {
+     "name": "US dining",
+     "product_country": "US",
+     "claims": [
+      {
+       "id": "rcl_U1000000000000000000000000",
+       "benefit": "points",
+       "field": "earn_rate",
+       "value": {
+        "rate_x100": 300,
+        "unit": "point",
+        "per": "USD",
+        "category": "dining"
+       },
+       "quote": "Earn 3X points on dining.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    },
+    {
+     "name": "Everyday",
+     "product_country": "ES",
+     "claims": [
+      {
+       "id": "rcl_B1000000000000000000000000",
+       "benefit": "fx_fee",
+       "field": "percent",
+       "value": {
+        "basis_points": 300
+       },
+       "quote": "A foreign transaction fee of 3% applies.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_B2000000000000000000000000",
+       "benefit": "points",
+       "field": "earn_rate",
+       "value": {
+        "rate_x100": 100,
+        "unit": "point",
+        "per": "EUR",
+        "category": "everything_else"
+       },
+       "quote": "You earn 1 point per EUR on all purchases.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "order": [
+     "Everyday",
+     "US dining"
+    ],
+    "fx_cost_minor": {
+     "US dining": null,
+     "Everyday": 300
+    },
+    "points": {
+     "US dining": 300
+    },
+    "says": {
+     "US dining": "fx fee: the terms i've read don't say."
+    }
+   }
+  }
+ ],
+ "answer": [
+  {
+   "name": "a_chosen_quote_is_quoted_whole_with_its_verdict",
+   "product": "Example Bank Travel Visa",
+   "chosen": [
+    "A5"
+   ],
+   "verdict": "no",
+   "claims": [
+    {
+     "id": "rcl_A1000000000000000000000000",
+     "benefit": "fx_fee",
+     "field": "percent",
+     "value": {
+      "basis_points": 0
+     },
+     "quote": "A foreign transaction fee of 0% applies.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_A2000000000000000000000000",
+     "benefit": "points",
+     "field": "earn_rate",
+     "value": {
+      "rate_x100": 200,
+      "unit": "point",
+      "per": "EUR",
+      "category": "travel"
+     },
+     "quote": "You earn 2 points per EUR on travel.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_A3000000000000000000000000",
+     "benefit": "points",
+     "field": "earn_rate",
+     "value": {
+      "rate_x100": 100,
+      "unit": "point",
+      "per": "EUR",
+      "category": "everything_else"
+     },
+     "quote": "You earn 1 point per EUR on everything else.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_A4000000000000000000000000",
+     "benefit": "car_rental",
+     "field": "cover_type",
+     "value": "primary",
+     "quote": "This benefit is primary coverage.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_A5000000000000000000000000",
+     "benefit": "car_rental",
+     "field": "excluded_countries",
+     "value": [
+      "Ireland",
+      "Israel",
+      "Jamaica"
+     ],
+     "quote": "Excluded countries: Ireland, Israel, Jamaica.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_A6000000000000000000000000",
+     "benefit": "claims",
+     "field": "phone",
+     "value": "+34 900 000 000",
+     "quote": "Claims line: +34 900 000 000.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    }
+   ],
+   "expect": {
+    "answer": "no",
+    "text": "Your Example Bank Travel Visa's terms (read 2026-10-10) say: \"Excluded countries: Ireland, Israel, Jamaica.\" So: no, as the terms state it. Source: https://bank.test/gtb.pdf."
+   }
+  },
+  {
+   "name": "nothing_chosen_is_not_stated_with_the_claims_line",
+   "product": "Example Bank Travel Visa",
+   "chosen": [],
+   "verdict": "not_stated",
+   "claims": [
+    {
+     "id": "rcl_A1000000000000000000000000",
+     "benefit": "fx_fee",
+     "field": "percent",
+     "value": {
+      "basis_points": 0
+     },
+     "quote": "A foreign transaction fee of 0% applies.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_A2000000000000000000000000",
+     "benefit": "points",
+     "field": "earn_rate",
+     "value": {
+      "rate_x100": 200,
+      "unit": "point",
+      "per": "EUR",
+      "category": "travel"
+     },
+     "quote": "You earn 2 points per EUR on travel.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_A3000000000000000000000000",
+     "benefit": "points",
+     "field": "earn_rate",
+     "value": {
+      "rate_x100": 100,
+      "unit": "point",
+      "per": "EUR",
+      "category": "everything_else"
+     },
+     "quote": "You earn 1 point per EUR on everything else.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_A4000000000000000000000000",
+     "benefit": "car_rental",
+     "field": "cover_type",
+     "value": "primary",
+     "quote": "This benefit is primary coverage.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_A5000000000000000000000000",
+     "benefit": "car_rental",
+     "field": "excluded_countries",
+     "value": [
+      "Ireland",
+      "Israel",
+      "Jamaica"
+     ],
+     "quote": "Excluded countries: Ireland, Israel, Jamaica.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_A6000000000000000000000000",
+     "benefit": "claims",
+     "field": "phone",
+     "value": "+34 900 000 000",
+     "quote": "Claims line: +34 900 000 000.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    }
+   ],
+   "expect": {
+    "answer": "not_stated",
+    "text": "The terms I've read don't say. Here's the claims line from the same terms: +34 900 000 000 (\"Claims line: +34 900 000 000.\")."
+   }
+  },
+  {
+   "name": "no_claims_line_is_said",
+   "product": "Everyday",
+   "chosen": [],
+   "verdict": "not_stated",
+   "claims": [
+    {
+     "id": "rcl_B1000000000000000000000000",
+     "benefit": "fx_fee",
+     "field": "percent",
+     "value": {
+      "basis_points": 300
+     },
+     "quote": "A foreign transaction fee of 3% applies.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_B2000000000000000000000000",
+     "benefit": "points",
+     "field": "earn_rate",
+     "value": {
+      "rate_x100": 100,
+      "unit": "point",
+      "per": "EUR",
+      "category": "everything_else"
+     },
+     "quote": "You earn 1 point per EUR on all purchases.",
+     "source_url": "https://bank.test/gtb.pdf",
+     "read_at": "2026-10-10T08:00:00Z"
+    }
+   ],
+   "expect": {
+    "answer": "not_stated",
+    "text": "The terms I've read don't say. They don't give a claims line either."
+   }
+  }
+ ]
+}

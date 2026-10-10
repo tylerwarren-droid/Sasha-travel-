@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json",
-  "title": "Kanoe sandbox extensions to AgAPI v1.0 (CR 60) — ADDITIVE ONLY: messages.send_email, calendar.add_event · CR 69: magellan.read_site · CR 72: subscriptions.* · CR 73: registry.* (wave 0)",
+  "title": "Kanoe sandbox extensions to AgAPI v1.0 (CR 60) — ADDITIVE ONLY: messages.send_email, calendar.add_event · CR 69: magellan.read_site · CR 72: subscriptions.* · CR 73: registry.* (wave 0) · CR 74: cards.*",
   "$defs": {
     "activity_item": {
       "type": "object",
@@ -388,7 +388,8 @@
           "enum": [
             "operator",
             "venue",
-            "registry"
+            "registry",
+            "card_terms"
           ]
         }
       }
@@ -416,7 +417,8 @@
           "enum": [
             "operator",
             "venue",
-            "registry"
+            "registry",
+            "card_terms"
           ]
         },
         "operator": {
@@ -771,6 +773,24 @@
             "usd": {
               "type": "number"
             }
+          }
+        },
+        "benefits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/card_benefit"
+          }
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "unread": {
+          "type": "array",
+          "items": {
+            "type": "object"
           }
         }
       }
@@ -1708,6 +1728,681 @@
         },
         "reverify_after": {
           "type": "string"
+        }
+      }
+    },
+    "card_benefit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "benefit",
+        "field",
+        "value",
+        "source_url",
+        "quote",
+        "quote_found"
+      ],
+      "properties": {
+        "benefit": {
+          "enum": [
+            "travel_insurance",
+            "car_rental",
+            "purchase_protection",
+            "extended_warranty",
+            "lounges",
+            "fx_fee",
+            "points",
+            "claims"
+          ]
+        },
+        "field": {
+          "type": "string"
+        },
+        "value": {},
+        "source_url": {
+          "type": "string"
+        },
+        "quote": {
+          "$ref": "#/$defs/site_quote"
+        },
+        "quote_found": {
+          "const": true
+        }
+      }
+    },
+    "card_claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "value",
+        "source_url",
+        "read_at",
+        "quote",
+        "drift_state"
+      ],
+      "properties": {
+        "claim_id": {
+          "type": "string",
+          "pattern": "^rcl_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "value": {},
+        "source_url": {
+          "type": "string"
+        },
+        "read_at": {
+          "type": "string"
+        },
+        "quote": {
+          "$ref": "#/$defs/site_quote"
+        },
+        "drift_state": {
+          "enum": [
+            "fresh",
+            "drifted"
+          ]
+        },
+        "warning": {
+          "type": "string"
+        }
+      }
+    },
+    "card_product_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product_id",
+        "issuer",
+        "product",
+        "network",
+        "country",
+        "accepted",
+        "freshness"
+      ],
+      "properties": {
+        "product_id": {
+          "type": "string",
+          "pattern": "^cpr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "product": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string"
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "terms_read_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reverify_after": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "freshness": {
+          "enum": [
+            "fresh",
+            "due",
+            "stale",
+            "unread"
+          ]
+        },
+        "test_fixture": {
+          "type": "boolean"
+        },
+        "why_unread": {
+          "type": "string"
+        }
+      }
+    },
+    "cards_products_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "type": "string",
+          "maxLength": 80
+        }
+      }
+    },
+    "cards_products_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "products",
+        "note"
+      ],
+      "properties": {
+        "products": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/card_product_out"
+          }
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "cards_terms_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product_id"
+      ],
+      "properties": {
+        "product_id": {
+          "type": "string",
+          "pattern": "^cpr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "benefit": {
+          "enum": [
+            "travel_insurance",
+            "car_rental",
+            "purchase_protection",
+            "extended_warranty",
+            "lounges",
+            "fx_fee",
+            "points",
+            "claims"
+          ]
+        }
+      }
+    },
+    "cards_terms_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product",
+        "benefits",
+        "sources",
+        "unread"
+      ],
+      "properties": {
+        "product": {
+          "$ref": "#/$defs/card_product_out"
+        },
+        "benefits": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "travel_insurance",
+              "car_rental",
+              "purchase_protection",
+              "extended_warranty",
+              "lounges",
+              "fx_fee",
+              "points",
+              "claims"
+            ]
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/card_claim"
+              }
+            }
+          }
+        },
+        "sources": {
+          "type": "array"
+        },
+        "unread": {
+          "type": "array"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "card_terms_brief": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "product_id",
+        "terms_read_at",
+        "accepted",
+        "freshness"
+      ],
+      "properties": {
+        "product_id": {
+          "type": "string",
+          "pattern": "^cpr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "terms_read_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "freshness": {
+          "enum": [
+            "fresh",
+            "due",
+            "stale",
+            "unread"
+          ]
+        }
+      }
+    },
+    "card_product_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issuer",
+        "product",
+        "network"
+      ],
+      "properties": {
+        "issuer": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "product": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "network": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string"
+        }
+      }
+    },
+    "cards_intake_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "image"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "save": {
+          "type": "boolean"
+        },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "media_type",
+            "content_base64"
+          ],
+          "properties": {
+            "media_type": {
+              "enum": [
+                "image/png",
+                "image/jpeg",
+                "image/webp",
+                "image/heic"
+              ]
+            },
+            "content_base64": {
+              "type": "string",
+              "maxLength": 7000000
+            }
+          }
+        }
+      }
+    },
+    "cards_intake_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "card",
+        "saved",
+        "terms",
+        "note"
+      ],
+      "properties": {
+        "card": {
+          "$ref": "#/$defs/card_product_value"
+        },
+        "saved": {
+          "type": "boolean"
+        },
+        "item_id": {
+          "type": "string",
+          "pattern": "^kpi_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "masked": {
+          "type": "string"
+        },
+        "terms": {
+          "$ref": "#/$defs/card_terms_brief"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "cards_mine_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        }
+      }
+    },
+    "cards_mine_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cards"
+      ],
+      "properties": {
+        "cards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "item_id",
+              "masked",
+              "issuer",
+              "product",
+              "network",
+              "terms",
+              "status"
+            ],
+            "properties": {
+              "item_id": {
+                "type": "string"
+              },
+              "masked": {
+                "type": "string"
+              },
+              "issuer": {
+                "type": "string"
+              },
+              "product": {
+                "type": "string"
+              },
+              "network": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string"
+              },
+              "terms": {
+                "$ref": "#/$defs/card_terms_brief"
+              },
+              "status": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "card_cite": {
+      "type": "object",
+      "required": [
+        "claim_id",
+        "quote",
+        "source_url",
+        "read_at"
+      ],
+      "properties": {
+        "claim_id": {
+          "type": "string",
+          "pattern": "^rcl_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "benefit": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "value": {},
+        "quote": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "read_at": {
+          "type": "string"
+        },
+        "warning": {
+          "type": "string"
+        }
+      }
+    },
+    "cards_ask_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "question"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "card_item_id": {
+          "type": "string",
+          "pattern": "^kpi_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "product_id": {
+          "type": "string",
+          "pattern": "^cpr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "question": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "card_item_id"
+          ]
+        },
+        {
+          "required": [
+            "product_id"
+          ]
+        }
+      ]
+    },
+    "cards_ask_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "card",
+        "answer",
+        "text",
+        "quotes",
+        "framing"
+      ],
+      "properties": {
+        "card": {
+          "type": "string"
+        },
+        "product_id": {
+          "type": "string"
+        },
+        "framing": {
+          "type": "string"
+        },
+        "answer": {
+          "enum": [
+            "yes",
+            "no",
+            "partly",
+            "quoted",
+            "not_stated",
+            "no_terms",
+            "awaiting_check"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "quotes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/card_cite"
+          }
+        },
+        "claims_line": {
+          "$ref": "#/$defs/card_cite"
+        },
+        "how": {
+          "type": "string"
+        }
+      }
+    },
+    "cards_which_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "purchase"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "purchase": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "amount_minor",
+            "currency"
+          ],
+          "properties": {
+            "amount_minor": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000000
+            },
+            "currency": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{3}$"
+            },
+            "kind": {
+              "enum": [
+                "flight",
+                "hotel",
+                "car_rental",
+                "dining",
+                "groceries",
+                "gas",
+                "transit",
+                "other"
+              ]
+            },
+            "country": {
+              "type": "string",
+              "maxLength": 2
+            }
+          }
+        }
+      }
+    },
+    "cards_which_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "framing",
+        "cards",
+        "net_view",
+        "skipped"
+      ],
+      "properties": {
+        "framing": {
+          "const": "Information from your cards' own terms. You decide."
+        },
+        "ordered_by": {
+          "type": "string"
+        },
+        "net_view": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "skipped": {
+          "type": "array"
+        },
+        "cards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "card",
+              "position",
+              "reasons"
+            ],
+            "properties": {
+              "card": {
+                "type": "string"
+              },
+              "position": {
+                "type": "integer"
+              },
+              "fx_cost_minor": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "points": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "cover_quotes": {
+                "type": "integer"
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "text"
+                  ]
+                }
+              }
+            }
+          }
         }
       }
     }

@@ -478,7 +478,8 @@ class Extensions(Base):
         self.assertEqual(set(operations()) - set(eu_operations()), {"magellan.read_site", "subscriptions.find",   # CR 69, CR 72:
                                                                     "subscriptions.cancel_plan", "subscriptions.cancel",   # Kanoe extensions
                                                                     "registry.countries", "registry.get", "registry.documents",   # CR 73
-                                                                    "registry.obtain_plan", "registry.verify"})
+                                                                    "registry.obtain_plan", "registry.verify",
+                                                                    "cards.products", "cards.terms", "cards.intake", "cards.mine", "cards.ask", "cards.which"})   # CR 74
         self.assertEqual(operations()["acts.status"]["output"], eu_operations()["acts.status"]["output"])
 
 

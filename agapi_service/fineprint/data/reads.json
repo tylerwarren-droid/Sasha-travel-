@@ -1,0 +1,3679 @@
+{
+ "note": "Magellan read_site (purpose card_terms), run on agapi-sandbox (Railway) — never from a laptop. robots.txt first (strict), AD's never-fetch list honoured, issuer pages + the terms they link; each fact's quote checked word for word (else dropped), a number only if it is in its own quote. Untrusted text: data, never instructions.",
+ "reads": {
+  "amex_gold": {
+   "card": {
+    "country": "US",
+    "issuer": "American Express",
+    "key": "amex_gold",
+    "network": "amex",
+    "product": "American Express Gold Card"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 4,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "4X Points at Restaurants Worldwide",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": {
+      "category": "dining",
+      "per": "USD",
+      "rate_x100": 400,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "caps",
+     "quote": "Per dollar spent on up to $50,000 in purchases per calendar year, then 1X points‡",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": "Restaurants: 4X on up to 50000 USD in purchases per calendar year, then 1X"
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "4X Points at U.S. Supermarkets",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": {
+      "category": "groceries",
+      "per": "USD",
+      "rate_x100": 400,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "caps",
+     "quote": "Per dollar spent on up to $25,000 in purchases per calendar year, then 1X points for the rest of the year‡",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": "U.S. supermarkets: 4X on up to 25000 USD in purchases per calendar year, then 1X"
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "5X Points per dollar spent on Prepaid Hotels",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": {
+      "category": "hotels",
+      "per": "USD",
+      "rate_x100": 500,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "3X Points per dollar spent on Flights",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": {
+      "category": "flights",
+      "per": "USD",
+      "rate_x100": 300,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "As an American Express® Gold Card Member, you are eligible for a complimentary upgrade to Hertz Five Star® Status and can earn 2X Membership Rewards® points on prepaid car rentals through AmexTravel.com or the Amex Travel App™.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": {
+      "category": "car_rental",
+      "per": "USD",
+      "rate_x100": 200,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "Earn 1X Membership Rewards® points on all other eligible purchases.‡",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": {
+      "category": "everything_else",
+      "per": "USD",
+      "rate_x100": 100,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "Whether you're dreaming of sunrise abroad or sunset on your favorite shore, American Express offers you the opportunity to transfer points to 20 airline and hotel travel partners.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": [
+      "20 airline and hotel travel partners"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_delay_limit",
+     "quote": "If a round-trip is paid for entirely with your Eligible Card and a covered reason delays your trip more than 12 hours, Trip Delay Insurance can help reimburse certain additional expenses purchased on the same Eligible Card, up to $300 per trip, maximum 2 claims per Eligible Card per 12 consecutive month period.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": {
+      "amount_minor": 30000,
+      "currency": "USD",
+      "per": "per trip"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_delay_threshold_hours",
+     "quote": "If a round-trip is paid for entirely with your Eligible Card and a covered reason delays your trip more than 12 hours, Trip Delay Insurance can help reimburse certain additional expenses purchased on the same Eligible Card, up to $300 per trip, maximum 2 claims per Eligible Card per 12 consecutive month period.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": 12
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "paid_with_card_condition",
+     "quote": "If a round-trip is paid for entirely with your Eligible Card and a covered reason delays your trip more than 12 hours, Trip Delay Insurance can help reimburse certain additional expenses purchased on the same Eligible Card, up to $300 per trip, maximum 2 claims per Eligible Card per 12 consecutive month period.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": "Round-trip paid entirely with the Eligible Card (trip delay)"
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "paid_with_card_condition",
+     "quote": "Travel more comfortably knowing you can be covered for lost, damaged, or stolen Baggage when you purchase the Entire Fare for a Common Carrier Vehicle ticket (e.g. plane, train, ship, or bus) on an Eligible Card.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": "Entire Fare for a Common Carrier ticket purchased on the Eligible Card (baggage)"
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_loss_limit",
+     "quote": "Coverage can be provided for up to $1,250 for carry-on Baggage and up to $500 for checked Baggage, in excess of coverage provided by the Common Carrier.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": {
+      "amount_minor": 50000,
+      "currency": "USD",
+      "per": "per checked baggage"
+     }
+    },
+    {
+     "benefit": "car_rental",
+     "field": "cover_type",
+     "quote": "This product provides secondary coverage and does not include liability coverage.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": "secondary"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "liability_included",
+     "quote": "This product provides secondary coverage and does not include liability coverage.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": false
+    },
+    {
+     "benefit": "car_rental",
+     "field": "damage_theft_covered",
+     "quote": "When you use your Eligible Card to reserve and pay for the Entire Rental and decline the collision damage waiver (CDW) at the Rental Company counter, you can be covered for Damage to or Theft of a Rental Vehicle in a Covered Territory.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "must_decline_rental_cdw",
+     "quote": "When you use your Eligible Card to reserve and pay for the Entire Rental and decline the collision damage waiver (CDW) at the Rental Company counter, you can be covered for Damage to or Theft of a Rental Vehicle in a Covered Territory.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "paid_with_card_condition",
+     "quote": "When you use your Eligible Card to reserve and pay for the Entire Rental and decline the collision damage waiver (CDW) at the Rental Company counter, you can be covered for Damage to or Theft of a Rental Vehicle in a Covered Territory.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": "Reserve and pay for the Entire Rental with the Eligible Card"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_countries",
+     "quote": "Coverage is not available for vehicles rented in Australia, Italy, and New Zealand.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": [
+      "Australia",
+      "Italy",
+      "New Zealand"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "days",
+     "quote": "But Purchase Protection◆ can help protect Covered Purchases for up to 90 days from the Covered Purchase date made on your Eligible Card when they're accidentally damaged, stolen, or lost.*",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": 90
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "annual_limit",
+     "quote": "*Up to $10,000 per Covered Purchase, up to $50,000 per calendar year.",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "value": {
+      "amount_minor": 5000000,
+      "currency": "USD",
+      "per": "per calendar year"
+     }
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T06:58:17Z",
+   "reader": {
+    "input_tokens": 70513,
+    "model": "claude-opus-5-5",
+    "output_tokens": 5119,
+    "usd": 0.3844
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:a630c7e18f59806ee3786c70ecb3c82ad678656c335e5374bed3c73466582bbc",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Benefits Dashboard",
+     "url": "https://global.americanexpress.com/card-benefits/view-all/gold",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:7886b6336d660ef2783e7385d90c98b7ea0d717663aa1bf6d4daa4221818e50f",
+     "kind": "html",
+     "linked_from": "",
+     "title": "The American Express® Gold Cardsearch",
+     "url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:541700f65e3f6e920314f851ad6b043f991d6070fe4aaac6b7628809c450c521",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "title": "No Foreign Transaction Fee Cards | American Express",
+     "url": "https://www.americanexpress.com/us/credit-cards/category/no-foreign-transaction-fee/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:771ab38db513c931754ec4c905cfee7d0a116556155be392735dcab4e3782c83",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "title": "Redeem Membership Rewards® Points | Amex US",
+     "url": "https://www.americanexpress.com/en-us/benefits/rewards/membership-rewards/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:95457fc929f14f7e264cd93e19de81d918e8f4d4a370fb7b59ef0b092d0ac984",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/en-us/benefits/rewards/membership-rewards/",
+     "title": "Insurance - Premium Car Rental Protection | American Express US",
+     "url": "https://www.americanexpress.com/en-us/insurance/premium-car-rental-protection/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:577541fa597f39b38376c6a77dfc32127a591a513c4a5615bb933f1896658003",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/en-us/benefits/rewards/membership-rewards/",
+     "title": "American Express Insurance & Related Benefits",
+     "url": "https://www.americanexpress.com/en-us/insurance/protections/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:623917c892ca8b9e724ccdf48b83ad1ea83755293682be3e2a279d2f337339f8",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/en-us/benefits/rewards/membership-rewards/",
+     "title": "search",
+     "url": "https://www.americanexpress.com/en-us/benefits/trip-cancel-guard/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:cb4ac6aedeeb7a2a7c47979261db8de9b6fe5a584f8c385afe29e9ecc19f6f85",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+     "title": "Consumer & Small Business Card Agreements | Amex US",
+     "url": "https://www.americanexpress.com/en-us/company/legal/cardmember-agreements/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:9f13ec9cacd7cd669d27aed6797b291e1f375cb0228f6f514b83686ea3bafff2",
+     "kind": "pdf",
+     "linked_from": "https://www.americanexpress.com/en-us/company/legal/cardmember-agreements/",
+     "title": "",
+     "url": "https://www.americanexpress.com/content/dam/amex/en-us/company/legal/cardmember-agreements/public-site-2026-q2-pdf-cmas/cps-charge/american-express-gold-card-06-30-2026.pdf",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:aa13a95bcd2f7ab5d491ae0fefb42e030f2082dab2e58c1ce05486920e48e9f5",
+     "kind": "pdf",
+     "linked_from": "https://www.americanexpress.com/en-us/company/legal/cardmember-agreements/",
+     "title": "",
+     "url": "https://www.americanexpress.com/content/dam/amex/en-us/company/legal/cardmember-agreements/public-site-2026-q2-pdf-cmas/cps-lending/delta-skymiles-gold-06-30-2026.pdf",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:e96c15c445532b245fdb442cf1989fa3c0e1eae93ac8ff02c7a31bc51c28248a",
+     "kind": "pdf",
+     "linked_from": "https://www.americanexpress.com/en-us/company/legal/cardmember-agreements/",
+     "title": "",
+     "url": "https://www.americanexpress.com/content/dam/amex/en-us/company/legal/cardmember-agreements/public-site-2026-q2-pdf-cmas/sbs-small-business/business-gold-06-30-2026.pdf",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:d1700a1f5846d72b56d47c591acde27fd7e4d35a30ee36446c71889686a8dfc0",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/en-us/benefits/trip-cancel-guard/",
+     "title": "Page Not Found | American Express US",
+     "url": "https://www.americanexpress.com/us/credit-cards/features-benefits/us-newcomers/",
+     "used": false
+    }
+   ],
+   "unread": []
+  },
+  "amex_platinum": {
+   "card": {
+    "country": "US",
+    "issuer": "American Express",
+    "key": "amex_platinum",
+    "network": "amex",
+    "product": "American Express Platinum Card"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 0,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "5X Points on Flights",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/platinum/",
+     "value": {
+      "category": "flights",
+      "per": "USD",
+      "rate_x100": 500,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "caps",
+     "quote": "Booked directly with airlines or through American Express Travel®, on up to $500,000 on these purchases per calendar year.‡",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/platinum/",
+     "value": "5X on flights booked directly with airlines or through American Express Travel, on up to $500,000 per calendar year"
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "5X Points on Prepaid Hotels",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/platinum/",
+     "value": {
+      "category": "hotels",
+      "per": "USD",
+      "rate_x100": 500,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "lounges",
+     "field": "programme",
+     "quote": "With over 1,550 airport lounges - more than any other credit card company on the market* - enjoy the benefits of the Global Lounge Collection, over $850 of annual value, with access to Centurion Lounges, 10 Delta Sky Club visits when flying on an eligible Delta flight, Priority Pass membership (enrollment required), and other select partner lounges.‡",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/platinum/",
+     "value": "Global Lounge Collection (Centurion Lounges, Delta Sky Club, Priority Pass, other select partner lounges)"
+    },
+    {
+     "benefit": "lounges",
+     "field": "visit_limit",
+     "quote": "With over 1,550 airport lounges - more than any other credit card company on the market* - enjoy the benefits of the Global Lounge Collection, over $850 of annual value, with access to Centurion Lounges, 10 Delta Sky Club visits when flying on an eligible Delta flight, Priority Pass membership (enrollment required), and other select partner lounges.‡",
+     "source_url": "https://www.americanexpress.com/us/credit-cards/card/platinum/",
+     "value": "10 Delta Sky Club visits when flying on an eligible Delta flight"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "cover_type",
+     "quote": "Please note: this coverage is always excess insurance.",
+     "source_url": "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+     "value": "secondary"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "damage_theft_covered",
+     "quote": "Car Rental Loss and Damage Insurance provides the Cardmember, if the Cardmember is the Primary Renter (as defined below) with insurance coverage for damage to or theft of most Rental Autos when the Cardmember uses the Card (as defined below) to reserve and pay for an auto rental from any commercial car rental company within the geographic scope of the United States, its territories and possessions.",
+     "source_url": "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "paid_with_card_condition",
+     "quote": "1d. uses the Card to pay for the entire auto rental from the Rental Company at the time of vehicle return;",
+     "source_url": "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+     "value": "Card used to reserve and to pay for the entire rental at the time of vehicle return"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "liability_included",
+     "quote": "Note: This policy does not provide liability or any other coverage such as Uninsured Motorists, benefits under any Worker's Compensation law, Disability benefits law or other mandated Government Plans.",
+     "source_url": "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+     "value": false
+    },
+    {
+     "benefit": "car_rental",
+     "field": "max_rental_days",
+     "quote": "Car Rental Loss and Damage Insurance covers eligible Rental Autos when rented under a written rental agreement from a Rental Company for no more than 30 consecutive days.",
+     "source_url": "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+     "value": 30
+    },
+    {
+     "benefit": "car_rental",
+     "field": "must_decline_rental_cdw",
+     "quote": "lb. chooses not to purcha se or declines the declines the full Collision Damage Waiver or similar option (CDW), or pays for a partial collision damage waiver, offered by the Rental Company;",
+     "source_url": "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_vehicles",
+     "quote": "1. expensive cars, which means cars with an original manu facturer's suggested retail price of $50,000 or more when new;",
+     "source_url": "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+     "value": [
+      "expensive cars with original MSRP of $50,000 or more when new"
+     ]
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_vehicles",
+     "quote": "3. trucks, pick-ups, cargo vans, custom vans;",
+     "source_url": "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+     "value": [
+      "trucks",
+      "pick-ups",
+      "cargo vans",
+      "custom vans"
+     ]
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_vehicles",
+     "quote": "9. limousines;",
+     "source_url": "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+     "value": [
+      "limousines"
+     ]
+    },
+    {
+     "benefit": "claims",
+     "field": "phone",
+     "quote": "If a loss occurs, a Cardmember should promptly notify the Car Rental Loss and Damage Claims Unit toll free at (800) 338-1670 in the U.S. only or call (440) 914- 2950 from other locations worldwide.",
+     "source_url": "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+     "value": "(800) 338-1670 in the U.S. only; (440) 914- 2950 from other locations worldwide"
+    },
+    {
+     "benefit": "claims",
+     "field": "administrator",
+     "quote": "The written proof of loss, which includes the claim form and all other requested documentation (listed below), must be received within one year of the Notice of Claim date and sent to American Express Car Rental Loss and Damage Claims Unit, PO Box, 94729, Cleveland, Ohio 44101-4729.",
+     "source_url": "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+     "value": "American Express Car Rental Loss and Damage Claims Unit"
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T06:57:26Z",
+   "reader": {
+    "input_tokens": 73803,
+    "model": "claude-opus-5-5",
+    "output_tokens": 4634,
+    "usd": 0.3879
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:17217c940febd35d6aae169131a317a0450f42ec34777357ce6bcd11696ed9bd",
+     "kind": "pdf",
+     "linked_from": "",
+     "title": "",
+     "url": "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:0bfb51a286f986b09dedba24e6a939154e73416ed35aa68f38c9d7d14414b11b",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Benefits Dashboard",
+     "url": "https://global.americanexpress.com/card-benefits/detail/trip-delay-insurance/platinum",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:710de9b291d8d643e0900da0153090e29ab6cf679fe0039be43f23570409e17a",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Benefits Dashboard",
+     "url": "https://global.americanexpress.com/card-benefits/detail/car-rental-insurance/platinum",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:be5c57dd787988b79cd3c160babf595a1d4fd7c1977a8927e41b70d4bdf4e77c",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Platinum Card®search",
+     "url": "https://www.americanexpress.com/us/credit-cards/card/platinum/",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:eea095ad50d2345d3831f369f9ad08f9a41864e751aab1a528a5c6398e051448",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/us/credit-cards/card/platinum/",
+     "title": "No Foreign Transaction Fee Cards | American Express",
+     "url": "https://www.americanexpress.com/us/credit-cards/category/no-foreign-transaction-fee/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:c90e1f5aa3a81faed55133c59c42280bbc2eb2ae5ba1f7a151458424373d537c",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/us/credit-cards/card/platinum/",
+     "title": "Redeem Membership Rewards® Points | Amex US",
+     "url": "https://www.americanexpress.com/en-us/benefits/rewards/membership-rewards/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:db3cbe60bca8f096ef7a38d1995b9fc86bb77d51d36321a11de3296b02ddf84f",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/en-us/benefits/rewards/membership-rewards/",
+     "title": "Insurance - Premium Car Rental Protection | American Express US",
+     "url": "https://www.americanexpress.com/en-us/insurance/premium-car-rental-protection/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:a6928d72df9738e0ff2daa0e2bc4bcce0fde2626a7762fdbf9ee2a45a71fe21c",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/en-us/benefits/rewards/membership-rewards/",
+     "title": "American Express Insurance & Related Benefits",
+     "url": "https://www.americanexpress.com/en-us/insurance/protections/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:e33f68d663e859acccccb86b79f69ff99b7f560b471ede08f2daff51b64f796f",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/en-us/benefits/rewards/membership-rewards/",
+     "title": "search",
+     "url": "https://www.americanexpress.com/en-us/benefits/trip-cancel-guard/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:cb4ac6aedeeb7a2a7c47979261db8de9b6fe5a584f8c385afe29e9ecc19f6f85",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/us/credit-cards/card/platinum/",
+     "title": "Consumer & Small Business Card Agreements | Amex US",
+     "url": "https://www.americanexpress.com/en-us/company/legal/cardmember-agreements/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:b5b3c9facf6d90a2108559eb9323c68b054ef746e515dbdb83343303c30611e6",
+     "kind": "pdf",
+     "linked_from": "https://www.americanexpress.com/en-us/company/legal/cardmember-agreements/",
+     "title": "",
+     "url": "https://www.americanexpress.com/content/dam/amex/en-us/company/legal/cardmember-agreements/public-site-2026-q2-pdf-cmas/cps-charge/platinum-card-06-30-2026.pdf",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:1bd046393b094346535d41de5f9cbc3b7fc2ff987d6f8d842483da0190a4392f",
+     "kind": "pdf",
+     "linked_from": "https://www.americanexpress.com/en-us/company/legal/cardmember-agreements/",
+     "title": "",
+     "url": "https://www.americanexpress.com/content/dam/amex/en-us/company/legal/cardmember-agreements/public-site-2026-q2-pdf-cmas/cps-charge/platinum-goldman-sachs-06-30-2026.pdf",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:cdd1f9ccfdd1981a8ab5dcb0526b4bac94e3707717c4417b9b53f72b4986772b",
+     "kind": "pdf",
+     "linked_from": "https://www.americanexpress.com/en-us/company/legal/cardmember-agreements/",
+     "title": "",
+     "url": "https://www.americanexpress.com/content/dam/amex/en-us/company/legal/cardmember-agreements/public-site-2026-q2-pdf-cmas/cps-charge/morgan-stanley-platinum-06-30-2026.pdf",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:ab1fbf06a8a893d1091f664bd57f952f73ed12b799738f6439c915a229743bc7",
+     "kind": "html",
+     "linked_from": "https://www.americanexpress.com/en-us/benefits/trip-cancel-guard/",
+     "title": "Page Not Found | American Express US",
+     "url": "https://www.americanexpress.com/us/credit-cards/features-benefits/us-newcomers/",
+     "used": false
+    }
+   ],
+   "unread": []
+  },
+  "bilt_mastercard": {
+   "card": {
+    "country": "US",
+    "issuer": "Bilt",
+    "key": "bilt_mastercard",
+    "network": "mastercard",
+    "product": "Bilt Mastercard"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 1,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "claims",
+     "field": "phone",
+     "quote": "To file a claim, call 1-800-316-8051 (all relay calls are accepted, including 711) or visit https://mycardbenefits.assurant.com.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/bilt-benefits/",
+     "value": "1-800-316-8051"
+    },
+    {
+     "benefit": "claims",
+     "field": "url",
+     "quote": "To file a claim, call 1-800-316-8051 (all relay calls are accepted, including 711) or visit https://mycardbenefits.assurant.com.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/bilt-benefits/",
+     "value": "https://mycardbenefits.assurant.com"
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "You must notify us of the loss within sixty (60) days of the loss or as soon as reasonably possible.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/bilt-benefits/",
+     "value": 60
+    },
+    {
+     "benefit": "claims",
+     "field": "documents_deadline_days",
+     "quote": "The requested documents must be submitted within one hundred twenty (120) days of the loss or the claim may not be honored.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/bilt-benefits/",
+     "value": 120
+    },
+    {
+     "benefit": "car_rental",
+     "field": "damage_theft_covered",
+     "quote": "Get reimbursed for covered damage or theft to your rental car2",
+     "source_url": "https://www.bilt.com/card",
+     "value": true
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T07:05:55Z",
+   "reader": {
+    "input_tokens": 72195,
+    "model": "claude-opus-5-5",
+    "output_tokens": 1731,
+    "usd": 0.3234
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:845dde517886161d3f98ad99742dc2327969c4dad1f7ecdf9abe86a10bcb459a",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Bilt World Elite Mastercard Credit Card Guide to Benefits",
+     "url": "https://www.wellsfargo.com/credit-cards/documents/bilt-benefits/",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:d148ba41236544a1946514229573d38064b78acca56d3ff5cfe119bd0b298c0d",
+     "kind": "pdf",
+     "linked_from": "",
+     "title": "",
+     "url": "https://www.biltrewards.com/terms/blue-card-guide-to-benefits",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:a8931399e7782521ad2b4c3a34afc2fefc4db344eab73773d29178c888f932c9",
+     "kind": "html",
+     "linked_from": "",
+     "title": "The Bilt Credit Cards - Turn Your Rent & Mortgage Into Travel · Bilt Rewards",
+     "url": "https://www.bilt.com/card",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:5ef58505f4c4fa1624209f7d189d6ff20be1bd9d4cd24d3eac3e1db1159b3704",
+     "kind": "pdf",
+     "linked_from": "https://www.bilt.com/card",
+     "title": "",
+     "url": "https://www.biltrewards.com/terms/obsidian-card-guide-to-benefits",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:d67f465894488b91e82ce89cc6ae8a221bf7a9e3107cb38dda5313927fac59c4",
+     "kind": "pdf",
+     "linked_from": "https://www.bilt.com/card",
+     "title": "",
+     "url": "https://www.biltrewards.com/terms/palladium-card-guide-to-benefits",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:c5428aa20aa2963504fc42563b0207389e78f5e448fc7ea01015b3cb5ea2eb21",
+     "kind": "pdf",
+     "linked_from": "https://www.bilt.com/card",
+     "title": "",
+     "url": "https://www.biltrewards.com/terms/bilt-card-offer-terms",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:45e30ef80725bf5ef1936f6425628b4439213eeef7c409f3c6741dc2c4d3e3d3",
+     "kind": "html",
+     "linked_from": "https://www.wellsfargo.com/credit-cards/documents/bilt-benefits/",
+     "title": "General Terms of Use - Privacy and Security - Wells Fargo",
+     "url": "https://www.wellsfargo.com/privacy-security/terms/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:2d75c78f4c003d557dd8c7184f806f0ee76d25263d51f9f1ba5e7d48b338cbb5",
+     "kind": "html",
+     "linked_from": "https://www.wellsfargo.com/privacy-security/terms/",
+     "title": "Digital Millennium Copyright Act (DMCA) Notice and Procedure",
+     "url": "https://www.wellsfargo.com/privacy-security/terms/dmca-notice/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:4512b000a8674f94da6e07d9c69b31af8189618e567bb26de2d9c9f93ea6df47",
+     "kind": "html",
+     "linked_from": "https://www.wellsfargo.com/privacy-security/terms/dmca-notice/",
+     "title": "General Terms of Use - Privacy and Security - Wells Fargo",
+     "url": "https://www.wellsfargo.com/privacy-security/terms/",
+     "used": false
+    }
+   ],
+   "unread": []
+  },
+  "bofa_travel_rewards": {
+   "card": {
+    "country": "US",
+    "issuer": "Bank of America",
+    "key": "bofa_travel_rewards",
+    "network": "visa",
+    "product": "Bank of America Travel Rewards"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 0,
+    "not_verbatim": 0
+   },
+   "facts": [],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T07:05:35Z",
+   "reader": {
+    "input_tokens": 24273,
+    "model": "claude-opus-5-5",
+    "output_tokens": 168,
+    "usd": 0.1005
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:7df7c1a34d543e9aea957726970e1b7bf0450acd0553f55227f7575f92c675dd",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Bank of America® Travel Rewards Credit Card - Apply Today",
+     "url": "https://www.bankofamerica.com/credit-cards/products/travel-rewards-credit-card/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:027c967c09a65aa47060b2e5df2af5fbe49315aaf0de07ca2b7704b2dc9af44c",
+     "kind": "html",
+     "linked_from": "https://www.bankofamerica.com/credit-cards/products/travel-rewards-credit-card/",
+     "title": "Tarjeta de Crédito para Viajar: Bank of America® Travel Rewards",
+     "url": "https://www.bankofamerica.com/credit-cards/products/travel-rewards-credit-card/es/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:8ead91598ca03f2cbb2f399869e303a90b2d390da54c4cec35c19f4e5cb3c91c",
+     "kind": "html",
+     "linked_from": "https://www.bankofamerica.com/credit-cards/products/travel-rewards-credit-card/",
+     "title": "Travel Credit Cards with Travel Rewards from Bank of America",
+     "url": "https://www.bankofamerica.com/credit-cards/travel-credit-cards/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:b24b140252eac3d14dfaa4daa6019668371e3551417fd7accabf61f017b0f0cd",
+     "kind": "html",
+     "linked_from": "https://www.bankofamerica.com/credit-cards/products/travel-rewards-credit-card/",
+     "title": "Credit Cards with No Foreign Transaction Fees",
+     "url": "https://www.bankofamerica.com/credit-cards/no-foreign-transaction-fee-credit-cards/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:b60dcf301e6de23f7e2b8a036d5e4530f31d68584956ace4c8f6df312c9ee4b1",
+     "kind": "html",
+     "linked_from": "https://www.bankofamerica.com/credit-cards/products/travel-rewards-credit-card/es/",
+     "title": "Tarjetas de Crédito Sin Cargos por Transacción en el Extranjero",
+     "url": "https://www.bankofamerica.com/credit-cards/no-foreign-transaction-fee-credit-cards/es/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:35cf20f91a78283512beb9acdf05a3ded40f7b46f54f3692ecb0290ff372ecf6",
+     "kind": "html",
+     "linked_from": "https://www.bankofamerica.com/credit-cards/products/travel-rewards-credit-card/es/",
+     "title": "Bank of America: Operaciones Bancarias, Tarjetas de Crédito, Préstamos e Inversiones con Merrill",
+     "url": "https://www.bankofamerica.com/es/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:4e2551584f1019c9be1a5c7dd2fb016bdcdbd92cb8960e32beeb069cafa4e5b7",
+     "kind": "html",
+     "linked_from": "https://www.bankofamerica.com/credit-cards/products/travel-rewards-credit-card/es/",
+     "title": "Tarjetas de Crédito con Puntos para Viajar de Bank of America",
+     "url": "https://www.bankofamerica.com/credit-cards/travel-credit-cards/es/",
+     "used": false
+    }
+   ],
+   "unread": [
+    {
+     "url": "https://www.managerewardsonline.bankofamerica.com/cms/published/root/duo/sharedContent/pdf/travelrwd/TV2_202105_D_ADA.pdf",
+     "why": "HTTP 403"
+    }
+   ]
+  },
+  "capital_one_venture_x": {
+   "card": {
+    "country": "US",
+    "issuer": "Capital One",
+    "key": "capital_one_venture_x",
+    "network": "visa",
+    "product": "Capital One Venture X Rewards"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 7,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "car_rental",
+     "field": "cover_type",
+     "quote": "Your Auto Rental Collision Damage Waiver benefit acts as primary coverage and covers theft, damage, valid loss-ofuse charges imposed and substantiated by the auto rental company, administrative fees and reasonable and customary towing charges, due to a covered theft or damage to the nearest qualified repair facility.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": "primary"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "damage_theft_covered",
+     "quote": "Auto Rental Collision Damage Waiver reimburses You for damages caused by theft or collision – up to the Actual Cash Value of rental vehicles with an original manufacturer’s suggested retail price of up to seventy-five thousand dollars ($75,000.00) when new.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "liability_included",
+     "quote": "Personal liability",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": false
+    },
+    {
+     "benefit": "car_rental",
+     "field": "max_rental_days",
+     "quote": "Rental periods of fifteen (15) consecutive days within Your country of residence, and thirty-one (31) consecutive days outside it, are both covered.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": 15
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_countries",
+     "quote": "This benefit is available in the United States and most foreign countries (with the exception of Israel, Jamaica, the Republic of Ireland or Northern Ireland).",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": [
+      "Israel",
+      "Jamaica",
+      "Republic of Ireland",
+      "Northern Ireland"
+     ]
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_vehicles",
+     "quote": "Certain vehicles are not covered by this benefit, they consist of expensive, exotic, and antique cars; cargo vans; certain vans; vehicles with an open cargo bed; trucks; motorcycles; mopeds; motorbikes; limousines; and recreational vehicles.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": [
+      "expensive, exotic, and antique cars",
+      "cargo vans",
+      "certain vans",
+      "vehicles with an open cargo bed",
+      "trucks",
+      "motorcycles",
+      "mopeds",
+      "motorbikes",
+      "limousines",
+      "recreational vehicles"
+     ]
+    },
+    {
+     "benefit": "car_rental",
+     "field": "must_decline_rental_cdw",
+     "quote": "Review the auto rental agreement and decline the rental compan y’s collision damage waiver (CDW/LDW) option, or a similar provision, as accepting this c overage will canc el out Y our benefit.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "paid_with_card_condition",
+     "quote": "You are eligible for this benefit if Your name is embossed on an eligible card issued in the United States and You use it to initiate and complete Your entire car rental transaction.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": "Name embossed on eligible US-issued card and card used to initiate and complete the entire rental transaction"
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "You should report the theft or damage as soon as possible but no later than forty-five (45) days from the date of the incident.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": 45
+    },
+    {
+     "benefit": "claims",
+     "field": "documents_deadline_days",
+     "quote": "Finally, please note that all remaining documents must be postmarked within three hundred and sixty-fiv e (365) days of the theft or damage date or Y our claim may be denied.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": 365
+    },
+    {
+     "benefit": "claims",
+     "field": "phone",
+     "quote": "To use the services, simply call the toll-free, 24-hour Benefit Administrator line at 1-800-825-4062.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": "1-800-825-4062"
+    },
+    {
+     "benefit": "claims",
+     "field": "url",
+     "quote": "For faster fling, or to learn more about Trip Delay Reimbursement, visit www.eclaimsline.com",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": "www.eclaimsline.com"
+    },
+    {
+     "benefit": "claims",
+     "field": "administrator",
+     "quote": "cbsi Card Benefit Services",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": "cbsi Card Benefit Services (Trip Cancellation and Interruption)"
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "Within thirty (30) days of the Covered Trip delay, call the Beneft Administrator at 1-800-825-4062, or call collect outside the U.S. at 1-804-965-8071.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": 30
+    },
+    {
+     "benefit": "claims",
+     "field": "documents_deadline_days",
+     "quote": "Within ninety (90) days of the date of Your Covered Trip delay, return Your completed and signed claim form and the requested documentation below to the following address:",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": 90
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "Within twenty (20) days of the Trip Cancellation or interruption or as soon as reasonably possible, You must provide (written) claim notice to the Plan Administrator.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": 20
+    },
+    {
+     "benefit": "claims",
+     "field": "phone",
+     "quote": "Call the Beneft Administrator at 1-844-288-2140, within sixty (60) days of the damage or theft (if You wait longer, coverage may be denied).",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": "1-844-288-2140"
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "Call the Beneft Administrator at 1-844-288-2140, within sixty (60) days of the damage or theft (if You wait longer, coverage may be denied).",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": 60
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "paid_with_card_condition",
+     "quote": "You, Your spouse (or Domestic Partner) and Your Dependent Children are eligible for coverage if You charge the entire cost of the Trip using Your Account, less redeemable certificates, vouchers, or coupons, or rewards program associated with Your covered Account.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": "Entire cost of the trip charged to the account or its rewards program (trip cancellation/interruption)"
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "A Pre-existing Condition",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": [
+      "A Pre-existing Condition"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "Suicide, attempted suicide, or intentionally self-inflicted injuries",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": [
+      "Suicide, attempted suicide, or intentionally self-inflicted injuries"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_delay_limit",
+     "quote": "Trip Delay Reimbursement covers up to a maximum of fve hundred dollars ($500.00) for each purchased ticket, for reasonable additional expenses incurred when a Covered Trip You purchased with Your eligible Account and/or rewards program associated with Your covered Account is delayed for more than six (6) hours or requires an overnight stay.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": {
+      "amount_minor": 50000,
+      "currency": "USD",
+      "per": "per ticket"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_delay_threshold_hours",
+     "quote": "Trip Delay Reimbursement covers up to a maximum of fve hundred dollars ($500.00) for each purchased ticket, for reasonable additional expenses incurred when a Covered Trip You purchased with Your eligible Account and/or rewards program associated with Your covered Account is delayed for more than six (6) hours or requires an overnight stay.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": 6
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "paid_with_card_condition",
+     "quote": "To be eligible for this coverage, You need to purchase either a portion or the entire cost of Your Common Carrier fare using Your Account.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": "Portion or entire Common Carrier fare purchased with the account (trip delay)"
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "Any delay due to a Covered Hazard which was made public or made known to You prior to Your departure.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": [
+      "Delay due to a Covered Hazard made public or known prior to departure"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "paid_with_card_condition",
+     "quote": "To be eligible for coverage, You must purchase a portion or the entire cost of the Covered Trip with Your covered Account and/or rewards program associated with Your covered Account.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": "Portion or entire cost of the Covered Trip purchased with the account (lost luggage)"
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "days",
+     "quote": "Purchase Security protects new retail purchases made with Your eligible Account and/or rewards programs associated with Your covered Account within the frst ninety (90) days from the date of purchase.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": 90
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "per_claim_limit",
+     "quote": "At the Beneft Administrator’s discretion, this beneft replaces, repairs, or reimburses You, up to the total purchase price of Your item for a maximum of ten thousand dollars ($10,000.00) per claim and ffty thousand dollars ($50,000.00) per cardholder, in the event of theft or damage.",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": {
+      "amount_minor": 1000000,
+      "currency": "USD",
+      "per": "per claim"
+     }
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "Animals and living plants",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": [
+      "Animals and living plants"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "Antiques or collectible items",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": [
+      "Antiques or collectible items"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "Computer software",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": [
+      "Computer software"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "Medical equipment",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": [
+      "Medical equipment"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "Rented and leased items",
+     "source_url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "value": [
+      "Rented and leased items"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "2X Miles on all other purchases, every day",
+     "source_url": "https://www.capitalone.com/credit-cards/venture-x/",
+     "value": {
+      "category": "everything_else",
+      "per": "USD",
+      "rate_x100": 200,
+      "unit": "mile"
+     }
+    },
+    {
+     "benefit": "lounges",
+     "field": "programme",
+     "quote": "Venture X primary cardholders can enjoy access to 1,300+ participating lounges worldwide from Priority Pass.",
+     "source_url": "https://www.capitalone.com/credit-cards/venture-x/",
+     "value": "Priority Pass (1,300+ participating lounges; primary cardholders; enrollment required)"
+    },
+    {
+     "benefit": "lounges",
+     "field": "programme",
+     "quote": "Venture X primary cardholders can enjoy access to Capital One Lounge and Landing locations.",
+     "source_url": "https://www.capitalone.com/credit-cards/venture-x/",
+     "value": "Capital One Lounge and Landing locations (primary cardholders)"
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T07:02:35Z",
+   "reader": {
+    "input_tokens": 60447,
+    "model": "claude-opus-5-5",
+    "output_tokens": 10862,
+    "usd": 0.459
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:7f3864111afcbbedbb96775ea11bb41dcce34dd96f187b88aa5e0f102e5d1bad",
+     "kind": "pdf",
+     "linked_from": "",
+     "title": "",
+     "url": "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:2c2e9bef35cf02888c9fb1787fcb0f61e7a90ece8024e79f91a26d20d6a02840",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Venture X Rewards | Capital One",
+     "url": "https://www.capitalone.com/credit-cards/venture-x/",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:0369a0bcbe6fc7675c809a9778be90634318bb100be0ed4b80e1e0d9a4df9250",
+     "kind": "html",
+     "linked_from": "https://www.capitalone.com/credit-cards/venture-x/",
+     "title": "FDIC Coverage | Capital One",
+     "url": "https://www.capitalone.com/bank/fdic/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:b1979ea4e9e57ea566103ee5d321aeb20f44da0ed8c30669dad64bf1dd5bf7be",
+     "kind": "html",
+     "linked_from": "https://www.capitalone.com/credit-cards/venture-x/",
+     "title": "Partner Benefits: Terms & Conditions | Capital One",
+     "url": "https://www.capitalone.com/credit-cards/disclosures/additional-benefit-terms/?section=hertz-gold-status-upgrade%2F",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:ac293a625995200e6d6558788f58a2ab49595ecd490eab04792b6e734900291b",
+     "kind": "html",
+     "linked_from": "https://www.capitalone.com/credit-cards/venture-x/",
+     "title": "Get Pre-Approved for a Capital One Credit Card | Capital One",
+     "url": "https://www.capitalone.com/apply/credit-cards/preapprove/venture-x/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:883028ffa2a2959b734cabd002ceabdf7fdfb584eb289b0231a464e5714eb75a",
+     "kind": "html",
+     "linked_from": "https://www.capitalone.com/bank/fdic/",
+     "title": "Capital One Shopping",
+     "url": "https://capitaloneshopping.com/lp/shoppingsavingscoupons",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:d4e48d7eb92a64dec732bb20f3f95f138f585dc6e46a757919bb40ad8b291304",
+     "kind": "html",
+     "linked_from": "https://www.capitalone.com/bank/fdic/",
+     "title": "Visit Local Capital One Cafés: Part bank, part café–all in one space",
+     "url": "https://www.capitalone.com/local/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:5e42563dd686617e41aeaf096e4e2ebb836fb1c1e39a63c285d89f676734c899",
+     "kind": "html",
+     "linked_from": "https://www.capitalone.com/bank/fdic/",
+     "title": "Your Next Journey Starts Here - Capital One Travel",
+     "url": "https://capitalonetravel.com/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:79266a5a5ba556e9f2c797a2e7f82ec56df2db4b43c41c7812e63685748e87e1",
+     "kind": "html",
+     "linked_from": "https://www.capitalone.com/apply/credit-cards/preapprove/venture-x/",
+     "title": "Commitment to Identity Security | Capital One",
+     "url": "https://www.capitalone.com/digital/identity-protection/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:634d646fcb50df3e05e9dde71dd3ef84a536ccf995233bbe3b7b7dd3f94c791d",
+     "kind": "html",
+     "linked_from": "https://www.capitalone.com/digital/identity-protection/",
+     "title": "Banking Security Features & Fraud Protection | Capital One",
+     "url": "https://www.capitalone.com/bank/security-fraud-protection/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:a06246f4b3028c21f82d22356b31b3a421ed1a963407ce06c6ea24cc23973892",
+     "kind": "html",
+     "linked_from": "https://www.capitalone.com/bank/security-fraud-protection/",
+     "title": "Capital One Fraud Protection Tools | Capital One",
+     "url": "https://www.capitalone.com/learn-grow/money-management/capital-one-fraud-protection/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:7134ed760d61af1bd43f08227a113a5fc56a84b3e2f12031d7c16558ebbc0cc5",
+     "kind": "html",
+     "linked_from": "https://www.capitalone.com/learn-grow/money-management/capital-one-fraud-protection/",
+     "title": "Capital One Credit Card Security Features | Capital One",
+     "url": "https://www.capitalone.com/learn-grow/privacy-security/capital-one-credit-card-security-features/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:4fd0e54435fb112397c7be6036d53fa2a6d570637e4d46c7e50857a2cd233440",
+     "kind": "html",
+     "linked_from": "https://www.capitalone.com/bank/security-fraud-protection/",
+     "title": "Capital One Sign In: Log in to access your account(s)",
+     "url": "https://verified.capitalone.com/auth/signin",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:81f992116a832a39a992e1a4dcd276a840ca9e8bdf8b8bba0589ff74bee8c405",
+     "kind": "html",
+     "linked_from": "https://www.capitalone.com/bank/security-fraud-protection/",
+     "title": "Capital One Mobile App — Download Today | Capital One",
+     "url": "https://www.capitalone.com/digital/tools/mobile/",
+     "used": false
+    }
+   ],
+   "unread": []
+  },
+  "chase_sapphire_preferred": {
+   "card": {
+    "country": "US",
+    "issuer": "Chase",
+    "key": "chase_sapphire_preferred",
+    "network": "visa",
+    "product": "Chase Sapphire Preferred"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 1,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_cancellation_limit",
+     "quote": "If your trip is canceled or cut short by sickness, severe weather or other covered situations, you can be reimbursed up to $10,000 per covered traveler and $20,000 per trip for your pre-paid, non-refundable travel expenses, including passenger fares, tours, and hotels.",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": {
+      "amount_minor": 1000000,
+      "currency": "USD",
+      "per": "per person"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_interruption_limit",
+     "quote": "If your trip is canceled or cut short by sickness, severe weather or other covered situations, you can be reimbursed up to $10,000 per covered traveler and $20,000 per trip for your pre-paid, non-refundable travel expenses, including passenger fares, tours, and hotels.",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": {
+      "amount_minor": 1000000,
+      "currency": "USD",
+      "per": "per person"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_cancellation_limit",
+     "quote": "• $10,000 per Covered Traveler",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11387_v2.pdf",
+     "value": {
+      "amount_minor": 1000000,
+      "currency": "USD",
+      "per": "per person"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "paid_with_card_condition",
+     "quote": "The Covered Traveler is covered when You charge all or a portion of the cost of the Trip to Your Covered Card and/or use redeemable Rewards.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11387_v2.pdf",
+     "value": "all or a portion of the Trip cost charged to the card and/or paid with redeemable Rewards"
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "It doesn’t provide coverage if the Covered Traveler simply chooses to change plans, is not feeling well but still able to travel, or the Covered Traveler can reach their destination but decides not to travel.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11387_v2.pdf",
+     "value": [
+      "simply choosing to change plans",
+      "not feeling well but still able to travel",
+      "able to reach destination but deciding not to travel"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_delay_limit",
+     "quote": "If your common carrier travel is delayed more than 12 hours or requires an overnight stay, you are covered for unreimbursed expenses, such as meals and lodging, up to $500 per covered traveler.",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": {
+      "amount_minor": 50000,
+      "currency": "USD",
+      "per": "per person"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_delay_threshold_hours",
+     "quote": "If your common carrier travel is delayed more than 12 hours or requires an overnight stay, you are covered for unreimbursed expenses, such as meals and lodging, up to $500 per covered traveler.",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": 12
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_delay_limit",
+     "quote": "The maximum benefit is $100 per day after the initial six (6) hour delay, and for each additional twenty-four (24) hour period, up to a maximum of five (5) days.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": {
+      "amount_minor": 10000,
+      "currency": "USD",
+      "per": "per day"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_delay_threshold_hours",
+     "quote": "This benefit applies if the Covered Traveler’s Checked Baggage is delayed or misdirected by the Common Carrier for more than six (6) hours from the time the Covered Traveler arrives at their destination.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": 6
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_loss_limit",
+     "quote": "The maximum benefit is $3,000 per Covered Traveler per Trip (additionally, New York residents are limited to $2,000 per bag and $10,000 for all Covered Travelers per Trip).",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": {
+      "amount_minor": 300000,
+      "currency": "USD",
+      "per": "per person"
+     }
+    },
+    {
+     "benefit": "car_rental",
+     "field": "cover_type",
+     "quote": "Inside the United States and outside the United States (where this benefit is available) the coverage provided is primary.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": "primary"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "damage_theft_covered",
+     "quote": "This benefit provides reimbursement for damages caused by theft or collision of the Rental Vehicle up to $60,000.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "limit",
+     "quote": "This benefit provides reimbursement for damages caused by theft or collision of the Rental Vehicle up to $60,000.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": {
+      "amount_minor": 6000000,
+      "currency": "USD"
+     }
+    },
+    {
+     "benefit": "car_rental",
+     "field": "liability_included",
+     "quote": "• Personal liability",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": false
+    },
+    {
+     "benefit": "car_rental",
+     "field": "max_rental_days",
+     "quote": "Rental periods up to thirty-one (31) consecutive days are covered.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": 31
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_vehicles",
+     "quote": "Certain vehicles are not covered by this benefit, including: exotic vehicles or any vehicle with a dealer or manufacturer’s suggested retail price greater than $125,000, and antique cars (cars over twenty (20) years old or that have not been manufactured for ten (10) years or more), cargo vans, trucks (other than pick-ups), motorcycles, mopeds, motorbikes, limousines",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": [
+      "exotic vehicles or any vehicle with MSRP greater than $125,000",
+      "antique cars (over 20 years old or not manufactured for 10 years or more)",
+      "cargo vans",
+      "trucks (other than pick-ups)",
+      "motorcycles",
+      "mopeds",
+      "motorbikes",
+      "limousines"
+     ]
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_vehicles",
+     "quote": "limousines and vehicles that are rented with a driver, recreational vehicles, and passenger vans with seating for more than twelve (12) people including the driver.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": [
+      "vehicles rented with a driver",
+      "recreational vehicles",
+      "passenger vans with seating for more than 12 people including the driver"
+     ]
+    },
+    {
+     "benefit": "car_rental",
+     "field": "must_decline_rental_cdw",
+     "quote": "Accepting the Rental Agency’s CDW/LDW coverage will cancel out this benefit.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "paid_with_card_condition",
+     "quote": "You are covered when You use a Covered Card Account and/or redeemable Rewards, to initiate and complete the entire Rental Vehicle transaction.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": "entire rental transaction initiated and completed with the card and/or redeemable Rewards"
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "days",
+     "quote": "This benefit protects an item You purchase against theft, damage, or Involuntary and Accidental Parting within one hundred twenty (120) days (ninety (90) days for New York residents) from the date of purchase.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": 120
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "per_claim_limit",
+     "quote": "• $500 per item and a maximum of $50,000 per Account",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": {
+      "amount_minor": 50000,
+      "currency": "USD",
+      "per": "per item"
+     }
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "• Items that are lost, or that “mysteriously disappear,” meaning they vanished in an unexplained manner, with no evidence of wrongdoing by one person",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": [
+      "items that are lost or mysteriously disappear"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "• Perishables, consumables, and limited life items, including but not limited to, cosmetics, perfumes, and rechargeable batteries",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": [
+      "perishables, consumables, and limited life items"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "• Living animals and plants",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": [
+      "living animals and plants"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "• Antiques or collectible items",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": [
+      "antiques or collectible items"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "• Computer software",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": [
+      "computer software"
+     ]
+    },
+    {
+     "benefit": "extended_warranty",
+     "field": "months_added",
+     "quote": "• On an original manufacturer’s U.S. repair warranty of six (6) months, We would provide You with an additional twelve (12) months of coverage for a combined total of eighteen (18) months of coverage.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": 12
+    },
+    {
+     "benefit": "extended_warranty",
+     "field": "limit",
+     "quote": "• $10,000 per item and a maximum of $50,000 per Account",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": {
+      "amount_minor": 1000000,
+      "currency": "USD",
+      "per": "per item"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "3x points on dining*",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": {
+      "category": "dining",
+      "per": "USD",
+      "rate_x100": 300,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "3x points on gas stations, EV charging, and vacation homes at top brands*",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": {
+      "category": "gas",
+      "per": "USD",
+      "rate_x100": 300,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "3x points on top streaming services and online grocery, exclusions apply*",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": {
+      "category": "groceries",
+      "per": "USD",
+      "rate_x100": 300,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "2x points on all other travel*",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": {
+      "category": "travel",
+      "per": "USD",
+      "rate_x100": 200,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "and 1X points on all other purchases*",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": {
+      "category": "everything_else",
+      "per": "USD",
+      "rate_x100": 100,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "Aer Lingus, AerClub",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "Aer Lingus AerClub"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "Air Canada Aeroplan",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "Air Canada Aeroplan"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "British Airways Executive Club",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "British Airways Executive Club"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "Flying Blue AIR FRANCE KLM",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "Flying Blue AIR FRANCE KLM"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "Iberia Plus",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "Iberia Plus"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "JetBlue TrueBlue",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "JetBlue TrueBlue"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "Singapore Airlines KrisFlyer",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "Singapore Airlines KrisFlyer"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "Southwest Airlines Rapid Rewards®",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "Southwest Airlines Rapid Rewards"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "United MileagePlus®",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "United MileagePlus"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "Virgin Atlantic Flying Club",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "Virgin Atlantic Flying Club"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "IHG® Rewards Club",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "IHG Rewards Club"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "Marriott Bonvoy®",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "Marriott Bonvoy"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "World of Hyatt®",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "World of Hyatt"
+     ]
+    },
+    {
+     "benefit": "points",
+     "field": "transfer_partners",
+     "quote": "Wyndham Rewards®",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "value": [
+      "Wyndham Rewards"
+     ]
+    },
+    {
+     "benefit": "claims",
+     "field": "administrator",
+     "quote": "We, Us and Our - Virginia Surety Company, Inc., an Assurant company, the insurance company that provides these benefits for the Covered Card",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": "Virginia Surety Company, Inc., an Assurant company"
+    },
+    {
+     "benefit": "claims",
+     "field": "phone",
+     "quote": "If you have any questions please call 1-800-350-1362 or if you are outside the U.S., call collect at 001-214-503-2951.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": "1-800-350-1362"
+    },
+    {
+     "benefit": "claims",
+     "field": "phone",
+     "quote": "If you have any questions please call 1-800-350-1362 or if you are outside the U.S., call collect at 001-214-503-2951.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": "001-214-503-2951 (collect, outside the U.S.)"
+    },
+    {
+     "benefit": "claims",
+     "field": "url",
+     "quote": "1. Visit chasecardbenefits.com or call 1-800-350-1362 within ninety (90) days of the loss or as soon as reasonably possible.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": "chasecardbenefits.com"
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "1. Visit chasecardbenefits.com or call 1-800-350-1362 within ninety (90) days of the loss or as soon as reasonably possible.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": 90
+    },
+    {
+     "benefit": "claims",
+     "field": "documents_deadline_days",
+     "quote": "The requested documents must be submitted within one hundred twenty (120) days of the loss or as soon as reasonably possible.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": 120
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "1. Visit chasecardbenefits.com or call 1-800-350-1362 to report the theft or damage, regardless of who is at fault and whether Your liability has been established, as soon as reasonably possible but no later than one hundred (100) days from the date of the incident even if all required documentation is not yet available.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": 100
+    },
+    {
+     "benefit": "claims",
+     "field": "documents_deadline_days",
+     "quote": "The requested documents must be submitted within three hundred sixty-five (365) days of the damage or theft of the Rental Vehicle or as soon as reasonably possible.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": 365
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "1. Visit chasecardbenefits.com or call 1-800-350-1362 within twenty (20) days of the date the Covered Traveler’s baggage was lost, damaged, or stolen or as soon as reasonably possible.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": 20
+    },
+    {
+     "benefit": "claims",
+     "field": "documents_deadline_days",
+     "quote": "The requested documents must be submitted within ninety (90) days of the baggage being lost, damaged, or stolen or as soon as reasonably possible.",
+     "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "value": 90
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T07:00:56Z",
+   "reader": {
+    "input_tokens": 73821,
+    "model": "claude-opus-5-5",
+    "output_tokens": 11557,
+    "usd": 0.5264
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:e7c9f93d6d49798661765aa99e8eca8da498f5431a7a4a3089b98b88c0f837d1",
+     "kind": "pdf",
+     "linked_from": "",
+     "title": "",
+     "url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11387_v2.pdf",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:97b865510259f086225df05e44d0117d4ffff9e54d1c3c01ff4fb4a42c7bde53",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Chase Sapphire Preferred Credit Card | Chase.com",
+     "url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:3aed377143e2b9d9771d856d4bfbc7c5d6c0c5a713d63a842dc58a6df42f114f",
+     "kind": "pdf",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "title": "",
+     "url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:0310ebf5409fae36ce958b9b56e3106a11a7e3296901a8100945b5b18cdc8d80",
+     "kind": "html",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "title": "Sapphire | Credit Cards | Chase.com",
+     "url": "https://creditcards.chase.com/rewards-credit-cards/sapphire?iCELL=6C1Y",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:b08565ceb5edd3db849a79936a510a23005e006c3e9dd35f7bb3cadc376fc8d0",
+     "kind": "html",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire?iCELL=6C1Y",
+     "title": "Chase Sapphire Preferred Credit Card | Chase.com",
+     "url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred?iCELL=61FY",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:338552c371634de0d6d3c0c6d64233364e9aeb5bdb97ecd2ce678beb3ba789ea",
+     "kind": "html",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+     "title": "Open a Chase Certificate of Deposit Account | Chase.com",
+     "url": "https://www.chase.com/personal/savings/bank-cd",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:e9e66642a00d73858896527b61a39d7040666ed1fdc7c2705f692172b333f224",
+     "kind": "html",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire?iCELL=6C1Y",
+     "title": "Chase Sapphire Reserve Credit Card | Chase.com",
+     "url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve?iCELL=61FY",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:723c302fdbc18e52382a83225266c735849012d0225920523d2f3bff875dd8f6",
+     "kind": "pdf",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve?iCELL=61FY",
+     "title": "",
+     "url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:93321e81f10a7e16a28edf995f418e0834eded9c40173be91959d56ec891f629",
+     "kind": "html",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve?iCELL=61FY",
+     "title": "Chase Sapphire Airport Lounge Network",
+     "url": "https://www.chase.com/sapphire-cards/lounges",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:01c2f41014b130dd68451641eb3a2c84968542caf4b9e012d753199b49095027",
+     "kind": "html",
+     "linked_from": "https://www.chase.com/sapphire-cards/lounges",
+     "title": "Chase for Business | Terms and Conditions | Chase",
+     "url": "https://www.chase.com/business/credit-cards/offerdetails/chaseforbusiness",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:db57ab4c57fbd01c93eaa337b7fede290b78f6ace029367753b76f934fd55798",
+     "kind": "html",
+     "linked_from": "https://www.chase.com/sapphire-cards/lounges",
+     "title": "Chase Sapphire Terms of Use  | Airport Dimensions",
+     "url": "https://www.airportdimensions.com/sapphire-lounge-terms-of-use",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:756b961a5ceee37db42a97615a6007f391cd420c18d89d20cbd6c620929f15b7",
+     "kind": "html",
+     "linked_from": "https://www.chase.com/sapphire-cards/lounges",
+     "title": "Chase Sapphire | Terms and Conditions | Chase",
+     "url": "https://www.chase.com/personal/credit-cards/offerdetails/chasesapphire",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:f843dc395afa11290623990a91ea3ee6b249f80813fb55b693a61fc0c4adc62c",
+     "kind": "html",
+     "linked_from": "https://www.chase.com/business/credit-cards/offerdetails/chaseforbusiness",
+     "title": "Rapid Rewards Terms & Conditions | Southwest Airlines",
+     "url": "https://www.southwest.com/about-southwest/terms-and-conditions/rapid-rewards/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:370268db12909abe01410fe7df6338ccb3826cf27f89508a395a0bf2973e97f2",
+     "kind": "html",
+     "linked_from": "https://www.chase.com/personal/savings/bank-cd",
+     "title": "CD Ladders | Chase Private Client",
+     "url": "https://www.chase.com/personal/checking/private-client/cd-ladders",
+     "used": false
+    }
+   ],
+   "unread": []
+  },
+  "chase_sapphire_reserve": {
+   "card": {
+    "country": "US",
+    "issuer": "Chase",
+    "key": "chase_sapphire_reserve",
+    "network": "visa",
+    "product": "Chase Sapphire Reserve"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 2,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "car_rental",
+     "field": "limit",
+     "quote": "This benefit provides reimbursement for damages caused by theft or collision of the Rental Vehicle up to $75,000.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": {
+      "amount_minor": 7500000,
+      "currency": "USD"
+     }
+    },
+    {
+     "benefit": "car_rental",
+     "field": "damage_theft_covered",
+     "quote": "This benefit covers theft, damage, valid loss-of-use charges imposed and substantiated by the Rental Agency, administrative fees, and reasonable and customary towing charges (due to a covered theft or damage) to the nearest qualified repair facility.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "cover_type",
+     "quote": "Inside the United States and outside the United States (where this benefit is available) the coverage provided is primary.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": "primary"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "liability_included",
+     "quote": "For example, in the event of a collision involving the Rental Vehicle, damage to any other driver’s car, the injury of anyone, or damage to anything is not covered.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": false
+    },
+    {
+     "benefit": "car_rental",
+     "field": "max_rental_days",
+     "quote": "Rental periods up to thirty-one (31) consecutive days are covered.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": 31
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_vehicles",
+     "quote": "antique cars (cars over twenty (20) years old or that have not been manufactured for ten (10) years or more), cargo vans, trucks (other than pick-ups), motorcycles, mopeds, motorbikes, limousines and vehicles that are rented with a driver, recreational vehicles, and passenger vans with seating for more than twelve (12) people including the driver.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": [
+      "antique cars (over 20 years old or not manufactured for 10 years or more)",
+      "cargo vans",
+      "trucks (other than pick-ups)",
+      "motorcycles",
+      "mopeds",
+      "motorbikes",
+      "limousines",
+      "vehicles rented with a driver",
+      "recreational vehicles",
+      "passenger vans with seating for more than 12 people including the driver"
+     ]
+    },
+    {
+     "benefit": "car_rental",
+     "field": "must_decline_rental_cdw",
+     "quote": "Accepting the Rental Agency’s CDW/LDW coverage will cancel out this benefit.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "paid_with_card_condition",
+     "quote": "You are covered when You use a Covered Card Account and/or redeemable Rewards, to initiate and complete the entire Rental Vehicle transaction.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": "Covered Card and/or redeemable Rewards used to initiate and complete the entire rental transaction"
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "1. Visit chasecardbenefits.com or call 1-800-350-1697 to report the theft or damage, regardless of who is at fault and whether Your liability has been established, as soon as reasonably possible but no later than one hundred (100) days from the date of the incident even if all required documentation is not yet available.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": 100
+    },
+    {
+     "benefit": "claims",
+     "field": "documents_deadline_days",
+     "quote": "The requested documents must be submitted within three hundred sixty-five (365) days of the damage or theft of the Rental Vehicle or as soon as reasonably possible.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": 365
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_delay_threshold_hours",
+     "quote": "This benefit applies if the Covered Traveler’s Checked Baggage is delayed or misdirected by the Common Carrier for more than six (6) hours from the time the Covered Traveler arrives at their destination.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": 6
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_delay_limit",
+     "quote": "The maximum benefit is $100 per day after the initial six (6) hour delay, and for each additional twenty-four (24) hour period, up to a maximum of five (5) days.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": {
+      "amount_minor": 10000,
+      "currency": "USD",
+      "per": "per day"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "paid_with_card_condition",
+     "quote": "The Covered Traveler is covered when You charge all or a portion of the cost of the Common Carrier fare to Your Covered Card and/or use redeemable Rewards.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": "all or a portion of the Common Carrier fare charged to the card and/or paid with redeemable Rewards"
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "Jewelry and watches",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": [
+      "Jewelry and watches"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "Cameras, video recorders, and other electronic equipment",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": [
+      "Cameras, video recorders, and other electronic equipment"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "Tickets, documents, money, securities, checks, travelers checks, and valuable papers",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": [
+      "Tickets",
+      "documents",
+      "money",
+      "securities",
+      "checks",
+      "travelers checks",
+      "valuable papers"
+     ]
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "1. Visit chasecardbenefits.com or call 1-800-350-1697 within twenty (20) days of the date the Covered Traveler’s Checked Baggage was delayed or as soon as reasonably possible.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": 20
+    },
+    {
+     "benefit": "claims",
+     "field": "documents_deadline_days",
+     "quote": "The requested documents must be submitted within ninety (90) days of the baggage being lost, damaged, or stolen or as soon as reasonably possible.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": 90
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_cancellation_limit",
+     "quote": "If your trip is canceled or cut short by sickness, severe weather or other covered situations, you can be reimbursed up to $10,000 per covered traveler and $20,000 per trip for your pre-paid, non-refundable travel expenses, including passenger fares, tours, and hotels.",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "value": {
+      "amount_minor": 1000000,
+      "currency": "USD",
+      "per": "per covered traveler"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_interruption_limit",
+     "quote": "If your trip is canceled or cut short by sickness, severe weather or other covered situations, you can be reimbursed up to $10,000 per covered traveler and $20,000 per trip for your pre-paid, non-refundable travel expenses, including passenger fares, tours, and hotels.",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "value": {
+      "amount_minor": 1000000,
+      "currency": "USD",
+      "per": "per covered traveler"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_delay_limit",
+     "quote": "If your common carrier travel is delayed more than 6 hours or requires an overnight stay, you are covered for unreimbursed expenses, such as meals and lodging, up to $500 per covered traveler.",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "value": {
+      "amount_minor": 50000,
+      "currency": "USD",
+      "per": "per covered traveler"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_delay_threshold_hours",
+     "quote": "If your common carrier travel is delayed more than 6 hours or requires an overnight stay, you are covered for unreimbursed expenses, such as meals and lodging, up to $500 per covered traveler.",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "value": 6
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "days",
+     "quote": "This benefit protects an item You purchase against theft, damage, or Involuntary and Accidental Parting within one hundred twenty (120) days (ninety (90) days for New York residents) from the date of purchase.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": 120
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "per_claim_limit",
+     "quote": "$10,000 per item and a maximum of $50,000 per calendar year",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": {
+      "amount_minor": 1000000,
+      "currency": "USD",
+      "per": "per item"
+     }
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "annual_limit",
+     "quote": "$10,000 per item and a maximum of $50,000 per calendar year",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": {
+      "amount_minor": 5000000,
+      "currency": "USD",
+      "per": "per calendar year"
+     }
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "Living animals and plants",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": [
+      "Living animals and plants"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "Antiques or collectible items",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": [
+      "Antiques or collectible items"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "Computer software",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": [
+      "Computer software"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "Items that are lost, or that “mysteriously disappear,” meaning they vanished in an unexplained manner, with no evidence of wrongdoing by one person",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": [
+      "Items that are lost or mysteriously disappear"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "Items under the control and care of a common carrier, including the U.S. Postal Service, airplanes, or a delivery service",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": [
+      "Items under the control and care of a common carrier"
+     ]
+    },
+    {
+     "benefit": "claims",
+     "field": "documents_deadline_days",
+     "quote": "The requested documents must be submitted within one hundred twenty (120) days of the loss or as soon as reasonably possible.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": 120
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "1. Visit chasecardbenefits.com or call 1-800-350-1697 within ninety (90) days of the loss or as soon as reasonably possible.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": 90
+    },
+    {
+     "benefit": "extended_warranty",
+     "field": "months_added",
+     "quote": "On an original manufacturer’s U.S. repair warranty of six (6) months, We would provide You with an additional twelve (12) months of coverage for a combined total of eighteen (18) months of coverage.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": 12
+    },
+    {
+     "benefit": "extended_warranty",
+     "field": "limit",
+     "quote": "$10,000 per item and a maximum of $50,000 per Account",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": {
+      "amount_minor": 1000000,
+      "currency": "USD",
+      "per": "per item"
+     }
+    },
+    {
+     "benefit": "claims",
+     "field": "administrator",
+     "quote": "We, Us and Our - Virginia Surety Company, Inc., an Assurant company, the insurance company that provides these benefits for the Covered Card",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": "Virginia Surety Company, Inc., an Assurant company"
+    },
+    {
+     "benefit": "claims",
+     "field": "phone",
+     "quote": "If you have any questions please call 1-800-350-1697 or if you are outside the U.S., call collect at 001-214-503-2954.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": "1-800-350-1697; outside the U.S. call collect 001-214-503-2954"
+    },
+    {
+     "benefit": "claims",
+     "field": "url",
+     "quote": "1. Visit chasecardbenefits.com or call 1-800-350-1697 within ninety (90) days of the loss or as soon as reasonably possible.",
+     "source_url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "value": "chasecardbenefits.com"
+    },
+    {
+     "benefit": "lounges",
+     "field": "programme",
+     "quote": "Access over 1,300 airport lounges worldwide with your complimentary Priority PassTM Select Membership.*",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "value": "Priority Pass Select"
+    },
+    {
+     "benefit": "lounges",
+     "field": "programme",
+     "quote": "Escape the crowds and settle into elevated comfort with access to any Chase Sapphire Lounge by The Club with up to two complimentary guests.",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "value": "Chase Sapphire Lounges by The Club"
+    },
+    {
+     "benefit": "lounges",
+     "field": "guest_rules",
+     "quote": "Enjoy complimentary access to Chase Sapphire Lounges by The Club and 1,300+ Priority PassTM airport lounges worldwide with up to two guests* - valued at over $850 when you and your guests visit multiple times each year.",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "value": "up to two guests"
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "4x points on flights booked direct*",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "value": {
+      "category": "flights",
+      "per": "USD",
+      "rate_x100": 400,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "4x points on hotels booked direct*",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "value": {
+      "category": "hotels",
+      "per": "USD",
+      "rate_x100": 400,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "3x points on dining worldwide*",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "value": {
+      "category": "dining",
+      "per": "USD",
+      "rate_x100": 300,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "1x points on all other purchases*",
+     "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "value": {
+      "category": "everything_else",
+      "per": "USD",
+      "rate_x100": 100,
+      "unit": "point"
+     }
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T06:59:15Z",
+   "reader": {
+    "input_tokens": 73259,
+    "model": "claude-opus-5-5",
+    "output_tokens": 11078,
+    "usd": 0.5146
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:f9e6aae55f2d0e741e5802d1896b87baab8d77d53b3f5675b03cd47daf98e56a",
+     "kind": "pdf",
+     "linked_from": "",
+     "title": "",
+     "url": "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:8ab58d1f6bd103a14cbc4bdfcd7aca1b1159acddf53459fdb1deed79b45556d4",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Chase Sapphire Reserve Credit Card | Chase.com",
+     "url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:723c302fdbc18e52382a83225266c735849012d0225920523d2f3bff875dd8f6",
+     "kind": "pdf",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "title": "",
+     "url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:7631c0da2dee98f4e7ad647f2f7871a82968f00aae07e17a41685dc34501ba15",
+     "kind": "html",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "title": "Sapphire | Credit Cards | Chase.com",
+     "url": "https://creditcards.chase.com/rewards-credit-cards/sapphire?iCELL=6C1Y",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:ddbad5636596b5f7e4971e6bbfa3179e195c77a3ad6144bf11b46ecfacbfcd87",
+     "kind": "html",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire?iCELL=6C1Y",
+     "title": "Chase Sapphire Reserve Credit Card | Chase.com",
+     "url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve?iCELL=61FY",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:8006b8426e0d4452dabf781735816105c324c58f6b10001b65f2bf447e25a950",
+     "kind": "html",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+     "title": "Chase Sapphire Airport Lounge Network",
+     "url": "https://www.chase.com/sapphire-cards/lounges",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:fde3dd156932bf9111e659b94ca4f99f23fa945e81c4f740b7ee30b2020e6846",
+     "kind": "html",
+     "linked_from": "https://www.chase.com/sapphire-cards/lounges",
+     "title": "Chase for Business | Terms and Conditions | Chase",
+     "url": "https://www.chase.com/business/credit-cards/offerdetails/chaseforbusiness",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:faaefa1e9212aa1d5b8c7188153a1187494fd43091c7d0fdaab41d723267db8e",
+     "kind": "html",
+     "linked_from": "https://www.chase.com/sapphire-cards/lounges",
+     "title": "Chase Sapphire Terms of Use  | Airport Dimensions",
+     "url": "https://www.airportdimensions.com/sapphire-lounge-terms-of-use",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:951d82494dcecbcd2b1e5f6d5762a2f37328c472f0cfbc32d804b9c59d1f3299",
+     "kind": "html",
+     "linked_from": "https://www.chase.com/sapphire-cards/lounges",
+     "title": "Chase Sapphire Reserve Credit Card  | Chase.com",
+     "url": "https://creditcards.chase.com/a1/26Q2b/sapphire/goreserve?CELL=68JY",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:39254455c5adde49a5a598e8779398017b5ab7de5900055fa254c808b79f4aca",
+     "kind": "html",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire?iCELL=6C1Y",
+     "title": "Chase Sapphire Preferred Credit Card | Chase.com",
+     "url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred?iCELL=61FY",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:3aed377143e2b9d9771d856d4bfbc7c5d6c0c5a713d63a842dc58a6df42f114f",
+     "kind": "pdf",
+     "linked_from": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred?iCELL=61FY",
+     "title": "",
+     "url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11599.pdf",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:1ea591f0b626b8a814a686e276da8d687fcee00e23bb5a6390c07eb2cf10915a",
+     "kind": "html",
+     "linked_from": "https://creditcards.chase.com/a1/26Q2b/sapphire/goreserve?CELL=68JY",
+     "title": "Sapphire Reserve Experiences",
+     "url": "https://account.chase.com/sapphire/reserve/reservedbysapphire",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:751609300f5f32a3f4fe40c4d2656158c2340874efe185e0c0d914a879533cab",
+     "kind": "html",
+     "linked_from": "https://account.chase.com/sapphire/reserve/reservedbysapphire",
+     "title": "Chase Sapphire Reserve® Benefits",
+     "url": "https://www.chase.com/sapphire-cards/personal/reserve",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:951d82494dcecbcd2b1e5f6d5762a2f37328c472f0cfbc32d804b9c59d1f3299",
+     "kind": "html",
+     "linked_from": "https://www.chase.com/sapphire-cards/personal/reserve",
+     "title": "Chase Sapphire Reserve Credit Card  | Chase.com",
+     "url": "https://creditcards.chase.com/a1/26Q2b/sapphire/goreserve?CELL=68JV",
+     "used": false
+    }
+   ],
+   "unread": []
+  },
+  "citi_aadvantage_executive": {
+   "card": {
+    "country": "US",
+    "issuer": "Citi",
+    "key": "citi_aadvantage_executive",
+    "network": "mastercard",
+    "product": "Citi AAdvantage Executive World Elite Mastercard"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 8,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "travel_insurance",
+     "field": "paid_with_card_condition",
+     "quote": "To be eligible for coverage under this benefit, Your Citi® Card and/or AAdvantage® miles must be used to purchase at least a portion of the Trip.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": "Citi Card and/or AAdvantage miles used to purchase at least a portion of the Trip"
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "paid_with_card_condition",
+     "quote": "To be eligible for coverage under this benefit, Your Citi® Card and/or AAdvantage® miles must be used to purchase at least a portion of the Common Carrier fare.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": "Citi Card and/or AAdvantage miles used to purchase at least a portion of the Common Carrier fare (trip delay, lost baggage)"
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_delay_threshold_hours",
+     "quote": "If a Covered Traveler’s Trip on a Common Carrier is delayed for at least 6 hours, We may reimburse You for expenses incurred because of the delay.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": 6
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "• Any event/incident (such as severe weather or terrorist incident) that occurred prior to the Trip being booked.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": [
+      "cancelling for a reason not covered",
+      "events that occurred prior to the Trip being booked",
+      "death, serious injury or sickness of a non-Family Member not traveling",
+      "missing required travel documentation"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "• The Covered Traveler(s) did not get the required travel documentation, such as a passport or visa.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": [
+      "Covered Traveler did not get required travel documentation"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "• The Covered Traveler(s) accepted an offer or coupon in exchange for not boarding an overbooked flight.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": [
+      "accepting an offer or coupon in exchange for not boarding an overbooked flight (trip delay)"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "• Antiques and collector’s items.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": [
+      "antiques and collector's items (baggage)"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "• The item is seized by customs or any government agency.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": [
+      "items seized by customs or any government agency (baggage)"
+     ]
+    },
+    {
+     "benefit": "car_rental",
+     "field": "limit",
+     "quote": "We will cover You up to $75,000 toward the cost of repairs or the cash value of the car, whichever is less, if a covered accident or theft occurs when You pay for a rental car with Your Citi Card and/or AAdvantage® miles and decline the rental company’s collision loss/damage insurance.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": {
+      "amount_minor": 7500000,
+      "currency": "USD"
+     }
+    },
+    {
+     "benefit": "car_rental",
+     "field": "must_decline_rental_cdw",
+     "quote": "We will cover You up to $75,000 toward the cost of repairs or the cash value of the car, whichever is less, if a covered accident or theft occurs when You pay for a rental car with Your Citi Card and/or AAdvantage® miles and decline the rental company’s collision loss/damage insurance.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "paid_with_card_condition",
+     "quote": "We will cover You up to $75,000 toward the cost of repairs or the cash value of the car, whichever is less, if a covered accident or theft occurs when You pay for a rental car with Your Citi Card and/or AAdvantage® miles and decline the rental company’s collision loss/damage insurance.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": "pay for the rental car with the Citi Card and/or AAdvantage miles"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "damage_theft_covered",
+     "quote": "We will cover You up to $75,000 toward the cost of repairs or the cash value of the car, whichever is less, if a covered accident or theft occurs when You pay for a rental car with Your Citi Card and/or AAdvantage® miles and decline the rental company’s collision loss/damage insurance.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "max_rental_days",
+     "quote": "• The rental period is no more than 31 consecutive days.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": 31
+    },
+    {
+     "benefit": "car_rental",
+     "field": "cover_type",
+     "quote": "In the United States, the coverage provided by this benefit is secondary.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": "secondary"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "cover_type",
+     "quote": "Outside the United States, the coverage provided by this benefit is primary even if You have another insurance policy.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": "primary"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "liability_included",
+     "quote": "This coverage is not all-inclusive, which means it does not cover such things as personal injury, personal liability or third-party personal property.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": false
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "days",
+     "quote": "Within 90 days of purchase or delivery of the item, whichever is first.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": 90
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "• Tickets of any kind (e.g., for airlines, sporting events, concerts or lottery).",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": [
+      "tickets of any kind"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "• Watches or jewelry including loose gems, precious stones, metals and pearls.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": [
+      "watches or jewelry including loose gems, precious stones, metals and pearls"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "• Firearms or ammunition.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": [
+      "firearms or ammunition"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "• Currency, cash (including rare or precious coins), gift cards or Traveler’s checks.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": [
+      "currency, cash, gift cards or traveler's checks"
+     ]
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "exclusions",
+     "quote": "• Items purchased for resale, professional or commercial use.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": [
+      "items purchased for resale, professional or commercial use"
+     ]
+    },
+    {
+     "benefit": "extended_warranty",
+     "field": "months_added",
+     "quote": "Feel more confident about Your purchase. We will add 24 Months on Your warranty.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": 24
+    },
+    {
+     "benefit": "extended_warranty",
+     "field": "limit",
+     "quote": "• $10,000 per item.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": {
+      "amount_minor": 1000000,
+      "currency": "USD",
+      "per": "per item"
+     }
+    },
+    {
+     "benefit": "lounges",
+     "field": "programme",
+     "quote": "Membership includes unlimited visits for you (and up to 2 guests or immediate members) to more that 100 Admirals Club® lounges and partner lounges worldwide.2",
+     "source_url": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "value": "Admirals Club membership"
+    },
+    {
+     "benefit": "lounges",
+     "field": "visit_limit",
+     "quote": "Membership includes unlimited visits for you (and up to 2 guests or immediate members) to more that 100 Admirals Club® lounges and partner lounges worldwide.2",
+     "source_url": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "value": "unlimited"
+    },
+    {
+     "benefit": "lounges",
+     "field": "guest_rules",
+     "quote": "The Citi® / AAdvantage® Executive Card gives access for the primary cardmember and up to 2 guests or immediate family members.2",
+     "source_url": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "value": "primary cardmember plus up to 2 guests or immediate family members"
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "Earn 4 AAdvantage® miles for every $1 spent on eligible American Airlines purchases",
+     "source_url": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "value": {
+      "category": "flights",
+      "per": "USD",
+      "rate_x100": 400,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "Earn 12 AAdvantage® miles for every $1 spent on eligible AAdvantage Hotels® bookings and eligible AAdvantage Cars® bookings2",
+     "source_url": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "value": {
+      "category": "hotels",
+      "per": "USD",
+      "rate_x100": 1200,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "Earn 12 AAdvantage® miles for every $1 spent on eligible AAdvantage Hotels® bookings and eligible AAdvantage Cars® bookings2",
+     "source_url": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "value": {
+      "category": "car_rental",
+      "per": "USD",
+      "rate_x100": 1200,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "Earn 1 AAdvantage® mile for every $1 spent on all other purchases2",
+     "source_url": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "value": {
+      "category": "everything_else",
+      "per": "USD",
+      "rate_x100": 100,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "caps",
+     "quote": "After you spend $150,000 in purchases in a calendar year, earn a total of 5 AAdvantage® miles for every $1 spent on eligible American Airlines purchases for the remainder of the year2",
+     "source_url": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "value": "After $150,000 in purchases in a calendar year, 5 miles per $1 on eligible American Airlines purchases for the remainder of the year"
+    },
+    {
+     "benefit": "points",
+     "field": "caps",
+     "quote": "There is no maximum number of American Airlines AAdvantage® miles that you can accumulate with your card.",
+     "source_url": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "value": "No maximum number of miles that can be accumulated"
+    },
+    {
+     "benefit": "claims",
+     "field": "phone",
+     "quote": "cardbenefits.citi.com 1-866-506-5222",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": "1-866-506-5222"
+    },
+    {
+     "benefit": "claims",
+     "field": "phone",
+     "quote": "or call collect internationally at 1-312-356-7830",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": "1-312-356-7830 (call collect internationally)"
+    },
+    {
+     "benefit": "claims",
+     "field": "url",
+     "quote": "Or You can visit mybenefits.cardbenefitclaims.com to submit a claim.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": "mybenefits.cardbenefitclaims.com"
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "Failure to file a claim within 60 days will result in the denial of coverage.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": 60
+    },
+    {
+     "benefit": "claims",
+     "field": "documents_deadline_days",
+     "quote": "2. Return all requested documents within 180 days of the Trip delay or as soon as reasonably possible.",
+     "source_url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "value": 180
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T07:04:01Z",
+   "reader": {
+    "input_tokens": 40326,
+    "model": "claude-opus-5-5",
+    "output_tokens": 9278,
+    "usd": 0.3469
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:5cc9fac64a03c2a4853612847bdb0d5fe18091017a09049104429de3b99d54b3",
+     "kind": "pdf",
+     "linked_from": "",
+     "title": "",
+     "url": "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:29d08e6ceeabddb27530d211bff78caa911e2d5f26f7fdf3ad8aafeae2f4c101",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Citi® / AAdvantage® Executive World Legend Mastercard® | Citi.com",
+     "url": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:29d08e6ceeabddb27530d211bff78caa911e2d5f26f7fdf3ad8aafeae2f4c101",
+     "kind": "html",
+     "linked_from": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "title": "Citi® / AAdvantage® Executive World Legend Mastercard® | Citi.com",
+     "url": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:4028124e9129a71061f78c1af2ccfdd3c6af69008e7d46972eab356ea022cbcc",
+     "kind": "html",
+     "linked_from": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "title": "Citi® / AAdvantage® Globe™ Mastercard® | Citi.com",
+     "url": "https://www.citi.com/credit-cards/citi-aadvantage-globe-mastercard",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:fe0ab785b2c9c5286d7f43c716970bdc44340d97489df36cdeaefafae237e9bb",
+     "kind": "html",
+     "linked_from": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "title": "Citi® / AAdvantage® Platinum Select® World Elite Mastercard® | Citi.com",
+     "url": "https://www.citi.com/credit-cards/citi-aadvantage-platinum-select-world-elite-mastercard",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:29d08e6ceeabddb27530d211bff78caa911e2d5f26f7fdf3ad8aafeae2f4c101",
+     "kind": "html",
+     "linked_from": "https://www.citi.com/credit-cards/citi-aadvantage-platinum-select-world-elite-mastercard",
+     "title": "Citi® / AAdvantage® Executive World Legend Mastercard® | Citi.com",
+     "url": "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-legend-mastercard",
+     "used": true
+    }
+   ],
+   "unread": []
+  },
+  "discover_it_miles": {
+   "card": {
+    "country": "US",
+    "issuer": "Discover",
+    "key": "discover_it_miles",
+    "network": "discover",
+    "product": "Discover it Miles"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 0,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "You will earn one and a half (1.5) Miles for each dollar you spend on all purchases.",
+     "source_url": "https://www.discover.com/acquisitions/miles/terms.pdf",
+     "value": {
+      "category": "everything_else",
+      "per": "USD",
+      "rate_x100": 150,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "Earn unlimited 1.5x miles on travel purchases and all your everyday purchases.",
+     "source_url": "https://www.discover.com/credit-cards/travel/?ICMPGN=PUB_HNAV_CARDS_TRAVEL",
+     "value": {
+      "category": "travel",
+      "per": "USD",
+      "rate_x100": 150,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "caps",
+     "quote": "You earn unlimited Miles by using your Card to make purchases.",
+     "source_url": "https://www.discover.com/acquisitions/miles/terms.pdf",
+     "value": "Unlimited Miles; no cap on earning"
+    },
+    {
+     "benefit": "points",
+     "field": "caps",
+     "quote": "You will not earn Miles on cash advances, balance transfers, illegal transactions, or on any cash you receive in connection with a purchase at the point of sale through our Cash at Checkout feature.",
+     "source_url": "https://www.discover.com/acquisitions/miles/terms.pdf",
+     "value": "No miles on cash advances, balance transfers, illegal transactions or Cash at Checkout cash"
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T07:05:18Z",
+   "reader": {
+    "input_tokens": 40990,
+    "model": "claude-opus-5-5",
+    "output_tokens": 784,
+    "usd": 0.1796
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:0d0a4585fab666c79a95424029c955390fca610d45a8b1bbec6b07dad4a98d06",
+     "kind": "pdf",
+     "linked_from": "",
+     "title": "",
+     "url": "https://www.discover.com/acquisitions/miles/terms.pdf",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:a6dbc87c334291d9f8256b081c3dee2edd0168eb1955a2b54c28350b7b799da1",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Discover - Personal Banking, Credit Cards & Loans",
+     "url": "https://www.discover.com/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:f43720c7a2ef5183c261f8c91b4e1e760f9c9cc6f96817173001d3f8fdd02db0",
+     "kind": "html",
+     "linked_from": "https://www.discover.com/",
+     "title": "Travel Credit Card | Discover it Miles Credit Card",
+     "url": "https://www.discover.com/credit-cards/travel/?ICMPGN=PUB_HNAV_CARDS_TRAVEL",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:683354f9dea20db932674a1f9cb253d7ca94935852e0ffbd0c8dc71ea563ea9f",
+     "kind": "html",
+     "linked_from": "https://www.discover.com/credit-cards/travel/?ICMPGN=PUB_HNAV_CARDS_TRAVEL",
+     "title": "How Do Credit Card Miles Work? | Discover",
+     "url": "https://www.discover.com/credit-cards/card-smarts/how-do-credit-card-miles-work-for-travel-rewards/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:3c4c5a26c221b2b0fc6753519d7a539a6b115fbe263edca266d6a109cd862911",
+     "kind": "html",
+     "linked_from": "https://www.discover.com/credit-cards/card-smarts/how-do-credit-card-miles-work-for-travel-rewards/",
+     "title": "Travel Credit Card | Discover it Miles Credit Card",
+     "url": "https://www.discover.com/credit-cards/travel/?ICMPGN=crdsmart_ymak_travel",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:bbde77d6c0d199449114f7abba98070d2fa53db761bbc0ee035b9da36adf3801",
+     "kind": "html",
+     "linked_from": "https://www.discover.com/",
+     "title": "Discover it Cash Back Credit Card | Apply in Minutes",
+     "url": "https://www.discover.com/credit-cards/cash-back/it-card/?ICMPGN=PUB_HNAV_CARDS_IT",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:7eaddd0bc0288291c6a25fbd20b4a47fb5a7043bb10e8652a4905844e999c6dc",
+     "kind": "html",
+     "linked_from": "https://www.discover.com/",
+     "title": "Gas & Restaurant Credit Card | Discover",
+     "url": "https://www.discover.com/credit-cards/cash-back/chrome/?ICMPGN=PUB_HNAV_CARDS_CHROME",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:8a6a9bbf2ddbee69cc5358aa6cafbd3bc713abd34a65c6c6d3d018f4a77f3a33",
+     "kind": "html",
+     "linked_from": "https://www.discover.com/credit-cards/card-smarts/how-do-credit-card-miles-work-for-travel-rewards/",
+     "title": "Travel Credit Card | Discover it Miles Credit Card",
+     "url": "https://www.discover.com/credit-cards/travel/?icmpgn=crdsmart_inline_yh_airline",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:d4140a4ca92573a4196a6518ffb0a333e51f31c297addb75307cfd3044ef5a8e",
+     "kind": "html",
+     "linked_from": "https://www.discover.com/credit-cards/cash-back/it-card/?ICMPGN=PUB_HNAV_CARDS_IT",
+     "title": "Where Are Discover Credit Cards Accepted? | Discover",
+     "url": "https://www.discover.com/credit-cards/card-smarts/discover-cards-acceptance/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:d703668ad25ca0aaf8a365ddc9938f20dcabc250841a6eeaa0dda137b77c1170",
+     "kind": "html",
+     "linked_from": "https://www.discover.com/credit-cards/card-smarts/discover-cards-acceptance/",
+     "title": "How Automatic Bill Payments Can Make Life Easier | Discover",
+     "url": "https://www.discover.com/credit-cards/card-smarts/directpay-automatic-bill-payments/?ICMPGN=cardsmarts_you-may-be-also-interested-in_article_image_a-guide-to-recurring-bill-pay-for-discover%C2%AE-card",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:e31f6b04d492599d6ee97e8fbe7695a8c478fcbd8e7ae09bf86674a48c465d93",
+     "kind": "html",
+     "linked_from": "https://www.discover.com/credit-cards/card-smarts/directpay-automatic-bill-payments/?ICMPGN=cardsmarts_you-may-be-also-interested-in_article_image_a-guide-to-recurring-bill-pay-for-discover%C2%AE-card",
+     "title": "Discover it Cash Back Credit Card | Apply in Minutes",
+     "url": "https://www.discover.com/credit-cards/cash-back/it-card/?ICMPGN=crdsmart_inline_dyk_cashback",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:4e5315730757444e49c1707270e01f5349d1eabc717e075f183813128a548b18",
+     "kind": "html",
+     "linked_from": "https://www.discover.com/credit-cards/cash-back/it-card/?ICMPGN=crdsmart_inline_dyk_cashback",
+     "title": "Discover it Cash Back Credit Card | Apply in Minutes",
+     "url": "https://www.discover.com/credit-cards/cash-back/it-card/?ICMPGN=crdsmart_inline_dyk_cashback",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:40a0f1242e94ac4554b2c728eb147f691c9af404012705e0d9718b1c8ed8ae5f",
+     "kind": "html",
+     "linked_from": "https://www.discover.com/credit-cards/travel/?ICMPGN=PUB_HNAV_CARDS_TRAVEL",
+     "title": "Card Smarts: Credit Card Rewards Articles | Discover",
+     "url": "https://www.discover.com/credit-cards/card-smarts/credit-card-rewards/?cat=travel",
+     "used": false
+    }
+   ],
+   "unread": [
+    {
+     "url": "https://www.discover.com/credit-cards/travel/discover-it-miles.html",
+     "why": "HTTP 404"
+    }
+   ]
+  },
+  "example-bank-everyday-mastercard": {
+   "card": {
+    "country": "ES",
+    "issuer": "Example Bank",
+    "key": "example-bank-everyday-mastercard",
+    "network": "mastercard",
+    "product": "Example Bank Everyday Mastercard"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 0,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "fx_fee",
+     "field": "percent",
+     "quote": "A foreign transaction fee of 3% applies to purchases in a currency other than the euro.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-everyday-mastercard/guide-to-benefits.pdf",
+     "value": {
+      "basis_points": 300
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "You earn 1 point per EUR on all purchases.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-everyday-mastercard/guide-to-benefits.pdf",
+     "value": {
+      "category": "everything_else",
+      "per": "EUR",
+      "rate_x100": 100,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "days",
+     "quote": "Items you buy with the card are protected against theft and accidental damage for 90 days, up to EUR 1,000 per claim.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-everyday-mastercard/guide-to-benefits.pdf",
+     "value": 90
+    },
+    {
+     "benefit": "purchase_protection",
+     "field": "per_claim_limit",
+     "quote": "Items you buy with the card are protected against theft and accidental damage for 90 days, up to EUR 1,000 per claim.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-everyday-mastercard/guide-to-benefits.pdf",
+     "value": {
+      "amount_minor": 100000,
+      "currency": "EUR"
+     }
+    },
+    {
+     "benefit": "claims",
+     "field": "administrator",
+     "quote": "Claims are handled by Example Assistance (not a real company).",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-everyday-mastercard/guide-to-benefits.pdf",
+     "value": "Example Assistance"
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "You must notify Example Assistance within 30 days of the incident.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-everyday-mastercard/guide-to-benefits.pdf",
+     "value": 30
+    },
+    {
+     "benefit": "claims",
+     "field": "phone",
+     "quote": "Claims line: +34 900 000 001.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-everyday-mastercard/guide-to-benefits.pdf",
+     "value": "+34 900 000 001"
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T06:48:26Z",
+   "reader": {
+    "input_tokens": 2205,
+    "model": "claude-opus-5-5",
+    "output_tokens": 896,
+    "usd": 0.0267
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:73f1da186574f7cedae736308e1cb81d44b3991e5a72a0a580542aa8a408a14c",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Example Bank Everyday Mastercard · Example Bank (test fixture)",
+     "url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-everyday-mastercard",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:9857f41727f3bcb7ebe4b4b158c4a9f121055ab3a101c1a7f4e552321c9597db",
+     "kind": "pdf",
+     "linked_from": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-everyday-mastercard",
+     "title": "",
+     "url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-everyday-mastercard/guide-to-benefits.pdf",
+     "used": true
+    }
+   ],
+   "unread": []
+  },
+  "example-bank-travel-visa": {
+   "card": {
+    "country": "ES",
+    "issuer": "Example Bank",
+    "key": "example-bank-travel-visa",
+    "network": "visa",
+    "product": "Example Bank Travel Visa"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 0,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "fx_fee",
+     "field": "percent",
+     "quote": "A foreign transaction fee of 0% applies to purchases in a currency other than the euro.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": {
+      "basis_points": 0
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "You earn 2 points per EUR on travel purchases, including flights, hotels and car rentals.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": {
+      "category": "travel",
+      "per": "EUR",
+      "rate_x100": 200,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "You earn 2 points per EUR on travel purchases, including flights, hotels and car rentals.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": {
+      "category": "flights",
+      "per": "EUR",
+      "rate_x100": 200,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "You earn 2 points per EUR on travel purchases, including flights, hotels and car rentals.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": {
+      "category": "hotels",
+      "per": "EUR",
+      "rate_x100": 200,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "You earn 2 points per EUR on travel purchases, including flights, hotels and car rentals.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": {
+      "category": "car_rental",
+      "per": "EUR",
+      "rate_x100": 200,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "You earn 1 point per EUR on everything else.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": {
+      "category": "everything_else",
+      "per": "EUR",
+      "rate_x100": 100,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "car_rental",
+     "field": "cover_type",
+     "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": "primary"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "damage_theft_covered",
+     "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "must_decline_rental_cdw",
+     "quote": "To be eligible you must decline the rental company's collision damage waiver (CDW/LDW) and pay for the entire rental with your card.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "paid_with_card_condition",
+     "quote": "To be eligible you must decline the rental company's collision damage waiver (CDW/LDW) and pay for the entire rental with your card.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": "Entire rental paid with the card"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "liability_included",
+     "quote": "Third-party liability is not covered by this benefit.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": false
+    },
+    {
+     "benefit": "car_rental",
+     "field": "max_rental_days",
+     "quote": "Rental periods of up to 31 consecutive days are covered.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": 31
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_countries",
+     "quote": "Excluded countries: Ireland, Israel, Jamaica.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": [
+      "Ireland",
+      "Israel",
+      "Jamaica"
+     ]
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_vehicles",
+     "quote": "Excluded vehicles: motorcycles, campervans, vehicles with a retail value over EUR 75,000.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": [
+      "motorcycles",
+      "campervans",
+      "vehicles with a retail value over EUR 75,000"
+     ]
+    },
+    {
+     "benefit": "car_rental",
+     "field": "limit",
+     "quote": "The maximum benefit is EUR 50,000 per rental, including any excess charged by the rental company.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": {
+      "amount_minor": 5000000,
+      "currency": "EUR",
+      "per": "per rental"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_delay_threshold_hours",
+     "quote": "If your checked baggage is delayed for more than 6 hours, we reimburse essential purchases up to EUR 300 per trip.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": 6
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_delay_limit",
+     "quote": "If your checked baggage is delayed for more than 6 hours, we reimburse essential purchases up to EUR 300 per trip.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": {
+      "amount_minor": 30000,
+      "currency": "EUR",
+      "per": "per trip"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_loss_limit",
+     "quote": "Lost checked baggage is covered up to EUR 1,500 per person.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": {
+      "amount_minor": 150000,
+      "currency": "EUR",
+      "per": "per person"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_delay_threshold_hours",
+     "quote": "If your trip is delayed by more than 12 hours, we reimburse reasonable expenses up to EUR 500 per trip.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": 12
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_delay_limit",
+     "quote": "If your trip is delayed by more than 12 hours, we reimburse reasonable expenses up to EUR 500 per trip.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": {
+      "amount_minor": 50000,
+      "currency": "EUR",
+      "per": "per trip"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "paid_with_card_condition",
+     "quote": "Travel insurance applies only if the fare was paid with your Example Bank Travel Visa.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": "Fare paid with the Example Bank Travel Visa"
+    },
+    {
+     "benefit": "claims",
+     "field": "administrator",
+     "quote": "Claims are handled by Example Assistance (not a real company).",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": "Example Assistance"
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "You must notify Example Assistance within 60 days of the incident.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": 60
+    },
+    {
+     "benefit": "claims",
+     "field": "documents_deadline_days",
+     "quote": "Send all documents within 180 days of the incident.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": 180
+    },
+    {
+     "benefit": "claims",
+     "field": "phone",
+     "quote": "Claims line: +34 900 000 000. Email: claims@example-assistance.example",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": "+34 900 000 000"
+    },
+    {
+     "benefit": "claims",
+     "field": "email",
+     "quote": "Claims line: +34 900 000 000. Email: claims@example-assistance.example",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "value": "claims@example-assistance.example"
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T06:47:59Z",
+   "reader": {
+    "input_tokens": 2592,
+    "model": "claude-opus-5-5",
+    "output_tokens": 3305,
+    "usd": 0.0765
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:e8036e39b619fdbad2b20f71c795a9a8d9b1cc83a38cc7f81f8b2503435450bf",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Example Bank Travel Visa · Example Bank (test fixture)",
+     "url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:3d11fb5891c60cb2d99baa0858b88d80d5d65167921b772136e380679af7f240",
+     "kind": "pdf",
+     "linked_from": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa",
+     "title": "",
+     "url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf",
+     "used": true
+    }
+   ],
+   "unread": []
+  },
+  "wells_fargo_autograph": {
+   "card": {
+    "country": "US",
+    "issuer": "Wells Fargo",
+    "key": "wells_fargo_autograph",
+    "network": "visa",
+    "product": "Wells Fargo Autograph Card"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 1,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "car_rental",
+     "field": "damage_theft_covered",
+     "quote": "This coverage reimburses You if a covered accident or theft occurs to the Rental Car.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-benefits/",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "paid_with_card_condition",
+     "quote": "You must pay for all of the cost to rent the car with Your Covered Card and/or rewards program associated with Your Covered Card Account.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-benefits/",
+     "value": "Pay the entire rental cost with the Covered Card and/or its associated rewards program"
+    },
+    {
+     "benefit": "car_rental",
+     "field": "must_decline_rental_cdw",
+     "quote": "You must decline the rental company’s collision loss/damage insurance.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-benefits/",
+     "value": true
+    },
+    {
+     "benefit": "car_rental",
+     "field": "max_rental_days",
+     "quote": "The length of the Rental Car agreement with a maximum rental period of fifteen (15) consecutive days in the United States, and thirty-one (31) consecutive days outside the United States.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-benefits/",
+     "value": 15
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_countries",
+     "quote": "Coverage is available worldwide except in Israel, Jamaica, the Republic of Ireland or Northern Ireland.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-benefits/",
+     "value": [
+      "Israel",
+      "Jamaica",
+      "Republic of Ireland",
+      "Northern Ireland"
+     ]
+    },
+    {
+     "benefit": "car_rental",
+     "field": "excluded_vehicles",
+     "quote": "Vans are not covered, except those designed as small-group transportation vehicles (seating up to nine (9) people, including the driver) are covered.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-benefits/",
+     "value": [
+      "vans (except small-group transportation vehicles seating up to 9 people, including the driver)"
+     ]
+    },
+    {
+     "benefit": "car_rental",
+     "field": "limit",
+     "quote": "$50,000",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-benefits/",
+     "value": {
+      "amount_minor": 5000000,
+      "currency": "USD"
+     }
+    },
+    {
+     "benefit": "claims",
+     "field": "phone",
+     "quote": "To file a claim, call 1-800-316-8051 (all relay calls are accepted, including 711) or visit https://mycardbenefits.assurant.com.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-benefits/",
+     "value": "1-800-316-8051"
+    },
+    {
+     "benefit": "claims",
+     "field": "url",
+     "quote": "To file a claim, call 1-800-316-8051 (all relay calls are accepted, including 711) or visit https://mycardbenefits.assurant.com.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-benefits/",
+     "value": "https://mycardbenefits.assurant.com"
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days",
+     "quote": "You must notify us of the loss within sixty (60) days of the loss or as soon as reasonably possible.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-benefits/",
+     "value": 60
+    },
+    {
+     "benefit": "claims",
+     "field": "documents_deadline_days",
+     "quote": "The requested documents must be submitted within one hundred twenty (120) days of the loss or the claim may not be honored.",
+     "source_url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-benefits/",
+     "value": 120
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "Three rewards points (1 base point plus 2 bonus points) are earned per $1 spent on net purchases (purchases minus returns/credits) at retailers whose VISA® merchant code is classified as: Travel: airline, hotel/motel, timeshare, or vehicle/auto rental, cruise lines, travel agencies, discount travel sites, campgrounds.",
+     "source_url": "https://creditcards.wellsfargo.com/wells-fargo-autograph-visa-credit-cards/",
+     "value": {
+      "category": "travel",
+      "per": "USD",
+      "rate_x100": 300,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "Unlimited 3X points on restaurants, travel, gas stations, transit, popular streaming services, and phone plans6",
+     "source_url": "https://creditcards.wellsfargo.com/",
+     "value": {
+      "category": "dining",
+      "per": "USD",
+      "rate_x100": 300,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "Unlimited 3X points on restaurants, travel, gas stations, transit, popular streaming services, and phone plans6",
+     "source_url": "https://creditcards.wellsfargo.com/",
+     "value": {
+      "category": "gas",
+      "per": "USD",
+      "rate_x100": 300,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "Unlimited 3X points on restaurants, travel, gas stations, transit, popular streaming services, and phone plans6",
+     "source_url": "https://creditcards.wellsfargo.com/",
+     "value": {
+      "category": "transit",
+      "per": "USD",
+      "rate_x100": 300,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "earn_rate",
+     "quote": "Other purchases: 1 rewards point will be earned per $1 spent on other net purchases.",
+     "source_url": "https://creditcards.wellsfargo.com/wells-fargo-autograph-visa-credit-cards/",
+     "value": {
+      "category": "everything_else",
+      "per": "USD",
+      "rate_x100": 100,
+      "unit": "point"
+     }
+    },
+    {
+     "benefit": "points",
+     "field": "caps",
+     "quote": "Unlimited 3X points on restaurants, travel, gas stations, transit, popular streaming services, and phone plans6",
+     "source_url": "https://creditcards.wellsfargo.com/",
+     "value": "Unlimited (no cap stated on 3X categories)"
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T07:06:32Z",
+   "reader": {
+    "input_tokens": 58678,
+    "model": "claude-opus-5-5",
+    "output_tokens": 4125,
+    "usd": 0.3172
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:4c45077dae0d0c03f736977190bc3ba7c661552375f8e8044ba9e9eeb5a1ea57",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Wells Fargo Autograph Visa Card Guide to Benefits",
+     "url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-benefits/",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:092843c5176cb2a36fcb55e7d6806ddcdeac5ddc0164830ded394e1c6f9f79db",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Wells Fargo Autograph Visa Card Terms and Conditions",
+     "url": "https://www.wellsfargo.com/credit-cards/documents/autograph-visa-terms/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:01e061af5df8c73dc900c37c377f428eae61acab05259bae1b24baf329c23496",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Wells Fargo Bank | Financial Services & Online Banking",
+     "url": "https://www.wellsfargo.com/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:ed6038fc746f21b71959cc4505bc03996ed33a8f5ca4b8bfa85d7f8d6b5f56eb",
+     "kind": "html",
+     "linked_from": "https://www.wellsfargo.com/",
+     "title": "Open a Certificate of Deposit (CD) Account Online | Wells Fargo",
+     "url": "https://www.wellsfargo.com/savings-cds/certificate-of-deposit/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:85a72ced14c183b5f575bdf8c187c5a3844cc152fc743eca373399352b4bb2f7",
+     "kind": "html",
+     "linked_from": "https://www.wellsfargo.com/",
+     "title": "Wells Fargo Rewards",
+     "url": "https://www.wellsfargo.com/rewards/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:ab8d2f7bb0444da76262aa46a29d4960161d04921f1805a12b3849779dcd502f",
+     "kind": "html",
+     "linked_from": "https://www.wellsfargo.com/rewards/",
+     "title": "Wells Fargo Visa® Credit Cards and Mastercard® | Wells Fargo",
+     "url": "https://creditcards.wellsfargo.com/",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:70494ddcdaee8cd5d9db139402e09bb601341d0d60fd58072cb964e918c25f8c",
+     "kind": "html",
+     "linked_from": "https://creditcards.wellsfargo.com/",
+     "title": "Wells Fargo Autograph Journey Visa® Card Terms and Conditions",
+     "url": "https://www.wellsfargo.com/credit-cards/documents/autograph-journey-visa-terms/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:41cec98cc460b3bca9fe9ceff87a07dab7cc7068309e80c781cf6084a3aa3833",
+     "kind": "html",
+     "linked_from": "https://creditcards.wellsfargo.com/",
+     "title": "Wells Fargo Active Cash Credit Card Credit Terms and Conditions",
+     "url": "https://www.wellsfargo.com/credit-cards/documents/active-cash-terms/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:1968225ad53acbe16c677d3c3e5747ded5663ec9799bb7a0a9c93b10ec9531e4",
+     "kind": "html",
+     "linked_from": "https://creditcards.wellsfargo.com/",
+     "title": "Compare Wells Fargo Autograph Credit Cards | Wells Fargo",
+     "url": "https://creditcards.wellsfargo.com/wells-fargo-autograph-visa-credit-cards/",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:c6fdb7eee7c2203d0e441d9d2760b51d907ba1c44f4e57c575a1b92a530ffd2d",
+     "kind": "html",
+     "linked_from": "https://creditcards.wellsfargo.com/wells-fargo-autograph-visa-credit-cards/",
+     "title": "Wells Fargo Autograph Journey Visa® Card Guide to Benefits",
+     "url": "https://www.wellsfargo.com/credit-cards/documents/autograph-journey-visa-benefits/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:a0d89515388ca1b570ed7451819aaf970c985940bfe702d3d05ba2da1a3fcc7d",
+     "kind": "html",
+     "linked_from": "https://creditcards.wellsfargo.com/wells-fargo-autograph-visa-credit-cards/",
+     "title": "Comparar las Tarjetas de Crédito Wells Fargo Autograph | Wells Fargo",
+     "url": "https://creditcards.wellsfargo.com/es/wells-fargo-autograph-visa-credit-cards/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:055dad42263e3bf1d1513533a3caf8890365751f6c363236b9fa1a9cf2525da4",
+     "kind": "html",
+     "linked_from": "https://creditcards.wellsfargo.com/es/wells-fargo-autograph-visa-credit-cards/",
+     "title": "Guía de Beneficios de la Tarjeta Wells Fargo Autograph Visa",
+     "url": "https://www.wellsfargo.com/es/credit-cards/documents/autograph-visa-benefits/",
+     "used": false
+    },
+    {
+     "body_sha256": "sha256:71b2094acf653f486ea8deb3bf3fd65e692f2b8fffd76314f90efe943483580b",
+     "kind": "html",
+     "linked_from": "https://creditcards.wellsfargo.com/es/wells-fargo-autograph-visa-credit-cards/",
+     "title": "Guía de Beneficios de la Tarjeta Wells Fargo Autograph Journey Visa®",
+     "url": "https://www.wellsfargo.com/es/credit-cards/documents/autograph-journey-visa-benefits/",
+     "used": false
+    }
+   ],
+   "unread": [
+    {
+     "url": "https://www.wellsfargo.com/credit-cards/autograph/",
+     "why": "HTTP 404"
+    },
+    {
+     "robots": "unreadable",
+     "url": "https://www08.wellsfargomedia.com/assets/pdf/personal/my-wells-fargo-deals/terms-and-conditions-english.pdf",
+     "why": "robots.txt couldn't be read (ConnectError)"
+    }
+   ]
+  }
+ }
+}

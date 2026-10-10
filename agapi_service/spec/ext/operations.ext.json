@@ -1,6 +1,6 @@
 {
-  "version": "kanoe-sandbox-ext.10",
-  "note": "Additive only. CR 66: AgAPI 1.2 (EU 213) ADOPTED the Keep (keep.put/list/use/delete/activity) — it runs on EU's own schemas (spec/v1/schemas/keep/keep.schema.json). 1.1 (EU 211) had adopted CR 60–62's six. No sandbox extension is left. CR 69: magellan.read_site — read a business's own public website (offers, partners, contacts, booking channels, each quoting its source; robots.txt first; never a booking platform) — a Kanoe extension for EU to formalize in 1.3. CR 72: subscriptions.find / cancel_plan / cancel — the subscription radar (Kanoe extensions; EU to formalize). CR 73: registry.countries / get / documents / obtain_plan / verify — the registry survey's wave 0 (EU 214's design; Kanoe extensions until EU formalizes them in 1.3; registry.obtain is OFF). EU 214's registry codes ride on existing codes as details.registry_code.",
+  "version": "kanoe-sandbox-ext.11",
+  "note": "Additive only. CR 66: AgAPI 1.2 (EU 213) ADOPTED the Keep (keep.put/list/use/delete/activity) — it runs on EU's own schemas (spec/v1/schemas/keep/keep.schema.json). 1.1 (EU 211) had adopted CR 60–62's six. No sandbox extension is left. CR 69: magellan.read_site — read a business's own public website (offers, partners, contacts, booking channels, each quoting its source; robots.txt first; never a booking platform) — a Kanoe extension for EU to formalize in 1.3. CR 72: subscriptions.find / cancel_plan / cancel — the subscription radar (Kanoe extensions; EU to formalize). CR 73: registry.countries / get / documents / obtain_plan / verify — the registry survey's wave 0 (EU 214's design; Kanoe extensions until EU formalizes them in 1.3; registry.obtain is OFF). EU 214's registry codes ride on existing codes as details.registry_code. CR 74: cards.* — fine print (EU 216 steps 1–3): a card's official terms as cited claims; magellan.read_site gains purpose card_terms.",
   "add": [
     {
       "operation": "magellan.read_site",
@@ -183,6 +183,125 @@
       "requires_approval": false,
       "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/registry_verify_in",
       "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/registry_verify_out",
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted",
+        "upstream_unreachable"
+      ],
+      "cost_class": "read",
+      "extension": "kanoe",
+      "formalize_in": "1.3"
+    },
+    {
+      "operation": "cards.products",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/cards_products_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/cards_products_out",
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted"
+      ],
+      "cost_class": "read",
+      "extension": "kanoe",
+      "formalize_in": "1.3"
+    },
+    {
+      "operation": "cards.terms",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/cards_terms_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/cards_terms_out",
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted"
+      ],
+      "cost_class": "read",
+      "extension": "kanoe",
+      "formalize_in": "1.3"
+    },
+    {
+      "operation": "cards.intake",
+      "agent": "austen",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/cards_intake_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/cards_intake_out",
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted",
+        "upstream_unreachable",
+        "upstream_failed"
+      ],
+      "cost_class": "search",
+      "extension": "kanoe",
+      "formalize_in": "1.3"
+    },
+    {
+      "operation": "cards.mine",
+      "agent": "austen",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/cards_mine_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/cards_mine_out",
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted",
+        "upstream_unreachable"
+      ],
+      "cost_class": "read",
+      "extension": "kanoe",
+      "formalize_in": "1.3"
+    },
+    {
+      "operation": "cards.ask",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/cards_ask_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/cards_ask_out",
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted",
+        "upstream_unreachable"
+      ],
+      "cost_class": "search",
+      "extension": "kanoe",
+      "formalize_in": "1.3"
+    },
+    {
+      "operation": "cards.which",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/cards_which_in",
+      "output": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json#/$defs/cards_which_out",
       "errors": [
         "invalid_input",
         "not_found",

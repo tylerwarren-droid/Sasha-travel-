@@ -1,0 +1,141 @@
+{
+ "note": "CR 74 wave: the first cards whose OFFICIAL terms Magellan reads (purpose card_terms). Seeds are the issuers' own product pages; the reader follows only the links those pages give to their terms (Guide to Benefits, insurance certificate, rates and fees). Nothing is claimed from a seed until a document is read and quoted.",
+ "cards": {
+  "amex_platinum": {
+   "issuer": "American Express",
+   "product": "American Express Platinum Card",
+   "network": "amex",
+   "country": "US",
+   "seeds": [
+    "https://www.americanexpress.com/content/dam/amex/us/credit-cards/features-benefits/policies/pdf/CRLDI-DOC-OSBN-PLAT.pdf",
+    "https://global.americanexpress.com/card-benefits/detail/trip-delay-insurance/platinum",
+    "https://global.americanexpress.com/card-benefits/detail/car-rental-insurance/platinum",
+    "https://www.americanexpress.com/us/credit-cards/card/platinum/"
+   ],
+   "seed_source": "the issuer's own terms documents, located by the CR tab's desk search on 10 Oct 2026 (issuer domains only), plus the product page from Sasha's old card_benefits_db (which only chose the card)"
+  },
+  "amex_gold": {
+   "issuer": "American Express",
+   "product": "American Express Gold Card",
+   "network": "amex",
+   "country": "US",
+   "seeds": [
+    "https://global.americanexpress.com/card-benefits/view-all/gold",
+    "https://www.americanexpress.com/us/credit-cards/card/gold-card/"
+   ],
+   "seed_source": "the issuer's own terms documents, located by the CR tab's desk search on 10 Oct 2026 (issuer domains only), plus the product page from Sasha's old card_benefits_db (which only chose the card)"
+  },
+  "chase_sapphire_reserve": {
+   "issuer": "Chase",
+   "product": "Chase Sapphire Reserve",
+   "network": "visa",
+   "country": "US",
+   "seeds": [
+    "https://asset.chase.com/content/dam/structured-documents/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
+    "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve"
+   ],
+   "seed_source": "the issuer's own terms documents, located by the CR tab's desk search on 10 Oct 2026 (issuer domains only), plus the product page from Sasha's old card_benefits_db (which only chose the card)"
+  },
+  "chase_sapphire_preferred": {
+   "issuer": "Chase",
+   "product": "Chase Sapphire Preferred",
+   "network": "visa",
+   "country": "US",
+   "seeds": [
+    "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/BGC11387_v2.pdf",
+    "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred"
+   ],
+   "seed_source": "the issuer's own terms documents, located by the CR tab's desk search on 10 Oct 2026 (issuer domains only), plus the product page from Sasha's old card_benefits_db (which only chose the card)"
+  },
+  "capital_one_venture_x": {
+   "issuer": "Capital One",
+   "product": "Capital One Venture X Rewards",
+   "network": "visa",
+   "country": "US",
+   "seeds": [
+    "https://ecm.capitalone.com/WCM/card/benefits-guide/visa-benefits-guides/visa-infinite-english.pdf",
+    "https://www.capitalone.com/credit-cards/venture-x/"
+   ],
+   "seed_source": "the issuer's own terms documents, located by the CR tab's desk search on 10 Oct 2026 (issuer domains only), plus the product page from Sasha's old card_benefits_db (which only chose the card)"
+  },
+  "citi_aadvantage_executive": {
+   "issuer": "Citi",
+   "product": "Citi AAdvantage Executive World Elite Mastercard",
+   "network": "mastercard",
+   "country": "US",
+   "seeds": [
+    "https://www.cardbenefits.citi.com/-/media/CPP/Files/LegalDocs/SOAPI/PID93_AAEXEC_CRE119_GTPB_0124_TAGGED.ashx",
+    "https://www.citi.com/credit-cards/citi-aadvantage-executive-world-elite-mastercard"
+   ],
+   "seed_source": "the issuer's own terms documents, located by the CR tab's desk search on 10 Oct 2026 (issuer domains only), plus the product page from Sasha's old card_benefits_db (which only chose the card)"
+  },
+  "discover_it_miles": {
+   "issuer": "Discover",
+   "product": "Discover it Miles",
+   "network": "discover",
+   "country": "US",
+   "seeds": [
+    "https://www.discover.com/acquisitions/miles/terms.pdf",
+    "https://www.discover.com/credit-cards/travel/discover-it-miles.html"
+   ],
+   "seed_source": "the issuer's own terms documents, located by the CR tab's desk search on 10 Oct 2026 (issuer domains only), plus the product page from Sasha's old card_benefits_db (which only chose the card)"
+  },
+  "bofa_travel_rewards": {
+   "issuer": "Bank of America",
+   "product": "Bank of America Travel Rewards",
+   "network": "visa",
+   "country": "US",
+   "seeds": [
+    "https://www.managerewardsonline.bankofamerica.com/cms/published/root/duo/sharedContent/pdf/travelrwd/TV2_202105_D_ADA.pdf",
+    "https://www.bankofamerica.com/credit-cards/products/travel-rewards-credit-card/"
+   ],
+   "seed_source": "the issuer's own terms documents, located by the CR tab's desk search on 10 Oct 2026 (issuer domains only), plus the product page from Sasha's old card_benefits_db (which only chose the card)"
+  },
+  "bilt_mastercard": {
+   "issuer": "Bilt",
+   "product": "Bilt Mastercard",
+   "network": "mastercard",
+   "country": "US",
+   "seeds": [
+    "https://www.wellsfargo.com/credit-cards/bilt/guide-to-benefits/",
+    "https://www.biltrewards.com/terms/blue-card-guide-to-benefits",
+    "https://www.biltrewards.com/card"
+   ],
+   "seed_source": "the issuer's own terms documents, located by the CR tab's desk search on 10 Oct 2026 (issuer domains only), plus the product page from Sasha's old card_benefits_db (which only chose the card)"
+  },
+  "wells_fargo_autograph": {
+   "issuer": "Wells Fargo",
+   "product": "Wells Fargo Autograph Card",
+   "network": "visa",
+   "country": "US",
+   "seeds": [
+    "https://www.wellsfargo.com/credit-cards/autograph-visa/guide-to-benefits/",
+    "https://www.wellsfargo.com/credit-cards/autograph-visa/terms/",
+    "https://www.wellsfargo.com/credit-cards/autograph/"
+   ],
+   "seed_source": "the issuer's own terms documents, located by the CR tab's desk search on 10 Oct 2026 (issuer domains only), plus the product page from Sasha's old card_benefits_db (which only chose the card)"
+  },
+  "example-bank-travel-visa": {
+   "issuer": "Example Bank",
+   "product": "Example Bank Travel Visa",
+   "network": "visa",
+   "country": "ES",
+   "seeds": [
+    "/fixtures/cards/example-bank-travel-visa"
+   ],
+   "fixture": true,
+   "seed_source": "the sandbox's own test fixture (Example Bank is not a real bank)"
+  },
+  "example-bank-everyday-mastercard": {
+   "issuer": "Example Bank",
+   "product": "Example Bank Everyday Mastercard",
+   "network": "mastercard",
+   "country": "ES",
+   "seeds": [
+    "/fixtures/cards/example-bank-everyday-mastercard"
+   ],
+   "fixture": true,
+   "seed_source": "the sandbox's own test fixture (Example Bank is not a real bank)"
+  }
+ }
+}

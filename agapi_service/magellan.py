@@ -37,6 +37,7 @@ PAGE_CHARS = 9000
 GAP_S = 0.8
 LOW = 60
 PURPOSES = ("operator", "venue", "registry", "merchant")   # CR 72 · merchant: how a customer cancels
+PURPOSES += ("card_terms",)   # CR 74 · a card's official benefit terms (fineprint/reader.py: issuer pages + the PDFs they link)
 
 # booking platforms: never read (their own terms govern access); a link to one is reported as a booking channel of kind "platform"
 BOOKING_PLATFORMS = ("booking.com", "expedia.com", "hotels.com", "airbnb.com", "vrbo.com", "agoda.com", "trip.com", "tripadvisor.com",
@@ -505,6 +506,9 @@ async def read_site(url: str, purpose: str = "operator") -> Dict[str, Any]:
     """The operation's work → the result object; Unreadable → raised (the engine turns it into an AgAPI error that says why)."""
     if purpose not in PURPOSES:
         raise Unreadable("invalid_url", "purpose is operator, venue or registry.")
+    if purpose == "card_terms":                                   # CR 74 · its own reader (PDFs, the benefit schema); same rules
+        from .fineprint import reader as _FR
+        return await _FR.as_read_site(url)
     got = await crawl(url)
     if not config.ANTHROPIC_KEY and EXTRACT is _claude:
         raise Unreadable("ai_off", f"Read {got['coverage']['pages_read']} pages, but the AI reader is off until AGAPI_ANTHROPIC_API_KEY is set.")

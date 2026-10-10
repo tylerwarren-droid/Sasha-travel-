@@ -141,3 +141,22 @@ async def cancel_standin(slug: str):
 <p>This page stands in for {name}'s own cancel page in test mode. It is <b>not</b> {name}'s site, and nothing here cancels anything.</p>
 <p>In live mode, AgAPI reads {name}'s own help pages for the real cancel route, and you finish it there yourself.</p></body></html>""",
                         headers={"X-Robots-Tag": "noindex, nofollow"})
+
+
+# ── CR 74 · fine print's demo: "Example Bank" (NOT a real bank — every page says so), two cards with Guides to Benefits as PDFs ─
+
+@router.get("/fixtures/cards/{slug}", response_class=HTMLResponse)
+async def card_product_page(slug: str):
+    from .fineprint import fixture as FX
+    if slug not in FX.CARDS:
+        return HTMLResponse("Not found", status_code=404)
+    return HTMLResponse(FX.product_page(slug), headers={"X-Robots-Tag": "noindex, nofollow"})
+
+
+@router.get("/fixtures/cards/{slug}/guide-to-benefits.pdf")
+async def card_guide_pdf(slug: str):
+    from fastapi.responses import Response
+    from .fineprint import fixture as FX
+    if slug not in FX.CARDS:
+        return HTMLResponse("Not found", status_code=404)
+    return Response(FX.guide_pdf(slug), media_type="application/pdf", headers={"X-Robots-Tag": "noindex, nofollow"})

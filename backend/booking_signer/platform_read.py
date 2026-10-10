@@ -18,7 +18,6 @@ import re
 import time
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin, urlsplit
-from urllib.robotparser import RobotFileParser
 
 from . import venue_read as V
 
@@ -42,7 +41,7 @@ def named(url: str) -> Optional[str]:
 
 
 def _rules_for(text: str) -> List[str]:
-    """The lines of the groups that apply to us (our agent, else '*') — shown in the report, never the whole file."""
+    """The lines of the groups that apply to us (our agent, else '*') — Allow / Disallow / Crawl-delay, as written."""
     groups: List[tuple] = []   # (agents, rules)
     for line in text.splitlines():
         s = line.split("#", 1)[0].strip()
@@ -58,7 +57,43 @@ def _rules_for(text: str) -> List[str]:
             groups[-1][1].append(s)
     ours = [g for g in groups if any(a != "*" and a in USER_AGENT.lower() for a in g[0])]
     star = [g for g in groups if "*" in g[0]]
-    return [r for g in (ours or star) for r in g[1]][:80]
+    return [r for g in (ours or star) for r in g[1]][:600]
+
+
+def _rx(pattern: str):
+    """A robots path pattern (Google / RFC 9309): '*' any run of characters, a trailing '$' the end; else a prefix."""
+    end = pattern.endswith("$")
+    body = re.escape(pattern[:-1] if end else pattern).replace(r"\*", ".*")
+    return re.compile("^" + body + ("$" if end else ""))
+
+
+def verdict(rules: List[str], url: str) -> tuple:
+    """(allowed, the deciding rule or None): the LONGEST matching Allow/Disallow wins; a tie goes to Allow; none → allowed.
+    Python's RobotFileParser ignores '*' and '$' — Fresha's '*booking/time*' and Booksy's '/*/l/book/' need them."""
+    u = urlsplit(url)
+    path = (u.path or "/") + (("?" + u.query) if u.query else "")
+    best = None   # (length, is_allow, rule)
+    for r in rules:
+        k, _, v = r.partition(":")
+        k, v = k.strip().lower(), v.strip()
+        if k not in ("allow", "disallow") or not v:
+            continue
+        if _rx(v).match(path):
+            cand = (len(v), k == "allow", r)
+            if best is None or cand[:2] > best[:2]:
+                best = cand
+    return (True, None) if best is None else (best[1], best[2])
+
+
+def crawl_delay(rules: List[str]) -> float:
+    for r in rules:
+        k, _, v = r.partition(":")
+        if k.strip().lower() == "crawl-delay":
+            try:
+                return min(10.0, max(0.0, float(v.strip())))
+            except ValueError:
+                pass
+    return 0.0
 
 
 async def HTTP(method: str, url: str, headers: dict, json: Optional[dict] = None):
@@ -95,11 +130,23 @@ async def robots(http, url: str) -> dict:
         return {"allowed": False, "robots_url": robots_url, "status": status, "why": "robots.txt unreadable — no permission assumed"}
     if status != 200:
         return {"allowed": True, "robots_url": robots_url, "status": status, "why": "no robots.txt"}
-    rp = RobotFileParser()
-    rp.parse(text.splitlines())
-    ok = rp.can_fetch(USER_AGENT, url)
-    return {"allowed": ok, "robots_url": robots_url, "status": status, "rules": _rules_for(text),
-            "why": "robots.txt allows this path" if ok else "robots.txt disallows this path"}
+    rules = _rules_for(text)
+    ok, rule = verdict(rules, url)
+    return {"allowed": ok, "robots_url": robots_url, "status": status, "rules": rules, "rule": rule, "crawl_delay": crawl_delay(rules),
+            "why": ("robots.txt allows this path" + (f" ({rule})" if rule else "")) if ok else f"robots.txt disallows this path ({rule})"}
+
+
+_LAST: Dict[str, float] = {}   # host → when we last fetched a page there
+
+
+async def _pace(url: str, delay: float) -> None:
+    """Their Crawl-delay (Treatwell: 5 s), and never more than one page a second from us on any platform."""
+    import asyncio
+    host = (urlsplit(url).hostname or "").lower()
+    wait = max(delay, 1.0) - (time.time() - _LAST.get(host, 0.0))
+    if wait > 0:
+        await asyncio.sleep(wait)
+    _LAST[host] = time.time()
 
 
 async def fetch(http, url: str) -> dict:
@@ -110,6 +157,7 @@ async def fetch(http, url: str) -> dict:
         rb = await robots(http, url)
         if not rb.get("allowed"):
             raise Refused("robots_disallow", f"{url}: {rb.get('why')}")
+        await _pace(url, rb.get("crawl_delay") or 0.0)
         r = await _get(http, url)
         if r.status_code in (301, 302, 303, 307, 308) and r.headers.get("location"):
             url = urljoin(url, r.headers["location"])

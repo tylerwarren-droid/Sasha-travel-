@@ -92,6 +92,28 @@ class Robots(unittest.TestCase):
         self.assertIn("async with httpx.AsyncClient(", src)   # a fresh client per request — nothing carried between requests
 
 
+class Wildcards(unittest.TestCase):
+    """Python's RobotFileParser ignores '*' and '$'; the platforms' files depend on them (read on the server, 10 Oct)."""
+    R = ["Disallow: /search*", "Disallow: *booking/time*", "Disallow: /*/booking?*", "Disallow: /*/l/book/", "Allow: /pro/start*",
+         "Disallow: /pro/", "Disallow: /x$", "Crawl-delay: 5"]
+
+    def test_fresha_slots_and_search_are_disallowed_its_venue_page_allowed(self):
+        self.assertTrue(PR.verdict(self.R, "https://www.fresha.com/a/spa-madrid-1")[0])
+        self.assertFalse(PR.verdict(self.R, "https://www.fresha.com/a/spa-madrid-1/booking/time?x=1")[0])
+        self.assertFalse(PR.verdict(self.R, "https://www.fresha.com/a/spa-madrid-1/booking?menu=true")[0])
+        self.assertFalse(PR.verdict(self.R, "https://www.fresha.com/search?q=spa")[0])
+
+    def test_longest_match_and_allow_on_a_tie(self):
+        self.assertFalse(PR.verdict(self.R, "https://booksy.com/es-es/l/book/123")[0])
+        self.assertTrue(PR.verdict(self.R, "https://booksy.com/pro/start-now")[0])
+        self.assertFalse(PR.verdict(self.R, "https://booksy.com/pro/other")[0])
+        self.assertFalse(PR.verdict(self.R, "https://a.fresha.com/x")[0])
+        self.assertTrue(PR.verdict(self.R, "https://a.fresha.com/xy")[0])
+
+    def test_crawl_delay(self):
+        self.assertEqual(PR.crawl_delay(self.R), 5.0)
+
+
 class CardsUnderTheirLine(unittest.TestCase):
     def test_the_line_that_showed_them_is_marked(self):
         from agapi import s2_memory as MEM

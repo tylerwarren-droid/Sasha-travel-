@@ -192,6 +192,8 @@ async def _dek(account: str, create: bool) -> Optional[bytes]:
     except KeepError:
         raise
     except Exception as e:
+        if type(e).__name__ == "UndefinedTableError":   # Sasha 224 · 037 not applied yet: closed, said as it is (not the key service)
+            raise KeepError("keep_closed", "The Keep isn't set up on this server yet — nothing was saved or used.") from None
         log.warning("[keep] the key couldn't be opened: %s", type(e).__name__)   # the type only: never a value, never a key
         raise KeepError("keep_unreachable", "The Keep's key service didn't answer — nothing was saved or used.") from None
 

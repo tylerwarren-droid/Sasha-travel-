@@ -151,6 +151,17 @@ class TestVenue(unittest.TestCase):
         self.assertFalse(VNT._our_test_venue({"read": {"name": "Casa Gate", "sources": ["https://casagate.es"]}}))
 
 
+class ANewHoldSupersedes(unittest.TestCase):
+    def test_a_yes_never_falls_back_to_an_older_venue(self):
+        from agapi import venues as VN
+        VN._HELD[ACCOUNT] = {"rung": "form", "id": "f1", "sha": "x" * 64, "at": datetime.now(timezone.utc) - timedelta(minutes=2),
+                             "venue": "El Mirador de Sol", "when": f"{D1}T21:00", "party": 2, "out": {"status": "awaiting_yes"}}
+        with mock.patch.object(VN, "_read", mock.AsyncMock(side_effect=RuntimeError("the new venue's read failed"))):
+            with self.assertRaises(RuntimeError):
+                run(VN.hold_venue(ctx(), {"name": "D-Sunset Madrid", "city": "Madrid", "day": D1, "time": "21:00", "party": 2}))
+        self.assertNotIn(ACCOUNT, VN._HELD)   # nothing left for a yes to book
+
+
 class CancelHotelAndFlight(unittest.TestCase):
     def setUp(self):
         M._HELD.clear()

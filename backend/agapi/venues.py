@@ -219,6 +219,9 @@ async def hold_venue(ctx, a: dict) -> dict:
             and ((a.get("place_id") and a.get("place_id") == held.get("place_id")) or _base(a.get("name") or "") == _base(held.get("venue") or "")):
         card = card_of(ctx.account, a.get("place_id") or held.get("place_id"), a.get("name"))
         return _with_card(card, {**held["out"], "same_read_back": "they've heard this — on their yes, call book_venue (never hold again)"})
+    # Sasha 226 · a NEW hold supersedes the old one at once: if this one ends in a question (choose_route…) or an error, a yes must
+    # never fall through to the earlier venue's read-back (found live: "D-Sunset" read back, the yes booked the held "El Mirador")
+    _HELD.pop(ctx.account, None)
     rd = await _read(ctx, a)
     res = await _reservation(ctx, a, rd)
     at = res["when"]["at"]

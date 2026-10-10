@@ -698,7 +698,7 @@ export default function S2App() {
       )}
     </main>{hello}
     {dormant ? <button onClick={wake} aria-label="Sasha is resting — tap to bring her back" style={{ position: 'fixed', inset: 0, zIndex: 45, background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}>
-      <span style={{ position: 'absolute', left: '50%', bottom: 'calc(env(safe-area-inset-bottom) + 40px)', transform: 'translateX(-50%)', padding: '10px 18px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: C.dim, fontSize: 14.5, whiteSpace: 'nowrap' }}>Tap me if you need me</span>
+      <span style={{ position: 'absolute', left: '50%', top: '46%', transform: 'translate(-50%, -50%)', padding: '10px 18px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: C.dim, fontSize: 14.5, whiteSpace: 'nowrap' }}>Tap me if you need me</span>
     </button> : null}</>
   )
 }

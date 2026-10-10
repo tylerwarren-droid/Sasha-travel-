@@ -18,6 +18,7 @@ from agapi_service import adapters_live as AL
 from agapi_service.adapters_live import places as LP
 from agapi_service.tests.test_service import Base
 from agapi_service import app as A
+from agapi_service.store import later
 
 VENUES = {"what": "restaurant", "where": {"query": "Madrid", "country": "ES"}}
 
@@ -627,6 +628,7 @@ class FlightCancelLive(PaymentsLive):
                     return 422, {"errors": RECORDED["refused"]["errors"]}
                 if path == "/air/order_cancellations":
                     d = dict(RECORDED["quote"]["data"], order_id=body["data"]["order_id"])
+                    d["expires_at"] = later(minutes=30)[:19] + "Z"   # CR 73 · the recording's own expiry (10 Oct 05:40Z) passed: a quote is fresh when quoted
                     if self.mode == "expired":
                         d["expires_at"] = "2026-01-01T00:00:00Z"
                     return RECORDED["quote"]["status"], {"data": d}

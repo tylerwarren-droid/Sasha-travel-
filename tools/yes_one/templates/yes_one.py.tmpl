@@ -1,0 +1,302 @@
+"""yes_one — THE ONE YES RULE, generated from the AgAPI __VERSION__ contract. DO NOT EDIT: regenerate with tools/yes_one/generate.py.
+
+__HEADER__
+
+Every act that moves money or sends something goes: a READ-BACK (the exact lines + payload, hashed) → the person's YES in a LATER turn
+(AP3; an explicit yes, AP6, server-side, never a model) → ONE idempotent act (§7). Pure Python, standard library only; the same module,
+byte for byte, in AgAPI, Sasha (S2) and — as yes_one.ts, from the same contract — AD.
+
+  canonical(v) / sha256(v) / read_back_sha256(...) / request_sha256(op, input)      Part 1 §4
+  explicit_yes(said, lang, act_kind) / explicit_yes_any(said, act_kind) / act_kind(op) AP6 (approval-language*.json)
+  read_back(...) → ReadBack      approval(...) → Approval      decide(case) → (decision, void_reason)      AP1–AP9 in the contract's order
+  check(rb, apv, current, ...)   the runtime's one call at act time (builds the case, decides)
+  Ledger(store)                  §7 idempotency: begin → act → finish; replay, conflict, in flight, one act per intent
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import unicodedata
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
+
+CONTRACT_VERSION = "__VERSION__"
+CONTRACT: Dict[str, Any] = json.loads(r'''__CONTRACT_JSON__''')
+ORDER: List[str] = CONTRACT["order"]
+READ_BACK_TTL_MIN, APPROVAL_TTL_MIN, IRREVERSIBLE_TTL_MIN = 30, 15, 15          # AP4 (products may shorten, never lengthen)
+TRUSTED_CHANNELS = ("link", "sdk", "sasha_voice", "sasha_chat")                 # AP5; sandbox_simulated only in test mode
+STORE_FOR_REPLAY = ("upstream_refused", "approval_void", "approval_expired", "approval_consumed", "no_explicit_yes", "already_completed",
+                    "invalid_input")                                            # I7: stored; every other refusal releases the key
+KEY_RE = re.compile(r"^[A-Za-z0-9_-]{16,128}$")                                 # I2
+MAX_INT = 2 ** 53 - 1
+_KEY = re.compile(r"^[a-z0-9_]+$")
+
+
+class Refused(ValueError):
+    """A value canonical JSON refuses (§4.1) — an error, never coerced."""
+
+
+# ── Part 1 §4 canonical JSON and hashes ──────────────────────────────────────────────────────────────────────────────
+
+def _norm_num(v: Any) -> Any:
+    if isinstance(v, bool) or v is None:
+        return v
+    if isinstance(v, float):
+        if v != v or v in (float("inf"), float("-inf")):
+            raise Refused("non-finite number")
+        return int(v) if v.is_integer() else v
+    if isinstance(v, list):
+        return [_norm_num(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _norm_num(x) for k, x in v.items()}
+    return v
+
+
+def _check(v: Any) -> None:
+    if v is None or isinstance(v, bool):
+        return
+    if isinstance(v, int):
+        if abs(v) > MAX_INT:
+            raise Refused("integer out of range")
+        return
+    if isinstance(v, float):
+        raise Refused("float")
+    if isinstance(v, str):
+        if any(0xD800 <= ord(c) <= 0xDFFF for c in v):
+            raise Refused("lone surrogate")
+        return
+    if isinstance(v, (list, tuple)):
+        for x in v:
+            _check(x)
+        return
+    if isinstance(v, dict):
+        for k, x in v.items():
+            if not isinstance(k, str) or not _KEY.match(k):
+                raise Refused("key charset")
+            _check(x)
+        return
+    raise Refused(f"type {type(v).__name__}")
+
+
+def canonical(v: Any) -> str:
+    v = _norm_num(v)
+    _check(v)
+    return json.dumps(v, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def sha256(v: Any) -> str:
+    return "sha256:" + hashlib.sha256(canonical(v).encode("utf-8")).hexdigest()
+
+
+def read_back_sha256(account: str, intent_id: str, operation: str, lines: List[str], payload_sha256: str) -> str:
+    return sha256({"account": account, "intent_id": intent_id, "operation": operation, "lines": lines, "payload_sha256": payload_sha256})
+
+
+def request_sha256(operation: str, input_: Any) -> str:
+    return sha256({"operation": operation, "input": input_})
+
+
+# ── AP6 the explicit yes (server-side, never a model) ────────────────────────────────────────────────────────────────
+
+_W = r"[^\W]"     # a word character, Unicode-aware (yes_one.ts uses [\p{L}\p{N}\p{M}_])
+
+
+def _norm_said(s: str, apostrophe: str = "") -> str:
+    s = unicodedata.normalize("NFC", s).lower()
+    s = re.sub(r"['‘’]", apostrophe, s)
+    s = re.sub(r"[¡¿!?.,;:\"“”()—–]", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _exempt(kind: Optional[str], lang: str) -> set:
+    return set(CONTRACT["acts"].get(kind, {}).get(lang, {}).get("exempt_negations", [])) if kind else set()
+
+
+def _vetoed(said: str, L: dict, exempt: set) -> bool:
+    forms = (_norm_said(said or ""), _norm_said(said or "", " "))
+    for neg in [n for n in L["negations"] if n not in exempt] + L.get("questions_and_requests", []):
+        if any(re.search(r"(?<!" + _W + ")" + re.escape(neg) + r"(?!" + _W + ")", f) for f in forms):
+            return True
+    return False
+
+
+def explicit_yes(said: Optional[str], lang: str = "en", act_kind: Optional[str] = None) -> bool:
+    L = CONTRACT["languages"][lang]
+    t = _norm_said(said or "")
+    if not t or _vetoed(said or "", L, _exempt(act_kind, lang)):
+        return False
+    rest, changed = t, True
+    while changed:
+        changed = False
+        for f in sorted(L["fillers"], key=len, reverse=True):
+            if rest == f or rest.startswith(f + " "):
+                rest, changed = rest[len(f):].strip(), True
+    return any(rest == a or rest.startswith(a + " ") for a in sorted(L["affirmatives"], key=len, reverse=True))
+
+
+def explicit_yes_any(said: Optional[str], act_kind: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+    """No language given: a yes in some language AND no veto in ANY of them."""
+    for code, L in CONTRACT["languages"].items():
+        if _vetoed(said or "", L, _exempt(act_kind, code)):
+            return False, None
+    for code in CONTRACT["languages"]:
+        if explicit_yes(said, code, act_kind):
+            return True, code
+    return False, None
+
+
+def act_kind(operation: Optional[str]) -> Optional[str]:
+    """From the read-back's OWN operation, never the caller: a cancellation is 'cancel'."""
+    return "cancel" if operation and operation.split(".")[-1].startswith("cancel") else None
+
+
+# ── AP1–AP9 ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+def _t(s: Optional[str]) -> Optional[datetime]:
+    if s is None:
+        return None
+    d = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def _iso(d: datetime) -> str:
+    return d.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def decide(case: dict, *, test_mode: bool = False) -> Tuple[str, Optional[str]]:
+    """case = {account, lang?, act_kind?, now, acts_in_request, read_back{presented_to, presented_at, presented_turn_id, expires_at},
+    approval{…} | None, current{intent_id, operation, lines, payload}} → (decision, void_reason), in the contract's order."""
+    a, rb, cur, now = case["approval"], case["read_back"], case["current"], _t(case["now"])
+    channels = TRUSTED_CHANNELS + (("sandbox_simulated",) if test_mode else ())
+    if a is None or a["account"] != case["account"]:
+        return "approval_not_found", None
+    if a["device"]["channel"] not in channels or a["approved_by"] != rb["presented_to"]:
+        return "approval_untrusted_origin", None
+    if a["device"]["channel"] == "sdk" and not a["device"].get("attestation"):
+        return "approval_untrusted_origin", None
+    if a["state"] == "consumed":
+        return "approval_consumed", None
+    if rb.get("presented_at") is None or a["approved_turn_id"] == rb["presented_turn_id"] or not (_t(a["approved_at"]) > _t(rb["presented_at"])):
+        return "approval_same_turn", None
+    if a["method"] == "voice" or (a["device"]["channel"] == "sasha_chat" and a.get("said") is not None):
+        kind = case.get("act_kind") or act_kind(cur.get("operation"))
+        ok = explicit_yes(a.get("said"), case["lang"], kind) if case.get("lang") else explicit_yes_any(a.get("said"), kind)[0]
+        if not ok:
+            return "no_explicit_yes", None
+    if _t(a["approved_at"]) > _t(rb["expires_at"]) or now > _t(a["expires_at"]):
+        return "approval_expired", None
+    if a["irreversible"] and case.get("acts_in_request", 1) > 1:
+        return "approval_void", "irreversible_batch"
+    if cur["intent_id"] != a["intent_id"]:
+        return "approval_void", "intent_changed"
+    if sha256(cur["payload"]) != a["payload_sha256"]:
+        return "approval_void", "payload_changed"
+    if read_back_sha256(case["account"], cur["intent_id"], cur["operation"], cur["lines"], sha256(cur["payload"])) != a["read_back_sha256"]:
+        return "approval_void", "read_back_changed"
+    return "valid", None
+
+
+def read_back(account: str, intent_id: str, operation: str, lines: List[str], payload: Any, presented_to: str, presented_turn_id: str,
+              now: str, irreversible: bool = True) -> Dict[str, Any]:
+    """What the person is shown, hashed (AP1) and timed (AP4: 30 min; an irreversible act at most 15)."""
+    psha = sha256(payload)
+    ttl = min(READ_BACK_TTL_MIN, IRREVERSIBLE_TTL_MIN) if irreversible else READ_BACK_TTL_MIN
+    return {"account": account, "intent_id": intent_id, "operation": operation, "lines": list(lines), "payload_sha256": psha,
+            "read_back_sha256": read_back_sha256(account, intent_id, operation, list(lines), psha), "presented_to": presented_to,
+            "presented_at": now, "presented_turn_id": presented_turn_id, "expires_at": _iso(_t(now) + timedelta(minutes=ttl)),
+            "irreversible": irreversible}
+
+
+def approval(rb: Dict[str, Any], approved_by: str, approved_turn_id: str, now: str, *, said: Optional[str] = None, channel: str = "sasha_chat",
+             method: Optional[str] = None, attestation: Optional[str] = None) -> Dict[str, Any]:
+    """The person's yes to THAT read-back, as an Approval (bound to its hashes, AP1; valid for 15 minutes, AP4). decide() judges it."""
+    return {"account": rb["account"], "intent_id": rb["intent_id"], "read_back_sha256": rb["read_back_sha256"], "payload_sha256": rb["payload_sha256"],
+            "method": method or ("voice" if said is not None and channel == "sasha_voice" else "tap"), "said": said, "approved_by": approved_by,
+            "approved_at": now, "approved_turn_id": approved_turn_id, "device": {"channel": channel, **({"attestation": attestation} if attestation else {})},
+            "expires_at": _iso(_t(now) + timedelta(minutes=APPROVAL_TTL_MIN)), "irreversible": bool(rb.get("irreversible", True)), "state": "valid"}
+
+
+def check(rb: Dict[str, Any], apv: Optional[Dict[str, Any]], current: Dict[str, Any], now: str, *, acts_in_request: int = 1,
+          lang: Optional[str] = None, test_mode: bool = False) -> Tuple[str, Optional[str]]:
+    """The runtime's ONE call at act time: is this act covered by that yes? current = {intent_id, operation, lines, payload} re-derived NOW."""
+    return decide({"account": rb["account"], "lang": lang, "now": now, "acts_in_request": acts_in_request,
+                   "read_back": {k: rb[k] for k in ("presented_to", "presented_at", "presented_turn_id", "expires_at")},
+                   "approval": apv, "current": current}, test_mode=test_mode)
+
+
+# ── Part 1 §7 idempotency ────────────────────────────────────────────────────────────────────────────────────────────
+
+class MemoryStore:
+    """For tests and single-process tools only — a runtime passes its DURABLE, shared store (I5)."""
+
+    def __init__(self):
+        self.rows: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+        self.intents: Dict[Tuple[str, str], str] = {}
+
+    def get(self, scope):
+        return self.rows.get(scope)
+
+    def put(self, scope, row):
+        self.rows[scope] = row
+
+    def delete(self, scope):
+        self.rows.pop(scope, None)
+
+    def confirmed_act(self, account, intent_id):
+        return self.intents.get((account, intent_id))
+
+    def confirm(self, account, intent_id, act_id):
+        self.intents[(account, intent_id)] = act_id
+
+
+class Ledger:
+    """begin() before an act; finish() after. Scope (account, operation, key) — I3. The store decides durability (I5)."""
+
+    def __init__(self, store=None):
+        self.store = store or MemoryStore()
+
+    def begin(self, account: str, operation: str, key: Optional[str], input_: Any, intent_id: Optional[str] = None) -> Dict[str, Any]:
+        """→ {"do": "act"} | {"do": "replay", "status", "body"} | {"do": "refuse", "status", "code", "details"?}"""
+        if not key:
+            return {"do": "refuse", "status": 400, "code": "idempotency_key_required"}
+        if not KEY_RE.match(key):
+            return {"do": "refuse", "status": 400, "code": "invalid_request"}
+        scope, rsha = (account, operation, key), request_sha256(operation, input_)
+        row = self.store.get(scope)
+        if row:
+            if row["request_sha256"] != rsha:
+                return {"do": "refuse", "status": 409, "code": "idempotency_conflict"}
+            if row["state"] == "in_flight":
+                return {"do": "refuse", "status": 409, "code": "idempotency_in_flight", "retry_after_s": 2}
+            return {"do": "replay", "status": row["status"], "body": row["body"]}
+        if intent_id and self.store.confirmed_act(account, intent_id):                  # I11: one act per intent
+            return {"do": "refuse", "status": 409, "code": "already_completed", "details": {"act_id": self.store.confirmed_act(account, intent_id)}}
+        self.store.put(scope, {"request_sha256": rsha, "state": "in_flight", "status": None, "body": None})
+        return {"do": "act"}
+
+    def finish(self, account: str, operation: str, key: str, status: int, body: Dict[str, Any], *, intent_id: Optional[str] = None,
+               act_id: Optional[str] = None) -> None:
+        """Store an ok result or a non-retryable refusal (I7); release the key for everything else; outcome_unknown stays in flight (I8)."""
+        scope = (account, operation, key)
+        code = (body.get("error") or {}).get("code") if not body.get("ok") else None
+        if code == "outcome_unknown":
+            return
+        if body.get("ok") or code in STORE_FOR_REPLAY:
+            row = self.store.get(scope) or {}
+            self.store.put(scope, {**row, "state": "done", "status": status, "body": body})
+            if body.get("ok") and intent_id and act_id:
+                self.store.confirm(account, intent_id, act_id)
+        else:
+            self.store.delete(scope)
+
+    def resolve(self, account: str, operation: str, key: str, status: int, body: Dict[str, Any], **kw) -> None:
+        """outcome_unknown resolved (acts.status): what a retry now replays."""
+        row = self.store.get((account, operation, key))
+        if row:
+            self.store.put((account, operation, key), {**row, "state": "in_flight_resolving"})
+        self.finish(account, operation, key, status, body, **kw)
+
+
+__all__ = ["CONTRACT_VERSION", "canonical", "sha256", "read_back_sha256", "request_sha256", "explicit_yes", "explicit_yes_any", "act_kind",
+           "decide", "read_back", "approval", "check", "Ledger", "MemoryStore", "STORE_FOR_REPLAY", "Refused"]

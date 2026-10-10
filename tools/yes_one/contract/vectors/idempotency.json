@@ -1,0 +1,423 @@
+{
+  "version": "1.0",
+  "rule": "Part 1 §7",
+  "note": "Each case starts from an empty key store. 'upstream' is the scripted provider behaviour for that step. Counters: upstream_calls (calls to the provider), charged (a metering charge, Part 4). A step without 'operation' is trip.complete. Scope (Part 1 I3, v1.0): (account, operation, idempotency_key).",
+  "cases": [
+    {
+      "id": "I-1",
+      "description": "replay returns the first result, no second act, no charge",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "confirmed",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "replayed": false,
+            "upstream_calls": 1,
+            "charged": true
+          }
+        },
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "not_called",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "replayed": true,
+            "upstream_calls": 0,
+            "charged": false,
+            "same_result_as_step": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "I-2",
+      "description": "the same key, the same operation, a different input → idempotency_conflict (I3 v1.0: the intent is not part of the scope)",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "confirmed",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "replayed": false,
+            "upstream_calls": 1
+          }
+        },
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8X"
+          },
+          "upstream": "not_called",
+          "expect": {
+            "status": 409,
+            "code": "idempotency_conflict",
+            "upstream_calls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "I-3",
+      "description": "the same key from ANOTHER account → independent (never the other account's result)",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "confirmed",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "replayed": false,
+            "upstream_calls": 1
+          }
+        },
+        {
+          "caller": "acct_B·key_B",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "confirmed",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "replayed": false,
+            "upstream_calls": 1,
+            "result_differs_from_step": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "I-4",
+      "description": "a transient upstream failure releases the key; the retry acts",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "unreachable",
+          "expect": {
+            "status": 503,
+            "code": "upstream_unreachable",
+            "stored": false
+          }
+        },
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "confirmed",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "replayed": false,
+            "upstream_calls": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "I-5",
+      "description": "a definitive refusal is stored and replayed",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "refused",
+          "expect": {
+            "status": 422,
+            "code": "upstream_refused",
+            "stored": true
+          }
+        },
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "not_called",
+          "expect": {
+            "status": 422,
+            "code": "upstream_refused",
+            "replayed": true,
+            "upstream_calls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "I-6",
+      "description": "concurrent: the second while the first is running → in_flight",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "slow_confirmed",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "upstream_calls": 1
+          }
+        },
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "not_called",
+          "expect": {
+            "status": 409,
+            "code": "idempotency_in_flight",
+            "retry_after_s": ">=1",
+            "upstream_calls": 0,
+            "sent_while_step_1_running": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "I-7",
+      "description": "outcome_unknown keeps the key in flight until status resolves it",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "timeout_after_send",
+          "expect": {
+            "status": 502,
+            "code": "outcome_unknown",
+            "details": {
+              "act_id": "<act_id>"
+            }
+          }
+        },
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "not_called",
+          "expect": {
+            "status": 409,
+            "code": "idempotency_in_flight",
+            "upstream_calls": 0
+          }
+        },
+        {
+          "caller": "acct_A·key_A",
+          "operation": "acts.status",
+          "input": {
+            "act_id": "<act_id>"
+          },
+          "upstream": "confirmed",
+          "expect": {
+            "status": 200,
+            "outcome": "CONFIRMED"
+          }
+        },
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "not_called",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "replayed": true,
+            "upstream_calls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "I-8",
+      "description": "unauthenticated with a known key → 401; nothing claimed, nothing replayed",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "confirmed",
+          "expect": {
+            "status": 201,
+            "ok": true
+          }
+        },
+        {
+          "caller": "anonymous",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "not_called",
+          "expect": {
+            "status": 401,
+            "code": "unauthenticated",
+            "replayed": false,
+            "key_store_touched": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "I-9",
+      "description": "rate limited → not stored; the retry acts",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "rate_limited_by_us",
+          "expect": {
+            "status": 429,
+            "code": "rate_limited",
+            "stored": false
+          }
+        },
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "confirmed",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "replayed": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "I-10",
+      "description": "the intent is already CONFIRMED, a new key → already_completed",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "confirmed",
+          "expect": {
+            "status": 201,
+            "ok": true
+          }
+        },
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000002",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "not_called",
+          "expect": {
+            "status": 409,
+            "code": "already_completed",
+            "details": {
+              "act_id": "<act_id from step 1>"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "I-11",
+      "description": "an Austen op without a key → idempotency_key_required",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": null,
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "not_called",
+          "expect": {
+            "status": 400,
+            "code": "idempotency_key_required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "I-12",
+      "description": "the same key on a DIFFERENT operation is a different key (I3 scope includes the operation): no conflict, no replay",
+      "steps": [
+        {
+          "caller": "acct_A·key_A",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+          },
+          "upstream": "confirmed",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "replayed": false,
+            "upstream_calls": 1
+          }
+        },
+        {
+          "caller": "acct_A·key_A",
+          "operation": "trip.cancel",
+          "idempotency_key": "idem_test_key_0000000001",
+          "input": {
+            "act_id": "<act_id from step 1>"
+          },
+          "approval": "valid",
+          "upstream": "cancelled",
+          "expect": {
+            "status": 201,
+            "ok": true,
+            "replayed": false,
+            "upstream_calls": 1
+          }
+        }
+      ]
+    }
+  ]
+}

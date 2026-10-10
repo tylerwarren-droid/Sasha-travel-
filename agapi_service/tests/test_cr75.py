@@ -217,3 +217,21 @@ class Supplied(Base):
         names = {p["product"] for p in self.ok("cards.products", {})["products"]}
         self.assertNotIn("Tarjeta de crédito Visa Platinum BBVA", names)
         self.assertIn("Tarjeta Después Oro BBVA", names)
+
+
+class OneYesRule(unittest.TestCase):
+    """CR 76 · the vendored module is byte for byte the generated one, and every AgAPI act's check runs through it."""
+
+    def test_vendored_byte_for_byte_and_wired(self):
+        import hashlib
+        from pathlib import Path
+        from agapi_service import rules as R
+        from agapi_service.yes_one import yes_one as Y
+        here = Path(R.__file__).parent / "yes_one"
+        man = json.loads((here / "MANIFEST.json").read_text())
+        for f in ("yes_one.py", "conformance.json", "test_yes_one.py"):
+            self.assertEqual(hashlib.sha256((here / f).read_bytes()).hexdigest(), man["outputs"][f], f)
+        self.assertEqual(man["contract_version"], "1.3")
+        self.assertIs(R.explicit_yes, Y.explicit_yes)
+        self.assertIs(R.canonical, Y.canonical)
+        self.assertEqual(R.decide.__code__.co_names[:2], ("YES_ONE", "decide"))

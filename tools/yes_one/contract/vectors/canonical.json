@@ -1,0 +1,139 @@
+{
+  "version": "1.0",
+  "rule": "Part 1 §4.1",
+  "cases": [
+    {
+      "id": "C-1 key order",
+      "input": {
+        "b": 1,
+        "a": 2,
+        "c": {
+          "z": true,
+          "y": null
+        }
+      },
+      "canonical": "{\"a\":2,\"b\":1,\"c\":{\"y\":null,\"z\":true}}",
+      "sha256": "sha256:e238c7551aeab3a4d63763242b13268386f4975976255faf6cd722430bbe8800"
+    },
+    {
+      "id": "C-2 array order kept",
+      "input": {
+        "list": [
+          3,
+          1,
+          2
+        ]
+      },
+      "canonical": "{\"list\":[3,1,2]}",
+      "sha256": "sha256:e1a0b6138e48437b9d08d505c4b902f063d221a38a0e13b9c5605d8ab1f4545d"
+    },
+    {
+      "id": "C-3 unicode raw, not escaped",
+      "input": {
+        "name": "Café Ñandú 東京 🚀"
+      },
+      "canonical": "{\"name\":\"Café Ñandú 東京 🚀\"}",
+      "sha256": "sha256:bbe5c59a0da16f7d881ec844699bbdb4fa394150791fba18d380e8106bc422f6"
+    },
+    {
+      "id": "C-4 escapes",
+      "input": {
+        "s": "quote\" backslash\\ nl\n tab\t ctl\u0001"
+      },
+      "canonical": "{\"s\":\"quote\\\" backslash\\\\ nl\\n tab\\t ctl\\u0001\"}",
+      "sha256": "sha256:7e34c2ce0a2b63767729d153819790709df0f139e89c715832c42e2c93c2ca92"
+    },
+    {
+      "id": "C-5 money minor units",
+      "input": {
+        "total": {
+          "amount_minor": 123456,
+          "currency": "EUR"
+        }
+      },
+      "canonical": "{\"total\":{\"amount_minor\":123456,\"currency\":\"EUR\"}}",
+      "sha256": "sha256:583a46d01c627b65f368fd5a2ea9853595590b17f7939851bd5ce5af5f0160a6"
+    },
+    {
+      "id": "C-6 max safe integer",
+      "input": {
+        "n": 9007199254740991,
+        "m": -9007199254740991
+      },
+      "canonical": "{\"m\":-9007199254740991,\"n\":9007199254740991}",
+      "sha256": "sha256:3f54c80abdfbc38f08ed5654622eea6e7d7e58cbac36cf5a0670c8aeb054703d"
+    },
+    {
+      "id": "C-7 integral float normalised",
+      "input": {
+        "n": 1.0,
+        "z": -0.0,
+        "e": 1000.0
+      },
+      "canonical": "{\"e\":1000,\"n\":1,\"z\":0}",
+      "sha256": "sha256:44bedb368f948b91f46e49c0e5d52677ba38c73ae5eaa2c995a6105f6be523ec"
+    },
+    {
+      "id": "C-8 empty containers",
+      "input": {
+        "a": [],
+        "o": {}
+      },
+      "canonical": "{\"a\":[],\"o\":{}}",
+      "sha256": "sha256:9bee7ebfc94b459dacb8cbc72cb2900e61f0aa42189df18329f84f92568f4f89"
+    },
+    {
+      "id": "C-9 null is kept",
+      "input": {
+        "x": null
+      },
+      "canonical": "{\"x\":null}",
+      "sha256": "sha256:c6b8df5aba33a39cbdee46ffaf77fae93ea2aa7d99d66408162b05a42105bd71"
+    },
+    {
+      "id": "C-10 read-back shape",
+      "input": {
+        "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+        "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+        "operation": "trip.complete",
+        "lines": [
+          "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+          "Total €1,234.56"
+        ],
+        "payload_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "canonical": "{\"account\":\"acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W\",\"intent_id\":\"int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W\",\"lines\":[\"Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35\",\"Total €1,234.56\"],\"operation\":\"trip.complete\",\"payload_sha256\":\"sha256:0000000000000000000000000000000000000000000000000000000000000000\"}",
+      "sha256": "sha256:d78e6b2c512789b1f3cadff5068bc728e8d2246ee6dd2be4618c6056b5aa26b7"
+    },
+    {
+      "id": "C-R1 fraction refused",
+      "input_json": "{\"n\":1.5}",
+      "expect": "refused",
+      "reason": "float"
+    },
+    {
+      "id": "C-R2 non-ASCII key refused",
+      "input_json": "{\"é\":1}",
+      "expect": "refused",
+      "reason": "key charset"
+    },
+    {
+      "id": "C-R3 uppercase key refused",
+      "input_json": "{\"Name\":1}",
+      "expect": "refused",
+      "reason": "key charset"
+    },
+    {
+      "id": "C-R4 lone surrogate refused",
+      "input_json": "{\"s\":\"\\ud800\"}",
+      "expect": "refused",
+      "reason": "lone surrogate"
+    },
+    {
+      "id": "C-R5 integer beyond 2^53-1 refused",
+      "input_json": "{\"n\":9007199254740992}",
+      "expect": "refused",
+      "reason": "integer out of range"
+    }
+  ]
+}

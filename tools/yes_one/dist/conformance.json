@@ -1,0 +1,1962 @@
+{
+ "contract_version": "1.3",
+ "note": "ONE conformance set for yes_one.py and yes_one.ts — the contract's own vectors + the flow cases.",
+ "approval": [
+  {
+   "id": "A-1",
+   "description": "valid: hashes match, a later turn, within expiry, explicit yes",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "valid",
+    "void_reason": null
+   }
+  },
+  {
+   "id": "A-2",
+   "description": "price changed at act time → void payload_changed",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 125000,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_void",
+    "void_reason": "payload_changed"
+   }
+  },
+  {
+   "id": "A-3",
+   "description": "wording changed (same payload) → void read_back_changed",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56",
+     "Seat 12A"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_void",
+    "void_reason": "read_back_changed"
+   }
+  },
+  {
+   "id": "A-4",
+   "description": "a different intent → void intent_changed",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8Z",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_void",
+    "void_reason": "intent_changed"
+   }
+  },
+  {
+   "id": "A-5",
+   "description": "same turn as the read-back → approval_same_turn",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_same_turn",
+    "void_reason": null
+   }
+  },
+  {
+   "id": "A-6",
+   "description": "approved before it was presented → approval_same_turn",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T13:59:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_same_turn",
+    "void_reason": null
+   }
+  },
+  {
+   "id": "A-7",
+   "description": "never presented → approval_same_turn",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": null,
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_same_turn",
+    "void_reason": null
+   }
+  },
+  {
+   "id": "A-8",
+   "description": "approval used after its 15-min window → expired",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:20:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_expired",
+    "void_reason": null
+   }
+  },
+  {
+   "id": "A-9",
+   "description": "yes given after the read-back expired → expired",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:32:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:31:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:46:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_expired",
+    "void_reason": null
+   }
+  },
+  {
+   "id": "A-10",
+   "description": "voice yes with a hesitation → no_explicit_yes",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "yes but wait",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "no_explicit_yes",
+    "void_reason": null
+   }
+  },
+  {
+   "id": "A-11",
+   "description": "already consumed → approval_consumed",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "consumed"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_consumed",
+    "void_reason": null
+   }
+  },
+  {
+   "id": "A-12",
+   "description": "approved by someone else → untrusted origin",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8Q",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_untrusted_origin",
+    "void_reason": null
+   }
+  },
+  {
+   "id": "A-13",
+   "description": "SDK approval without attestation → untrusted origin",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "tap",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sdk"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_untrusted_origin",
+    "void_reason": null
+   }
+  },
+  {
+   "id": "A-14",
+   "description": "an irreversible approval used for 2 acts → void irreversible_batch",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 2,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_void",
+    "void_reason": "irreversible_batch"
+   }
+  },
+  {
+   "id": "A-15",
+   "description": "a tap via a link (no said) → valid",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "tap",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "link"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "valid",
+    "void_reason": null
+   }
+  },
+  {
+   "id": "A-16",
+   "description": "the wrong account → approval_not_found",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8Y",
+   "lang": "en",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Yes, book it.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "approval_not_found",
+    "void_reason": null
+   }
+  },
+  {
+   "id": "A-17",
+   "description": "Spanish voice yes → valid",
+   "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+   "lang": "es",
+   "now": "2026-10-08T14:05:00Z",
+   "acts_in_request": 1,
+   "read_back": {
+    "presented_to": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "presented_at": "2026-10-08T14:00:00Z",
+    "presented_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8A",
+    "expires_at": "2026-10-08T14:30:00Z"
+   },
+   "approval": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "read_back_sha256": "sha256:b2eaae2f051b792c0b59e74e5fc1d0e7796b163985353fa8495775fc6c59c96c",
+    "payload_sha256": "sha256:c2cb27fd0e1f8a47a5c10c72fcf2cfa5707e4ce9273d430f81e598bae0ebd364",
+    "method": "voice",
+    "said": "Sí, adelante.",
+    "approved_by": "usr_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "approved_at": "2026-10-08T14:02:00Z",
+    "approved_turn_id": "trn_01J9Z3ZP0G6D8X2Q4R5S6T7V8B",
+    "device": {
+     "channel": "sasha_voice"
+    },
+    "expires_at": "2026-10-08T14:17:00Z",
+    "irreversible": true,
+    "state": "valid"
+   },
+   "current": {
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload": {
+     "offer_ref": "off_0000AAA",
+     "amount": {
+      "amount_minor": 123456,
+      "currency": "EUR"
+     },
+     "travellers": [
+      {
+       "given_name": "Testperson",
+       "family_name": "Alfa",
+       "born_on": "1990-01-01"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "decision": "valid",
+    "void_reason": null
+   }
+  }
+ ],
+ "explicit_yes": [
+  {
+   "lang": "en",
+   "said": "Yes, book it.",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "ok yes",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "Then book it.",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "Go ahead",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "great, go ahead and book",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "yes but wait",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "not yet",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "maybe yes",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "Yes!",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "yeah no",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "sure",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "I think so",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "book the trip",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "please don't",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "Cancel",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "",
+   "explicit_yes": false
+  },
+  {
+   "lang": "es",
+   "said": "Sí, adelante.",
+   "explicit_yes": true
+  },
+  {
+   "lang": "es",
+   "said": "vale",
+   "explicit_yes": true
+  },
+  {
+   "lang": "es",
+   "said": "bueno, hazlo",
+   "explicit_yes": true
+  },
+  {
+   "lang": "es",
+   "said": "no",
+   "explicit_yes": false
+  },
+  {
+   "lang": "es",
+   "said": "espera",
+   "explicit_yes": false
+  },
+  {
+   "lang": "es",
+   "said": "sí, pero luego",
+   "explicit_yes": false
+  },
+  {
+   "lang": "es",
+   "said": "quizás sí",
+   "explicit_yes": false
+  },
+  {
+   "lang": "es",
+   "said": "¿sí?",
+   "explicit_yes": true
+  },
+  {
+   "lang": "es",
+   "said": "de acuerdo",
+   "explicit_yes": true
+  },
+  {
+   "lang": "es",
+   "said": "todavía no",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "Yes — what are my cancellation terms?",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "Sure, find me dinner options",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "yes, can you check the price first",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "Yes, show me the hotel",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "ok, which seat is it",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "Yes, book it.",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "Go ahead and book it",
+   "explicit_yes": true
+  },
+  {
+   "lang": "es",
+   "said": "Sí, ¿qué condiciones tiene?",
+   "explicit_yes": false
+  },
+  {
+   "lang": "es",
+   "said": "Vale, búscame opciones",
+   "explicit_yes": false
+  },
+  {
+   "lang": "es",
+   "said": "sí, ¿puedes mirar el precio?",
+   "explicit_yes": false
+  },
+  {
+   "lang": "es",
+   "said": "Sí, adelante.",
+   "explicit_yes": true
+  },
+  {
+   "lang": "es",
+   "said": "Vale, hazlo",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "Yes, don't book it",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "OK, let's do it",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "yes, don’t book it yet",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "Let’s book it",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "Yes, but what's the refund?",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "Sure — what’s the total?",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "Yes, it's fine, book it",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "Yes, cancel it.",
+   "act_kind": "cancel",
+   "explicit_yes": true
+  },
+  {
+   "lang": "en",
+   "said": "Yes, cancel it.",
+   "act_kind": null,
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "Don't cancel it",
+   "act_kind": "cancel",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "Yes, cancel it — wait",
+   "act_kind": "cancel",
+   "explicit_yes": false
+  },
+  {
+   "lang": "en",
+   "said": "Yes, but what's the refund?",
+   "act_kind": "cancel",
+   "explicit_yes": false
+  },
+  {
+   "lang": "es",
+   "said": "Sí, cancela la reserva",
+   "act_kind": "cancel",
+   "explicit_yes": true
+  },
+  {
+   "lang": "es",
+   "said": "Sí, cancela la reserva",
+   "act_kind": null,
+   "explicit_yes": false
+  },
+  {
+   "lang": "es",
+   "said": "No, no la canceles",
+   "act_kind": "cancel",
+   "explicit_yes": false
+  }
+ ],
+ "canonical": [
+  {
+   "id": "C-1 key order",
+   "input": {
+    "b": 1,
+    "a": 2,
+    "c": {
+     "z": true,
+     "y": null
+    }
+   },
+   "canonical": "{\"a\":2,\"b\":1,\"c\":{\"y\":null,\"z\":true}}",
+   "sha256": "sha256:e238c7551aeab3a4d63763242b13268386f4975976255faf6cd722430bbe8800"
+  },
+  {
+   "id": "C-2 array order kept",
+   "input": {
+    "list": [
+     3,
+     1,
+     2
+    ]
+   },
+   "canonical": "{\"list\":[3,1,2]}",
+   "sha256": "sha256:e1a0b6138e48437b9d08d505c4b902f063d221a38a0e13b9c5605d8ab1f4545d"
+  },
+  {
+   "id": "C-3 unicode raw, not escaped",
+   "input": {
+    "name": "Café Ñandú 東京 🚀"
+   },
+   "canonical": "{\"name\":\"Café Ñandú 東京 🚀\"}",
+   "sha256": "sha256:bbe5c59a0da16f7d881ec844699bbdb4fa394150791fba18d380e8106bc422f6"
+  },
+  {
+   "id": "C-4 escapes",
+   "input": {
+    "s": "quote\" backslash\\ nl\n tab\t ctl\u0001"
+   },
+   "canonical": "{\"s\":\"quote\\\" backslash\\\\ nl\\n tab\\t ctl\\u0001\"}",
+   "sha256": "sha256:7e34c2ce0a2b63767729d153819790709df0f139e89c715832c42e2c93c2ca92"
+  },
+  {
+   "id": "C-5 money minor units",
+   "input": {
+    "total": {
+     "amount_minor": 123456,
+     "currency": "EUR"
+    }
+   },
+   "canonical": "{\"total\":{\"amount_minor\":123456,\"currency\":\"EUR\"}}",
+   "sha256": "sha256:583a46d01c627b65f368fd5a2ea9853595590b17f7939851bd5ce5af5f0160a6"
+  },
+  {
+   "id": "C-6 max safe integer",
+   "input": {
+    "n": 9007199254740991,
+    "m": -9007199254740991
+   },
+   "canonical": "{\"m\":-9007199254740991,\"n\":9007199254740991}",
+   "sha256": "sha256:3f54c80abdfbc38f08ed5654622eea6e7d7e58cbac36cf5a0670c8aeb054703d"
+  },
+  {
+   "id": "C-7 integral float normalised",
+   "input": {
+    "n": 1.0,
+    "z": -0.0,
+    "e": 1000.0
+   },
+   "canonical": "{\"e\":1000,\"n\":1,\"z\":0}",
+   "sha256": "sha256:44bedb368f948b91f46e49c0e5d52677ba38c73ae5eaa2c995a6105f6be523ec"
+  },
+  {
+   "id": "C-8 empty containers",
+   "input": {
+    "a": [],
+    "o": {}
+   },
+   "canonical": "{\"a\":[],\"o\":{}}",
+   "sha256": "sha256:9bee7ebfc94b459dacb8cbc72cb2900e61f0aa42189df18329f84f92568f4f89"
+  },
+  {
+   "id": "C-9 null is kept",
+   "input": {
+    "x": null
+   },
+   "canonical": "{\"x\":null}",
+   "sha256": "sha256:c6b8df5aba33a39cbdee46ffaf77fae93ea2aa7d99d66408162b05a42105bd71"
+  },
+  {
+   "id": "C-10 read-back shape",
+   "input": {
+    "account": "acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "intent_id": "int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W",
+    "operation": "trip.complete",
+    "lines": [
+     "Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35",
+     "Total €1,234.56"
+    ],
+    "payload_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+   },
+   "canonical": "{\"account\":\"acct_01J9Z3ZP0G6D8X2Q4R5S6T7V8W\",\"intent_id\":\"int_01J9Z3ZP0G6D8X2Q4R5S6T7V8W\",\"lines\":[\"Iberia IB6061 Madrid → Hanoi, 2 Nov, 10:35\",\"Total €1,234.56\"],\"operation\":\"trip.complete\",\"payload_sha256\":\"sha256:0000000000000000000000000000000000000000000000000000000000000000\"}",
+   "sha256": "sha256:d78e6b2c512789b1f3cadff5068bc728e8d2246ee6dd2be4618c6056b5aa26b7"
+  },
+  {
+   "id": "C-R1 fraction refused",
+   "input_json": "{\"n\":1.5}",
+   "expect": "refused",
+   "reason": "float"
+  },
+  {
+   "id": "C-R2 non-ASCII key refused",
+   "input_json": "{\"é\":1}",
+   "expect": "refused",
+   "reason": "key charset"
+  },
+  {
+   "id": "C-R3 uppercase key refused",
+   "input_json": "{\"Name\":1}",
+   "expect": "refused",
+   "reason": "key charset"
+  },
+  {
+   "id": "C-R4 lone surrogate refused",
+   "input_json": "{\"s\":\"\\ud800\"}",
+   "expect": "refused",
+   "reason": "lone surrogate"
+  },
+  {
+   "id": "C-R5 integer beyond 2^53-1 refused",
+   "input_json": "{\"n\":9007199254740992}",
+   "expect": "refused",
+   "reason": "integer out of range"
+  }
+ ],
+ "idempotency": [
+  {
+   "id": "I-1",
+   "description": "replay returns the first result, no second act, no charge",
+   "steps": [
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "confirmed",
+     "expect": {
+      "status": 201,
+      "ok": true,
+      "replayed": false,
+      "upstream_calls": 1,
+      "charged": true
+     }
+    },
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "not_called",
+     "expect": {
+      "status": 201,
+      "ok": true,
+      "replayed": true,
+      "upstream_calls": 0,
+      "charged": false,
+      "same_result_as_step": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": "I-2",
+   "description": "the same key, the same operation, a different input → idempotency_conflict (I3 v1.0: the intent is not part of the scope)",
+   "steps": [
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "confirmed",
+     "expect": {
+      "status": 201,
+      "ok": true,
+      "replayed": false,
+      "upstream_calls": 1
+     }
+    },
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8X"
+     },
+     "upstream": "not_called",
+     "expect": {
+      "status": 409,
+      "code": "idempotency_conflict",
+      "upstream_calls": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "I-3",
+   "description": "the same key from ANOTHER account → independent (never the other account's result)",
+   "steps": [
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "confirmed",
+     "expect": {
+      "status": 201,
+      "ok": true,
+      "replayed": false,
+      "upstream_calls": 1
+     }
+    },
+    {
+     "caller": "acct_B·key_B",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "confirmed",
+     "expect": {
+      "status": 201,
+      "ok": true,
+      "replayed": false,
+      "upstream_calls": 1,
+      "result_differs_from_step": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": "I-4",
+   "description": "a transient upstream failure releases the key; the retry acts",
+   "steps": [
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "unreachable",
+     "expect": {
+      "status": 503,
+      "code": "upstream_unreachable",
+      "stored": false
+     }
+    },
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "confirmed",
+     "expect": {
+      "status": 201,
+      "ok": true,
+      "replayed": false,
+      "upstream_calls": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": "I-5",
+   "description": "a definitive refusal is stored and replayed",
+   "steps": [
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "refused",
+     "expect": {
+      "status": 422,
+      "code": "upstream_refused",
+      "stored": true
+     }
+    },
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "not_called",
+     "expect": {
+      "status": 422,
+      "code": "upstream_refused",
+      "replayed": true,
+      "upstream_calls": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "I-6",
+   "description": "concurrent: the second while the first is running → in_flight",
+   "steps": [
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "slow_confirmed",
+     "expect": {
+      "status": 201,
+      "ok": true,
+      "upstream_calls": 1
+     }
+    },
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "not_called",
+     "expect": {
+      "status": 409,
+      "code": "idempotency_in_flight",
+      "retry_after_s": ">=1",
+      "upstream_calls": 0,
+      "sent_while_step_1_running": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "I-7",
+   "description": "outcome_unknown keeps the key in flight until status resolves it",
+   "steps": [
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "timeout_after_send",
+     "expect": {
+      "status": 502,
+      "code": "outcome_unknown",
+      "details": {
+       "act_id": "<act_id>"
+      }
+     }
+    },
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "not_called",
+     "expect": {
+      "status": 409,
+      "code": "idempotency_in_flight",
+      "upstream_calls": 0
+     }
+    },
+    {
+     "caller": "acct_A·key_A",
+     "operation": "acts.status",
+     "input": {
+      "act_id": "<act_id>"
+     },
+     "upstream": "confirmed",
+     "expect": {
+      "status": 200,
+      "outcome": "CONFIRMED"
+     }
+    },
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "not_called",
+     "expect": {
+      "status": 201,
+      "ok": true,
+      "replayed": true,
+      "upstream_calls": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "I-8",
+   "description": "unauthenticated with a known key → 401; nothing claimed, nothing replayed",
+   "steps": [
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "confirmed",
+     "expect": {
+      "status": 201,
+      "ok": true
+     }
+    },
+    {
+     "caller": "anonymous",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "not_called",
+     "expect": {
+      "status": 401,
+      "code": "unauthenticated",
+      "replayed": false,
+      "key_store_touched": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "I-9",
+   "description": "rate limited → not stored; the retry acts",
+   "steps": [
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "rate_limited_by_us",
+     "expect": {
+      "status": 429,
+      "code": "rate_limited",
+      "stored": false
+     }
+    },
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "confirmed",
+     "expect": {
+      "status": 201,
+      "ok": true,
+      "replayed": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "I-10",
+   "description": "the intent is already CONFIRMED, a new key → already_completed",
+   "steps": [
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "confirmed",
+     "expect": {
+      "status": 201,
+      "ok": true
+     }
+    },
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000002",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "not_called",
+     "expect": {
+      "status": 409,
+      "code": "already_completed",
+      "details": {
+       "act_id": "<act_id from step 1>"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "I-11",
+   "description": "an Austen op without a key → idempotency_key_required",
+   "steps": [
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": null,
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "not_called",
+     "expect": {
+      "status": 400,
+      "code": "idempotency_key_required"
+     }
+    }
+   ]
+  },
+  {
+   "id": "I-12",
+   "description": "the same key on a DIFFERENT operation is a different key (I3 scope includes the operation): no conflict, no replay",
+   "steps": [
+    {
+     "caller": "acct_A·key_A",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "hold_id": "hold_01J9Z3ZP0G6D8X2Q4R5S6T7V8W"
+     },
+     "upstream": "confirmed",
+     "expect": {
+      "status": 201,
+      "ok": true,
+      "replayed": false,
+      "upstream_calls": 1
+     }
+    },
+    {
+     "caller": "acct_A·key_A",
+     "operation": "trip.cancel",
+     "idempotency_key": "idem_test_key_0000000001",
+     "input": {
+      "act_id": "<act_id from step 1>"
+     },
+     "approval": "valid",
+     "upstream": "cancelled",
+     "expect": {
+      "status": 201,
+      "ok": true,
+      "replayed": false,
+      "upstream_calls": 1
+     }
+    }
+   ]
+  }
+ ],
+ "flow": [
+  {
+   "id": "F-1",
+   "says": "a yes in a later turn, the same payload → valid",
+   "said": "Yes, book it.",
+   "approved_turn": "t2",
+   "approved_at": "2026-10-10T10:02:00Z",
+   "act_at": "2026-10-10T10:03:00Z",
+   "expect": [
+    "valid",
+    null
+   ]
+  },
+  {
+   "id": "F-2",
+   "says": "the yes in the SAME turn as the read-back → approval_same_turn",
+   "said": "Yes, book it.",
+   "approved_turn": "t1",
+   "approved_at": "2026-10-10T10:00:30Z",
+   "act_at": "2026-10-10T10:01:00Z",
+   "expect": [
+    "approval_same_turn",
+    null
+   ]
+  },
+  {
+   "id": "F-3",
+   "says": "a question is not a yes",
+   "said": "Yes, but what's the refund?",
+   "approved_turn": "t2",
+   "approved_at": "2026-10-10T10:02:00Z",
+   "act_at": "2026-10-10T10:03:00Z",
+   "expect": [
+    "no_explicit_yes",
+    null
+   ]
+  },
+  {
+   "id": "F-4",
+   "says": "the price changed after the yes → void",
+   "said": "Yes, book it.",
+   "approved_turn": "t2",
+   "approved_at": "2026-10-10T10:02:00Z",
+   "act_at": "2026-10-10T10:03:00Z",
+   "act_payload": {
+    "total_minor": 99000,
+    "currency": "EUR",
+    "offer": "off_1"
+   },
+   "expect": [
+    "approval_void",
+    "payload_changed"
+   ]
+  },
+  {
+   "id": "F-5",
+   "says": "'Yes, cancel it' approves a cancellation",
+   "operation": "trip.cancel",
+   "said": "Yes, cancel it.",
+   "approved_turn": "t2",
+   "approved_at": "2026-10-10T10:02:00Z",
+   "act_at": "2026-10-10T10:03:00Z",
+   "expect": [
+    "valid",
+    null
+   ]
+  },
+  {
+   "id": "F-6",
+   "says": "… but never a booking",
+   "said": "Yes, cancel it.",
+   "approved_turn": "t2",
+   "approved_at": "2026-10-10T10:02:00Z",
+   "act_at": "2026-10-10T10:03:00Z",
+   "expect": [
+    "no_explicit_yes",
+    null
+   ]
+  },
+  {
+   "id": "F-7",
+   "says": "the act 16 minutes after the yes → expired",
+   "said": "Yes, book it.",
+   "approved_turn": "t2",
+   "approved_at": "2026-10-10T10:02:00Z",
+   "act_at": "2026-10-10T10:18:30Z",
+   "expect": [
+    "approval_expired",
+    null
+   ]
+  },
+  {
+   "id": "F-8",
+   "says": "a Spanish yes with no language given",
+   "said": "Sí, adelante.",
+   "lang": null,
+   "approved_turn": "t2",
+   "approved_at": "2026-10-10T10:02:00Z",
+   "act_at": "2026-10-10T10:03:00Z",
+   "expect": [
+    "valid",
+    null
+   ]
+  },
+  {
+   "id": "F-9",
+   "says": "someone else's yes → untrusted",
+   "said": "Yes, book it.",
+   "approved_by": "usr_other",
+   "approved_turn": "t2",
+   "approved_at": "2026-10-10T10:02:00Z",
+   "act_at": "2026-10-10T10:03:00Z",
+   "expect": [
+    "approval_untrusted_origin",
+    null
+   ]
+  },
+  {
+   "id": "F-10",
+   "says": "a used approval → consumed",
+   "said": "Yes, book it.",
+   "consumed": true,
+   "approved_turn": "t2",
+   "approved_at": "2026-10-10T10:02:00Z",
+   "act_at": "2026-10-10T10:03:00Z",
+   "expect": [
+    "approval_consumed",
+    null
+   ]
+  },
+  {
+   "id": "F-11",
+   "says": "a tap on the person's own link (no words) → valid",
+   "said": null,
+   "channel": "link",
+   "approved_turn": "t2",
+   "approved_at": "2026-10-10T10:02:00Z",
+   "act_at": "2026-10-10T10:03:00Z",
+   "expect": [
+    "valid",
+    null
+   ]
+  },
+  {
+   "id": "F-12",
+   "says": "an email read-back: the wording changed after the yes → void",
+   "operation": "messages.send_email",
+   "said": "Yes, send it.",
+   "approved_turn": "t2",
+   "approved_at": "2026-10-10T10:02:00Z",
+   "act_at": "2026-10-10T10:03:00Z",
+   "act_lines": [
+    "Email jon@kanoe.ai: a different text"
+   ],
+   "expect": [
+    "approval_void",
+    "read_back_changed"
+   ]
+  }
+ ]
+}

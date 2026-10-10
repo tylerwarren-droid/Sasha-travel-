@@ -1,0 +1,869 @@
+{
+  "version": "1.3",
+  "operations": [
+    {
+      "operation": "travel.find_flights",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/find_flights_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/find_flights_out",
+      "errors": [
+        "upstream_unreachable",
+        "upstream_timeout",
+        "upstream_rate_limited",
+        "upstream_failed",
+        "invalid_input"
+      ],
+      "cost_class": "search",
+      "units": 1
+    },
+    {
+      "operation": "travel.find_stays",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/find_stays_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/find_stays_out",
+      "errors": [
+        "upstream_unreachable",
+        "upstream_timeout",
+        "upstream_rate_limited",
+        "upstream_failed",
+        "invalid_input"
+      ],
+      "cost_class": "search",
+      "units": 1
+    },
+    {
+      "operation": "venues.find_venues",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/find_venues_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/find_venues_out",
+      "errors": [
+        "upstream_unreachable",
+        "upstream_timeout",
+        "upstream_rate_limited",
+        "upstream_failed",
+        "invalid_input"
+      ],
+      "cost_class": "search",
+      "units": 1
+    },
+    {
+      "operation": "trip.hold",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/hold_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/hold_out",
+      "errors": [
+        "upstream_unreachable",
+        "upstream_timeout",
+        "upstream_rate_limited",
+        "upstream_failed",
+        "idempotency_key_required",
+        "idempotency_in_flight",
+        "idempotency_conflict",
+        "already_completed",
+        "invalid_input",
+        "upstream_refused",
+        "travellers_missing"
+      ],
+      "cost_class": "act_prepare",
+      "units": 2
+    },
+    {
+      "operation": "approvals.request",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/request_approval_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/request_approval_out",
+      "errors": [
+        "idempotency_key_required",
+        "idempotency_in_flight",
+        "idempotency_conflict",
+        "already_completed",
+        "not_found",
+        "approval_expired",
+        "invalid_input"
+      ],
+      "cost_class": "message",
+      "units": 1
+    },
+    {
+      "operation": "trip.complete",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": true,
+      "input": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/complete_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/complete_out",
+      "errors": [
+        "upstream_unreachable",
+        "upstream_timeout",
+        "upstream_rate_limited",
+        "upstream_failed",
+        "approval_required",
+        "approval_not_found",
+        "approval_same_turn",
+        "approval_expired",
+        "approval_void",
+        "approval_consumed",
+        "approval_untrusted_origin",
+        "no_explicit_yes",
+        "idempotency_key_required",
+        "idempotency_in_flight",
+        "idempotency_conflict",
+        "already_completed",
+        "upstream_refused",
+        "outcome_unknown",
+        "hold_expired",
+        "invalid_input"
+      ],
+      "cost_class": "act",
+      "units": 5
+    },
+    {
+      "operation": "trip.cancel",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": true,
+      "input": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/cancel_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/cancel_out",
+      "errors": [
+        "upstream_unreachable",
+        "upstream_timeout",
+        "upstream_rate_limited",
+        "upstream_failed",
+        "approval_required",
+        "approval_not_found",
+        "approval_same_turn",
+        "approval_expired",
+        "approval_void",
+        "approval_consumed",
+        "approval_untrusted_origin",
+        "no_explicit_yes",
+        "idempotency_key_required",
+        "idempotency_in_flight",
+        "idempotency_conflict",
+        "already_completed",
+        "upstream_refused",
+        "outcome_unknown",
+        "not_cancellable",
+        "invalid_input"
+      ],
+      "cost_class": "act",
+      "units": 5
+    },
+    {
+      "operation": "acts.status",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/status_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/status_out",
+      "errors": [
+        "upstream_unreachable",
+        "upstream_timeout",
+        "upstream_rate_limited",
+        "upstream_failed",
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "read",
+      "units": 0
+    },
+    {
+      "operation": "evidence.get",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/evidence_get_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/evidence",
+      "errors": [
+        "not_found"
+      ],
+      "cost_class": "read",
+      "units": 0
+    },
+    {
+      "operation": "evidence.verify",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/evidence_verify_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/evidence_verify_out",
+      "errors": [
+        "invalid_input"
+      ],
+      "cost_class": "read",
+      "units": 0
+    },
+    {
+      "operation": "users.register",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/users_register_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/users_register_out",
+      "errors": [
+        "invalid_input",
+        "idempotency_key_required",
+        "idempotency_conflict"
+      ],
+      "cost_class": "free",
+      "units": 0
+    },
+    {
+      "operation": "usage.get",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/usage_get_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/usage_get_out",
+      "errors": [
+        "invalid_input"
+      ],
+      "cost_class": "free",
+      "units": 0
+    },
+    {
+      "operation": "sandbox.simulate_approval",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "test_only": true,
+      "input": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/simulate_approval_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/simulate_approval_out",
+      "errors": [
+        "mode_not_available",
+        "not_found",
+        "approval_expired",
+        "no_explicit_yes",
+        "approval_same_turn",
+        "idempotency_key_required"
+      ],
+      "cost_class": "free",
+      "units": 0
+    },
+    {
+      "operation": "sandbox.messages",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "test_only": true,
+      "input": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/sandbox_messages_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/sandbox_messages_out",
+      "errors": [
+        "mode_not_available"
+      ],
+      "cost_class": "free",
+      "units": 0
+    },
+    {
+      "operation": "approvals.status",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/approvals_status_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/tools/tools.schema.json#/$defs/approvals_status_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "read",
+      "units": 0
+    },
+    {
+      "operation": "webhooks.register",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/webhooks_register_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/webhooks_register_out",
+      "errors": [
+        "invalid_input",
+        "webhook_url_refused",
+        "webhook_limit_reached",
+        "idempotency_key_required",
+        "idempotency_conflict"
+      ],
+      "cost_class": "free",
+      "units": 0
+    },
+    {
+      "operation": "webhooks.revoke",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/webhooks_revoke_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/webhooks_revoke_out",
+      "errors": [
+        "not_found",
+        "idempotency_key_required"
+      ],
+      "cost_class": "free",
+      "units": 0
+    },
+    {
+      "operation": "users.verify_destination",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/users_verify_destination_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/product/product.schema.json#/$defs/users_verify_destination_out",
+      "errors": [
+        "not_found",
+        "invalid_input",
+        "destination_code_invalid",
+        "destination_code_expired",
+        "rate_limited",
+        "idempotency_key_required"
+      ],
+      "cost_class": "free",
+      "units": 0
+    },
+    {
+      "operation": "messages.send_email",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": true,
+      "input": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/send_email_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/send_email_out",
+      "errors": [
+        "approval_required",
+        "approval_not_found",
+        "approval_same_turn",
+        "approval_expired",
+        "approval_void",
+        "approval_consumed",
+        "approval_untrusted_origin",
+        "no_explicit_yes",
+        "idempotency_key_required",
+        "idempotency_in_flight",
+        "idempotency_conflict",
+        "already_completed",
+        "upstream_unreachable",
+        "upstream_timeout",
+        "upstream_rate_limited",
+        "upstream_failed",
+        "upstream_refused",
+        "outcome_unknown",
+        "invalid_input",
+        "not_found"
+      ],
+      "cost_class": "message",
+      "since": "1.1",
+      "units": 1
+    },
+    {
+      "operation": "messages.send_whatsapp",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": true,
+      "input": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/send_whatsapp_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/send_whatsapp_out",
+      "errors": [
+        "approval_required",
+        "approval_not_found",
+        "approval_same_turn",
+        "approval_expired",
+        "approval_void",
+        "approval_consumed",
+        "approval_untrusted_origin",
+        "no_explicit_yes",
+        "idempotency_key_required",
+        "idempotency_in_flight",
+        "idempotency_conflict",
+        "already_completed",
+        "upstream_unreachable",
+        "upstream_timeout",
+        "upstream_rate_limited",
+        "upstream_failed",
+        "upstream_refused",
+        "outcome_unknown",
+        "invalid_input",
+        "not_found"
+      ],
+      "cost_class": "message",
+      "since": "1.1",
+      "units": 1
+    },
+    {
+      "operation": "messages.replies",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/replies_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/replies_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "read",
+      "since": "1.1",
+      "units": 0
+    },
+    {
+      "operation": "activity.list",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/activity_list_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/activity_list_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "read",
+      "since": "1.1",
+      "units": 0
+    },
+    {
+      "operation": "calendar.add_event",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/calendar_add_event_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/calendar_add_event_out",
+      "errors": [
+        "not_found",
+        "invalid_input"
+      ],
+      "cost_class": "free",
+      "since": "1.1",
+      "units": 0
+    },
+    {
+      "operation": "sandbox.simulate_reply",
+      "agent": "austen",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/simulate_reply_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/ext/ext.schema.json#/$defs/simulate_reply_out",
+      "errors": [
+        "invalid_input",
+        "mode_not_available"
+      ],
+      "cost_class": "free",
+      "since": "1.1",
+      "units": 0
+    },
+    {
+      "operation": "keep.put",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_put_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_put_out",
+      "errors": [
+        "invalid_input",
+        "upstream_unreachable",
+        "idempotency_key_required",
+        "idempotency_conflict",
+        "idempotency_in_flight"
+      ],
+      "cost_class": "free",
+      "since": "1.2",
+      "units": 0
+    },
+    {
+      "operation": "keep.list",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_list_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_list_out",
+      "errors": [
+        "invalid_input",
+        "not_found"
+      ],
+      "cost_class": "read",
+      "since": "1.2",
+      "units": 0
+    },
+    {
+      "operation": "keep.use",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_use_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_use_out",
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "already_completed",
+        "upstream_unreachable",
+        "idempotency_key_required",
+        "idempotency_conflict",
+        "idempotency_in_flight"
+      ],
+      "cost_class": "free",
+      "since": "1.2",
+      "units": 0
+    },
+    {
+      "operation": "keep.delete",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_delete_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_delete_out",
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "upstream_unreachable",
+        "idempotency_key_required"
+      ],
+      "cost_class": "free",
+      "since": "1.2",
+      "units": 0
+    },
+    {
+      "operation": "keep.activity",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "input": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_activity_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/keep/keep.schema.json#/$defs/keep_activity_out",
+      "errors": [
+        "invalid_input",
+        "not_found"
+      ],
+      "cost_class": "read",
+      "since": "1.2",
+      "units": 0
+    },
+    {
+      "operation": "magellan.read_site",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "upstream_unreachable",
+        "upstream_refused",
+        "upstream_failed",
+        "rate_limited",
+        "budget_exhausted",
+        "unauthenticated",
+        "forbidden"
+      ],
+      "cost_class": "site_read",
+      "input": "https://agapi.kanoe.dev/v1/schemas/sites/sites.schema.json#/$defs/read_site_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/sites/sites.schema.json#/$defs/read_site_out",
+      "since": "1.3",
+      "units": 10
+    },
+    {
+      "operation": "subscriptions.find",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted",
+        "upstream_unreachable",
+        "upstream_failed",
+        "mode_not_available"
+      ],
+      "cost_class": "search",
+      "input": "https://agapi.kanoe.dev/v1/schemas/subscriptions/subscriptions.schema.json#/$defs/subs_find_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/subscriptions/subscriptions.schema.json#/$defs/subs_find_out",
+      "since": "1.3",
+      "units": 1
+    },
+    {
+      "operation": "subscriptions.cancel_plan",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted",
+        "upstream_unreachable",
+        "upstream_refused",
+        "upstream_failed"
+      ],
+      "cost_class": "site_read",
+      "input": "https://agapi.kanoe.dev/v1/schemas/subscriptions/subscriptions.schema.json#/$defs/subs_plan_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/subscriptions/subscriptions.schema.json#/$defs/subs_plan_out",
+      "since": "1.3",
+      "units": 10
+    },
+    {
+      "operation": "subscriptions.cancel",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": true,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted",
+        "approval_required",
+        "approval_not_found",
+        "approval_same_turn",
+        "approval_expired",
+        "approval_void",
+        "approval_consumed",
+        "approval_untrusted_origin",
+        "no_explicit_yes",
+        "idempotency_key_required",
+        "idempotency_in_flight",
+        "idempotency_conflict",
+        "already_completed",
+        "upstream_refused",
+        "upstream_unreachable",
+        "upstream_failed"
+      ],
+      "cost_class": "message",
+      "input": "https://agapi.kanoe.dev/v1/schemas/subscriptions/subscriptions.schema.json#/$defs/subs_cancel_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/subscriptions/subscriptions.schema.json#/$defs/subs_cancel_out",
+      "since": "1.3",
+      "units": 1
+    },
+    {
+      "operation": "registry.countries",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted"
+      ],
+      "cost_class": "read",
+      "input": "https://agapi.kanoe.dev/v1/schemas/registry/registry.schema.json#/$defs/registry_countries_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/registry/registry.schema.json#/$defs/registry_countries_out",
+      "since": "1.3",
+      "units": 0
+    },
+    {
+      "operation": "registry.get",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted"
+      ],
+      "cost_class": "read",
+      "input": "https://agapi.kanoe.dev/v1/schemas/registry/registry.schema.json#/$defs/registry_get_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/registry/registry.schema.json#/$defs/registry_get_out",
+      "since": "1.3",
+      "units": 0
+    },
+    {
+      "operation": "registry.documents",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted"
+      ],
+      "cost_class": "read",
+      "input": "https://agapi.kanoe.dev/v1/schemas/registry/registry.schema.json#/$defs/registry_documents_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/registry/registry.schema.json#/$defs/registry_documents_out",
+      "since": "1.3",
+      "units": 0
+    },
+    {
+      "operation": "registry.obtain_plan",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted"
+      ],
+      "cost_class": "search",
+      "input": "https://agapi.kanoe.dev/v1/schemas/registry/registry.schema.json#/$defs/registry_obtain_plan_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/registry/registry.schema.json#/$defs/registry_obtain_plan_out",
+      "since": "1.3",
+      "units": 1
+    },
+    {
+      "operation": "registry.verify",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted",
+        "upstream_unreachable"
+      ],
+      "cost_class": "read",
+      "input": "https://agapi.kanoe.dev/v1/schemas/registry/registry.schema.json#/$defs/registry_verify_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/registry/registry.schema.json#/$defs/registry_verify_out",
+      "since": "1.3",
+      "units": 0
+    },
+    {
+      "operation": "cards.products",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted"
+      ],
+      "cost_class": "read",
+      "input": "https://agapi.kanoe.dev/v1/schemas/cards/cards.schema.json#/$defs/cards_products_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/cards/cards.schema.json#/$defs/cards_products_out",
+      "since": "1.3",
+      "units": 0
+    },
+    {
+      "operation": "cards.terms",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted"
+      ],
+      "cost_class": "read",
+      "input": "https://agapi.kanoe.dev/v1/schemas/cards/cards.schema.json#/$defs/cards_terms_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/cards/cards.schema.json#/$defs/cards_terms_out",
+      "since": "1.3",
+      "units": 0
+    },
+    {
+      "operation": "cards.intake",
+      "agent": "austen",
+      "idempotent": true,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted",
+        "upstream_unreachable",
+        "upstream_failed",
+        "idempotency_key_required",
+        "idempotency_in_flight",
+        "idempotency_conflict"
+      ],
+      "cost_class": "search",
+      "input": "https://agapi.kanoe.dev/v1/schemas/cards/cards.schema.json#/$defs/cards_intake_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/cards/cards.schema.json#/$defs/cards_intake_out",
+      "since": "1.3",
+      "units": 1
+    },
+    {
+      "operation": "cards.mine",
+      "agent": "pacioli",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted",
+        "upstream_unreachable"
+      ],
+      "cost_class": "read",
+      "input": "https://agapi.kanoe.dev/v1/schemas/cards/cards.schema.json#/$defs/cards_mine_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/cards/cards.schema.json#/$defs/cards_mine_out",
+      "since": "1.3",
+      "units": 0
+    },
+    {
+      "operation": "cards.ask",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted",
+        "upstream_unreachable"
+      ],
+      "cost_class": "search",
+      "input": "https://agapi.kanoe.dev/v1/schemas/cards/cards.schema.json#/$defs/cards_ask_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/cards/cards.schema.json#/$defs/cards_ask_out",
+      "since": "1.3",
+      "units": 1
+    },
+    {
+      "operation": "cards.which",
+      "agent": "magellan",
+      "idempotent": false,
+      "requires_approval": false,
+      "errors": [
+        "invalid_input",
+        "not_found",
+        "unauthenticated",
+        "forbidden",
+        "rate_limited",
+        "budget_exhausted",
+        "upstream_unreachable"
+      ],
+      "cost_class": "read",
+      "input": "https://agapi.kanoe.dev/v1/schemas/cards/cards.schema.json#/$defs/cards_which_in",
+      "output": "https://agapi.kanoe.dev/v1/schemas/cards/cards.schema.json#/$defs/cards_which_out",
+      "since": "1.3",
+      "units": 0
+    }
+  ],
+  "cost_units": {
+    "note": "1.3: the unit per cost class is normative for metering (Part 4 M2); the PRICE per unit is a pricing decision (docs/agapi/product/03-pricing.md, placeholders). Each operation carries its units.",
+    "classes": {
+      "free": 0,
+      "read": 0,
+      "search": 1,
+      "message": 1,
+      "act_prepare": 2,
+      "act": 5,
+      "site_read": 10
+    }
+  }
+}

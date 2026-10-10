@@ -270,3 +270,19 @@ _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 def new_id(prefix: str) -> str:
     n = (int(time.time() * 1000) << 80) | secrets.randbits(80)
     return f"{prefix}_" + "".join(_CROCKFORD[(n >> (5 * i)) & 31] for i in reversed(range(26)))
+
+
+# ── CR 76 · THE ONE YES RULE ─────────────────────────────────────────────────────────────────────────────────────────
+# The approvals now come from ONE generated module (agapi_service/yes_one/yes_one.py, from the AgAPI 1.3 contract) — byte for byte the
+# module Sasha's S2 and AD vendor (AD as yes_one.ts). Every act's check (engine._check_and_consume → decide) and every yes
+# (sandbox.simulate_approval → explicit_yes_any) runs through it; the names above stay so nothing calling them changes.
+from .yes_one import yes_one as YES_ONE   # noqa: E402
+
+Refused = YES_ONE.Refused
+canonical, sha256 = YES_ONE.canonical, YES_ONE.sha256
+read_back_sha256, request_sha256 = YES_ONE.read_back_sha256, YES_ONE.request_sha256
+explicit_yes, explicit_yes_any = YES_ONE.explicit_yes, YES_ONE.explicit_yes_any
+
+
+def decide(case: dict, *, test_mode: bool = False) -> Tuple[str, Optional[str]]:   # noqa: F811 — the one rule
+    return YES_ONE.decide(case, test_mode=test_mode)

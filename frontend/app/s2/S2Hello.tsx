@@ -97,7 +97,7 @@ function chroma(video: HTMLVideoElement, canvas: HTMLCanvasElement): () => void 
   return () => { running = false }
 }
 
-export default function S2Hello({ talker, name, ready }: { talker: Talker; name: string | null | undefined; ready: boolean }) {
+export default function S2Hello({ talker, name, signedIn }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null }) {
   type Phase = 'off' | 'starting' | 'face' | 'voice' | 'tap' | 'bubble' | 'faceAgain'
   const [phase, setPhase] = useState<Phase>('off')
   const [tapFor, setTapFor] = useState<'face' | 'voice'>('voice')
@@ -114,6 +114,15 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
   const text = useRef('')
   const [line, setLine] = useState('')
   const idle = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const early = useRef<{ p: Promise<Face>; t0: number } | null>(null)   // her face starts at mount, before the sign-in check returns
+
+  useEffect(() => {
+    if (signedIn === false) { early.current?.p.then(f => f.stop()).catch(() => {}); early.current = null; return }
+    if (early.current || !video.current) return
+    try { if (sessionStorage.getItem('s2_hello') === '1') return } catch { /* private mode */ }
+    early.current = { p: startFace(video.current), t0: performance.now() }
+    early.current.p.catch(() => {})
+  }, [signedIn])
 
   useEffect(() => talker.onSpeaking(setTalking), [talker])
 
@@ -140,7 +149,7 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
 
   // the opening: once per visit (the session), as soon as the page is signed in and the name is known (or ~0.9 s has passed)
   useEffect(() => {
-    if (!ready || phase !== 'off') return
+    if (signedIn !== true || phase !== 'off') return
     let settled = false, timer: ReturnType<typeof setTimeout> | undefined
     const go = setTimeout(() => {   // out of the effect's own pass (no state set while it runs)
     let greeted = false
@@ -148,17 +157,17 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
     if (greeted) { setPhase('bubble'); return }
     setPhase('starting')
     const v = video.current as HTMLVideoElement
-    const t0 = performance.now()
-    const starting = startFace(v)
+    const t0 = early.current?.t0 ?? performance.now()
+    const starting = early.current?.p ?? startFace(v)
     starting.then(() => console.log(`[s2-hello] face on screen in ${Math.round(performance.now() - t0)} ms`)).catch(() => console.log('[s2-hello] face failed to start'))
-    timer = setTimeout(() => {   // not on screen in 3 s: her voice alone, never a spinner
+    timer = setTimeout(() => {   // not on screen in 3 s (from its start): her voice alone, never a spinner
       if (settled) return
       settled = true
       console.log('[s2-hello] not on screen in 3 s — her voice alone')
       starting.then(f => f.stop()).catch(() => {})
       setPhase('voice')
       speakVoice()
-    }, 3000)
+    }, Math.max(0, 3000 - (performance.now() - t0)))
     starting.then(async f => {
       if (settled) return
       settled = true
@@ -177,8 +186,8 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
     })
     }, 0)
     return () => { clearTimeout(go); if (timer) clearTimeout(timer) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when ready
-  }, [ready])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when signed in
+  }, [signedIn])
 
   useEffect(() => () => { keyOff(); face.current?.stop(); talker.setRoute(null) }, [talker])   // leaving the page ends any session
 

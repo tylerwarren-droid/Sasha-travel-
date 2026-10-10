@@ -334,17 +334,18 @@ export default function S2App() {
     }
   }, [busy, speaker])
 
-  if (signedIn === null) return <main style={{ minHeight: '100dvh', background: C.bg }} />
-  if (!signedIn) return (
+  const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} />   // the same place in every branch: it outlives the sign-in check
+  if (signedIn === null) return <><main style={{ minHeight: '100dvh', background: C.bg }} />{hello}</>
+  if (!signedIn) return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'system-ui' }}>
       <div style={{ textAlign: 'center', maxWidth: 340 }}>
         <div style={{ fontSize: 34, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
         <p style={{ color: C.dim, marginTop: 8 }}>Your personal concierge. Sign in with your email — a 6-digit code, right here.</p>
         <a href="/sign-in?next=/s2" style={{ display: 'inline-block', marginTop: 18, padding: '12px 22px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 700, textDecoration: 'none' }}>Sign in</a>
       </div>
-    </main>)
+    </main>{hello}</>)
 
-  return (
+  return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, width: '100%', margin: '0 auto', overflowX: 'hidden' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', paddingTop: 'max(56px, calc(env(safe-area-inset-top) + 44px))' }}>{/* room for the site's sign-in badge above */}
         <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
@@ -395,7 +396,6 @@ export default function S2App() {
           <style>{`.s2-mic button{width:56px;height:56px;border-radius:50%}`}</style>
         </>
       )}
-      <S2Hello talker={speaker} name={name} ready={!!signedIn} />
-    </main>
+    </main>{hello}</>
   )
 }

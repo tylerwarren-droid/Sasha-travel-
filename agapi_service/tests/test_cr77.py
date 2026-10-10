@@ -234,3 +234,21 @@ class ObjectStore(CopiesBase):
         self.assertIn("X-Amz-Expires=600", u)
         self.assertIn("X-Amz-Signature=", u)
         self.assertNotIn("&s&", u)
+
+
+class Guard(CopiesBase):
+    def test_the_sandbox_guard_lets_exactly_the_bucket_through(self):
+        import httpx
+        from agapi_service import providers as PV
+        PV.block_network()
+        env = {"AGAPI_S3_ENDPOINT": "https://t3.storage.test", "AGAPI_S3_BUCKET": "b-1", "AGAPI_S3_KEY_ID": "AKID", "AGAPI_S3_SECRET": "s"}
+        seen = []
+
+        async def go(url):
+            async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: seen.append(str(r.url.host)) or httpx.Response(200))) as h:
+                return await h.request("GET", url, extensions=OB.MARK)
+        with mock.patch.dict("os.environ", env):
+            self.assertEqual(run(go("https://b-1.t3.storage.test/sources/x.pdf")).status_code, 200)
+            with self.assertRaises(httpx.ConnectError):
+                run(go("https://evil.test/x"))                                          # marked, but not the bucket: refused
+        self.assertEqual(seen, ["b-1.t3.storage.test"])

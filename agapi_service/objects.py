@@ -32,6 +32,14 @@ def backend() -> str:
     return "bucket" if configured() else "memory"
 
 
+def bucket_host() -> Optional[str]:
+    c = _cfg()
+    return _host(c).lower() if c else None
+
+
+MARK = {"agapi_objects": True}   # the sandbox's network guard lets exactly the bucket's host through for these
+
+
 def _host(c: dict) -> str:
     return f"{c['bucket']}.{urlsplit(c['endpoint']).hostname}"          # virtual-host style (the bucket's urlStyle)
 
@@ -73,7 +81,7 @@ async def exists(key: str) -> bool:
         return key in MEMORY
     import httpx
     async with httpx.AsyncClient(timeout=30) as h:
-        r = await h.head(f"https://{_host(c)}{_path(key)}", headers=_headers(c, "HEAD", key, b""))
+        r = await h.request("HEAD", f"https://{_host(c)}{_path(key)}", headers=_headers(c, "HEAD", key, b""), extensions=MARK)
     return r.status_code == 200
 
 
@@ -87,7 +95,7 @@ async def put(key: str, body: bytes, ctype: str) -> None:
         return
     import httpx
     async with httpx.AsyncClient(timeout=120) as h:
-        r = await h.put(f"https://{_host(c)}{_path(key)}", content=body, headers=_headers(c, "PUT", key, body, ctype))
+        r = await h.request("PUT", f"https://{_host(c)}{_path(key)}", content=body, headers=_headers(c, "PUT", key, body, ctype), extensions=MARK)
     if r.status_code not in (200, 201):
         raise RuntimeError(f"the source copy wasn't stored (HTTP {r.status_code})")
 
@@ -98,7 +106,7 @@ async def get(key: str) -> bytes:
         return MEMORY[key][0]
     import httpx
     async with httpx.AsyncClient(timeout=120) as h:
-        r = await h.get(f"https://{_host(c)}{_path(key)}", headers=_headers(c, "GET", key, b""))
+        r = await h.request("GET", f"https://{_host(c)}{_path(key)}", headers=_headers(c, "GET", key, b""), extensions=MARK)
     if r.status_code != 200:
         raise RuntimeError(f"the source copy couldn't be read (HTTP {r.status_code})")
     return r.content

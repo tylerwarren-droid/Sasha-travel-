@@ -51,7 +51,11 @@ def block_network() -> None:
     ra, rs = httpx.AsyncClient.send, httpx.Client.send
 
     async def asend(self, request, *a, **k):
-        if not request.extensions.get("agapi_magellan"):   # CR 69 · magellan.read_site's own reads (public pages only, checked there)
+        if request.extensions.get("agapi_objects"):        # CR 77 · our own bucket (source copies) — exactly its host, nothing else
+            from . import objects as _OB
+            if (request.url.host or "").lower() != (_OB.bucket_host() or ""):
+                guard(request.url)
+        elif not request.extensions.get("agapi_magellan"):   # CR 69 · magellan.read_site's own reads (public pages only, checked there)
             guard(request.url)
         return await ra(self, request, *a, **k)
 

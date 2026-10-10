@@ -278,6 +278,11 @@ ACTIVITY_LINES = {
     # CR 63 · the Keep: every save, use, show and deletion (the item travels as its MASK, never its value)
     ("keep_save", "done"): "Saved to your Keep", ("keep_use", "done"): "Used from your Keep for a booking",
     ("keep_show", "done"): "Shown on your phone from your Keep", ("keep_delete", "done"): "Deleted from your Keep",
+    # Sasha 226 · telling a venue you're running late; changing a booking (venue, hotel, flight) — their answer decides
+    ("venue_late", "done"): "Told them you're running late", ("venue_late", "requested"): "Telling them you're running late",
+    ("venue_late", "failed"): "Couldn't tell them you're late",
+    ("booking_change", "done"): "Booking changed", ("booking_change", "requested"): "Change asked — waiting for their answer",
+    ("booking_change", "failed"): "Change not made",
 }
 CHECK = {"done": "green", "failed": "red", "not_sent": "red", "waiting": "amber", "requested": "amber"}
 

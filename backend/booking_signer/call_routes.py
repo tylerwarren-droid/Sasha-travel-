@@ -229,6 +229,13 @@ async def retry_confirmation(conf: dict) -> str:
 
 async def _follow_up(call: dict, reading) -> None:
     """Sasha 74 · rules 2–3 — awaited here, never fire-and-forget; its failure is logged and never undoes the reading."""
+    if (call.get("brief") or {}).get("purpose") in ("late", "change"):   # Sasha 226 · said on their page; no answer → the email
+        from . import venue_notice as VNT
+        try:
+            await VNT.after_call(str(call.get("account_id")), call, reading)
+        except Exception as e:
+            log.error("[booking_calls] notice follow-up for %s failed: %s: %s", call.get("call_id"), type(e).__name__, e)
+        return
     if call.get("is_test"):   # Sasha 144 · a test-line call: logged and read like any call, but no venue to follow up, no receipt
         log.info("[booking_calls] test call %s read: %s", call.get("call_id"), reading.outcome or reading.state)
         return

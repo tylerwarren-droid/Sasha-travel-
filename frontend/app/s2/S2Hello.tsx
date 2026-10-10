@@ -5,7 +5,7 @@
  *
  *  · The avatar is a LiveAvatar LITE session: her face only, lip-synced to the audio /s2 sends — her OWN voice, the same one her
  *    spoken replies use after the hand-off (Deepgram, /api/s2-voice/pcm). One voice from the first word.
- *  · It starts in parallel with the page. Not on screen within 3 s → the hello is said in her voice alone (no face, never a spinner).
+ *  · It starts in parallel with the page. Not on screen within 5 s (from its start) → the hello is said in her voice alone (no face, never a spinner).
  *  · A phone that won't play sound before a tap gets "Tap to hear Sasha" — the hello starts on that tap, never silently.
  *  · After the hello the session is ENDED (no live session left running); the bubble shows her face as it last was.
  *  · Tap the bubble: her face back (a new session) — while it's up, her replies are spoken by it; tap again (or 90 s quiet) → bubble.
@@ -24,7 +24,7 @@ type Face = { video: HTMLVideoElement; say: (text: string) => Promise<number>; s
 const GOLD = '#e8b931'
 export const helloLine = (name?: string | null) =>
   `Hi${name ? ` ${name}` : ''}, I'm Sasha. I'm going to head behind the scenes and get to work — just talk to me normally. ` +
-  "I can book restaurants and trips, send emails for you, keep your passport safe, and more."
+  'I can book restaurants and trips, sort your subscriptions, send emails for you, and more.'
 
 async function pcm(text: string): Promise<string | null> {
   const r = await fetch('/api/s2-voice/pcm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) }).catch(() => null)
@@ -160,14 +160,14 @@ export default function S2Hello({ talker, name, signedIn }: { talker: Talker; na
     const t0 = early.current?.t0 ?? performance.now()
     const starting = early.current?.p ?? startFace(v)
     starting.then(() => console.log(`[s2-hello] face on screen in ${Math.round(performance.now() - t0)} ms`)).catch(() => console.log('[s2-hello] face failed to start'))
-    timer = setTimeout(() => {   // not on screen in 3 s (from its start): her voice alone, never a spinner
+    timer = setTimeout(() => {   // not on screen in 5 s (from its start): her voice alone, never a spinner
       if (settled) return
       settled = true
-      console.log('[s2-hello] not on screen in 3 s — her voice alone')
+      console.log('[s2-hello] not on screen in 5 s — her voice alone')
       starting.then(f => f.stop()).catch(() => {})
       setPhase('voice')
       speakVoice()
-    }, Math.max(0, 3000 - (performance.now() - t0)))
+    }, Math.max(0, 5000 - (performance.now() - t0)))
     starting.then(async f => {
       if (settled) return
       settled = true

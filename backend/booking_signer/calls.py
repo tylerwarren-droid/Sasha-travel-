@@ -753,8 +753,13 @@ def venue_turns(details: Mapping[str, Any]) -> List[str]:
     return out
 
 
+_PURPOSE_LABEL = {"cancel": "CANCEL an existing booking", "book": "BOOK a table",
+                  "late": "SAY an existing booking's guests will ARRIVE LATE and ask the venue to HOLD the table (yes = they'll hold it)",
+                  "change": "CHANGE an existing booking's time or party size (yes = they agreed to exactly that change)"}
+
+
 def transcript_for_reader(details: Mapping[str, Any], purpose: str = "book") -> str:
-    lines = [f"PURPOSE: {'CANCEL an existing booking' if purpose == 'cancel' else 'BOOK a table'}"]
+    lines = [f"PURPOSE: {_PURPOSE_LABEL.get(purpose, 'BOOK a table')}"]
     for t in details.get("transcripts") or []:
         if not isinstance(t, dict) or not isinstance(t.get("text"), str):
             continue
@@ -934,6 +939,12 @@ def say_for(venue_name: str, r: CallReading, purpose: str = "book") -> str:
         return f"I'm on the phone to {venue_name} now."
     if r.state == "not_reached":
         return f"I couldn't reach {venue_name}: {r.why}"
+    if purpose == "late" and r.outcome in ("yes", "no"):   # Sasha 226 · running late: what THEY said, never more
+        return (f"{venue_name} said they'll hold the table. Their words: \"{r.quote}\"" if r.outcome == "yes" else
+                f"{venue_name} couldn't hold it. Their words: \"{r.quote}\" — I agreed to nothing else.")
+    if purpose == "change" and r.outcome in ("yes", "no"):
+        return (f"{venue_name} agreed to the change. Their words: \"{r.quote}\"" if r.outcome == "yes" else
+                f"{venue_name} couldn't change it — your booking stays as it was. Their words: \"{r.quote}\"")
     if purpose == "cancel" and r.outcome == "yes":
         return f"{venue_name} confirmed the cancellation. Their words: \"{r.quote}\""
     if purpose == "cancel" and r.outcome == "no":
@@ -944,3 +955,107 @@ def say_for(venue_name: str, r: CallReading, purpose: str = "book") -> str:
     if r.outcome == "no":
         return f"{venue_name} said no. Their words: \"{r.quote}\""
     return f"I couldn't tell whether {venue_name} said yes — {r.why}. What they said: \"{r.venue_words}\""
+
+
+
+# ── Sasha 226 · RUNNING LATE and CHANGING A BOOKING, by phone — an existing booking, in the venue's language ─────────────
+# (book and cancel above are untouched; these are separate purposes with their own words, rules and read-back)
+
+_NOTICE = {
+    "en": {"late": "Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling about {when}, a table {party} under the name {surname} {at}. They're running a little late and will arrive at about {arrive}. Could you hold the table for them?",
+           "change": "Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling about {when}, a table {party} under the name {surname} {at}. Could we change it to {change}?",
+           "ask": "a table {party} {at}"},
+    "es": {"late": "Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL. Llamo por {when}, una mesa {party} a nombre de {surname} {at}. Llegarán con un poco de retraso, sobre las {arrive}. ¿Podrían mantenerles la mesa?",
+           "change": "Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL. Llamo por {when}, una mesa {party} a nombre de {surname} {at}. ¿Sería posible cambiarla a {change}?",
+           "ask": "una mesa {party} {at}"},
+    "pt-BR": {"late": "Olá, fala a Sasha, uma concierge de inteligência artificial da Kanoe Technologies SL, sobre a reserva de uma mesa {party} em nome de {surname} {at}. Vão chegar um pouco atrasados, por volta das {arrive}. Podem guardar a mesa?",
+              "change": "Olá, fala a Sasha, uma concierge de inteligência artificial da Kanoe Technologies SL, sobre a reserva de uma mesa {party} em nome de {surname} {at}. Seria possível mudar para {change}?",
+              "ask": "uma mesa {party} {at}"},
+    "fr": {"late": "Bonjour, ici Sasha, une concierge d'intelligence artificielle de Kanoe Technologies SL, au sujet de la réservation d'une table {party} au nom de {surname} {at}. Ils auront un peu de retard et arriveront vers {arrive}. Pourriez-vous leur garder la table ?",
+           "change": "Bonjour, ici Sasha, une concierge d'intelligence artificielle de Kanoe Technologies SL, au sujet de la réservation d'une table {party} au nom de {surname} {at}. Serait-il possible de la changer pour {change} ?",
+           "ask": "une table {party} {at}"},
+    "de": {"late": "Hallo, hier ist Sasha, eine KI-Concierge von Kanoe Technologies SL, wegen der Reservierung eines Tisches {party} auf den Namen {surname} {at}. Die Gäste verspäten sich etwas und kommen gegen {arrive}. Könnten Sie den Tisch für sie freihalten?",
+           "change": "Hallo, hier ist Sasha, eine KI-Concierge von Kanoe Technologies SL, wegen der Reservierung eines Tisches {party} auf den Namen {surname} {at}. Könnten wir sie auf {change} ändern?",
+           "ask": "einen Tisch {party} {at}"},
+    "it": {"late": "Buongiorno, sono Sasha, una concierge di intelligenza artificiale di Kanoe Technologies SL, per la prenotazione di un tavolo {party} a nome {surname} {at}. Arriveranno con un po' di ritardo, verso le {arrive}. Potreste tenere il tavolo?",
+           "change": "Buongiorno, sono Sasha, una concierge di intelligenza artificiale di Kanoe Technologies SL, per la prenotazione di un tavolo {party} a nome {surname} {at}. Sarebbe possibile cambiarla in {change}?",
+           "ask": "un tavolo {party} {at}"},
+}
+
+
+def notice_opening(lang: Lang, p: CallParticulars, today: date, purpose: str, arrive: Optional[time] = None,
+                   new_time: Optional[time] = None, new_party: Optional[int] = None) -> str:
+    t = _NOTICE.get(lang.code, _NOTICE["en"])
+    change = None
+    if purpose == "change":
+        change = t["ask"].format(party=lang.for_n(new_party or p.party), at=lang.at(new_time or p.at)).strip()
+    return t[purpose].format(when=cancel_when(lang, p.on, p.at, today), party=lang.for_n(p.party), surname=surname_of(p.name),
+                             at=lang.at(p.at), arrive=_hm(arrive) if arrive else "", change=change or "")
+
+
+def notice_instructions(lang: Lang, p: CallParticulars, opening: str, check: str, purpose: str, reference: Optional[str],
+                        arrive: Optional[time] = None, new_time: Optional[time] = None, new_party: Optional[int] = None) -> str:
+    held = f'It is held under "{reference}". ' if reference else ""
+    if purpose == "late":
+        goal = (f"Your ONLY job: tell them the guests will arrive at about {arrive.strftime('%H:%M') if arrive else 'a little later'} "
+                "(venue's local time) and ask whether they can hold the table until then. ")
+        agree = "If they say they'll hold it, thank them and end the call. "
+    else:
+        goal = (f"Your ONLY job: ask to change it to {new_party or p.party} people at {(new_time or p.at).strftime('%H:%M')} "
+                "(venue's local time), the same day. ")
+        agree = "If they agree to exactly that, repeat the new time and party once to confirm, thank them and end the call. "
+    return (
+        f"You are Sasha, an AI concierge operated by Kanoe Technologies SL, phoning a restaurant about an EXISTING booking on behalf of a guest. Speak {lang.label} only. "
+        f"{already_said(lang.code, opening)}"
+        f"The booking: {p.party} people, {p.on.isoformat()} at {p.at.strftime('%H:%M')} (venue's local time), under the name {p.name}. {held}"
+        f"{goal}{agree}"
+        "If they ask whether you are a person or a machine: you are an AI concierge. Never claim to be the guest or a human. "
+        "RULES YOU MUST NEVER BREAK: Never agree to anything other than what you asked — no other time, no other day, no other party size, "
+        "no fee, no charge, no card. You have no card and no payment details. "
+        f"If they offer anything else, or ask for ANY payment, say exactly: \"{check}\" — then thank them and end the call. "
+        "Do not cancel the booking. Do not give any email address or personal detail. "
+        "If they cannot find the booking, thank them and end the call. "
+        f"If they ask not to be called or contacted again, say exactly: \"{_ack(lang)}\" — then end the call. "
+        "Keep it short and polite. Do not leave a voicemail."
+    )
+
+
+def build_notice_call(venue: CallVenue, p: CallParticulars, now: datetime, purpose: str, reference: Optional[str] = None,
+                      arrive: Optional[time] = None, new_time: Optional[time] = None, new_party: Optional[int] = None) -> dict:
+    """Sasha 226 · the brief, the read-back and both hashes for a LATE or CHANGE call on an existing booking (as build_call)."""
+    if purpose not in ("late", "change"):
+        raise CallRefused("purpose_invalid", "a notice call says they're late or asks for a change")
+    if purpose == "late" and arrive is None:
+        raise CallRefused("arrive_missing", "when will they arrive?")
+    if purpose == "change" and new_time is None and new_party is None:
+        raise CallRefused("change_missing", "what should it change to?")
+    lang = LANGUAGES.get(venue.language)
+    if lang is None:
+        raise CallRefused("language_not_supported", f"no call script exists in {venue.language!r}")
+    number = number_of(venue)
+    try:
+        today = now.astimezone(ZoneInfo(venue.timezone)).date()
+    except Exception:
+        raise CallRefused("venue_timezone_unavailable", f"the server cannot resolve {venue.timezone}") from None
+    opening = notice_opening(lang, p, today, purpose, arrive, new_time, new_party)
+    check = check_sentence(lang, p)
+    task = notice_instructions(lang, p, opening, check, purpose, reference, arrive, new_time, new_party)
+    brief = {
+        "purpose": purpose, "timezone": venue.timezone, "reference": reference,
+        "venue_key": venue.key, "number": number, "language": lang.code, "recap": None,
+        "first_sentence": opening, "task": task, "check_sentence": check,
+        "party": p.party, "date": p.on.isoformat(), "time": p.at.strftime("%H:%M"), "name": p.name, "phone": p.phone,
+        "from": caller_id(), "number_source": venue.source, "venue_name": venue.name,
+        "venue_ids": list(venue.venue_ids) if venue.venue_ids else None,
+        **({"arrive": arrive.strftime("%H:%M")} if arrive else {}),
+        **({"new_time": new_time.strftime("%H:%M")} if new_time else {}), **({"new_party": new_party} if new_party else {}),
+    }
+    en = LANGUAGES["en"]
+    lines = [
+        f"I'll phone {venue.name}, {number}" + (f" — the number on {venue.source}." if venue.source else "."),
+        f"I'll say: \"{opening}\"" + ("" if lang.code == "en" else f" (in {lang.label}: {notice_opening(en, p, today, purpose, arrive, new_time, new_party)})"),
+        "I won't agree to anything else — no other time, no fee, no card. I'll tell them I need to check with you.",
+        "I'll tell you exactly what they said.",
+    ]
+    return {"brief": brief, "brief_sha256": _sha256hex(_canonical(brief)), "read_back_lines": lines,
+            "read_back_sha256": _sha256hex("\n".join(lines)), "local_timezone": venue.timezone}

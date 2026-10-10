@@ -594,6 +594,8 @@ from . import demo_ops as _demo_ops  # noqa: E402
 router.include_router(_demo_ops.router)   # Sasha 121 · the investor demo's controls (founder only)
 # Sasha 99 · cancelling by the best route there is (link, email, text, call)
 router.include_router(cancel_routes.router)
+from . import venue_notice   # noqa: E402 · Sasha 226 · running late / change a booking (its own read-back and yes)
+router.include_router(venue_notice.router)
 # S-55 · the Work-with-Sasha page's server half (reached through the frontend's own route, which adds the key)
 router.include_router(optin_page.router)
 from products import routes as _products  # noqa: E402

@@ -31,7 +31,8 @@ VENUE = {"confirmed": ("booking", "done"), "guest_booked": ("booking", "done"), 
 BASKET = {"booked": ("booking", "done"), "pending_payment": ("booking", "waiting"), "failed": ("booking", "failed"),
           "cancelled": ("cancellation", "done")}
 S2_KIND = {"email": "email", "whatsapp": "whatsapp", "calendar": "calendar",
-           "keep_save": "keep_save", "keep_use": "keep_use", "keep_show": "keep_show", "keep_delete": "keep_delete"}   # CR 63
+           "keep_save": "keep_save", "keep_use": "keep_use", "keep_show": "keep_show", "keep_delete": "keep_delete",   # CR 63
+           "venue_late": "venue_late", "booking_change": "booking_change"}   # Sasha 226
 
 
 def _run():

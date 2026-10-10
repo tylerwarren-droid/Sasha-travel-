@@ -24,6 +24,9 @@ type Card =
   | { k: 'booked'; line: string }
   | { k: 'keep_capture'; what: 'passport' | 'loyalty' }
   | { k: 'capabilities'; groups: { group: string; items: string[] }[] }
+  | { k: 'plans'; items: Plan[]; on?: string }
+  | { k: 'notice'; title: string; lines: string[]; status?: string }
+type Plan = { kind: 'dinner' | 'spa' | 'venue' | 'flight' | 'hotel'; title: string; when: string; where?: string; status: string; reference?: string; id?: string }
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
 type Ev = Record<string, any>
@@ -97,10 +100,11 @@ function useSpeaker() {
   }), [])
 }
 
-const CHIPS = ['Book dinner', 'Plan a weekend', 'Add my passport', 'What can you do?']   // Sasha 225 · each one something she does
+// Sasha 226 · each one something she does; the capability card is still reachable by asking "what can you do?"
+const CHIPS = ['Book dinner', 'What am I subscribed to?', 'Plan a weekend', 'Add my passport', "What's coming up?"]
 /** Sasha 225 · one honest line after an action: what she can do next (each is a real tool on /s2). */
 const AFTER: Partial<Record<string, string>> = {
-  booked: 'Want me to email the details to someone, or put it in your calendar? Just say.',
+  booked: 'If you’re running late, just tell me — or I can email the details to someone, or put it in your calendar.',
   calendar: 'It’s in your Activity too, with its proof.',
   pay: 'I’ll tell you here the moment it’s confirmed.',
   sent: 'It’s in your Activity, with its proof.',
@@ -147,6 +151,71 @@ async function shrink(file: File): Promise<string> {
   canvas.getContext('2d')?.drawImage(bmp, 0, 0, canvas.width, canvas.height)
   bmp.close?.()
   return canvas.toDataURL('image/jpeg', 0.88).split(',')[1] ?? ''
+}
+
+/** Sasha 226 · a file as base64, unchanged (a CSV or a PDF goes as it is). */
+function asBase64(file: File): Promise<string> {
+  return new Promise((res, rej) => {
+    const fr = new FileReader()
+    fr.onload = () => res(String(fr.result).split(',')[1] ?? '')
+    fr.onerror = () => rej(fr.error)
+    fr.readAsDataURL(file)
+  })
+}
+const UPLOAD_MAX = 5 * 1024 * 1024   // the backend's own cap (agapi s2_subscriptions / s2_fine_print MAX_BYTES: 5 MB)
+
+/** Sasha 226 · the paperclip: a bank statement (→ statement_ref for find_subscriptions) or a card (→ card_image_ref for add_card).
+ *  The file goes through /api/s2-upload/* to the backend's memory (never on disk); on success the ref is said in the chat so she
+ *  passes it to her tool; on failure the server's own words are her line — never a fake "got it". */
+function Clip({ busy, send, say }: { busy: boolean; send: (t: string) => void; say: (t: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [working, setWorking] = useState(false)
+  const stmt = useRef<HTMLInputElement | null>(null)
+  const card = useRef<HTMLInputElement | null>(null)
+  async function picked(what: 'statement' | 'card', f?: File | null) {
+    if (stmt.current) stmt.current.value = ''
+    if (card.current) card.current.value = ''
+    if (!f) return
+    setWorking(true)
+    try {
+      const isImage = f.type.startsWith('image/')
+      const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
+      const isCsv = /\.csv$/i.test(f.name) || f.type === 'text/csv'
+      if (what === 'card' && !isImage) { say('A card is added from a photo or a screenshot — that file isn’t an image.'); return }
+      if (what === 'statement' && !isImage && !isPdf && !isCsv) { say('A statement is a CSV, a PDF or a photo — that file isn’t one of those.'); return }
+      let content: string, media: string
+      if (isImage) { content = await shrink(f); media = 'image/jpeg' }
+      else {
+        if (f.size > UPLOAD_MAX) { say('That file is too large — 5 MB at most.'); return }
+        content = await asBase64(f); media = isPdf ? 'application/pdf' : 'text/csv'
+      }
+      if (!content || (content.length * 3) / 4 > UPLOAD_MAX) { say(content ? 'That file is too large — 5 MB at most.' : 'That file couldn’t be read.'); return }
+      const r = await fetch(what === 'statement' ? '/api/s2-upload/statement' : '/api/s2-upload/card-image', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ media_type: media, content_base64: content }) })
+      if (r.status === 401) { window.location.href = '/sign-in?next=/s2'; return }
+      const j = await r.json().catch(() => ({}))
+      const ref = what === 'statement' ? j?.statement_ref : j?.card_image_ref
+      if (r.ok && j?.ok && typeof ref === 'string' && ref) {
+        send(what === 'statement' ? `Here's my statement (statement_ref: ${ref}).` : `Add this card (card_image_ref: ${ref}).`)
+      } else say(untag(String(j?.message || (what === 'statement' ? 'That statement couldn’t be uploaded.' : 'That card couldn’t be uploaded.'))))
+    } catch { say('That file couldn’t be uploaded — try again?') }
+    finally { setWorking(false) }
+  }
+  const item = { display: 'block', width: '100%', textAlign: 'left', padding: '12px 14px', background: 'transparent', border: 0, color: '#fff', fontSize: 15 } as const
+  return (
+    <div style={{ position: 'relative', flex: 'none' }}>
+      <input ref={stmt} type="file" accept=".csv,.pdf,image/*" hidden onChange={e => picked('statement', e.target.files?.[0])} aria-label="A bank statement" />
+      <input ref={card} type="file" accept="image/*" hidden onChange={e => picked('card', e.target.files?.[0])} aria-label="A card (photo or Wallet screenshot)" />
+      <button type="button" onClick={() => setOpen(o => !o)} disabled={busy || working} aria-label="Add a statement or a card" aria-expanded={open}
+        style={{ width: 40, height: 40, borderRadius: '50%', border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 18, opacity: busy || working ? 0.5 : 1 }}>
+        {working ? '…' : '📎'}</button>
+      {open && (
+        <div role="menu" style={{ position: 'absolute', bottom: 48, left: 0, minWidth: 250, background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,.5)', zIndex: 20 }}>
+          <button type="button" role="menuitem" style={item} onClick={() => { setOpen(false); stmt.current?.click() }}>A bank statement</button>
+          <button type="button" role="menuitem" style={{ ...item, borderTop: `1px solid ${C.line}` }} onClick={() => { setOpen(false); card.current?.click() }}>A card (photo or Wallet screenshot)</button>
+        </div>)}
+    </div>
+  )
 }
 
 function KeepCapture({ what }: { what: 'passport' | 'loyalty' }) {
@@ -197,8 +266,39 @@ function After({ k }: { k: string }) {
   return line ? <div style={{ fontSize: 13.5, color: C.dim, margin: '6px 4px 0' }}>{line}</div> : null
 }
 
+/** Sasha 226 · a plan's date, en-GB and absolute ("Sat 24 Oct · 21:00"; a date alone has no clock) — never "in 2 days". */
+function fmtWhen(iso: string): string {
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(iso)
+  const d = dateOnly ? new Date(`${iso}T00:00`) : new Date(iso)   // a bare date is the person's own day, not UTC midnight
+  if (isNaN(d.getTime())) return untag(iso)
+  const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+  return dateOnly ? day : `${day} · ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
+}
+const PLAN_ICON: Record<string, string> = { dinner: '🍽️', venue: '🍽️', spa: '💆', flight: '✈️', hotel: '🏨' }
+
+function Plans({ items, on }: { items: Plan[]; on?: string }) {
+  return (
+    <Box k={on ? `Your plans on ${/^\d{4}-\d{2}-\d{2}/.test(on) ? fmtWhen(on.slice(0, 10)) : untag(on)}` : 'Your plans'}>
+      {items.length === 0 ? <div style={{ fontSize: 14.5, color: C.dim }}>Nothing coming up.</div> : items.map((p, i) => (
+        <div key={p.id || `${p.when}-${i}`} style={{ display: 'flex', gap: 10, padding: '8px 0', borderTop: i ? `1px solid ${C.line}` : 'none' }}>
+          <span style={{ fontSize: 20, lineHeight: 1.2 }} aria-hidden>{PLAN_ICON[p.kind] || '📌'}</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700 }}>{untag(p.title)}</div>
+            <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,.88)' }}>{fmtWhen(p.when)}{p.where ? ` · ${untag(p.where)}` : ''}</div>
+            <div style={{ fontSize: 12.5, color: C.dim }}>{untag(p.status)}{p.reference ? ` · Ref ${untag(p.reference)}` : ''}</div>
+          </div>
+        </div>))}
+    </Box>
+  )
+}
+
 function CardView({ c, choose }: { c: Card; choose: (t: string) => void }) {
   if (c.k === 'keep_capture') return <KeepCapture what={c.what} />
+  if (c.k === 'plans') return <Plans items={c.items} on={c.on} />
+  if (c.k === 'notice') return (
+    <Box k={c.status ? untag(c.status) : 'Update'} h={untag(c.title)}>
+      {c.lines.map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
+    </Box>)
   if (c.k === 'capabilities') return (
     <Box k="What I can do">
       {c.groups.map(g => (
@@ -278,12 +378,19 @@ export default function S2App() {
     es.onmessage = m => {
       let ev: Ev
       try { ev = untagDeep(JSON.parse(m.data)) } catch { return }
+      if (ev.type === 'venue_notice') {   // Sasha 226 · the venue's answer to "I'm running late" / a change — in their words, when it comes
+        const lines: string[] = Array.isArray(ev.lines) ? ev.lines.map(String) : [String(ev.say || '')]
+        const title = `${ev.purpose === 'change' ? 'Change' : 'Running late'} · ${String(ev.venue || 'the venue')}`
+        setMsgs(ms => [...ms, { role: 'sasha', text: '', cards: [{ k: 'notice', title, lines, status: ev.outcome === 'yes' ? 'Done' : ev.state === 'not_reached' ? 'No answer' : 'Their answer' }] }])
+        speaker.say(String(ev.say || ''))
+        return
+      }
       if (ev.type !== 'booked' && ev.type !== 'booking_failed') return
       setMsgs(ms => [...ms.map(x => ({ ...x, cards: x.cards.map(c => (c.k === 'pay' ? { ...c, already_paid: ev.type === 'booked' } : c)) })),
                      { role: 'sasha', text: String(ev.say || ev.text || ''), cards: [] }])
     }
     return () => es.close()
-  }, [signedIn])
+  }, [signedIn, speaker])
 
   const send = useCallback(async (text: string) => {
     const t = text.trim()
@@ -322,6 +429,8 @@ export default function S2App() {
             else if (ev.kind === 'calendar' && ev.links) add({ k: 'calendar', title: ev.title, links: ev.links })
             else if (ev.kind === 'keep_capture') add({ k: 'keep_capture', what: ev.what === 'loyalty' ? 'loyalty' : 'passport' })
             else if (ev.kind === 'capabilities' && Array.isArray(ev.groups)) add({ k: 'capabilities', groups: ev.groups })
+            else if (ev.kind === 'plans' && Array.isArray(ev.items)) add({ k: 'plans', items: ev.items, on: ev.on })
+            else if (ev.kind === 'notice' && ev.title) add({ k: 'notice', title: String(ev.title), lines: Array.isArray(ev.lines) ? ev.lines : [], status: ev.status })
             else if (ev.kind === 'pay_here') add({ k: 'pay', client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid })
           }
         }
@@ -386,6 +495,7 @@ export default function S2App() {
             <div className="s2-mic" onPointerDown={() => speaker.unlock()} style={{ flex: 'none' }}>
               <VoiceButton onTranscript={send} readyToListen muted={busy} />
             </div>
+            <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} />
             <form onSubmit={e => { e.preventDefault(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
               <input ref={typeBox} value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sasha anything…" aria-label="Message Sasha"
                 style={{ flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 16 }} />

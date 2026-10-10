@@ -108,9 +108,10 @@ RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues":
           "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
 RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_whatsapp": "read_back", "get_activity": "inline"})
 RENDER.update({"keep_list": "inline", "keep_use": "inline", "keep_add": "keep_capture"})
-RENDER.update({"what_i_can_do": "capabilities", "note_not_yet": "inline"})   # Sasha 225 · /s2's capability card   # Sasha 224 · CR 63 + the photo capture   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
+RENDER.update({"what_i_can_do": "capabilities", "note_not_yet": "inline"})   # Sasha 225 · /s2's capability card
+RENDER.update({"my_plans": "plans", "running_late": "read_back", "change_booking": "read_back", "cancel_booking": "read_back"})   # Sasha 226   # Sasha 224 · CR 63 + the photo capture   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
-KINDS_S2_ONLY = {"keep_capture", "capabilities"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
+KINDS_S2_ONLY = {"keep_capture", "capabilities", "plans", "notice"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
 KINDS = KINDS_S2 | {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 
 
@@ -154,6 +155,10 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": kind, "find": {"what": args.get("what") or c.get("name"), "where": args.get("city") or ""},
                 "preset": {"all": [c], "cards": [c], "show": 1}, "focus": c.get("place_id"),
                 "ribbon": f"{c.get('name')}" + (f" · {res['when']}" if res.get("when") else "")}
+    if tool == "my_plans":   # Sasha 226 · their plans, on a card (/s2)
+        return {"type": "render", "kind": "plans", "items": res.get("items") or [], **({"on": res["on"]} if res.get("on") else {})}
+    if tool in ("running_late", "change_booking", "cancel_booking"):   # Sasha 226 · its own read-back, on the card
+        return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"])} if res.get("read_back") else None
     if tool == "what_i_can_do" and res.get("groups"):   # Sasha 225 · the capability card (/s2)
         return {"type": "render", "kind": "capabilities", "groups": res["groups"]}
     if tool == "keep_add" and res.get("status") == "capture_on_screen":   # Sasha 224 · the photo picker on their screen (no value, ever)
@@ -505,7 +510,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                          if surface == "s2" or t["name"] != "keep_add"]   # /next has no photo picker: its Keep is added on /keep
     run = API.call        # CR 71 · how a tool runs: agapi.v0.call, as always — /s2's block below is the ONLY place that changes it
     if surface == "s2":   # Sasha 225 · what she can do / can't do yet: /s2 only
-        tools = tools + [API.schema_for_model(t) for t in API.HOME_TOOLS]
+        tools = tools + [API.schema_for_model(t) for t in API.HOME_TOOLS + API.MANAGE_TOOLS]
     if surface == "s2":   # Sasha 221 · S2's tool set (/s2 only); S1's list is untouched
         from app.agent import s2 as S2
         tools = [t for t in tools if t["name"] in S2.S2_TOOLS]
@@ -652,7 +657,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 continue
             if t and t["idempotent"]:
                 args["idempotency_key"] = f"{turn_key}:{u.name}:{hashlib.sha256(json.dumps(u.input, sort_keys=True).encode()).hexdigest()[:12]}"
-            if u.name in ("book", "book_venue", "cancel_venue", "send_email", "send_whatsapp"):
+            if u.name in ("book", "book_venue", "cancel_venue", "send_email", "send_whatsapp", "running_late", "change_booking", "cancel_booking"):
                 args["approval"] = {"said": message}   # the REAL words of this turn — never the model's (CR 60: the email's too)
             r = await run(ctx, u.name, args)
             if r.get("ok"):

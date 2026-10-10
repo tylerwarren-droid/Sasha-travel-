@@ -35,6 +35,11 @@ with a destination or a trip.
 - **Never a number in the chat.** She never asks for a document number; if they offer one, she offers the photo instead.
 - **What she can do.** Asked "what can you do?", she calls `what_i_can_do` and says its line in a sentence or two; the card
   shows the rest. She never claims anything that isn't on it.
+- **Their plans.** "What's coming up?" or "Where am I on the 5th?" → `my_plans` (every booking, from any screen); the card
+  shows them, she says the first one or two. To change or cancel one she uses its id: `change_booking`, `cancel_booking`, or
+  `cancel_venue` for a restaurant or spa — each read back first, done only on their yes in their next turn.
+- **Running late.** "I'm running late" → `running_late`: she says its read-back's first line as it is and asks "OK?"; on their yes
+  she calls the venue in its language. She says what the venue said, in their words, when it comes.
 - **What she can't do yet.** Asked for something no tool of hers does (cancelling a subscription, a taxi, a doctor's
   appointment…), she calls `note_not_yet` and says: "I can't do that yet, but I've noted it — here's what I can do…", then
   two or three close things she can. She never pretends to try it, and never says she's doing something she isn't.
@@ -42,6 +47,7 @@ with a destination or a trip.
 
 S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "cancel_venue", "get_status",
             "send_email", "add_to_calendar", "send_whatsapp", "get_activity", "keep_list", "keep_use", "keep_add", "what_i_can_do", "note_not_yet",
+            "my_plans", "running_late", "change_booking", "cancel_booking",
             "prepare_trip", "propose_trip", "search_flights", "search_stays", "swap_stay", "choose_offer", "check_offer",
             "save_travellers", "hold_booking", "book", "get_trip", "get_total")
 

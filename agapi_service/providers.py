@@ -62,12 +62,18 @@ def block_network() -> None:
     httpx.AsyncClient.send, httpx.Client.send = asend, ssend
 
 
+def live_hosts() -> set:
+    """The live providers' hosts + Sasha's booking service (the ladder, over HTTPS)."""
+    from urllib.parse import urlsplit
+    return set(config.LIVE_HOSTS) | {urlsplit(os.getenv("AGAPI_SASHA_API_URL", "https://sasha-travel-production.up.railway.app")).hostname}
+
+
 def install_live() -> None:
     """CR 70 · agapi-live: NO fixtures; the network guard lets only the live providers' hosts out (config.LIVE_HOSTS)."""
     global _INSTALLED
     if _INSTALLED:
         return
-    ALLOWED_HOSTS.update(config.LIVE_HOSTS)
+    ALLOWED_HOSTS.update(live_hosts())
     block_network()
     _INSTALLED = True
 

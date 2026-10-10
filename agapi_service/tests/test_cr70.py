@@ -577,6 +577,12 @@ class LadderLive(Live):
         r, b2 = self.call("trip.complete", {"hold_id": b["result"]["hold_id"]}, key=self.live,
                           approval=self.approve(b["result"]["read_back"]["read_back_id"]), expect="hold_expired")
 
+    def test_the_live_network_guard_lets_sasha_through_and_nothing_else_new(self):
+        hosts = PV.live_hosts()
+        self.assertIn("sasha-travel-production.up.railway.app", hosts)                             # (the live smoke caught its absence)
+        self.assertTrue(hosts >= config.LIVE_HOSTS)
+        self.assertFalse(any(p in h for h in hosts for p in ("opentable", "thefork", "booking.com", "resy")))
+
     def test_a_tap_is_sashas_button_and_the_smoke_check_prepares_nothing(self):
         out = asyncio.run(AL.ADAPTERS["venue_ladder"].book("venue", {"_ladder": {"rung": "form", "id": "form_9", "sha256": "s", "venue": "X"}}, PV.Upstream(),
                                                            approval={"method": "tap", "said": None}))

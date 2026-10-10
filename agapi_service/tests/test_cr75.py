@@ -165,7 +165,7 @@ class Accident(Base):
         self.assertIn("I never sign", s["say"])
         s = self.step(cid, "done")
         clocks = {c["who"]: c for c in s["clocks"]}
-        self.assertEqual(clocks["the rental company"]["due"], "2026-10-12 14:00")                       # 48 hours, quoted
+        self.assertEqual(clocks["the rental company"]["due"], "2026-10-12 14:00")                       # 48 hours from the accident's own time
         self.assertIn("within 48 hours", clocks["the rental company"]["quotes"][0]["quote"])
         self.assertTrue(any(k.startswith("your card's insurer") and c["due"] == "2026-12-09" for k, c in clocks.items()))   # 60 days
         self.assertEqual(clocks["PT"]["say"], "Portugal's own deadline: its official rules aren't read at source yet — not shown.")
@@ -181,3 +181,5 @@ class Accident(Base):
         claim = self.ok("cards.claim_status", {"end_user": self.uid, "case_id": out["claim_case_id"]})
         self.assertEqual((claim["kind"], claim["state"]), ("rental_damage", "preparing"))
         self.assertEqual(next(e for e in claim["evidence"] if e["item"] == "photos")["have"], ["your_car_front.jpg", "the_damage_close_up.jpg"])
+        self.assertEqual(next(e for e in claim["evidence"] if e["item"] == "accident_statement")["have"], ["accident-statement-facts.txt"])
+        self.assertIn("Vehicle: make a test car, plate AA-00-ZZ", lines)

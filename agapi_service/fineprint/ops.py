@@ -430,7 +430,11 @@ async def _acc_view(ctx, row: dict, said: Optional[dict] = None) -> Dict[str, An
         return {**out, **AC.statement(country, d.get("facts") or {}, keep, law), "next": "done"}
     rental, rnote = rental_terms_for(ctx.store, country, d.get("rental_company") or "")
     card = await _acc_card(ctx, row["end_user"], d.get("card_item_id"))
-    at = _dt.fromisoformat(d["at"].replace("Z", ""))
+    f = d.get("facts") or {}
+    try:   # the accident's own time when the person gave it; else when the case was opened
+        at = _dt.fromisoformat(f"{f['date']}T{f.get('time') or '00:00'}") if f.get("date") else _dt.fromisoformat(d["at"].replace("Z", ""))
+    except ValueError:
+        at = _dt.fromisoformat(d["at"].replace("Z", ""))
     clocks = AC.clocks(at, rental, rnote, card[1] if card else None, card[0] if card else None, law, country, note)
     if step == "clocks":
         return {**out, "say": "Three clocks, each from its own source:", "clocks": clocks, "next": "done"}
@@ -544,7 +548,8 @@ async def accident_notify(ctx, inp: dict):
     rep = next((c for c in rental or [] if c["field"] == "accident_report_deadline_hours"), None)
     f = d.get("facts") or {}
     facts_txt = "\n".join([f"Date: {f.get('date') or d['at'][:10]}", f"Time: {f.get('time') or d['at'][11:16]}", f"Place: {f.get('place') or d['place']}",
-                           f"Vehicle: {json.dumps(f.get('your_vehicle') or {}, ensure_ascii=False)}", f"Injuries: {f.get('injuries', 'none reported')}",
+                           "Vehicle: " + (", ".join(f"{k.replace('_', ' ')} {v}" for k, v in (f.get("your_vehicle") or {}).items()) or "as on the rental agreement"),
+                           f"Injuries: {f.get('injuries', 'none reported')}",
                            "Circumstances boxes, sketch, signature: left to the drivers (not filled by Sasha)."])
     photos = d.get("photos") or []
 
@@ -559,6 +564,8 @@ async def accident_notify(ctx, inp: dict):
         if got.get("case_id"):
             for p in photos:
                 ctx.store.x("update claim_files set case_id = ? where account = ? and id = ? and case_id = ?", got["case_id"], ctx.account, p["file_id"], row["id"])
+            await CL.attach(ctx, {"end_user": uid, "case_id": got["case_id"], "kind": "accident_statement", "name": "accident-statement-facts.txt",
+                                  "media_type": "text/plain", "content_base64": _b64.b64encode(facts_txt.encode()).decode()})   # the facts, sealed
             return got["case_id"]
         return None
     if not to:

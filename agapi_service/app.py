@@ -390,6 +390,12 @@ async def admin(action: str, req: Request):
     if action == "smoke" and config.LIVE_SERVICE:   # CR 70 · a live adapter's smoke check: spends nothing, contacts nobody
         from . import adapters_live
         kind = str(body.get("provider") or "")
+        if kind == "flights_cancel":   # CR 71 · a TEST order made here, then cancelled (Duffel test mode only)
+            try:
+                out = await adapters_live.ADAPTERS["flights"].smoke_cancel()
+            except Exception as e:
+                out = {"ok": False, "why": type(e).__name__}
+            return JSONResponse({"ok": True, "provider": kind, "smoke": out}, headers={"Cache-Control": "no-store"})
         ad = adapters_live.ADAPTERS.get(kind)
         if not ad or not hasattr(ad, "smoke"):
             return JSONResponse({"ok": False, "why": "no such live adapter"}, status_code=404)

@@ -9,6 +9,10 @@ from ..adapters import Flights
 from ..registry import AgapiError
 
 
+def _err(j, s) -> str:
+    return ((j or {}).get("errors") or [{}])[0].get("message") or f"HTTP {s}"
+
+
 def _test_token() -> bool:
     from booking_signer import travel as T
     return (T.token() or "").startswith("duffel_test_")
@@ -27,12 +31,68 @@ class LiveFlights(Flights):
                              {"service": "duffel", "reason": "test_mode_only"})
         return await PV.order_flight(offer, travellers, up)
 
-    async def cancel(self, service, act_id, up):
-        raise AgapiError("not_cancellable", "A flight can't be cancelled through AgAPI yet: Sasha has no Duffel cancel call (cancellations "
-                         "arrive by Duffel's webhook). Cancel with the airline.", {"service": "duffel", "reason": "no_cancel_call"})
+    async def cancel_quote(self, order_id: str) -> dict:
+        """CR 71 · Duffel's own cancellation QUOTE for the order (nothing is cancelled yet): the refund it will give, until when."""
+        from booking_signer import travel as T
+        if not _test_token():
+            raise AgapiError("upstream_refused", "Flight cancellations run on Duffel TEST only for now.", {"service": "duffel", "reason": "test_mode_only"})
+        st, j = await T.HTTP("POST", "/air/order_cancellations", {"data": {"order_id": order_id}})
+        d = (j or {}).get("data") or {}
+        if st not in (200, 201) or not d.get("id") or d.get("live_mode"):
+            raise AgapiError("not_cancellable", f"The airline won't quote a cancellation for this order ({_err(j, st)}).", {"service": "duffel"})
+        return {"quote_id": d["id"], "order_id": order_id, "refund": {"amount_minor": PV._minor(str(d.get("refund_amount") or "0")),
+                "currency": d.get("refund_currency") or "EUR"}, "refund_to": d.get("refund_to"), "expires_at": d.get("expires_at")}
+
+    async def cancel(self, service, act_id, up, prep=None, approval=None):
+        """CR 71 · after the cancellation's yes: Duffel confirms ITS quote (the refund the person approved) → evidence from its answer."""
+        import hashlib
+        import json
+        import time
+        from booking_signer import travel as T
+        if not prep or not prep.get("quote_id"):
+            raise AgapiError("not_cancellable", "No airline cancellation quote for this flight; ask to cancel again.", {"service": "duffel"})
+        if not _test_token():
+            raise AgapiError("upstream_refused", "Flight cancellations run on Duffel TEST only for now.", {"service": "duffel", "reason": "test_mode_only"})
+        t0 = time.perf_counter()
+        st, j = await T.HTTP("POST", f"/air/order_cancellations/{prep['quote_id']}/actions/confirm", None)
+        d = (j or {}).get("data") or {}
+        if st not in (200, 201) or not d.get("confirmed_at") or d.get("live_mode"):
+            up.add("duffel", t0, False, "upstream_refused")
+            raise AgapiError("upstream_refused", f"The airline didn't confirm the cancellation ({_err(j, st)}); nothing changed.", {"service": "duffel"})
+        up.add("duffel", t0, True)
+        amount = f"{d.get('refund_currency') or ''} {d.get('refund_amount') or '0'}".strip()
+        return {"reference": d["id"], "service": "duffel", "outcome_kind": "CONFIRMED",
+                "words": f"Cancelled by the airline (Duffel TEST) — refund {amount} to {d.get('refund_to') or 'the original payment'}.",
+                "sha256": hashlib.sha256(json.dumps(d, sort_keys=True, default=str).encode()).hexdigest()}
 
     async def smoke(self) -> dict:
         """Spends nothing, contacts nobody: one airline from Duffel's reference data (no offer request, no order)."""
         from booking_signer import travel as T
         st, j = await T.HTTP("GET", "/air/airlines", params={"limit": 1})
         return {"ok": st == 200 and bool((j or {}).get("data")), "status": st, "token": "test" if _test_token() else "NOT a test token"}
+
+    async def smoke_cancel(self) -> dict:
+        """CR 71 · the live cancellation, end to end, on a Duffel TEST order made HERE for this check (balance payment, test mode:
+        nothing real is booked, paid or refunded) → Duffel's own answers, for the recorded tests. Refused unless the token is a test one."""
+        from datetime import date, timedelta
+        from booking_signer import travel as T
+        if not _test_token():
+            return {"ok": False, "why": "not a Duffel TEST token — refused"}
+        day = (date.today() + timedelta(days=45)).isoformat()
+        got = await T.search("MAD", "LHR", day, adults=1, limit=8)
+        cards = got.get("cards") or []
+        if not cards:
+            return {"ok": False, "why": "no test offers", "search": {k: v for k, v in got.items() if k != "cards"}}
+        made = await T.order(cards[0], "Smoke Check", "smoke-check@agapi.kanoe.example", None)
+        if not made.get("order_id"):
+            return {"ok": False, "why": made.get("why") or "no order"}
+        st, q = await T.HTTP("POST", "/air/order_cancellations", {"data": {"order_id": made["order_id"]}})
+        quote = (q or {}).get("data") or {}
+        if st not in (200, 201) or not quote.get("id"):
+            return {"ok": False, "why": f"quote: {_err(q, st)}", "order_id": made["order_id"]}
+        st2, c = await T.HTTP("POST", f"/air/order_cancellations/{quote['id']}/actions/confirm", None)
+        conf = (c or {}).get("data") or {}
+        keep = ("id", "order_id", "refund_amount", "refund_currency", "refund_to", "expires_at", "confirmed_at", "live_mode", "created_at")
+        return {"ok": st2 in (200, 201) and bool(conf.get("confirmed_at")) and conf.get("live_mode") is False, "order_id": made["order_id"],
+                "booking_reference": made.get("booking_reference"), "quote_status": st, "confirm_status": st2,
+                "quote": {k: quote.get(k) for k in keep}, "confirmed": {k: conf.get(k) for k in keep}}

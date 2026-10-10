@@ -33,7 +33,8 @@ class Flights:
     async def search(self, inp: dict, up: PV.Upstream) -> List[dict]: raise NotImplementedError
     async def recheck(self, offer: dict, up: PV.Upstream, passengers: int) -> Tuple[dict, str]: raise NotImplementedError
     async def order(self, offer: dict, travellers: List[dict], up: PV.Upstream) -> Dict[str, Any]: raise NotImplementedError
-    async def cancel(self, service: str, act_id: str, up: PV.Upstream) -> Dict[str, Any]: raise NotImplementedError
+    async def cancel(self, service: str, act_id: str, up: PV.Upstream, prep: Optional[dict] = None, approval: Optional[dict] = None) -> Dict[str, Any]:
+        raise NotImplementedError
 
 
 class Places:
@@ -75,7 +76,7 @@ class SimFlights(Flights):
     async def search(self, inp, up): return await PV.find_flights(inp, up)
     async def recheck(self, offer, up, passengers): return await PV.recheck_flight(offer, up, passengers)
     async def order(self, offer, travellers, up): return await PV.order_flight(offer, travellers, up)
-    async def cancel(self, service, act_id, up): return await PV.cancel_fixture(service, act_id, up)
+    async def cancel(self, service, act_id, up, prep=None, approval=None): return await PV.cancel_fixture(service, act_id, up)
 
 
 class SimPlaces(Places):

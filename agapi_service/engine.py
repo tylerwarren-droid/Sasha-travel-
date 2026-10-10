@@ -137,6 +137,23 @@ async def _priced(ctx: Ctx, items: List[dict], travellers: List[dict], *, at_act
     return priced, lines
 
 
+async def _flight_cancel_quote(ctx: Ctx, act: dict) -> dict:
+    """CR 71 · one quote per act while it is valid, so the read-back and the act see the same refund; an expired one → a fresh quote
+    (new lines → a new read-back → the person is asked again)."""
+    ctx.store.x("create table if not exists flight_cancel_quotes (account text not null, act_id text not null, quote text not null, created_at text not null)")
+    row = ctx.store.one("select quote from flight_cancel_quotes where account = ? and act_id = ? order by created_at desc", ctx.account, act["id"])
+    q = loads(row["quote"]) if row else None
+    if q and (not q.get("expires_at") or parse_ts(q["expires_at"]) > now()):
+        return q
+    ctx.store.x("create table if not exists flight_orders (account text not null, act_id text not null, order_id text not null, created_at text not null)")
+    o = ctx.store.one("select order_id from flight_orders where account = ? and act_id = ?", ctx.account, act["id"])
+    if not o:
+        raise AgapiError("not_cancellable", "This flight has no airline order on record to cancel.", {"service": "duffel"})
+    q = await AD.get("flights", ctx.mode).cancel_quote(o["order_id"])
+    ctx.store.x("insert into flight_cancel_quotes (account, act_id, quote, created_at) values (?, ?, ?, ?)", ctx.account, act["id"], dumps(q), ts())
+    return q
+
+
 async def _ladder_prep(ctx: Ctx, offer: dict, it: dict, at_act: bool) -> dict:
     """CR 70 · at hold: Sasha prepares the booking (one prepared booking per venue/time/party); at the act: that SAME preparation,
     so the lines re-derive identically and the yes stays bound to them. Gone → hold again."""
@@ -482,6 +499,9 @@ async def pay(store: Store, act: dict) -> dict:
                               held["items"][0]["kind"], ctx.up)   # CR 63: at the moment of use, under the booking's yes
         if flights:
             res = await AD.get("flights", ctx.mode).order(_offer(ctx, "flight", flights[0]["ref"]), held["travellers"], ctx.up)
+            if res.get("order_id"):   # CR 71 · the airline's order id, for a later cancellation
+                store.x("create table if not exists flight_orders (account text not null, act_id text not null, order_id text not null, created_at text not null)")
+                store.x("insert into flight_orders (account, act_id, order_id, created_at) values (?, ?, ?, ?)", act["account"], act["id"], res["order_id"], ts())
         else:
             res = await AD.get("venue_ladder", ctx.mode).book(priced[0]["kind"], priced[0], ctx.up, approval=dict(apv) if apv else None)
         outcome = _confirmed(res)
@@ -520,6 +540,13 @@ async def trip_cancel(ctx: Ctx, inp: dict):
     lines = [f"Cancel: {original[0]}", f"Refund {_money(refund)} (sandbox: Stripe test)." if refund["amount_minor"] else
              "Nothing was charged, so nothing is refunded."]
     payload = {"act_id": act["id"], "refund": refund}
+    quote = None
+    if ctx.mode == "live" and "Flight" in original[0]:   # CR 71 · the airline's OWN cancellation quote states the refund
+        quote = await _flight_cancel_quote(ctx, act)
+        refund = quote["refund"]
+        lines = [f"Cancel: {original[0]}", f"Refund {_money(refund)} — the airline's own quote (Duffel TEST)"
+                 + (f", to {quote['refund_to'].replace('_', ' ')}" if quote.get("refund_to") else "") + "."]
+        payload = {"act_id": act["id"], "refund": refund, "quote_id": quote["quote_id"]}
     it = ctx.store.one("select * from intents where account = ? and target_act = ? and state = 'open' order by created_at desc",
                        ctx.account, act["id"])
     rb = it and ctx.store.one("select * from read_backs where account = ? and intent_id = ? order by created_at desc", ctx.account, it["id"])
@@ -538,7 +565,7 @@ async def trip_cancel(ctx: Ctx, inp: dict):
             pl = loads(ctx.store.one("select payload from read_backs r join holds h on h.account = r.account and h.read_back_id = r.id "
                                      "where h.account = ? and h.id = ?", ctx.account, act["hold_id"])["payload"])
             prep = next((i.get("_ladder") for i in pl.get("items") or [] if i.get("_ladder")), None)
-        res = await ((AD.get("flights", ctx.mode).cancel("duffel", act["id"], ctx.up)) if "Flight" in original[0] else
+        res = await ((AD.get("flights", ctx.mode).cancel("duffel", act["id"], ctx.up, prep=quote, approval=dict(apv) if apv else None)) if "Flight" in original[0] else
                      AD.get("venue_ladder", ctx.mode).cancel("sandbox_venue", act["id"], ctx.up, prep=prep, approval=dict(apv) if apv else None))
     except PV._Unknown as u:
         _unknown(ctx, cid, it, {"id": None}, inp, apv, u.service, None)

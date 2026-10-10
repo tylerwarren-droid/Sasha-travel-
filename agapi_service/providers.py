@@ -281,7 +281,7 @@ async def order_flight(offer: dict, travellers: List[dict], up: Upstream) -> Dic
     up.add("duffel", t0, True)
     ref = got.get("booking_reference") or "TEST"
     return {"reference": ref, "service": "duffel", "words": f"Order {got.get('order_id') or ''} — booking reference {ref} (Duffel TEST).",
-            "sha256": _sha(got)}
+            "sha256": _sha(got), **({"order_id": got["order_id"]} if got.get("order_id") else {})}   # CR 71: kept for a cancellation
 
 
 def _magic_act(magic: str, up: Upstream, service: str, t0: float) -> Dict[str, Any]:

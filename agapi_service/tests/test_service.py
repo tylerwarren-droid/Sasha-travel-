@@ -475,7 +475,8 @@ class Extensions(Base):
         for op in ("messages.send_email", "messages.send_whatsapp", "messages.replies", "activity.list", "calendar.add_event",
                    "sandbox.simulate_reply", "keep.put", "keep.list", "keep.use", "keep.delete", "keep.activity"):
             self.assertEqual(operations()[op]["output"], eu_operations()[op]["output"], op)   # on EU's own schemas
-        self.assertEqual(set(operations()) - set(eu_operations()), {"magellan.read_site"})   # CR 69: the one Kanoe extension (EU: 1.3)
+        self.assertEqual(set(operations()) - set(eu_operations()), {"magellan.read_site", "subscriptions.find",   # CR 69, CR 72:
+                                                                    "subscriptions.cancel_plan", "subscriptions.cancel"})   # Kanoe extensions
         self.assertEqual(operations()["acts.status"]["output"], eu_operations()["acts.status"]["output"])
 
 

@@ -24,6 +24,7 @@ OP_PROVIDERS: Dict[str, Tuple[str, ...]] = {
     "trip.cancel": ("flights", "venue_ladder"), "approvals.request": ("email", "whatsapp"), "users.register": ("email", "whatsapp"),
     "messages.send_email": ("email",), "messages.send_whatsapp": ("whatsapp",), "messages.replies": ("whatsapp",),
     "calendar.add_event": ("calendar",), "keep.use": ("email", "whatsapp"),
+    "subscriptions.cancel": ("email", "whatsapp"),   # CR 72 (find reads a statement; cancel_plan reads the merchant's site)
 }
 
 

@@ -118,3 +118,26 @@ in the name of {html.escape(b['name'])}.</p><p>Reference <strong id="reference">
 async def taverna_booking(ref: str):
     """The confirmation again (as a supplier's confirmation link would show it)."""
     return _confirmed(ref if re.fullmatch(r"TAV-[0-9A-F]{6}", ref) else "")
+
+
+# ── CR 72 · the subscription radar's demo: a sample statement, and a STAND-IN cancel page (never the merchant's) ──────────
+
+@router.get("/fixtures/statement/sample.csv")
+async def sample_statement():
+    """A fictional person's three months: ~10 subscriptions among ordinary spending (test mode's sample)."""
+    from fastapi.responses import PlainTextResponse
+    from . import subscriptions as SB
+    return PlainTextResponse(SB.sample_csv(), media_type="text/csv", headers={"Content-Disposition": 'inline; filename="sample-statement.csv"'})
+
+
+@router.get("/fixtures/cancel/{slug}", response_class=HTMLResponse)
+async def cancel_standin(slug: str):
+    """Test mode's stand-in for a merchant's cancel page — labelled as such; it is NOT the merchant's site and cancels nothing."""
+    name = html.escape(re.sub(r"[^a-z0-9 -]+", "", slug.replace("-", " ")).title()[:60])
+    return HTMLResponse(f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Sandbox stand-in · cancel {name}</title>
+<style>body{{font:17px/1.5 system-ui;max-width:32rem;margin:3rem auto;padding:0 1.2rem}}.t{{background:#fff3cd;border:1px solid #e0c36b;border-radius:6px;padding:.2rem .5rem}}</style>
+</head><body><p class="t">AgAPI sandbox · test mode</p><h1>Cancel {name} — a stand-in</h1>
+<p>This page stands in for {name}'s own cancel page in test mode. It is <b>not</b> {name}'s site, and nothing here cancels anything.</p>
+<p>In live mode, AgAPI reads {name}'s own help pages for the real cancel route, and you finish it there yourself.</p></body></html>""",
+                        headers={"X-Robots-Tag": "noindex, nofollow"})

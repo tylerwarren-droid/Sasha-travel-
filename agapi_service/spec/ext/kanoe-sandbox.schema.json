@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json",
-  "title": "Kanoe sandbox extensions to AgAPI v1.0 (CR 60) — ADDITIVE ONLY: messages.send_email, calendar.add_event · CR 69: magellan.read_site",
+  "title": "Kanoe sandbox extensions to AgAPI v1.0 (CR 60) — ADDITIVE ONLY: messages.send_email, calendar.add_event · CR 69: magellan.read_site · CR 72: subscriptions.*",
   "$defs": {
     "activity_item": {
       "type": "object",
@@ -772,6 +772,384 @@
               "type": "number"
             }
           }
+        }
+      }
+    },
+    "subscription": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subscription_id",
+        "merchant",
+        "kind",
+        "descriptor",
+        "amount",
+        "cadence",
+        "per_month",
+        "charges",
+        "first_charge",
+        "last_charge",
+        "likely_unused",
+        "why",
+        "confidence",
+        "status"
+      ],
+      "properties": {
+        "subscription_id": {
+          "type": "string"
+        },
+        "merchant": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "descriptor": {
+          "$ref": "#/$defs/site_quote"
+        },
+        "amount": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "amount_minor",
+            "currency"
+          ],
+          "properties": {
+            "amount_minor": {
+              "type": "integer"
+            },
+            "currency": {
+              "type": "string"
+            }
+          }
+        },
+        "cadence": {
+          "type": "string"
+        },
+        "per_month": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "amount_minor",
+            "currency"
+          ],
+          "properties": {
+            "amount_minor": {
+              "type": "integer"
+            },
+            "currency": {
+              "type": "string"
+            }
+          }
+        },
+        "charges": {
+          "type": "integer"
+        },
+        "first_charge": {
+          "type": "string"
+        },
+        "last_charge": {
+          "type": "string"
+        },
+        "next_expected": {
+          "type": "string"
+        },
+        "likely_unused": {
+          "type": "boolean"
+        },
+        "why": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "confidence": {
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "cancel_requested",
+            "cancelled"
+          ]
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "value",
+              "quote",
+              "confidence"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "page",
+                  "email",
+                  "phone"
+                ]
+              },
+              "value": {
+                "type": "string"
+              },
+              "source_url": {
+                "type": "string"
+              },
+              "quote": {
+                "$ref": "#/$defs/site_quote"
+              },
+              "confidence": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "cancel_act_id": {
+          "type": "string"
+        }
+      }
+    },
+    "subs_find_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "statement": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sample": {
+              "type": "boolean"
+            },
+            "media_type": {
+              "enum": [
+                "text/csv",
+                "text/plain",
+                "application/pdf",
+                "image/png",
+                "image/jpeg",
+                "image/webp"
+              ]
+            },
+            "content_base64": {
+              "type": "string",
+              "maxLength": 7000000
+            },
+            "filename": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        }
+      }
+    },
+    "subs_find_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subscriptions",
+        "monthly_total",
+        "likely_unused",
+        "note"
+      ],
+      "properties": {
+        "subscriptions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/subscription"
+          }
+        },
+        "monthly_total": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "amount_minor",
+              "currency"
+            ],
+            "properties": {
+              "amount_minor": {
+                "type": "integer"
+              },
+              "currency": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "likely_unused": {
+          "type": "integer"
+        },
+        "note": {
+          "type": "string"
+        },
+        "statement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sha256",
+            "transactions",
+            "media_type"
+          ],
+          "properties": {
+            "sha256": {
+              "type": "string"
+            },
+            "transactions": {
+              "type": "integer"
+            },
+            "media_type": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "subs_plan_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "subscription_id"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "subscription_id": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "site_url": {
+          "type": "string",
+          "maxLength": 300
+        }
+      }
+    },
+    "subs_plan_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subscription_id",
+        "merchant",
+        "routes",
+        "never"
+      ],
+      "properties": {
+        "subscription_id": {
+          "type": "string"
+        },
+        "merchant": {
+          "type": "string"
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "value",
+              "quote",
+              "confidence"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "page",
+                  "email",
+                  "phone"
+                ]
+              },
+              "value": {
+                "type": "string"
+              },
+              "source_url": {
+                "type": "string"
+              },
+              "quote": {
+                "$ref": "#/$defs/site_quote"
+              },
+              "confidence": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "never": {
+          "type": "string"
+        }
+      }
+    },
+    "subs_cancel_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "subscription_id",
+        "route"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "subscription_id": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "route": {
+          "enum": [
+            "email",
+            "page"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "account_email": {
+          "type": "string",
+          "maxLength": 120
+        }
+      }
+    },
+    "subs_cancel_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "act_id",
+        "intent_id",
+        "outcome",
+        "evidence_id",
+        "subscription"
+      ],
+      "properties": {
+        "act_id": {
+          "type": "string"
+        },
+        "intent_id": {
+          "type": "string"
+        },
+        "outcome": {
+          "type": "object"
+        },
+        "evidence_id": {
+          "type": "string"
+        },
+        "subscription": {
+          "$ref": "#/$defs/subscription"
         }
       }
     }

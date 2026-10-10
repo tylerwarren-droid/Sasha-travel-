@@ -1145,3 +1145,5 @@ OPS = {"travel.find_flights": find_flights, "travel.find_stays": find_stays, "ve
        "messages.send_whatsapp": messages_send_whatsapp, "messages.replies": messages_replies, "activity.list": activity_list,
        "sandbox.simulate_reply": sandbox_simulate_reply, "keep.activity": keep_activity, **KO.OPS,
        "magellan.read_site": magellan_read_site}   # CR 69 · a Kanoe extension (EU: 1.3)
+from . import subscriptions as _SUBS   # noqa: E402   CR 72 · the subscription radar (Kanoe extensions)
+OPS.update(_SUBS.OPS)

@@ -36,7 +36,7 @@ MAX_BYTES = 2_000_000
 PAGE_CHARS = 9000
 GAP_S = 0.8
 LOW = 60
-PURPOSES = ("operator", "venue", "registry")
+PURPOSES = ("operator", "venue", "registry", "merchant")   # CR 72 · merchant: how a customer cancels
 
 # booking platforms: never read (their own terms govern access); a link to one is reported as a booking channel of kind "platform"
 BOOKING_PLATFORMS = ("booking.com", "expedia.com", "hotels.com", "airbnb.com", "vrbo.com", "agoda.com", "trip.com", "tripadvisor.com",
@@ -325,6 +325,9 @@ async def crawl(start: str, *, max_pages: int = MAX_PAGES) -> Dict[str, Any]:
 # ── the AI reader ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 _WHAT = {
+    "merchant": "how a customer CANCELS their subscription with this business: the cancel / account / membership page (as booking_channels "
+                "kind form, its URL as value), a cancellation email (kind email), a phone line (kind phone). offers and partners stay empty. "
+                "Only routes the pages themselves state; never a login, never a third-party site.",
     "operator": "(1) the products/offers it sells (tours, dives, courses, packages, stays, events) and (2) the OTHER businesses it works with "
                 "(its partners/suppliers: boats, hotels, restaurants, transfers, gear rental, guides, photographers, florists, caterers, musicians, "
                 "venues…). Not the business itself, not a booking platform, review site, payment provider, certifying body or website-builder credit.",

@@ -157,7 +157,7 @@ async def read_sources(seeds: List[str], max_fetch: int = MAX_FETCH, product: st
         is_pdf = "pdf" in (ctype or "").lower() or body[:5] == b"%PDF-"
         if is_pdf:
             try:
-                text = pdf_text(body)
+                text = await asyncio.to_thread(pdf_text, body)   # CR 77 · CPU-bound: off the event loop
             except Exception as e:
                 unread.append({"url": url, "why": f"a PDF that couldn't be read ({type(e).__name__})"})
                 continue
@@ -436,7 +436,7 @@ async def read_supplied(card: dict, raw: bytes, original_url: str, supplied_by: 
     citing the document's ORIGINAL official URL; the source is recorded as supplied by a person. Nothing is fetched."""
     if raw[:5] != b"%PDF-":
         return {"card": card, "read_at": ts()[:19] + "Z", "sources": [], "unread": [{"url": original_url, "why": "not a PDF"}], "facts": [], "dropped": {}, "instruction_like": 0}
-    text = pdf_text(raw)
+    text = await asyncio.to_thread(pdf_text, raw)
     url = clean_url(original_url)
     doc = {"url": url, "kind": "pdf", "title": "", "text": text[:PDF_CHARS], "body_sha256": "sha256:" + hashlib.sha256(raw).hexdigest(),
            "linked_from": f"supplied by a person ({supplied_by})", "score": 1000}

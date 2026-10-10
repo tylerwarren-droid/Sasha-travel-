@@ -10,6 +10,7 @@ Anything that fails goes to the EXCEPTIONS list on the review page — only thos
 card stays. The switch (fineprint_settings.auto_accept, review page / admin pacioli_switch) turns automatic acceptance off; checks still run."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import json
@@ -133,7 +134,7 @@ async def check_claim(store, claim: dict, product: dict, seed: Optional[dict], c
     if raw and d:
         t = _TEXT_CACHE.get(copy["sha256"])
         if t is None:
-            t = _TEXT_CACHE[copy["sha256"]] = norm(copy_text(raw, copy["content_type"]))
+            t = _TEXT_CACHE[copy["sha256"]] = norm(await asyncio.to_thread(copy_text, raw, copy["content_type"]))   # off the event loop
         a = len(norm(claim["quote"])) >= 6 and norm(claim["quote"]) in t
         if not a:
             why.append("the quote isn't in the stored copy word for word")

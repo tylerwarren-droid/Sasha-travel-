@@ -12,7 +12,7 @@ import hmac
 import json
 import re
 import time
-from typing import Optional
+from typing import Dict, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
@@ -357,6 +357,25 @@ app.include_router(_docs_site.router)
 
 # ── issuing by hand, remotely (Part 4 K6) — signed with the service's own pepper, so no second secret exists ────────────
 
+_JOBS: Dict[str, dict] = {}   # CR 77 · background admin jobs (reads), in this process only
+_TASKS: set = set()
+
+
+def _start_job(coro) -> str:
+    import asyncio as _aio
+    import secrets as _sec
+    jid = "job_" + _sec.token_hex(8)
+    _JOBS[jid] = {"state": "running", "started_at": ts()}
+
+    async def run():
+        try:
+            _JOBS[jid].update(state="done", result=await coro, finished_at=ts())
+        except Exception as e:
+            _JOBS[jid].update(state="failed", why=f"{type(e).__name__}: {str(e)[:200]}", finished_at=ts())
+    _TASKS.add(_aio.get_running_loop().create_task(run()))   # held, so the task isn't garbage-collected mid-read
+    return jid
+
+
 @app.post("/admin/{action}")
 async def admin(action: str, req: Request):
     """AgAPI-Admin-Signature: t=<unix>,n=<nonce>,v1=<hex HMAC-SHA256(pepper, "<t>.<n>.<raw body>")>. Stale after 5 minutes; a nonce
@@ -435,15 +454,26 @@ async def admin(action: str, req: Request):
         card = _FJ.seeds().get(key)
         if not card or not card.get("supplied"):
             return JSONResponse({"ok": False, "why": "no such supplied card"}, status_code=404)
+        from .fineprint import copies as _FC   # CR 77 · the supplied file is kept as the copy
+
+        async def _supplied(raw: bytes):
+            async with _FC.keeping(store, key, "card_terms", supplied_by=card["supplied"]["by"]):
+                got = await _FR.read_supplied({**card, "key": key}, raw, card["supplied"]["original_url"], card["supplied"]["by"])
+            _FM.apply_read(store, key, card, got)
+            return got
         try:
             raw = _b64.b64decode(str(body.get("content_base64") or ""), validate=True)
-            from .fineprint import copies as _FC   # CR 77 · the supplied file is kept as the copy
-            async with _FC.keeping(store, key, "card_terms", supplied_by=card["supplied"]["by"]):
-                res = await _FR.read_supplied({**card, "key": key}, raw, card["supplied"]["original_url"], card["supplied"]["by"])
-            _FM.apply_read(store, key, card, res)
+            if body.get("background"):   # CR 77 · start → poll card_read_job
+                return JSONResponse({"ok": True, "job": _start_job(_supplied(raw))}, headers={"Cache-Control": "no-store"})
+            res = await _supplied(raw)
         except Exception as e:
             return JSONResponse({"ok": False, "why": f"{type(e).__name__}: {str(e)[:200]}"}, status_code=502)
         return JSONResponse({"ok": True, "read": res}, headers={"Cache-Control": "no-store"})
+    if action == "card_read_job" and not config.LIVE_SERVICE:   # CR 77 · a background read's state; its result once done
+        j = _JOBS.get(str(body.get("job") or ""))
+        if not j:
+            return JSONResponse({"ok": False, "why": "no such job (jobs live only as long as this process)"}, status_code=404)
+        return JSONResponse({"ok": True, **j}, headers={"Cache-Control": "no-store"})
     if action in ("pacioli_run", "pacioli_switch"):   # CR 77 · Pacioli's auto-check over the claim store; the auto-accept switch
         from .fineprint import model as _FM, pacioli as _FP
         if action == "pacioli_switch":
@@ -466,6 +496,8 @@ async def admin(action: str, req: Request):
             key = str(body.get("key") or "")
             if key not in _FJ.seeds():
                 return JSONResponse({"ok": False, "why": "no such card"}, status_code=404)
+            if body.get("background"):   # CR 77 · a long read runs as a job (start → poll card_read_job); never held past the proxy's limit
+                return JSONResponse({"ok": True, "job": _start_job(_FJ.read_now(store, key))}, headers={"Cache-Control": "no-store"})
             return JSONResponse({"ok": True, "read": await _FJ.read_now(store, key)}, headers={"Cache-Control": "no-store"})
         except Exception as e:
             return JSONResponse({"ok": False, "why": f"{type(e).__name__}: {str(e)[:200]}"}, status_code=502)

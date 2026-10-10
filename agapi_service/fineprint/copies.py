@@ -8,6 +8,7 @@ a new copy; nothing is ever overwritten (objects are content-addressed). Every q
   never   a failed copy never fails a read: the fact then has no copy, and Pacioli's check (d) sends it to the exceptions list."""
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import hashlib
 import logging
@@ -76,7 +77,7 @@ class Keeper:
             return None
         if ext == "html":
             try:
-                pdf = RENDER(raw, final_c)
+                pdf = await asyncio.to_thread(RENDER, raw, final_c)   # CPU-bound: never on the event loop
                 rs = hashlib.sha256(pdf).hexdigest()
                 await OB.put(f"renders/{rs[:2]}/{rs}.pdf", pdf, "application/pdf")
                 rec["render_key"], rec["render_sha256"] = f"renders/{rs[:2]}/{rs}.pdf", "sha256:" + rs

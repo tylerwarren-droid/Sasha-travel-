@@ -252,3 +252,20 @@ class Guard(CopiesBase):
             with self.assertRaises(httpx.ConnectError):
                 run(go("https://evil.test/x"))                                          # marked, but not the bucket: refused
         self.assertEqual(seen, ["b-1.t3.storage.test"])
+
+
+class Jobs(CopiesBase):
+    def test_a_background_read_is_started_then_polled(self):
+        from agapi_service import app as APP
+
+        async def go():
+            async def slow():
+                return {"facts": [1]}
+            jid = APP._start_job(slow())
+            for _ in range(20):
+                if APP._JOBS[jid]["state"] != "running":
+                    break
+                await asyncio.sleep(0)
+            return APP._JOBS[jid]
+        j = run(go())
+        self.assertEqual((j["state"], j["result"]), ("done", {"facts": [1]}))

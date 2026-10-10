@@ -44,6 +44,12 @@ class Mrz(unittest.TestCase):
         with self.assertRaises(SCAN.ScanRefused):
             SCAN.parse_td3("hello", "world")
 
+    def test_miscounted_fillers_are_refilled_and_still_checked(self):
+        l1, l2 = specimen()
+        self.assertEqual(SCAN.parse_td3(l1.rstrip("<") + "<<<", l2[:28] + "<<<<<<<<" + l2[-2:])["number"], "XDA123456")
+        with self.assertRaises(SCAN.ScanRefused):   # a digit misread is still refused after the refill
+            SCAN.parse_td3(l1, l2[:28] + "<<<<<<" + ("1" if l2[-2] != "1" else "2") + l2[-1])
+
     def test_germany_is_d(self):
         self.assertEqual(SCAN.parse_td3(*specimen(state="D<<"))["country"], "DE")
 

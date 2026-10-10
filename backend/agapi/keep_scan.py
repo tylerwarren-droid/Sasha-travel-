@@ -65,10 +65,22 @@ def _clean(line: str) -> str:
     return re.sub(r"\s+", "", str(line or "")).upper().replace("«", "<")
 
 
+def _refill(l1: str, l2: str) -> tuple:
+    """A reader miscounts runs of '<'. Line 1's trailing fillers are re-padded to 44; line 2's ONLY free run (the optional
+    personal number, positions 28-41) is re-padded to 14 — every check digit is still verified after, so a misread never passes."""
+    if l1.startswith("P") and 30 <= len(l1) <= 60 and len(l1) != 44:
+        l1 = (l1.rstrip("<") + "<" * 44)[:44]
+    if len(l2) != 44 and 30 <= len(l2) <= 60 and re.fullmatch(r"[A-Z0-9<]+", l2):
+        mid = l2[28:-2].rstrip("<")
+        if len(mid) <= 14:
+            l2 = l2[:28] + (mid + "<" * 14)[:14] + l2[-2:]
+    return l1, l2
+
+
 def parse_td3(line1: str, line2: str) -> Dict[str, str]:
     """A passport's two 44-character MRZ lines → {number, country, expires_on}. Every check digit (number, birth date, expiry,
     the composite) must hold, or it's refused — a misread is never saved."""
-    l1, l2 = _clean(line1), _clean(line2)
+    l1, l2 = _refill(_clean(line1), _clean(line2))
     if len(l1) != 44 or len(l2) != 44 or not l1.startswith("P") or not re.fullmatch(r"[A-Z0-9<]{44}", l2):
         raise ScanRefused("mrz_unreadable", "I couldn't read the two lines at the bottom of the photo page clearly — take another "
                                             "photo, flat, in good light, with the whole page in the frame.")
@@ -108,7 +120,7 @@ async def _read(kind: str, image: bytes, media_type: str) -> dict:
         return await READ(kind, image, media_type)
     import app.services.llm as LLM
     r = await LLM.client.messages.create(
-        model=os.getenv("SASHA_KEEP_SCAN_MODEL", "claude-opus-5-5"), max_tokens=300,
+        model=os.getenv("SASHA_KEEP_SCAN_MODEL", "claude-opus-5-5"), max_tokens=2500,   # it thinks first (~700 tokens for an MRZ)
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": base64.b64encode(image).decode()}},
             {"type": "text", "text": _ASK[kind]}]}])

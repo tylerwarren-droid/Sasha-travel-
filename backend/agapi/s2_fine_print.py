@@ -56,6 +56,11 @@ FACTS = {"type": "object", "properties": {
 _HHMM = re.compile(r"\b([01]?\d|2[0-3])[:h]([0-5]\d)\b")
 
 
+def _card_name(c: dict) -> str:
+    """'Example Bank Travel Visa', not 'Example Bank Example Bank Travel Visa'."""
+    return c["product"] if (c.get("product") or "").startswith(c.get("issuer") or "\0") else f"{c.get('issuer')} {c.get('product')}"
+
+
 def agapi_facts(given: Optional[dict], said: str = "") -> Dict[str, Any]:
     """CR 78 · the model's facts → AgAPI's keys (other_vehicle / your_vehicle objects). A time they typed ("14:00") is taken from their
     own words when the model left it out — a plate never is (theirs or the other car's can't be told apart from the words alone)."""
@@ -257,7 +262,7 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             _CLAIM[ctx.account] = v["claim_case_id"]
         ask = v.get("ask_card")
         return {"ok": True, "result": {"say": v.get("say"), "step": v["step"], **({"handoff": v["handoff"]} if v.get("handoff") else {}),
-                                       **({"ask": ask["say"], "cards": [f"{c['issuer']} {c['product']}" for c in ask["cards"]]} if ask else {}),
+                                       **({"ask": ask["say"], "cards": [_card_name(c) for c in ask["cards"]]} if ask else {}),
                                        "how": ("Say `say` as given; then the hand-off line if there is one." + (" Then ask `ask` as given." if ask else "")
                                                + " Never offer to put these dates in a calendar."), "render": _view(v)}}
     if name == "accident_notify":
@@ -271,7 +276,7 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             v = r["result"]
             ask = v.get("ask_card")   # CR 78 · notified with no card known: the claim waits for their answer
             return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), "render": _view(v),
-                                           **({"ask": ask["say"], "cards": [f"{c['issuer']} {c['product']}" for c in ask["cards"]],
+                                           **({"ask": ask["say"], "cards": [_card_name(c) for c in ask["cards"]],
                                                "how": "Then ask `ask` as given; their answer goes to `accident` as `card`."} if ask else {})}}
         return r if r.get("ok") else _fail(r)
     if name == "file_claim":
@@ -280,7 +285,7 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             mine = await CALL("cards.mine", {"end_user": uid})
             cards = (mine.get("result") or {}).get("cards") or []
             return {"ok": True, "result": {"status": "which_card", "ask": "Which card did you pay the rental with?",
-                                           "cards": [f"{c['issuer']} {c['product']}" for c in cards],
+                                           "cards": [_card_name(c) for c in cards],
                                            "how": "Ask `ask` as given; their answer goes to `accident` as `card`, then file_claim again."}}
         if not cid:
             return {"ok": False, "error": {"code": "no_claim", "message": "there's no claim prepared yet"}}

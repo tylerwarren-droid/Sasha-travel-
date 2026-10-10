@@ -43,7 +43,7 @@ class AccidentCR78(FinePrint):
         run(FP.run_tool(Ctx(), "accident", {"country": "PT", "place": "Lisbon", "rental_company": "Example Rentals"}))
         r = run(FP.run_tool(Ctx(), "file_claim", {}))
         self.assertEqual((r["result"]["status"], r["result"]["ask"]), ("which_card", "Which card did you pay the rental with?"))
-        self.assertEqual(r["result"]["cards"], [f"{c['issuer']} {c['product']}" for c in CARDS])     # from My cards
+        self.assertEqual(r["result"]["cards"], ["Example Bank Travel Visa", "Example Bank Everyday Mastercard"])     # from My cards
         run(FP.run_tool(Ctx(said="my travel visa"), "accident", {"card": "travel visa"}))
         self.assertEqual(self.steps()[-1]["card_item_id"], CARDS[0]["item_id"])
 

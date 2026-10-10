@@ -44,6 +44,10 @@ def is_rental(p: dict) -> bool:
     return p.get("network") == "rental"
 
 
+def is_law(p: dict) -> bool:
+    return p.get("network") == "law"
+
+
 def product_id(key: str) -> str:
     return rid("cpr", key)
 
@@ -71,7 +75,7 @@ def apply_read(store, key: str, card: dict, read: dict, *, accepted_by: Optional
             "last_read": {k: read.get(k) for k in ("read_at", "unread", "dropped", "instruction_like", "why", "reader")}}
     if not row:
         store.x("insert or ignore into card_products (id, key, issuer, product, network, country, data, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
-                pid, key, card["issuer"], card["product"], "rental" if card.get("kind") == "rental" else card.get("network") or "unknown",
+                pid, key, card["issuer"], card["product"], card["kind"] if card.get("kind") in ("rental", "law") else card.get("network") or "unknown",
                 card.get("country") or "", dumps(data), now)
     else:
         store.x("update card_products set data = ?, updated_at = ? where id = ?", dumps({**loads(row["data"]), **data}), now, pid)
@@ -124,7 +128,7 @@ def ensure_loaded(store) -> None:
         return
     if not store.one("select sha from card_loads where sha = ?", sha):
         reads = json.loads(p.read_text())["reads"] if p.exists() else {}
-        for key, card in {**seeds["cards"], **(seeds.get("rentals") or {})}.items():
+        for key, card in {**seeds["cards"], **(seeds.get("rentals") or {}), **(seeds.get("laws") or {})}.items():
             r = reads.get(key)
             if r and r.get("facts"):
                 if not store.one("select id from card_claims where product_id = ? and read_at = ? limit 1", product_id(key), r["read_at"]):
@@ -138,7 +142,7 @@ def ensure_loaded(store) -> None:
 def is_beta(p: dict) -> bool:
     """CR 74b · the BETA SET (seeds beta: true — Tyler's 12 + the Example Bank fixtures). A seeded card outside it is kept, never used to answer."""
     d = json.loads((DATA / "seeds.json").read_text())
-    seed = {**d["cards"], **(d.get("rentals") or {})}.get(p["key"])
+    seed = {**d["cards"], **(d.get("rentals") or {}), **(d.get("laws") or {})}.get(p["key"])
     return True if seed is None else bool(seed.get("beta"))
 
 

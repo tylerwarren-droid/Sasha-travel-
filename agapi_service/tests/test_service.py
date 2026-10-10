@@ -480,7 +480,10 @@ class Extensions(Base):
                                                                     "registry.countries", "registry.get", "registry.documents",   # CR 73
                                                                     "registry.obtain_plan", "registry.verify",
                                                                     "cards.products", "cards.terms", "cards.intake", "cards.mine", "cards.ask", "cards.which", "cards.rental_cover", "cards.claim_start", "cards.claim_attach",
-                                                                    "cards.claim_file", "cards.claim_status", "cards.claim_simulate_reply"})   # CR 74
+                                                                    "cards.claim_file", "cards.claim_status", "cards.claim_simulate_reply",
+                                                                    "cards.moment", "cards.moment_settings", "cards.rental_dispute",
+                                                                    "cards.accident_start", "cards.accident_step", "cards.accident_photo",
+                                                                    "cards.accident_notify"})   # CR 74/75
         self.assertEqual(operations()["acts.status"]["output"], eu_operations()["acts.status"]["output"])
 
 

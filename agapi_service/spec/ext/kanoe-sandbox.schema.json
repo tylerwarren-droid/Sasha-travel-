@@ -2807,6 +2807,504 @@
     },
     "cards_claim_simulate_reply_out": {
       "$ref": "#/$defs/claim_case"
+    },
+    "cards_moment_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "event"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "event": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "kind"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "kind": {
+              "enum": [
+                "rental_booked",
+                "pickup_tomorrow",
+                "which_card",
+                "rental_returned"
+              ]
+            },
+            "country": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{2}$"
+            },
+            "rental_company": {
+              "type": "string",
+              "maxLength": 60
+            },
+            "place": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "pickup_time": {
+              "type": "string",
+              "maxLength": 20
+            },
+            "days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365
+            },
+            "booking_ref": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "purchase": {
+              "$ref": "#/$defs/cards_which_in/properties/purchase"
+            },
+            "quoted": {
+              "type": "array",
+              "maxItems": 30,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label",
+                  "amount_minor"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "amount_minor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000000
+                  }
+                }
+              }
+            },
+            "final": {
+              "type": "array",
+              "maxItems": 30,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label",
+                  "amount_minor"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "amount_minor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000000
+                  }
+                }
+              }
+            },
+            "currency": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{3}$"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "rental_booked",
+                      "pickup_tomorrow"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "country",
+                  "rental_company"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "which_card"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "purchase"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "rental_returned"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "quoted",
+                  "final"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "cards_moment_out": {
+      "type": "object",
+      "required": [
+        "speak"
+      ],
+      "properties": {
+        "speak": {
+          "type": "boolean"
+        },
+        "why_silent": {
+          "type": "string"
+        },
+        "moment_id": {
+          "type": "string"
+        },
+        "moment": {
+          "enum": [
+            "rental_booked",
+            "pickup_tomorrow",
+            "which_card",
+            "rental_returned"
+          ]
+        },
+        "line": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        },
+        "card": {
+          "type": "object"
+        }
+      }
+    },
+    "cards_moment_settings_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "moment": {
+          "enum": [
+            "rental_booked",
+            "pickup_tomorrow",
+            "which_card",
+            "rental_returned"
+          ]
+        },
+        "on": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cards_moment_settings_out": {
+      "type": "object",
+      "required": [
+        "moments"
+      ],
+      "properties": {
+        "moments": {
+          "type": "array"
+        }
+      }
+    },
+    "cards_rental_dispute_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "moment_id"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "moment_id": {
+          "type": "string",
+          "pattern": "^mom_[0-9A-HJKMNP-TV-Z]{26}$"
+        }
+      }
+    },
+    "cards_rental_dispute_out": {
+      "type": "object",
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "sent",
+            "draft_only"
+          ]
+        },
+        "draft": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        },
+        "act_id": {
+          "type": "string"
+        },
+        "outcome": {
+          "type": "object"
+        },
+        "evidence_id": {
+          "type": "string"
+        }
+      }
+    },
+    "accident_view": {
+      "type": "object",
+      "required": [
+        "case_id",
+        "step",
+        "steps"
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "pattern": "^acc_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "step": {
+          "enum": [
+            "safety",
+            "duties",
+            "photos",
+            "statement",
+            "clocks",
+            "notify",
+            "claim"
+          ]
+        },
+        "steps": {
+          "type": "array"
+        },
+        "say": {
+          "type": "string"
+        },
+        "handoff": {
+          "type": "string"
+        }
+      }
+    },
+    "cards_accident_start_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "country"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "country": {
+          "type": "string",
+          "pattern": "^[A-Za-z]{2}$"
+        },
+        "place": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "rental_company": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "card_item_id": {
+          "type": "string",
+          "pattern": "^kpi_[0-9A-HJKMNP-TV-Z]{26}$"
+        }
+      }
+    },
+    "cards_accident_start_out": {
+      "$ref": "#/$defs/accident_view"
+    },
+    "cards_accident_step_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "case_id"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^acc_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "answer": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "flags": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "enum": [
+              "injuries",
+              "fault_disputed",
+              "police_charges",
+              "claim_against_me"
+            ]
+          }
+        },
+        "facts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "date": {
+              "type": "string",
+              "maxLength": 10
+            },
+            "time": {
+              "type": "string",
+              "maxLength": 5
+            },
+            "place": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "your_vehicle": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 60
+              }
+            },
+            "your_insurer": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "witnesses": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+                "type": "string",
+                "maxLength": 120
+              }
+            },
+            "injuries": {
+              "type": "string",
+              "maxLength": 120
+            }
+          }
+        }
+      }
+    },
+    "cards_accident_step_out": {
+      "$ref": "#/$defs/accident_view"
+    },
+    "cards_accident_photo_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "case_id",
+        "shot",
+        "content_base64"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^acc_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "shot": {
+          "enum": [
+            "your_car_front",
+            "your_car_back",
+            "your_car_left",
+            "your_car_right",
+            "the_damage_close_up",
+            "the_other_car_and_its_plate",
+            "your_rental_cars_plate",
+            "the_road_and_signs",
+            "the_other_drivers_licence_and_insurance"
+          ]
+        },
+        "media_type": {
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "image/heic"
+          ]
+        },
+        "content_base64": {
+          "type": "string",
+          "maxLength": 9000000
+        }
+      }
+    },
+    "cards_accident_photo_out": {
+      "$ref": "#/$defs/accident_view"
+    },
+    "cards_accident_notify_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "case_id"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^acc_[0-9A-HJKMNP-TV-Z]{26}$"
+        }
+      }
+    },
+    "cards_accident_notify_out": {
+      "$ref": "#/$defs/accident_view"
     }
   }
 }

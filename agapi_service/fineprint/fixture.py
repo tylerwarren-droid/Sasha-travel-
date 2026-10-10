@@ -103,6 +103,7 @@ RENTALS: Dict[str, dict] = {
         "5. Driving licence. A licence issued in the European Union is accepted without an International Driving Permit.",
         "Drivers must be at least 21 years old.",
         "6. Accidents. Any accident must be reported to Example Rentals within 48 hours, with a completed European Accident Statement.",
+        "Send accident reports and any question about your final invoice to accidents@example-rentals.example.",
     ]},
 }
 

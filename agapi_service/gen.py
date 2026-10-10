@@ -140,6 +140,18 @@ DESCRIPTIONS = {
                         "prepared, and the person logs in themselves.",
     "cards.claim_status": "A claim's state, its deadlines with reminders, and what the claims administrator replied (their words).",
     "cards.claim_simulate_reply": "Test mode only: the claims administrator replies to a filed claim (the demo's insurer inbox).",
+    "cards.moment": "Should Sasha speak up for this event (a rental booked, the day before pickup, 'which card?', a rental returned)? One "
+                    "line + a card, only when it saves money or prevents a mistake; at most once per event; silent otherwise, saying why.",
+    "cards.moment_settings": "Turn one of the four card moments on or off for the person; returns all four with their state.",
+    "cards.rental_dispute": "Dispute a rental's final charge that's more than the quote: the difference line by line, read back → the person's yes → "
+                            "one email to the rental company's own address from its terms (or the draft, if its terms give none).",
+    "cards.accident_start": "'I've had an accident': the playbook starts with safety — 'Is anyone hurt?' — and offers nothing else until it's "
+                            "answered (if anyone may be hurt: call the emergency number, quoted, until help is on the way).",
+    "cards.accident_step": "The person's answer to the playbook's current step: the duties at the scene (only from a source read at source), the "
+                           "guided photos, the accident statement (facts only — never a fault box, never signed), the three clocks quoted.",
+    "cards.accident_photo": "One guided accident photo: sealed under the person's own key and recorded as hashed, timestamped evidence.",
+    "cards.accident_notify": "Report the accident to the rental company (its own address, from its terms) with the evidence pack, on the person's yes; "
+                             "then the card insurer's claim is prepared, for its own yes.",
     "registry.countries": "Which jurisdictions the registry covers (wave 0: the certified core) — per country its registers, documents and "
                           "access routes, the automation mix and how fresh its sources are. Every count rests on cited claims.",
     "registry.get": "One jurisdiction's official registers (company, UBO, insolvency…): name, authority, official URL, status — every field "

@@ -4934,7 +4934,7 @@
      "field": "liability_note",
      "quote": "Compulsory third-party liability insurance, as required by Portuguese law, is included in every rental price.",
      "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/rentals/example-rentals-pt",
-     "value": "Compulsory third-party liability insurance, as required by Portuguese law, included in every rental price"
+     "value": "compulsory third-party liability insurance as required by Portuguese law"
     },
     {
      "benefit": "rental_terms",
@@ -4951,7 +4951,7 @@
      "field": "cdw_name",
      "quote": "The CDW is optional and costs EUR 12 per day.",
      "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/rentals/example-rentals-pt",
-     "value": "CDW"
+     "value": "Collision Damage Waiver (CDW)"
     },
     {
      "benefit": "rental_terms",
@@ -5043,19 +5043,26 @@
      "quote": "Any accident must be reported to Example Rentals within 48 hours, with a completed European Accident Statement.",
      "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/rentals/example-rentals-pt",
      "value": "Report any accident to Example Rentals within 48 hours with a completed European Accident Statement"
+    },
+    {
+     "benefit": "rental_terms",
+     "field": "contact_email",
+     "quote": "Send accident reports and any question about your final invoice to accidents@example-rentals.example.",
+     "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/rentals/example-rentals-pt",
+     "value": "accidents@example-rentals.example"
     }
    ],
    "instruction_like": 0,
-   "read_at": "2026-10-10T08:51:07Z",
+   "read_at": "2026-10-10T09:04:33Z",
    "reader": {
-    "input_tokens": 1895,
+    "input_tokens": 1964,
     "model": "claude-opus-5-5",
-    "output_tokens": 2435,
-    "usd": 0.0563
+    "output_tokens": 2103,
+    "usd": 0.0499
    },
    "sources": [
     {
-     "body_sha256": "sha256:3ae3d20f924fc42c639df9f9631256988a70c2176e2b5a74df5ba720b5f0fadc",
+     "body_sha256": "sha256:12275ee900660688ac3eb2e4cdb1f3638a0361ad84f9afc65e91144e42ce738a",
      "kind": "html",
      "linked_from": "",
      "title": "Example Rentals · rental terms (Portugal) · test fixture",
@@ -5181,6 +5188,676 @@
     }
    ],
    "unread": []
+  },
+  "law_de": {
+   "card": {
+    "country": "DE",
+    "issuer": "Deutschland",
+    "key": "law_de",
+    "network": null,
+    "product": "Accident rules (Germany)"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 0,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "accident_rules",
+     "field": "scene_duties",
+     "quote": "unverzüglich zu halten,",
+     "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+     "value": [
+      "stop immediately"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "scene_duties",
+     "quote": "den Verkehr zu sichern und bei geringfügigem Schaden unverzüglich beiseite zu fahren,",
+     "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+     "value": [
+      "secure the traffic",
+      "if damage is minor, move aside immediately"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "scene_duties",
+     "quote": "sich über die Unfallfolgen zu vergewissern,",
+     "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+     "value": [
+      "ascertain the consequences of the accident"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "scene_duties",
+     "quote": "Verletzten zu helfen (§ 323c des Strafgesetzbuchs),",
+     "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+     "value": [
+      "help injured persons"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "scene_duties",
+     "quote": "anzugeben, dass man am Unfall beteiligt war und",
+     "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+     "value": [
+      "state to other parties present that one was involved in the accident"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "scene_duties",
+     "quote": "auf Verlangen den eigenen Namen und die eigene Anschrift anzugeben sowie den eigenen Führerschein und den Fahrzeugschein vorzuweisen und nach bestem Wissen Angaben über die Haftpflichtversicherung zu machen,",
+     "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+     "value": [
+      "on request, give own name and address",
+      "show driving licence and vehicle registration",
+      "give liability insurance details to the best of one's knowledge"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "scene_duties",
+     "quote": "so lange am Unfallort zu bleiben, bis zugunsten der anderen Beteiligten und Geschädigten die Feststellung der Person, des Fahrzeugs und der Art der Beteiligung durch eigene Anwesenheit ermöglicht wurde oder",
+     "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+     "value": [
+      "remain at the scene until identification of person, vehicle and type of involvement has been made possible"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "scene_duties",
+     "quote": "eine nach den Umständen angemessene Zeit zu warten und am Unfallort den eigenen Namen und die eigene Anschrift zu hinterlassen, wenn niemand bereit war, die Feststellung zu treffen,",
+     "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+     "value": [
+      "if no one is willing to make the identification, wait a reasonable time and leave own name and address at the scene"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "police_when",
+     "quote": "Dazu ist mindestens den Berechtigten (Nummer 6 Buchstabe a) oder einer nahe gelegenen Polizeidienststelle mitzuteilen, dass man am Unfall beteiligt gewesen ist, und die eigene Anschrift, den Aufenthalt sowie das Kennzeichen und den Standort des beteiligten Fahrzeugs anzugeben und dieses zu unverzüglichen Feststellungen für eine zumutbare Zeit zur Verfügung zu halten.",
+     "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+     "value": "after leaving the scene (justified, excused or after the waiting period): inform at least the entitled persons or a nearby police station of involvement, give address, whereabouts, licence plate and location of the vehicle, and keep the vehicle available for a reasonable time"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "scene_duties",
+     "quote": "Unfallspuren dürfen nicht beseitigt werden, bevor die notwendigen Feststellungen getroffen worden sind.",
+     "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+     "value": [
+      "do not remove accident traces before the necessary findings have been made"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Der Versicherungsnehmer hat dem Versicherer innerhalb einer Woche die Tatsachen anzuzeigen, die seine Verantwortlichkeit gegenüber einem Dritten zur Folge haben könnten.",
+     "source_url": "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
+     "value": "Policyholder must notify the insurer within one week (innerhalb einer Woche) of facts that could result in liability towards a third party"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Macht der Dritte seinen Anspruch gegenüber dem Versicherungsnehmer geltend, ist der Versicherungsnehmer zur Anzeige innerhalb einer Woche nach der Geltendmachung verpflichtet.",
+     "source_url": "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
+     "value": "If the third party asserts a claim, notify the insurer within one week (innerhalb einer Woche) of the assertion"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Wird gegen den Versicherungsnehmer ein Anspruch gerichtlich geltend gemacht, Prozesskostenhilfe beantragt oder wird ihm gerichtlich der Streit verkündet, hat er dies dem Versicherer unverzüglich anzuzeigen.",
+     "source_url": "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
+     "value": "Court claims, legal aid applications or third-party notices must be reported to the insurer without delay (unverzüglich)"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Dies gilt auch, wenn gegen den Versicherungsnehmer wegen des den Anspruch begründenden Schadensereignisses ein Ermittlungsverfahren eingeleitet wird.",
+     "source_url": "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
+     "value": "Also applies if criminal investigation proceedings are opened over the damaging event"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Zur Wahrung der Fristen nach den Absätzen 1 und 2 genügt die rechtzeitige Absendung der Anzeige.",
+     "source_url": "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
+     "value": "Timely dispatch of the notice is sufficient to meet the deadlines"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Der Versicherungsnehmer hat den Eintritt des Versicherungsfalles, nachdem er von ihm Kenntnis erlangt hat, dem Versicherer unverzüglich anzuzeigen.",
+     "source_url": "https://www.gesetze-im-internet.de/vvg_2008/__30.html",
+     "value": "Policyholder must report the occurrence of the insured event to the insurer without delay (unverzüglich) after becoming aware of it"
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T09:06:10Z",
+   "reader": {
+    "input_tokens": 3320,
+    "model": "claude-opus-5-5",
+    "output_tokens": 3983,
+    "usd": 0.0929
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:54297e5d7f5c7cf195b025e77b92bcae51f98bcd65aa5c1aff9c82fee04586f1",
+     "kind": "html",
+     "linked_from": "",
+     "title": "§ 34 StVO 2013 - Einzelnorm",
+     "url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:46274301e169d33418be7ff3ca232576ecf9150767c7a72106cf6ba00ea05b68",
+     "kind": "html",
+     "linked_from": "",
+     "title": "§ 104 VVG - Einzelnorm",
+     "url": "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:3159081e859462ede32b151b3237a5bfa44d800794ecb70bb7c8384bb7aa10ca",
+     "kind": "html",
+     "linked_from": "",
+     "title": "§ 30 VVG - Einzelnorm",
+     "url": "https://www.gesetze-im-internet.de/vvg_2008/__30.html",
+     "used": true
+    }
+   ],
+   "unread": []
+  },
+  "law_es": {
+   "card": {
+    "country": "ES",
+    "issuer": "España",
+    "key": "law_es",
+    "network": null,
+    "product": "Accident rules (Spain)"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 0,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "accident_rules",
+     "field": "emergency_number",
+     "quote": "A nivel europeo está establecido como numero teléfono de emergencias el 112.",
+     "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+     "value": "112"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "safety_steps",
+     "quote": "Estaciona tu vehículo en un lugar seguro, si fuese posible antes del accidente y fuera de la calzada donde no estorbe ni produzca nuevos accidentes de tráfico.",
+     "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+     "value": [
+      "Estaciona tu vehículo en un lugar seguro, si fuese posible antes del accidente y fuera de la calzada"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "safety_steps",
+     "quote": "Apaga el vehículo, echa el freno de mano y coloca las luces de emergencias.",
+     "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+     "value": [
+      "Apaga el vehículo",
+      "echa el freno de mano",
+      "coloca las luces de emergencias"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "safety_steps",
+     "quote": "Antes de salir del vehículo colóquese el chaleco reflectante.",
+     "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+     "value": [
+      "Antes de salir del vehículo colóquese el chaleco reflectante"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "safety_steps",
+     "quote": "Coge los triángulos de señalización y señalizar el accidente de tráfico; si es de doble sentido a 50 metros en ambos sentidos y si es de uno, como las autovías, el primero a 50 metros y el otro si fuese necesario a 150 metros mínimo.",
+     "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+     "value": [
+      "Señalizar el accidente con los triángulos: en doble sentido a 50 metros en ambos sentidos",
+      "en sentido único el primero a 50 metros y el otro si fuese necesario a 150 metros mínimo"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "safety_steps",
+     "quote": "Evitar posibles focos de ignición, por ejemplo que se fume cerca del lugar del accidente.",
+     "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+     "value": [
+      "Evitar posibles focos de ignición"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "safety_steps",
+     "quote": "No modifiques el estado de los vehículos o de las víctimas, al menos que ello suponga un peligro para la circulación o para las propias víctimas.",
+     "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+     "value": [
+      "No modifiques el estado de los vehículos o de las víctimas, salvo peligro para la circulación o para las propias víctimas"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "safety_steps",
+     "quote": "Si no se sabe qué hacer, no hacer nada.",
+     "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+     "value": [
+      "Si no se sabe qué hacer, no hacer nada"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "safety_steps",
+     "quote": "En caso de ser un motorista el accidentado, no le quites el casco.",
+     "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+     "value": [
+      "En caso de ser un motorista el accidentado, no le quites el casco"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "safety_steps",
+     "quote": "No rescates a personas de vehículos inestables.",
+     "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+     "value": [
+      "No rescates a personas de vehículos inestables"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "safety_steps",
+     "quote": "No des a las víctimas nada de beber ni comer.",
+     "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+     "value": [
+      "No des a las víctimas nada de beber ni comer"
+     ]
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "El tomador del seguro o el asegurado o el beneficiario deberán comunicar al asegurador el acaecimiento del siniestro dentro del plazo máximo de siete días de haberlo conocido, salvo que se haya fijado en la póliza un plazo más amplio.",
+     "source_url": "https://www.boe.es/buscar/act.php?id=BOE-A-1980-22501",
+     "value": "Comunicar al asegurador el acaecimiento del siniestro dentro del plazo máximo de siete días de haberlo conocido, salvo que se haya fijado en la póliza un plazo más amplio"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "El tomador del seguro o el asegurado deberá, además, dar al asegurador toda clase de informaciones sobre las circunstancias y consecuencias del siniestro.",
+     "source_url": "https://www.boe.es/buscar/act.php?id=BOE-A-1980-22501",
+     "value": "Dar al asegurador toda clase de informaciones sobre las circunstancias y consecuencias del siniestro"
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T09:05:02Z",
+   "reader": {
+    "input_tokens": 40669,
+    "model": "claude-opus-5-5",
+    "output_tokens": 3039,
+    "usd": 0.2235
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:e43bd73bb34a48b019f1edf9542068841bed4b2883ecfc1762125b4b6bb5b803",
+     "kind": "html",
+     "linked_from": "",
+     "title": "DGT - Qué hacer ante un accidente de tráfico",
+     "url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:0e83dffffceb41701d2d8665782bc122fd5ea15ea303adac3dbfea4499323d1a",
+     "kind": "html",
+     "linked_from": "",
+     "title": "BOE-A-1980-22501 Ley 50/1980, de 8 de octubre, de Contrato de Seguro.",
+     "url": "https://www.boe.es/buscar/act.php?id=BOE-A-1980-22501",
+     "used": true
+    }
+   ],
+   "unread": []
+  },
+  "law_fr": {
+   "card": {
+    "country": "FR",
+    "issuer": "France",
+    "key": "law_fr",
+    "network": null,
+    "product": "Accident rules (France)"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 0,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "accident_rules",
+     "field": "emergency_number",
+     "quote": "Composez le 17 en cas d'urgence concernant un accident de la route, un trouble à l'ordre public ou une infraction pénale.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "17"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "emergency_number",
+     "quote": "Vous pouvez aussi composer le 112.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "112"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "emergency_number",
+     "quote": "Vous pouvez aussi envoyer un SMS gratuitement au 114.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "114 (SMS)"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "police_when",
+     "quote": "Si une personne est blessée lors de l'accident, vous devez prévenir la police ou la gendarmerie avant de remplir le constat.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Si une personne est blessée lors de l'accident, avant de remplir le constat"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "police_when",
+     "quote": "Si l'autre conducteur prend la fuite après l'accident, il est important de noter le numéro de sa plaque d'immatriculation et de prévenir la police ou la gendarmerie.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Si l'autre conducteur prend la fuite après l'accident"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_name",
+     "quote": "Vous devez remplir un constat amiable d'accident.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "constat amiable d'accident"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_name",
+     "quote": "Le e-constat auto est une application gratuite qui permet de saisir les informations sur le constat via votre smartphone ou votre tablette.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "e-constat auto"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_name",
+     "quote": "En cas d'accident de la circulation intervenu lors d'un déplacement à l'étranger, vous devez compléter un constat européen d'accident (ou \"constat amiable\").",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "constat européen d'accident"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_advice",
+     "quote": "Le constat doit être signé par les 2 conducteurs pour être valable.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Le constat doit être signé par les 2 conducteurs pour être valable"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_advice",
+     "quote": "Vous devez remplir le recto (partie constat) sur les lieux de l'accident, avec l'autre conducteur, le tout sur un seul exemplaire de constat.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Remplir le recto sur les lieux de l'accident, avec l'autre conducteur, sur un seul exemplaire"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_advice",
+     "quote": "Une fois que le recto a été complété et signé par les 2 parties, vous ne devez plus rien y écrire.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Ne plus rien écrire sur le recto une fois complété et signé par les 2 parties"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_advice",
+     "quote": "Le verso (partie déclaration) peut être complété plus tard, individuellement par chacun des conducteurs.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Le verso peut être complété plus tard, individuellement par chaque conducteur"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_advice",
+     "quote": "Il convient de le vérifier avec attention avant de le signer.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Vérifier avec attention le récapitulatif du e-constat avant de le signer"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_advice",
+     "quote": "Vous devez remplir complètement le constat en signalant le refus de l'autre conducteur dans la partie \"Observations\" au recto.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "En cas de refus de l'autre conducteur, remplir complètement le constat en le signalant dans la partie \"Observations\" au recto"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_advice",
+     "quote": "Si l'accident implique plus de 2 véhicules, vous devez remplir un constat amiable avec le conducteur du véhicule qui vous précède et un autre avec celui qui vous suit.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Plus de 2 véhicules : un constat avec le conducteur qui précède et un autre avec celui qui suit"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_advice",
+     "quote": "Bien qu'il ne soit pas obligatoire légalement, il est fortement recommandé car il simplifie les démarches d'indemnisation.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Non obligatoire légalement mais fortement recommandé"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_deadline_days",
+     "quote": "Vous disposez de 5 jours ouvrés: titleContent pour envoyer le e-constat à votre assureur.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": 5
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_deadline_days",
+     "quote": "Ce délai ne peut pas être inférieur à 5 jours ouvrés: titleContent suivant l'accident.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": 5
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Une fois que vous avez complété le constat amiable, vous devez le faire parvenir à votre assureur dans le délai prévu dans votre contrat.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Faire parvenir le constat amiable à l'assureur dans le délai prévu dans le contrat (généralement 5 jours ouvrés)"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Vous devez informer votre assureur même si l'autre conducteur a refusé de signer le constat.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Informer l'assureur même si l'autre conducteur a refusé de signer le constat"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Même si les autorités établissent un procès-verbal, vous devez signaler l'accident à votre assureur, avec le constat à l'amiable version papier obligatoirement.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Même avec un procès-verbal, signaler l'accident à l'assureur avec le constat papier obligatoirement"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Vous devez envoyer le certificat médical à votre assureur le plus tôt possible.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Envoyer le certificat médical à l'assureur le plus tôt possible"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Vous pouvez envoyer le constat à votre assureur par mail, par courrier ou le lui remettre en mains propres.",
+     "source_url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "value": "Envoi du constat par mail, par courrier ou remise en mains propres"
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T09:05:29Z",
+   "reader": {
+    "input_tokens": 15391,
+    "model": "claude-opus-5-5",
+    "output_tokens": 4935,
+    "usd": 0.1603
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:4e46eb7494989ea532e6a09470c157acca19a09bd8d85723d7a665f7c3ec9e9e",
+     "kind": "html",
+     "linked_from": "",
+     "title": "Assurance auto : remplir le \"constat amiable\" après un accident | Service Public",
+     "url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149",
+     "used": true
+    }
+   ],
+   "unread": []
+  },
+  "law_it": {
+   "card": {
+    "country": "IT",
+    "issuer": "Italia",
+    "key": "law_it",
+    "network": null,
+    "product": "Accident rules (Italy)"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 0,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "accident_rules",
+     "field": "statement_name",
+     "quote": "La cosa più semplice che devi fare è compilare il modulo di constatazione amichevole di incidente (C.A.I.) - denuncia di sinistro.",
+     "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
+     "value": "modulo di constatazione amichevole di incidente (C.A.I.) - denuncia di sinistro"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_name",
+     "quote": "ll termine di 60 giorni si riduce a 30 giorni se i due conducenti dei veicoli coinvolti sottoscrivono congiuntamente il modulo di constatazione amichevole di incidente (C.A.I. o modulo blu).",
+     "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
+     "value": "modulo di constatazione amichevole di incidente (C.A.I. o modulo blu)"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_advice",
+     "quote": "In caso di accordo sulla dinamica del sinistro è importante che il modulo venga sottoscritto da entrambi i conducenti coinvolti, per abbreviare le tempistiche del risarcimento dei danni; in caso di disaccordo è comunque utile compilare il modulo singolarmente per fornire la propria versione della dinamica del sinistro.",
+     "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
+     "value": "In caso di accordo sulla dinamica del sinistro il modulo va sottoscritto da entrambi i conducenti coinvolti, per abbreviare le tempistiche del risarcimento; in caso di disaccordo è comunque utile compilare il modulo singolarmente per fornire la propria versione"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_advice",
+     "quote": "Il modulo di denuncia può essere compilato su un documento cartaceo o informatico, a scelta del conducente o del proprietario.",
+     "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
+     "value": "Il modulo di denuncia può essere compilato su un documento cartaceo o informatico, a scelta del conducente o del proprietario"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_advice",
+     "quote": "ll termine di 60 giorni si riduce a 30 giorni se i due conducenti dei veicoli coinvolti sottoscrivono congiuntamente il modulo di constatazione amichevole di incidente (C.A.I. o modulo blu).",
+     "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
+     "value": "Se i due conducenti sottoscrivono congiuntamente il modulo C.A.I., il termine di 60 giorni per l'offerta di risarcimento si riduce a 30 giorni"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "statement_advice",
+     "quote": "In caso di sinistri con soli danni a cose ricordati di indicare il nome di eventuali testimoni presenti sul luogo dell’incidente fin da subito, nella denuncia di sinistro o comunque nel primo atto formale che manderai all’impresa di assicurazione.",
+     "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
+     "value": "In caso di sinistri con soli danni a cose indicare il nome di eventuali testimoni fin da subito, nella denuncia di sinistro o nel primo atto formale inviato all'impresa"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Se non è stato compilato il modulo CAI, in ogni caso devi informare la tua impresa per iscritto, e formulare, anche nel tuo interesse, la cosiddetta “denuncia cautelativa”, ossia la descrizione del sinistro.",
+     "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
+     "value": "Se non è stato compilato il modulo CAI, informare comunque la propria impresa per iscritto con la cosiddetta “denuncia cautelativa” (descrizione del sinistro)"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "L'assicurato deve dare avviso del sinistro all'assicuratore o all'agente autorizzato a concludere il contratto, entro tre giorni da quello in cui il sinistro si e' verificato o l'assicurato ne ha avuta conoscenza.",
+     "source_url": "https://www.gazzettaufficiale.it/atto/serie_generale/caricaArticolo?art.progressivo=0&art.idArticolo=1913&art.versione=1&art.codiceRedazionale=042U0262&art.dataPubblicazioneGazzetta=1942-04-04&art.idGruppo=236&art.idSottoArticolo1=10&art.idSottoArticolo=1&art.flagTipoArticolo=2",
+     "value": "L'assicurato deve dare avviso del sinistro all'assicuratore o all'agente autorizzato entro tre giorni da quello in cui il sinistro si è verificato o l'assicurato ne ha avuta conoscenza"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Non e' necessario l'avviso, se l'assicuratore o l'agente autorizzato alla conclusione del contratto intervengono entro il detto termine alle operazioni di salvataggio o di constatazione del sinistro.",
+     "source_url": "https://www.gazzettaufficiale.it/atto/serie_generale/caricaArticolo?art.progressivo=0&art.idArticolo=1913&art.versione=1&art.codiceRedazionale=042U0262&art.dataPubblicazioneGazzetta=1942-04-04&art.idGruppo=236&art.idSottoArticolo1=10&art.idSottoArticolo=1&art.flagTipoArticolo=2",
+     "value": "L'avviso non è necessario se l'assicuratore o l'agente autorizzato intervengono entro il detto termine alle operazioni di salvataggio o di constatazione del sinistro"
+    }
+   ],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T09:06:46Z",
+   "reader": {
+    "input_tokens": 5934,
+    "model": "claude-opus-5-5",
+    "output_tokens": 3049,
+    "usd": 0.0847
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:77e91c3636ebc28d220b869aafcbef5e4c327c96b02eae7b27daba8de616bafc",
+     "kind": "html",
+     "linked_from": "",
+     "title": "IVASS - Cosa fare in caso di sinistro",
+     "url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
+     "used": true
+    },
+    {
+     "body_sha256": "sha256:a1f5d8705a16806a2133d6acbb28bd830d2a85cbf4f9bb5eb86a56a28ab7576d",
+     "kind": "html",
+     "linked_from": "",
+     "title": "",
+     "url": "https://www.gazzettaufficiale.it/atto/serie_generale/caricaArticolo?art.progressivo=0&art.idArticolo=1913&art.versione=1&art.codiceRedazionale=042U0262&art.dataPubblicazioneGazzetta=1942-04-04&art.idGruppo=236&art.idSottoArticolo1=10&art.idSottoArticolo=1&art.flagTipoArticolo=2",
+     "used": true
+    }
+   ],
+   "unread": []
+  },
+  "law_pt": {
+   "card": {
+    "country": "PT",
+    "issuer": "Portugal",
+    "key": "law_pt",
+    "network": null,
+    "product": "Accident rules (Portugal)"
+   },
+   "dropped": {},
+   "facts": [],
+   "instruction_like": 0,
+   "read_at": "2026-10-10T09:07:12Z",
+   "sources": [],
+   "unread": [
+    {
+     "robots": "unreadable",
+     "url": "https://www.consumidor.asf.com.pt/pt/w/o-que-fazer-em-caso-de-acidente-",
+     "why": "robots.txt answered a web page, not a robots file"
+    },
+    {
+     "robots": "unreadable",
+     "url": "https://www.consumidor.asf.com.pt/documents/115290/1306434/Brochura_Digital_AcidenteAuto.pdf/b6653739-4623-d59b-7081-738d162e46b7?version=1.1&t=1706614477245",
+     "why": "robots.txt answered a web page, not a robots file"
+    }
+   ],
+   "why": "no official terms could be read (each one says why)"
   },
   "revolut_metal_eea": {
    "card": {

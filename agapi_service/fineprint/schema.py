@@ -26,10 +26,22 @@ BENEFITS: Dict[str, Dict[str, str]] = {
                      "deposit": "money", "idp_required": "bool", "licence_rule": "text", "min_driver_age": "count",
                      "accident_report_deadline_hours": "hours", "accident_report_rule": "text", "cross_border": "text", "fuel_policy": "text"},
 }
-CARD_BENEFITS = tuple(b for b in BENEFITS if b != "rental_terms")
+BENEFITS["rental_terms"]["contact_email"] = "text"     # CR 75 · where the rental company takes accident reports / disputes, as its terms say
+# CR 75 · a COUNTRY's official accident rules (step 7, the playbook): the authority's own page or the law's own text
+BENEFITS["accident_rules"] = {"emergency_number": "text", "safety_steps": "list", "scene_duties": "list", "police_when": "text",
+                              "statement_name": "text", "statement_advice": "text", "notice_deadline_days": "days", "notice_deadline_hours": "hours",
+                              "notice_rule": "text"}
+CARD_BENEFITS = tuple(b for b in BENEFITS if b not in ("rental_terms", "accident_rules"))
 CATEGORIES = ("travel", "flights", "hotels", "car_rental", "dining", "groceries", "gas", "transit", "everything_else")
 NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12,
-             "fifteen": 15, "twenty": 20, "thirty": 30, "forty-five": 45, "sixty": 60, "ninety": 90}
+             "fifteen": 15, "twenty": 20, "thirty": 30, "forty-five": 45, "sixty": 60, "ninety": 90,
+             # CR 75 · the official sources' own languages (a deadline written in words is still in its quote)
+             "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "siete": 7, "diez": 10, "quince": 15, "treinta": 30, "sesenta": 60,
+             "deux": 2, "trois": 3, "cinq": 5, "dix": 10, "quinze": 15, "trente": 30,
+             "tre": 3, "cinque": 5, "sette": 7, "dieci": 10, "quindici": 15, "trenta": 30, "sessanta": 60,
+             "zwei": 2, "drei": 3, "fünf": 5, "sieben": 7, "zehn": 10, "vierzehn": 14, "dreißig": 30,
+             "dois": 2, "três": 3, "oito": 8, "trinta": 30,
+             "einer woche": 7, "una semana": 7, "une semaine": 7, "una settimana": 7, "uma semana": 7}
 
 
 def _num(s: str) -> Optional[float]:

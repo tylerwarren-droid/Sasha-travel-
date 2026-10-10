@@ -328,5 +328,67 @@
     "https://www.hertz.es/rentacar/productservice/index.jsp?targetPage=HEL_PS_SuperCover.jsp"
    ]
   }
+ },
+ "laws": {
+  "law_es": {
+   "issuer": "España",
+   "product": "Accident rules (Spain)",
+   "country": "ES",
+   "kind": "law",
+   "beta": true,
+   "seed_source": "the country's official source (road-safety authority, insurance supervisor, or the law's own text), located by the CR tab's desk search on 10 Oct 2026",
+   "seeds": [
+    "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
+    "https://www.boe.es/buscar/act.php?id=BOE-A-1980-22501"
+   ]
+  },
+  "law_fr": {
+   "issuer": "France",
+   "product": "Accident rules (France)",
+   "country": "FR",
+   "kind": "law",
+   "beta": true,
+   "seed_source": "the country's official source (road-safety authority, insurance supervisor, or the law's own text), located by the CR tab's desk search on 10 Oct 2026",
+   "seeds": [
+    "https://www.service-public.gouv.fr/particuliers/vosdroits/F2149"
+   ]
+  },
+  "law_de": {
+   "issuer": "Deutschland",
+   "product": "Accident rules (Germany)",
+   "country": "DE",
+   "kind": "law",
+   "beta": true,
+   "seed_source": "the country's official source (road-safety authority, insurance supervisor, or the law's own text), located by the CR tab's desk search on 10 Oct 2026",
+   "seeds": [
+    "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+    "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
+    "https://www.gesetze-im-internet.de/vvg_2008/__30.html"
+   ]
+  },
+  "law_it": {
+   "issuer": "Italia",
+   "product": "Accident rules (Italy)",
+   "country": "IT",
+   "kind": "law",
+   "beta": true,
+   "seed_source": "the country's official source (road-safety authority, insurance supervisor, or the law's own text), located by the CR tab's desk search on 10 Oct 2026",
+   "seeds": [
+    "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
+    "https://www.gazzettaufficiale.it/atto/serie_generale/caricaArticolo?art.progressivo=0&art.idArticolo=1913&art.versione=1&art.codiceRedazionale=042U0262&art.dataPubblicazioneGazzetta=1942-04-04&art.idGruppo=236&art.idSottoArticolo1=10&art.idSottoArticolo=1&art.flagTipoArticolo=2"
+   ]
+  },
+  "law_pt": {
+   "issuer": "Portugal",
+   "product": "Accident rules (Portugal)",
+   "country": "PT",
+   "kind": "law",
+   "beta": true,
+   "seed_source": "the country's official source (road-safety authority, insurance supervisor, or the law's own text), located by the CR tab's desk search on 10 Oct 2026",
+   "seeds": [
+    "https://www.consumidor.asf.com.pt/pt/w/o-que-fazer-em-caso-de-acidente-",
+    "https://www.consumidor.asf.com.pt/documents/115290/1306434/Brochura_Digital_AcidenteAuto.pdf/b6653739-4623-d59b-7081-738d162e46b7?version=1.1&t=1706614477245"
+   ]
+  }
  }
 }

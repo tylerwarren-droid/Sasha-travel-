@@ -158,7 +158,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
     if tool == "my_plans":   # Sasha 226 · their plans, on a card (/s2)
         return {"type": "render", "kind": "plans", "items": res.get("items") or [], **({"on": res["on"]} if res.get("on") else {})}
     if tool in ("running_late", "change_booking", "cancel_booking"):   # Sasha 226 · its own read-back, on the card
-        return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"])} if res.get("read_back") else None
+        act = {"running_late": "late", "change_booking": "change", "cancel_booking": "cancel"}[tool]   # its own card words (/s2)
+        return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": act} if res.get("read_back") else None
     if tool == "what_i_can_do" and res.get("groups"):   # Sasha 225 · the capability card (/s2)
         return {"type": "render", "kind": "capabilities", "groups": res["groups"]}
     if tool == "keep_add" and res.get("status") == "capture_on_screen":   # Sasha 224 · the photo picker on their screen (no value, ever)

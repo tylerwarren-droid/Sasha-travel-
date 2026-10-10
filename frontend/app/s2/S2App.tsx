@@ -18,7 +18,7 @@ import { apiHeaders, apiUrl } from '@/lib/api'
 
 type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
-  | { k: 'read_back'; lines: string[]; what?: string; live?: boolean; status?: string; total?: number }
+  | { k: 'read_back'; lines: string[]; what?: string; live?: boolean; status?: string; total?: number; act?: string }
   | { k: 'calendar'; title?: string; links: Record<string, string> }
   | { k: 'pay'; client_secret?: string; url?: string; total_eur?: number; already_paid?: boolean }
   | { k: 'booked'; line: string }
@@ -318,7 +318,8 @@ function CardView({ c, choose }: { c: Card; choose: (t: string) => void }) {
       </div>
     </Box><After k="calendar" /></>)
   if (c.k === 'pay') return <><div style={{ background: C.card, border: `1px solid ${C.gold}`, borderRadius: 16, padding: 14, marginTop: 8 }}><PayHere clientSecret={c.client_secret} url={c.url} totalEur={c.total_eur} alreadyPaid={c.already_paid} /></div>{!c.already_paid && <After k="pay" />}</>
-  const head = c.what ? (c.status === 'sent' ? 'Sent' : c.status === 'not_sent' ? 'Not sent' : 'Ready to send · on your yes')
+  const ACT_HEAD: Record<string, string> = { late: 'Ready to call · on your yes', change: 'Ready to change · on your yes', cancel: 'Ready to cancel · on your yes' }   // Sasha 226
+  const head = c.act && ACT_HEAD[c.act] ? ACT_HEAD[c.act] : c.what ? (c.status === 'sent' ? 'Sent' : c.status === 'not_sent' ? 'Not sent' : 'Ready to send · on your yes')
     : (c.total ? `Ready to book · €${Math.round(c.total).toLocaleString()} all in` : 'Ready to book · on your yes')
   return (
     <><Box k={head} h={c.what === 'email' ? (c.live ? "From Sasha's own address" : 'Kept here · not sent') : c.what === 'whatsapp' ? "From Sasha's own number" : undefined}>
@@ -425,7 +426,7 @@ export default function S2App() {
           else if (ev.type === 'render') {
             const add = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k), c] }))
             if (ev.kind === 'venues' && ev.preset) { const cs = shownCards(ev.preset); if (cs.length) add({ k: 'venues', cards: cs }) }
-            else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur })
+            else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur, act: ev.act })
             else if (ev.kind === 'calendar' && ev.links) add({ k: 'calendar', title: ev.title, links: ev.links })
             else if (ev.kind === 'keep_capture') add({ k: 'keep_capture', what: ev.what === 'loyalty' ? 'loyalty' : 'passport' })
             else if (ev.kind === 'capabilities' && Array.isArray(ev.groups)) add({ k: 'capabilities', groups: ev.groups })

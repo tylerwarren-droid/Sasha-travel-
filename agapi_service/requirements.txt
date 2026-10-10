@@ -10,3 +10,4 @@ psycopg[binary]==3.2.3
 anthropic==0.104.1
 pypdf==5.1.0
 weasyprint==62.3
+pydyf==0.10.0

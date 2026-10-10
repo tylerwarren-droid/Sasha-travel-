@@ -148,10 +148,13 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
     if (greeted) { setPhase('bubble'); return }
     setPhase('starting')
     const v = video.current as HTMLVideoElement
+    const t0 = performance.now()
     const starting = startFace(v)
+    starting.then(() => console.log(`[s2-hello] face on screen in ${Math.round(performance.now() - t0)} ms`)).catch(() => console.log('[s2-hello] face failed to start'))
     timer = setTimeout(() => {   // not on screen in 3 s: her voice alone, never a spinner
       if (settled) return
       settled = true
+      console.log('[s2-hello] not on screen in 3 s — her voice alone')
       starting.then(f => f.stop()).catch(() => {})
       setPhase('voice')
       speakVoice()

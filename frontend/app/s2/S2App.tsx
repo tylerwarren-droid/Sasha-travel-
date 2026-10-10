@@ -23,6 +23,7 @@ type Card =
   | { k: 'pay'; client_secret?: string; url?: string; total_eur?: number; already_paid?: boolean }
   | { k: 'booked'; line: string }
   | { k: 'keep_capture'; what: 'passport' | 'loyalty' }
+  | { k: 'wa_open'; to: { name?: string | null; number?: string }; text: string; open: string; why: string }   // Sasha 230
   | { k: 'capabilities'; groups: { group: string; items: string[] }[] }
   | { k: 'plans'; items: Plan[]; on?: string }
   | { k: 'notice'; title: string; lines: string[]; status?: string }
@@ -267,6 +268,18 @@ export function KeepCapture({ what, base = '/api/s2-keep/scan', onSaved }: { wha
   )
 }
 
+/** Sasha 230 · the drafted WhatsApp, pre-filled in the person's OWN WhatsApp: they press send (Sasha sends nothing). */
+function WaOpen({ c }: { c: { to: { name?: string | null; number?: string }; text: string; open: string; why: string } }) {
+  const who = untag(c.to.name || c.to.number || 'them')
+  return (
+    <Box k="Ready in your WhatsApp" h={`To ${who}${c.to.name && c.to.number ? ` · ${c.to.number}` : ''}`}>
+      <div style={{ fontSize: 15, lineHeight: 1.45, whiteSpace: 'pre-wrap', padding: '8px 10px', borderRadius: 12, background: 'rgba(37,211,102,.08)', border: '1px solid rgba(37,211,102,.25)' }}>{untag(c.text)}</div>
+      <a href={c.open} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, padding: '10px 16px', borderRadius: 999, background: '#25D366', color: '#062b14', fontWeight: 700, textDecoration: 'none' }}>Open in WhatsApp</a>
+      <div style={{ fontSize: 12.5, color: C.dim, marginTop: 8 }}>You press send — Sasha hasn&rsquo;t sent anything.</div>
+    </Box>
+  )
+}
+
 function After({ k }: { k: string }) {
   const line = AFTER[k]
   return line ? <div style={{ fontSize: 13.5, color: C.dim, margin: '6px 4px 0' }}>{line}</div> : null
@@ -424,6 +437,7 @@ function CardView({ c, choose, send }: { c: Card; choose: (t: string) => void; s
   if (c.k === 'accident') return <AccidentCard view={c.view} send={send} />
   if (c.k === 'claim_status') return <ClaimStatus claim={c.claim} />
   if (c.k === 'keep_capture') return <KeepCapture what={c.what} />
+  if (c.k === 'wa_open') return <WaOpen c={c} />
   if (c.k === 'plans') return <Plans items={c.items} on={c.on} />
   if (c.k === 'notice') return (
     <Box k={c.status ? untag(c.status) : 'Update'} h={untag(c.title)}>
@@ -492,6 +506,11 @@ export default function S2App() {
   const typeBox = useRef<HTMLInputElement | null>(null)
   const [name, setName] = useState<string | null | undefined>(undefined)   // undefined: not known yet (the hello waits ≤ 0.9 s)
   const [muted, setMuted] = useState(false)
+  useEffect(() => {   // Sasha 230 · the voice toggle is remembered (this browser): read once, applied to her voice
+    let m = false
+    try { m = localStorage.getItem('s2_muted') === '1' } catch { /* private mode: voice on */ }
+    if (m) { speaker.setMuted(true); const t = setTimeout(() => setMuted(true), 0); return () => clearTimeout(t) }
+  }, [speaker])
   const [chipAt, setChipAt] = useState(0)
   useEffect(() => {
     if (!signedIn) return
@@ -565,6 +584,7 @@ export default function S2App() {
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur, act: ev.act })
             else if (ev.kind === 'calendar' && ev.links) add({ k: 'calendar', title: ev.title, links: ev.links })
             else if (ev.kind === 'keep_capture') add({ k: 'keep_capture', what: ev.what === 'loyalty' ? 'loyalty' : 'passport' })
+            else if (ev.kind === 'wa_open' && typeof ev.open === 'string' && ev.open.startsWith('https://wa.me/')) add({ k: 'wa_open', to: ev.to || {}, text: String(ev.text || ''), open: ev.open, why: String(ev.why || '') })   // Sasha 230
             else if (ev.kind === 'capabilities' && Array.isArray(ev.groups)) add({ k: 'capabilities', groups: ev.groups })
             else if (ev.kind === 'plans' && Array.isArray(ev.items)) add({ k: 'plans', items: ev.items, on: ev.on })
             else if (ev.kind === 'notice' && ev.title) add({ k: 'notice', title: String(ev.title), lines: Array.isArray(ev.lines) ? ev.lines : [], status: ev.status })
@@ -623,12 +643,12 @@ export default function S2App() {
                   <div style={{ maxWidth: '88%', padding: '10px 14px', borderRadius: 18, background: m.role === 'user' ? 'linear-gradient(135deg,#6d4aff,#9b4dff)' : C.card, border: m.role === 'user' ? 'none' : `1px solid ${C.line}`, lineHeight: 1.45 }}>
                     {m.text}</div>
                 ) : <div style={{ color: C.dim, padding: '8px 4px' }}>…</div>}
-                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => send(`${t}, please.`)} send={send} />)}</div> : null}
+                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); send(`${t}, please.`) }} send={t => { speaker.unlock(); send(t) }} />)}</div> : null}
               </div>))}
             <div ref={end} />
           </section>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 16px 6px', fontSize: 13.5 }}>
-            <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m) }} aria-pressed={muted} style={{ background: 'none', border: 0, color: C.dim, padding: 4 }}>
+            <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch { /* private mode */ } }} aria-pressed={muted} aria-label={muted ? 'Turn her voice on' : 'Mute her voice'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600 }}>
               {muted ? '🔇 Voice off' : '🔊 Voice on'}</button>
             <button onClick={() => { typeBox.current?.focus() }} style={{ background: 'none', border: 0, color: C.dim, padding: 4 }}>⌨︎ Type instead</button>
           </div>
@@ -637,7 +657,7 @@ export default function S2App() {
               <VoiceButton onTranscript={send} readyToListen muted={busy} />
             </div>
             <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} />
-            <form onSubmit={e => { e.preventDefault(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
+            <form onSubmit={e => { e.preventDefault(); speaker.unlock(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
               <input ref={typeBox} value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sasha anything…" aria-label="Message Sasha"
                 style={{ flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 16 }} />
               <button type="submit" disabled={busy || !input.trim()} aria-label="Send"

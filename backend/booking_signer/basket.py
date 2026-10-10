@@ -406,7 +406,7 @@ def words(r: Dict[str, Any]) -> str:
 
 def overlay(plan: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """The merged plan with the basket on it: each day's `stay` (the stay covering that night), and the trip's flights."""
-    stays = [r for r in rows if r["kind"] == "stay"]
+    stays = sorted([r for r in rows if r["kind"] == "stay"], key=lambda r: r["state"] not in DONE)   # Sasha 230 · a booked stay wins its night
     for d in plan.get("days") or []:
         on_day = d.get("date")
         hit = next((r for r in stays if on_day and r.get("day") and r["day"] <= on_day < (r["snapshot"].get("checkout") or r["day"])), None)
@@ -414,10 +414,24 @@ def overlay(plan: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
             d["stay"] = {"id": hit["id"], "name": hit["snapshot"].get("name"), "state": hit["state"], "words": words(hit),
                          "first_night": hit["day"] == on_day, "price_eur": hit.get("price_amount"), "price_source": hit.get("price_source")}
     plan["basket"] = {"flights": [{"id": r["id"], "state": r["state"], "words": words(r), "day": r.get("day"), **{
-        k: r["snapshot"].get(k) for k in ("owner", "flights", "from", "to", "dep")}} for r in rows
-        if r["kind"] == "flight" and r["state"] != "suggested"], "total": total(rows)}
+        k: r["snapshot"].get(k) for k in ("owner", "flights", "from", "to", "dep")}} for r in shown_flights(rows)], "total": total(rows)}
     return plan
 
 
+DONE = ("booked", "pending_payment")
+
+
+def _leg(r: Dict[str, Any]) -> str:
+    return str(r.get("slice_key") or "").split(":", 1)[0] or "?"
+
+
+def shown_flights(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sasha 230 · the Trip board's flights: once a leg is booked (or being paid for), ONLY that — the options chosen before it
+    are not shown beside it (found live in 228: easyJet "chosen" next to the booked Iberia, both ways). Before any booking, as before."""
+    flights = [r for r in rows if r["kind"] == "flight" and r["state"] != "suggested"]
+    done = {_leg(r) for r in flights if r["state"] in DONE}
+    return [r for r in flights if r["state"] in DONE or r["state"] in ("failed", "cancelled") or _leg(r) not in done]
+
+
 __all__ = ["MAGELLAN", "SHERLOCK", "AUSTEN", "PACIOLI", "BasketError", "items", "item", "by_ref", "by_session", "to_book", "total",
-           "suggest", "refresh", "choose", "unchoose_flights", "hold", "remove", "status_line", "booked", "failed", "cancelled", "event", "on", "sync_stays", "words", "overlay"]
+           "suggest", "refresh", "choose", "unchoose_flights", "hold", "remove", "status_line", "booked", "failed", "cancelled", "event", "on", "sync_stays", "words", "overlay", "shown_flights"]

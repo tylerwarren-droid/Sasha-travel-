@@ -265,7 +265,14 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
                                 "Sasha sends the drafted message to their phone and they send it; it is NOT booked until the place replies"}
     if not route:
         lad = GW.ladder_of(rd, res, now)
-        if lad and lad.get("options"):
+        acts = [r for _t, r in (lad or {}).get("options") or [] if r != "no"]
+        if lad and len(acts) == 1 and getattr(ctx, "surface", "s1") == "s2":
+            # Sasha 230 · /s2: ONE way to book it ("I can book X directly — shall I?") is not a choice — straight to that route's
+            # read-back, which asks the one yes. Found live (10 Oct): the pick got "shall I?", the yes got the read-back's "shall
+            # I send it?" — the same question twice, and on the phone it looked like she'd repeated the step. A real choice
+            # (email or book now, the page or a call) still asks first. S1 unchanged.
+            route = acts[0]
+        elif lad and lad.get("options"):
             return {"status": "choose_route", "venue": rd["venue"], "ask": lad["line"],
                     "options": [{"title": t, "route": r} for t, r in lad["options"]]}
     if route == "no":

@@ -22,6 +22,9 @@ export type Talker = {
 type Face = { video: HTMLVideoElement; say: (text: string) => Promise<number>; stop: () => Promise<void> }
 
 const GOLD = '#e8b931'
+/** Sasha 230 · a LATER visit (she's said hello in this browser before): no re-introduction — her face for a moment, then away. */
+export const WELCOME_BACK = 'Hey, welcome back!'
+const metBefore = (): boolean => { try { return localStorage.getItem('s2_met') === '1' } catch { return false } }
 export const helloLine = (name?: string | null) =>
   `Hi${name ? ` ${name}` : ''}, I'm Sasha. I'm going to head behind the scenes and get to work — just talk to me normally. ` +
   'I can book restaurants and trips, sort your subscriptions, send emails for you, and more.'
@@ -130,16 +133,22 @@ export default function S2Hello({ talker, name, signedIn }: { talker: Talker; na
     const f = face.current
     face.current = null
     if (f) { setImg(still(canvas.current) || img); keyOff(); await f.stop() }   // the session ENDS after the hello
-    try { sessionStorage.setItem('s2_hello', '1') } catch { /* private mode */ }
+    try { sessionStorage.setItem('s2_hello', '1'); localStorage.setItem('s2_met', '1') } catch { /* private mode */ }
     setPhase('bubble')
   }
-  const words = () => { text.current = helloLine(nameRef.current ?? null); setLine(text.current); return text.current }
+  const back = useRef<boolean | null>(null)   // Sasha 230 · decided once per visit, before the hello is said
+  const words = () => {
+    if (back.current === null) back.current = metBefore()
+    text.current = back.current ? WELCOME_BACK : helloLine(nameRef.current ?? null)
+    setLine(text.current)
+    return text.current
+  }
   const speakFace = async () => {
     words()
     const f = face.current
     if (!f) return handoff()
     const secs = await f.say(text.current)
-    setTimeout(handoff, Math.max(2500, secs * 1000 + 900))
+    setTimeout(handoff, back.current ? Math.min(2000, Math.max(1000, secs * 1000 + 300)) : Math.max(2500, secs * 1000 + 900))   // back: ~1–2 s, then away
   }
   const speakVoice = async () => {
     const r = await talker.sayNow(words())
@@ -176,7 +185,7 @@ export default function S2Hello({ talker, name, signedIn }: { talker: Talker; na
       keyOn()
       setPhase('face')
       v.muted = false
-      try { await v.play(); speakFace() } catch { v.muted = true; v.play().catch(() => {}); setTapFor('face'); setPhase('tap') }
+      try { await v.play(); talker.unlock(); speakFace() } catch { v.muted = true; v.play().catch(() => {}); setTapFor('face'); setPhase('tap') }   // Sasha 230 · played → her voice stays on
     }).catch(() => {
       if (settled) return
       settled = true

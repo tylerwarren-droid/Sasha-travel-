@@ -83,6 +83,8 @@ async def send_whatsapp(ctx, a: dict) -> dict:
     now = datetime.now(timezone.utc)
     live, frm = live_for(ctx.account), _from() or "Sasha's WhatsApp"
     free = bool(c) and P.window_open(c.get("last_inbound_at"), now.isoformat())
+    if getattr(ctx, "surface", "s1") == "s2" and not (free and live):   # Sasha 230 · /s2: their OWN WhatsApp, pre-filled
+        return _in_their_whatsapp(number, to.get("name"), a.get("text"), "no_window" if live else "not_live")
     try:
         if free:
             if not a.get("text"):
@@ -135,6 +137,29 @@ async def send_whatsapp(ctx, a: dict) -> dict:
             "message": {"to": msg["to"], "kind": msg["kind"], "body_sha256": body_sha, "sent_at": sent_at},
             **({"say": "Only the approved first message went. Their note goes after they reply — and their yes again."}
                if msg["kind"] == "template" else {})}
+
+
+# Sasha 230 · when she can't send it from her number, the ONE line that says exactly why — never "it has to be set up first"
+WHY_THEIRS = {
+    "no_window": "WhatsApp only lets me write first to someone who's messaged my number in the last 24 hours — so it's ready in "
+                 "your WhatsApp: press send.",
+    "not_live": "In this beta I only send from my own number for a few accounts — so it's ready in your WhatsApp: press send.",
+}
+
+
+def _in_their_whatsapp(number: str, name: Optional[str], text: Optional[str], why: str) -> dict:
+    """/s2 · the drafted message in the person's OWN WhatsApp (a wa.me link, pre-filled to that number): they press send. Sasha
+    sends nothing, so there's no yes to bind — the tap on Send in their WhatsApp is theirs."""
+    from urllib.parse import quote
+    from agapi.v0 import ToolError
+    body = (text or "").strip()
+    if not body:
+        raise ToolError("invalid_input", "draft the message first (text) — it opens in their WhatsApp, pre-filled, for them to send")
+    link = f"https://wa.me/{re.sub(r'[^0-9]', '', number)}?text={quote(body[:1500])}"
+    return {"status": "open_in_their_whatsapp", "sent_by_sasha": False, "to": {"name": name, "number": number}, "text": body[:1500],
+            "open": link, "why": WHY_THEIRS[why],
+            "say": f"Say this one line, word for word: \"{WHY_THEIRS[why]}\" The card has the message and an Open in WhatsApp button. "
+                   "Never say it was sent: they send it."}
 
 
 async def on_contact_message(sender: str, body: str) -> Optional[str]:

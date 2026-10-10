@@ -113,7 +113,8 @@ RENDER.update({"note_rental": "inline"})   # Sasha 227
 RENDER.update({"my_plans": "plans", "running_late": "read_back", "change_booking": "read_back", "cancel_booking": "read_back"})   # Sasha 226   # Sasha 224 · CR 63 + the photo capture   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
 KINDS_S2_ONLY = {"keep_capture", "capabilities", "plans", "notice"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
-KINDS_S2_ONLY |= {"counter_card", "my_cards", "accident", "claim_status"}   # CR 75 · fine print's cards, rendered by /s2 only
+KINDS_S2_ONLY |= {"counter_card", "my_cards", "accident", "claim_status"}
+KINDS_S2_ONLY |= {"wa_open"}   # Sasha 230 · the message, pre-filled in the person's own WhatsApp (they press send)   # CR 75 · fine print's cards, rendered by /s2 only
 KINDS = KINDS_S2 | {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 KINDS |= {"keep_handoff"}   # Sasha 228 · /next's "Add from your phone" (QR + short link → /s2's Add my passport): on the read-back's event
 
@@ -178,6 +179,9 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         ev = res.get("event") or {}
         return {"type": "render", "kind": "calendar", "title": ev.get("title"), "starts_at": ev.get("starts_at"),
                 "links": {k: v for k, v in res["links"].items() if k in ("google", "outlook", "apple")}}
+    if tool == "send_whatsapp" and res.get("status") == "open_in_their_whatsapp" and res.get("open"):   # Sasha 230 · /s2: their own WhatsApp
+        return {"type": "render", "kind": "wa_open", "to": res.get("to") or {}, "text": res.get("text") or "", "open": res["open"],
+                "why": res.get("why") or ""}
     if tool in ("send_email", "send_whatsapp") and res.get("status") in ("sent", "not_sent"):   # Sasha 217 · the card becomes the outcome
         m = res.get("message") or {}
         to = m.get("to") or {}

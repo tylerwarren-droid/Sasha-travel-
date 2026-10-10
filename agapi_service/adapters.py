@@ -42,8 +42,9 @@ class Places:
 
 
 class VenueLadder:
-    async def book(self, kind: str, item: dict, up: PV.Upstream) -> Dict[str, Any]: raise NotImplementedError
-    async def cancel(self, service: str, act_id: str, up: PV.Upstream) -> Dict[str, Any]: raise NotImplementedError
+    async def book(self, kind: str, item: dict, up: PV.Upstream, approval: Optional[dict] = None) -> Dict[str, Any]: raise NotImplementedError
+    async def cancel(self, service: str, act_id: str, up: PV.Upstream, prep: Optional[dict] = None, approval: Optional[dict] = None) -> Dict[str, Any]:
+        raise NotImplementedError
 
 
 class Payments:
@@ -83,8 +84,8 @@ class SimPlaces(Places):
 
 
 class SimVenueLadder(VenueLadder):
-    async def book(self, kind, item, up): return await PV.book_fixture(kind, item, up)
-    async def cancel(self, service, act_id, up): return await PV.cancel_fixture(service, act_id, up)
+    async def book(self, kind, item, up, approval=None): return await PV.book_fixture(kind, item, up)
+    async def cancel(self, service, act_id, up, prep=None, approval=None): return await PV.cancel_fixture(service, act_id, up)
 
 
 class SimPayments(Payments):

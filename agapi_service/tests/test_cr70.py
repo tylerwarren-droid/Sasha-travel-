@@ -460,6 +460,133 @@ class WhatsAppLive(Live):
         self.assertTrue(all(m == "GET" for m, _ in self.twilio.calls))
 
 
+
+SASHA = "https://sasha-travel-production.up.railway.app"
+TEST_FORM = SASHA + "/api/booking/test-venue/plain"
+
+
+class FakeSasha:
+    """Sasha's deployed booking routes (over HTTPS), as fakes: a venue read with the given rungs, prepare, send, cancel. Every call kept."""
+
+    def __init__(self, rungs, plan="form", send=None):
+        self.rungs, self.plan, self.calls = rungs, plan, []
+        self.send = send or {"status": "sent", "reading": {"result": "confirmed"}, "booking_reference": "TV-123"}
+
+    async def __call__(self, method, url, headers=None, json=None, **kw):
+        from scripts import places_fake
+        path = url.replace(SASHA, "")
+        self.calls.append((method, path, json, dict(headers or {})))
+        R = lambda st, body: places_fake._R(st, body)
+        if path == "/api/booking/health":
+            return R(200, {"ok": True})
+        if (headers or {}).get("x-sasha-booking-key") != "booking-key-recorded" or (headers or {}).get("x-sasha-session") != "demo":
+            return R(401, {"detail": {"message": "booking key required"}})
+        if path == "/api/booking/venues/read":
+            return R(200, {"read_id": "rd_1", "venue": "Casa Marea", "country": "ES", "plan": {"route": self.plan},
+                           "rungs": [{"rung": k, "available": True, "value": v} for k, v in self.rungs.items()]})
+        if path == "/api/booking/draft":
+            return R(200, {"parts": {"what": {"category": "restaurant", "activity": "table"}}})
+        if path == "/api/booking/contact":
+            return R(200, {"contact": {"name": "Demo Guest", "mobile_e164": "+34600000001"}})
+        if method == "POST" and path in ("/api/booking/forms", "/api/booking/emails", "/api/booking/calls"):
+            kind = path.rsplit("/", 1)[1][:-1]
+            return R(200, {f"{kind}_id": f"{kind}_1", "trip_item_id": "ti_1", "read_back": {"sha256": "sha_" + kind,
+                     "lines": [f"Sasha will book Casa Marea by {kind} for 2, 20 Nov 20:30.", "Name: Demo Guest."]}})
+        if method == "POST" and path.endswith(("/send", "/place")):
+            return R(200, self.send)
+        if path == "/api/booking/reservations/ti_1/cancel":
+            if method == "GET":
+                return R(200, {"read_back": {"sha256": "sha_cancel", "lines": ["Cancel Casa Marea, 20 Nov 20:30."]}, "venue": "Casa Marea"})
+            return R(200, {"status": "cancelled", "say": "Casa Marea cancelled it."})
+        raise AssertionError((method, path))
+
+    def paths(self):
+        return [p for _, p, _, _ in self.calls]
+
+
+class LadderLive(Live):
+    connected = {"places", "flights", "payments", "calendar", "email", "whatsapp", "venue_ladder"}
+    rungs = {"form": TEST_FORM, "email": "info@casa-marea.example", "phone": "+34911111111"}
+
+    def setUp(self):
+        super().setUp()
+        self.sasha = FakeSasha(self.rungs)
+        for p in (mock.patch.object(AL, "http", self.sasha), mock.patch.object(config, "EMAIL_ALLOW", {"tyler-test@kanoe.example"}),
+                  mock.patch.object(config, "WHATSAPP_ALLOW", {JON}), mock.patch.dict("os.environ", {"SASHA_BOOKING_KEY": "booking-key-recorded"})):
+            p.start()
+            self.addCleanup(p.stop)
+        self.uid = self.ok("users.register", {"external_ref": "ven-1"}, key=self.live)["end_user_id"]
+        self.venue = self.sandbox_answer["venues"][0]
+        self.offer_live()
+
+    def offer_live(self):
+        """The venue found live (its ref in this account's offers) — Places' answer recorded by the sandbox's search."""
+        with mock.patch.object(AL, "http", Recorded()):
+            self.ok("venues.find_venues", VENUES, key=self.live)
+
+    def approve(self, read_back_id):
+        return PaymentsLive.approve(self, read_back_id)
+
+    def hold(self):
+        return self.call("trip.hold", {"end_user": self.uid, "items": [{"kind": "venue", "ref": self.venue["venue_ref"], "at": "2026-11-20T20:30:00+01:00",
+                                                                       "party": 2}]}, key=self.live)
+
+    def test_a_form_booking_at_sashas_test_venue_end_to_end(self):
+        r, b = self.hold()
+        self.assertTrue(b["ok"], b)
+        lines = b["result"]["read_back"]["lines"]
+        self.assertIn("Sasha will book Casa Marea by form for 2, 20 Nov 20:30.", lines)          # Sasha's own read-back, approved as is
+        self.assertTrue(any("by their booking form" in l for l in lines))
+        self.assertNotIn("/api/booking/forms/form_1/send", self.sasha.paths())                    # nothing sent before the yes
+        out = self.ok("trip.complete", {"hold_id": b["result"]["hold_id"]}, key=self.live, approval=self.approve(b["result"]["read_back"]["read_back_id"]))
+        sent = [c for c in self.sasha.calls if c[1] == "/api/booking/forms/form_1/send"][0][2]
+        self.assertEqual(sent, {"read_back_sha256": "sha_form", "approval": {"how": "chat", "said": "Yes, book it."}})   # their own words
+        self.assertEqual((out["outcome"]["kind"], out["outcome"]["reference"]), ("CONFIRMED", "TV-123"))
+        # cancelling it: Sasha's own cancellation, under the cancellation's yes
+        r, b2 = self.call("trip.cancel", {"act_id": out["act_id"]}, key=self.live, expect="approval_required")
+        c = self.ok("trip.cancel", {"act_id": out["act_id"]}, key=self.live, approval=self.approve(b2["error"]["details"]["read_back_id"]))
+        self.assertEqual(c["outcome"]["kind"], "CONFIRMED")
+        self.assertIn("/api/booking/reservations/ti_1/cancel", self.sasha.paths())
+
+    def test_an_email_route_only_to_an_allow_listed_address_and_it_is_requested(self):
+        self.sasha.rungs = {"form": "https://www.real-venue.example/book", "email": "tyler-test@kanoe.example"}
+        self.sasha.send = {"status": "sent"}
+        r, b = self.hold()
+        self.assertTrue(b["ok"], b)
+        self.assertIn("/api/booking/emails", self.sasha.paths())
+        self.assertNotIn("/api/booking/forms", self.sasha.paths())                                 # a real venue's form: never
+        out = self.ok("trip.complete", {"hold_id": b["result"]["hold_id"]}, key=self.live, approval=self.approve(b["result"]["read_back"]["read_back_id"]))
+        self.assertEqual(out["outcome"]["kind"], "REQUESTED")                                     # booked only when they reply
+        self.assertIn("requested until they reply", out["outcome"]["target_words"]["text"])
+
+    def test_a_real_venue_with_no_allowed_route_is_refused_before_anything_is_prepared(self):
+        self.sasha.rungs = {"form": "https://www.real-venue.example/book", "email": "info@real-venue.example", "phone": "+34911111111"}
+        r, b = self.hold()
+        self.assertEqual((b["error"]["code"], b["error"]["details"]["reason"]), ("upstream_refused", "not_allow_listed"))
+        self.assertEqual([p for p in self.sasha.paths() if p in ("/api/booking/forms", "/api/booking/emails", "/api/booking/calls")], [])
+        self.assertEqual(self.store.one("select count(*) as n from read_backs")["n"], 0)
+
+    def test_never_a_booking_platform(self):
+        self.sasha.rungs = {"form": "https://www.opentable.com/r/casa-marea?ref=" + SASHA}
+        r, b = self.hold()
+        self.assertEqual(b["error"]["details"]["reason"], "not_allow_listed")
+
+    def test_a_lost_preparation_means_holding_again(self):
+        r, b = self.hold()
+        self.store.x("delete from ladder_preps")
+        r, b2 = self.call("trip.complete", {"hold_id": b["result"]["hold_id"]}, key=self.live,
+                          approval=self.approve(b["result"]["read_back"]["read_back_id"]), expect="hold_expired")
+
+    def test_a_tap_is_sashas_button_and_the_smoke_check_prepares_nothing(self):
+        out = asyncio.run(AL.ADAPTERS["venue_ladder"].book("venue", {"_ladder": {"rung": "form", "id": "form_9", "sha256": "s", "venue": "X"}}, PV.Upstream(),
+                                                           approval={"method": "tap", "said": None}))
+        self.assertEqual(self.sasha.calls[-1][2]["approval"], {"how": "button"})
+        n = len(self.sasha.calls)
+        sm = asyncio.run(AL.ADAPTERS["venue_ladder"].smoke())
+        self.assertEqual((sm["ok"], sm["sent"], sm["demo_contact"]), (True, False, True))
+        self.assertEqual([m for m, *_ in self.sasha.calls[n:]], ["GET", "GET"])                    # reads only
+
+
 def Base_sign(body: str) -> str:
     import hashlib, hmac, secrets, time
     t, n = int(time.time()), secrets.token_urlsafe(16)

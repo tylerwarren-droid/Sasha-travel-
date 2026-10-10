@@ -122,11 +122,36 @@ async def _priced(ctx: Ctx, items: List[dict], travellers: List[dict], *, at_act
                 raise AgapiError("invalid_input", "A venue booking needs its time (at) and party.", {"path": "/items", "rule": "required"})
             price = {"amount_minor": 0, "currency": "EUR"}
             d = datetime.fromisoformat(it["at"])
+            if ctx.mode == "live":   # CR 70 · Sasha prepares it (over HTTPS); her read-back IS what the person approves
+                prep = await _ladder_prep(ctx, o, it, at_act)
+                lines.append(f"Table for {it['party']} at {o['name']['text']}, {d.strftime('%a %-d %b %Y')} at {it['at'][11:16]} — "
+                             f"by {'their booking form' if prep['rung'] == 'form' else 'email' if prep['rung'] == 'email' else 'a phone call'}.")
+                lines.extend(prep["lines"])
+                priced.append({"kind": "venue", "ref": it["ref"], "price": price, "price_source": "quoted", "rechecked_at": ts(),
+                               "at": it["at"], "party": it["party"], "_ladder": prep})
+                continue
             lines.append(f"Table for {it['party']} at {o['name']['text']}, {d.strftime('%a %-d %b %Y')} at {it['at'][11:16]} "
                          f"(sandbox fixture venue — nothing is sent to a real venue).")
             priced.append({"kind": "venue", "ref": it["ref"], "price": price, "price_source": "quoted", "rechecked_at": ts(),
                            "at": it["at"], "party": it["party"]})
     return priced, lines
+
+
+async def _ladder_prep(ctx: Ctx, offer: dict, it: dict, at_act: bool) -> dict:
+    """CR 70 · at hold: Sasha prepares the booking (one prepared booking per venue/time/party); at the act: that SAME preparation,
+    so the lines re-derive identically and the yes stays bound to them. Gone → hold again."""
+    ctx.store.x("create table if not exists ladder_preps (account text not null, ref text not null, at text not null, party int not null, "
+                "prep text not null, created_at text not null)")
+    if not at_act:
+        prep = await AD.get("venue_ladder", "live").prepare(offer, it)
+        ctx.store.x("insert into ladder_preps (account, ref, at, party, prep, created_at) values (?, ?, ?, ?, ?, ?)",
+                    ctx.account, it["ref"], it["at"], int(it["party"]), dumps(prep), ts())
+        return prep
+    row = ctx.store.one("select prep from ladder_preps where account = ? and ref = ? and at = ? and party = ? order by created_at desc",
+                        ctx.account, it["ref"], it["at"], int(it["party"]))
+    if not row:
+        raise AgapiError("hold_expired", "The prepared booking is gone; hold again (a new read-back and Approval follow).")
+    return loads(row["prep"])
 
 
 def _total(priced: List[dict]) -> dict:
@@ -336,7 +361,9 @@ def _source(res: dict) -> dict:
 
 
 def _confirmed(res: dict) -> dict:
-    return {"kind": "CONFIRMED", "reference": res["reference"], "target_words": R.wrap(res["words"], res["service"], ts()[:19] + "Z")}
+    # CR 70 · a venue's email or call is REQUESTED until it answers; everything else as before (CONFIRMED)
+    return {"kind": res.get("outcome_kind", "CONFIRMED"), "reference": res["reference"],
+            "target_words": R.wrap(res["words"], res["service"], ts()[:19] + "Z")}
 
 
 async def trip_complete(ctx: Ctx, inp: dict):
@@ -390,7 +417,8 @@ async def trip_complete(ctx: Ctx, inp: dict):
         return {"act_id": aid, "intent_id": it["id"], "outcome": outcome, "evidence_id": eid}, 201, eid
     try:
         await KO.fill_for_act(ctx.store, ctx.account, hold, apv, aid, it["id"], "sandbox_" + priced[0]["kind"], ctx.up)   # CR 63
-        res = await AD.get("venue_ladder", ctx.mode).book(priced[0]["kind"], priced[0], ctx.up) if len(priced) == 1 else await _book_all(ctx, priced)
+        res = await AD.get("venue_ladder", ctx.mode).book(priced[0]["kind"], priced[0], ctx.up, approval=dict(apv) if apv else None) \
+            if len(priced) == 1 else await _book_all(ctx, priced, apv)
     except PV._Unknown as u:
         _unknown(ctx, aid, it, hold, inp, apv, u.service, None)
     except AgapiError as e:
@@ -419,8 +447,8 @@ def _unknown(ctx: Ctx, aid: str, it: dict, hold: dict, inp: dict, apv: dict, ser
                      {"act_id": aid, "service": service})
 
 
-async def _book_all(ctx: Ctx, priced: List[dict]) -> dict:
-    got = [await AD.get("venue_ladder", ctx.mode).book(p["kind"], p, ctx.up) for p in priced]
+async def _book_all(ctx: Ctx, priced: List[dict], apv=None) -> dict:
+    got = [await AD.get("venue_ladder", ctx.mode).book(p["kind"], p, ctx.up, approval=dict(apv) if apv else None) for p in priced]
     return {"reference": " · ".join(g["reference"] for g in got), "service": got[0]["service"],
             "words": " ".join(g["words"] for g in got), "sha256": R.sha256([g["sha256"] for g in got])}
 
@@ -455,7 +483,7 @@ async def pay(store: Store, act: dict) -> dict:
         if flights:
             res = await AD.get("flights", ctx.mode).order(_offer(ctx, "flight", flights[0]["ref"]), held["travellers"], ctx.up)
         else:
-            res = await AD.get("venue_ladder", ctx.mode).book(priced[0]["kind"], priced[0], ctx.up)
+            res = await AD.get("venue_ladder", ctx.mode).book(priced[0]["kind"], priced[0], ctx.up, approval=dict(apv) if apv else None)
         outcome = _confirmed(res)
         sources = [{"service": "stripe_test", "retrieved_at": ts()[:19] + "Z", "sha256": R.sha256({"paid": act["id"]})}, _source(res)]
     except AgapiError as e:
@@ -483,7 +511,7 @@ async def trip_cancel(ctx: Ctx, inp: dict):
     if done:
         raise AgapiError("already_completed", "That act is already cancelled.", {"act_id": done["id"]})
     kind = loads(act["outcome"])["kind"]
-    if kind not in ("CONFIRMED", "AWAITING_PAYMENT"):
+    if kind not in ("CONFIRMED", "AWAITING_PAYMENT", "REQUESTED"):   # CR 70 · a venue asked by email/call can be called off too
         raise AgapiError("not_cancellable", f"An act that is {kind} can't be cancelled.")
     paid = kind == "CONFIRMED" and loads(ctx.store.one("select total from holds where account = ? and id = ?", ctx.account, act["hold_id"])["total"])
     refund = paid if paid and paid["amount_minor"] > 0 else {"amount_minor": 0, "currency": "EUR"}
@@ -505,8 +533,13 @@ async def trip_cancel(ctx: Ctx, inp: dict):
     apv = _check_and_consume(ctx, rb, current, 1)
     cid = R.new_id("act")
     try:
-        res = await (AD.get("flights", ctx.mode) if "Flight" in original[0] else AD.get("venue_ladder", ctx.mode)).cancel(
-            "duffel" if "Flight" in original[0] else "sandbox_venue", act["id"], ctx.up)
+        prep = None
+        if ctx.mode == "live" and "Flight" not in original[0]:   # CR 70 · the reservation Sasha made, from the hold's approved payload
+            pl = loads(ctx.store.one("select payload from read_backs r join holds h on h.account = r.account and h.read_back_id = r.id "
+                                     "where h.account = ? and h.id = ?", ctx.account, act["hold_id"])["payload"])
+            prep = next((i.get("_ladder") for i in pl.get("items") or [] if i.get("_ladder")), None)
+        res = await ((AD.get("flights", ctx.mode).cancel("duffel", act["id"], ctx.up)) if "Flight" in original[0] else
+                     AD.get("venue_ladder", ctx.mode).cancel("sandbox_venue", act["id"], ctx.up, prep=prep, approval=dict(apv) if apv else None))
     except PV._Unknown as u:
         _unknown(ctx, cid, it, {"id": None}, inp, apv, u.service, None)
     outcome = _confirmed(res)

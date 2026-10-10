@@ -35,6 +35,10 @@ class Honest(unittest.TestCase):
         self.assertEqual(ev["kind"], "capabilities")
         self.assertEqual(ev["groups"][0]["group"], "Book")
 
+    def test_s2_persona_never_promises_a_reminder_it_cant_send(self):   # Sasha 227 · found live: "I'll remind you as those dates get close"
+        from app.agent import s2 as S2
+        self.assertIn("She never says she'll remind them", S2.S2_WHO)
+
     def test_s2_persona_says_not_yet_and_never_pretends(self):
         from app.agent import s2 as S2
         self.assertIn("I can't do that yet, but I've noted it", S2.S2_WHO)

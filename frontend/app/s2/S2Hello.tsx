@@ -161,7 +161,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant }: {
   }
   const speakVoice = async () => {
     const r = await talker.sayNow(words())
-    if (r === 'blocked') { setTapFor('voice'); setPhase('tap'); return }
+    if (r === 'blocked') { setTapFor(face.current ? 'face' : 'voice'); setPhase('tap'); return }   // Sasha 232 · her face, if it came, with the tap
     handoff()
   }
 

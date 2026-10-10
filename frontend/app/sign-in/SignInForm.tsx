@@ -9,6 +9,11 @@ import { createBrowserClient } from '@supabase/ssr'
 // template has been changed yet; NEXT_PUBLIC_SIGNIN_CODE=0 hides it.
 const CODE_IN_EMAIL = process.env.NEXT_PUBLIC_SIGNIN_CODE === '1'
 
+// Sasha 223 · the boxes are white, the page's text is white: say the box's own colours, or what's typed is invisible
+const FIELD: React.CSSProperties = { display: 'block', width: '100%', padding: 10, margin: '6px 0 10px', color: '#111', background: '#fff',
+  caretColor: '#111', border: '1px solid #8a8a8a', borderRadius: 8, fontSize: 16, colorScheme: 'light' }
+const FIELD_CSS = '.si-field::placeholder{color:#6b6b6b;opacity:1}.si-field::-webkit-input-placeholder{color:#6b6b6b}'
+
 function CodeEntry({ to, next }: { to: string; next: string }) {
   const [code, setCode] = useState('')
   const [why, setWhy] = useState<string | null>(null)
@@ -29,7 +34,8 @@ function CodeEntry({ to, next }: { to: string; next: string }) {
       <p>We&rsquo;ve emailed <strong>{to}</strong> a sign-in link. Open it on this device — or, if the email shows a 6-digit code, type it here (that works in the Home Screen app too).</p>
       <label htmlFor="code">The 6-digit code</label>
       <input id="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,7}" maxLength={7} required value={code}
-        onChange={(e) => setCode(e.target.value)} style={{ display: 'block', width: '100%', padding: 8, margin: '6px 0 10px', fontSize: 20, letterSpacing: 4 }} />
+        onChange={(e) => setCode(e.target.value)} className="si-field" placeholder="123456" style={{ ...FIELD, fontSize: 20, letterSpacing: 4 }} />
+      <style>{FIELD_CSS}</style>
       <button type="submit" disabled={busy} style={{ padding: '8px 14px' }}>{busy ? 'Signing in…' : 'Sign in'}</button>
       {why && <p role="alert" style={{ color: '#9a1c1c' }}>Not signed in: {why}.</p>}
     </form>
@@ -62,7 +68,8 @@ export default function SignInForm({ next }: { next: string }) {
     <form onSubmit={send}>
       <label htmlFor="email">Your email</label>
       <input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-        style={{ display: 'block', width: '100%', padding: 8, margin: '6px 0 10px' }} />
+        className="si-field" placeholder="you@example.com" style={FIELD} />
+      <style>{FIELD_CSS}</style>
       <button type="submit" style={{ padding: '8px 14px' }}>{state.phase === 'sending' ? 'Sending…' : 'Email me a sign-in link'}</button>
       {state.phase === 'failed' && <p role="alert" style={{ color: '#9a1c1c' }}>No link was sent: {state.why}.</p>}
     </form>

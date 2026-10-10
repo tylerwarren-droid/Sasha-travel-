@@ -112,6 +112,29 @@ TOOLS += [
     {"name": "claim_status", "description": "Their latest card claim: its state, deadlines, what's still missing and what the insurer replied.",
      "input_schema": {"type": "object", "properties": {}}},
 ]
+# ── CR 78 · money back (EU261): the check, then the claim to the airline's own address, read back, filed on their yes ──────────────────
+TOOL_NAMES = TOOL_NAMES + ("flight_money_back", "file_flight_claim")
+TOOLS += [
+    {"name": "flight_money_back", "description": (
+        "Money back for a flight that was delayed, cancelled or where they were denied boarding (EU rules): whether it's owed and how much, "
+        "each rule quoted from the Regulation's own text. Ask only for what's missing: the airline and flight number, the date, from and to "
+        "(airport codes), what happened and how late it arrived (or the days' notice of a cancellation). Say `say` as given; never name an "
+        "amount it didn't give. If it's owed, ask whether to claim it."),
+     "input_schema": {"type": "object", "properties": {
+         "airline": {"type": "string", "description": "IATA code, e.g. IB"}, "number": {"type": "string"}, "date": {"type": "string", "description": "YYYY-MM-DD"},
+         "from": {"type": "string", "description": "IATA airport, e.g. MAD"}, "to": {"type": "string"},
+         "what": {"type": "string", "enum": ["delayed", "cancelled", "denied_boarding"]},
+         "arrival_delay_minutes": {"type": "integer"}, "notice_days": {"type": "integer"},
+         "airline_said_extraordinary": {"type": "boolean"}, "booking_reference": {"type": "string"},
+         "passengers": {"type": "array", "items": {"type": "string"}}}, "required": ["airline", "date", "from", "to", "what"]}},
+    {"name": "file_flight_claim", "description": (
+        "File the flight compensation claim flight_money_back prepared, to the airline's own address. Needs the booking reference and every "
+        "passenger's name (ask if missing). The FIRST call returns the read-back — read it back and ask; call again only after they say yes, "
+        "in a later turn."),
+     "input_schema": {"type": "object", "properties": {"booking_reference": {"type": "string"}, "passengers": {"type": "array", "items": {"type": "string"}}}}},
+]
+_MONEY: Dict[str, str] = {}        # account → the latest money-back case
+
 _ACCIDENT: Dict[str, str] = {}     # account → the open accident case
 _CLAIM: Dict[str, str] = {}        # account → the latest claim case
 _PEND: Dict[str, dict] = {}        # account|op → {read_back_id, at} — the read-back said; their yes comes next turn
@@ -292,6 +315,32 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         r = await _with_yes(ctx, f"{ctx.account}|file_claim", "cards.claim_file", {"end_user": uid, "case_id": cid})
         if r.get("ok") and r["result"].get("state"):
             return {"ok": True, "result": {"status": r["result"]["state"], "render": {"kind": "claim_status", "claim": r["result"]}}}
+        return r if r.get("ok") else _fail(r)
+    if name == "flight_money_back":
+        flight = {k: args[k] for k in ("airline", "number", "date", "from", "to", "what", "arrival_delay_minutes", "notice_days", "airline_said_extraordinary")
+                  if args.get(k) not in (None, "")}
+        for k in ("airline", "from", "to"):
+            flight[k] = str(flight.get(k) or "").upper()
+        r = await CALL("money.flight_check", {"end_user": uid, "flight": flight, **({"booking_reference": args["booking_reference"]} if args.get("booking_reference") else {}),
+                                              **({"passengers": args["passengers"]} if args.get("passengers") else {})})
+        if not r.get("ok"):
+            return _fail(r)
+        v = r["result"]
+        _MONEY[ctx.account] = v["case_id"]
+        return {"ok": True, "result": {"say": v["say"], "verdict": v["verdict"], "amount": v.get("amount"),
+                                       "quotes": [q["quote"] for x in v["rules"] for q in x["quotes"]][:4],
+                                       "how": ("Say `say` as given: the amount is the Regulation's own sentence, quoted. Never name an amount it "
+                                               "didn't give, never promise the airline will pay.")}}
+    if name == "file_flight_claim":
+        cid = _MONEY.get(ctx.account)
+        if not cid:
+            return {"ok": False, "error": {"code": "no_case", "message": "check the flight first (flight_money_back)"}}
+        body = {"end_user": uid, "case_id": cid, **({"booking_reference": args["booking_reference"]} if args.get("booking_reference") else {}),
+                **({"passengers": args["passengers"]} if args.get("passengers") else {})}
+        r = await _with_yes(ctx, f"{ctx.account}|file_flight_claim", "money.flight_claim", body)
+        if r.get("ok") and r["result"].get("state"):
+            v = r["result"]
+            return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), **({"draft": v["draft"]} if v.get("draft") else {})}}
         return r if r.get("ok") else _fail(r)
     if name == "claim_status":
         cid = _CLAIM.get(ctx.account)

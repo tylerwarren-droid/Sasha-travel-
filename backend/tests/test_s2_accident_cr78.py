@@ -70,3 +70,50 @@ class AccidentCR78(FinePrint):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MoneyBackCR78(FinePrint):
+    """CR 78 · money back on /s2: the check's own words; the claim read back first, filed only on the yes in a later turn."""
+
+    def setUp(self):
+        super().setUp()
+        from unittest import mock
+        p = mock.patch.dict(FP._MONEY, {}, clear=True)
+        p.start()
+        self.addCleanup(p.stop)
+        real = self.agapi.__call__
+
+        async def call(op, body, approval=None):
+            self.agapi.calls.append((op, body))
+            if op == "money.flight_check":
+                return {"ok": True, "result": {"case_id": "mny_" + "1" * 26, "verdict": "yes", "amount": {"amount_minor": 25000, "currency": "EUR"},
+                                               "rules": [{"rule": "compensation_short", "quotes": [{"quote": "a) 250 euros para vuelos de hasta 1 500 kilómetros;"}]}],
+                                               "say": "Your flight EX123 (1,246 km) is covered: under EU rules you may be owed EUR 250. Want me to claim it?"}}
+            if op == "money.flight_claim":
+                if not approval:
+                    return {"ok": False, "error": {"code": "approval_required", "details": {"read_back_id": "rb_mny", "read_back": {"lines": [
+                        "File a compensation claim with Example Air at claims@example-air.example (the address on its own claims page), in your name — I file it for you."]}}}}
+                return {"ok": True, "result": {"case_id": body["case_id"], "state": "filed", "say": "Filed with Example Air. They say they reply within 30 days."}}
+            self.agapi.calls.pop()
+            return await real(op, body, approval)
+        FP.CALL = call
+
+    def test_check_says_the_amount_as_given_and_upper_cases_codes(self):
+        r = run(FP.run_tool(Ctx(), "flight_money_back", {"airline": "ex", "number": "123", "date": "2026-10-09", "from": "mad", "to": "lhr",
+                                                          "what": "delayed", "arrival_delay_minutes": 220}))
+        self.assertIn("may be owed EUR 250", r["result"]["say"])
+        self.assertIn("Never name an amount it didn't give", r["result"]["how"])
+        sent = [b for op, b in self.agapi.calls if op == "money.flight_check"][-1]
+        self.assertEqual((sent["flight"]["airline"], sent["flight"]["from"], sent["flight"]["to"]), ("EX", "MAD", "LHR"))
+
+    def test_the_claim_is_read_back_then_filed_only_on_a_later_yes(self):
+        self.assertEqual(run(FP.run_tool(Ctx(), "file_flight_claim", {}))["error"]["code"], "no_case")
+        run(FP.run_tool(Ctx(), "flight_money_back", {"airline": "EX", "date": "2026-10-09", "from": "MAD", "to": "LHR", "what": "delayed",
+                                                      "arrival_delay_minutes": 220}))
+        r = run(FP.run_tool(Ctx(), "file_flight_claim", {"booking_reference": "EXA1B2", "passengers": ["Alex Doe"]}))
+        self.assertEqual(r["result"]["status"], "awaiting_yes")
+        self.assertIn("claims@example-air.example", r["result"]["read_back"][0])
+        same = run(FP.run_tool(Ctx(said="Yes, file it.", ago=-60), "file_flight_claim", {"booking_reference": "EXA1B2", "passengers": ["Alex Doe"]}))
+        self.assertNotEqual(same["result"].get("status"), "filed")                                      # the same turn is never the yes
+        done = run(FP.run_tool(Ctx(said="Yes, file it.", ago=60), "file_flight_claim", {"booking_reference": "EXA1B2", "passengers": ["Alex Doe"]}))
+        self.assertEqual(done["result"]["status"], "filed")

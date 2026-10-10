@@ -190,6 +190,12 @@ async def confirm(account: str, token: str) -> dict:
         out = await KEEP.put(account, p["kind"], p["values"])
     finally:
         p["values"] = None
+    try:   # Sasha 228 · the account's open pages hear it (a /next waiting on "Add from your phone" carries on) — the mask only
+        from agapi.keep_handoff import added_line
+        from booking_signer import live_events as LE
+        LE.publish(account, {"type": "keep_added", "kind": out.get("type"), "masked": out.get("masked"), "text": added_line(out.get("masked") or "")})
+    except Exception as e:
+        log.info("[keep] keep_added not published: %s", type(e).__name__)
     return {"item": out.get("masked"), "created": out.get("created"), "type": out.get("type")}
 
 

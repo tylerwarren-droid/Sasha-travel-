@@ -788,6 +788,10 @@ The read-back before booking: every item re-checked and priced, the total, and t
   "origin": {
    "type": "string"
   },
+  "without_passport": {
+   "type": "boolean",
+   "description": "only when they've said to go on without adding their passport"
+  },
   "idempotency_key": {
    "type": "string",
    "minLength": 8,

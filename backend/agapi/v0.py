@@ -592,7 +592,43 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
             "flight_out": flights.get("out"), "flight_back": flights.get("back"), **({"flight_note": "; ".join(why)} if why else {}),
             "flight_options": options, "party": party,
             "total_eur": q.get("eur") if "eur" in q else None, **({"total_note": q.get("why")} if "why" in q else {}),
-            "prices": "stays at the TEST hotel rate, the flight at its Duffel TEST fare — nothing is booked", "prefetched": used_prefetch}
+            "prices": "stays at the TEST hotel rate, the flight at its Duffel TEST fare — nothing is booked", "prefetched": used_prefetch,
+            **({"keep": kn} if flights and (kn := await _s1_passport(ctx, trip_id, bind=False)) else {})}   # Sasha 228 · said up front
+
+
+async def _s1_passport(ctx: Ctx, trip_id: Optional[str], bind: bool = True) -> Optional[dict]:
+    """Sasha 228 · S1 (/next, where SASHA_KEEP_S1 has the Keep on): a plan or hold with a FLIGHT needs the passport.
+    In the Keep → bound to this booking (the read-back names it; the value opens only after their yes, at payment) and said up
+    front: "I have your passport (ES ••••456) and will apply it." Not in it → the "Add from your phone" handoff (a one-time code).
+    The Keep closed or unreachable → None: the booking goes on exactly as before. The mask only, ever."""
+    from agapi.keep_gate import s1_on
+    if ctx.surface == "s2" or not s1_on(ctx.account) or not trip_id:
+        return None
+    from booking_signer import basket as BK
+    if not any(r.get("kind") == "flight" for r in await BK.items(ctx.account, trip_id, ("suggested", "chosen"))):
+        return None
+    try:
+        pp = next((i for i in await _KEEP.list_(ctx.account) if i["type"] == "passport"), None)
+    except _KEEP.KeepError:
+        return None
+    if pp is None:
+        if not bind:
+            return None   # the plan says nothing yet: the hold asks for it
+        from agapi import keep_handoff as HO
+        h = HO.mint(ctx.account, "passport")
+        return {"status": "passport_needed", "booked": False, "handoff": {"code": h["code"], "kind": "passport", "expires_at": h["expires_at"]},
+                "say": "This flight needs their passport and their Keep has none. The 'Add from your phone' card (a QR code and a short link) "
+                       "is on their screen: they scan it with their phone and take a photo of the passport's photo page. Say that in one "
+                       "or two sentences and wait — you'll hear when it's added. Never ask for the number in the chat. No read-back yet."}
+    short = re.sub(r"(?i)^passport\s+", "", pp["masked"]).strip()
+    if bind:
+        from agapi import keep as K
+        if K.use_line(pp["masked"]) not in await _KEEP.lines(ctx.account):
+            try:
+                await _KEEP.bind(ctx.account, pp["item_id"], "fill")
+            except _KEEP.KeepError:
+                return None
+    return {"masked": pp["masked"], "say_first": f"I have your passport ({short}) and will apply it."}
 
 
 async def _swap_world(ctx: Ctx, p: dict, city: str, name: str) -> dict:
@@ -730,11 +766,15 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
     have, need = len(await PX.saved(ctx.account)), _party(p)
     if have < need:
         raise ToolError("travellers_missing", f"the airline needs each traveller's full name, title and date of birth — {have} of {need} on file")
+    kept = None if a.get("without_passport") else await _s1_passport(ctx, p.get("trip_id"))   # Sasha 228 · S1: the passport, up front
+    if kept and kept.get("handoff"):
+        return kept
     held = _HELD.get(ctx.account)
     if held and held.get("result") and (datetime.now(timezone.utc) - held["at"]).total_seconds() < 120:   # Sasha 205 · just checked
         import hashlib as _h
         cur = await BB.current(ctx.account)
-        if cur and _h.sha256("\n".join(BB.lines_of(cur["rows"], cur["party"])).encode()).hexdigest() == held["sha"]:
+        if cur and _h.sha256("\n".join(BB.lines_of(cur["rows"], cur["party"])).encode()).hexdigest() == held["sha"] and \
+                (not kept or all(l in held["result"]["read_back"] for l in await _KEEP.lines(ctx.account))):   # Sasha 228 · a passport added since: read again
             return {**held["result"], "reused": "checked under two minutes ago and nothing has changed"}
     q = await BB.quote(ctx.account, a.get("origin") or "Madrid")
     if q.get("outage"):   # Sasha 215 · CR 56 #3 — the airline not answering: said, and the chosen flights are never swapped
@@ -756,6 +796,8 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
     from agapi.keep_gate import keep_on
     if keep_on(ctx.account, ctx.surface):   # Sasha 224 · CR 63 — a bound passport is NAMED in what she reads out (where the Keep is on)
         res["read_back"] += await _KEEP.lines(ctx.account)
+    if kept:   # Sasha 228 · said in this turn, before the read-back — the mask only
+        res["keep"] = kept
     prev = _HELD.get(ctx.account)   # Sasha 210 · the same words read back again keep the time they were first said
     at = prev["at"] if prev and prev.get("sha") == q["sha256"] else datetime.now(timezone.utc)
     _HELD[ctx.account] = {"sha": q["sha256"], "at": at, "result": res}   # Sasha 205 · book() uses it as is
@@ -1012,7 +1054,8 @@ TOOLS: List[dict] = [
        {"type": "object", "properties": {"saved": {"type": "integer"}, "travellers_on_file": {"type": "integer"}, "invalid": {"type": "array"}}},
        [], austen=True),
     _t("hold_booking", "Austen", hold_booking, "The read-back before booking: every item re-checked and priced, the total, and the "
-       "sha256 the yes binds to. No money moves; nothing is booked.", {"origin": {"type": "string"}}, [],
+       "sha256 the yes binds to. No money moves; nothing is booked.", {"origin": {"type": "string"},
+       "without_passport": {"type": "boolean", "description": "only when they've said to go on without adding their passport"}}, [],   # Sasha 228
        {"type": "object", "properties": {"read_back": {"type": "array"}, "read_back_sha256": {"type": "string"}, "total_eur": {"type": "number"}}},
        ["no_trip", "travellers_missing", "not_bookable", "airline_unreachable", "store_unreachable"], austen=True),
     _t("book", "Austen", book, "After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back they "

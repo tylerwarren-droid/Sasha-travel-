@@ -23,6 +23,7 @@ import ChatCancel from './ChatCancel'  // Sasha 96 chat cancel, Stage B re-appli
 import { takeChatText } from '@/lib/chat-booking-bus'
 import { accountUrl, guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // S-62 step 7
 import axios from 'axios'
+import KeepHandoff from './KeepHandoff'   // Sasha 228 · "Add from your phone"
 
 // `description` is the photographer's free-text Unsplash caption ("Colors", "4:51pm") — never
 // use it as a place name. `location` is the actual destination, stamped on by the foto agent.
@@ -222,6 +223,9 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   const [payHere, setPayHere] = useState<{ client_secret?: string; url?: string; total_eur?: number; already_paid?: boolean; n: number } | null>(null)   // Sasha 220
   const [calendar, setCalendar] = useState<{ title?: string; starts_at?: string; links: Record<string, string> } | null>(null)   // Sasha 217
   const [readBack, setReadBack] = useState<{ lines: string[]; total?: number | null; what?: string; live?: boolean; status?: string } | null>(null)
+  const [handoff, setHandoff] = useState<{ code: string; what: string; expires_at?: string; added?: string | null } | null>(null)   // Sasha 228 · "Add from your phone"
+  const handoffRef = useRef(handoff)
+  handoffRef.current = handoff
   const onScreen = (g: string) => !agent || !screenTurn || groupTurn[g] === screenTurn
   const claim = (g: string, t?: string) => { if (!t) return; setScreenTurn(t); setGroupTurn(m => ({ ...m, [g]: t })) }
   const [bookingCancel, setBookingCancel] = useState<{ venue: string; n: number } | null>(null)  // Sasha 96 chat cancel (Stage B)
@@ -560,8 +564,19 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
     es.onmessage = (m) => {
       let ev: any
       try { ev = JSON.parse(m.data) } catch { return }
-      if (!ev || !ev.id || ev.id <= last || (ev.type !== 'booked' && ev.type !== 'booking_failed')) return
+      if (!ev || !ev.id || ev.id <= last || (ev.type !== 'booked' && ev.type !== 'booking_failed' && ev.type !== 'keep_added')) return
       ev = untagDeep(ev)   // Sasha 218
+      if (ev.type === 'keep_added') {   // Sasha 228 · added on their phone (or /s2): said once — the mask only — and, if a booking was waiting on it, she carries on
+        last = ev.id
+        try { sessionStorage.setItem(seenKey, String(ev.id)) } catch { /* fine */ }
+        const waiting = handoffRef.current && !handoffRef.current.added
+        if (!waiting) return
+        setHandoff(h => h ? { ...h, added: String(ev.masked || '') } : h)
+        const line = String(ev.text || '')
+        if (line) { setMessages(prev => [...prev, { role: 'assistant', content: line }]); onSashaResponse?.(line) }
+        setTimeout(() => { sendRef.current(`(Added from my phone just now: ${String(ev.masked || 'my passport')} is in my Keep. Please carry on with the booking.)`, { opening: true, force: true }) }, 400)
+        return
+      }
       if (ev.type === 'booked') setPayHere(p => p ? { ...p, already_paid: true, n: p.n + 1 } : p)   // Sasha 220 · the card says it's paid
       last = ev.id
       try { sessionStorage.setItem(seenKey, String(ev.id)) } catch { /* fine */ }
@@ -641,6 +656,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             else if (ev.kind === 'calendar' && ev.links) { setCalendar({ title: ev.title, starts_at: ev.starts_at, links: ev.links }); claim('calendar', ev.turn) }
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) { setReadBack({ lines: ev.read_back, total: ev.total_eur, what: ev.what, live: ev.live, status: ev.status }); claim('readback', ev.turn) }
             else if (ev.kind === 'trip') window.dispatchEvent(new Event('sasha-plan-refresh'))
+            else if (ev.kind === 'keep_handoff' && ev.code) { setHandoff({ code: String(ev.code), what: String(ev.what || 'passport'), expires_at: ev.expires_at, added: null }); claim('handoff', ev.turn) }   // Sasha 228
           }
           else if (ev.type === 'state') { if (Array.isArray(ev.highlight) && ev.highlight.length) setHighlight(ev.highlight) }   // Sasha 213 · the card(s) she named
           else if (ev.type === 'replace') { reply = ev.text; show(reply); if (ev.speak) onSashaResponse?.(ev.say || ev.text) }   // Sasha 210 · only what she hasn't said
@@ -1001,6 +1017,9 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             )}
             <div className="lw-cardBody" style={readBack.what ? { display: 'block' } : undefined}>{readBack.lines.filter(l => !/^\s*⚠\s*TEST bookings\b/.test(l)).map((l, i) => <div key={i} className="o2" style={{ padding: '2px 0' }}>{untag(l)}</div>)}</div>
           </div>
+        )}
+        {handoff && onScreen('handoff') && (   /* Sasha 228 · the booking needs a passport: add it from the phone (QR + short link) */
+          <KeepHandoff code={handoff.code} what={handoff.what} expiresAt={handoff.expires_at} added={handoff.added} />
         )}
         {tripTotal && onScreen('total') && (
           <div className="lw-card">{/* Sasha 212 · one total, its parts marked */}

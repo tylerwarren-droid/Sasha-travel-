@@ -222,7 +222,8 @@ function Clip({ busy, send, say }: { busy: boolean; send: (t: string) => void; s
   )
 }
 
-function KeepCapture({ what }: { what: 'passport' | 'loyalty' }) {
+/** Sasha 228 · `base` lets the phone handoff (/s2?handoff=…, not signed in) use its one-time code's routes; `onSaved` tells it. */
+export function KeepCapture({ what, base = '/api/s2-keep/scan', onSaved }: { what: 'passport' | 'loyalty'; base?: string; onSaved?: (item: string) => void }) {
   type Phase = { p: 'pick' } | { p: 'reading' } | { p: 'confirm'; token: string; shown: string[] } | { p: 'saving' } | { p: 'saved'; item: string } | { p: 'error'; why: string }
   const [ph, setPh] = useState<Phase>({ p: 'pick' })
   const input = useRef<HTMLInputElement | null>(null)
@@ -232,18 +233,19 @@ function KeepCapture({ what }: { what: 'passport' | 'loyalty' }) {
     setPh({ p: 'reading' })
     try {
       const image = await shrink(f)
-      const r = await fetch('/api/s2-keep/scan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: what, image, media_type: 'image/jpeg' }) })
+      const r = await fetch(base, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: what, image, media_type: 'image/jpeg' }) })
       const j = await r.json().catch(() => ({}))
       setPh(j?.ok ? { p: 'confirm', token: j.token, shown: j.shown || [j.masked] } : { p: 'error', why: j?.message || 'That photo couldn\u2019t be read.' })
     } catch { setPh({ p: 'error', why: 'That photo couldn\u2019t be read.' }) }
     if (input.current) input.current.value = ''
   }
   async function act(token: string, action: 'confirm' | 'discard') {
-    if (action === 'discard') { fetch(`/api/s2-keep/scan/${encodeURIComponent(token)}/discard`, { method: 'POST' }).catch(() => {}); setPh({ p: 'pick' }); return }
+    if (action === 'discard') { fetch(`${base}/${encodeURIComponent(token)}/discard`, { method: 'POST' }).catch(() => {}); setPh({ p: 'pick' }); return }
     setPh({ p: 'saving' })
-    const r = await fetch(`/api/s2-keep/scan/${encodeURIComponent(token)}/confirm`, { method: 'POST' }).catch(() => null)
+    const r = await fetch(`${base}/${encodeURIComponent(token)}/confirm`, { method: 'POST' }).catch(() => null)
     const j = r ? await r.json().catch(() => ({})) : {}
     setPh(j?.ok ? { p: 'saved', item: j.item } : { p: 'error', why: j?.message || 'It wasn\u2019t saved — try again.' })
+    if (j?.ok) onSaved?.(String(j.item || ''))
   }
   const btn = { padding: '9px 16px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 700 } as const
   return (
@@ -646,5 +648,30 @@ export default function S2App() {
         </>
       )}
     </main>{hello}</>
+  )
+}
+
+/** Sasha 228 · /s2?handoff=<code> — the phone end of /next's "Add from your phone": straight to Add my passport, for the account
+ *  that showed the QR code. Not signed in: the one-time code is the only permission, and it covers this one photo. */
+export function S2Handoff({ code }: { code: string }) {
+  const [st, setSt] = useState<{ s: 'checking' } | { s: 'open'; what: 'passport' | 'loyalty' } | { s: 'gone'; why: string } | { s: 'done'; item: string }>({ s: 'checking' })
+  useEffect(() => {
+    fetch(`/api/keep-handoff/${encodeURIComponent(code)}`, { cache: 'no-store' }).then(r => r.json())
+      .then(j => setSt(j?.ok ? { s: 'open', what: j.kind === 'loyalty' ? 'loyalty' : 'passport' } : { s: 'gone', why: j?.message || 'This link has expired.' }))
+      .catch(() => setSt({ s: 'gone', why: 'This link couldn’t be checked — try scanning it again.' }))
+  }, [code])
+  return (
+    <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', fontFamily: 'system-ui', maxWidth: 560, width: '100%', margin: '0 auto', padding: '0 16px', overflowX: 'hidden' }}>
+      <header style={{ padding: '14px 0', paddingTop: 'max(56px, calc(env(safe-area-inset-top) + 44px))' }}>
+        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
+        <div style={{ color: C.dim, fontSize: 14, marginTop: 4 }}>Adding to your Keep, from your phone</div>
+      </header>
+      {st.s === 'checking' && <div style={{ color: C.dim, fontSize: 14 }}>Opening…</div>}
+      {st.s === 'gone' && <Box k="Add from your phone" h="This link can't be used"><div style={{ fontSize: 14, color: C.dim }}>{st.why}</div></Box>}
+      {st.s === 'open' && <KeepCapture what={st.what} base={`/api/keep-handoff/${encodeURIComponent(code)}/scan`} onSaved={item => setSt({ s: 'done', item })} />}
+      {st.s === 'done' && <>
+        <Box k="Added to your Keep" h={untag(st.item)} tone="rgba(126,226,168,.5)"><div style={{ fontSize: 13.5, color: C.dim }}>Encrypted. Sasha only ever sees the mask.</div></Box>
+        <div style={{ color: C.dim, fontSize: 14, margin: '14px 4px' }}>Sasha has it on your computer now — you can close this page.</div></>}
+    </main>
   )
 }

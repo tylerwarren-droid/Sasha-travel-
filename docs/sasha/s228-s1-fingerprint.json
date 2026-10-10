@@ -1,0 +1,87 @@
+{
+ "system_sha": [
+  "445e944d9c66b7b4007af907e9a6384b5b1064178d9423d65aeac2d184b71744",
+  "d4fdbd6aa3025839643f84389d7ea9aff9e08263d123106d97a0c047e6ccf2d0",
+  "d4fdbd6aa3025839643f84389d7ea9aff9e08263d123106d97a0c047e6ccf2d0",
+  "d4fdbd6aa3025839643f84389d7ea9aff9e08263d123106d97a0c047e6ccf2d0"
+ ],
+ "tools_sha": "2b2d0951bb9b96da506268fdd7e7c644c9cb2eb0680e40c624f19014c99c056d",
+ "tool_names": [
+  "search_flights",
+  "search_stays",
+  "search_venues",
+  "prepare_trip",
+  "propose_trip",
+  "swap_stay",
+  "check_offer",
+  "read_booking_route",
+  "choose_offer",
+  "save_travellers",
+  "hold_booking",
+  "book",
+  "hold_venue",
+  "book_venue",
+  "cancel_venue",
+  "get_status",
+  "get_trip",
+  "get_total",
+  "send_email",
+  "add_to_calendar",
+  "send_whatsapp",
+  "get_activity",
+  "keep_list",
+  "keep_use"
+ ],
+ "events": [
+  {
+   "type": "text",
+   "delta": "Lovely, Lisbon it is. "
+  },
+  {
+   "type": "say",
+   "text": "Lovely, Lisbon it is."
+  },
+  {
+   "type": "tool_start",
+   "name": "search_venues"
+  },
+  {
+   "type": "tool",
+   "name": "search_venues",
+   "ok": true
+  },
+  {
+   "type": "text",
+   "delta": "Here are a few places near Sol. Which do you like? "
+  },
+  {
+   "type": "say",
+   "text": "Here are a few places near Sol. Which do you like?"
+  },
+  {
+   "type": "done",
+   "text": "Lovely, Lisbon it is. Here are a few places near Sol. Which do you like?"
+  },
+  {
+   "type": "tool_start",
+   "name": "get_total"
+  },
+  {
+   "type": "tool",
+   "name": "get_total",
+   "ok": true
+  },
+  {
+   "type": "text",
+   "delta": "It comes to about two thousand euros. "
+  },
+  {
+   "type": "say",
+   "text": "It comes to about two thousand euros."
+  },
+  {
+   "type": "done",
+   "text": "It comes to about two thousand euros."
+  }
+ ]
+}

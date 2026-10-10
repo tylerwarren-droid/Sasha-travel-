@@ -115,6 +115,7 @@ KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the convers
 KINDS_S2_ONLY = {"keep_capture", "capabilities", "plans", "notice"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
 KINDS_S2_ONLY |= {"counter_card", "my_cards", "accident", "claim_status"}   # CR 75 · fine print's cards, rendered by /s2 only
 KINDS = KINDS_S2 | {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
+KINDS |= {"keep_handoff"}   # Sasha 228 · /next's "Add from your phone" (QR + short link → /s2's Add my passport)
 
 
 def _fine_print_tools() -> tuple:
@@ -184,6 +185,9 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
                if isinstance(to, dict) else str(to or ""))
         return {"type": "render", "kind": "read_back", "what": "email" if tool == "send_email" else "whatsapp", "status": res["status"],
                 "live": res["status"] == "sent", "read_back": [x for x in (f"To: {who}" if who else "", f"Subject: {m['subject']}" if m.get("subject") else "") if x]}
+    if tool == "hold_booking" and isinstance(res.get("handoff"), dict) and res["handoff"].get("code"):   # Sasha 228 · S1: "Add from your phone"
+        return {"type": "render", "kind": "keep_handoff", "code": res["handoff"]["code"], "what": res["handoff"].get("kind") or "passport",
+                "expires_at": res["handoff"].get("expires_at")}
     if kind == "read_back" and not res.get("read_back"):   # Sasha 216 · a sent email has nothing to read back
         return None
     if kind == "read_back":   # Sasha 213 · the read-back she just gave, from her own hold — never a second quote
@@ -557,6 +561,11 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             extra += ("\n\nTheir Keep: passport, ID and loyalty numbers can live in their Keep (/keep). You never see them — only masks "
                       "like 'Passport ES ••••456' (keep_list) — and use one only where it's needed (keep_use), after their yes. Never ask "
                       "for a document number in the chat; if they offer one, send them to /keep.")
+            extra += ("\n\nWhen a tool result has keep.say_first (propose_trip or hold_booking with a flight), say it word for "
+                      "word in that same turn, before the read-back: e.g. \"I have your passport (ES ••••456) and will apply it.\" "
+                      "When hold_booking says passport_needed, the 'Add from your phone' card is on their screen: say so briefly and "
+                      "wait. When they've added it from their phone, the page has already said \"Got it — …\": don't say that again — "
+                      "call hold_booking and read back.")
         if used_openers:
             extra += (f"\n\nOpeners you've already used in this conversation — never start with them again: "
                       f"{', '.join(sorted(used_openers))}.")
@@ -680,6 +689,15 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 spoken_any = True
                 yield {"type": "text", "delta": line + " "}
                 yield {"type": "say", "text": SP.speakable(line)}
+            kept = ((r.get("result") or {}).get("keep") or {}).get("say_first") if r.get("ok") and isinstance(r.get("result"), dict) else None
+            if kept and surface != "s2" and kept not in said:   # Sasha 228 · S1: "I have your passport (ES ••••456) and will apply it." —
+                for e in await flush():                           # said by code, up front, in this turn (the mask only); never twice
+                    yield e
+                said.append(kept)
+                said_norms.add(_norm(kept))
+                spoken_any = True
+                yield {"type": "text", "delta": kept + " "}
+                yield {"type": "say", "text": SP.speakable(kept)}
             yield {"type": "tool", "name": u.name, "agent": (t or {}).get("agent"), "ok": r.get("ok"),
                    **({"error": r["error"]["code"]} if not r.get("ok") else {})}
             if r.get("ok") and u.name in _CHANGES_TRIP:
@@ -1020,6 +1038,8 @@ router.include_router(_activity_router)
 from agapi.s2_keep import router as _KEEP_router   # noqa: E402 · Sasha 224 · CR 63 · /api/agent/keep… (the person's own Keep screen)
 from agapi.keep_scan import router as _SCAN_router   # noqa: E402 · Sasha 224 · /api/agent/keep/scan… (add from a photo)
 router.include_router(_SCAN_router)
+from agapi.keep_handoff import router as _HANDOFF_router   # noqa: E402 · Sasha 228 · /api/agent/keep/handoff… (S1's "Add from your phone")
+router.include_router(_HANDOFF_router)
 from agapi.s2_home import router as _HOME_router   # noqa: E402 · Sasha 225 · /api/agent/me, /api/agent/not-yet (founder)
 router.include_router(_HOME_router)
 router.include_router(_KEEP_router)

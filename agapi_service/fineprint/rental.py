@@ -112,8 +112,8 @@ def compose(country: str, company: str, rental: Optional[List[dict]], rental_not
         keep.append({"say": "Keep the third-party liability the rental includes." + (f" Limit: {_money(r_lim['value'])}." if r_lim and isinstance(r_lim["value"], dict) else ""),
                      "quotes": [_q(r_liab)] + ([_q(r_lim)] if r_lim else [])})
     else:
-        keep.append({"say": f"Third-party liability included in the rental: {UNSAID if rental is not None else 'the rental terms aren’t read'} — ask at the counter.",
-                     "quotes": []})
+        why = UNSAID if rental is not None else (rental_note or "the rental company's terms aren't read").rstrip(".")
+        keep.append({"say": f"Third-party liability included in the rental: {why} — ask at the counter.", "quotes": []})
     if card_liab and card_liab["value"] is False:
         keep.append({"say": "Your card doesn't cover liability.", "quotes": [_q(card_liab)]})
     exc_amt, sc_name, sc_price, sc_rm = (_get(rc, "rental_terms", f) for f in ("excess_amount", "super_cover_name", "super_cover_price", "super_cover_removes_excess"))

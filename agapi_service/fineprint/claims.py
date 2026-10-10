@@ -232,9 +232,9 @@ async def file(ctx, inp: dict):
     amt = f"{amount['currency']} {amount['amount_minor'] / 100:,.2f}" if amount else "to be confirmed with the receipts"
     notice = next((x for x in pl["deadlines"] if x.get("due") and x["what"].startswith("notify")), None)
     lines = [f"File a {KINDS[row['kind']]['words']} claim on your {pl['card']} with {admin}, by email to {email}.",
-             f"What happened ({inc['date']}): {inc['description'][:200] or 'as you described it'}.",
+             f"What happened ({inc['date']}): {(inc['description'][:200] or 'as you described it').rstrip('.')}.",
              f"Amount claimed: {amt}.",
-             "The terms it relies on: " + " ".join(f"\"{c['quote']}\"" for c in pl["clause"][:2]),
+             "The terms it relies on: " + " ".join(f"\"{q}\"" for q in list(dict.fromkeys(c["quote"] for c in pl["clause"]))[:2]),
              "Attached: " + (", ".join(f"{f['name']} ({f['kind'].replace('_', ' ')})" for f in files) or "nothing yet") + ".",
              "To follow: " + (", ".join(e["item"].replace("_", " ") for e in ev if e.get("missing")) or "nothing") + ".",
              (f"Deadline: notify by {notice['due']} (the terms: \"{notice['quote']}\")." if notice else

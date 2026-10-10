@@ -29,6 +29,14 @@ HANDOFF_FLAGS = ("injuries", "fault_disputed", "police_charges", "claim_against_
 STATEMENT_NAME = {"ES": "Declaración Amistosa de Accidente", "FR": "constat amiable", "IT": "Constatazione Amichevole di Incidente (CAI)",
                   "PT": "Declaração Amigável de Acidente Automóvel", "DE": "Europäischer Unfallbericht"}
 NEVER = ("circumstances boxes (1–17)", "the sketch", "the signature")
+COUNTRY = {"ES": "Spain", "FR": "France", "DE": "Germany", "IT": "Italy", "PT": "Portugal", "GB": "the UK", "IE": "Ireland", "NL": "the Netherlands"}
+
+
+def _why(note: Optional[str]) -> str:
+    """'not read at source yet' → said once, plainly; any other note in brackets."""
+    if not note or note == "not read at source yet":
+        return "aren't read at source yet"
+    return f"can't be used yet ({note})"
 
 
 def _q(c: dict) -> dict:
@@ -56,7 +64,7 @@ def safety(answer: Optional[str], emergency: Optional[dict]) -> Dict[str, Any]:
 
 def duties(country: str, law: Optional[List[dict]], law_note: Optional[str]) -> Dict[str, Any]:
     if law is None:
-        return {"say": f"The official rules for {country} aren't read at source yet ({law_note}), so I won't quote them. Stay at the scene, keep "
+        return {"say": f"The official rules for {COUNTRY.get(country, country)} {_why(law_note)}, so I won't quote them. Stay at the scene, keep "
                        "everyone safe, and exchange details with the other driver.", "quotes": [], "read_at_source": False}
     lines = []
     for f, head in (("safety_steps", "Make the scene safe"), ("scene_duties", "Your duties at the scene"), ("police_when", "When to call the police")):
@@ -105,7 +113,7 @@ def clocks(at: datetime, rental: Optional[List[dict]], rental_note: Optional[str
     else:
         out.append({"who": "your card's insurer", "due": None, "say": "Your card's terms I've read don't give a notice deadline: tell them now.", "quotes": []})
     if law is None:
-        out.append({"who": country, "due": None, "say": f"{country}'s own deadline: not read at source yet ({law_note}) — not shown.", "quotes": []})
+        out.append({"who": country, "due": None, "say": f"{COUNTRY.get(country, country)}'s own deadline: its official rules {_why(law_note)} — not shown.", "quotes": []})
     else:
         d = next(iter(_get(law, "accident_rules", "notice_deadline_days")), None)
         h = next(iter(_get(law, "accident_rules", "notice_deadline_hours")), None)
@@ -113,7 +121,7 @@ def clocks(at: datetime, rental: Optional[List[dict]], rental_note: Optional[str
             x = d or h
             due = at + (timedelta(days=int(x["value"])) if d else timedelta(hours=int(x["value"])))
             out.append({"who": f"the law in {country}", "due": due.strftime("%Y-%m-%d"), "quotes": [_q(x)],
-                        "say": f"The law in {country}: tell the insurer within {x['value']} {'days' if d else 'hours'}."})
+                        "say": f"The law in {COUNTRY.get(country, country)}: tell the insurer within {x['value']} {'days' if d else 'hours'}."})
         else:
-            out.append({"who": f"the law in {country}", "due": None, "say": f"The official source I've read for {country} gives no deadline.", "quotes": []})
+            out.append({"who": f"the law in {country}", "due": None, "say": f"The official source I've read for {COUNTRY.get(country, country)} gives no deadline.", "quotes": []})
     return out

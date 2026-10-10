@@ -140,7 +140,7 @@ class Accident(Base):
         a = self.start("PT")
         s = self.step(a["case_id"], "no")
         self.assertFalse(s["read_at_source"])                                                             # ASF couldn't be read: nothing quoted
-        self.assertIn("aren't read at source yet", s["say"])
+        self.assertTrue(s["say"].startswith("The official rules for Portugal aren't read at source yet, so I won't quote them."))
         a = self.start("DE")
         s = self.step(a["case_id"], "no")
         self.assertTrue(s["read_at_source"])
@@ -168,7 +168,7 @@ class Accident(Base):
         self.assertEqual(clocks["the rental company"]["due"], "2026-10-12 14:00")                       # 48 hours, quoted
         self.assertIn("within 48 hours", clocks["the rental company"]["quotes"][0]["quote"])
         self.assertTrue(any(k.startswith("your card's insurer") and c["due"] == "2026-12-09" for k, c in clocks.items()))   # 60 days
-        self.assertIn("not read at source yet", clocks["PT"]["say"])                                    # Portugal: not shown
+        self.assertEqual(clocks["PT"]["say"], "Portugal's own deadline: its official rules aren't read at source yet — not shown.")
         s = self.step(cid, "done")
         self.assertEqual(s["step"], "notify")
         r, b = self.call("cards.accident_notify", {"end_user": self.uid, "case_id": cid}, expect="approval_required")

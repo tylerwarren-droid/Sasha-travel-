@@ -294,7 +294,7 @@ def _norm_dest(v: str) -> str:
 
 def _act_kind(rb: dict) -> Optional[str]:
     """1.1 AP6 act_kind — from the read-back's OWN operation, never from the caller: only a cancellation is 'cancel'."""
-    return "cancel" if rb.get("operation") == "trip.cancel" else None
+    return "cancel" if rb.get("operation") in ("trip.cancel", "subscriptions.cancel") else None   # CR 72: a subscription's cancel too
 
 
 def _approval_case(ctx: Ctx, rb: dict, apv: Optional[dict], current: dict, acts_in_request: int) -> dict:

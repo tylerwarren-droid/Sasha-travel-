@@ -114,6 +114,17 @@ class Radar(Base):
         self.call("subscriptions.cancel", {"end_user": uid, "subscription_id": netflix["subscription_id"], "route": "page"},
                   expect="already_completed")
 
+    def test_a_cancellations_own_yes_may_say_cancel(self):
+        uid = self.user()
+        calm = next(s for s in self.find(uid, sample=True)["subscriptions"] if s["merchant"] == "Calm")
+        self.ok("subscriptions.cancel_plan", {"end_user": uid, "subscription_id": calm["subscription_id"]})
+        r, b = self.call("subscriptions.cancel", {"end_user": uid, "subscription_id": calm["subscription_id"], "route": "page"}, expect="approval_required")
+        rb = b["error"]["details"]["read_back_id"]
+        self.call("sandbox.simulate_approval", {"read_back_id": rb, "said": "Yes, but what's the refund?"}, expect="no_explicit_yes")
+        apv = self.ok("sandbox.simulate_approval", {"read_back_id": rb, "said": "Yes, cancel Calm."})["approval_id"]   # its own yes
+        out = self.ok("subscriptions.cancel", {"end_user": uid, "subscription_id": calm["subscription_id"], "route": "page"}, approval=apv)
+        self.assertEqual(out["subscription"]["status"], "cancel_requested")
+
     def test_cancel_by_email_is_captured_in_test_and_refused_live(self):
         uid = self.user()
         calm = next(s for s in self.find(uid, sample=True)["subscriptions"] if s["merchant"] == "Calm")

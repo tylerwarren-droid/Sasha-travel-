@@ -85,3 +85,31 @@ def tiny_pdf(lines: List[str]) -> bytes:
 
 def guide_pdf(slug: str) -> bytes:
     return tiny_pdf(CARDS[slug]["guide"])
+
+
+# CR 74b · the demo's fake RENTAL COMPANY (step 4) — "Example Rentals" is NOT a real company; its page says so.
+RENTAL_LABEL = "Example Rentals is not a real company: this is a test fixture of the AgAPI sandbox."
+RENTALS: Dict[str, dict] = {
+    "example-rentals-pt": {"name": "Example Rentals", "country": "Portugal", "lines": [
+        "General rental terms - Portugal (effective 1 September 2026)",
+        RENTAL_LABEL,
+        "1. Third-party liability. Compulsory third-party liability insurance, as required by Portuguese law, is included in every rental price.",
+        "The third-party liability cover is limited to EUR 6,450,000 per accident.",
+        "2. Collision Damage Waiver (CDW). The CDW is optional and costs EUR 12 per day.",
+        "If you decline the CDW, you are liable for the full cost of any damage to or theft of the vehicle.",
+        "With the CDW, an excess of EUR 1,200 remains payable by the renter for each damage or theft.",
+        "3. Zero Excess Cover. Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+        "4. Deposit. A deposit of EUR 1,500 is blocked on the renter's card at pick-up when the CDW is declined.",
+        "5. Driving licence. A licence issued in the European Union is accepted without an International Driving Permit.",
+        "Drivers must be at least 21 years old.",
+        "6. Accidents. Any accident must be reported to Example Rentals within 48 hours, with a completed European Accident Statement.",
+    ]},
+}
+
+
+def rental_page(slug: str) -> str:
+    r = RENTALS[slug]
+    body = "".join(f"<p>{escape(x)}</p>" for x in r["lines"])
+    return (f"<!doctype html><html lang='en'><head><meta charset='utf-8'><title>{escape(r['name'])} · rental terms ({escape(r['country'])}) · test fixture</title>"
+            f"<meta name='robots' content='noindex'></head><body><header><b>{escape(r['name'])}</b> — <i>{escape(RENTAL_LABEL)}</i></header>"
+            f"<h1>Rental terms — {escape(r['country'])}</h1>{body}<footer>{escape(RENTAL_LABEL)}</footer></body></html>")

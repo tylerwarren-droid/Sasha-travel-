@@ -1,0 +1,953 @@
+{
+ "version": "kanoe-rental.1",
+ "note": "CR 74b · the counter card (EU 216 §3): card claims + the rental company's own country terms → decline / keep / optional / check. A decline only with damage+theft cover, the must-decline term AND an excluded-country list without this country. Never 'you don't need insurance'.",
+ "cases": [
+  {
+   "name": "a_primary_card_in_portugal_declines_the_cdw_keeps_liability_and_quotes_the_excess_cover",
+   "country": "PT",
+   "rental": [
+    {
+     "id": "rcl_R1000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "liability_included",
+     "value": true,
+     "quote": "Compulsory third-party liability insurance, as required by Portuguese law, is included in every rental price.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R2000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "excess_amount",
+     "value": {
+      "amount_minor": 120000,
+      "currency": "EUR"
+     },
+     "quote": "With the CDW, an excess of EUR 1,200 remains payable by the renter for each damage or theft.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R3000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_name",
+     "value": "Zero Excess Cover",
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R4000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_price",
+     "value": {
+      "amount_minor": 1800,
+      "currency": "EUR",
+      "per": "per day"
+     },
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R5000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_removes_excess",
+     "value": true,
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R6000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "accident_report_deadline_hours",
+     "value": 48,
+     "quote": "Any accident must be reported to Example Rentals within 48 hours, with a completed European Accident Statement.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    }
+   ],
+   "cards": [
+    {
+     "name": "Travel Visa",
+     "claims": [
+      {
+       "id": "rcl_C1000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "cover_type",
+       "value": "primary",
+       "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C2000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "damage_theft_covered",
+       "value": true,
+       "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C3000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "must_decline_rental_cdw",
+       "value": true,
+       "quote": "To be eligible you must decline the rental company's collision damage waiver (CDW/LDW).",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C4000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "liability_included",
+       "value": false,
+       "quote": "Third-party liability is not covered by this benefit.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C5000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "excluded_countries",
+       "value": [
+        "Ireland",
+        "Israel",
+        "Jamaica"
+       ],
+       "quote": "Excluded countries: Ireland, Israel, Jamaica.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C6000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "max_rental_days",
+       "value": 31,
+       "quote": "Rental periods of up to 31 consecutive days are covered.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C7000000000000000000000000",
+       "benefit": "claims",
+       "field": "phone",
+       "value": "+34 900 000 000",
+       "quote": "Claims line: +34 900 000 000.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C8000000000000000000000000",
+       "benefit": "claims",
+       "field": "notice_deadline_days@car_rental",
+       "value": 60,
+       "quote": "You must notify Example Assistance within 60 days of the incident.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "card": "Travel Visa",
+    "decline": 1,
+    "keep_has": "Keep the third-party liability the rental includes.",
+    "optional_has": "Zero Excess Cover",
+    "check": 0,
+    "report_has": "within 48 hours"
+   }
+  },
+  {
+   "name": "an_excluded_country_never_declines",
+   "country": "IE",
+   "rental": [
+    {
+     "id": "rcl_R1000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "liability_included",
+     "value": true,
+     "quote": "Compulsory third-party liability insurance, as required by Portuguese law, is included in every rental price.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R2000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "excess_amount",
+     "value": {
+      "amount_minor": 120000,
+      "currency": "EUR"
+     },
+     "quote": "With the CDW, an excess of EUR 1,200 remains payable by the renter for each damage or theft.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R3000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_name",
+     "value": "Zero Excess Cover",
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R4000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_price",
+     "value": {
+      "amount_minor": 1800,
+      "currency": "EUR",
+      "per": "per day"
+     },
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R5000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_removes_excess",
+     "value": true,
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R6000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "accident_report_deadline_hours",
+     "value": 48,
+     "quote": "Any accident must be reported to Example Rentals within 48 hours, with a completed European Accident Statement.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    }
+   ],
+   "cards": [
+    {
+     "name": "Travel Visa",
+     "claims": [
+      {
+       "id": "rcl_C1000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "cover_type",
+       "value": "primary",
+       "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C2000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "damage_theft_covered",
+       "value": true,
+       "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C3000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "must_decline_rental_cdw",
+       "value": true,
+       "quote": "To be eligible you must decline the rental company's collision damage waiver (CDW/LDW).",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C4000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "liability_included",
+       "value": false,
+       "quote": "Third-party liability is not covered by this benefit.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C5000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "excluded_countries",
+       "value": [
+        "Ireland",
+        "Israel",
+        "Jamaica"
+       ],
+       "quote": "Excluded countries: Ireland, Israel, Jamaica.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C6000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "max_rental_days",
+       "value": 31,
+       "quote": "Rental periods of up to 31 consecutive days are covered.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C7000000000000000000000000",
+       "benefit": "claims",
+       "field": "phone",
+       "value": "+34 900 000 000",
+       "quote": "Claims line: +34 900 000 000.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C8000000000000000000000000",
+       "benefit": "claims",
+       "field": "notice_deadline_days@car_rental",
+       "value": 60,
+       "quote": "You must notify Example Assistance within 60 days of the incident.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "card": null,
+    "decline": 0,
+    "check": 1,
+    "status": {
+     "Travel Visa": "excluded"
+    }
+   }
+  },
+  {
+   "name": "no_excluded_country_list_is_a_check_not_a_decline",
+   "country": "PT",
+   "rental": [
+    {
+     "id": "rcl_R1000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "liability_included",
+     "value": true,
+     "quote": "Compulsory third-party liability insurance, as required by Portuguese law, is included in every rental price.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R2000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "excess_amount",
+     "value": {
+      "amount_minor": 120000,
+      "currency": "EUR"
+     },
+     "quote": "With the CDW, an excess of EUR 1,200 remains payable by the renter for each damage or theft.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R3000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_name",
+     "value": "Zero Excess Cover",
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R4000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_price",
+     "value": {
+      "amount_minor": 1800,
+      "currency": "EUR",
+      "per": "per day"
+     },
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R5000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_removes_excess",
+     "value": true,
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R6000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "accident_report_deadline_hours",
+     "value": 48,
+     "quote": "Any accident must be reported to Example Rentals within 48 hours, with a completed European Accident Statement.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    }
+   ],
+   "cards": [
+    {
+     "name": "Travel Visa",
+     "claims": [
+      {
+       "id": "rcl_C1000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "cover_type",
+       "value": "primary",
+       "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C2000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "damage_theft_covered",
+       "value": true,
+       "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C3000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "must_decline_rental_cdw",
+       "value": true,
+       "quote": "To be eligible you must decline the rental company's collision damage waiver (CDW/LDW).",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C4000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "liability_included",
+       "value": false,
+       "quote": "Third-party liability is not covered by this benefit.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C6000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "max_rental_days",
+       "value": 31,
+       "quote": "Rental periods of up to 31 consecutive days are covered.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C7000000000000000000000000",
+       "benefit": "claims",
+       "field": "phone",
+       "value": "+34 900 000 000",
+       "quote": "Claims line: +34 900 000 000.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C8000000000000000000000000",
+       "benefit": "claims",
+       "field": "notice_deadline_days@car_rental",
+       "value": 60,
+       "quote": "You must notify Example Assistance within 60 days of the incident.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "card": "Travel Visa",
+    "decline": 0,
+    "check": 1
+   }
+  },
+  {
+   "name": "no_must_decline_term_is_a_check_not_a_decline",
+   "country": "PT",
+   "rental": [
+    {
+     "id": "rcl_R1000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "liability_included",
+     "value": true,
+     "quote": "Compulsory third-party liability insurance, as required by Portuguese law, is included in every rental price.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R2000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "excess_amount",
+     "value": {
+      "amount_minor": 120000,
+      "currency": "EUR"
+     },
+     "quote": "With the CDW, an excess of EUR 1,200 remains payable by the renter for each damage or theft.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R3000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_name",
+     "value": "Zero Excess Cover",
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R4000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_price",
+     "value": {
+      "amount_minor": 1800,
+      "currency": "EUR",
+      "per": "per day"
+     },
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R5000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_removes_excess",
+     "value": true,
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R6000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "accident_report_deadline_hours",
+     "value": 48,
+     "quote": "Any accident must be reported to Example Rentals within 48 hours, with a completed European Accident Statement.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    }
+   ],
+   "cards": [
+    {
+     "name": "Travel Visa",
+     "claims": [
+      {
+       "id": "rcl_C1000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "cover_type",
+       "value": "primary",
+       "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C2000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "damage_theft_covered",
+       "value": true,
+       "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C4000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "liability_included",
+       "value": false,
+       "quote": "Third-party liability is not covered by this benefit.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C5000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "excluded_countries",
+       "value": [
+        "Ireland",
+        "Israel",
+        "Jamaica"
+       ],
+       "quote": "Excluded countries: Ireland, Israel, Jamaica.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C6000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "max_rental_days",
+       "value": 31,
+       "quote": "Rental periods of up to 31 consecutive days are covered.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C7000000000000000000000000",
+       "benefit": "claims",
+       "field": "phone",
+       "value": "+34 900 000 000",
+       "quote": "Claims line: +34 900 000 000.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C8000000000000000000000000",
+       "benefit": "claims",
+       "field": "notice_deadline_days@car_rental",
+       "value": 60,
+       "quote": "You must notify Example Assistance within 60 days of the incident.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "card": "Travel Visa",
+    "decline": 0,
+    "check": 1
+   }
+  },
+  {
+   "name": "a_rental_too_long_for_the_card",
+   "country": "PT",
+   "rental": [
+    {
+     "id": "rcl_R1000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "liability_included",
+     "value": true,
+     "quote": "Compulsory third-party liability insurance, as required by Portuguese law, is included in every rental price.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R2000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "excess_amount",
+     "value": {
+      "amount_minor": 120000,
+      "currency": "EUR"
+     },
+     "quote": "With the CDW, an excess of EUR 1,200 remains payable by the renter for each damage or theft.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R3000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_name",
+     "value": "Zero Excess Cover",
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R4000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_price",
+     "value": {
+      "amount_minor": 1800,
+      "currency": "EUR",
+      "per": "per day"
+     },
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R5000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_removes_excess",
+     "value": true,
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R6000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "accident_report_deadline_hours",
+     "value": 48,
+     "quote": "Any accident must be reported to Example Rentals within 48 hours, with a completed European Accident Statement.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    }
+   ],
+   "days": 40,
+   "cards": [
+    {
+     "name": "Travel Visa",
+     "claims": [
+      {
+       "id": "rcl_C1000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "cover_type",
+       "value": "primary",
+       "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C2000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "damage_theft_covered",
+       "value": true,
+       "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C3000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "must_decline_rental_cdw",
+       "value": true,
+       "quote": "To be eligible you must decline the rental company's collision damage waiver (CDW/LDW).",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C4000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "liability_included",
+       "value": false,
+       "quote": "Third-party liability is not covered by this benefit.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C5000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "excluded_countries",
+       "value": [
+        "Ireland",
+        "Israel",
+        "Jamaica"
+       ],
+       "quote": "Excluded countries: Ireland, Israel, Jamaica.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C6000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "max_rental_days",
+       "value": 31,
+       "quote": "Rental periods of up to 31 consecutive days are covered.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C7000000000000000000000000",
+       "benefit": "claims",
+       "field": "phone",
+       "value": "+34 900 000 000",
+       "quote": "Claims line: +34 900 000 000.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C8000000000000000000000000",
+       "benefit": "claims",
+       "field": "notice_deadline_days@car_rental",
+       "value": 60,
+       "quote": "You must notify Example Assistance within 60 days of the incident.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "card": null,
+    "decline": 0,
+    "status": {
+     "Travel Visa": "too_long"
+    }
+   }
+  },
+  {
+   "name": "rental_terms_not_read_still_says_so",
+   "country": "PT",
+   "rental": null,
+   "note": "I haven't read Example Rentals's terms for PT.",
+   "cards": [
+    {
+     "name": "Travel Visa",
+     "claims": [
+      {
+       "id": "rcl_C1000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "cover_type",
+       "value": "primary",
+       "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C2000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "damage_theft_covered",
+       "value": true,
+       "quote": "This benefit is primary coverage and covers damage to and theft of the rental vehicle.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C3000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "must_decline_rental_cdw",
+       "value": true,
+       "quote": "To be eligible you must decline the rental company's collision damage waiver (CDW/LDW).",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C4000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "liability_included",
+       "value": false,
+       "quote": "Third-party liability is not covered by this benefit.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C5000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "excluded_countries",
+       "value": [
+        "Ireland",
+        "Israel",
+        "Jamaica"
+       ],
+       "quote": "Excluded countries: Ireland, Israel, Jamaica.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C6000000000000000000000000",
+       "benefit": "car_rental",
+       "field": "max_rental_days",
+       "value": 31,
+       "quote": "Rental periods of up to 31 consecutive days are covered.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C7000000000000000000000000",
+       "benefit": "claims",
+       "field": "phone",
+       "value": "+34 900 000 000",
+       "quote": "Claims line: +34 900 000 000.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      },
+      {
+       "id": "rcl_C8000000000000000000000000",
+       "benefit": "claims",
+       "field": "notice_deadline_days@car_rental",
+       "value": 60,
+       "quote": "You must notify Example Assistance within 60 days of the incident.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "card": "Travel Visa",
+    "decline": 1,
+    "keep_has": "ask at the counter"
+   }
+  },
+  {
+   "name": "a_card_with_no_rental_terms_is_not_stated",
+   "country": "PT",
+   "rental": [
+    {
+     "id": "rcl_R1000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "liability_included",
+     "value": true,
+     "quote": "Compulsory third-party liability insurance, as required by Portuguese law, is included in every rental price.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R2000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "excess_amount",
+     "value": {
+      "amount_minor": 120000,
+      "currency": "EUR"
+     },
+     "quote": "With the CDW, an excess of EUR 1,200 remains payable by the renter for each damage or theft.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R3000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_name",
+     "value": "Zero Excess Cover",
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R4000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_price",
+     "value": {
+      "amount_minor": 1800,
+      "currency": "EUR",
+      "per": "per day"
+     },
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R5000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "super_cover_removes_excess",
+     "value": true,
+     "quote": "Zero Excess Cover costs EUR 18 per day and removes the excess entirely.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    },
+    {
+     "id": "rcl_R6000000000000000000000000",
+     "benefit": "rental_terms",
+     "field": "accident_report_deadline_hours",
+     "value": 48,
+     "quote": "Any accident must be reported to Example Rentals within 48 hours, with a completed European Accident Statement.",
+     "source_url": "https://rentals.test/pt",
+     "read_at": "2026-10-10T08:00:00Z"
+    }
+   ],
+   "cards": [
+    {
+     "name": "Everyday",
+     "claims": [
+      {
+       "id": "rcl_C7000000000000000000000000",
+       "benefit": "claims",
+       "field": "phone",
+       "value": "+34 900 000 000",
+       "quote": "Claims line: +34 900 000 000.",
+       "source_url": "https://bank.test/gtb.pdf",
+       "read_at": "2026-10-10T08:00:00Z"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "card": null,
+    "decline": 0,
+    "check": 1,
+    "status": {
+     "Everyday": "not_stated"
+    }
+   }
+  }
+ ]
+}

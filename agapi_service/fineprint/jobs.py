@@ -20,7 +20,8 @@ DAY_S = 24 * 3600
 
 
 def seeds() -> Dict[str, dict]:
-    return json.loads((M.DATA / "seeds.json").read_text())["cards"]
+    d = json.loads((M.DATA / "seeds.json").read_text())
+    return {**d["cards"], **(d.get("rentals") or {})}           # CR 74b · rental companies' terms read the same way
 
 
 def resolve(card: dict) -> List[str]:

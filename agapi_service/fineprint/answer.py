@@ -17,7 +17,7 @@ from .. import config
 FRAMING = "Information from your cards' own terms. You decide."
 UNSAID = "the terms I've read don't say"
 NOT_STATED = "The terms I've read don't say."
-CURRENCY_OF = {"US": "USD", "ES": "EUR", "FR": "EUR", "DE": "EUR", "IT": "EUR", "PT": "EUR", "IE": "EUR", "NL": "EUR", "GB": "GBP", "CA": "CAD",
+CURRENCY_OF = {"US": "USD", "ES": "EUR", "LT": "EUR", "FR": "EUR", "DE": "EUR", "IT": "EUR", "PT": "EUR", "IE": "EUR", "NL": "EUR", "GB": "GBP", "CA": "CAD",
                "AU": "AUD", "CH": "CHF", "SE": "SEK", "DK": "DKK", "NO": "NOK", "MX": "MXN", "BR": "BRL", "JP": "JPY"}
 ROUTES = (  # question words → the benefits whose quotes can answer it (the offline router; the AI reader chooses among the same claims)
     (r"\b(rent|rental|hire|car|vehicle|cdw|ldw|collision)\b", ("car_rental",)),
@@ -70,7 +70,7 @@ def _cite(c: dict) -> dict:
 
 def claims_line(claims: List[dict]) -> Optional[dict]:
     for f in ("phone", "url", "email"):
-        c = next((x for x in claims if x["benefit"] == "claims" and x["field"] == f), None)
+        c = next((x for x in claims if x["benefit"] == "claims" and x["field"].split("@")[0] == f), None)
         if c:
             return _cite(c)
     return None

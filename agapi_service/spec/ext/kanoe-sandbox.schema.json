@@ -2405,6 +2405,408 @@
           }
         }
       }
+    },
+    "counter_line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "say",
+        "quotes"
+      ],
+      "properties": {
+        "say": {
+          "type": "string"
+        },
+        "quotes": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "cards_rental_cover_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "country",
+        "rental_company"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "country": {
+          "type": "string",
+          "pattern": "^[A-Za-z]{2}$"
+        },
+        "rental_company": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365
+        },
+        "vehicle": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "card_item_id": {
+          "type": "string",
+          "pattern": "^kpi_[0-9A-HJKMNP-TV-Z]{26}$"
+        }
+      }
+    },
+    "cards_rental_cover_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "framing",
+        "country",
+        "company",
+        "card",
+        "cards",
+        "counter",
+        "conditions",
+        "bring",
+        "report",
+        "skipped"
+      ],
+      "properties": {
+        "framing": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string"
+        },
+        "company": {
+          "type": "string"
+        },
+        "card": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cards": {
+          "type": "array"
+        },
+        "rental_note": {
+          "type": "string"
+        },
+        "skipped": {
+          "type": "array"
+        },
+        "counter": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "decline",
+            "keep",
+            "optional",
+            "check"
+          ],
+          "properties": {
+            "decline": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/counter_line"
+              }
+            },
+            "keep": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/counter_line"
+              }
+            },
+            "optional": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/counter_line"
+              }
+            },
+            "check": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/counter_line"
+              }
+            }
+          }
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/counter_line"
+          }
+        },
+        "bring": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/counter_line"
+          }
+        },
+        "report": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/counter_line"
+          }
+        }
+      }
+    },
+    "claim_case": {
+      "type": "object",
+      "required": [
+        "case_id",
+        "state",
+        "card",
+        "kind",
+        "route",
+        "deadlines",
+        "clause",
+        "evidence"
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "pattern": "^clm_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "state": {
+          "enum": [
+            "preparing",
+            "ready_for_portal",
+            "filed"
+          ]
+        },
+        "card": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "baggage_delay",
+            "baggage_loss",
+            "trip_delay",
+            "trip_cancellation",
+            "rental_damage",
+            "purchase_damage_theft"
+          ]
+        },
+        "route": {
+          "type": "object"
+        },
+        "deadlines": {
+          "type": "array"
+        },
+        "reminders": {
+          "type": "array"
+        },
+        "clause": {
+          "type": "array"
+        },
+        "evidence": {
+          "type": "array"
+        },
+        "files": {
+          "type": "array"
+        },
+        "replies": {
+          "type": "array"
+        },
+        "incident": {
+          "type": "object"
+        }
+      }
+    },
+    "cards_claim_start_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "card_item_id",
+        "kind",
+        "incident_date"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "card_item_id": {
+          "type": "string",
+          "pattern": "^kpi_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "kind": {
+          "enum": [
+            "baggage_delay",
+            "baggage_loss",
+            "trip_delay",
+            "trip_cancellation",
+            "rental_damage",
+            "purchase_damage_theft"
+          ]
+        },
+        "incident_date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "amount_minor": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000000
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      }
+    },
+    "cards_claim_start_out": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/claim_case"
+        },
+        {
+          "type": "object",
+          "required": [
+            "state",
+            "say"
+          ],
+          "properties": {
+            "state": {
+              "const": "not_in_terms"
+            }
+          }
+        }
+      ]
+    },
+    "cards_claim_attach_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "case_id",
+        "kind",
+        "media_type",
+        "content_base64"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^clm_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "kind": {
+          "enum": [
+            "card_statement_line",
+            "booking_confirmation",
+            "airline_delay_report",
+            "airline_delay_letter",
+            "receipts",
+            "photos",
+            "cancellation_proof",
+            "medical_certificate",
+            "rental_agreement",
+            "damage_report",
+            "accident_statement",
+            "repair_invoice",
+            "police_report"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "content_base64": {
+          "type": "string",
+          "maxLength": 7000000
+        }
+      }
+    },
+    "cards_claim_attach_out": {
+      "$ref": "#/$defs/claim_case"
+    },
+    "cards_claim_file_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "case_id"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^clm_[0-9A-HJKMNP-TV-Z]{26}$"
+        }
+      }
+    },
+    "cards_claim_file_out": {
+      "$ref": "#/$defs/claim_case"
+    },
+    "cards_claim_status_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "case_id"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^clm_[0-9A-HJKMNP-TV-Z]{26}$"
+        }
+      }
+    },
+    "cards_claim_status_out": {
+      "$ref": "#/$defs/claim_case"
+    },
+    "cards_claim_simulate_reply_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end_user",
+        "case_id",
+        "text"
+      ],
+      "properties": {
+        "end_user": {
+          "type": "string",
+          "pattern": "^usr_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^clm_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      }
+    },
+    "cards_claim_simulate_reply_out": {
+      "$ref": "#/$defs/claim_case"
     }
   }
 }

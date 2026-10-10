@@ -47,7 +47,7 @@ def get_product(store, pid: str) -> dict:
 
 
 async def products(ctx, inp: dict):
-    rows = M.products(ctx.store)
+    rows = [p for p in M.products(ctx.store) if M.is_beta(p) and not M.is_rental(p)]   # CR 74b · the beta set's CARDS only
     q = (inp.get("query") or "").lower().strip()
     out = [_product_out(p) for p in rows if not q or q in f"{p['issuer']} {p['product']}".lower()]
     return {"products": out, "note": "Facts come only from the issuers' own terms, each quoted with its source and date. A first read is "
@@ -161,6 +161,8 @@ async def ask(ctx, inp: dict):
         p = get_product(ctx.store, inp.get("product_id") or "")
         name = p["product"]
     base = {"card": name, "framing": A.FRAMING}
+    if p and not M.is_beta(p):
+        return {**base, "answer": "no_terms", "text": f"{name} isn't in the cards I answer for yet, so I can't say what it covers.", "quotes": []}, 200, None
     if not p or not p["last_read_at"]:
         return {**base, "answer": "no_terms", "text": f"I haven't read {name}'s official terms yet, so I can't say what it covers.", "quotes": []}, 200, None
     if not p["accepted_at"]:
@@ -178,8 +180,9 @@ async def which(ctx, inp: dict):
     cards, skipped = [], []
     for c in await _my_cards(ctx, inp["end_user"]):
         p = c["_p"]
-        if not p or not p["accepted_at"]:
-            skipped.append({"card": c["product"], "why": "its official terms haven't been read and checked yet"})
+        if not p or not p["accepted_at"] or not M.is_beta(p):
+            skipped.append({"card": c["product"], "why": "its official terms haven't been read and checked yet" if not p or M.is_beta(p)
+                            else "it isn't in the cards I answer for yet"})
             continue
         cards.append({"name": c["product"], "product_country": p["country"] or c.get("country") or "", "claims": _live(ctx.store, p)})
     if not cards:
@@ -190,3 +193,45 @@ async def which(ctx, inp: dict):
 
 
 OPS.update({"cards.ask": ask, "cards.which": which})
+
+
+# ── step 4 · rental cover: the counter card ────────────────────────────────────────────────────────────────────────────
+
+def rental_terms_for(store, country: str, company: str):
+    """The rental company's own terms for this country — (claims, note). Only an accepted read is used."""
+    want = (company or "").strip().lower()
+    for p in M.products(store):
+        if M.is_rental(p) and p["country"] == country and want and (p["issuer"].lower().startswith(want) or want.startswith(p["issuer"].lower())):
+            if not p["last_read_at"]:
+                return None, f"I haven't read {p['issuer']}'s terms for {country} yet."
+            if not p["accepted_at"]:
+                return None, f"{p['issuer']}'s terms for {country} were read on {p['last_read_at'][:10]} and await a Kanoe check."
+            return _live(store, p), None
+    return None, f"I haven't read {company}'s terms for {country}."
+
+
+async def rental_cover(ctx, inp: dict):
+    """cards.rental_cover — the counter card for one rental: decline / keep / optional, each line quoted from the card's terms and the
+    rental company's own terms for that country. Never "you don't need insurance"."""
+    from ..engine import _end_user
+    from . import rental as RT
+    _end_user(ctx, inp["end_user"])
+    country = inp["country"].upper()
+    cards, skipped = [], []
+    for c in await _my_cards(ctx, inp["end_user"]):
+        p = c["_p"]
+        if inp.get("card_item_id") and c["item_id"] != inp["card_item_id"]:
+            continue
+        if not p or not p["accepted_at"] or not M.is_beta(p):
+            skipped.append({"card": c["product"], "why": "its official terms haven't been read and checked yet"})
+            continue
+        cards.append({"name": c["product"], "claims": _live(ctx.store, p)})
+    rental, note = rental_terms_for(ctx.store, country, inp["rental_company"])
+    out = RT.compose(country, inp["rental_company"], rental, note, cards, inp.get("days"), inp.get("vehicle"))
+    return {**out, "skipped": skipped}, 200, None
+
+
+OPS.update({"cards.rental_cover": rental_cover})
+
+from . import claims as _CLAIMS   # noqa: E402   CR 74b · step 5: claims
+OPS.update(_CLAIMS.OPS)

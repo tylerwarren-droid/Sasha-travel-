@@ -20,7 +20,13 @@ BENEFITS: Dict[str, Dict[str, str]] = {
     "points": {"earn_rate": "earn", "transfer_partners": "list", "caps": "text"},
     "claims": {"administrator": "text", "url": "text", "phone": "text", "email": "text", "notice_deadline_days": "days",
                "documents_deadline_days": "days"},
+    # CR 74b · a RENTAL COMPANY's own terms for one country (step 4: the counter card)
+    "rental_terms": {"excess_amount": "money", "cdw_name": "text", "cdw_price": "money", "super_cover_name": "text", "super_cover_price": "money",
+                     "super_cover_removes_excess": "bool", "liability_included": "bool", "liability_limit": "money", "liability_note": "text",
+                     "deposit": "money", "idp_required": "bool", "licence_rule": "text", "min_driver_age": "count",
+                     "accident_report_deadline_hours": "hours", "accident_report_rule": "text", "cross_border": "text", "fuel_policy": "text"},
 }
+CARD_BENEFITS = tuple(b for b in BENEFITS if b != "rental_terms")
 CATEGORIES = ("travel", "flights", "hotels", "car_rental", "dining", "groceries", "gas", "transit", "everything_else")
 NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12,
              "fifteen": 15, "twenty": 20, "thirty": 30, "forty-five": 45, "sixty": 60, "ninety": 90}

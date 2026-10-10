@@ -160,3 +160,12 @@ async def card_guide_pdf(slug: str):
     if slug not in FX.CARDS:
         return HTMLResponse("Not found", status_code=404)
     return Response(FX.guide_pdf(slug), media_type="application/pdf", headers={"X-Robots-Tag": "noindex, nofollow"})
+
+
+@router.get("/fixtures/rentals/{slug}", response_class=HTMLResponse)
+async def rental_terms_page(slug: str):
+    """CR 74b · the demo's fake rental company's country terms — labelled as not a real company."""
+    from .fineprint import fixture as FX
+    if slug not in FX.RENTALS:
+        return HTMLResponse("Not found", status_code=404)
+    return HTMLResponse(FX.rental_page(slug), headers={"X-Robots-Tag": "noindex, nofollow"})

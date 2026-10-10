@@ -479,7 +479,8 @@ class Extensions(Base):
                                                                     "subscriptions.cancel_plan", "subscriptions.cancel",   # Kanoe extensions
                                                                     "registry.countries", "registry.get", "registry.documents",   # CR 73
                                                                     "registry.obtain_plan", "registry.verify",
-                                                                    "cards.products", "cards.terms", "cards.intake", "cards.mine", "cards.ask", "cards.which"})   # CR 74
+                                                                    "cards.products", "cards.terms", "cards.intake", "cards.mine", "cards.ask", "cards.which", "cards.rental_cover", "cards.claim_start", "cards.claim_attach",
+                                                                    "cards.claim_file", "cards.claim_status", "cards.claim_simulate_reply"})   # CR 74
         self.assertEqual(operations()["acts.status"]["output"], eu_operations()["acts.status"]["output"])
 
 

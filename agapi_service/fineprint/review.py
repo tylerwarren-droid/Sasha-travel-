@@ -92,7 +92,7 @@ async def page(req: Request):
     store = _get_store()
     if not _session(store, req):
         return HTMLResponse("<p>Open this page from your one-time link.</p>", status_code=401)
-    rows = M.products(store)
+    rows = [p for p in M.products(store) if M.is_beta(p)]                # CR 74b · only the beta set is checked
     rows = sorted(rows, key=lambda p: (bool(p["accepted_at"]), not p["last_read_at"], p["issuer"], p["product"]))
     cards = []
     for p in rows:

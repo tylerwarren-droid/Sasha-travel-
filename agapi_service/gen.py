@@ -130,6 +130,16 @@ DESCRIPTIONS = {
                  "and yes / no / only-under-a-condition as the terms state it — or 'the terms I've read don't say' with the claims line.",
     "cards.which": "Which of the person's cards for one purchase: their cards ranked by the FX fee, the cover that applies and the points, "
                    "each reason quoted from the card's own terms. Information, framed as such — no card is recommended.",
+    "cards.rental_cover": "The counter card for one car rental: what to decline, keep and consider buying, each line quoted from the person's "
+                          "card terms and the rental company's own terms for that country — never 'you don't need insurance'.",
+    "cards.claim_start": "Start a card-insurance claim: the claims administrator's route and the deadlines, quoted from the card's own terms "
+                         "(a deadline the terms don't give is said missing), the clause it relies on, and the evidence checklist with where to get each item.",
+    "cards.claim_attach": "Add one piece of evidence to a claim (a receipt, the airline's letter, a photo) — sealed under the person's own key.",
+    "cards.claim_file": "File the claim on the person's yes: AgAPI's read-back (the administrator, the clause quoted, the amount, the evidence, "
+                        "the deadline) → their yes in a later turn → one email to the administrator from the terms. A portal behind a login: "
+                        "prepared, and the person logs in themselves.",
+    "cards.claim_status": "A claim's state, its deadlines with reminders, and what the claims administrator replied (their words).",
+    "cards.claim_simulate_reply": "Test mode only: the claims administrator replies to a filed claim (the demo's insurer inbox).",
     "registry.countries": "Which jurisdictions the registry covers (wave 0: the certified core) — per country its registers, documents and "
                           "access routes, the automation mix and how fresh its sources are. Every count rests on cited claims.",
     "registry.get": "One jurisdiction's official registers (company, UBO, insolvency…): name, authority, official URL, status — every field "

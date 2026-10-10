@@ -97,6 +97,8 @@ def match(store, issuer: str, product: str) -> Optional[dict]:
     want = _toks(product) | _toks(issuer)
     best = None
     for p in M.products(store):
+        if M.is_rental(p):
+            continue
         have = _toks(p["product"]) | _toks(p["issuer"])
         if _toks(p["product"]) and _toks(p["product"]) <= want | _toks(issuer) and _toks(product) <= have:
             if best is None or len(have) > len(_toks(best["product"]) | _toks(best["issuer"])):

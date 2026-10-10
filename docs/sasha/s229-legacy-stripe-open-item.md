@@ -25,3 +25,17 @@ Before this path takes a live card it needs the proper fix, not a key switch:
    it is.
 
 Until then: `SASHA_LEGACY_STRIPE_MODE=test` on Railway.
+
+## Found while proving it live (10 Oct 2026)
+
+- **The legacy pay button can't be reached any more.** /next runs the agent (`<SashaChat agent>`), so the conductor actions that
+  open "Pay securely" (`await_payment`, `pay_new_card`) never fire there. `ItineraryDays` (whose "Book this trip" calls it) is
+  not rendered anywhere. On /vietnam (still the conductor) a scratch guest's "Book the whole trip" → "A different card" never
+  reached the card question, and no `itinerary_id` came back. Tried twice.
+- **What was proved instead:** the button's endpoint, `POST /api/payments/create-checkout`, called as a signed-in scratch guest
+  (its no-id branch, $1). It returned a `cs_test_` session, `livemode: false`, and Stripe's page showed Test mode
+  (`s229-shots/stripe-checkout-test.png`). Before 229 this endpoint answered 501, because no `STRIPE_SECRET_KEY` was set.
+- **The booking update** was proved with a SIMULATED `checkout.session.completed` signed with the TEST webhook secret. The live
+  webhook accepted it, logged `PAID id=cs_test_…`, and marked the booking row paid (it reached the confirmation-email step;
+  Resend rejected the `example.com` address, so nothing was sent). No card was typed: entering card numbers on the live site is
+  outside what the Sasha tab does. **The 4242 leg is the founder's to run** on any account.

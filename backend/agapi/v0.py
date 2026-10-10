@@ -44,6 +44,8 @@ class Ctx:
     idem: Optional[str] = None         # Sasha 215 · the acting call's durable key (call() sets it; claim() takes it once)
     surface: str = "s1"                # Sasha 221 · "s2" only from /s2 (its proxy's header); everything else is S1, as before
     claimed: Optional[str] = None      # the claim this call holds, released if the act is refused before anything is sent
+    act_name: Optional[str] = None     # CR 76 · /s2: the act this call is (claim() runs THE ONE YES RULE on it)
+    act_said: Optional[str] = None     # CR 76 · /s2: the person's words this turn, as the act was called
 
 
 class ToolError(Exception):
@@ -74,6 +76,11 @@ async def claim(ctx: "Ctx") -> None:
     """Sasha 215 · EU 200 — DURABLE IDEMPOTENCY: an act (a payment sent, a booking or cancellation sent) runs once for its key,
     across restarts and workers: the key is claimed in Postgres (basket_events is unique on source + event_id) BEFORE the act.
     Already claimed → already_done; the records unreachable → nothing is sent."""
+    if ctx.surface == "s2" and ctx.act_name:   # CR 76 · THE ONE YES RULE (agapi/yes_one, AgAPI 1.3): read-back → a later-turn yes → this act
+        from agapi import yes_gate as YG
+        got, why = YG.check(ctx, ctx.act_name, ctx.act_said)
+        if got != "valid":
+            raise ToolError(got, YG.SAY.get(got, "ask them, then act") + (f" ({why})" if why else ""))
     if not ctx.idem:
         return
     from booking_signer import basket as BK
@@ -1091,6 +1098,11 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
         if key in _IDEM:
             return {**_IDEM[key], "replayed": True}
     ctx.idem, ctx.claimed = (key if name in ACTS else None), None
+    ctx.act_name = ctx.act_said = None
+    if ctx.surface == "s2" and name in ACTS:   # CR 76 · their words, heard as the approval if they answer an earlier read-back
+        from agapi import yes_gate as YG
+        ctx.act_name, ctx.act_said = name, ((args.get("approval") or {}).get("said")) or ctx.user_said
+        YG.heard(ctx, name, ctx.act_said)
     try:
         res = {"ok": True, "result": await t["fn"](ctx, args)}
     except ToolError as e:
@@ -1105,8 +1117,11 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
             f"{name} failed ({type(e).__name__}) — a lookup only, so nothing was changed" if name in READS else
             f"{name} failed partway ({type(e).__name__}) — it may or may not have taken effect: check get_status / get_trip "
             "before saying anything was or wasn't done")}}
-    ctx.idem = ctx.claimed = None
+    ctx.idem = ctx.claimed = ctx.act_name = ctx.act_said = None
     out = res.get("result") if res["ok"] else None
+    if ctx.surface == "s2" and res["ok"]:   # CR 76 · a read-back shown is recorded for THE ONE YES RULE
+        from agapi import yes_gate as YG
+        YG.shown(ctx, name, out)
     ctx.calls.append({"tool": name, "ok": res["ok"], "agent": t["agent"], "ms": int((time.perf_counter() - t_call) * 1000),
                       **({"status": out.get("status")} if isinstance(out, dict) and out.get("status") else {}),
                       **({"code": res["error"]["code"]} if not res["ok"] else {})})

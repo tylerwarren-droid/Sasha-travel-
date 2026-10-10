@@ -1,0 +1,25 @@
+# CR 76 · THE ONE YES RULE — the shared conformance set, on every push. The same conformance.json runs in AgAPI, Sasha's S2 (here) and AD.
+name: yes-one
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the vendored module is the generated one, byte for byte (MANIFEST)
+        run: |
+          cd backend/agapi/yes_one
+          python3 -c "import hashlib,json; m=json.load(open('MANIFEST.json')); bad=[f for f in ('yes_one.py','conformance.json','test_yes_one.py') if hashlib.sha256(open(f,'rb').read()).hexdigest()!=m['outputs'][f]]; assert not bad, bad; print('contract', m['contract_version'])"
+      - name: conformance — yes_one.py (stdlib only)
+        run: cd backend/agapi/yes_one && python3 -m unittest test_yes_one -v
+      - name: S2's acts go through it
+        run: |
+          cd backend && pip install -q -r requirements.txt
+          python3 -m unittest tests.test_yes_one_cr76 -v

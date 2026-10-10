@@ -1,0 +1,19 @@
+{
+ "contract_version": "1.3",
+ "contract_sources": {
+  "operations.json": "b1d2673c5c7a2b1d5df0e9d57bf01b4442f1faabd6d1c207fa4e611a267489a1",
+  "vectors/approval-language.json": "b4992034e2757c96d1bf074d964546d133bb5e7a7b0fdab7b01e571b27da3dfd",
+  "vectors/approval-language-acts.json": "e8c8c2edc71ee93965a0fa2476f73107b843a0521e0bdc82ec6e455faf03dd5f",
+  "vectors/approval.json": "103eddeff2990b5fa444c46e9ef8104758073cc010aeea012e81d42f2a809832",
+  "vectors/explicit-yes.json": "4ee8c822a61087ebbddb4d35d1c57c30149a9a80a1675faa54b555399ec0fbad",
+  "vectors/canonical.json": "2ce5e4853c1f18831af4227fa8e9d81cd7ab246c5eff1868e385f840040817e2",
+  "vectors/idempotency.json": "5320323249060a32d32269c00ea8d2344e2cf8ca9362b57b726ac74b57ef4335"
+ },
+ "outputs": {
+  "yes_one.py": "f39e3de5c95cb6f7d4e94a861700c73941eec599ebacf18f405e7bfc266db083",
+  "yes_one.ts": "532cae8c7152de58b2e52ba792cab871589e6ab873667e961d01c45e68ba4969",
+  "conformance.json": "ee012d4d8d6a5a9117822c567107d316c1decb7b608ff140605a15d6946a87bb",
+  "test_yes_one.py": "66bb05605486f83d43387a2b30ab6c4e0faddfc77a5f9eeab243b271d9c22bc6",
+  "yes_one.test.ts": "203c6c4a3cb99aa2f8bb42605d7d2233a0b84ce98a5e67c27b5249d3f5e50656"
+ }
+}

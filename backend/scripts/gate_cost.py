@@ -14,9 +14,10 @@ import os
 from collections import defaultdict
 from typing import Dict
 
-# $ per million tokens: (input, output). Cache write = 1.25 × input, cache read = 0.1 × input (Anthropic's published multipliers).
+# $ per million tokens: (input, output[, 5-minute cache write, cache read]). Without the last two: write = 1.25 × input, read =
+# 0.1 × input. Sonnet 5.5 from Anthropic's pricing page (platform.claude.com/docs/en/about-claude/pricing, read 10 Oct 2026).
 PRICES = {"claude-haiku-4-5": (1.0, 5.0), "claude-sonnet-4-5": (3.0, 15.0), "claude-sonnet-4-6": (3.0, 15.0),
-          "claude-opus-4-1": (15.0, 75.0)}
+          "claude-opus-4-1": (15.0, 75.0), "claude-sonnet-5-5": (2.0, 10.0, 2.5, 0.10)}
 _USE: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
 _SEEN: set = set()
 
@@ -89,7 +90,8 @@ def report() -> float:
         p = PRICES.get(model)
         cost = None
         if p:
-            cost = (u["input"] * p[0] + u["cache_write"] * p[0] * 1.25 + u["cache_read"] * p[0] * 0.1 + u["output"] * p[1]) / 1e6
+            cw, cr = (p[2], p[3]) if len(p) == 4 else (p[0] * 1.25, p[0] * 0.1)
+            cost = (u["input"] * p[0] + u["cache_write"] * cw + u["cache_read"] * cr + u["output"] * p[1]) / 1e6
             total += cost
         else:
             known = False

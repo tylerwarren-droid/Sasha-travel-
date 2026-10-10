@@ -254,9 +254,11 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
         val = str((rd["rungs"].get(ch) or {}).get("value") or "")
         n = res['how_many']['count']
         when_words = f"{n} {'person' if n == 1 else 'people'}"
-        msg = (f"Hola, quería pedir cita para {n} {'persona' if n == 1 else 'personas'} el {at[:10]} a las {at[11:16]}, a nombre de {res['who']['name']}. "
+        asked = _what(a)   # Sasha 232 · the service they asked for ("a 60-minute massage") — found live: the draft left it out
+        svc = f" ({asked})" if asked and asked.lower() not in ("a table", "table", "dinner", "lunch") else ""
+        msg = (f"Hola, quería pedir cita{svc} para {n} {'persona' if n == 1 else 'personas'} el {at[:10]} a las {at[11:16]}, a nombre de {res['who']['name']}. "
                f"¿Tienen disponibilidad? Gracias." if rd.get("country") == "ES" else
-               f"Hello, I'd like to book for {when_words} on {at[:10]} at {at[11:16]}, under {res['who']['name']}. "
+               f"Hello, I'd like to book{svc} for {when_words} on {at[:10]} at {at[11:16]}, under {res['who']['name']}. "
                f"Do you have availability? Thank you.")
         link = (f"https://wa.me/{re.sub(r'[^0-9]', '', val)}?text={quote(msg)}" if ch == "whatsapp" and re.sub(r"\D", "", val)
                 else f"https://ig.me/m/{val}" if ch == "instagram" and val else None)

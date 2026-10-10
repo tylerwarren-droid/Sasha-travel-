@@ -65,20 +65,40 @@ function useSignedIn(): boolean | null {
   return ok
 }
 
+/** Sasha 232 · iPhone Safari: audio plays only from a tap, PER ELEMENT. Her replies were each a NEW Audio(), played after the TTS
+ *  fetch (outside any tap) → refused (NotAllowedError) and dropped — silent, while the toggle said "Voice on". 230's unlock()
+ *  played an empty `new Audio()`, which unlocks nothing. Now: ONE element for all her speech, primed with this silent clip
+ *  INSIDE the tap (synchronously), then reused — iOS lets an element that a tap has played play again. A refusal is shown. */
+const SILENT = 'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA=='
+
 function useSpeaker() {
   const q = useRef<string[]>([])
   const playing = useRef(false)
   const on = useRef(false)
   const muted = useRef(false)
+  const el = useRef<HTMLAudioElement | null>(null)
+  const primed = useRef(false)
   const route = useRef<((t: string) => Promise<void>) | null>(null)   // Sasha 225 · her face, while it's up
   const subs = useRef(new Set<(b: boolean) => void>())
+  const blockSubs = useRef(new Set<(b: boolean) => void>())
+  const lastBlocked = useRef<string | null>(null)
   const emit = (b: boolean) => subs.current.forEach(f => f(b))
+  const setBlocked = (t: string | null) => { lastBlocked.current = t; blockSubs.current.forEach(f => f(!!t)) }
+  const audio = () => {
+    if (!el.current) { el.current = new Audio(); el.current.setAttribute('playsinline', ''); el.current.preload = 'auto' }
+    return el.current
+  }
   const mp3 = async (text: string): Promise<'played' | 'blocked' | 'failed'> => {
     try {
       const r = await fetch(apiUrl('/api/voice/tts'), { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ text }) })   // Sasha 225 · ONE content-type (two were merged → 422: /s2 was silent)
       if (!r.ok) return 'failed'
-      const a = new Audio(URL.createObjectURL(await r.blob()))
-      return await new Promise(res => { a.onended = () => res('played'); a.onerror = () => res('failed'); a.play().catch(e => res(e?.name === 'NotAllowedError' ? 'blocked' : 'failed')) })
+      const a = audio()
+      const url = URL.createObjectURL(await r.blob())
+      a.src = url
+      const got = await new Promise<'played' | 'blocked' | 'failed'>(res => { a.onended = () => res('played'); a.onerror = () => res('failed'); a.play().catch(e => res(e?.name === 'NotAllowedError' ? 'blocked' : 'failed')) })
+      URL.revokeObjectURL(url)
+      if (got === 'blocked') setBlocked(text); else if (got === 'played') setBlocked(null)
+      return got
     } catch { return 'failed' }   // her words are on screen either way
   }
   const next = useCallback(async () => {   // one at a time, in order, until the queue is empty
@@ -92,14 +112,24 @@ function useSpeaker() {
       emit(false)
     }
     playing.current = false
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs only
   }, [])
   return useMemo(() => ({
-    unlock: () => { on.current = true; try { new Audio().play().catch(() => {}) } catch { /* iOS: a gesture unlocks audio */ } },
+    /** Call SYNCHRONOUSLY inside a tap / key / submit handler: primes the one element iOS will then let her speak through. */
+    unlock: () => {
+      on.current = true
+      try { (navigator as unknown as { audioSession?: { type: string } }).audioSession!.type = 'playback' } catch { /* not Safari 16.4+ */ }
+      if (primed.current || playing.current) return
+      try { const a = audio(); a.src = SILENT; a.play().then(() => { primed.current = true }).catch(() => {}) } catch { /* no audio */ }
+    },
     say: (t: string) => { if (on.current && !muted.current && t.trim()) { q.current.push(t); next() } },
     sayNow: async (t: string) => { emit(true); const r = muted.current ? 'played' as const : await mp3(t); if (r === 'played') on.current = true; emit(false); return r },
     setRoute: (fn: ((t: string) => Promise<void>) | null) => { route.current = fn },
-    setMuted: (m: boolean) => { muted.current = m; if (m) q.current = [] },
+    setMuted: (m: boolean) => { muted.current = m; if (m) { q.current = []; setBlocked(null) } },
     onSpeaking: (fn: (b: boolean) => void) => { subs.current.add(fn); return () => { subs.current.delete(fn) } },
+    /** Sasha 232 · a reply the phone refused to play: the toggle says so (never "Voice on" while she's silent); a tap replays it. */
+    onBlocked: (fn: (b: boolean) => void) => { blockSubs.current.add(fn); return () => { blockSubs.current.delete(fn) } },
+    replayBlocked: () => { const t = lastBlocked.current; setBlocked(null); if (t && !muted.current) { q.current.unshift(t); next() } },
     isOn: () => on.current,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs and a stable callback: one speaker for the page's life
   }), [])
@@ -506,6 +536,8 @@ export default function S2App() {
   const typeBox = useRef<HTMLInputElement | null>(null)
   const [name, setName] = useState<string | null | undefined>(undefined)   // undefined: not known yet (the hello waits ≤ 0.9 s)
   const [muted, setMuted] = useState(false)
+  const [voiceBlocked, setVoiceBlocked] = useState(false)   // Sasha 232 · the phone refused to play her — the toggle says so
+  useEffect(() => speaker.onBlocked(setVoiceBlocked), [speaker])
   useEffect(() => {   // Sasha 230 · the voice toggle is remembered (this browser): read once, applied to her voice
     let m = false
     try { m = localStorage.getItem('s2_muted') === '1' } catch { /* private mode: voice on */ }
@@ -677,8 +709,12 @@ export default function S2App() {
             <div ref={end} />
           </section>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 16px 6px', fontSize: 13.5 }}>
+            {voiceBlocked && !muted ? (
+              <button onClick={() => { speaker.unlock(); speaker.replayBlocked() }} aria-label="Tap to hear her" style={{ background: 'none', border: 0, color: C.gold, padding: 4, fontWeight: 700 }}>
+                🔈 Tap to hear her</button>
+            ) : (
             <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch { /* private mode */ } }} aria-pressed={muted} aria-label={muted ? 'Turn her voice on' : 'Mute her voice'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600 }}>
-              {muted ? '🔇 Voice off' : '🔊 Voice on'}</button>
+              {muted ? '🔇 Voice off' : '🔊 Voice on'}</button>)}
             <button onClick={() => { typeBox.current?.focus() }} style={{ background: 'none', border: 0, color: C.dim, padding: 4 }}>⌨︎ Type instead</button>
           </div>
           <footer style={{ padding: '10px 12px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>

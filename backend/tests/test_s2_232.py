@@ -106,6 +106,7 @@ class DirectFirstEveryKind(unittest.TestCase):
         out = self.pick("s2", {"whatsapp": {"value": "+34600111222"}, "email": {}, "phone": {"fact_index": 0}})
         self.assertEqual((out["status"], out["route"]), ("draft_message", "whatsapp"))
         self.assertTrue(out["open_in_whatsapp"].startswith("https://wa.me/34600111222?text="))
+        self.assertIn("(a dog walk)", out["message"])                         # the service they asked for is in it
 
     def test_s2_their_own_form_still_first(self):
         out = self.pick("s2", {"form": {}, "whatsapp": {"value": "+34600111222"}, "email": {}})

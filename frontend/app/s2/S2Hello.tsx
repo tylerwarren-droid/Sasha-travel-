@@ -104,9 +104,13 @@ function chroma(video: HTMLVideoElement, canvas: HTMLCanvasElement): () => void 
 const BUBBLE_BOTTOM = 'calc(env(safe-area-inset-bottom) + 128px)'
 
 export default function S2Hello({ talker, name, signedIn, backLine, dormant }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean }) {
-  type Phase = 'off' | 'starting' | 'face' | 'voice' | 'tap' | 'bubble' | 'faceAgain'
+  type Phase = 'off' | 'starting' | 'face' | 'faceLate' | 'voice' | 'tap' | 'bubble' | 'faceAgain'
   const [phase, setPhase] = useState<Phase>('off')
   const [tapFor, setTapFor] = useState<'face' | 'voice'>('voice')
+  const phaseRef = useRef<Phase>('off')
+  useEffect(() => { phaseRef.current = phase }, [phase])
+  const tapForRef = useRef<'face' | 'voice'>('voice')
+  useEffect(() => { tapForRef.current = tapFor }, [tapFor])
   const [img, setImg] = useState<string | null>(null)
   const [talking, setTalking] = useState(false)
   const video = useRef<HTMLVideoElement | null>(null)
@@ -161,6 +165,18 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant }: {
     handoff()
   }
 
+  const lateFace = (f: Face, v: HTMLVideoElement) => {
+    const now = phaseRef.current
+    console.log(`[s2-hello] face on screen late (${now})`)
+    face.current = f
+    keyOn()
+    v.muted = true
+    v.play().catch(() => {})
+    if (now === 'voice') setPhase('faceLate')
+    else if (now === 'tap' && tapForRef.current === 'voice') setTapFor('face')
+    else if (now === 'bubble' || now === 'off') setTimeout(() => { face.current = null; setImg(still(canvas.current) || img); keyOff(); f.stop() }, 900)
+  }
+
   // the opening: once per visit (the session), as soon as the page is signed in and the name is known (or ~0.9 s has passed)
   useEffect(() => {
     if (signedIn !== true || phase !== 'off') return
@@ -178,7 +194,10 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant }: {
       if (settled) return
       settled = true
       console.log('[s2-hello] not on screen in 5 s — her voice alone')
-      starting.then(f => f.stop()).catch(() => {})
+      // Sasha 232 · her face, when it comes LATE, is SHOWN — never stopped (iPhone: the face starts in 4.7–11.6 s, measured on
+      // WebKit; at > 5 s it was stopped, so on the phone her face never appeared). Still speaking → her face, big; waiting for a
+      // tap → her face with "Tap to hear Sasha" (the tap then speaks through it); already done → her face becomes the bubble.
+      starting.then(f => lateFace(f, v)).catch(() => {})
       setPhase('voice')
       speakVoice()
     }, Math.max(0, 5000 - (performance.now() - t0)))
@@ -234,7 +253,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant }: {
     } catch { setPhase('bubble') }
   }
 
-  const big = phase === 'starting' || phase === 'face' || phase === 'faceAgain' || (phase === 'tap' && tapFor === 'face')
+  const big = phase === 'starting' || phase === 'face' || phase === 'faceLate' || phase === 'faceAgain' || (phase === 'tap' && tapFor === 'face')
   return (
     <>
       <div onClick={phase === 'faceAgain' ? collapse : undefined} style={{

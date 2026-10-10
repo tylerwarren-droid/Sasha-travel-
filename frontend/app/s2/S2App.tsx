@@ -82,6 +82,7 @@ function useSpeaker() {
   const subs = useRef(new Set<(b: boolean) => void>())
   const blockSubs = useRef(new Set<(b: boolean) => void>())
   const lastBlocked = useRef<string | null>(null)
+  const epoch = useRef(0)   // Sasha 233 · bumped by interrupt(): a line fetched before it is never played
   const emit = (b: boolean) => subs.current.forEach(f => f(b))
   const setBlocked = (t: string | null) => { lastBlocked.current = t; blockSubs.current.forEach(f => f(!!t)) }
   const audio = () => {
@@ -89,13 +90,15 @@ function useSpeaker() {
     return el.current
   }
   const mp3 = async (text: string): Promise<'played' | 'blocked' | 'failed'> => {
+    const mine = epoch.current
     try {
       const r = await fetch(apiUrl('/api/voice/tts'), { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ text }) })   // Sasha 225 · ONE content-type (two were merged → 422: /s2 was silent)
       if (!r.ok) return 'failed'
+      if (mine !== epoch.current) return 'played'   // interrupted while it was being fetched
       const a = audio()
       const url = URL.createObjectURL(await r.blob())
       a.src = url
-      const got = await new Promise<'played' | 'blocked' | 'failed'>(res => { a.onended = () => res('played'); a.onerror = () => res('failed'); a.play().catch(e => res(e?.name === 'NotAllowedError' ? 'blocked' : 'failed')) })
+      const got = await new Promise<'played' | 'blocked' | 'failed'>(res => { a.onended = () => res('played'); a.onpause = () => res('played'); a.onerror = () => res('failed'); a.play().catch(e => res(e?.name === 'NotAllowedError' ? 'blocked' : 'failed')) })   // Sasha 233 · paused (interrupted) ends it too
       URL.revokeObjectURL(url)
       if (got === 'blocked') setBlocked(text); else if (got === 'played') setBlocked(null)
       return got
@@ -126,6 +129,8 @@ function useSpeaker() {
     sayNow: async (t: string) => { emit(true); const r = muted.current ? 'played' as const : await mp3(t); if (r === 'played') on.current = true; emit(false); return r },
     setRoute: (fn: ((t: string) => Promise<void>) | null) => { route.current = fn },
     setMuted: (m: boolean) => { muted.current = m; if (m) { q.current = []; setBlocked(null) } },
+    /** Sasha 233 · "Thanks!" mid read-back: what she's saying stops now, and nothing queued is said. */
+    interrupt: () => { epoch.current++; q.current = []; try { if (el.current && !el.current.paused) el.current.pause() } catch { /* nothing playing */ } },
     onSpeaking: (fn: (b: boolean) => void) => { subs.current.add(fn); return () => { subs.current.delete(fn) } },
     /** Sasha 232 · a reply the phone refused to play: the toggle says so (never "Voice on" while she's silent); a tap replays it. */
     onBlocked: (fn: (b: boolean) => void) => { blockSubs.current.add(fn); return () => { blockSubs.current.delete(fn) } },
@@ -567,13 +572,15 @@ export default function S2App() {
       const line = typeof j?.line === 'string' && j.line ? untag(j.line) : null
       setBackLine(line)
       if (!line) return
-      const recent: { role: string; content: string }[] = (Array.isArray(j.recent) ? j.recent : [])
+      const recent: { role: string; content: string; cards?: boolean }[] = (Array.isArray(j.recent) ? j.recent : [])
         .filter((m: Ev) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content && m.content !== '[removed]')
-      histRef.current = [...recent, { role: 'assistant', content: line }]   // she carries on from where it stopped
-      const shown: Msg[] = recent.slice(-8).map(m => ({ role: m.role === 'user' ? 'user' as const : 'sasha' as const, text: untag(m.content), cards: [] }))
+      histRef.current = [...recent.map(m => ({ role: m.role, content: m.content })), { role: 'assistant', content: line }]   // she carries on from where it stopped
+      // Sasha 233 · her cards go back under the line that SHOWED them (marked by the server), never simply under the last line
+      const marked = recent.map(m => !!m.cards).lastIndexOf(true)
+      const from = Math.max(0, Math.min(recent.length - 8, marked >= 0 ? marked - 1 : recent.length))
       const cards = j.screen?.cards
-      const k = shown.map(m => m.role).lastIndexOf('sasha')
-      if (Array.isArray(cards) && cards.length && k >= 0) shown[k] = { ...shown[k], cards: [{ k: 'venues', cards: untagDeep(cards) }] }
+      const shown: Msg[] = recent.slice(from).map(m => ({ role: m.role === 'user' ? 'user' as const : 'sasha' as const, text: untag(m.content),
+        cards: m.cards && Array.isArray(cards) && cards.length ? [{ k: 'venues' as const, cards: untagDeep(cards) }] : [] }))
       setMsgs(ms => (ms.length ? ms : [...shown, { role: 'sasha', text: line, cards: [] }]))
     }).catch(() => setBackLine(null))
     return () => { live = false; clearTimeout(t) }
@@ -633,7 +640,7 @@ export default function S2App() {
           try { ev = JSON.parse(line) } catch { continue }
           if (ev.type === 'render' || ev.type === 'state') ev = untagDeep(ev)
           if (ev.type === 'text') { reply += ev.delta; patch(m => ({ ...m, text: untag(reply) })) }
-          else if (ev.type === 'say') speaker.say(ev.text)
+          else if (ev.type === 'say') { if (ev.interrupt) speaker.interrupt(); speaker.say(ev.text) }
           else if (ev.type === 'replace') { reply = ev.text; patch(m => ({ ...m, text: untag(reply) })); if (ev.speak && ev.say) speaker.say(ev.say) }
           else if (ev.type === 'error') { reply = ev.message; patch(m => ({ ...m, text: untag(reply) })); speaker.say(ev.message) }
           else if (ev.type === 'done') { reply = ev.text || reply; if (ev.dormant) setDormant(true); patch(m => ({ ...m, text: untag(reply), cards: /^✅\s*Booked/m.test(reply) ? [...m.cards, { k: 'booked', line: (reply.match(/✅[^\n]*/) || [''])[0] }] : m.cards })) }

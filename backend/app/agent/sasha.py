@@ -1166,7 +1166,7 @@ async def agent_turn(request: Request):
 
             async def dormant():
                 yield f"data: {json.dumps({'type': 'text', 'delta': bye})}\n\n"
-                yield f"data: {json.dumps({'type': 'say', 'text': bye})}\n\n"
+                yield f"data: {json.dumps({'type': 'say', 'text': bye, 'interrupt': True})}\n\n"   # Sasha 233 · stops a long read-back mid-sentence
                 try:
                     await MEM.closing(account, message, bye)
                 except Exception as e:

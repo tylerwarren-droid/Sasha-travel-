@@ -139,6 +139,30 @@ def _plan_for(read: dict, rungs: list, account: Optional[str] = None) -> dict:
         return {"route": None, "line": None}
 
 
+# ── Sasha 233 · the named-platform exception: what robots.txt allows, read on THIS server (a scratch fixture's check) ──────────
+
+@router.get("/platform/check")
+async def platform_check(request: Request, url: str = "", body: int = 0):
+    """For the accounts in SASHA_PLATFORM_CHECK_ACCOUNTS only (scratch fixtures): a named platform's robots verdict for a URL,
+    and — when robots allows it and body=1 — that public page as fetched (GET, no cookies). Nothing is submitted."""
+    from . import platform_read as PR
+    acct = (account_for(request) or "").lower()
+    listed = {a.strip().lower() for a in os.getenv("SASHA_PLATFORM_CHECK_ACCOUNTS", "").split(",") if a.strip()}
+    if not acct or acct not in listed:
+        return _refuse(403, "not_listed", "this check is for a listed scratch account")
+    if not PR.named(url):
+        return _refuse(422, "not_named_platform", "Fresha, Treatwell, Booksy or Rover only")
+    rb = await PR.robots(None, url)
+    out = {"ok": True, "platform": PR.named(url), "url": url, "robots": rb}
+    if body and rb.get("allowed"):
+        try:
+            got = await PR.fetch(None, url)
+            out["page"] = {"url": got["url"], "status": got["status"], "bytes": len(got["text"]), "text": got["text"]}
+        except PR.Refused as e:
+            out["page"] = {"refused": e.rule, "detail": e.detail}
+    return out
+
+
 # ── reading a venue ───────────────────────────────────────────────────────────────────────────
 
 @router.post("/venues/read")

@@ -79,6 +79,9 @@ def fold(mem: Optional[dict], said: str, reply: str, seen: dict) -> dict:
     ran = {c.get("tool") for c in calls if c.get("ok")}
     if seen.get("cards"):
         m["screen"] = {"cards": [_card(c) for c in seen["cards"] if c.get("place_id")][:8], "ribbon": seen.get("ribbon"), "focus": seen.get("focus")}
+        for x in m["recent"]:
+            x.pop("cards", None)
+        m["recent"][-1]["cards"] = True   # Sasha 233 · the line that SHOWED them — restored there, not under the last line
     topic = None
     if "search_venues" in ran and seen.get("ribbon"):
         topic = _thing_of_ribbon(seen["ribbon"])

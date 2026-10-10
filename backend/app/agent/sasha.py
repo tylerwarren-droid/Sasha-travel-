@@ -500,9 +500,12 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     if keep_on(account, surface):   # Sasha 224 · the Keep's tools only where the Keep is on (/s2; /next only behind SASHA_KEEP_S1)
         tools = tools + [API.schema_for_model(t) for t in API.KEEP_TOOLS
                          if surface == "s2" or t["name"] != "keep_add"]   # /next has no photo picker: its Keep is added on /keep
+    run = API.call        # CR 71 · how a tool runs: agapi.v0.call, as always — /s2's block below is the ONLY place that changes it
     if surface == "s2":   # Sasha 221 · S2's tool set (/s2 only); S1's list is untouched
         from app.agent import s2 as S2
         tools = [t for t in tools if t["name"] in S2.S2_TOOLS]
+        from agapi import via_agapi as VIA   # CR 71 · SASHA_S2_VIA_AGAPI (0 · shadow · reads · 1), read here and nowhere else
+        run = VIA.runner(API.call)
     tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     step_ms: List[dict] = []
     pending = ""          # this step's text, not yet spoken
@@ -640,7 +643,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 args["idempotency_key"] = f"{turn_key}:{u.name}:{hashlib.sha256(json.dumps(u.input, sort_keys=True).encode()).hexdigest()[:12]}"
             if u.name in ("book", "book_venue", "cancel_venue", "send_email", "send_whatsapp"):
                 args["approval"] = {"said": message}   # the REAL words of this turn — never the model's (CR 60: the email's too)
-            r = await API.call(ctx, u.name, args)
+            r = await run(ctx, u.name, args)
             if r.get("ok"):
                 _amounts(r["result"], allowed)
             line = outage(r)
@@ -1040,9 +1043,13 @@ async def agent_turn(request: Request):
                 yield f"data: {json.dumps({'type': 'done', 'text': _held, 'guard': ['input_guard']})}\n\n"
             return StreamingResponse(withheld(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
         body["history"] = _KEEP.clean_history(body.get("history") or [])
+    guest_token = request.headers.get("authorization", "").partition(" ")[2].strip() if surface == "s2" else None   # CR 71 · /s2 only
     over = await over_budget(account)
 
     async def events():
+        if guest_token:   # CR 71 · this guest's own token goes with S2's AgAPI calls (via_agapi); /next never sets it
+            from agapi import via_agapi as VIA
+            VIA.GUEST_TOKEN.set(guest_token)
         if over:   # Sasha 215 · said, in her voice, never a bare 429
             yield f"data: {json.dumps({'type': 'error', 'message': over, 'rule': 'budget'})}\n\n"
             return

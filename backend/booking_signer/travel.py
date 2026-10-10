@@ -172,6 +172,9 @@ async def order(c: dict, name: str, email: str, phone: Optional[str], people: Op
         given, _, family = (name or "Guest Test").partition(" ")
         pax = [{"id": p["id"], "type": "adult", "given_name": given, "family_name": family or "Guest", "email": email or "guest@example.com",
                 "phone_number": phone or "+34600000000", **PLACEHOLDERS} for p in o["passengers"]]
+    if documents and "supported_passenger_identity_document_types" in o:   # Sasha 228 · only what THIS airline takes (easyJet takes none:
+        ok_types = set(o.get("supported_passenger_identity_document_types") or [])   # sending one anyway would fail the order)
+        documents = [d for d in documents if d.get("type") in ok_types]
     if documents and pax:   # Sasha 224 · CR 63 — the Keep's identity documents (opened just for this order) → the account holder's passenger
         pax[next((k for k, p in enumerate(people or []) if p.get("is_account_holder")), 0) % len(pax)]["identity_documents"] = documents
     s, j = await HTTP("POST", "/air/orders", {"data": {"type": "instant", "selected_offers": [c["id"]], "passengers": pax,
@@ -182,7 +185,7 @@ async def order(c: dict, name: str, email: str, phone: Optional[str], people: Op
     d = j["data"]
     if d.get("live_mode"):
         return {"why": "Duffel answered in LIVE mode — refused"}
-    return {"booking_reference": d.get("booking_reference"), "order_id": d.get("id")}
+    return {"booking_reference": d.get("booking_reference"), "order_id": d.get("id"), "documents_sent": len(documents or [])}
 
 
 async def _record(account: str, c: dict, ref: str) -> Optional[str]:

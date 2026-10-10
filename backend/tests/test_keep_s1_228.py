@@ -174,6 +174,35 @@ class SaidUpFront(_Keep):
             self.assertIsNone(self.passport())
 
 
+class OnlyWhatTheAirlineTakes(unittest.TestCase):
+    """Found live (228): Duffel's easyJet TEST offers take no identity document; sending the passport anyway would fail the order."""
+    def order(self, supported):
+        from booking_signer import travel as T
+        sent = {}
+
+        async def http(method, path, body=None):
+            if method == "GET":
+                return 200, {"data": {"total_amount": "50.00", "total_currency": "EUR", "passengers": [{"id": "pas_1"}],
+                                      "supported_passenger_identity_document_types": supported}}
+            sent.update(body["data"]["passengers"][0])
+            return 201, {"data": {"booking_reference": "ABC123", "id": "ord_1", "live_mode": False}}
+        people = [{"given_name": "Test", "family_name": "Fixture", "born_on": "1980-02-01", "title": "mr", "gender": "m", "is_account_holder": True}]
+        doc = [{"type": "passport", "unique_identifier": "XDA123456", "issuing_country_code": "ES", "expires_on": "2031-05-01"}]
+        with mock.patch.object(T, "HTTP", http), mock.patch.object(T, "token", lambda: "duffel_test_x"):
+            o = run(T.order({"id": "off_1", "amount": "50.00", "currency": "EUR"}, "Test Fixture", "f@example.com", "+34600000000", people, documents=doc))
+        return o, sent
+
+    def test_a_passport_goes_where_the_airline_takes_one(self):
+        o, sent = self.order(["passport", "known_traveler_number"])
+        self.assertEqual(o["documents_sent"], 1)
+        self.assertEqual(sent["identity_documents"][0]["type"], "passport")
+
+    def test_never_where_it_doesnt_and_the_order_still_goes(self):
+        o, sent = self.order([])
+        self.assertEqual((o["booking_reference"], o["documents_sent"]), ("ABC123", 0))
+        self.assertNotIn("identity_documents", sent)
+
+
 class SaidByCode(unittest.TestCase):
     def test_the_line_is_said_once_by_code_on_next(self):
         import app.services.llm as LLM

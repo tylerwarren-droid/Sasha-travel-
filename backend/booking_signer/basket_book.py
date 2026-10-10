@@ -374,7 +374,7 @@ async def _book_rows(account: str, sid: str, rows: list, contact: dict, email, p
                     if "why" not in o2:
                         c, o = again, o2
             if kept is not None:
-                kept.result(o.get("booking_reference"), "why" not in o)
+                kept.result(o.get("booking_reference"), "why" not in o and bool(o.get("documents_sent", 1)))   # Sasha 228 · "used" only if it went
             if "why" in o:
                 await BK.failed(account, r["id"], o["why"])
                 continue

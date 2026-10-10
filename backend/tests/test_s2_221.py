@@ -108,8 +108,10 @@ class DemoSetting(unittest.TestCase):
     def test_who_has_the_demo_setting(self):
         from booking_signer import ladder_routes as LR, guest_accounts as GA
         with mock.patch.object(GA, "founder", lambda a: a == "f"), mock.patch.dict("os.environ", {"SASHA_S2_DEMO_ACCOUNTS": "fixture-1"}):
-            self.assertTrue(LR._s2_demo_account("f"))
+            self.assertFalse(LR._s2_demo_account("f"))   # Sasha 232 · the founder only if listed (real bookings on /s2)
             self.assertTrue(LR._s2_demo_account("fixture-1"))
+        with mock.patch.object(GA, "founder", lambda a: a == "f"), mock.patch.dict("os.environ", {"SASHA_S2_DEMO_ACCOUNTS": "f,fixture-1"}):
+            self.assertTrue(LR._s2_demo_account("f"))
             self.assertFalse(LR._s2_demo_account("guest-9"))
             self.assertFalse(LR._s2_demo_account(None))
 

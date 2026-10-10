@@ -239,11 +239,11 @@ def is_restaurant(asked_for) -> bool:
 
 
 def _s2_demo_account(account: Optional[str]) -> bool:
-    """Sasha 221 · who has the S2 demo setting: the founder, or an account listed in SASHA_S2_DEMO_ACCOUNTS (a scratch fixture)."""
+    """Sasha 221 · who has the S2 demo setting: an account listed in SASHA_S2_DEMO_ACCOUNTS (a scratch fixture). Sasha 232 · the founder
+    only if listed (Tyler, 10 Oct: real bookings on /s2) — S1's founder powers (standin, rehearsal, calls) are unchanged."""
     import os
-    from .guest_accounts import founder
     listed = {a.strip().lower() for a in os.getenv("SASHA_S2_DEMO_ACCOUNTS", "").split(",") if a.strip()}
-    return bool(account) and (founder(account) or account.lower() in listed)
+    return bool(account) and account.lower() in listed
 
 
 def standin(account: Optional[str]) -> bool:

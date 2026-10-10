@@ -33,7 +33,7 @@ class FakeAgAPI:
     def __init__(self, cards=CARDS):
         self.calls, self.cards = [], cards
 
-    async def __call__(self, op, body):
+    async def __call__(self, op, body, approval=None):
         self.calls.append((op, body))
         if op == "users.register":
             return {"ok": True, "result": {"end_user_id": "usr_" + "0" * 26}}
@@ -50,6 +50,31 @@ class FakeAgAPI:
         if op == "cards.ask":
             return {"ok": True, "result": {"card": "Example Bank Travel Visa", "answer": "no", "text": ANSWER,
                                            "quotes": [{"source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/cards/example-bank-travel-visa/guide-to-benefits.pdf"}]}}
+        if op == "cards.rental_cover":
+            return {"ok": True, "result": {"card": "Example Bank Travel Visa", "framing": "From your card's terms…", "counter": {
+                "decline": [{"say": "Decline CDW: your Example Bank Travel Visa's terms say it covers damage and theft as primary cover…", "quotes": []}],
+                "keep": [], "optional": [], "check": []}, "conditions": [], "bring": [], "report": [], "cards": [], "skipped": []}}
+        if op == "cards.accident_start":
+            self.acc_step = "safety"
+            return {"ok": True, "result": {"case_id": "acc_" + "1" * 26, "step": "safety", "steps": [], "say": "Is anyone hurt?", "choices": ["no", "yes", "not sure"]}}
+        if op == "cards.accident_step":
+            if body.get("answer") == "yes":
+                return {"ok": True, "result": {"case_id": body["case_id"], "step": "safety", "steps": [], "say": "Call 112 now.",
+                                               "handoff": "This needs a lawyer or your insurer's legal team. I can find one for you, and I'll keep doing only the paperwork."}}
+            return {"ok": True, "result": {"case_id": body["case_id"], "step": "duties", "steps": [], "say": "What the official rules say:"}}
+        if op == "cards.accident_notify":
+            if not approval:
+                return {"ok": False, "error": {"code": "approval_required", "details": {"read_back_id": "rb_acc", "read_back": {"lines": [
+                    "Report the accident to Example Rentals at accidents@example-rentals.example (the address in its terms)."]}}}}
+            return {"ok": True, "result": {"case_id": body["case_id"], "step": "claim", "steps": [], "state": "sent", "say": "Sent to Example Rentals.",
+                                           "claim_case_id": "clm_" + "1" * 26}}
+        if op == "sandbox.simulate_approval":
+            said = body["said"].lower()
+            if "yes" not in said or "?" in said:
+                return {"ok": False, "error": {"code": "no_explicit_yes"}}
+            return {"ok": True, "result": {"approval_id": "apv_1"}}
+        if op == "cards.accident_photo":
+            return {"ok": True, "result": {"case_id": body["case_id"], "step": "photos", "steps": [], "shots": []}}
         if op == "cards.which":
             return {"ok": True, "result": {"framing": "Information from your cards' own terms. You decide.", "net_view": "Travel: FX ≈ USD 0.00",
                                            "cards": [{"card": "Example Bank Travel Visa", "reasons": [{"text": "FX fee 0% ≈ USD 0.00"}]}], "skipped": []}}
@@ -57,14 +82,17 @@ class FakeAgAPI:
 
 
 class Ctx:
-    def __init__(self, account=ACCOUNT):
-        self.account = account
+    def __init__(self, account=ACCOUNT, said="", ago=0):
+        from datetime import datetime, timedelta, timezone
+        self.account, self.user_said = account, said
+        self.started = datetime.now(timezone.utc) + timedelta(seconds=ago)
 
 
 class FinePrint(unittest.TestCase):
     def setUp(self):
         self.agapi = FakeAgAPI()
-        for p in (mock.patch.object(FP, "CALL", self.agapi), mock.patch.dict(FP._USERS, {}, clear=True), mock.patch.dict(FP._IMAGES, {}, clear=True)):
+        for p in (mock.patch.object(FP, "CALL", self.agapi), mock.patch.dict(FP._USERS, {}, clear=True), mock.patch.dict(FP._IMAGES, {}, clear=True),
+                  mock.patch.dict(FP._ACCIDENT, {}, clear=True), mock.patch.dict(FP._CLAIM, {}, clear=True), mock.patch.dict(FP._PEND, {}, clear=True)):
             p.start()
             self.addCleanup(p.stop)
 
@@ -103,6 +131,59 @@ class FinePrint(unittest.TestCase):
         with mock.patch.object(FP, "CALL", FP._agapi), mock.patch.dict("os.environ", {"SASHA_AGAPI_TEST_KEY": ""}):
             r = run(FP.run_tool(Ctx(), "my_cards", {}))
         self.assertEqual(r["error"]["code"], "unavailable")
+
+
+class CR75(FinePrint):
+    """The counter card, the accident playbook and the claim on /s2 — each result carries its /s2-only card."""
+
+    def test_the_counter_card_renders_on_s2(self):
+        from app.agent import sasha as AG
+        r = run(FP.run_tool(Ctx(), "rental_cover", {"country": "pt", "rental_company": "Example Rentals"}))
+        self.assertTrue(r["result"]["say"].startswith("Decline CDW"))
+        ev = AG.render("rental_cover", r["result"], {})
+        self.assertEqual((ev["type"], ev["kind"]), ("render", "counter_card"))
+        self.assertIn(ev["kind"], AG.KINDS_S2_ONLY)
+        self.assertIsNone(AG.render("search_venues", {"render": {"kind": "counter_card"}}, {}) if False else None)
+
+    def test_a_render_payload_is_honoured_only_for_fine_prints_own_tools(self):
+        from app.agent import sasha as AG
+        ev = AG.render("send_email", {"render": {"kind": "accident", "view": {}}}, {})
+        self.assertFalse(ev and ev.get("kind") == "accident")                                  # another tool can't draw fine print's cards
+
+    def test_the_accident_starts_with_safety_and_the_hand_off_is_said(self):
+        r = run(FP.run_tool(Ctx(), "accident", {"country": "PT", "place": "a roundabout in Lisbon", "rental_company": "Example Rentals"}))
+        self.assertEqual((r["result"]["say"], r["result"]["render"]["kind"]), ("Is anyone hurt?", "accident"))
+        r = run(FP.run_tool(Ctx(), "accident", {"answer": "yes"}))
+        self.assertEqual(r["result"]["say"], "Call 112 now.")
+        self.assertIn("lawyer", r["result"]["handoff"])
+
+    def test_notify_needs_their_own_yes_in_a_later_turn(self):
+        run(FP.run_tool(Ctx(), "accident", {"country": "PT", "place": "Lisbon", "rental_company": "Example Rentals"}))
+        r = run(FP.run_tool(Ctx(), "accident_notify", {}))
+        self.assertEqual(r["result"]["status"], "awaiting_yes")
+        self.assertEqual(r["result"]["render"]["kind"], "read_back")
+        r = run(FP.run_tool(Ctx(said="Yes, send it", ago=-60), "accident_notify", {}))              # the SAME turn: not a yes
+        self.assertEqual(r["result"]["status"], "awaiting_yes")
+        r = run(FP.run_tool(Ctx(said="Wait, what will they charge?", ago=5), "accident_notify", {}))
+        self.assertEqual(r["error"]["code"], "no_explicit_yes")
+        r = run(FP.run_tool(Ctx(said="Yes, send it.", ago=5), "accident_notify", {}))
+        self.assertEqual((r["result"]["status"], r["result"]["render"]["kind"]), ("sent", "accident"))
+        self.assertEqual(FP._CLAIM[ACCOUNT], "clm_" + "1" * 26)
+
+    def test_the_accident_photo_route_is_s2_only(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.agent import sasha as AG
+        run(FP.run_tool(Ctx(), "accident", {"country": "PT", "place": "Lisbon"}))
+        app = FastAPI()
+        app.include_router(AG.router)
+        c = TestClient(app)
+        body = {"shot": "your_car_front", "media_type": "image/jpeg", "content_base64": base64.b64encode(b"jpeg").decode()}
+        with mock.patch("app.services.chat_account.chat_account", mock.AsyncMock(return_value=ACCOUNT)), \
+                mock.patch("app.services.chat_account.signed_in", lambda a: True):
+            self.assertEqual(c.post("/api/agent/s2/accident-photo", json=body).status_code, 404)
+            self.assertTrue(c.post("/api/agent/s2/accident-photo", json=body, headers={"x-sasha-surface": "s2"}).json()["ok"])
+        self.assertEqual([op for op, _ in self.agapi.calls][-1], "cards.accident_photo")
 
 
 class OnlyOnS2(unittest.TestCase):

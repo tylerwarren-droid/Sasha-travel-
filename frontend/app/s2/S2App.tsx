@@ -26,6 +26,10 @@ type Card =
   | { k: 'capabilities'; groups: { group: string; items: string[] }[] }
   | { k: 'plans'; items: Plan[]; on?: string }
   | { k: 'notice'; title: string; lines: string[]; status?: string }
+  | { k: 'counter_card'; card: Ev }   // CR 75 · fine print: the counter card (each line quoted)
+  | { k: 'my_cards'; cards: { product: string; network: string; status: string }[] }
+  | { k: 'accident'; view: Ev }
+  | { k: 'claim_status'; claim: Ev }
 type Plan = { kind: 'dinner' | 'spa' | 'venue' | 'flight' | 'hotel'; title: string; when: string; where?: string; status: string; reference?: string; id?: string }
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
@@ -292,7 +296,131 @@ function Plans({ items, on }: { items: Plan[]; on?: string }) {
   )
 }
 
-function CardView({ c, choose }: { c: Card; choose: (t: string) => void }) {
+/** CR 75 · fine print — every line rests on a quote; "source" opens the sentence, its page and the date it was read. */
+type Q = { quote: string; source_url: string; read_at?: string }
+function Sources({ quotes }: { quotes?: Q[] }) {
+  const [open, setOpen] = useState(false)
+  if (!quotes || !quotes.length) return null
+  return (
+    <span>
+      <button onClick={() => setOpen(o => !o)} style={{ background: 'none', border: 0, color: C.gold, fontSize: 12, padding: '0 0 0 6px', textDecoration: 'underline' }}>
+        {open ? 'hide' : 'source'}</button>
+      {open && quotes.map((q, i) => (
+        <div key={i} style={{ fontSize: 12.5, color: C.dim, borderLeft: `2px solid ${C.line}`, margin: '6px 0', padding: '2px 8px' }}>
+          &ldquo;{q.quote}&rdquo;<br /><a href={q.source_url} target="_blank" rel="noreferrer" style={{ color: C.dim }}>{(() => { try { return new URL(q.source_url).hostname } catch { return 'source' } })()}</a>
+          {q.read_at ? ` · read ${q.read_at}` : ''}</div>))}
+    </span>)
+}
+type Line = { say: string; quotes?: Q[] }
+function Lines({ title, lines, tone }: { title: string; lines?: Line[]; tone?: string }) {
+  if (!lines || !lines.length) return null
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 11.5, letterSpacing: '.1em', textTransform: 'uppercase', color: tone || C.dim }}>{title}</div>
+      {lines.map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '3px 0' }}>{untag(l.say)}<Sources quotes={l.quotes} /></div>)}
+    </div>)
+}
+function CounterCard({ card }: { card: Ev }) {
+  const k = card.counter || {}
+  return (
+    <Box k="At the counter" h={card.card ? `Pay with your ${untag(card.card)}` : 'Your counter card'} tone={C.gold}>
+      <Lines title="Decline" lines={k.decline} tone="#f19999" />
+      <Lines title="Check first" lines={k.check} tone={C.gold} />
+      <Lines title="Keep" lines={k.keep} tone="#7ee2a8" />
+      <Lines title="Optional" lines={k.optional} />
+      <Lines title="Conditions" lines={card.conditions} />
+      <Lines title="Bring" lines={card.bring} />
+      <Lines title="If something happens" lines={card.report} />
+      <div style={{ fontSize: 12, color: C.dim, marginTop: 10 }}>{untag(card.framing || '')}</div>
+    </Box>)
+}
+function MyCards({ cards, choose }: { cards: { product: string; network: string; status: string }[]; choose: (t: string) => void }) {
+  if (!cards.length) return <Box k="My cards" h="No cards yet">Add one with a photo or its name — only its product is kept, never a number.</Box>
+  return (
+    <Box k="My cards">
+      {cards.map((c, i) => (
+        <div key={i} style={{ padding: '8px 0', borderTop: i ? `1px solid ${C.line}` : 'none' }}>
+          <div style={{ fontWeight: 700 }}>{untag(c.product)} <span style={{ color: C.dim, fontWeight: 400 }}>· {c.network}</span></div>
+          <div style={{ fontSize: 12.5, color: C.dim }}>{untag(c.status)}</div>
+          <button onClick={() => choose(`What does my ${untag(c.product)} cover`)} style={{ marginTop: 6, padding: '6px 12px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 600 }}>
+            What does it cover?</button>
+        </div>))}
+    </Box>)
+}
+const STEP_NAMES: Record<string, string> = { safety: 'Safety', duties: 'At the scene', photos: 'Photos', statement: 'The statement', clocks: 'Deadlines', notify: 'Notify', claim: 'The claim' }
+function AccidentCard({ view, send }: { view: Ev; send: (t: string) => void }) {
+  // the card's own update (a photo sealed) until the next turn sends a new view — derived, not synced in an effect
+  const [local, setLocal] = useState<{ base: Ev; v: Ev } | null>(null)
+  const v: Ev = local && local.base === view ? local.v : view
+  const setV = (x: Ev) => setLocal({ base: view, v: x })
+  const [busy, setBusy] = useState<string | null>(null)
+  const pick = useRef<HTMLInputElement | null>(null)
+  const shot = useRef<string>('')
+  const btn = (primary?: boolean) => ({ padding: '9px 16px', borderRadius: 999, border: `1px solid ${C.gold}`, background: primary ? C.gold : 'transparent', color: primary ? '#111' : C.gold, fontWeight: 700, marginRight: 8, marginTop: 8 }) as const
+  async function photo(f?: File | null) {
+    if (!f || !shot.current) return
+    setBusy(shot.current)
+    try {
+      const image = await shrink(f)
+      const r = await fetch('/api/s2-agent/accident-photo', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ shot: shot.current, media_type: 'image/jpeg', content_base64: image }) })
+      const j = await r.json().catch(() => ({}))
+      if (j?.ok && j.result) setV(j.result)
+    } finally { setBusy(null); if (pick.current) pick.current.value = '' }
+  }
+  const steps: string[] = v.steps || []
+  return (
+    <Box k={`Accident · ${STEP_NAMES[v.step] || v.step}`} tone={v.step === 'safety' ? '#f19999' : undefined}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>{steps.map(s => <div key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: steps.indexOf(s) <= steps.indexOf(v.step) ? C.gold : C.line }} />)}</div>
+      {v.say ? <div style={{ fontSize: 15.5, fontWeight: 600 }}>{untag(v.say)}</div> : null}
+      {v.step === 'safety' && <>
+        {v.call && <a href={`tel:${v.call.number}`} style={{ display: 'inline-block', marginTop: 10, padding: '12px 22px', borderRadius: 999, background: '#e5484d', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>Call {v.call.number}</a>}
+        {v.call?.source && <Sources quotes={[v.call.source]} />}
+        <div>{(v.choices || []).map((c: string) => <button key={c} onClick={() => send(c)} style={btn(c === 'no')}>{c[0].toUpperCase() + c.slice(1)}</button>)}</div></>}
+      {v.step === 'duties' && <><Lines title="The official rules" lines={v.lines} /><button onClick={() => send('done')} style={btn(true)}>Done</button></>}
+      {v.step === 'photos' && <>
+        <input ref={pick} type="file" accept="image/*" capture="environment" hidden onChange={e => photo(e.target.files?.[0])} aria-label="Accident photo" />
+        {(v.shots || []).map((s: Ev) => (
+          <div key={s.shot} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${C.line}` }}>
+            <span style={{ fontSize: 14, color: s.taken ? '#7ee2a8' : '#fff' }}>{s.taken ? '✓ ' : ''}{s.say}</span>
+            <button onClick={() => { shot.current = s.shot; pick.current?.click() }} disabled={!!busy} style={{ ...btn(), marginTop: 0, padding: '5px 12px' }}>{busy === s.shot ? '…' : s.taken ? 'Retake' : 'Take'}</button>
+          </div>))}
+        <button onClick={() => send('done')} style={btn(true)}>Done with photos</button></>}
+      {v.step === 'statement' && <>
+        <div style={{ fontSize: 13, color: C.dim, marginTop: 6 }}>{untag(v.form || '')} — the facts:</div>
+        {Object.entries(v.facts || {}).filter(([, x]) => x && (typeof x !== 'object' || Object.keys(x as object).length)).map(([k, x]) => (
+          <div key={k} style={{ fontSize: 14, padding: '2px 0' }}><span style={{ color: C.dim }}>{k.replace(/_/g, ' ')}:</span> {Array.isArray(x) ? x.join(', ') : typeof x === 'object' ? Object.values(x as object).join(' · ') : String(x)}</div>))}
+        <div style={{ fontSize: 13.5, color: C.gold, marginTop: 8 }}>Yours to fill with the other driver: {(v.left_for_you || []).join(', ')}.</div>
+        {(v.advice || []).map((a: Line, i: number) => <div key={i} style={{ fontSize: 13 }}>{a.say}<Sources quotes={a.quotes} /></div>)}
+        <button onClick={() => send('done')} style={btn(true)}>Done</button></>}
+      {(v.step === 'clocks' || v.step === 'notify') && (v.clocks || []).map((c: Ev, i: number) => (
+        <div key={i} style={{ padding: '6px 0', borderTop: `1px solid ${C.line}` }}>
+          <div style={{ fontSize: 14.5 }}>{untag(c.say)}{c.due ? <b style={{ color: C.gold }}> · by {c.due}</b> : null}<Sources quotes={c.quotes} /></div></div>))}
+      {v.step === 'clocks' && <button onClick={() => send('done')} style={btn(true)}>Done</button>}
+      {v.step === 'notify' && <button onClick={() => send('Notify the rental company')} style={btn(true)}>Notify the rental company</button>}
+      {v.step === 'claim' && v.claim_case_id && <button onClick={() => send('File my card claim')} style={btn(true)}>File the card claim</button>}
+      {v.handoff && <div style={{ marginTop: 10, padding: 10, borderRadius: 10, border: '1px solid #f19999', color: '#f19999', fontSize: 14 }}>{v.handoff}</div>}
+    </Box>)
+}
+function ClaimStatus({ claim }: { claim: Ev }) {
+  const missing = (claim.evidence || []).filter((e: Ev) => e.missing)
+  return (
+    <Box k={`Claim · ${claim.state === 'filed' ? 'filed' : claim.state === 'ready_for_portal' ? 'ready for their portal' : 'being prepared'}`} h={untag(claim.card || '')}
+      tone={claim.state === 'filed' ? 'rgba(126,226,168,.5)' : undefined}>
+      {(claim.deadlines || []).map((d: Ev, i: number) => <div key={i} style={{ fontSize: 14 }}>{untag(d.say)}{d.quote ? <Sources quotes={[d as Q]} /> : null}</div>)}
+      {missing.length ? <div style={{ marginTop: 8, fontSize: 13.5 }}><span style={{ color: C.gold }}>Still needed:</span>
+        {missing.map((e: Ev) => <div key={e.item} style={{ color: C.dim }}>· {e.item.replace(/_/g, ' ')} — {e.where}</div>)}</div> : null}
+      {(claim.replies || []).map((r: Ev) => <div key={r.reply_id} style={{ marginTop: 8, fontSize: 13.5, borderLeft: `2px solid ${C.line}`, paddingLeft: 8 }}>
+        <span style={{ color: C.dim }}>They wrote:</span> &ldquo;{r.text?.text}&rdquo;</div>)}
+      {claim.note ? <div style={{ fontSize: 13, color: C.dim, marginTop: 8 }}>{untag(claim.note)}</div> : null}
+    </Box>)
+}
+
+function CardView({ c, choose, send }: { c: Card; choose: (t: string) => void; send: (t: string) => void }) {
+  if (c.k === 'counter_card') return <CounterCard card={c.card} />
+  if (c.k === 'my_cards') return <MyCards cards={c.cards} choose={choose} />
+  if (c.k === 'accident') return <AccidentCard view={c.view} send={send} />
+  if (c.k === 'claim_status') return <ClaimStatus claim={c.claim} />
   if (c.k === 'keep_capture') return <KeepCapture what={c.what} />
   if (c.k === 'plans') return <Plans items={c.items} on={c.on} />
   if (c.k === 'notice') return (
@@ -433,6 +561,10 @@ export default function S2App() {
             else if (ev.kind === 'plans' && Array.isArray(ev.items)) add({ k: 'plans', items: ev.items, on: ev.on })
             else if (ev.kind === 'notice' && ev.title) add({ k: 'notice', title: String(ev.title), lines: Array.isArray(ev.lines) ? ev.lines : [], status: ev.status })
             else if (ev.kind === 'pay_here') add({ k: 'pay', client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid })
+            else if (ev.kind === 'counter_card' && ev.card) add({ k: 'counter_card', card: ev.card })   // CR 75 · fine print
+            else if (ev.kind === 'my_cards') add({ k: 'my_cards', cards: ev.cards || [] })
+            else if (ev.kind === 'accident' && ev.view) add({ k: 'accident', view: ev.view })
+            else if (ev.kind === 'claim_status' && ev.claim) add({ k: 'claim_status', claim: ev.claim })
           }
         }
       }
@@ -483,7 +615,7 @@ export default function S2App() {
                   <div style={{ maxWidth: '88%', padding: '10px 14px', borderRadius: 18, background: m.role === 'user' ? 'linear-gradient(135deg,#6d4aff,#9b4dff)' : C.card, border: m.role === 'user' ? 'none' : `1px solid ${C.line}`, lineHeight: 1.45 }}>
                     {m.text}</div>
                 ) : <div style={{ color: C.dim, padding: '8px 4px' }}>…</div>}
-                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => send(`${t}, please.`)} />)}</div> : null}
+                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => send(`${t}, please.`)} send={send} />)}</div> : null}
               </div>))}
             <div ref={end} />
           </section>

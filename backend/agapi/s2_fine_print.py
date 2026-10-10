@@ -44,6 +44,38 @@ TOOLS = [
                       "required": ["amount", "currency"]}},
 ]
 
+# ── CR 75 · the counter card, the accident playbook, claims (step 11: /s2's screens) ────────────────────────────────────
+TOOL_NAMES = TOOL_NAMES + ("rental_cover", "accident", "accident_notify", "file_claim", "claim_status")
+TOOLS += [
+    {"name": "rental_cover", "description": (
+        "The counter card for a car rental: which of their cards to pay with, and what to decline, keep and consider at the counter — each line "
+        "quoted from the card's terms and the rental company's own terms for that country. Say the card's first line briefly; the card on screen "
+        "has every line with its source. Never say they don't need insurance."),
+     "input_schema": {"type": "object", "properties": {"country": {"type": "string", "description": "ISO code, e.g. PT"}, "rental_company": {"type": "string"},
+                                                       "days": {"type": "integer"}}, "required": ["country", "rental_company"]}},
+    {"name": "accident", "description": (
+        "The accident playbook, one step at a time. Start it when they say they've had an accident (country, place, rental company if it's a "
+        "rental). SAFETY FIRST: the first question is 'Is anyone hurt?' and nothing else comes until it's answered; if yes or not sure, tell "
+        "them to call 112 now. Pass each answer of theirs ('no', 'yes', 'not sure', 'help is on the way', 'done') and the facts they give. "
+        "Say each step's `say` as given. Never fill a fault box, never sign, never argue who's at fault. Injuries, a disputed fault, police "
+        "charges or a claim against them: add the flag and say the hand-off line as given."),
+     "input_schema": {"type": "object", "properties": {"answer": {"type": "string"}, "country": {"type": "string"}, "place": {"type": "string"},
+                                                       "rental_company": {"type": "string"}, "card": {"type": "string"},
+                                                       "flags": {"type": "array", "items": {"type": "string", "enum": ["injuries", "fault_disputed", "police_charges", "claim_against_me"]}},
+                                                       "facts": {"type": "object"}}}},
+    {"name": "accident_notify", "description": (
+        "Tell the rental company about the accident with the photos and the statement's facts. The FIRST call returns the read-back — read it "
+        "back and ask; call again only after they say yes, in a later turn."), "input_schema": {"type": "object", "properties": {}}},
+    {"name": "file_claim", "description": (
+        "File the card-insurance claim the accident (or a claim they started) prepared. The FIRST call returns the read-back — read it back "
+        "and ask; call again only after they say yes, in a later turn."), "input_schema": {"type": "object", "properties": {}}},
+    {"name": "claim_status", "description": "Their latest card claim: its state, deadlines, what's still missing and what the insurer replied.",
+     "input_schema": {"type": "object", "properties": {}}},
+]
+_ACCIDENT: Dict[str, str] = {}     # account → the open accident case
+_CLAIM: Dict[str, str] = {}        # account → the latest claim case
+_PEND: Dict[str, dict] = {}        # account|op → {read_back_id, at} — the read-back said; their yes comes next turn
+
 _IMAGES: Dict[str, dict] = {}      # card_image_ref → {account, media_type, b64, at} — memory only, 10 minutes, read once
 _USERS: Dict[str, str] = {}        # account → AgAPI end_user
 IMAGE_TTL_S, MAX_BYTES = 600, 5_000_000
@@ -67,7 +99,7 @@ def keep_image(account: str, raw: bytes, media_type: str) -> str:
     return ref
 
 
-async def _agapi(op: str, body: dict) -> Dict[str, Any]:
+async def _agapi(op: str, body: dict, approval: Optional[str] = None) -> Dict[str, Any]:
     import httpx
     live = via() == "live"
     url = (os.getenv("SASHA_AGAPI_URL", "https://agapi-live-production.up.railway.app") if live
@@ -77,8 +109,10 @@ async def _agapi(op: str, body: dict) -> Dict[str, Any]:
         return {"ok": False, "error": {"code": "not_configured", "message": "card fine print isn't switched on yet"}}
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(90.0)) as c:
-            r = await c.post(f"{url}/v1/{op}", headers={"Authorization": f"Bearer {key}", "content-type": "application/json",
-                                                       "Idempotency-Key": "s2fp_" + secrets.token_hex(12)}, content=json.dumps(body))
+            h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": "s2fp_" + secrets.token_hex(12)}
+            if approval:
+                h["AgAPI-Approval-Id"] = approval
+            r = await c.post(f"{url}/v1/{op}", headers=h, content=json.dumps(body))
         return r.json()
     except Exception as e:
         return {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}
@@ -106,15 +140,118 @@ def _words(s: str) -> set:
     return {w for w in re.findall(r"[a-z]+", (s or "").lower()) if w not in {"my", "the", "card", "credit", "visa", "mastercard"}}
 
 
+async def _card_item(uid: str, words: str) -> Optional[str]:
+    mine = await CALL("cards.mine", {"end_user": uid})
+    cards = (mine.get("result") or {}).get("cards") or []
+    want = _words(words or "")
+    pick = [c for c in cards if want and want <= _words(f"{c['issuer']} {c['product']}")] if want else (cards if len(cards) == 1 else [])
+    return pick[0]["item_id"] if len(pick) == 1 else None
+
+
+async def _with_yes(ctx, key: str, op: str, body: dict) -> Dict[str, Any]:
+    """AgAPI's read-back first; their OWN words in a LATER turn are the yes (sandbox: AgAPI's rules decide; live: their tap)."""
+    pend = _PEND.get(key)
+    if pend and pend["at"] < ctx.started.timestamp():
+        if via() == "sandbox":
+            a = await CALL("sandbox.simulate_approval", {"read_back_id": pend["read_back_id"], "said": ctx.user_said or ""})
+            if not a.get("ok"):
+                return {"ok": False, "error": {"code": (a.get("error") or {}).get("code") or "no_explicit_yes",
+                                               "message": "that wasn't a clear yes — ask them again before sending"}}
+            apv = a["result"]["approval_id"]
+        else:
+            st = await CALL("approvals.status", {"read_back_id": pend["read_back_id"]})
+            ap = ((st.get("result") or {}).get("approval") or {}) if st.get("ok") else {}
+            if not ap.get("approval_id") or ap.get("state") != "valid":
+                return {"ok": True, "result": {"status": "waiting_for_their_tap"}}
+            apv = ap["approval_id"]
+        r = await CALL(op, body, approval=apv)
+        if r.get("ok"):
+            _PEND.pop(key, None)
+        return r
+    r = await CALL(op, body)
+    e = r.get("error") or {}
+    if e.get("code") == "approval_required":
+        d = e.get("details") or {}
+        _PEND[key] = {"read_back_id": d["read_back_id"], "at": time.time()}
+        if via() == "live":
+            await CALL("approvals.request", {"read_back_id": d["read_back_id"], "channel": "link_sms"})
+        lines = (d.get("read_back") or {}).get("lines") or []
+        return {"ok": True, "result": {"status": "awaiting_yes", "read_back": lines, "ask": "Read this back and ask; it goes only on their yes, in their next message.",
+                                       "render": {"kind": "read_back", "read_back": lines, "what": "email", "status": "ready"}}}
+    return r
+
+
+def _view(v: dict) -> dict:
+    return {"kind": "accident", "view": v}
+
+
 async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
     uid = await _end_user(ctx.account)
     if not uid:
         return {"ok": False, "error": {"code": "unavailable", "message": "card fine print didn't answer"}}
+    if name == "rental_cover":
+        r = await CALL("cards.rental_cover", {"end_user": uid, "country": str(args.get("country") or "").upper()[:2], "rental_company": args.get("rental_company") or "",
+                                              **({"days": int(args["days"])} if args.get("days") else {})})
+        if not r.get("ok"):
+            return _fail(r)
+        c = r["result"]
+        first = (c["counter"]["decline"] or c["counter"]["check"] or c["counter"]["keep"] or [{"say": ""}])[0]["say"]
+        return {"ok": True, "result": {"say": first, "card_to_use": c.get("card"), "framing": c["framing"], "how": SAY_AS_GIVEN,
+                                       "render": {"kind": "counter_card", "card": c}}}
+    if name == "accident":
+        cid = _ACCIDENT.get(ctx.account)
+        if not cid or (args.get("country") and args.get("place") and not args.get("answer")):
+            item = await _card_item(uid, args.get("card") or "")
+            r = await CALL("cards.accident_start", {"end_user": uid, "country": str(args.get("country") or "ES").upper()[:2], "place": args.get("place") or "",
+                                                    "rental_company": args.get("rental_company") or "", **({"card_item_id": item} if item else {})})
+            if not r.get("ok"):
+                return _fail(r)
+            _ACCIDENT[ctx.account] = r["result"]["case_id"]
+            return {"ok": True, "result": {"say": r["result"]["say"], "step": "safety", "render": _view(r["result"])}}
+        r = await CALL("cards.accident_step", {"end_user": uid, "case_id": cid, **({"answer": args["answer"]} if args.get("answer") else {}),
+                                               **({"flags": args["flags"]} if args.get("flags") else {}), **({"facts": args["facts"]} if args.get("facts") else {})})
+        if not r.get("ok"):
+            return _fail(r)
+        v = r["result"]
+        return {"ok": True, "result": {"say": v.get("say"), "step": v["step"], **({"handoff": v["handoff"]} if v.get("handoff") else {}),
+                                       "how": "Say `say` as given; then the hand-off line if there is one.", "render": _view(v)}}
+    if name == "accident_notify":
+        cid = _ACCIDENT.get(ctx.account)
+        if not cid:
+            return {"ok": False, "error": {"code": "no_accident", "message": "there's no accident case open"}}
+        r = await _with_yes(ctx, f"{ctx.account}|accident_notify", "cards.accident_notify", {"end_user": uid, "case_id": cid})
+        if r.get("ok") and (r["result"].get("claim_case_id")):
+            _CLAIM[ctx.account] = r["result"]["claim_case_id"]
+        if r.get("ok") and r["result"].get("state"):
+            v = r["result"]
+            return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), "render": _view(v)}}
+        return r if r.get("ok") else _fail(r)
+    if name == "file_claim":
+        cid = _CLAIM.get(ctx.account)
+        if not cid:
+            return {"ok": False, "error": {"code": "no_claim", "message": "there's no claim prepared yet"}}
+        r = await _with_yes(ctx, f"{ctx.account}|file_claim", "cards.claim_file", {"end_user": uid, "case_id": cid})
+        if r.get("ok") and r["result"].get("state"):
+            return {"ok": True, "result": {"status": r["result"]["state"], "render": {"kind": "claim_status", "claim": r["result"]}}}
+        return r if r.get("ok") else _fail(r)
+    if name == "claim_status":
+        cid = _CLAIM.get(ctx.account)
+        if not cid:
+            return {"ok": True, "result": {"say": "There's no claim open."}}
+        r = await CALL("cards.claim_status", {"end_user": uid, "case_id": cid})
+        if not r.get("ok"):
+            return _fail(r)
+        c = r["result"]
+        return {"ok": True, "result": {"state": c["state"], "deadlines": [d["say"] for d in c["deadlines"]],
+                                       "missing": [e["item"] for e in c["evidence"] if e.get("missing")], "replies": len(c.get("replies") or []),
+                                       "render": {"kind": "claim_status", "claim": c}}}
     if name == "my_cards":
         r = await CALL("cards.mine", {"end_user": uid})
         if not r.get("ok"):
             return _fail(r)
-        return {"ok": True, "result": {"cards": [{"card": c["masked"], "status": c["status"]} for c in r["result"]["cards"]]}}
+        cards = r["result"]["cards"]
+        return {"ok": True, "result": {"cards": [{"card": c["masked"], "status": c["status"]} for c in cards],
+                                       "render": {"kind": "my_cards", "cards": [{"product": c["product"], "network": c["network"], "status": c["status"]} for c in cards]}}}
     if name == "add_card":
         ref = args.get("card_image_ref")
         if ref:
@@ -177,4 +314,27 @@ def wrap(base: Callable[..., Awaitable[Dict[str, Any]]]) -> Callable[..., Awaita
     return run
 
 
-__all__ = ["TOOLS", "TOOL_NAMES", "wrap", "keep_image", "via"]
+async def accident_photo(account: str, shot: str, media_type: str, b64: str) -> Dict[str, Any]:
+    """/s2's photo button on the accident card: straight to AgAPI (sealed, hashed evidence) — never through the chat or the model."""
+    uid = await _end_user(account)
+    cid = _ACCIDENT.get(account)
+    if not uid or not cid:
+        return {"ok": False, "error": {"code": "no_accident", "message": "there's no accident case open"}}
+    return await CALL("cards.accident_photo", {"end_user": uid, "case_id": cid, "shot": shot, "media_type": media_type, "content_base64": b64})
+
+
+async def moment(account: str, event: dict) -> Dict[str, Any]:
+    """CR 75 · for Sasha's proactive loop (S-83, standing consent): ask AgAPI whether to speak up for this event (rental_booked ·
+    pickup_tomorrow · which_card · rental_returned). → {speak, line, card} — say the line and show the card only when speak is true;
+    AgAPI keeps it to one per event and honours the person's off switch."""
+    uid = await _end_user(account)
+    if not uid:
+        return {"speak": False, "why_silent": "card fine print didn't answer"}
+    r = await CALL("cards.moment", {"end_user": uid, "event": event})
+    return r["result"] if r.get("ok") else {"speak": False, "why_silent": (r.get("error") or {}).get("message") or "unavailable"}
+
+
+RENDER_KINDS = ("counter_card", "my_cards", "accident", "claim_status")
+
+
+__all__ = ["TOOLS", "TOOL_NAMES", "wrap", "keep_image", "via", "accident_photo", "moment", "RENDER_KINDS"]

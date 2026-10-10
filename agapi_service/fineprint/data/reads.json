@@ -5219,7 +5219,7 @@
      "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
      "value": [
       "secure the traffic",
-      "if damage is minor, move aside immediately"
+      "in case of minor damage, move aside immediately"
      ]
     },
     {
@@ -5237,7 +5237,7 @@
      "quote": "Verletzten zu helfen (§ 323c des Strafgesetzbuchs),",
      "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
      "value": [
-      "help injured persons"
+      "help injured persons (§ 323c StGB)"
      ]
     },
     {
@@ -5246,7 +5246,7 @@
      "quote": "anzugeben, dass man am Unfall beteiligt war und",
      "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
      "value": [
-      "state to other parties present that one was involved in the accident"
+      "tell other parties and injured parties present that one was involved in the accident"
      ]
     },
     {
@@ -5257,7 +5257,7 @@
      "value": [
       "on request, give own name and address",
       "show driving licence and vehicle registration",
-      "give liability insurance details to the best of one's knowledge"
+      "give information on liability insurance to the best of one's knowledge"
      ]
     },
     {
@@ -5266,7 +5266,7 @@
      "quote": "so lange am Unfallort zu bleiben, bis zugunsten der anderen Beteiligten und Geschädigten die Feststellung der Person, des Fahrzeugs und der Art der Beteiligung durch eigene Anwesenheit ermöglicht wurde oder",
      "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
      "value": [
-      "remain at the scene until identification of person, vehicle and type of involvement has been made possible"
+      "remain at the scene until identification of person, vehicle and type of involvement has been made possible for the other parties"
      ]
     },
     {
@@ -5280,13 +5280,6 @@
     },
     {
      "benefit": "accident_rules",
-     "field": "police_when",
-     "quote": "Dazu ist mindestens den Berechtigten (Nummer 6 Buchstabe a) oder einer nahe gelegenen Polizeidienststelle mitzuteilen, dass man am Unfall beteiligt gewesen ist, und die eigene Anschrift, den Aufenthalt sowie das Kennzeichen und den Standort des beteiligten Fahrzeugs anzugeben und dieses zu unverzüglichen Feststellungen für eine zumutbare Zeit zur Verfügung zu halten.",
-     "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
-     "value": "after leaving the scene (justified, excused or after the waiting period): inform at least the entitled persons or a nearby police station of involvement, give address, whereabouts, licence plate and location of the vehicle, and keep the vehicle available for a reasonable time"
-    },
-    {
-     "benefit": "accident_rules",
      "field": "scene_duties",
      "quote": "Unfallspuren dürfen nicht beseitigt werden, bevor die notwendigen Feststellungen getroffen worden sind.",
      "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
@@ -5296,54 +5289,61 @@
     },
     {
      "benefit": "accident_rules",
-     "field": "notice_rule",
+     "field": "police_when",
+     "quote": "Dazu ist mindestens den Berechtigten (Nummer 6 Buchstabe a) oder einer nahe gelegenen Polizeidienststelle mitzuteilen, dass man am Unfall beteiligt gewesen ist, und die eigene Anschrift, den Aufenthalt sowie das Kennzeichen und den Standort des beteiligten Fahrzeugs anzugeben und dieses zu unverzüglichen Feststellungen für eine zumutbare Zeit zur Verfügung zu halten.",
+     "source_url": "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
+     "value": "after leaving the scene (justified, excused or after the waiting period), inform at least the entitled persons or a nearby police station of involvement, own address, whereabouts, licence plate and location of the vehicle"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_deadline_days",
      "quote": "Der Versicherungsnehmer hat dem Versicherer innerhalb einer Woche die Tatsachen anzuzeigen, die seine Verantwortlichkeit gegenüber einem Dritten zur Folge haben könnten.",
      "source_url": "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
-     "value": "Policyholder must notify the insurer within one week (innerhalb einer Woche) of facts that could result in liability towards a third party"
+     "value": 7
     },
     {
      "benefit": "accident_rules",
      "field": "notice_rule",
      "quote": "Macht der Dritte seinen Anspruch gegenüber dem Versicherungsnehmer geltend, ist der Versicherungsnehmer zur Anzeige innerhalb einer Woche nach der Geltendmachung verpflichtet.",
      "source_url": "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
-     "value": "If the third party asserts a claim, notify the insurer within one week (innerhalb einer Woche) of the assertion"
+     "value": "if the third party asserts a claim against the policyholder, notify the insurer within one week of the assertion"
     },
     {
      "benefit": "accident_rules",
      "field": "notice_rule",
      "quote": "Wird gegen den Versicherungsnehmer ein Anspruch gerichtlich geltend gemacht, Prozesskostenhilfe beantragt oder wird ihm gerichtlich der Streit verkündet, hat er dies dem Versicherer unverzüglich anzuzeigen.",
      "source_url": "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
-     "value": "Court claims, legal aid applications or third-party notices must be reported to the insurer without delay (unverzüglich)"
+     "value": "court claims, applications for legal aid or third-party notices must be reported to the insurer without delay"
     },
     {
      "benefit": "accident_rules",
      "field": "notice_rule",
      "quote": "Dies gilt auch, wenn gegen den Versicherungsnehmer wegen des den Anspruch begründenden Schadensereignisses ein Ermittlungsverfahren eingeleitet wird.",
      "source_url": "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
-     "value": "Also applies if criminal investigation proceedings are opened over the damaging event"
+     "value": "also applies if criminal investigation proceedings are initiated against the policyholder over the event"
     },
     {
      "benefit": "accident_rules",
      "field": "notice_rule",
      "quote": "Zur Wahrung der Fristen nach den Absätzen 1 und 2 genügt die rechtzeitige Absendung der Anzeige.",
      "source_url": "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
-     "value": "Timely dispatch of the notice is sufficient to meet the deadlines"
+     "value": "timely dispatch of the notice suffices to meet the deadlines"
     },
     {
      "benefit": "accident_rules",
      "field": "notice_rule",
      "quote": "Der Versicherungsnehmer hat den Eintritt des Versicherungsfalles, nachdem er von ihm Kenntnis erlangt hat, dem Versicherer unverzüglich anzuzeigen.",
      "source_url": "https://www.gesetze-im-internet.de/vvg_2008/__30.html",
-     "value": "Policyholder must report the occurrence of the insured event to the insurer without delay (unverzüglich) after becoming aware of it"
+     "value": "the policyholder must notify the insurer of the insured event without delay after becoming aware of it"
     }
    ],
    "instruction_like": 0,
-   "read_at": "2026-10-10T09:06:10Z",
+   "read_at": "2026-10-10T09:13:41Z",
    "reader": {
-    "input_tokens": 3320,
+    "input_tokens": 3383,
     "model": "claude-opus-5-5",
-    "output_tokens": 3983,
-    "usd": 0.0929
+    "output_tokens": 3714,
+    "usd": 0.0878
    },
    "sources": [
     {
@@ -5430,7 +5430,7 @@
      "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
      "value": [
       "Señalizar el accidente con los triángulos: en doble sentido a 50 metros en ambos sentidos",
-      "en sentido único el primero a 50 metros y el otro si fuese necesario a 150 metros mínimo"
+      "en sentido único, el primero a 50 metros y el otro si fuese necesario a 150 metros mínimo"
      ]
     },
     {
@@ -5448,16 +5448,16 @@
      "quote": "No modifiques el estado de los vehículos o de las víctimas, al menos que ello suponga un peligro para la circulación o para las propias víctimas.",
      "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
      "value": [
-      "No modifiques el estado de los vehículos o de las víctimas, salvo peligro para la circulación o para las propias víctimas"
+      "No modifiques el estado de los vehículos o de las víctimas, salvo peligro para la circulación o para las víctimas"
      ]
     },
     {
      "benefit": "accident_rules",
      "field": "safety_steps",
-     "quote": "Si no se sabe qué hacer, no hacer nada.",
+     "quote": "Solo socorrer si tienes conocimientos básicos de primeros auxilios",
      "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
      "value": [
-      "Si no se sabe qué hacer, no hacer nada"
+      "Solo socorrer si tienes conocimientos básicos de primeros auxilios"
      ]
     },
     {
@@ -5472,10 +5472,10 @@
     {
      "benefit": "accident_rules",
      "field": "safety_steps",
-     "quote": "No rescates a personas de vehículos inestables.",
+     "quote": "No movilices a la víctima si no se tiene conocimiento, salvo situaciones de riesgo por incendio o explosión inminente.",
      "source_url": "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
      "value": [
-      "No rescates a personas de vehículos inestables"
+      "No movilices a la víctima si no se tiene conocimiento, salvo riesgo de incendio o explosión inminente"
      ]
     },
     {
@@ -5489,10 +5489,17 @@
     },
     {
      "benefit": "accident_rules",
-     "field": "notice_rule",
+     "field": "notice_deadline_days",
      "quote": "El tomador del seguro o el asegurado o el beneficiario deberán comunicar al asegurador el acaecimiento del siniestro dentro del plazo máximo de siete días de haberlo conocido, salvo que se haya fijado en la póliza un plazo más amplio.",
      "source_url": "https://www.boe.es/buscar/act.php?id=BOE-A-1980-22501",
-     "value": "Comunicar al asegurador el acaecimiento del siniestro dentro del plazo máximo de siete días de haberlo conocido, salvo que se haya fijado en la póliza un plazo más amplio"
+     "value": 7
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "En caso de incumplimiento, el asegurador podrá reclamar los daños y perjuicios causados por la falta de declaración.",
+     "source_url": "https://www.boe.es/buscar/act.php?id=BOE-A-1980-22501",
+     "value": "En caso de incumplimiento del plazo, el asegurador podrá reclamar los daños y perjuicios causados por la falta de declaración"
     },
     {
      "benefit": "accident_rules",
@@ -5503,16 +5510,16 @@
     }
    ],
    "instruction_like": 0,
-   "read_at": "2026-10-10T09:05:02Z",
+   "read_at": "2026-10-10T09:13:11Z",
    "reader": {
-    "input_tokens": 40669,
+    "input_tokens": 40732,
     "model": "claude-opus-5-5",
-    "output_tokens": 3039,
-    "usd": 0.2235
+    "output_tokens": 3216,
+    "usd": 0.2272
    },
    "sources": [
     {
-     "body_sha256": "sha256:e43bd73bb34a48b019f1edf9542068841bed4b2883ecfc1762125b4b6bb5b803",
+     "body_sha256": "sha256:7e4d2780281e57c17beee03221ff636a8b1109040e6ca9f7cd896749392274af",
      "kind": "html",
      "linked_from": "",
      "title": "DGT - Qué hacer ante un accidente de tráfico",
@@ -5520,7 +5527,7 @@
      "used": true
     },
     {
-     "body_sha256": "sha256:0e83dffffceb41701d2d8665782bc122fd5ea15ea303adac3dbfea4499323d1a",
+     "body_sha256": "sha256:c68c1da9a0a74d8e9c1260a1e08d9f2776739ff07f673e6f2ac67856922b7ff1",
      "kind": "html",
      "linked_from": "",
      "title": "BOE-A-1980-22501 Ley 50/1980, de 8 de octubre, de Contrato de Seguro.",
@@ -5749,72 +5756,72 @@
     },
     {
      "benefit": "accident_rules",
-     "field": "statement_name",
-     "quote": "ll termine di 60 giorni si riduce a 30 giorni se i due conducenti dei veicoli coinvolti sottoscrivono congiuntamente il modulo di constatazione amichevole di incidente (C.A.I. o modulo blu).",
-     "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
-     "value": "modulo di constatazione amichevole di incidente (C.A.I. o modulo blu)"
-    },
-    {
-     "benefit": "accident_rules",
      "field": "statement_advice",
      "quote": "In caso di accordo sulla dinamica del sinistro è importante che il modulo venga sottoscritto da entrambi i conducenti coinvolti, per abbreviare le tempistiche del risarcimento dei danni; in caso di disaccordo è comunque utile compilare il modulo singolarmente per fornire la propria versione della dinamica del sinistro.",
      "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
-     "value": "In caso di accordo sulla dinamica del sinistro il modulo va sottoscritto da entrambi i conducenti coinvolti, per abbreviare le tempistiche del risarcimento; in caso di disaccordo è comunque utile compilare il modulo singolarmente per fornire la propria versione"
+     "value": "If the drivers agree on how the accident happened, the form should be signed by both drivers to shorten compensation times; if they disagree, it is still useful to fill in the form individually to give one's own version"
     },
     {
      "benefit": "accident_rules",
      "field": "statement_advice",
      "quote": "Il modulo di denuncia può essere compilato su un documento cartaceo o informatico, a scelta del conducente o del proprietario.",
      "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
-     "value": "Il modulo di denuncia può essere compilato su un documento cartaceo o informatico, a scelta del conducente o del proprietario"
+     "value": "The form can be filled in on paper or electronically, at the choice of the driver or owner"
     },
     {
      "benefit": "accident_rules",
      "field": "statement_advice",
      "quote": "ll termine di 60 giorni si riduce a 30 giorni se i due conducenti dei veicoli coinvolti sottoscrivono congiuntamente il modulo di constatazione amichevole di incidente (C.A.I. o modulo blu).",
      "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
-     "value": "Se i due conducenti sottoscrivono congiuntamente il modulo C.A.I., il termine di 60 giorni per l'offerta di risarcimento si riduce a 30 giorni"
-    },
-    {
-     "benefit": "accident_rules",
-     "field": "statement_advice",
-     "quote": "In caso di sinistri con soli danni a cose ricordati di indicare il nome di eventuali testimoni presenti sul luogo dell’incidente fin da subito, nella denuncia di sinistro o comunque nel primo atto formale che manderai all’impresa di assicurazione.",
-     "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
-     "value": "In caso di sinistri con soli danni a cose indicare il nome di eventuali testimoni fin da subito, nella denuncia di sinistro o nel primo atto formale inviato all'impresa"
+     "value": "The insurer's 60-day offer deadline drops to 30 days if both drivers jointly sign the C.A.I. form"
     },
     {
      "benefit": "accident_rules",
      "field": "notice_rule",
      "quote": "Se non è stato compilato il modulo CAI, in ogni caso devi informare la tua impresa per iscritto, e formulare, anche nel tuo interesse, la cosiddetta “denuncia cautelativa”, ossia la descrizione del sinistro.",
      "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
-     "value": "Se non è stato compilato il modulo CAI, informare comunque la propria impresa per iscritto con la cosiddetta “denuncia cautelativa” (descrizione del sinistro)"
+     "value": "If the CAI form was not filled in, you must still inform your insurer in writing and make a 'denuncia cautelativa' (description of the accident)"
     },
     {
      "benefit": "accident_rules",
      "field": "notice_rule",
+     "quote": "In caso di sinistri con soli danni a cose ricordati di indicare il nome di eventuali testimoni presenti sul luogo dell’incidente fin da subito, nella denuncia di sinistro o comunque nel primo atto formale che manderai all’impresa di assicurazione.",
+     "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
+     "value": "In property-damage-only accidents, give the names of any witnesses present at the scene right away, in the claim notice or in the first formal communication to the insurer"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_rule",
+     "quote": "Il mancato rispetto della procedura prevista per la denuncia del sinistro può compromettere la corretta gestione del sinistro e comportare per l’interessato il mancato riconoscimento delle proprie ragioni.",
+     "source_url": "https://www.ivass.it/consumatori/rc-auto/sinistri/index.html",
+     "value": "Failure to follow the claim notification procedure can compromise claim handling and lead to the person's claims not being recognised"
+    },
+    {
+     "benefit": "accident_rules",
+     "field": "notice_deadline_days",
      "quote": "L'assicurato deve dare avviso del sinistro all'assicuratore o all'agente autorizzato a concludere il contratto, entro tre giorni da quello in cui il sinistro si e' verificato o l'assicurato ne ha avuta conoscenza.",
      "source_url": "https://www.gazzettaufficiale.it/atto/serie_generale/caricaArticolo?art.progressivo=0&art.idArticolo=1913&art.versione=1&art.codiceRedazionale=042U0262&art.dataPubblicazioneGazzetta=1942-04-04&art.idGruppo=236&art.idSottoArticolo1=10&art.idSottoArticolo=1&art.flagTipoArticolo=2",
-     "value": "L'assicurato deve dare avviso del sinistro all'assicuratore o all'agente autorizzato entro tre giorni da quello in cui il sinistro si è verificato o l'assicurato ne ha avuta conoscenza"
+     "value": 3
     },
     {
      "benefit": "accident_rules",
      "field": "notice_rule",
      "quote": "Non e' necessario l'avviso, se l'assicuratore o l'agente autorizzato alla conclusione del contratto intervengono entro il detto termine alle operazioni di salvataggio o di constatazione del sinistro.",
      "source_url": "https://www.gazzettaufficiale.it/atto/serie_generale/caricaArticolo?art.progressivo=0&art.idArticolo=1913&art.versione=1&art.codiceRedazionale=042U0262&art.dataPubblicazioneGazzetta=1942-04-04&art.idGruppo=236&art.idSottoArticolo1=10&art.idSottoArticolo=1&art.flagTipoArticolo=2",
-     "value": "L'avviso non è necessario se l'assicuratore o l'agente autorizzato intervengono entro il detto termine alle operazioni di salvataggio o di constatazione del sinistro"
+     "value": "Notice is not necessary if the insurer or the authorised agent takes part in the rescue or claim assessment operations within that deadline"
     }
    ],
    "instruction_like": 0,
-   "read_at": "2026-10-10T09:06:46Z",
+   "read_at": "2026-10-10T09:14:14Z",
    "reader": {
-    "input_tokens": 5934,
+    "input_tokens": 5997,
     "model": "claude-opus-5-5",
-    "output_tokens": 3049,
-    "usd": 0.0847
+    "output_tokens": 2776,
+    "usd": 0.0795
    },
    "sources": [
     {
-     "body_sha256": "sha256:77e91c3636ebc28d220b869aafcbef5e4c327c96b02eae7b27daba8de616bafc",
+     "body_sha256": "sha256:bc09fd6c4c00dd893824fff5a239d55addc37bce6917563d59972e51c3abfcfb",
      "kind": "html",
      "linked_from": "",
      "title": "IVASS - Cosa fare in caso di sinistro",

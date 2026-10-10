@@ -492,9 +492,13 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     raw: List[str] = []       # what the model wrote — the guards read it
     turn_key = hashlib.sha256(f"{session}:{len(history or [])}:{message}".encode()).hexdigest()[:16]
     tools = tools_for_model()
+    run = API.call        # CR 72 · how a tool runs: agapi.v0.call, as always — /s2's block below is the ONLY place that changes it
     if surface == "s2":   # Sasha 221 · S2's tool set (/s2 only); S1's list is untouched
         from app.agent import s2 as S2
         tools = [t for t in tools if t["name"] in S2.S2_TOOLS]
+        from agapi import s2_subscriptions as SUBS   # CR 72 · the subscription radar: /s2's own three tools, run here
+        tools = tools + [dict(t) for t in SUBS.TOOLS]
+        run = SUBS.wrap(run)
     tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     step_ms: List[dict] = []
     pending = ""          # this step's text, not yet spoken
@@ -628,7 +632,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 args["idempotency_key"] = f"{turn_key}:{u.name}:{hashlib.sha256(json.dumps(u.input, sort_keys=True).encode()).hexdigest()[:12]}"
             if u.name in ("book", "book_venue", "cancel_venue", "send_email", "send_whatsapp"):
                 args["approval"] = {"said": message}   # the REAL words of this turn — never the model's (CR 60: the email's too)
-            r = await API.call(ctx, u.name, args)
+            r = await run(ctx, u.name, args)
             if r.get("ok"):
                 _amounts(r["result"], allowed)
             line = outage(r)
@@ -986,6 +990,27 @@ async def agent_ics(token: str):
     if not text:
         return JSONResponse({"ok": False}, status_code=404)
     return Response(text, media_type="text/calendar; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="sasha.ics"'})
+
+
+@router.post("/s2/statement")
+async def s2_statement(request: Request):
+    """CR 72 · /s2 only: the person's statement (CSV, PDF or photo), kept in this server's MEMORY for 30 minutes (never on disk) → a
+    statement_ref that find_subscriptions reads once. /next (no S2 header) is refused."""
+    from app.services.chat_account import chat_account, signed_in
+    from agapi import s2_subscriptions as SUBS
+    if request.headers.get("x-sasha-surface", "").strip().lower() != "s2":
+        return JSONResponse({"ok": False, "rule": "s2_only"}, status_code=404)
+    account = await chat_account(request)
+    if not signed_in(account):
+        return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
+    try:
+        body = await request.json()
+        raw = __import__("base64").b64decode(str(body.get("content_base64") or ""), validate=True)
+        ref = SUBS.keep_statement(account, raw, str(body.get("media_type") or "text/csv"))
+    except Exception as e:
+        return JSONResponse({"ok": False, "rule": "statement_invalid", "message": str(e)[:120] if isinstance(e, ValueError) else "not a statement"},
+                            status_code=400)
+    return JSONResponse({"ok": True, "statement_ref": ref, "expires_in_minutes": SUBS.STATEMENT_TTL_S // 60})
 
 
 @router.post("/turn")

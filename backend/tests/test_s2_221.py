@@ -45,8 +45,9 @@ class Isolation(unittest.TestCase):
         s = seen_by_model("s2")
         self.assertTrue(s["system"][0]["text"].startswith(S2.S2_WHO))
         self.assertIn("## How she talks", s["system"][0]["text"])   # the shared rules, unchanged
-        from agapi import s2_subscriptions as SUBS   # CR 72 · + the subscription radar's three tools, /s2 only
-        self.assertEqual(sorted(t["name"] for t in s["tools"]), sorted([n for n in S2.S2_TOOLS if n in API.BY_NAME] + list(SUBS.TOOL_NAMES)))
+        from agapi import s2_subscriptions as SUBS, s2_fine_print as FP   # CR 72 + CR 74 · the radar's and fine print's tools, /s2 only
+        self.assertEqual(sorted(t["name"] for t in s["tools"]),
+                         sorted([n for n in S2.S2_TOOLS if n in API.BY_NAME] + list(SUBS.TOOL_NAMES) + list(FP.TOOL_NAMES)))
 
     def test_only_the_s2_header_chooses_s2(self):
         from fastapi import FastAPI

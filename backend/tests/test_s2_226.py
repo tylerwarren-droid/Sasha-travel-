@@ -162,6 +162,18 @@ class ANewHoldSupersedes(unittest.TestCase):
         self.assertNotIn(ACCOUNT, VN._HELD)   # nothing left for a yes to book
 
 
+class CancelledIsOnTheRecord(unittest.TestCase):
+    def test_get_status_lists_a_cancelled_table(self):   # found live: she retracted a TRUE "cancelled" because the record didn't show it
+        from agapi import venues as VN
+        rows = VENUES + [{**VENUES[0], "trip_item_id": "t-2", "venue": "Casa Vieja", "status": "cancelled"}]
+        async def vb(account, include_cancelled=False):
+            return [r for r in rows if include_cancelled or r["status"] != "cancelled"]
+        with mock.patch.object(VN, "venue_bookings", vb), mock.patch.object(API, "_latest", mock.AsyncMock(return_value=None)):
+            r = run(API.get_status(ctx(), {}))
+        self.assertEqual([v["venue"] for v in r["venues"]], ["Casa Gate"])
+        self.assertTrue(r["cancelled"][0].startswith("Casa Vieja"))
+
+
 class CancelHotelAndFlight(unittest.TestCase):
     def setUp(self):
         M._HELD.clear()

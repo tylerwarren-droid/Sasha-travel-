@@ -896,17 +896,21 @@ async def get_status(ctx: Ctx, a: dict) -> dict:
     p = await _latest(ctx)
     if not p:   # Sasha 211 · no trip: the venue bookings still have their status
         from agapi import venues as VN
-        vb = await VN.venue_bookings(ctx.account)
+        vb_all = await VN.venue_bookings(ctx.account, include_cancelled=True)
+        vb = [b for b in vb_all if b.get("status") != "cancelled"]
+        vc = [f"{b['venue']} — {b.get('date')} {b.get('time') or ''}".strip() + " · cancelled" for b in vb_all if b.get("status") == "cancelled"]
         return {"venues": vb, "anything_booked": any(b["status"] == "confirmed" for b in vb), "booked": [], "failed": [],
-                "cancelled": [], "awaiting_payment": 0}
+                "cancelled": vc, "awaiting_payment": 0}   # Sasha 226 · a cancelled table is on the record too
     await PW.sweep(ctx.account)   # a payment waiting is settled first (Pacioli writes the outcome)
     rows = await BK.items(ctx.account, p["trip_id"], ("pending_payment", "booked", "failed", "cancelled"))
     from agapi import venues as VN   # Sasha 211 · the venues too: Requested / Confirmed, from proof only
-    vb = await VN.venue_bookings(ctx.account)
+    vb_all = await VN.venue_bookings(ctx.account, include_cancelled=True)
+    vb = [b for b in vb_all if b.get("status") != "cancelled"]
+    vc = [f"{b['venue']} — {b.get('date')} {b.get('time') or ''}".strip() + " · cancelled" for b in vb_all if b.get("status") == "cancelled"]
     return {"venues": vb, "anything_booked": any(r["state"] == "booked" for r in rows) or any(b["status"] == "confirmed" for b in vb),
             "booked": [r["status_line"] for r in rows if r["state"] == "booked"],
             "failed": [r["status_line"] for r in rows if r["state"] == "failed"],
-            "cancelled": [r["status_line"] for r in rows if r["state"] == "cancelled"],
+            "cancelled": [r["status_line"] for r in rows if r["state"] == "cancelled"] + vc,   # Sasha 226 · a cancelled table is on the record too
             "awaiting_payment": sum(1 for r in rows if r["state"] == "pending_payment")}
 
 

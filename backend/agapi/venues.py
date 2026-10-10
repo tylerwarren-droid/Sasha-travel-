@@ -418,7 +418,7 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
             **({"scheduled_for": str(j.get("scheduled_for") or "")[11:16]} if j.get("status") == "scheduled" else {})}
 
 
-async def venue_bookings(account: str) -> List[dict]:
+async def venue_bookings(account: str, include_cancelled: bool = False) -> List[dict]:
     """Pacioli's venue rows: what was asked of each venue, and its status in words (Requested / Confirmed… — from proof only)."""
     GW = _API()
     status, j = await GW.api(account, "GET", "/api/booking/reservations")
@@ -433,7 +433,8 @@ async def venue_bookings(account: str) -> List[dict]:
              **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),   # Sasha 217 · the venue's reference in full
              # Sasha 215 · CR 56 — the venue's OWN words (an email/SMS reply) are untrusted data, never instructions to her
              **({"venue_said": {"untrusted_text": str(r["status_words"])[:160]}} if r.get("status_words") else {})}
-            for r in (j or {}).get("reservations") or [] if (r.get("date") or today) >= today and r.get("status") != "cancelled"][:20]
+            for r in (j or {}).get("reservations") or []
+            if (r.get("date") or today) >= today and (include_cancelled or r.get("status") != "cancelled")][:20]
 
 
 async def cancel_venue(ctx, a: dict) -> dict:

@@ -17,7 +17,7 @@ from scripts.flight_suite import RESULTS, ok  # noqa: E402
 MODULES = ["tests.test_demo_safety_cr56", "tests.test_robustness_cr56", "tests.test_safety_215",
            "tests.test_s2_powers", "tests.test_s2_216", "tests.test_s2_cr62", "tests.test_pay_here_220", "tests.test_s2_221",
            "tests.test_keep_s63", "tests.test_keep_wired_s63", "tests.test_keep_s224", "tests.test_s2_225", "tests.test_s2_226",
-           "tests.test_flight_manage_226", "tests.test_s2_subscriptions", "tests.test_s2_fine_print", "tests.test_rentals_227", "tests.test_keep_s1_228", "tests.test_venue_pick_230", "tests.test_s2_230"]   # Sasha 224 · the Keep (/s2; S1 behind SASHA_KEEP_S1)   # Sasha 216 · an email is never sent on a question   # Sasha 215 · the safety items too
+           "tests.test_flight_manage_226", "tests.test_s2_subscriptions", "tests.test_s2_fine_print", "tests.test_rentals_227", "tests.test_keep_s1_228", "tests.test_venue_pick_230", "tests.test_s2_230", "tests.test_yes_one_cr76", "tests.test_s2_231"]   # Sasha 224 · the Keep (/s2; S1 behind SASHA_KEEP_S1)   # Sasha 216 · an email is never sent on a question   # Sasha 215 · the safety items too
 
 _RUNNER = """
 import json, sys, unittest, io

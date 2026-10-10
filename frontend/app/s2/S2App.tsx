@@ -115,7 +115,7 @@ const AFTER: Partial<Record<string, string>> = {
   sent: 'It’s in your Activity, with its proof.',
 }
 
-function VenueCards({ cards, choose }: { cards: Extract<Card, { k: 'venues' }>['cards']; choose: (name: string) => void }) {
+function VenueCards({ cards, choose }: { cards: Extract<Card, { k: 'venues' }>['cards']; choose: (name: string, placeId: string) => void }) {
   return (
     <div style={{ display: 'flex', gap: 10, overflowX: 'auto', maxWidth: '100%', padding: '4px 2px 8px', scrollSnapType: 'x mandatory' }}>
       {cards.map(c => (
@@ -128,7 +128,7 @@ function VenueCards({ cards, choose }: { cards: Extract<Card, { k: 'venues' }>['
               {c.rating ? `★ ${c.rating}${c.rating_count ? ` (${Number(c.rating_count).toLocaleString()})` : ''} · ` : ''}{untag(c.area || c.type || '')}
             </div>
             {typeof c.open_at === 'string' ? <div style={{ fontSize: 12.5, color: C.dim, marginTop: 2 }}>{untag(c.open_at)}</div> : null}
-            <button onClick={() => choose(untag(c.name))} style={{ marginTop: 10, padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 700 }}>Choose</button>
+            <button onClick={() => choose(untag(c.name), c.place_id)} style={{ marginTop: 10, padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 700 }}>Choose</button>
           </div>
         </div>
       ))}
@@ -431,7 +431,7 @@ function ClaimStatus({ claim }: { claim: Ev }) {
     </Box>)
 }
 
-function CardView({ c, choose, send }: { c: Card; choose: (t: string) => void; send: (t: string) => void }) {
+function CardView({ c, choose, pick, send }: { c: Card; choose: (t: string) => void; pick: (name: string, placeId: string) => void; send: (t: string) => void }) {
   if (c.k === 'counter_card') return <CounterCard card={c.card} />
   if (c.k === 'my_cards') return <MyCards cards={c.cards} choose={choose} />
   if (c.k === 'accident') return <AccidentCard view={c.view} send={send} />
@@ -451,7 +451,7 @@ function CardView({ c, choose, send }: { c: Card; choose: (t: string) => void; s
           {g.items.map(i => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{i}</div>)}
         </div>))}
     </Box>)
-  if (c.k === 'venues') return <VenueCards cards={c.cards} choose={choose} />
+  if (c.k === 'venues') return <VenueCards cards={c.cards} choose={pick} />   // Sasha 231 · the tap carries the card's place_id
   if (c.k === 'booked') return <><Box k="Booked" h={firstSentences(untag(c.line.replace(/^✅\s*/, '').replace(/^Booked:\s*/i, '')), 2)} tone="rgba(126,226,168,.5)" /><After k="booked" /></>
   if (c.k === 'calendar') return (
     <><Box k="Add to your calendar" h={untag(c.title || 'Your booking')}>
@@ -520,6 +520,32 @@ export default function S2App() {
   }, [signedIn])
   useEffect(() => { const t = setInterval(() => setChipAt(i => (i + 1) % CHIPS.length), 4000); return () => clearInterval(t) }, [])
   const histRef = useRef<{ role: string; content: string }[]>([])
+  // Sasha 231 · "thanks / bye" → she rests: faded, the mic off (not listening) until a tap; a tap brings her back, no re-introduction
+  const [dormant, setDormant] = useState(false)
+  const micUsed = useRef(false)
+  const [woke, setWoke] = useState(false)
+  // Sasha 231 · MEMORY ACROSS VISITS: what she remembers for this account (masked) — "Welcome back — we were looking at …"
+  const [backLine, setBackLine] = useState<string | null | undefined>(undefined)
+  useEffect(() => {
+    if (!signedIn) return
+    let live = true
+    const t = setTimeout(() => setBackLine(b => (b === undefined ? null : b)), 2500)
+    fetch(`/api/s2-memory?session=${encodeURIComponent(session.current)}`, { cache: 'no-store' }).then(r => r.json()).then((j: Ev) => {
+      if (!live) return
+      const line = typeof j?.line === 'string' && j.line ? untag(j.line) : null
+      setBackLine(line)
+      if (!line) return
+      const recent: { role: string; content: string }[] = (Array.isArray(j.recent) ? j.recent : [])
+        .filter((m: Ev) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content && m.content !== '[removed]')
+      histRef.current = [...recent, { role: 'assistant', content: line }]   // she carries on from where it stopped
+      const shown: Msg[] = recent.slice(-8).map(m => ({ role: m.role === 'user' ? 'user' as const : 'sasha' as const, text: untag(m.content), cards: [] }))
+      const cards = j.screen?.cards
+      const k = shown.map(m => m.role).lastIndexOf('sasha')
+      if (Array.isArray(cards) && cards.length && k >= 0) shown[k] = { ...shown[k], cards: [{ k: 'venues', cards: untagDeep(cards) }] }
+      setMsgs(ms => (ms.length ? ms : [...shown, { role: 'sasha', text: line, cards: [] }]))
+    }).catch(() => setBackLine(null))
+    return () => { live = false; clearTimeout(t) }
+  }, [signedIn])
 
   useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [msgs])
   useEffect(() => {   // a payment settled (Pacioli): said here, and the pay card turns to Paid
@@ -548,9 +574,10 @@ export default function S2App() {
     return () => es.close()
   }, [signedIn, speaker])
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (text: string, pick?: { place_id: string }) => {
     const t = text.trim()
     if (!t || busy) return
+    if (dormant) setDormant(false)   // Sasha 231 · a message wakes her, with no re-introduction
     setBusy(true)
     setInput('')
     setMsgs(ms => [...ms, { role: 'user', text: t, cards: [] }, { role: 'sasha', text: '', cards: [] }])
@@ -558,7 +585,7 @@ export default function S2App() {
     let reply = ''
     try {
       const r = await fetch('/api/s2-agent', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current }) })
+        body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current, ...(pick ? { pick } : {}) }) })
       if (r.status === 401) { window.location.href = '/sign-in?next=/s2'; return }
       const rd = r.body?.getReader()
       const dec = new TextDecoder()
@@ -577,7 +604,7 @@ export default function S2App() {
           else if (ev.type === 'say') speaker.say(ev.text)
           else if (ev.type === 'replace') { reply = ev.text; patch(m => ({ ...m, text: untag(reply) })); if (ev.speak && ev.say) speaker.say(ev.say) }
           else if (ev.type === 'error') { reply = ev.message; patch(m => ({ ...m, text: untag(reply) })); speaker.say(ev.message) }
-          else if (ev.type === 'done') { reply = ev.text || reply; patch(m => ({ ...m, text: untag(reply), cards: /^✅\s*Booked/m.test(reply) ? [...m.cards, { k: 'booked', line: (reply.match(/✅[^\n]*/) || [''])[0] }] : m.cards })) }
+          else if (ev.type === 'done') { reply = ev.text || reply; if (ev.dormant) setDormant(true); patch(m => ({ ...m, text: untag(reply), cards: /^✅\s*Booked/m.test(reply) ? [...m.cards, { k: 'booked', line: (reply.match(/✅[^\n]*/) || [''])[0] }] : m.cards })) }
           else if (ev.type === 'render') {
             const add = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k), c] }))
             if (ev.kind === 'venues' && ev.preset) { const cs = shownCards(ev.preset); if (cs.length) add({ k: 'venues', cards: cs }) }
@@ -602,9 +629,10 @@ export default function S2App() {
       histRef.current = [...histRef.current, { role: 'user', content: t }, { role: 'assistant', content: reply }]
       setBusy(false)
     }
-  }, [busy, speaker])
+  }, [busy, speaker, dormant])
 
-  const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} />   // the same place in every branch: it outlives the sign-in check
+  const wake = () => { setDormant(false); setWoke(micUsed.current); speaker.unlock() }   // she was listening → listening again
+  const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} />   // the same place in every branch: it outlives the sign-in check
   if (signedIn === null) return <><main style={{ minHeight: '100dvh', background: C.bg }} />{hello}</>
   if (!signedIn) return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'system-ui' }}>
@@ -616,7 +644,7 @@ export default function S2App() {
     </main>{hello}</>)
 
   return (<>
-    <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, width: '100%', margin: '0 auto', overflowX: 'hidden' }}>
+    <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, width: '100%', margin: '0 auto', overflowX: 'hidden', opacity: dormant ? 0.22 : 1, filter: dormant ? 'saturate(.4)' : 'none', transition: 'opacity 1.2s ease, filter 1.2s ease' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', paddingTop: 'max(56px, calc(env(safe-area-inset-top) + 44px))' }}>{/* room for the site's sign-in badge above */}
         <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
         <nav style={{ display: 'flex', gap: 6 }}>
@@ -644,7 +672,7 @@ export default function S2App() {
                     {m.text}</div>
                 ) : <div style={{ color: C.dim, padding: '8px 4px' }}>…</div>}
                 {/* Sasha 230 · a pick sends the card's name QUOTED: a listing like "Comida Hindu - Restaurante India, NAMASTE INDIA(…)" + ", please." read as TWO places — she asked which, the yes didn't answer it, the loop */}
-                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); send(`This one: “${t}”`) }} send={t => { speaker.unlock(); send(t) }} />)}</div> : null}
+                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); send(`This one: “${t}”`) }} pick={(t, id) => { speaker.unlock(); send(`This one: “${t}”`, { place_id: id }) }} send={t => { speaker.unlock(); send(t) }} />)}</div> : null}
               </div>))}
             <div ref={end} />
           </section>
@@ -654,8 +682,8 @@ export default function S2App() {
             <button onClick={() => { typeBox.current?.focus() }} style={{ background: 'none', border: 0, color: C.dim, padding: 4 }}>⌨︎ Type instead</button>
           </div>
           <footer style={{ padding: '10px 12px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div className="s2-mic" onPointerDown={() => speaker.unlock()} style={{ flex: 'none' }}>
-              <VoiceButton onTranscript={send} readyToListen muted={busy} />
+            <div className="s2-mic" onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, height: 56 }}>
+              {dormant ? null : <VoiceButton onTranscript={send} readyToListen muted={busy} autoStart={woke} />}{/* resting: unmounted — the mic is off */}
             </div>
             <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} />
             <form onSubmit={e => { e.preventDefault(); speaker.unlock(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
@@ -668,7 +696,10 @@ export default function S2App() {
           <style>{`.s2-mic button{width:56px;height:56px;border-radius:50%}`}</style>
         </>
       )}
-    </main>{hello}</>
+    </main>{hello}
+    {dormant ? <button onClick={wake} aria-label="Sasha is resting — tap to bring her back" style={{ position: 'fixed', inset: 0, zIndex: 45, background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}>
+      <span style={{ position: 'absolute', left: '50%', bottom: 'calc(env(safe-area-inset-bottom) + 40px)', transform: 'translateX(-50%)', padding: '10px 18px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: C.dim, fontSize: 14.5, whiteSpace: 'nowrap' }}>Tap me if you need me</span>
+    </button> : null}</>
   )
 }
 

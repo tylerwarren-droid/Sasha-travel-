@@ -1157,6 +1157,29 @@ async def agent_turn(request: Request):
         body["history"] = _KEEP.clean_history(body.get("history") or [])
     guest_token = request.headers.get("authorization", "").partition(" ")[2].strip() if surface == "s2" else None   # CR 71 · /s2 only
     over = await over_budget(account)
+    session_id = str(body.get("session_id") or "")[:64] or None
+    if surface == "s2":
+        from agapi import s2_closing as CL, s2_memory as MEM
+        lang = CL.closing(message) if body.get("history") else None   # Sasha 231 · "thanks / bye" after a conversation → dormant
+        if lang:
+            bye = CL.line(lang)
+
+            async def dormant():
+                yield f"data: {json.dumps({'type': 'text', 'delta': bye})}\n\n"
+                yield f"data: {json.dumps({'type': 'say', 'text': bye})}\n\n"
+                try:
+                    await MEM.closing(account, message, bye)
+                except Exception as e:
+                    log.warning("[memory] closing not kept: %s: %s", type(e).__name__, e)
+                yield f"data: {json.dumps({'type': 'done', 'text': bye, 'dormant': True, 'guard': [], 'tools': []})}\n\n"
+            return StreamingResponse(dormant(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        pick = body.get("pick") if isinstance(body.get("pick"), dict) else {}
+        pid = str(pick.get("place_id") or "")[:200]
+        if pid:   # Sasha 231 · a Choose tap carries THAT card's place_id — matched to the cards on their screen, never a name guess
+            from agapi import venues as VN
+            c = VN.card_of(account, pid)
+            if c:
+                message = f"{message} [their tap on the card on their screen: {c.get('name')} · place_id {pid} — use this place_id]"
 
     async def events():
         if guest_token:   # CR 71 · this guest's own token goes with S2's AgAPI calls (via_agapi); /next never sets it
@@ -1165,14 +1188,44 @@ async def agent_turn(request: Request):
         if over:   # Sasha 215 · said, in her voice, never a bare 429
             yield f"data: {json.dumps({'type': 'error', 'message': over, 'rule': 'budget'})}\n\n"
             return
+        seen: Dict[str, Any] = {}   # Sasha 231 · /s2: what this turn showed, for her memory across visits
+        reply = ""
         try:
-            async for ev in turn_with_quiver(account, message, body.get("history") or [], str(body.get("session_id") or "")[:64] or None,
-                                             surface):
+            async for ev in turn_with_quiver(account, message, body.get("history") or [], session_id, surface):
+                if surface == "s2":
+                    if ev.get("type") == "render" and ev.get("kind") == "venues" and ev.get("preset"):
+                        seen.update(cards=(ev["preset"].get("cards") or []), ribbon=ev.get("ribbon"), focus=ev.get("focus"))
+                    elif ev.get("type") == "done":
+                        reply, seen["calls"] = str(ev.get("text") or ""), ev.get("tools") or []
                 yield f"data: {json.dumps(ev, default=str)}\n\n"
         except Exception as e:
             log.error("[agent] turn failed: %s: %s", type(e).__name__, e)
             yield f"data: {json.dumps({'type': 'error', 'message': 'Sorry — could you say that once more?'})}\n\n"
+        if surface == "s2" and reply:
+            try:   # awaited here, in the stream: kept before the response ends (never fire-and-forget)
+                from agapi import s2_memory as MEM
+                await MEM.remember(account, session_id, str(body.get("message") or "").strip()[:4000], reply, seen)
+            except Exception as e:
+                log.warning("[memory] turn not kept: %s: %s", type(e).__name__, e)
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.get("/s2/memory")
+async def s2_memory(request: Request, session: str = ""):
+    """Sasha 231 · /s2 on return: what she remembers for this account (masked) — the "Welcome back — we were looking at …" line,
+    the recent conversation, the cards she'd shown (on screen again for this new session). Signed-in accounts only."""
+    from app.services.chat_account import chat_account, signed_in
+    if request.headers.get("x-sasha-surface", "").strip().lower() != "s2":
+        return JSONResponse({"ok": False, "rule": "s2_only"}, status_code=404)
+    account = await chat_account(request)
+    if not signed_in(account):
+        return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
+    from agapi import s2_memory as MEM
+    try:
+        return {"ok": True, **(await MEM.recall(account, session[:64] or None))}
+    except Exception as e:
+        log.warning("[memory] recall failed: %s: %s", type(e).__name__, e)
+        return {"ok": True, "line": None, "recent": [], "screen": None}
 
 
 __all__ = ["router", "turn", "turn_with_quiver", "make_filler", "filler_ok", "opener_of", "strip_openers", "clean_for_model", "drop_internal", "flight_card", "stays_card", "render", "RENDER", "KINDS", "FAST_MODEL", "guard_check", "guard_strip", "tools_for_model", "system_prompt", "MODEL"]

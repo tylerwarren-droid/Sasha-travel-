@@ -275,6 +275,9 @@ ACTIVITY_LINES = {
     ("calendar", "done"): "Added to your calendar",
     ("cancellation", "done"): "Cancelled", ("cancellation", "failed"): "Cancellation failed",
     ("cancellation", "waiting"): "Cancellation asked — waiting for their answer",
+    # CR 63 · the Keep: every save, use, show and deletion (the item travels as its MASK, never its value)
+    ("keep_save", "done"): "Saved to your Keep", ("keep_use", "done"): "Used from your Keep for a booking",
+    ("keep_show", "done"): "Shown on your phone from your Keep", ("keep_delete", "done"): "Deleted from your Keep",
 }
 CHECK = {"done": "green", "failed": "red", "not_sent": "red", "waiting": "amber", "requested": "amber"}
 

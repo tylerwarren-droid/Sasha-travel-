@@ -67,7 +67,7 @@ function useSpeaker() {
   const emit = (b: boolean) => subs.current.forEach(f => f(b))
   const mp3 = async (text: string): Promise<'played' | 'blocked' | 'failed'> => {
     try {
-      const r = await fetch(apiUrl('/api/voice/tts'), { method: 'POST', headers: { ...apiHeaders(), 'content-type': 'application/json' }, body: JSON.stringify({ text }) })
+      const r = await fetch(apiUrl('/api/voice/tts'), { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ text }) })   // Sasha 225 · ONE content-type (two were merged → 422: /s2 was silent)
       if (!r.ok) return 'failed'
       const a = new Audio(URL.createObjectURL(await r.blob()))
       return await new Promise(res => { a.onended = () => res('played'); a.onerror = () => res('failed'); a.play().catch(e => res(e?.name === 'NotAllowedError' ? 'blocked' : 'failed')) })

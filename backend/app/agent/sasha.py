@@ -109,6 +109,7 @@ RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues":
 RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_whatsapp": "read_back", "get_activity": "inline"})
 RENDER.update({"keep_list": "inline", "keep_use": "inline", "keep_add": "keep_capture"})
 RENDER.update({"what_i_can_do": "capabilities", "note_not_yet": "inline"})   # Sasha 225 · /s2's capability card
+RENDER.update({"note_rental": "inline"})   # Sasha 227
 RENDER.update({"my_plans": "plans", "running_late": "read_back", "change_booking": "read_back", "cancel_booking": "read_back"})   # Sasha 226   # Sasha 224 · CR 63 + the photo capture   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
 KINDS_S2_ONLY = {"keep_capture", "capabilities", "plans", "notice"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged

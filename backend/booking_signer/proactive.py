@@ -487,6 +487,11 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
                 return said["text"], template_vars(kind, fresh, extra)
             outcome = await _send(ch, kind, fresh, compose, None, local_day, fresh.get("status"))
             done.append({"kind": kind, "booking": fresh.get("id"), "outcome": outcome, "text": said.get("text")})
+    try:   # Sasha 227 · CR 75's "day before pickup" for a car rental (the founder only, SASHA_PROACTIVE_RENTALS=1; off by default)
+        from . import rental_moments as RM
+        done += await RM.tick(now)
+    except Exception as e:
+        log.warning("[proactive] rental moments failed: %s: %s", type(e).__name__, e)
     return done
 
 

@@ -96,6 +96,10 @@ async def plans_of(account: str) -> List[dict]:
                             **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),
                             "id": str(r["id"]), "trip_item_id": str(r["trip_item_id"]) if r.get("trip_item_id") else None,
                             "trip": p.get("title"), "source": "hotel"})
+    from booking_signer import rental_moments as RM   # Sasha 227 · the rentals they told her about
+    for r in await RM.rentals(account):
+        out.append({"kind": "car", "title": f"{r['rental_company']} car rental", "when": r["pickup_date"] + (f"T{r['pickup_time']}" if r.get("pickup_time") else ""),
+                    "where": r.get("place") or r.get("country") or "", "status": "noted (booked elsewhere)", "id": r["id"], "source": "rental"})
     today = date.today().isoformat()
     keep = [i for i in out if (i["when"] or today)[:10] >= today or
             (i["kind"] == "hotel" and i["when"] and (date.fromisoformat(i["when"][:10]) + timedelta(days=i.get("nights") or 1)).isoformat() > today)]
@@ -300,10 +304,28 @@ async def cancel_booking(ctx, a: dict) -> dict:
     raise _err("what_invalid", "what is hotel or flight (a restaurant or spa: cancel_venue)")
 
 
+async def note_rental(ctx, a: dict) -> dict:
+    """Sasha 227 · a car rental they tell her about (Sasha books none): kept so My plans shows it and, for the founder behind
+    SASHA_PROACTIVE_RENTALS, the evening before pickup she can say what to decline at the counter (CR 75's moment)."""
+    from booking_signer import rental_moments as RM
+    try:
+        r = await RM.note(ctx.account, a)
+    except ValueError as e:
+        raise _err("rental_invalid", str(e))
+    return {"saved": True, "rental": {k: r[k] for k in ("rental_company", "country", "place", "pickup_date", "pickup_time") if r.get(k)},
+            "say": "Say it's noted in a sentence. If they haven't seen the counter card yet, offer it (rental_cover)."}
+
+
 def tools() -> List[dict]:
     from agapi.v0 import _t
     appr = {"approval": {"type": "object", "properties": {"said": {"type": "string"}}, "description": "the person's own words (filled by the caller)"}}
     return [
+        _t("note_rental", "Pacioli", note_rental, "Note a car rental they've booked elsewhere (company, country, where, pickup day and "
+           "time) so it's in My plans. Nothing is sent anywhere; you don't book rentals.",
+           {"rental_company": {"type": "string"}, "country": {"type": "string", "description": "ISO-2, e.g. PT"}, "place": {"type": "string"},
+            "pickup_date": {"type": "string", "description": "YYYY-MM-DD"}, "pickup_time": {"type": "string", "description": "HH:MM"},
+            "days": {"type": "integer", "minimum": 1, "maximum": 90}}, ["rental_company", "country", "pickup_date"],
+           {"type": "object", "properties": {"saved": {"type": "boolean"}}}, ["rental_invalid"]),
         _t("my_plans", "Pacioli", my_plans, "Everything booked on their account — restaurants, spas, flights, hotels, from any screen — "
            "upcoming first, on a card. 'What's coming up?' → no args; 'Where am I on the 5th?' → on=YYYY-MM-DD (that day's bookings and "
            "the night's hotel). Each item has an id for change_booking / cancel_booking / cancel_venue / running_late.",

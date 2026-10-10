@@ -47,7 +47,7 @@ with a destination or a trip.
 
 S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "cancel_venue", "get_status",
             "send_email", "add_to_calendar", "send_whatsapp", "get_activity", "keep_list", "keep_use", "keep_add", "what_i_can_do", "note_not_yet",
-            "my_plans", "running_late", "change_booking", "cancel_booking",
+            "my_plans", "running_late", "change_booking", "cancel_booking", "note_rental",
             "prepare_trip", "propose_trip", "search_flights", "search_stays", "swap_stay", "choose_offer", "check_offer",
             "save_travellers", "hold_booking", "book", "get_trip", "get_total")
 

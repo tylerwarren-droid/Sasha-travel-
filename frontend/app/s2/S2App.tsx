@@ -30,7 +30,7 @@ type Card =
   | { k: 'my_cards'; cards: { product: string; network: string; status: string }[] }
   | { k: 'accident'; view: Ev }
   | { k: 'claim_status'; claim: Ev }
-type Plan = { kind: 'dinner' | 'spa' | 'venue' | 'flight' | 'hotel'; title: string; when: string; where?: string; status: string; reference?: string; id?: string }
+type Plan = { kind: 'dinner' | 'spa' | 'venue' | 'flight' | 'hotel' | 'car'; title: string; when: string; where?: string; status: string; reference?: string; id?: string }
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
 type Ev = Record<string, any>
@@ -278,7 +278,7 @@ function fmtWhen(iso: string): string {
   const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
   return dateOnly ? day : `${day} · ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
 }
-const PLAN_ICON: Record<string, string> = { dinner: '🍽️', venue: '🍽️', spa: '💆', flight: '✈️', hotel: '🏨' }
+const PLAN_ICON: Record<string, string> = { dinner: '🍽️', venue: '🍽️', spa: '💆', flight: '✈️', hotel: '🏨', car: '🚗' }
 
 function Plans({ items, on }: { items: Plan[]; on?: string }) {
   return (
@@ -507,6 +507,12 @@ export default function S2App() {
     es.onmessage = m => {
       let ev: Ev
       try { ev = untagDeep(JSON.parse(m.data)) } catch { return }
+      if (ev.type === 'proactive' && ev.say) {   // Sasha 227 · "day before pickup": her one line, and the counter card
+        const card: Card[] = ev.render?.kind === 'counter_card' && ev.render.card ? [{ k: 'counter_card', card: ev.render.card }] : []
+        setMsgs(ms => [...ms, { role: 'sasha', text: untag(String(ev.say)), cards: card }])
+        speaker.say(String(ev.say))
+        return
+      }
       if (ev.type === 'venue_notice') {   // Sasha 226 · the venue's answer to "I'm running late" / a change — in their words, when it comes
         const lines: string[] = Array.isArray(ev.lines) ? ev.lines.map(String) : [String(ev.say || '')]
         const title = `${ev.purpose === 'change' ? 'Change' : 'Running late'} · ${String(ev.venue || 'the venue')}`

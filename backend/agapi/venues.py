@@ -241,7 +241,13 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
     from booking_signer import guest_accounts as GA, guest_receipt as GR
     GW = _API()
     msg_routes = [x for x in _routes_of(rd) if x in ("whatsapp", "instagram")]
-    if route in ("whatsapp", "instagram") or (not route and msg_routes and set(_routes_of(rd)) <= {"whatsapp", "instagram"}):
+    # Sasha 232 · /s2, DIRECT FIRST for every kind of place: their own form or booking page (their booking software IS their form) →
+    # their own WhatsApp (drafted; THEY send it from their WhatsApp — S-48 Mode A) → email → phone. S1 unchanged.
+    wa_first = (not route and getattr(ctx, "surface", "s1") == "s2" and "whatsapp" in msg_routes
+                and not {"form", "page"} & set(_routes_of(rd)))
+    if wa_first:
+        msg_routes = ["whatsapp"]
+    if route in ("whatsapp", "instagram") or wa_first or (not route and msg_routes and set(_routes_of(rd)) <= {"whatsapp", "instagram"}):
         # Sasha 212 · a place that books only by a message (a tattoo studio on Instagram, a bar on WhatsApp): Sasha DRAFTS it
         # for their phone — they send it; nothing is booked until the place answers them
         ch = route if route in ("whatsapp", "instagram") else msg_routes[0]

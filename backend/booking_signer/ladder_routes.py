@@ -162,8 +162,9 @@ async def read_venue(request: Request):
         quote = re.search(r"tattoo|piercing|custom|commission|portrait|bespoke|tailor|quote", str(body.get("asked_for") or ""), re.I)
         body = {"name": standin_name(body.get("name")), "city": body.get("city") or "Madrid", "country": "ES",
                 "website": test_venue_url("email" if quote else "plain")}
-    elif body.get("place_id") and standin(account_for(request)) and not body.get("real_venue") \
+    elif not s2_demo and body.get("place_id") and standin(account_for(request)) and not body.get("real_venue") \
             and not is_restaurant(body.get("asked_for")):   # Sasha 175 · the platform run reads real venues; Sasha 186 · restaurants are real
+        # Sasha 232 · /next only now (an /s2 read always carries s2_demo): on /s2 the founder books the real place, every kind
         # Sasha 169 · THE DEMO STAND-IN (founder only, SASHA_DEMO_STANDIN=1): a real listing picked → OUR test venue's own page
         # is read and sent to instead, and its name says so everywhere — the real place is never contacted
         from .form_rung import test_venue_url

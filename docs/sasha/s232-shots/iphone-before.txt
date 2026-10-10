@@ -1,0 +1,24 @@
+OPENING: face box on screen: true | "Tap to hear Sasha" shown: true
+tapped "Tap to hear Sasha"
+HELLO said (TTS/pcm requested): ["Welcome back — we were looking at tapas bar in Puerta del Sol, Madrid. Want to carry on?"]
+PLAYS so far:
+  5578ms face-video(muted)#b90x: AbortError
+  5581ms face-video#b90x: NotAllowedError(iOS rule)
+  5583ms face-video(muted)#b90x: AbortError
+  5585ms face-video(muted)#b90x: played
+  6027ms face-video#b90x: NotAllowedError(iOS rule)
+  6027ms face-video(muted)#b90x: played
+  10409ms voice#utsk: pending
+  10409ms face-video#b90x: played
+REPLY 1 to "What can you do?" | toggle shows: 🔊 Voice on
+REPLY 2 to "Any good tapas places near Sol?" | toggle shows: 🔊 Voice on
+REPLY 3 to "Thanks — and what time is it in New York?" | toggle shows: 🔊 Voice on
+PLAYS during the replies:
+  19646ms voice#57q0: pending
+  25148ms voice#8o31: NotAllowedError(iOS rule)
+  33963ms voice#vw20: pending
+  41943ms voice#jdhh: NotAllowedError(iOS rule)
+  49546ms voice#wzsb: pending
+  55012ms voice#96k6: NotAllowedError(iOS rule)
+voice plays during replies: played 0 | refused 3 | TTS lines requested 4
+console: [DG] readyToListen: true autoStart: false disabled: undefined || could not playback audio {room: 1e6161f2-c4cc-11f1-91cc-b62e0a34e828, roomID: RM_6TmRbYmbxDkK, participant: client, pID: PA_9QSvkt6YFzcQ, error: NotAllowedError || [s2-hello] face on screen in 4713 ms

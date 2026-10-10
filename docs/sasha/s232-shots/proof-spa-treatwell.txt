@@ -1,0 +1,27 @@
+
+> Book me a 60-minute massage at a spa in Madrid tomorrow at 11
+  HTTP 200 tools: search_venues, get_total!no_trip, get_trip!no_trip, get_status
+  renders: venues(Kamai Spa - Spa Privado en Madrid - Plaza Castilla | Spazio Wellness - Masajes en Madrid | Chalalai Thai Massage - Masajes Orientales | Kamiraku. Oriental Wellness | The Fix Room)
+  "TEST stand-in" anywhere in the stream: false
+  she: I've found five, all open tomorrow at 11 and all rated 4.9. Spazio Wellness in Centro has the most reviews. Kamai Spa near Plaza Castilla is a private spa, so it'll feel more exclusive. Chalalai in Chamberí does Thai massage. Opening hours don't mean they have a free slot, so we'll only know once the place you pick replies. Which one would you like?
+
+> This one: “Kamai Spa - Spa Privado en Madrid - Plaza Castilla”  [place_id ChIJzYkvOHspQg0R2-DYtlRmTuc]
+  HTTP 200 tools: read_booking_route, hold_venue(draft_message), get_total!no_trip, get_trip!no_trip, get_status
+  renders: focus[focus ChIJzYkvOH] ; focus[focus ChIJzYkvOH]
+  "TEST stand-in" anywhere in the stream: false
+  she: Kamai only takes bookings by message, so I've drafted a WhatsApp. It says: "Hola, quería pedir cita para 1 persona el 11 de octubre a las 11:00, a nombre de Alex Gate. ¿Tienen disponibilidad? Gracias." It doesn't mention the 60-minute massage, so they'll probably ask what you want. Shall I send it to your phone for you to send on? It isn't booked until they reply. I can email them instead if you'd rather.
+> This one: “Elite uñas & peluquería”  [place_id ChIJCWwpiKUnQg0Rnko_8Y6DeHk]
+  HTTP 200 tools: read_booking_route, note_not_yet, get_total!no_trip, get_trip!no_trip, get_status
+  she: I can't book Elite uñas yet. They only take bookings by phone, and I can't make calls on your account yet. I've noted it. You could call them yourself for the 11:00 slot. Or I can check the other two salons, Nails Star Madrid and Nail Bar Hermosilla, to see whether either takes bookings online or by email. Want me to try one of those?
+> This one: “NailOn Quintana”  [place_id ChIJOTR6WAQvQg0RloTnKQp3boM]
+  HTTP 200 tools: read_booking_route, note_not_yet, get_total!no_trip, get_trip!no_trip, get_status
+  she: I can't do that yet, but I've noted it. NailOn Quintana only takes bookings through Booksy and by phone. I can't reach their Booksy page, and calls aren't switched on for your account. Here's what I can do instead. I can try Elite uñas & peluquería or Nails Star Madrid, and I'll check how each of them takes bookings. I can also look for other nail salons that have a form or email I can use. Which would you like?
+> This one: “Nail Bar Hermosilla - Salon de Uñas”  [place_id ChIJ6SWYyAYpQg0Rl-ZNZvfgIBs]
+  HTTP 200 tools: read_booking_route, hold_venue(awaiting_yes), get_total!no_trip, get_trip!no_trip, get_status
+  she: Nail Bar Hermosilla only takes bookings through Treatwell, so I can't press the final button for you. If you say yes, I'll send their page to your phone. You then pick Sunday 11 October at 11 am for one person and book it there. Shall I send it?
+> This one: “Nail Bar Hermosilla - Salon de Uñas”  [place_id ChIJ6SWYyAYpQg0Rl-ZNZvfgIBs]
+  HTTP 200 tools: read_booking_route, hold_venue(awaiting_yes), get_total!no_trip, get_trip!no_trip, get_status
+  she: It's set for Sunday 11 October at 11 for one person. Shall I send it?
+> This one: “Nail salón”  [place_id ChIJ986xQ9MpQg0R6d7Gdbv_aL8]
+  HTTP 200 tools: read_booking_route, note_not_yet, get_total!no_trip, get_trip!no_trip, get_status
+  she: I can't do that yet, but I've noted it. Nail salón only takes bookings by phone, and I can't make calls on your account yet. I can try one of the other salons instead. Elite Uñas & Peluquería in Chamberí, NailOn Quintana in Centro and Nails Star Madrid in Salamanca are all on your screen, and I'll check how each one takes bookings. Or you could call Nail salón yourself. Want me to try one of the others?

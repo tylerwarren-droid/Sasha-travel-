@@ -250,6 +250,12 @@ async def execute(op_name: str, headers: dict, raw: bytes, principal: Optional[d
         except R.Refused as e:
             raise AgapiError("invalid_input", f"The input can't be canonicalised ({e}).", {"path": "/", "rule": "canonical"})
         check_input(op_name, inp)
+        gtok = (headers.get("x-sasha-guest-token") or "").strip()
+        if gtok and config.LIVE_SERVICE and key["mode"] == "live":   # CR 71 · S2's guest token: only from the sasha product's key
+            prod = store.one("select product from accounts where id = ?", key["account"])
+            if prod and prod.get("product") == "sasha" and len(gtok) <= 4096:
+                from . import adapters_live as _AL
+                _AL.GUEST_TOKEN.set(gtok)
         if _live_inp:
             AD.require_live(op_name, inp, store, key["account"])   # CR 70 · the items decide which providers a live act needs
             AD.precheck_live(op_name, inp, store, key["account"])  # CR 70 · live sends only to allow-listed addresses/numbers

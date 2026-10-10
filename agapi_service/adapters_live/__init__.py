@@ -7,6 +7,11 @@ from typing import Any, Callable, Dict, Optional
 
 STORE: Optional[Callable[[], Any]] = None      # app.py binds the store getter (daily caps, provider call counts)
 
+import contextvars  # noqa: E402
+# CR 71 · S2's guest: their own Sasha sign-in token (X-Sasha-Guest-Token), accepted ONLY from the sasha product's live key, for this
+# request only — the ladder then acts as THAT guest at Sasha's booking routes (else Sasha's demo account)
+GUEST_TOKEN: contextvars.ContextVar = contextvars.ContextVar("agapi_sasha_guest_token", default=None)
+
 
 def bind(store_getter) -> None:
     global STORE

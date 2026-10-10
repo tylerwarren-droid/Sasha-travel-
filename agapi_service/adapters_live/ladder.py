@@ -40,7 +40,10 @@ async def sasha(method: str, path: str, body: Any = None, timeout: float = 60.0)
     if not key:
         raise AgapiError("upstream_unreachable", "agapi-live has no Sasha booking key; nothing was prepared.", {"service": "sasha_ladder"})
     try:
-        r = await http(method, base() + path, headers={"x-sasha-booking-key": key, "x-sasha-session": "demo", "content-type": "application/json"},
+        from . import GUEST_TOKEN
+        tok = GUEST_TOKEN.get()
+        who = {"authorization": f"Bearer {tok}"} if tok else {"x-sasha-session": "demo"}   # CR 71 · the guest themself, else the demo account
+        r = await http(method, base() + path, headers={"x-sasha-booking-key": key, **who, "content-type": "application/json"},
                        json=body, timeout=timeout)
     except Exception as e:
         raise AgapiError("upstream_unreachable", f"Sasha's booking service didn't answer ({type(e).__name__}); nothing was sent.",

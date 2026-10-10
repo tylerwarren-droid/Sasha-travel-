@@ -577,6 +577,20 @@ class LadderLive(Live):
         r, b2 = self.call("trip.complete", {"hold_id": b["result"]["hold_id"]}, key=self.live,
                           approval=self.approve(b["result"]["read_back"]["read_back_id"]), expect="hold_expired")
 
+    def test_s2s_guest_token_acts_as_that_guest_only_from_the_sasha_key(self):
+        self.store.x("update accounts set product = 'sasha' where id = ?", self.account)
+        H = {"X-Sasha-Guest-Token": "guest-jwt-123"}
+        self.call("trip.hold", {"end_user": self.uid, "items": [{"kind": "venue", "ref": self.venue["venue_ref"], "at": "2026-11-20T20:30:00+01:00",
+                                                                "party": 2}]}, key=self.live, headers=H)
+        first = [c for c in self.sasha.calls if c[1] == "/api/booking/venues/read"][-1][3]
+        self.assertEqual(first.get("authorization"), "Bearer guest-jwt-123")                     # as this guest
+        self.assertNotIn("x-sasha-session", first)
+        self.store.x("update accounts set product = 'partner' where id = ?", self.account)       # any other key: the token is ignored
+        self.call("trip.hold", {"end_user": self.uid, "items": [{"kind": "venue", "ref": self.venue["venue_ref"], "at": "2026-11-21T20:30:00+01:00",
+                                                                "party": 2}]}, key=self.live, headers=H)
+        last = [c for c in self.sasha.calls if c[1] == "/api/booking/venues/read"][-1][3]
+        self.assertEqual((last.get("x-sasha-session"), last.get("authorization")), ("demo", None))
+
     def test_the_live_network_guard_lets_sasha_through_and_nothing_else_new(self):
         hosts = PV.live_hosts()
         self.assertIn("sasha-travel-production.up.railway.app", hosts)                             # (the live smoke caught its absence)

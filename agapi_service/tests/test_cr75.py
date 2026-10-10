@@ -183,3 +183,37 @@ class Accident(Base):
         self.assertEqual(next(e for e in claim["evidence"] if e["item"] == "photos")["have"], ["your_car_front.jpg", "the_damage_close_up.jpg"])
         self.assertEqual(next(e for e in claim["evidence"] if e["item"] == "accident_statement")["have"], ["accident-statement-facts.txt"])
         self.assertIn("Vehicle: make a test car, plate AA-00-ZZ", lines)
+
+
+class Supplied(Base):
+    """CR 76 · an official document a person supplied: read like a fetched one, cited by its ORIGINAL URL, never fetched, never re-read alone."""
+
+    def test_a_supplied_pdf_is_read_and_cited_by_its_original_url(self):
+        import asyncio
+        from unittest import mock
+        from agapi_service.fineprint import fixture as FX, jobs as J, reader as RD
+        url = "https://www.bank.example/docs/certificate.pdf"
+        g = FX.CARDS["example-bank-travel-visa"]["guide"]
+
+        async def model(card, docs):
+            self.assertEqual(docs[0]["linked_from"], "supplied by a person (Tyler, test)")
+            return {"card": {"issuer": "x", "product": "x", "network": "visa"}, "instruction_like": [], "facts": [
+                {"benefit": "fx_fee", "field": "percent", "value": "0", "source_url": url, "quote": g[2], "applies_to": ""},
+                {"benefit": "claims", "field": "notice_deadline_days", "value": "60", "source_url": url, "quote": g[17], "applies_to": "all"}]}
+
+        async def no_fetch(*a, **k):
+            raise AssertionError("a supplied document is never fetched")
+        with mock.patch.object(RD, "EXTRACT", model), mock.patch.object(RD, "FETCH_BYTES", no_fetch):
+            out = asyncio.run(RD.read_supplied({"issuer": "X", "product": "X"}, FX.guide_pdf("example-bank-travel-visa"), url, "Tyler, test"))
+        self.assertEqual([f["source_url"] for f in out["facts"]], [url, url])
+        self.assertEqual(out["sources"][0]["linked_from"], "supplied by a person (Tyler, test)")
+        out = asyncio.run(RD.read_supplied({"issuer": "X"}, b"not a pdf", url, "Tyler, test"))
+        self.assertEqual(out["unread"][0]["why"], "not a PDF")
+        M.ensure_loaded(self.store)
+        self.store.x("update card_products set accepted_at = 'x' where key = 'bbva_despues_oro'")
+        self.assertIn("supplied by a person", asyncio.run(J.check(self.store, "bbva_despues_oro"))["action"])
+
+    def test_bbva_platinum_is_kept_but_not_answered(self):
+        names = {p["product"] for p in self.ok("cards.products", {})["products"]}
+        self.assertNotIn("Tarjeta de crédito Visa Platinum BBVA", names)
+        self.assertIn("Tarjeta Después Oro BBVA", names)

@@ -42,6 +42,8 @@ async def check(store, key: str) -> Dict[str, Any]:
     p = store.one("select * from card_products where id = ?", pid)
     if not p or not p["accepted_at"]:
         return {"key": key, "action": "skipped (not accepted)"}
+    if seeds().get(key, {}).get("supplied"):
+        return {"key": key, "action": "supplied by a person: a re-read needs a new copy from the issuer (its site refuses our reader)"}
     if M.freshness(p) != "fresh":
         await read_now(store, key)
         return {"key": key, "action": "re-read (due)"}

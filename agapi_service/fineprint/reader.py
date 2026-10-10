@@ -202,13 +202,17 @@ Benefits and fields (value formats in brackets):
 - car_rental: cover_type [primary|secondary], damage_theft_covered [true|false], liability_included [true|false — false ONLY if the
   terms say liability isn't covered], max_rental_days [number], excluded_countries, excluded_vehicles [items separated by "; "],
   must_decline_rental_cdw [true|false], paid_with_card_condition [text], limit [money]
+- travel_insurance also: accident_death_limit, medical_abroad_limit, bail_advance_limit [money], cover_days [number of days a trip is
+  covered], partial_payment_rule [what happens when only part of the trip is paid with the card], travel_delay_step [money per step],
+  travel_delay_max_steps [number], baggage_rental_car_rule [text: who is covered in a rental car, as stated]
 - purchase_protection: days [number], per_claim_limit, annual_limit [money], exclusions [list]
 - extended_warranty: months_added [number], limit [money]
 - lounges: programme, guest_rules, visit_limit [text]
 - fx_fee: percent [a number, e.g. "3" or "0"]
 - points: earn_rate ["<rate> points per <ISO currency> on <category>", category one of travel|flights|hotels|car_rental|dining|groceries|
   gas|transit|everything_else; one fact per category], transfer_partners [list], caps [text]
-- claims: administrator, url, phone, email [text, as written], notice_deadline_days, documents_deadline_days [number of days].
+- claims: administrator, url, phone, email, assistance_phone, assistance_phone_abroad [text, as written], notice_deadline_days,
+  documents_deadline_days [number of days; also when written in words, e.g. "SIETE días" → 7].
   For a claims fact, applies_to says WHICH benefit's claims it is about (e.g. a 20-day baggage notice → travel_insurance; a rental
   damage report deadline → car_rental), or "all" if the terms give it for every claim. For any other fact applies_to is "".
 
@@ -255,7 +259,7 @@ DRAFT = {
         "facts": {"type": "array", "maxItems": 150, "items": {"type": "object", "additionalProperties": False,
                   "required": ["benefit", "field", "value", "source_url", "quote", "applies_to"],
                   "properties": {"benefit": {"type": "string", "enum": list(SC.BENEFITS)}, "field": {"type": "string"}, "value": {"type": "string"},
-                                 "applies_to": {"type": "string", "enum": [b for b in SC.BENEFITS if b != "claims"] + ["all", ""]},
+                                 "applies_to": {"type": "string", "enum": [b for b in SC.CARD_BENEFITS if b != "claims"] + ["all", ""]},
                                  "source_url": {"type": "string"}, "quote": {"type": "string"}}}},
         "instruction_like": {"type": "array", "maxItems": 10, "items": {"type": "object", "additionalProperties": False, "required": ["source_url", "quote"],
                              "properties": {"source_url": {"type": "string"}, "quote": {"type": "string"}}}},
@@ -334,7 +338,7 @@ def ground(draft: dict, docs: List[dict]) -> Dict[str, Any]:
             continue
         seen.add(key)
         field = f["field"]
-        if f["benefit"] == "claims" and f.get("applies_to") and f["applies_to"] != "all":
+        if f["benefit"] == "claims" and f.get("applies_to") in SC.CARD_BENEFITS and f["applies_to"] != "claims":   # a card benefit only
             field = f"{field}@{f['applies_to']}"                          # CR 74b · a claims fact scoped to its benefit
         facts.append({"benefit": f["benefit"], "field": field, "value": val, "source_url": at, "quote": w["text"]})
     return {"facts": facts, "dropped": dropped, "instruction_like": len(draft.get("instruction_like") or [])}
@@ -378,3 +382,24 @@ async def as_read_site(url: str) -> Dict[str, Any]:
                          "failed": [{"url": u["url"], "why": u["why"]} for u in got["unread"]][:10], "skipped_by_robots": sum(1 for u in got["unread"] if u.get("robots")),
                          "more_links_unread": 0},
             "reader": got.get("reader") or {"model": config.READER_MODEL}}
+
+
+async def read_supplied(card: dict, raw: bytes, original_url: str, supplied_by: str) -> Dict[str, Any]:
+    """CR 76 · an official document a PERSON supplied (the issuer's own site refuses our reader): read exactly like a fetched one, every fact
+    citing the document's ORIGINAL official URL; the source is recorded as supplied by a person. Nothing is fetched."""
+    if raw[:5] != b"%PDF-":
+        return {"card": card, "read_at": ts()[:19] + "Z", "sources": [], "unread": [{"url": original_url, "why": "not a PDF"}], "facts": [], "dropped": {}, "instruction_like": 0}
+    text = pdf_text(raw)
+    url = clean_url(original_url)
+    doc = {"url": url, "kind": "pdf", "title": "", "text": text[:PDF_CHARS], "body_sha256": "sha256:" + hashlib.sha256(raw).hexdigest(),
+           "linked_from": f"supplied by a person ({supplied_by})", "score": 1000}
+    out: Dict[str, Any] = {"card": {k: card.get(k) for k in ("key", "issuer", "product", "network", "country")}, "read_at": ts()[:19] + "Z",
+                           "sources": [{k: doc[k] for k in ("url", "kind", "title", "body_sha256", "linked_from")}], "unread": [],
+                           "supplied_by": supplied_by, "pages_chars": len(text)}
+    if not config.ANTHROPIC_KEY and EXTRACT is _claude:
+        return {**out, "facts": [], "dropped": {}, "instruction_like": 0, "why": "the AI reader is off"}
+    raw_draft = await EXTRACT(card, [doc])
+    usage = MG.usd(raw_draft.pop("_usage", None))
+    g = ground(raw_draft, [doc])
+    out["sources"] = [{**s, "used": bool(g["facts"])} for s in out["sources"]]
+    return {**out, **g, "reader": {k: usage[k] for k in ("model", "input_tokens", "output_tokens", "usd")} if usage else None}

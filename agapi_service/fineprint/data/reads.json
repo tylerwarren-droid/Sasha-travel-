@@ -1624,6 +1624,256 @@
    ],
    "unread": []
   },
+  "bbva_despues_oro": {
+   "card": {
+    "country": "ES",
+    "issuer": "BBVA",
+    "key": "bbva_despues_oro",
+    "network": "visa",
+    "product": "Tarjeta Después Oro BBVA"
+   },
+   "dropped": {
+    "instruction_like": 0,
+    "invalid_value": 0,
+    "not_verbatim": 0
+   },
+   "facts": [
+    {
+     "benefit": "travel_insurance",
+     "field": "accident_death_limit",
+     "quote": "Los capitales establecidos para cada Asegurado en las distintas garantías serán los siguientes: En caso de Fallecimiento por accidente 760.000 €.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": {
+      "amount_minor": 76000000,
+      "currency": "EUR"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "paid_with_card_condition",
+     "quote": "Tienen la condición de Asegurados, el Titular de la Tarjeta, su cónyuge, hijos, así como cualquier acompañante adicional, siempre que el importe total del viaje haya sido abonado con la Tarjeta indicada.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": "importe total del viaje abonado con la Tarjeta"
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "partial_payment_rule",
+     "quote": "Cuando se abone con la Tarjeta tan solo una parte del viaje, la indemnización se reducirá en la proporción existente entre dicho importe abonado y el coste total del viaje.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": "La indemnización se reduce en proporción al importe abonado con la Tarjeta respecto al coste total del viaje"
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_rental_car_rule",
+     "quote": "Para los accidentes sufridos en coche de alquiler, avionetas o helicópteros, tienen la condición de asegurados el Titular de la Tarjeta y un máximo de 5 acompañantes adicionales, siempre que el importe total del viaje realizado en dicho coche de alquiler, avioneta o helicóptero haya sido abonado con la Tarjeta del Titular.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": "En coche de alquiler, avioneta o helicóptero: el Titular y un máximo de 5 acompañantes adicionales, si el importe total del viaje se abonó con la Tarjeta del Titular"
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "c) Guerra declarada o no, rebelión, tumulto o cualquier otro hecho de naturaleza análoga.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": [
+      "Guerra declarada o no",
+      "rebelión",
+      "tumulto"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "d) Reacción nuclear, radiación nuclear o contaminación radioactiva.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": [
+      "Reacción nuclear",
+      "radiación nuclear",
+      "contaminación radioactiva"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_loss_limit",
+     "quote": "El ASEGURADOR garantiza, hasta 600 € y a reserva de las exclusiones que se indican en este Certificado, el pago de la indemnización de las pérdidas materiales sufridas por el equipaje durante los viajes y estancias fuera del domicilio habitual del ASEGURADO a consecuencia de:",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": {
+      "amount_minor": 60000,
+      "currency": "EUR"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "b) El hurto.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": [
+      "El hurto (equipajes)"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_delay_limit",
+     "quote": "Igualmente queda cubierta por el Seguro la compra de artículos necesarios, debidamente justificada, ocasionada por una demora de al menos 6 horas o transcurra una noche por medio, en la entrega del equipaje facturado, cualquiera que sea su causa, hasta un límite máximo de 120 €.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": {
+      "amount_minor": 12000,
+      "currency": "EUR"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "baggage_delay_threshold_hours",
+     "quote": "Igualmente queda cubierta por el Seguro la compra de artículos necesarios, debidamente justificada, ocasionada por una demora de al menos 6 horas o transcurra una noche por medio, en la entrega del equipaje facturado, cualquiera que sea su causa, hasta un límite máximo de 120 €.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": 6
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "trip_delay_threshold_hours",
+     "quote": "• Hasta 40 €, si la demora fuera superior a 6 horas.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": 6
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "travel_delay_step",
+     "quote": "• 40 € más, si la demora fuera superior a 12 horas.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": {
+      "amount_minor": 4000,
+      "currency": "EUR"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "Quedan excluidas de esta prestación las indemnizaciones por demoras producidas en vuelos no regulares.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": [
+      "Demoras en vuelos no regulares"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "medical_abroad_limit",
+     "quote": "El ASEGURADOR toma a su cargo, hasta el límite máximo de 3.000 €, los gastos médico-quirúrgicos, farmacéuticos, de hospitalización, traslado y de ambulancia que necesite el ASEGURADO durante el viaje en el extranjero, como consecuencia de una enfermedad o accidente sobrevenido en el transcurso del mismo.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": {
+      "amount_minor": 300000,
+      "currency": "EUR"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "bail_advance_limit",
+     "quote": "Si el ASEGURADO es encarcelado o procesado como consecuencia de un accidente de circulación, el ASEGURADOR le concederá un anticipo equivalente al importe de la fianza penal exigida por las autoridades correspondientes, hasta el límite de 4.200 €.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": {
+      "amount_minor": 420000,
+      "currency": "EUR"
+     }
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "cover_days",
+     "quote": "Las garantías toman efecto durante 90 días consecutivos desde el día del inicio del viaje y dejan de tener efecto a partir del NONAGÉSIMO día de viaje.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": 90
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "Las garantías cubiertas por la Póliza tomarán efecto siempre que el ASEGURADO se encuentre de viaje por el extranjero (con la excepción de Afganistán, Camboya, Guayana, Laos, Líbano, El Salvador, Uganda, Irán, Irak y Guinea), fuera de España.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": [
+      "Viajes a Afganistán",
+      "Camboya",
+      "Guayana",
+      "Laos",
+      "Líbano",
+      "El Salvador",
+      "Uganda",
+      "Irán",
+      "Irak",
+      "Guinea"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "f) El rescate en montaña, mar o desierto.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": [
+      "El rescate en montaña, mar o desierto"
+     ]
+    },
+    {
+     "benefit": "travel_insurance",
+     "field": "exclusions",
+     "quote": "i) Cualquier enfermedad mental.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": [
+      "Cualquier enfermedad mental"
+     ]
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days@travel_insurance",
+     "quote": "Dentro de los 30 días desde la ocurrencia del accidente se dará aviso por escrito a la Compañía, por mediación de BBVA Broker, a la siguiente dirección: c/ Azul 4, 28050 Madrid.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": 30
+    },
+    {
+     "benefit": "claims",
+     "field": "notice_deadline_days@travel_insurance",
+     "quote": "b) El TOMADOR, el ASEGURADO o sus derechohabientes, deberán comunicar al ASEGURADOR el acaecimiento de un siniestro dentro del plazo máximo de SIETE días, CONTADOS a partir de la fecha en que fue conocido, pudiendo reclamar el ASEGURADOR los daños y perjuicios causados por la falta de esta declaración, salvo que demuestre que éste tuvo conocimiento del siniestro por otro medio.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": 7
+    },
+    {
+     "benefit": "claims",
+     "field": "assistance_phone@travel_insurance",
+     "quote": "El teléfono de asistencia para llamadas realizadas desde España es 900 102 801, y desde el extranjero al 00 34 91 374 73 68.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": "900 102 801"
+    },
+    {
+     "benefit": "claims",
+     "field": "assistance_phone_abroad@travel_insurance",
+     "quote": "El teléfono de asistencia para llamadas realizadas desde España es 900 102 801, y desde el extranjero al 00 34 91 374 73 68.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": "00 34 91 374 73 68"
+    },
+    {
+     "benefit": "claims",
+     "field": "administrator@travel_insurance",
+     "quote": "Asegurador: BBVA Seguros, S.A. de Seguros y Reaseguros, inscrita en el Registro de la Dirección General de Seguros y Fondos de Pensiones con la clave C-0502.",
+     "source_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "value": "BBVA Seguros, S.A. de Seguros y Reaseguros"
+    }
+   ],
+   "instruction_like": 0,
+   "pages_chars": 50129,
+   "read_at": "2026-10-10T10:19:53Z",
+   "reader": {
+    "input_tokens": 24863,
+    "model": "claude-opus-5-5",
+    "output_tokens": 6891,
+    "usd": 0.2373
+   },
+   "sources": [
+    {
+     "body_sha256": "sha256:394158e3c420328c6971117dddb212f2d8c72790c76d204b271f9b35002e7822",
+     "kind": "pdf",
+     "linked_from": "supplied by a person (Tyler (Kanoe), 10 Oct 2026)",
+     "title": "",
+     "url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+     "used": true
+    }
+   ],
+   "supplied_by": "Tyler (Kanoe), 10 Oct 2026",
+   "unread": []
+  },
   "bbva_iberia_visa": {
    "card": {
     "country": "ES",

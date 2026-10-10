@@ -425,6 +425,20 @@ async def admin(action: str, req: Request):
         except Exception as e:
             return JSONResponse({"ok": False, "why": f"{type(e).__name__}: {str(e)[:200]}"}, status_code=502)
         return JSONResponse({"ok": True, "read": out}, headers={"Cache-Control": "no-store"})
+    if action == "card_read_supplied" and not config.LIVE_SERVICE:   # CR 76 · an official document a PERSON supplied (the issuer's site refuses us)
+        import base64 as _b64
+        from .fineprint import jobs as _FJ, model as _FM, reader as _FR
+        key = str(body.get("key") or "")
+        card = _FJ.seeds().get(key)
+        if not card or not card.get("supplied"):
+            return JSONResponse({"ok": False, "why": "no such supplied card"}, status_code=404)
+        try:
+            raw = _b64.b64decode(str(body.get("content_base64") or ""), validate=True)
+            res = await _FR.read_supplied({**card, "key": key}, raw, card["supplied"]["original_url"], card["supplied"]["by"])
+            _FM.apply_read(store, key, card, res)
+        except Exception as e:
+            return JSONResponse({"ok": False, "why": f"{type(e).__name__}: {str(e)[:200]}"}, status_code=502)
+        return JSONResponse({"ok": True, "read": res}, headers={"Cache-Control": "no-store"})
     if action in ("card_read", "cards_tick", "review_link") and not config.LIVE_SERVICE:   # CR 74 · fine print: reads run FROM THIS SERVER
         from .fineprint import jobs as _FJ, review as _FRV
         if action == "review_link":                       # a one-time link to the accept surface (15 minutes, used once)

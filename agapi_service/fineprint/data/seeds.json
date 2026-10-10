@@ -211,9 +211,9 @@
     "https://www.bbva.es/content/dam/public-web/bbvaes/documents/personas/productos/tarjetas/credito/platinum/empleados/ine/empleados-visa-platinum.pdf"
    ],
    "seed_source": "the issuer's own terms documents (country version), located by the CR tab's desk search on 10 Oct 2026 (issuer domains only)",
-   "beta": true,
+   "beta": false,
    "candidate_for": "BBVA",
-   "chosen": "BBVA's slot: no BBVA terms could be read (HTTP 403 from bbva.es to every request); kept so the review page shows it unread"
+   "chosen": "kept, unused (CR 76): BBVA's slot is the Después Oro card, whose official certificate a person supplied"
   },
   "bbva_infinite_patrimonios": {
    "issuer": "BBVA",
@@ -267,6 +267,21 @@
    "beta": false,
    "candidate_for": "Santander",
    "not_chosen": "read as a candidate; the bank's other card had the fuller official travel-insurance terms"
+  },
+  "bbva_despues_oro": {
+   "issuer": "BBVA",
+   "product": "Tarjeta Después Oro BBVA",
+   "network": "visa",
+   "country": "ES",
+   "beta": true,
+   "seeds": [],
+   "supplied": {
+    "original_url": "https://www.bbva.es/content/dam/public-web/bbvaes/documents/productos/tarjetas/seguros-tarjetas/seguro-despues-oro.pdf",
+    "file": "seguro-despues-oro.pdf",
+    "by": "Tyler (Kanoe), 10 Oct 2026",
+    "title": "Certificados Individuales de Seguros — Tarjeta Después Oro BBVA (BBVA Seguros; póliza 94/000.005 accidentes, J1A0 08-000001 asistencia)"
+   },
+   "seed_source": "BBVA's official 16-page insurance certificate, SUPPLIED BY A PERSON (bbva.es answers 403 to our reader); every fact cites its original URL"
   }
  },
  "rentals": {

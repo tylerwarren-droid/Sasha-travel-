@@ -26,6 +26,11 @@ BENEFITS: Dict[str, Dict[str, str]] = {
                      "deposit": "money", "idp_required": "bool", "licence_rule": "text", "min_driver_age": "count",
                      "accident_report_deadline_hours": "hours", "accident_report_rule": "text", "cross_border": "text", "fuel_policy": "text"},
 }
+# CR 76 · fields the Spanish certificates state (BBVA Después Oro): additive
+BENEFITS["travel_insurance"].update({"accident_death_limit": "money", "medical_abroad_limit": "money", "bail_advance_limit": "money",
+                                     "cover_days": "days", "partial_payment_rule": "text", "travel_delay_step": "money", "travel_delay_max_steps": "count",
+                                     "baggage_rental_car_rule": "text"})
+BENEFITS["claims"].update({"assistance_phone": "text", "assistance_phone_abroad": "text"})
 BENEFITS["rental_terms"]["contact_email"] = "text"     # CR 75 · where the rental company takes accident reports / disputes, as its terms say
 # CR 75 · a COUNTRY's official accident rules (step 7, the playbook): the authority's own page or the law's own text
 BENEFITS["accident_rules"] = {"emergency_number": "text", "safety_steps": "list", "scene_duties": "list", "police_when": "text",
@@ -40,7 +45,7 @@ NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "se
              "deux": 2, "trois": 3, "cinq": 5, "dix": 10, "quinze": 15, "trente": 30,
              "tre": 3, "cinque": 5, "sette": 7, "dieci": 10, "quindici": 15, "trenta": 30, "sessanta": 60,
              "zwei": 2, "drei": 3, "fünf": 5, "sieben": 7, "zehn": 10, "vierzehn": 14, "dreißig": 30,
-             "dois": 2, "três": 3, "oito": 8, "trinta": 30,
+             "dois": 2, "três": 3, "oito": 8, "trinta": 30, "seis": 6, "noventa": 90,
              "einer woche": 7, "una semana": 7, "une semaine": 7, "una settimana": 7, "uma semana": 7}
 
 

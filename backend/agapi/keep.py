@@ -62,16 +62,23 @@ TYPES: Dict[str, dict] = {
     "wifi":              {"tier": READ_BACK, "name": "Wi-Fi", "fields": {"network": (1, 64, "text"), "password": (0, 63, "text")}},
     "esim":              {"tier": READ_BACK, "name": "eSIM", "fields": {"provider": (1, 60, "text"), "activation_code": (10, 300, "text"),
                                                                      "iccid": (0, 22, "id")}},
+    # CR 74 · a card PRODUCT (EU 216 §1), never a card: issuer · product · network · country — no digits at all (not even the last four)
+    "card_product":      {"tier": FREE, "name": "Card", "fields": {"issuer": (1, 60, "text"), "product": (1, 80, "text"),
+                                                                   "network": (2, 12, "enum:visa|mastercard|amex|discover|jcb|unionpay|diners|other"),
+                                                                   "country": (0, 2, "iso2")}},   # a photo rarely says it: optional
 }
 # what the mask may show (never the value): a type's public words, and the LAST characters of its secret field
 PUBLIC = {"preference": ("topic",), "loyalty": ("program",), "home_address": ("country",), "passport": ("country",),
           "national_id": ("kind", "country"), "trusted_traveller": ("program",), "visa_residence": ("country",),
           "insurance_policy": ("insurer",), "health_card": ("issuer",), "booking_reference": ("provider",), "door_code": ("place",),
-          "wifi": ("network",), "esim": ("provider",)}
+          "wifi": ("network",), "esim": ("provider",), "card_product": ("product", "network")}
 SECRET = {"loyalty": "number", "passport": "number", "national_id": "number", "trusted_traveller": "number", "visa_residence": "number",
           "insurance_policy": "number", "health_card": "number", "booking_reference": "reference"}
 PROGRAM_WORDS = {"global_entry": "Global Entry", "tsa_precheck": "TSA PreCheck", "nexus": "NEXUS", "sentri": "SENTRI",
                  "dni": "DNI", "nie": "NIE", "other": "ID"}
+
+NETWORK_WORDS = {"visa": "Visa", "mastercard": "Mastercard", "amex": "American Express", "discover": "Discover", "jcb": "JCB",
+                 "unionpay": "UnionPay", "diners": "Diners Club", "other": "card"}
 
 NEVER = {"card": ("never_card", "Card numbers are never kept — Sasha pays with Apple Pay."),
          "payment_card": ("never_card", "Card numbers are never kept — Sasha pays with Apple Pay."),
@@ -152,6 +159,9 @@ def normalise(kind: str, value: dict) -> Dict[str, str]:
         v = unicodedata.normalize("NFC", re.sub(r"[\u0000-\u001f\u007f-\u009f​-‍‪-‮⁦-⁩﻿]", "", v)).strip()
         if (k, f) not in NO_PAN_CHECK and looks_like_card(v):
             raise Refused(f"/value/{f}", "never_card", NEVER["card"][1])
+        if k == "card_product" and re.search(r"\d{4}|(?:\d[ -]?){4}|[•*]{2,}|[xX]{4,}", v):   # CR 74 · no card digits, not even the last 4
+            raise Refused(f"/value/{f}", "never_card", "A card is kept as its product only (issuer, product, network, country) — never any "
+                                                       "of its numbers, not even the last four.")
         if _OTP.search(v):
             raise Refused(f"/value/{f}", "never_2fa", NEVER["otp"][1])
         if fk == "id":
@@ -197,6 +207,8 @@ def mask(kind: str, v: Dict[str, str]) -> str:
         return f"{pub[0]} ({v['country']}) {_tail(v['number'])}"
     if kind == "preference":
         return f"Preference: {v['topic']}"
+    if kind == "card_product":                       # "Chase Sapphire Reserve · Visa" — nothing secret in it
+        return f"{v['product']} · {NETWORK_WORDS.get(v['network'], v['network'].title())}"
     if kind in ("door_code", "wifi", "esim", "home_address"):
         return f"{name} · {pub[0]}" if pub else name
     sec = SECRET.get(kind)

@@ -506,6 +506,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         tools = [t for t in tools if t["name"] in S2.S2_TOOLS]
         from agapi import via_agapi as VIA   # CR 71 · SASHA_S2_VIA_AGAPI (0 · shadow · reads · 1), read here and nowhere else
         run = VIA.runner(API.call)
+        from agapi import s2_fine_print as FP   # CR 74 · fine print: /s2's own four card tools, run here
+        tools = tools + [dict(t) for t in FP.TOOLS]
+        run = FP.wrap(run)
     tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     step_ms: List[dict] = []
     pending = ""          # this step's text, not yet spoken
@@ -1005,6 +1008,27 @@ async def agent_ics(token: str):
     if not text:
         return JSONResponse({"ok": False}, status_code=404)
     return Response(text, media_type="text/calendar; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="sasha.ics"'})
+
+
+@router.post("/s2/card-image")
+async def s2_card_image(request: Request):
+    """CR 74 · /s2 only: a photo of a card or a Wallet screenshot, kept in this server's MEMORY for 10 minutes (never on disk) → a
+    card_image_ref that add_card reads once (AgAPI keeps only the card's product). /next (no S2 header) is refused."""
+    from app.services.chat_account import chat_account, signed_in
+    from agapi import s2_fine_print as FP
+    if request.headers.get("x-sasha-surface", "").strip().lower() != "s2":
+        return JSONResponse({"ok": False, "rule": "s2_only"}, status_code=404)
+    account = await chat_account(request)
+    if not signed_in(account):
+        return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
+    try:
+        body = await request.json()
+        raw = __import__("base64").b64decode(str(body.get("content_base64") or ""), validate=True)
+        ref = FP.keep_image(account, raw, str(body.get("media_type") or "image/jpeg"))
+    except Exception as e:
+        return JSONResponse({"ok": False, "rule": "image_invalid", "message": str(e)[:120] if isinstance(e, ValueError) else "not an image"},
+                            status_code=400)
+    return JSONResponse({"ok": True, "card_image_ref": ref, "expires_in_minutes": FP.IMAGE_TTL_S // 60})
 
 
 @router.post("/turn")

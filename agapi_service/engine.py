@@ -1147,3 +1147,5 @@ OPS = {"travel.find_flights": find_flights, "travel.find_stays": find_stays, "ve
        "magellan.read_site": magellan_read_site}   # CR 69 · a Kanoe extension (EU: 1.3)
 from . import subscriptions as _SUBS   # noqa: E402   CR 72 · the subscription radar (Kanoe extensions)
 OPS.update(_SUBS.OPS)
+from .registers import ops as _REG   # noqa: E402   CR 73 · the registry survey, wave 0 (Kanoe extensions; registry.obtain is OFF)
+OPS.update(_REG.OPS)

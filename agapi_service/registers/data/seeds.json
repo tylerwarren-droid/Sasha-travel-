@@ -1,0 +1,142 @@
+{
+ "note": "Wave 0 seeds: the official pages Magellan starts from. EU 214's rule: an official URL comes from a fetched page or a person — these were put here by people (AD's profiles and catalogue, or the CR tab's desk, as each says). A seed is only a starting point: nothing is claimed from it until a page is read and quoted.",
+ "wave": 0,
+ "jurisdictions": {
+  "AT": {
+   "seed_source": "AD profile docs/ad/profiles/AT.md (EU 189, sources read 8 Oct 2026)",
+   "seeds": [
+    "https://www.justiz.gv.at/html/default/2c9484852308c2a601240b693e1c0860.de.html",
+    "https://www.bmj.gv.at/service/weiterverwendung-von-informationen.html",
+    "https://www.ris.bka.gv.at/NormDokument.wxe?Abfrage=Bundesnormen&Gesetzesnummer=10002997&Paragraf=34"
+   ]
+  },
+  "CY": {
+   "seed_source": "AD profile docs/ad/profiles/CY.md (EU 189, sources read 8 Oct 2026)",
+   "seeds": [
+    "https://www.companies.gov.cy/en/21-eservices/esearch-in-business-entity-s-registry",
+    "https://www.companies.gov.cy/en/company-lifecycle/search-for-company-information",
+    "https://www.companies.gov.cy/en/business-entities/2-company/5-lifecycle/1-running-a-company/5-guidance/obtaining-certified-copies-certificates/obtaining-certified-copies-certificates-online"
+   ]
+  },
+  "DE": {
+   "seed_source": "AD profile docs/ad/profiles/DE.md (EU 189, sources read 8 Oct 2026)",
+   "seeds": [
+    "https://www.unternehmensregister.de/de/so-gehts/kosten",
+    "https://www.gesetze-im-internet.de/hgb/__9.html",
+    "https://www.handelsregister.de/rp_web/welcome.xhtml"
+   ]
+  },
+  "DK": {
+   "seed_source": "AD profile docs/ad/profiles/DK.md (EU 189, sources read 8 Oct 2026)",
+   "seeds": [
+    "https://erhvervsstyrelsen.dk/det-centrale-virksomhedsregister-cvr",
+    "https://datafordeler.dk/vejledning/brugervilkaar/det-centrale-virksomhedsregister-cvr/"
+   ]
+  },
+  "ES": {
+   "seed_source": "AD profile docs/ad/profiles/ES.md (EU 189, sources read 8 Oct 2026)",
+   "seeds": [
+    "https://sede.registradores.org/site/mercantil",
+    "https://www.publicidadconcursal.es/",
+    "https://www.boe.es/datosabiertos/api/api.php"
+   ]
+  },
+  "FI": {
+   "seed_source": "CR 73 desk: the Finnish Patent and Registration Office's own site (AD catalogue: avoindata.prh.fi)",
+   "seeds": [
+    "https://www.prh.fi/en/",
+    "https://avoindata.prh.fi/en"
+   ]
+  },
+  "FR": {
+   "seed_source": "AD profile docs/ad/profiles/FR.md (EU 189, sources read 8 Oct 2026)",
+   "seeds": [
+    "https://www.data.gouv.fr/dataservices/api-sirene-open-data",
+    "https://www.infogreffe.fr/tarifs",
+    "https://www.insee.fr/fr/information/3591226"
+   ]
+  },
+  "IE": {
+   "seed_source": "AD profile docs/ad/profiles/IE.md (EU 189, sources read 8 Oct 2026)",
+   "seeds": [
+    "https://opendata.cro.ie/dataset/companies",
+    "https://cro.ie/"
+   ]
+  },
+  "LT": {
+   "seed_source": "CR 73 desk: the State Enterprise Centre of Registers' own site (AD catalogue: lt_jar_entities)",
+   "seeds": [
+    "https://www.registrucentras.lt/en/",
+    "https://www.registrucentras.lt/"
+   ]
+  },
+  "LV": {
+   "seed_source": "CR 73 desk: the Register of Enterprises' own site (AD catalogue: lv_ur_entities)",
+   "seeds": [
+    "https://www.ur.gov.lv/en/"
+   ]
+  },
+  "MT": {
+   "seed_source": "CR 73 desk: AD catalogue api_endpoint + the Malta Business Registry's own site",
+   "seeds": [
+    "https://corporateinsolvency.mt/",
+    "https://mbr.mt/"
+   ]
+  },
+  "NL": {
+   "seed_source": "AD profile docs/ad/profiles/NL.md (EU 189, sources read 8 Oct 2026)",
+   "seeds": [
+    "https://www.kvk.nl/over-het-handelsregister/check-via-uittreksel/",
+    "https://www.kvk.nl/en/ordering-products/business-register-extract---digitally-certified/",
+    "https://www.rechtspraak.nl/registers/webservice-centraal-insolventieregister"
+   ]
+  },
+  "SE": {
+   "seed_source": "AD profile docs/ad/profiles/SE.md (EU 189, sources read 8 Oct 2026)",
+   "seeds": [
+    "https://bolagsverket.se/apierochoppnadata/hamtaforetagsinformation/vardefulladatamangder.5294.html",
+    "https://www.scb.se/vara-tjanster/bestall-data-och-statistik/foretagsregistret/vardefulla-datamangder--grundlaggande-foretagsinformation/"
+   ]
+  },
+  "SI": {
+   "seed_source": "CR 73 desk: AJPES's own site (AD catalogue: si_prs_entities)",
+   "seeds": [
+    "https://www.ajpes.si/"
+   ]
+  },
+  "US-AL": {
+   "seed_source": "CR 73 desk: the Alabama Secretary of State's own site (arc-sos.state.al.us is on AD's never-fetch list: not read)",
+   "seeds": [
+    "https://www.sos.alabama.gov/government-records/business-entity-records"
+   ]
+  },
+  "US-HI": {
+   "seed_source": "AD catalogue manual_process_url + the DCCA Business Registration Division's own site",
+   "seeds": [
+    "https://cca.hawaii.gov/breg/",
+    "https://data.honolulu.gov/Business/Hawaii-Business-Registration/9k54-ztb8"
+   ]
+  },
+  "US-ID": {
+   "seed_source": "AD catalogue manual_process_url + the Idaho Secretary of State's own site",
+   "seeds": [
+    "https://sos.idaho.gov/",
+    "https://sosbiz.idaho.gov/search/business"
+   ]
+  },
+  "US-ND": {
+   "seed_source": "AD catalogue manual_process_url + the North Dakota Secretary of State's own site",
+   "seeds": [
+    "https://www.sos.nd.gov/business/business-services/",
+    "https://firststop.sos.nd.gov/search/business"
+   ]
+  },
+  "GLOBAL": {
+   "seed_source": "AD catalogue source_key opensanctions + OpenSanctions' own site",
+   "seeds": [
+    "https://www.opensanctions.org/docs/api/",
+    "https://www.opensanctions.org/licensing/"
+   ]
+  }
+ }
+}

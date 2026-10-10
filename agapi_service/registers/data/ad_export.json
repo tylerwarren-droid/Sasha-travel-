@@ -1,0 +1,486 @@
+{
+ "export": {
+  "source": "Applied Diligence production (Supabase xzmybjgzffgadaeuundq)",
+  "read_only": true,
+  "exported_at": "2026-10-10",
+  "by": "CR 73 (CR tab) — SELECT only; nothing written to AD's database",
+  "tables": [
+   "jurisdictions",
+   "jurisdiction_record_types",
+   "jurisdiction_certifications",
+   "acquisition_route_policies"
+  ],
+  "selection": "jurisdiction_record_types where certified_config_hash is not null (the 20 live-hash cells = coverage-plan wave 0), joined to jurisdictions; each cell's latest passed certification; every acquisition_route_policies row",
+  "omitted": "legal_basis_notes, process_description, notes (AD's internal prose: not claims; never copied)",
+  "counts": {
+   "cells": 20,
+   "certifications": 20,
+   "route_policies": 1
+  }
+ },
+ "cells": [
+  {
+   "jurisdiction": "AT",
+   "jurisdiction_name": "Austria",
+   "region": "Western Europe",
+   "record_type_id": "7177d61f-4dd6-4cdf-899b-cd87422e4324",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "available",
+   "api_endpoint": "https://justizonline.gv.at/jop/service/fba/search",
+   "api_documentation_url": null,
+   "manual_process_url": "https://justizonline.gv.at/jop/web/firmenbuchabfrage",
+   "consent_class": "open",
+   "certified_config_hash": "0ab8e7f7516e8808ff4e53a1adba2c71aaedc4ed9c29ab8b06178eb9001ea1c6",
+   "certification": {
+    "id": "814a7440-8911-4bcd-a783-c395125d959d",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-10T08:36:11Z",
+    "deployment_sha": "54b8c827e432d0022d4998861a817ee4f74a3417"
+   }
+  },
+  {
+   "jurisdiction": "CY",
+   "jurisdiction_name": "Cyprus",
+   "region": "Western Europe",
+   "record_type_id": "b0069acb-07f6-4d62-a65e-8bbd3b7f7498",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "available",
+   "api_endpoint": "https://efiling.drcor.mcit.gov.cy/DrcorPublic/SearchResults.aspx",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "ea97adff7a9068506b650825477a86c5bf36aa5edda88a876eae74dabd934f73",
+   "certification": {
+    "id": "7f028e90-c606-4a88-88d3-6b28c783c934",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-10T20:26:55Z",
+    "deployment_sha": "8d93a5db8a1b7d24a361c49dac6a40eb18f8761d"
+   }
+  },
+  {
+   "jurisdiction": "DE",
+   "jurisdiction_name": "Germany",
+   "region": "Western Europe",
+   "record_type_id": "723df5d1-d910-4d78-a2ad-5990961129ec",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "available",
+   "api_endpoint": "https://www.handelsregister.de/rp_web/erweitertesuche/welcome.xhtml",
+   "api_documentation_url": null,
+   "manual_process_url": "https://www.handelsregister.de/",
+   "consent_class": "open",
+   "certified_config_hash": "adc172125fe6c87ead0cde243165b0cd4e096128d2c477a29203704742d9823b",
+   "certification": {
+    "id": "ccd43725-ec0d-402f-9bff-3a4977ad4a8f",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-19T06:48:18Z",
+    "deployment_sha": "e5e4cebebd24c4be576bd91ccb32a8451c533055"
+   }
+  },
+  {
+   "jurisdiction": "DK",
+   "jurisdiction_name": "Denmark",
+   "region": "Western Europe",
+   "record_type_id": "f0dd8039-bf8d-4ff1-bfe4-a038208c8092",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "withdrawn",
+   "api_endpoint": "http://distribution.virk.dk/cvr-permanent/virksomhed/_search",
+   "api_documentation_url": null,
+   "manual_process_url": "https://datacvr.virk.dk",
+   "consent_class": "open",
+   "certified_config_hash": "966995e5d282d18b140ee8af50697e94ee8f1bfc9927704d0b568acb7e98dffa",
+   "certification": {
+    "id": "a05148b3-a992-406b-9b0b-c54c4c25eacc",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-16T16:50:54Z",
+    "deployment_sha": "6be03581becc07460e9e5963e1dbada813bb6cce"
+   }
+  },
+  {
+   "jurisdiction": "DK",
+   "jurisdiction_name": "Denmark",
+   "region": "Western Europe",
+   "record_type_id": "edddf048-d76d-490c-8cb5-9ab776266c39",
+   "record_type": "Director & Officer Search",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "withdrawn",
+   "api_endpoint": "http://distribution.virk.dk/cvr-permanent/virksomhed/_search",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "556cd896c58935b0d1a52b1d10228993efe2f2424032f89887422848b6ef2676",
+   "certification": {
+    "id": "f5b33512-8ef7-452e-b1d1-4e1ee4ac6341",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-18T16:09:22Z",
+    "deployment_sha": "079f139d9d5c720126425a70333c5407c96570bd"
+   }
+  },
+  {
+   "jurisdiction": "ES",
+   "jurisdiction_name": "Spain",
+   "region": "Western Europe",
+   "record_type_id": "7aed91d7-fd84-4886-beba-3e8d6b7413f8",
+   "record_type": "Insolvency/Bankruptcy",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "available",
+   "api_endpoint": "local://es_borme_acts",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "9e11289d410b17dda226926ac7a4c29ac4d14c79ea372ef3415fb56d25cc5845",
+   "certification": {
+    "id": "afe745e8-44ff-46c2-9ef2-ee4060293d0b",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-13T20:08:01Z",
+    "deployment_sha": "7c6cb45f9bb1ac9f9a40a0496046ae65e2c5696b"
+   }
+  },
+  {
+   "jurisdiction": "FI",
+   "jurisdiction_name": "Finland",
+   "region": "Western Europe",
+   "record_type_id": "d0a696e0-e550-4ab6-971d-af6ea5dd5fce",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "available",
+   "api_endpoint": "https://avoindata.prh.fi/opendata-ytj-api/v3",
+   "api_documentation_url": "https://avoindata.prh.fi/opendata-ytj-api/v3/schema?lang=en",
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "5418afb302bbf5c7cd09c8b1ae4bd45054d82f7a167b764629d448b53a5584a3",
+   "certification": {
+    "id": "4bf77cd7-557f-405b-8fad-cb8bbacef78b",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-19T12:46:48Z",
+    "deployment_sha": "dc418598fd55daab79343ae8b0e8f475308b1472"
+   }
+  },
+  {
+   "jurisdiction": "FR",
+   "jurisdiction_name": "France",
+   "region": "Western Europe",
+   "record_type_id": "d2332b1b-ff62-4570-b948-d070bcc6fb61",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "allowlisted_machine",
+   "availability": "available",
+   "api_endpoint": "https://api.insee.fr/api-sirene/3.11",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "dc3e16a466722767f8dc9151b30bbf1270c2c32592daf9a26fbfe4d2f3b8daa6",
+   "certification": {
+    "id": "655dc4fc-b621-4d61-8a50-97ede24523b2",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-18T18:38:44Z",
+    "deployment_sha": "186a560509e3fe5734d509a2a4b0410da57c89e0"
+   }
+  },
+  {
+   "jurisdiction": "GLOBAL",
+   "jurisdiction_name": "Global (Cross-Jurisdiction)",
+   "region": "Global",
+   "record_type_id": "b3521d79-96a9-4270-b613-5b6d47fa6a0e",
+   "record_type": "Sanctions & Watchlist Screening",
+   "access_method": "api",
+   "acquisition_mode": null,
+   "availability": "available",
+   "api_endpoint": "https://api.opensanctions.org/match/",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "657141ab591e686b2ec8c47cfa34fde356a0c4050520913c99a39daea31a358a",
+   "certification": {
+    "id": "24600e78-c3fe-485f-978a-c1621dd829de",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-10-04T05:23:36Z",
+    "deployment_sha": "d89056d4bd6d91947134c8d46403dc394a8d3731"
+   }
+  },
+  {
+   "jurisdiction": "IE",
+   "jurisdiction_name": "Ireland",
+   "region": "Western Europe",
+   "record_type_id": "7f355773-cb34-43b1-9436-ed2cd6594739",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "operator_download",
+   "availability": "available",
+   "api_endpoint": "local://ie_cro_entities",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "dbd6e0a76eeeb24354e08b8a95ef65aa5bbf3738d973eb3f6f1237106a3803ae",
+   "certification": {
+    "id": "8905e624-0269-4674-9a4b-e781cdd55252",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-19T12:56:35Z",
+    "deployment_sha": "0a6af7bee54d6ebccd18da207407e561f95c7a31"
+   }
+  },
+  {
+   "jurisdiction": "LT",
+   "jurisdiction_name": "Lithuania",
+   "region": "Eastern Europe",
+   "record_type_id": "bf96006c-750f-49fe-a822-d1c9ef7970d6",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "operator_download",
+   "availability": "available",
+   "api_endpoint": "local://lt_jar_entities",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "72b19bc990f5133f309f27aa4529038ff5cf70145d5a937ff415566d37d7a9a4",
+   "certification": {
+    "id": "55023181-b286-4a77-a451-6acb68d9bf04",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-19T12:42:17Z",
+    "deployment_sha": "dc418598fd55daab79343ae8b0e8f475308b1472"
+   }
+  },
+  {
+   "jurisdiction": "LV",
+   "jurisdiction_name": "Latvia",
+   "region": "Eastern Europe",
+   "record_type_id": "8cea5db1-47bd-4591-ad45-765edcb37eac",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "operator_download",
+   "availability": "available",
+   "api_endpoint": "local://lv_ur_entities",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "91caf18349b9849d262a16be0135c4560a012f253ebefb9aa4176a47825a060f",
+   "certification": {
+    "id": "23c85296-2f16-45d8-b938-069bcd4ae741",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-19T13:00:31Z",
+    "deployment_sha": "0a6af7bee54d6ebccd18da207407e561f95c7a31"
+   }
+  },
+  {
+   "jurisdiction": "MT",
+   "jurisdiction_name": "Malta",
+   "region": "Western Europe",
+   "record_type_id": "ee7f5b2a-3f18-479c-9ea4-24297f02bd09",
+   "record_type": "Insolvency/Bankruptcy",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "withdrawn",
+   "api_endpoint": "https://corporateinsolvency.mt/",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "3630f207f7f1a40fc118a60d8208111766ae1c2ec40b7855c6cefbd344f79faa",
+   "certification": {
+    "id": "35842686-1d3e-46ca-90c8-6bed176171c8",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-12T15:16:03Z",
+    "deployment_sha": "d4994fc0aebef0b03eddbf7a3eda90c478e8188f"
+   }
+  },
+  {
+   "jurisdiction": "NL",
+   "jurisdiction_name": "Netherlands",
+   "region": "Western Europe",
+   "record_type_id": "f506ba8c-2013-406a-b5e7-d3f374bfbbca",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "available",
+   "api_endpoint": "https://web-api.kvk.nl/zoeken/v3/search",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "d62af60861d92ecf181c9b3f50d8b1d46868eac23708b8783f4f50409ae047c9",
+   "certification": {
+    "id": "7ff5a516-81ce-4e4e-84d7-63003a17bfdd",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-10T08:48:03Z",
+    "deployment_sha": "e0e1e7c19b5c789f5a5a40d0304a773ad9c8f4fa"
+   }
+  },
+  {
+   "jurisdiction": "SE",
+   "jurisdiction_name": "Sweden",
+   "region": "Western Europe",
+   "record_type_id": "688eadeb-96d2-499e-b8ab-64c93a9584b9",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "operator_download",
+   "availability": "available",
+   "api_endpoint": "local://se_bolagsverket_entities",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "47366678f6ecbf444d7920c38ccda184a83c243fdc2a4efd79ebee608dafd84f",
+   "certification": {
+    "id": "daff95ea-47c0-4a76-9084-5a7961ddbf94",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-24T15:07:54Z",
+    "deployment_sha": "d827510f93c49b82c5abba1dc6d53ba61aea6b54"
+   }
+  },
+  {
+   "jurisdiction": "SI",
+   "jurisdiction_name": "Slovenia",
+   "region": "Eastern Europe",
+   "record_type_id": "4cdc90ed-43c8-4d8f-aac3-c5bac6998aa3",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "operator_download",
+   "availability": "available",
+   "api_endpoint": "local://si_prs_entities",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "c1197843d89998f57a1035317091510e7486aadb74d495897a479d385316620c",
+   "certification": {
+    "id": "d17ffea2-9d14-4acc-aace-7ca181ce8950",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-19T12:39:29Z",
+    "deployment_sha": "dc418598fd55daab79343ae8b0e8f475308b1472"
+   }
+  },
+  {
+   "jurisdiction": "US-AL",
+   "jurisdiction_name": "Alabama",
+   "region": "Americas",
+   "record_type_id": "a9c12d86-df02-452f-b6fe-470f5f5c8d32",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "withdrawn",
+   "api_endpoint": "https://arc-sos.state.al.us/cgi/corpname.mbr/input",
+   "api_documentation_url": null,
+   "manual_process_url": null,
+   "consent_class": "open",
+   "certified_config_hash": "66de0f7b003f7700d44df1d25dd0c45c23c535184091186959deb010b3b0938f",
+   "certification": {
+    "id": "3c7e96c1-3070-4dbe-8ce7-1584ca92d9ee",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-13T08:07:46Z",
+    "deployment_sha": "628930929f29838bd9dbcfd4b5370550e435e31b"
+   }
+  },
+  {
+   "jurisdiction": "US-HI",
+   "jurisdiction_name": "Hawaii",
+   "region": "Americas",
+   "record_type_id": "67dbe449-6135-4e67-8a79-1c43dec61c1b",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "available",
+   "api_endpoint": "https://data.honolulu.gov/resource/9k54-ztb8.json",
+   "api_documentation_url": null,
+   "manual_process_url": "https://data.honolulu.gov/Business/Hawaii-Business-Registration/9k54-ztb8",
+   "consent_class": "open",
+   "certified_config_hash": "be6152d95d11cb129a9a37de3fed59feddc4d905d8d31dcbfb42ce1912701321",
+   "certification": {
+    "id": "0dfc8f22-a6de-4bd9-a81a-1e6fb447ea99",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-10T09:52:04Z",
+    "deployment_sha": "48d8914613cf33172c8828f46db1ad933cb52799"
+   }
+  },
+  {
+   "jurisdiction": "US-ID",
+   "jurisdiction_name": "Idaho",
+   "region": "Americas",
+   "record_type_id": "579740ee-349c-409d-8afa-4a1f41a50e85",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "available",
+   "api_endpoint": "https://sosbiz.idaho.gov/api/Records/businessSearch",
+   "api_documentation_url": null,
+   "manual_process_url": "https://sosbiz.idaho.gov/search/business",
+   "consent_class": "open",
+   "certified_config_hash": "fb5e64f27635f97f9c67cf8b8c46253be71198f0f97621ada82b205672a922e0",
+   "certification": {
+    "id": "0642b5f1-5958-48d1-a574-befff14dbb71",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-10T09:46:42Z",
+    "deployment_sha": "7022542386e2bdb04a441866ed72906b7ff7f78e"
+   }
+  },
+  {
+   "jurisdiction": "US-ND",
+   "jurisdiction_name": "North Dakota",
+   "region": "Americas",
+   "record_type_id": "de74a4ba-5251-4252-8860-15675245e28e",
+   "record_type": "Company Registry/Filings",
+   "access_method": "api",
+   "acquisition_mode": "public_machine",
+   "availability": "available",
+   "api_endpoint": "https://firststop.sos.nd.gov/api/Records/businessSearch",
+   "api_documentation_url": null,
+   "manual_process_url": "https://firststop.sos.nd.gov/search/business",
+   "consent_class": "open",
+   "certified_config_hash": "830fb554072ef4b95f9722ba53d2b28f14157e8cfcdd78cfac88169239e714e9",
+   "certification": {
+    "id": "23de12b8-c382-46c0-9d3c-06c7c76f8051",
+    "suite_version": "v1",
+    "passed": true,
+    "executed_at": "2026-09-10T09:46:06Z",
+    "deployment_sha": "7022542386e2bdb04a441866ed72906b7ff7f78e"
+   }
+  }
+ ],
+ "route_policies": [
+  {
+   "jurisdiction": "GR",
+   "route_key": "gr-gemi-public-browser",
+   "record_type": "Company Registry/Filings",
+   "enabled": true,
+   "public_tier_only": true,
+   "allowed_origins": [
+    "https://www.businessregistry.gr",
+    "https://publicity.businessportal.gr"
+   ],
+   "refused_origins": [
+    "https://services.businessportal.gr",
+    "https://data.gov.gr"
+   ],
+   "credentials_permitted": false,
+   "payment_permitted": false,
+   "human_in_the_loop_required": true,
+   "captcha_policy": "pause_for_human",
+   "decided_on": "2026-09-16",
+   "policy_version": 18
+  }
+ ]
+}

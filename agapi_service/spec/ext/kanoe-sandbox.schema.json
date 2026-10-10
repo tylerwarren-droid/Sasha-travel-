@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agapi.kanoe.dev/v1/ext/kanoe-sandbox.schema.json",
-  "title": "Kanoe sandbox extensions to AgAPI v1.0 (CR 60) — ADDITIVE ONLY: messages.send_email, calendar.add_event · CR 69: magellan.read_site · CR 72: subscriptions.*",
+  "title": "Kanoe sandbox extensions to AgAPI v1.0 (CR 60) — ADDITIVE ONLY: messages.send_email, calendar.add_event · CR 69: magellan.read_site · CR 72: subscriptions.* · CR 73: registry.* (wave 0)",
   "$defs": {
     "activity_item": {
       "type": "object",
@@ -1150,6 +1150,564 @@
         },
         "subscription": {
           "$ref": "#/$defs/subscription"
+        }
+      }
+    },
+    "registry_claim": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {},
+        "claim_id": {
+          "type": "string",
+          "pattern": "^rcl_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "read_at": {
+          "type": "string"
+        },
+        "quote": {
+          "type": "object",
+          "required": [
+            "text"
+          ],
+          "properties": {
+            "text": {
+              "type": "string",
+              "maxLength": 500
+            }
+          }
+        },
+        "quote_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "method": {
+          "enum": [
+            "magellan_fetch",
+            "magellan_robots",
+            "ad_catalogue",
+            "certification",
+            "magellan_verify"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "frontier",
+            "desk",
+            "read_at_source",
+            "proven"
+          ]
+        },
+        "note": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        }
+      }
+    },
+    "registry_fields": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/registry_claim"
+      }
+    },
+    "registry_countries_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "region": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "has": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "enum": [
+              "company",
+              "ubo",
+              "insolvency",
+              "court",
+              "land",
+              "criminal",
+              "professional",
+              "vehicle",
+              "sanctions",
+              "other"
+            ]
+          }
+        },
+        "min_confidence": {
+          "enum": [
+            "frontier",
+            "desk",
+            "read_at_source",
+            "proven"
+          ]
+        }
+      }
+    },
+    "registry_countries_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jurisdictions",
+        "note"
+      ],
+      "properties": {
+        "note": {
+          "type": "string"
+        },
+        "jurisdictions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "name",
+              "registers",
+              "documents",
+              "routes",
+              "automation_mix",
+              "as_of"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "region": {
+                "type": "string"
+              },
+              "wave": {
+                "type": "integer"
+              },
+              "registers": {
+                "type": "integer"
+              },
+              "documents": {
+                "type": "integer"
+              },
+              "routes": {
+                "type": "integer"
+              },
+              "kinds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "automation_mix": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                }
+              },
+              "as_of": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "oldest_read_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "registry_get_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jurisdiction"
+      ],
+      "properties": {
+        "jurisdiction": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}(-[A-Z]{2,3})?$|^GLOBAL$",
+          "maxLength": 10
+        }
+      }
+    },
+    "registry_get_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jurisdiction",
+        "registers",
+        "sources"
+      ],
+      "properties": {
+        "jurisdiction": {
+          "type": "object"
+        },
+        "sources": {
+          "type": "object"
+        },
+        "registers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "register_id",
+              "name",
+              "fields",
+              "confidence"
+            ],
+            "properties": {
+              "register_id": {
+                "type": "string",
+                "pattern": "^rgr_[0-9A-HJKMNP-TV-Z]{26}$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "fields": {
+                "$ref": "#/$defs/registry_fields"
+              },
+              "confidence": {
+                "enum": [
+                  "frontier",
+                  "desk",
+                  "read_at_source",
+                  "proven"
+                ]
+              },
+              "documents": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
+    "registry_documents_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jurisdiction"
+      ],
+      "properties": {
+        "jurisdiction": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}(-[A-Z]{2,3})?$|^GLOBAL$",
+          "maxLength": 10
+        },
+        "kind": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "subject": {
+          "enum": [
+            "company",
+            "person",
+            "property"
+          ]
+        }
+      }
+    },
+    "registry_documents_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jurisdiction",
+        "documents"
+      ],
+      "properties": {
+        "jurisdiction": {
+          "type": "string"
+        },
+        "documents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "document_id",
+              "register_id",
+              "name",
+              "fields",
+              "routes"
+            ],
+            "properties": {
+              "document_id": {
+                "type": "string",
+                "pattern": "^rdt_[0-9A-HJKMNP-TV-Z]{26}$"
+              },
+              "register_id": {
+                "type": "string"
+              },
+              "register": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "fields": {
+                "$ref": "#/$defs/registry_fields"
+              },
+              "fulfils_cells": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "routes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "route_id",
+                    "channel",
+                    "automation"
+                  ],
+                  "properties": {
+                    "route_id": {
+                      "type": "string",
+                      "pattern": "^rrt_[0-9A-HJKMNP-TV-Z]{26}$"
+                    },
+                    "channel": {
+                      "type": "string"
+                    },
+                    "automation": {
+                      "enum": [
+                        "api",
+                        "web_form",
+                        "human_only",
+                        "unknown"
+                      ]
+                    },
+                    "cost": {},
+                    "turnaround": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "registry_obtain_plan_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jurisdiction"
+      ],
+      "properties": {
+        "jurisdiction": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}(-[A-Z]{2,3})?$|^GLOBAL$",
+          "maxLength": 10
+        },
+        "document_id": {
+          "type": "string",
+          "pattern": "^rdt_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "need": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "subject": {
+              "enum": [
+                "company",
+                "person",
+                "property"
+              ]
+            }
+          }
+        },
+        "identifier": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "actor": {
+          "enum": [
+            "agapi",
+            "person",
+            "subject"
+          ]
+        }
+      }
+    },
+    "registry_obtain_plan_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jurisdiction",
+        "actor",
+        "routes",
+        "excluded",
+        "obtainable_by_agapi",
+        "obtain"
+      ],
+      "properties": {
+        "jurisdiction": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "obtain": {
+          "type": "string"
+        },
+        "obtainable_by_agapi": {
+          "enum": [
+            "yes",
+            "with_human",
+            "no",
+            "unknown"
+          ]
+        },
+        "excluded": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "route_id",
+              "why"
+            ]
+          }
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "route_id",
+              "rank",
+              "tier",
+              "automation",
+              "obtainable_by_agapi",
+              "requires",
+              "fields"
+            ],
+            "properties": {
+              "route_id": {
+                "type": "string",
+                "pattern": "^rrt_[0-9A-HJKMNP-TV-Z]{26}$"
+              },
+              "rank": {
+                "type": "integer"
+              },
+              "tier": {
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4
+                ]
+              },
+              "automation": {
+                "enum": [
+                  "api",
+                  "web_form",
+                  "human_only",
+                  "unknown"
+                ]
+              },
+              "obtainable_by_agapi": {
+                "enum": [
+                  "yes",
+                  "with_human",
+                  "no"
+                ]
+              },
+              "requires": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "fields": {
+                "$ref": "#/$defs/registry_fields"
+              }
+            }
+          }
+        }
+      }
+    },
+    "registry_verify_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "claim_id": {
+          "type": "string",
+          "pattern": "^rcl_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "route_id": {
+          "type": "string",
+          "pattern": "^rrt_[0-9A-HJKMNP-TV-Z]{26}$"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "claim_id"
+          ]
+        },
+        {
+          "required": [
+            "route_id"
+          ]
+        }
+      ]
+    },
+    "registry_verify_out": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "read_at",
+        "quote_still_present",
+        "checked"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "fresh",
+            "drifted",
+            "broken"
+          ]
+        },
+        "read_at": {
+          "type": "string"
+        },
+        "quote_still_present": {
+          "type": "boolean"
+        },
+        "failure_layer": {
+          "enum": [
+            "tls",
+            "http",
+            "robots",
+            "content",
+            "policy"
+          ]
+        },
+        "checked": {
+          "type": "array"
+        },
+        "reverify_after": {
+          "type": "string"
         }
       }
     }

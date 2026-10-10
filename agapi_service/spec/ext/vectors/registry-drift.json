@@ -1,0 +1,90 @@
+{
+ "version": "kanoe-registry-drift.1",
+ "note": "CR 73 · registry.verify (EU 214 api.md §5 registry-drift). A transport failure (DNS, timeout, 5xx) is never a state: the operation answers source_unreachable (upstream_unreachable, details.registry_code) — see the tests.",
+ "cases": [
+  {
+   "name": "the_same_sentence_is_fresh",
+   "quote": "Aktueller Firmenbuchauszug EUR 4,89",
+   "page_text": "Gebühren\nAktueller Firmenbuchauszug EUR 4,89\n",
+   "failure_layer": null,
+   "expect": {
+    "state": "fresh"
+   }
+  },
+  {
+   "name": "a_whitespace_only_change_is_fresh",
+   "quote": "Aktueller Firmenbuchauszug EUR 4,89",
+   "page_text": "Aktueller   Firmenbuchauszug\n EUR 4,89",
+   "failure_layer": null,
+   "expect": {
+    "state": "fresh"
+   }
+  },
+  {
+   "name": "typographic_quotes_and_dashes_are_fresh",
+   "quote": "the “register” — open",
+   "page_text": "the \"register\" - open",
+   "failure_layer": null,
+   "expect": {
+    "state": "fresh"
+   }
+  },
+  {
+   "name": "a_case_change_is_fresh",
+   "quote": "Search is free.",
+   "page_text": "SEARCH IS FREE.",
+   "failure_layer": null,
+   "expect": {
+    "state": "fresh"
+   }
+  },
+  {
+   "name": "the_sentence_removed_is_drifted",
+   "quote": "Search is free.",
+   "page_text": "Search costs EUR 1.",
+   "failure_layer": null,
+   "expect": {
+    "state": "drifted"
+   }
+  },
+  {
+   "name": "a_changed_fee_is_drifted",
+   "quote": "Aktueller Firmenbuchauszug EUR 4,89",
+   "page_text": "Aktueller Firmenbuchauszug EUR 4,99",
+   "failure_layer": null,
+   "expect": {
+    "state": "drifted"
+   }
+  },
+  {
+   "name": "a_tls_failure_is_broken_at_tls",
+   "quote": "Search is free.",
+   "page_text": null,
+   "failure_layer": "tls",
+   "expect": {
+    "state": "broken",
+    "failure_layer": "tls"
+   }
+  },
+  {
+   "name": "a_404_is_broken_at_http",
+   "quote": "Search is free.",
+   "page_text": null,
+   "failure_layer": "http",
+   "expect": {
+    "state": "broken",
+    "failure_layer": "http"
+   }
+  },
+  {
+   "name": "robots_now_refusing_is_broken_at_robots",
+   "quote": "Search is free.",
+   "page_text": null,
+   "failure_layer": "robots",
+   "expect": {
+    "state": "broken",
+    "failure_layer": "robots"
+   }
+  }
+ ]
+}

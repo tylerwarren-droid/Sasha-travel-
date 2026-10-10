@@ -119,6 +119,17 @@ DESCRIPTIONS = {
                                        "with the sentence it came from. AgAPI never logs into anyone's account.",
     "subscriptions.cancel": "Cancel one subscription by its planned route, on the person's yes: an email to the merchant, or their cancel "
                                   "page sent to the person's own phone to finish. It stays 'cancel requested' until the merchant confirms.",
+    "registry.countries": "Which jurisdictions the registry covers (wave 0: the certified core) — per country its registers, documents and "
+                          "access routes, the automation mix and how fresh its sources are. Every count rests on cited claims.",
+    "registry.get": "One jurisdiction's official registers (company, UBO, insolvency…): name, authority, official URL, status — every field "
+                    "with the source it came from (URL, the sentence quoted word for word, the date read), or 'unknown' when nothing says.",
+    "registry.documents": "What can be obtained in one jurisdiction (extracts, certificates, search results, datasets): who may obtain each, "
+                          "as the source states it, the identifier needed, and a summary of the routes. Every field cited.",
+    "registry.obtain_plan": "How to obtain one document there, for this actor: the ranked routes (certified instant rail, attended route, "
+                            "needs a decision, a person must do it), what each requires, and whether AgAPI can obtain it — yes, with a human, "
+                            "or no — with the claims behind every field. Never obtains anything: registry.obtain is off.",
+    "registry.verify": "Re-read a claim's official source now (robots.txt first; AD's never-fetch list honoured; a per-host budget) and say "
+                       "fresh (the quoted sentence is still there), drifted (it's gone) or broken (the page can't be read) — never a bulk crawl.",
     "keep.activity": "The Keep's own activity rows (saved, used for a booking, shown, deleted), each with its proof — the same shape as "
                      "activity.list.",
 }

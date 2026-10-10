@@ -41,7 +41,7 @@ class DocsSite(Base):
             self.assertEqual(self.client.get(u).status_code, 200, u)                            # the existing pages, kept
 
     def test_operation_pages_are_generated_with_their_badges_and_errors(self):
-        self.assertEqual(len(operations()), 33)                                                   # EU's 29 + magellan.read_site + CR 72's three
+        self.assertEqual(len(operations()), 38)                                                   # EU's 29 + magellan.read_site + CR 72's three + CR 73's five
         for n, o in operations().items():
             t = html.unescape(self.client.get(f"/docs/operations/{n}").text)
             self.assertIn("needs the user's approval" if o["requires_approval"] else "no approval", t, n)

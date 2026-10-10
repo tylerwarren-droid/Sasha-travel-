@@ -410,6 +410,19 @@ async def admin(action: str, req: Request):
         except Exception as e:
             out = {"ok": False, "why": type(e).__name__}
         return JSONResponse({"ok": True, "provider": kind, "connected": kind in AD.CONNECTED_LIVE, "smoke": out}, headers={"Cache-Control": "no-store"})
+    if action == "registry_read" and not config.LIVE_SERVICE:   # CR 73 · Magellan reads one jurisdiction's official pages FROM THIS SERVER
+        from .registers import model as _RM, reader as _RR
+        code = str(body.get("jurisdiction") or "").strip().upper()
+        ex, se, _ = _RM.files()
+        seeds = (se["jurisdictions"].get(code) or {}).get("seeds") or []
+        if not seeds:
+            return JSONResponse({"ok": False, "why": "no seeds for that jurisdiction"}, status_code=404)
+        checks = [c["api_endpoint"] for c in ex["cells"] if c["jurisdiction"] == code and c["api_endpoint"].startswith("http")]
+        try:
+            out = await _RR.read_jurisdiction(code, seeds, checks)
+        except Exception as e:
+            return JSONResponse({"ok": False, "why": f"{type(e).__name__}: {str(e)[:200]}"}, status_code=502)
+        return JSONResponse({"ok": True, "read": out}, headers={"Cache-Control": "no-store"})
     if action == "list":
         out = []
         for a in store.q("select * from accounts order by created_at"):
@@ -420,6 +433,9 @@ async def admin(action: str, req: Request):
 
 
 _demo.bind(db, lambda *a, **k: execute(*a, **k))
+from .registers import page as _registry_page   # noqa: E402 · CR 73 · /registry, the registry survey's demo (read-only)
+_registry_page.bind(db)
+app.include_router(_registry_page.router)
 
 
 @app.get("/ics/{token}.ics")

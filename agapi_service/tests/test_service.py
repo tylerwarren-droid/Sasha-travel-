@@ -476,7 +476,9 @@ class Extensions(Base):
                    "sandbox.simulate_reply", "keep.put", "keep.list", "keep.use", "keep.delete", "keep.activity"):
             self.assertEqual(operations()[op]["output"], eu_operations()[op]["output"], op)   # on EU's own schemas
         self.assertEqual(set(operations()) - set(eu_operations()), {"magellan.read_site", "subscriptions.find",   # CR 69, CR 72:
-                                                                    "subscriptions.cancel_plan", "subscriptions.cancel"})   # Kanoe extensions
+                                                                    "subscriptions.cancel_plan", "subscriptions.cancel",   # Kanoe extensions
+                                                                    "registry.countries", "registry.get", "registry.documents",   # CR 73
+                                                                    "registry.obtain_plan", "registry.verify"})
         self.assertEqual(operations()["acts.status"]["output"], eu_operations()["acts.status"]["output"])
 
 

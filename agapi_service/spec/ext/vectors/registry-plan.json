@@ -1,0 +1,756 @@
+{
+ "version": "kanoe-registry-plan.1",
+ "note": "CR 73 \u00b7 registry.obtain_plan's ranking (EU 214 api.md \u00a72). Proposed to EU for docs/agapi/v1/vectors/registry-plan.json. Each case: actor + routes \u2192 the expected order, tiers, automation, obtainable_by_agapi, requires, excluded and overall.",
+ "cases": [
+  {
+   "name": "api_with_a_certified_rail_beats_an_attended_web_form",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "b",
+     "channel": "free_web",
+     "actor": "anyone",
+     "automation": "web_form",
+     "certified_rail": false,
+     "policy_enabled": true,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    },
+    {
+     "route_id": "a",
+     "channel": "api",
+     "actor": "anyone",
+     "automation": "api",
+     "certified_rail": true,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "a",
+     "b"
+    ],
+    "tiers": [
+     1,
+     2
+    ],
+    "obtainable": {
+     "a": "yes",
+     "b": "yes"
+    },
+    "overall": "yes"
+   }
+  },
+  {
+   "name": "a_web_form_with_a_policy_beats_a_cheaper_one_without",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "free_web",
+     "actor": "anyone",
+     "automation": "web_form",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 0,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    },
+    {
+     "route_id": "b",
+     "channel": "free_web",
+     "actor": "anyone",
+     "automation": "web_form",
+     "certified_rail": false,
+     "policy_enabled": true,
+     "robots_verdict": "allowed",
+     "cost_minor": 500,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "b",
+     "a"
+    ],
+    "tiers": [
+     2,
+     3
+    ],
+    "obtainable": {
+     "a": "with_human",
+     "b": "yes"
+    },
+    "overall": "yes"
+   }
+  },
+  {
+   "name": "a_robots_disallowed_web_form_is_kept_as_human_only",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "free_web",
+     "actor": "anyone",
+     "automation": "web_form",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "disallowed",
+     "cost_minor": 0,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    },
+    {
+     "route_id": "b",
+     "channel": "in_person",
+     "actor": "anyone",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 100,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "a",
+     "b"
+    ],
+    "tiers": [
+     4,
+     4
+    ],
+    "automation": {
+     "a": "human_only"
+    },
+    "obtainable": {
+     "a": "with_human"
+    },
+    "overall": "with_human"
+   }
+  },
+  {
+   "name": "an_unreadable_robots_file_means_not_automated_even_for_a_certified_api",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "api",
+     "actor": "anyone",
+     "automation": "api",
+     "certified_rail": true,
+     "policy_enabled": false,
+     "robots_verdict": "unreadable",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "a"
+    ],
+    "tiers": [
+     4
+    ],
+    "automation": {
+     "a": "human_only"
+    },
+    "obtainable": {
+     "a": "with_human"
+    },
+    "overall": "with_human"
+   }
+  },
+  {
+   "name": "a_never_fetch_host_is_not_automated",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "api",
+     "actor": "anyone",
+     "automation": "api",
+     "certified_rail": true,
+     "policy_enabled": false,
+     "robots_verdict": "never_fetch",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "a"
+    ],
+    "tiers": [
+     4
+    ],
+    "automation": {
+     "a": "human_only"
+    },
+    "overall": "with_human"
+   }
+  },
+  {
+   "name": "operator_download_robots_not_applicable_stays_automated",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "bulk_download",
+     "actor": "anyone",
+     "automation": "api",
+     "certified_rail": true,
+     "policy_enabled": false,
+     "robots_verdict": "not_applicable",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "a"
+    ],
+    "tiers": [
+     1
+    ],
+    "overall": "yes"
+   }
+  },
+  {
+   "name": "subject_only_is_excluded_outside_lane_s",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "in_person",
+     "actor": "subject",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [],
+    "excluded": [
+     "a"
+    ],
+    "overall": "no"
+   }
+  },
+  {
+   "name": "in_lane_s_the_subject_applies_and_agapi_cannot",
+   "actor": "subject",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "in_person",
+     "actor": "subject",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "a"
+    ],
+    "tiers": [
+     4
+    ],
+    "obtainable": {
+     "a": "no"
+    },
+    "requires": {
+     "a": [
+      "in_person",
+      "the_subject_applies"
+     ]
+    },
+    "overall": "no"
+   }
+  },
+  {
+   "name": "who_may_obtain_subject_only_is_lane_s",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "free_web",
+     "actor": "anyone",
+     "automation": "web_form",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z",
+     "who_may_obtain": "subject_only"
+    }
+   ],
+   "expect": {
+    "order": [],
+    "excluded": [
+     "a"
+    ],
+    "overall": "no"
+   }
+  },
+  {
+   "name": "an_eid_only_route_is_dropped_for_agapi",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "eid",
+     "actor": "resident_eid",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [],
+    "excluded": [
+     "a"
+    ],
+    "overall": "no"
+   }
+  },
+  {
+   "name": "an_eid_route_stays_for_a_person_who_has_one",
+   "actor": "person",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "eid",
+     "actor": "resident_eid",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "a"
+    ],
+    "tiers": [
+     4
+    ],
+    "obtainable": {
+     "a": "with_human"
+    },
+    "requires": {
+     "a": [
+      "eid"
+     ]
+    },
+    "overall": "with_human"
+   }
+  },
+  {
+   "name": "an_account_route_is_a_persons_job_agapi_never_logs_in",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "paid_web",
+     "actor": "account_holder",
+     "automation": "web_form",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 489,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "a"
+    ],
+    "tiers": [
+     4
+    ],
+    "automation": {
+     "a": "human_only"
+    },
+    "requires": {
+     "a": [
+      "a_person_uses_the_site",
+      "account",
+      "payment"
+     ]
+    },
+    "overall": "with_human"
+   }
+  },
+  {
+   "name": "ties_go_to_the_cheaper",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "in_person",
+     "actor": "anyone",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 500,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    },
+    {
+     "route_id": "b",
+     "channel": "in_person",
+     "actor": "anyone",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 200,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "b",
+     "a"
+    ]
+   }
+  },
+  {
+   "name": "then_the_faster",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "in_person",
+     "actor": "anyone",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 200,
+     "turnaround": "days:10",
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    },
+    {
+     "route_id": "b",
+     "channel": "in_person",
+     "actor": "anyone",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 200,
+     "turnaround": "instant",
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "b",
+     "a"
+    ]
+   }
+  },
+  {
+   "name": "then_the_fresher_claims",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "in_person",
+     "actor": "anyone",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 200,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    },
+    {
+     "route_id": "b",
+     "channel": "in_person",
+     "actor": "anyone",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 200,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-09T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "b",
+     "a"
+    ]
+   }
+  },
+  {
+   "name": "an_unknown_cost_ranks_after_a_known_one",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "in_person",
+     "actor": "anyone",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    },
+    {
+     "route_id": "b",
+     "channel": "in_person",
+     "actor": "anyone",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 1900,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "b",
+     "a"
+    ]
+   }
+  },
+  {
+   "name": "a_withdrawn_certified_rail_needs_a_decision",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "api",
+     "actor": "anyone",
+     "automation": "api",
+     "certified_rail": true,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z",
+     "rail_withdrawn": true
+    }
+   ],
+   "expect": {
+    "order": [
+     "a"
+    ],
+    "tiers": [
+     3
+    ],
+    "obtainable": {
+     "a": "with_human"
+    }
+   }
+  },
+  {
+   "name": "an_uncertified_api_needs_a_decision",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "api",
+     "actor": "anyone",
+     "automation": "api",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "a"
+    ],
+    "tiers": [
+     3
+    ],
+    "obtainable": {
+     "a": "with_human"
+    }
+   }
+  },
+  {
+   "name": "authority_only_is_excluded",
+   "actor": "person",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": "free_web",
+     "actor": "anyone",
+     "automation": "web_form",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z",
+     "who_may_obtain": "authority_only"
+    }
+   ],
+   "expect": {
+    "order": [],
+    "excluded": [
+     "a"
+    ],
+    "overall": "no"
+   }
+  },
+  {
+   "name": "a_route_whose_channel_is_unknown_is_a_persons_job",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "a",
+     "channel": null,
+     "actor": "anyone",
+     "automation": "unknown",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "a"
+    ],
+    "tiers": [
+     4
+    ],
+    "automation": {
+     "a": "unknown"
+    },
+    "obtainable": {
+     "a": "with_human"
+    }
+   }
+  },
+  {
+   "name": "no_route_stated_is_unknown_not_no",
+   "actor": "agapi",
+   "routes": [],
+   "expect": {
+    "order": [],
+    "overall": "unknown"
+   }
+  },
+  {
+   "name": "a_mixed_country_ranks_in_four_tiers",
+   "actor": "agapi",
+   "routes": [
+    {
+     "route_id": "court",
+     "channel": "in_person",
+     "actor": "anyone",
+     "automation": "human_only",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 1900,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    },
+    {
+     "route_id": "web",
+     "channel": "paid_web",
+     "actor": "anyone",
+     "automation": "web_form",
+     "certified_rail": false,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 489,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    },
+    {
+     "route_id": "rail",
+     "channel": "api",
+     "actor": "anyone",
+     "automation": "api",
+     "certified_rail": true,
+     "policy_enabled": false,
+     "robots_verdict": "allowed",
+     "cost_minor": 0,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    },
+    {
+     "route_id": "gr",
+     "channel": "free_web",
+     "actor": "anyone",
+     "automation": "web_form",
+     "certified_rail": false,
+     "policy_enabled": true,
+     "robots_verdict": "allowed",
+     "cost_minor": null,
+     "turnaround": null,
+     "freshest_read_at": "2026-10-01T00:00:00Z"
+    }
+   ],
+   "expect": {
+    "order": [
+     "rail",
+     "gr",
+     "web",
+     "court"
+    ],
+    "tiers": [
+     1,
+     2,
+     3,
+     4
+    ],
+    "overall": "yes"
+   }
+  }
+ ]
+}

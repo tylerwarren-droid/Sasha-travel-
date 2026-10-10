@@ -14,6 +14,8 @@ Configuration (test-mode-ready; absent keys → 501 so the demo degrades gracefu
   STRIPE_WEBHOOK_SECRET    whsec_...   (for /webhook signature verification)
   STRIPE_SUCCESS_URL       where Checkout returns on success
   STRIPE_CANCEL_URL        where Checkout returns on cancel
+  SASHA_LEGACY_STRIPE_MODE test (default) → STRIPE_TEST_SECRET_KEY + STRIPE_TEST_WEBHOOK_SECRET|STRIPE_WEBHOOK_SECRET;
+                           live → STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET (Sasha 229)
 """
 
 import asyncio
@@ -30,8 +32,21 @@ from app.services import chat_store
 from app.services.chat_account import chat_account, own_itinerary, own_offer
 from app.services.booking_ref import generate as generate_booking_ref
 
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+# Sasha 229 · SASHA_LEGACY_STRIPE_MODE (test | live; anything else, or unset, is test) — the beta runs this legacy path on Stripe
+# TEST: the same STRIPE_TEST_SECRET_KEY S2's Pay here uses, and STRIPE_TEST_WEBHOOK_SECRET if set (else STRIPE_WEBHOOK_SECRET,
+# which is the TEST endpoint's since Sasha 221). A key that isn't sk_test_ is never used in test mode (→ 501, as with no key).
+# live: exactly as before (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET). Neither key is changed or removed by the switch.
+LEGACY_STRIPE_MODE = "live" if os.getenv("SASHA_LEGACY_STRIPE_MODE", "").strip().lower() == "live" else "test"
+
+
+def _legacy_keys(mode: str) -> tuple:
+    if mode == "live":
+        return os.getenv("STRIPE_SECRET_KEY", ""), os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    key = os.getenv("STRIPE_TEST_SECRET_KEY", "").strip()
+    return (key if key.startswith("sk_test_") else ""), (os.getenv("STRIPE_TEST_WEBHOOK_SECRET", "").strip() or os.getenv("STRIPE_WEBHOOK_SECRET", ""))
+
+
+stripe.api_key, STRIPE_WEBHOOK_SECRET = _legacy_keys(LEGACY_STRIPE_MODE)
 SUCCESS_URL = os.getenv("STRIPE_SUCCESS_URL", "http://localhost:3000/vietnam?paid=1")
 CANCEL_URL = os.getenv("STRIPE_CANCEL_URL", "http://localhost:3000/vietnam?canceled=1")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")

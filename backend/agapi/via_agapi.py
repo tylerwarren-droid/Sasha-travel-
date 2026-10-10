@@ -154,8 +154,10 @@ def runner(base: Callable[..., Awaitable[Dict[str, Any]]], m: Optional[str] = No
     if m == "0":
         return base
 
+    asked = {t.strip() for t in os.getenv("SASHA_S2_SHADOW_TOOLS", "search_flights").split(",") if t.strip()}   # Sasha 225 · flights only
+                                                                                                                # (venues would spend Places calls)
     async def run(ctx, name: str, args: dict) -> Dict[str, Any]:
-        if name not in READS:
+        if name not in READS or name not in asked:
             return await base(ctx, name, args)          # every act and every other tool: Sasha's own engine (see the module doc)
         op, shape = READS[name]
         try:

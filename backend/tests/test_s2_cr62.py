@@ -290,16 +290,20 @@ class OnPostgres(unittest.TestCase):
         self.assertEqual([i["at"] for i in got["items"]], sorted([i["at"] for i in got["items"]], reverse=True))
 
 
+_ADDED: list = []   # Sasha 225 · v0 registers them itself (wired since 217): only what THIS module added is taken away again
+
+
 def setUpModule():
     """CR 62's tools ride Sasha's own AgAPI v0 call() — registered for these tests only (the wiring note does it for real)."""
     for t in WA.tools() + ACT.tools():
         if t["name"] not in API.BY_NAME:
             API.TOOLS.append(t)
             API.BY_NAME[t["name"]] = t
+            _ADDED.append(t["name"])
 
 
 def tearDownModule():
-    for name in ("send_whatsapp", "get_activity"):
+    for name in _ADDED:
         t = API.BY_NAME.pop(name, None)
         if t in API.TOOLS:
             API.TOOLS.remove(t)

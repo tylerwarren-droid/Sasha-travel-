@@ -9,9 +9,10 @@
  *   · her voice: what she says is spoken (TTS) once the person has used the mic or turned her voice on; no avatar on S2 v1
  * Nothing shown here carries a "test" or "stand-in" label (lib/no-test-label.mjs) — what's underneath is unchanged.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import VoiceButton from '@/app/components/VoiceButton'
 import { PayHere } from '@/app/components/PayHere'
+import S2Hello from './S2Hello'
 import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { apiHeaders, apiUrl } from '@/lib/api'
 
@@ -22,6 +23,7 @@ type Card =
   | { k: 'pay'; client_secret?: string; url?: string; total_eur?: number; already_paid?: boolean }
   | { k: 'booked'; line: string }
   | { k: 'keep_capture'; what: 'passport' | 'loyalty' }
+  | { k: 'capabilities'; groups: { group: string; items: string[] }[] }
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
 type Ev = Record<string, any>
@@ -55,29 +57,53 @@ function useSignedIn(): boolean | null {
   return ok
 }
 
-function Speaker() {
+function useSpeaker() {
   const q = useRef<string[]>([])
   const playing = useRef(false)
   const on = useRef(false)
-  const next = useCallback(async () => {
-    if (playing.current || !q.current.length) return
-    playing.current = true
-    const text = q.current.shift() as string
+  const muted = useRef(false)
+  const route = useRef<((t: string) => Promise<void>) | null>(null)   // Sasha 225 · her face, while it's up
+  const subs = useRef(new Set<(b: boolean) => void>())
+  const emit = (b: boolean) => subs.current.forEach(f => f(b))
+  const mp3 = async (text: string): Promise<'played' | 'blocked' | 'failed'> => {
     try {
       const r = await fetch(apiUrl('/api/voice/tts'), { method: 'POST', headers: { ...apiHeaders(), 'content-type': 'application/json' }, body: JSON.stringify({ text }) })
-      if (r.ok) {
-        const a = new Audio(URL.createObjectURL(await r.blob()))
-        await new Promise<void>(res => { a.onended = () => res(); a.onerror = () => res(); a.play().catch(() => res()) })
-      }
-    } catch { /* her words are on screen either way */ }
-    playing.current = false
-    next()
-  }, [])
-  return {
-    unlock: () => { on.current = true; try { new Audio().play().catch(() => {}) } catch { /* iOS: a gesture unlocks audio */ } },
-    say: (t: string) => { if (on.current && t.trim()) { q.current.push(t); next() } },
-    get on() { return on.current },
+      if (!r.ok) return 'failed'
+      const a = new Audio(URL.createObjectURL(await r.blob()))
+      return await new Promise(res => { a.onended = () => res('played'); a.onerror = () => res('failed'); a.play().catch(e => res(e?.name === 'NotAllowedError' ? 'blocked' : 'failed')) })
+    } catch { return 'failed' }   // her words are on screen either way
   }
+  const next = useCallback(async () => {   // one at a time, in order, until the queue is empty
+    if (playing.current) return
+    playing.current = true
+    while (q.current.length) {
+      emit(true)
+      const text = q.current.shift() as string
+      if (route.current) await route.current(text).catch(() => {})
+      else await mp3(text)
+      emit(false)
+    }
+    playing.current = false
+  }, [])
+  return useMemo(() => ({
+    unlock: () => { on.current = true; try { new Audio().play().catch(() => {}) } catch { /* iOS: a gesture unlocks audio */ } },
+    say: (t: string) => { if (on.current && !muted.current && t.trim()) { q.current.push(t); next() } },
+    sayNow: async (t: string) => { emit(true); const r = muted.current ? 'played' as const : await mp3(t); if (r === 'played') on.current = true; emit(false); return r },
+    setRoute: (fn: ((t: string) => Promise<void>) | null) => { route.current = fn },
+    setMuted: (m: boolean) => { muted.current = m; if (m) q.current = [] },
+    onSpeaking: (fn: (b: boolean) => void) => { subs.current.add(fn); return () => { subs.current.delete(fn) } },
+    isOn: () => on.current,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs and a stable callback: one speaker for the page's life
+  }), [])
+}
+
+const CHIPS = ['Book dinner', 'Plan a weekend', 'Add my passport', 'What can you do?']   // Sasha 225 · each one something she does
+/** Sasha 225 · one honest line after an action: what she can do next (each is a real tool on /s2). */
+const AFTER: Partial<Record<string, string>> = {
+  booked: 'Want me to email the details to someone, or put it in your calendar? Just say.',
+  calendar: 'It’s in your Activity too, with its proof.',
+  pay: 'I’ll tell you here the moment it’s confirmed.',
+  sent: 'It’s in your Activity, with its proof.',
 }
 
 function VenueCards({ cards, choose }: { cards: Extract<Card, { k: 'venues' }>['cards']; choose: (name: string) => void }) {
@@ -166,25 +192,38 @@ function KeepCapture({ what }: { what: 'passport' | 'loyalty' }) {
   )
 }
 
+function After({ k }: { k: string }) {
+  const line = AFTER[k]
+  return line ? <div style={{ fontSize: 13.5, color: C.dim, margin: '6px 4px 0' }}>{line}</div> : null
+}
+
 function CardView({ c, choose }: { c: Card; choose: (t: string) => void }) {
   if (c.k === 'keep_capture') return <KeepCapture what={c.what} />
+  if (c.k === 'capabilities') return (
+    <Box k="What I can do">
+      {c.groups.map(g => (
+        <div key={g.group} style={{ marginTop: 8 }}>
+          <div style={{ fontWeight: 700, color: C.gold, fontSize: 14 }}>{g.group}</div>
+          {g.items.map(i => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{i}</div>)}
+        </div>))}
+    </Box>)
   if (c.k === 'venues') return <VenueCards cards={c.cards} choose={choose} />
-  if (c.k === 'booked') return <Box k="Booked" h={firstSentences(untag(c.line.replace(/^✅\s*/, '').replace(/^Booked:\s*/i, '')), 2)} tone="rgba(126,226,168,.5)" />
+  if (c.k === 'booked') return <><Box k="Booked" h={firstSentences(untag(c.line.replace(/^✅\s*/, '').replace(/^Booked:\s*/i, '')), 2)} tone="rgba(126,226,168,.5)" /><After k="booked" /></>
   if (c.k === 'calendar') return (
-    <Box k="Add to your calendar" h={untag(c.title || 'Your booking')}>
+    <><Box k="Add to your calendar" h={untag(c.title || 'Your booking')}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {(['google', 'outlook', 'apple'] as const).filter(x => c.links[x]).map(x => (
           <a key={x} href={c.links[x]} target="_blank" rel="noreferrer" style={{ padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, color: C.gold, fontWeight: 600, textDecoration: 'none' }}>
             {x === 'google' ? 'Google' : x === 'outlook' ? 'Outlook' : 'Apple / other'}</a>))}
       </div>
-    </Box>)
-  if (c.k === 'pay') return <div style={{ background: C.card, border: `1px solid ${C.gold}`, borderRadius: 16, padding: 14, marginTop: 8 }}><PayHere clientSecret={c.client_secret} url={c.url} totalEur={c.total_eur} alreadyPaid={c.already_paid} /></div>
+    </Box><After k="calendar" /></>)
+  if (c.k === 'pay') return <><div style={{ background: C.card, border: `1px solid ${C.gold}`, borderRadius: 16, padding: 14, marginTop: 8 }}><PayHere clientSecret={c.client_secret} url={c.url} totalEur={c.total_eur} alreadyPaid={c.already_paid} /></div>{!c.already_paid && <After k="pay" />}</>
   const head = c.what ? (c.status === 'sent' ? 'Sent' : c.status === 'not_sent' ? 'Not sent' : 'Ready to send · on your yes')
     : (c.total ? `Ready to book · €${Math.round(c.total).toLocaleString()} all in` : 'Ready to book · on your yes')
   return (
-    <Box k={head} h={c.what === 'email' ? (c.live ? "From Sasha's own address" : 'Kept here · not sent') : c.what === 'whatsapp' ? "From Sasha's own number" : undefined}>
+    <><Box k={head} h={c.what === 'email' ? (c.live ? "From Sasha's own address" : 'Kept here · not sent') : c.what === 'whatsapp' ? "From Sasha's own number" : undefined}>
       {c.lines.filter(l => !/^\s*⚠/.test(l)).map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
-    </Box>)
+    </Box>{c.what && c.status === 'sent' ? <After k="sent" /> : null}</>)
 }
 
 function Activity() {
@@ -217,8 +256,19 @@ export default function S2App() {
   const [busy, setBusy] = useState(false)
   const session = useRef('')
   useEffect(() => { session.current = `s2-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}` }, [])
-  const speaker = useRef(Speaker()).current
+  const speaker = useSpeaker()
   const end = useRef<HTMLDivElement>(null)
+  const typeBox = useRef<HTMLInputElement | null>(null)
+  const [name, setName] = useState<string | null | undefined>(undefined)   // undefined: not known yet (the hello waits ≤ 0.9 s)
+  const [muted, setMuted] = useState(false)
+  const [chipAt, setChipAt] = useState(0)
+  useEffect(() => {
+    if (!signedIn) return
+    const t = setTimeout(() => setName(n => (n === undefined ? null : n)), 900)
+    fetch('/api/s2-me', { cache: 'no-store' }).then(r => r.json()).then(j => setName(j?.name || null)).catch(() => setName(null))
+    return () => clearTimeout(t)
+  }, [signedIn])
+  useEffect(() => { const t = setInterval(() => setChipAt(i => (i + 1) % CHIPS.length), 4000); return () => clearInterval(t) }, [])
   const histRef = useRef<{ role: string; content: string }[]>([])
 
   useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [msgs])
@@ -271,6 +321,7 @@ export default function S2App() {
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur })
             else if (ev.kind === 'calendar' && ev.links) add({ k: 'calendar', title: ev.title, links: ev.links })
             else if (ev.kind === 'keep_capture') add({ k: 'keep_capture', what: ev.what === 'loyalty' ? 'loyalty' : 'passport' })
+            else if (ev.kind === 'capabilities' && Array.isArray(ev.groups)) add({ k: 'capabilities', groups: ev.groups })
             else if (ev.kind === 'pay_here') add({ k: 'pay', client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid })
           }
         }
@@ -310,6 +361,10 @@ export default function S2App() {
               <div style={{ textAlign: 'center', paddingTop: '18vh' }}>
                 <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Playfair Display',Georgia,serif", lineHeight: 1.25 }}>{GREETING}</div>
                 <p style={{ color: C.dim, marginTop: 10 }}>A table tonight, a spa on Saturday, an email to someone, a booking in your calendar.</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 22 }}>
+                  {CHIPS.map((_, j) => CHIPS[(chipAt + j) % CHIPS.length]).map(c => (
+                    <button key={c} onClick={() => { speaker.unlock(); send(c) }} style={{ padding: '9px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 14.5, transition: 'all .4s' }}>{c}</button>))}
+                </div>
               </div>
             ) : msgs.map((m, i) => (
               <div key={i} style={{ margin: '10px 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
@@ -321,12 +376,17 @@ export default function S2App() {
               </div>))}
             <div ref={end} />
           </section>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 16px 6px', fontSize: 13.5 }}>
+            <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m) }} aria-pressed={muted} style={{ background: 'none', border: 0, color: C.dim, padding: 4 }}>
+              {muted ? '🔇 Voice off' : '🔊 Voice on'}</button>
+            <button onClick={() => { typeBox.current?.focus() }} style={{ background: 'none', border: 0, color: C.dim, padding: 4 }}>⌨︎ Type instead</button>
+          </div>
           <footer style={{ padding: '10px 12px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="s2-mic" onPointerDown={() => speaker.unlock()} style={{ flex: 'none' }}>
               <VoiceButton onTranscript={send} readyToListen muted={busy} />
             </div>
             <form onSubmit={e => { e.preventDefault(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
-              <input value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sasha anything…" aria-label="Message Sasha"
+              <input ref={typeBox} value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sasha anything…" aria-label="Message Sasha"
                 style={{ flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 16 }} />
               <button type="submit" disabled={busy || !input.trim()} aria-label="Send"
                 style={{ padding: '0 16px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700, opacity: busy || !input.trim() ? 0.5 : 1 }}>➤</button>
@@ -335,6 +395,7 @@ export default function S2App() {
           <style>{`.s2-mic button{width:56px;height:56px;border-radius:50%}`}</style>
         </>
       )}
+      <S2Hello talker={speaker} name={name} ready={!!signedIn} />
     </main>
   )
 }

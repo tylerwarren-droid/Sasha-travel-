@@ -206,12 +206,25 @@ class S2Modes(unittest.TestCase):
                 b = await runner(ctx, "book_venue", {"approval": {"said": "yes"}})
                 await asyncio.gather(*list(VIA.SHADOW_TASKS))
                 return v, b
-            with mock.patch.object(VIA, "CALL", rec.via):
-                v, b = run(go())
+            with mock.patch.object(VIA, "CALL", rec.via), mock.patch.dict(os.environ, {"SASHA_S2_SHADOW_TOOLS": "search_flights,search_venues"}):
+                v, b = run(go())   # Sasha 225 · venues compared only when listed (SASHA_S2_SHADOW_TOOLS)
             self.assertEqual(v["result"]["venues"][0]["name"], "Casa Marea")                   # Sasha's own cards
             self.assertEqual(b["result"]["tool"], "book_venue")
             self.assertEqual([n for n, _ in rec.engine], ["search_venues", "book_venue"])
             self.assertEqual([op for op, _ in rec.agapi], ["venues.find_venues"])               # venues compared; the act never sent to AgAPI
+
+    def test_by_default_only_flights_are_shadowed(self):   # Sasha 225 · venue shadowing would spend Places calls
+        rec = Recorder()
+        ctx = API.Ctx(account=ACCOUNT, surface="s2")
+
+        async def go():
+            await VIA.runner(rec.call, "shadow")(ctx, "search_venues", {"what": "dinner", "where": "Madrid"})
+            await asyncio.gather(*list(VIA.SHADOW_TASKS))
+        with mock.patch.object(VIA, "CALL", rec.via), mock.patch.dict(os.environ, {"SASHA_S2_SHADOW_TOOLS": ""}):
+            os.environ.pop("SASHA_S2_SHADOW_TOOLS", None)
+            run(go())
+        self.assertEqual(rec.agapi, [])
+        self.assertEqual([n for n, _ in rec.engine], ["search_venues"])
 
     def test_modes_and_the_flip_back(self):
         for raw, want in (("", "0"), ("0", "0"), ("shadow", "shadow"), ("READS", "reads"), ("1", "1"), ("yes", "0")):

@@ -110,12 +110,20 @@ RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_w
 RENDER.update({"keep_list": "inline", "keep_use": "inline", "keep_add": "keep_capture"})   # Sasha 224 · CR 63 + the photo capture   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
 KINDS_S2_ONLY = {"keep_capture"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
+KINDS_S2_ONLY |= {"counter_card", "my_cards", "accident", "claim_status"}   # CR 75 · fine print's cards, rendered by /s2 only
 KINDS = KINDS_S2 | {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
+
+
+def _fine_print_tools() -> tuple:
+    from agapi import s2_fine_print as FP
+    return FP.TOOL_NAMES
 
 
 def render(tool: str, res: dict, args: dict) -> Optional[dict]:
     """The UI event for a tool's result: {"type": "render", "kind", …payload} — or None for "inline" (it's in her words) and
     "trip" (the trip_changed event already refreshes the Trip view)."""
+    if isinstance(res.get("render"), dict) and tool in _fine_print_tools():   # CR 75 · /s2's fine-print cards (its tools only)
+        return {"type": "render", **res["render"]}
     kind = RENDER.get(tool, "inline")
     # Sasha 214 · the human step on the SAME device (a phone): the checkout, their booking page, Tap to finish — the page
     # decides (a phone opens it over her; the desktop keeps the phone hand-off)
@@ -1029,6 +1037,26 @@ async def s2_card_image(request: Request):
         return JSONResponse({"ok": False, "rule": "image_invalid", "message": str(e)[:120] if isinstance(e, ValueError) else "not an image"},
                             status_code=400)
     return JSONResponse({"ok": True, "card_image_ref": ref, "expires_in_minutes": FP.IMAGE_TTL_S // 60})
+
+
+@router.post("/s2/accident-photo")
+async def s2_accident_photo(request: Request):
+    """CR 75 · /s2 only: one guided accident photo from the accident card, straight to AgAPI (sealed under the person's own key, hashed
+    evidence) — never through the chat or the model. /next is refused."""
+    from app.services.chat_account import chat_account, signed_in
+    from agapi import s2_fine_print as FP
+    if request.headers.get("x-sasha-surface", "").strip().lower() != "s2":
+        return JSONResponse({"ok": False, "rule": "s2_only"}, status_code=404)
+    account = await chat_account(request)
+    if not signed_in(account):
+        return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
+    try:
+        body = await request.json()
+        __import__("base64").b64decode(str(body.get("content_base64") or ""), validate=True)
+    except Exception:
+        return JSONResponse({"ok": False, "rule": "image_invalid"}, status_code=400)
+    r = await FP.accident_photo(account, str(body.get("shot") or ""), str(body.get("media_type") or "image/jpeg"), str(body["content_base64"]))
+    return JSONResponse(r, status_code=200 if r.get("ok") else 400)
 
 
 @router.post("/turn")

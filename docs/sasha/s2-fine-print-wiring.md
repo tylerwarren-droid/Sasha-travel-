@@ -105,3 +105,40 @@ run = FP.wrap(run)       # CR 74
 - **Coverage:** never "you're covered" without the quote. The answer is the terms' sentence.
 - **Advice:** a card ranking is information about each card's own terms, not advice. No card is "recommended".
 - **Reality of the demo bank:** Example Bank isn't a real bank. Its pages say so.
+
+## CR 75 · the counter card, the accident playbook, claims: the /s2 screens
+
+**Five more /s2-only tools** in `backend/agapi/s2_fine_print.py`, all run by the same `FP.wrap(run)`:
+
+| Tool | What it does |
+|---|---|
+| `rental_cover` | the counter card |
+| `accident` | the playbook, one step per answer: safety first |
+| `accident_notify` | read-back → their yes in a later turn → sent |
+| `file_claim` | read-back → their yes → filed |
+| `claim_status` | the claim's state, deadlines, what's missing and replies |
+
+**Rendering:**
+- Each result carries a `render` payload. `render()` in `sasha.py` passes it on **only for fine print's own tools**
+  (`_fine_print_tools()`).
+- The new kinds are /s2-only (`KINDS_S2_ONLY`): `counter_card`, `my_cards`, `accident`, `claim_status`.
+- `frontend/app/s2/S2App.tsx` renders them, and the guard test checks it. Every quoted line has a **source** toggle: the sentence, its
+  page and the date read.
+
+**A new route, `POST /api/agent/s2/accident-photo`:**
+- /s2 only, signed in.
+- It has a Next proxy at `frontend/app/api/s2-agent/accident-photo/route.ts`.
+- The photo goes from the accident card straight to AgAPI: sealed under the person's own key, recorded as hashed evidence. It never goes
+  through the chat or the model.
+
+**For the proactive loop (S-83, the Sasha tab's wiring):**
+- `await FP.moment(account, {"id": …, "kind": "pickup_tomorrow", "country": "PT", "rental_company": "…", "pickup_time": "10:00",
+  "place": "Lisbon airport"})` returns `{speak, line, card}`.
+- Say the line and show the card (`render` kind `counter_card` with `card.card`) **only when `speak` is true**. AgAPI keeps it to one per
+  event and honours the person's off switch.
+
+**Tests:** `backend/tests/test_s2_fine_print.py` (13). The S2, agent, safety and Keep suites give **206 green**: main's 188 + 18. S1's
+fingerprint is unchanged. The frontend builds, and the prebuild checks pass.
+
+**The demos:** `docs/sasha/s2-fine-print-demos.md`. Demo photos are in `docs/sasha/demo-fixtures/accident/`, each labelled "DEMO PHOTO —
+not a real accident".

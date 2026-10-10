@@ -58,13 +58,43 @@ async function startFace(video: HTMLVideoElement): Promise<Face> {
   }
 }
 
-function still(v: HTMLVideoElement | null): string | null {
+function still(keyed: HTMLCanvasElement | null): string | null {   // her face as it last was, on the page's own dark (keyed)
   try {
-    if (!v || !v.videoWidth) return null
-    const c = document.createElement('canvas'); c.width = 160; c.height = Math.round((160 * v.videoHeight) / v.videoWidth)
-    c.getContext('2d')?.drawImage(v, 0, 0, c.width, c.height)
-    return c.toDataURL('image/jpeg', 0.8)
+    if (!keyed || !keyed.width) return null
+    const c = document.createElement('canvas'); c.width = 160; c.height = Math.round((160 * keyed.height) / keyed.width)
+    const x = c.getContext('2d')
+    if (!x) return null
+    x.fillStyle = '#1b1b26'; x.fillRect(0, 0, c.width, c.height)
+    x.drawImage(keyed, 0, 0, c.width, c.height)
+    return c.toDataURL('image/jpeg', 0.85)
   } catch { return null }
+}
+
+/** The avatar streams on a green screen: each decoded frame drawn to the canvas with the green knocked out (as /next does). */
+function chroma(video: HTMLVideoElement, canvas: HTMLCanvasElement): () => void {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  let running = true
+  const one = () => {
+    try {
+      const w = video.videoWidth, h = video.videoHeight
+      if (ctx && w && h && video.readyState >= 2) {
+        if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
+        ctx.drawImage(video, 0, 0, w, h)
+        const f = ctx.getImageData(0, 0, w, h), d = f.data
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i], g = d[i + 1], b = d[i + 2]
+          if (g > 90 && g > r * 1.35 && g > b * 1.35) d[i + 3] = 0
+          else if (g > 80 && g > r * 1.1 && g > b * 1.1) d[i + 3] = Math.floor(d[i + 3] * 0.5)
+        }
+        ctx.putImageData(f, 0, 0)
+      }
+    } catch { /* a bad frame: keep going */ }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- requestVideoFrameCallback isn't in every TS lib yet
+  const v = video as any
+  if (typeof v.requestVideoFrameCallback === 'function') { const step = () => { if (running) { one(); v.requestVideoFrameCallback(step) } }; v.requestVideoFrameCallback(step) }
+  else { const step = () => { if (running) { one(); requestAnimationFrame(step) } }; requestAnimationFrame(step) }
+  return () => { running = false }
 }
 
 export default function S2Hello({ talker, name, ready }: { talker: Talker; name: string | null | undefined; ready: boolean }) {
@@ -74,6 +104,12 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
   const [img, setImg] = useState<string | null>(null)
   const [talking, setTalking] = useState(false)
   const video = useRef<HTMLVideoElement | null>(null)
+  const canvas = useRef<HTMLCanvasElement | null>(null)
+  const unkey = useRef<(() => void) | null>(null)
+  const nameRef = useRef<string | null | undefined>(name)
+  useEffect(() => { nameRef.current = name }, [name])
+  const keyOn = () => { unkey.current?.(); if (video.current && canvas.current) unkey.current = chroma(video.current, canvas.current) }
+  const keyOff = () => { unkey.current?.(); unkey.current = null }
   const face = useRef<Face | null>(null)
   const text = useRef('')
   const [line, setLine] = useState('')
@@ -84,32 +120,32 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
   const handoff = async () => {
     const f = face.current
     face.current = null
-    if (f) { setImg(still(f.video) || img); await f.stop() }   // the session ENDS after the hello
+    if (f) { setImg(still(canvas.current) || img); keyOff(); await f.stop() }   // the session ENDS after the hello
     try { sessionStorage.setItem('s2_hello', '1') } catch { /* private mode */ }
     setPhase('bubble')
   }
+  const words = () => { text.current = helloLine(nameRef.current ?? null); setLine(text.current); return text.current }
   const speakFace = async () => {
+    words()
     const f = face.current
     if (!f) return handoff()
     const secs = await f.say(text.current)
     setTimeout(handoff, Math.max(2500, secs * 1000 + 900))
   }
   const speakVoice = async () => {
-    const r = await talker.sayNow(text.current)
+    const r = await talker.sayNow(words())
     if (r === 'blocked') { setTapFor('voice'); setPhase('tap'); return }
     handoff()
   }
 
   // the opening: once per visit (the session), as soon as the page is signed in and the name is known (or ~0.9 s has passed)
   useEffect(() => {
-    if (!ready || phase !== 'off' || name === undefined) return
+    if (!ready || phase !== 'off') return
     let settled = false, timer: ReturnType<typeof setTimeout> | undefined
     const go = setTimeout(() => {   // out of the effect's own pass (no state set while it runs)
     let greeted = false
     try { greeted = sessionStorage.getItem('s2_hello') === '1' } catch { /* private mode */ }
     if (greeted) { setPhase('bubble'); return }
-    text.current = helloLine(name)
-    setLine(text.current)
     setPhase('starting')
     const v = video.current as HTMLVideoElement
     const starting = startFace(v)
@@ -125,6 +161,7 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
       settled = true
       clearTimeout(timer)
       face.current = f
+      keyOn()
       setPhase('face')
       v.muted = false
       try { await v.play(); speakFace() } catch { v.muted = true; v.play().catch(() => {}); setTapFor('face'); setPhase('tap') }
@@ -138,9 +175,9 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
     }, 0)
     return () => { clearTimeout(go); if (timer) clearTimeout(timer) }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when ready
-  }, [ready, name])
+  }, [ready])
 
-  useEffect(() => () => { face.current?.stop(); talker.setRoute(null) }, [talker])   // leaving the page ends any session
+  useEffect(() => () => { keyOff(); face.current?.stop(); talker.setRoute(null) }, [talker])   // leaving the page ends any session
 
   const tapToHear = () => {
     talker.unlock()
@@ -153,7 +190,7 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
     talker.setRoute(null)
     const f = face.current
     face.current = null
-    if (f) { setImg(still(f.video) || img); await f.stop() }
+    if (f) { setImg(still(canvas.current) || img); keyOff(); await f.stop() }
     setPhase('bubble')
   }
   const faceBack = async () => {
@@ -162,6 +199,7 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
     try {
       const f = await startFace(video.current as HTMLVideoElement)
       face.current = f
+      keyOn()
       f.video.muted = false
       f.video.play().catch(() => {})
       const arm = () => { if (idle.current) clearTimeout(idle.current); idle.current = setTimeout(collapse, 90000) }
@@ -174,10 +212,11 @@ export default function S2Hello({ talker, name, ready }: { talker: Talker; name:
   return (
     <>
       <div onClick={phase === 'faceAgain' ? collapse : undefined} style={{
-        position: 'fixed', zIndex: 40, transition: 'all .45s ease', overflow: 'hidden', background: '#000',
+        position: 'fixed', zIndex: 40, transition: 'all .45s ease', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 20%, #2a2440 0%, #14141c 70%)',
         ...(big ? { left: '50%', top: 'calc(env(safe-area-inset-top) + 96px)', width: 'min(86vw, 420px)', aspectRatio: '3 / 4', transform: 'translateX(-50%)', borderRadius: 24, boxShadow: '0 20px 60px rgba(0,0,0,.6)', opacity: phase === 'starting' ? 0 : 1 }
           : { right: 16, bottom: 'calc(env(safe-area-inset-bottom) + 92px)', width: 0, height: 0, borderRadius: '50%', opacity: 0 }) }}>
-        <video ref={video} playsInline autoPlay muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <video ref={video} playsInline autoPlay muted style={{ position: 'absolute', width: 2, height: 2, opacity: 0, pointerEvents: 'none' }} />
+        <canvas ref={canvas} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
         {phase === 'tap' && tapFor === 'face' && <button onClick={tapToHear} style={{ position: 'absolute', left: '50%', bottom: 18, transform: 'translateX(-50%)', padding: '12px 20px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700, fontSize: 16 }}>Tap to hear Sasha</button>}
       </div>
       {phase === 'voice' || (phase === 'tap' && tapFor === 'voice') ? (

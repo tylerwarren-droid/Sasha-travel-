@@ -1,0 +1,39 @@
+{
+ "note": "Recorded 10 Oct 2026 from Duffel TEST through agapi-live's signed smoke 'flights_cancel' (a Duffel Airways TEST order made for the check). 'refused' is Duffel's answer for another test airline's order on the first run. For 'refused' only the message was recorded (not the HTTP status); tests use any non-2xx with it.",
+ "quote": {
+  "status": 201,
+  "data": {
+   "id": "ore_0000BBG3VpCbCs9YhPfEvX",
+   "order_id": "ord_0000BBG3VnOXCLlwLK4IkK",
+   "refund_amount": "74.74",
+   "refund_currency": "EUR",
+   "refund_to": "balance",
+   "expires_at": "2026-10-10T05:40:54Z",
+   "confirmed_at": null,
+   "live_mode": false,
+   "created_at": "2026-10-10T04:40:54.780425Z"
+  }
+ },
+ "confirm": {
+  "status": 200,
+  "data": {
+   "id": "ore_0000BBG3VpCbCs9YhPfEvX",
+   "order_id": "ord_0000BBG3VnOXCLlwLK4IkK",
+   "refund_amount": "74.74",
+   "refund_currency": "EUR",
+   "refund_to": "balance",
+   "expires_at": "2026-10-10T05:40:54Z",
+   "confirmed_at": "2026-10-10T04:40:55.022251Z",
+   "live_mode": false,
+   "created_at": "2026-10-10T04:40:54.780425Z"
+  }
+ },
+ "refused": {
+  "status": null,
+  "errors": [
+   {
+    "message": "This order cannot be cancelled through the API."
+   }
+  ]
+ }
+}

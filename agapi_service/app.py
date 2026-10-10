@@ -230,7 +230,7 @@ async def execute(op_name: str, headers: dict, raw: bytes, principal: Optional[d
         if config.LIVE_SERVICE and key["mode"] != "live":   # CR 70 · agapi-live serves live keys only
             raise AgapiError("mode_not_available", "This is AgAPI live: use a live key here (test keys go to the sandbox).")
         if key["mode"] == "live":
-            if op_name not in ("trip.hold", "trip.complete", "users.register"):   # CR 70: checked by their input, just below
+            if op_name not in ("trip.hold", "trip.complete", "trip.cancel", "users.register"):   # CR 70/71: checked by their input, below
                 AD.require_live(op_name)   # CR 69 · refused BEFORE anything happens until phase 2 connects the provider
             _live_inp = True               # CR 70 · re-checked item-aware once the input is read (below)
         else:

@@ -593,6 +593,80 @@ class LadderLive(Live):
         self.assertEqual([m for m, *_ in self.sasha.calls[n:]], ["GET", "GET"])                    # reads only
 
 
+
+import pathlib as _pl
+RECORDED = json.loads((_pl.Path(__file__).parent / "fixtures" / "duffel_cancel_recorded.json").read_text())
+
+
+class FlightCancelLive(PaymentsLive):
+    """CR 71 · the Duffel cancel on RECORDED Duffel TEST answers (fixtures/duffel_cancel_recorded.json, from agapi-live's own smoke)."""
+
+    def setUp(self):
+        super().setUp()
+        from booking_signer import travel as T
+        self.replay, self.duffel_calls, self.mode = T.HTTP, [], "ok"
+
+        async def http(method, path, body=None, params=None):
+            if "/air/order_cancellations" in path:
+                self.duffel_calls.append((method, path, body))
+                if self.mode == "refused":
+                    return 422, {"errors": RECORDED["refused"]["errors"]}
+                if path == "/air/order_cancellations":
+                    d = dict(RECORDED["quote"]["data"], order_id=body["data"]["order_id"])
+                    if self.mode == "expired":
+                        d["expires_at"] = "2026-01-01T00:00:00Z"
+                    return RECORDED["quote"]["status"], {"data": d}
+                return RECORDED["confirm"]["status"], {"data": RECORDED["confirm"]["data"]}
+            return await self.replay(method, path, body, params) if params is not None or body is not None else await self.replay(method, path)
+        p = mock.patch("booking_signer.travel.HTTP", http)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def confirmed_flight(self):
+        out = self.booked()
+        sid = out["outcome"]["payment_url"].rsplit("/", 1)[1]
+        made = [c for c in self.stripe.calls if c[1] == "/checkout/sessions"][0][2]
+        path = "/" + made["success_url"].split("://", 1)[1].split("/", 1)[1].split("?")[0]
+        self.stripe.pay(sid)
+        self.assertIn("Booked — reference", self.client.get(path + f"?s={sid}").text)
+        self.assertTrue(self.store.one("select order_id from flight_orders")["order_id"])
+        return out["act_id"]
+
+    def test_the_refund_is_the_airlines_own_quote_and_it_cancels_only_after_the_yes(self):
+        act = self.confirmed_flight()
+        r, b = self.call("trip.cancel", {"act_id": act}, key=self.live, expect="approval_required")
+        lines = b["error"]["details"]["read_back"]["lines"]
+        self.assertIn("Refund EUR 74.74 — the airline's own quote (Duffel TEST), to balance.", lines)   # Duffel's recorded answer
+        self.assertEqual([c[1] for c in self.duffel_calls], ["/air/order_cancellations"])           # quoted, NOT cancelled
+        apv = self.approve(b["error"]["details"]["read_back_id"])
+        c = self.ok("trip.cancel", {"act_id": act}, key=self.live, approval=apv)
+        self.assertEqual(c["outcome"]["kind"], "CONFIRMED")
+        self.assertEqual(c["outcome"]["reference"], RECORDED["confirm"]["data"]["id"])
+        self.assertIn("refund EUR 74.74 to balance", c["outcome"]["target_words"]["text"])
+        self.assertEqual([c_[1] for c_ in self.duffel_calls], ["/air/order_cancellations",
+                                                              f"/air/order_cancellations/{RECORDED['quote']['data']['id']}/actions/confirm"])
+        self.call("trip.cancel", {"act_id": act}, key=self.live, expect="already_completed")
+
+    def test_an_expired_quote_is_quoted_again_and_asked_again(self):
+        act = self.confirmed_flight()
+        self.mode = "expired"
+        self.call("trip.cancel", {"act_id": act}, key=self.live, expect="approval_required")
+        self.call("trip.cancel", {"act_id": act}, key=self.live, expect="approval_required")
+        self.assertEqual([c[1] for c in self.duffel_calls].count("/air/order_cancellations"), 2)    # never confirmed on a stale quote
+
+    def test_an_airline_that_cant_cancel_by_api_is_said(self):
+        act = self.confirmed_flight()
+        self.mode = "refused"
+        r, b = self.call("trip.cancel", {"act_id": act}, key=self.live, expect="not_cancellable")
+        self.assertIn("cannot be cancelled through the API", b["error"]["message"])
+
+    def test_a_live_token_is_refused(self):
+        with mock.patch("booking_signer.travel.token", lambda: "duffel_live_x"):
+            with self.assertRaises(Exception) as x:
+                asyncio.run(AL.ADAPTERS["flights"].cancel_quote("ord_x"))
+        self.assertEqual(x.exception.details["reason"], "test_mode_only")
+
+
 def Base_sign(body: str) -> str:
     import hashlib, hmac, secrets, time
     t, n = int(time.time()), secrets.token_urlsafe(16)

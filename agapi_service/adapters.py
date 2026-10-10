@@ -165,6 +165,14 @@ def kinds_for(op_name: str, inp: Optional[dict] = None, store: Optional[Store] =
             return tuple(sorted({"email" if d.get("channel") == "email" else "whatsapp" for d in (inp or {}).get("destinations") or []})) if inp is not None else full
         if op_name == "trip.hold":
             items = [i.get("kind") for i in (inp or {}).get("items") or []]
+        elif op_name == "trip.cancel" and store is not None:   # CR 71 · the act's own hold decides (a flight → flights only)
+            from .store import loads
+            act = store.one("select hold_id from acts where account = ? and id = ?", account, (inp or {}).get("act_id"))
+            h = act and store.one("select items from holds where account = ? and id = ?", account, act["hold_id"])
+            held = loads(h["items"]) if h else None
+            ks = {_ITEM_KIND.get(i.get("kind"), "venue_ladder") for i in ((held or {}).get("items") or [])} if isinstance(held, dict) else set()
+            if ks:
+                return tuple(sorted(ks))
         elif op_name == "trip.complete" and store is not None:
             from .store import loads
             h = store.one("select items from holds where account = ? and id = ?", account, (inp or {}).get("hold_id"))

@@ -83,7 +83,10 @@ class LiveFlights(Flights):
         cards = got.get("cards") or []
         if not cards:
             return {"ok": False, "why": "no test offers", "search": {k: v for k, v in got.items() if k != "cards"}}
-        made = await T.order(cards[0], "Smoke Check", "smoke-check@agapi.kanoe.example", None)
+        pick = next((c for c in cards if "duffel airways" in str(c.get("owner") or "").lower()), None)   # Duffel's own test airline:
+        if not pick:                                                                                    # the one that cancels through the API
+            return {"ok": False, "why": "no Duffel Airways test offer on this route", "owners": sorted({str(c.get("owner")) for c in cards})}
+        made = await T.order(pick, "Smoke Check", "smoke-check@agapi.kanoe.example", None)
         if not made.get("order_id"):
             return {"ok": False, "why": made.get("why") or "no order"}
         st, q = await T.HTTP("POST", "/air/order_cancellations", {"data": {"order_id": made["order_id"]}})

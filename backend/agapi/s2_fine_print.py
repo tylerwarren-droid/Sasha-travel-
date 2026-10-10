@@ -77,7 +77,8 @@ async def _agapi(op: str, body: dict) -> Dict[str, Any]:
         return {"ok": False, "error": {"code": "not_configured", "message": "card fine print isn't switched on yet"}}
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(90.0)) as c:
-            r = await c.post(f"{url}/v1/{op}", headers={"Authorization": f"Bearer {key}", "content-type": "application/json"}, content=json.dumps(body))
+            r = await c.post(f"{url}/v1/{op}", headers={"Authorization": f"Bearer {key}", "content-type": "application/json",
+                                                       "Idempotency-Key": "s2fp_" + secrets.token_hex(12)}, content=json.dumps(body))
         return r.json()
     except Exception as e:
         return {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}

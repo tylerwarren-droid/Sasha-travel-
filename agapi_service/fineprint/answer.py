@@ -15,6 +15,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from .. import config
 
 FRAMING = "Information from your cards' own terms. You decide."
+UNSAID = "the terms I've read don't say"
 NOT_STATED = "The terms I've read don't say."
 CURRENCY_OF = {"US": "USD", "ES": "EUR", "FR": "EUR", "DE": "EUR", "IT": "EUR", "PT": "EUR", "IE": "EUR", "NL": "EUR", "GB": "GBP", "CA": "CAD",
                "AU": "AUD", "CH": "CHF", "SE": "SEK", "DK": "DKK", "NO": "NOK", "MX": "MXN", "BR": "BRL", "JP": "JPY"}
@@ -83,7 +84,7 @@ def compose(product: str, chosen: List[dict], verdict: Optional[str], all_claims
                              " They don't give a claims line either.")
         return {"answer": "not_stated", "text": text, "quotes": [], **({"claims_line": line} if line else {})}
     read = min(c["read_at"][:10] for c in chosen)
-    said = " ".join(f"\"{c['quote']}\"" for c in chosen[:4])
+    said = " ".join(f"\"{q}\"" for q in list(dict.fromkeys(c["quote"] for c in chosen))[:4])   # one sentence once, however many facts rest on it
     tail = {"yes": " So: yes, as the terms state it.", "no": " So: no, as the terms state it.",
             "partly": " So: only under the condition quoted."}.get(verdict or "", "")
     srcs = sorted({c["source_url"] for c in chosen})
@@ -145,7 +146,7 @@ def rank_cards(purchase: dict, cards: List[dict]) -> Dict[str, Any]:
             fx_cost = amt * bp // 10000
             lines.append({"text": f"FX fee {bp / 100:g}% ≈ {_money(fx_cost, cur)}", **_cite(fx)})
         else:
-            lines.append({"text": "FX fee: " + NOT_STATED.lower()})
+            lines.append({"text": f"FX fee: {UNSAID}."})
         cats = CATS.get(kind, ())
         earn = [x for x in cl if x["benefit"] == "points" and x["field"] == "earn_rate"]
         def val(x):
@@ -157,14 +158,15 @@ def rank_cards(purchase: dict, cards: List[dict]) -> Dict[str, Any]:
             v = val(best)
             pts = v["rate_x100"] * amt // 10000
             note = "" if v["per"] == cur else f" (the terms say per {v['per']}; this purchase is in {cur})"
-            lines.append({"text": f"{v['rate_x100'] / 100:g} {v['unit']}s per {v['per']} on {v['category'].replace('_', ' ')} ≈ {pts:,} {v['unit']}s{note}", **_cite(best)})
+            unit = v["unit"] + ("" if v["rate_x100"] == 100 else "s")
+            lines.append({"text": f"{v['rate_x100'] / 100:g} {unit} per {v['per']} on {v['category'].replace('_', ' ')} ≈ {pts:,} {v['unit']}s{note}", **_cite(best)})
         else:
-            lines.append({"text": "Points: " + NOT_STATED.lower()})
+            lines.append({"text": f"Points: {UNSAID}."})
         cover = [x for x in cl if x["benefit"] in COVER.get(kind, ())]
         for x in cover[:4]:
             lines.append({"text": f"Cover: {x['benefit'].replace('_', ' ')} · {x['field'].replace('_', ' ')}", **_cite(x)})
         if not cover and COVER.get(kind):
-            lines.append({"text": f"Cover for this ({', '.join(b.replace('_', ' ') for b in COVER[kind])}): " + NOT_STATED.lower()})
+            lines.append({"text": f"Cover for this ({', '.join(b.replace('_', ' ') for b in COVER[kind])}): {UNSAID}."})
         out.append({"card": c["name"], "fx_cost_minor": fx_cost, "points": pts, "cover_quotes": len(cover), "reasons": lines})
     out.sort(key=lambda r: (r["fx_cost_minor"] is None, r["fx_cost_minor"] or 0, -r["cover_quotes"], -(r["points"] or 0), r["card"]))
     for i, r in enumerate(out, 1):

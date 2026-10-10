@@ -455,3 +455,22 @@ class Answers(Base):
         for r in out["cards"][0]["reasons"]:
             if "claim_id" in r:
                 self.assertTrue(r["quote"] and r["source_url"])
+
+
+class Wording(Base):
+    def test_one_sentence_is_quoted_once_and_words_stay_whole(self):
+        from agapi_service.fineprint import answer as A
+        q = "If your checked baggage is delayed for more than 6 hours, we reimburse essential purchases up to EUR 300 per trip."
+        cl = [{"id": "rcl_" + "A" * 26, "benefit": "travel_insurance", "field": "baggage_delay_threshold_hours", "value": 6, "quote": q,
+               "source_url": "https://bank.test/g.pdf", "read_at": "2026-10-10T08:00:00Z"},
+              {"id": "rcl_" + "B" * 26, "benefit": "travel_insurance", "field": "baggage_delay_limit", "value": {"amount_minor": 30000, "currency": "EUR"},
+               "quote": q, "source_url": "https://bank.test/g.pdf", "read_at": "2026-10-10T08:00:00Z"}]
+        out = A.compose("Travel Visa", cl, "partly", cl)
+        self.assertEqual(out["text"].count(q), 1)
+        self.assertEqual(len(out["quotes"]), 2)
+        r = A.rank_cards({"amount_minor": 1000, "currency": "EUR", "kind": "other"}, [{"name": "X", "product_country": "", "claims": [
+            {"id": "rcl_" + "C" * 26, "benefit": "points", "field": "earn_rate", "value": {"rate_x100": 100, "unit": "point", "per": "EUR", "category": "everything_else"},
+             "quote": "1 point per EUR", "source_url": "https://bank.test/g.pdf", "read_at": "2026-10-10T08:00:00Z"}]}])
+        texts = [x["text"] for x in r["cards"][0]["reasons"]]
+        self.assertIn("FX fee: the terms I've read don't say.", texts)
+        self.assertTrue(any(t.startswith("1 point per EUR") for t in texts))

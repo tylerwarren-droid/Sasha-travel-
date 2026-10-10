@@ -355,6 +355,12 @@
    "seeds": [
     "https://www.dgt.es/muevete-con-seguridad/que-hacer-ante-un-accidente-de-trafico/",
     "https://www.boe.es/buscar/act.php?id=BOE-A-1980-22501"
+   ],
+   "official_pdfs": [
+    {
+     "url": "https://www.boe.es/buscar/pdf/1980/BOE-A-1980-22501-consolidado.pdf",
+     "of": "https://www.boe.es/buscar/act.php?id=BOE-A-1980-22501"
+    }
    ]
   },
   "law_fr": {
@@ -379,6 +385,16 @@
     "https://www.gesetze-im-internet.de/stvo_2013/__34.html",
     "https://www.gesetze-im-internet.de/vvg_2008/__104.html",
     "https://www.gesetze-im-internet.de/vvg_2008/__30.html"
+   ],
+   "official_pdfs": [
+    {
+     "url": "https://www.gesetze-im-internet.de/stvo_2013/StVO.pdf",
+     "of": "https://www.gesetze-im-internet.de/stvo_2013/__34.html"
+    },
+    {
+     "url": "https://www.gesetze-im-internet.de/vvg_2008/VVG.pdf",
+     "of": "https://www.gesetze-im-internet.de/vvg_2008/__104.html"
+    }
    ]
   },
   "law_it": {

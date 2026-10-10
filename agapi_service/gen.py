@@ -143,6 +143,7 @@ DESCRIPTIONS = {
     "cards.moment": "Should Sasha speak up for this event (a rental booked, the day before pickup, 'which card?', a rental returned)? One "
                     "line + a card, only when it saves money or prevents a mistake; at most once per event; silent otherwise, saying why.",
     "cards.moment_settings": "Turn one of the four card moments on or off for the person; returns all four with their state.",
+    "sources.get": "The kept copy of a source AgAPI read, as it was read (a PDF as the file; a web page as its HTML or a PDF rendered from it): a 10-minute signed download link, its sha256 and the date read. By copy_id, or by claim_id for the copy a fact came from.",
     "cards.rental_dispute": "Dispute a rental's final charge that's more than the quote: the difference line by line, read back → the person's yes → "
                             "one email to the rental company's own address from its terms (or the draft, if its terms give none).",
     "cards.accident_start": "'I've had an accident': the playbook starts with safety — 'Is anyone hurt?' — and offers nothing else until it's "

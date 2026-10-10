@@ -421,7 +421,10 @@ async def admin(action: str, req: Request):
             return JSONResponse({"ok": False, "why": "no seeds for that jurisdiction"}, status_code=404)
         checks = [c["api_endpoint"] for c in ex["cells"] if c["jurisdiction"] == code and c["api_endpoint"].startswith("http")]
         try:
-            out = await _RR.read_jurisdiction(code, seeds, checks)
+            from .fineprint import copies as _FC   # CR 77 · every registry page read is kept too
+            async with _FC.keeping(store, f"registry:{code}", "registry") as _k:
+                out = await _RR.read_jurisdiction(code, seeds, checks)
+                out["copies"] = list(_k.kept)
         except Exception as e:
             return JSONResponse({"ok": False, "why": f"{type(e).__name__}: {str(e)[:200]}"}, status_code=502)
         return JSONResponse({"ok": True, "read": out}, headers={"Cache-Control": "no-store"})
@@ -434,11 +437,25 @@ async def admin(action: str, req: Request):
             return JSONResponse({"ok": False, "why": "no such supplied card"}, status_code=404)
         try:
             raw = _b64.b64decode(str(body.get("content_base64") or ""), validate=True)
-            res = await _FR.read_supplied({**card, "key": key}, raw, card["supplied"]["original_url"], card["supplied"]["by"])
+            from .fineprint import copies as _FC   # CR 77 · the supplied file is kept as the copy
+            async with _FC.keeping(store, key, "card_terms", supplied_by=card["supplied"]["by"]):
+                res = await _FR.read_supplied({**card, "key": key}, raw, card["supplied"]["original_url"], card["supplied"]["by"])
             _FM.apply_read(store, key, card, res)
         except Exception as e:
             return JSONResponse({"ok": False, "why": f"{type(e).__name__}: {str(e)[:200]}"}, status_code=502)
         return JSONResponse({"ok": True, "read": res}, headers={"Cache-Control": "no-store"})
+    if action in ("pacioli_run", "pacioli_switch"):   # CR 77 · Pacioli's auto-check over the claim store; the auto-accept switch
+        from .fineprint import model as _FM, pacioli as _FP
+        if action == "pacioli_switch":
+            on = bool(body.get("on"))
+            _FP.set_auto(store, on, "admin (signed)")
+            _FM._AUTO["on"] = on
+            return JSONResponse({"ok": True, "auto_accept": on})
+        try:
+            out = await _FP.run(store, keys=body.get("keys") or None)
+        except Exception as e:
+            return JSONResponse({"ok": False, "why": f"{type(e).__name__}: {str(e)[:200]}"}, status_code=502)
+        return JSONResponse({"ok": True, "auto_accept": _FP.auto_on(store), **out}, headers={"Cache-Control": "no-store"})
     if action in ("card_read", "cards_tick", "review_link") and not config.LIVE_SERVICE:   # CR 74 · fine print: reads run FROM THIS SERVER
         from .fineprint import jobs as _FJ, review as _FRV
         if action == "review_link":                       # a one-time link to the accept surface (15 minutes, used once)

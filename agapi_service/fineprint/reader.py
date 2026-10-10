@@ -22,7 +22,7 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 from .. import config, magellan as MG, rules as R
 from ..registers import gate
 from ..store import ts
-from . import schema as SC
+from . import copies as CP, schema as SC
 
 MAX_FETCH, MAX_BYTES, HTML_CHARS, PDF_CHARS, TOTAL_CHARS, QUOTE_MAX = 14, 12_000_000, 12_000, 70_000, 200_000, 500
 TERMS = ("guide to benefits", "benefits guide", "benefit guide", "guide-to-benefits", "benefits-guide", "benefit terms", "insurance",
@@ -134,6 +134,7 @@ async def read_sources(seeds: List[str], max_fetch: int = MAX_FETCH, product: st
         fetched += 1
         try:
             st, ctype, body, final = await FETCH_BYTES(url)
+            await CP.capture(url, final, st, ctype, body)   # CR 77 · kept as read (a copy per source; never overwritten)
         except MG.Unreadable as u:
             unread.append({"url": url, "why": u.say})
             continue
@@ -360,7 +361,52 @@ async def read_card(card: dict, seeds: List[str]) -> Dict[str, Any]:
     g = ground(raw, got["docs"])
     used = {f["source_url"] for f in g["facts"]}
     out["sources"] = [{**s, "used": s["url"] in used} for s in out["sources"]]
-    return {**out, **g, "reader": {k: usage[k] for k in ("model", "input_tokens", "output_tokens", "usd")} if usage else None}
+    if law:
+        await keep_official_pdfs(card)
+    return await attach({**out, **g, "reader": {k: usage[k] for k in ("model", "input_tokens", "output_tokens", "usd")} if usage else None}, card)
+
+
+async def keep_official_pdfs(card: dict) -> None:
+    """CR 77 · where the government publishes an official PDF of the same text (BOE, gesetze-im-internet.de), that PDF is kept too —
+    robots first, the same guarded fetch; kept beside the page it is the PDF of (role official_pdf, of_url)."""
+    k = CP._KEEPER.get()
+    if k is None:
+        return
+    cache: Dict[str, tuple] = {}
+    for item in card.get("official_pdfs") or []:
+        url = clean_url(item["url"])
+        v = await gate.robots_verdict(url, cache)
+        if v["verdict"] != "allowed":
+            k.notes.append({"url": url, "why": v["why"]})
+            continue
+        try:
+            st, ctype, body, final = await FETCH_BYTES(url)
+        except Exception as e:
+            k.notes.append({"url": url, "why": f"couldn't be reached ({type(e).__name__})"})
+            continue
+        if 200 <= st < 300 and body[:5] == b"%PDF-":
+            await k.keep(url, final, "application/pdf", body, role="official_pdf", of_url=clean_url(item["of"]))
+        else:
+            k.notes.append({"url": url, "why": f"HTTP {st}" if not 200 <= st < 300 else "not a PDF"})
+        await asyncio.sleep(MG.GAP_S)
+
+
+async def attach(out: Dict[str, Any], card: dict) -> Dict[str, Any]:
+    """CR 77 · each source and each fact → the copy it came from; each fact checked by Pacioli against that copy (at the read, here)."""
+    k = CP._KEEPER.get()
+    if k is None:
+        return out
+    from . import pacioli as PC
+    m = CP.by_url([c for c in k.kept if c["role"] != "official_pdf"])
+    out["sources"] = [{**s, **({"copy_id": m[s["url"]]["id"]} if s["url"] in m else {})} for s in out.get("sources") or []]
+    for f in out.get("facts") or []:
+        cp = m.get(f["source_url"])
+        f["copy_id"] = cp["id"] if cp else None
+        f["pacioli"] = await PC.check_claim(None, {"quote": f["quote"], "field": f["field"], "value": f["value"]}, {}, card, cp)
+    out["copies"] = list(k.kept)
+    if k.notes:
+        out["copies_not_kept"] = list(k.notes)
+    return out
 
 
 async def as_read_site(url: str) -> Dict[str, Any]:
@@ -376,8 +422,9 @@ async def as_read_site(url: str) -> Dict[str, Any]:
     now = got["read_at"]
     return {"url": start, "purpose": "card_terms", "operator": {"name": "", "summary": "a card's official benefit terms"},
             "offers": [], "partners": [], "contacts": [], "booking_channels": [], "instruction_like": [],
-            "benefits": [{**f, "quote": R.wrap(f["quote"], f"site:{f['source_url']}", now, cap=QUOTE_MAX), "quote_found": True} for f in got["facts"]],
-            "sources": got["sources"], "unread": got["unread"],
+            "benefits": [{**{k: v for k, v in f.items() if k not in ("copy_id", "pacioli")},   # CR 77 · copies kept; this output's shape unchanged
+                          "quote": R.wrap(f["quote"], f"site:{f['source_url']}", now, cap=QUOTE_MAX), "quote_found": True} for f in got["facts"]],
+            "sources": [{k: v for k, v in x.items() if k != "copy_id"} for x in got["sources"]], "unread": got["unread"],
             "coverage": {"start": start, "pages_read": len(got["sources"]), "limit": MAX_FETCH, "urls": [s["url"] for s in got["sources"]],
                          "failed": [{"url": u["url"], "why": u["why"]} for u in got["unread"]][:10], "skipped_by_robots": sum(1 for u in got["unread"] if u.get("robots")),
                          "more_links_unread": 0},
@@ -402,4 +449,7 @@ async def read_supplied(card: dict, raw: bytes, original_url: str, supplied_by: 
     usage = MG.usd(raw_draft.pop("_usage", None))
     g = ground(raw_draft, [doc])
     out["sources"] = [{**s, "used": bool(g["facts"])} for s in out["sources"]]
-    return {**out, **g, "reader": {k: usage[k] for k in ("model", "input_tokens", "output_tokens", "usd")} if usage else None}
+    k = CP._KEEPER.get()
+    if k is not None:   # CR 77 · the supplied file itself is the copy (its original official URL beside it)
+        await k.keep(url, url, "application/pdf", raw, role="supplied")
+    return await attach({**out, **g, "reader": {k: usage[k] for k in ("model", "input_tokens", "output_tokens", "usd")} if usage else None}, card)

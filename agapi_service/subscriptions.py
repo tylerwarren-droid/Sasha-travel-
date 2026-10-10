@@ -351,8 +351,10 @@ async def cancel_plan(ctx, inp: dict):
         site = inp.get("site_url") or (f"https://www.{d['site']}" if d.get("site") else None)
         if not site:
             raise AgapiError("invalid_input", f"{d['merchant']}'s own website isn't known; give it (site_url).", {"path": "/site_url", "rule": "required"})
+        from .fineprint import copies as CP   # CR 77 · the merchant's pages, kept as read
         try:
-            got = await MG.read_site(site, "merchant")
+            async with CP.keeping(ctx.store, f"site:{MG.normalise(site)}", "site:merchant"):
+                got = await MG.read_site(site, "merchant")
         except MG.Unreadable as u:
             raise u.as_error()
         routes = []

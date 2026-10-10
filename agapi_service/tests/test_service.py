@@ -483,7 +483,7 @@ class Extensions(Base):
                                                                     "cards.claim_file", "cards.claim_status", "cards.claim_simulate_reply",
                                                                     "cards.moment", "cards.moment_settings", "cards.rental_dispute",
                                                                     "cards.accident_start", "cards.accident_step", "cards.accident_photo",
-                                                                    "cards.accident_notify"})   # CR 74/75
+                                                                    "cards.accident_notify", "sources.get"})   # CR 74/75, CR 77
         self.assertEqual(operations()["acts.status"]["output"], eu_operations()["acts.status"]["output"])
 
 

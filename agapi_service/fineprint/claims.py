@@ -125,7 +125,7 @@ async def _card(ctx, uid: str, item_id: str):
     if not c:
         raise AgapiError("not_found", "That card isn't in this person's cards.", {"card_item_id": item_id})
     p = c["_p"]
-    if not p or not p["accepted_at"] or not M.is_beta(p):
+    if not p or not M.accepted(p) or not M.is_beta(p):
         raise AgapiError("invalid_input", "This card's official terms haven't been read and checked yet, so no claim can be prepared from them.",
                          {"path": "/card_item_id", "rule": "terms_not_checked"})
     return c, p, _live(ctx.store, p)

@@ -38,6 +38,27 @@ TABLES = (
 def ensure(store) -> None:
     for t in TABLES:
         store.x(t)
+    if not getattr(store, "_cards_copy_col", False):   # CR 77 · every fact points to the copy of the source it came from
+        try:
+            store.x("alter table card_claims add column copy_id text")
+        except Exception:
+            pass                                          # already there
+        store._cards_copy_col = True
+
+
+def all_seeds() -> Dict[str, dict]:
+    d = json.loads((DATA / "seeds.json").read_text())
+    return {**d["cards"], **(d.get("rentals") or {}), **(d.get("laws") or {})}
+
+
+_AUTO = {"on": True}   # CR 77 · Pacioli's auto-accept switch, as last read from fineprint_settings (refreshed on every load)
+
+
+def accepted(p: Optional[dict]) -> bool:
+    """CR 77 · accepted by a person (stays), or by Pacioli while the auto-accept switch is on."""
+    if not p or not p.get("accepted_at"):
+        return False
+    return p.get("accepted_by") != "checked by Pacioli" or _AUTO["on"]
 
 
 def is_rental(p: dict) -> bool:
@@ -81,6 +102,9 @@ def apply_read(store, key: str, card: dict, read: dict, *, accepted_by: Optional
         store.x("update card_products set data = ?, updated_at = ? where id = ?", dumps({**loads(row["data"]), **data}), now, pid)
     if accepted_by and not (row or {}).get("accepted_at"):
         store.x("update card_products set accepted_at = ?, accepted_by = ? where id = ?", now, accepted_by, pid)
+    from . import copies as CP, pacioli as PC
+    for cp in read.get("copies") or []:   # CR 77 · the copies kept at this read (the objects are in the bucket)
+        CP.record(store, cp)
     facts = read.get("facts") or []
     if not facts:
         return {"product_id": pid, "claims": 0, "changed": False}
@@ -92,6 +116,10 @@ def apply_read(store, key: str, card: dict, read: dict, *, accepted_by: Optional
         store.x("insert or ignore into card_claims (id, product_id, benefit, field, value, source_url, read_at, quote, quote_sha256, claim_sha256, "
                 "method, confidence, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", c["id"], pid, f["benefit"], f["field"],
                 dumps(f["value"]), f["source_url"], at, f["quote"], c["quote_sha256"], c["claim_sha256"], c["method"], c["confidence"], now)
+        if f.get("copy_id"):
+            store.x("update card_claims set copy_id = ? where id = ?", f["copy_id"], c["id"])
+        if f.get("pacioli"):   # CR 77 · checked on the server at the read (Pacioli), recorded wherever the read is loaded
+            PC.record(store, c["id"], pid, f["pacioli"])
     for r in store.q("select id from card_claims where product_id = ? and superseded_at is null", pid):
         if r["id"] not in new_ids:
             store.x("update card_claims set superseded_by = ?, superseded_at = ? where id = ?", f"read:{at}", now, r["id"])
@@ -102,6 +130,8 @@ def apply_read(store, key: str, card: dict, read: dict, *, accepted_by: Optional
                     pid, s["url"], s["kind"], s["body_sha256"], s.get("linked_from") or "", at)
     ra = (_at(at) + timedelta(days=REREAD_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     store.x("update card_products set last_read_at = ?, reverify_after = ?, updated_at = ? where id = ?", at, ra, now, pid)
+    if not card.get("fixture"):
+        PC.auto_accept(store, pid)   # CR 77 · only while the switch is on; a person's decision stands
     return {"product_id": pid, "claims": len(new_ids), "changed": True}
 
 
@@ -124,6 +154,8 @@ def ensure_loaded(store) -> None:
     seeds = json.loads((DATA / "seeds.json").read_text())
     raw = (p.read_bytes() if p.exists() else b"") + (DATA / "seeds.json").read_bytes()
     sha = hashlib.sha256(raw).hexdigest()
+    from . import pacioli as PC
+    _AUTO["on"] = PC.auto_on(store)
     if getattr(store, "_cards_sha", None) == sha:
         return
     if not store.one("select sha from card_loads where sha = ?", sha):
@@ -151,5 +183,24 @@ def products(store) -> List[dict]:
     return store.q("select * from card_products order by issuer, product")
 
 
-def claims(store, pid: str) -> List[dict]:
-    return store.q("select * from card_claims where product_id = ? and superseded_at is null order by benefit, field, read_at desc", pid)
+def claims(store, pid: str, every: bool = False) -> List[dict]:
+    """The live claims an answer may use. CR 77 · a fact that FAILED Pacioli's check is withheld until a person decides (the exceptions
+    list); a card accepted by Pacioli answers only from facts that passed. every=True: all live claims (the review page, the checks)."""
+    rows = store.q("select * from card_claims where product_id = ? and superseded_at is null order by benefit, field, read_at desc", pid)
+    if every:
+        return rows
+    from . import pacioli as PC
+    PC.ensure(store)
+    checks = {k["claim_id"]: k for k in store.q("select claim_id, passed, decision from card_checks where product_id = ?", pid)}
+    p = store.one("select accepted_by from card_products where id = ?", pid)
+    by_pacioli = bool(p) and p["accepted_by"] == PC.CHECKER
+    out = []
+    for c in rows:
+        k = checks.get(c["id"])
+        ok = k is not None and (k["passed"] or k["decision"] == "accept")
+        if k is not None and (k["decision"] == "reject" or not ok):
+            continue
+        if by_pacioli and not ok:
+            continue
+        out.append(c)
+    return out

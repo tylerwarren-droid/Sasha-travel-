@@ -1069,8 +1069,10 @@ async def magellan_read_site(ctx: Ctx, inp: dict):
     from . import magellan as MG
     import time as _t
     t0 = _t.perf_counter()
+    from .fineprint import copies as CP   # CR 77 · each page read is kept as read (a copy per read; never overwritten)
     try:
-        out = await MG.read_site(inp["url"], inp.get("purpose", "operator"))
+        async with CP.keeping(ctx.store, f"site:{MG.normalise(inp['url'])}", f"site:{inp.get('purpose', 'operator')}"):
+            out = await MG.read_site(inp["url"], inp.get("purpose", "operator"))
     except MG.Unreadable as u:
         ctx.up.add("magellan_web", t0, False, u.rule)
         raise u.as_error()

@@ -53,8 +53,8 @@ DEFAULT_RATE_PER_MIN = int(os.getenv("AGAPI_DEFAULT_RATE_PER_MIN", "120"))   # p
 PRODUCTS = ("sasha", "ad", "dive", "campusme")
 METRICS_SCOPE = "metrics.*"                # /metrics (p50/p95 per operation) — only a key that holds this scope (Falguni's)
 DEFAULT_SCOPES = ["travel.*", "venues.*", "trip.*", "approvals.*", "acts.*", "evidence.*", "users.*", "usage.*", "sandbox.*", "webhooks.*",
-                  "messages.*", "calendar.*", "activity.*", "keep.*", "magellan.*", "subscriptions.*", "registry.*", "cards.*"]
-SCOPES_ADDED = {"webhooks.*": "CR 59", "messages.*": "CR 60", "calendar.*": "CR 60", "activity.*": "CR 62", "keep.*": "CR 63", "magellan.*": "CR 69", "subscriptions.*": "CR 72", "registry.*": "CR 73", "cards.*": "CR 74"}   # keys issued earlier gain these (additive)
+                  "messages.*", "calendar.*", "activity.*", "keep.*", "magellan.*", "subscriptions.*", "registry.*", "cards.*", "sources.*"]
+SCOPES_ADDED = {"webhooks.*": "CR 59", "messages.*": "CR 60", "calendar.*": "CR 60", "activity.*": "CR 62", "keep.*": "CR 63", "magellan.*": "CR 69", "subscriptions.*": "CR 72", "registry.*": "CR 73", "cards.*": "CR 74", "sources.*": "CR 77"}   # keys issued earlier gain these (additive)
 
 # CR 60 · Sasha's own sending address (never the user's mailbox). TYLER DECIDES the real one; in test mode nothing is sent.
 EMAIL_FROM = os.getenv("AGAPI_EMAIL_FROM", "Sasha (sandbox) <sasha@sandbox.agapi.kanoe.ai>")

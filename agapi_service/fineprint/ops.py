@@ -14,13 +14,13 @@ from ..registry import AgapiError
 from ..store import loads
 from . import model as M
 
-NOT_ACCEPTED = "Read on {d}; awaiting a Kanoe person's check of this first read — not used to answer anyone yet."
+NOT_ACCEPTED = "Read on {d}; awaiting a Kanoe person's check of this read (or Pacioli's) — not used to answer anyone yet."
 
 
 def _product_out(p: dict) -> dict:
     d = loads(p["data"])
     return {"product_id": p["id"], "issuer": p["issuer"], "product": p["product"], "network": p["network"], "country": p["country"],
-            "accepted": bool(p["accepted_at"]), "terms_read_at": (p["last_read_at"] or "")[:10] or None, "reverify_after": (p["reverify_after"] or "")[:10] or None,
+            "accepted": M.accepted(p), "terms_read_at": (p["last_read_at"] or "")[:10] or None, "reverify_after": (p["reverify_after"] or "")[:10] or None,
             "freshness": M.freshness(p), "test_fixture": bool(d.get("fixture")),
             **({"why_unread": (d.get("last_read") or {}).get("why") or "not read yet"} if not p["last_read_at"] else {})}
 
@@ -52,7 +52,7 @@ async def products(ctx, inp: dict):
     q = (inp.get("query") or "").lower().strip()
     out = [_product_out(p) for p in rows if not q or q in f"{p['issuer']} {p['product']}".lower()]
     return {"products": out, "note": "Facts come only from the issuers' own terms, each quoted with its source and date. A first read is "
-                                     "used only after a Kanoe person checks it."}, 200, None
+                                     "used only once Pacioli's check passes or a Kanoe person accepts it."}, 200, None
 
 
 async def terms(ctx, inp: dict):
@@ -67,7 +67,7 @@ async def terms(ctx, inp: dict):
            "sources": [{"url": s["url"], "kind": s["kind"], **({"linked_from": s["linked_from"]} if s["linked_from"] else {}),
                         "read_at": s["read_at"][:10], **({"changed_at": s["changed_at"][:10]} if s["changed_at"] else {})} for s in srcs],
            "unread": (loads(p["data"]).get("last_read") or {}).get("unread") or []}
-    if not p["accepted_at"] and p["last_read_at"]:
+    if not M.accepted(p) and p["last_read_at"]:
         out["note"] = NOT_ACCEPTED.format(d=p["last_read_at"][:10])
     return out, 200, None
 
@@ -77,7 +77,7 @@ async def terms(ctx, inp: dict):
 def _terms_brief(p: Optional[dict]) -> Optional[dict]:
     if not p:
         return None
-    return {"product_id": p["id"], "terms_read_at": (p["last_read_at"] or "")[:10] or None, "accepted": bool(p["accepted_at"]), "freshness": M.freshness(p)}
+    return {"product_id": p["id"], "terms_read_at": (p["last_read_at"] or "")[:10] or None, "accepted": M.accepted(p), "freshness": M.freshness(p)}
 
 
 async def intake(ctx, inp: dict):
@@ -134,7 +134,7 @@ async def mine(ctx, inp: dict):
     for c in cards:
         p = c.pop("_p")
         c["status"] = ("no official terms read for this card yet" if not p or not p["last_read_at"] else
-                       f"terms read {p['last_read_at'][:10]}" + ("" if p["accepted_at"] else ", awaiting a Kanoe check"))
+                       f"terms read {p['last_read_at'][:10]}" + ("" if M.accepted(p) else ", awaiting a Kanoe check"))
     return {"cards": cards}, 200, None
 
 
@@ -166,7 +166,7 @@ async def ask(ctx, inp: dict):
         return {**base, "answer": "no_terms", "text": f"{name} isn't in the cards I answer for yet, so I can't say what it covers.", "quotes": []}, 200, None
     if not p or not p["last_read_at"]:
         return {**base, "answer": "no_terms", "text": f"I haven't read {name}'s official terms yet, so I can't say what it covers.", "quotes": []}, 200, None
-    if not p["accepted_at"]:
+    if not M.accepted(p):
         return {**base, "answer": "awaiting_check", "text": f"I read {name}'s terms on {p['last_read_at'][:10]}; a Kanoe person still has to check that "
                                                             "first read before I answer from it.", "quotes": []}, 200, None
     out = await A.ask(p, _live(ctx.store, p), inp["question"])
@@ -181,7 +181,7 @@ async def which(ctx, inp: dict):
     cards, skipped = [], []
     for c in await _my_cards(ctx, inp["end_user"]):
         p = c["_p"]
-        if not p or not p["accepted_at"] or not M.is_beta(p):
+        if not p or not M.accepted(p) or not M.is_beta(p):
             skipped.append({"card": c["product"], "why": "its official terms haven't been read and checked yet" if not p or M.is_beta(p)
                             else "it isn't in the cards I answer for yet"})
             continue
@@ -205,7 +205,7 @@ def rental_terms_for(store, country: str, company: str):
         if M.is_rental(p) and p["country"] == country and want and (p["issuer"].lower().startswith(want) or want.startswith(p["issuer"].lower())):
             if not p["last_read_at"]:
                 return None, f"I haven't read {p['issuer']}'s terms for {country} yet."
-            if not p["accepted_at"]:
+            if not M.accepted(p):
                 return None, f"{p['issuer']}'s terms for {country} were read on {p['last_read_at'][:10]} and await a Kanoe check."
             return _live(store, p), None
     return None, f"I haven't read {company}'s terms for {country}."
@@ -223,7 +223,7 @@ async def rental_cover(ctx, inp: dict):
         p = c["_p"]
         if inp.get("card_item_id") and c["item_id"] != inp["card_item_id"]:
             continue
-        if not p or not p["accepted_at"] or not M.is_beta(p):
+        if not p or not M.accepted(p) or not M.is_beta(p):
             skipped.append({"card": c["product"], "why": "its official terms haven't been read and checked yet"})
             continue
         cards.append({"name": c["product"], "claims": _live(ctx.store, p)})
@@ -382,7 +382,7 @@ def law_for(store, country: str):
         if M.is_law(p) and p["country"] == country:
             if not p["last_read_at"]:
                 return None, "not read at source yet"
-            if not p["accepted_at"]:
+            if not M.accepted(p):
                 return None, "read on " + p["last_read_at"][:10] + ", awaiting a Kanoe check"
             return _live(store, p), None
     return None, "no official source for this country yet"
@@ -446,7 +446,7 @@ async def _acc_card(ctx, uid: str, item_id: Optional[str]):
     if not item_id:
         return None
     c = next((c for c in await _my_cards(ctx, uid) if c["item_id"] == item_id), None)
-    if not c or not c["_p"] or not c["_p"]["accepted_at"] or not M.is_beta(c["_p"]):
+    if not c or not c["_p"] or not M.accepted(c["_p"]) or not M.is_beta(c["_p"]):
         return None
     return c["product"], _live(ctx.store, c["_p"])
 
@@ -615,3 +615,51 @@ async def accident_notify(ctx, inp: dict):
 
 OPS.update({"cards.accident_start": accident_start, "cards.accident_step": accident_step, "cards.accident_photo": accident_photo,
             "cards.accident_notify": accident_notify})
+
+
+# ── CR 77 · sources.get: the kept copy of a source, as read ─────────────────────────────────────────────────────────────────
+
+LINK_SECONDS = 600
+
+
+async def sources_get(ctx, inp: dict):
+    """sources.get — the copy of a source AgAPI read (by copy_id, or the copy a fact came from by claim_id): a short-lived signed URL
+    (10 minutes) to the file as read (a PDF as the file; a web page as its HTML, or format "pdf" for the PDF rendered from it), with
+    its sha256, the date it was read, the source URL and the reader kind."""
+    from datetime import datetime, timedelta, timezone
+    from .. import objects as OB
+    from . import copies as CP
+    cid = inp.get("copy_id")
+    if not cid and inp.get("claim_id"):
+        c = ctx.store.one("select * from card_claims where id = ?", inp["claim_id"])
+        if not c:
+            raise AgapiError("not_found", "No such fact in the claim store.", {"claim_id": inp["claim_id"]})
+        p = ctx.store.one("select key from card_products where id = ?", c["product_id"])
+        cp = CP.get(ctx.store, c["copy_id"]) if c.get("copy_id") else CP.for_source(ctx.store, (p or {}).get("key") or "", c["source_url"], c["read_at"])
+    else:
+        cp = CP.get(ctx.store, cid or "")
+    if not cp:
+        raise AgapiError("not_found", "No kept copy of that source (it was read before copies were kept, or never read).",
+                         {"copy_id": cid} if cid else {"claim_id": inp.get("claim_id")})
+    fmt = inp.get("format") or "original"
+    if fmt == "pdf" and not cp["content_type"].endswith("pdf") and not cp["render_key"]:
+        raise AgapiError("not_found", "This web page has no PDF rendering (" + (cp["render_note"] or "none was made") + "); ask for format original.",
+                         {"copy_id": cp["id"]})
+    key, sha = (cp["render_key"], cp["render_sha256"]) if fmt == "pdf" and cp["render_key"] else (cp["object_key"], cp["sha256"])
+    name = f"{cp['id']}.{key.rsplit('.', 1)[-1]}"
+    exp = (datetime.now(timezone.utc) + timedelta(seconds=LINK_SECONDS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    out = {"copy_id": cp["id"], "url": OB.presign(key, LINK_SECONDS, filename=name), "expires_at": exp, "sha256": sha,
+           "format": "pdf" if key.endswith(".pdf") else "html", "read_at": cp["read_at"], "source_url": cp["final_url"],
+           "reader_kind": cp["reader_kind"], "role": cp["role"], "size": cp["size"]}
+    if cp["role"] == "official_pdf" and cp["of_url"]:
+        out["official_pdf_of"] = cp["of_url"]
+    if cp["supplied_by"]:
+        out["supplied_by"] = "a person (" + cp["supplied_by"] + ")"
+    if fmt == "pdf" and key == cp["render_key"]:
+        out["rendering"] = {"of_sha256": cp["sha256"], "note": cp["render_note"]}
+    elif cp["render_key"]:
+        out["pdf_available"] = True
+    return out, 200, None
+
+
+OPS.update({"sources.get": sources_get})

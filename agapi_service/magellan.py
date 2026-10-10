@@ -150,6 +150,8 @@ async def _fetch(url: str) -> Tuple[int, str, str, str]:
                     buf += chunk
                     if len(buf) > MAX_BYTES:
                         break
+                from .fineprint import copies as _CP   # CR 77 · the source as read is kept (when a reader keeps copies)
+                await _CP.capture(url, str(r.url), r.status_code, r.headers.get("content-type", ""), buf)
                 return r.status_code, r.headers.get("content-type", ""), buf.decode(r.encoding or "utf-8", "replace"), str(r.url)
             finally:
                 await r.aclose()

@@ -31,7 +31,10 @@ def resolve(card: dict) -> List[str]:
 
 async def read_now(store, key: str) -> Dict[str, Any]:
     card = seeds()[key]
-    res = await RD.read_card({**card, "key": key}, resolve(card))
+    from . import copies as CP   # CR 77 · every source read is kept (a copy per read; never overwritten)
+    kind = "law" if card.get("kind") == "law" else "rental" if card.get("kind") == "rental" else "card_terms"
+    async with CP.keeping(store, key, kind):
+        res = await RD.read_card({**card, "key": key}, resolve(card))
     M.apply_read(store, key, card, res, accepted_by="fixture (test mode)" if card.get("fixture") else None)
     return res
 
@@ -40,7 +43,7 @@ async def check(store, key: str) -> Dict[str, Any]:
     """One card: due → re-read; else each source it quotes is fetched (robots first) and compared by body_sha256."""
     pid = M.product_id(key)
     p = store.one("select * from card_products where id = ?", pid)
-    if not p or not p["accepted_at"]:
+    if not p or not M.accepted(p):
         return {"key": key, "action": "skipped (not accepted)"}
     if seeds().get(key, {}).get("supplied"):
         return {"key": key, "action": "supplied by a person: a re-read needs a new copy from the issuer (its site refuses our reader)"}

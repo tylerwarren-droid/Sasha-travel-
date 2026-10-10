@@ -3305,6 +3305,87 @@
     },
     "cards_accident_notify_out": {
       "$ref": "#/$defs/accident_view"
+    },
+    "sources_get_in": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "copy_id": {
+          "type": "string",
+          "pattern": "^scp_[0-9a-f]{24}$"
+        },
+        "claim_id": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 80
+        },
+        "format": {
+          "enum": [
+            "original",
+            "pdf"
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "copy_id"
+          ]
+        },
+        {
+          "required": [
+            "claim_id"
+          ]
+        }
+      ]
+    },
+    "sources_get_out": {
+      "type": "object",
+      "required": [
+        "copy_id",
+        "url",
+        "expires_at",
+        "sha256",
+        "read_at",
+        "source_url",
+        "reader_kind"
+      ],
+      "properties": {
+        "copy_id": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "expires_at": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "format": {
+          "enum": [
+            "pdf",
+            "html"
+          ]
+        },
+        "read_at": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "reader_kind": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      }
     }
   }
 }

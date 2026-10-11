@@ -246,18 +246,25 @@ def _words(s: str) -> set:
     return w | {_SYN[x] for x in w if x in _SYN}
 
 
+_BUNDLE = re.compile(r"\b(pack|bono|combo|bundle|package|paquete)\b|\+", re.I)
+
+
 def pick(svcs: List[dict], asked: str) -> Optional[dict]:
     """The service that best matches what was asked ("a 60-minute relaxing massage"), or None — never a guess on no overlap."""
     want = _words(asked or "")
     m = re.search(r"(\d{2,3})\s*-?\s*min", asked or "", re.I) or re.search(r"\b(\d)\s*-?\s*(?:h|hour)", asked or "", re.I)
     mins = (int(m.group(1)) * (60 if int(m.group(1)) < 10 else 1)) if m else None
-    best, score = None, 0.0
+    best, score = None, float("-inf")   # Sasha 234 · was 0.0; any overlap still qualifies (the tie-breaks below may go under 0)
     for s in svcs:
         hit = len(want & _words(s["name"]))
         if not hit:
             continue
         sc = hit + (1.5 if mins and (s.get("minutes") == mins or mins in (s.get("minutes_range") or [])) else 0) \
             - (0.5 if mins and s.get("minutes") and s["minutes"] != mins else 0)
+        # Sasha 234 · ties: a bundle loses unless asked for (live: "Pack masaje anticelulítico (masaje + presoterapia)" won a plain
+        # "60-minute massage" by being listed first), then fewer unasked words, then the closer duration
+        sc -= (1.0 if (_BUNDLE.search(s["name"]) and not _BUNDLE.search(asked or "")) else 0) + 0.1 * len(_words(s["name"]) - want) \
+            + (min(abs(s["minutes"] - mins), 60) / 600 if mins and s.get("minutes") else 0)
         if sc > score:
             best, score = s, sc
     return best

@@ -249,3 +249,22 @@ class AccidentPlace234(unittest.TestCase):
         run(self.FP.run_tool(Ctx(), "accident", {"country": "PT", "place": "Lisbon", "rental_company": "Example Rentals"}))
         run(self.FP.run_tool(Ctx(said="no"), "accident", {"answer": "no", "place": "Lisbon"}))
         self.assertIsNone(self.last_facts())
+
+
+class PickNotABundle234(unittest.TestCase):
+    """Sasha 234 · live (Treatwell, Método Javier Panizo): a plain "60-minute massage" picked the PACK because it was listed first."""
+    SVCS = [{"name": "Pack masaje anticelulítico (masaje + presoterapia)", "minutes": 50},
+            {"name": "Masaje deportivo", "minutes": 55}, {"name": "Masaje relajante", "minutes": 55},
+            {"name": "Masaje express", "minutes": 30}, {"name": "Masaje tailandés tradicional", "minutes": 90}]
+
+    def test_a_plain_massage_is_not_a_bundle(self):
+        from booking_signer import platform_read as PR
+        self.assertNotIn("Pack", PR.pick(self.SVCS, "a 60-minute massage")["name"])
+        self.assertEqual(PR.pick(self.SVCS, "a 60-minute massage")["minutes"], 55)          # the closer duration, not express
+
+    def test_asked_words_still_lead(self):
+        from booking_signer import platform_read as PR
+        self.assertEqual(PR.pick(self.SVCS, "a relaxing massage")["name"], "Masaje relajante")
+        self.assertIn("Pack", PR.pick(self.SVCS, "the massage pack with presoterapia")["name"])
+        self.assertEqual(PR.pick(self.SVCS[:1], "a massage")["name"], self.SVCS[0]["name"])   # a lone bundle still qualifies
+        self.assertIsNone(PR.pick(self.SVCS, "a haircut"))

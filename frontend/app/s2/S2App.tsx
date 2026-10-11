@@ -32,6 +32,7 @@ type Card =
   | { k: 'accident'; view: Ev }
   | { k: 'claim_status'; claim: Ev }
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
+  | { k: 'subscriptions'; items: Ev[]; total?: string; source?: string }   // CR 84 · what they pay for, from their receipts
 type Plan = { kind: 'dinner' | 'spa' | 'venue' | 'flight' | 'hotel' | 'car'; title: string; when: string; where?: string; status: string; reference?: string; id?: string }
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
@@ -468,6 +469,23 @@ function ClaimStatus({ claim }: { claim: Ev }) {
 }
 
 /** CR 81 · one place to go: what's on / when it's open that day, the price — each quoted from its own site — and its official ticket office. */
+// CR 84 · the subscriptions list: service · price · renews (from the receipt — "expected" when the email doesn't say); tap one → its cancel flow
+function SubscriptionsCard({ items, total, source, send }: { items: Ev[]; total?: string; source?: string; send: (t: string) => void }) {
+  const per: Record<string, string> = { monthly: '/mo', yearly: '/yr', weekly: '/wk', quarterly: '/qtr' }
+  return (
+    <Box k="Subscriptions" h={total ? `About ${untag(total)} a month` : undefined}>
+      {items.map((s, i) => (
+        <button key={i} onClick={() => send(`Cancel ${s.service}`)} style={{ display: 'flex', width: '100%', justifyContent: 'space-between', gap: 12,
+          background: 'transparent', border: 'none', borderTop: i ? '1px solid rgba(255,255,255,.08)' : 'none', color: 'inherit', padding: '9px 0',
+          textAlign: 'left', cursor: 'pointer', fontSize: 15 }}>
+          <span style={{ fontWeight: 600 }}>{untag(String(s.service))}</span>
+          <span style={{ color: C.dim, fontSize: 14, textAlign: 'right' }}>{untag(String(s.price))}{per[s.how_often] || ''}
+            {s.renews ? <> · renews {untag(String(s.renews))}{s.expected ? ' (expected)' : ''}</> : null}</span>
+        </button>))}
+      <div style={{ fontSize: 12.5, color: C.dim, marginTop: 6 }}>From {untag(source || 'your receipts')} · tap one to cancel it — nothing happens until you say yes</div>
+    </Box>)
+}
+
 function ActivityCard({ a }: { a: Ev }) {
   const dom = (() => { try { return new URL(a.official_url).hostname.replace(/^www\./, '') } catch { return '' } })()
   const quotes: Q[] = [a.event, a.open, a.price?.quote ? a.price : null, a.no_event?.next].filter(Boolean).map((x: Ev) => ({ quote: x.quote, source_url: x.source_url, read_at: x.read_at }))
@@ -493,6 +511,7 @@ function CardView({ c, choose, pick, send }: { c: Card; choose: (t: string) => v
   if (c.k === 'my_cards') return <MyCards cards={c.cards} choose={choose} />
   if (c.k === 'accident') return <AccidentCard view={c.view} send={send} />
   if (c.k === 'claim_status') return <ClaimStatus claim={c.claim} />
+  if (c.k === 'subscriptions') return <SubscriptionsCard items={c.items} total={c.total} source={c.source} send={send} />
   if (c.k === 'activities') return (<>{c.cards.map((a, i) => <ActivityCard key={i} a={a} />)}
     {c.unread.length ? <div style={{ fontSize: 13, color: C.dim, margin: '4px 2px' }}>Couldn&apos;t check on their official sites: {c.unread.map(untag).join(', ')}</div> : null}</>)
   if (c.k === 'keep_capture') return <KeepCapture what={c.what} />
@@ -683,6 +702,7 @@ export default function S2App() {
             else if (ev.kind === 'my_cards') add({ k: 'my_cards', cards: ev.cards || [] })
             else if (ev.kind === 'accident' && ev.view) add({ k: 'accident', view: ev.view })
             else if (ev.kind === 'claim_status' && ev.claim) add({ k: 'claim_status', claim: ev.claim })
+            else if (ev.kind === 'subscriptions' && Array.isArray(ev.items)) add({ k: 'subscriptions', items: ev.items, total: ev.total, source: ev.source })   // CR 84
             else if (ev.kind === 'activities' && Array.isArray(ev.cards)) add({ k: 'activities', cards: ev.cards, unread: Array.isArray(ev.unread) ? ev.unread : [], date: ev.date })   // CR 81
           }
         }

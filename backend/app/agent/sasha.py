@@ -114,6 +114,7 @@ RENDER.update({"my_plans": "plans", "running_late": "read_back", "change_booking
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
 KINDS_S2_ONLY = {"keep_capture", "capabilities", "plans", "notice"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
 KINDS_S2_ONLY |= {"counter_card", "my_cards", "accident", "claim_status"}
+KINDS_S2_ONLY |= {"subscriptions"}   # CR 84 · the subscriptions list card (service · price · renews; tap one → cancel)
 KINDS_S2_ONLY |= {"activities"}   # CR 81 · the ActivityCard (things to do, verified on each place's own site)
 KINDS_S2_ONLY |= {"wa_open"}   # Sasha 230 · the message, pre-filled in the person's own WhatsApp (they press send)   # CR 75 · fine print's cards, rendered by /s2 only
 KINDS = KINDS_S2 | {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
@@ -122,7 +123,7 @@ KINDS |= {"keep_handoff"}   # Sasha 228 · /next's "Add from your phone" (QR + s
 
 def _fine_print_tools() -> tuple:
     from agapi import s2_fine_print as FP
-    return FP.TOOL_NAMES
+    return FP.TOOL_NAMES + ("find_subscriptions",)   # CR 84 · the subscriptions list card
 
 
 def render(tool: str, res: dict, args: dict) -> Optional[dict]:

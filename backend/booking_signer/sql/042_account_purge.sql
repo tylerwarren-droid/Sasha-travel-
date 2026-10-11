@@ -6,6 +6,8 @@
 -- DRAFT — apply in Supabase AFTER the Sasha tab deploys Sasha 236; never applied by a tab. Nothing depends on it being applied first.
 -- Schema verified live (11 Oct): account_id is uuid NOT NULL on all six; none has an FK to auth.users; keep_fills → keep_items cascades.
 
+-- preview (read-only): retention_log's rule check today (live 11 Oct: bodies|bookings|consent|all)
+-- select pg_get_constraintdef(oid) from pg_constraint where conname = 'retention_log_rule_check';
 -- preview (read-only): the rows whose account no longer exists — deleted below (11 Oct: s2_acts 1, every other table 0)
 -- select t, count(*) from (
 --   select 'keep_fills' t, account_id from public.keep_fills union all select 'keep_items', account_id from public.keep_items
@@ -28,6 +30,12 @@ alter table public.keep_keys      add constraint keep_keys_account_fkey      for
 alter table public.s2_acts        add constraint s2_acts_account_fkey        foreign key (account_id) references auth.users(id) on delete cascade;
 alter table public.s2_wa_replies  add constraint s2_wa_replies_account_fkey  foreign key (account_id) references auth.users(id) on delete cascade;
 alter table public.s2_wa_contacts add constraint s2_wa_contacts_account_fkey foreign key (account_id) references auth.users(id) on delete cascade;
+
+-- the account's own erasure is logged as itself (found live, 11 Oct: DELETE /api/booking/account/data answered 500 — the rule
+-- 'guest_erasure' wasn't allowed; until this is applied the code logs it under 'all' with the reason in the note)
+alter table public.retention_log drop constraint retention_log_rule_check;
+alter table public.retention_log add constraint retention_log_rule_check
+  check (rule = any (array['bodies', 'bookings', 'consent', 'all', 'guest_erasure']));
 
 commit;
 

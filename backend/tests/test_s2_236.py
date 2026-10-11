@@ -68,6 +68,32 @@ class Purge(unittest.TestCase):
         self.assertEqual(sql.count("references auth.users(id) on delete cascade"), 6)
 
 
+class ErasureIsLogged(unittest.TestCase):
+    def test_a_refused_rule_falls_back_to_all_never_unlogged(self):   # found live: 500 after the erasure had run
+        from booking_signer.vault import gdpr as G
+        from booking_signer import routes
+        rows = []
+
+        class C:
+            async def execute(self, q, *a):
+                if a[2] == "guest_erasure":
+                    raise type("CheckViolationError", (Exception,), {})()
+                rows.append((a[2], a[3], a[6]))
+
+        async def runner(fn):
+            return await fn(C())
+        store = type("S", (), {"_run": staticmethod(runner)})()
+        from datetime import datetime, timezone
+        with mock.patch.object(routes, "STORE", store):
+            run(G._log_deletion(ACCT, {"keep_items": 3, "s2_acts": 3}, datetime.now(timezone.utc)))
+        self.assertEqual([(r, t) for r, t, _ in rows], [("all", "keep_items"), ("all", "s2_acts")])
+        self.assertTrue(all(n.startswith("guest_erasure:") for _, _, n in rows))
+
+    def test_the_migration_allows_guest_erasure(self):
+        sql = open(os.path.join(os.path.dirname(PG.__file__), "sql", "042_account_purge.sql")).read()
+        self.assertIn("'all', 'guest_erasure'", sql)
+
+
 class FlightNumber(unittest.TestCase):
     def test_the_airline_code_isnt_doubled(self):   # found live: "Flight: EXEX123"
         from agapi.s2_fine_print import flight_number

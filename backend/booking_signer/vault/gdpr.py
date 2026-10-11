@@ -58,12 +58,18 @@ async def _log_deletion(account: str, counts: Dict[str, int], now: datetime) -> 
     from .. import routes
     run_id = uuid.uuid4()
 
-    async def go(c):
+    async def go(c, rule="guest_erasure", note="the guest asked for everything to be deleted (S-78 §9)"):
         for table, n in counts.items():
             await c.execute("insert into retention_log (run_id, ran_at, rule, table_name, rows_affected, cutoff, note) "
-                            "values ($1,$2,$3,$4,$5,$6,$7)", run_id, now, "guest_erasure", table, n, now,
-                            "the guest asked for everything to be deleted (S-78 §9)")
-    await routes.STORE._run(go)
+                            "values ($1,$2,$3,$4,$5,$6,$7)", run_id, now, rule, table, n, now, note)
+    try:
+        await routes.STORE._run(go)
+    except Exception as e:
+        # Sasha 236 · found live: retention_log's rule check allows only bodies|bookings|consent|all until 042 adds guest_erasure —
+        # the erasure had already run and the route answered 500. Logged under 'all', the reason in its note; never unlogged.
+        if type(e).__name__ != "CheckViolationError":
+            raise
+        await routes.STORE._run(lambda c: go(c, "all", "guest_erasure: the guest asked for everything to be deleted (S-78 §9)"))
 
 
 LOG_DELETION: Callable = _log_deletion   # tests replace it

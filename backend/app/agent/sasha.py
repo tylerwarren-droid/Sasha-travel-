@@ -531,11 +531,21 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     tools = tools_for_model()
     from agapi.keep_gate import keep_on, s1_on
     if keep_on(account, surface):   # Sasha 224 · the Keep's tools only where the Keep is on (/s2; /next only behind SASHA_KEEP_S1)
-        tools = tools + [API.schema_for_model(t) for t in API.KEEP_TOOLS
-                         if surface == "s2" or t["name"] != "keep_add"]   # /next has no photo picker: its Keep is added on /keep
+        tools = tools + [API.schema_for_model(t) for t in API.KEEP_TOOLS   # Sasha 241 · keep_add on /next too, with parity (its 📎 / the card)
+                         if surface == "s2" or s1_parity() or t["name"] != "keep_add"]
     run = API.call        # CR 71 · how a tool runs: agapi.v0.call, as always — /s2's block below is the ONLY place that changes it
     if surface == "s2":   # Sasha 225 · what she can do / can't do yet: /s2 only
         tools = tools + [API.schema_for_model(t) for t in API.HOME_TOOLS + API.MANAGE_TOOLS]
+    if surface != "s2" and s1_parity():   # Sasha 241 · S1 PARITY (Tyler's OK, 11 Oct): /next keeps ALL its own tools and gains S2's —
+        tools = tools + [API.schema_for_model(t) for t in API.HOME_TOOLS + API.MANAGE_TOOLS]   # what she can do, plans, change/cancel,
+        from agapi import s2_subscriptions as SUBS   # late, rentals, upgrade-my-room; subscriptions; cards/accident/money back/entry/things to do
+        tools = tools + [dict(t) for t in SUBS.TOOLS]   # — run through the same wrappers as /s2. via_agapi stays S2-only (its guest-token path).
+        run = SUBS.wrap(run)
+        from agapi import s2_fine_print as FP
+        tools = tools + [dict(t) for t in FP.TOOLS]
+        run = FP.wrap(run)
+        seen_names: set = set()   # one schema per name (a tool already in S1's list is never sent twice)
+        tools = [t for t in tools if not (t["name"] in seen_names or seen_names.add(t["name"]))]
     if surface == "s2":   # Sasha 221 · S2's tool set (/s2 only); S1's list is untouched
         from app.agent import s2 as S2
         tools = [t for t in tools if t["name"] in S2.S2_TOOLS]
@@ -566,6 +576,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         # Sasha 205 · PROMPT CACHING: her persona is the same every call (cached); the rest is per turn
         extra = system_prompt(datetime.now(timezone.utc))[len(P.AGENT_SYSTEM):]
         base = P.AGENT_SYSTEM
+        if surface != "s2" and s1_parity():   # Sasha 241 · S2's capability lines on /next, in the CACHED part (S1 keeps its "Who she is")
+            from app.agent import s2 as S2
+            base = P.AGENT_SYSTEM + "\n\n" + S2.S1_CAN
         if surface == "s2":   # Sasha 221 · her own opening lines on /s2; S1's text from "How she talks" on, shared
             from app.agent import s2 as S2
             base = S2.s2_system() + (S2.WA_NOTE if wa else "")   # Sasha 237 · on WhatsApp: cards arrive as messages, photos sent here
@@ -1131,6 +1144,68 @@ async def s2_accident_photo(request: Request):
     return JSONResponse(r, status_code=200 if r.get("ok") else 400)
 
 
+_PHOTO_SCAN: Dict[str, dict] = {}   # Sasha 241 · account → a Keep item read from a 📎 photo, waiting for their yes (10 min, memory)
+
+
+async def _photo_turn(account: str, photos: list, message: str) -> tuple:
+    """Sasha 241 · (words to say now, or None; the message for the model). A Keep item read from a photo waits for a yes/no; a
+    statement goes to subscriptions; damage goes to the accident card's own photo buttons. Never a value, never the photo kept."""
+    import base64 as _b64
+    from booking_signer import wa_agent as WA
+    from agapi.v0 import explicit_yes
+    now = datetime.now(timezone.utc)
+    held = _PHOTO_SCAN.get(account)
+    if held and (now - held["at"]).total_seconds() > 600:
+        _PHOTO_SCAN.pop(account, None)
+        held = None
+    if held and not photos:
+        if explicit_yes(message):
+            _PHOTO_SCAN.pop(account, None)
+            from agapi import keep_scan as SCAN
+            try:
+                got = await SCAN.confirm(account, held["token"])
+            except SCAN.ScanRefused as e:
+                return e.message, message
+            return f"Saved to your Keep: {got['item']}. I'll only ever see that mask.", message
+        if re.fullmatch(r"\s*(no|nope|don'?t|cancel)\b.*", message or "", re.I):
+            _PHOTO_SCAN.pop(account, None)
+            return "OK — not saved, and the photo isn't kept.", message
+    if not photos:
+        return None, message
+    p = photos[0] if isinstance(photos[0], dict) else {}
+    try:
+        raw = _b64.b64decode(str(p.get("content_base64") or ""), validate=True)
+    except Exception:
+        return "I couldn't open that photo — could you attach it again?", message
+    mime = str(p.get("media_type") or "image/jpeg")
+    kind = WA.purpose_of(message)
+    if kind in ("passport", "loyalty"):
+        from agapi import keep_scan as SCAN
+        try:
+            got = await SCAN.scan(account, kind, raw, mime)
+        except SCAN.ScanRefused as e:
+            return e.message, message
+        finally:
+            raw = b""
+        _PHOTO_SCAN[account] = {"token": got["token"], "masked": got["masked"], "at": now}
+        return (" · ".join(got["shown"]) + " — save it to your Keep? Say yes or no. It's kept encrypted; the photo isn't kept."), message
+    if kind == "statement":
+        from agapi import s2_subscriptions as SUBS
+        try:
+            ref = SUBS.keep_statement(account, raw, mime)
+        except ValueError as e:
+            return str(e), message
+        return None, f"{message} [they attached a statement — statement_ref {ref}: find their subscriptions with it]"
+    if kind == "damage":
+        return None, f"{message} [they attached a photo of damage — the accident card's own photo buttons take each shot; say so]"
+    return "Got the photo — what is it: your passport, a loyalty card, a bank statement, or damage for an accident? Attach it again with a word.", message
+
+
+def s1_parity() -> bool:
+    """Sasha 241 · /next on S2's tools, cards, memory and closing (Tyler's OK, 11 Oct). SASHA_S1_PARITY=off is the way back."""
+    return os.getenv("SASHA_S1_PARITY", "on").strip().lower() != "off"
+
+
 def pick_hint(account: str, pid: str, message: str) -> str:
     """Sasha 231 / 237 · a tap on a venue card (S2's Choose, WhatsApp's list picker): THAT card's place_id, matched to the cards
     this account was shown — never a name guess. Unknown id → the message as it is."""
@@ -1175,10 +1250,19 @@ async def agent_turn(request: Request):
                 yield f"data: {json.dumps({'type': 'done', 'text': _held, 'guard': ['input_guard']})}\n\n"
             return StreamingResponse(withheld(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
         body["history"] = _KEEP.clean_history(body.get("history") or [])
+    # Sasha 241 · /next's 📎 photos (and a yes/no to a scanned Keep item) — the same handlers as /s2 and WhatsApp
+    said_now, message = await _photo_turn(account, body.get("photos") or [], message)
+    if said_now:
+        async def photo_said():
+            yield f"data: {json.dumps({'type': 'text', 'delta': said_now})}\n\n"
+            yield f"data: {json.dumps({'type': 'say', 'text': said_now})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'text': said_now, 'guard': [], 'tools': []})}\n\n"
+        return StreamingResponse(photo_said(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
     guest_token = request.headers.get("authorization", "").partition(" ")[2].strip() if surface == "s2" else None   # CR 71 · /s2 only
     over = await over_budget(account)
     session_id = str(body.get("session_id") or "")[:64] or None
-    if surface == "s2":
+    remembers = surface == "s2" or s1_parity()   # Sasha 241 · memory, closing and card taps on /next too
+    if remembers:
         from agapi import s2_closing as CL, s2_memory as MEM
         lang = CL.closing(message) if body.get("history") else None   # Sasha 231 · "thanks / bye" after a conversation → dormant
         if lang:
@@ -1209,7 +1293,7 @@ async def agent_turn(request: Request):
         reply = ""
         try:
             async for ev in turn_with_quiver(account, message, body.get("history") or [], session_id, surface):
-                if surface == "s2":
+                if remembers:
                     if ev.get("type") == "render" and ev.get("kind") == "venues" and ev.get("preset"):
                         seen.update(cards=(ev["preset"].get("cards") or []), ribbon=ev.get("ribbon"), focus=ev.get("focus"))
                     elif ev.get("type") == "render" and ev.get("kind") in ("focus", "venues") and ev.get("focus"):   # Sasha 239 · the place they chose
@@ -1220,7 +1304,7 @@ async def agent_turn(request: Request):
         except Exception as e:
             log.error("[agent] turn failed: %s: %s", type(e).__name__, e)
             yield f"data: {json.dumps({'type': 'error', 'message': 'Sorry — could you say that once more?'})}\n\n"
-        if surface == "s2" and reply:
+        if remembers and reply:
             try:   # awaited here, in the stream: kept before the response ends (never fire-and-forget)
                 from agapi import s2_memory as MEM
                 await MEM.remember(account, session_id, str(body.get("message") or "").strip()[:4000], reply, seen)
@@ -1238,6 +1322,22 @@ async def voice_note(token: str):
         return JSONResponse({"ok": False, "rule": "gone"}, status_code=404)
     from fastapi.responses import Response
     return Response(audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
+
+
+@router.get("/memory")
+async def memory(request: Request, session: str = ""):
+    """Sasha 241 · S1 PARITY: /next's welcome back — the same memory as /s2 (one per account, shared by /s2, /next and WhatsApp).
+    /s2/memory stays as it is (its alias)."""
+    from app.services.chat_account import chat_account, signed_in
+    account = await chat_account(request)
+    if not signed_in(account):
+        return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
+    from agapi import s2_memory as MEM
+    try:
+        return {"ok": True, **(await MEM.recall(account, session[:64] or None))}
+    except Exception as e:
+        log.warning("[memory] recall failed: %s: %s", type(e).__name__, e)
+        return {"ok": True, "line": None, "recent": [], "screen": None}
 
 
 @router.get("/s2/memory")

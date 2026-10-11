@@ -129,6 +129,7 @@ class OnlyOnS2(unittest.TestCase):
             run(go())
         return [t["name"] for t in seen[0]["tools"]]
 
+    @mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"})   # Sasha 241 · the old S1, exactly, behind its way-back switch
     def test_s1_never_sees_the_radar_and_s2_does(self):
         from app.agent import sasha as AG
         s1 = self.seen("s1")

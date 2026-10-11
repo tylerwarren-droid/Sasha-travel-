@@ -6,6 +6,7 @@ recorded. Offline: fakes only (no call, no email, no Duffel, no database).
 from __future__ import annotations
 
 import asyncio
+import os
 import unittest
 from datetime import date, datetime, time, timedelta, timezone
 from unittest import mock
@@ -207,6 +208,7 @@ class CancelHotelAndFlight(unittest.TestCase):
 
 
 class NextIsUnchanged(unittest.TestCase):
+    @mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"})   # Sasha 241 · the old S1, exactly, behind its way-back switch
     def test_s1_has_none_of_them(self):
         import app.services.llm as LLM
         from app.agent import sasha as AG

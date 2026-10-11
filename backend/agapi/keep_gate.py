@@ -12,7 +12,15 @@ from typing import Optional
 
 def s1_on(account: Optional[str]) -> bool:
     v = os.getenv("SASHA_KEEP_S1", "").strip().lower()
-    if v not in ("1", "all") or not account:
+    # Sasha 241 · S1 PARITY (Tyler's OK, 11 Oct): the Keep is on for EVERY signed-in account on /next, as on /s2. The way back:
+    # SASHA_S1_PARITY=off restores the old gate exactly (below); SASHA_KEEP_S1=off turns just the Keep off.
+    parity = os.getenv("SASHA_S1_PARITY", "on").strip().lower() != "off"
+    if parity:
+        if v == "off" or not account:
+            return False
+        from app.services.chat_account import signed_in
+        return signed_in(account)
+    if v not in ("1", "all") or not account:   # the old gate, exactly (Sasha 224/228)
         return False
     if v == "all":   # Sasha 228 · every signed-in account: a verified guest or the founder — never the public demo's
         from app.services.chat_account import signed_in

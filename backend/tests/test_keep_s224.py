@@ -122,12 +122,14 @@ class S1IsUnchanged(unittest.TestCase):
             run(go())
         return [t["name"] for t in seen[0]["tools"]], seen[0]["system"][1]["text"]
 
+    @mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"})   # Sasha 241 · the old S1, exactly, behind its way-back switch
     def test_next_has_no_keep_by_default(self):
         names, extra = self.seen(FOUNDER, "s1", {"SASHA_KEEP_S1": ""})
         self.assertFalse({"keep_list", "keep_use", "keep_add"} & set(names))
         self.assertNotIn("Their Keep", extra)
         self.assertEqual(names, [t["name"] for t in API.TOOLS])
 
+    @mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"})   # Sasha 241 · the old S1, exactly, behind its way-back switch
     def test_the_flag_turns_it_on_for_the_founder_only(self):
         names, extra = self.seen(FOUNDER, "s1", {"SASHA_KEEP_S1": "1"})
         self.assertTrue({"keep_list", "keep_use"} <= set(names))
@@ -140,6 +142,7 @@ class S1IsUnchanged(unittest.TestCase):
         names, _ = self.seen(ACCT, "s2", {"SASHA_KEEP_S1": ""})
         self.assertTrue({"keep_list", "keep_use", "keep_add"} <= set(names))
 
+    @mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"})   # Sasha 241 · the old S1, exactly, behind its way-back switch
     def test_a_passport_typed_on_next_still_reaches_the_turn_by_default(self):   # S1 exactly as before (S-78's guard only)
         from fastapi import FastAPI
         from fastapi.testclient import TestClient

@@ -1,8 +1,6 @@
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
-import { COOKIE, valid } from '@/lib/founder-session'
-import { guest } from '@/lib/guest-session'
+import { actingAs } from '@/lib/acting-as'
 
 /**
  * S-41 · The booking pass-through. The booking page calls THIS (same origin); it checks the founder's session and
@@ -14,18 +12,18 @@ import { guest } from '@/lib/guest-session'
 async function pass(request: Request, ctx: { params: Promise<{ path: string[] }> }): Promise<Response> {
   // S-62 step 4 · WHO: the founder's session, or a guest verified with Supabase (only while guest sign-in is open).
   // The backend is told which — the founder by name, a guest by their signed access token, which it verifies again.
-  const store = await cookies()
+  // Sasha 241 · WHO IS ACTING (lib/acting-rule.mjs): a real sign-in wins over the founder cookie
+  const acting = await actingAs()
   let who: Record<string, string>
-  if (valid(store.get(COOKIE)?.value)) {
+  if (acting?.kind === 'founder') {
     // Sasha 159 · with his address, so guests on his devices and wifi are never capped
     const ip = (request.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || request.headers.get('x-real-ip') || ''
     who = { 'x-sasha-session': 'founder', ...(ip ? { 'x-sasha-client-ip': ip } : {}) }
   } else {
-    const g = await guest()
-    if (!g) {
+    if (!acting) {
       return NextResponse.json({ ok: false, rule: 'sign_in_required', message: 'Sign in to book with Sasha.' }, { status: 401 })
     }
-    who = { authorization: `Bearer ${g.accessToken}` }
+    who = { authorization: `Bearer ${acting.accessToken}` }
   }
   const key = (process.env.SASHA_BOOKING_KEY ?? '').trim()
   if (!key) {

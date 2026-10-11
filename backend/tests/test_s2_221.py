@@ -6,6 +6,7 @@ Offline: a scripted model, stand-in APIs, 0 live calls.
 from __future__ import annotations
 
 import asyncio
+import os
 import unittest
 from unittest import mock
 
@@ -33,6 +34,7 @@ def seen_by_model(surface):
 
 
 class Isolation(unittest.TestCase):
+    @mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"})   # Sasha 241 · the old S1, exactly, behind its way-back switch
     def test_s1_is_exactly_as_before(self):
         from app.agent import sasha as AG
         from app.services import persona as P

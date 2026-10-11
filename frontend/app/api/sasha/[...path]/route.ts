@@ -1,7 +1,6 @@
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { API_URL, CLIENT_KEY } from '@/lib/api'
-import { COOKIE, valid } from '@/lib/founder-session'
+import { founderActing } from '@/lib/acting-as'
 
 /**
  * Sasha 142 · THE FOUNDER'S CHAT PASS-THROUGH. Since Sasha 142 a web visitor with no sign-in is the PUBLIC demo account
@@ -18,8 +17,7 @@ const ROUTES = ['agents/conductor', 'agents/classify', 'voice/conductor', 'trips
 export const maxDuration = 60   // a conductor turn: the chat's own timeout is 60 s
 
 async function pass(request: Request, ctx: { params: Promise<{ path: string[] }> }): Promise<Response> {
-  const store = await cookies()
-  if (!valid(store.get(COOKIE)?.value)) {
+  if (!(await founderActing())) {   // Sasha 241 · the founder must be the one ACTING (a real sign-in on this browser wins)
     return NextResponse.json({ ok: false, rule: 'founder_session_required', message: 'This pass-through is the founder’s own session only.' }, { status: 401 })
   }
   const key = (process.env.SASHA_BOOKING_KEY ?? '').trim()

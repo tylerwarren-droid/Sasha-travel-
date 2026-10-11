@@ -14,6 +14,7 @@ import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { PayHere } from './PayHere'   // Sasha 220 · pay here, in the conversation   // Sasha 218 · no visible TEST label on /next (display only)
 import { apiUrl, apiHeaders } from '@/lib/api'
 import { MAX_PHOTOS, imagesOf, toJpeg, type Attachment } from '@/lib/photo-attach'
+import { SharedCard, SHARED_KINDS } from '@/app/components/cards/S2Cards'   // Sasha 241 · S1 PARITY
 import type { RichItinerary } from './ItineraryDays'
 import IdeasPanel, { Idea } from './workspace/IdeasPanel'
 import TripPanel from './workspace/TripPanel'
@@ -223,6 +224,8 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   const [payHere, setPayHere] = useState<{ client_secret?: string; url?: string; total_eur?: number; already_paid?: boolean; n: number } | null>(null)   // Sasha 220
   const [calendar, setCalendar] = useState<{ title?: string; starts_at?: string; links: Record<string, string> } | null>(null)   // Sasha 217
   const [readBack, setReadBack] = useState<{ lines: string[]; total?: number | null; what?: string; live?: boolean; status?: string } | null>(null)
+  // Sasha 241 · S1 PARITY: the shared cards (components/cards/) — this turn's, drawn in the chat as on /s2
+  const [shared, setShared] = useState<{ turn?: string; evs: Record<string, unknown>[] }>({ evs: [] })
   const [handoff, setHandoff] = useState<{ code: string; what: string; expires_at?: string; added?: string | null } | null>(null)   // Sasha 228 · "Add from your phone"
   const handoffRef = useRef(handoff)
   handoffRef.current = handoff
@@ -302,6 +305,17 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   // One stable id per chat (per mount = per "Tap to start" session) so the backend can group
   // this conversation's turns in the DB. Minted lazily on the first send (client-only crypto).
   const chatSessionIdRef = useRef<string>('')
+  // Sasha 241 · S1 PARITY: welcome back on /next — the same memory as /s2 and WhatsApp; shown as her first line (nothing spoken)
+  const welcomedRef = useRef(false)
+  useEffect(() => {
+    if (!agent || welcomedRef.current || messages.length) return
+    welcomedRef.current = true
+    if (!chatSessionIdRef.current) chatSessionIdRef.current = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `sess-${Date.now()}`
+    fetch(`/api/sasha-agent/memory?session=${encodeURIComponent(chatSessionIdRef.current)}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((j: { line?: string | null } | null) => { if (j?.line) setMessages(prev => (prev.length ? prev : [{ role: 'assistant', content: untagDeep(j.line) as string }])) })
+      .catch(() => { /* no memory: the chat opens as before */ })
+  }, [agent])   // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Send a turn to the conductor.
@@ -379,7 +393,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
     const turnId = ++turnSeqRef.current
     if (agent) {   // Sasha 205 · the agent path (/next): streamed, spoken in phrases, the Trip view refreshed as tools return
       try {
-        await agentTurn(content, historyBeforeMessage, turnId)
+        await agentTurn(content, historyBeforeMessage, turnId, media)   // Sasha 241 · its 📎 photos go with it
       } finally {
         setIsLoading(false)
         inFlightRef.current = false
@@ -592,7 +606,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   // shown as it streams; phrases go to the avatar through onSashaResponse (the page queues them behind what she's saying);
   // a short acknowledgement goes through onThinking (spoken only when she's quiet); flight searches arrive as the same
   // Live Workspace card; every trip change refreshes the Trip view at once (the 'sasha-plan-refresh' event).
-  const agentTurn = async (content: string, history: any[], turnId: number) => {
+  const agentTurn = async (content: string, history: any[], turnId: number, media: Attachment[] = []) => {
     const plain = (history || []).filter((m: any) => (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim())
       .map((m: any) => ({ role: m.role, content: String(m.content) }))
     // Sasha 212 · NEVER AN EMPTY BUBBLE: her text now arrives with her voice (one utterance per step), so a turn that starts
@@ -612,7 +626,9 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
     const heard = (kind: string) => { if (firstSound === null) { firstSound = performance.now() - t0; firstKind = kind } }
     try {
       const r = await fetch('/api/sasha-agent', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message: content, history: plain, session_id: chatSessionIdRef.current }) })
+        // Sasha 241 · the 📎 photos go WITH the turn (they were dropped on the agent path): the same handlers as /s2 and WhatsApp
+        body: JSON.stringify({ message: content, history: plain, session_id: chatSessionIdRef.current,
+          ...(media.length ? { photos: media.map(a => ({ media_type: a.content_type, content_base64: a.data_b64 })) } : {}) }) })
       if (!r.ok || !r.body) {
         const j = await r.json().catch(() => ({}))
         show(r.status === 401 ? 'Please sign in first — this is your own session for now.' : `I couldn't reach my server (${j.rule ?? r.status}).`)
@@ -654,6 +670,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             else if (ev.kind === 'handover' && ev.url) { if (ev.focus) setHighlight([ev.focus]); onHandover?.(String(ev.url), !!ev.external) }   // their page / Tap to finish   // Sasha 213 · a pick: the cards stay, that one highlighted
             else if (ev.kind === 'pay_here') { setPayHere(p => ({ client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid, n: (p?.n ?? 0) + 1 })); claim('pay', ev.turn) }
             else if (ev.kind === 'calendar' && ev.links) { setCalendar({ title: ev.title, starts_at: ev.starts_at, links: ev.links }); claim('calendar', ev.turn) }
+            else if (SHARED_KINDS.includes(ev.kind)) { const t = ev.turn; setShared(s => ({ turn: t, evs: s.turn === t ? [...s.evs, ev] : [ev] })); claim('shared', t) }   // Sasha 241
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) {
               setReadBack({ lines: ev.read_back, total: ev.total_eur, what: ev.what, live: ev.live, status: ev.status }); claim('readback', ev.turn)
               if (ev.handoff?.code) { setHandoff({ code: String(ev.handoff.code), what: String(ev.handoff.kind || 'passport'), expires_at: ev.handoff.expires_at, added: null }); claim('handoff', ev.turn) }   // Sasha 228 · beside the read-back, never instead of it
@@ -996,6 +1013,9 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
         {payHere && onScreen('pay') && (
           <PayHere key={payHere.n} clientSecret={payHere.client_secret} url={payHere.url} totalEur={payHere.total_eur} alreadyPaid={payHere.already_paid} />
         )}
+        {shared.evs.length > 0 && onScreen('shared') && shared.evs.map((ev, i) => (   /* Sasha 241 · the /s2 cards, on /next */
+          <SharedCard key={`${shared.turn}-${i}`} ev={ev} send={(t: string) => { void sendMessage(t) }} />
+        ))}
         {calendar && onScreen('calendar') && (
           <div className="lw-card">{/* Sasha 217 · the confirmed booking in their calendar: one tap each (nothing leaves their account) */}
             <div className="lw-cardHd"><span className="lw-ci gold">📅</span><div className="lw-meta"><div className="lw-k">Add to your calendar</div>

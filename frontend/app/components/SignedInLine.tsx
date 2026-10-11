@@ -6,8 +6,9 @@
  */
 import { useEffect, useState } from 'react'
 import { ensureGuest } from '@/lib/guest-start'
+import { badge } from '@/lib/acting-rule.mjs'
 
-type Who = { who: 'founder' | 'guest' | null; email?: string | null; guest_sign_in_open: boolean }
+type Who = { who: 'founder' | 'guest' | null; acting?: 'founder' | 'user' | 'guest' | null; email?: string | null; guest_sign_in_open: boolean }
 
 function useWho(): Who | null | 'unknown' {
   const [who, setWho] = useState<Who | null | 'unknown'>(null)
@@ -67,7 +68,8 @@ export function WhoBadge() {
   if (who === null || who === 'unknown') return null
   const email = who.email ?? ''
   const guest = !who.who || email.endsWith('@guests.kanoe.ai')
-  const label = who.who === 'founder' ? 'Signed in as Tyler' : guest ? 'Guest' : `Signed in as ${email || 'you'}`
+  // Sasha 241 · always the account ACTING (/api/auth/whoami, lib/acting-rule.mjs) — a real sign-in is never shown as Tyler
+  const label = badge(who.who === 'founder' ? 'founder' : guest ? 'guest' : 'user', email)
   return (
     <div style={{ position: 'fixed', left: '50%', top: 6, transform: 'translateX(-50%)', zIndex: 50, fontSize: 11, padding: '3px 9px', borderRadius: 999,
       background: 'rgba(17,17,17,.78)', color: '#fff', border: '1px solid rgba(255,255,255,.15)', pointerEvents: 'auto' }}>

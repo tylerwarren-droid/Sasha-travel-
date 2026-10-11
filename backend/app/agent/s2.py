@@ -57,6 +57,10 @@ S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "
             "hotel_request")   # Sasha 235 · upgrade my room
 
 
+# Sasha 241 · S1 PARITY: /next keeps its own "Who she is" and gains S2's capability lines — taken from S2_WHO itself, so the two
+# never drift (her Keep, never a number in the chat, what she can do, her plans, running late, no promises, claim deadlines, not yet)
+S1_CAN = ("## What else she does (the same as on /s2)\n\n- **Their Keep.**" + S2_WHO.split("- **Their Keep.**", 1)[1]).rstrip() + "\n"
+
 # Sasha 237 · ONE BRAIN on WhatsApp (EU 232 §1.1): S2's persona and tools, plus how WhatsApp differs
 WA_NOTE = """
 

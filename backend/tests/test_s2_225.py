@@ -6,6 +6,7 @@ noted MASKED for the founder; /next is unchanged. Offline.
 from __future__ import annotations
 
 import asyncio
+import os
 import unittest
 from unittest import mock
 
@@ -88,6 +89,7 @@ class NextIsUnchanged(unittest.TestCase):
             run(go())
         return [t["name"] for t in seen[0]["tools"]]
 
+    @mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"})   # Sasha 241 · the old S1, exactly, behind its way-back switch
     def test_only_s2_has_them(self):
         s1, s2 = self.tools_for("s1"), self.tools_for("s2")
         self.assertFalse({"what_i_can_do", "note_not_yet"} & set(s1))

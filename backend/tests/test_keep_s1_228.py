@@ -36,6 +36,7 @@ class Gate(unittest.TestCase):
         self.assertFalse(self.on("all", DEMO))
         self.assertFalse(self.on("all", None))
 
+    @mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"})   # Sasha 241 · the old S1, exactly, behind its way-back switch
     def test_one_stays_founder_only_and_unset_is_off(self):
         self.assertFalse(self.on("1", ACCT))
         self.assertFalse(self.on("", ACCT))
@@ -164,6 +165,7 @@ class SaidUpFront(_Keep):
         self.assertEqual(self.passport(bind=False)["say_first"], "I have your passport (ES ••••456) and will apply it.")
         self.assertEqual(run(KEEP.lines(ACCT)), [])                                       # the plan binds nothing
 
+    @mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"})   # Sasha 241 · the old S1, exactly, behind its way-back switch
     def test_not_without_a_flight_not_on_s2_not_when_off(self):
         self.add()
         self.assertIsNone(self.passport(flights=False))

@@ -57,6 +57,12 @@ def test_venue_url(variant: str = "plain") -> str:
     return f"{public_base()}/api/booking/test-venue/{variant}"
 
 
+def test_hotel_desk() -> str:
+    """Sasha 235 · OUR test hotel's front desk: an address on our own inbound domain (never a real hotel's). A guest's request to
+    it (an upgrade) is captured, and the test hotel answers with a scripted reply that says it's a test."""
+    return f"recepcion-prueba@{os.getenv('SASHA_INBOUND_DOMAIN', '').strip() or 'booking.kanoe.ai'}"
+
+
 # ── CR 42 · the test venue's CAPTCHA: reCAPTCHA v2 (checkbox) or Cloudflare Turnstile, a REAL key when Railway has one ─────
 # SASHA_TEST_CAPTCHA = recaptcha (default) | turnstile; the pair RECAPTCHA_SITE_KEY + RECAPTCHA_SECRET_KEY, or TURNSTILE_SITE_KEY +
 # TURNSTILE_SECRET_KEY. Until BOTH of a pair are set, the provider's documented always-pass TEST pair is used (Google:
@@ -877,6 +883,7 @@ _PAGE = """<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Sas
 _HOTEL_PAGE = """<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Kanoe Test Hotel — reservas</title>
 <meta property="og:site_name" content="Kanoe Test Hotel"></head><body>
 <h1>Kanoe Test Hotel</h1><p>Hotel de pruebas de Kanoe. No es un hotel real: aquí solo reserva Sasha, para ensayar la reserva de una habitación.</p>
+<p>Recepción (peticiones de huéspedes): <a href="mailto:{desk}">{desk}</a></p>
 <form method="post" action="/api/booking/test-venue/hotel">
 <input type="hidden" name="token" value="{token}">
 <label for="fecha">Llegada</label><input id="fecha" name="fecha" type="date" required>
@@ -944,7 +951,7 @@ async def test_venue(variant: str):
     if variant == "wizard":
         return HTMLResponse(_WIZARD_ONE.format(token=uuid.uuid4().hex))
     if variant == "hotel":
-        return HTMLResponse(_HOTEL_PAGE.format(token=uuid.uuid4().hex))
+        return HTMLResponse(_HOTEL_PAGE.format(token=uuid.uuid4().hex, desk=escape(test_hotel_desk())))   # Sasha 235 · + its front desk
     if variant == "email":   # Sasha 157 · the email route on OUR venue: an address on our own domain, no form
         addr = f"reservas-prueba@{os.getenv('SASHA_INBOUND_DOMAIN', '').strip() or 'booking.kanoe.ai'}"
         return HTMLResponse(f"""<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Sasha Test Venue — reservas por email</title>

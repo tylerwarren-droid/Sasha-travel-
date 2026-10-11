@@ -240,6 +240,40 @@ async def list_(account: str) -> List[dict]:
     return [_out(i) for i in await _store().items_of(account)]
 
 
+_USE_WORDS = {"keep_save": "Saved", "keep_use": "Used", "keep_show": "Shown on your screen"}
+
+
+async def history(account: str) -> Dict[str, List[dict]]:
+    """Sasha 235 · My Keep: what each item was used for and when — from the Activity rows the Keep already writes (save, use,
+    show; a loyalty number added to a booking is a use). {item_id: [{what, at, for?}]}, newest first. Never a value."""
+    try:
+        from agapi import s2_records as REC
+        acts = await REC.acts(account)
+    except Exception as e:
+        log.info("[keep] history not read: %s", type(e).__name__)
+        return {}
+    out: Dict[str, List[dict]] = {}
+    for a in acts:
+        if a.get("kind") not in _USE_WORDS:
+            continue
+        p = a.get("proof") or {}
+        ref = str(p.get("reference") or "")
+        iid = ref[5:] if ref.startswith("keep:") else str(p.get("item_id") or "")
+        if not iid:
+            continue
+        out.setdefault(iid, []).append({"what": _USE_WORDS[a["kind"]], "at": a.get("at"),
+                                        **({"for": str(p["for"])[:120]} if p.get("for") else {})})
+    for v in out.values():
+        v.sort(key=lambda u: str(u.get("at") or ""), reverse=True)
+    return out
+
+
+async def list_with_uses(account: str) -> List[dict]:
+    """Sasha 235 · the My Keep screen (/s2 and /keep): the masks, each with its uses."""
+    items, uses = await list_(account), await history(account)
+    return [{**i, "uses": uses.get(i["item_id"], [])[:10]} for i in items]
+
+
 async def show(account: str, item_id: str) -> Dict[str, str]:
     """A read-back-only item, to the signed-in person's OWN screen (the route returns it to their browser, never to the model)."""
     st = _store()
@@ -362,6 +396,74 @@ class Fill:
         self._docs.clear()
 
 
+# ── Sasha 235 · LOYALTY APPLIED: a loyalty number (tier free — used for them freely) goes onto a booking with ITS airline or
+# hotel group, opened at the moment of use and dropped after. The program's words decide the match, never a guess. ─────────
+AIRLINE_PROGRAMS = [   # (program words, the airlines' IATA codes it is credited on)
+    (r"iberia", ("IB",)), (r"avios|british airways|executive club", ("BA",)), (r"flying blue|air france|\bklm\b", ("AF", "KL")),
+    (r"miles ?(?:&|and) ?more|lufthansa", ("LH", "LX", "OS")), (r"vueling", ("VY",)), (r"aadvantage|american airlines", ("AA",)),
+    (r"mileageplus|united", ("UA",)), (r"skymiles|delta", ("DL",)), (r"tap miles|miles ?& ?go", ("TP",)),
+    (r"air europa|suma", ("UX",)), (r"duffel", ("ZZ",)),   # ZZ: Duffel Airways, the TEST airline
+]
+HOTEL_PROGRAMS = [   # (program words, the hotel brands' words it is credited at)
+    (r"marriott|bonvoy", r"marriott|sheraton|westin|w hotel|ritz|st\.? regis|le m[eé]ridien|renaissance|courtyard|ac hotel|moxy|aloft|edition|autograph|tribute|luxury collection"),
+    (r"hilton", r"hilton|conrad|waldorf|doubletree|hampton|curio|canopy|embassy suites"),
+    (r"\bihg\b|ihg one", r"intercontinental|holiday inn|crowne plaza|kimpton|hotel indigo|six senses|voco|regent"),
+    (r"hyatt", r"hyatt|andaz|park hyatt|grand hyatt|thompson"),
+    (r"accor|\ball\b", r"sofitel|novotel|ibis|mercure|pullman|fairmont|raffles|swiss[oô]tel|mgallery|mövenpick|movenpick"),
+    (r"meli[aá]", r"meli[aá]|gran meli[aá]|me by meli[aá]|innside|paradisus|sol hotel"), (r"\bnh\b|nh discovery|nh rewards", r"\bnh\b|nhow|tivoli|anantara|avani"),
+    (r"iberostar", r"iberostar"), (r"barcel[oó]", r"barcel[oó]"), (r"radisson", r"radisson"),
+]
+
+
+def airlines_of(program: str) -> tuple:
+    p = (program or "").lower()
+    return next((codes for rx, codes in AIRLINE_PROGRAMS if re.search(rx, p)), ())
+
+
+def hotel_matches(program: str, hotel_name: str) -> bool:
+    p, h = (program or "").lower(), (hotel_name or "").lower()
+    return any(re.search(rx, p) and re.search(brands, h) for rx, brands in HOTEL_PROGRAMS)
+
+
+def applied_line(masked: str) -> str:
+    return f"I've added your {masked} to this booking."
+
+
+@asynccontextmanager
+async def loyalty(account: str):
+    """The account's loyalty numbers, opened for one payment's loop of bookings and dropped after:
+        async with KEEP.loyalty(account) as cards:  [{item_id, masked, program, number}]"""
+    opened: List[dict] = []
+    try:
+        st = _store()
+        items = [i for i in await st.items_of(account) if i["type"] == "loyalty"]
+        if items:
+            dek = await _dek(account, create=False)
+            for it in items:
+                v = K.open_(dek, K.item_aad(account, account, str(it["id"]), it["type"]), bytes(it["nonce"]), bytes(it["ciphertext"]))
+                opened.append({"item_id": str(it["id"]), "masked": it["masked"], "program": v.get("program") or "", "number": v.get("number") or ""})
+    except Exception as e:   # the Keep closed / 037 not applied: no loyalty, the booking itself never fails for it
+        log.info("[keep] loyalty not opened: %s", type(e).__name__)
+        opened = []
+    try:
+        yield opened
+    finally:
+        for o in opened:
+            o["number"] = None
+        opened.clear()
+
+
+async def loyalty_used(account: str, card: dict, what: str) -> None:
+    """Activity (and so My Keep's uses): the number went onto `what` ("Iberia IB 3166 booking ABC123")."""
+    try:
+        st = _store()
+        await st.touch(card["item_id"])
+    except Exception as e:
+        log.info("[keep] loyalty not touched: %s", type(e).__name__)
+    await _activity(account, "keep_use", {"masked": card["masked"]}, {"reference": "keep:" + card["item_id"], "item": card["masked"],
+                                                                    "item_id": card["item_id"], "for": what[:120]})
+
+
 @asynccontextmanager
 async def fill(account: str, session_id: str):
     """AT THE MOMENT OF USE (basket_book, after payment): the approved items for this payment, opened, then dropped — around
@@ -392,7 +494,9 @@ async def fill(account: str, session_id: str):
             if kept.ok:
                 await st.touch(it["id"])
                 await _activity(account, "keep_use", it, {"reference": ", ".join(kept.references), "said": f.get("said"),
-                                                          "read_back_sha256": f.get("read_back_sha256"), "item": it["masked"]})
+                                                          "read_back_sha256": f.get("read_back_sha256"), "item": it["masked"],
+                                                          "item_id": str(it["id"]),   # Sasha 235 · My Keep's uses
+                                                          "for": "booking " + ", ".join(kept.references) if kept.references else "a booking"})
 
 
 # ── the chat never carries a value ────────────────────────────────────────────────────────────────────────────────────────
@@ -505,7 +609,7 @@ async def keep_get(request: Request):
     if not account:
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     try:
-        return JSONResponse({"ok": True, "items": await list_(account), "types": {k: {"tier": v["tier"], "name": v["name"],
+        return JSONResponse({"ok": True, "items": await list_with_uses(account), "types": {k: {"tier": v["tier"], "name": v["name"],
                              "fields": list(v["fields"])} for k, v in K.TYPES.items()}}, headers={"Cache-Control": "no-store"})
     except KeepError as e:
         return _err(e)

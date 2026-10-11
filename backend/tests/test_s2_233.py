@@ -268,3 +268,36 @@ class PickNotABundle234(unittest.TestCase):
         self.assertIn("Pack", PR.pick(self.SVCS, "the massage pack with presoterapia")["name"])
         self.assertEqual(PR.pick(self.SVCS[:1], "a massage")["name"], self.SVCS[0]["name"])   # a lone bundle still qualifies
         self.assertIsNone(PR.pick(self.SVCS, "a haircut"))
+
+
+class HoursCheck235(unittest.TestCase):
+    """Sasha 235 · the page route says the asked time against the venue's listed hours before the link (found in 234: Método Javier
+    Panizo closes at 14:00 on Saturdays and the read-back said "pick Saturday at 5 pm")."""
+    # Google's periods: day 0 is SUNDAY. Mon–Fri 07:00–21:00, Sat + Sun 08:00–14:00
+    PERIODS = [{"open": {"day": d, "hour": 7, "minute": 0}, "close": {"day": d, "hour": 21, "minute": 0}} for d in range(1, 6)] + \
+              [{"open": {"day": d, "hour": 8, "minute": 0}, "close": {"day": d, "hour": 14, "minute": 0}} for d in (6, 0)]
+    READ = {"facts": [{"kind": "hours", "source_kind": "places", "source_label": "Google", "evidence": {"periods": PERIODS}}]}
+
+    def test_closed_at_the_asked_time_is_said(self):
+        from datetime import date, time
+        from booking_signer.ladder_routes import hours_check
+        h = hours_check(self.READ, date(2026, 10, 17), time(17, 0))
+        self.assertFalse(h["open"])
+        self.assertIn("closed on Saturday 17 October at 17:00", h["line"])
+        self.assertIn("Sat: 08:00–14:00", h["line"])
+
+    def test_open_is_not_a_free_slot(self):
+        from datetime import date, time
+        from booking_signer.ladder_routes import hours_check
+        h = hours_check(self.READ, date(2026, 10, 17), time(12, 0))
+        self.assertTrue(h["open"])
+        self.assertIn("open isn't the same as a free slot", h["line"])
+
+    def test_no_hours_says_nothing(self):
+        from datetime import date, time
+        from booking_signer.ladder_routes import hours_check
+        self.assertIsNone(hours_check({"facts": []}, date(2026, 10, 17), time(12, 0)))
+
+    def test_the_route_puts_it_before_the_link(self):
+        src = open(__import__("booking_signer.ladder_routes", fromlist=["x"]).__file__).read()
+        self.assertIn("lines.insert(2 if offer else 1, hours[\"line\"])", src)

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import VoiceButton from '@/app/components/VoiceButton'
 import { PayHere } from '@/app/components/PayHere'
 import S2Hello from './S2Hello'
+import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
 import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { apiHeaders, apiUrl } from '@/lib/api'
 
@@ -530,7 +531,7 @@ function Activity() {
 
 export default function S2App() {
   const signedIn = useSignedIn()
-  const [tab, setTab] = useState<'sasha' | 'activity'>('sasha')
+  const [tab, setTab] = useState<'sasha' | 'activity' | 'keep'>('sasha')   // Sasha 235 · 'keep': My Keep
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -687,12 +688,20 @@ export default function S2App() {
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', paddingTop: 'max(56px, calc(env(safe-area-inset-top) + 44px))' }}>{/* room for the site's sign-in badge above */}
         <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
         <nav style={{ display: 'flex', gap: 6 }}>
-          {(['sasha', 'activity'] as const).map(t => (
+          {(['sasha', 'activity', 'keep'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 14px', borderRadius: 999, border: `1px solid ${tab === t ? C.gold : C.line}`, background: 'transparent', color: tab === t ? C.gold : C.dim, fontWeight: 600 }}>
-              {t === 'sasha' ? 'Sasha' : 'Activity'}</button>))}
+              {t === 'sasha' ? 'Sasha' : t === 'keep' ? 'My Keep' : 'Activity'}</button>))}
         </nav>
       </header>
-      {tab === 'activity' ? <Activity /> : (
+      {tab === 'keep' ? (   /* Sasha 235 · My Keep: the same screen as S1's /keep — masks, what each was used for and when, add, delete */
+        <section style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
+          <div className="mx-3 mb-4 rounded-2xl bg-white pb-4 pt-2 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+            <h2 className="px-4 pb-1 pt-3 text-xl font-bold">My Keep</h2>
+            <p className="px-4 pb-2 text-sm opacity-60">Sasha never sees these — only “Passport ES ••••456”. They’re filled in where needed, at that moment, after your yes.</p>
+            <KeepScreen />
+          </div>
+        </section>
+      ) : tab === 'activity' ? <Activity /> : (
         <>
           <section style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, padding: '0 16px 12px' }}>
             {msgs.length === 0 ? (

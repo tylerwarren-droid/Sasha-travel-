@@ -110,6 +110,7 @@ RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_w
 RENDER.update({"keep_list": "inline", "keep_use": "inline", "keep_add": "keep_capture"})
 RENDER.update({"what_i_can_do": "capabilities", "note_not_yet": "inline"})   # Sasha 225 · /s2's capability card
 RENDER.update({"note_rental": "inline"})   # Sasha 227
+RENDER.update({"hotel_request": "read_back"})   # Sasha 235 · upgrade my room: its read-back, then the outcome on the same card
 RENDER.update({"my_plans": "plans", "running_late": "read_back", "change_booking": "read_back", "cancel_booking": "read_back"})   # Sasha 226   # Sasha 224 · CR 63 + the photo capture   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
 KINDS_S2_ONLY = {"keep_capture", "capabilities", "plans", "notice"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
@@ -182,12 +183,12 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
     if tool == "send_whatsapp" and res.get("status") == "open_in_their_whatsapp" and res.get("open"):   # Sasha 230 · /s2: their own WhatsApp
         return {"type": "render", "kind": "wa_open", "to": res.get("to") or {}, "text": res.get("text") or "", "open": res["open"],
                 "why": res.get("why") or ""}
-    if tool in ("send_email", "send_whatsapp") and res.get("status") in ("sent", "not_sent"):   # Sasha 217 · the card becomes the outcome
+    if tool in ("send_email", "send_whatsapp", "hotel_request") and res.get("status") in ("sent", "not_sent"):   # Sasha 217 · the card becomes the outcome (235: + hotel_request)
         m = res.get("message") or {}
         to = m.get("to") or {}
         who = (f"{to.get('name')} <{to.get('address')}>" if to.get("name") and to.get("address") else to.get("address") or to.get("name")
                if isinstance(to, dict) else str(to or ""))
-        return {"type": "render", "kind": "read_back", "what": "email" if tool == "send_email" else "whatsapp", "status": res["status"],
+        return {"type": "render", "kind": "read_back", "what": "whatsapp" if tool == "send_whatsapp" else "email", "status": res["status"],
                 "live": res["status"] == "sent", "read_back": [x for x in (f"To: {who}" if who else "", f"Subject: {m['subject']}" if m.get("subject") else "") if x]}
     if kind == "read_back" and not res.get("read_back"):   # Sasha 216 · a sent email has nothing to read back
         return None

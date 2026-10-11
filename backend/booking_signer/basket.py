@@ -311,6 +311,28 @@ async def booked(account: str, item_id: str, *, booking_reference: str, order_id
     return await _settle(account, item_id, "booked", booking_reference=booking_reference, order_id=order_id, trip_item_id=trip_item_id)
 
 
+async def add_to_record(account: str, item_id: str, extra: Dict[str, Any]) -> bool:
+    """Sasha 235 · PACIOLI · facts added to a booked item's record (its snapshot), e.g. the loyalty programme it was booked with —
+    the number's MASK only, never the number (that goes to the provider, not into this table)."""
+    async def fn(conn):   # read, merge, write back — the snapshot is written as refresh() writes it (json.dumps; _row reads both shapes)
+        async with conn.transaction():
+            cur = await conn.fetchval("select snapshot from trip_basket_items where account_id = $1 and id = $2 for update",
+                                      uuid.UUID(account), uuid.UUID(item_id))
+            if cur is None and not await conn.fetchval("select 1 from trip_basket_items where account_id = $1 and id = $2",
+                                                       uuid.UUID(account), uuid.UUID(item_id)):
+                return None
+            snap = json.loads(cur) if isinstance(cur, str) else dict(cur or {})
+            return await conn.fetchval("update trip_basket_items set snapshot = $3::jsonb, updated_at = now() where account_id = $1 and id = $2 "
+                                       "returning id", uuid.UUID(account), uuid.UUID(item_id), json.dumps({**snap, **extra}))
+    try:
+        ok = bool(await _go(fn))
+    except Exception as e:
+        _log(PACIOLI, "item %s record not added (%s)", item_id[:8], type(e).__name__)
+        return False
+    _log(PACIOLI, "item %s record %s", item_id[:8], "added" if ok else "not found")
+    return ok
+
+
 async def failed(account: str, item_id: str, why: str) -> Dict[str, Any]:
     return await _settle(account, item_id, "failed", failed_why=why[:300])
 

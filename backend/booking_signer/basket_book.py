@@ -351,9 +351,25 @@ async def _moved(account: str, mv: Dict[str, Any], where: str) -> Dict[str, Any]
     return {"where": "phone", "url": got["url"], "session_id": got["id"], "phone": phone, "eur": amount, "moved": True}
 
 
-async def _book_rows(account: str, sid: str, rows: list, contact: dict, email, people, docs, kept) -> None:
-    """book_paid's loop (Sasha 224: moved here unchanged, so the Keep's fill wraps it): every held item booked by its provider."""
+def _loyalty_for_flight(cards: list, c: dict) -> tuple:
+    """Sasha 235 · ([Duffel loyalty_programme_accounts], [the cards used]) for this flight's own airlines."""
+    from agapi import s2_keep as KEEP
+    import re as _re
+    flown = set(_re.findall(r"\b([A-Z0-9]{2}) \d", c.get("flights") or ""))
+    accounts, used = [], []
+    for k in cards or []:
+        code = next((x for x in KEEP.airlines_of(k["program"]) if x in flown), None)
+        if code and k.get("number") and code not in {a["airline_iata_code"] for a in accounts}:
+            accounts.append({"airline_iata_code": code, "account_number": k["number"]})
+            used.append(k)
+    return accounts, used
+
+
+async def _book_rows(account: str, sid: str, rows: list, contact: dict, email, people, docs, kept, cards=None, applied=None) -> None:
+    """book_paid's loop (Sasha 224: moved here unchanged, so the Keep's fill wraps it): every held item booked by its provider.
+    Sasha 235 · `cards`: the Keep's loyalty numbers (opened for this loop); each one used goes in `applied` (the lines she says)."""
     from . import hotel_test as HT, travel as T, trip_book as TB
+    applied = applied if applied is not None else []
     for r in [r for r in rows if r["state"] == "pending_payment"]:
         s = r.get("snapshot") or {}
         if r["kind"] == "stay":
@@ -364,13 +380,24 @@ async def _book_rows(account: str, sid: str, rows: list, contact: dict, email, p
                 await BK.booked(account, r["id"], booking_reference=ref, trip_item_id=tid)
             except Exception as e:
                 await BK.failed(account, r["id"], f"not recorded ({type(e).__name__})")
+                continue
+            # Sasha 235 · the hotel group's loyalty number on the stay's record (its mask: the TEST hotel has no system to receive the
+            # number — a hotel connector would send it with the reservation)
+            from agapi import s2_keep as KEEP
+            k = next((k for k in cards or [] if KEEP.hotel_matches(k["program"], s.get("name") or "")), None)
+            if k and await BK.add_to_record(account, r["id"], {"loyalty": {"program": k["program"], "masked": k["masked"]}}):
+                applied.append(KEEP.applied_line(k["masked"]))
+                await KEEP.loyalty_used(account, k, f"{s.get('name') or 'the hotel'} booking {ref}")
         elif r["kind"] == "flight":
             c = _card(r)
-            o = await T.order(c, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"), people, **({"documents": docs} if docs else {}))
+            loy, loy_cards = _loyalty_for_flight(cards, c)   # Sasha 235
+            o = await T.order(c, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"), people, **({"documents": docs} if docs else {}),
+                              **({"loyalty": loy} if loy else {}))
             if "why" in o:   # a TEST fare withdrawn between the quote and the payment: the same flight, priced again
                 again = await TB._same_or_cheaper(c, int(r.get("party") or 2))
                 if again is not None and again.get("flights") == c.get("flights"):
-                    o2 = await T.order(again, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"), people, **({"documents": docs} if docs else {}))
+                    o2 = await T.order(again, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"), people, **({"documents": docs} if docs else {}),
+                                       **({"loyalty": loy} if loy else {}))
                     if "why" not in o2:
                         c, o = again, o2
             if kept is not None:
@@ -381,6 +408,12 @@ async def _book_rows(account: str, sid: str, rows: list, contact: dict, email, p
             tid = await T.RECORD(account, c, o["booking_reference"] or "")
             await BK.booked(account, r["id"], booking_reference=o["booking_reference"] or "", order_id=o.get("order_id"), trip_item_id=tid)
             await BK.event("duffel_order", o.get("order_id") or f"{sid}:{r['id']}", "order.created", o, verified=True, item_id=r["id"])
+            sent = set(o.get("loyalty_sent") or [])   # Sasha 235 · only what Duffel's order actually carried
+            from agapi import s2_keep as KEEP
+            for k in loy_cards:
+                if any(x in sent for x in KEEP.airlines_of(k["program"])):
+                    applied.append(KEEP.applied_line(k["masked"]))
+                    await KEEP.loyalty_used(account, k, f"{c.get('owner') or ''} {c.get('flights') or ''} booking {o.get('booking_reference') or ''}".strip())
 
 
 async def book_paid(account: str, sid: str) -> Dict[str, Any]:
@@ -403,8 +436,19 @@ async def book_paid(account: str, sid: str) -> Dict[str, Any]:
         log.info("[basket_book] the Keep wasn't opened for %s: %s", sid[:14], type(e).__name__)
         kept_cm, kept = None, None
     docs = (kept.duffel() or None) if kept else None
+    applied: list = []   # Sasha 235 · "I've added your Iberia Plus ••••432 to this booking."
     try:
-        await _book_rows(account, sid, rows, contact, email, people, docs, kept)
+        try:
+            from agapi import s2_keep as KEEP
+            loy_cm = KEEP.loyalty(account)
+        except Exception as e:
+            log.info("[basket_book] no loyalty for %s: %s", sid[:14], type(e).__name__)
+            loy_cm = None
+        if loy_cm is None:
+            await _book_rows(account, sid, rows, contact, email, people, docs, kept)
+        else:
+            async with loy_cm as cards:
+                await _book_rows(account, sid, rows, contact, email, people, docs, kept, cards=cards, applied=applied)
     finally:
         if kept_cm is not None:
             try:
@@ -416,10 +460,12 @@ async def book_paid(account: str, sid: str) -> Dict[str, Any]:
     bad = [r for r in rows if r["state"] == "failed"]
     say = "✅ Booked — everything's in your itinerary." if done and not bad else ("Partly booked:" if done else "Not booked:")
     say += "\n" + "\n".join(r.get("status_line") or "" for r in done + bad)   # Pacioli's lines, word for word
+    if applied and done:
+        say += "\n" + "\n".join(dict.fromkeys(applied))   # Sasha 235 · only a number a booked item actually carried
     from . import test_deposit as TD
     TD.note(sid, bool(done), say.split("\n")[0])   # Stripe's return page says what happened
     return {"status": "booked" if done else "failed", "say": say, "booked": [r["status_line"] for r in done],
-            "failed": [r["status_line"] for r in bad]}
+            "failed": [r["status_line"] for r in bad], **({"loyalty": list(dict.fromkeys(applied))} if applied else {})}
 
 
 __all__ = ["quote", "current", "pay", "book_paid", "lines_of"]

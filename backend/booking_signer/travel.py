@@ -156,7 +156,7 @@ def read_back(c: dict, name: str, email: str) -> List[str]:
 
 
 async def order(c: dict, name: str, email: str, phone: Optional[str], people: Optional[list] = None,
-                documents: Optional[list] = None) -> Dict[str, Any]:
+                documents: Optional[list] = None, loyalty: Optional[list] = None) -> Dict[str, Any]:
     """The Duffel TEST order — only after Stripe recorded the test payment. {booking_reference, order_id} or {why}."""
     if not token():
         return {"why": "no Duffel TEST token"}
@@ -177,6 +177,13 @@ async def order(c: dict, name: str, email: str, phone: Optional[str], people: Op
         documents = [d for d in documents if d.get("type") in ok_types]
     if documents and pax:   # Sasha 224 · CR 63 — the Keep's identity documents (opened just for this order) → the account holder's passenger
         pax[next((k for k, p in enumerate(people or []) if p.get("is_account_holder")), 0) % len(pax)]["identity_documents"] = documents
+    # Sasha 235 · LOYALTY APPLIED: the Keep's number for THIS airline → Duffel's loyalty_programme_accounts on the account holder's
+    # passenger — only programmes this offer takes (when it says), so an unsupported one never fails the order
+    if loyalty and pax:
+        ok_codes = o.get("supported_loyalty_programmes")
+        loyalty = [a for a in loyalty if ok_codes is None or a.get("airline_iata_code") in set(ok_codes or [])]
+        if loyalty:
+            pax[next((k for k, p in enumerate(people or []) if p.get("is_account_holder")), 0) % len(pax)]["loyalty_programme_accounts"] = loyalty
     s, j = await HTTP("POST", "/air/orders", {"data": {"type": "instant", "selected_offers": [c["id"]], "passengers": pax,
                                                        "payments": [{"type": "balance", "currency": o["total_currency"], "amount": o["total_amount"]}],
                                                        "metadata": {"sasha": "test_booking"}}})
@@ -185,7 +192,8 @@ async def order(c: dict, name: str, email: str, phone: Optional[str], people: Op
     d = j["data"]
     if d.get("live_mode"):
         return {"why": "Duffel answered in LIVE mode — refused"}
-    return {"booking_reference": d.get("booking_reference"), "order_id": d.get("id"), "documents_sent": len(documents or [])}
+    return {"booking_reference": d.get("booking_reference"), "order_id": d.get("id"), "documents_sent": len(documents or []),
+            "loyalty_sent": [a["airline_iata_code"] for a in (loyalty or [])]}   # Sasha 235
 
 
 async def _record(account: str, c: dict, ref: str) -> Optional[str]:

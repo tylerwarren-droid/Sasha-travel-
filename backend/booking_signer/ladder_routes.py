@@ -909,6 +909,25 @@ def inbound_ready() -> bool:
     return bool(os.getenv("SASHA_INBOUND_DOMAIN", "").strip() and os.getenv("RESEND_WEBHOOK_SECRET", "").strip())
 
 
+def hours_check(read: dict, on, at) -> Optional[dict]:
+    """Sasha 235 · {open, words, line} for the asked local date + time by the hours the read holds (the venue's site and Google,
+    merged: open only where every source says open). None when no hours are listed — then nothing is said."""
+    from . import hours as H
+    week, _notes = H.merge(H.sources(read))
+    if not week:
+        return None
+    oa = H.open_at(week, datetime.combine(on, at))
+    day = H._DAY3[on.weekday()]
+    listed = ", ".join(f"{a:%H:%M}–{b:%H:%M}" for a, b in week.get(on.weekday(), [])) or "closed"
+    when = f"{on.strftime('%A')} {on.day} {on.strftime('%B')} at {at:%H:%M}"
+    if oa["open"]:
+        line = f"By their listed hours they're open then ({day} {listed}) — open isn't the same as a free slot; their page shows that."
+    else:
+        line = (f"Heads up: by their listed hours they're closed on {when} ({oa['words']}; {day}: {listed}). "
+                f"Pick a time inside their hours on their page, or tell me another time.")
+    return {"open": oa["open"], "words": oa["words"], "listed": listed, "line": line}
+
+
 @router.post("/links")
 async def prepare_link(request: Request):
     body = await _json(request)
@@ -955,6 +974,11 @@ async def prepare_link(request: Request):
             if offer:
                 lines.insert(1, f"Their {offer['platform']} page lists “{offer['service']}”" + (f" ({offer['price']})" if offer["price"] else "")
                              + f" — that's the one to choose. {offer['platform']} doesn't show me which times are free; their page shows you.")
+    # Sasha 235 · the asked time against the venue's LISTED hours, said before the link (found in 234: "pick Saturday at 5 pm" for a
+    # venue that closes at 14:00 on Saturdays). Open is not available — the line says so; unknown hours say nothing.
+    hours = None if nights else hours_check(read, p.on, p.at)
+    if hours and hours.get("line"):
+        lines.insert(2 if offer else 1, hours["line"])
     plan = _plan_of(body)   # Sasha 132 · the escalation the guest's ONE yes covers — this link is made only after that yes
     if plan:
         lines.append(plan)
@@ -982,6 +1006,7 @@ async def prepare_link(request: Request):
                                       link_id=link_id, venue=venue, when=f"{p.on.isoformat()} {p.at.strftime('%H:%M')}")
     return {"link_id": link_id, "trip_item_id": item, "platform": link.platform, "slot_filled": link.slot_filled, "url": link.url,
             "prefill_tried": link.prefill_tried, "read_back": {"lines": lines},   # Sasha 138
+            **({"hours": {k: hours[k] for k in ("open", "words", "listed")}} if hours else {}),   # Sasha 235
             **({"offer": offer} if offer else {}),   # Sasha 233
             "forward_to": forward_to, "read_back": {"lines": lines, "sha256": rec["read_back_sha256"]}, "phone": phone}
 

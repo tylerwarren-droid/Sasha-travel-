@@ -159,7 +159,8 @@ def _card(ev: dict, out, title: str) -> None:
         per = {"monthly": "a month", "yearly": "a year", "weekly": "a week", "quarterly": "a quarter"}
         for b in (ev.get("items") or [])[:12]:
             lines.append(" · ".join(x for x in (b.get("service"), " ".join(x for x in (b.get("price"), per.get(b.get("how_often") or "", "")) if x),
-                                                 f"renews {b['renews']}" + (" (expected)" if b.get("expected") else "") if b.get("renews") else "") if x))
+                                                 f"renews {b['renews']}" + (" (expected)" if b.get("expected") else "") if b.get("renews") else "",
+                                                 b.get("not_yet") or "") if x))
         if ev.get("total"):
             lines.append(f"About {ev['total']} a month. To cancel one, say which.")
     lines = [_cut(l, 300) for l in lines if str(l or "").strip()]

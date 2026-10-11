@@ -128,5 +128,33 @@ class CancelPageReachesTheChat(unittest.TestCase):
         self.assertEqual(out.sent, [f"Tap to finish: {SP}"])
 
 
+class ListKeepsWhatIsStillPaid(unittest.TestCase):
+    """Live (scratch A, 9028243): Spotify, its cancel page handed over, left the list while AgAPI's €67.03 still counted it; and /next's
+    later plain call said 'From statement' for a list read from receipts."""
+    def test_handed_over_stays_marked_and_the_source_is_remembered(self):
+        from datetime import datetime, timezone
+        from agapi import s2_subscriptions as SUBS, v0 as API
+        rows = [{"subscription_id": "sub_nf", "merchant": "Netflix", "amount": {"amount_minor": 1399, "currency": "EUR"}, "cadence": "monthly",
+                 "last_charge": "2026-10-03", "likely_unused": False, "why": [], "status": "active"},
+                {"subscription_id": "sub_sp", "merchant": "Spotify", "amount": {"amount_minor": 1099, "currency": "EUR"}, "cadence": "monthly",
+                 "last_charge": "2026-10-11", "likely_unused": False, "why": [], "status": "handed_over"},
+                {"subscription_id": "sub_x", "merchant": "Gone", "amount": {"amount_minor": 500, "currency": "EUR"}, "cadence": "monthly",
+                 "last_charge": "2026-09-01", "likely_unused": False, "why": [], "status": "cancelled"}]
+
+        async def call(op, body, approval=None):
+            if op == "users.register":
+                return {"ok": True, "result": {"end_user_id": "usr_" + "4" * 26}}
+            return {"ok": True, "result": {"subscriptions": rows, "monthly_total": [{"amount_minor": 2498, "currency": "EUR"}], "likely_unused": 0}}
+        with mock.patch.object(SUBS, "CALL", call), mock.patch.dict(SUBS._USERS, {}, clear=True), mock.patch.dict(SUBS._SOURCE, {ACCOUNT: "receipts in your Gmail"}), \
+                mock.patch.dict(SUBS._LAST, {}, clear=True):
+            ctx = API.Ctx(account=ACCOUNT, user_said="", surface="s1", started=datetime.now(timezone.utc))
+            r = asyncio.run(SUBS.run_tool(ctx, "find_subscriptions", {}))["result"]
+        self.assertEqual([i["service"] for i in r["render"]["items"]], ["Netflix", "Spotify"])
+        self.assertEqual(r["render"]["items"][1]["not_yet"], "cancel page handed over — not cancelled yet")
+        self.assertEqual(r["render"]["source"], "receipts in your Gmail")
+        self.assertIn("Spotify: EUR 10.99 a month (cancel page handed over — not cancelled yet)", r["say"])
+        self.assertTrue(r["say"].startswith("From your receipts in your Gmail"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -46,6 +46,8 @@ _PENDING: Dict[str, dict] = {}        # account|subscription → {read_back_id, 
 _CONSENT_ASKED: Dict[str, float] = {}  # CR 84 · account → when the Gmail sentence was said (their yes must come in a later turn)
 _CONSENTED: Dict[str, dict] = {}      # CR 84 · account → the sentence's version + sha256, and when they said yes
 _LAST: Dict[str, list] = {}           # CR 84 · account → the last list (to find "Spotify" by name)
+_SOURCE: Dict[str, str] = {}          # Sasha 243 · account → where their list last came from (a later plain call is said as that)
+_NOT_YET = {"handed_over": "cancel page handed over — not cancelled yet", "cancel_requested": "cancel requested — not confirmed yet"}
 STATEMENT_TTL_S, MAX_BYTES = 1800, 5_000_000
 MEDIA = {"text/csv", "text/plain", "application/pdf", "image/png", "image/jpeg", "image/webp"}
 
@@ -121,9 +123,11 @@ def _say_list(subs: list, tot: str, source: str) -> str:
         per = {"monthly": "a month", "yearly": "a year", "weekly": "a week", "quarterly": "a quarter"}.get(b["how_often"], "")
         renew = (f", renews {b['renews']}" + (" (expected — the email doesn't say)" if (b.get("renews_basis") or "").startswith("expected") else "")
                  if b.get("renews") else "")
-        lines.append(f"{b['service']}: {b['amount']}{' ' + per if per else ' (the receipt doesn’t say how often)'}{renew}")
+        lines.append(f"{b['service']}: {b['amount']}{' ' + per if per else ' (the receipt doesn’t say how often)'}{renew}"
+                     + (f" ({_NOT_YET[b['status']]})" if b.get("status") in _NOT_YET else ""))
     unknown = [b["service"] for b in subs if b["how_often"] not in ("monthly", "yearly", "weekly", "quarterly")]
-    return (f"From your {source}, you're paying for {len(subs)}: " + "; ".join(lines) + f". That's about {tot} a month"
+    lead = "From what I found earlier" if source == "subscriptions I found earlier" else f"From your {source}"
+    return (f"{lead}, you're paying for {len(subs)}: " + "; ".join(lines) + f". That's about {tot} a month"
             + (f", not counting {', '.join(unknown)}." if unknown else "."))
 
 
@@ -134,7 +138,7 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
     if name == "find_subscriptions":
         body: Dict[str, Any] = {"end_user": uid}
         ref = args.get("statement_ref")
-        source = "statement"
+        source = _SOURCE.get(ctx.account, "subscriptions I found earlier")   # Sasha 243 · /next said "From statement" for a receipts list
         if args.get("from_gmail") and not ref:   # CR 84 · receipts in their Gmail (read-only)
             from agapi import s2_gmail_receipts as GR
             c = GR.consent()
@@ -161,10 +165,12 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             if not st or st["account"] != ctx.account:
                 return {"ok": False, "error": {"code": "statement_unknown", "message": "that statement isn't here any more — ask them to upload it again"}}
             body["statement"] = {"media_type": st["media_type"], "content_base64": st["b64"]}
+            source = "statement"
         elif args.get("use_sample"):
             if via() == "live":
                 return {"ok": False, "error": {"code": "sample_test_only", "message": "the sample statement is for test mode"}}
             body["statement"] = {"sample": True}
+            source = "statement"
         r = await CALL("subscriptions.find", body)
         body.pop("emails", None)                           # the emails are dropped here, as soon as AgAPI has answered
         if ref:
@@ -173,14 +179,16 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             return _fail(r)
         res = r["result"]
         tot = ", ".join(f"{t['currency']} {t['amount_minor'] / 100:.2f}" for t in res["monthly_total"])
-        subs = [_brief(s) for s in res["subscriptions"] if s["status"] == "active"]
+        subs = [_brief(s) for s in res["subscriptions"] if s["status"] != "cancelled"]   # Sasha 243 · still paid until it's cancelled: AgAPI's
+        _SOURCE[ctx.account] = source                                                    # total counts it (live: Spotify left out, its €10.99 kept in)
         _LAST[ctx.account] = subs
         return {"ok": True, "result": {"subscriptions": subs, "monthly_total": tot, "say": _say_list(subs, tot, source),
                                        "likely_unused": res["likely_unused"], "note": res.get("note"),
                                        **({"emails": res["emails"]} if res.get("emails") else {}),
                                        "render": {"kind": "subscriptions", "items": [{"service": b["service"], "price": b["amount"], "how_often": b["how_often"],
                                                   "renews": b.get("renews"), "expected": (b.get("renews_basis") or "").startswith("expected"),
-                                                  "subscription_id": b["subscription_id"]} for b in subs], "total": tot, "source": source}}}
+                                                  "subscription_id": b["subscription_id"], **({"not_yet": _NOT_YET[b["status"]]} if b["status"] in _NOT_YET else {})}
+                                                 for b in subs], "total": tot, "source": source}}}
     if name == "plan_cancel_subscription":
         r = await CALL("subscriptions.cancel_plan", {"end_user": uid, "subscription_id": args["subscription_id"]})
         if not r.get("ok"):

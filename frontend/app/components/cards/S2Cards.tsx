@@ -269,7 +269,8 @@ export function SubscriptionsCard({ items, total, source, send }: { items: Ev[];
           textAlign: 'left', cursor: 'pointer', fontSize: 15 }}>
           <span style={{ fontWeight: 600 }}>{untag(String(s.service))}</span>
           <span style={{ color: C.dim, fontSize: 14, textAlign: 'right' }}>{untag(String(s.price))}{per[s.how_often] || ''}
-            {s.renews ? <> · renews {untag(String(s.renews))}{s.expected ? ' (expected)' : ''}</> : null}</span>
+            {s.renews ? <> · renews {untag(String(s.renews))}{s.expected ? ' (expected)' : ''}</> : null}
+            {s.not_yet ? <span style={{ display: 'block', color: C.gold, fontSize: 12.5 }}>{untag(String(s.not_yet))}</span> : null}</span>
         </button>))}
       <div style={{ fontSize: 12.5, color: C.dim, marginTop: 6 }}>From {untag(source || 'your receipts')} · tap one to cancel it — nothing happens until you say yes</div>
     </Box>)

@@ -263,6 +263,13 @@ def is_restaurant(asked_for) -> bool:
     return not _DEMO_ONLY.search(t) and bool(_RESTAURANT.search(t) or _REAL_BEAUTY.search(t))
 
 
+def eating_out(asked_for) -> bool:
+    """Sasha 233 · a RESTAURANT request: a restaurant word and no spa/beauty word ("a Thai massage" is a spa, "Thai dinner" is not).
+    (is_restaurant() above is the founder's REAL set — restaurants AND spas — so it can't tell them apart.)"""
+    t = str(asked_for or "")
+    return bool(_RESTAURANT.search(t)) and not _REAL_BEAUTY.search(t)
+
+
 def _s2_demo_account(account: Optional[str]) -> bool:
     """Sasha 221 · who has the S2 demo setting: an account listed in SASHA_S2_DEMO_ACCOUNTS (a scratch fixture). Sasha 232 · the founder
     only if listed (Tyler, 10 Oct: real bookings on /s2) — S1's founder powers (standin, rehearsal, calls) are unchanged."""
@@ -940,7 +947,8 @@ async def prepare_link(request: Request):
     # booking calendar is robots-closed on all three, so she never says a time is free; the person picks it and presses Book.
     offer = None
     asked = str(body.get("asked_for") or "").strip()[:200]
-    if asked and not nights and not is_restaurant(asked):
+    # ⚠ not is_restaurant(): that one is TRUE for spas too (the founder's "real" set). Found live on BELMONT (11 Oct): the read never ran.
+    if asked and not nights and not eating_out(asked):
         from . import platform_read as PR
         if PR.named(link.url) in PR.SLOTS_CLOSED:
             offer = await PR.offer(None, link.url, asked)

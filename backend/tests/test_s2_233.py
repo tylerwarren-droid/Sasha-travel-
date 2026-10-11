@@ -172,8 +172,16 @@ class ServicesFromTheirPage(unittest.TestCase):
         from booking_signer import ladder_routes as LR
         self.assertIn('{"asked_for": _what(a)} if getattr(ctx, "surface", "s1") == "s2"', inspect.getsource(VN._hold_inner))
         src = inspect.getsource(LR.prepare_link)
-        self.assertIn("not is_restaurant(asked)", src)
+        self.assertIn("not eating_out(asked)", src)
         self.assertIn("PR.SLOTS_CLOSED", src)
+
+    def test_a_spa_is_not_a_restaurant(self):
+        """Found live (BELMONT, 11 Oct): the guard used is_restaurant(), TRUE for spas too — the read never ran."""
+        from booking_signer import ladder_routes as LR
+        for spa in ("a 60-minute relaxing massage", "a Thai massage", "manicure", "a facial at a spa"):
+            self.assertFalse(LR.eating_out(spa), spa)
+        for food in ("dinner for two", "a table for 4", "Thai dinner", "tapas"):
+            self.assertTrue(LR.eating_out(food), food)
 
 
 class CardsUnderTheirLine(unittest.TestCase):

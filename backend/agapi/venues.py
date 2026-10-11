@@ -440,7 +440,9 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
                                     url, held["id"], venue, held["when"])
         sent = "sent" in out and "not" not in out
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where,
-                "platform": held.get("platform"), **({} if sent else {"open": url}), **({"page_url": url} if url else {})}
+                "platform": held.get("platform"), **({} if sent else {"open": url}), **({"page_url": url} if url else {}),
+                # Sasha 236 · found live on /s2: "their page is on your phone" when it wasn't sent there
+                **({} if sent else {"say": "Their page is on this screen — Tap to finish opens it. Never say it's on their phone."})}
     if rung == "email":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/emails/{held['id']}/send", {"read_back_sha256": held["sha"], "approval": how}, timeout=60)
         if status != 200 or j.get("status") != "sent":

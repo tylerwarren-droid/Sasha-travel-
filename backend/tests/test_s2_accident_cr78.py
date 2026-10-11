@@ -241,3 +241,31 @@ class ActivitiesCR81(FinePrint):
         from app.agent import sasha
         self.assertIn("activities", sasha.KINDS_S2_ONLY)
         self.assertIn("activities", FP.RENDER_KINDS)
+
+
+class FormClaimsCR82(MoneyBackCR78):
+    """CR 82 · an airline that takes claims only on its own web form: the read-back, then — on a later yes — the fields prepared, the form's
+    address passed through; never said to be filed (they press submit on the airline's site)."""
+    FORM = "https://www.iberia.com/us/claims/flight-delays-cancellations/"
+
+    def setUp(self):
+        super().setUp()
+        real = FP.CALL
+
+        async def call(op, body, approval=None):
+            if op == "money.flight_claim" and approval and body.get("booking_reference") == "IBX7Q2":
+                self.agapi.calls.append((op, body))
+                return {"ok": True, "result": {"case_id": body["case_id"], "state": "form_prepared", "form_url": self.FORM,
+                                               "fields": ["Booking reference: IBX7Q2."], "say": "Everything for Iberia's claim form is ready — "
+                                               "open it, copy these in, and press submit yourself. Nothing is filed until you do."}}
+            return await real(op, body, approval)
+        FP.CALL = call
+
+    def test_a_form_claim_is_prepared_never_filed(self):
+        run(FP.run_tool(Ctx(), "flight_money_back", {"airline": "EX", "date": "2026-10-09", "from": "MAD", "to": "LHR", "what": "delayed",
+                                                      "arrival_delay_minutes": 220}))
+        run(FP.run_tool(Ctx(), "file_flight_claim", {"booking_reference": "IBX7Q2", "passengers": ["Alex Doe"]}))
+        done = run(FP.run_tool(Ctx(said="Yes.", ago=60), "file_flight_claim", {"booking_reference": "IBX7Q2", "passengers": ["Alex Doe"]}))
+        self.assertEqual((done["result"]["status"], done["result"]["form_url"]), ("form_prepared", self.FORM))
+        self.assertIn("Nothing is filed until you do", done["result"]["say"])
+        self.assertIn("never say it's filed", [t for t in FP.TOOLS if t["name"] == "file_flight_claim"][0]["description"])

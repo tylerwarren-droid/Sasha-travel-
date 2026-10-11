@@ -1,0 +1,49 @@
+CR 82 demo — Sasha /s2 code (cr/82-s2) → the DEPLOYED agapi-sandbox (AgAPI cr/82 a557f04, deploy 87e20ff0), 11 Oct 2026.
+
+» 'What should we do in Madrid on Saturday 17 October?'
+  suggest_activities({"city": "Madrid", "date": "2026-10-17"})
+
+  say: Museo Nacional del Prado: open 10am - 8pm on Saturday ("Mon - Sat: 10am - 8pm"). General admission: 15 EUR ("General admission: €15"). Free: All visitors from Monday to Saturday: 6pm - 8pm / Sundays and Public Holidays: 5pm - 7pm ("Free: All visitors from Monday to Saturday: 6pm - 8pm / Sundays and Public Holidays: 5pm - 7pm (Find out who is entitled to free admission on the official website)"). From esmadrid.com — Madrid city council's tourism site (museodelprado.es's own site couldn't be read), read 2026-10-11. Real Madrid: no home match on Sat 17 Oct; the next at home: "SUN 18.10.2026 | 19:00 | Real Madrid VS Sevilla FC | LALIGA EA SPORTS | - |". From laliga.com — the league's own fixtures (realmadrid.com's own site couldn't be read), read 2026-10-11. Museo Nacional Centro de Arte Reina Sofía: hours 10:00 - 21:00; Horario gratuito 19:00 on Saturday ("Sábado
+10:00
+19:00
+21:00"). Entrada individual general: 12 EUR ("2. El precio de la entrada individual general se establece en 12 euros."). Free: 18 de abril, 18 y 22 de mayo, 12 de octubre y 6 de diciembre ("Los días 18 de abril, 18 y 22 de mayo, 12 de octubre y 6 de diciembre la entrada es gratuita. Puedes reservarla online"). Free for: Mayores de 65 años ("Mayores de 65 años."). From museoreinasofia.es, read 2026-10-11. Museo Nacional Thyssen-Bornemisza: open 10:00 - 23:00 on Saturday ("Sábado | 10:00 | 23:00 |"). Entrada general: 14 EUR ("General | 14€"). Free: Todos los lunes de 12:00 a 16:00 ("Todos los lunes entra gratis al museo gracias a Mastercard de 12:00 a 16:00."). Free for: Niños y jóvenes menores de 18 años ("Niños y jóvenesMenores de 18 años | Gratis"). From museothyssen.org, read 2026-10-11. Palacio Real de Madrid: open 10am-6pm on Saturday ("Mon to Sat: 10am-6pm"). Free for: EU citizens, residents, and holders of work permits in the EU, and citizens of Ibero-American countries: Monday to Thursday from 5pm to 7pm (4pm to 6pm in winter); proof of concession required ("Free admission: From Monday to Thursday from 5pm to 7pm (4pm to 6pm in winter), for EU citizens, residents, and holders of work permits in the EU, and citizens of Ibero-American countries."). From esmadrid.com — Madrid city council's tourism site (patrimonionacional.es's own site couldn't be read), read 2026-10-11.
+
+  CARD Museo Nacional del Prado · verified · read 2026-10-11 · copy sha256:b015f63300f8
+    open: {"date": "2026-10-17", "hours": "10am - 8pm", "claim_id": "rcl_B2MHP11NFC3F10VBBGYZQ8XB0D", "quote": "Mon - Sat: 10am - 8pm", "source_url": "https://www.esmadrid.com/en/tourist-information/museo-del-prado", "read_at": "2026-10-11", "copy_id": "scp_418068f00a90f23371089c83", "copy_sha256": "sha256:b0
+    price: {"text": "15 EUR", "for": "general admission", "claim_id": "rcl_P5W7CJN69S3AQ1BAZ6VVHFDGPK", "quote": "General admission: €15", "source_url": "https://www.esmadrid.com/en/tourist-information/museo-del-prado", "read_at": "2026-10-11", "copy_id": "scp_418068f00a90f23371089c83", "copy_sha256": "sha256:
+    source: {"key": "mad_prado_esmadrid", "site": "esmadrid.com", "label": "esmadrid.com — Madrid city council's tourism site", "url": "https://www.esmadrid.com/en/tourist-information/museo-del-prado"}
+    ticket_url: None
+
+  CARD Real Madrid · partial · read 2026-10-11 · copy None
+    no_event: {"say": "the fixtures I read on 2026-10-11 list no home match on 2026-10-17", "next": {"date": "2026-10-18", "value": "2026-10-18 19:00 · Real Madrid VS Sevilla FC", "claim_id": "rcl_8SG0QGZ4KTCBY2XNQAD2M585MN", "quote": "SUN 18.10.2026 | 19:00 | Real Madrid VS Sevilla FC | LALIGA EA SPORTS | - |", 
+    source: {"key": "mad_real_madrid_laliga", "site": "laliga.com", "label": "laliga.com — the league's own fixtures", "url": "https://www.laliga.com/en-GB/clubs/real-madrid/next-matches"}
+    ticket_url: None
+
+  CARD Museo Nacional Centro de Arte Reina Sofía · verified · read 2026-10-11 · copy sha256:43fd75ae77c6
+    open: {"date": "2026-10-17", "hours": "10:00 - 21:00; Horario gratuito 19:00", "claim_id": "rcl_ZYYME1Y3PPQQFEDARXKGBQE0X9", "quote": "Sábado\n10:00\n19:00\n21:00", "source_url": "https://www.museoreinasofia.es/visita/horarios-tarifas/", "read_at": "2026-10-11", "copy_id": "scp_12cca9129fad0c8fdc3d2ea1", 
+    price: {"text": "12 EUR", "for": "entrada individual general", "claim_id": "rcl_ZC4WA7968RH5TMPWZ2CR88TNFZ", "quote": "2. El precio de la entrada individual general se establece en 12 euros.", "source_url": "https://cms.museoreinasofia.es/sites/default/files/Visita/resolucion-precios-publicos-boe-num-2-de-
+    ticket_url: None
+
+  CARD Museo Nacional Thyssen-Bornemisza · verified · read 2026-10-11 · copy sha256:d1ff5cab465e
+    open: {"date": "2026-10-17", "hours": "10:00 - 23:00", "claim_id": "rcl_NMYPPH8EQ1HZ4X88SS9YSXQW2E", "quote": "Sábado | 10:00 | 23:00 |", "source_url": "https://www.museothyssen.org/visita/horarios-tarifas", "read_at": "2026-10-11", "copy_id": "scp_f75ffd4895c2952a9e06c2bf", "copy_sha256": "sha256:d1ff5ca
+    price: {"text": "14 EUR", "for": "entrada general", "claim_id": "rcl_0DXQVJWF1GJQ1BBCSNV0C12XWY", "quote": "General | 14€", "source_url": "https://www.museothyssen.org/visita/horarios-tarifas", "read_at": "2026-10-11", "copy_id": "scp_f75ffd4895c2952a9e06c2bf", "copy_sha256": "sha256:d1ff5cab465e67b770a023
+    ticket_url: None
+
+  CARD Palacio Real de Madrid · verified · read 2026-10-11 · copy sha256:e26d8c1972c8
+    open: {"date": "2026-10-17", "hours": "10am-6pm", "claim_id": "rcl_73XGFBE83MEA9HCC8BXXTX5G60", "quote": "Mon to Sat: 10am-6pm", "source_url": "https://www.esmadrid.com/en/tourist-information/royal-palace", "read_at": "2026-10-11", "copy_id": "scp_9464d87317c5850bdd034953", "copy_sha256": "sha256:e26d8c19
+    price: {"free_for": "EU citizens, residents, and holders of work permits in the EU, and citizens of Ibero-American countries: Monday to Thursday from 5pm to 7pm (4pm to 6pm in winter); proof of concession required", "free_for_quote": {"claim_id": "rcl_GSB3PA7AGTN715M2ZNSYQXVGW5", "quote": "Free admission: 
+    source: {"key": "mad_palacio_real_esmadrid", "site": "esmadrid.com", "label": "esmadrid.com — Madrid city council's tourism site", "url": "https://www.esmadrid.com/en/tourist-information/royal-palace"}
+    ticket_url: None
+
+  not checked: []
+
+  activities.verify mad_prado: verified — None
+    say: Museo Nacional del Prado: open 10am - 8pm on Saturday ("Mon - Sat: 10am - 8pm"). General admission: 15 EUR ("General admission: €15"). Free: All visitors from Monday to Saturday: 6pm - 8pm / Sundays and Public Holidays: 5pm - 7pm ("Free: All visitors from Monday to Saturday: 6pm - 8pm / Sundays and Public Holidays: 5pm - 7pm (Find out who is entitled to free admission on the official website)"). From esmadrid.com — Madrid city council's tourism site (museodelprado.es's own site couldn't be read), read 2026-10-11.
+
+  activities.verify mad_real_madrid: partial — None
+    say: Real Madrid: no home match on Sat 17 Oct; the next at home: "SUN 18.10.2026 | 19:00 | Real Madrid VS Sevilla FC | LALIGA EA SPORTS | - |". From laliga.com — the league's own fixtures (realmadrid.com's own site couldn't be read), read 2026-10-11.
+
+── Money back on the real airlines (flight_money_back → file_flight_claim; nothing filed) ──
+IB {"status": "draft_only", "say": "Iberia's own claims pages couldn't be read when I tried on 2026-10-11: HTTP 403: I won't guess one. The claim is drafted.", "draft": ["Flight: IB3170 on 2026-10-09, MAD → LHR (1,246 km).", "What happened: the flight arrived 3 h 40 min late at its final destination.", "Booking reference: ABC123.", "Passengers: Alex Doe.", "Compensation claimed: EUR 250 under Regulation (EC) No 261/2004 (\"a) 250 euros para vuelos de hasta 1500 kilómetros;\").", "Payment: by bank transfer — not a voucher (\"3. La compensación a que hace referencia el apartado 1 se abonará en metálico, por transferencia bancaria electrónica, transferencia bancaria, cheque o, previo acuerdo firma
+BA {"status": "draft_only", "say": "British Airways's own claims pages couldn't be read when I tried on 2026-10-11: robots.txt answered a web page, not a robots file: I won't guess one. The claim is drafted.", "draft": ["Flight: BA459 on 2026-10-09, MAD → LHR (1,246 km).", "What happened: the flight arrived 3 h 40 min late at its final destination.", "Booking reference: ABC123.", "Passengers: Alex Doe.", "Compensation claimed: EUR 250 under Regulation (EC) No 261/2004 (\"a) 250 euros para vuelos de hasta 1500 kilómetros;\").", "Payment: by bank transfer — not a voucher (\"3. La compensación a que hace referencia el apartado 1 se abonará en metálico, por transferencia bancaria electrónica, trans
+VY {"status": "draft_only", "say": "The airline's pages I've read don't give an address for claims: I won't guess one. The claim is drafted.", "draft": ["Flight: VY7002 on 2026-10-09, MAD → LGW (1,216 km).", "What happened: the flight arrived 3 h 40 min late at its final destination.", "Booking reference: ABC123.", "Passengers: Alex Doe.", "Compensation claimed: EUR 250 under Regulation (EC) No 261/2004 (\"a) 250 euros para vuelos de hasta 1500 kilómetros;\").", "Payment: by bank transfer — not a voucher (\"3. La compensación a que hace referencia el apartado 1 se abonará en metálico, por transferencia bancaria electrónica, transferencia bancaria, cheque o, previo acuerdo firmado por el pasajer

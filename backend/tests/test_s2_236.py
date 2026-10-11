@@ -99,6 +99,12 @@ class SameReadBack(unittest.TestCase):
             first = VN._HELD[ACCT]["at"]
             VN._hold(ctx, "page", "l2", {"sha256": "b" * 64, "lines": lines(uuid.uuid4())}, rd, res)
             self.assertEqual(VN._HELD[ACCT]["at"], first)                      # the same booking: the same time it was said
+            from datetime import datetime, timedelta, timezone
+            later = API.Ctx(account=ACCT, user_said="Yes, book it.", started=datetime.now(timezone.utc) + timedelta(seconds=5))
+            out = VN._hold(later, "page", "l4", {"sha256": "d" * 64, "lines": lines(uuid.uuid4())}, rd, res)
+            self.assertEqual(out["status"], "yes_heard")                       # held again in the turn of their yes: book now
+            q = API.Ctx(account=ACCT, user_said="Is it free at 12?", started=datetime.now(timezone.utc) + timedelta(seconds=6))
+            self.assertEqual(VN._hold(q, "page", "l5", {"sha256": "e" * 64, "lines": lines(uuid.uuid4())}, rd, res)["status"], "awaiting_yes")
             VN._hold(ctx, "page", "l3", {"sha256": "c" * 64, "lines": ["Another venue, another time."]}, rd, res)
             self.assertNotEqual(VN._HELD[ACCT]["at"], first)                   # different words: a new read-back
 

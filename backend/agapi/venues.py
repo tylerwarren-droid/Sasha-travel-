@@ -359,6 +359,12 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
                 "email": "Sasha emails them; it's a request until they reply",
                 "call": "Sasha calls them; it's booked only if they say yes on the call"}.get(rung, "")}
     _HELD[ctx.account]["out"] = out   # Sasha 217 · the same booking held again gets these words, unchanged
+    # Sasha 236 · held again in the turn they said yes to it (found live on /s2: she re-held and asked again, turn after turn):
+    # the read-back is the one they heard in an EARLIER turn, and this turn's words are an explicit yes → book it now
+    from agapi.v0 import yes_to_book
+    if at < ctx.started and yes_to_book(ctx.user_said or ""):
+        return {**out, "status": "yes_heard", "how": "They already heard this read-back and said yes this turn: call book_venue now. "
+                                                     "Don't ask again."}
     return out
 
 

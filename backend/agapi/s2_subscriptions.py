@@ -121,8 +121,10 @@ def _say_list(subs: list, tot: str, source: str) -> str:
         per = {"monthly": "a month", "yearly": "a year", "weekly": "a week", "quarterly": "a quarter"}.get(b["how_often"], "")
         renew = (f", renews {b['renews']}" + (" (expected — the email doesn't say)" if (b.get("renews_basis") or "").startswith("expected") else "")
                  if b.get("renews") else "")
-        lines.append(f"{b['service']}: {b['amount']}{' ' + per if per else ''}{renew}")
-    return f"From your {source}, you're paying for {len(subs)}: " + "; ".join(lines) + f". That's about {tot} a month."
+        lines.append(f"{b['service']}: {b['amount']}{' ' + per if per else ' (the receipt doesn’t say how often)'}{renew}")
+    unknown = [b["service"] for b in subs if b["how_often"] not in ("monthly", "yearly", "weekly", "quarterly")]
+    return (f"From your {source}, you're paying for {len(subs)}: " + "; ".join(lines) + f". That's about {tot} a month"
+            + (f", not counting {', '.join(unknown)}." if unknown else "."))
 
 
 async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:

@@ -935,6 +935,18 @@ async def prepare_link(request: Request):
     # Sasha 138 · the hotel's NAME (its listing), never its web page's title ("Contacto UMusic Hotels")
     lines = (SL.hotel_read_back((read.get("listing") or {}).get("name") or read["name"], link, p.on, nights, p.party, forward_to) if nights
              else SL.read_back(read["name"], link, p.on, p.at, p.party, forward_to))
+    # Sasha 233 · TYLER'S NAMED-PLATFORM EXCEPTION: a spa / salon on Fresha, Treatwell or Booksy (never a restaurant) — THIS server
+    # reads their public venue page where robots.txt allows it, finds the service asked for and its price, and says so. Their
+    # booking calendar is robots-closed on all three, so she never says a time is free; the person picks it and presses Book.
+    offer = None
+    asked = str(body.get("asked_for") or "").strip()[:200]
+    if asked and not nights and not is_restaurant(asked):
+        from . import platform_read as PR
+        if PR.named(link.url) in PR.SLOTS_CLOSED:
+            offer = await PR.offer(None, link.url, asked)
+            if offer:
+                lines.insert(1, f"Their {offer['platform']} page lists “{offer['service']}”" + (f" ({offer['price']})" if offer["price"] else "")
+                             + f" — that's the one to choose. {offer['platform']} doesn't show me which times are free; their page shows you.")
     plan = _plan_of(body)   # Sasha 132 · the escalation the guest's ONE yes covers — this link is made only after that yes
     if plan:
         lines.append(plan)
@@ -962,6 +974,7 @@ async def prepare_link(request: Request):
                                       link_id=link_id, venue=venue, when=f"{p.on.isoformat()} {p.at.strftime('%H:%M')}")
     return {"link_id": link_id, "trip_item_id": item, "platform": link.platform, "slot_filled": link.slot_filled, "url": link.url,
             "prefill_tried": link.prefill_tried, "read_back": {"lines": lines},   # Sasha 138
+            **({"offer": offer} if offer else {}),   # Sasha 233
             "forward_to": forward_to, "read_back": {"lines": lines, "sha256": rec["read_back_sha256"]}, "phone": phone}
 
 

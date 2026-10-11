@@ -166,4 +166,138 @@ async def fetch(http, url: str) -> dict:
     raise Refused("too_many_redirects", "more than three redirects")
 
 
-__all__ = ["named", "robots", "fetch", "Refused", "NAMED"]
+# ── what a venue's page offers: its services and prices, from the schema.org data it publishes (read on the server, 11 Oct) ──
+#
+#   Booksy:    the business's JSON-LD `makesOffer` — [{Offer, name, price, priceCurrency}] (BELMONT, Madrid: 12 offers)
+#   Treatwell: JSON-LD `@graph` → `hasOfferCatalog` → OfferCatalog → [{AggregateOffer, itemOffered{name, Duration PT1H},
+#              lowPrice, highPrice}] (a Granada salon: 30+ services)
+#   Fresha:    not read yet — its venue page is allowed, so the same reader applies when one is linked; none is assumed.
+# ⚠ OPEN SLOTS: no platform publishes them on a page robots allows (Fresha *booking/time*, Booksy /*/l/book/, Treatwell
+#   /availability — all Disallow), so Sasha never says a time is free; the person picks it on the page and presses Book.
+
+SLOTS_CLOSED = {"fresha": "Fresha", "treatwell": "Treatwell", "booksy": "Booksy"}
+_ISO = re.compile(r"PT(?:(\d+)H)?(?:(\d+)M)?")
+
+
+def _minutes(v) -> Optional[int]:
+    m = _ISO.match(str(v or "").strip())
+    if not m or not (m.group(1) or m.group(2)):
+        return None
+    return int(m.group(1) or 0) * 60 + int(m.group(2) or 0)
+
+
+def _num(v) -> Optional[float]:
+    try:
+        return float(str(v).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+
+
+def services(html: str) -> List[dict]:
+    """[{name, price | low+high, currency, minutes}] — every Offer / AggregateOffer in the page's JSON-LD, nothing else."""
+    import html as H
+    import json
+    out: List[dict] = []
+
+    def walk(x):
+        if isinstance(x, list):
+            for y in x:
+                walk(y)
+            return
+        if not isinstance(x, dict):
+            return
+        t = x.get("@type")
+        if t in ("Offer", "AggregateOffer"):
+            item = x.get("itemOffered") if isinstance(x.get("itemOffered"), dict) else {}
+            name = H.unescape(str(item.get("name") or x.get("name") or "")).strip()
+            prop = item.get("additionalProperty") if isinstance(item.get("additionalProperty"), dict) else {}
+            dur = str(prop.get("value") or "") if str(prop.get("name") or "").lower() == "duration" else ""
+            mins = [_minutes(d) for d in dur.split(" - ")] if dur else []
+            mins = [m for m in mins if m]
+            if not mins:
+                mm = re.search(r"(\d{2,3})\s*min", name, re.I)
+                mins = [int(mm.group(1))] if mm else []
+            if name:
+                out.append({"name": name[:160], "price": _num(x.get("price")), "low": _num(x.get("lowPrice")),
+                            "high": _num(x.get("highPrice")), "currency": x.get("priceCurrency") or "EUR",
+                            "minutes": mins[0] if len(mins) == 1 else None, "minutes_range": mins if len(mins) > 1 else None})
+            return
+        for v in x.values():
+            walk(v)
+
+    for block in re.findall(r'<script[^>]+type="application/ld\+json"[^>]*>(.*?)</script>', html or "", re.S | re.I):
+        try:
+            walk(json.loads(block))
+        except ValueError:
+            continue
+    return out[:200]
+
+
+#: the words a person says → the words these pages use (Spanish venues name services in Spanish, often both)
+_SYN = {"massage": "masaje", "relaxing": "relajante", "relax": "relajante", "deep": "descontracturante", "tissue": "descontracturante",
+        "sports": "deportivo", "sport": "deportivo", "nails": "uñas", "nail": "uñas", "manicure": "manicura", "pedicure": "pedicura",
+        "haircut": "corte", "hair": "pelo", "facial": "facial", "wax": "depilación", "waxing": "depilación", "couples": "pareja",
+        "back": "espalda", "feet": "pies", "foot": "pies", "thai": "tailandés", "hot": "piedras", "stones": "piedras"}
+_STOP = {"a", "an", "the", "for", "at", "of", "and", "y", "de", "la", "el", "un", "una", "con", "min", "minute", "minutes", "minutos"}
+
+
+def _words(s: str) -> set:
+    w = {x for x in re.findall(r"[a-záéíóúñü]+", s.lower()) if x not in _STOP and len(x) > 2}
+    return w | {_SYN[x] for x in w if x in _SYN}
+
+
+def pick(svcs: List[dict], asked: str) -> Optional[dict]:
+    """The service that best matches what was asked ("a 60-minute relaxing massage"), or None — never a guess on no overlap."""
+    want = _words(asked or "")
+    m = re.search(r"(\d{2,3})\s*-?\s*min", asked or "", re.I) or re.search(r"\b(\d)\s*-?\s*(?:h|hour)", asked or "", re.I)
+    mins = (int(m.group(1)) * (60 if int(m.group(1)) < 10 else 1)) if m else None
+    best, score = None, 0.0
+    for s in svcs:
+        hit = len(want & _words(s["name"]))
+        if not hit:
+            continue
+        sc = hit + (1.5 if mins and (s.get("minutes") == mins or mins in (s.get("minutes_range") or [])) else 0) \
+            - (0.5 if mins and s.get("minutes") and s["minutes"] != mins else 0)
+        if sc > score:
+            best, score = s, sc
+    return best
+
+
+def price_words(s: dict) -> str:
+    cur = "€" if (s.get("currency") or "EUR") == "EUR" else (s.get("currency") + " ")
+    f = lambda v: f"{cur}{v:g}"
+    if s.get("price") is not None:
+        p = f(s["price"])
+    elif s.get("low") is not None and s.get("high") is not None and s["low"] != s["high"]:
+        p = f"{f(s['low'])}–{f(s['high'])}"
+    elif s.get("low") is not None:
+        p = f"from {f(s['low'])}"
+    else:
+        return ""
+    d = f"{s['minutes']} min, " if s.get("minutes") else ""
+    return f"{d}{p}"
+
+
+async def offer(http, url: str, asked: str) -> Optional[dict]:
+    """The asked service on a named platform's venue page, read only where robots allows; None when not read (refused,
+    unreadable, no service matched) — the caller then says what it always said."""
+    plat = named(url)
+    if plat not in SLOTS_CLOSED or not str(asked or "").strip():
+        return None
+    try:
+        got = await fetch(http, url)
+    except Refused:
+        return None
+    except Exception:
+        return None
+    if got.get("status") != 200:
+        return None
+    svcs = services(got.get("text") or "")
+    s = pick(svcs, asked)
+    if not s:
+        return None
+    return {"platform": SLOTS_CLOSED[plat], "url": got["url"], "service": s["name"], "price": price_words(s), "services_read": len(svcs),
+            "slots": None, "slots_why": f"{SLOTS_CLOSED[plat]}'s booking calendar is closed to readers (its robots.txt)"}
+
+
+__all__ = ["named", "robots", "fetch", "Refused", "NAMED", "services", "pick", "price_words", "offer"]

@@ -128,7 +128,9 @@ async def _save(account: str, m: dict) -> None:
             await run(lambda c: c.execute(
                 "insert into s2_memory (account_id, memory, updated_at) values ($1, $2::jsonb, now()) "
                 "on conflict (account_id) do update set memory = excluded.memory, updated_at = now()",
-                uuid.UUID(account), json.dumps(m, default=str)))
+                # Sasha 233 · the pool's jsonb codec encodes once — a json.dumps here stored a JSON STRING (it loaded fine, but SQL
+                # saw text, not an object); rows written that way still load (the str branch in _load)
+                uuid.UUID(account), json.loads(json.dumps(m, default=str))))
             return
         except Exception as e:
             log.info("[memory] not stored (%s) — kept in memory", type(e).__name__)

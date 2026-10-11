@@ -306,7 +306,9 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
         elif r == "one_tap" and ("link" in rungs or "form" in rungs):
             status, j = await GW.api(ctx.account, "POST", "/api/booking/links", {
                 "read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": res["how_many"]["count"], "name": contact_name,
-                "venue": GW.plain_venue(rd["venue"])[:120]})
+                "venue": GW.plain_venue(rd["venue"])[:120],
+                # Sasha 233 · /s2: the service asked for, so a Fresha/Treatwell/Booksy page's matching service + price is read back
+                **({"asked_for": _what(a)} if getattr(ctx, "surface", "s1") == "s2" else {})})
             if status == 200:
                 return _hold(ctx, "page", j["link_id"], j["read_back"], rd, res,
                              extra={"url": j["url"], "platform": j.get("platform"), "slot_filled": bool(j.get("slot_filled")),

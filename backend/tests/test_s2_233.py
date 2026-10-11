@@ -114,6 +114,68 @@ class Wildcards(unittest.TestCase):
         self.assertEqual(PR.crawl_delay(self.R), 5.0)
 
 
+BOOKSY_PAGE = """<html><script type="application/ld+json">{"@context":"https://schema.org","@type":"HealthAndBeautyBusiness","name":"Spa Gate",
+"makesOffer":[{"@type":"Offer","name":"Masaje deportivo / SPORT RECOVERY MASAJE","priceCurrency":"EUR","price":86},
+{"@type":"Offer","name":"Masaje relajante / RELAX MASAJE 60 min","priceCurrency":"EUR","price":86},
+{"@type":"Offer","name":"Masaje relajante / RELAX MASAJE 90 min","priceCurrency":"EUR","price":122}]}</script></html>"""
+TREATWELL_PAGE = """<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"HealthAndBeautyBusiness",
+"hasOfferCatalog":{"@type":"OfferCatalog","itemListElement":[{"@type":"OfferCatalog","name":"Masajes","itemListElement":[
+{"@type":"AggregateOffer","itemOffered":{"@type":"Service","name":"Masaje relajante","additionalProperty":{"@type":"PropertyValue",
+"name":"Duration","value":"PT30M - PT1H"}},"lowPrice":"25.00","highPrice":"45.00","priceCurrency":"EUR"},
+{"@type":"AggregateOffer","itemOffered":{"@type":"Service","name":"Manicura semipermanente","additionalProperty":{"@type":"PropertyValue",
+"name":"Duration","value":"PT45M"}},"price":"20.00","priceCurrency":"EUR"}]}]}}]}</script>"""
+
+
+class ServicesFromTheirPage(unittest.TestCase):
+    """Sasha 233 · the service asked for and its price, from the schema.org data the page publishes (shapes read on the server)."""
+
+    def test_booksy_offers(self):
+        s = PR.services(BOOKSY_PAGE)
+        self.assertEqual(len(s), 3)
+        p = PR.pick(s, "a 60-minute relaxing massage")
+        self.assertEqual((p["name"], PR.price_words(p)), ("Masaje relajante / RELAX MASAJE 60 min", "60 min, €86"))
+        self.assertEqual(PR.pick(s, "relaxing massage 90 min")["name"], "Masaje relajante / RELAX MASAJE 90 min")
+
+    def test_treatwell_catalogue(self):
+        s = PR.services(TREATWELL_PAGE)
+        self.assertEqual(PR.price_words(PR.pick(s, "a relaxing massage")), "€25–€45")
+        self.assertEqual(PR.price_words(PR.pick(s, "a manicure")), "45 min, €20")
+
+    def test_no_overlap_is_no_guess(self):
+        self.assertIsNone(PR.pick(PR.services(BOOKSY_PAGE), "a haircut"))
+        self.assertEqual(PR.services("<html>no data</html>"), [])
+
+    def test_offer_reads_only_where_robots_allows(self):
+        PR._ROBOTS.clear()
+        with mock.patch.object(PR.V, "public_url", lambda u, *a: u), mock.patch.object(PR, "_pace", mock.AsyncMock()):
+            http, calls = fake({"https://booksy.com/robots.txt": (200, "User-agent: *\nDisallow: /*/l/book/\n", None),
+                                "https://booksy.com/es-es/1_spa-gate": (200, BOOKSY_PAGE, None)})
+            got = run(PR.offer(http, "https://booksy.com/es-es/1_spa-gate", "a 60-minute relaxing massage"))
+            self.assertEqual((got["platform"], got["service"], got["price"], got["slots"]),
+                             ("Booksy", "Masaje relajante / RELAX MASAJE 60 min", "60 min, €86", None))
+            self.assertIn("robots", got["slots_why"])
+            self.assertEqual({c[0] for c in calls}, {"GET"})
+            PR._ROBOTS.clear()
+            http, calls = fake({"https://booksy.com/robots.txt": (200, "User-agent: *\nDisallow: /\n", None)})
+            self.assertIsNone(run(PR.offer(http, "https://booksy.com/es-es/1_spa-gate", "massage")))
+            self.assertEqual([c[1] for c in calls], ["https://booksy.com/robots.txt"])   # the page itself never fetched
+
+    def test_rover_and_restaurants_are_never_read_for_an_offer(self):
+        http, calls = fake({})
+        self.assertIsNone(run(PR.offer(http, "https://www.rover.com/es/search/", "dog walker")))
+        self.assertIsNone(run(PR.offer(http, "https://www.thefork.es/restaurante/x", "dinner")))
+        self.assertEqual(calls, [])
+
+    def test_wired_s2_only_and_never_for_a_restaurant(self):
+        import inspect
+        from agapi import venues as VN
+        from booking_signer import ladder_routes as LR
+        self.assertIn('{"asked_for": _what(a)} if getattr(ctx, "surface", "s1") == "s2"', inspect.getsource(VN._hold_inner))
+        src = inspect.getsource(LR.prepare_link)
+        self.assertIn("not is_restaurant(asked)", src)
+        self.assertIn("PR.SLOTS_CLOSED", src)
+
+
 class CardsUnderTheirLine(unittest.TestCase):
     def test_the_line_that_showed_them_is_marked(self):
         from agapi import s2_memory as MEM
@@ -121,6 +183,22 @@ class CardsUnderTheirLine(unittest.TestCase):
                                                                            "calls": [{"tool": "search_venues", "ok": True}]})
         m = MEM.fold(m, "What's the weather?", "Sunny.", {})
         self.assertEqual([x.get("cards", False) for x in m["recent"]], [False, True, False, False])
+
+
+class MemoryIsAnObject(unittest.TestCase):
+    def test_saved_as_jsonb_object_not_a_json_string(self):
+        """041 applied: the pool's jsonb codec encodes once — the memory goes in as a dict (a string landed as a JSON string)."""
+        from agapi import s2_memory as MEM
+        got = []
+
+        async def run_(fn):
+            class C:
+                async def execute(self, sql, *args):
+                    got.append(args)
+            return await fn(C())
+        with mock.patch.object(MEM, "RUN", run_):
+            run(MEM._save("00000000-0000-4000-8000-000000000233", {"recent": [{"role": "user", "content": "hi"}]}))
+        self.assertIsInstance(got[0][1], dict)
 
 
 class ThanksInterrupts(unittest.TestCase):

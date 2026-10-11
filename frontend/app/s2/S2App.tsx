@@ -31,6 +31,7 @@ type Card =
   | { k: 'my_cards'; cards: { product: string; network: string; status: string }[] }
   | { k: 'accident'; view: Ev }
   | { k: 'claim_status'; claim: Ev }
+  | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
 type Plan = { kind: 'dinner' | 'spa' | 'venue' | 'flight' | 'hotel' | 'car'; title: string; when: string; where?: string; status: string; reference?: string; id?: string }
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
@@ -466,11 +467,31 @@ function ClaimStatus({ claim }: { claim: Ev }) {
     </Box>)
 }
 
+/** CR 81 · one place to go: what's on / when it's open that day, the price — each quoted from its own site — and its official ticket office. */
+function ActivityCard({ a }: { a: Ev }) {
+  const dom = (() => { try { return new URL(a.official_url).hostname.replace(/^www\./, '') } catch { return '' } })()
+  const quotes: Q[] = [a.event, a.open, a.price?.quote ? a.price : null, a.no_event?.next].filter(Boolean).map((x: Ev) => ({ quote: x.quote, source_url: x.source_url, read_at: x.read_at }))
+  const when = a.event ? `${a.event.title} · ${a.event.starts_at.slice(11, 16)}`
+    : a.open ? (/^closed|cerrad/i.test(String(a.open.hours)) ? 'Closed that day' : `Open ${a.open.hours}`)
+    : a.no_event ? 'No match or event listed that day' : ''
+  const href = a.ticket_url || a.official_url
+  return (
+    <Box k={a.kind === 'event' ? 'On' : a.kind === 'outdoor' ? 'Outdoors' : 'Visit'} h={untag(a.name)}>
+      {when ? <div style={{ fontSize: 15 }}>{untag(when)}<Sources quotes={quotes} /></div> : null}
+      {a.price?.text ? <div style={{ fontSize: 14, color: C.dim }}>Tickets {a.price.text}{a.price.free_window ? ` · free ${untag(a.price.free_window)}` : ''}</div> : null}
+      <div style={{ fontSize: 12.5, color: C.dim, marginTop: 6 }}>from {dom}, read {a.read_at}{a.stale ? ' · may be out of date' : ''}</div>
+      {href && /^https:\/\//.test(href) ? <a href={href} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 8, padding: '8px 14px', borderRadius: 999,
+        border: `1px solid ${C.gold}`, color: C.gold, fontWeight: 700, textDecoration: 'none' }}>{a.ticket_url ? 'Book on the official site' : 'Official site'}</a> : null}
+    </Box>)
+}
+
 function CardView({ c, choose, pick, send }: { c: Card; choose: (t: string) => void; pick: (name: string, placeId: string) => void; send: (t: string) => void }) {
   if (c.k === 'counter_card') return <CounterCard card={c.card} />
   if (c.k === 'my_cards') return <MyCards cards={c.cards} choose={choose} />
   if (c.k === 'accident') return <AccidentCard view={c.view} send={send} />
   if (c.k === 'claim_status') return <ClaimStatus claim={c.claim} />
+  if (c.k === 'activities') return (<>{c.cards.map((a, i) => <ActivityCard key={i} a={a} />)}
+    {c.unread.length ? <div style={{ fontSize: 13, color: C.dim, margin: '4px 2px' }}>Couldn&apos;t check on their official sites: {c.unread.map(untag).join(', ')}</div> : null}</>)
   if (c.k === 'keep_capture') return <KeepCapture what={c.what} />
   if (c.k === 'wa_open') return <WaOpen c={c} />
   if (c.k === 'plans') return <Plans items={c.items} on={c.on} />
@@ -659,6 +680,7 @@ export default function S2App() {
             else if (ev.kind === 'my_cards') add({ k: 'my_cards', cards: ev.cards || [] })
             else if (ev.kind === 'accident' && ev.view) add({ k: 'accident', view: ev.view })
             else if (ev.kind === 'claim_status' && ev.claim) add({ k: 'claim_status', claim: ev.claim })
+            else if (ev.kind === 'activities' && Array.isArray(ev.cards)) add({ k: 'activities', cards: ev.cards, unread: Array.isArray(ev.unread) ? ev.unread : [], date: ev.date })   // CR 81
           }
         }
       }

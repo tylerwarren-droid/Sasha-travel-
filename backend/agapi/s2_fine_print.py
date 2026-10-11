@@ -135,6 +135,19 @@ TOOLS += [
 ]
 _MONEY: Dict[str, str] = {}        # account → the latest money-back case
 
+# ── CR 81 · things to do, verified on each place's OWN site (AgAPI activities.*): an ActivityCard per place ───────────────────────────
+TOOL_NAMES = TOOL_NAMES + ("suggest_activities",)
+TOOLS += [
+    {"name": "suggest_activities", "description": (
+        "Things to do (museums, matches, concerts, exhibitions, tours, outdoors) in a city on a date. Each suggestion is checked on its own "
+        "official site: the opening hours that day, a match or event that day, the price — quoted. Say `say` as given: every time, date and "
+        "price comes from it; if a place says it couldn't be checked, say you couldn't check its official site. The card's button goes to the "
+        "official site — never a reseller."),
+     "input_schema": {"type": "object", "properties": {"city": {"type": "string"}, "date": {"type": "string", "description": "YYYY-MM-DD"},
+                                                       "interests": {"type": "array", "items": {"type": "string"}}}, "required": ["city", "date"]}},
+]
+VERIFY_TOP = 5
+
 # ── CR 80 · money back for luggage; any money claim's status (deadlines, the airline's replies in their words) ──────────────────────
 TOOL_NAMES = TOOL_NAMES + ("bag_money_back", "file_bag_claim", "money_claim_status")
 TOOLS += [
@@ -385,6 +398,24 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             v = r["result"]
             return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), **({"draft": v["draft"]} if v.get("draft") else {})}}
         return r if r.get("ok") else _fail(r)
+    if name == "suggest_activities":
+        import asyncio as _aio
+        day = str(args.get("date") or "")[:10]
+        r = await CALL("activities.suggest", {"city": str(args.get("city") or ""), "dates": {"from": day},
+                                              **({"interests": [str(i) for i in args["interests"]][:8]} if args.get("interests") else {}), "limit": 8})
+        if not r.get("ok"):
+            return _fail(r)
+        cands = r["result"]["candidates"][:VERIFY_TOP]
+        if not cands:
+            return {"ok": True, "result": {"say": r["result"]["say"]}}
+        got = await _aio.gather(*[CALL("activities.verify", {"candidate_id": c["candidate_id"], "date": day}) for c in cands])
+        cards = [g["result"] for g in got if g.get("ok")]
+        shown = [c for c in cards if c["confidence"] in ("verified", "partial")]
+        unread = [c for c in cards if c["confidence"] == "not_read"]
+        say = " ".join([c["say"] for c in shown] + ([f"I couldn't check {', '.join(c['name'] for c in unread)} on their official sites."] if unread else []))
+        return {"ok": True, "result": {"say": say or "I couldn't check any of them on their official sites today.",
+                                       "how": "Say `say` as given — every time, date and price is quoted from the place's own site.",
+                                       "render": {"kind": "activities", "cards": shown, "unread": [c["name"] for c in unread], "date": day}}}
     if name == "bag_money_back":
         bag = {k: args[k] for k in ("airline", "number", "date", "from", "to", "what", "received_on", "pir_reference", "currency") if args.get(k) not in (None, "")}
         for k in ("airline", "from", "to", "currency"):
@@ -548,7 +579,7 @@ async def moment(account: str, event: dict) -> Dict[str, Any]:
     return r["result"] if r.get("ok") else {"speak": False, "why_silent": (r.get("error") or {}).get("message") or "unavailable"}
 
 
-RENDER_KINDS = ("counter_card", "my_cards", "accident", "claim_status")
+RENDER_KINDS = ("counter_card", "my_cards", "accident", "claim_status", "activities")   # CR 81 · + the ActivityCard
 
 
 __all__ = ["TOOLS", "TOOL_NAMES", "wrap", "keep_image", "via", "accident_photo", "moment", "RENDER_KINDS"]

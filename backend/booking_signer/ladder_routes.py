@@ -977,6 +977,13 @@ async def prepare_link(request: Request):
     # Sasha 235 · the asked time against the venue's LISTED hours, said before the link (found in 234: "pick Saturday at 5 pm" for a
     # venue that closes at 14:00 on Saturdays). Open is not available — the line says so; unknown hours say nothing.
     hours = None if nights else hours_check(read, p.on, p.at)
+    if hours is None and not nights and any(f.get("kind") == "hours" and f.get("source_kind") == "places" and f.get("value") is None
+                                            for f in read.get("facts") or []):
+        # the listing's hours are never stored (Google's terms): re-read for THIS response only (found live: no line was said)
+        try:
+            hours = hours_check(await PT.hydrate_read(HTTP, read, NOW()), p.on, p.at)
+        except Exception as e:
+            log.info("[ladder] hours not re-read: %s", type(e).__name__)
     if hours and hours.get("line"):
         lines.insert(2 if offer else 1, hours["line"])
     plan = _plan_of(body)   # Sasha 132 · the escalation the guest's ONE yes covers — this link is made only after that yes

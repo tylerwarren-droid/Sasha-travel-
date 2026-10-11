@@ -298,6 +298,15 @@ class HoursCheck235(unittest.TestCase):
         from booking_signer.ladder_routes import hours_check
         self.assertIsNone(hours_check({"facts": []}, date(2026, 10, 17), time(12, 0)))
 
+    def test_a_listing_re_read_for_this_response_is_used(self):   # live: stored reads withhold Google's hours (its terms)
+        from datetime import date, time
+        from booking_signer.ladder_routes import hours_check
+        hydrated = {"facts": [{"kind": "hours", "source_kind": "places", "value": "Monday: 7:00 AM – 9:00 PM",
+                               "detail": {"periods": self.PERIODS, "transient": True}}]}
+        self.assertFalse(hours_check(hydrated, date(2026, 10, 17), time(17, 0))["open"])
+        src = open(__import__("booking_signer.ladder_routes", fromlist=["x"]).__file__).read()
+        self.assertIn("hours_check(await PT.hydrate_read(HTTP, read, NOW()), p.on, p.at)", src)
+
     def test_the_route_puts_it_before_the_link(self):
         src = open(__import__("booking_signer.ladder_routes", fromlist=["x"]).__file__).read()
         self.assertIn("lines.insert(2 if offer else 1, hours[\"line\"])", src)

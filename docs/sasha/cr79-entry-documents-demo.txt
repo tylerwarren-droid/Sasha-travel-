@@ -1,0 +1,43 @@
+CR 79 · entry documents demo — Sasha's /s2 code (cr/79-s2) → AgAPI cr/79. A Spanish passport (in the Keep: Passport ES ••••456); Madrid → London (lands 2 Nov 2026), Madrid → Bangkok (lands 20 Nov 2026). 11 Oct 2026.
+
+PASS 1 — against the DEPLOYED sandbox (cr/79), where GOV.UK's and Thailand's pages aren't read at source yet (the Anthropic credits are exhausted): she says so and prepares nothing.
+(their Spanish passport saved in the Keep beforehand: Passport ES ••••456 )
+
+» "I'm flying Madrid to London on 2 Nov, then Madrid to Bangkok, landing 20 Nov. What do I need?"
+  entry_documents({"destinations": [{"country": "GB", "arrival_date": "2026-11-02"}, {"country": "TH", "arrival_date": "2026-11-20"}]})
+  say: UK Electronic Travel Authorisation (ETA): the government's page isn't read at source yet — so I won't say whether you need anything yet. Thailand Digital Arrival Card (TDAC): the government's page isn't read at source yet — so I won't say whether you need anything yet.
+  passport: Passport ES ••••456
+  destinations: [{"country": "GB", "verdict": "not_read"}, {"country": "TH", "verdict": "not_read"}]
+
+» 'Prepare my ETA'
+  prepare_entry({"country": "GB", "flight": "IB3170", "arrival_date": "2026-11-02"})
+  code: not_found
+  message: UK Electronic Travel Authorisation (ETA): the government's page isn't read at source yet: nothing to prepare yet.
+
+» "And the Thai arrival card — I'm at Hotel Example, Bangkok"
+  prepare_entry({"country": "TH", "flight": "TG949", "arrival_date": "2026-11-20", "accommodation": "Hotel Example, Bangkok"})
+  code: not_found
+  message: Thailand Digital Arrival Card (TDAC): the government's page isn't read at source yet: nothing to prepare yet.
+
+PASS 2 — AgAPI cr/79 locally with EU 219's government sentences (read at source 10 Oct 2026) as TEST DATA, plus ONE labelled TEST line for the UK nationality list; replaced by the sandbox's read at source, with stored copies, once credits are back:
+(their Spanish passport saved in the Keep beforehand: Passport ES ••••456 )
+
+» "I'm flying Madrid to London on 2 Nov, then Madrid to Bangkok, landing 20 Nov. What do I need?"
+  entry_documents({"destinations": [{"country": "GB", "arrival_date": "2026-11-02"}, {"country": "TH", "arrival_date": "2026-11-20"}]})
+  say: You need an electronic travel authorisation (ETA) ("TEST DATA: European nationals need an ETA to visit the UK."). It costs GBP 20 on the official site. Apply by 28 Oct 2026: decisions can take up to 3 working days ("You'll usually get a decision by email within a day, but it can take up to 3 working days."). You need a Thailand Digital Arrival Card (TDAC) ("Foreigners are required to submit their arrival card information 3 days in advance of their arrival date in Thailand."). Submit it from 17 Nov 2026, 3 days before you land ("Foreigners are required to submit their arrival card information 3 days in advance of their arrival date in Thailand.").
+  passport: Passport ES ••••456
+  destinations: [{"country": "GB", "verdict": "needed", "deadline": {"apply_by": "2026-10-28", "rule": "processing", "quote": {"claim_id": "rcl_F1Z1GT0FRKRJM4391PX27PNV0J", "quote": "You'll usually get a decision by email within a day, but it can take up to 3 working days.", "source_url": "https://www.gov.uk/eta/apply", "read_at": "2026-10-11"}, "wait": {"claim_id": "rcl_33CGPA4HBWQD8AHASCHFS0WP5Y", "quote": "You must wait until you get an email confirming you have an ETA before you travel.", "source_url": "https://www.gov.uk/eta/apply", "read_at": "2026-10-11"}}}, {"country": "TH", "verdict": "needed", "deadline": {"opens": "2026-11-17", "before": "2026-11-20", "rule": "window", "quote": {"claim_id": "rcl_BVRP3H36GX3WJA8DKFNX0EMJR3", "quote": "Foreigners are required to submit their arrival card information 3 days in advance of their arrival date in Thailand.", "source_url": "https://tdac.immigration.go.th/manual/en/", "read_at": "2026-10-11"}}}]
+
+» 'Prepare my ETA'
+  prepare_entry({"country": "GB", "flight": "IB3170", "arrival_date": "2026-11-02"})
+  say: Here's your electronic travel authorisation (ETA), prepared: 1 of 4 sections come from your Keep and your trip. You submit it — and pay, if there's a fee — yourself on the official site: https://www.gov.uk/eta/apply. I never submit or pay for you.
+  official_url: https://www.gov.uk/eta/apply
+  fields: [{"asks": "your passport", "from": "your Keep", "value": "Passport ES ••••456"}, {"asks": "a photo of your face", "from": "you", "value": null}, {"asks": "an email address", "from": "you", "value": null}, {"asks": "a way to pay", "from": "you", "value": null}]
+  you_do: ["open the official site", "check every field", "add what only you can (photo, declarations)", "pay there if asked", "press submit"]
+
+» "And the Thai arrival card — I'm at Hotel Example, Bangkok"
+  prepare_entry({"country": "TH", "flight": "TG949", "arrival_date": "2026-11-20", "accommodation": "Hotel Example, Bangkok"})
+  say: Here's your Thailand Digital Arrival Card (TDAC), prepared: 3 of 5 sections come from your Keep and your trip. You submit it — and pay, if there's a fee — yourself on the official site: https://tdac.immigration.go.th/manual/en/. I never submit or pay for you.
+  official_url: https://tdac.immigration.go.th/manual/en/
+  fields: [{"asks": "Passport Information", "from": "your Keep", "value": "Passport ES ••••456"}, {"asks": "Personal Information", "from": "you", "value": null}, {"asks": "Travel Information", "from": "your trip", "value": "flight: TG949; arrival date: 2026-11-20"}, {"asks": "Accommodation Information in Thailand", "from": "your trip", "value": "accommodation: Hotel Example, Bangkok"}, {"asks": "Health Declaration Information", "from": "you", "value": null}]
+  you_do: ["open the official site", "check every field", "add what only you can (photo, declarations)", "pay there if asked", "press submit"]

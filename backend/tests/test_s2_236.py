@@ -81,6 +81,28 @@ class FlightNumber(unittest.TestCase):
         self.assertIn("When they want to claim, CALL file_bag_claim", src)
 
 
+class SameReadBack(unittest.TestCase):
+    """Found live on /s2: a page route's read-back carries a ONE-TIME forwarding address, so each hold looked new and the yes never
+    answered a read-back they'd heard (she held again, and again)."""
+
+    def test_held_again_keeps_its_time(self):
+        from agapi import venues as VN, v0 as API
+        lines = lambda u: ["Their Treatwell page: pick Saturday 17 October at 12:00, for 1.",
+                           f"When the confirmation arrives, forward it to act-{u}@booking.kanoe.ai and I'll put it in your trip."]
+        rd = {"venue": "Método Javier Panizo", "read_id": "r1"}
+        res = {"when": {"at": "2026-10-17T12:00"}, "how_many": {"count": 1}, "who": {"name": "Alex"}}
+        with mock.patch.dict(VN._HELD, {}, clear=True), mock.patch.object(VN, "_API", lambda: type("GW", (), {
+                "summary": staticmethod(lambda r: "Sat 17 Oct 12:00, 1"), "guest_lines": staticmethod(lambda rung, l: l),
+                "plain_venue": staticmethod(lambda v: v)})):
+            ctx = API.Ctx(account=ACCT)
+            VN._hold(ctx, "page", "l1", {"sha256": "a" * 64, "lines": lines(uuid.uuid4())}, rd, res)
+            first = VN._HELD[ACCT]["at"]
+            VN._hold(ctx, "page", "l2", {"sha256": "b" * 64, "lines": lines(uuid.uuid4())}, rd, res)
+            self.assertEqual(VN._HELD[ACCT]["at"], first)                      # the same booking: the same time it was said
+            VN._hold(ctx, "page", "l3", {"sha256": "c" * 64, "lines": ["Another venue, another time."]}, rd, res)
+            self.assertNotEqual(VN._HELD[ACCT]["at"], first)                   # different words: a new read-back
+
+
 class BookSaysThisScreen(unittest.TestCase):
     def test_s2_book_is_its_own_s1_untouched(self):
         from agapi import v0 as API

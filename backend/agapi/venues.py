@@ -332,13 +332,23 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
     raise _err("no_route", f"{GW.plain_venue(rd['venue'])} can't be booked from here right now" + (f" — {why}" if why else ""))
 
 
+def _same_words(lines: List[str]) -> str:
+    """Sasha 236 · a read-back's words without its one-time forwarding address: what the person HEARD, for "is this the same one?"."""
+    import hashlib as _h
+    return _h.sha256("\n".join(re.sub(r"act-[0-9a-f-]+@", "act-@", str(l)) for l in lines).encode()).hexdigest()
+
+
 def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra: Optional[dict] = None) -> dict:
     GW = _API()
     prev = _HELD.get(ctx.account)
-    at = prev["at"] if prev and prev.get("sha") == read_back["sha256"] else datetime.now(timezone.utc)
+    # Sasha 236 · the same booking held again is the same read-back, whatever its ONE-TIME forwarding address (act-<uuid>@…) —
+    # found live on /s2: a page route's read-back changed on every hold, so the yes never answered one they'd heard
+    same = _same_words(read_back.get("lines") or [])
+    at = prev["at"] if prev and (prev.get("sha") == read_back["sha256"] or (prev.get("same") == same and prev.get("rung") == rung)) \
+        else datetime.now(timezone.utc)
     _HELD[ctx.account] = {"rung": rung, "id": rid, "sha": read_back["sha256"], "at": at, "venue": rd["venue"], "summary": GW.summary(res),
                           "place_id": rd.get("place_id"),
-                          "when": res["when"]["at"], "party": res["how_many"]["count"], **(extra or {})}
+                          "when": res["when"]["at"], "party": res["how_many"]["count"], "same": same, **(extra or {})}
     lines = GW.guest_lines(rung, read_back.get("lines") or [])
     out = {"status": "awaiting_yes", "venue": GW.plain_venue(rd["venue"]), "route": rung, "when": GW.summary(res),
             "read_back": lines, "what_happens": {

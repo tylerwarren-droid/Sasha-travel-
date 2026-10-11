@@ -73,7 +73,7 @@ class Drawing(unittest.TestCase):
     def test_the_photo_picker_asks_for_the_photo_here(self):
         items, st = self.draw({"kind": "keep_capture", "what": "passport"})
         self.assertIn("passport's photo page here", items[0][1])
-        self.assertEqual(st["photo_for"]["kind"], "passport")
+        self.assertEqual(WA.agent_state(st)["photo_for"]["kind"], "passport")   # 238 · in the state the store keeps
 
 
 class Taps(unittest.TestCase):
@@ -94,7 +94,7 @@ class Routing(Base):
         super().setUp()
         self.seen = []
 
-        async def fake(ch, body, payload, st, out, now, button_text=""):
+        async def fake(ch, body, payload, st, out, now, button_text="", voice_in=False):
             self.seen.append((body, payload))
             out.text(f"agent: {body or payload}")
             return "x"
@@ -180,3 +180,165 @@ class SurfaceWa(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ── Sasha 238 · photos, memory + closing, voice ───────────────────────────────────────────────────────────────────────────────
+
+class Photos(unittest.TestCase):
+    CH = {"account_id": ACCOUNT, "wa_id_sha256": "k" * 64}
+
+    def setUp(self):
+        import asyncio
+        asyncio.set_event_loop(asyncio.new_event_loop())   # the shared run() needs a current loop (another test may have closed it)
+
+        async def fetch(p):
+            return b"\xff\xd8 fixture jpeg"
+        self.p = [mock.patch.object(WA, "FETCH", fetch)]
+        for x in self.p:
+            x.start()
+        WA._HELD_PHOTOS.clear()
+
+    def tearDown(self):
+        for x in self.p:
+            x.stop()
+
+    def test_purpose_order_asked_then_caption_then_a_question(self):
+        self.assertEqual(WA.purpose_of("my passport"), "passport")
+        self.assertEqual(WA.purpose_of("iberia plus card"), "loyalty")
+        self.assertEqual(WA.purpose_of("bank statement"), "statement")
+        self.assertEqual(WA.purpose_of("the damage on the door"), "damage")
+        st, out = {}, GW.Out()
+        run(WA.photo_intake(self.CH, {"NumMedia": "1", "MediaContentType0": "image/jpeg", "MessageSid": "SM1"}, st, out, NOW))
+        self.assertEqual(out.items[0][0], "ask")
+        self.assertEqual([b for b, _ in out.items[0][2]], ["Passport", "Loyalty card", "Something else"])
+        self.assertIn("SM1", WA._HELD_PHOTOS)
+
+    def test_a_passport_photo_is_read_masked_then_saved_on_yes(self):
+        from agapi import keep_scan as SCAN
+        scans, saved = [], []
+
+        async def scan(account, kind, image, mime):
+            scans.append(kind)
+            return {"token": "t1", "kind": kind, "masked": "Passport ES ••••456", "shown": ["Passport ES ••••456", "Expires 2031-05"]}
+
+        async def confirm(account, token):
+            saved.append(token)
+            return {"item": "Passport ES ••••456", "created": True, "type": "passport"}
+        st = {}
+        WA.set_agent_state(st, photo_for={"kind": "passport", "at": NOW.isoformat()})   # she asked for it (keep_capture)
+        out = GW.Out()
+        with mock.patch.object(SCAN, "scan", scan), mock.patch.object(SCAN, "confirm", confirm):
+            run(WA.photo_intake(self.CH, {"NumMedia": "1", "MediaContentType0": "image/jpeg", "Body": ""}, st, out, NOW))
+            self.assertEqual(scans, ["passport"])
+            self.assertIn("Passport ES ••••456", out.items[0][1])
+            self.assertEqual([i for _, i in out.items[0][2]], ["keep:yes", "keep:no"])
+            out2 = GW.Out()
+            run(WA.agent_turn(self.CH, "", "keep:yes", st, out2, NOW))
+        self.assertEqual(saved, ["t1"])
+        self.assertIn("Saved to your Keep: Passport ES ••••456", out2.items[0][1])
+        self.assertNotIn("photo", WA.agent_state(st))
+
+    def test_a_statement_photo_goes_to_subscriptions_then_the_agent(self):
+        from agapi import s2_subscriptions as SUBS
+        seen = []
+
+        async def agent(ch, body, payload, st, out, now, button_text="", voice_in=False):
+            seen.append(body)
+            return "x"
+        with mock.patch.object(SUBS, "keep_statement", lambda a, raw, mime: "st_ref1"), mock.patch.object(WA, "agent_turn", agent):
+            run(WA.photo_intake(self.CH, {"NumMedia": "1", "MediaContentType0": "image/jpeg", "Body": "my bank statement"}, {}, GW.Out(), NOW))
+        self.assertIn("statement_ref st_ref1", seen[0])
+
+    def test_damage_goes_to_the_accident_case(self):
+        from agapi import s2_fine_print as FP
+        sent, seen = [], []
+        st = {}
+        WA.render({"type": "render", "kind": "accident", "view": {"step": "photos", "say": "Next: your car from the front.",
+                   "shots": [{"shot": "front", "say": "Your car from the front"}, {"shot": "damage_close", "say": "The damage"}]}},
+                  GW.Out(), st, NOW)
+        self.assertEqual(WA.agent_state(st)["shots"], ["front", "damage_close"])
+
+        async def photo(account, shot, mime, b64):
+            sent.append(shot)
+            return {"ok": True}
+
+        async def agent(ch, body, payload, st, out, now, button_text="", voice_in=False):
+            seen.append(body)
+            return "x"
+        with mock.patch.object(FP, "accident_photo", photo), mock.patch.object(WA, "agent_turn", agent):
+            run(WA.photo_intake(self.CH, {"NumMedia": "1", "MediaContentType0": "image/jpeg", "Body": "the damage"}, st, GW.Out(), NOW))
+        self.assertEqual(sent, ["front"])                                        # the case's own next shot
+        self.assertIn("saved to the case as evidence; still to send: damage_close", seen[0])
+        self.assertEqual(WA.agent_state(st)["shots"], ["damage_close"])
+
+    def test_before_the_photos_step_it_says_so(self):
+        out = GW.Out()
+        run(WA.photo_intake(self.CH, {"NumMedia": "1", "MediaContentType0": "image/jpeg", "Body": "the damage"}, {}, out, NOW))
+        self.assertIn("at the photo step", out.items[0][1])
+
+    def test_a_card_twice_in_a_turn_is_drawn_once(self):
+        rs = [{"kind": "accident", "view": {"say": "old"}}, {"kind": "read_back", "read_back": ["x"]}, {"kind": "accident", "view": {"say": "new"}}]
+        self.assertEqual([r.get("view", {}).get("say") for r in WA.last_of_each_card(rs)], [None, "new"])
+
+    def test_the_agents_state_survives_the_stores_columns(self):
+        st = {"history": [], "pending": None}
+        WA.set_agent_state(st, photo_for={"kind": "loyalty", "at": NOW.isoformat()})
+        store = GW.MemoryGuestStore()
+        run(store.put_state("k", st))
+        self.assertEqual(WA.agent_state(run(store.get_state("k")))["photo_for"]["kind"], "loyalty")
+
+
+class MemoryClosingVoice(unittest.TestCase):
+    CH = {"account_id": ACCOUNT, "wa_id_sha256": "k" * 64}
+
+    def setUp(self):
+        import asyncio
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
+    def run_turn(self, body, st, recall=None, voice_in=False, reply="Here you go."):
+        calls, notes = [], []
+
+        async def quiver(account, message, history, session, surface="s1"):
+            calls.append(list(history))
+            yield {"type": "done", "text": reply}
+
+        async def nothing(*a, **k):
+            return None
+
+        async def rec(account, session):
+            return recall or {"line": None, "recent": []}
+
+        async def tts(text):
+            notes.append(text)
+            return b"mp3"
+        out = GW.Out()
+        with mock.patch("app.agent.sasha.turn_with_quiver", quiver), mock.patch("app.agent.sasha.over_budget", nothing), \
+                mock.patch("agapi.s2_memory.remember", nothing), mock.patch("agapi.s2_memory.closing", nothing), \
+                mock.patch("agapi.s2_memory.recall", rec), mock.patch.object(WA, "TTS", tts):
+            run(WA.agent_turn(self.CH, body, "", st, out, NOW, voice_in=voice_in))
+        return out, calls, notes
+
+    def test_away_she_opens_with_what_she_remembers_from_s2(self):
+        out, calls, _ = self.run_turn("hi again", {}, recall={"line": "Welcome back — we were looking at tables near Gran Vía. Want to carry on?",
+                                                           "recent": [{"role": "user", "content": "a table near Gran Vía"}]})
+        self.assertEqual(out.items[0], ("text", "Welcome back — we were looking at tables near Gran Vía. Want to carry on?"))
+        self.assertEqual(calls[0][0]["content"], "a table near Gran Vía")        # /s2's conversation carried into WhatsApp
+
+    def test_thanks_closes_and_rests_until_the_next_message(self):
+        st = {"history": [{"role": "user", "content": "book it"}, {"role": "assistant", "content": "Booked."}]}
+        WA.set_agent_state(st, last_seen=NOW.isoformat())
+        out, calls, _ = self.run_turn("thanks!", st)
+        self.assertEqual(calls, [])                                              # no model call: a short close
+        self.assertTrue(WA.agent_state(st).get("dormant"))
+        out, calls, _ = self.run_turn("one more thing", st)
+        self.assertFalse(WA.agent_state(st).get("dormant"))                      # woken by their message
+
+    def test_voice_in_gets_voice_out_text_in_text_out(self):
+        out, _, notes = self.run_turn("hello", {"history": [{"role": "user", "content": "x"}]}, voice_in=True)
+        self.assertEqual(notes, ["Here you go."])
+        self.assertTrue(any(i[0] == "media" and "/api/agent/voice/note/" in i[2] for i in out.items))
+        out, _, notes = self.run_turn("hello", {"history": [{"role": "user", "content": "x"}]}, voice_in=False)
+        self.assertEqual(notes, [])
+        token = [i for i in self.run_turn("hey", {"history": [{"role": "user", "content": "x"}]}, voice_in=True)[0].items
+                 if i[0] == "media"][0][2].rsplit("/", 1)[1][:-4]
+        self.assertEqual(WA.note_audio(token), b"mp3")

@@ -1223,6 +1223,17 @@ async def agent_turn(request: Request):
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@router.get("/voice/note/{token}.mp3")
+async def voice_note(token: str):
+    """Sasha 238 · her answer as a WhatsApp voice note: the mp3 Twilio fetches — in memory, one hour, behind an unguessable token."""
+    from booking_signer import wa_agent as WA
+    audio = WA.note_audio(token[:64])
+    if not audio:
+        return JSONResponse({"ok": False, "rule": "gone"}, status_code=404)
+    from fastapi.responses import Response
+    return Response(audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
+
+
 @router.get("/s2/memory")
 async def s2_memory(request: Request, session: str = ""):
     """Sasha 231 · /s2 on return: what she remembers for this account (masked) — the "Welcome back — we were looking at …" line,

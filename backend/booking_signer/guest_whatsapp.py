@@ -828,6 +828,12 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     handed = (p.get("Body") or "").strip()
     if handed and handed != body and not payload:
         body = handed
+    from . import wa_agent as WA   # Sasha 238 · a PHOTO on the one brain → the same handlers as /s2 (products first, above)
+    if WA.on(account) and WA.is_photo(p) and not payload:
+        await WA.photo_intake(ch, p, st, out, now)
+        await STORE.put_state(key, st)
+        await deliver(ch, frm, out, now)
+        return out
     if not body and not payload:
         # Sasha 104 · a voice note or a picture arrives with no words: voice notes are phase 3 (F-3), so say so plainly
         has_media = int(p.get("NumMedia") or 0) > 0
@@ -849,7 +855,8 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     # /s2. A button from an OLD flow (in flight) finishes there; invitations stay in front (no agent tool for them yet).
     from . import wa_agent as WA
     if WA.on(account) and (not payload or WA.ours(payload)) and not (not payload and _invite_words(body, now)):
-        await WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip())
+        await WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip(),
+                            voice_in=bool(heard))   # Sasha 238 · a voice note in → a voice note back
         await STORE.put_state(key, st)
         await deliver(ch, frm, out, now)
         return out

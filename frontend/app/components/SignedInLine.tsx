@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import { ensureGuest } from '@/lib/guest-start'
-import { badge } from '@/lib/acting-rule.mjs'
+import { badge, whoKey, changed, PER_PERSON_LOCAL, WHO_KEY } from '@/lib/acting-rule.mjs'
 
 type Who = { who: 'founder' | 'guest' | null; acting?: 'founder' | 'user' | 'guest' | null; email?: string | null; guest_sign_in_open: boolean }
 
@@ -18,6 +18,7 @@ function useWho(): Who | null | 'unknown' {
       try {
         const r = await fetch('/api/auth/whoami', { cache: 'no-store' })
         const j = r.ok ? (await r.json() as Who) : null
+        if (j) forgetIfSomeoneElse(j)   // Sasha 242 · before anything reads them
         if (!off) setWho(j ?? 'unknown')
       } catch {
         if (!off) setWho('unknown')
@@ -26,6 +27,20 @@ function useWho(): Who | null | 'unknown' {
     return () => { off = true }
   }, [])
   return who
+}
+
+/** Sasha 242 · per-person browser storage belongs to ONE person: when the person acting changes (sign-out, another sign-in),
+ *  it goes (lib/acting-rule.mjs). Found by EU's walk (row 730): a new account saw trips it never made. */
+export function forgetPerson(): void {
+  try { for (const k of PER_PERSON_LOCAL) localStorage.removeItem(k) } catch { /* private window */ }
+  try { sessionStorage.clear() } catch { /* private window */ }
+}
+function forgetIfSomeoneElse(j: Who): void {
+  try {
+    const now = whoKey(j.acting ?? (j.who === 'founder' ? 'founder' : j.who === 'guest' ? 'guest' : null), j.email)
+    if (changed(localStorage.getItem(WHO_KEY), now)) forgetPerson()
+    localStorage.setItem(WHO_KEY, now)
+  } catch { /* storage off: nothing kept to leak */ }
 }
 
 export function SignInToBook() {
@@ -44,6 +59,7 @@ export function WhoIsBooking() {
   async function signOut() {
     try {
       const r = await fetch('/api/auth/sign-out', { method: 'POST' })
+      if (r.ok) { forgetPerson(); try { localStorage.removeItem(WHO_KEY) } catch { /* fine */ } }   // Sasha 242
       const j = await r.json().catch(() => ({})) as { message?: string }
       setOut(r.ok ? 'Signed out.' : `Not signed out — ${j.message ?? `HTTP ${r.status}`}`)
     } catch (e) {

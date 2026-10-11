@@ -341,7 +341,16 @@ async def _online_route(account: str, c: dict, body: dict) -> Optional[str]:
         return page[0]
     if "form" in rungs and not any(f.get("kind") == "platform" for f in read.get("facts") or []):
         return "their own booking page"
+    # Sasha 242 (EU 238 walk) · a venue whose OWN site stops machines (a CAPTCHA) still books online — the guest finishes it
+    # themselves (the 175 flow). Dropping it hid Hammam Al Ándalus ("Hammam Madrid Plaza Mayor") from "Arab baths in Madrid".
+    if online_by_hand(read):
+        return "their own site (you finish it — it has a CAPTCHA)"
     return None
+
+
+def online_by_hand(read: Optional[dict]) -> bool:
+    """Sasha 242 · the venue's own site carries a CAPTCHA: bookable online, by the guest's own hand."""
+    return any(f.get("kind") == "challenge" and f.get("source_kind") == "site" for f in (read or {}).get("facts") or [])
 
 
 async def _online_only(account: str, out: dict, body: dict) -> dict:
@@ -462,7 +471,26 @@ async def plan_view(request: Request):
         return {"plan": None, "plans": await PS.plans(account)}
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
     rows = PS.truthful((j or {}).get("reservations") or [] if s == 200 else [])
-    return {"plan": await PS.view(account, p, JN.for_journey(rows, p.get("trip_id"))), "plans": await PS.plans(account)}
+    return {"plan": await PS.view(account, p, JN.for_journey(rows, p.get("trip_id"))), "plans": await PS.plans(account),
+            **({"trip_total": tt} if (tt := await trip_total(account, p.get("trip_id"))) else {})}
+
+
+async def trip_total(account: str, trip_id: Optional[str]) -> Optional[dict]:
+    """Sasha 242 (EU's walk: chat "€496 ALL IN", Trip tab "Hotels $340") · ONE TOTAL: the Trip tab shows the figure she says — the
+    basket's, in euros, as the rows stand (no re-search, no re-price on a 6-second poll). None until the basket has a price."""
+    if not trip_id:
+        return None
+    from . import basket as BK
+    from agapi.v0 import breakdown
+    try:
+        rows = BK.to_book(await BK.items(account, trip_id, ("suggested", "chosen")))
+    except Exception as e:
+        log.info("[ladder_routes] trip total not read: %s", type(e).__name__)
+        return None
+    t = BK.total(rows)
+    if not rows or not t["amount"] or t["currency"] != "EUR":
+        return None
+    return {**breakdown(rows, t["amount"]), "trip_id": trip_id}
 
 
 @router.get("/journeys")

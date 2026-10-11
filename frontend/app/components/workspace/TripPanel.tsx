@@ -49,7 +49,10 @@ const shortStatus = (b: ServerBooking): string => {
   const ref = /their ref ([A-Z0-9-]+)/.exec(b.status_words ?? '')
   return (SHORT[b.status ?? ''] ?? b.status_words ?? b.status ?? '') + (ref && b.status === 'confirmed' ? ` · ref ${ref[1]}` : '')
 }
-type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?: string }
+type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?: string; trip_total?: TripTotal }
+// Sasha 242 · ONE TOTAL: the basket's figure in euros, the same one Sasha says in the chat
+type TripTotal = { total_eur: number; flights_eur: number; stays_eur: number; stays_are: string; trip_id: string }
+const eur = (n: number) => `€${Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 type JRow = { id: string; venue: string; date: string | null; time: string | null; status: string; status_words?: string; booking_reference?: string | null; trip_id?: string }
 /** CR 45 · a RelocateMe form on the Move tab: its state, its PDF one tap away (if there is one), where it goes next */
 type JForm = { name: string; state: 'filled' | 'signed' | 'missing' | 'waiting' | 'done' | 'doing' | 'expired' | 'info'; note: string; pdf: string | null; next: string | null }
@@ -124,7 +127,8 @@ function useServerPlan(tripId: string | null, onPlans?: (p: PlanRef[]) => void):
     const pull = async () => {
       const r = await bookingReq(`/api/booking/plan${tripId ? `?trip_id=${encodeURIComponent(tripId)}` : ''}`).catch(() => null)
       if (!off && r?.ok) {
-        setPlan(untagDeep(r.json.plan ?? null) as ServerPlan | null)   // Sasha 218 · no visible TEST label
+        const p = untagDeep(r.json.plan ?? null) as ServerPlan | null   // Sasha 218 · no visible TEST label
+        setPlan(p && r.json.trip_total ? { ...p, trip_total: r.json.trip_total as TripTotal } : p)
         onPlans?.((r.json.plans ?? []) as PlanRef[])   // Sasha 175 · every trip on the account, for the picker
       }
     }
@@ -247,7 +251,9 @@ export default function TripPanel({
     )
   }
 
-  const cb: any = (richItinerary as any).cost_breakdown
+  // Sasha 242 · the basket's euro total for THIS trip wins over the planner's dollar estimate (they disagreed: €496 vs $340 hotels)
+  const tt = server?.trip_total && server.trip_total.trip_id === (activeTrip ?? server.trip_id) ? server.trip_total : null
+  const cb: any = tt ? null : (richItinerary as any).cost_breakdown
   const pax = cb?.travellers || travellerCount
   const dayCount = richItinerary.days?.length || 0
   // Where the trip actually begins — the first day that names a city, not necessarily day 1.
@@ -270,8 +276,8 @@ export default function TripPanel({
           <div className="lw-sumcell"><span className="k">Stays</span><span className="v">{stayCount}</span></div>
         )}
         <div className="lw-sumcell tot">
-          <span className="k">{isBooked ? 'Trip total' : 'Estimated total'}</span>
-          <span className="amt">${(richItinerary.estimated_total_usd || 0).toLocaleString()}</span>
+          <span className="k">{isBooked ? 'Trip total' : tt ? 'All in' : 'Estimated total'}</span>
+          <span className="amt">{tt ? eur(tt.total_eur) : `$${(richItinerary.estimated_total_usd || 0).toLocaleString()}`}</span>
         </div>
       </div>
 
@@ -313,6 +319,12 @@ export default function TripPanel({
             <div className="lw-mapwrap"><TripMap days={richItinerary.days} /></div>
 
 
+            {tt && (
+              <div className="lw-breakdown">
+                <span>✈️ Flights {eur(tt.flights_eur)}</span>
+                <span>🏨 Stays {eur(tt.stays_eur)}{tt.stays_are === 'estimates' ? ' (estimate)' : ''}</span>
+              </div>
+            )}
             {cb && (
               <div className="lw-breakdown">
                 <span>🏨 Hotels ${Number(cb.hotels || 0).toLocaleString()}</span>

@@ -35,3 +35,22 @@ export function badge(kind, email) {
   if (kind === 'user') return `Signed in as ${email || 'you'}`
   return 'Guest'
 }
+
+/**
+ * Sasha 242 · PER-PERSON browser storage goes when the person acting changes (sign-out, another sign-in) — found by EU's walk
+ * (row 730): after a new sign-in, Trip showed trips the account never made. Device preferences (the mic, mute, a closed panel) stay.
+ */
+export const PER_PERSON_LOCAL = ['sasha_last_session', 's2_met', 's2_hello', 'kanoe_onboarding_draft']
+export const WHO_KEY = 'sasha.who'
+
+/** The identity this browser acts as, as a short key ("founder", "user:a@b.c", "guest:guest-…", "none"). */
+export function whoKey(acting, email) {
+  if (acting === 'founder') return 'founder'
+  if (acting === 'user' || acting === 'guest') return `${acting}:${String(email || '').toLowerCase()}`
+  return 'none'
+}
+
+/** True when what was stored belongs to someone else (a first visit — nothing stored — is not a change). */
+export function changed(prev, now) {
+  return typeof prev === 'string' && prev !== '' && prev !== now
+}

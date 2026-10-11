@@ -20,8 +20,10 @@ let founder: boolean | null = null
 async function refreshFounder(): Promise<void> {
   if (founder !== null) return
   try {
-    const r = await fetch('/api/founder-session', { cache: 'no-store' })
-    founder = r.ok && (await r.json())?.signed_in === true
+    // Sasha 242 · who is ACTING (241's rule, /api/auth/whoami), not merely whether the founder cookie exists: a real sign-in on
+    // a browser that also holds the founder cookie is that account, never the founder (found by EU's walk, row 730)
+    const r = await fetch('/api/auth/whoami', { cache: 'no-store' })
+    founder = r.ok && (await r.json())?.acting === 'founder'
   } catch {
     founder = false   // can't tell: the call goes as the public demo's — never as the founder's
   }

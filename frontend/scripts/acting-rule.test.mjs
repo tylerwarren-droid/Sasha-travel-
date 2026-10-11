@@ -21,3 +21,14 @@ test('the badge names who is acting', () => {
   assert.equal(badge('guest', 'guest-x@guests.kanoe.ai'), 'Guest')
   assert.ok(isAutoGuest('GUEST-1@GUESTS.KANOE.AI'))
 })
+
+test('Sasha 242 · per-person storage goes when the person acting changes, not on a first visit', async () => {
+  const { whoKey, changed, PER_PERSON_LOCAL } = await import('../lib/acting-rule.mjs')
+  const a = whoKey('user', 'Tylerwarren+EU234@gmail.com'), b = whoKey('user', 'someone@else.com')
+  assert.equal(a, 'user:tylerwarren+eu234@gmail.com')
+  assert.ok(changed(a, b))
+  assert.ok(changed(whoKey('founder'), a))
+  assert.ok(!changed(a, a))
+  assert.ok(!changed(null, a))              // first visit: nothing to clear
+  assert.ok(PER_PERSON_LOCAL.includes('sasha_last_session'))
+})

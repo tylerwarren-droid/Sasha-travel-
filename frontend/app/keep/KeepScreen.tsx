@@ -9,7 +9,7 @@
  * and booking references are only ever shown to YOU, here. Card numbers, one-time codes and passwords are never kept.
  * Values go from this form straight to the server, which seals them under your own key; nothing here logs or keeps them.
  */
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useState, type CSSProperties } from 'react'
 import { GatedButton } from '../booking-helper/GatedButton'
 
 type Use = { what: string; at?: string; for?: string }   // Sasha 235 · from the Activity rows the Keep writes
@@ -64,7 +64,11 @@ function AddItem({ types, onSaved }: { types: Types; onSaved: (msg: string) => v
         <label key={f} className="mt-2 block text-sm">
           <span className="opacity-70">{label(f)}</span>
           <input className="mt-1 w-full rounded-lg border border-neutral-300 bg-transparent p-3 text-base dark:border-neutral-700"
-            type={DATE_FIELDS.has(f) ? 'date' : SECRET_FIELDS.has(f) ? 'password' : 'text'} autoComplete="off" spellCheck={false}
+            // Sasha 242 (EU's walk) · never type=password: Chrome filled a saved password into the passport number. Text, no
+            // autofill, still masked on screen (CSS), and the password managers told to stay out
+            type={DATE_FIELDS.has(f) ? 'date' : 'text'} autoComplete="off" spellCheck={false} name={`keep-${kind}-${f}`}
+            data-lpignore="true" data-1p-ignore="true" data-form-type="other"
+            style={SECRET_FIELDS.has(f) ? ({ WebkitTextSecurity: 'disc' } as CSSProperties) : undefined}
             value={vals[f] ?? ''} onChange={e => setVals(v => ({ ...v, [f]: e.target.value }))} />
         </label>
       ))}

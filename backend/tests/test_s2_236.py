@@ -122,6 +122,12 @@ class SameReadBack(unittest.TestCase):
             self.assertNotEqual(VN._HELD[ACCT]["at"], first)                   # different words: a new read-back
 
 
+class PageOnThisScreen(unittest.TestCase):
+    def test_not_sent_to_the_phone_is_never_said_to_be_there(self):   # found live: "Their Treatwell page is on your phone"
+        src = open(__import__("agapi.venues", fromlist=["x"]).__file__).read()
+        self.assertIn("Their page is on this screen — Tap to finish opens it. Never say it's on their phone.", src)
+
+
 class BookSaysThisScreen(unittest.TestCase):
     def test_s2_book_is_its_own_s1_untouched(self):
         from agapi import v0 as API

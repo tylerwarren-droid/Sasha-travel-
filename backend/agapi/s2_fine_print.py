@@ -45,6 +45,42 @@ TOOLS = [
 ]
 
 # ── CR 75 · the counter card, the accident playbook, claims (step 11: /s2's screens) ────────────────────────────────────
+# CR 78 · the facts' own keys, named for the model (CR 75's bare object let it guess keys AgAPI refused, so nothing landed)
+FACTS = {"type": "object", "properties": {
+    "date": {"type": "string", "description": "YYYY-MM-DD"}, "time": {"type": "string", "description": "HH:MM, 24-hour"},
+    "place": {"type": "string", "description": "where it happened, in their words"},
+    "other_vehicle_plate": {"type": "string", "description": "the OTHER car's number plate, as they said it"},
+    "your_plate": {"type": "string", "description": "their own (rental) car's plate"},
+    "your_insurer": {"type": "string"}, "injuries": {"type": "string"},
+    "witnesses": {"type": "array", "items": {"type": "string"}}}}
+_HHMM = re.compile(r"\b([01]?\d|2[0-3])[:h]([0-5]\d)\b")
+
+
+def _card_name(c: dict) -> str:
+    """'Example Bank Travel Visa', not 'Example Bank Example Bank Travel Visa'."""
+    return c["product"] if (c.get("product") or "").startswith(c.get("issuer") or "\0") else f"{c.get('issuer')} {c.get('product')}"
+
+
+def agapi_facts(given: Optional[dict], said: str = "") -> Dict[str, Any]:
+    """CR 78 · the model's facts → AgAPI's keys (other_vehicle / your_vehicle objects). A time they typed ("14:00") is taken from their
+    own words when the model left it out — a plate never is (theirs or the other car's can't be told apart from the words alone)."""
+    g = dict(given or {})
+    out: Dict[str, Any] = {k: str(g[k])[:120] for k in ("date", "time", "place", "your_insurer", "injuries") if g.get(k)}
+    if g.get("other_vehicle_plate"):
+        out["other_vehicle"] = {"plate": str(g["other_vehicle_plate"])[:60]}
+    if g.get("your_plate"):
+        out["your_vehicle"] = {"plate": str(g["your_plate"])[:60]}
+    if g.get("witnesses"):
+        out["witnesses"] = [str(w)[:120] for w in g["witnesses"]][:4]
+    if "time" not in out:
+        m = _HHMM.search(said or "")
+        if m:
+            out["time"] = f"{int(m.group(1)):02d}:{m.group(2)}"
+    if out.get("date") and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", out["date"]):
+        out.pop("date")
+    if out.get("time") and not re.fullmatch(r"\d{2}:\d{2}", out["time"]):
+        out.pop("time")
+    return out
 TOOL_NAMES = TOOL_NAMES + ("rental_cover", "accident", "accident_notify", "file_claim", "claim_status")
 TOOLS += [
     {"name": "rental_cover", "description": (
@@ -58,11 +94,15 @@ TOOLS += [
         "rental). SAFETY FIRST: the first question is 'Is anyone hurt?' and nothing else comes until it's answered; if yes or not sure, tell "
         "them to call 112 now. Pass each answer of theirs ('no', 'yes', 'not sure', 'help is on the way', 'done') and the facts they give. "
         "Say each step's `say` as given. Never fill a fault box, never sign, never argue who's at fault. Injuries, a disputed fault, police "
-        "charges or a claim against them: add the flag and say the hand-off line as given."),
+        "charges or a claim against them: add the flag and say the hand-off line as given. EVERY fact they give — the time, the place, the "
+        "other car's plate — goes in `facts` the moment they say it, at any step (\"14:00, Rotunda do Marquês, AA-00-ZZ\" → time 14:00, place "
+        "Rotunda do Marquês, other_vehicle_plate AA-00-ZZ). The card they paid with goes in `card` whenever they name it; if the step "
+        "asks which card, ask it as given. The dates it gives are said, never offered for a calendar."),
      "input_schema": {"type": "object", "properties": {"answer": {"type": "string"}, "country": {"type": "string"}, "place": {"type": "string"},
                                                        "rental_company": {"type": "string"}, "card": {"type": "string"},
                                                        "flags": {"type": "array", "items": {"type": "string", "enum": ["injuries", "fault_disputed", "police_charges", "claim_against_me"]}},
-                                                       "facts": {"type": "object"}}}},
+                                                       "new_accident": {"type": "boolean", "description": "true only for a SECOND, different accident"},
+                                                       "facts": FACTS}}},
     {"name": "accident_notify", "description": (
         "Tell the rental company about the accident with the photos and the statement's facts. The FIRST call returns the read-back — read it "
         "back and ask; call again only after they say yes, in a later turn."), "input_schema": {"type": "object", "properties": {}}},
@@ -72,6 +112,29 @@ TOOLS += [
     {"name": "claim_status", "description": "Their latest card claim: its state, deadlines, what's still missing and what the insurer replied.",
      "input_schema": {"type": "object", "properties": {}}},
 ]
+# ── CR 78 · money back (EU261): the check, then the claim to the airline's own address, read back, filed on their yes ──────────────────
+TOOL_NAMES = TOOL_NAMES + ("flight_money_back", "file_flight_claim")
+TOOLS += [
+    {"name": "flight_money_back", "description": (
+        "Money back for a flight that was delayed, cancelled or where they were denied boarding (EU rules): whether it's owed and how much, "
+        "each rule quoted from the Regulation's own text. Ask only for what's missing: the airline and flight number, the date, from and to "
+        "(airport codes), what happened and how late it arrived (or the days' notice of a cancellation). Say `say` as given; never name an "
+        "amount it didn't give. If it's owed, ask whether to claim it."),
+     "input_schema": {"type": "object", "properties": {
+         "airline": {"type": "string", "description": "IATA code, e.g. IB"}, "number": {"type": "string"}, "date": {"type": "string", "description": "YYYY-MM-DD"},
+         "from": {"type": "string", "description": "IATA airport, e.g. MAD"}, "to": {"type": "string"},
+         "what": {"type": "string", "enum": ["delayed", "cancelled", "denied_boarding"]},
+         "arrival_delay_minutes": {"type": "integer"}, "notice_days": {"type": "integer"},
+         "airline_said_extraordinary": {"type": "boolean"}, "booking_reference": {"type": "string"},
+         "passengers": {"type": "array", "items": {"type": "string"}}}, "required": ["airline", "date", "from", "to", "what"]}},
+    {"name": "file_flight_claim", "description": (
+        "File the flight compensation claim flight_money_back prepared, to the airline's own address. Needs the booking reference and every "
+        "passenger's name (ask if missing). The FIRST call returns the read-back — read it back and ask; call again only after they say yes, "
+        "in a later turn."),
+     "input_schema": {"type": "object", "properties": {"booking_reference": {"type": "string"}, "passengers": {"type": "array", "items": {"type": "string"}}}}},
+]
+_MONEY: Dict[str, str] = {}        # account → the latest money-back case
+
 _ACCIDENT: Dict[str, str] = {}     # account → the open accident case
 _CLAIM: Dict[str, str] = {}        # account → the latest claim case
 _PEND: Dict[str, dict] = {}        # account|op → {read_back_id, at} — the read-back said; their yes comes next turn
@@ -200,21 +263,31 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                                        "render": {"kind": "counter_card", "card": c}}}
     if name == "accident":
         cid = _ACCIDENT.get(ctx.account)
-        if not cid or (args.get("country") and args.get("place") and not args.get("answer")):
-            item = await _card_item(uid, args.get("card") or "")
+        facts = agapi_facts({**(args.get("facts") or {}), **({"place": args["place"]} if cid and args.get("place") else {})}, ctx.user_said or "")
+        # CR 78 · an open case is never restarted by a later fact (CR 75 opened a new case whenever country + place came without an answer)
+        if not cid or args.get("new_accident"):
+            item = await _card_item(uid, args.get("card") or "") if args.get("card") else None
             r = await CALL("cards.accident_start", {"end_user": uid, "country": str(args.get("country") or "ES").upper()[:2], "place": args.get("place") or "",
-                                                    "rental_company": args.get("rental_company") or "", **({"card_item_id": item} if item else {})})
+                                                    "rental_company": args.get("rental_company") or "", **({"card_item_id": item} if item else {}),
+                                                    **({"facts": facts} if facts else {})})
             if not r.get("ok"):
                 return _fail(r)
             _ACCIDENT[ctx.account] = r["result"]["case_id"]
             return {"ok": True, "result": {"say": r["result"]["say"], "step": "safety", "render": _view(r["result"])}}
+        item = await _card_item(uid, args["card"]) if args.get("card") else None
         r = await CALL("cards.accident_step", {"end_user": uid, "case_id": cid, **({"answer": args["answer"]} if args.get("answer") else {}),
-                                               **({"flags": args["flags"]} if args.get("flags") else {}), **({"facts": args["facts"]} if args.get("facts") else {})})
+                                               **({"flags": args["flags"]} if args.get("flags") else {}), **({"facts": facts} if facts else {}),
+                                               **({"card_item_id": item} if item else {})})
         if not r.get("ok"):
             return _fail(r)
         v = r["result"]
+        if v.get("claim_case_id"):
+            _CLAIM[ctx.account] = v["claim_case_id"]
+        ask = v.get("ask_card")
         return {"ok": True, "result": {"say": v.get("say"), "step": v["step"], **({"handoff": v["handoff"]} if v.get("handoff") else {}),
-                                       "how": "Say `say` as given; then the hand-off line if there is one.", "render": _view(v)}}
+                                       **({"ask": ask["say"], "cards": [_card_name(c) for c in ask["cards"]]} if ask else {}),
+                                       "how": ("Say `say` as given; then the hand-off line if there is one." + (" Then ask `ask` as given." if ask else "")
+                                               + " Never offer to put these dates in a calendar."), "render": _view(v)}}
     if name == "accident_notify":
         cid = _ACCIDENT.get(ctx.account)
         if not cid:
@@ -224,15 +297,50 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             _CLAIM[ctx.account] = r["result"]["claim_case_id"]
         if r.get("ok") and r["result"].get("state"):
             v = r["result"]
-            return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), "render": _view(v)}}
+            ask = v.get("ask_card")   # CR 78 · notified with no card known: the claim waits for their answer
+            return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), "render": _view(v),
+                                           **({"ask": ask["say"], "cards": [_card_name(c) for c in ask["cards"]],
+                                               "how": "Then ask `ask` as given; their answer goes to `accident` as `card`."} if ask else {})}}
         return r if r.get("ok") else _fail(r)
     if name == "file_claim":
         cid = _CLAIM.get(ctx.account)
+        if not cid and _ACCIDENT.get(ctx.account):   # CR 78 · an accident with no card named: ask, don't fail
+            mine = await CALL("cards.mine", {"end_user": uid})
+            cards = (mine.get("result") or {}).get("cards") or []
+            return {"ok": True, "result": {"status": "which_card", "ask": "Which card did you pay the rental with?",
+                                           "cards": [_card_name(c) for c in cards],
+                                           "how": "Ask `ask` as given; their answer goes to `accident` as `card`, then file_claim again."}}
         if not cid:
             return {"ok": False, "error": {"code": "no_claim", "message": "there's no claim prepared yet"}}
         r = await _with_yes(ctx, f"{ctx.account}|file_claim", "cards.claim_file", {"end_user": uid, "case_id": cid})
         if r.get("ok") and r["result"].get("state"):
             return {"ok": True, "result": {"status": r["result"]["state"], "render": {"kind": "claim_status", "claim": r["result"]}}}
+        return r if r.get("ok") else _fail(r)
+    if name == "flight_money_back":
+        flight = {k: args[k] for k in ("airline", "number", "date", "from", "to", "what", "arrival_delay_minutes", "notice_days", "airline_said_extraordinary")
+                  if args.get(k) not in (None, "")}
+        for k in ("airline", "from", "to"):
+            flight[k] = str(flight.get(k) or "").upper()
+        r = await CALL("money.flight_check", {"end_user": uid, "flight": flight, **({"booking_reference": args["booking_reference"]} if args.get("booking_reference") else {}),
+                                              **({"passengers": args["passengers"]} if args.get("passengers") else {})})
+        if not r.get("ok"):
+            return _fail(r)
+        v = r["result"]
+        _MONEY[ctx.account] = v["case_id"]
+        return {"ok": True, "result": {"say": v["say"], "verdict": v["verdict"], "amount": v.get("amount"),
+                                       "quotes": [q["quote"] for x in v["rules"] for q in x["quotes"]][:4],
+                                       "how": ("Say `say` as given: the amount is the Regulation's own sentence, quoted. Never name an amount it "
+                                               "didn't give, never promise the airline will pay.")}}
+    if name == "file_flight_claim":
+        cid = _MONEY.get(ctx.account)
+        if not cid:
+            return {"ok": False, "error": {"code": "no_case", "message": "check the flight first (flight_money_back)"}}
+        body = {"end_user": uid, "case_id": cid, **({"booking_reference": args["booking_reference"]} if args.get("booking_reference") else {}),
+                **({"passengers": args["passengers"]} if args.get("passengers") else {})}
+        r = await _with_yes(ctx, f"{ctx.account}|file_flight_claim", "money.flight_claim", body)
+        if r.get("ok") and r["result"].get("state"):
+            v = r["result"]
+            return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), **({"draft": v["draft"]} if v.get("draft") else {})}}
         return r if r.get("ok") else _fail(r)
     if name == "claim_status":
         cid = _CLAIM.get(ctx.account)
@@ -243,6 +351,7 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             return _fail(r)
         c = r["result"]
         return {"ok": True, "result": {"state": c["state"], "deadlines": [d["say"] for d in c["deadlines"]],
+                                       "how": "Say the deadlines as dates. Never offer to put them in a calendar — the calendar is for confirmed bookings.",
                                        "missing": [e["item"] for e in c["evidence"] if e.get("missing")], "replies": len(c.get("replies") or []),
                                        "render": {"kind": "claim_status", "claim": c}}}
     if name == "my_cards":

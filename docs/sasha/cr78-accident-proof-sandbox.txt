@@ -1,0 +1,82 @@
+
+» 'Add my Example Bank Travel Visa'
+  add_card({"issuer": "Example Bank", "product": "Example Bank Travel Visa", "network": "visa"})
+
+» "I've had an accident in Lisbon with my Example Rentals car"
+  accident({"country": "PT", "place": "Lisbon", "rental_company": "Example Rentals"})
+  say: Is anyone hurt?
+  step: safety
+
+» '14:00, Rotunda do Marquês, AA-00-ZZ'
+  accident({"country": "PT", "place": "Rotunda do Marquês", "facts": {"time": "14:00", "other_vehicle_plate": "AA-00-ZZ"}})
+  say: Is anyone hurt?
+  step: safety
+
+» "No, nobody's hurt"
+  accident({"answer": "no"})
+  say: The official rules for Portugal aren't read at source yet, so I won't quote them. Stay at the scene, keep everyone safe, and exchange details with the other driver.
+  step: duties
+
+» 'done'
+  accident({"answer": "done"})
+  say: Next: Your car from the front.
+  step: photos
+
+» 'done'
+  accident({"answer": "done"})
+  say: Here's the statement with the facts filled in. The circumstances boxes and the sketch are yours to fill with the other driver. Don't sign anything you disagree with — and I never sign.
+  step: statement
+  STATEMENT facts: {"date": "2026-10-10", "time": "14:00", "place": "Rotunda do Marquês", "injuries": "none, as you said", "your_vehicle": {}, "your_insurer": null, "your_details_from_keep": [], "witnesses": [], "other_vehicle": {"plate": "AA-00-ZZ"}}
+
+» 'done'
+  accident({"answer": "done"})
+  say: Three clocks, each from its own source:
+  step: clocks
+  ask: Which card did you pay the rental with?
+  cards: ["Example Bank Travel Visa"]
+
+» 'done'
+  accident({"answer": "done"})
+  say: Ready to notify the rental company. I'll read it back first.
+  step: notify
+  ask: Which card did you pay the rental with?
+  cards: ["Example Bank Travel Visa"]
+
+» 'Send it to the rental company'
+  accident_notify({})
+  status: awaiting_yes
+  ask: Read this back and ask; it goes only on their yes, in their next message.
+  read_back: ["Report the accident to Example Rentals at accidents@example-rentals.example (the address in its terms).", "Date: 2026-10-10", "Time: 14:00", "Place: Rotunda do Marquês", "Vehicle: as on the rental agreement", "Other vehicle: plate AA-00-ZZ", "Injuries: none reported", "Circumstances boxes, sketch, signature: left to the drivers (not filled by Sasha).", "With: 0 photo(s), each recorded with its fingerprint and time.", "Their deadline: within 48 hours (their terms: \"Any accident must be reported to Example Rentals within 48 hours, with a completed European Accident Statement.\")."]
+
+» 'Yes, send it.'
+  accident_notify({})
+  say: Sent to Example Rentals.
+  status: sent
+  ask: Which card did you pay the rental with?
+  cards: ["Example Bank Travel Visa"]
+
+» 'And file the claim with my card'
+  file_claim({})
+  status: which_card
+  ask: Which card did you pay the rental with?
+  cards: ["Example Bank Travel Visa"]
+
+» 'My Travel Visa'
+  accident({"card": "travel visa"})
+  say: Sent to Example Rentals.
+  step: claim
+
+» 'File it'
+  file_claim({})
+  status: awaiting_yes
+  ask: Read this back and ask; it goes only on their yes, in their next message.
+  read_back: ["File a rental car damage claim on your Example Bank Travel Visa with Example Assistance, by email to claims@example-assistance.example.", "What happened (2026-10-10): Accident at Rotunda do Marquês at 14:00; the other vehicle's plate AA-00-ZZ.", "Amount claimed: to be confirmed with the receipts.", "The terms it relies on: \"This benefit is primary coverage and covers damage to and theft of the rental vehicle.\" \"The maximum benefit is EUR 50,000 per rental, including any excess charged by the rental company.\"", "Attached: accident-statement-facts.txt (accident statement).", "To follow: card statement line, rental agreement, damage report, photos, repair invoice.", "Deadline: notify by 2026-12-09 (the terms: \"You must notify Example Assistance within 60 days of the incident.\")."]
+
+» 'Yes, file it.'
+  file_claim({})
+  status: filed
+
+» "What's the status?"
+  claim_status({})
+  state: filed
+  how: Say the deadlines as dates. Never offer to put them in a calendar — the calendar is for confirmed bookings.

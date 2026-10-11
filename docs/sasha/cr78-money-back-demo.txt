@@ -1,0 +1,38 @@
+CR 78 · money back demo — Sasha's /s2 code (cr/78-s2) over HTTP to AgAPI cr/78 running locally on a throwaway store. 10 Oct 2026.
+Example Air is a labelled TEST FIXTURE (not a real airline); its claims facts are its own page's sentences. Filing is sandbox: captured, never sent.
+
+PASS 1 — as things stand until the Regulation is read at source on the sandbox (no amount is named, nothing can be filed):
+
+» 'My Example Air flight EX123 Madrid to London yesterday landed 3 h 40 late'
+  flight_money_back({"airline": "EX", "number": "123", "date": "2026-10-09", "from": "MAD", "to": "LHR", "what": "delayed", "arrival_delay_minutes": 220})
+  say: It looks covered, but the Regulation's text isn't read at source yet — so I won't name an amount yet.
+  verdict: yes
+
+» "Yes, claim it. Booking EXA1B2, it's just me, Alex Doe."
+  file_flight_claim({"booking_reference": "EXA1B2", "passengers": ["Alex Doe"]})
+  code: invalid_input
+  message: There's nothing to claim on this case (not covered, or no amount quoted).
+
+» 'Yes, file it.'
+  file_flight_claim({"booking_reference": "EXA1B2", "passengers": ["Alex Doe"]})
+  code: invalid_input
+  message: There's nothing to claim on this case (not covered, or no amount quoted).
+
+PASS 2 — with Regulation (EC) 261/2004's art. 3 / 7 sentences as TEST DATA (the BOE text; replaced by the sandbox's read at source, with its stored copy, at the cutover deploy):
+
+» 'My Example Air flight EX123 Madrid to London yesterday landed 3 h 40 late'
+  flight_money_back({"airline": "EX", "number": "123", "date": "2026-10-09", "from": "MAD", "to": "LHR", "what": "delayed", "arrival_delay_minutes": 220})
+  say: Your flight EX123 (1,246 km) is covered: under EU rules you may be owed EUR 250. Want me to claim it?
+  verdict: yes
+  amount: {"amount_minor": 25000, "currency": "EUR"}
+  quotes: ["a) a los pasajeros que partan de un aeropuerto situado en el territorio de un Estado miembro sujeto a las disposiciones del Tratado;", "Las distancias contempladas en los apartados 1 y 2 se calcularán según el método de la ruta ortodrómica.", "La compensación contemplada en el apartado 1 se abonará en metálico, por transferencia bancaria electrónica, transferencia bancaria o cheque, o, previo acuerdo firmado por el pasajero, en bonos de viaje u otros servicios.", "a) 250 euros para vuelos de hasta 1 500 kilómetros;"]
+
+» "Yes, claim it. Booking EXA1B2, it's just me, Alex Doe."
+  file_flight_claim({"booking_reference": "EXA1B2", "passengers": ["Alex Doe"]})
+  status: awaiting_yes
+  read_back: ["File a compensation claim with Example Air at claims@example-air.example (the address on its own claims page), in your name — I file it for you.", "Flight: EX123 on 2026-10-09, MAD → LHR (1,246 km).", "What happened: the flight arrived 3 h 40 min late at its final destination.", "Booking reference: EXA1B2.", "Passengers: Alex Doe.", "Compensation claimed: EUR 250 under Regulation (EC) No 261/2004 (\"a) 250 euros para vuelos de hasta 1 500 kilómetros;\").", "Payment: by bank transfer — not a voucher (\"La compensación contemplada en el apartado 1 se abonará en metálico, por transferencia bancaria electrónica, transferencia bancaria o cheque, o, previo acuerdo firmado por el pasajero, en bonos de viaje u otros servicios.\").", "Their reply: within 30 days (their page: \"4. Our reply. We reply to every claim within 30 days.\").", "Claims made for you: their page says \"3. Claims made for you. Someone may claim on your behalf if the claim includes your signed authorisation.\" — if they ask for your signed authorisation, you sign it; I never sign for you."]
+
+» 'Yes, file it.'
+  file_flight_claim({"booking_reference": "EXA1B2", "passengers": ["Alex Doe"]})
+  say: Filed with Example Air. They say they reply within 30 days.
+  status: filed

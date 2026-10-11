@@ -1,0 +1,39 @@
+CR 81 · demo on the DEPLOYED agapi-sandbox (cr/81 @ f165347) through Sasha's /s2 code (cr/81-s2), 11 Oct 2026. Every place read on its OWN official site, on the sandbox (robots first), each fact Pacioli-checked.
+
+» 'What should we do in Madrid on Saturday 17 October?'
+  suggest_activities({"city": "Madrid", "date": "2026-10-17"})
+
+  say: Museo Nacional Centro de Arte Reina Sofía: open 10:00 - 21:00 on Saturday ("Sábado
+10:00
+19:00
+21:00"). Tickets 12 EUR ("2. El precio de la entrada individual general se establece en 12 euros."). Free: 18 de abril, 18 y 22 de mayo, 12 de octubre y 6 de diciembre ("Los días 18 de abril, 18 y 22 de mayo, 12 de octubre y 6 de diciembre la entrada es gratuita."). From museoreinasofia.es, read 2026-10-11. Museo Nacional Thyssen-Bornemisza: open 10:00 - 23:00 on Saturday ("Sábado 10:00 23:00"). Tickets 14 EUR ("Colecciones + exposiciones temporales: 14€"). Free: El 18 de mayo con motivo del Día Internacional de los Museos. ("El 18 de mayo con motivo del Día Internacional de los Museos."). From museothyssen.org, read 2026-10-11. Atlético de Madrid: no home match on Sat 17 Oct — they play away that day ("Sábado 17 de octubre (14:00h) | RCDE Stadium"); the next at home: "Sábado 24 de octubre (21:00h) | Riyadh Air Metropolitano". From atleticodemadrid.com, read 2026-10-11. Teatro Real: Tickets 10 EUR ("General: 10 euros"). From teatroreal.es, read 2026-10-11. Real Jardín Botánico de Madrid (CSIC): Free: Las personas con discapacidad y su persona de apoyo tienen entrada gratuita. ("Las personas con discapacidad y su persona de apoyo tienen entrada gratuita."). From rjb.csic.es, read 2026-10-11. I couldn't check Museo Nacional del Prado, Real Madrid, Palacio Real de Madrid on their official sites.
+
+  CARD Museo Nacional Centro de Arte Reina Sofía · verified · read 2026-10-11 · copy sha256:43fd75ae77c6
+    open: {"date": "2026-10-17", "hours": "10:00 - 21:00", "claim_id": "rcl_RRZ26RHZ6VMABWTAMECHNZEWQA", "quote": "Sábado\n10:00\n19:00\n21:00", "source_url": "https://www.museoreinasofia.es/visita/horarios-tarifas/", "read_at": "2026-10-11", "copy_id": "scp_b3d0305d58cd4ab27da43212", "copy_sha256": "sha256:4
+    price: {"text": "12 EUR", "claim_id": "rcl_E8QNZA172FGVZ3RR8DZNWYEYQG", "quote": "2. El precio de la entrada individual general se establece en 12 euros.", "source_url": "https://cms.museoreinasofia.es/sites/default/files/Visita/resolucion-precios-publicos-boe-num-2-de-2022.pdf", "read_at": "2026-10-11", "
+    ticket_url: None
+
+  CARD Museo Nacional Thyssen-Bornemisza · verified · read 2026-10-11 · copy sha256:d1ff5cab465e
+    open: {"date": "2026-10-17", "hours": "10:00 - 23:00", "claim_id": "rcl_JQNVS2PMWK81409GPE2QFBZGJQ", "quote": "Sábado 10:00 23:00", "source_url": "https://www.museothyssen.org/visita/horarios-tarifas", "read_at": "2026-10-11", "copy_id": "scp_3cce414844fb37786bf78b01", "copy_sha256": "sha256:d1ff5cab465e6
+    price: {"text": "14 EUR", "claim_id": "rcl_MVTT8TGCSWKAH70DF3GPP15V84", "quote": "Colecciones + exposiciones temporales: 14€", "source_url": "https://www.museothyssen.org/visita", "read_at": "2026-10-11", "copy_id": "scp_b48ef8059de177eae305976c", "copy_sha256": "sha256:43de0dacc9fe3184637f5f4cd63c34bc6acf
+    ticket_url: None
+
+  CARD Atlético de Madrid · partial · read 2026-10-11 · copy None
+    no_event: {"say": "the fixtures I read on 2026-10-11 list no home match on 2026-10-17", "away": {"value": "2026-10-17 14:00 · Espanyol vs Atlético de Madrid", "claim_id": "rcl_Z0SV48CHM1YFQBEBTFWJWM2X01", "quote": "Sábado 17 de octubre (14:00h) | RCDE Stadium", "source_url": "https://www.atleticodemadrid.com/
+    ticket_url: None
+
+  CARD Teatro Real · partial · read 2026-10-11 · copy None
+    price: {"text": "10 EUR", "claim_id": "rcl_1QWB9D8Q5KRDXTZV00N0Z25JVV", "quote": "General: 10 euros", "source_url": "https://www.teatroreal.es/es/visita-teatro-real", "read_at": "2026-10-11", "copy_id": "scp_eb1a7bad9dfd3638fc28e0f7", "copy_sha256": "sha256:71dd28a13c2a4191c0aa4c34cca47f83be32ac14ee356b250
+    ticket_url: None
+
+  CARD Real Jardín Botánico de Madrid (CSIC) · partial · read 2026-10-11 · copy None
+    price: {"free_window": "Las personas con discapacidad y su persona de apoyo tienen entrada gratuita.", "free_quote": {"claim_id": "rcl_PS4B5RGPTCWMD316EHGK1FXQ8Y", "quote": "Las personas con discapacidad y su persona de apoyo tienen entrada gratuita.", "source_url": "https://rjb.csic.es/educacion/inclusion
+    ticket_url: None
+
+  not checked: ['Museo Nacional del Prado', 'Real Madrid', 'Palacio Real de Madrid']
+
+  activities.verify mad_prado: not_read — museodelprado.es couldn't be read when I tried on 2026-10-11: HTTP 403
+    say: Museo Nacional del Prado: I couldn't check its official site (museodelprado.es couldn't be read when I tried on 2026-10-11: HTTP 403).
+
+  activities.verify mad_real_madrid: not_read — realmadrid.com couldn't be read when I tried on 2026-10-11: robots.txt answered a web page, not a robots file
+    say: Real Madrid: I couldn't check its official site (realmadrid.com couldn't be read when I tried on 2026-10-11: robots.txt answered a web page, not a robots file).

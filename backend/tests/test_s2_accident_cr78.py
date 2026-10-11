@@ -203,3 +203,41 @@ class BagsCR80(FinePrint):
         st = run(FP.run_tool(Ctx(), "money_claim_status", {}))
         self.assertEqual(st["result"]["replies"], ["Approved."])
         self.assertIn("never paraphrase", st["result"]["how"])
+
+
+class ActivitiesCR81(FinePrint):
+    """CR 81 · suggest_activities on /s2: suggest, verify the top ones on the date, say only what the cards quote; not_read named, never shown."""
+
+    def setUp(self):
+        super().setUp()
+        real = self.agapi.__call__
+
+        async def call(op, body, approval=None):
+            self.agapi.calls.append((op, body))
+            if op == "activities.suggest":
+                return {"ok": True, "result": {"city": "Madrid", "candidates": [{"candidate_id": k} for k in ("mad_prado", "mad_real_madrid", "mad_atletico")],
+                                               "say": "3 ideas"}}
+            if op == "activities.verify":
+                k = body["candidate_id"]
+                if k == "mad_atletico":
+                    return {"ok": True, "result": {"candidate_id": k, "name": "Atlético de Madrid", "confidence": "not_read", "say": "x"}}
+                return {"ok": True, "result": {"candidate_id": k, "name": k, "confidence": "verified", "official_url": "https://www.museodelprado.es/",
+                                               "say": f"{k}: open 10:00 - 20:00 on Saturday ('De lunes a sábado: 10:00 - 20:00 h')."}}
+            self.agapi.calls.pop()
+            return await real(op, body, approval)
+        FP.CALL = call
+
+    def test_suggest_then_verify_on_the_date_and_name_what_couldnt_be_checked(self):
+        r = run(FP.run_tool(Ctx(), "suggest_activities", {"city": "Madrid", "date": "2026-10-17", "interests": ["art"]}))
+        v = [b for op, b in self.agapi.calls if op == "activities.verify"]
+        self.assertEqual({b["date"] for b in v}, {"2026-10-17"})
+        self.assertEqual(len(r["result"]["render"]["cards"]), 2)                                    # not_read never drawn as a card
+        self.assertEqual(r["result"]["render"]["unread"], ["Atlético de Madrid"])
+        self.assertIn("I couldn't check Atlético de Madrid on their official sites.", r["result"]["say"])
+        self.assertIn("open 10:00 - 20:00 on Saturday", r["result"]["say"])
+        self.assertEqual(r["result"]["render"]["kind"], "activities")
+
+    def test_the_card_is_an_s2_kind(self):
+        from app.agent import sasha
+        self.assertIn("activities", sasha.KINDS_S2_ONLY)
+        self.assertIn("activities", FP.RENDER_KINDS)

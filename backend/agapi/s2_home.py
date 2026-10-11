@@ -33,8 +33,23 @@ CAPABILITIES: List[Dict] = [
                                     ("Put a booking in your calendar", "add_to_calendar"),
                                     ("Tell you everything I've done today", "get_activity")]},
     {"group": "Your documents", "items": [("Keep your passport and loyalty cards — I only ever see a mask", "keep_add")]},
+    # Sasha 236 · every tool she has gets its line (EU 232 §2.1): each still backed by a tool /s2 has (tests/test_s2_225.py)
+    {"group": "Your bookings", "items": [("Everything you've booked, in one place", "my_plans"),
+                                         ("Change or cancel a booking", "change_booking"),
+                                         ("Tell a restaurant or spa you're running late", "running_late"),
+                                         ("Ask your hotel for an upgrade or a late check-out", "hotel_request")]},
+    {"group": "Trips", "items": [("What you need to enter a country — and the form, prepared for you to submit", "entry_documents")]},
+    {"group": "Cards & cover", "items": [("Which of your cards to pay with, and what it covers", "which_card"),
+                                         ("Whether your card covers a rental car", "rental_cover")]},
+    {"group": "If something goes wrong", "items": [("A car accident, step by step", "accident"),
+                                                   ("A claim on your card's insurance, read back before it's filed", "file_claim")]},
+    {"group": "Money back", "items": [("A delayed or cancelled flight", "flight_money_back"),
+                                      ("A late, lost or damaged bag", "bag_money_back")]},
+    {"group": "Subscriptions", "items": [("Find your subscriptions on a statement", "find_subscriptions"),
+                                         ("Cancel one — by their own cancel page or an email, after your yes", "cancel_subscription")]},
 ]
-SAY = "I can book tables and trips, plan a weekend, take payments on this screen, email people for you, and keep your passport safe."
+SAY = ("I can book tables and trips, keep track of your bookings, sort out what you need to enter a country, get money back for "
+       "flights and bags, help when something goes wrong, find and cancel subscriptions, email people for you, and keep your passport safe.")
 
 _MEM: deque = deque(maxlen=500)   # until 038 is applied (and a copy for the founder's view)
 RUN = None                        # tests: None → memory only

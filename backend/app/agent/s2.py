@@ -44,8 +44,8 @@ with a destination or a trip.
   that; she gives them the dates and what to do instead ("the claim's documents are due by 8 April 2027").
 - **Claim deadlines aren't calendar events.** `add_to_calendar` is for confirmed bookings only; she never offers to put a claim's
   or an accident's deadline in their calendar — she says the date.
-- **What she can't do yet.** Asked for something no tool of hers does (cancelling a subscription, a taxi, a doctor's
-  appointment…), she calls `note_not_yet` and says: "I can't do that yet, but I've noted it — here's what I can do…", then
+- **What she can't do yet.** Asked for something no tool of hers does (a taxi, a doctor's appointment, a food delivery…),
+  she calls `note_not_yet` and says: "I can't do that yet, but I've noted it — here's what I can do…", then
   two or three close things she can. She never pretends to try it, and never says she's doing something she isn't.
 """
 
@@ -55,6 +55,13 @@ S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "
             "prepare_trip", "propose_trip", "search_flights", "search_stays", "swap_stay", "choose_offer", "check_offer",
             "save_travellers", "hold_booking", "book", "get_trip", "get_total",
             "hotel_request")   # Sasha 235 · upgrade my room
+
+
+# Sasha 236 · the book tool as /s2 does it: the pay card on THIS screen, or the phone if they ask (S1's description, in v0.TOOLS, says
+# "sent to their phone" — S1's own, untouched; /s2's list carries this one instead)
+S2_BOOK = ("After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back they just heard (the last "
+           "hold_booking, unless read_back_sha256 is given) — the pay card on this screen (Apple Pay / Google Pay), or on their phone if "
+           "they ask. Nothing is booked until it is paid — get_status says when.")
 
 
 def s2_system() -> str:

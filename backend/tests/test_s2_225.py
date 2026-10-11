@@ -18,15 +18,27 @@ run = asyncio.run
 class Honest(unittest.TestCase):
     def test_every_capability_is_a_tool_s2_has(self):
         from app.agent import s2 as S2
+        from agapi import s2_fine_print as FP, s2_subscriptions as SUBS
+        own = set(FP.TOOL_NAMES) | {t["name"] for t in SUBS.TOOLS}   # /s2's own tools (run in sasha.py's /s2 block)
         for g in HOME.CAPABILITIES:
             for line, tool in g["items"]:
-                self.assertIn(tool, S2.S2_TOOLS, line)
-                self.assertIn(tool, API.BY_NAME, line)
-        self.assertEqual([g["group"] for g in HOME.CAPABILITIES], ["Book", "Plan", "Money", "Messages", "Your documents"])
+                self.assertTrue(tool in own or (tool in S2.S2_TOOLS and tool in API.BY_NAME), line)
+        self.assertEqual([g["group"] for g in HOME.CAPABILITIES], ["Book", "Plan", "Money", "Messages", "Your documents", "Your bookings",
+                                                                   "Trips", "Cards & cover", "If something goes wrong", "Money back",
+                                                                   "Subscriptions"])
 
-    def test_nothing_about_subscriptions_is_claimed(self):   # no tool does it (yet): it's a "not yet"
-        blob = " ".join([HOME.SAY] + [i for g in HOME.CAPABILITIES for i, _ in g["items"]]).lower()
-        self.assertNotIn("subscri", blob)
+    def test_subscriptions_are_claimed_because_a_tool_does_it(self):   # Sasha 236 · cancel_subscription exists (CR 72): a "can", not a "not yet"
+        from agapi import s2_subscriptions as SUBS
+        from app.agent import s2 as S2
+        self.assertIn("cancel_subscription", {t["name"] for t in SUBS.TOOLS})
+        self.assertIn("cancel subscriptions", HOME.SAY)
+        self.assertNotIn("cancelling a subscription", S2.S2_WHO)   # never in her can't-do examples
+
+    def test_every_tool_s2_has_is_on_the_card(self):   # Sasha 236 · what she says she can do matches the real tool list
+        lines = {t for g in HOME.CAPABILITIES for _, t in g["items"]}
+        for tool in ("my_plans", "change_booking", "running_late", "hotel_request", "entry_documents", "which_card", "rental_cover",
+                     "accident", "file_claim", "flight_money_back", "bag_money_back", "find_subscriptions", "cancel_subscription"):
+            self.assertIn(tool, lines)
 
     def test_the_card_renders(self):
         from app.agent import sasha as AG

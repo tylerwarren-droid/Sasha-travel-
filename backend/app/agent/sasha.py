@@ -531,6 +531,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     if surface == "s2":   # Sasha 221 · S2's tool set (/s2 only); S1's list is untouched
         from app.agent import s2 as S2
         tools = [t for t in tools if t["name"] in S2.S2_TOOLS]
+        tools = [{**t, "description": S2.S2_BOOK} if t["name"] == "book" else t for t in tools]   # Sasha 236 · /s2's own words (S1's untouched)
         from agapi import via_agapi as VIA   # CR 71 · SASHA_S2_VIA_AGAPI (0 · shadow · reads · 1), read here and nowhere else
         run = VIA.runner(API.call)
         from agapi import s2_subscriptions as SUBS   # CR 72 · the subscription radar: /s2's own three tools, run here

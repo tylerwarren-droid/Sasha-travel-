@@ -97,12 +97,15 @@ async def delete_everything(request: Request):
         from .. import mailbox as MB
         if MB.STORE is not None:   # S-82 · what was found in their inbox (facts only; the token went with the vault)
             counts["mailbox_finds"] = await MB.STORE.delete_account_finds(account)
+        from .. import purge as PG   # Sasha 236 · the Keep (and its key) and every /s2 record: Activity, WhatsApp contacts/replies, memory
+        counts.update(await PG.purge(account))
         await LOG_DELETION(account, counts, now)
     except StorageUnavailable as e:
         log.error("[gdpr] erasure incomplete: %s", e.detail)
         return _refuse(503, e.rule, f"not everything could be deleted yet — {e.detail}; nothing you can see was kept back on purpose, try again")
     log.info("[gdpr] an account's data was erased: %s", counts)
-    return {"deleted": counts, "say": "Deleted. Your saved accesses, WhatsApp link and saved details are gone. Bookings already "
+    return {"deleted": counts, "say": "Deleted. Your saved accesses, your Keep, Sasha's record of what she did, the WhatsApp link and "
+                                      "saved details are gone. Bookings already "
                                       "made stay with the venue's own record; Sasha's copies follow the retention periods in the privacy notice."}
 
 

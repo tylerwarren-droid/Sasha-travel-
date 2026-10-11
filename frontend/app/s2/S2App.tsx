@@ -6,7 +6,7 @@
  *   · Home: her greeting, a big mic (Deepgram), a text box
  *   · the conversation with its cards: places, the read-back, booked, the calendar, the email, the payment ("Pay here")
  *   · Activity: everything she did, each line with its proof
- *   · her voice: what she says is spoken (TTS) once the person has used the mic or turned her voice on; no avatar on S2 v1
+ *   · her voice: what she says is spoken (TTS) once the person has used the mic or turned her voice on; her face on screen as she speaks (S2Hello; Sasha 232)
  * Nothing shown here carries a "test" or "stand-in" label (lib/no-test-label.mjs) — what's underneath is unchanged.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -14,6 +14,8 @@ import VoiceButton from '@/app/components/VoiceButton'
 import { PayHere } from '@/app/components/PayHere'
 import S2Hello from './S2Hello'
 import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
+import TripPanel from '@/app/components/workspace/TripPanel'   // Sasha 236 · the trip board: S1's own, on the same records
+import { TRIP_BOARD_CSS } from './tripBoardCss'
 import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { apiHeaders, apiUrl } from '@/lib/api'
 
@@ -32,6 +34,8 @@ type Card =
   | { k: 'my_cards'; cards: { product: string; network: string; status: string }[] }
   | { k: 'accident'; view: Ev }
   | { k: 'claim_status'; claim: Ev }
+  | { k: 'handover'; url: string; external: boolean }   // Sasha 236 · Tap to finish (their page / our hand-over), over her
+  | { k: 'trip'; what: string }                          // Sasha 236 · the trip changed: one tap to the Trip board
 type Plan = { kind: 'dinner' | 'spa' | 'venue' | 'flight' | 'hotel' | 'car'; title: string; when: string; where?: string; status: string; reference?: string; id?: string }
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
@@ -474,6 +478,16 @@ function CardView({ c, choose, pick, send }: { c: Card; choose: (t: string) => v
   if (c.k === 'claim_status') return <ClaimStatus claim={c.claim} />
   if (c.k === 'keep_capture') return <KeepCapture what={c.what} />
   if (c.k === 'wa_open') return <WaOpen c={c} />
+  if (c.k === 'handover') return (   // Sasha 236 · as /next's onHandover: our Tap to finish in a sheet over her; a platform's page in their browser
+    <Box k="One tap left" h="Finish it on their page">
+      <button type="button" onClick={() => { if (c.external) window.open(c.url, '_blank', 'noopener'); else window.dispatchEvent(new CustomEvent('s2-handover', { detail: c.url })) }}
+        style={{ marginTop: 6, padding: '10px 18px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700 }}>Tap to finish</button>
+    </Box>)
+  if (c.k === 'trip') return (
+    <Box k="Your trip" h={c.what}>
+      <button type="button" onClick={() => window.dispatchEvent(new Event('s2-open-trip'))}
+        style={{ marginTop: 6, padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 600 }}>See the whole trip</button>
+    </Box>)
   if (c.k === 'plans') return <Plans items={c.items} on={c.on} />
   if (c.k === 'notice') return (
     <Box k={c.status ? untag(c.status) : 'Update'} h={untag(c.title)}>
@@ -531,7 +545,15 @@ function Activity() {
 
 export default function S2App() {
   const signedIn = useSignedIn()
-  const [tab, setTab] = useState<'sasha' | 'activity' | 'keep'>('sasha')   // Sasha 235 · 'keep': My Keep
+  const [tab, setTab] = useState<'sasha' | 'activity' | 'keep' | 'trip'>('sasha')   // Sasha 235 · 'keep': My Keep · 236 · 'trip': the trip board
+  const [handover, setHandover] = useState<string | null>(null)   // Sasha 236 · Tap to finish, in a sheet over her
+  useEffect(() => {
+    const h = (e: Event) => setHandover(String((e as CustomEvent).detail || '') || null)
+    const t = () => setTab('trip')
+    window.addEventListener('s2-handover', h); window.addEventListener('s2-open-trip', t)
+    return () => { window.removeEventListener('s2-handover', h); window.removeEventListener('s2-open-trip', t) }
+  }, [])
+  const [openDays, setOpenDays] = useState<Set<number>>(new Set([1]))
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -660,6 +682,12 @@ export default function S2App() {
             else if (ev.kind === 'my_cards') add({ k: 'my_cards', cards: ev.cards || [] })
             else if (ev.kind === 'accident' && ev.view) add({ k: 'accident', view: ev.view })
             else if (ev.kind === 'claim_status' && ev.claim) add({ k: 'claim_status', claim: ev.claim })
+            else if (ev.kind === 'handover' && typeof ev.url === 'string' && ev.url.startsWith('https://')) add({ k: 'handover', url: ev.url, external: !!ev.external })   // Sasha 236
+            else if (['flights', 'stays', 'flight_chosen', 'total', 'trip', 'trip_changed'].includes(String(ev.kind))) {   // Sasha 236 · the trip board refreshes; one card says so
+              window.dispatchEvent(new Event('sasha-plan-refresh'))
+              const what = ev.kind === 'flights' ? 'Flights to choose from' : ev.kind === 'stays' ? 'Places to stay' : ev.kind === 'total' ? 'The total, all in' : 'Your trip, updated'
+              add({ k: 'trip', what })
+            }
           }
         }
       }
@@ -688,12 +716,18 @@ export default function S2App() {
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', paddingTop: 'max(56px, calc(env(safe-area-inset-top) + 44px))' }}>{/* room for the site's sign-in badge above */}
         <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
         <nav style={{ display: 'flex', gap: 6 }}>
-          {(['sasha', 'activity', 'keep'] as const).map(t => (
+          {(['sasha', 'trip', 'activity', 'keep'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 14px', borderRadius: 999, border: `1px solid ${tab === t ? C.gold : C.line}`, background: 'transparent', color: tab === t ? C.gold : C.dim, fontWeight: 600 }}>
-              {t === 'sasha' ? 'Sasha' : t === 'keep' ? 'My Keep' : 'Activity'}</button>))}
+              {t === 'sasha' ? 'Sasha' : t === 'keep' ? 'My Keep' : t === 'trip' ? 'Trip' : 'Activity'}</button>))}
         </nav>
       </header>
-      {tab === 'keep' ? (   /* Sasha 235 · My Keep: the same screen as S1's /keep — masks, what each was used for and when, add, delete */
+      {tab === 'trip' ? (   /* Sasha 236 · the trip board: S1's TripPanel itself (flights, stays, bookings, forms and receipts, from /plan + /journeys) */
+        <section className="s2-trip" style={{ flex: 1, overflowY: 'auto', minWidth: 0, padding: '0 12px 16px' }}>
+          <style>{TRIP_BOARD_CSS}</style>
+          <TripPanel richItinerary={null} openDays={openDays} travellerCount={1}
+            toggleDay={(d: number) => setOpenDays(s => { const n = new Set(s); if (n.has(d)) n.delete(d); else n.add(d); return n })} />
+        </section>
+      ) : tab === 'keep' ? (   /* Sasha 235 · My Keep: the same screen as S1's /keep — masks, what each was used for and when, add, delete */
         <section style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
           <div className="mx-3 mb-4 rounded-2xl bg-white pb-4 pt-2 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
             <h2 className="px-4 pb-1 pt-3 text-xl font-bold">My Keep</h2>
@@ -749,6 +783,15 @@ export default function S2App() {
         </>
       )}
     </main>{hello}
+    {handover ? (   /* Sasha 236 · Tap to finish in a sheet over her (the CAPTCHA, terms, their button) — then back to her, as /next */
+      <div role="dialog" aria-label="Finish the booking" style={{ position: 'fixed', inset: 0, zIndex: 60, background: C.bg, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', paddingTop: 'max(12px, env(safe-area-inset-top))', borderBottom: `1px solid ${C.line}`, color: '#fff' }}>
+          <b>Finish the booking</b>
+          <button type="button" onClick={() => setHandover(null)} style={{ padding: '6px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 600 }}>Back to Sasha</button>
+        </div>
+        <iframe src={handover} title="Finish the booking" allow="clipboard-write" style={{ flex: 1, border: 0, width: '100%', background: '#fff' }} />
+      </div>
+    ) : null}
     {dormant ? <button onClick={wake} aria-label="Sasha is resting — tap to bring her back" style={{ position: 'fixed', inset: 0, zIndex: 45, background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}>
       <span style={{ position: 'absolute', left: '50%', top: '46%', transform: 'translate(-50%, -50%)', padding: '10px 18px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: C.dim, fontSize: 14.5, whiteSpace: 'nowrap' }}>Tap me if you need me</span>
     </button> : null}</>

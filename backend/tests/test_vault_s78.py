@@ -284,7 +284,10 @@ class Gdpr(Base):
         self.assertEqual((VC.STORE.items, GW.STORE.channels, CT.STORE.rows), ({}, {}, {}))
         self.assertEqual(self.erasures, [{"vault_items": 1, "vault_uses": 0, "vault_events": 1, "guest_channels": 1,
                                           "guest_wa_state": 1, "guest_link_codes": 0, "guest_contacts": 1,
-                                          "proactive_sent": 0, "proactive_prefs": 0, "guest_places": 0, "booking_invitations": 0, "mailbox_finds": 0}])
+                                          "proactive_sent": 0, "proactive_prefs": 0, "guest_places": 0, "booking_invitations": 0, "mailbox_finds": 0,
+                                          # Sasha 236 · + the Keep and the /s2 records (no database in this test: 0 each)
+                                          "keep_fills": 0, "keep_items": 0, "keep_keys": 0, "s2_acts": 0, "s2_wa_replies": 0,
+                                          "s2_wa_contacts": 0, "s2_memory": 0}])
 
     def test_export_is_metadata_only(self):
         self.save()

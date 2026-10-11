@@ -124,7 +124,7 @@ KINDS |= {"keep_handoff"}   # Sasha 228 · /next's "Add from your phone" (QR + s
 
 def _fine_print_tools() -> tuple:
     from agapi import s2_fine_print as FP
-    return FP.TOOL_NAMES + ("find_subscriptions",)   # CR 84 · the subscriptions list card
+    return FP.TOOL_NAMES + ("find_subscriptions", "cancel_subscription")   # CR 84 · the subscriptions list card; Sasha 243 · its cancel page
 
 
 def render(tool: str, res: dict, args: dict) -> Optional[dict]:

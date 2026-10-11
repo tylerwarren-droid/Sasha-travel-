@@ -226,8 +226,12 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             _PENDING.pop(key, None)
             s = r["result"]["subscription"]
             if s["status"] == "handed_over":   # CR 84 · the page is theirs to press
-                return {"ok": True, "result": {"status": "handed_over", "service": s["merchant"], "page": (s.get("routes") or [{}])[0].get("value"),
-                                               "line": r["result"]["outcome"]["target_words"]["text"]}}
+                page = (s.get("routes") or [{}])[0].get("value")
+                # Sasha 243 · the page reaches the chat as a card (live: she said "it's in the chat now" and nothing was there)
+                return {"ok": True, "result": {"status": "handed_over", "service": s["merchant"], "page": page,
+                                               "line": r["result"]["outcome"]["target_words"]["text"],
+                                               **({"render": {"kind": "handover", "url": page, "external": True}}
+                                                  if isinstance(page, str) and page.startswith("https://") else {})}}
             return {"ok": True, "result": {"status": "cancel_requested", "service": s["merchant"],
                                            "line": f"Cancellation requested from {s['merchant']} — it's not cancelled until they confirm."}}
         st = await CALL("approvals.status", {"read_back_id": pend["read_back_id"]})   # live: their tap on AgAPI's link decides

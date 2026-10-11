@@ -100,5 +100,33 @@ class GmailByInvitation(unittest.TestCase):
             self.assertFalse(MB.invited(ACCOUNT))
 
 
+class CancelPageReachesTheChat(unittest.TestCase):
+    """Live (scratch A, 2913e9a): after the yes she said Spotify's cancel page "is in the chat now" — and nothing was. It is now a card."""
+    def test_the_yes_hands_over_the_page_as_a_card(self):
+        from datetime import datetime, timedelta, timezone
+        from agapi import s2_subscriptions as SUBS, v0 as API
+        from app.agent import sasha
+        SP = "https://www.spotify.com/account/subscription/"
+
+        async def call(op, body, approval=None):
+            if op == "sandbox.simulate_approval":
+                return {"ok": True, "result": {"approval_id": "apv_1"}}
+            if op == "subscriptions.cancel":
+                return {"ok": True, "result": {"subscription": {"status": "handed_over", "merchant": "Spotify", "routes": [{"kind": "page", "value": SP}]},
+                                               "outcome": {"target_words": {"text": "Spotify's own cancel page: you press cancel."}}}}
+            raise AssertionError(op)
+        key = f"{ACCOUNT}|sub_sp"
+        with mock.patch.object(SUBS, "CALL", call), mock.patch.dict(SUBS._USERS, {ACCOUNT: "usr_" + "3" * 26}), \
+                mock.patch.dict(SUBS._PENDING, {key: {"read_back_id": "rb_1", "route": "page", "at": 0}}), mock.patch.object(SUBS, "via", lambda: "sandbox"):
+            ctx = API.Ctx(account=ACCOUNT, user_said="yes", surface="s2", started=datetime.now(timezone.utc) + timedelta(seconds=1))
+            r = asyncio.run(SUBS.run_tool(ctx, "cancel_subscription", {"subscription_id": "sub_sp"}))
+        self.assertEqual(r["result"]["render"], {"kind": "handover", "url": SP, "external": True})
+        self.assertEqual(sasha.render("cancel_subscription", r["result"], {}), {"type": "render", "kind": "handover", "url": SP, "external": True})
+        from booking_signer import wa_agent as WA
+        out = _Out()
+        WA.render({"kind": "handover", "url": SP, "external": True}, out, {}, None)
+        self.assertEqual(out.sent, [f"Tap to finish: {SP}"])
+
+
 if __name__ == "__main__":
     unittest.main()

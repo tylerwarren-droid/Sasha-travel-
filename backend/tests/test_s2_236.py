@@ -90,6 +90,14 @@ class SameReadBack(unittest.TestCase):
         self.assertIn("_PREV[ctx.account] = _HELD.pop(ctx.account, None)", src)
         self.assertIn("prev = _HELD.get(ctx.account) or _PREV.pop(ctx.account, None)", src)
 
+    def test_the_one_yes_gate_binds_a_venue_by_its_words(self):
+        from agapi import yes_gate as G
+        a = G._current("book_venue", {"sha": "a" * 64, "same": "w" * 64})
+        b = G._current("book_venue", {"sha": "b" * 64, "same": "w" * 64})
+        self.assertEqual(a["payload"], b["payload"])                              # a new forwarding address: the same read-back
+        self.assertNotEqual(G._current("book_venue", {"sha": "a" * 64, "same": "x" * 64})["payload"], a["payload"])
+        self.assertEqual(G._current("send_email", {"sha": "c" * 64})["payload"], {"read_back_sha256": "c" * 64})   # others unchanged
+
     def test_held_again_keeps_its_time(self):
         from agapi import venues as VN, v0 as API
         lines = lambda u: ["Their Treatwell page: pick Saturday 17 October at 12:00, for 1.",

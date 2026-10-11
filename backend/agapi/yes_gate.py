@@ -49,7 +49,10 @@ def _now() -> str:
 
 
 def _current(act: str, h: dict) -> dict:
-    return {"intent_id": act, "operation": OPERATION[act], "lines": [], "payload": {"read_back_sha256": h["sha"]}}
+    # Sasha 236 · a venue's read-back is bound by its WORDS (venues._same_words: everything but the one-time forwarding address) — found
+    # live on /s2: each re-hold's new address made a "new" read-back shown this turn, so their yes was refused (approval_same_turn)
+    return {"intent_id": act, "operation": OPERATION[act], "lines": [],
+            "payload": {"read_back_sha256": (h.get("same") if act == "book_venue" else None) or h["sha"]}}
 
 
 def shown(ctx, name: str, result) -> None:

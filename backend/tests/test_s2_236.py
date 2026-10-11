@@ -177,3 +177,35 @@ class S2Draws(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MemoryHandover239(unittest.TestCase):
+    """Sasha 239 · found live: "Oven Mozzarella is the one you've picked" when nothing was picked. Only a real decision is said as one."""
+
+    def fold(self, m, calls, **seen):
+        from agapi import s2_memory as MEM
+        return MEM.fold(m, "x", "y", {"calls": [{"tool": t, "ok": True, "status": st} for t, st in calls], **seen})
+
+    def test_browsing_is_never_a_pick(self):
+        from agapi import s2_memory as MEM
+        cards = [{"place_id": f"p{i}", "name": n} for i, n in enumerate(["Bloved", "Beata Pasta", "Oven Mozzarella"])]
+        m = self.fold(None, [("search_venues", None)], cards=cards, ribbon="5 restaurants in Gran Vía · Sat 21:00")
+        self.assertIsNone(m.get("decided"))
+        with mock.patch.object(MEM, "_hold_live", lambda a, p: False):
+            self.assertEqual(MEM.line_for(m, ACCT), "Welcome back — we were looking at restaurants in Gran Vía, Sat 21:00. Want to carry on?")
+        self.assertIn("NOT chosen or booked anything", MEM.handover(m))
+
+    def test_a_pick_is_named_as_theirs(self):
+        from agapi import s2_memory as MEM
+        cards = [{"place_id": f"p{i}", "name": n} for i, n in enumerate(["Bloved", "Beata Pasta", "Oven Mozzarella"])]
+        m = self.fold(None, [("search_venues", None)], cards=cards, ribbon="5 restaurants in Gran Vía · Sat 21:00")
+        m = self.fold(m, [("read_booking_route", None)], focus="p2")
+        self.assertEqual(m["decided"]["what"], "Oven Mozzarella")
+        self.assertIn("you'd chosen Oven Mozzarella", MEM.line_for(m, ACCT))
+        self.assertIn("THEY chose Oven Mozzarella", MEM.handover(m))
+        m = self.fold(m, [("search_venues", None)], cards=cards, ribbon="3 spas in Madrid")
+        self.assertIsNone(m.get("decided"))                                      # a new search: no pick carried over
+
+    def test_the_first_turn_back_hears_it(self):
+        src = open(os.path.join(os.path.dirname(PG.__file__), "..", "app", "agent", "sasha.py")).read()
+        self.assertIn('remembered = _HANDOVER.pop(session or "-", None)', src)

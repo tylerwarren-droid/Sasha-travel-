@@ -86,16 +86,24 @@ def fold(mem: Optional[dict], said: str, reply: str, seen: dict) -> dict:
     if "search_venues" in ran and seen.get("ribbon"):
         topic = _thing_of_ribbon(seen["ribbon"])
         m["thing"], m["pending"] = topic, None
+        m["decided"] = None   # Sasha 239 · a new search: nothing chosen from it (yet)
+    if "read_booking_route" in ran or "hold_venue" in ran:   # Sasha 239 · THEY chose a place (a tap, or naming it): only then "decided"
+        name = seen.get("held") or next((c.get("name") for c in ((m.get("screen") or {}).get("cards") or [])
+                                          if seen.get("focus") and c.get("place_id") == seen.get("focus")), None)
+        if name:
+            m["decided"] = {"what": masked(str(name))[:120], "state": "chosen — not booked yet"}
     held = next((t for t, s in status.items() if s == "awaiting_yes"), None)
     if held:
         what = (seen.get("held") or (_thing_of_ribbon(seen["ribbon"]) if held == "hold_venue" and seen.get("ribbon") else None)
                 or m.get("thing") or "your booking")
         m["pending"] = {"kind": "hold", "tool": held, "what": what, "at": NOW().isoformat()}
         m["thing"] = topic = f"{what} — it's ready, waiting for your yes" if held == "hold_venue" else what
+        if held == "hold_venue" and seen.get("held"):
+            m["decided"] = {"what": masked(str(seen["held"]))[:120], "state": "chosen and read back — waiting for their yes"}
     if any(status.get(t) in ("confirmed", "requested", "sent", "booked") for t in ("book_venue", "book", "send_email", "send_whatsapp")) \
             or re.search(r"✅\s*Booked", reply or ""):
         topic = topic or "done: " + (m.get("thing") or "your booking")
-        m["thing"], m["pending"] = None, None
+        m["thing"], m["pending"], m["decided"] = None, None, None
     q = _question(reply)
     if (m.get("pending") or {}).get("kind") == "question":
         m["pending"] = None   # a question is only unfinished until her next reply
@@ -182,7 +190,22 @@ def line_for(m: Optional[dict], account: str) -> Optional[str]:
     p = m.get("pending") or {}
     if p.get("kind") == "hold" and not _hold_live(account, p):
         thing = p.get("what") or thing   # the read-back has lapsed: what it was, read back again if they carry on
+    d = m.get("decided") or {}
+    if d.get("what") and d["what"] not in thing:   # Sasha 239 · a pick is said as theirs ONLY when they made it
+        return f"Welcome back — you'd chosen {d['what']} ({thing}). Want to carry on?"
     return f"Welcome back — we were looking at {thing}. Want to carry on?"
+
+
+def handover(m: dict) -> str:
+    """Sasha 239 · what the model is told on return (found live: "Oven Mozzarella is the one you've picked" when nothing was picked).
+    Decided only if they decided; otherwise they were looking — and it must not say they chose."""
+    d = m.get("decided") or {}
+    thing = m.get("thing") or "something"
+    if d.get("what"):
+        return (f"What you remember from before they left: they were looking at {thing}, and THEY chose {d['what']} "
+                f"({d.get('state') or 'chosen'}). Nothing else was chosen or booked.")
+    return (f"What you remember from before they left: they were looking at {thing}. They had NOT chosen or booked anything — never "
+            f"say they picked or chose one; if it helps, ask which they'd like.")
 
 
 async def recall(account: str, session: Optional[str]) -> dict:
@@ -198,7 +221,11 @@ async def recall(account: str, session: Optional[str]) -> dict:
         AG._SCREEN[session] = {"cards": scr["cards"], "ribbon": scr.get("ribbon"), "names": [c.get("name") for c in scr["cards"] if c.get("name")]}
         VN.remember_cards(account, scr["cards"])
     p = m.get("pending") or {}
-    return {"line": line, "recent": m.get("recent") or [], "screen": scr, "summary": m.get("summary") or [],
+    note = handover(m)
+    if session:   # Sasha 239 · the model's first turn back hears exactly what was (and wasn't) decided
+        from app.agent import sasha as AG
+        AG._HANDOVER[session] = note
+    return {"line": line, "recent": m.get("recent") or [], "screen": scr, "summary": m.get("summary") or [], "handover": note,
             "pending": ({"kind": "hold", "what": p.get("what"), "waiting": _hold_live(account, p)} if p.get("kind") == "hold" else
                         {"kind": "question", "asked": p.get("asked")} if p.get("kind") == "question" else None)}
 

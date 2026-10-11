@@ -385,6 +385,7 @@ async def named_places(text: str) -> List[str]:
 # the SCREEN per conversation: what the person sees until a turn with new results replaces it (a turn that only talks
 # keeps it) — so "on screen this turn" is exactly what's in front of them
 _SCREEN: Dict[str, dict] = {}
+_HANDOVER: Dict[str, str] = {}   # Sasha 239 · session → what she remembers (s2_memory.recall), for its first turn back
 
 
 def _card_names(ev: dict) -> List[str]:
@@ -509,6 +510,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     wa = surface == "wa"
     if wa:
         surface = "s2"
+    remembered = _HANDOVER.pop(session or "-", None)   # Sasha 239 · on the first turn back only: what was (and wasn't) decided
     t0 = time.perf_counter()
     first_text_ms = None
     ctx = API.Ctx(account=account, mode="test", user_said=message, session=session, surface=surface)
@@ -576,6 +578,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                       "If their Keep has no passport, the read-back goes ahead as always and the 'Add from your phone' card sits beside "
                       "it — booking never waits for it. If they add it from their phone, the page has already said \"Got it — …\": "
                       "don't say that again — call hold_booking and read back.")
+        if remembered:
+            extra += "\n\n" + remembered
         if used_openers:
             extra += (f"\n\nOpeners you've already used in this conversation — never start with them again: "
                       f"{', '.join(sorted(used_openers))}.")
@@ -1208,6 +1212,8 @@ async def agent_turn(request: Request):
                 if surface == "s2":
                     if ev.get("type") == "render" and ev.get("kind") == "venues" and ev.get("preset"):
                         seen.update(cards=(ev["preset"].get("cards") or []), ribbon=ev.get("ribbon"), focus=ev.get("focus"))
+                    elif ev.get("type") == "render" and ev.get("kind") in ("focus", "venues") and ev.get("focus"):   # Sasha 239 · the place they chose
+                        seen["focus"] = ev["focus"]
                     elif ev.get("type") == "done":
                         reply, seen["calls"] = str(ev.get("text") or ""), ev.get("tools") or []
                 yield f"data: {json.dumps(ev, default=str)}\n\n"

@@ -151,7 +151,8 @@ def _card(ev: dict, out, title: str) -> None:
         for c in (ev.get("cards") or [])[:5]:
             when = ((c.get("event") or {}).get("title") or (c.get("open") or {}).get("hours") or "")
             price = (c.get("price") or {}).get("text") or ""
-            lines.append(" · ".join(x for x in (c.get("name"), when, price, c.get("ticket_url") or c.get("official_url")) if x))
+            src = (c.get("source") or {}).get("label")   # CR 82 · an official second source is always named
+            lines.append(" · ".join(x for x in (c.get("name"), when, price, f"from {src}" if src else "", c.get("ticket_url") or c.get("official_url")) if x))
         if ev.get("unread"):
             lines.append("Couldn't check on their own sites: " + ", ".join(ev["unread"][:4]))
     lines = [_cut(l, 300) for l in lines if str(l or "").strip()]
@@ -324,6 +325,8 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
             renders.append(ev)
             if ev.get("kind") == "venues" and ev.get("preset"):
                 seen.update(cards=(ev["preset"].get("cards") or []), ribbon=ev.get("ribbon"))
+            if ev.get("kind") in ("focus", "venues") and ev.get("focus"):   # Sasha 239 · the place they chose (memory says it as theirs)
+                seen["focus"] = ev["focus"]
         elif t == "error":
             text = str(ev.get("message") or text)
         elif t == "done":

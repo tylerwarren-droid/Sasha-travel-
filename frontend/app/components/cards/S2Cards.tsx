@@ -257,9 +257,26 @@ export function ActivityCard({ a }: { a: Ev }) {
     </Box>)
 }
 
+/** CR 84 · the subscriptions list: service · price · renews (from the receipt — "expected" when the email doesn't say); tap one → its
+ *  cancel flow (Sasha 243: moved here from CR 84's S2App so /next draws it too). */
+export function SubscriptionsCard({ items, total, source, send }: { items: Ev[]; total?: string; source?: string; send: (t: string) => void }) {
+  const per: Record<string, string> = { monthly: '/mo', yearly: '/yr', weekly: '/wk', quarterly: '/qtr' }
+  return (
+    <Box k="Subscriptions" h={total ? `About ${untag(total)} a month` : undefined}>
+      {items.length === 0 ? <div style={{ fontSize: 14.5, color: C.dim }}>No subscription receipts found.</div> : items.map((s, i) => (
+        <button key={s.subscription_id || i} onClick={() => send(`Cancel ${s.service}`)} style={{ display: 'flex', width: '100%', justifyContent: 'space-between', gap: 12,
+          background: 'transparent', border: 'none', borderTop: i ? `1px solid ${C.line}` : 'none', color: 'inherit', padding: '9px 0',
+          textAlign: 'left', cursor: 'pointer', fontSize: 15 }}>
+          <span style={{ fontWeight: 600 }}>{untag(String(s.service))}</span>
+          <span style={{ color: C.dim, fontSize: 14, textAlign: 'right' }}>{untag(String(s.price))}{per[s.how_often] || ''}
+            {s.renews ? <> · renews {untag(String(s.renews))}{s.expected ? ' (expected)' : ''}</> : null}</span>
+        </button>))}
+      <div style={{ fontSize: 12.5, color: C.dim, marginTop: 6 }}>From {untag(source || 'your receipts')} · tap one to cancel it — nothing happens until you say yes</div>
+    </Box>)
+}
 
 /** Sasha 241 · the render kinds these cards draw (sasha.py's former KINDS_S2_ONLY): one render event → its card, for /next. */
-export const SHARED_KINDS = ['keep_capture', 'capabilities', 'plans', 'notice', 'counter_card', 'my_cards', 'accident', 'claim_status', 'wa_open', 'activities']
+export const SHARED_KINDS = ['keep_capture', 'capabilities', 'plans', 'notice', 'counter_card', 'my_cards', 'accident', 'claim_status', 'wa_open', 'activities', 'subscriptions']   // Sasha 243 · + CR 84's list
 
 export function SharedCard({ ev, send }: { ev: Ev; send: (t: string) => void }) {
   if (ev.kind === 'keep_capture') return <KeepCapture what={ev.what === 'loyalty' ? 'loyalty' : 'passport'} />
@@ -272,6 +289,7 @@ export function SharedCard({ ev, send }: { ev: Ev; send: (t: string) => void }) 
     return <WaOpen c={{ to: ev.to || {}, text: String(ev.text || ''), open: ev.open, why: String(ev.why || '') }} />
   if (ev.kind === 'activities' && Array.isArray(ev.cards)) return (<>{ev.cards.map((a: Ev, i: number) => <ActivityCard key={i} a={a} />)}
     {(ev.unread || []).length ? <div style={{ fontSize: 13, color: C.dim, margin: '4px 2px' }}>Couldn&apos;t check on their official sites: {ev.unread.map(untag).join(', ')}</div> : null}</>)
+  if (ev.kind === 'subscriptions' && Array.isArray(ev.items)) return <SubscriptionsCard items={ev.items} total={ev.total} source={ev.source} send={send} />
   if (ev.kind === 'notice' && ev.title) return (
     <Box k={ev.status ? untag(ev.status) : 'Update'} h={untag(ev.title)}>
       {(ev.lines || []).map((l: string, i: number) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}

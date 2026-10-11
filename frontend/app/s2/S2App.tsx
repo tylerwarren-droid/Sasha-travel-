@@ -15,7 +15,7 @@ import { PayHere } from '@/app/components/PayHere'
 import S2Hello from './S2Hello'
 import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
 // Sasha 241 · the cards moved to components/cards/ (shared with /next's SashaChat), unchanged
-import { C, Box, shrink, KeepCapture, WaOpen, Plans, CounterCard, MyCards, AccidentCard, ClaimStatus, ActivityCard } from '@/app/components/cards/S2Cards'
+import { C, Box, shrink, KeepCapture, WaOpen, Plans, CounterCard, MyCards, AccidentCard, ClaimStatus, ActivityCard, SubscriptionsCard } from '@/app/components/cards/S2Cards'
 import type { Plan } from '@/app/components/cards/S2Cards'
 export { KeepCapture }   // Sasha 228's handoff page imports it from here
 import TripPanel from '@/app/components/workspace/TripPanel'   // Sasha 236 · the trip board: S1's own, on the same records
@@ -41,6 +41,7 @@ type Card =
   | { k: 'handover'; url: string; external: boolean }   // Sasha 236 · Tap to finish (their page / our hand-over), over her
   | { k: 'trip'; what: string }                          // Sasha 236 · the trip changed: one tap to the Trip board
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
+  | { k: 'subscriptions'; items: Ev[]; total?: string; source?: string }   // CR 84 · what they pay for, from their receipts
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
 type Ev = Record<string, any>
@@ -260,6 +261,7 @@ function CardView({ c, choose, pick, send }: { c: Card; choose: (t: string) => v
   if (c.k === 'my_cards') return <MyCards cards={c.cards} choose={choose} />
   if (c.k === 'accident') return <AccidentCard view={c.view} send={send} />
   if (c.k === 'claim_status') return <ClaimStatus claim={c.claim} />
+  if (c.k === 'subscriptions') return <SubscriptionsCard items={c.items} total={c.total} source={c.source} send={send} />
   if (c.k === 'activities') return (<>{c.cards.map((a, i) => <ActivityCard key={i} a={a} />)}
     {c.unread.length ? <div style={{ fontSize: 13, color: C.dim, margin: '4px 2px' }}>Couldn&apos;t check on their official sites: {c.unread.map(untag).join(', ')}</div> : null}</>)
   if (c.k === 'keep_capture') return <KeepCapture what={c.what} />
@@ -474,6 +476,7 @@ export default function S2App() {
               const what = ev.kind === 'flights' ? 'Flights to choose from' : ev.kind === 'stays' ? 'Places to stay' : ev.kind === 'total' ? 'The total, all in' : 'Your trip, updated'
               add({ k: 'trip', what })
             }
+            else if (ev.kind === 'subscriptions' && Array.isArray(ev.items)) add({ k: 'subscriptions', items: ev.items, total: ev.total, source: ev.source })   // CR 84
             else if (ev.kind === 'activities' && Array.isArray(ev.cards)) add({ k: 'activities', cards: ev.cards, unread: Array.isArray(ev.unread) ? ev.unread : [], date: ev.date })   // CR 81
           }
         }

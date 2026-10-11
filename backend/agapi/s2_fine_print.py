@@ -265,6 +265,19 @@ async def _end_user(account: str) -> Optional[str]:
     return None
 
 
+async def _own_passport_country(account: str) -> Optional[str]:
+    """Sasha 243 · the ISSUING COUNTRY of the passport in the person's own Keep, read from its mask ("Passport ES ••••041": the
+    country is the mask's public part by design) — nothing is opened, and the number never leaves the Keep."""
+    try:
+        from agapi import s2_keep as KEEP
+        pp = next((i for i in await KEEP.list_(account) if i.get("type") == "passport"), None)
+    except Exception as e:
+        log.info("[fine_print] own Keep not read: %s", type(e).__name__)
+        return None
+    m = re.match(r"Passport ([A-Z]{2}) ", str((pp or {}).get("masked") or ""))
+    return m.group(1) if m else None
+
+
 async def _with_own_passport(account: str, v: dict) -> dict:
     """Sasha 242 (EU's walk) · the passport the person saved on /keep lives in SASHA's Keep; AgAPI's entry.prepare reads its own,
     so "fill my arrival card from my passport" said the passport "wasn't pulled in". Its Keep section takes the mask from the
@@ -510,11 +523,14 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                  for d in (args.get("destinations") or []) if d.get("country")]
         if not dests:
             return {"ok": False, "error": {"code": "need_destination", "message": "ask where they're going (and when they land)"}}
-        r = await CALL("entry.check", {"end_user": uid, "destinations": dests})
+        pc = await _own_passport_country(ctx.account)   # Sasha 243 · the passport saved on /keep lives in Sasha's Keep: its country only
+        r = await CALL("entry.check", {"end_user": uid, "destinations": dests, **({"passport_country": pc} if pc else {})})
+        if not r.get("ok") and pc and (r.get("error") or {}).get("code") == "invalid_input":   # an AgAPI from before the input: as before
+            r = await CALL("entry.check", {"end_user": uid, "destinations": dests})
         if not r.get("ok"):
             return _fail(r)
         v = r["result"]
-        return {"ok": True, "result": {"say": v["say"], "passport": (v.get("passport") or {}).get("masked"),
+        return {"ok": True, "result": {"say": v["say"], "passport": (v.get("passport") or {}).get("masked") or (f"your passport ({pc}), from your Keep" if pc and v.get("passport") else None),
                                        "destinations": [{"country": d["country"], "verdict": d["verdict"], **({"deadline": d["deadline"]} if d.get("deadline") else {})}
                                                         for d in v["destinations"]],
                                        "how": "Say `say` as given: every rule is the government's own sentence, quoted. Never say they're cleared to enter."}}

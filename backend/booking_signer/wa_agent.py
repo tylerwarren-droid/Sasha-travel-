@@ -155,6 +155,13 @@ def _card(ev: dict, out, title: str) -> None:
             lines.append(" · ".join(x for x in (c.get("name"), when, price, f"from {src}" if src else "", c.get("ticket_url") or c.get("official_url")) if x))
         if ev.get("unread"):
             lines.append("Couldn't check on their own sites: " + ", ".join(ev["unread"][:4]))
+    elif k == "subscriptions":   # Sasha 243 · CR 84's list as text: service · price · renews ("expected" when the email doesn't say)
+        per = {"monthly": "a month", "yearly": "a year", "weekly": "a week", "quarterly": "a quarter"}
+        for b in (ev.get("items") or [])[:12]:
+            lines.append(" · ".join(x for x in (b.get("service"), " ".join(x for x in (b.get("price"), per.get(b.get("how_often") or "", "")) if x),
+                                                 f"renews {b['renews']}" + (" (expected)" if b.get("expected") else "") if b.get("renews") else "") if x))
+        if ev.get("total"):
+            lines.append(f"About {ev['total']} a month. To cancel one, say which.")
     lines = [_cut(l, 300) for l in lines if str(l or "").strip()]
     if lines:
         out.text("\n".join([f"*{title}*"] + lines + [f"See the card: {s2_link()}"]))
@@ -216,6 +223,7 @@ KIND_MAP = {
     "claim_status": lambda ev, out: _card(ev, out, "Your claim"), "accident": "accident",   # Sasha 238 · keeps the shots it asks for
     "counter_card": lambda ev, out: _card(ev, out, "At the counter"), "my_cards": lambda ev, out: _card(ev, out, "Your cards"),
     "activities": lambda ev, out: _card(ev, out, "Things to do"),
+    "subscriptions": lambda ev, out: _card(ev, out, "Your subscriptions"),   # Sasha 243
     "keep_capture": "keep_capture",          # sets st["photo_for"] (needs the state)
     "keep_handoff": _nothing,                # WhatsApp takes the photo directly
     "focus": _nothing, "trip": _nothing, "inline": _nothing,
@@ -239,7 +247,7 @@ def render(ev: dict, out, st: dict, now) -> None:
         f(ev, out)
 
 
-CARD_KINDS = {"accident", "claim_status", "notice", "counter_card", "my_cards", "activities", "plans", "capabilities", "calendar"}
+CARD_KINDS = {"accident", "claim_status", "notice", "counter_card", "my_cards", "activities", "plans", "capabilities", "calendar", "subscriptions"}
 
 
 def last_of_each_card(renders: List[dict]) -> List[dict]:

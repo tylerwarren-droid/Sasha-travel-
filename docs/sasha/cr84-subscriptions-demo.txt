@@ -1,0 +1,25 @@
+CR 84 demo — Sasha /s2 code (cr/84-s2) → the DEPLOYED agapi-sandbox (AgAPI cr/84 ebfa8c5, deploy 191b8a2a), 11 Oct 2026. The fake inbox (test mode; no Gmail connected here).
+
+
+» 'What subscriptions am I paying for?'
+  find_subscriptions({"from_gmail": true})
+  status: needs_consent
+  ask: I'll look in your Gmail only for receipt and renewal emails from the last 13 months, keep only each subscription's name, price and dates (each with the line it came from), and never store your emails. OK?
+
+» 'Yes, go ahead.'
+  find_subscriptions({"from_gmail": true, "consent_yes": true})
+  say: From your receipts (a fake inbox — test mode), you're paying for 6: FitBox Madrid: EUR 34.90 a month, renews 2026-10-31 (expected — the email doesn't say); Netflix: EUR 13.99 a month, renews 2026-11-03; Spotify: EUR 10.99 a month, renews 2026-11-10 (expected — the email doesn't say); Amazon Prime: EUR 49.90 a year, renews 2027-03-14; Apple iCloud+: EUR 2.99 a month, renews 2026-11-07; ChatGPT Plus: USD 20.00 (the receipt doesn’t say how often). That's about EUR 67.03 a month, not counting ChatGPT Plus.
+  card: {"kind": "subscriptions", "items": [{"service": "FitBox Madrid", "price": "EUR 34.90", "how_often": "monthly", "renews": "2026-10-31", "expected": true, "subscription_id": "sub_01M4NP9DW47RFN7N0DS9V6TB4N"}, {"service": "Netflix", "price": "EUR 13.99", "how_often": "monthly", "renews": "2026-11-03", "expected": false, "subscription_id": "sub_01M4NP9DWBC5B9GYGVS4YS3AK9"}, {"service": "Spotify", "price": "EUR 10.99", "how_often": "monthly", "renews": "2026-11-10", "expected": true, "subscription_id": "sub_01M4NP9DWH1XCFRNNGGVVCZSQH"}, {"service": "Amazon Prime", "price": "EUR 49.90", "how_often": "yearly", "renews": "2027-03-14", "expected": false, "subscription_id": "sub_01M4NP9DWQC2KGMT9SQ5EJFQGM"}, {"service": "Apple iCloud+", "price": "EUR 2.99", "how_often": "monthly", "renews": "2026-11-07", "expected": false, "subscription_id": "sub_01M4NP9DWX08QTZ6S5M8VSMY3M"}, {"service": "ChatGPT Plus", "price": "USD 20.00", "how_often": "unknown (the email doesn't say)", "renews": null, "expected": false, "subscription_id": "sub_01M4NP9DX58HNTH646WA0CP9YA"}], "total": "EUR 67.03", "source": "receipts (a fake inbox — test mode)"}
+  emails: {"messages": 9, "receipts_read": 8, "not_receipts_unread": 1, "bodies_kept": 0, "facts_checked": 32, "facts_passed": 32, "consent_sha256": "sha256:2cf9a6c1dcefcc9cef0480213421f49f422de9370f6eb6ed1f04e60be180bd0c"}
+
+» 'Cancel Spotify'
+  cancel_subscription({"service": "Spotify"})
+  status: awaiting_yes
+  ask: Read this back and ask; cancel only on their yes, in their next message.
+  read_back: ["Cancel Spotify: EUR 10.99 monthly (last charged 2026-10-11).", "Here is Spotify's own cancel page: https://www.spotify.com/account/subscription/ — you open it and press cancel. Sasha never logs in for you."]
+
+» 'Cancel the gym'
+  cancel_subscription({"service": "FitBox"})
+  status: awaiting_yes
+  ask: Read this back and ask; cancel only on their yes, in their next message.
+  read_back: ["Cancel FitBox Madrid: EUR 34.90 monthly (last charged 2026-10-01).", "Sasha emails bajas@fitbox-madrid.example — FitBox Madrid's cancellation address — asking them to cancel. It's “cancel requested” until they confirm."]

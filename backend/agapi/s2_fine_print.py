@@ -405,12 +405,12 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                                               **({"interests": [str(i) for i in args["interests"]][:8]} if args.get("interests") else {}), "limit": 8})
         if not r.get("ok"):
             return _fail(r)
-        cands = r["result"]["candidates"][:VERIFY_TOP]
+        cands = r["result"]["candidates"]   # all of them are checked (each from its stored read); the first VERIFY_TOP readable ones are shown
         if not cands:
             return {"ok": True, "result": {"say": r["result"]["say"]}}
         got = await _aio.gather(*[CALL("activities.verify", {"candidate_id": c["candidate_id"], "date": day}) for c in cands])
         cards = [g["result"] for g in got if g.get("ok")]
-        shown = [c for c in cards if c["confidence"] in ("verified", "partial")]
+        shown = [c for c in cards if c["confidence"] in ("verified", "partial")][:VERIFY_TOP]
         unread = [c for c in cards if c["confidence"] == "not_read"]
         say = " ".join([c["say"] for c in shown] + ([f"I couldn't check {', '.join(c['name'] for c in unread)} on their official sites."] if unread else []))
         return {"ok": True, "result": {"say": say or "I couldn't check any of them on their official sites today.",

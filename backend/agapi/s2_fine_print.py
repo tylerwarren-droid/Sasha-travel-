@@ -61,6 +61,14 @@ def _card_name(c: dict) -> str:
     return c["product"] if (c.get("product") or "").startswith(c.get("issuer") or "\0") else f"{c.get('issuer')} {c.get('product')}"
 
 
+def flight_number(airline: Optional[str], number: Optional[str]) -> Optional[str]:
+    """Sasha 236 · the number without the airline's code in front ("EX" + "EX123" → "123"): AgAPI puts the code back, and the
+    read-back said "EXEX123" (found live)."""
+    n = str(number or "").strip().replace(" ", "")
+    a = str(airline or "").strip().upper()
+    return n[len(a):] if a and n.upper().startswith(a) and n[len(a):].isdigit() else (n or None)
+
+
 def agapi_facts(given: Optional[dict], said: str = "") -> Dict[str, Any]:
     """CR 78 · the model's facts → AgAPI's keys (other_vehicle / your_vehicle objects). A time they typed ("14:00") is taken from their
     own words when the model left it out — a plate never is (theirs or the other car's can't be told apart from the words alone)."""
@@ -369,6 +377,8 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                   if args.get(k) not in (None, "")}
         for k in ("airline", "from", "to"):
             flight[k] = str(flight.get(k) or "").upper()
+        if flight.get("number"):
+            flight["number"] = flight_number(flight["airline"], flight["number"])   # Sasha 236 · never "EXEX123"
         r = await CALL("money.flight_check", {"end_user": uid, "flight": flight, **({"booking_reference": args["booking_reference"]} if args.get("booking_reference") else {}),
                                               **({"passengers": args["passengers"]} if args.get("passengers") else {})})
         if not r.get("ok"):
@@ -392,6 +402,8 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         return r if r.get("ok") else _fail(r)
     if name == "bag_money_back":
         bag = {k: args[k] for k in ("airline", "number", "date", "from", "to", "what", "received_on", "pir_reference", "currency") if args.get(k) not in (None, "")}
+        if bag.get("number"):
+            bag["number"] = flight_number(bag.get("airline"), bag["number"])   # Sasha 236 · found live: "EXEX123"
         for k in ("airline", "from", "to", "currency"):
             if bag.get(k):
                 bag[k] = str(bag[k]).upper()
@@ -407,7 +419,10 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         v = r["result"]
         _MONEY[ctx.account] = v["case_id"]
         return {"ok": True, "result": {"say": v["say"], "verdict": v["verdict"], "file_by": v.get("file_by"),
-                                       "how": "Say `say` as given: every deadline is quoted from its source. The limit is never what they're owed."}}
+                                       "how": ("Say `say` as given: every deadline is quoted from its source. The limit is never what they're owed. "
+                                               # Sasha 236 · found live: she described the claim from memory and asked again and again
+                                               "When they want to claim, CALL file_bag_claim — its first call returns the read-back you "
+                                               "read out; never describe a claim you haven't got back from it.")}}
     if name == "file_bag_claim":
         cid = _MONEY.get(ctx.account)
         if not cid:

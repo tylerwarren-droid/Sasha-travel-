@@ -68,6 +68,19 @@ class Purge(unittest.TestCase):
         self.assertEqual(sql.count("references auth.users(id) on delete cascade"), 6)
 
 
+class FlightNumber(unittest.TestCase):
+    def test_the_airline_code_isnt_doubled(self):   # found live: "Flight: EXEX123"
+        from agapi.s2_fine_print import flight_number
+        self.assertEqual(flight_number("EX", "EX123"), "123")
+        self.assertEqual(flight_number("EX", "ex 123"), "123")
+        self.assertEqual(flight_number("EX", "123"), "123")
+        self.assertEqual(flight_number("IB", "EX123"), "EX123")   # another airline's code is left alone
+
+    def test_bag_check_says_to_claim_through_the_tool(self):
+        src = open(__import__("agapi.s2_fine_print", fromlist=["x"]).__file__).read()
+        self.assertIn("When they want to claim, CALL file_bag_claim", src)
+
+
 class BookSaysThisScreen(unittest.TestCase):
     def test_s2_book_is_its_own_s1_untouched(self):
         from agapi import v0 as API

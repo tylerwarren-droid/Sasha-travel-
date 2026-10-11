@@ -101,10 +101,14 @@ class LoyaltyOnTheBooking(KeepFixture):
         uses = {i["masked"]: i["uses"] for i in run(KEEP.list_with_uses(ACCT))}["Iberia Plus ••••432"]
         self.assertEqual(uses[0]["for"], "Iberia IB 3166 booking ABC123")
 
-    def test_another_airline_gets_nothing(self):
-        got, _, applied = self.book(self.FLIGHT, card={"id": "r1", "owner": "easyJet", "flights": "U2 7652"})
-        self.assertEqual(got, [{}])
+    def test_another_airline_gets_nothing(self):   # offered to the order (Iberia Plus → IB); easyJet's offer takes only U2 → not carried
+        got, _, applied = self.book(self.FLIGHT, card={"id": "r1", "owner": "easyJet", "flights": "U2 7652"}, sent=[])
+        self.assertEqual(got[0]["loyalty"], [{"airline_iata_code": "IB", "account_number": "IB98765432"}])
         self.assertEqual(applied, [])
+
+    def test_a_ba_flight_takes_iberia_plus(self):   # Duffel: BA's offers list IB among their supported programmes
+        got, _, applied = self.book(self.FLIGHT, card={"id": "r1", "owner": "British Airways", "flights": "BA 461"})
+        self.assertEqual(applied, ["I've added your Iberia Plus ••••432 to this booking."])
 
     def test_said_only_when_duffel_carried_it(self):
         _, _, applied = self.book(self.FLIGHT, sent=[])                     # the offer didn't take Iberia Plus
@@ -151,6 +155,15 @@ class DuffelOrderCarriesIt(unittest.TestCase):
         o, sent = self.order(["BA"])
         self.assertNotIn("loyalty_programme_accounts", sent["passengers"][0])
         self.assertEqual(o["loyalty_sent"], [])
+
+    def test_duffels_test_iberia_takes_none(self):   # live, 11 Oct: Duffel's TEST Iberia offers list supported_loyalty_programmes []
+        o, sent = self.order([])
+        self.assertNotIn("loyalty_programme_accounts", sent["passengers"][0])
+        self.assertEqual(o["loyalty_sent"], [])
+
+    def test_an_offer_that_doesnt_say_takes_only_its_own_airline(self):
+        o, sent = self.order(None)   # no slices in the stand-in → no airline of its own → nothing sent
+        self.assertNotIn("loyalty_programme_accounts", sent["passengers"][0])
 
 
 if __name__ == "__main__":

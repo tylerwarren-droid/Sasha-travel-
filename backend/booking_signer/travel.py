@@ -181,7 +181,9 @@ async def order(c: dict, name: str, email: str, phone: Optional[str], people: Op
     # passenger — only programmes this offer takes (when it says), so an unsupported one never fails the order
     if loyalty and pax:
         ok_codes = o.get("supported_loyalty_programmes")
-        loyalty = [a for a in loyalty if ok_codes is None or a.get("airline_iata_code") in set(ok_codes or [])]
+        if ok_codes is None:   # the offer doesn't say: only the flight's own airlines' programmes
+            ok_codes = [sg["marketing_carrier"]["iata_code"] for sl in o.get("slices") or [] for sg in sl.get("segments") or []]
+        loyalty = [a for a in loyalty if a.get("airline_iata_code") in set(ok_codes or [])]
         if loyalty:
             pax[next((k for k, p in enumerate(people or []) if p.get("is_account_holder")), 0) % len(pax)]["loyalty_programme_accounts"] = loyalty
     s, j = await HTTP("POST", "/air/orders", {"data": {"type": "instant", "selected_offers": [c["id"]], "passengers": pax,

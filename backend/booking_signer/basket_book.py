@@ -352,13 +352,13 @@ async def _moved(account: str, mv: Dict[str, Any], where: str) -> Dict[str, Any]
 
 
 def _loyalty_for_flight(cards: list, c: dict) -> tuple:
-    """Sasha 235 · ([Duffel loyalty_programme_accounts], [the cards used]) for this flight's own airlines."""
+    """Sasha 235 · ([Duffel loyalty_programme_accounts], [the cards]) — every airline programme in the Keep, under ITS programme's code
+    (Iberia Plus → IB). travel.order keeps only what THIS offer takes (its supported_loyalty_programmes: a BA flight takes IB; Duffel's
+    TEST Iberia offers take none), or, when the offer doesn't say, only the flight's own airlines. Said only when the order carried it."""
     from agapi import s2_keep as KEEP
-    import re as _re
-    flown = set(_re.findall(r"\b([A-Z0-9]{2}) \d", c.get("flights") or ""))
     accounts, used = [], []
     for k in cards or []:
-        code = next((x for x in KEEP.airlines_of(k["program"]) if x in flown), None)
+        code = next(iter(KEEP.airlines_of(k["program"])), None)
         if code and k.get("number") and code not in {a["airline_iata_code"] for a in accounts}:
             accounts.append({"airline_iata_code": code, "account_number": k["number"]})
             used.append(k)

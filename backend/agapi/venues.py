@@ -221,7 +221,7 @@ async def hold_venue(ctx, a: dict) -> dict:
         return _with_card(card, {**held["out"], "same_read_back": "they've heard this — on their yes, call book_venue (never hold again)"})
     # Sasha 226 · a NEW hold supersedes the old one at once: if this one ends in a question (choose_route…) or an error, a yes must
     # never fall through to the earlier venue's read-back (found live: "D-Sunset" read back, the yes booked the held "El Mirador")
-    _HELD.pop(ctx.account, None)
+    _PREV[ctx.account] = _HELD.pop(ctx.account, None)   # Sasha 236 · kept aside ONLY to tell "the same words again" (_hold)
     rd = await _read(ctx, a)
     res = await _reservation(ctx, a, rd)
     at = res["when"]["at"]
@@ -332,6 +332,9 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
     raise _err("no_route", f"{GW.plain_venue(rd['venue'])} can't be booked from here right now" + (f" — {why}" if why else ""))
 
 
+_PREV: Dict[str, Optional[dict]] = {}   # Sasha 236 · account → the hold a new hold_venue superseded (for _hold's same-words check only)
+
+
 def _same_words(lines: List[str]) -> str:
     """Sasha 236 · a read-back's words without its one-time forwarding address: what the person HEARD, for "is this the same one?"."""
     import hashlib as _h
@@ -340,7 +343,7 @@ def _same_words(lines: List[str]) -> str:
 
 def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra: Optional[dict] = None) -> dict:
     GW = _API()
-    prev = _HELD.get(ctx.account)
+    prev = _HELD.get(ctx.account) or _PREV.pop(ctx.account, None)
     # Sasha 236 · the same booking held again is the same read-back, whatever its ONE-TIME forwarding address (act-<uuid>@…) —
     # found live on /s2: a page route's read-back changed on every hold, so the yes never answered one they'd heard
     same = _same_words(read_back.get("lines") or [])

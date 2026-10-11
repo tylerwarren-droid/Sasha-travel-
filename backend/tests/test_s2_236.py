@@ -85,6 +85,11 @@ class SameReadBack(unittest.TestCase):
     """Found live on /s2: a page route's read-back carries a ONE-TIME forwarding address, so each hold looked new and the yes never
     answered a read-back they'd heard (she held again, and again)."""
 
+    def test_hold_venue_keeps_the_superseded_hold_for_the_check(self):   # found live: hold_venue popped it before _hold could compare
+        src = open(__import__("agapi.venues", fromlist=["x"]).__file__).read()
+        self.assertIn("_PREV[ctx.account] = _HELD.pop(ctx.account, None)", src)
+        self.assertIn("prev = _HELD.get(ctx.account) or _PREV.pop(ctx.account, None)", src)
+
     def test_held_again_keeps_its_time(self):
         from agapi import venues as VN, v0 as API
         lines = lambda u: ["Their Treatwell page: pick Saturday 17 October at 12:00, for 1.",

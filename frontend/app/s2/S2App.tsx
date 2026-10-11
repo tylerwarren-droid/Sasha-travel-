@@ -472,14 +472,17 @@ function ActivityCard({ a }: { a: Ev }) {
   const dom = (() => { try { return new URL(a.official_url).hostname.replace(/^www\./, '') } catch { return '' } })()
   const quotes: Q[] = [a.event, a.open, a.price?.quote ? a.price : null, a.no_event?.next].filter(Boolean).map((x: Ev) => ({ quote: x.quote, source_url: x.source_url, read_at: x.read_at }))
   const when = a.event ? `${a.event.title} · ${a.event.starts_at.slice(11, 16)}`
-    : a.open ? (/^closed|cerrad/i.test(String(a.open.hours)) ? 'Closed that day' : `Open ${a.open.hours}`)
+    : a.open ? (/^closed|cerrad/i.test(String(a.open.hours)) ? 'Closed that day' : String(a.open.hours).includes(';') ? `Hours: ${a.open.hours}` : `Open ${a.open.hours}`)
     : a.no_event ? 'No match or event listed that day' : ''
   const href = a.ticket_url || a.official_url
   return (
     <Box k={a.kind === 'event' ? 'On' : a.kind === 'outdoor' ? 'Outdoors' : 'Visit'} h={untag(a.name)}>
       {when ? <div style={{ fontSize: 15 }}>{untag(when)}<Sources quotes={quotes} /></div> : null}
-      {a.price?.text ? <div style={{ fontSize: 14, color: C.dim }}>Tickets {a.price.text}{a.price.free_window ? ` · free ${untag(a.price.free_window)}` : ''}</div> : null}
-      <div style={{ fontSize: 12.5, color: C.dim, marginTop: 6 }}>from {dom}, read {a.read_at}{a.stale ? ' · may be out of date' : ''}</div>
+      {/* CR 82 · a price says what it's for; free for a group is never a free window */}
+      {a.price?.text ? <div style={{ fontSize: 14, color: C.dim }}>{a.price.for ? `${untag(a.price.for)}: ` : 'Tickets '}{a.price.text}{a.price.free_window ? ` · free ${untag(a.price.free_window)}` : ''}</div> : null}
+      {a.price?.free_for ? <div style={{ fontSize: 14, color: C.dim }}>Free for {untag(a.price.free_for)}</div> : null}
+      {/* CR 82 · from an official second source when the place's own site couldn't be read — always said */}
+      <div style={{ fontSize: 12.5, color: C.dim, marginTop: 6 }}>{a.source ? `from ${untag(a.source.label)} (${dom}'s own site couldn't be read)` : `from ${dom}`}, read {a.read_at}{a.stale ? ' · may be out of date' : ''}</div>
       {href && /^https:\/\//.test(href) ? <a href={href} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 8, padding: '8px 14px', borderRadius: 999,
         border: `1px solid ${C.gold}`, color: C.gold, fontWeight: 700, textDecoration: 'none' }}>{a.ticket_url ? 'Book on the official site' : 'Official site'}</a> : null}
     </Box>)

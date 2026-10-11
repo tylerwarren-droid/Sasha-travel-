@@ -128,7 +128,9 @@ TOOLS += [
          "airline_said_extraordinary": {"type": "boolean"}, "booking_reference": {"type": "string"},
          "passengers": {"type": "array", "items": {"type": "string"}}}, "required": ["airline", "date", "from", "to", "what"]}},
     {"name": "file_flight_claim", "description": (
-        "File the flight compensation claim flight_money_back prepared, to the airline's own address. Needs the booking reference and every "
+        "File the flight compensation claim flight_money_back prepared, to the airline's own address — or, when the airline takes claims only "
+        "on its own web form, prepare every field for that form (status form_prepared: they press submit on the airline's site; never say it's "
+        "filed). Needs the booking reference and every "
         "passenger's name (ask if missing). The FIRST call returns the read-back — read it back and ask; call again only after they say yes, "
         "in a later turn."),
      "input_schema": {"type": "object", "properties": {"booking_reference": {"type": "string"}, "passengers": {"type": "array", "items": {"type": "string"}}}}},
@@ -163,7 +165,8 @@ TOOLS += [
          "expenses": {"type": "number", "description": "the receipts' total"}, "currency": {"type": "string"}, "booking_reference": {"type": "string"},
          "passengers": {"type": "array", "items": {"type": "string"}}}, "required": ["airline", "date", "from", "to", "what"]}},
     {"name": "file_bag_claim", "description": (
-        "File the bag claim bag_money_back prepared, to the airline's own address. Needs the PIR reference, the booking reference and every "
+        "File the bag claim bag_money_back prepared, to the airline's own address — or, when the airline takes them only on its own form, "
+        "prepare every field for it (status form_prepared: they submit it themselves). Needs the PIR reference, the booking reference and every "
         "passenger's name (ask if missing). The FIRST call returns the read-back — read it back and ask; call again only after they say yes, "
         "in a later turn."),
      "input_schema": {"type": "object", "properties": {"pir_reference": {"type": "string"}, "booking_reference": {"type": "string"},
@@ -396,7 +399,8 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         r = await _with_yes(ctx, f"{ctx.account}|file_flight_claim", "money.flight_claim", body)
         if r.get("ok") and r["result"].get("state"):
             v = r["result"]
-            return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), **({"draft": v["draft"]} if v.get("draft") else {})}}
+            return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), **({"draft": v["draft"]} if v.get("draft") else {}),
+                                           **({"form_url": v["form_url"], "fields": v["fields"]} if v.get("form_url") else {})}}   # CR 82
         return r if r.get("ok") else _fail(r)
     if name == "suggest_activities":
         import asyncio as _aio
@@ -442,7 +446,8 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         r = await _with_yes(ctx, f"{ctx.account}|file_bag_claim", "money.bag_claim", body)
         if r.get("ok") and r["result"].get("state"):
             v = r["result"]
-            return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), **({"draft": v["draft"]} if v.get("draft") else {})}}
+            return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), **({"draft": v["draft"]} if v.get("draft") else {}),
+                                           **({"form_url": v["form_url"], "fields": v["fields"]} if v.get("form_url") else {})}}   # CR 82
         return r if r.get("ok") else _fail(r)
     if name == "money_claim_status":
         cid = _MONEY.get(ctx.account)

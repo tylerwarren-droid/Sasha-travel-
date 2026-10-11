@@ -1,0 +1,75 @@
+CR 80 · demos from REAL READS — Sasha's /s2 code (cr/80-s2) → the DEPLOYED agapi-sandbox (cr/80 @ 7464399), 11 Oct 2026.
+Sources read at source on the sandbox, each with its stored copy: Regulation (EC) 261/2004 (BOE), the Montreal Convention + its revised limits (BOE-A-2004-9347, BOE-A-2025-3872), gov.uk/eta + /eta/apply (+ guidance pages it links), the TDAC manual (tdac.immigration.go.th). Example Air = labelled test fixture. Sandbox: every filing captured, never sent.
+
+═══ 1 · MONEY BACK — a delayed Madrid → London flight
+
+» 'My Example Air flight EX123 Madrid to London yesterday landed 3 h 40 late'
+  flight_money_back({"airline": "EX", "number": "123", "date": "2026-10-09", "from": "MAD", "to": "LHR", "what": "delayed", "arrival_delay_minutes": 220})
+  say: Your flight EX123 (1,246 km) is covered: under EU rules you may be owed EUR 250. Want me to claim it?
+  verdict: yes
+  amount: {"amount_minor": 25000, "currency": "EUR"}
+  quotes: ["a) a los pasajeros que partan de un aeropuerto situado en el territorio de un Estado miembro sujeto a las disposiciones del Tratado;", "4. Las distancias indicadas en los apartados 1 y 2 se calcularán en función del método de la ruta ortodrómica.", "3. La compensación a que hace referencia el apartado 1 se abonará en metálico, por transferencia bancaria electrónica, transferencia bancaria, cheque o, previo acuerdo firmado por el pasajero, bonos de viaje u otros servicios.", "a) 250 euros para vuelos de hasta 1500 kilómetros;"]
+
+» "Yes, claim it. Booking EXA1B2, it's just me, Alex Doe."
+  file_flight_claim({"booking_reference": "EXA1B2", "passengers": ["Alex Doe"]})
+  status: awaiting_yes
+  read_back: ["File a compensation claim with Example Air at claims@example-air.example (the address on its own claims page), in your name — I file it for you.", "Flight: EX123 on 2026-10-09, MAD → LHR (1,246 km).", "What happened: the flight arrived 3 h 40 min late at its final destination.", "Booking reference: EXA1B2.", "Passengers: Alex Doe.", "Compensation claimed: EUR 250 under Regulation (EC) No 261/2004 (\"a) 250 euros para vuelos de hasta 1500 kilómetros;\").", "Payment: by bank transfer — not a voucher (\"3. La compensación a que hace referencia el apartado 1 se abonará en metálico, por transferencia bancaria electrónica, transferencia bancaria, cheque o, previo acuerdo firmado por el pasajero, bonos de viaje u otros servicios.\").", "Their reply: within 30 days (their page: \"We reply to every claim within 30 days.\").", "Claims made for you: their page says \"Someone may claim on your behalf if the claim includes your signed authorisation.\" — if they ask for your signed authorisation, you sign it; I never sign for you."]
+
+» 'Yes, file it.'
+  file_flight_claim({"booking_reference": "EXA1B2", "passengers": ["Alex Doe"]})
+  say: Filed with Example Air. They say they reply within 30 days.
+  status: filed
+
+═══ 2 · ENTRY DOCUMENTS — a Spanish passport to London and Bangkok
+(their Spanish passport saved in the Keep beforehand: Passport ES ••••456 )
+
+» "I'm flying Madrid to London on 2 Nov, then Madrid to Bangkok, landing 20 Nov. What do I need?"
+  entry_documents({"destinations": [{"country": "GB", "arrival_date": "2026-11-02"}, {"country": "TH", "arrival_date": "2026-11-20"}]})
+  say: You need an electronic travel authorisation (ETA) ("You usually need an ETA rather than a visa if you’re from Europe, the USA, Australia, Canada or certain other countries."). It costs GBP 20 on the official site. Apply by 28 Oct 2026: decisions can take up to 3 working days ("Allow up to 3 working days (Monday to Friday) to get a decision, but it may arrive much sooner."). You need a Thailand Digital Arrival Card (TDAC) ("All non-Thai nationals entering the Kingdom of Thailand are required to complete the Thailand Digital Arrival Card online prior to entry."). Submit it from 17 Nov 2026, 3 days before you land ("Foreigners are required to submit their arrival card information 3 days in advance of their arrival date in Thailand.").
+  passport: Passport ES ••••456
+  destinations: [{"country": "GB", "verdict": "needed", "deadline": {"apply_by": "2026-10-28", "rule": "processing", "quote": {"claim_id": "rcl_W8Y93WNP5WK9M8DQVD579393QE", "quote": "Allow up to 3 working days (Monday to Friday) to get a decision, but it may arrive much sooner.", "source_url": "https://www.gov.uk/contact-ukvi-inside-outside-uk/y/outside-the-uk/electronic-travel-authorisation-eta", "read_at": "2026-10-11", "copy_id": "scp_5a3df1680755035090842bf6", "copy_sha256": "sha256:930347955f008e54281701bf177e43084067b960e5f764d2130e9b05195229ad"}, "wait": {"claim_id": "rcl_E02VNY3XWS5GCC02MNDMKEYA2C", "quote": "You must wait until you get an email confirming you have an ETA before you travel to the UK.", "source_url": "https://www.gov.uk/eta/apply", "read_at": "2026-10-11", "copy_id": "scp_1ca6aa3843645dfabf6b1989", "copy_sha256": "sha256:b4cae104c43762d1ee4fabb92176feedbf4dbbb98c9cd826111dcbe975a09076"}}}, {"country": "TH", "verdict": "needed", "deadline": {"opens": "2026-11-17", "before": "2026-11-20", "rule": "window", "quote": {"claim_id": "rcl_DBBE66YA67HPXJGQYSEHK4GVE7", "quote": "Foreigners are required to submit their arrival card information 3 days in advance of their arrival date in Thailand.", "source_url": "https://tdac.immigration.go.th/manual/en/", "read_at": "2026-10-11", "copy_id": "scp_7847b5e6c764b3f3215881b2", "copy_sha256": "sha256:00f6934befc87cca6d154caadb6720c24cb3ee4a28cd65a2ce921320177d9fef"}}}]
+
+» 'Prepare my ETA'
+  prepare_entry({"country": "GB", "flight": "IB3170", "arrival_date": "2026-11-02"})
+  say: Here's your electronic travel authorisation (ETA), prepared: 0 of 5 sections come from your Keep and your trip. You submit it — and pay, if there's a fee — yourself on the official site: https://www.gov.uk/eta/apply. I never submit or pay for you.
+  official_url: https://www.gov.uk/eta/apply
+  fields: [{"asks": "contact details for someone who has parental responsibility (if under 18)", "from": "you", "value": null}, {"asks": "photos of the face of the person applying", "from": "you", "value": null}, {"asks": "a photo of their passport", "from": "you", "value": null}, {"asks": "a photo of their face", "from": "you", "value": null}, {"asks": "criminal convictions", "from": "you", "value": null}]
+  you_do: ["open the official site", "check every field", "add what only you can (photo, declarations)", "pay there if asked", "press submit"]
+
+» "And the Thai arrival card — I'm at Hotel Example, Bangkok"
+  prepare_entry({"country": "TH", "flight": "TG949", "arrival_date": "2026-11-20", "accommodation": "Hotel Example, Bangkok"})
+  say: Here's your Thailand Digital Arrival Card (TDAC), prepared: 3 of 5 sections come from your Keep and your trip. You submit it — and pay, if there's a fee — yourself on the official site: https://tdac.immigration.go.th. I never submit or pay for you.
+  official_url: https://tdac.immigration.go.th
+  fields: [{"asks": "Passport Information", "from": "your Keep", "value": "Passport ES ••••456"}, {"asks": "Personal Information", "from": "you", "value": null}, {"asks": "Travel Information", "from": "your trip", "value": "flight: TG949; arrival date: 2026-11-20"}, {"asks": "Accommodation Information in Thailand", "from": "your trip", "value": "accommodation: Hotel Example, Bangkok"}, {"asks": "Health Declaration Information", "from": "you", "value": null}]
+  you_do: ["open the official site", "check every field", "add what only you can (photo, declarations)", "pay there if asked", "press submit"]
+
+═══ 3 · LUGGAGE — a bag delayed 2 days on Madrid → London; the claim, the airline's reply in their words, the status
+
+» 'My bag on Example Air EX123 Madrid–London on 2026-10-09 only turned up today, two days late. I spent €85.50 on clothes. PIR LHREX12345.'
+  bag_money_back({"airline": "EX", "number": "123", "date": "2026-10-09", "from": "MAD", "to": "LHR", "what": "delayed", "received_on": "2026-10-11", "pir_reference": "LHREX12345", "expenses": 85.5, "currency": "EUR"})
+  say: Your bag on EX123 was delayed: you can claim your costs from Example Air. Send the claim by 01 Nov 2026. The Montreal Convention: "En caso de retraso, la protesta deberá hacerla a más tardar dentro de veintiún días, a partir de la fecha en que el equipaje o la carga hayan sido puestos a su disposición." Example Air: "Then send your baggage claim, with the PIR reference and your receipts, to baggage@example-air.example within 21 days of receiving your bag." The Montreal Convention: "El derecho a indemnización se extinguirá si no se inicia una acción dentro del plazo de dos años, contados a partir de la fecha de llegada a destino o la del día en que la aeronave debería haber llegado o la de la detención del transporte." The Convention sets a limit — not what you're owed: "En el transporte de equipaje, la responsabilidad del transportista en caso de destrucción, pérdida, avería o retraso se limita a 1.519 derechos especiales de giro por pasajero" Your receipts come to EUR 85.50; that's what you'd claim.
+  verdict: yes
+  file_by: 2026-11-01
+
+» 'Yes, claim it. Booking EXA1B2, just me, Alex Doe.'
+  file_bag_claim({"pir_reference": "LHREX12345", "booking_reference": "EXA1B2", "passengers": ["Alex Doe"]})
+  status: awaiting_yes
+  read_back: ["File a baggage claim with Example Air at baggage@example-air.example (the address on its own claims page), in your name — I file it for you.", "Flight: EX123 on 2026-10-09, MAD → LHR.", "What happened: my checked bag arrived late — I received it on 2026-10-11.", "PIR reference: LHREX12345.", "Booking reference: EXA1B2.", "Passengers: Alex Doe.", "Claimed: EUR 85.50 for the costs it caused (receipts attached).", "Their deadline: \"Then send your baggage claim, with the PIR reference and your receipts, to baggage@example-air.example within 21 days of receiving your bag.\".", "Their reply: within 30 days (their page: \"We reply to every claim within 30 days.\")."]
+
+» 'Yes, file it.'
+  file_bag_claim({"pir_reference": "LHREX12345", "booking_reference": "EXA1B2", "passengers": ["Alex Doe"]})
+  say: Filed with Example Air. They say they reply within 30 days.
+  status: filed
+
+» "Where's my bag claim?"
+  money_claim_status({})
+  say: Filed with Example Air on 2026-10-11 (ref sbx_claim_bsebjp63). Next date: Example Air's reply is due 10 Nov 2026.
+  next: {"what": "Example Air's reply is due", "due": "2026-11-10", "from": "Example Air", "quotes": [{"quote": "We reply to every claim within 30 days.", "source_url": "https://agapi-sandbox-production.up.railway.app/fixtures/airlines/example-air"}]}
+
+(the sandbox: Example Air replies — ok )
+
+» 'Did they answer?'
+  money_claim_status({})
+  say: Filed with Example Air on 2026-10-11 (ref sbx_claim_bsebjp63). Example Air replied on 2026-10-11, in their words: "Dear Alex, we have received your baggage claim LHREX12345. We have approved EUR 85.50, to be paid by bank transfer within 14 days. Example Air Baggage Services" The last day to go to court, if it ever came to that: 09 Oct 2028.
+  replies: ["Dear Alex, we have received your baggage claim LHREX12345. We have approved EUR 85.50, to be paid by bank transfer within 14 days. Example Air Baggage Services"]
+  next: {"due": "2028-10-09", "from": "the Montreal Convention", "quotes": [{"claim_id": "rcl_Y1Y65H8CPBAG6R4XCZ2F8FTYH5", "copy_id": "scp_632c56ed36962a15466c14e9", "copy_sha256": "sha256:480e7bc57a271381668b2dfacf3108af9e25974dfcab736c948b5d0f0d9f6755", "quote": "El derecho a indemnización se extinguirá si no se inicia una acción dentro del plazo de dos años, contados a partir de la fecha de llegada a destino o la del día en que la aeronave debería haber llegado o la de la detención del transporte.", "read_at": "2026-10-11", "source_url": "https://www.boe.es/buscar/doc.php?id=BOE-A-2004-9347"}], "what": "go to court, if it comes to that"}

@@ -1,0 +1,18 @@
+
+> I need a dog walker in Madrid for tomorrow at 10
+  HTTP 200 tools: search_venues, get_total!no_trip, get_trip!no_trip, get_status
+  renders: venues(Gatungueando - Catsitter a domicilio | Dogs In Town Madrid | CUIDO TU MASCOTA MADRID VALLECAS | Pet Sitter Madrid | PaseoTuPerroMadrid)
+  "TEST stand-in" anywhere in the stream: false
+  she: I've found a few pet-care services in Madrid that list themselves as open tomorrow at 10. Dogs In Town Madrid in Chamartín has the most reviews and is rated 4.9. PaseoTuPerroMadrid in Salamanca is a dog-walking service. Cuido Tu Mascota in Vallecas is also rated 4.9. Being open doesn't mean they have a walker free tomorrow, so we'll only know once one of them replies. Which one is closest to you? I'll find out how they take bookings.
+
+> This one: “Gatungueando - Catsitter a domicilio”  [place_id ChIJ7-nSN16JQQ0R1xcSAzSHaw0]
+  HTTP 200 tools: read_booking_route, get_total!no_trip, get_trip!no_trip, get_status
+  renders: focus[focus ChIJ7-nSN1]
+  "TEST stand-in" anywhere in the stream: false
+  she: Gatungueando is actually a home cat-sitting service, so they might not walk dogs. They also have no booking form or email, just a phone number, and I can't make calls from your account yet. Want me to try one of the dog walkers instead, like Dogs In Town Madrid or PaseoTuPerroMadrid?
+> This one: “Dogs In Town Madrid”  [place_id ChIJja32_LwpQg0Rva3y83Ani7w]
+  HTTP 200 tools: read_booking_route, hold_venue(draft_message), get_total!no_trip, get_trip!no_trip, get_status
+  she: Dogs In Town has no booking form, so you'd have to message them. I can email them and we wait for a reply, or I can write a WhatsApp or Instagram message that you send from your phone. Since it's for tomorrow morning, WhatsApp is probably the quickest. Which would you like?
+> This one: “PaseoTuPerroMadrid”  [place_id ChIJeew1uywnQg0ReIYrjjH-7H0]
+  HTTP 200 tools: read_booking_route, get_total!no_trip, get_trip!no_trip, get_status
+  she: PaseoTuPerroMadrid has no online booking. I can email them for you and we wait for their reply, or I can write you a WhatsApp or Instagram message that you send yourself. Which would you like?

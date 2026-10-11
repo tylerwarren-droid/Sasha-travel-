@@ -100,10 +100,17 @@ function chroma(video: HTMLVideoElement, canvas: HTMLCanvasElement): () => void 
   return () => { running = false }
 }
 
-export default function S2Hello({ talker, name, signedIn }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null }) {
-  type Phase = 'off' | 'starting' | 'face' | 'voice' | 'tap' | 'bubble' | 'faceAgain'
+/** Sasha 231 · the bubble sits ABOVE the "Voice on · Type instead" row (it covered "Type instead" at 92 px). */
+const BUBBLE_BOTTOM = 'calc(env(safe-area-inset-bottom) + 128px)'
+
+export default function S2Hello({ talker, name, signedIn, backLine, dormant }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean }) {
+  type Phase = 'off' | 'starting' | 'face' | 'faceLate' | 'voice' | 'tap' | 'bubble' | 'faceAgain'
   const [phase, setPhase] = useState<Phase>('off')
   const [tapFor, setTapFor] = useState<'face' | 'voice'>('voice')
+  const phaseRef = useRef<Phase>('off')
+  useEffect(() => { phaseRef.current = phase }, [phase])
+  const tapForRef = useRef<'face' | 'voice'>('voice')
+  useEffect(() => { tapForRef.current = tapFor }, [tapFor])
   const [img, setImg] = useState<string | null>(null)
   const [talking, setTalking] = useState(false)
   const video = useRef<HTMLVideoElement | null>(null)
@@ -111,6 +118,8 @@ export default function S2Hello({ talker, name, signedIn }: { talker: Talker; na
   const unkey = useRef<(() => void) | null>(null)
   const nameRef = useRef<string | null | undefined>(name)
   useEffect(() => { nameRef.current = name }, [name])
+  const backRef = useRef<string | null | undefined>(backLine)   // Sasha 231 · "Welcome back — we were looking at …" (her memory)
+  useEffect(() => { backRef.current = backLine }, [backLine])
   const keyOn = () => { unkey.current?.(); if (video.current && canvas.current) unkey.current = chroma(video.current, canvas.current) }
   const keyOff = () => { unkey.current?.(); unkey.current = null }
   const face = useRef<Face | null>(null)
@@ -138,8 +147,8 @@ export default function S2Hello({ talker, name, signedIn }: { talker: Talker; na
   }
   const back = useRef<boolean | null>(null)   // Sasha 230 · decided once per visit, before the hello is said
   const words = () => {
-    if (back.current === null) back.current = metBefore()
-    text.current = back.current ? WELCOME_BACK : helloLine(nameRef.current ?? null)
+    if (back.current === null) back.current = metBefore() || !!backRef.current
+    text.current = backRef.current || (back.current ? WELCOME_BACK : helloLine(nameRef.current ?? null))
     setLine(text.current)
     return text.current
   }
@@ -148,12 +157,24 @@ export default function S2Hello({ talker, name, signedIn }: { talker: Talker; na
     const f = face.current
     if (!f) return handoff()
     const secs = await f.say(text.current)
-    setTimeout(handoff, back.current ? Math.min(2000, Math.max(1000, secs * 1000 + 300)) : Math.max(2500, secs * 1000 + 900))   // back: ~1–2 s, then away
+    setTimeout(handoff, backRef.current ? Math.max(1500, secs * 1000 + 500) : back.current ? Math.min(2000, Math.max(1000, secs * 1000 + 300)) : Math.max(2500, secs * 1000 + 900))   // back: ~1–2 s (with her memory: its line), then away
   }
   const speakVoice = async () => {
     const r = await talker.sayNow(words())
-    if (r === 'blocked') { setTapFor('voice'); setPhase('tap'); return }
+    if (r === 'blocked') { setTapFor(face.current ? 'face' : 'voice'); setPhase('tap'); return }   // Sasha 232 · her face, if it came, with the tap
     handoff()
+  }
+
+  const lateFace = (f: Face, v: HTMLVideoElement) => {
+    const now = phaseRef.current
+    console.log(`[s2-hello] face on screen late (${now})`)
+    face.current = f
+    keyOn()
+    v.muted = true
+    v.play().catch(() => {})
+    if (now === 'voice') setPhase('faceLate')
+    else if (now === 'tap' && tapForRef.current === 'voice') setTapFor('face')
+    else if (now === 'bubble' || now === 'off') setTimeout(() => { face.current = null; setImg(still(canvas.current) || img); keyOff(); f.stop() }, 900)
   }
 
   // the opening: once per visit (the session), as soon as the page is signed in and the name is known (or ~0.9 s has passed)
@@ -173,7 +194,10 @@ export default function S2Hello({ talker, name, signedIn }: { talker: Talker; na
       if (settled) return
       settled = true
       console.log('[s2-hello] not on screen in 5 s — her voice alone')
-      starting.then(f => f.stop()).catch(() => {})
+      // Sasha 232 · her face, when it comes LATE, is SHOWN — never stopped (iPhone: the face starts in 4.7–11.6 s, measured on
+      // WebKit; at > 5 s it was stopped, so on the phone her face never appeared). Still speaking → her face, big; waiting for a
+      // tap → her face with "Tap to hear Sasha" (the tap then speaks through it); already done → her face becomes the bubble.
+      starting.then(f => lateFace(f, v)).catch(() => {})
       setPhase('voice')
       speakVoice()
     }, Math.max(0, 5000 - (performance.now() - t0)))
@@ -229,13 +253,13 @@ export default function S2Hello({ talker, name, signedIn }: { talker: Talker; na
     } catch { setPhase('bubble') }
   }
 
-  const big = phase === 'starting' || phase === 'face' || phase === 'faceAgain' || (phase === 'tap' && tapFor === 'face')
+  const big = phase === 'starting' || phase === 'face' || phase === 'faceLate' || phase === 'faceAgain' || (phase === 'tap' && tapFor === 'face')
   return (
     <>
       <div onClick={phase === 'faceAgain' ? collapse : undefined} style={{
         position: 'fixed', zIndex: 40, transition: 'all .45s ease', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 20%, #2a2440 0%, #14141c 70%)',
         ...(big ? { left: '50%', top: 'calc(env(safe-area-inset-top) + 96px)', width: 'min(86vw, 420px)', aspectRatio: '3 / 4', transform: 'translateX(-50%)', borderRadius: 24, boxShadow: '0 20px 60px rgba(0,0,0,.6)', opacity: phase === 'starting' ? 0 : 1 }
-          : { right: 16, bottom: 'calc(env(safe-area-inset-bottom) + 92px)', width: 0, height: 0, borderRadius: '50%', opacity: 0 }) }}>
+          : { right: 16, bottom: BUBBLE_BOTTOM, width: 0, height: 0, borderRadius: '50%', opacity: 0 }) }}>
         <video ref={video} playsInline autoPlay muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0, pointerEvents: 'none' }} />
         <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 18%', display: 'block' }} />
         {phase === 'tap' && tapFor === 'face' && <button onClick={tapToHear} style={{ position: 'absolute', left: '50%', bottom: 18, transform: 'translateX(-50%)', padding: '12px 20px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700, fontSize: 16 }}>Tap to hear Sasha</button>}
@@ -247,9 +271,9 @@ export default function S2Hello({ talker, name, signedIn }: { talker: Talker; na
         </div>) : null}
       {phase === 'bubble' && (
         <button onClick={faceBack} aria-label="Sasha — tap to see her" style={{
-          position: 'fixed', zIndex: 40, right: 16, bottom: 'calc(env(safe-area-inset-bottom) + 92px)', width: 58, height: 58, borderRadius: '50%', padding: 0,
+          position: 'fixed', zIndex: 40, right: 16, bottom: BUBBLE_BOTTOM, width: 58, height: 58, borderRadius: '50%', padding: 0, opacity: dormant ? 0.45 : 1,
           border: `2px solid ${talking ? GOLD : 'rgba(255,255,255,.35)'}`, boxShadow: talking ? `0 0 0 6px rgba(232,185,49,.25)` : '0 6px 18px rgba(0,0,0,.5)',
-          background: img ? `center / cover no-repeat url(${img})` : 'linear-gradient(135deg,#6d4aff,#9b4dff)', color: '#fff', fontWeight: 700, fontSize: 20, transition: 'box-shadow .3s, border-color .3s' }}>
+          background: img ? `center / cover no-repeat url(${img})` : 'linear-gradient(135deg,#6d4aff,#9b4dff)', color: '#fff', fontWeight: 700, fontSize: 20, transition: 'box-shadow .3s, border-color .3s, opacity 1.2s' }}>
           {img ? '' : 'S'}</button>)}
     </>
   )

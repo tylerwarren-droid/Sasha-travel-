@@ -8,6 +8,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from scripts import gate_cost as COST  # noqa: E402   # Sasha 232 · the gate's own Anthropic key — BEFORE any client is built
+COST.use_gate_key()
+COST.install()
 from scripts import flight_suite as F, core_suites as C, basket_suite as BS, agent_suite as AS, whatsapp_suite as WS, postgres_suite as PG, \
     voice_loop_suite as VS, venue_suite as VN  # noqa: E402
 
@@ -43,6 +46,7 @@ async def main() -> int:
     f = await __import__("asyncio").to_thread(PG.main)   # Sasha 207 · the stores on a real, throwaway Postgres (never production)
     from scripts import demo_safety_suite as DS   # Sasha 215 · CR 56 + the safety items: the yes, outages, once-only acts (offline)
     s = await __import__("asyncio").to_thread(DS.main)
+    COST.report()   # Sasha 232 · what this run spent on the model
     print(f"\nDEPLOY GATE: {'PASS' if not (a or b or c or d or v or w or e or f or s) else 'FAIL'}")
     return 1 if (a or b or c or d or v or w or e or f) else 0
 

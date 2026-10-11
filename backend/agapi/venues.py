@@ -241,16 +241,24 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
     from booking_signer import guest_accounts as GA, guest_receipt as GR
     GW = _API()
     msg_routes = [x for x in _routes_of(rd) if x in ("whatsapp", "instagram")]
-    if route in ("whatsapp", "instagram") or (not route and msg_routes and set(_routes_of(rd)) <= {"whatsapp", "instagram"}):
+    # Sasha 232 · /s2, DIRECT FIRST for every kind of place: their own form or booking page (their booking software IS their form) →
+    # their own WhatsApp (drafted; THEY send it from their WhatsApp — S-48 Mode A) → email → phone. S1 unchanged.
+    wa_first = (not route and getattr(ctx, "surface", "s1") == "s2" and "whatsapp" in msg_routes
+                and not {"form", "page"} & set(_routes_of(rd)))
+    if wa_first:
+        msg_routes = ["whatsapp"]
+    if route in ("whatsapp", "instagram") or wa_first or (not route and msg_routes and set(_routes_of(rd)) <= {"whatsapp", "instagram"}):
         # Sasha 212 · a place that books only by a message (a tattoo studio on Instagram, a bar on WhatsApp): Sasha DRAFTS it
         # for their phone — they send it; nothing is booked until the place answers them
         ch = route if route in ("whatsapp", "instagram") else msg_routes[0]
         val = str((rd["rungs"].get(ch) or {}).get("value") or "")
         n = res['how_many']['count']
         when_words = f"{n} {'person' if n == 1 else 'people'}"
-        msg = (f"Hola, quería pedir cita para {n} {'persona' if n == 1 else 'personas'} el {at[:10]} a las {at[11:16]}, a nombre de {res['who']['name']}. "
+        asked = _what(a)   # Sasha 232 · the service they asked for ("a 60-minute massage") — found live: the draft left it out
+        svc = f" ({asked})" if asked and asked.lower() not in ("a table", "table", "dinner", "lunch") else ""
+        msg = (f"Hola, quería pedir cita{svc} para {n} {'persona' if n == 1 else 'personas'} el {at[:10]} a las {at[11:16]}, a nombre de {res['who']['name']}. "
                f"¿Tienen disponibilidad? Gracias." if rd.get("country") == "ES" else
-               f"Hello, I'd like to book for {when_words} on {at[:10]} at {at[11:16]}, under {res['who']['name']}. "
+               f"Hello, I'd like to book{svc} for {when_words} on {at[:10]} at {at[11:16]}, under {res['who']['name']}. "
                f"Do you have availability? Thank you.")
         link = (f"https://wa.me/{re.sub(r'[^0-9]', '', val)}?text={quote(msg)}" if ch == "whatsapp" and re.sub(r"\D", "", val)
                 else f"https://ig.me/m/{val}" if ch == "instagram" and val else None)

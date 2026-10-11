@@ -26,8 +26,21 @@ _MEM: Dict[str, dict] = {}   # id → rental, until 040 is applied
 RUN = "auto"                 # tests: None → memory
 
 
+def accounts() -> List[str]:
+    """Sasha 231 · who gets the moment: SASHA_PROACTIVE_RENTALS is "1" (the founder, as 227) or an account list
+    ("founder,<uuid>,…" — the founder and the demo helpers). Unset = nobody."""
+    from .identity import founder_account
+    v = os.getenv("SASHA_PROACTIVE_RENTALS", "").strip().lower()
+    out: List[str] = []
+    for a in (["founder"] if v == "1" else [x.strip() for x in v.split(",") if x.strip()]):
+        a = founder_account() if a in ("1", "founder") else a
+        if re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", a) and a not in out:
+            out.append(a)
+    return out
+
+
 def on() -> bool:
-    return os.getenv("SASHA_PROACTIVE_RENTALS", "").strip() == "1"
+    return bool(accounts())
 
 
 def _run():
@@ -143,27 +156,25 @@ async def _whatsapp(account: str, text: str) -> str:
 
 
 async def tick(now: datetime) -> List[dict]:
-    """The proactive loop's rental moments — the founder's account only, behind SASHA_PROACTIVE_RENTALS."""
-    if not on():
-        return []
-    from .identity import founder_account
+    """The proactive loop's rental moments — only the accounts listed in SASHA_PROACTIVE_RENTALS (Sasha 231; "1" = the founder)."""
     from . import live_events as LE
     from agapi import s2_fine_print as FP
-    founder, done = founder_account(), []
-    for r in await _all(founder):
-        if r.get("moment_at") or not due(r, now) or not await _claim(r, now):
-            continue
-        m = await FP.moment(founder, {"id": r["id"], "kind": "pickup_tomorrow", "country": r["country"], "rental_company": r["rental_company"],
-                                      "pickup_time": r.get("pickup_time") or "", "place": r.get("place") or ""})
-        if not m.get("speak"):
-            outcome = f"silent: {m.get('why_silent') or 'AgAPI said not to'}"
-        else:
-            wa = await _whatsapp(founder, m.get("line") or "")
-            LE.publish(founder, {"type": "proactive", "kind": "pickup_tomorrow", "say": m.get("line"),
-                                 **({"render": {"kind": "counter_card", "card": (m.get("card") or {}).get("card") or m.get("card")}} if m.get("card") else {})})
-            outcome = f"said: whatsapp {wa}; /s2 if open"
-        await _outcome(r, outcome)
-        done.append({"kind": "pickup_tomorrow", "rental": r["id"], "outcome": outcome})
+    done = []
+    for acct in accounts():
+        for r in await _all(acct):
+            if r.get("moment_at") or not due(r, now) or not await _claim(r, now):
+                continue
+            m = await FP.moment(acct, {"id": r["id"], "kind": "pickup_tomorrow", "country": r["country"], "rental_company": r["rental_company"],
+                                       "pickup_time": r.get("pickup_time") or "", "place": r.get("place") or ""})
+            if not m.get("speak"):
+                outcome = f"silent: {m.get('why_silent') or 'AgAPI said not to'}"
+            else:
+                wa = await _whatsapp(acct, m.get("line") or "")
+                LE.publish(acct, {"type": "proactive", "kind": "pickup_tomorrow", "say": m.get("line"),
+                                  **({"render": {"kind": "counter_card", "card": (m.get("card") or {}).get("card") or m.get("card")}} if m.get("card") else {})})
+                outcome = f"said: whatsapp {wa}; /s2 if open"
+            await _outcome(r, outcome)
+            done.append({"kind": "pickup_tomorrow", "rental": r["id"], "outcome": outcome})
     return done
 
 

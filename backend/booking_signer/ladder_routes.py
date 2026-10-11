@@ -139,6 +139,30 @@ def _plan_for(read: dict, rungs: list, account: Optional[str] = None) -> dict:
         return {"route": None, "line": None}
 
 
+# ── Sasha 233 · the named-platform exception: what robots.txt allows, read on THIS server (a scratch fixture's check) ──────────
+
+@router.get("/platform/check")
+async def platform_check(request: Request, url: str = "", body: int = 0):
+    """For the accounts in SASHA_PLATFORM_CHECK_ACCOUNTS only (scratch fixtures): a named platform's robots verdict for a URL,
+    and — when robots allows it and body=1 — that public page as fetched (GET, no cookies). Nothing is submitted."""
+    from . import platform_read as PR
+    acct = (account_for(request) or "").lower()
+    listed = {a.strip().lower() for a in os.getenv("SASHA_PLATFORM_CHECK_ACCOUNTS", "").split(",") if a.strip()}
+    if not acct or acct not in listed:
+        return _refuse(403, "not_listed", "this check is for a listed scratch account")
+    if not PR.named(url):
+        return _refuse(422, "not_named_platform", "Fresha, Treatwell, Booksy or Rover only")
+    rb = await PR.robots(None, url)
+    out = {"ok": True, "platform": PR.named(url), "url": url, "robots": rb}
+    if body and rb.get("allowed"):
+        try:
+            got = await PR.fetch(None, url)
+            out["page"] = {"url": got["url"], "status": got["status"], "bytes": len(got["text"]), "text": got["text"]}
+        except PR.Refused as e:
+            out["page"] = {"refused": e.rule, "detail": e.detail}
+    return out
+
+
 # ── reading a venue ───────────────────────────────────────────────────────────────────────────
 
 @router.post("/venues/read")
@@ -162,8 +186,9 @@ async def read_venue(request: Request):
         quote = re.search(r"tattoo|piercing|custom|commission|portrait|bespoke|tailor|quote", str(body.get("asked_for") or ""), re.I)
         body = {"name": standin_name(body.get("name")), "city": body.get("city") or "Madrid", "country": "ES",
                 "website": test_venue_url("email" if quote else "plain")}
-    elif body.get("place_id") and standin(account_for(request)) and not body.get("real_venue") \
+    elif not s2_demo and body.get("place_id") and standin(account_for(request)) and not body.get("real_venue") \
             and not is_restaurant(body.get("asked_for")):   # Sasha 175 · the platform run reads real venues; Sasha 186 · restaurants are real
+        # Sasha 232 · /next only now (an /s2 read always carries s2_demo): on /s2 the founder books the real place, every kind
         # Sasha 169 · THE DEMO STAND-IN (founder only, SASHA_DEMO_STANDIN=1): a real listing picked → OUR test venue's own page
         # is read and sent to instead, and its name says so everywhere — the real place is never contacted
         from .form_rung import test_venue_url
@@ -239,11 +264,11 @@ def is_restaurant(asked_for) -> bool:
 
 
 def _s2_demo_account(account: Optional[str]) -> bool:
-    """Sasha 221 · who has the S2 demo setting: the founder, or an account listed in SASHA_S2_DEMO_ACCOUNTS (a scratch fixture)."""
+    """Sasha 221 · who has the S2 demo setting: an account listed in SASHA_S2_DEMO_ACCOUNTS (a scratch fixture). Sasha 232 · the founder
+    only if listed (Tyler, 10 Oct: real bookings on /s2) — S1's founder powers (standin, rehearsal, calls) are unchanged."""
     import os
-    from .guest_accounts import founder
     listed = {a.strip().lower() for a in os.getenv("SASHA_S2_DEMO_ACCOUNTS", "").split(",") if a.strip()}
-    return bool(account) and (founder(account) or account.lower() in listed)
+    return bool(account) and account.lower() in listed
 
 
 def standin(account: Optional[str]) -> bool:

@@ -1,0 +1,26 @@
+OPENING: face box on screen: true | "Tap to hear Sasha" shown: true
+tapped "Tap to hear Sasha"
+HELLO said (TTS/pcm requested): ["Welcome back — we were looking at tapas bar in Puerta del Sol, Madrid. Want to carry on?"]
+PLAYS so far:
+  5751ms face-video(muted)#d5q9: AbortError
+  5755ms face-video#d5q9: NotAllowedError(iOS rule)
+  5759ms face-video(muted)#d5q9: AbortError
+  5763ms face-video(muted)#d5q9: played
+  6206ms face-video#d5q9: NotAllowedError(iOS rule)
+  6206ms face-video(muted)#d5q9: played
+  10538ms prime#g464: played
+  10538ms face-video#d5q9: played
+REPLY 1 to "What can you do?" | toggle shows: 🔊 Voice on
+REPLY 2 to "Any good tapas places near Sol?" | toggle shows: 🔊 Voice on
+REPLY 3 to "Thanks — and what time is it in New York?" | toggle shows: 🔊 Voice on
+LINES SPOKEN (TTS requested, in order):
+  Welcome back — we were looking at tapas bar in Puerta del Sol, Madrid. Want to carry on?
+  I can book tables and trips, plan a weekend, take payments on this screen, email people fo
+  Same spots as before, plus one new one this time. Cervecería Cruz de Malta is an old-schoo
+  I don't have a live clock, so I can't give you the exact time. New York is six hours behin
+PLAYS during the replies:
+  25399ms voice#g464: played
+  43548ms voice#g464: played
+  65503ms voice#g464: played
+voice plays during replies: played 3 | refused 0 | TTS lines requested 4
+console: [DG] readyToListen: true autoStart: false disabled: undefined || could not playback audio {room: 279cc36f-c4cd-11f1-a0b9-127aa6fe5d68, roomID: RM_8eDQUPH7XYnJ, participant: client, pID: PA_j4xNSiasZ3my, error: NotAllowedError || [s2-hello] face on screen in 4686 ms

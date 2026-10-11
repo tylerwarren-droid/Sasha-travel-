@@ -72,14 +72,23 @@ class LoyaltyOpened(KeepFixture):
 
 
 class LoyaltyOnTheBooking(KeepFixture):
+    echo = True   # Duffel's order shows the account back
+
+    def test_sent_but_not_shown_back_is_said_as_that(self):   # live, 11 Oct: Duffel TEST orders echo an empty list
+        self.echo = False
+        _, _, applied = self.book(self.FLIGHT, card={"id": "r1", "owner": "British Airways", "flights": "BA 461"})
+        self.assertEqual(applied, ["I sent your Iberia Plus ••••432 to British Airways with this booking, but their booking doesn't show it "
+                                   "back yet — check it's on your boarding pass."])
+
     def book(self, rows, card=None, sent=None):
         from booking_signer import basket_book as BB, basket as BK, hotel_test as HT, travel as T
         got, records, applied = [], [], []
 
         async def order(c, name, email, phone, people, **kw):
             got.append(kw)
-            return {"booking_reference": "ABC123", "order_id": "ord_1",
-                    "loyalty_sent": sent if sent is not None else [a["airline_iata_code"] for a in kw.get("loyalty") or []]}
+            out = sent if sent is not None else [a["airline_iata_code"] for a in kw.get("loyalty") or []]
+            return {"booking_reference": "ABC123", "order_id": "ord_1", "loyalty_sent": out,
+                    "loyalty_on_order": out if self.echo else []}
 
         async def add(account, item_id, extra):
             records.append(extra)
@@ -150,6 +159,7 @@ class DuffelOrderCarriesIt(unittest.TestCase):
         o, sent = self.order(["IB", "BA"])
         self.assertEqual(sent["passengers"][0]["loyalty_programme_accounts"], [{"airline_iata_code": "IB", "account_number": "IB98765432"}])
         self.assertEqual(o["loyalty_sent"], ["IB"])
+        self.assertEqual(o["loyalty_on_order"], [])   # the stand-in's order shows none back
 
     def test_an_unsupported_programme_never_fails_the_order(self):
         o, sent = self.order(["BA"])

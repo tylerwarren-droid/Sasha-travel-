@@ -195,7 +195,9 @@ async def order(c: dict, name: str, email: str, phone: Optional[str], people: Op
     if d.get("live_mode"):
         return {"why": "Duffel answered in LIVE mode — refused"}
     return {"booking_reference": d.get("booking_reference"), "order_id": d.get("id"), "documents_sent": len(documents or []),
-            "loyalty_sent": [a["airline_iata_code"] for a in (loyalty or [])]}   # Sasha 235
+            "loyalty_sent": [a["airline_iata_code"] for a in (loyalty or [])],   # Sasha 235 · what we sent …
+            "loyalty_on_order": sorted({x.get("airline_iata_code") for p in d.get("passengers") or []   # … and what Duffel's ORDER shows
+                                        for x in p.get("loyalty_programme_accounts") or [] if x.get("airline_iata_code")})}
 
 
 async def _record(account: str, c: dict, ref: str) -> Optional[str]:

@@ -429,6 +429,11 @@ def applied_line(masked: str) -> str:
     return f"I've added your {masked} to this booking."
 
 
+def sent_line(masked: str, airline: str) -> str:
+    """Sent with the order, but the airline's booking doesn't show it back: said as exactly that, never "added"."""
+    return f"I sent your {masked} to {airline} with this booking, but their booking doesn't show it back yet — check it's on your boarding pass."
+
+
 @asynccontextmanager
 async def loyalty(account: str):
     """The account's loyalty numbers, opened for one payment's loop of bookings and dropped after:

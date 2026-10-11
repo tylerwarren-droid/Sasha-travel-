@@ -408,12 +408,19 @@ async def _book_rows(account: str, sid: str, rows: list, contact: dict, email, p
             tid = await T.RECORD(account, c, o["booking_reference"] or "")
             await BK.booked(account, r["id"], booking_reference=o["booking_reference"] or "", order_id=o.get("order_id"), trip_item_id=tid)
             await BK.event("duffel_order", o.get("order_id") or f"{sid}:{r['id']}", "order.created", o, verified=True, item_id=r["id"])
-            sent = set(o.get("loyalty_sent") or [])   # Sasha 235 · only what Duffel's order actually carried
+            # Sasha 235 · "added" only when Duffel's ORDER shows the account; sent but not shown back → said as exactly that (found live:
+            # Duffel's TEST orders take the field and echo an empty list — never a success the order doesn't show)
+            sent, shown = set(o.get("loyalty_sent") or []), set(o.get("loyalty_on_order") or [])
             from agapi import s2_keep as KEEP
             for k in loy_cards:
-                if any(x in sent for x in KEEP.airlines_of(k["program"])):
+                codes = set(KEEP.airlines_of(k["program"]))
+                what = f"{c.get('owner') or ''} {c.get('flights') or ''} booking {o.get('booking_reference') or ''}".strip()
+                if codes & shown:
                     applied.append(KEEP.applied_line(k["masked"]))
-                    await KEEP.loyalty_used(account, k, f"{c.get('owner') or ''} {c.get('flights') or ''} booking {o.get('booking_reference') or ''}".strip())
+                    await KEEP.loyalty_used(account, k, what)
+                elif codes & sent:
+                    applied.append(KEEP.sent_line(k["masked"], c.get("owner") or "the airline"))
+                    await KEEP.loyalty_used(account, k, what + " (sent; not shown back on the airline's booking)")
 
 
 async def book_paid(account: str, sid: str) -> Dict[str, Any]:

@@ -2,9 +2,11 @@
 
 A linked guest books, cancels and gets receipts entirely in WhatsApp, on the SAME booking routes the web chat uses,
 called in process (no HTTP to ourselves) as that guest's own account. What is never done:
-  · ⛔ THE MODEL IS NEVER CALLED. Anything that is not a booking, a cancellation, a receipt or help gets one fixed
-    sentence (Meta's AI policy, S-75 §0: a booking service, not a general assistant). Stricter than the spec's
-    "scope gate, then conduct()": the scope gate's own booking functions (handoff, chat_request) do the whole turn.
+  · Sasha 237 · ONE BRAIN: behind SASHA_WA_BRAIN (agent | agent_for:<ids>), a message goes to the SAME agent as /s2
+    (wa_agent.agent_turn → sasha.turn surface "wa": S2's tools, persona, guards and the one yes rule), drawn for WhatsApp by
+    wa_agent.render. Identity, STOP/START, reminders words, products, invitations and the 24-hour rule stay here, in front.
+    SASHA_WA_BRAIN=old (the default) is the path below exactly: the scope gate's own booking functions (handoff,
+    chat_request) do the whole turn, and the cascade's fixed sentences answer the rest (S-75 §0). The cascade goes in Sasha 240.
   · ⛔ A VENUE IS NEVER ANSWERED. Only numbers named in SASHA_GUEST_WHATSAPP_TO (the sandbox's) serve guests; on every
     other number — Sasha's own +44, where venues write — the venue path runs byte for byte as before. On a guest
     number a sender matching a venue call still takes the venue path.
@@ -334,6 +336,27 @@ class Sender:
             log.error("[guest_whatsapp] quick-reply content failed: %s: %s", type(e).__name__, e)
         return None
 
+    async def list_picker(self, body: str, button: str, rows: List[Tuple[str, str, str]]) -> Optional[str]:
+        """Sasha 237 · a twilio/list-picker content made for THIS list (≤ 10 rows: title ≤ 24, description ≤ 72), or None."""
+        auth = self._auth()
+        if not auth or not rows:
+            return None
+        spec = {"friendly_name": f"sasha_wa_list_{uuid.uuid4().hex[:12]}", "language": "en",
+                "types": {"twilio/list-picker": {"body": body[:1024], "button": button[:20],
+                                                 "items": [{"item": t[:24], "id": i[:200], "description": (d or "")[:72]} for t, d, i in rows[:10]]},
+                          "twilio/text": {"body": body[:1024]}}}
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
+                r = await client.post("https://content.twilio.com/v1/Content", json=spec,
+                                      headers={"authorization": f"Basic {auth[1]}", "user-agent": "sasha-booking/1"})
+            if r.status_code in (200, 201) and (r.json() or {}).get("sid"):
+                return r.json()["sid"]
+            log.error("[guest_whatsapp] list-picker content not created: HTTP %s %s", r.status_code, r.text[:200])
+        except Exception as e:
+            log.error("[guest_whatsapp] list-picker content failed: %s: %s", type(e).__name__, e)
+        return None
+
     async def send(self, frm: str, to: str, *, body: str = "", media: Optional[str] = None, content_sid: Optional[str] = None,
                    variables: Optional[dict] = None) -> str:
         auth = self._auth()
@@ -389,6 +412,11 @@ class Out:
         self.items.append(("ask", s, buttons))
         return self
 
+    def pick(self, s: str, button: str, rows: List[Tuple[str, str, str]]) -> "Out":
+        """Sasha 237 · a list picker: `s` (the options, numbered, as text too), its button, rows of (title, description, id)."""
+        self.items.append(("list", s, button, rows))
+        return self
+
     def said(self) -> str:
         return "\n".join(i[1] for i in self.items)
 
@@ -408,6 +436,11 @@ async def deliver(ch: dict, frm: str, out: Out, last_inbound_at: Optional[dateti
             results.append(await SENDER.send(frm, ch["number_e164"], body=it[1]))
         elif it[0] == "media":
             results.append(await SENDER.send(frm, ch["number_e164"], body=it[1], media=it[2]))
+        elif it[0] == "list":   # Sasha 237 · the options as a list picker; no picker → the numbered text (answered by typing)
+            mk = getattr(SENDER, "list_picker", None)
+            sid = await mk(it[1], it[2], it[3]) if mk and it[3] else None
+            results.append(await SENDER.send(frm, ch["number_e164"], content_sid=sid) if sid
+                           else await SENDER.send(frm, ch["number_e164"], body=it[1]))
         else:
             sid = await SENDER.quick_reply(it[1], it[2])
             if sid:
@@ -812,6 +845,14 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         await STORE.put_state(key, st)
         await deliver(ch, frm, out, now)
         return out
+    # Sasha 237 · ONE BRAIN (SASHA_WA_BRAIN): a new message — or a button from the agent's own cards — goes to the same agent as
+    # /s2. A button from an OLD flow (in flight) finishes there; invitations stay in front (no agent tool for them yet).
+    from . import wa_agent as WA
+    if WA.on(account) and (not payload or WA.ours(payload)) and not (not payload and _invite_words(body, now)):
+        await WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip())
+        await STORE.put_state(key, st)
+        await deliver(ch, frm, out, now)
+        return out
     # Sasha 126 · the two-booking plan rides INSIDE the open question (guest_wa_state stores only its four columns):
     # it lives exactly as long as a question is open, and goes with it
     st["combo"] = (st.get("pending") or {}).pop("combo", None)
@@ -837,6 +878,15 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     await STORE.put_state(key, st)
     await deliver(ch, frm, out, now)
     return out
+
+
+def _invite_words(body: str, now) -> bool:
+    """Sasha 237 · an invitation request (S-80) — still answered by the path below (the agent has no invite tool yet)."""
+    from . import invitations as IV
+    try:
+        return IV.STORE is not None and IV.invite_request(body, now) is not None
+    except Exception:
+        return False
 
 
 _CANCEL_WORD = re.compile(r"\b(cancel|cancell?ation|cancela|cancelar|cancelad|cancele|anula|anular|anulad|anule)\b", re.I)

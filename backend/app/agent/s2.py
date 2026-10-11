@@ -57,6 +57,17 @@ S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "
             "hotel_request")   # Sasha 235 · upgrade my room
 
 
+# Sasha 237 · ONE BRAIN on WhatsApp (EU 232 §1.1): S2's persona and tools, plus how WhatsApp differs
+WA_NOTE = """
+
+## On WhatsApp
+
+You're on WhatsApp. Cards arrive as messages under your words: say "the options are below", never "on your screen" or "tap the
+card". A choice is a list they open, a yes is a [Yes] button. For a photo (a passport page, a loyalty card, a receipt, damage),
+ask them to send it here as a photo — there's no camera button. Payment and their own booking page are links. Keep each message
+short: WhatsApp splits long ones.
+"""
+
 # Sasha 236 · the book tool as /s2 does it: the pay card on THIS screen, or the phone if they ask (S1's description, in v0.TOOLS, says
 # "sent to their phone" — S1's own, untouched; /s2's list carries this one instead)
 S2_BOOK = ("After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back they just heard (the last "

@@ -504,6 +504,11 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     # default was ~10 minutes × 5 tries, longer than the connection)
     client = client.with_options(max_retries=2, timeout=MODEL_TIMEOUT_S) if hasattr(client, "with_options") else client
     voice = voice if voice is not None else {}
+    # Sasha 237 · ONE BRAIN: WhatsApp (surface "wa") is S2 for tools, wrappers, the Keep and the one-yes rule — only its words differ
+    # (S2.WA_NOTE) and its screen (booking_signer/wa_agent.render). Everything below that asks "s2?" therefore answers yes for "wa".
+    wa = surface == "wa"
+    if wa:
+        surface = "s2"
     t0 = time.perf_counter()
     first_text_ms = None
     ctx = API.Ctx(account=account, mode="test", user_said=message, session=session, surface=surface)
@@ -561,7 +566,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         base = P.AGENT_SYSTEM
         if surface == "s2":   # Sasha 221 · her own opening lines on /s2; S1's text from "How she talks" on, shared
             from app.agent import s2 as S2
-            base = S2.s2_system()
+            base = S2.s2_system() + (S2.WA_NOTE if wa else "")   # Sasha 237 · on WhatsApp: cards arrive as messages, photos sent here
         if surface != "s2" and s1_on(account):   # Sasha 224 · SASHA_KEEP_S1 (the founder only): the Keep on /next
             extra += ("\n\nTheir Keep: passport, ID and loyalty numbers can live in their Keep (/keep). You never see them — only masks "
                       "like 'Passport ES ••••456' (keep_list) — and use one only where it's needed (keep_use), after their yes. Never ask "
@@ -1122,6 +1127,14 @@ async def s2_accident_photo(request: Request):
     return JSONResponse(r, status_code=200 if r.get("ok") else 400)
 
 
+def pick_hint(account: str, pid: str, message: str) -> str:
+    """Sasha 231 / 237 · a tap on a venue card (S2's Choose, WhatsApp's list picker): THAT card's place_id, matched to the cards
+    this account was shown — never a name guess. Unknown id → the message as it is."""
+    from agapi import venues as VN
+    c = VN.card_of(account, pid)
+    return f"{message} [their tap on the card on their screen: {c.get('name')} · place_id {pid} — use this place_id]" if c else message
+
+
 @router.post("/turn")
 async def agent_turn(request: Request):
     from app.services.chat_account import chat_account, signed_in
@@ -1179,10 +1192,7 @@ async def agent_turn(request: Request):
         pick = body.get("pick") if isinstance(body.get("pick"), dict) else {}
         pid = str(pick.get("place_id") or "")[:200]
         if pid:   # Sasha 231 · a Choose tap carries THAT card's place_id — matched to the cards on their screen, never a name guess
-            from agapi import venues as VN
-            c = VN.card_of(account, pid)
-            if c:
-                message = f"{message} [their tap on the card on their screen: {c.get('name')} · place_id {pid} — use this place_id]"
+            message = pick_hint(account, pid, message)   # Sasha 237 · shared with WhatsApp's list picker
 
     async def events():
         if guest_token:   # CR 71 · this guest's own token goes with S2's AgAPI calls (via_agapi); /next never sets it
@@ -1231,4 +1241,4 @@ async def s2_memory(request: Request, session: str = ""):
         return {"ok": True, "line": None, "recent": [], "screen": None}
 
 
-__all__ = ["router", "turn", "turn_with_quiver", "make_filler", "filler_ok", "opener_of", "strip_openers", "clean_for_model", "drop_internal", "flight_card", "stays_card", "render", "RENDER", "KINDS", "FAST_MODEL", "guard_check", "guard_strip", "tools_for_model", "system_prompt", "MODEL"]
+__all__ = ["router", "pick_hint", "turn", "turn_with_quiver", "make_filler", "filler_ok", "opener_of", "strip_openers", "clean_for_model", "drop_internal", "flight_card", "stays_card", "render", "RENDER", "KINDS", "FAST_MODEL", "guard_check", "guard_strip", "tools_for_model", "system_prompt", "MODEL"]

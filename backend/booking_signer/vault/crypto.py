@@ -138,6 +138,7 @@ async def use(account: str, item_id: str, *, approval: Optional[dict], approved_
 #: these purposes, only for an oauth item of this provider, every use logged. Site logins never come this way (V-2).
 CONNECTION_PURPOSES = {"google.com": ("calendar_sync", "calendar_freebusy", "calendar_setup", "calendar_revoke",
                                      "gmail_read", "gmail_revoke")}   # S-82 · read-only mail
+CONNECTION_PURPOSES["microsoft.com"] = ("outlook_read",)   # CR 86 · Outlook / Microsoft 365, read-only mail (Graph Mail.Read)
 
 
 async def _google_refresh(refresh_token: str) -> dict:
@@ -154,6 +155,23 @@ async def _google_refresh(refresh_token: str) -> dict:
 
 
 GOOGLE_REFRESH = _google_refresh   # tests replace it
+
+
+async def _microsoft_refresh(refresh_token: str) -> dict:
+    """CR 86 · an access token for Microsoft Graph (delegated Mail.Read) from the sealed refresh token."""
+    import httpx
+    from ..outlook import SCOPE, tenant
+    async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as c:
+        r = await c.post(f"https://login.microsoftonline.com/{tenant()}/oauth2/v2.0/token", data={
+            "client_id": os.getenv("SASHA_MS_CLIENT_ID", "").strip(), "client_secret": os.getenv("SASHA_MS_CLIENT_SECRET", "").strip(),
+            "refresh_token": refresh_token, "grant_type": "refresh_token", "scope": SCOPE})
+    j = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    if r.status_code != 200 or not j.get("access_token"):
+        raise UseRefused("connection_" + str(j.get("error") or f"http_{r.status_code}"), "Microsoft refused the connection's token")
+    return j
+
+
+MICROSOFT_REFRESH = _microsoft_refresh   # tests replace it
 
 
 async def use_connection(account: str, item_id: str, *, purpose: str, revoke: bool = False) -> str:
@@ -179,6 +197,15 @@ async def use_connection(account: str, item_id: str, *, purpose: str, revoke: bo
                 r = await c.post("https://oauth2.googleapis.com/revoke", data={"token": secret.get("refresh_token")})
             status, words = ("done", "revoked at Google") if r.status_code == 200 else ("failed", f"Google answered HTTP {r.status_code}")
             return "revoked" if status == "done" else f"not revoked: HTTP {r.status_code}"
+        if row["provider"] == "microsoft.com":   # CR 86 · Microsoft rotates its refresh token: the new one is sealed in its place
+            j = await MICROSOFT_REFRESH(secret.get("refresh_token"))
+            if j.get("refresh_token") and j["refresh_token"] != secret.get("refresh_token"):
+                try:
+                    await STORE.reseal(account, item_id, await seal(account, item_id, "oauth", json.dumps({"refresh_token": j["refresh_token"]}).encode()), NOW())
+                except Exception as e:
+                    __import__("logging").getLogger(__name__).warning("[vault] the rotated Microsoft token wasn't resealed: %s", type(e).__name__)
+            status = "done"
+            return j["access_token"]
         j = await GOOGLE_REFRESH(secret.get("refresh_token"))
         status = "done"
         return j["access_token"]

@@ -24,9 +24,10 @@ TOOLS = [
     {"name": "find_subscriptions", "description": (
         "What the person is paying for: from their RECEIPT emails (from_gmail: true — use it when they ask 'what subscriptions am I paying "
         "for?') or from a bank statement they uploaded (statement_ref; use_sample in test mode); with neither, what's already known. From Gmail: the FIRST time it returns a consent "
-        "sentence — say it exactly and ask; call again with consent_yes: true only after they say yes, in a later turn. Each subscription: "
+        "sentence — say it exactly and ask; call again with consent_yes: true only after they say yes, in a later turn. Their mail is Outlook / "
+        "Microsoft 365 (they connected Outlook, or say Outlook / their work mail): from_outlook: true instead — the same steps, its own sentence. Each subscription: "
         "service, price, monthly/yearly, last charge, renews (quoted from the receipt; 'expected' when the email doesn't say). Say `say` as given."),
-     "input_schema": {"type": "object", "properties": {"from_gmail": {"type": "boolean"}, "consent_yes": {"type": "boolean"},
+     "input_schema": {"type": "object", "properties": {"from_gmail": {"type": "boolean"}, "from_outlook": {"type": "boolean"}, "consent_yes": {"type": "boolean"},
                                                        "statement_ref": {"type": "string"}, "use_sample": {"type": "boolean"}}}},
     {"name": "plan_cancel_subscription", "description": (
         "How to cancel one subscription: the merchant's own cancel routes (their cancel page, an email). Call it before cancel_subscription."),
@@ -139,7 +140,31 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         body: Dict[str, Any] = {"end_user": uid}
         ref = args.get("statement_ref")
         source = _SOURCE.get(ctx.account, "subscriptions I found earlier")   # Sasha 243 · /next said "From statement" for a receipts list
-        if args.get("from_gmail") and not ref:   # CR 84 · receipts in their Gmail (read-only)
+        outlook = False
+        if (args.get("from_outlook") or args.get("from_gmail")) and not ref:   # CR 86 · Outlook: asked for, or the only mail connected
+            from agapi import s2_gmail_receipts as GR, s2_outlook_receipts as OR
+            outlook = bool(args.get("from_outlook")) or (not await GR.connected(ctx.account) and await OR.connected(ctx.account))
+        if outlook:   # CR 86 · receipts in their Outlook / Microsoft 365 (Graph, delegated Mail.Read) — the same steps as Gmail's
+            c, ck = OR.consent(), ctx.account + "|outlook"
+            if ck not in _CONSENTED:
+                asked = _CONSENT_ASKED.get(ck)
+                if not (args.get("consent_yes") and asked and asked < ctx.started.timestamp()):
+                    _CONSENT_ASKED[ck] = time.time()
+                    return {"ok": True, "result": {"status": "needs_consent", "ask": c["text"],
+                                                   "how": "Say this sentence exactly and ask; look only after they say yes, in their next message."}}
+                _CONSENTED[ck] = {"version": c["version"], "text_sha256": c["text_sha256"], "at": time.time()}
+            if await OR.connected(ctx.account):
+                msgs = await OR.receipts(ctx.account)
+                if msgs is None:
+                    return {"ok": False, "error": {"code": "outlook_unavailable", "message": "their Outlook connection needs reconnecting on the You page"}}
+                body["emails"] = {"messages": msgs, "provider": "outlook", "consent": {"text_sha256": c["text_sha256"], "version": c["version"]}}
+                source = "receipts in your Outlook"
+            elif via() == "sandbox":
+                body["emails"] = {"sample": True, "provider": "outlook", "consent": {"text_sha256": c["text_sha256"], "version": c["version"]}}
+                source = "receipts (a fake Outlook inbox — test mode)"
+            else:
+                return {"ok": False, "error": {"code": "outlook_not_connected", "message": "connect Outlook (read-only) on the You page first"}}
+        elif args.get("from_gmail") and not ref:   # CR 84 · receipts in their Gmail (read-only)
             from agapi import s2_gmail_receipts as GR
             c = GR.consent()
             if ctx.account not in _CONSENTED:

@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
+import { gmailOffer, quietLine } from '@/lib/gmail-offer.mjs'   // Sasha 244 · never push a Gmail they don't have
 
 type Find = { id: string; kind: string; action: string | null; status: string; offer_sha256: string | null; sentence: string | null }
 type View = { configured: boolean; invited?: boolean; connected: boolean; expired: boolean; consent: { version: string; text: string; sha256: string }; finds: Find[] }
@@ -19,6 +20,8 @@ export function MailboxConnect() {
   const [words, setWords] = useState<string | null>(null)
   const [ticked, setTicked] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [email, setEmail] = useState<string | undefined>(undefined)   // Sasha 244 · the sign-in address (whoami) decides how loud the offer is
+  const [opened, setOpened] = useState(false)
 
   async function load() {
     const r = await bookingReq('/api/booking/mailbox')
@@ -34,6 +37,7 @@ export function MailboxConnect() {
       const rest = params.toString()
       window.history.replaceState(null, '', window.location.pathname + (rest ? `?${rest}` : '') + window.location.hash)
     }
+    fetch('/api/auth/whoami', { cache: 'no-store' }).then(r => r.json()).then(w => { if (!off && typeof w?.email === 'string') setEmail(w.email) }).catch(() => {})
     bookingReq('/api/booking/mailbox').then((r) => {
       if (off) return
       if (r.ok) setView(r.json as unknown as View)
@@ -96,7 +100,13 @@ export function MailboxConnect() {
           </div>
         </div>
       )}
-      {view && view.configured && view.invited !== false && !view.connected && (
+      {view && view.configured && view.invited !== false && !view.connected && gmailOffer({ email, connected: view.connected, expired: view.expired, opened }) === 'quiet' && (
+        <div className="space-y-2">
+          <p className="opacity-75">{quietLine(email)}</p>
+          <button type="button" className="underline" onClick={() => setOpened(true)}>I have a Gmail account</button>
+        </div>
+      )}
+      {view && view.configured && view.invited !== false && !view.connected && gmailOffer({ email, connected: view.connected, expired: view.expired, opened }) === 'full' && (
         <div className="space-y-2">
           {view.expired && <p><strong>Expired, reconnect.</strong> In Google&rsquo;s testing mode a connection lasts 7 days.</p>}
           <label className="flex items-start gap-2"><input type="checkbox" checked={ticked} onChange={(e) => setTicked(e.target.checked)} /><span>{view.consent.text}</span></label>

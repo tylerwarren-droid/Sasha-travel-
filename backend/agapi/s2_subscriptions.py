@@ -53,7 +53,9 @@ MEDIA = {"text/csv", "text/plain", "application/pdf", "image/png", "image/jpeg",
 
 
 def via() -> str:
-    return "live" if os.getenv("SASHA_SUBSCRIPTIONS_VIA", "sandbox").strip().lower() == "live" else "sandbox"
+    """Sasha 244 · the subscriptions family's AgAPI (agapi_route: SASHA_AGAPI_ROUTE, else SASHA_SUBSCRIPTIONS_VIA, else the sandbox)."""
+    from agapi import agapi_route as AR
+    return AR.current("subscriptions")
 
 
 def keep_statement(account: str, raw: bytes, media_type: str) -> str:
@@ -92,12 +94,13 @@ CALL: Callable[..., Awaitable[Dict[str, Any]]] = _agapi   # tests replace it
 
 
 async def _end_user(account: str) -> Optional[str]:
-    if account in _USERS:
-        return _USERS[account]
+    k = account if via() == "sandbox" else f"live|{account}"   # Sasha 244 · each AgAPI has its own end users
+    if k in _USERS:
+        return _USERS[k]
     r = await CALL("users.register", {"external_ref": f"sasha:{account}"})
     if r.get("ok"):
-        _USERS[account] = r["result"]["end_user_id"]
-        return _USERS[account]
+        _USERS[k] = r["result"]["end_user_id"]
+        return _USERS[k]
     return None
 
 

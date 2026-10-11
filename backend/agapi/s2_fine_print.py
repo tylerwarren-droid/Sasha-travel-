@@ -147,6 +147,7 @@ TOOLS += [
      "input_schema": {"type": "object", "properties": {"booking_reference": {"type": "string"}, "passengers": {"type": "array", "items": {"type": "string"}}}}},
 ]
 _MONEY: Dict[str, str] = {}        # account → the latest money-back case
+_MONEY_AT: Dict[str, str] = {}     # Sasha 244 · account → the AgAPI that case lives on (live, or the sandbox for test inventory)
 
 # ── CR 81 · things to do, verified on each place's OWN site (AgAPI activities.*): an ActivityCard per place ───────────────────────────
 TOOL_NAMES = TOOL_NAMES + ("suggest_activities",)
@@ -217,7 +218,13 @@ MEDIA = {"image/png", "image/jpeg", "image/webp", "image/heic"}
 
 
 def via() -> str:
-    return "live" if os.getenv("SASHA_FINE_PRINT_VIA", "sandbox").strip().lower() == "live" else "sandbox"
+    """Sasha 244 · the AgAPI of the call in progress (agapi_route: per operation family), else the cards family's route."""
+    from agapi import agapi_route as AR
+    return AR.current("cards")
+
+
+def _user_key(account: str) -> str:
+    return account if via() == "sandbox" else f"live|{account}"   # Sasha 244 · each AgAPI has its own end users
 
 
 def keep_image(account: str, raw: bytes, media_type: str) -> str:
@@ -256,12 +263,13 @@ CALL: Callable[..., Awaitable[Dict[str, Any]]] = _agapi   # tests replace it
 
 
 async def _end_user(account: str) -> Optional[str]:
-    if account in _USERS:
-        return _USERS[account]
+    k = _user_key(account)
+    if k in _USERS:
+        return _USERS[k]
     r = await CALL("users.register", {"external_ref": f"sasha:{account}"})
     if r.get("ok"):
-        _USERS[account] = r["result"]["end_user_id"]
-        return _USERS[account]
+        _USERS[k] = r["result"]["end_user_id"]
+        return _USERS[k]
     return None
 
 
@@ -354,7 +362,35 @@ def _view(v: dict) -> dict:
     return {"kind": "accident", "view": v}
 
 
+_FAMILY = {"suggest_activities": "activities", "entry_documents": "entry", "prepare_entry": "entry"}
+_MONEY_CHECK = {"flight_money_back": "flight", "bag_money_back": "bag"}
+_MONEY_AFTER = ("file_flight_claim", "file_bag_claim", "money_claim_status")
+
+
+async def target(account: str, name: str, args: dict) -> str:
+    """Sasha 244 · which AgAPI this tool's calls go to (agapi_route): money by the flight (test inventory → the sandbox), a claim on
+    the AgAPI its case was opened on, the rest by family (cards for every card / accident / claim tool)."""
+    from agapi import agapi_route as AR
+    if name in _MONEY_CHECK:
+        f = args.get(_MONEY_CHECK[name]) if isinstance(args.get(_MONEY_CHECK[name]), dict) else args
+        return await AR.money_target(account, {"airline": f.get("airline"), "number": f.get("number"), "date": f.get("date")},
+                                     args.get("booking_reference"))
+    if name in _MONEY_AFTER:
+        return _MONEY_AT.get(account) or AR.route("money")
+    return AR.route(_FAMILY.get(name, "cards"))
+
+
 async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
+    from agapi import agapi_route as AR
+    t = await target(ctx.account, name, args)
+    with AR.using(t):
+        r = await _run_tool(ctx, name, args)
+    if name in _MONEY_CHECK and r.get("ok"):
+        _MONEY_AT[ctx.account] = t
+    return r
+
+
+async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
     uid = await _end_user(ctx.account)
     if not uid:
         return {"ok": False, "error": {"code": "unavailable", "message": "card fine print didn't answer"}}

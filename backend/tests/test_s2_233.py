@@ -218,3 +218,34 @@ class ThanksInterrupts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AccidentPlace234(unittest.TestCase):
+    """Sasha 234 · live: the model re-sent place "Lisbon" (the city the case opened with) beside facts.place "Rotunda do Marquês";
+    the city won and reached the rental company's read-back. The facts' own place wins; the opening city is never re-sent."""
+
+    def setUp(self):
+        from unittest import mock
+        from agapi import s2_fine_print as FP
+        from tests.test_s2_fine_print import FakeAgAPI
+        self.FP, self.agapi = FP, FakeAgAPI()
+        for p in (mock.patch.object(FP, "CALL", self.agapi), mock.patch.dict(FP._USERS, {}, clear=True), mock.patch.dict(FP._ACCIDENT, {}, clear=True),
+                  mock.patch.dict(FP._ACCIDENT_CITY, {}, clear=True)):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def last_facts(self):
+        return [b for op, b in self.agapi.calls if op == "cards.accident_step"][-1].get("facts")
+
+    def test_the_facts_place_beats_the_city_sent_again(self):
+        from tests.test_s2_fine_print import Ctx, run
+        run(self.FP.run_tool(Ctx(), "accident", {"country": "PT", "place": "Lisbon", "rental_company": "Example Rentals"}))
+        run(self.FP.run_tool(Ctx(said="14:00, Rotunda do Marquês, AA-00-ZZ"), "accident", {"country": "PT", "place": "Lisbon",
+            "facts": {"time": "14:00", "place": "Rotunda do Marquês", "other_vehicle_plate": "AA-00-ZZ"}}))
+        self.assertEqual(self.last_facts(), {"time": "14:00", "place": "Rotunda do Marquês", "other_vehicle": {"plate": "AA-00-ZZ"}})
+
+    def test_the_opening_city_alone_is_not_a_new_place(self):
+        from tests.test_s2_fine_print import Ctx, run
+        run(self.FP.run_tool(Ctx(), "accident", {"country": "PT", "place": "Lisbon", "rental_company": "Example Rentals"}))
+        run(self.FP.run_tool(Ctx(said="no"), "accident", {"answer": "no", "place": "Lisbon"}))
+        self.assertIsNone(self.last_facts())

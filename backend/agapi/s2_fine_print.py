@@ -136,6 +136,7 @@ TOOLS += [
 _MONEY: Dict[str, str] = {}        # account → the latest money-back case
 
 _ACCIDENT: Dict[str, str] = {}     # account → the open accident case
+_ACCIDENT_CITY: Dict[str, str] = {}   # Sasha 234 · account → the place the case was opened with (never re-sent as the accident's place)
 _CLAIM: Dict[str, str] = {}        # account → the latest claim case
 _PEND: Dict[str, dict] = {}        # account|op → {read_back_id, at} — the read-back said; their yes comes next turn
 
@@ -263,7 +264,10 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                                        "render": {"kind": "counter_card", "card": c}}}
     if name == "accident":
         cid = _ACCIDENT.get(ctx.account)
-        facts = agapi_facts({**(args.get("facts") or {}), **({"place": args["place"]} if cid and args.get("place") else {})}, ctx.user_said or "")
+        # Sasha 234 · the facts' own place wins; a top-level place is a fact only when it isn't the city the case was opened with
+        # (live: the model re-sent place "Lisbon" beside facts.place "Rotunda do Marquês", and Lisbon reached the read-back)
+        again = cid and args.get("place") and str(args["place"]).strip().lower() != _ACCIDENT_CITY.get(ctx.account, "")
+        facts = agapi_facts({**({"place": args["place"]} if again else {}), **(args.get("facts") or {})}, ctx.user_said or "")
         # CR 78 · an open case is never restarted by a later fact (CR 75 opened a new case whenever country + place came without an answer)
         if not cid or args.get("new_accident"):
             item = await _card_item(uid, args.get("card") or "") if args.get("card") else None
@@ -273,6 +277,7 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             if not r.get("ok"):
                 return _fail(r)
             _ACCIDENT[ctx.account] = r["result"]["case_id"]
+            _ACCIDENT_CITY[ctx.account] = str(args.get("place") or "").strip().lower()
             return {"ok": True, "result": {"say": r["result"]["say"], "step": "safety", "render": _view(r["result"])}}
         item = await _card_item(uid, args["card"]) if args.get("card") else None
         r = await CALL("cards.accident_step", {"end_user": uid, "case_id": cid, **({"answer": args["answer"]} if args.get("answer") else {}),

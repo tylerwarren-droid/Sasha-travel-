@@ -135,6 +135,31 @@ TOOLS += [
 ]
 _MONEY: Dict[str, str] = {}        # account → the latest money-back case
 
+# ── CR 80 · money back for luggage; any money claim's status (deadlines, the airline's replies in their words) ──────────────────────
+TOOL_NAMES = TOOL_NAMES + ("bag_money_back", "file_bag_claim", "money_claim_status")
+TOOLS += [
+    {"name": "bag_money_back", "description": (
+        "Money back for a checked bag that was delayed, lost or damaged: whether they can claim and by when — the Montreal Convention's "
+        "deadlines and the airline's own, quoted. Ask only for what's missing: airline + flight number, date, from and to (airport codes), "
+        "what happened, the day they got the bag back, the PIR reference from the airport desk, and what the receipts add up to. Say `say` "
+        "as given. The Convention's limit is a limit — never say it's what they're owed."),
+     "input_schema": {"type": "object", "properties": {
+         "airline": {"type": "string"}, "number": {"type": "string"}, "date": {"type": "string", "description": "the flight's date, YYYY-MM-DD"},
+         "from": {"type": "string"}, "to": {"type": "string"}, "what": {"type": "string", "enum": ["delayed", "lost", "damaged"]},
+         "received_on": {"type": "string", "description": "the day they got the bag back, YYYY-MM-DD"}, "pir_reference": {"type": "string"},
+         "expenses": {"type": "number", "description": "the receipts' total"}, "currency": {"type": "string"}, "booking_reference": {"type": "string"},
+         "passengers": {"type": "array", "items": {"type": "string"}}}, "required": ["airline", "date", "from", "to", "what"]}},
+    {"name": "file_bag_claim", "description": (
+        "File the bag claim bag_money_back prepared, to the airline's own address. Needs the PIR reference, the booking reference and every "
+        "passenger's name (ask if missing). The FIRST call returns the read-back — read it back and ask; call again only after they say yes, "
+        "in a later turn."),
+     "input_schema": {"type": "object", "properties": {"pir_reference": {"type": "string"}, "booking_reference": {"type": "string"},
+                                                       "passengers": {"type": "array", "items": {"type": "string"}}}}},
+    {"name": "money_claim_status", "description": (
+        "Their latest money-back claim (a flight or a bag): its state, the next date that matters, and what the airline replied — say the "
+        "airline's reply as THEIR words, in quotes, never in yours."), "input_schema": {"type": "object", "properties": {}}},
+]
+
 # ── CR 79 · entry documents (UK ETA, Thailand TDAC): needed or not, quoted; the application prepared — they submit on the official site ──
 TOOL_NAMES = TOOL_NAMES + ("entry_documents", "prepare_entry")
 TOOLS += [
@@ -360,6 +385,45 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             v = r["result"]
             return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), **({"draft": v["draft"]} if v.get("draft") else {})}}
         return r if r.get("ok") else _fail(r)
+    if name == "bag_money_back":
+        bag = {k: args[k] for k in ("airline", "number", "date", "from", "to", "what", "received_on", "pir_reference", "currency") if args.get(k) not in (None, "")}
+        for k in ("airline", "from", "to", "currency"):
+            if bag.get(k):
+                bag[k] = str(bag[k]).upper()
+        if args.get("expenses"):
+            try:
+                bag["expenses_minor"] = int(round(float(args["expenses"]) * 100))
+            except (TypeError, ValueError):
+                pass
+        r = await CALL("money.bag_check", {"end_user": uid, "bag": bag, **({"booking_reference": args["booking_reference"]} if args.get("booking_reference") else {}),
+                                           **({"passengers": args["passengers"]} if args.get("passengers") else {})})
+        if not r.get("ok"):
+            return _fail(r)
+        v = r["result"]
+        _MONEY[ctx.account] = v["case_id"]
+        return {"ok": True, "result": {"say": v["say"], "verdict": v["verdict"], "file_by": v.get("file_by"),
+                                       "how": "Say `say` as given: every deadline is quoted from its source. The limit is never what they're owed."}}
+    if name == "file_bag_claim":
+        cid = _MONEY.get(ctx.account)
+        if not cid:
+            return {"ok": False, "error": {"code": "no_case", "message": "check the bag first (bag_money_back)"}}
+        body = {"end_user": uid, "case_id": cid, **{k: args[k] for k in ("pir_reference", "booking_reference", "passengers") if args.get(k)}}
+        r = await _with_yes(ctx, f"{ctx.account}|file_bag_claim", "money.bag_claim", body)
+        if r.get("ok") and r["result"].get("state"):
+            v = r["result"]
+            return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), **({"draft": v["draft"]} if v.get("draft") else {})}}
+        return r if r.get("ok") else _fail(r)
+    if name == "money_claim_status":
+        cid = _MONEY.get(ctx.account)
+        if not cid:
+            return {"ok": True, "result": {"say": "There's no money-back claim open."}}
+        r = await CALL("money.claim_status", {"end_user": uid, "case_id": cid})
+        if not r.get("ok"):
+            return _fail(r)
+        v = r["result"]
+        return {"ok": True, "result": {"say": v["say"], "state": v["state"], "next": v.get("next"),
+                                       "replies": [x["their_words"]["text"] for x in v.get("replies") or []],
+                                       "how": "Say `say` as given. The airline's reply is THEIR words: quote it, never paraphrase it or add to it."}}
     if name == "entry_documents":
         dests = [{"country": str(d.get("country") or "").upper()[:2], **({"arrival_date": d["arrival_date"]} if d.get("arrival_date") else {})}
                  for d in (args.get("destinations") or []) if d.get("country")]

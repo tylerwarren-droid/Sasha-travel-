@@ -156,3 +156,50 @@ class EntryCR79(FinePrint):
         self.assertEqual(sent["trip"], {"flight": "TG949", "arrival_date": "2026-11-20", "accommodation": "Hotel Example"})
         self.assertEqual(r["result"]["official_url"], "https://tdac.immigration.go.th/manual/en/")
         self.assertIn("you never do", r["result"]["how"])
+
+
+
+class BagsCR80(FinePrint):
+    """CR 80 · luggage on /s2: the check in its own words; the claim read back, filed on a later yes; the status says the airline's reply verbatim."""
+
+    def setUp(self):
+        super().setUp()
+        from unittest import mock
+        p = mock.patch.dict(FP._MONEY, {}, clear=True)
+        p.start()
+        self.addCleanup(p.stop)
+        real = self.agapi.__call__
+
+        async def call(op, body, approval=None):
+            self.agapi.calls.append((op, body))
+            if op == "money.bag_check":
+                return {"ok": True, "result": {"case_id": "mny_" + "2" * 26, "verdict": "yes", "file_by": "2026-11-01", "deadlines": [],
+                                               "say": "Your bag on EX123 was delayed: you can claim your costs from Example Air. Send the claim by 01 Nov 2026."}}
+            if op == "money.bag_claim":
+                if not approval:
+                    return {"ok": False, "error": {"code": "approval_required", "details": {"read_back_id": "rb_bag", "read_back": {"lines": [
+                        "File a baggage claim with Example Air at baggage@example-air.example (the address on its own claims page), in your name — I file it for you."]}}}}
+                return {"ok": True, "result": {"case_id": body["case_id"], "state": "filed", "say": "Filed with Example Air. They say they reply within 30 days."}}
+            if op == "money.claim_status":
+                return {"ok": True, "result": {"state": "filed", "next": None, "say": "Filed. Example Air replied on 2026-10-12, in their words: \"Approved.\"",
+                                               "replies": [{"their_words": {"text": "Approved."}}]}}
+            self.agapi.calls.pop()
+            return await real(op, body, approval)
+        FP.CALL = call
+
+    def test_check_converts_the_receipts_and_codes(self):
+        r = run(FP.run_tool(Ctx(), "bag_money_back", {"airline": "ex", "number": "123", "date": "2026-10-09", "from": "mad", "to": "lhr",
+                                                       "what": "delayed", "received_on": "2026-10-11", "pir_reference": "LHREX12345", "expenses": 85.5, "currency": "eur"}))
+        sent = [b for op, b in self.agapi.calls if op == "money.bag_check"][-1]["bag"]
+        self.assertEqual((sent["airline"], sent["from"], sent["expenses_minor"], sent["currency"]), ("EX", "MAD", 8550, "EUR"))
+        self.assertIn("never what they're owed", r["result"]["how"])
+
+    def test_claim_read_back_then_a_later_yes_then_their_words(self):
+        run(FP.run_tool(Ctx(), "bag_money_back", {"airline": "EX", "date": "2026-10-09", "from": "MAD", "to": "LHR", "what": "delayed"}))
+        r = run(FP.run_tool(Ctx(), "file_bag_claim", {"pir_reference": "LHREX12345", "booking_reference": "EXA1B2", "passengers": ["Alex Doe"]}))
+        self.assertEqual(r["result"]["status"], "awaiting_yes")
+        done = run(FP.run_tool(Ctx(said="Yes, file it.", ago=60), "file_bag_claim", {}))
+        self.assertEqual(done["result"]["status"], "filed")
+        st = run(FP.run_tool(Ctx(), "money_claim_status", {}))
+        self.assertEqual(st["result"]["replies"], ["Approved."])
+        self.assertIn("never paraphrase", st["result"]["how"])

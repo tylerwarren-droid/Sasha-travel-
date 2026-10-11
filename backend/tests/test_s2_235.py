@@ -223,6 +223,8 @@ class UpgradeMyRoom(unittest.TestCase):
         self.assertEqual(self.S.OUTBOX, [])                                               # nothing yet
         done = self.turn("Yes, send it.", self.later())["result"]
         self.assertEqual(done["status"], "not_sent")                                       # captured — never "sent"
+        self.assertIn("our test hotel inside Kanoe", done["outcome"]["target_words"])       # said as delivered to OUR test hotel
+        self.assertIn("Never say it reached the real hotel", done["say"])
         self.assertEqual(len(self.S.OUTBOX), 1)
         self.assertEqual(self.S.OUTBOX[0]["message"]["to"]["address"], "recepcion-prueba@booking.kanoe.ai")
         self.assertIn("habitación superior", done["their_reply"]["text"])

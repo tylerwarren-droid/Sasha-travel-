@@ -117,6 +117,10 @@ async def hotel_request(ctx, a: dict) -> dict:
         return {**out, "read_back": [via, *out.get("read_back", [])],
                 "say": "Read it back exactly (the first line too), then ask: shall I send it?"}
     reply = None
+    if desk["test"] and out.get("status") in ("sent", "not_sent"):   # found live: "not sent" + a reply read as a contradiction
+        out = {**out, "outcome": {**(out.get("outcome") or {}), "target_words": f"Delivered to {TEST_HOTEL}, our test hotel inside Kanoe — no email left Kanoe."},
+               "say": (f"Say it went to {TEST_HOTEL} — our test hotel, inside Kanoe, so no email left Kanoe and no real hotel was "
+                       f"contacted (this stay is a TEST booking). Never say it reached the real hotel.")}
     if desk["test"]:   # our test hotel answers — its own words, scripted, and it says it's a test
         reply = {"from": f"Recepción · {TEST_HOTEL}", "text": TEST_REPLY["upgrade" if ask == "upgrade" else "other"], "test": True,
                  "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}

@@ -135,6 +135,24 @@ TOOLS += [
 ]
 _MONEY: Dict[str, str] = {}        # account → the latest money-back case
 
+# ── CR 79 · entry documents (UK ETA, Thailand TDAC): needed or not, quoted; the application prepared — they submit on the official site ──
+TOOL_NAMES = TOOL_NAMES + ("entry_documents", "prepare_entry")
+TOOLS += [
+    {"name": "entry_documents", "description": (
+        "What they need to enter the countries on their trip (an ETA, an arrival card), from their saved passport and the government's own "
+        "pages, quoted, with the date to apply by. Pass each destination's ISO country code and arrival date. Say `say` as given. Never say "
+        "they're 'cleared' to enter, never name a fee or a site it didn't give."),
+     "input_schema": {"type": "object", "properties": {"destinations": {"type": "array", "items": {"type": "object", "properties": {
+         "country": {"type": "string", "description": "ISO code, e.g. GB, TH"}, "arrival_date": {"type": "string", "description": "YYYY-MM-DD"}},
+         "required": ["country"]}}}, "required": ["destinations"]}},
+    {"name": "prepare_entry", "description": (
+        "Prepare their ETA or arrival-card application: which sections come from their Keep (masked) and their trip, which they fill in, and "
+        "the official address. THEY submit and pay there — never offer to submit, pay, upload a photo or fill the site for them. Pass the "
+        "flight, arrival date and where they're staying if the trip has them."),
+     "input_schema": {"type": "object", "properties": {"country": {"type": "string"}, "flight": {"type": "string"}, "arrival_date": {"type": "string"},
+                                                       "accommodation": {"type": "string"}}, "required": ["country"]}},
+]
+
 _ACCIDENT: Dict[str, str] = {}     # account → the open accident case
 _ACCIDENT_CITY: Dict[str, str] = {}   # Sasha 234 · account → the place the case was opened with (never re-sent as the accident's place)
 _CLAIM: Dict[str, str] = {}        # account → the latest claim case
@@ -347,6 +365,29 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             v = r["result"]
             return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), **({"draft": v["draft"]} if v.get("draft") else {})}}
         return r if r.get("ok") else _fail(r)
+    if name == "entry_documents":
+        dests = [{"country": str(d.get("country") or "").upper()[:2], **({"arrival_date": d["arrival_date"]} if d.get("arrival_date") else {})}
+                 for d in (args.get("destinations") or []) if d.get("country")]
+        if not dests:
+            return {"ok": False, "error": {"code": "need_destination", "message": "ask where they're going (and when they land)"}}
+        r = await CALL("entry.check", {"end_user": uid, "destinations": dests})
+        if not r.get("ok"):
+            return _fail(r)
+        v = r["result"]
+        return {"ok": True, "result": {"say": v["say"], "passport": (v.get("passport") or {}).get("masked"),
+                                       "destinations": [{"country": d["country"], "verdict": d["verdict"], **({"deadline": d["deadline"]} if d.get("deadline") else {})}
+                                                        for d in v["destinations"]],
+                                       "how": "Say `say` as given: every rule is the government's own sentence, quoted. Never say they're cleared to enter."}}
+    if name == "prepare_entry":
+        trip = {k: str(args[k]) for k in ("flight", "arrival_date", "accommodation") if args.get(k)}
+        r = await CALL("entry.prepare", {"end_user": uid, "country": str(args.get("country") or "").upper()[:2], **({"trip": trip} if trip else {})})
+        if not r.get("ok"):
+            return _fail(r)
+        v = r["result"]
+        return {"ok": True, "result": {"say": v["say"], "official_url": v["official_url"],
+                                       "fields": [{"asks": f["asks"], "from": f["from"], "value": f["value"]} for f in v["fields"]],
+                                       "you_do": v["you_do"],
+                                       "how": "Say `say` as given and give the official address exactly. They submit and pay there; you never do."}}
     if name == "claim_status":
         cid = _CLAIM.get(ctx.account)
         if not cid:

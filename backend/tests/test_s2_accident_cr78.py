@@ -117,3 +117,42 @@ class MoneyBackCR78(FinePrint):
         self.assertNotEqual(same["result"].get("status"), "filed")                                      # the same turn is never the yes
         done = run(FP.run_tool(Ctx(said="Yes, file it.", ago=60), "file_flight_claim", {"booking_reference": "EXA1B2", "passengers": ["Alex Doe"]}))
         self.assertEqual(done["result"]["status"], "filed")
+
+
+
+class EntryCR79(FinePrint):
+    """CR 79 · entry documents on /s2: the check's own words, quoted; the application prepared, the official address only; they submit."""
+
+    def setUp(self):
+        super().setUp()
+        real = self.agapi.__call__
+
+        async def call(op, body, approval=None):
+            self.agapi.calls.append((op, body))
+            if op == "entry.check":
+                return {"ok": True, "result": {"passport": {"masked": "Passport ES ••••456", "country": "ES"}, "destinations": [
+                    {"country": "GB", "verdict": "needed", "deadline": {"apply_by": "2026-10-28"}}, {"country": "TH", "verdict": "needed",
+                     "deadline": {"opens": "2026-11-17", "before": "2026-11-20"}}],
+                    "say": "You need an electronic travel authorisation (ETA). It costs GBP 20 on the official site."}}
+            if op == "entry.prepare":
+                return {"ok": True, "result": {"country": "TH", "official_url": "https://tdac.immigration.go.th/manual/en/", "say": "Here's your TDAC, prepared.",
+                                               "fields": [{"asks": "Passport Information", "from": "your Keep", "value": "Passport ES ••••456", "note": "x"}],
+                                               "you_do": ["press submit"]}}
+            self.agapi.calls.pop()
+            return await real(op, body, approval)
+        FP.CALL = call
+
+    def test_check_passes_codes_and_says_it_as_given(self):
+        r = run(FP.run_tool(Ctx(), "entry_documents", {"destinations": [{"country": "gb", "arrival_date": "2026-11-02"}, {"country": "th"}]}))
+        sent = [b for op, b in self.agapi.calls if op == "entry.check"][-1]
+        self.assertEqual(sent["destinations"], [{"country": "GB", "arrival_date": "2026-11-02"}, {"country": "TH"}])
+        self.assertEqual(r["result"]["passport"], "Passport ES ••••456")
+        self.assertIn("Never say they're cleared to enter", r["result"]["how"])
+        self.assertEqual(run(FP.run_tool(Ctx(), "entry_documents", {"destinations": []}))["error"]["code"], "need_destination")
+
+    def test_prepare_gives_the_official_address_and_leaves_submit_to_them(self):
+        r = run(FP.run_tool(Ctx(), "prepare_entry", {"country": "th", "flight": "TG949", "arrival_date": "2026-11-20", "accommodation": "Hotel Example"}))
+        sent = [b for op, b in self.agapi.calls if op == "entry.prepare"][-1]
+        self.assertEqual(sent["trip"], {"flight": "TG949", "arrival_date": "2026-11-20", "accommodation": "Hotel Example"})
+        self.assertEqual(r["result"]["official_url"], "https://tdac.immigration.go.th/manual/en/")
+        self.assertIn("you never do", r["result"]["how"])

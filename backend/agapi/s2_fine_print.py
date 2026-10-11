@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import re
 import secrets
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional
+
+log = logging.getLogger("agapi.fine_print")
 
 TOOL_NAMES = ("my_cards", "add_card", "card_cover", "which_card")
 SAY_AS_GIVEN = ("Say `say` as given: it's built from the card's own terms, quoted. Never add cover the quotes don't state, never say "
@@ -262,6 +265,28 @@ async def _end_user(account: str) -> Optional[str]:
     return None
 
 
+async def _with_own_passport(account: str, v: dict) -> dict:
+    """Sasha 242 (EU's walk) · the passport the person saved on /keep lives in SASHA's Keep; AgAPI's entry.prepare reads its own,
+    so "fill my arrival card from my passport" said the passport "wasn't pulled in". Its Keep section takes the mask from the
+    person's own Keep (the mask only — the number never leaves the Keep; they copy it from their phone), and the count is said again."""
+    fields = list(v.get("fields") or [])
+    if not any(f.get("from") == "your Keep" and not f.get("value") for f in fields):
+        return v
+    try:
+        from agapi import s2_keep as KEEP
+        pp = next((i for i in await KEEP.list_(account) if i.get("type") == "passport"), None)
+    except Exception as e:
+        log.info("[fine_print] own Keep not read: %s", type(e).__name__)
+        return v
+    if not pp:
+        return v
+    fields = [{**f, "value": pp["masked"], "note": "Your passport, from your Keep — the full number is on your phone, never in the chat."}
+              if f.get("from") == "your Keep" and not f.get("value") else f for f in fields]
+    n = sum(1 for f in fields if f.get("value"))
+    say = re.sub(r"\d+ of (\d+) sections come from", f"{n} of \\1 sections come from", str(v.get("say") or ""), count=1)
+    return {**v, "fields": fields, "say": say, "passport": {"masked": pp["masked"]}}
+
+
 def _fail(r: dict) -> Dict[str, Any]:
     e = r.get("error") or {}
     return {"ok": False, "error": {"code": e.get("code") or "unavailable", "message": e.get("message") or "card fine print didn't answer"}}
@@ -498,7 +523,7 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         r = await CALL("entry.prepare", {"end_user": uid, "country": str(args.get("country") or "").upper()[:2], **({"trip": trip} if trip else {})})
         if not r.get("ok"):
             return _fail(r)
-        v = r["result"]
+        v = await _with_own_passport(ctx.account, r["result"])
         return {"ok": True, "result": {"say": v["say"], "official_url": v["official_url"],
                                        "fields": [{"asks": f["asks"], "from": f["from"], "value": f["value"]} for f in v["fields"]],
                                        "you_do": v["you_do"],

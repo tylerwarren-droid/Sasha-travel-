@@ -76,6 +76,43 @@ class OneTotalInEuros(unittest.TestCase):
         self.assertIn("never mentions an earlier draft", s2.S1_CAN)   # /next inherits it (241's parity)
 
 
+class ArrivalCardFromTheirOwnKeep(unittest.TestCase):
+    """Live (scratch A): the passport saved on /keep is in Sasha's Keep; AgAPI's entry.prepare read its own and said the passport
+    "wasn't pulled in". The Keep section now carries the person's own mask, and the count is said again."""
+
+    def _run(self, keep_items):
+        from agapi import s2_fine_print as FP, s2_keep as KEEP
+        sent = []
+
+        async def call(op, body, approval=None):
+            sent.append((op, body))
+            if op == "users.register":
+                return {"ok": True, "result": {"end_user_id": "eu_242"}}
+            return {"ok": True, "result": {"official_url": "https://tdac.immigration.go.th/", "you_do": ["press submit"],
+                                           "say": "Here's your Thailand Digital Arrival Card, prepared: 1 of 3 sections come from your Keep and your trip.",
+                                           "fields": [{"asks": "Passport information", "from": "your Keep", "value": None},
+                                                      {"asks": "Travel information", "from": "your trip", "value": "arrival date: 2026-11-20"},
+                                                      {"asks": "Health declaration", "from": "you", "value": None}]}}
+
+        async def list_(account):
+            return keep_items
+        with mock.patch.object(FP, "CALL", call), mock.patch.dict(FP._USERS, {}, clear=True), mock.patch.object(KEEP, "list_", list_):
+            ctx = type("C", (), {"account": "7536a3f0-0000-4000-8000-000000000242"})()
+            return asyncio.run(FP.run_tool(ctx, "prepare_entry", {"country": "th", "arrival_date": "2026-11-20"})), sent
+
+    def test_own_passport_fills_the_keep_section(self):
+        r, sent = self._run([{"type": "passport", "masked": "Passport ES ••••041", "item_id": "x"}])
+        f = r["result"]["fields"][0]
+        self.assertEqual((f["from"], f["value"]), ("your Keep", "Passport ES ••••041"))
+        self.assertIn("2 of 3 sections come from", r["result"]["say"])
+        self.assertNotIn("XA2420041", repr(sent) + repr(r))   # the mask only, never the number
+
+    def test_no_passport_stays_honest(self):
+        r, _ = self._run([])
+        self.assertIsNone(r["result"]["fields"][0]["value"])
+        self.assertIn("1 of 3 sections come from", r["result"]["say"])
+
+
 class RehearsalNeverForRealAccounts(unittest.TestCase):
     def test_real_account_never_sees_the_test_venue(self):
         out = {"query": "tattoo studio in Madrid", "candidates": [{"place_id": "a"}, {"place_id": "b"}],

@@ -41,6 +41,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T18": ("activities are places (one card, their own photos)", ["tests.test_s252_activities.ThingsToDoArePlaces"]),
     # Sasha 252 · the Trip tab's flights from the one trip record, never "ask for flights" while they're chosen
     "T19": ("the Trip tab's flights from the trip record", ["tests.test_s252_activities.TripTabReadsTheTrip"]),
+    # Sasha 253 · G5: a booking that needs a name and mobile asks once (with the consent), saves them on the one person record
+    "T20": ("booking contact asked once and kept",
+            ["tests.test_s253_contact.AskedOnceAndKept", "tests.test_s253_contact.WhatsAppThisNumber",
+             "tests.test_s253_contact.OnlyWhereTheBrainIs", "tests.test_s253_contact.BrainPath"]),
 }
 
 _RUNNER = """

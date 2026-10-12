@@ -272,12 +272,156 @@ async def _reservation(ctx, a: dict, rd: dict) -> dict:
     status, cj = await GW.api(ctx.account, "GET", "/api/booking/contact")
     contact = (cj or {}).get("contact") if status == 200 else None
     if not contact:
+        if one_path(ctx):   # Sasha 253 · /s2, WhatsApp and /next under parity: she asks once, with the consent, and saves it
+            raise _err("contact_missing", await _contact_ask(ctx, a, rd, (cj or {}).get("consent") or {}))
         raise _err("contact_missing", "the venue needs the person's name and mobile — ask them, once")
     # Sasha 251 · "under Alex Gate": the name they gave, else the account's own — the contact (mobile) stays theirs
     under = re.sub(r"\s+", " ", str(a.get("under") or "")).strip()[:80]
     return {"schema": "reservation/1", "flow": "book", "who": {"name": under or contact["name"], "contact": {"mobile_e164": contact["mobile_e164"]}},
             "what": what, "where": {}, "when": {"mode": "at", "at": f"{day.isoformat()}T{hhmm}"},
             "how_many": {"count": party, "unit": "people"}}
+
+
+# ── Sasha 253 · THE BOOKING CONTACT (G5): asked once, saved on the one person record, used from then on ──────────────────────
+# A venue needs a name and a mobile. When the account has none, hold_venue's contact_missing tells her what to ask — in ONE
+# question, with the consent sentence word for word — and save_contact saves what the person said through the booking API's own
+# PUT /api/booking/contact (the same record /you edits; no second store). It never invents a name or a number: both must be in
+# the person's own words (this turn, or the turn she asked in); on WhatsApp "this number" is their linked WhatsApp number.
+
+_ASKED: Dict[str, dict] = {}   # account → when she asked, in which session, the words of that turn, the venue's country
+ASK_WINDOW_S = 2 * 3600
+# a mobile typed without its country code, made E.164 only when the venue's country makes it unambiguous
+NATIONAL = {"ES": ("34", r"[67]\d{8}"), "PT": ("351", r"9\d{8}"), "IT": ("39", r"3\d{8,9}"), "FR": ("33", r"0?[67]\d{8}"),
+            "GB": ("44", r"0?7\d{9}"), "IE": ("353", r"0?8\d{8}"), "NL": ("31", r"0?6\d{8}"), "DE": ("49", r"0?1[5-7]\d{8,9}"),
+            "US": ("1", r"[2-9]\d{9}")}
+_THIS_NUMBER = re.compile(r"\b(?:this|my|same|the same)\s+(?:number|one|whatsapp|mobile|phone)\b|\b(?:este|mismo)\s+n[úu]mero\b", re.I)
+
+
+def _wa(ctx) -> bool:
+    return str(getattr(ctx, "session", "") or "").startswith("wa:")
+
+
+async def _wa_number(account: str) -> Optional[str]:
+    from booking_signer import contacts as CT
+    GW = _API()
+    try:
+        ch = await GW.STORE.channel_of_account(account) if GW.STORE is not None else None
+    except Exception as e:
+        log.warning("[contact] no WhatsApp channel read: %s", type(e).__name__)
+        return None
+    return CT.e164((ch or {}).get("number_e164"))
+
+
+async def _known_name(account: str) -> Optional[str]:
+    """The name they already told her (remember_name) — so only the mobile is asked."""
+    try:
+        from agapi import s2_memory as MEM
+        return await MEM.first_name(account)
+    except Exception as e:
+        log.info("[contact] no remembered name: %s", type(e).__name__)
+        return None
+
+
+async def _contact_ask(ctx, a: dict, rd: dict, consent: dict) -> str:
+    from booking_signer import contacts as CT
+    sentence = consent.get("text") or CT.consent()["text"]
+    prev = _ASKED.get(ctx.account)
+    if prev and prev["session"] == ctx.session and (datetime.now(timezone.utc) - prev["at"]).total_seconds() < ASK_WINDOW_S:
+        return ("You've already asked for their booking name and mobile in this conversation — never ask again. If their message "
+                "gives them, call save_contact with exactly what they said, then hold_venue again (same booking). If not, say plainly "
+                "the venue can't be booked without a name and mobile, and that they can add them on /you.")
+    wa_num = await _wa_number(ctx.account) if _wa(ctx) else None
+    named = await _known_name(ctx.account)
+    _ASKED[ctx.account] = {"at": datetime.now(timezone.utc), "session": ctx.session, "said": str(ctx.user_said or ""),
+                           "country": rd.get("country") or a.get("country"), "name": named}
+    if wa_num:
+        what = ("their full name — the mobile will be this WhatsApp number (they can give another)" if not named else
+                f"whether to book as {named} with this WhatsApp number (or another name or mobile)")
+    elif named:
+        what = f"a mobile with its country code (their name is {named}; if they've told you their full name, use that)"
+    else:
+        what = ("their name and a mobile with its country code — if they've already told you their full name in this conversation, "
+                "ask only for the mobile")
+    under = " The booking itself still goes under the name they gave (under); this is THEIR contact, kept for every booking." \
+        if a.get("under") else ""
+    return (f"No booking name and mobile on their account yet — the venue needs them. Ask ONCE, in one question, for {what}, and "
+            f"say this sentence with it, word for word: \"{sentence}\" When they answer, call save_contact with what they said "
+            f"(never a name or number they didn't give), then hold_venue again for the same booking.{under}")
+
+
+def _in_words(needle: str, texts: List[str]) -> bool:
+    words = [w for w in re.findall(r"[^\W\d_]+", needle.casefold()) if w]
+    hay = " ".join(texts).casefold()
+    return bool(words) and all(re.search(rf"(?<!\w){re.escape(w)}(?!\w)", hay) for w in words)
+
+
+def _digits_in(raw: str, texts: List[str]) -> bool:
+    d = re.sub(r"\D", "", raw)
+    return len(d) >= 7 and any(d[-9:] in re.sub(r"\D", "", t) for t in texts)
+
+
+def _mobile(raw: str, country: Optional[str]) -> Optional[str]:
+    from booking_signer import contacts as CT
+    got = CT.e164(raw)
+    if got:
+        return got
+    d = re.sub(r"[\s().-]", "", str(raw or ""))
+    cc = NATIONAL.get(str(country or "").upper())
+    if cc and re.fullmatch(cc[1], d):
+        return CT.e164("+" + cc[0] + d.lstrip("0"))
+    return None
+
+
+async def save_contact(ctx, a: dict) -> dict:
+    """Sasha 253 · their booking name and mobile, from their own words, saved with the consent they were told."""
+    GW = _API()
+    said = str(ctx.user_said or "")
+    asked = _ASKED.get(ctx.account) or {}
+    fresh = asked.get("session") == ctx.session and asked.get("at") and \
+        (datetime.now(timezone.utc) - asked["at"]).total_seconds() < ASK_WINDOW_S
+    texts = [said] + ([asked.get("said") or ""] if fresh else [])
+    name = re.sub(r"\s+", " ", str(a.get("name") or "")).strip()[:80]
+    if name and not _in_words(name, texts + ([asked.get("name") or ""] if fresh else [])):
+        raise _err("not_their_words", f"they didn't say the name \"{name}\" — ask them for it; never write one for them")
+    name = name or (asked.get("name") if fresh else None) or await _known_name(ctx.account) or ""
+    if not name:
+        raise _err("name_missing", "ask for their name (one short question) — nothing was saved")
+    raw = str(a.get("mobile") or "").strip()
+    wa_default = _wa(ctx) and (not raw or _THIS_NUMBER.search(raw) or a.get("this_number"))
+    if wa_default:
+        mobile = await _wa_number(ctx.account)
+        if not mobile:
+            raise _err("mobile_missing", "this WhatsApp number isn't linked — ask for a mobile with its country code")
+    else:
+        if not raw or a.get("this_number"):
+            raise _err("mobile_missing", "ask for a mobile with its country code, e.g. +34 600 000 000 — nothing was saved")
+        if not _digits_in(raw, texts):
+            raise _err("not_their_words", "they didn't give that number — ask them for it; never write one for them")
+        mobile = _mobile(raw, a.get("country") or asked.get("country"))
+        if not mobile:
+            raise _err("mobile_unclear", "ask for the mobile with its country code (e.g. +34 600 000 000) — nothing was saved")
+    # their own words, THIS turn: the name, the number, or (WhatsApp) "this number" / a yes to the one she offered
+    if not ((a.get("name") and _in_words(name, [said])) or (not wa_default and _digits_in(raw, [said]))
+            or (wa_default and (_THIS_NUMBER.search(said) or re.match(r"\s*(?:yes|yeah|yep|sure|ok|okay|s[ií]|vale)\b", said, re.I)))):
+        raise _err("not_their_words", "save only what they've just told you — ask them for their name and mobile, once")
+    s, cj = await GW.api(ctx.account, "GET", "/api/booking/contact")
+    c = (cj or {}).get("consent") or {}
+    if s != 200 or not c.get("version"):
+        raise _err("store_unreachable", "their details couldn't be saved just now — nothing was saved")
+    s, j = await GW.api(ctx.account, "PUT", "/api/booking/contact",
+                        {"name": name, "mobile": mobile, "consent_version": c["version"], "consent_sha256": c["sha256"]})
+    if s != 200:
+        raise _err("not_saved", f"I couldn't save that — {GW.refusal_words(j, s)}. Nothing was saved or booked.")
+    _ASKED.pop(ctx.account, None)
+    saved = (j or {}).get("contact") or {"name": name, "mobile_e164": mobile}
+    return {"saved": True, "name": saved.get("name") or name, "mobile_e164": saved.get("mobile_e164") or mobile,
+            "how": f"Say in a few words that bookings go under {saved.get('name') or name}, then call hold_venue again for the same "
+                   "booking (same details) — never ask for these again."}
+
+
+SAVE_CONTACT_DESC = ("When a booking needs their name and mobile (hold_venue said contact_missing) and they've just told you: save "
+                     "them on their account (with the consent sentence you said), then call hold_venue again. Pass only what they "
+                     "said — never make up a name or a number. On WhatsApp leave mobile out (or this_number) for this WhatsApp number.")
 
 
 async def hold_venue(ctx, a: dict) -> dict:

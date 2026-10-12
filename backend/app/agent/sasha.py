@@ -173,6 +173,7 @@ RENDER.update({"keep_list": "inline", "keep_use": "inline", "keep_add": "keep_ca
 RENDER.update({"what_i_can_do": "capabilities", "note_not_yet": "inline"})   # Sasha 225 · /s2's capability card
 RENDER.update({"note_rental": "inline"})   # Sasha 227
 RENDER.update({"remember_name": "inline"})   # Sasha 246
+RENDER.update({"save_contact": "inline"})   # Sasha 253 · the booking contact, saved
 RENDER.update({"hotel_request": "read_back"})   # Sasha 235 · upgrade my room: its read-back, then the outcome on the same card
 RENDER.update({"my_plans": "plans", "running_late": "read_back", "change_booking": "read_back", "cancel_booking": "read_back"})   # Sasha 226   # Sasha 224 · CR 63 + the photo capture   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)

@@ -39,23 +39,29 @@ def mode() -> str:
     return m if m in MODES else "0"
 
 
+FAMILY = "s2_reads"   # Sasha 249 · agapi_route's family for these reads (live unless the table names it: see agapi_route)
+
+
 def _url() -> str:
-    return os.getenv("SASHA_AGAPI_URL", "https://agapi-live-production.up.railway.app").rstrip("/")
+    """Sasha 249 · the family's URL, from the one route (it was always live; it still is unless "s2_reads=sandbox" is set)."""
+    from agapi import agapi_route as AR
+    return AR.endpoint(AR.route(FAMILY))[0]
 
 
 async def _agapi(op: str, body: dict) -> Dict[str, Any]:
     """One AgAPI live call as this guest. → the envelope (ok/result/error); a transport failure is an envelope too."""
     import httpx
-    key = os.getenv("SASHA_AGAPI_KEY", "").strip()
+    from agapi import agapi_route as AR
+    url, key = await AR.client_for(FAMILY)   # Sasha 249 · ONE ROUTE
     if not key:
-        return {"ok": False, "error": {"code": "not_configured", "message": "SASHA_AGAPI_KEY isn't set"}}
+        return {"ok": False, "error": {"code": "not_configured", "message": f"{AR.key_name(AR.route(FAMILY))} isn't set"}}
     h = {"Authorization": f"Bearer {key}", "content-type": "application/json"}
     tok = GUEST_TOKEN.get()
     if tok:
         h["X-Sasha-Guest-Token"] = tok
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT_S)) as c:
-            r = await c.post(f"{_url()}/v1/{op}", headers=h, content=json.dumps(body))
+            r = await c.post(f"{url}/v1/{op}", headers=h, content=json.dumps(body))
         return r.json()
     except Exception as e:
         return {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}

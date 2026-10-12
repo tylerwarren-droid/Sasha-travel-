@@ -74,10 +74,8 @@ def keep_statement(account: str, raw: bytes, media_type: str) -> str:
 
 async def _agapi(op: str, body: dict, approval: Optional[str] = None) -> Dict[str, Any]:
     import httpx
-    live = via() == "live"
-    url = (os.getenv("SASHA_AGAPI_URL", "https://agapi-live-production.up.railway.app") if live
-           else os.getenv("SASHA_AGAPI_TEST_URL", "https://agapi-sandbox-production.up.railway.app")).rstrip("/")
-    key = os.getenv("SASHA_AGAPI_KEY" if live else "SASHA_AGAPI_TEST_KEY", "").strip()
+    from agapi import agapi_route as AR
+    url, key = await AR.client_for("subscriptions")   # Sasha 249 · ONE ROUTE (the copied URL/key block is gone)
     if not key:
         return {"ok": False, "error": {"code": "not_configured", "message": "the subscription radar isn't switched on yet"}}
     h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": "s2sub_" + secrets.token_hex(12)}
@@ -135,7 +133,29 @@ def _say_list(subs: list, tot: str, source: str) -> str:
             + (f", not counting {', '.join(unknown)}." if unknown else "."))
 
 
+def _pending_of(account: str) -> Optional[dict]:
+    return {k.split("|", 1)[1]: v for k, v in _PENDING.items() if k.startswith(account + "|")} or None
+
+
 async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
+    """Sasha 249 · ONE MEMORY: a cancel's read-back waiting for their yes is kept in s2_memory (kind subs_pending) as well as in this
+    process — after a restart their yes still finds it."""
+    from agapi import s2_memory as M
+    if not _pending_of(ctx.account):
+        kept = await M.kind(ctx.account, "subs_pending")
+        for sid, v in (kept or {}).items() if isinstance(kept, dict) else ():
+            if isinstance(v, dict) and v.get("read_back_id"):
+                _PENDING.setdefault(f"{ctx.account}|{sid}", {"read_back_id": v["read_back_id"], "route": v.get("route"),
+                                                              "at": float(v.get("at") or 0)})
+    before = _pending_of(ctx.account)
+    r = await _run_tool(ctx, name, args)
+    after = _pending_of(ctx.account)
+    if after != before:
+        await M.put_kind(ctx.account, "subs_pending", after)
+    return r
+
+
+async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
     uid = await _end_user(ctx.account)
     if not uid:
         return {"ok": False, "error": {"code": "unavailable", "message": "the subscription radar didn't answer"}}

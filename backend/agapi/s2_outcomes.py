@@ -13,7 +13,10 @@ the venue's reply lands (outcomes.update). "We get any booking done", measured b
   never        the customer's name, phone, email or card: only the venue, its sector and city, the rung, the channel and the times.
 
 Where: SASHA_OUTCOMES_VIA = sandbox (default) | live. Keys: SASHA_AGAPI_TEST_KEY / SASHA_AGAPI_KEY. Never printed. A ledger that
-doesn't answer never stops a booking: it is logged and skipped."""
+doesn't answer never stops a booking: it is logged and skipped.
+Sasha 249 · where is now agapi_route's "outcomes" family (SASHA_AGAPI_ROUTE; SASHA_OUTCOMES_VIA is its legacy switch), URL + key from
+agapi_route.client_for. The OPEN set is kept in s2_memory too (kind "outcomes_open"): after a restart the sweep picks the open
+attempts back up (restore(), at start-up) instead of forgetting them."""
 from __future__ import annotations
 
 import asyncio
@@ -39,15 +42,16 @@ _task: Optional[asyncio.Task] = None
 
 
 def via() -> str:
-    return "live" if os.getenv("SASHA_OUTCOMES_VIA", "sandbox").strip().lower() == "live" else "sandbox"
+    """Sasha 249 · the outcomes family's AgAPI, from the one route table (agapi_route). SASHA_OUTCOMES_VIA is that family's legacy
+    switch there — read only when SASHA_AGAPI_ROUTE doesn't name "outcomes" — so production (SASHA_OUTCOMES_VIA=live) stays live."""
+    from agapi import agapi_route as AR
+    return AR.route("outcomes")
 
 
 async def _agapi(op: str, body: dict) -> Dict[str, Any]:
     import httpx
-    live = via() == "live"
-    url = (os.getenv("SASHA_AGAPI_URL", "https://agapi-live-production.up.railway.app") if live
-           else os.getenv("SASHA_AGAPI_TEST_URL", "https://agapi-sandbox-production.up.railway.app")).rstrip("/")
-    key = os.getenv("SASHA_AGAPI_KEY" if live else "SASHA_AGAPI_TEST_KEY", "").strip()
+    from agapi import agapi_route as AR
+    url, key = await AR.client_for("outcomes")   # Sasha 249 · ONE ROUTE (the copied URL/key block is gone)
     if not key:
         return {"ok": False, "error": {"code": "not_configured", "message": "the outcomes ledger isn't switched on"}}
     h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": "s2out_" + secrets.token_hex(12)}
@@ -98,13 +102,16 @@ async def booked(account: str, held: dict, venue: str, city: Optional[str], resu
     if out:
         _DONE.add((ref, st))
         if st not in ("confirmed", "declined", "failed") and held.get("trip_item_id"):
+            await _open_of(account)
             _OPEN.setdefault(account, set()).add(str(held["trip_item_id"]))
+            await _keep_open(account)
             start()
 
 
 async def sync(account: str, reservations: list) -> int:
     """The reservations as Sasha's records have them now → each decided one updates its outcome (once). Never raises."""
     n = 0
+    was = set(await _open_of(account))
     for r in reservations or []:
         tid, status = str(r.get("id") or r.get("trip_item_id") or ""), str(r.get("status") or "")
         st = LATER.get(status)
@@ -125,6 +132,46 @@ async def sync(account: str, reservations: list) -> int:
         if await _send("outcomes.update", body):
             n += 1
         _OPEN.get(account, set()).discard(tid)
+    if set(_OPEN.get(account, set())) != was:
+        await _keep_open(account)
+    return n
+
+
+# ── Sasha 249 · THE OPEN SET, DURABLE (T14): kept in s2_memory (kind outcomes_open) beside this process's _OPEN; restore() at start-up
+# picks every open attempt back up and starts the sweep, so a restart no longer forgets the outcomes still waiting for a venue.
+
+async def _open_of(account: str) -> Set[str]:
+    """This account's open attempts — this process's, else (after a restart) the ones kept in s2_memory."""
+    if account not in _OPEN:
+        try:
+            from agapi import s2_memory as M
+            kept = await M.kind(account, "outcomes_open")
+        except Exception as e:
+            log.warning("[outcomes] open set not read: %s", type(e).__name__)
+            kept = None
+        if kept:
+            _OPEN[account] = {str(x) for x in kept}
+    return _OPEN.get(account, set())
+
+
+async def _keep_open(account: str) -> None:
+    try:
+        from agapi import s2_memory as M
+        await M.put_kind(account, "outcomes_open", sorted(_OPEN.get(account) or []) or None)
+    except Exception as e:
+        log.warning("[outcomes] open set not kept: %s", type(e).__name__)
+
+
+async def restore() -> int:
+    """At start-up: every account's open attempts back into _OPEN, and the sweep started if any. → how many accounts."""
+    from agapi import s2_memory as M
+    n = 0
+    for account, ids in await M.accounts_with("outcomes_open"):
+        if ids and account not in _OPEN:
+            _OPEN[account] = {str(x) for x in ids}
+            n += 1
+    if _OPEN:
+        start()
     return n
 
 
@@ -162,4 +209,4 @@ def start() -> None:
             _task = None
 
 
-__all__ = ["booked", "sync", "ref_of", "via", "RUNG", "LATER"]
+__all__ = ["booked", "sync", "ref_of", "via", "restore", "RUNG", "LATER"]

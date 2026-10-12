@@ -33,6 +33,8 @@ async def main() -> int:
     # Sasha 247 · the gate's test bookings never go in the LIVE outcomes ledger (found by CR: after the switch, the restart's gate
     # recorded its test venue bookings live) — the gate runs with production's environment, so the ledger is pinned to the sandbox here
     os.environ["SASHA_OUTCOMES_VIA"] = "sandbox"
+    # Sasha 249 · outcomes is a family of the one route table now: the table wins over the legacy switch, so it is pinned there too
+    os.environ["SASHA_AGAPI_ROUTE"] = (os.getenv("SASHA_AGAPI_ROUTE", "") + ",outcomes=sandbox").lstrip(",")
     from scripts import venue_engine_fake   # Sasha 248 · the venue engine's saved answers: no AgAPI read from a suite
     venue_engine_fake.install()
     from datetime import datetime, timezone

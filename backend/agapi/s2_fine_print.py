@@ -242,10 +242,8 @@ def keep_image(account: str, raw: bytes, media_type: str) -> str:
 
 async def _agapi(op: str, body: dict, approval: Optional[str] = None) -> Dict[str, Any]:
     import httpx
-    live = via() == "live"
-    url = (os.getenv("SASHA_AGAPI_URL", "https://agapi-live-production.up.railway.app") if live
-           else os.getenv("SASHA_AGAPI_TEST_URL", "https://agapi-sandbox-production.up.railway.app")).rstrip("/")
-    key = os.getenv("SASHA_AGAPI_KEY" if live else "SASHA_AGAPI_TEST_KEY", "").strip()
+    from agapi import agapi_route as AR
+    url, key = await AR.client_for("cards")   # Sasha 249 · ONE ROUTE: the call in progress (run_tool's `using`), else cards' route
     if not key:
         return {"ok": False, "error": {"code": "not_configured", "message": "card fine print isn't switched on yet"}}
     try:
@@ -367,6 +365,69 @@ _MONEY_CHECK = {"flight_money_back": "flight", "bag_money_back": "bag"}
 _MONEY_AFTER = ("file_flight_claim", "file_bag_claim", "money_claim_status")
 
 
+_CASE_AT: Dict[str, str] = {}      # Sasha 249 · "accident|<account>" / "claim|<account>" → the AgAPI that case was opened on
+_CASE_TOOLS = {"accident_notify": "accident", "file_claim": "claim", "claim_status": "claim"}
+
+
+# ── Sasha 249 · DURABLE CASE POINTERS (EU 245 step 8, T14): the money claim, the accident and the card claim — each {case_id, target}
+# — and the read-backs waiting for a yes are kept in s2_memory (kinds case_money / case_accident / case_claim / fp_pending) as well
+# as in this process. After a restart "status of my claim" finds the SAME case in the SAME AgAPI (sandbox or live), not nothing.
+
+def _snap(account: str) -> Dict[str, Any]:
+    """This process's pointers for one account, in the shape s2_memory keeps."""
+    a = account
+    pend = {k.split("|", 1)[1]: v for k, v in _PEND.items() if k.startswith(a + "|")}
+    return {"case_money": {"case_id": _MONEY[a], "target": _MONEY_AT.get(a)} if _MONEY.get(a) else None,
+            "case_accident": ({"case_id": _ACCIDENT[a], "city": _ACCIDENT_CITY.get(a, ""), "target": _CASE_AT.get(f"accident|{a}")}
+                              if _ACCIDENT.get(a) else None),
+            "case_claim": {"case_id": _CLAIM[a], "target": _CASE_AT.get(f"claim|{a}")} if _CLAIM.get(a) else None,
+            "fp_pending": pend or None}
+
+
+async def _hydrate(account: str) -> None:
+    """After a restart: the pointers this process lacks, from s2_memory (this process's own copy always wins)."""
+    s = _snap(account)
+    if all(s.values()):
+        return
+    from agapi import s2_memory as M
+    k = await M.kinds(account)
+    a = account
+    m = k.get("case_money") if not s["case_money"] else None
+    if isinstance(m, dict) and m.get("case_id"):
+        _MONEY[a] = m["case_id"]
+        if m.get("target"):
+            _MONEY_AT[a] = m["target"]
+    m = k.get("case_accident") if not s["case_accident"] else None
+    if isinstance(m, dict) and m.get("case_id"):
+        _ACCIDENT[a], _ACCIDENT_CITY[a] = m["case_id"], str(m.get("city") or "")
+        if m.get("target"):
+            _CASE_AT[f"accident|{a}"] = m["target"]
+    m = k.get("case_claim") if not s["case_claim"] else None
+    if isinstance(m, dict) and m.get("case_id"):
+        _CLAIM[a] = m["case_id"]
+        if m.get("target"):
+            _CASE_AT[f"claim|{a}"] = m["target"]
+    m = k.get("fp_pending") if not s["fp_pending"] else None
+    if isinstance(m, dict):
+        for op, v in m.items():
+            if isinstance(v, dict) and v.get("read_back_id"):
+                _PEND.setdefault(f"{a}|{op}", {"read_back_id": v["read_back_id"], "at": float(v.get("at") or 0)})
+
+
+async def _persist(account: str, before: Dict[str, Any], target_now: str) -> None:
+    """The pointers that changed in this call → s2_memory (awaited: kept before the turn answers). A new case records the AgAPI it
+    was opened on."""
+    for kind in ("accident", "claim"):
+        new = _snap(account)[f"case_{kind}"]
+        if new and (before.get(f"case_{kind}") or {}).get("case_id") != new["case_id"]:
+            _CASE_AT[f"{kind}|{account}"] = target_now
+    after = _snap(account)
+    changed = {k: v for k, v in after.items() if v != before.get(k)}
+    if changed:
+        from agapi import s2_memory as M
+        await M.put_kinds(account, changed)
+
+
 async def target(account: str, name: str, args: dict) -> str:
     """Sasha 244 · which AgAPI this tool's calls go to (agapi_route): money by the flight (test inventory → the sandbox), a claim on
     the AgAPI its case was opened on, the rest by family (cards for every card / accident / claim tool)."""
@@ -377,16 +438,22 @@ async def target(account: str, name: str, args: dict) -> str:
                                      args.get("booking_reference"))
     if name in _MONEY_AFTER:
         return _MONEY_AT.get(account) or AR.route("money")
+    case = _CASE_TOOLS.get(name) or ("accident" if name == "accident" and not args.get("new_accident") and _ACCIDENT.get(account) else None)
+    if case and _CASE_AT.get(f"{case}|{account}"):   # Sasha 249 · a card case on the AgAPI it was opened on
+        return _CASE_AT[f"{case}|{account}"]
     return AR.route(_FAMILY.get(name, "cards"))
 
 
 async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
     from agapi import agapi_route as AR
+    await _hydrate(ctx.account)   # Sasha 249 · after a restart, the pointers kept in s2_memory
+    before = _snap(ctx.account)
     t = await target(ctx.account, name, args)
     with AR.using(t):
         r = await _run_tool(ctx, name, args)
     if name in _MONEY_CHECK and r.get("ok"):
         _MONEY_AT[ctx.account] = t
+    await _persist(ctx.account, before, t)
     return r
 
 
@@ -663,11 +730,14 @@ def wrap(base: Callable[..., Awaitable[Dict[str, Any]]]) -> Callable[..., Awaita
 
 async def accident_photo(account: str, shot: str, media_type: str, b64: str) -> Dict[str, Any]:
     """/s2's photo button on the accident card: straight to AgAPI (sealed, hashed evidence) — never through the chat or the model."""
-    uid = await _end_user(account)
-    cid = _ACCIDENT.get(account)
-    if not uid or not cid:
-        return {"ok": False, "error": {"code": "no_accident", "message": "there's no accident case open"}}
-    return await CALL("cards.accident_photo", {"end_user": uid, "case_id": cid, "shot": shot, "media_type": media_type, "content_base64": b64})
+    from agapi import agapi_route as AR
+    await _hydrate(account)   # Sasha 249 · the open accident, after a restart too — on the AgAPI it was opened on
+    with AR.using(_CASE_AT.get(f"accident|{account}") or AR.route("cards")):
+        uid = await _end_user(account)
+        cid = _ACCIDENT.get(account)
+        if not uid or not cid:
+            return {"ok": False, "error": {"code": "no_accident", "message": "there's no accident case open"}}
+        return await CALL("cards.accident_photo", {"end_user": uid, "case_id": cid, "shot": shot, "media_type": media_type, "content_base64": b64})
 
 
 async def moment(account: str, event: dict) -> Dict[str, Any]:

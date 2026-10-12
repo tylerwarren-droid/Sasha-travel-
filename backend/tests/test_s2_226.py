@@ -4,6 +4,7 @@ recorded. Offline: fakes only (no call, no email, no Duffel, no database).
     cd backend && python -m unittest tests.test_s2_226 -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import asyncio
 import os

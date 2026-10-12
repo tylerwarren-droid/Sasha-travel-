@@ -18,12 +18,8 @@ async def list_chats(request: Request):
     """List the caller's own chat sessions (newest first) — a signed-in guest's, or the public demo's (S-62 step 7)."""
     account = await chat_account(request)
     sessions = await chat_store.list_sessions(account)
-    demo = account == chat_store.DEMO_USER_ID
-    return {
-        "user": {"id": account, "email": chat_store.DEMO_USER_EMAIL if demo else None,
-                 "display_name": chat_store.DEMO_USER_NAME if demo else None},
-        "sessions": sessions,
-    }
+    # Sasha 249 · no fixed person for the demo (it was "Jon Peters"): the demo is nobody, and says no name
+    return {"user": {"id": account, "email": None, "display_name": None}, "sessions": sessions}
 
 
 @router.get("/{session_id}")

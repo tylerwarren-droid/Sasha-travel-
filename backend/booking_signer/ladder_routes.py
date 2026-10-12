@@ -273,16 +273,14 @@ def eating_out(asked_for) -> bool:
 def _s2_demo_account(account: Optional[str]) -> bool:
     """Sasha 221 · who has the S2 demo setting: an account listed in SASHA_S2_DEMO_ACCOUNTS (a scratch fixture). Sasha 232 · the founder
     only if listed (Tyler, 10 Oct: real bookings on /s2) — S1's founder powers (standin, rehearsal, calls) are unchanged."""
-    import os
-    listed = {a.strip().lower() for a in os.getenv("SASHA_S2_DEMO_ACCOUNTS", "").split(",") if a.strip()}
-    return bool(account) and account.lower() in listed
+    from app.services.accounts import is_founder_test   # Sasha 249 · the one founder/test decision (the founder only if listed)
+    return is_founder_test(account, founder=False, listed="SASHA_S2_DEMO_ACCOUNTS")
 
 
 def standin(account: Optional[str]) -> bool:
     """Sasha 169 · the founder's demo: every send goes to OUR test venue, standing in for the place he picked (labelled TEST)."""
-    import os
-    from .guest_accounts import founder
-    return os.getenv("SASHA_DEMO_STANDIN", "") == "1" and bool(account) and founder(account)
+    from app.services.accounts import is_founder_test   # Sasha 249 · the one founder/test decision
+    return is_founder_test(account, flag="SASHA_DEMO_STANDIN")
 
 
 def standin_captcha(asked_for) -> bool:

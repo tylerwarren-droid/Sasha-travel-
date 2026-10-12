@@ -33,8 +33,8 @@ def accounts() -> List[str]:
     v = os.getenv("SASHA_PROACTIVE_RENTALS", "").strip().lower()
     out: List[str] = []
     for a in (["founder"] if v == "1" else [x.strip() for x in v.split(",") if x.strip()]):
-        a = founder_account() if a in ("1", "founder") else a
-        if re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", a) and a not in out:
+        a = founder_account() if a in ("1", "founder") else a   # Sasha 249 · an unset founder is None (nobody), never the demo
+        if a and re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", a) and a not in out:
             out.append(a)
     return out
 

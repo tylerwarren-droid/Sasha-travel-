@@ -4,11 +4,14 @@ The booking key (gate.py) proves a call came through the frontend's proxy. On it
 must never equal every account. So, after the key, each request carries exactly one of:
   · `Authorization: Bearer <a Supabase access token>` — a signed-in guest. Its signature is checked against Sasha's
     Supabase project's PUBLIC keys (JWKS, ES256), with the issuer, audience and expiry; the account is its `sub`;
-  · `x-sasha-session: founder` — the founder's own session, checked by the proxy. It maps to FOUNDER_ACCOUNT_ID once he
-    has an auth user of his own; until that is set, to the demo account his bookings have always been under;
+  · `x-sasha-session: founder` — the founder's own session, checked by the proxy. It maps to FOUNDER_ACCOUNT_ID.
+    Sasha 249 · unset, the founder's session is REFUSED (503) — until 249 it fell back to the demo account (11111111);
   · `x-sasha-session: demo` — the demo account, only when the founder's session asks for it explicitly.
 None of them → no account, and every route that needs one refuses (account.account_for: 401 account_required).
 ⛔ Fails closed: keys unreachable, a forged, expired or wrongly-issued token, an unknown session word → refused.
+Sasha 249 · resolve() is a thin wrapper over app.services.chat_account.chat_account() — the ONE resolver — so a chat route
+and a booking route resolve the same request to the same account. Only the anonymous default differs: a booking route
+has none (None → 401). The founder decision is app.services.accounts.
 """
 from __future__ import annotations
 
@@ -103,32 +106,17 @@ async def verify_token(token: str) -> str:
     return sub
 
 
-def founder_account() -> str:
-    """FOUNDER_ACCOUNT_ID (his own auth user) when set and well-formed; until then, the demo account."""
-    from .account import DEMO_ACCOUNT_ID
-    v = os.getenv("FOUNDER_ACCOUNT_ID", "").strip().lower()
-    return v if _UUID.fullmatch(v) else DEMO_ACCOUNT_ID
+def founder_account() -> Optional[str]:
+    """Sasha 249 · app.services.accounts.founder_account(): FOUNDER_ACCOUNT_ID, or None — never the demo account."""
+    from app.services.accounts import founder_account as one
+    return one()
 
 
 async def resolve(request: Request) -> Optional[str]:
-    """The verified account for this request, or None. Called by the gate after the booking key."""
-    from .account import DEMO_ACCOUNT_ID
-    auth = request.headers.get("authorization", "")
-    if auth:
-        scheme, _, token = auth.partition(" ")
-        if scheme.lower() != "bearer" or not token.strip():
-            raise _refuse("account_token_invalid", "the Authorization header is not a bearer token")
-        return await verify_token(token.strip())
-    session = request.headers.get(SESSION_HEADER, "").strip().lower()
-    if not session:
-        return None
-    if session == "founder":   # (the booking gate has already checked the key)
-        from .guest_accounts import note_founder_ip   # Sasha 159 · his address: guests beside him are never capped
-        note_founder_ip(request.headers.get("x-sasha-client-ip", "").strip()[:64] or None)
-        return founder_account()
-    if session == "demo":
-        return DEMO_ACCOUNT_ID
-    raise _refuse("account_session_unknown", f"{SESSION_HEADER} is founder or demo")
+    """The verified account for this request, or None. Called by the gate after the booking key.
+    Sasha 249 · a thin wrapper: chat_account() decides; a booking route has no anonymous default."""
+    from app.services.chat_account import chat_account
+    return await chat_account(request, anonymous=None)
 
 
 __all__ = ["resolve", "verify_token", "founder_account", "reset_cache", "project_url", "issuer", "SESSION_HEADER", "AUDIENCE"]

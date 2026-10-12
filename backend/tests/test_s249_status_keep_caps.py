@@ -223,8 +223,8 @@ class NoFixedExamples(unittest.TestCase):
                 k = os.path.relpath(f, BACK)
                 found[k] = found.get(k, 0) + 1
         self.assertEqual(found, {"app/agent/sasha.py": 2,            # S1's Keep lines with parity off (byte-identical)
-                                 "agapi/s2_keep.py": 1,              # S1's keep_list words with parity off (KEEP_LIST_S1)
-                                 "app/services/chat_store.py": 1})   # the demo user "Jon Peters" (EU 245 step 2, identity)
+                                 "agapi/s2_keep.py": 1})             # S1's keep_list words with parity off (KEEP_LIST_S1)
+        # (chat_store's demo user "Jon Peters" is gone — step 2, one identity — so the ratchet tightened)
 
     def test_the_parity_off_words_are_the_only_branch_that_keeps_them(self):
         from agapi import s2_keep as K

@@ -2,6 +2,7 @@
 
     cd backend && python -m unittest tests.test_booking_gate -v
 """
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 import os
 import unittest
 from unittest import mock

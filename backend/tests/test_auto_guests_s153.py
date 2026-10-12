@@ -5,6 +5,7 @@ Offline.
     cd backend && python -m unittest tests.test_auto_guests_s153 -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import asyncio
 import os
@@ -54,7 +55,7 @@ class Creating(unittest.TestCase):
 
 class RealVenues(unittest.TestCase):
     def test_only_the_founder_contacts_a_real_venue(self):
-        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": "", "SASHA_REAL_CONTACT_ACCOUNTS": ""}):
+        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": tests.founder_fixture.FOUNDER, "SASHA_REAL_CONTACT_ACCOUNTS": ""}):
             self.assertIsNone(GA.real_contact_refusal(A, False))                 # the founder
             self.assertIsNone(GA.real_contact_refusal("g-1", True))              # anyone, at our test venue
             r = GA.real_contact_refusal("g-1", False)                            # a guest, a real venue

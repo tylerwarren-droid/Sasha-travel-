@@ -10,6 +10,7 @@ SKIPPED, and says so — a skip is not a pass.
 Keys are the public RFC 8032 test keys (signer: TEST 1, device: TEST 2), never real. Nothing here reaches a
 venue, a helper, or any network.
 """
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 import asyncio
 import base64
 import json
@@ -179,7 +180,7 @@ class BookingRoutes:
         strip = lambda t: {k: v for k, v in t.items() if k not in ("intent_id", "issued_at", "expires_at")}
         self.assertEqual(canonical_bytes(strip(p["task"])), canonical_bytes(strip(VEC["payload"]["task"])))
         self.assertEqual([p["task"]["intent_id"], p["mode"], p["device_id"], p["approval"]["by"], p["spec_standing"]],
-                         [i["intent_id"], "dry_run", DEVICE_ID, DEMO_ACCOUNT_ID, VEC["payload"]["spec_standing"]])
+                         [i["intent_id"], "dry_run", DEVICE_ID, tests.founder_fixture.FOUNDER, VEC["payload"]["spec_standing"]])
         again = self.post(f"/intents/{i['intent_id']}/issue", {"device_id": DEVICE_ID, "approval": {"how": "button", "said": None}})
         self.assertEqual([again.status_code, again.json()["rule"]], [409, "intent_already_issued"])
 
@@ -376,7 +377,7 @@ class OnPostgres(BookingRoutes, unittest.TestCase):
         # 20:00 in Lisbon on 2 October 2026 is summer time (UTC+1): 19:00 UTC
         self.assertEqual(dict(row), {"type": "restaurant", "status": "pending", "provider_name": "Restaurante Psi",
                                      "party_size": 2, "local_timezone": "Europe/Lisbon", "utc": "2026-10-02 19:00",
-                                     "title": "Sasha bookings", "owner": DEMO_ACCOUNT_ID})
+                                     "title": "Sasha bookings", "owner": tests.founder_fixture.FOUNDER})
         self.intent()  # a second booking joins the same trip rather than opening another
         self.assertEqual(self.sql("select count(*) as n from trips")[0]["n"], 1)
 
@@ -417,8 +418,11 @@ class WithoutStorageOrAMount(unittest.TestCase):
             routes.STORE = saved
 
     def test_the_demo_account_is_the_chat_stores_demo_user(self):
-        src = (BACKEND / "app" / "services" / "chat_store.py").read_text(encoding="utf-8")
-        self.assertEqual(re.search(r'^DEMO_USER_ID = "([^"]+)"', src, re.M).group(1), DEMO_ACCOUNT_ID)
+        # Sasha 249 · it pinned two copies of one id kept equal by this test; now there is ONE (app/services/accounts.py) and
+        # both names are that object
+        from app.services import accounts, chat_store
+        self.assertIs(chat_store.DEMO_USER_ID, accounts.DEMO_ACCOUNT_ID)
+        self.assertIs(DEMO_ACCOUNT_ID, accounts.DEMO_ACCOUNT_ID)
 
     def test_main_mounts_the_booking_routes(self):
         # ⚠ Every CTO zip ships main.py WITHOUT this; Stage B re-applies it and Stage E probes /api/booking/health.

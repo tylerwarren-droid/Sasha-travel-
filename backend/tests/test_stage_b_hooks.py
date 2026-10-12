@@ -4,6 +4,7 @@ back — booking-in-chat is the core, so its absence is a failed suite, not a qu
     cd backend && python -m unittest tests.test_stage_b_hooks -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import unittest
 from datetime import datetime, timezone
@@ -41,7 +42,7 @@ class TheResponseCarriesIt(unittest.TestCase):
         import os
         from unittest import mock
         # Sasha 152 · signed out, the search is not offered (sign in first): the founder's pass-through carries it
-        with mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-s152", "FOUNDER_ACCOUNT_ID": ""}):
+        with mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-s152", "FOUNDER_ACCOUNT_ID": tests.founder_fixture.FOUNDER}):
             r = TestClient(app).post("/api/agents/conductor", json={"message": "find me a tattoo studio in Nairobi, KE"},
                                      headers={"x-sasha-session": "founder", "x-sasha-booking-key": "k-s152"})
         if r.status_code == 401:

@@ -254,7 +254,7 @@ class OnPostgres(unittest.TestCase):
         async def runner(fn):
             return await fn(c)
         from tests import test_booking_ladder as TBL   # a module: its own tests are not collected twice
-        acct = TBL.DEMO_ACCOUNT_ID                                                               # trips.owner_id needs a real auth user
+        acct = TBL.FOUNDER_ACCOUNT                                                               # trips.owner_id needs a real auth user
 
         async def seed():
             trip = await c.fetchval("insert into trips (owner_id, title) values ($1, 'cr62') returning id", uuid.UUID(acct))

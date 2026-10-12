@@ -254,7 +254,7 @@ class OnPostgresPrefs(unittest.TestCase):
 
         async def go():
             st = PR.PostgresProactiveStore(PostgresStore(self.url))
-            from tests.test_booking_ladder import DEMO_ACCOUNT_ID as a
+            from tests.test_booking_ladder import FOUNDER_ACCOUNT as a
             first = await st.set_prefs(a, all_off=True)                       # the reminders offer's write
             second = await st.set_prefs(a, off_kinds=["day_before"])            # all_off kept
             third = await st.set_prefs(a, all_off=False)                        # off_kinds kept

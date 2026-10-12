@@ -6,6 +6,7 @@ card sends — and holds every line of the read-back to what he asked for. Offli
     cd backend && python -m unittest tests.test_chat_readback_sasha86 -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import json
 import unittest

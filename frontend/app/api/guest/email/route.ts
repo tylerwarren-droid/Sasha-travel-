@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { guest, guestClient } from '@/lib/guest-session'
+import { guestClient } from '@/lib/guest-session'
+import { actingAs } from '@/lib/acting-as'
 
 /**
  * Sasha 153 · "Keep this across devices: add your email" — offered AFTER a booking, never before. The guest's own account
@@ -9,9 +10,11 @@ import { guest, guestClient } from '@/lib/guest-session'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const g = await guest()
-  if (!g) return NextResponse.json({ ok: false, rule: 'no_guest', message: 'No guest session in this browser.' }, { status: 401 })
-  if (!(g.email ?? '').endsWith('@guests.kanoe.ai')) {
+  // Sasha 249 · WHO IS ACTING (lib/acting-as.ts → acting-rule.mjs decide()), not a second check of the email's suffix here:
+  // only the automatic guest, when it is the one acting (never under the founder's session or a real sign-in)
+  const a = await actingAs()
+  if (!a) return NextResponse.json({ ok: false, rule: 'no_guest', message: 'No guest session in this browser.' }, { status: 401 })
+  if (a.kind !== 'guest') {
     return NextResponse.json({ ok: false, rule: 'already_has_email', message: 'This account already has its email.' }, { status: 409 })
   }
   const body = await request.json().catch(() => ({})) as { email?: unknown }

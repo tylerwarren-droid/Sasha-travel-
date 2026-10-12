@@ -157,14 +157,14 @@ class OnPostgres(unittest.TestCase):
         async def go():
             c = await asyncpg.connect(TBL.PG_URL)
             try:
-                trip = await c.fetchval("insert into trips (owner_id, title) values ($1, 'w118') returning id", U.UUID(TBL.DEMO_ACCOUNT_ID))
+                trip = await c.fetchval("insert into trips (owner_id, title) values ($1, 'w118') returning id", U.UUID(TBL.FOUNDER_ACCOUNT))
                 item = await c.fetchval("insert into trip_items (trip_id, type, status, provider_name, date_time) values "
                                         "($1, 'restaurant', 'requested', 'Hanakura', now() + interval '1 day') returning id", trip)
             finally:
                 await c.close()
             base = PostgresStore(TBL.PG_URL)
             st = IP.PostgresInboundStore(base)
-            mine = await st.written_candidates(datetime(2026, 1, 1, tzinfo=timezone.utc), TBL.DEMO_ACCOUNT_ID)
+            mine = await st.written_candidates(datetime(2026, 1, 1, tzinfo=timezone.utc), TBL.FOUNDER_ACCOUNT)
             anyone = await st.written_candidates(datetime(2026, 1, 1, tzinfo=timezone.utc), None)
             nobody = await PostgresLadderStore(base).account_by_email("nobody@example.com")
             c = await asyncpg.connect(TBL.PG_URL)

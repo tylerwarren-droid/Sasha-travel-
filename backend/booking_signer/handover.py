@@ -73,11 +73,10 @@ class Refused(Exception):
 
 def founder_override(account: Optional[str]) -> bool:
     """Sasha 162 · the founder's decision: his OWN account's real bookings go through the cloud browser (his details, his
-    consent) before the DPA. Only when FOUNDER_ACCOUNT_ID is really set and is this account — never the demo fallback."""
-    import re as _re
-    v = os.getenv("FOUNDER_ACCOUNT_ID", "").strip().lower()
-    return bool(account) and bool(_re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", v)) \
-        and str(account).strip().lower() == v
+    consent) before the DPA. Only when FOUNDER_ACCOUNT_ID is really set and is this account — never the demo fallback.
+    Sasha 249 · that is app.services.accounts.is_founder — the one founder decision (it has no fallback at all now)."""
+    from app.services.accounts import is_founder
+    return is_founder(str(account).strip() if account else account)
 
 
 def dpa_ok(account: Optional[str]) -> bool:

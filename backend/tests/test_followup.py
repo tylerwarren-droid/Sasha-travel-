@@ -4,6 +4,7 @@
     cd backend && python -m unittest tests.test_followup -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import asyncio
 import os
@@ -47,7 +48,7 @@ class FollowUps:
         return v, r.json()
 
     def call_row(self, call_id):
-        return self.c.portal.call(self.calls.get_call, TBL.DEMO_ACCOUNT_ID, call_id)
+        return self.c.portal.call(self.calls.get_call, TBL.FOUNDER_ACCOUNT, call_id)
 
     def sends(self):
         return [b for m, u, b in self.web.requests if u == E.RESEND_SEND_URL]
@@ -221,7 +222,7 @@ class OnMemory(FollowUps, unittest.TestCase):
         return calls, ladder
 
     def set_guest_email(self, e):
-        self.ladder.account_emails = {TBL.DEMO_ACCOUNT_ID: e}
+        self.ladder.account_emails = {TBL.FOUNDER_ACCOUNT: e}
 
     def trip_status(self, item):
         return self.calls.trip_items[item]["status"]
@@ -237,8 +238,8 @@ class OnPostgres(FollowUps, unittest.TestCase):
     _q = TBL.OnPostgres._q
 
     def set_guest_email(self, e):
-        self._q("update auth.users set email = $1 where id = $2::uuid", e, TBL.DEMO_ACCOUNT_ID)
-        self.addCleanup(lambda: self._q("update auth.users set email = null where id = $1::uuid", TBL.DEMO_ACCOUNT_ID))
+        self._q("update auth.users set email = $1 where id = $2::uuid", e, TBL.FOUNDER_ACCOUNT)
+        self.addCleanup(lambda: self._q("update auth.users set email = null where id = $1::uuid", TBL.FOUNDER_ACCOUNT))
 
     def trip_status(self, item):
         return self._q("select status from trip_items where id = $1::uuid", item)[0]["status"]

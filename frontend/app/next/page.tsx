@@ -42,25 +42,9 @@ const PREVIEW_PLAN: RichItinerary = {
   ],
 }
 
-const DEMO_USER: User = {
-  display_name: 'Jon Peters',
-  email: 'guest@example.com',
-  default_currency: 'USD',
-  sasha_context: 'Jon loves cultural immersion, authentic food experiences, and luxury travel across Asia.',
-  travellers: [
-    { relation: 'self', first_name: 'Jon' },
-    { relation: 'partner', first_name: 'Maya' },
-  ],
-  preferences: [
-    { key: 'accommodation.type', value: 'boutique_heritage', source: 'explicit', confidence: 1.0, is_active: true },
-    { key: 'experience.type', value: 'culture_and_food', source: 'explicit', confidence: 1.0, is_active: true },
-  ],
-  past_trips: [
-    { title: 'Japan — Kyoto and Tokyo', return_date: 'Summer 2024' },
-    { title: 'Portugal — Lisbon and the Douro', return_date: 'Spring 2023' },
-  ],
-  ota_affinity: ['culture', 'adventure']
-}
+// Sasha 249 · ONE IDENTITY: no fixed person stands in for whoever is here (it was a hardcoded demo profile — a name, a partner,
+// two past trips — shown to every visitor). Who is acting is whoami's (the badge); this page knows no profile of its own.
+const NO_PROFILE: User = { display_name: '', default_currency: 'USD', travellers: [], preferences: [] }
 
 // Browsers pad device labels with boilerplate ("Default - MacBook Air Microphone (Built-in)")
 // that eats the pill's width without telling the guest anything. Trim it to the part that
@@ -1065,7 +1049,7 @@ export default function NextPage() {
             onTurnBusy={setThinking}
             onPay={onPay}
             onHandover={onHandover}
-            user={DEMO_USER}
+            user={NO_PROFILE}
             onSashaResponse={handleSashaResponse}
             onListeningChange={setIsListening}
             onSetGate={handleSetGate}
@@ -1531,8 +1515,9 @@ export default function NextPage() {
                 {/* Fall back to who's actually on the booking rather than asserting "2
                     travellers" on a confirmation the guest is about to pay for. */}
                 {(() => {
-                  const pax = (richItinerary as any).cost_breakdown?.travellers || DEMO_USER.travellers?.length || 1
-                  return <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,.5)' }}>Total · {pax} traveller{pax > 1 ? 's' : ''}</span>
+                  // Sasha 249 · the count is the booking's own; unknown → no count (it fell back to the demo profile's two)
+                  const pax = Number((richItinerary as any).cost_breakdown?.travellers) || 0
+                  return <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,.5)' }}>Total{pax ? ` · ${pax} traveller${pax > 1 ? 's' : ''}` : ''}</span>
                 })()}
                 <span style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 24, color: '#E8B923' }}>${(richItinerary.estimated_total_usd || 0).toLocaleString()}</span>
               </div>

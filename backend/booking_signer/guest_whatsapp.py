@@ -1761,12 +1761,9 @@ TEST_CARD = {"place_id": "sasha-test-venue", "name": "Sasha Test Venue", "countr
 def rehearsal(account: str) -> bool:
     """The cards end with OUR test venue: on the founder's own account when SASHA_REHEARSAL=1 — and ALWAYS for an account
     that may not contact real venues (Sasha 153: every automatic guest), so a guest can complete a booking end to end."""
-    from .identity import founder_account
-    from .guest_accounts import extra_accounts
-    if account == founder_account():
-        return os.getenv("SASHA_REHEARSAL", "") == "1"
+    from app.services.accounts import is_founder_test   # Sasha 249 · the one founder/test decision
     # Sasha 175 (EU 172) · never to a guest: "Sasha Test Venue (ours — rehearsal)" in a stranger's search was a failure
-    return False
+    return is_founder_test(account, flag="SASHA_REHEARSAL")
 
 
 #: Sasha 140 · each venue's OWN share-picture URL, by its website (not Google content: cacheable), with "none" remembered too

@@ -36,8 +36,8 @@ def _n(env: str, default: int) -> int:
 
 
 def exempt(account: str) -> bool:
-    from .identity import founder_account
-    return account == founder_account()
+    from app.services.accounts import is_founder   # Sasha 249 · the one founder decision
+    return is_founder(account)
 
 
 def check(account: str, kind: str) -> Optional[JSONResponse]:
@@ -62,9 +62,8 @@ def calls_on(account: Optional[str]) -> bool:
     """May THIS account have Sasha phone venues? The founder's: yes. A guest's: only once the founder lists it."""
     if account is None:
         return True
-    from .identity import founder_account
-    listed = {a.strip().lower() for a in os.getenv("SASHA_CALLS_ACCOUNTS", "").split(",") if a.strip()}
-    return account == founder_account() or account.lower() in listed
+    from app.services.accounts import is_founder_test   # Sasha 249 · the one founder decision, plus this rule's list
+    return is_founder_test(account, listed="SASHA_CALLS_ACCOUNTS")
 
 
 CALLS_OFF_FOR_ACCOUNT = "phone calls aren't switched on for your account yet — Sasha can use their booking form or email instead"

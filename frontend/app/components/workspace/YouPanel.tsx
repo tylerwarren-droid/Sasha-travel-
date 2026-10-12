@@ -2,7 +2,6 @@
 import { accountUrl, guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // S-62 step 7
 import { useState, useEffect } from 'react'
 import { User } from '@/types'
-import { CURRENT_USER } from '@/lib/currentUser'
 import { apiUrl, apiHeaders } from '@/lib/api'
 import SashaReservations from './SashaReservations'  // S-45, Stage B re-applies
 import ProductReminders from './ProductReminders'  // CR 10 · the products' dated reminders, in their own block (not bookings)
@@ -94,7 +93,8 @@ export default function YouPanel({ user, plannedThisSession = 0, language = 'en'
         </span>
         <div className="lw-who-m">
           <div className="lw-who-n">{user.display_name}</div>
-          <div className="lw-who-e">{user.email || CURRENT_USER.email}</div>
+          {/* Sasha 249 · no fixed person's address as a fallback (it was the hardcoded "Jon Peters" guest@example.com) */}
+          {user.email && <div className="lw-who-e">{user.email}</div>}
         </div>
         <span className="lw-who-tier">Member</span>
       </div>

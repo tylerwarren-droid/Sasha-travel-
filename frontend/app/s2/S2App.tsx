@@ -26,6 +26,7 @@ import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE } from '@/lib/sleep-rule.mjs'
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
+import { actingOf } from '@/lib/acting-rule.mjs'   // Sasha 249 · whoami's acting
 
 type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
@@ -74,10 +75,13 @@ function shownCards(preset: Ev): Extract<Card, { k: 'venues' }>['cards'] {
   return (cards as Extract<Card, { k: 'venues' }>['cards']).slice(0, Number(preset.show) || 5)
 }
 
+/** Sasha 249 · ONE IDENTITY: signed in = whoami names someone ACTING (the same answer the badge renders) — not a second
+ *  decision from an activity ping that could fail for other reasons. */
 function useSignedIn(): boolean | null {
   const [ok, setOk] = useState<boolean | null>(null)
   useEffect(() => {
-    fetch('/api/sasha-agent/activity', { cache: 'no-store' }).then(r => setOk(r.ok)).catch(() => setOk(false))
+    fetch('/api/auth/whoami', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null).then(w => setOk(actingOf(w) !== null)).catch(() => setOk(false))
   }, [])
   return ok
 }

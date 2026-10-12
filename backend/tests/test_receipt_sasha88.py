@@ -4,6 +4,7 @@ references, their words, the two-sided transcript, what they wrote, and the yes 
     cd backend && python -m unittest tests.test_receipt_sasha88 -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import json
 import unittest

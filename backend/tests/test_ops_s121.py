@@ -3,6 +3,7 @@
     cd backend && python -m unittest tests.test_ops_s121 -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import asyncio
 import os
@@ -17,7 +18,7 @@ from booking_signer import emailing as E, ops as OPS
 
 class Invite(unittest.TestCase):
     def setUp(self):
-        self.env = mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": "", "SASHA_WEB_URL": "https://project.kanoe.ai",
+        self.env = mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": tests.founder_fixture.FOUNDER, "SASHA_WEB_URL": "https://project.kanoe.ai",
                                                 "SASHA_EMAIL_FROM": "Sasha <sasha@booking.kanoe.ai>"})
         self.env.start()
         self.admin_calls, self.mails = [], []

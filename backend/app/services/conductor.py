@@ -690,7 +690,7 @@ CAPABILITY_FACTS = (
 # Sasha 88 abilities: backend/booking_signer/abilities.py. CTO zips drop this; Stage B re-applies it.
 from booking_signer.abilities import ABILITIES as _SASHA_ABILITIES  # noqa: E402
 # Sasha 142 · no account given (the voice page) is the PUBLIC demo, never the founder's
-from app.services.chat_account import PUBLIC_DEMO_ID  # noqa: E402
+from app.services.accounts import DEMO_ACCOUNT_ID  # noqa: E402  (Sasha 249 · the one demo id; was chat_account.PUBLIC_DEMO_ID)
 CAPABILITY_FACTS += _SASHA_ABILITIES
 
 
@@ -2739,14 +2739,14 @@ async def conduct(
         await chat_store.save_itinerary(
             itinerary_id=itinerary_id,
             session_id=session_id or "",
-            user_id=user_id or PUBLIC_DEMO_ID,
+            user_id=user_id or DEMO_ACCOUNT_ID,
             title=itinerary.get("title") or "",
             total_usd=itinerary.get("estimated_total_usd") or 0,
             payload=itinerary,
         )
         # Sasha 165 · THE BRIDGE: the plan is also a trip on the ACCOUNT (Postgres) — readable on WhatsApp and voice, kept
         # across redeploys, and the bookings slot into its days. After the builder, never instead of it; never fatal.
-        if user_id and signed_in is not False and user_id != PUBLIC_DEMO_ID:
+        if user_id and signed_in is not False and user_id != DEMO_ACCOUNT_ID:
             from booking_signer import plan_store as _ps  # noqa: E402
             from datetime import datetime as _dtp, timezone as _tzp  # noqa: E402
             _said = " | ".join([user_message] + [str(h.get("content") or "") for h in reversed(conversation_history or []) if h.get("role") == "user"])
@@ -2987,7 +2987,7 @@ async def conduct(
             _party = int(_party)
         except (TypeError, ValueError):
             _party = 2
-        _uid = user_id or PUBLIC_DEMO_ID
+        _uid = user_id or DEMO_ACCOUNT_ID
         for h in hotels:
             try:
                 per_night = int(h.get("price_from") or 0)

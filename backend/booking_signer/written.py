@@ -142,16 +142,16 @@ async def file(provider_id: str, channel: str, sender: Optional[str], subject: O
 
 
 async def account_of_email(addr: Optional[str]) -> Optional[str]:
-    """The account whose OWN address this is (its sign-in email; the founder's for the demo account) — a guest forwarding."""
+    """The account whose OWN address this is (its sign-in email; SASHA_FOUNDER_EMAIL is the founder's) — a guest forwarding.
+    Sasha 249 · the founder's address names FOUNDER_ACCOUNT_ID, never the demo account: unset, it is looked up like any other."""
     import os
     from . import ladder_routes as LR
-    from .account import DEMO_ACCOUNT_ID
+    from app.services.accounts import founder_account
     a = (addr or "").strip().lower()
     if not a:
         return None
-    if a == os.getenv("SASHA_FOUNDER_EMAIL", "").strip().lower():
-        from .identity import founder_account
-        return founder_account() or DEMO_ACCOUNT_ID
+    if a == os.getenv("SASHA_FOUNDER_EMAIL", "").strip().lower() and founder_account():
+        return founder_account()
     return await LR.LADDER_STORE.account_by_email(a) if LR.LADDER_STORE is not None else None
 
 

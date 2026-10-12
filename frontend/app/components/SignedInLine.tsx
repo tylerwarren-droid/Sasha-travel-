@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import { ensureGuest } from '@/lib/guest-start'
-import { badge, whoKey, changed, PER_PERSON_LOCAL, WHO_KEY } from '@/lib/acting-rule.mjs'
+import { actingOf, badgeFor, whoKey, changed, PER_PERSON_LOCAL, WHO_KEY } from '@/lib/acting-rule.mjs'
 
 type Who = { who: 'founder' | 'guest' | null; acting?: 'founder' | 'user' | 'guest' | null; email?: string | null; guest_sign_in_open: boolean }
 
@@ -37,7 +37,7 @@ export function forgetPerson(): void {
 }
 function forgetIfSomeoneElse(j: Who): void {
   try {
-    const now = whoKey(j.acting ?? (j.who === 'founder' ? 'founder' : j.who === 'guest' ? 'guest' : null), j.email)
+    const now = whoKey(actingOf(j), j.email)   // Sasha 249 · whoami's acting, never re-derived here
     if (changed(localStorage.getItem(WHO_KEY), now)) forgetPerson()
     localStorage.setItem(WHO_KEY, now)
   } catch { /* storage off: nothing kept to leak */ }
@@ -55,7 +55,8 @@ export function SignInToBook() {
 export function WhoIsBooking() {
   const who = useWho()
   const [out, setOut] = useState<string | null>(null)
-  if (who === null || who === 'unknown' || !who.who) return null
+  const acting = who === null || who === 'unknown' ? null : actingOf(who)   // Sasha 249 · whoami's acting, never the email suffix
+  if (who === null || who === 'unknown' || !acting) return null
   async function signOut() {
     try {
       const r = await fetch('/api/auth/sign-out', { method: 'POST' })
@@ -68,7 +69,7 @@ export function WhoIsBooking() {
   }
   return (
     <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
-      {who.who === 'founder' ? 'Booking as the founder.' : (who.email ?? '').endsWith('@guests.kanoe.ai')
+      {acting === 'founder' ? 'Booking as the founder.' : acting === 'guest'
         ? 'Booking as a private guest — only you see these bookings.'
         : <>Booking as {who.email ?? 'your account'}. <button type="button" onClick={signOut} style={{ textDecoration: 'underline' }}>Sign out</button></>}
       {' · '}<a href="/you" style={{ textDecoration: 'underline' }}>You</a>
@@ -82,10 +83,11 @@ export function WhoIsBooking() {
 export function WhoBadge() {
   const who = useWho()
   if (who === null || who === 'unknown') return null
-  const email = who.email ?? ''
-  const guest = !who.who || email.endsWith('@guests.kanoe.ai')
-  // Sasha 241 · always the account ACTING (/api/auth/whoami, lib/acting-rule.mjs) — a real sign-in is never shown as Tyler
-  const label = badge(who.who === 'founder' ? 'founder' : guest ? 'guest' : 'user', email)
+  // Sasha 241 · always the account ACTING (/api/auth/whoami, lib/acting-rule.mjs) — a real sign-in is never shown as Tyler.
+  // Sasha 249 · from whoami's `acting` alone: no second decision here from `who` or the email's suffix
+  const acting = actingOf(who)
+  const guest = acting !== 'user' && acting !== 'founder'
+  const label = badgeFor(who)
   return (
     <div style={{ position: 'fixed', left: '50%', top: 6, transform: 'translateX(-50%)', zIndex: 50, fontSize: 11, padding: '3px 9px', borderRadius: 999,
       background: 'rgba(17,17,17,.78)', color: '#fff', border: '1px solid rgba(255,255,255,.15)', pointerEvents: 'auto' }}>

@@ -325,7 +325,7 @@ class OnPostgresVault(unittest.TestCase):
         asyncio.set_event_loop(asyncio.new_event_loop())
         base = PostgresStore(TBL.PG_URL)
         st = PostgresVaultStore(base)
-        acct, now = TBL.DEMO_ACCOUNT_ID, datetime.now(timezone.utc)
+        acct, now = TBL.FOUNDER_ACCOUNT, datetime.now(timezone.utc)
         iid = str(uuid.uuid4())
 
         async def go():

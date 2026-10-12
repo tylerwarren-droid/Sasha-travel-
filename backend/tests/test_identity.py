@@ -4,6 +4,7 @@ session. A forged, expired, foreign or absent token refuses. Offline: the keys a
     cd backend && python -m unittest tests.test_identity -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import base64
 import os
@@ -95,9 +96,15 @@ class Identity(unittest.TestCase):
         from starlette.requests import Request
         req = lambda h: Request({"type": "http", "headers": [(k.encode(), v.encode()) for k, v in h.items()]})
         self.assertEqual(asyncio.run(I.resolve(req({"x-sasha-session": "demo"}))), DEMO_ACCOUNT_ID)
-        self.assertEqual(asyncio.run(I.resolve(req({"x-sasha-session": "founder"}))), DEMO_ACCOUNT_ID)   # until he has his own
+        # Sasha 249 · this pinned the fallback ("until he has his own": founder → the demo). Unset, he is now REFUSED. And
+        # resolve() is chat_account(), which checks the booking key itself (in a real request the gate already has)
+        founder = {"x-sasha-session": "founder", "x-sasha-booking-key": "k-test"}
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as no:
+            asyncio.run(I.resolve(req(founder)))
+        self.assertEqual((no.exception.status_code, no.exception.detail["rule"]), (503, "founder_account_not_configured"))
         with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": FOUNDER}):
-            self.assertEqual(asyncio.run(I.resolve(req({"x-sasha-session": "founder"}))), FOUNDER)
+            self.assertEqual(asyncio.run(I.resolve(req(founder))), FOUNDER)
 
     def test_no_project_configured_refuses_said(self):
         """S-69 · no project ref in code: without SASHA_SUPABASE_URL, a token is refused (503), never checked elsewhere."""

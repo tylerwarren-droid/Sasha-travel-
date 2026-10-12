@@ -3,6 +3,7 @@
     cd backend && python -m unittest tests.test_limits_s120 -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import os
 import unittest
@@ -16,7 +17,7 @@ GUEST, OTHER, FOUNDER = "22222222-2222-4222-8222-222222222222", "33333333-3333-4
 class Limits(unittest.TestCase):
     def setUp(self):
         LM.reset()
-        self.env = mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": "", "SASHA_FINDS_PER_HOUR": "3", "SASHA_FORMS_PER_DAY": "2",
+        self.env = mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": tests.founder_fixture.FOUNDER, "SASHA_FINDS_PER_HOUR": "3", "SASHA_FORMS_PER_DAY": "2",
                                                 "SASHA_CALLS_ACCOUNTS": "", "SASHA_CALLS_ENABLED": "1", "BLAND_API_KEY": "k"})
         self.env.start()
 
@@ -57,7 +58,7 @@ class Limits(unittest.TestCase):
 class GmailByInvitation(unittest.TestCase):
     def test_only_the_founder_and_listed_accounts(self):
         from booking_signer import mailbox as MB
-        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": "", "SASHA_GMAIL_ACCOUNTS": OTHER}):
+        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": tests.founder_fixture.FOUNDER, "SASHA_GMAIL_ACCOUNTS": OTHER}):
             self.assertTrue(MB.invited(FOUNDER))
             self.assertTrue(MB.invited(OTHER))
             self.assertFalse(MB.invited(GUEST))

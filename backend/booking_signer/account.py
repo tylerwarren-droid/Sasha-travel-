@@ -1,16 +1,15 @@
 """Whose booking is this? S-62 step 1: the account the gate VERIFIED (identity.py) — a signed-in guest's token, the
 founder's session, or the demo when his session asks for it. With none, every booking route refuses.
 
-The demo id is the chat store's DEMO_USER_ID (backend/app/services/chat_store.py), restated here rather than imported
-because backend/app/ is replaced wholesale by every CTO drop; a test holds the two equal.
+Sasha 249 · the demo id is app.services.accounts.DEMO_ACCOUNT_ID — the ONE constant — imported, never restated (until 249
+this was a second copy of chat_store's 11111111, held equal only by a test).
 """
 from __future__ import annotations
 
 from fastapi import HTTPException
 from starlette.requests import Request
 
-#: = app.services.chat_store.DEMO_USER_ID ("Jon Peters"). Held equal by tests/test_booking_routes.py.
-DEMO_ACCOUNT_ID = "11111111-1111-4111-8111-111111111111"
+from app.services.accounts import DEMO_ACCOUNT_ID  # noqa: F401  (Sasha 249 · the one demo id, re-exported)
 
 
 def account_for(request: Request) -> str:

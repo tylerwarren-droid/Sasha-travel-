@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { API_URL, CLIENT_KEY } from '@/lib/api'
-import { founderActing } from '@/lib/acting-as'
+import { API_URL } from '@/lib/api'
+import { actingAs } from '@/lib/acting-as'
+import { agentHeaders, clientIp } from '@/lib/agent-auth'
 
 /**
  * Sasha 142 · THE FOUNDER'S CHAT PASS-THROUGH. Since Sasha 142 a web visitor with no sign-in is the PUBLIC demo account
@@ -17,7 +18,8 @@ const ROUTES = ['agents/conductor', 'agents/classify', 'voice/conductor', 'trips
 export const maxDuration = 60   // a conductor turn: the chat's own timeout is 60 s
 
 async function pass(request: Request, ctx: { params: Promise<{ path: string[] }> }): Promise<Response> {
-  if (!(await founderActing())) {   // Sasha 241 · the founder must be the one ACTING (a real sign-in on this browser wins)
+  const acting = await actingAs()
+  if (acting?.kind !== 'founder') {   // Sasha 241 · the founder must be the one ACTING (a real sign-in on this browser wins)
     return NextResponse.json({ ok: false, rule: 'founder_session_required', message: 'This pass-through is the founder’s own session only.' }, { status: 401 })
   }
   const key = (process.env.SASHA_BOOKING_KEY ?? '').trim()
@@ -34,11 +36,13 @@ async function pass(request: Request, ctx: { params: Promise<{ path: string[] }>
   }
   const url = `${API_URL}/api/${path.map(encodeURIComponent).join('/')}${new URL(request.url).search}`
   // the body is passed as it came (JSON, or the voice page's multipart audio), with its own content type
-  const headers: Record<string, string> = { 'content-type': request.headers.get('content-type') ?? 'application/json', 'x-sasha-session': 'founder', 'x-sasha-booking-key': key }
-  if (CLIENT_KEY) headers['X-Client-Key'] = CLIENT_KEY
-  // Sasha 159 · the founder's address, so guests on his devices and wifi are never capped
-  const ip = (request.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || request.headers.get('x-real-ip') || ''
-  if (ip) headers['x-sasha-client-ip'] = ip
+  // Sasha 249 · the identity headers are agentHeaders(acting) — the one builder (lib/agent-headers.mjs): his session word, the
+  // key, the client key, and his address (Sasha 159: guests on his devices and wifi are never capped)
+  const who = await agentHeaders(acting, { ip: clientIp(request.headers) })
+  if (!who) {
+    return NextResponse.json({ ok: false, rule: 'booking_key_not_configured', message: 'SASHA_BOOKING_KEY is not set on this deployment' }, { status: 503 })
+  }
+  const headers: Record<string, string> = { 'content-type': request.headers.get('content-type') ?? 'application/json', ...who }
   const init: RequestInit = { method: request.method, headers, cache: 'no-store' }
   if (request.method !== 'GET') init.body = await request.arrayBuffer()
   let r: Response

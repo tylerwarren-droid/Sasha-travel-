@@ -17,7 +17,7 @@ from products.campus import visits as VS
 from tests import test_booking_ladder as TBL
 
 run = TBL.run
-from booking_signer.account import DEMO_ACCOUNT_ID as ACCOUNT  # noqa: E402  (a user in the model-A fixture)
+from tests.founder_fixture import FOUNDER as ACCOUNT  # noqa: E402  (a user in the model-A fixture; Sasha 249 · named, no longer the demo id)
 
 
 @unittest.skipUnless(TBL.PG_URL, "BOOKING_TEST_DATABASE_URL is not set — the Postgres half did NOT run")

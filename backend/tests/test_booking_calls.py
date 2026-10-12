@@ -7,6 +7,7 @@ is a fake returning what a model might. The route half runs against the in-memor
 BOOKING_TEST_DATABASE_URL names a throwaway database, against Postgres with sql/001 + 002 + 003 applied —
 ⚠ without that variable the Postgres half is SKIPPED, and says so.
 """
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 import asyncio
 import json
 import os
@@ -20,7 +21,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from booking_signer import call_routes, calls as C, optins as O, routes
-from booking_signer.account import DEMO_ACCOUNT_ID
+FOUNDER_ACCOUNT = tests.founder_fixture.FOUNDER   # Sasha 249 · the account the founder's session acts as here (the seeded auth user); was the demo id by fallback
 from booking_signer.call_store import MemoryCallStore, PostgresCallStore
 from booking_signer.store import PostgresStore
 
@@ -431,9 +432,9 @@ class CallRoutes:
         cid = prep["call_id"]
         at = (self.now + timedelta(hours=1)).isoformat()
         run_ = lambda coro: self.c.portal.call(lambda: coro)
-        self.assertEqual(run_(self.store.schedule(DEMO_ACCOUNT_ID, cid,
+        self.assertEqual(run_(self.store.schedule(FOUNDER_ACCOUNT, cid,
                                                   {"scheduled_for": at, "how": "button"}, self.now, self.now - timedelta(minutes=15))), "scheduled")
-        self.assertEqual(run_(self.store.claim(DEMO_ACCOUNT_ID, cid, {}, self.now, self.now - timedelta(minutes=15), 3,
+        self.assertEqual(run_(self.store.claim(FOUNDER_ACCOUNT, cid, {}, self.now, self.now - timedelta(minutes=15), 3,
                                                self.now - timedelta(days=1))), "taken")      # a second yes cannot dial early
         self.assertEqual(run_(self.store.due(self.now)), [])
         later = self.now + timedelta(hours=2)
@@ -813,7 +814,7 @@ class OnPostgres(CallRoutes, unittest.TestCase):
         self.addCleanup(lambda: setattr(routes, "STORE", saved))
         from booking_signer import reservation as RS
         def obj(**over):
-            o = {"schema": "reservation/1", "flow": "book", "who": {"name": "Tyler Warren", "account_id": DEMO_ACCOUNT_ID},
+            o = {"schema": "reservation/1", "flow": "book", "who": {"name": "Tyler Warren", "account_id": FOUNDER_ACCOUNT},
                  "what": {"activity": "a 60-minute relaxing massage", "activity_venue_lang": "un masaje relajante de 60 minutos", "category": "beauty"},
                  "where": {"venue_name": "Calma", "timezone": "Europe/Madrid", "venue_ids": []},
                  "when": {"mode": "at", "at": "2026-10-05T10:00", "duration_min": 60}, "how_many": {"count": 1, "unit": "people"}}
@@ -822,7 +823,7 @@ class OnPostgres(CallRoutes, unittest.TestCase):
         def put(o, status, cid):
             b = C.build_call(C.test_line(), C.parse_call_particulars(JOHNSON), MONDAY)
             cols = RS.columns(o)
-            row = {"call_id": cid, "account_id": DEMO_ACCOUNT_ID, "venue_key": "read:x", "dialled_number": "+34919891916", "language": "es",
+            row = {"call_id": cid, "account_id": FOUNDER_ACCOUNT, "venue_key": "read:x", "dialled_number": "+34919891916", "language": "es",
                    "guest_name": "Tyler Warren", "guest_phone": None, "brief": b["brief"], "brief_sha256": b["brief_sha256"],
                    "read_back_lines": b["read_back_lines"], "read_back_sha256": b["read_back_sha256"], "created_at": MONDAY,
                    "venue_name": "Calma", "local_date": cols.get("local_date"), "local_time": cols.get("local_time"),

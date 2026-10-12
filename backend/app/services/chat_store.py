@@ -7,8 +7,8 @@ history is captured reliably for the demo out of the box. All writes run in a wo
 would block the FastAPI event loop and stall other turns. Writes are best-effort: a DB failure
 must never break a live conversation.
 
-Single-user demo: there is one hardcoded user (Jon Peters). When a real auth flow lands,
-swap `DEMO_USER_*` for the authenticated principal and pass a real user_id into save_turn().
+Accounts: every call passes the caller's own account (app/services/chat_account.py); the demo id is
+app/services/accounts.py's DEMO_ACCOUNT_ID (Sasha 249 · one demo id, nobody's).
 To move to Postgres later, this module is the only thing to reimplement (the API talks to it,
 not to sqlite directly).
 """
@@ -24,10 +24,11 @@ from typing import Optional
 _BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH = os.getenv("CHAT_DB_PATH", os.path.join(_BACKEND_ROOT, "sasha_chats.db"))
 
-# The one hardcoded demo user (no auth flow yet).
-DEMO_USER_ID = "11111111-1111-4111-8111-111111111111"
+# Sasha 249 · the demo account is app.services.accounts.DEMO_ACCOUNT_ID — the ONE demo id (until 249 this was 11111111,
+# "Jon Peters", a second demo beside chat_account.PUBLIC_DEMO_ID). The demo is nobody: no person's name.
+from app.services.accounts import DEMO_ACCOUNT_ID as DEMO_USER_ID  # noqa: E402
 DEMO_USER_EMAIL = "guest@example.com"
-DEMO_USER_NAME = "Jon Peters"
+DEMO_USER_NAME = "Demo"
 
 _inited = False
 

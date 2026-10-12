@@ -1716,7 +1716,8 @@ async def _reorder_approve(ctx: dict, pend: dict) -> None:
 async def _forwarded_confirmation(ctx: dict, body: str) -> bool:
     """Sasha 118 (3) · a guest forwards (or pastes) a venue's confirmation: filed on the ONE booking it names (written.py),
     read with the field checks, and answered here. Not a confirmation → False (the turn goes on)."""
-    line = await forwarded_confirmation(ctx["account"], ctx["ch"].get("number_e164"), body, ctx["now"])
+    # Sasha 253 · the web voice avatar runs this turn with no WhatsApp channel (ch None) — found by the gate: every voice turn crashed
+    line = await forwarded_confirmation(ctx["account"], (ctx.get("ch") or {}).get("number_e164"), body, ctx["now"])
     if line is None:
         return False
     ctx["out"].text(line)

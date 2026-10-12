@@ -67,6 +67,12 @@ class ScriptedBrain(TG.Base):
 # ── the four tools: one brain, every surface (S2_TOOLS · the parity list · the capability card · voice) ─────────────────────
 
 class TheToolsAreTheBrains(unittest.TestCase):
+    def test_the_web_voice_avatars_turn_has_no_channel(self):   # found by deploy e3334ba5's gate: every voice turn crashed
+        import asyncio as _a
+        from booking_signer import guest_whatsapp as _GW
+        ctx = {"account": "a", "ch": None, "now": _GW.NOW(), "out": _GW.Out()}
+        self.assertFalse(_a.run(_GW._forwarded_confirmation(ctx, "Book me a table for two tonight at 9 in Sol")))
+
     def test_registered_once_everywhere_a_tool_is(self):
         caps = {t for g in HOME.CAPABILITIES for _, t in g["items"]}
         for name in NEW_TOOLS:
@@ -76,7 +82,10 @@ class TheToolsAreTheBrains(unittest.TestCase):
             self.assertIn(name, caps, name)                                         # on the one capability list
             self.assertIn(name, V.SAYS, name)                                       # said, no card (honest results)
             self.assertEqual(AG.RENDER[name], "inline", name)
-        with open(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "lib", "capabilities.generated.mjs"), encoding="utf-8") as f:
+        gen_path = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "lib", "capabilities.generated.mjs")
+        if not os.path.exists(gen_path):   # the Railway image is the backend only
+            return
+        with open(gen_path, encoding="utf-8") as f:
             gen = f.read()
         self.assertEqual(gen, HOME.frontend_module())                                # regenerated (python -m scripts.capabilities_out)
 

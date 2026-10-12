@@ -147,6 +147,9 @@ interface SashaChatProps {
   // every visit back. Lifted, they survive tab switches for the life of the session.
   ideasCache?: Idea[] | null
   onIdeasCache?: (ideas: Idea[]) => void
+  // Sasha 246 item 2 · the pause / sleep button (the page owns it): asleep, the mic is off; pressing the mic or typing wakes her
+  asleep?: boolean
+  onWake?: (how: 'press_mic' | 'typed') => void
 }
 
 export type WorkspaceTab = 'chat' | 'ideas' | 'trip' | 'you'
@@ -175,7 +178,7 @@ function interimLineFor(intents: string[], variant: number): string {
 }
 
 
-export default function SashaChat({ agent = false, phone = false, onTurnBusy, onPay, onHandover, user, productMode, skinClassName, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onMicDevices, onBooked, onAwaitPayment, onBookItem, onConfirmCard, onPaySavedCard, onPayNewCard, paidWith, onItineraryId, bookingRef, hideTabs = false, chatHero = null, panelPortal = null, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache }: SashaChatProps) {
+export default function SashaChat({ agent = false, phone = false, onTurnBusy, onPay, onHandover, user, productMode, skinClassName, onSashaResponse, onListeningChange, onPhotos, initialMessage, emptyState, avatarSpeaking, onInterrupt, presetPrompts, onSetGate, avatarSpeechGetter, isRespondingRef, readyToListen, onThinking, onItinerary, language = 'en', registerSend, messages: propMessages, setMessages: propSetMessages, richItinerary = null, photos = [], activePhoto = 0, onSelectPhoto, onBook, onVoiceConnected, onMicError, onMicDevices, onBooked, onAwaitPayment, onBookItem, onConfirmCard, onPaySavedCard, onPayNewCard, paidWith, onItineraryId, bookingRef, hideTabs = false, chatHero = null, panelPortal = null, activeTab = 'chat', onTabChange, unseenTabs = [], onMarkUnseen, onBuildingChange, ideasCache, onIdeasCache, asleep = false, onWake }: SashaChatProps) {
   const tab = activeTab
   const [localMessages, setLocalMessages] = useState<any[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
@@ -343,6 +346,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
     if (got.length) setAttachments((a) => [...a, ...got].slice(0, MAX_PHOTOS))
   }
   const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string; payload?: string; opening?: boolean; history?: any[] }) => {
+    if (asleep && !opts?.opening) onWake?.('typed')   // Sasha 246 item 2 · a message wakes her
     const media = attachments
     if (!content.trim() && media.length) content = media.length === 1 ? '📷 (photo)' : `📷 (${media.length} photos)`
     if (!opts?.opening && !opts?.payload && !media.length && takeChatText(content)) { setMessages(prev => [...prev, { role: 'user', content }]); setInput(''); return }  // S-66 chat booking; Sasha 186 · the typed yes clears
@@ -607,7 +611,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   // a short acknowledgement goes through onThinking (spoken only when she's quiet); flight searches arrive as the same
   // Live Workspace card; every trip change refreshes the Trip view at once (the 'sasha-plan-refresh' event).
   const agentTurn = async (content: string, history: any[], turnId: number, media: Attachment[] = []) => {
-    const plain = (history || []).filter((m: any) => (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim())
+    const plain = (history || []).filter((m: any) => (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim() && !m.sleepLine)   // Sasha 246 · "I'm here" is the page's, not hers to answer
       .map((m: any) => ({ role: m.role, content: String(m.content) }))
     // Sasha 212 · NEVER AN EMPTY BUBBLE: her text now arrives with her voice (one utterance per step), so a turn that starts
     // with a tool (propose_trip after "Flying from London.") left this placeholder empty for the whole tool run — rendered
@@ -1245,10 +1249,12 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             onConnectedChange={onVoiceConnected}
             onMicError={onMicError}
             onMicDevices={onMicDevices}
+            asleep={asleep}
+            onWake={() => onWake?.('press_mic')}
           />
           <input
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => { if (asleep) onWake?.('typed'); setInput(e.target.value) }}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage(input, { force: true }))}
             onPaste={e => { const f = imagesOf(e.clipboardData?.files); if (f.length) { e.preventDefault(); addPhotos(f) } }}
             placeholder="Ask Sasha anything…  (or just talk)"

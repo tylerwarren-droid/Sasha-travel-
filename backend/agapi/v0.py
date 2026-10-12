@@ -46,6 +46,7 @@ class Ctx:
     claimed: Optional[str] = None      # the claim this call holds, released if the act is refused before anything is sent
     act_name: Optional[str] = None     # CR 76 · /s2: the act this call is (claim() runs THE ONE YES RULE on it)
     act_said: Optional[str] = None     # CR 76 · /s2: the person's words this turn, as the act was called
+    space: str = "sasha"               # Sasha 249 · the account's space (products/space.py), read at the start of sasha.turn
 
 
 class ToolError(Exception):

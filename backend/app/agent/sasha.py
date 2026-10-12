@@ -544,9 +544,34 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     if wa:
         surface = "s2"
     remembered = _HANDOVER.pop(session or "-", None)   # Sasha 239 · on the first turn back only: what was (and wasn't) decided
+    # Sasha 249 · ONE MEMORY: the handover, the screen and the openers are kept in s2_memory too (kinds handover / screen / openers,
+    # each with its session) — after a restart the first turn back still hears them. This process's copy wins when it has one.
+    from agapi import s2_memory as _MEMK
+    kept = await _MEMK.kinds(account)
+    _ho = kept.get("handover") if isinstance(kept.get("handover"), dict) else {}
+    if _ho.get("session") == session and _ho.get("note"):
+        remembered = remembered or _ho["note"]
+        await _MEMK.put_kind(account, "handover", None)   # the first turn back only, as before
+    _sc = kept.get("screen") if isinstance(kept.get("screen"), dict) else {}
+    if (session or "-") not in _SCREEN and _sc.get("session") == session and _sc.get("cards"):
+        _SCREEN[session or "-"] = {"cards": _sc["cards"], "ribbon": _sc.get("ribbon"), "names": _sc.get("names") or []}
+    _op = kept.get("openers") if isinstance(kept.get("openers"), dict) else {}
+    if _op.get("session") == session and _op.get("said"):
+        _OPENERS.setdefault(session or "-", set()).update(str(x) for x in _op["said"])
+    # Sasha 249 · ONE SPACE: the account's space (products/space.py), read here at the start of the turn and passed in the context;
+    # a message that names a space ("switch to RelocateMe", "sasha") moves it, from whichever surface it came
+    from products import space as _SPC
+    _now_space = await _SPC.current(account)
+    _to = _SPC.asked(message)
+    if _to and _to != _now_space.get("space"):
+        await _SPC.set_space(account, _to, "wa" if wa else surface)
+        _now_space = await _SPC.current(account)
+    space_line = _SPC.context_line(_now_space)
     t0 = time.perf_counter()
     first_text_ms = None
-    ctx = API.Ctx(account=account, mode="test", user_said=message, session=session, surface=surface)
+    from agapi import agapi_route as _AR   # Sasha 249 · ONE ROUTE: the v0 mode comes from the route ("test": v0 is Duffel TEST only)
+    ctx = API.Ctx(account=account, mode=_AR.ctx_mode(), user_said=message, session=session, surface=surface,
+                  space=_now_space.get("space") or "sasha")
     voice["ctx"] = ctx   # Sasha 215 · what already happened this turn, for the line said if the turn fails or runs out of time
     msgs: List[dict] = [{"role": m["role"], "content": str(m.get("content") or "")} for m in (history or [])
                         if m.get("role") in ("user", "assistant") and str(m.get("content") or "").strip()][-40:]
@@ -633,6 +658,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                       "don't say that again — call hold_booking and read back.")
         if remembered:
             extra += "\n\n" + remembered
+        if space_line:   # Sasha 249 · ONE SPACE (nothing is added while they're in Sasha)
+            extra += space_line
         if used_openers:
             extra += (f"\n\nOpeners you've already used in this conversation — never start with them again: "
                       f"{', '.join(sorted(used_openers))}.")
@@ -829,6 +856,10 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     if tstate.get("focus") and tstate["focus"] not in hl:
         hl.insert(0, tstate["focus"])
     _SCREEN[session or "-"] = {"cards": tstate["cards"], "ribbon": tstate["ribbon"], "names": tstate["names"]}
+    # Sasha 249 · ONE MEMORY: the screen and the openers said, kept in s2_memory as well (awaited: kept before the turn answers)
+    await _MEMK.put_kinds(account, {"screen": {"session": session, "cards": tstate["cards"][:8], "ribbon": tstate["ribbon"],
+                                               "names": tstate["names"]} if tstate["cards"] else None,
+                                    "openers": {"session": session, "said": sorted(_OPENERS.get(session or "-") or [])[-40:]}})
     yield {"type": "state", "turn": turn_key, "cards": [c["place_id"] for c in tstate["cards"]], "ribbon": tstate["ribbon"],
            "names": tstate["names"], "carried": not tstate["new"], "highlight": hl,
            **({"names_dropped": tstate["dropped"]} if tstate["dropped"] else {})}
@@ -1026,6 +1057,25 @@ async def _start_warm() -> None:
     import asyncio
     if os.getenv("DATABASE_URL", "").strip() and os.getenv("SASHA_AGENT_WARM", "1") == "1":
         asyncio.create_task(_keep_warm())
+
+
+async def _restore_outcomes() -> None:
+    """Sasha 249 · the open outcomes kept in s2_memory, back into the sweep after a restart (once the stores are up)."""
+    import asyncio
+    await asyncio.sleep(20)
+    try:
+        from agapi import s2_outcomes as OC
+        n = await OC.restore()
+        log.info("[outcomes] %d account(s) with open outcomes restored", n)
+    except Exception as e:
+        log.warning("[outcomes] restore failed: %s", type(e).__name__)
+
+
+@router.on_event("startup")
+async def _start_restore() -> None:
+    import asyncio
+    if os.getenv("DATABASE_URL", "").strip():   # Sasha 249 · no table without a database (tests, local runs)
+        asyncio.create_task(_restore_outcomes())
 
 
 @router.get("/events")
@@ -1320,6 +1370,10 @@ async def agent_turn(request: Request):
     remembers = surface == "s2" or s1_parity()   # Sasha 241 · memory, closing and card taps on /next too
     if remembers:
         from agapi import s2_closing as CL, s2_memory as MEM
+        try:   # Sasha 249 · SERVER-BUILT HISTORY: the client's history only when it is the conversation the server kept
+            body["history"] = await MEM.verified_history(account, session_id, body.get("history") or [])
+        except Exception as e:
+            log.warning("[memory] history not verified: %s", type(e).__name__)
         lang = CL.closing(message) if body.get("history") else None   # Sasha 231 · "thanks / bye" after a conversation → dormant
         if lang:
             bye = CL.line(lang)
@@ -1394,6 +1448,20 @@ async def memory(request: Request, session: str = ""):
     except Exception as e:
         log.warning("[memory] recall failed: %s: %s", type(e).__name__, e)
         return {"ok": True, "line": None, "recent": [], "screen": None}
+
+
+@router.get("/space")
+async def space_now(request: Request):
+    """Sasha 249 · ONE SPACE: the account's space (products/space.py) — the same answer WhatsApp, the web chips and sasha.turn read.
+    Signed-in accounts only."""
+    from app.services.chat_account import chat_account, signed_in
+    account = await chat_account(request)
+    if not signed_in(account):
+        return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
+    from products import space as SPC
+    rec = await SPC.current(account)
+    s = rec.get("space") or "sasha"
+    return {"ok": True, "space": s, "name": SPC.NAME[s], "cause": rec.get("cause")}
 
 
 @router.get("/place/{place_id}")

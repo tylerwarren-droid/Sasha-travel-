@@ -117,15 +117,29 @@ def fold(mem: Optional[dict], said: str, reply: str, seen: dict) -> dict:
     return m
 
 
+async def _db_load(run, account: str) -> Optional[dict]:
+    """The account's row in s2_memory (None: no row). Raises when the table can't be read."""
+    row = await run(lambda c: c.fetchrow("select memory from s2_memory where account_id = $1", uuid.UUID(account)))
+    if row:
+        v = row["memory"]
+        return json.loads(v) if isinstance(v, str) else dict(v)
+    return None
+
+
+async def _db_save(run, account: str, m: dict) -> None:
+    await run(lambda c: c.execute(
+        "insert into s2_memory (account_id, memory, updated_at) values ($1, $2::jsonb, now()) "
+        "on conflict (account_id) do update set memory = excluded.memory, updated_at = now()",
+        # Sasha 233 · the pool's jsonb codec encodes once — a json.dumps here stored a JSON STRING (it loaded fine, but SQL
+        # saw text, not an object); rows written that way still load (the str branch in _db_load)
+        uuid.UUID(account), json.loads(json.dumps(m, default=str))))
+
+
 async def _load(account: str) -> Optional[dict]:
     run = _run()
     if run is not None and account not in _MEM:
         try:
-            row = await run(lambda c: c.fetchrow("select memory from s2_memory where account_id = $1", uuid.UUID(account)))
-            if row:
-                v = row["memory"]
-                return json.loads(v) if isinstance(v, str) else dict(v)
-            return None
+            return await _db_load(run, account)
         except Exception as e:
             log.info("[memory] not read (%s) — memory", type(e).__name__)
     return _MEM.get(account)
@@ -135,16 +149,103 @@ async def _save(account: str, m: dict) -> None:
     run = _run()
     if run is not None and account not in _MEM:
         try:
-            await run(lambda c: c.execute(
-                "insert into s2_memory (account_id, memory, updated_at) values ($1, $2::jsonb, now()) "
-                "on conflict (account_id) do update set memory = excluded.memory, updated_at = now()",
-                # Sasha 233 · the pool's jsonb codec encodes once — a json.dumps here stored a JSON STRING (it loaded fine, but SQL
-                # saw text, not an object); rows written that way still load (the str branch in _load)
-                uuid.UUID(account), json.loads(json.dumps(m, default=str))))
+            await _db_save(run, account, m)
             return
         except Exception as e:
             log.info("[memory] not stored (%s) — kept in memory", type(e).__name__)
     _MEM[account] = m
+
+
+# ── Sasha 249 · ONE MEMORY (EU 245 step 9): what lived only in a process — the claim and case pointers ({case_id, target}), the
+# read-backs waiting for a yes, the handover note, the cards on screen, the openers already said, the open outcomes, the space —
+# is kept in the account's s2_memory row too, each under its own `kind` (memory.kinds.<kind>; no migration: s2_memory's jsonb).
+# These read and write the TABLE only: with no table (tests, a store that's down) they answer {} / False and the caller's own
+# process copy is the memory, exactly as before. Callers keep that copy (one worker, one replica) and read the table when the
+# copy is empty — after a restart.
+
+async def kinds(account: Optional[str]) -> Dict[str, Any]:
+    """Every kind kept for this account ({} when the table isn't there or has nothing)."""
+    run = _run()
+    if run is None or not account:
+        return {}
+    try:
+        return dict(((await _db_load(run, account)) or {}).get("kinds") or {})
+    except Exception as e:
+        log.info("[memory] kinds not read (%s)", type(e).__name__)
+        return {}
+
+
+async def kind(account: Optional[str], name: str) -> Any:
+    return (await kinds(account)).get(name)
+
+
+async def put_kinds(account: Optional[str], values: Dict[str, Any]) -> bool:
+    """{kind: value, or None to forget it} into the account's row (the rest of its memory untouched). True when stored."""
+    run = _run()
+    if run is None or not account or not values:
+        return False
+    try:
+        m = (await _db_load(run, account)) or {}
+        k = dict(m.get("kinds") or {})
+        for n, v in values.items():
+            if v is None:
+                k.pop(n, None)
+            else:
+                k[n] = v
+        m["kinds"] = k
+        await _db_save(run, account, m)
+        return True
+    except Exception as e:
+        log.info("[memory] kinds not stored (%s) — this process keeps them", type(e).__name__)
+        return False
+
+
+async def put_kind(account: Optional[str], name: str, value: Any) -> bool:
+    return await put_kinds(account, {name: value})
+
+
+async def verified_history(account: str, session: Optional[str], history: List[dict]) -> List[dict]:
+    """Sasha 249 · SERVER-BUILT HISTORY (one-truth-spec 1.14): the conversation the model hears is the one the SERVER kept, not
+    whatever the browser sends back. The stored turns (this memory's `recent`, masked, the last KEEP messages) are the truth:
+      · nothing stored for this conversation (a first turn, another session's memory, no table yet) → the client's history, as today
+        (it keeps working when the server has nothing);
+      · stored, and the client's last lines are those same lines (masked the same way) → the client's history (verified: it is the
+        same conversation, and keeps the lines older than the stored window);
+      · stored, and they differ → the stored turns: a history the server never said is never handed to the model (nor its amounts
+        to the price guard)."""
+    m = await _load(account) or {}
+    n = int(m.get("session_lines") or 0)
+    if not session or m.get("session") != session or n <= 0:
+        return history
+    stored = [x for x in (m.get("recent") or []) if x.get("role") in ("user", "assistant")][-n:]   # THIS conversation's lines only
+    if not stored:
+        return history
+    client = [x for x in (history or []) if x.get("role") in ("user", "assistant") and str(x.get("content") or "").strip()]
+    k = min(len(client), len(stored))
+    mine = [(x["role"], masked(str(x.get("content") or ""))) for x in client[len(client) - k:]]
+    if k and mine == [(x["role"], str(x.get("content") or "")) for x in stored[len(stored) - k:]]:
+        return history
+    log.info("[memory] the client's history isn't the stored conversation — the stored turns are used")
+    return [{"role": x["role"], "content": str(x.get("content") or "")} for x in stored]
+
+
+async def accounts_with(name: str) -> List[tuple]:
+    """[(account, value)] for every account that has this kind kept (the outcomes sweep, after a restart)."""
+    run = _run()
+    if run is None:
+        return []
+    try:
+        rows = await run(lambda c: c.fetch(
+            "select account_id, memory -> 'kinds' -> $1 as v from s2_memory "
+            "where jsonb_typeof(memory) = 'object' and memory -> 'kinds' ? $1", name))
+    except Exception as e:
+        log.info("[memory] %s not listed (%s)", name, type(e).__name__)
+        return []
+    out = []
+    for r in rows or []:
+        v = r["v"]
+        out.append((str(r["account_id"]), json.loads(v) if isinstance(v, str) else v))
+    return out
 
 
 async def remember(account: str, session: Optional[str], said: str, reply: str, seen: dict) -> dict:
@@ -153,8 +254,12 @@ async def remember(account: str, session: Optional[str], said: str, reply: str, 
         h = VN._HELD.get(account) or {}
         if h.get("venue"):   # the place she read back, by its name
             seen = {**seen, "held": str(h["venue"])[:120]}
-    m = fold(await _load(account), said, reply, seen)
+    before = await _load(account) or {}
+    m = fold(before, said, reply, seen)
     m["session"] = (session or "")[:64]
+    # Sasha 249 · how many of `recent`'s lines are THIS conversation's (verified_history compares only those)
+    same = bool(before) and before.get("session") == m["session"]
+    m["session_lines"] = min(len(m["recent"]), (int(before.get("session_lines") or 0) if same else 0) + 2)
     await _save(account, m)
     return m
 
@@ -277,9 +382,15 @@ async def recall(account: str, session: Optional[str]) -> dict:
         from app.agent import sasha as AG
         AG._HANDOVER[session] = note + (" They have just come back and you greeted them with \"" + opening_line + "\" — never bring "
                                          "this up yourself; use it only when THEY refer to it.")
+        # Sasha 249 · ONE MEMORY: kept in the table too, so the first turn back hears it even if this process restarted between
+        await put_kinds(account, {"handover": {"session": session, "note": AG._HANDOVER[session]},
+                                  **({"screen": {"session": session, "cards": scr["cards"], "ribbon": scr.get("ribbon"),
+                                                 "names": [c.get("name") for c in scr["cards"] if c.get("name")]}}
+                                     if scr and scr.get("cards") else {})})
     return {"line": opening_line, "recent": m.get("recent") or [], "screen": scr, "summary": m.get("summary") or [], "handover": note,
             "pending": ({"kind": "hold", "what": p.get("what"), "waiting": _hold_live(account, p)} if p.get("kind") == "hold" else
                         {"kind": "question", "asked": p.get("asked")} if p.get("kind") == "question" else None)}
 
 
-__all__ = ["remember", "closing", "recall", "fold", "line_for", "masked", "opening", "first_name", "set_name", "OPEN", "ASK_NAME"]
+__all__ = ["remember", "closing", "recall", "fold", "line_for", "masked", "opening", "first_name", "set_name", "OPEN", "ASK_NAME",
+           "kinds", "kind", "put_kinds", "put_kind", "accounts_with", "verified_history"]

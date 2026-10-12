@@ -852,7 +852,13 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
             await STORE.put_state(key, st)
             await deliver(ch, frm, out, now)
             return out
-    if not skip_products and await PW.product_turn(ch, frm, p, st, out, now, early=_early):
+    _in_product = await PW.product_turn(ch, frm, p, st, out, now, early=_early) if not skip_products else False
+    try:   # Sasha 249 · ONE SPACE: the space this line's products ended the turn in, kept per account (products/space.py) — the
+        from products import space as _SPC   # keywords themselves ("campus", "relocate", "españa", "sasha") work exactly as before
+        await _SPC.set_space(account, _SPC.from_pending(st.get("pending")), "whatsapp")
+    except Exception as e:
+        log.warning("[guest_whatsapp] space not kept: %s", type(e).__name__)
+    if _in_product:
         _pp = st.get("pending") or {}
         if sw:   # Sasha 194 · the space, always said (the founder's account; guests next, with their tests)
             SW.label_space(out.items, _pp.get("product") if _pp.get("kind") == "product" else None)

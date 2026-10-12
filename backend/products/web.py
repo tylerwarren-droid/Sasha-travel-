@@ -128,6 +128,11 @@ async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = N
         return {"agent": "products", "response": "Something went wrong on my side with that — nothing was done. Try again?",
                 "quick_replies": [], "media": [], "handoff": None}
     await _save(key, user_id, st)
+    try:   # Sasha 249 · ONE SPACE: the space the web's products ended this turn in, kept per account (products/space.py)
+        from . import space as SPC
+        await SPC.set_space(user_id, SPC.from_pending(st.get("pending")), "web")
+    except Exception as e:
+        log.warning("[products.web] space not kept: %s", type(e).__name__)
     texts = list(early)
     replies, media = [], []
     for it in out.items:

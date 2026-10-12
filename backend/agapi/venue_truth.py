@@ -51,10 +51,7 @@ async def _agapi(op: str, body: dict) -> Dict[str, Any]:
     """The engine's transport — the family's AgAPI (agapi_route), its own key. Never printed."""
     import httpx
     from agapi import agapi_route as AR
-    live = AR.route(FAMILY) == "live"
-    url = (os.getenv("SASHA_AGAPI_URL", "https://agapi-live-production.up.railway.app") if live
-           else os.getenv("SASHA_AGAPI_TEST_URL", "https://agapi-sandbox-production.up.railway.app")).rstrip("/")
-    key = os.getenv("SASHA_AGAPI_KEY" if live else "SASHA_AGAPI_TEST_KEY", "").strip()
+    url, key = await AR.client_for(FAMILY)   # Sasha 249 · ONE ROUTE (the copied URL/key block is gone)
     if not key:
         return {"ok": False, "error": {"code": "not_configured", "message": "the venue engine isn't switched on"}}
     try:

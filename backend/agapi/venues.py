@@ -264,14 +264,18 @@ async def _engine_route(ctx, a: dict, rd: dict, res: dict, at: str, now, route: 
     """The engine's channel → the ONE question (a form AND another way: Tyler's words, verbatim) or that channel's read-back.
     None: hand on to the request executors (email / WhatsApp / call) with the route set."""
     from agapi import venue_truth as VT
+    from app.agent import voice as V
     if not route and eng.get("ask"):
         alt = ENGINE_ROUTE.get((eng.get("alternative") or {}).get("kind") or "", "email")
-        return {"status": "choose_route", "venue": rd["venue"], "ask": VT.ASK_FILL,
-                "options": [{"title": "Fill it in now", "route": "page"}, {"title": "Send the request", "route": alt}],
+        return {"status": "choose_route", "venue": rd["venue"], "ask": V.ASK_BOOK,
+                "options": [{**o, "route": o["route"] or alt} for o in V.CHOICES],
                 "how": "Ask `ask` word for word, then hold_venue again with the route they chose."}
     route = route or ENGINE_ROUTE.get(eng.get("kind") or "")
     if route in ("page", "form", "whatsapp") and eng.get("kind") in VT.PREPARED:   # venue.prepare_booking prepares it (row 775)
-        return await _prepared(ctx, a, rd, res, at, now, eng, card)
+        held = await _prepared(ctx, a, rd, res, at, now, eng, card)
+        # Sasha 249 · ONE QUESTION: the prefilled form IS their go-ahead — nothing reaches the venue until they confirm it themselves,
+        # so no second yes. It goes on their screen now, recorded like any attempt.
+        return await _finish(ctx, _HELD[ctx.account]) if held.get("status") == "awaiting_yes" and ctx.account in _HELD else held
     return None if route in (None, "no") else await _hold_inner(ctx, a, rd, res, at, now, route)
 
 
@@ -292,7 +296,7 @@ async def _prepared(ctx, a: dict, rd: dict, res: dict, at: str, now, eng: dict, 
               {"label": "Mobile", "value": res["who"]["contact"].get("mobile_e164") or ""}]
     venue = GW.plain_venue(rd["venue"])
     if eng.get("kind") == "whatsapp":   # a prepared WhatsApp they send — a request: the venue answers yes or no
-        lines = [f"I'll put a WhatsApp to {venue} on your phone, ready to send: {GW.summary(res)}, under {res['who']['name']}.",
+        lines = [f"I'll put a message to {venue} on your phone, ready to send: {GW.summary(res)}, under {res['who']['name']}.",
                  "You press send — I never send it for you.", "It's a request: nothing is booked until they reply."]
     else:
         lines = [f"I'll put {venue}'s own booking page on your phone, with your booking ready to confirm: {GW.summary(res)}, under {res['who']['name']}.",
@@ -468,9 +472,18 @@ async def book_venue(ctx, a: dict) -> dict:
     if stale(held["at"]):   # Sasha 215 · a read-back over 15 minutes old is never acted on: prepared again, said again
         _HELD.pop(ctx.account, None)
         raise _err("read_back_stale", "that was prepared over 15 minutes ago — call hold_venue again and read it back before booking")
-    how = {"how": "voice", "said": said}
+    return await _finish(ctx, held, {"how": "voice", "said": said})
+
+
+async def _finish(ctx, held: dict, how: Optional[dict] = None) -> dict:
+    """Book what's held, once: claimed, recorded in the outcomes ledger (CR 87), its card with it. book_venue after a yes; a
+    prefilled form straight away (Sasha 249 — the form is their go-ahead)."""
+    from agapi.v0 import claim
+    GW = _API()
+    if how:   # an act on their yes: claimed first (a prefilled form sends nothing to the venue — nothing to claim)
+        await claim(ctx)   # Sasha 215 · durable: sent once, across restarts and workers
+    how = how or {"how": "chose_form", "said": "prefilled form"}
     venue, rung = GW.plain_venue(held["venue"]), held["rung"]
-    await claim(ctx)   # Sasha 215 · durable: sent once, across restarts and workers
     _HELD.pop(ctx.account, None)
     card = card_of(ctx.account, held.get("place_id"), venue)
     from agapi import s2_outcomes as OC   # CR 87 · every real booking attempt goes in the outcomes ledger (never the person's details)
@@ -496,14 +509,14 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         return {"status": "confirmed" if result == "confirmed" else ("requested" if j.get("status") == "sent" else "not_sent"),
                 "venue": venue, "when": held["summary"], "itinerary": where, **({"reference": ref} if ref else {}),
                 "line": (f"✅ Booked: {venue}, {held['summary']}." + (f" Their reference: {ref}." if ref else "")) if result == "confirmed"
-                else "Sent — it's Requested until their confirmation comes back."}
+                else __import__("app.agent.voice", fromlist=["x"]).SENT}   # Sasha 249 · her short confirmation
     if rung == "draft":   # Sasha 212 · the drafted message goes to THEIR phone; they send it — never "booked"
         sent = False
         try:
             ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE else None
             if ch:
-                where_ = "WhatsApp" if held["channel"] == "whatsapp" else "Instagram"
-                out = await GW._tell(ch, f"✍️ For {venue} — send this on {where_}{': ' + held['link'] if held.get('link') else ''}\n\n{held['message']}")
+                # Sasha 249 · her voice never names the channel: the link opens the right one
+                out = await GW._tell(ch, f"✍️ For {venue} — send them this{': ' + held['link'] if held.get('link') else ''}\n\n{held['message']}")
                 sent = "sent" in out and "not" not in out
         except Exception as e:
             log.warning("[venues] the draft was not sent to the phone: %s", type(e).__name__)
@@ -532,8 +545,8 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where, "booked": False,
                 "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent,
                              **({"human_step": held["human_step"], "prepared_by": "venue.prepare_booking"} if held.get("human_step") else {})},
-                **({"say": held["prep_say"] + " Never say it's booked."} if held.get("prep_say") else
-                   {} if sent else {"say": "Their page and your details are on this screen — never say it's on their phone."})}
+                # Sasha 249 · her words for it are her voice's, never the engine's (which may name the booking platform)
+                "say": __import__("app.agent.voice", fromlist=["x"]).done_form(getattr(ctx, "surface", "s2")) + " Say exactly that — never that it's booked."}
     if rung == "handover":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/forms/{held['id']}/handover", {}, timeout=120)
         if status != 200:
@@ -560,7 +573,7 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         if status != 200 or j.get("status") != "sent":
             raise _err("not_sent", (j or {}).get("say") or GW.refusal_words(j, status))
         return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where,
-                "line": "Emailed — it's Requested until they reply."}
+                "line": __import__("app.agent.voice", fromlist=["x"]).SENT}   # Sasha 249 · her short confirmation
     status, j = await GW.api(ctx.account, "POST", f"/api/booking/calls/{held['id']}/place", {"read_back_sha256": held["sha"], "approval": how}, timeout=120)
     if status != 200:
         raise _err("not_called", GW.refusal_words(j, status))

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from unittest import mock
 
 from booking_signer import guest_whatsapp as GW, wa_agent as WA
-from tests.test_guest_whatsapp_s75 import ACCOUNT, Base, run
+from tests.test_guest_whatsapp_s75 import ACCOUNT, GUEST, SANDBOX, Base, run
 
 NOW = datetime(2026, 10, 11, 12, 0, tzinfo=timezone.utc)
 
@@ -119,11 +119,32 @@ class Routing(Base):
             self.say("help")
         self.assertEqual(self.seen, [])
 
-    def test_an_old_flows_button_finishes_there(self):
+    def test_a_button_nothing_is_waiting_on_goes_to_the_agent(self):   # Sasha 249 · step 1: every button, not only ours
         self.link()
         with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "agent"}):
             self.say("", payload="call:abc:yes", text="Yes")
+        self.assertEqual(self.seen, [("", "call:abc:yes")])
+
+    def test_the_button_the_old_flow_is_waiting_on_finishes_there(self):   # Sasha 249 · one question, one owner
+        self.link()
+        st = run(GW.STORE.get_state(GW.wa_key(GUEST))) or {}
+        st["pending"] = {"kind": "demo_reset", "nonce": "n1", "asked_at": NOW}
+        run(GW.STORE.put_state(GW.wa_key(GUEST), st))
+        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "agent"}):
+            try:
+                self.say("", payload="no:n1", text="No")
+            except Exception:
+                pass
         self.assertEqual(self.seen, [])
+
+    def test_an_empty_message_and_a_file_reach_the_agent_never_help(self):   # Sasha 249 · W1
+        self.link()
+        ch = run(GW.STORE.channel_for(GW.wa_key(GUEST)))
+        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "agent"}):
+            self.say("")
+            run(GW.turn(ch, SANDBOX, {"From": f"whatsapp:{GUEST}", "To": f"whatsapp:{SANDBOX}", "Body": "", "NumMedia": "1",
+                                      "MediaContentType0": "application/pdf", "MediaUrl0": "https://x.test/a.pdf"}))
+        self.assertEqual([b for b, _ in self.seen], ["[an empty message]", "[they sent a file (application/pdf) with no words]"])
 
     def test_stop_still_wins(self):
         self.link()

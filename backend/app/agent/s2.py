@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+from app.agent import voice as V
 from app.services import persona as P
 
 S2_WHO = """## Who she is
@@ -64,6 +65,7 @@ S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "
 # Sasha 241 · S1 PARITY: /next keeps its own "Who she is" and gains S2's capability lines — taken from S2_WHO itself, so the two
 # never drift (her Keep, never a number in the chat, what she can do, her plans, running late, no promises, claim deadlines, not yet)
 S1_CAN = ("## What else she does (the same as on /s2)\n\n- **Their Keep.**" + S2_WHO.split("- **Their Keep.**", 1)[1]).rstrip() + "\n"
+S1_CAN += V.RULES   # Sasha 249 · her voice, the same on /next (parity on only — S1_CAN is never read with parity off)
 
 # Sasha 237 · ONE BRAIN on WhatsApp (EU 232 §1.1): S2's persona and tools, plus how WhatsApp differs
 WA_NOTE = """
@@ -86,7 +88,7 @@ S2_BOOK = ("After the person's explicit yes in THIS turn: one payment (Stripe TE
 def s2_system() -> str:
     """S2's whole system text: her own "Who she is", then S1's own text from "## How she talks" on (shared, unchanged)."""
     rest = P.AGENT_SYSTEM.split("## How she talks", 1)
-    return S2_WHO + "\n## How she talks" + rest[1] if len(rest) == 2 else S2_WHO + "\n" + P.AGENT_SYSTEM
+    return (S2_WHO + "\n## How she talks" + rest[1] if len(rest) == 2 else S2_WHO + "\n" + P.AGENT_SYSTEM) + V.RULES   # Sasha 249 · her voice
 
 
 def demo(account: Optional[str]) -> bool:

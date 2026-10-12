@@ -97,12 +97,16 @@ class DemoSetting(unittest.TestCase):
         API._LAST_FIND[ACCOUNT] = (("dinner", "sol", None), time.time(), first)
         try:
             with mock.patch.object(API, "_search_venues", mock.AsyncMock(side_effect=AssertionError("no new search"))):
-                s1 = run(API.search_venues(API.Ctx(account=ACCOUNT), a))
+                with mock.patch.dict("os.environ", {"SASHA_S1_PARITY": "off"}):
+                    s1 = run(API.search_venues(API.Ctx(account=ACCOUNT), a))
+                with mock.patch.dict("os.environ", {"SASHA_S1_PARITY": "on"}):
+                    s1p = run(API.search_venues(API.Ctx(account=ACCOUNT), a))
                 s2 = run(API.search_venues(API.Ctx(account=ACCOUNT, surface="s2"), a))
         finally:
             API._LAST_FIND.pop(ACCOUNT, None)
-        self.assertEqual(set(s1), {"venues", "note"})   # S1 exactly as before
+        self.assertEqual(set(s1), {"venues", "note"})   # S1 with parity off: exactly as before
         self.assertIsNone(AG.render("search_venues", s1, a))
+        self.assertEqual(AG.render("search_venues", s1p, a)["preset"]["cards"], [{"place_id": "p1"}])   # Sasha 249 · /next shows them again
         ev = AG.render("search_venues", s2, a)
         self.assertEqual(ev["kind"], "venues")
         self.assertEqual(ev["preset"]["cards"], [{"place_id": "p1"}])

@@ -53,9 +53,13 @@ async def main() -> int:
     s = await __import__("asyncio").to_thread(DS.main)
     from scripts import venue_truth_suite as VTS   # Sasha 248 · ONE VENUE TRUTH: the three demo paths (Spanish not "Korean", the form, the sheet)
     t = 0 if await VTS.main() else 1
+    from scripts import her_voice_suite as HV   # Sasha 249 · her voice: no channel named, one question per detail
+    h = 0 if await HV.main() else 1
     COST.report()   # Sasha 232 · what this run spent on the model
-    print(f"\nDEPLOY GATE: {'PASS' if not (a or b or c or d or v or w or e or f or s or t) else 'FAIL'}")
-    return 1 if (a or b or c or d or v or w or e or f or t) else 0
+    # Sasha 249 · ONE VERDICT: the line printed and the exit code are the same expression (the safety suite was printed, never failed)
+    bad = bool(a or b or c or d or v or w or e or f or s or t or h)
+    print(f"\nDEPLOY GATE: {'PASS' if not bad else 'FAIL'}")
+    return 1 if bad else 0
 
 
 if __name__ == "__main__":

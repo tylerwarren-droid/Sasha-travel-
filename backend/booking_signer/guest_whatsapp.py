@@ -749,6 +749,12 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         await STORE.put_state(key, st)
         await deliver({**ch, "opted_out_at": None}, frm, out.text(STOPPED), now)   # said once, then silence
         return out
+    # Sasha 249 · ONE BRAIN, DECIDED FIRST (EU 245 step 1): for an account on the agent (SASHA_WA_BRAIN), everything after STOP /
+    # opt-out and the reminders consent words goes to sasha.turn — empty messages, documents, every button. Only the product
+    # spaces (Tyler's keyword switch: campus / relocate / españa, "sasha" back — kept exactly, Sasha 246) and invitations (no agent
+    # tool yet) stay in front of it. The old HELP text and old-flow buttons never answer a brain account.
+    from . import wa_agent as WA
+    brain = WA.on(account)
     # CR 1 products (backend/products/whatsapp.py): CampusMe / relocation by MODE on this one sandbox number. Not in a
     # mode and no "campus…"/"relocation…" keyword → returns False at once and everything below runs as before.
     from products import whatsapp as PW
@@ -828,12 +834,17 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     handed = (p.get("Body") or "").strip()
     if handed and handed != body and not payload:
         body = handed
-    from . import wa_agent as WA   # Sasha 238 · a PHOTO on the one brain → the same handlers as /s2 (products first, above)
-    if WA.on(account) and WA.is_photo(p) and not payload:
+    # Sasha 238 · a PHOTO on the one brain → the same handlers as /s2 (products first, above)
+    if brain and WA.is_photo(p) and not payload:
         await WA.photo_intake(ch, p, st, out, now)
         await STORE.put_state(key, st)
         await deliver(ch, frm, out, now)
         return out
+    if brain and not body and not payload:   # Sasha 249 · empty, or a file that isn't a photo: the brain answers it, never HELP
+        has_media = int(p.get("NumMedia") or 0) > 0
+        audio = str(p.get("MediaContentType0") or "").startswith("audio")
+        body = ("[they sent a voice note that couldn't be made out]" if audio else
+                f"[they sent a file ({p.get('MediaContentType0') or 'unknown type'}) with no words]" if has_media else "[an empty message]")
     if not body and not payload:
         # Sasha 104 · a voice note or a picture arrives with no words: voice notes are phase 3 (F-3), so say so plainly
         has_media = int(p.get("NumMedia") or 0) > 0
@@ -853,8 +864,14 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         return out
     # Sasha 237 · ONE BRAIN (SASHA_WA_BRAIN): a new message — or a button from the agent's own cards — goes to the same agent as
     # /s2. A button from an OLD flow (in flight) finishes there; invitations stay in front (no agent tool for them yet).
-    from . import wa_agent as WA
-    if WA.on(account) and (not payload or WA.ours(payload)) and not (not payload and _invite_words(body, now)):
+    # Sasha 249 · every button too — except the one the old flow is waiting on (its own nonce: an invitation's yes, a question asked
+    # before the switch). One question, one owner: the flow that asked it.
+    pend_old = st.get("pending") or {}
+    try:
+        old_owns = bool(payload and pend_old.get("kind") and _payload_ok(pend_old, payload))
+    except Exception:
+        old_owns = False
+    if brain and not old_owns and not (not payload and _invite_words(body, now)):
         await WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip(),
                             voice_in=bool(heard))   # Sasha 238 · a voice note in → a voice note back
         await STORE.put_state(key, st)

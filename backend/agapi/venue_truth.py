@@ -30,8 +30,7 @@ ENGINE_OP = "venue.profile"           # CR 89 (agapi v1.6.0, 12 Oct) — was "di
 FAMILY = "venues"
 TTL_S = 24 * 3600
 ENGINE_TIMEOUT_S = 75.0
-ASK_FILL = ("Want me to fill it in now so you just tap confirm on your phone, or shall I send them the request and let you know "
-            "when they reply?")
+from app.agent.voice import ASK_BOOK as ASK_FILL   # Sasha 249 · the one booking question lives in her voice (app/agent/voice.py)
 FILLABLE = ("form", "own_engine", "widget")            # the venue's own booking form / engine: rung 2
 PREPARED = FILLABLE + ("whatsapp",)                    # prepared by venue.prepare_booking: a form to confirm, a WhatsApp to send
 REQUESTS = ("email", "whatsapp")                       # a request they answer

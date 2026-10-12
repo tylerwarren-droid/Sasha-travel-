@@ -52,7 +52,9 @@ async def main() -> bool:
     p = await VT.profile(dict(HAMMAM))
     ch = p.get("channel") or {}
     check("(b) its own booking engine, from the engine", ch.get("kind") == "own_engine" and "madridreservas" in str(ch.get("url")), str(ch))
-    check("(b) the question, word for word", ch.get("ask") == VT.ASK_FILL and VT.ASK_FILL.startswith("Want me to fill it in now so you just tap confirm on your phone"))
+    from app.agent import voice as V
+    check("(b) the question, word for word (her voice, Sasha 249)", ch.get("ask") == VT.ASK_FILL == V.ASK_BOOK
+          and V.ASK_BOOK == "I'll book it. Want a prefilled form you just confirm, or shall I handle it and let you know?")
 
     class GW:
         STORE = None
@@ -75,9 +77,12 @@ async def main() -> bool:
         q = await VN._engine_route(ctx, {}, rd, res, at, datetime.now(timezone.utc), None, ch, HAMMAM)
         check("(b) asks before acting", q.get("status") == "choose_route" and q.get("ask") == VT.ASK_FILL
               and [o["route"] for o in q["options"]] == ["page", "email"], str(q)[:200])
-        held = await VN._engine_route(ctx, {}, rd, res, at, datetime.now(timezone.utc), "page", ch, HAMMAM)
-        check("(b) 'fill it now' → read back first, nothing sent", held.get("status") == "awaiting_yes" and VN._HELD[ctx.account]["rung"] == "prepared")
-        out = await VN._book_inner(ctx, VN._HELD[ctx.account], {"said": "yes"}, "Hammam Al Ándalus", "prepared")
+        check("(b) its two answers are her voice's", [o["title"] for o in q["options"]] == ["Prefilled form", "Handle it"])
+        out = await VN._engine_route(ctx, {}, rd, res, at, datetime.now(timezone.utc), "page", ch, HAMMAM)
+        # Sasha 249 · ONE QUESTION: "prefilled form" is the go-ahead — the form goes on their screen, no second yes
+        check("(b) 'prefilled form' → on their screen at once, no second yes", out.get("status") in ("page_on_phone", "page_link")
+              and out.get("booked") is False and ctx.account not in VN._HELD, str(out)[:200])
+        check("(b) the short confirmation, in her voice", str(out.get("say", "")).startswith(V.DONE_FORM) and not V.check([out["say"]]), str(out.get("say")))
         prep = out.get("prepared") or {}
         check("(b) ready to confirm on the phone (venue.prepare_booking), every detail with it", "agapi.test/prepared/madrid.hammamalandalus.com" in str(prep.get("url"))
               and prep.get("prepared_by") == "venue.prepare_booking" and {"Day", "Time", "People", "Name", "Mobile"} <= {f["label"] for f in prep.get("fields") or []}, str(prep)[:240])

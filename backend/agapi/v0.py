@@ -413,7 +413,8 @@ async def search_venues(ctx: Ctx, a: dict) -> dict:
             await VT.enrich(sited)
             last[2]["venues"] = [VN.card_for_model(c) for c in cards]
             VN.remember_cards(ctx.account, cards)
-        if ctx.surface == "s2" and last[2].get("preset"):   # Sasha 221 · /s2: a fresh page (a reload, a rehearsal) shows those SAME cards again — still no new search
+        from app.agent.sasha import s1_parity   # Sasha 249 · /next under parity too (248: a repeat within 20 min showed no cards there)
+        if (ctx.surface == "s2" or s1_parity()) and last[2].get("preset"):   # Sasha 221 · /s2: a fresh page (a reload, a rehearsal) shows those SAME cards again — still no new search
             return {**{k: last[2][k] for k in ("venues", "find", "preset", "ribbon") if k in last[2]},
                     "note": "these are already on their cards — pick from them; no new search"}
         return {"venues": last[2]["venues"], "note": "these are already on their cards — pick from them; no new search"}

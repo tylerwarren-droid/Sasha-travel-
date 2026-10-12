@@ -12,9 +12,17 @@ import { placeFacts, photoOf, sourceWord } from '@/lib/place-view.mjs'
 
 type Ev = Record<string, any>   // eslint-disable-line @typescript-eslint/no-explicit-any
 const GOLD = '#E8B923'
+// Sasha 249 · the open sheet outlives a re-render: her turn re-rendering the cards (a new key → a remount) never closes the sheet
+// they're reading. Cleared only when they close it (or open another).
+let OPEN_SHEET: string | null = null
 
 export function PlaceCard({ card: shown, onBook, tone = 'dark', badge }: { card: Ev; onBook: (name: string, placeId: string) => void; tone?: 'dark' | 'light'; badge?: string | null }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpenNow] = useState(() => !!shown?.place_id && OPEN_SHEET === shown.place_id)
+  const setOpen = (v: boolean) => {
+    if (v) OPEN_SHEET = shown?.place_id ?? null
+    else if (OPEN_SHEET === shown?.place_id) OPEN_SHEET = null
+    setOpenNow(v)
+  }
   // the venue engine's read of their site may land after the search (it's never waited for): the card asks once and updates
   const [fresh, setFresh] = useState<Ev | null>(null)
   useEffect(() => {

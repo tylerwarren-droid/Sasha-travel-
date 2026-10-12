@@ -63,34 +63,9 @@ class RealVenues(unittest.TestCase):
             self.assertIn(b"Nothing was sent", r.body)
 
 
-class WhatsAppNewNumber(unittest.TestCase):
-    def test_a_new_number_gets_its_own_account_and_its_message_is_answered(self):
-        from booking_signer import guest_whatsapp as GW, invitations as IV
-        asyncio.set_event_loop(asyncio.new_event_loop())
-        saved = (GW.STORE, GW._spawn, IV.STORE)
-        GW.STORE, IV.STORE = GW.MemoryGuestStore(), IV.MemoryInviteStore()
-        spawned = []
-        GW._spawn = lambda coro: (spawned.append(coro.__name__), coro.close())
-
-        async def make(origin, ip):
-            return {"account_id": "g-wa", "email": "x", "password": "y"}, None
-        try:
-            with mock.patch.object(GA, "create_guest", make), mock.patch.object(GW, "guest_numbers", lambda: {"+14155238886"}):
-                async def no_venue(sender):
-                    return False
-                out = asyncio.get_event_loop().run_until_complete(GW.dispatch(
-                    {"From": "whatsapp:+34600111222", "To": "whatsapp:+14155238886", "Body": "spa in Madrid"}, no_venue))
-                ch = asyncio.get_event_loop().run_until_complete(GW.STORE.channel_for(GW.wa_key("+34600111222")))
-                stop = asyncio.get_event_loop().run_until_complete(GW.dispatch(
-                    {"From": "whatsapp:+34600999888", "To": "whatsapp:+14155238886", "Body": "STOP"}, no_venue))
-                none = asyncio.get_event_loop().run_until_complete(GW.STORE.channel_for(GW.wa_key("+34600999888")))
-        finally:
-            GW.STORE, GW._spawn, IV.STORE = saved
-        self.assertEqual(out, "")                                   # answered as a turn, not the "link your account" wall
-        self.assertEqual((ch["account_id"], ch["consent_wording_version"]), ("g-wa", "v0"))
-        self.assertFalse(GW.consent_at_least("v0", 3))              # never a proactive first message
-        self.assertEqual(spawned, ["_turn"])
-        self.assertIsNone(none)                                     # STOP from a stranger creates nothing
+# Sasha 253 · item 5 — RETIRED by Tyler's decision (mailbox 807): WhatsAppNewNumber (a new number got its own guest account and its
+# message was answered). An unlinked number now gets ONE line telling it to link at /you, and no account is made:
+# tests/test_s253_one_brain_all.py Unlinked pins that.
 
 
 if __name__ == "__main__":

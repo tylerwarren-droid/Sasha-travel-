@@ -11,8 +11,7 @@ import unittest
 from datetime import datetime, timezone
 from unittest import mock
 
-from booking_signer import call_store as CS, guest_whatsapp as GW, inbound_phone as IP, written as W
-from tests import test_guest_whatsapp_s75 as TG
+from booking_signer import call_store as CS, inbound_phone as IP, written as W
 
 NOW = datetime(2026, 10, 2, 10, 0, tzinfo=timezone.utc)
 A, B = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
@@ -94,33 +93,6 @@ class Filing(unittest.TestCase):
         got = run(W.file("rcv-2", "email", "r@botavara.es", None, "Sobre K-HH42: el sábado 3 de octubre solo tenemos a las 22:30 para 2.", NOW))
         self.assertEqual(got["result"], "proposed")
         self.assertEqual(IP.STORE.calls.trip_items["t-bota"]["status"], "proposed")
-
-
-class OnWhatsApp(TG.Base):
-    def setUp(self):
-        super().setUp()
-        self.link()
-        run(GW.STORE.put_state(GW.wa_key(TG.GUEST), {"history": [], "pending": None, "last_inbound_at": TG.NOW, "link_tries": []}))
-        self.ip = IP.STORE
-        calls = CS.MemoryCallStore()
-        calls.trip_items = {"t-hana": {"id": "t-hana", "status": "requested"}}
-        IP.STORE = IP.MemoryInboundStore(calls)
-        IP.STORE.candidates = [{**HANAKURA, "account_id": TG.ACCOUNT}]
-
-    def tearDown(self):
-        IP.STORE = self.ip
-        super().tearDown()
-
-    def test_3_a_forwarded_confirmation_on_whatsapp_is_filed_and_answered(self):
-        self.say("Reenviado: Hanakura — Su reserva está confirmada para el sábado 3 de octubre a las 21:00, 2 personas. ¡Le esperamos!")
-        self.assertEqual(self.bodies()[-1], "✅ Confirmed in writing: Hanakura, Saturday 3 October. I've filed their confirmation on it (forwarded by you).")
-        self.assertEqual(IP.STORE.calls.trip_items["t-hana"]["status"], "confirmed")
-        self.assertEqual(GW.api.calls, [])                                         # no search, nothing booked
-
-    def test_a_new_request_is_never_taken_for_a_forward(self):
-        self.say("Dinner for 2 on Saturday 3 October at 21:00 in Chamberí please, your booking help is great")
-        self.assertIn("/api/booking/venues/find", self.api_paths())
-        self.assertEqual(IP.STORE.rows, {})
 
 
 if __name__ == "__main__":

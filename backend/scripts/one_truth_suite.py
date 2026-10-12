@@ -66,6 +66,14 @@ T = {   # invariant → (what it holds, the test classes that hold it)
              "tests.test_s253_venue_gaps.G8HotelOnTheLadder", "tests.test_s253_venue_gaps.G8OnWhatsApp",
              "tests.test_s253_venue_gaps.G14Loyalty", "tests.test_s253_venue_gaps.G14Luxury",
              "tests.test_s253_venue_gaps.OldS1Untouched"]),
+    # Sasha 253 · item 5 (Tyler, mailbox 807/809): every account's WhatsApp to the one brain, no switch; an unlinked number gets one
+    # /you line and no guest account; STOP / reminders / spaces / invites / LINK / G3 / the demos (until G11) stay in front; the
+    # old flow's capability tests moved onto the brain
+    "T25": ("WhatsApp: the one brain for everyone, the old flow retired",
+            ["tests.test_s253_one_brain_all.EveryAccountEveryMessage", "tests.test_s253_one_brain_all.Unlinked",
+             "tests.test_s253_one_brain_all.InFront", "tests.test_s253_wa_caps.Cancel", "tests.test_s253_wa_caps.TheList",
+             "tests.test_s253_wa_caps.Tonight", "tests.test_s253_wa_caps.Cuisine", "tests.test_s253_wa_caps.Receipts",
+             "tests.test_s253_wa_caps.VoiceNote", "tests.test_s253_wa_caps.Rehearsal"]),
 }
 
 _RUNNER = """

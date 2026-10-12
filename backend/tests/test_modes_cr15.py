@@ -153,9 +153,11 @@ class Diligence(Base):
         self.assertIn("isn't certified for sale — so no result is shown", self.bodies()[-1])
 
     def test_a_dinner_while_diligence_is_open_is_sashas(self):
+        TG.stand_in_brain(self)   # Sasha 253 · item 5: Sasha's is the one brain
         self.say("diligence")
         self.say("dinner in Spain for 2 tomorrow at 21:00")
         self.assertEqual(self.calls, [])
+        self.assertEqual(self.brain_saw, ["dinner in Spain for 2 tomorrow at 21:00"])
 
     def test_not_connected_says_so_and_the_sample_is_labelled(self):
         os.environ["AD_PREVIEW_URL"] = ""
@@ -208,17 +210,10 @@ class AdIsOnlyAWholeWord(Base):
             if t == "Ad hoc meeting":
                 continue
             self.assertIsNone(PW._DILIGENCE.match(t), t)
+        TG.stand_in_brain(self)   # Sasha 253 · item 5: Sasha's is the one brain
         self.say("Ad hoc meeting tomorrow with the team")                  # "ad" as a word, but not a lookup: Sasha's
         self.assertNotIn("Applied Diligence", self.said())
-
-    def test_sashas_open_question_wins_over_a_bare_ad(self):
-        self.say("dinner for 2 in Chamberí on Saturday at 21:00")             # Sasha's own pending (cards)
-        pend = run(GW.STORE.get_state(GW.wa_key(TG.GUEST)))["pending"]
-        self.assertEqual(pend["kind"], "cards")
-        self.say("ad check TotalEnergies in France")
-        self.assertEqual(self.calls, [])                                     # not the AD mode while she asks
-        self.say("diligence")                                                # the full word still switches, as every mode word does
-        self.assertIn("Applied Diligence — PREVIEW 🔎", self.bodies()[-1])
+        self.assertEqual(self.brain_saw, ["Ad hoc meeting tomorrow with the team"])
 
 
 class CapAndPerson(Base):

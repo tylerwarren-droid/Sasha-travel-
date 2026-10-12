@@ -69,7 +69,7 @@ class Trip(T13.Base):
         self.assertTrue(all(d.get("date") for d in itin["days"]))
         self.assertTrue(message.startswith("from "))
         self.assertIn("Your “Move to Madrid” trip is on your account", self.said())
-        self.assertEqual(len(self.offer_requests()), 1)                 # then Sasha's own flight flow, as before
+        self.assertEqual(self.brain_saw, ["flights from London to Madrid on 2027-03-01 for 1"])   # then Sasha's turn (the one brain)
 
 
 if __name__ == "__main__":

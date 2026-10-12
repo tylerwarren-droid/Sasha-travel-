@@ -1,7 +1,14 @@
 """Sasha 206 (EU 186 R4) · WHATSAPP IN THE DEPLOY GATE — offline, the real WhatsApp turn (fake sender, memory stores, no model):
 the strict spaces on WhatsApp (14 tests un-skipped and rewritten to the strict rule — two still skipped for a REAL defect,
 listed here), the payment result reaching the phone (R1), no turn twice for one MessageSid (R2), and the core guest pipeline.
-Any failure fails the gate; skips are listed, never hidden."""
+Any failure fails the gate; skips are listed, never hidden.
+
+Sasha 253 · item 5 — ONE BRAIN FOR EVERYONE: there is no SASHA_WA_BRAIN any more, so these modules run on the brain (it was the
+old flow here). The FRONT checks stay as they were (webhook, LINK, the onboarding line, the venue path, STOP, the spaces, R1, R2);
+the old flow's checks were replaced by their brain twins: the handed sentence reaches the brain (one_sasha_cr10, trip_cr13,
+cross_channel_cr20 — stood in at wa_agent.agent_turn), the old card / question / cancel checks of guest_whatsapp_s75 Turns by
+test_s253_wa_caps (a scripted model through the real turn), and the routing itself by test_s253_one_brain_all, test_wa_one_brain
+and test_s252_g3 (Sasha's own open questions)."""
 from __future__ import annotations
 
 import os
@@ -12,7 +19,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.flight_suite import RESULTS, ok  # noqa: E402
 
 MODULES = ["tests.test_one_sasha_cr10", "tests.test_trip_cr13", "tests.test_cross_channel_cr20", "tests.test_finder_cr35",
-           "tests.test_whatsapp_r1_r2_s206", "tests.test_guest_whatsapp_s75"]
+           "tests.test_whatsapp_r1_r2_s206", "tests.test_guest_whatsapp_s75",
+           # Sasha 253 · item 5: the one brain for everyone — its routing, Sasha's own questions, the old flow's capabilities on it
+           "tests.test_s253_one_brain_all", "tests.test_wa_one_brain", "tests.test_s252_g3", "tests.test_s253_wa_caps"]
 
 
 _RUNNER = """
@@ -45,7 +54,7 @@ def main() -> int:
         ok(f"WHATSAPP {tid.split('tests.')[-1]}", False, why[:180])
     passed = res["ran"] - len(res["bad"]) - len(res["skipped"])
     ok(f"WHATSAPP: {passed} tests passed (spaces on WhatsApp, the payment result to the phone, one turn per MessageSid, the guest "
-       f"pipeline)", res["ran"] > 0 and not res["bad"], f"{res['ran']} run")
+       f"pipeline, the one brain for everyone)", res["ran"] > 0 and not res["bad"], f"{res['ran']} run")
     for tid, why in res["skipped"]:
         print(f"   SKIPPED · {tid.split('tests.')[-1]} — {why[:180]}", flush=True)
     mine = RESULTS[start:]

@@ -49,6 +49,7 @@ class Relocation(TR.Flow):
         self.assertTrue(r["response"].endswith(self.bodies()[-1]))
 
     def test_a_file_finished_on_one_channel_is_not_resumed_from_the_others_old_copy(self):
+        TG.stand_in_brain(self)   # Sasha 253 · item 5: outside the space, "me" is the one brain's
         self.start()
         web(self, mode="relocation")
         web(self, "sasha")                                                     # dropped on the laptop
@@ -114,16 +115,7 @@ class BookingInsideAProduct(TR.Flow):
 
     def setUp(self):
         super().setUp()
-        self.found, self.saved_find = [], GW._find
-
-        async def find(ctx, f, draft):
-            self.found.append((f, draft, (ctx.get("p") or {}).get("Body") if isinstance(ctx.get("p"), dict) else None))
-            ctx["out"].text(f"[venue cards: {f.get('what')} in {f.get('where')} near {f.get('near')}]")
-        GW._find = find
-
-    def tearDown(self):
-        GW._find = self.saved_find
-        super().tearDown()
+        TG.stand_in_brain(self)   # Sasha 253 · item 5: Sasha's side is the one brain now (the product's side is unchanged)
 
     def to_entry(self):
         for t in ("relocation", "first", "me", "myself", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"):
@@ -135,8 +127,8 @@ class BookingInsideAProduct(TR.Flow):
         said = "\n".join(self.bodies()[-3:])
         self.assertIn("in Madrid, near Calle de Ejemplo 12, on Mon 1 Mar 2027 (your entry date)", said)
         self.assertIn("say “relocation” to come back", said)
-        (f, draft, _), = self.found                                               # Sasha's OWN booking flow, with the context
-        self.assertEqual((f["where"], f.get("country"), f.get("near")), ("Madrid", "ES", "Calle de Ejemplo 12"))
+        # Sasha's turn (the one brain), handed the request WITH the product's context
+        self.assertEqual(self.brain_saw, ["book me a 60-minute massage in Madrid near Calle de Ejemplo 12 on 2027-03-01"])
         self.say("relocation")
         self.assertTrue((self.bodies() + [c for c, _ in GW.SENDER.contents])[-1].startswith("Back to your EX-01.")
                         or GW.SENDER.contents[-1][0].startswith("Back to your EX-01."))   # CR 52 · the say-back carries its buttons

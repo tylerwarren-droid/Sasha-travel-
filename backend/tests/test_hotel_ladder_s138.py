@@ -10,8 +10,7 @@ import unittest
 from datetime import date
 from urllib.parse import parse_qs, urlsplit
 
-from booking_signer import guest_whatsapp as GW, slot_link as SL, venue_read as V
-from tests import test_guest_whatsapp_s75 as TG
+from booking_signer import slot_link as SL, venue_read as V
 
 
 def read_with(link: str) -> dict:
@@ -67,61 +66,3 @@ class Rehearsal1(unittest.TestCase):
         self.assertEqual(link.url, "https://thehatmadrid.com/contacto/?lang=es")   # Google's tracking dropped, nothing added
         self.assertIn("booking through Mews on their own site", link.source_label)
 
-
-class OnWhatsApp(TG.Base):
-    def setUp(self):
-        super().setUp()
-        self.link()
-        self.links, api = [], GW.api
-
-        async def fake(account, method, path, body=None, timeout=90.0):
-            if path == "/api/booking/venues/read":
-                return 200, {"read_id": "r-h", "venue": "Hotel Test", "country": "ES", "listing": {"name": "Hotel Test Madrid"}, "say": "x", "facts": [],
-                             "rungs": [{"rung": "link", "available": True, "fact_index": 1, "value": "SynXis"},
-                                       {"rung": "email", "available": True, "fact_index": 2, "value": "res@hoteltest.es"}]}
-            if path == "/api/booking/links":
-                self.links.append(body)
-                return 200, {"link_id": "l-h", "platform": "SynXis", "slot_filled": False, "prefill_tried": True,
-                             "url": "https://be.synxis.com/?hotel=1&arrive=2026-10-20&depart=2026-10-22&adult=2&rooms=1",
-                             "read_back": {"lines": ["Hotel Test books rooms through its own booking engine (SynXis)."]}}
-            return await api(account, method, path, body, timeout)
-        fake.calls = api.calls
-        GW.api = fake
-        self.addCleanup(setattr, GW, "api", api)
-
-    def test_book_with_hotel_sends_its_own_engine_with_the_stay(self):
-        self.say("a hotel in Madrid from 20 to 22 October for 2")
-        _, cards = GW.SENDER.contents[-1]
-        self.say("x", payload=cards[0][1])
-        body, choice = GW.SENDER.contents[-1]
-        self.assertEqual([t for t, _ in choice], ["Test booking", "Book with hotel"])
-        self.say("Book with hotel", payload=choice[1][1])
-        said = "\n".join(self.bodies())
-        self.assertIn("They book through SynXis. I'll send their page to your phone — tap, then book.", said)   # Sasha 161
-        self.assertEqual(self.links[0]["nights"], 2)
-        self.assertIn("One tap: Hotel Test Madrid's own booking engine (SynXis).", said)
-        self.assertIn("https://be.synxis.com/?hotel=1&arrive=2026-10-20", said)
-
-    def test_a_call_says_the_stay_in_spanish_in_spain(self):
-        self.say("a hotel in Madrid from 20 to 22 October for 2")
-        d = (TG.run(GW.STORE.get_state(GW.wa_key(TG.GUEST))).get("pending") or {}).get("draft") or {}
-        self.assertEqual(d["what"]["activity_venue_lang"], "una habitación para 2 noches (salida el 2026-10-22)")
-
-
-class EngineCheck(TG.Base):
-    """Sasha 139 · the founder's replies per hotel link are recorded, not read as a new request."""
-
-    def test_answers_are_recorded_in_order_or_by_number(self):
-        self.link()
-        hotels = [{"n": 1, "name": "UMusic", "engine": "Neobookings"}, {"n": 2, "name": "The Hat", "engine": "Mews"},
-                  {"n": 3, "name": "The Signature", "engine": "D-Edge"}]
-        TG.run(GW.STORE.put_state(GW.wa_key(TG.GUEST), {"history": [], "pending": {"kind": "engine_check", "at": TG.NOW.isoformat(),
-                                                                                    "hotels": hotels}, "last_inbound_at": TG.NOW, "link_tries": []}))
-        self.say("not filled")
-        self.assertEqual(self.bodies()[-1], "Noted — UMusic (Neobookings): not filled. 2 to go.")
-        self.say("3 filled")
-        self.say("not filled")
-        self.assertEqual(self.bodies()[-1], "Noted — The Hat (Mews): not filled. That's all 3 — thank you.")
-        p = TG.run(GW.STORE.get_state(GW.wa_key(TG.GUEST)))["pending"]
-        self.assertEqual(p["kind"], "engine_check_done")
-        self.assertEqual({k: v["answer"] for k, v in p["answers"].items()}, {"1": "not filled", "3": "filled", "2": "not filled"})

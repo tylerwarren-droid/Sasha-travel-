@@ -6,13 +6,11 @@ cached by its website; a recent read of the same listing is reused (its Google f
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 import unittest
 from unittest import mock
 
 from booking_signer import guest_whatsapp as GW, style as ST
-from tests import test_guest_whatsapp_s75 as TG
 
 
 class Photos(unittest.TestCase):
@@ -47,25 +45,6 @@ class Photos(unittest.TestCase):
         self.assertEqual(list(ready), ["f"])
         self.assertEqual(len(late), 1)
         self.assertLess(took, 0.3)
-
-
-class Cards(TG.Base):
-    def test_the_cards_go_within_the_budget_and_late_photos_follow(self):
-        self.link()
-        GW.PHOTO_CACHE.clear()
-
-        async def page_text(http, url, resolve):
-            await asyncio.sleep(5)
-            return {"image": "https://x/og.jpg"}
-        cands = [{**c, "website": f"https://site{i}.example"} for i, c in enumerate(TG.CANDS)]
-        with mock.patch.object(ST, "page_text", page_text), mock.patch.object(TG, "CANDS", cands), \
-                mock.patch.dict(os.environ, {"SASHA_PHOTO_WAIT_S": "0.05"}):
-            t = time.perf_counter()
-            self.say("dinner for 2 in Chamberí on Saturday at 9")
-            took = time.perf_counter() - t
-        self.assertLess(took, 1.0)                                   # not the 5 s the photos would take
-        self.assertEqual(GW.SENDER.contents[-1][0], "Which one?")
-        self.assertIn("_late_photos", self.spawned)
 
 
 class ReadReuse(unittest.TestCase):

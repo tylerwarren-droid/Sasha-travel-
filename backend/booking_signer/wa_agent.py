@@ -2,7 +2,7 @@
 sasha.turn_with_quiver(surface="wa"): S2's tools, wrappers, persona (+ S2.WA_NOTE), guards and the ONE yes rule — and its events
 are drawn for WhatsApp here (render). guest_whatsapp keeps identity, STOP/START, reminders words, products and the 24-hour rule.
 
-    SASHA_WA_BRAIN = old (default: today's path exactly) | agent (everyone) | agent_for:<account id>,<account id>…
+Sasha 253 · item 5: the brain answers EVERY linked account's WhatsApp — no switch (SASHA_WA_BRAIN and its agent_for list are retired).
 
 Taps come back as the same turns /s2 sends:
     pick:<place_id>   a venue row in the list picker → the row's name + pick_hint (that card's place_id)
@@ -24,20 +24,8 @@ LIST_ROWS = 10          # WhatsApp's list picker: 10 rows at most
 TITLE, DESC = 24, 72    # its row title / description limits
 
 
-# ── the flag ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-def mode() -> str:
-    return os.getenv("SASHA_WA_BRAIN", "old").strip() or "old"
-
-
-def on(account: Optional[str]) -> bool:
-    m = mode()
-    if m == "agent":
-        return True
-    if m.startswith("agent_for:"):
-        ids = {x.strip().lower() for x in m.split(":", 1)[1].split(",") if x.strip()}
-        return str(account or "").lower() in ids
-    return False
+# Sasha 253 · ONE BRAIN FOR EVERYONE (Tyler, mailbox 807/809): every account's WhatsApp goes to agent_turn below. The per-account
+# switch (SASHA_WA_BRAIN = old | agent | agent_for:<ids>, with mode() / on()) is retired — there is no old path to switch back to.
 
 
 GREETING = re.compile(r"(?i)^\s*(?:(?:hi|hello|hey|hiya|hola|buenas|ola|good\s+(?:morning|afternoon|evening))(?:\s+(?:there|sasha))?|sasha)\s*[!.,?]*\s*$")   # Sasha 246
@@ -637,5 +625,5 @@ def note_audio(token: str) -> Optional[bytes]:
     return n["audio"] if n and time.time() - n["at"] <= NOTE_TTL_S else None
 
 
-__all__ = ["on", "mode", "ours", "message_of", "render", "KIND_MAP", "agent_turn", "split", "photo_intake", "tts_note", "note_audio",
+__all__ = ["ours", "message_of", "render", "KIND_MAP", "agent_turn", "split", "photo_intake", "tts_note", "note_audio",
            "agent_state", "set_agent_state", "unpack_state", "pack_pending", "purpose_of", "is_photo"]

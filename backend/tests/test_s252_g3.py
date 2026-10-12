@@ -15,7 +15,7 @@ from booking_signer import guest_whatsapp as GW, invitations as IV, mailbox as M
 from tests import test_guest_whatsapp_s75 as TG
 
 run, ACCOUNT, GUEST, NOW = TG.run, TG.ACCOUNT, TG.GUEST, TG.NOW
-BRAIN = {"SASHA_WA_BRAIN": f"agent_for:{ACCOUNT}"}
+BRAIN: dict = {}   # Sasha 253 · item 5: no switch any more (SASHA_WA_BRAIN retired) — every account is on the one brain
 
 
 class Api(TG.FakeApi):

@@ -5,7 +5,6 @@ unit suite). Each T names the ONE place a fact is decided and checks every surfa
 """
 from __future__ import annotations
 
-import os
 import unittest
 from unittest import mock
 
@@ -36,7 +35,7 @@ class T9_WhatsAppReachesTheBrain(Base):
             return True
         from booking_signer import wa_brain as WB
         self.ps = [mock.patch.object(WA, "agent_turn", agent), mock.patch.object(WA, "photo_intake", photo),
-                   mock.patch.object(WB, "web_turn", web), mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "agent"})]
+                   mock.patch.object(WB, "web_turn", web)]   # Sasha 253 · item 5: no switch — every account is on the one brain
         for p in self.ps:
             p.start()
         self.link()

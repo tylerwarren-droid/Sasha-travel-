@@ -57,7 +57,9 @@ type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?:
 type TripStatus = { state: string; line: string; refs: string[] }
 const ON_IT = ['booked', 'partly_booked', 'awaiting_payment']
 // Sasha 242 · ONE TOTAL: the basket's figure in euros, the same one Sasha says in the chat
-type TripTotal = { total_eur: number; flights_eur: number; stays_eur: number; stays_are: string; trip_id: string }
+// Sasha 249 · it is the server's trip_figures: + the trip's party (TRAVELLERS) and the lines priced as estimates
+type TripTotal = { total_eur: number; flights_eur: number; stays_eur: number; stays_are: string; trip_id: string; party?: number | null;
+  to_pay_eur?: number; estimate_lines?: { what: string; eur: number | null }[] }
 const eur = (n: number) => `€${Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 type JRow = { id: string; venue: string; date: string | null; time: string | null; status: string; status_words?: string; booking_reference?: string | null; trip_id?: string }
 /** CR 45 · a RelocateMe form on the Move tab: its state, its PDF one tap away (if there is one), where it goes next */
@@ -263,7 +265,7 @@ export default function TripPanel({
   // Sasha 242 · the basket's euro total for THIS trip wins over the planner's dollar estimate (they disagreed: €496 vs $340 hotels)
   const tt = server?.trip_total && server.trip_total.trip_id === (activeTrip ?? server.trip_id) ? server.trip_total : null
   const cb: any = tt ? null : (richItinerary as any).cost_breakdown
-  const pax = partySize(richItinerary, cb, cb?.travellers || travellerCount)   // Sasha 246 · the trip's own party first
+  const pax = partySize(richItinerary, cb, cb?.travellers || travellerCount, tt)   // Sasha 246 · the trip's own party first; 249 · trip_figures' first, null = "—"
   const dayCount = richItinerary.days?.length || 0
   // Where the trip actually begins — the first day that names a city, not necessarily day 1.
   const arrivalCity = (richItinerary.days || []).find((d: any) => d.city)?.city || ''
@@ -280,12 +282,13 @@ export default function TripPanel({
       {alsoHere}
       <div className="lw-summary">
         <div className="lw-sumcell"><span className="k">Days</span><span className="v">{dayCount}</span></div>
-        <div className="lw-sumcell"><span className="k">Travellers</span><span className="v">{pax}</span></div>
+        <div className="lw-sumcell"><span className="k">Travellers</span><span className="v" title={pax ? undefined : 'Sasha will ask how many are going'}>{pax ?? '—'}</span></div>
         {stayCount > 0 && (
           <div className="lw-sumcell"><span className="k">Stays</span><span className="v">{stayCount}</span></div>
         )}
         <div className="lw-sumcell tot">
-          <span className="k">{isBooked ? 'Trip total' : tt ? 'All in' : 'Estimated total'}</span>
+          {/* Sasha 249 · the $ figure is the planner's guess, shown only while the basket has no priced row — said as one */}
+          <span className="k">{isBooked ? 'Trip total' : tt ? 'All in' : "Planner's guess"}</span>
           <span className="amt">{tt ? eur(tt.total_eur) : `$${(richItinerary.estimated_total_usd || 0).toLocaleString()}`}</span>
         </div>
       </div>

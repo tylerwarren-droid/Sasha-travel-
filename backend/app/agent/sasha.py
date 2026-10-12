@@ -7,6 +7,7 @@ AgAPI v0 (agapi/v0.py), called like any outside client — per account, TEST mod
 HARD GUARDS, in code (not the prompt):
   · book's approval is the REAL user message of this turn (agapi.v0.explicit_yes) — the model can't supply it.
   · prices: every € amount in her reply must have come from a tool result this conversation (or the basket now);
+    Sasha 249 · a TRIP TOTAL she states must be trip_figures.total_eur exactly (get_total, read only — never a re-price);
   · booked / paid / confirmed: only when Pacioli (get_status) has a booked row.
   A reply breaking either is sent back to the model once to rewrite; if it still breaks, the offending sentence is replaced.
 
@@ -104,15 +105,60 @@ def _claims(text: str) -> bool:
     return any(_CLAIM.search(x) and not _CONDITIONAL.search(x) for x in re.split(r"(?<=[.!?])\s+", text or ""))
 
 
-def guard_check(text: str, allowed: set, anything_booked: bool) -> List[str]:
-    """What's wrong with a reply, if anything: unproven claims, prices no tool gave."""
+# Sasha 249 · ONE TOTAL — a sentence that states the TRIP's total ("about €496 for the two of you, everything included", "the
+# whole trip comes to €608") is checked against trip_figures.total_eur EXACTLY (to the cent, or that figure said to the euro) —
+# not "within 0.5 % of any number a tool gave", which let €496 stand beside a Trip tab of $1,520. Every other price keeps the
+# per-price allowance (a dinner, a refund, a nightly rate).
+_TOTAL_WORD = re.compile(r"(?i)\b(?:total|all[- ]in|altogether|in all|everything included|all included|comes? to|for everything)\b")
+_TRIP_WORD = re.compile(r"(?i)\b(?:trip|holiday|weekend|getaway|break|flights?|hotels?|stays?|everything|whole|both of you|"
+                        r"(?:two|three|four|five|six|seven|eight|nine|\d) of you)\b")
+_NOT_TRIP_TOTAL = re.compile(r"(?i)\b(?:refund\w*|compensation|claim\w*|subscriptions?|per night|a night|each|dinner|lunch|table|"
+                             r"spa|massage|ticket\w*|tour)\b")
+
+
+def trip_total_figure(sentence: str) -> Optional["re.Match"]:
+    """The € figure a sentence gives as the TRIP's total (the first after the total word, else the last before it) — or None when
+    the sentence doesn't state the trip's total."""
+    s = sentence or ""
+    if not (_TOTAL_WORD.search(s) and _TRIP_WORD.search(s)) or _NOT_TRIP_TOTAL.search(s):
+        return None
+    figs = list(_EUR.finditer(s))
+    for w in _TOTAL_WORD.finditer(s):
+        after = [f for f in figs if f.start() >= w.end()]
+        before = [f for f in figs if f.end() <= w.start()]
+        if after or before:
+            return after[0] if after else before[-1]
+    return None
+
+
+def total_matches(v: float, figures: dict) -> bool:
+    """The figure said IS the trip's total (or the read-back's to-pay figure): to the cent, or that figure said to the euro."""
+    for t in (figures.get("total_eur"), figures.get("to_pay_eur")):
+        if t is None:
+            continue
+        t = float(t)
+        if abs(v - t) < 0.005 or (float(v).is_integer() and abs(v - t) < 1.0):
+            return True
+    return False
+
+
+def guard_check(text: str, allowed: set, anything_booked: bool, figures: Optional[dict] = None) -> List[str]:
+    """What's wrong with a reply, if anything: unproven claims, prices no tool gave. Sasha 249 · `figures` (get_total's
+    trip_figures): a stated trip total must be exactly its total_eur."""
     bad = []
     if _claims(text) and not anything_booked:
         bad.append("claim: it says booked/paid/confirmed but Pacioli has nothing booked")
-    for m in _EUR.findall(text or ""):
-        v = float(m.replace(",", ""))
-        if not any(abs(v - a) <= max(1.0, a * 0.005) for a in allowed):
-            bad.append(f"price: €{m} did not come from a tool")
+    exact = bool(figures and figures.get("total_eur"))
+    for s in re.split(r"(?<=[.!?])\s+", text or ""):
+        tot = trip_total_figure(s) if exact else None
+        for m in _EUR.finditer(s):
+            v = float(m.group(1).replace(",", ""))
+            if tot is not None and m.start() == tot.start():
+                if not total_matches(v, figures):
+                    bad.append(f"total: €{m.group(1)} is not the trip's total — it is €{float(figures['total_eur']):,.2f} (get_total)")
+                continue
+            if not any(abs(v - a) <= max(1.0, a * 0.005) for a in allowed):
+                bad.append(f"price: €{m.group(1)} did not come from a tool")
     return bad
 
 
@@ -260,7 +306,7 @@ def guard_strip(text: str, bad: List[str]) -> str:
     for s in re.split(r"(?<=[.!?])\s+", text or ""):
         if _claims(s) and any(b.startswith("claim") for b in bad):
             out.append("Not booked yet — I'll tell you the moment it is.")
-        elif _EUR.search(s) and any(b.startswith("price") for b in bad):
+        elif _EUR.search(s) and any(b.startswith(("price", "total")) for b in bad):   # Sasha 249 · + a wrong trip total
             out.append("The panel shows the prices.")
         else:
             out.append(s)
@@ -284,13 +330,27 @@ async def _anything_booked(ctx: API.Ctx) -> bool:
     return bool(r.get("ok") and r["result"].get("anything_booked"))
 
 
-async def _basket_amounts(ctx: API.Ctx) -> set:
+async def _basket_amounts(ctx: API.Ctx, figures: Optional[dict] = None) -> set:
+    """The basket's numbers now (get_total and get_trip — both READ ONLY since Sasha 249: no re-price at the turn's end).
+    Sasha 249 · `figures`: filled with get_total's trip_figures, for the exact-total check."""
     out: set = set()
     for name in ("get_total", "get_trip"):
         r = await API.call(ctx, name, {})
         if r.get("ok"):
             _amounts(r["result"], out)
+            if name == "get_total" and figures is not None and isinstance(r["result"], dict):
+                figures.update(r["result"])
     return out
+
+
+async def _trip_figures_now(ctx: API.Ctx) -> Optional[dict]:
+    """Sasha 249 · the trip's figures at this moment (get_total's own function, read only — not through call(), so a guard's read
+    never counts as one of the turn's tool calls) — None without a priced trip."""
+    try:
+        return await API.get_total(ctx, {})
+    except Exception as e:   # no trip, nothing priced, the store down: the per-price check stands alone
+        log.info("[agent] trip figures not read for the guard: %s", type(e).__name__)
+        return None
 
 
 # ── Sasha 210 · ONE VOICE: openers never repeated, the acknowledgement continued, never her internals or a test disclaimer ──
@@ -683,7 +743,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 continue
             if _claims(x) and booked_now is None:
                 booked_now = await _anything_booked(ctx)
-            if guard_check(x, allowed, bool(booked_now)):
+            figs = await _trip_figures_now(ctx) if trip_total_figure(x) else None   # Sasha 249 · a trip total: checked exactly
+            if guard_check(x, allowed, bool(booked_now), figs):
                 held = True
                 break
             out.append(x)
@@ -824,8 +885,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             results.append({"type": "tool_result", "tool_use_id": u.id, "content": json.dumps(model_result(r, u.name), default=str)[:12000]})
         msgs.append({"role": "user", "content": results})
     text = " ".join(said).strip()
-    allowed |= await _basket_amounts(ctx)
-    bad = guard_check("".join(raw), allowed, await _anything_booked(ctx))
+    figures: Dict[str, Any] = {}   # Sasha 249 · get_total's trip_figures (read only — the guard never re-prices the trip)
+    allowed |= await _basket_amounts(ctx, figures)
+    bad = guard_check("".join(raw), allowed, await _anything_booked(ctx), figures or None)
     guard_log = list(bad) + [f"internal dropped: {x}" for x in internal_log]
     if bad:   # once: back to the model to rewrite — honestly (Sasha 205: no length rewrite; a safety trim below)
         spoken = " ".join(said).strip()
@@ -835,7 +897,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                         "it already says) — or an empty reply if that's enough." if spoken else " Reply with the rewritten text only.")})
         r = await client.messages.create(model=FAST_MODEL, max_tokens=400, system=system_now(), messages=msgs)
         new = drop_internal("".join(b.text for b in r.content if b.type == "text").strip())
-        bad2 = guard_check(new, allowed, await _anything_booked(ctx))
+        bad2 = guard_check(new, allowed, await _anything_booked(ctx), figures or None)
         new = new if not bad2 else guard_strip(new, bad2)
         if said and opener_of(new):
             new = strip_openers(new)

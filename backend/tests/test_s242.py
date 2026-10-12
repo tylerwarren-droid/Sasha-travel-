@@ -67,7 +67,12 @@ class OneTotalInEuros(unittest.TestCase):
 
     def test_nothing_until_priced_in_euros(self):
         self.assertIsNone(self._total([]))
-        self.assertIsNone(self._total(self._rows("USD")))
+        # Sasha 249 · updated: this pinned the double decision 249 removes — USD rows used to give None, so the Trip tab fell back
+        # to the planner's $ estimate while the basket had rows (T5). Now they are converted at fx.py's one dated rate.
+        usd = self._total(self._rows("USD"))
+        from booking_signer import fx as FX
+        self.assertEqual(usd["currency"], "EUR")
+        self.assertEqual(usd["total_eur"], round(FX.to_eur(85.0, "USD") + FX.to_eur(98.3, "USD") + FX.to_eur(312.8, "USD"), 2))
         self.assertIsNone(self._total(self._rows(), trip=None))
 
     def test_persona_never_mentions_earlier_drafts(self):

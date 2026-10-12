@@ -493,7 +493,7 @@ async def plan_view(request: Request):
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
     rows = PS.truthful((j or {}).get("reservations") or [] if s == 200 else [])
     return {"plan": await PS.view(account, p, JN.for_journey(rows, p.get("trip_id"))), "plans": await PS.plans(account),
-            **({"trip_total": tt} if (tt := await trip_total(account, p.get("trip_id"))) else {}),
+            **({"trip_total": tt} if (tt := await trip_total(account, p.get("trip_id"), p)) else {}),
             **({"trip_status": ts} if (ts := await trip_status(account, p.get("trip_id"))) else {})}
 
 
@@ -508,22 +508,25 @@ async def trip_status(account: str, trip_id: Optional[str]) -> Optional[dict]:
         return None
 
 
-async def trip_total(account: str, trip_id: Optional[str]) -> Optional[dict]:
+async def trip_total(account: str, trip_id: Optional[str], plan: Optional[dict] = None) -> Optional[dict]:
     """Sasha 242 (EU's walk: chat "€496 ALL IN", Trip tab "Hotels $340") · ONE TOTAL: the Trip tab shows the figure she says — the
-    basket's, in euros, as the rows stand (no re-search, no re-price on a 6-second poll). None until the basket has a price."""
+    basket's, in euros, as the rows stand (no re-search, no re-price on a 6-second poll). None until the basket has a row.
+    Sasha 249 · it IS basket.trip_figures() (the figure get_total gives her and the read-back says), plus the breakdown the tab
+    draws — in euros always (a row in another currency converted at fx.py's one rate, never the planner's $ estimate while the
+    basket has rows), held / booked rows still counted after payment, and the trip's own party (TRAVELLERS)."""
     if not trip_id:
         return None
     from . import basket as BK
-    from agapi.v0 import breakdown
     try:
-        rows = BK.to_book(await BK.items(account, trip_id, ("suggested", "chosen")))
+        rows = await BK.items(account, trip_id, ("suggested", "chosen") + BK.HELD)
     except Exception as e:
         log.info("[ladder_routes] trip total not read: %s", type(e).__name__)
         return None
-    t = BK.total(rows)
-    if not rows or not t["amount"] or t["currency"] != "EUR":
+    f = BK.figures_of(rows, trip_id, plan)
+    if not f["lines"] or f["total_eur"] is None:
         return None
-    return {**breakdown(rows, t["amount"]), "trip_id": trip_id}
+    return {**f["breakdown"], **{k: f[k] for k in ("total_eur", "to_pay_eur", "currency", "lines", "estimate_lines", "unpriced", "party")},
+            "trip_id": trip_id}
 
 
 @router.get("/journeys")

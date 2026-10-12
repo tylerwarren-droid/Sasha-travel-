@@ -541,7 +541,7 @@ export default function S2App() {
       {tab === 'trip' ? (   /* Sasha 236 · the trip board: S1's TripPanel itself (flights, stays, bookings, forms and receipts, from /plan + /journeys) */
         <section className="s2-trip" style={{ flex: 1, overflowY: 'auto', minWidth: 0, padding: '0 12px 16px' }}>
           <style>{TRIP_BOARD_CSS}</style>
-          <TripPanel richItinerary={null} openDays={openDays} travellerCount={1}
+          <TripPanel richItinerary={null} openDays={openDays} travellerCount={0 /* Sasha 249 · no page default: the trip's own party, else "—" */}
             toggleDay={(d: number) => setOpenDays(s => { const n = new Set(s); if (n.has(d)) n.delete(d); else n.add(d); return n })} />
         </section>
       ) : tab === 'keep' ? (   /* Sasha 235 · My Keep: the same screen as S1's /keep — masks, what each was used for and when, add, delete */

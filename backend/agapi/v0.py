@@ -31,6 +31,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 log = logging.getLogger("agapi.v0")
 VERSION = "v0"
+from booking_signer import fx as _FX   # noqa: E402 · Sasha 249 · ONE RATE (fx.py, dated) for every conversion into euros
 
 
 @dataclass
@@ -224,46 +225,72 @@ async def _plan(ctx: Ctx) -> dict:
     return p
 
 
-def _party(p: dict) -> int:
-    pl = p.get("plan") or {}
-    try:
-        return max(1, min(9, int(pl.get("party") or pl.get("travelers") or 2)))
-    except (TypeError, ValueError):
-        return 2
+def _party(p: dict, rows: Optional[List[dict]] = None) -> Optional[int]:
+    """Sasha 249 · ONE PARTY: the plan's party, else its basket rows', else None — the caller ASKS (never a silent 2)."""
+    from booking_signer import basket as BK
+    return BK._party_of(p, rows or [])
 
 
 def _flight_out(r_or_card: dict, row: Optional[dict] = None) -> dict:
+    from booking_signer import basket as BK
     c = r_or_card
+    eur = BK.card_eur(c) if c.get("amount") is not None or c.get("price_eur") is not None else None   # Sasha 249 · in euros, one rate
+    if eur is None and row is not None:
+        eur = BK.eur_of(row)
     return {"offer_id": c.get("id") or (row or {}).get("provider_ref"), "airline": c.get("owner"), "flights": c.get("flights"),
             "from": c.get("from"), "to": c.get("to"), "departs": str(c.get("departs") or ""), "arrives": str(c.get("arrives") or ""),
             "stops": int(c.get("stops") or 0), "duration_minutes": int(c.get("minutes") or 0),
-            "price_eur": round(float(c.get("amount") or (row or {}).get("price_amount") or 0), 2), "test": True,
+            "price_eur": round(float(eur or 0), 2), "test": True,
+            **({"fare": {"amount": c.get("amount"), "currency": c.get("currency"), "rate_as_of": (c.get("fx") or {}).get("as_of")}}
+               if isinstance(c.get("fx"), dict) else {}),   # Sasha 249 · a fare in another currency: the airline's own figure beside it
             **({"state": row["state"]} if row else {})}
 
 
+# Sasha 249 · ONE TOTAL — her instruction travels in the tool RESULT (S1's schemas and prompt stay byte-identical)
+TOTAL_HOW = ("total_eur is THE trip total — the same figure on the Trip tab and in the read-back. When you state the trip's total, "
+             "say exactly this figure (\"about €X\" may round it to the euro); never add, round or restate an earlier total.")
+
+
 async def _total(ctx: Ctx, p: dict) -> dict:
-    """The whole trip's total — the SAME figure booking would charge (basket_book.quote: stays at their provider's rate, the
-    chosen flights re-checked). One source, so a total never changes between asking and booking."""
-    from booking_signer import basket as BK, basket_book as BB
-    q = await BB.quote(ctx.account, "Madrid")
-    if "why" in q and "no longer offered" in q["why"]:   # Sasha 210 · a gone flight is replaced here too, never handed to her
-        await _replace_gone_flights(ctx, p)
-        q = await BB.quote(ctx.account, "Madrid")
-    if "why" in q:
-        raise ToolError("not_priced", q["why"])
-    rows = BK.to_book(await BK.items(ctx.account, p["trip_id"], ("suggested", "chosen")))
-    return {"total_eur": q["eur"], "items": len(rows), "flights_chosen": sum(1 for r in rows if r["kind"] == "flight"),
-            "price_sources": sorted({r.get("price_source") or "unpriced" for r in rows}), "breakdown": breakdown(rows, q["eur"])}
+    """The whole trip's total — Sasha 249 · basket.trip_figures(): the basket's rows as they stand, READ ONLY (no re-search, no
+    re-price, no swap — refresh() runs only in hold_booking). The same figure the Trip tab shows and the read-back says."""
+    from booking_signer import basket as BK
+    f = await BK.trip_figures(ctx.account, p["trip_id"], p)
+    if f["total_eur"] is None:
+        raise ToolError("not_priced", "nothing in this trip is priced yet — propose_trip first")
+    to_book = [l for l in f["lines"] if l["state"] in ("suggested", "chosen")]
+    return {**f, "items": len(f["lines"]), "flights_chosen": sum(1 for l in to_book if l["kind"] == "flight"),
+            "price_sources": sorted({l.get("source") or "unpriced" for l in f["lines"]}), "how": TOTAL_HOW}
 
 
 def breakdown(rows: List[dict], total: float) -> dict:
     """Sasha 212 · ONE TOTAL, its parts on the card only: the flights (quoted) and the stays (an estimate or a test rate) —
-    for the card, never for her to say as separate totals (the model never sees it)."""
-    fl = round(sum(float(r.get("price_amount") or 0) for r in rows if r["kind"] == "flight"), 2)
-    st = round(sum(float(r.get("price_amount") or 0) for r in rows if r["kind"] == "stay"), 2)
-    srcs = {r.get("price_source") for r in rows if r["kind"] == "stay"}
-    return {"total_eur": total, "flights_eur": fl, "flights_are": "quoted", "stays_eur": st,
-            "stays_are": "estimates" if "estimate" in srcs else "test rate" if "placeholder" in srcs else "quoted"}
+    for the card, never for her to say as separate totals (the model never sees it). Sasha 249 · basket.breakdown (one place)."""
+    from booking_signer import basket as BK
+    return BK.breakdown(rows, total)
+
+
+_LEG_BACK = re.compile(r"(?i)\b(?:home|back|return(?:ing)?|inbound)\b")
+
+
+def leg_said(said: Optional[str]) -> Optional[str]:
+    """Sasha 249 · the leg in the person's own words: "home" / "back" / "return" → "back"; anything else → None (not said)."""
+    return "back" if _LEG_BACK.search(said or "") else None
+
+
+def hhmm(t: Any) -> Optional[str]:
+    """Sasha 249 · a time as said or tapped → "HH:MM": "17:48", "17.48", "5:48pm", "5.48 p.m.", "1748", "9am"; else None."""
+    s = str(t or "").strip().lower().replace(".", ":").replace(" ", "")
+    s = s.replace("p:m:", "pm").replace("a:m:", "am").replace("p:m", "pm").replace("a:m", "am")
+    m = re.fullmatch(r"(\d{1,2})(?::?(\d{2}))?(am|pm|h)?", s)
+    if not m:
+        return None
+    h, mm, ap = int(m.group(1)), int(m.group(2) or 0), m.group(3)
+    if ap == "pm" and h < 12:
+        h += 12
+    if ap == "am" and h == 12:
+        h = 0
+    return f"{h:02d}:{mm:02d}" if h < 24 and mm < 60 else None
 
 
 # Sasha 203 · where each place in a trip flies from: its airport (a plan can end in the Mekong Delta, which has none)
@@ -286,26 +313,30 @@ def _best(cards: List[dict], earliest: str = "07:00") -> Optional[dict]:
     sensible = [c for c in cards if earliest <= hh(c) <= "21:00"]
     direct = [c for c in sensible if not c.get("stops")]
     pool = direct or sensible or cards
-    return min(pool, key=lambda c: float(c.get("amount") or 9e9)) if pool else None
+    return min(pool, key=lambda c: float(c.get("price_eur") or c.get("amount") or 9e9)) if pool else None
 
 
-def _options(cards: List[dict], chosen: Optional[dict], n: int = 5) -> List[dict]:
+def _options(cards: List[dict], chosen: Optional[dict], n: int = 5, stored: Optional[Dict[str, str]] = None) -> List[dict]:
     """Sasha 210 · the proposal's range of flights for a leg: the one chosen (Sasha's pick), the cheapest, the fastest, then the
-    next by price — up to n, each tagged; the chosen one marked."""
+    next by price — up to n, each tagged; the chosen one marked. Sasha 249 · OFFERED == BOOKABLE: given `stored` (offer id → its
+    basket row), only offers already in the basket are shown, each with its option_id."""
+    if stored is not None:
+        cards = [c for c in cards if c.get("id") in stored]
     if not cards:
         return []
     picks: List[tuple] = []
     if chosen:
         picks.append((chosen, "Sasha's pick"))
-    picks.append((min(cards, key=lambda c: float(c.get("amount") or 9e9)), "Cheapest"))
+    picks.append((min(cards, key=lambda c: float(c.get("price_eur") or c.get("amount") or 9e9)), "Cheapest"))
     picks.append((min(cards, key=lambda c: int(c.get("minutes") or 9e9)), "Fastest"))
-    picks += [(c, "") for c in sorted(cards, key=lambda c: float(c.get("amount") or 9e9))]
+    picks += [(c, "") for c in sorted(cards, key=lambda c: float(c.get("price_eur") or c.get("amount") or 9e9))]
     out, seen = [], set()
     for c, tag in picks:
         if c.get("id") in seen:
             continue
         seen.add(c.get("id"))
-        out.append({**_flight_out(c), "tag": tag, "chosen": bool(chosen) and c.get("id") == chosen.get("id")})
+        out.append({**_flight_out(c), "tag": tag, "chosen": bool(chosen) and c.get("id") == chosen.get("id"),
+                    **({"option_id": stored[c["id"]]} if stored and c.get("id") in stored else {})})
         if len(out) >= n:
             break
     return out
@@ -323,13 +354,35 @@ async def _search_healed(origin: str, dest: str, day: str, party: int, limit: in
             r = await T.search(origin, dest, d, adults=party, limit=limit)
         except Exception as e:
             r = {"why": f"{type(e).__name__}"}
-        if "why" not in r and [c for c in r.get("cards") or [] if c.get("currency") == "EUR"]:
+        if "why" not in r and _in_eur(r.get("cards") or []):   # Sasha 249 · any fare priceable in euros (converted), not EUR only
             return r, d
         if k == 0 and "why" in r and "token" in r["why"]:
             break   # not configured: no retry will help
         if r.get("outage"):
             return r, day   # Sasha 215 · Duffel not answering (already retried): said as an outage, never "the nearest day"
     return r if "why" in r else {"why": "no flights in euros"}, day
+
+
+def _in_eur(cards: List[dict]) -> List[dict]:
+    """Sasha 249 · CONVERTED AT INGESTION (basket.in_eur): the offers in euros — EUR fares first, as before; a search with none in
+    EUR gives its fares converted at fx.py's one dated rate (said in each one's `fare`), never the planner's $ estimate."""
+    from booking_signer import basket as BK
+    eur = [c for c in cards or [] if c.get("currency") == "EUR"]
+    return BK.in_eur(eur or cards or [])
+
+
+async def _offer_flights(ctx: Ctx, a: dict, cards: List[dict], leg: str, party: int) -> dict:
+    """Sasha 249 · OFFERED == BOOKABLE — the ONE way a flight search (Sasha's own, or /s2's AgAPI source) reaches her: the offers
+    STORED in the trip's basket first (the leg's earlier options marked superseded, never deleted in this turn), THEN shown, each
+    with its option_id. No trip yet → shown, and said: none can be booked until propose_trip."""
+    p = await _latest(ctx)
+    stored: Optional[Dict[str, str]] = None
+    if p:   # the flights shown are the trip's suggestions (the basket), so choose_offer can take any of them
+        ids = await _suggest_flights(ctx, p["trip_id"], cards, a["origin"], a["destination"], a["date"], party, leg)
+        stored = {c["id"]: i for c, i in zip(cards, ids or [])} if ids and len(ids) == len(cards) else None
+    shown = [{**_flight_out(c), **({"option_id": stored[c["id"]]} if stored and c.get("id") in stored else {})} for c in cards]
+    return {"leg": leg, "date": a["date"], "flights": shown, "note": "Duffel TEST fares — nothing is held until book",
+            "stored": bool(p), **({} if p else {"how": "No trip yet, so none of these can be booked: propose_trip first, then pick one."})}
 
 
 async def _suggest_flights(ctx: Ctx, trip_id: str, cards: List[dict], origin: str, dest: str, day: str, party: int,
@@ -347,14 +400,16 @@ async def _suggest_flights(ctx: Ctx, trip_id: str, cards: List[dict], origin: st
 async def search_flights(ctx: Ctx, a: dict) -> dict:
     from booking_signer import travel as T
     party = int(a.get("passengers") or 2)
-    leg = a.get("leg") or "out"
+    leg = a.get("leg") or leg_said(ctx.user_said) or "out"   # Sasha 249 · "flights home" is the back leg, said or not by the model
     r, day = await _search_healed(airport_of(a["origin"]), airport_of(a["destination"]), a["date"], party)
     if r.get("outage"):
         raise unreachable("airline_unreachable")
     if "why" in r:
         raise ToolError("no_flights", r["why"])
     a = {**a, "date": day}   # Sasha 210 · the nearest day with flights, when the day asked had none
-    cards = [c for c in r["cards"] if c.get("currency") == "EUR"] or r["cards"]
+    cards = _in_eur(r["cards"])   # Sasha 249 · in euros at ingestion (before: any currency shown as if euros)
+    if not cards:
+        raise ToolError("no_flights", "no fares that can be priced in euros")
     pref = (a.get("preferences") or "").lower()
     if "direct" in pref or "nonstop" in pref:
         cards = [c for c in cards if not c.get("stops")] or cards
@@ -363,11 +418,7 @@ async def search_flights(ctx: Ctx, a: dict) -> dict:
     elif "evening" in pref:
         cards = [c for c in cards if str(c.get("departs"))[11:13] >= "17"] or cards
     cards = cards[:6]
-    from booking_signer import plan_store as PS
-    p = await _latest(ctx)
-    if p:   # the flights shown are the trip's suggestions (the basket), so choose_offer can take any of them
-        await _suggest_flights(ctx, p["trip_id"], cards, a["origin"], a["destination"], a["date"], party, leg)
-    return {"leg": leg, "date": day, "flights": [_flight_out(c) for c in cards], "note": "Duffel TEST fares — nothing is held until book"}
+    return await _offer_flights(ctx, a, cards, leg, party)   # Sasha 249 · stored, then shown
 
 
 _STAYS: Dict[str, Dict[str, List[dict]]] = {}   # account → city → the Google hotels last shown (swap_stay picks from them)
@@ -396,7 +447,7 @@ async def search_stays(ctx: Ctx, a: dict) -> dict:
     if pref:
         hs = sorted(hs, key=lambda h: -sum(w in f"{h['name']} {h.get('blurb', '')}".lower() for w in re.findall(r"[a-z]{4,}", pref)))
     return {"city": city, "stays": [{"name": h["name"], "stars": h.get("stars"), "about": h.get("blurb"),
-                                     "estimate_eur_per_night": round(float(h.get("price_from") or 0) * 0.92)} for h in hs[:5]],
+                                     "estimate_eur_per_night": round(_FX.to_eur(h.get("price_from") or 0, "USD") or 0)} for h in hs[:5]],   # Sasha 249 · fx.py's one rate
             "note": "estimates from Sasha's hotel list; a booking is a TEST booking (no hotel contacted)"}
 
 
@@ -594,20 +645,27 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
         if "why" in r:
             why.append(f"{leg}: {r['why']}")
             continue
-        cards = [c for c in r["cards"] if c.get("currency") == "EUR"] or r["cards"]
-        ids = await _suggest_flights(ctx, trip_id, cards, o, d, day, party, leg)
+        cards = _in_eur(r["cards"])   # Sasha 249 · in euros at ingestion (converted, never dropped to the $ estimate)
+        if not cards:
+            why.append(f"{leg}: no fares that can be priced in euros")
+            continue
+        ids = await _suggest_flights(ctx, trip_id, cards, o, d, day, party, leg)   # Sasha 249 · STORED before they're shown
         best = _best(cards, "12:00" if leg == "back" else "07:00")
         await BK.choose(ctx.account, ids[cards.index(best)])
         flights[leg] = _flight_out(best)
-        options[leg] = _options(cards, best)
-    q = await BB.quote(ctx.account, origin)
+        options[leg] = _options(cards, best, stored={c["id"]: i for c, i in zip(cards, ids)})
+    # Sasha 249 · ONE TOTAL: the stays priced at their provider once, as they arrive (store_prices — no airline called, nothing
+    # swapped), then the figures READ from the basket: the figure she says now is the Trip tab's and the read-back's
+    why_priced = await BB.store_prices(ctx.account)
+    fig = await BK.trip_figures(ctx.account, trip_id, {"trip_id": trip_id, "plan": itin})
+    q = {"eur": fig["total_eur"]} if fig["total_eur"] is not None else {"why": (why_priced or {}).get("why") or "nothing in this trip is priced yet"}
     hotel = lambda d: (d.get("hotel") or {}).get("name") if isinstance(d.get("hotel"), dict) else d.get("hotel")
-    rows_now = BK.to_book(await BK.items(ctx.account, trip_id, ("suggested", "chosen"))) if "eur" in q else []
-    return {**({"breakdown": breakdown(rows_now, q["eur"])} if "eur" in q else {}), "trip_id": trip_id, "title": itin.get("title"),
+    return {**({"breakdown": fig["breakdown"]} if "eur" in q else {}), "trip_id": trip_id, "title": itin.get("title"),
             "days": [{"day": d.get("day"), "city": d.get("city"), "stay": hotel(d), "title": d.get("title")} for d in days],
             "flight_out": flights.get("out"), "flight_back": flights.get("back"), **({"flight_note": "; ".join(why)} if why else {}),
             "flight_options": options, "party": party,
             "total_eur": q.get("eur") if "eur" in q else None, **({"total_note": q.get("why")} if "why" in q else {}),
+            **({"how_total": TOTAL_HOW} if "eur" in q else {}),
             "prices": "stays at the TEST hotel rate, the flight at its Duffel TEST fare — nothing is booked", "prefetched": used_prefetch,
             **({"keep": kn} if flights and (kn := await _s1_passport(ctx, trip_id, bind=False)) else {})}   # Sasha 228 · said up front
 
@@ -673,6 +731,8 @@ async def _swap_world(ctx: Ctx, p: dict, city: str, name: str) -> dict:
     msg = (f"Plan a {len(days)}-day trip to {plan.get('country') or city} from {start.day} {start.strftime('%B %Y')} for {plan.get('party') or 2} people."
            if start else f"change the hotel in {city}")
     await PS.save(ctx.account, plan, msg, datetime.now(timezone.utc))
+    from booking_signer import basket_book as BB
+    await BB.store_prices(ctx.account)   # Sasha 249 · the new stay priced once, as it arrives
     return {"city": city, "stay": h["name"], "estimate_eur_per_night": h["est_eur"], **(await _total(ctx, await _plan(ctx)))}
 
 
@@ -692,6 +752,8 @@ async def swap_stay(ctx: Ctx, a: dict) -> dict:
         raise ToolError("swap_failed", "the stay couldn't be changed just now")
     new["party"] = plan.get("party")
     await PS.save(ctx.account, {**new, "title": plan.get("title") or new.get("title")}, f"change the hotel in {city}", datetime.now(timezone.utc))
+    from booking_signer import basket_book as BB
+    await BB.store_prices(ctx.account)   # Sasha 249 · the new stay priced once, as it arrives
     p = await _plan(ctx)
     return {"city": city, "stay": a["stay_name"], **(await _total(ctx, p))}
 
@@ -707,7 +769,10 @@ async def check_offer(ctx: Ctx, a: dict) -> dict:
     if st != 200:
         return {"available": False, "reason": T._err(j, st)}
     o = j["data"]
-    return {"available": True, "price_eur": float(o["total_amount"]), "currency": o["total_currency"], "expires_at": o.get("expires_at")}
+    eur = _FX.to_eur(o["total_amount"], o["total_currency"])   # Sasha 249 · in euros at fx.py's one rate (before: any currency as euros)
+    return {"available": True, "price_eur": eur, "currency": o["total_currency"], "expires_at": o.get("expires_at"),
+            **({"fare": {"amount": o["total_amount"], "currency": o["total_currency"], "rate_as_of": _FX.as_of()}}
+               if str(o["total_currency"]).upper() != "EUR" else {})}
 
 
 async def read_booking_route(ctx: Ctx, a: dict) -> dict:
@@ -739,22 +804,45 @@ async def choose_offer(ctx: Ctx, a: dict) -> dict:
 
 async def _find_option(ctx: Ctx, p: dict, a: dict) -> Optional[dict]:
     """Sasha 210 · a flight among the trip's options (the proposal's cards, a search's) by what the person said or tapped:
-    the leg, and the airline and/or departure time ("the British Airways flight out at 08:30"), or the cheapest / fastest."""
+    the leg, and the airline and/or departure time ("the British Airways flight out at 08:30"), or the cheapest / fastest.
+    Sasha 249 · OFFERED == BOOKABLE (the 17:48 fault: "Move our flight home to the 17:48" — offered, then "couldn't find": the leg
+    defaulted to "out" and the time had to be typed HH:MM). Matched on (leg, time): the leg from the person's own words first
+    ("home" / "back" / "return" = back), else the one given, else either leg when the time names one flight; the time as said
+    ("5:48pm", "17.48"); every option shown earlier still matches (superseded rows too — the newest preferred)."""
     from booking_signer import basket as BK
-    leg = a.get("leg") or "out"
-    rows = [r for r in await BK.items(ctx.account, p["trip_id"], ("suggested", "chosen"))
-            if r["kind"] == "flight" and (r.get("slice_key") or "out:").split(":", 1)[0] == leg]
+    said_leg, given_leg = leg_said(ctx.user_said), a.get("leg")
+    every = [r for r in await BK.items(ctx.account, p["trip_id"], ("suggested", "chosen")) if r["kind"] == "flight"]
     snap = lambda r: r.get("snapshot") or {}
-    if a.get("airline"):
-        rows = [r for r in rows if (a["airline"].lower() in str(snap(r).get("owner") or "").lower())] or []
-    if a.get("departs"):
-        hh = str(a["departs"]).strip()[:5].replace(".", ":").zfill(5)
-        rows = [r for r in rows if str(snap(r).get("departs") or "")[11:16] == hh]
+
+    def described(rows: List[dict]) -> List[dict]:
+        if a.get("airline"):
+            rows = [r for r in rows if (a["airline"].lower() in str(snap(r).get("owner") or "").lower())]
+        if a.get("departs"):
+            hh = hhmm(a["departs"]) or str(a["departs"]).strip()[:5].replace(".", ":").zfill(5)
+            rows = [r for r in rows if str(snap(r).get("departs") or "")[11:16] == hh]
+        return rows
+
+    rows: List[dict] = []
+    for leg in [x for x in (said_leg, given_leg) if x] or ([None] if a.get("departs") else ["out"]):   # no leg, no time: out, as before
+        rows = described([r for r in every if leg is None or _row_leg(r) in (leg, None)])
+        if rows:
+            break
+    if not rows and a.get("departs"):   # the time names exactly one flight, on whichever leg it is
+        anywhere = described(every)
+        rows = anywhere if len({_row_leg(r) for r in anywhere}) == 1 else []
     if not rows:
         return None
+    fresh = [r for r in rows if not BK.superseded(r)]
+    rows = fresh or rows   # the newest search's row first; an earlier one still books
     if a.get("pick") == "fastest":
         return min(rows, key=lambda r: int(snap(r).get("minutes") or 9e9))
     return min(rows, key=lambda r: float(r.get("price_amount") or 9e9))   # "cheapest", or the cheapest of the ones described
+
+
+def _row_leg(r: dict) -> Optional[str]:
+    """Sasha 249 · a flight row's leg from its slice ("out:…" / "back:…"); None for a slice with no leg (the cheapest-fare pick)."""
+    sk = str(r.get("slice_key") or "")
+    return "back" if sk.startswith("back:") else "out" if sk.startswith("out:") else None
 
 
 async def save_travellers(ctx: Ctx, a: dict) -> dict:
@@ -781,9 +869,13 @@ async def save_travellers(ctx: Ctx, a: dict) -> dict:
 
 async def hold_booking(ctx: Ctx, a: dict) -> dict:
     """The read-back: every item re-checked (Sherlock) and priced; no money moves. book() binds the yes to its sha256."""
-    from booking_signer import basket_book as BB, passengers as PX
+    from booking_signer import basket as BK, basket_book as BB, passengers as PX
     p = await _plan(ctx)
-    have, need = len(await PX.saved(ctx.account)), _party(p)
+    before = await BK.trip_figures(ctx.account, p["trip_id"], p)   # Sasha 249 · the figure she has said, before the re-check
+    have, need = len(await PX.saved(ctx.account)), before["party"]
+    if need is None:   # Sasha 249 · ONE PARTY: never a silent 2 — asked once
+        raise ToolError("party_unknown", "how many are travelling isn't on the trip — ask them once (e.g. “Just to check — how many of "
+                                         "you are going?”), then read it back")
     if have < need:
         raise ToolError("travellers_missing", f"the airline needs each traveller's full name, title and date of birth — {have} of {need} on file")
     kept = await _s1_passport(ctx, p.get("trip_id"))   # Sasha 228 · S1: the passport, up front (never blocks)
@@ -806,11 +898,17 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
     if "why" in q:
         raise ToolError("not_bookable", q["why"])
     est = any(l.rstrip(")").endswith("(estimate") for l in q["lines"])   # Sasha 211 · real hotels priced as estimates
-    from booking_signer import basket as BK
     rows_now = BK.to_book(await BK.items(ctx.account, p["trip_id"], ("suggested", "chosen")))
+    after = await BK.trip_figures(ctx.account, p["trip_id"], p)   # Sasha 249 · ONE TOTAL: the figures after the re-check
     res = {"breakdown": breakdown(rows_now, q["eur"]),   # Sasha 215 · the re-quote reaches the page: the pill and the total card refresh
            **({"changed": changed} if changed else {}), **({"stays_are_estimates": True} if est else {}), "read_back": [l for l in q["lines"] if not l.startswith("Note:")], "notes": [l for l in q["lines"] if l.startswith("Note:")],
-           "read_back_sha256": q["sha256"], "total_eur": q["eur"], "status": _ST_HELD}   # Sasha 249 · the one status's words
+            "read_back_sha256": q["sha256"], "total_eur": q["eur"], "status": _ST_HELD,   # Sasha 249 · the one status's words
+            "trip_total_eur": after["total_eur"] if after["total_eur"] is not None else q["eur"], "party": after["party"] or need, "how": TOTAL_HOW}
+    was, now = before.get("total_eur"), res["trip_total_eur"]
+    if was and now is not None and abs(float(was) - float(now)) >= 0.005:   # Sasha 249 · the re-check moved it: said once, by her
+        res["total_changed"] = {"from": was, "to": now,
+                                "say": f"The prices moved when I re-checked them: it's €{now:,.2f} now, not €{was:,.2f}."}
+        res["how_total_changed"] = "Say total_changed.say as it is, once, before the read-back."
     if q.get("spoken_flights"):   # Sasha 246 · the spoken read-back names BOTH flights, the outbound first — this line, as it is
         res["say_flights"] = q["spoken_flights"]
         res["how_flights"] = "When you sum it up, say say_flights as it is (both flights, the outbound first)."   # in the result: S1's schema unchanged
@@ -829,15 +927,18 @@ async def _replace_gone_flights(ctx: Ctx, p: dict) -> List[str]:
     """Each chosen flight Duffel no longer offers → the closest departure on the same leg and day, chosen in its place.
     → one plain line per change ("Iberia at 10:35 is gone — Iberia at 11:50 is in its place.")."""
     from booking_signer import basket as BK, basket_book as BB
-    party, out = _party(p), []
-    for r in [x for x in await BK.items(ctx.account, p["trip_id"], ("chosen",)) if x["kind"] == "flight"]:
+    chosen_rows = [x for x in await BK.items(ctx.account, p["trip_id"], ("chosen",)) if x["kind"] == "flight"]
+    party, out = _party(p, chosen_rows), []   # Sasha 249 · ONE PARTY (refresh() refused before this when it's unknown)
+    if party is None:
+        return out
+    for r in chosen_rows:
         v = await BB._validate_flight(ctx.account, r, party)
         if "why" not in v or v.get("outage"):   # Sasha 215 · only a flight Duffel SAID is gone is ever replaced
             continue
         c = BB._card(r)
         day = str(c.get("departs") or r.get("day") or "")[:10]
         res, used = await _search_healed(c.get("from") or "", c.get("to") or "", day, party)
-        cards = [x for x in res.get("cards") or [] if x.get("currency") == "EUR"]
+        cards = _in_eur(res.get("cards") or [])   # Sasha 249 · converted at ingestion, as every search
         if not cards:
             continue
         want = str(c.get("departs") or "")[11:16] or "12:00"
@@ -982,13 +1083,14 @@ async def get_trip(ctx: Ctx, a: dict) -> dict:
     rows = await BK.items(ctx.account, p["trip_id"])
     hotel = lambda d: (d.get("hotel") or {}).get("name") if isinstance(d.get("hotel"), dict) else d.get("hotel")
     return {"trip_id": p["trip_id"], "title": p.get("title"), "start": str(p.get("start") or ""), "end": str(p.get("end") or ""),
-            "party": _party(p), "days": [{"day": d.get("day"), "city": d.get("city"), "stay": hotel(d)} for d in (p.get("plan") or {}).get("days") or []],
+            "party": _party(p, rows), "days": [{"day": d.get("day"), "city": d.get("city"), "stay": hotel(d)} for d in (p.get("plan") or {}).get("days") or []],
             "flights": [_flight_out(r.get("snapshot") or {}, r) for r in rows if r["kind"] == "flight" and r["state"] != "suggested"],
             "stays": [{"name": (r.get("snapshot") or {}).get("name"), "from": r.get("day"), "nights": (r.get("snapshot") or {}).get("nights"),
                        "state": r["state"], "price_eur": r.get("price_amount"), "price_source": r.get("price_source")} for r in rows if r["kind"] == "stay"]}
 
 
 async def get_total(ctx: Ctx, a: dict) -> dict:
+    """Sasha 249 · basket.trip_figures(), read only — the guard calls this at every turn's end, so it must never re-price."""
     return await _total(ctx, await _plan(ctx))
 
 

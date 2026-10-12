@@ -134,8 +134,7 @@ async def _flights_from_agapi(ctx, a: dict, theirs: Dict[str, Any]) -> Optional[
     """reads: AgAPI's offers as Sasha's search_flights result, fed into her basket as her own search does. None → Sasha answers."""
     from agapi import v0 as API
     offers = (theirs.get("result") or {}).get("offers") or [] if theirs.get("ok") else []
-    cards = [_offer_card(o) for o in offers]
-    cards = [c for c in cards if c.get("currency") == "EUR"] or cards
+    cards = API._in_eur([_offer_card(o) for o in offers])   # Sasha 249 · in euros at ingestion (fx.py's one rate), as her own search
     pref = str(a.get("preferences") or "").lower()
     if "morning" in pref:
         cards = [c for c in cards if str(c.get("departs"))[11:13] < "12"] or cards
@@ -144,12 +143,9 @@ async def _flights_from_agapi(ctx, a: dict, theirs: Dict[str, Any]) -> Optional[
     cards = cards[:6]
     if not cards:
         return None                              # nothing from AgAPI (or the nearest-day healing it doesn't do): Sasha's own engine
-    leg, party = a.get("leg") or "out", int(a.get("passengers") or 2)
-    p = await API._latest(ctx)
-    if p:   # the flights shown are the trip's suggestions (the basket), exactly as her own search does
-        await API._suggest_flights(ctx, p["trip_id"], cards, a["origin"], a["destination"], a["date"], party, leg)
-    return {"ok": True, "result": {"leg": leg, "date": a["date"], "flights": [API._flight_out(c) for c in cards],
-                                   "note": "Duffel TEST fares — nothing is held until book"}}
+    leg, party = a.get("leg") or API.leg_said(ctx.user_said) or "out", int(a.get("passengers") or 2)
+    # Sasha 249 · OFFERED == BOOKABLE: the SAME basket, by the same one function as her own search — stored, then shown
+    return {"ok": True, "result": await API._offer_flights(ctx, a, cards, leg, party)}
 
 
 # ── the runner /s2's tool selection installs ───────────────────────────────────────────────────────────────────────────

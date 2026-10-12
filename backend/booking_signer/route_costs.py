@@ -29,11 +29,9 @@ def rate(route: str) -> Optional[float]:
 
 
 def usd_eur() -> Optional[float]:
-    v = os.getenv("SASHA_USD_EUR", "").strip()
-    try:
-        return float(v) if v else None
-    except ValueError:
-        return None
+    """Sasha 249 · fx.py's one rate — only when SET (configured_only): in the cost report an unset rate is unknown, never the default."""
+    from . import fx as FX
+    return FX.rate("USD", configured_only=True)
 
 
 def booking_cost(b: dict) -> dict:

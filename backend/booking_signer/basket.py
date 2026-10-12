@@ -106,14 +106,108 @@ def to_book(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [r for r in rows if r["state"] == "chosen" or (r["kind"] == "stay" and r["state"] == "suggested")]
 
 
+HELD = ("pending_payment", "booked")   # Sasha 249 · rows already paid for (or being paid): still the trip's, still in its total
+
+
+def counted(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sasha 249 · the rows the trip's total counts: what "book it" would book, AND what is held or booked already — so the Trip tab
+    keeps the same figure after payment (before, the rows left to_book() and the tab fell back to the planner's $ estimate)."""
+    return to_book([r for r in rows if r.get("state") in ("suggested", "chosen")]) + [r for r in rows if r.get("state") in HELD]
+
+
+def eur_of(r: Dict[str, Any]) -> Optional[float]:
+    """Sasha 249 · a row's price in euros — fx.py's one dated rate for a row stored in another currency; None when unpriced or
+    there's no rate (never a guess). Rows are stored in euros since 249 (converted at ingestion); this keeps an older row honest."""
+    if r.get("price_amount") is None:
+        return None
+    from . import fx as FX
+    return FX.to_eur(r["price_amount"], r.get("price_currency") or "EUR")
+
+
 def total(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """ONE total over what would be booked — said with where each price comes from (an estimate is never called a price)."""
-    rs = to_book(rows)
-    cur = {r.get("price_currency") for r in rs if r.get("price_amount") is not None}
-    return {"amount": round(sum(float(r["price_amount"]) for r in rs if r.get("price_amount") is not None), 2),
-            "currency": cur.pop() if len(cur) == 1 else ("mixed" if cur else None),
-            "unpriced": [r["id"] for r in rs if r.get("price_amount") is None],
+    """ONE total over what would be booked — said with where each price comes from (an estimate is never called a price).
+    Sasha 249 · in EUROS always (fx.py's one rate; a price with no rate is `unpriced`, never added in its own currency), and it
+    counts held / booked rows too (counted()) — the same figure before and after payment."""
+    rs = counted(rows)
+    eur = [(r, eur_of(r)) for r in rs]
+    priced = [e for _, e in eur if e is not None]
+    return {"amount": round(sum(priced), 2), "currency": "EUR" if priced else None,
+            "unpriced": [r.get("id") for r, e in eur if e is None],
             "sources": sorted({r.get("price_source") or "unpriced" for r in rs}), "count": len(rs)}
+
+
+def breakdown(rows: List[Dict[str, Any]], amount: float) -> Dict[str, Any]:
+    """Sasha 212 · ONE TOTAL, its parts on the card only: the flights (quoted) and the stays (an estimate or a test rate).
+    Sasha 249 · moved here from agapi/v0 (it re-exports it) so the Trip tab and the chat build it from the same rows, in euros."""
+    rs = counted(rows)
+    fl = round(sum(eur_of(r) or 0 for r in rs if r["kind"] == "flight"), 2)
+    st = round(sum(eur_of(r) or 0 for r in rs if r["kind"] == "stay"), 2)
+    srcs = {r.get("price_source") for r in rs if r["kind"] == "stay"}
+    return {"total_eur": amount, "flights_eur": fl, "flights_are": "quoted", "stays_eur": st,
+            "stays_are": "estimates" if "estimate" in srcs else "test rate" if "placeholder" in srcs else "quoted"}
+
+
+def _party_of(plan: Optional[Dict[str, Any]], rows: List[Dict[str, Any]]) -> Optional[int]:
+    """Sasha 249 · ONE PARTY: the plan's (how many they said), else its basket rows', else None — the caller ASKS; never a silent 1 or 2."""
+    pl = (plan or {}).get("plan") if isinstance((plan or {}).get("plan"), dict) else (plan or {})
+    for v in (pl.get("party"), pl.get("travellers"), pl.get("travelers")):
+        try:
+            if v is not None and 1 <= int(v) <= 9:
+                return int(v)
+        except (TypeError, ValueError):
+            continue
+    parties = [int(r["party"]) for r in rows if str(r.get("party") or "").isdigit() and 1 <= int(r["party"]) <= 9]
+    return max(parties) if parties else None
+
+
+def _what(r: Dict[str, Any]) -> str:
+    s = r.get("snapshot") or {}
+    if r.get("kind") == "flight":
+        return " ".join(str(x) for x in (s.get("owner"), s.get("flights"), f"{s.get('from') or ''}→{s.get('to') or ''}") if x).strip()
+    if r.get("kind") == "stay":
+        return f"{s.get('name') or 'Stay'}" + (f", {s['nights']} night{'s' if s['nights'] != 1 else ''}" if s.get("nights") else "")
+    return str(s.get("name") or r.get("kind") or "")
+
+
+def figures_of(rows: List[Dict[str, Any]], trip_id: Optional[str], plan: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Sasha 249 · THE TRIP'S FIGURES, pure (no read, no write, no re-price): the one total the chat, the Trip tab and the read-back
+    all say — {total_eur, to_pay_eur, lines, party, currency: "EUR", estimate_lines, unpriced, trip_id, breakdown}. `to_pay_eur` is
+    what a yes would pay now (the read-back's figure); it equals total_eur until something is paid."""
+    rs = counted(rows)
+    t = total(rows)
+    pay = total([r for r in rows if r.get("state") in ("suggested", "chosen")])
+    lines = []
+    for r in rs:
+        e = eur_of(r)
+        line = {"id": r.get("id"), "kind": r.get("kind"), "state": r.get("state"), "what": _what(r), "day": r.get("day"),
+                "eur": e, "source": r.get("price_source") or ("unpriced" if e is None else None)}
+        if e is not None and (r.get("price_currency") or "EUR").upper() != "EUR":
+            from . import fx as FX
+            line["fx"] = FX.stamp(r.get("price_currency"))
+        fx_in = (r.get("snapshot") or {}).get("fx")
+        if isinstance(fx_in, dict):   # converted at ingestion: the airline's own currency, said beside the euros
+            line["fx"] = fx_in
+        lines.append(line)
+    party = _party_of(plan, rows)
+    # total_eur None: nothing priced yet (never "€0")
+    return {"total_eur": t["amount"] if t["currency"] else None, "to_pay_eur": pay["amount"], "currency": "EUR", "lines": lines,
+            "estimate_lines": [l for l in lines if l["source"] == "estimate"], "unpriced": t["unpriced"],
+            "party": party, **({} if party else {"ask_party": "how many are travelling isn't on the trip — ask once"}),
+            "trip_id": trip_id, "breakdown": breakdown(rows, t["amount"])}
+
+
+async def trip_figures(account: str, trip_id: Optional[str] = None, plan: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Sasha 249 · ONE TOTAL: the trip's figures from the basket as its rows stand — READ ONLY (it never re-searches, re-prices or
+    chooses: that is refresh(), and only hold_booking calls it). `plan` the plan store's row when the caller has it; else the
+    account's latest plan (or the trip named). No trip → figures with no lines."""
+    if plan is None:
+        from . import plan_store as PS
+        plan = await (PS.by_id(account, trip_id) if trip_id else PS.latest(account))
+    trip_id = trip_id or (plan or {}).get("trip_id")
+    if not trip_id:
+        return figures_of([], None, plan)
+    rows = await items(account, trip_id, ("suggested", "chosen") + HELD)
+    return figures_of(rows, trip_id, plan)
 
 
 # ── Magellan · search ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -124,10 +218,15 @@ async def suggest(account: str, trip_id: str, kind: str, found: List[Dict[str, A
     previous SUGGESTIONS only — a chosen, held or booked row is never touched by a search."""
     if kind not in ("flight", "stay", "venue"):
         raise BasketError(f"unknown kind {kind}")
+    if kind == "flight":   # Sasha 249 · OFFERED == BOOKABLE: a flight search APPENDS — what she showed before stays choosable
+        found = [ingest_flight(f) for f in found]
+        found = [f for f in found if f is not None]
 
     async def fn(conn):
         async with conn.transaction():
-            if replace:
+            if replace and kind == "flight":   # Sasha 249 · never a delete of what was just shown: the older options are marked
+                await _supersede(conn, account, trip_id, slice_key, [f.get("provider_ref") for f in found])   # superseded
+            elif replace:
                 await conn.execute("delete from trip_basket_items where account_id = $1 and trip_id = $2 and kind = $3 and state = 'suggested' "
                                    "and coalesce(slice_key, '') = coalesce($4, '')", uuid.UUID(account), uuid.UUID(trip_id), kind, slice_key)
             ids = []
@@ -144,6 +243,97 @@ async def suggest(account: str, trip_id: str, kind: str, found: List[Dict[str, A
     ids = await _go(fn)
     _log(MAGELLAN, "%d %s suggested on trip %s", len(ids), kind, trip_id[:8])
     return ids
+
+
+SUPERSEDED_KEEP_S = 3600   # Sasha 249 · a superseded option stays choosable this long (never deleted in the turn that superseded it)
+
+
+def card_eur(c: Dict[str, Any]) -> Optional[float]:
+    """Sasha 249 · a flight card's price in euros: its own when in EUR, else fx.py's one dated rate; None when there's no rate."""
+    if c.get("price_eur") is not None:
+        try:
+            return round(float(c["price_eur"]), 2)
+        except (TypeError, ValueError):
+            pass
+    from . import fx as FX
+    return FX.to_eur(c.get("amount"), c.get("currency") or "EUR")
+
+
+def in_eur(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sasha 249 · CONVERTED AT INGESTION: every offer priced in euros (a non-EUR offer converted at the one dated rate and said so
+    in its `fx`), never dropped to the planner's $ estimate. The airline's own amount and currency stay on the card — the order and
+    the re-check are made in them. An offer in a currency with no rate can't join a euro trip: left out."""
+    out = []
+    from . import fx as FX
+    for c in cards or []:
+        e = card_eur(c)
+        if e is None:
+            continue
+        cur = (c.get("currency") or "EUR").upper()
+        out.append({**c, "price_eur": e, **({"fx": {**FX.stamp(cur), "amount": c.get("amount")}} if cur != "EUR" else {})})
+    return out
+
+
+def ingest_flight(f: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Sasha 249 · a flight row on its way into the basket, in euros: price_amount / price_currency EUR, the airline's own price kept
+    in the snapshot's `fx`. → None when it can't be priced in euros (no rate)."""
+    cur = (f.get("price_currency") or "EUR").upper()
+    if f.get("price_amount") is None or cur == "EUR":
+        return f
+    from . import fx as FX
+    e = FX.to_eur(f["price_amount"], cur)
+    if e is None:
+        return None
+    snap = dict(f.get("snapshot") or {})
+    snap.setdefault("fx", {**FX.stamp(cur), "amount": f["price_amount"]})
+    snap["price_eur"] = e
+    return {**f, "price_amount": e, "price_currency": "EUR", "snapshot": snap}
+
+
+def supersede_plan(existing: List[Dict[str, Any]], new_refs: List[Optional[str]], now: datetime) -> Dict[str, List[str]]:
+    """Sasha 249 · what a new search of a slice does to its earlier SUGGESTED rows, decided in plain Python: the same offer shown
+    again → its old row goes (the new row is the same option); a row superseded over SUPERSEDED_KEEP_S ago (an earlier turn) →
+    goes; every other row stays, marked superseded now. Nothing just shown is ever deleted."""
+    refs = {r for r in new_refs if r}
+    drop, mark = [], []
+    for r in existing:
+        snap = r.get("snapshot") or {}
+        if isinstance(snap, str):
+            snap = json.loads(snap)
+        if r.get("provider_ref") and r["provider_ref"] in refs:
+            drop.append(str(r["id"]))
+            continue
+        at = snap.get("superseded_at")
+        if at:
+            try:
+                old = (now - datetime.fromisoformat(str(at).replace("Z", "+00:00"))).total_seconds() > SUPERSEDED_KEEP_S
+            except ValueError:
+                old = False
+            if old:
+                drop.append(str(r["id"]))
+            continue
+        mark.append(str(r["id"]))
+    return {"drop": drop, "mark": mark}
+
+
+async def _supersede(conn, account: str, trip_id: str, slice_key: Optional[str], new_refs: List[Optional[str]]) -> None:
+    from datetime import timezone
+    rows = await conn.fetch("select id, provider_ref, snapshot from trip_basket_items where account_id = $1 and trip_id = $2 "
+                            "and kind = 'flight' and state = 'suggested' and coalesce(slice_key, '') = coalesce($3, '')",
+                            uuid.UUID(account), uuid.UUID(trip_id), slice_key)
+    now = datetime.now(timezone.utc)
+    plan = supersede_plan([dict(r) for r in rows], new_refs, now)
+    if plan["drop"]:
+        await conn.execute("delete from trip_basket_items where account_id = $1 and id = any($2::uuid[]) and state = 'suggested'",
+                           uuid.UUID(account), [uuid.UUID(i) for i in plan["drop"]])
+    if plan["mark"]:
+        await conn.execute("update trip_basket_items set snapshot = snapshot || jsonb_build_object('superseded_at', $3::text), "
+                           "updated_at = now() where account_id = $1 and id = any($2::uuid[]) and state = 'suggested'",
+                           uuid.UUID(account), [uuid.UUID(i) for i in plan["mark"]], now.isoformat())
+
+
+def superseded(r: Dict[str, Any]) -> bool:
+    return bool((r.get("snapshot") or {}).get("superseded_at"))
 
 
 def _d(v):
@@ -396,9 +586,9 @@ async def sync_stays(account: str, trip_id: str, days: List[dict], start: Option
     (said so). A revision replaces the suggestions; a stay already chosen, held or booked is kept and not suggested twice."""
     if not start or not days:
         return []
-    import os
     from datetime import timedelta
-    usd_eur = float(os.getenv("SASHA_USD_EUR", "0.92") or 0.92)
+    from . import fx as FX
+    usd_eur = FX.rate("USD") or 0.0   # Sasha 249 · ONE RATE (fx.py, dated) — the plan's hotel estimates are in USD
     runs: List[dict] = []
     for i, d in enumerate(days[:-1] if len(days) > 1 else days):   # the last day is the way home: no night
         h = d.get("hotel")
@@ -472,4 +662,6 @@ def shown_flights(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 __all__ = ["MAGELLAN", "SHERLOCK", "AUSTEN", "PACIOLI", "BasketError", "items", "item", "by_ref", "by_session", "to_book", "total",
-           "suggest", "refresh", "choose", "unchoose_flights", "hold", "remove", "status_line", "booked", "failed", "cancelled", "event", "on", "sync_stays", "words", "overlay", "shown_flights"]
+           "suggest", "refresh", "choose", "unchoose_flights", "hold", "remove", "status_line", "booked", "failed", "cancelled", "event", "on", "sync_stays", "words", "overlay", "shown_flights",
+           # Sasha 249 · one total, one currency, one party; offered == bookable
+           "counted", "eur_of", "breakdown", "figures_of", "trip_figures", "card_eur", "in_eur", "ingest_flight", "supersede_plan", "superseded"]

@@ -1372,11 +1372,9 @@ def _origin_of(history, message) -> "Optional[str]":
 
 
 def _eur190(usd) -> int:
-    """Sasha 190 · ONE CURRENCY: the plan's dollar estimate said in euros (SASHA_USD_EUR, 0.92 by default)."""
-    try:
-        return int(round(float(usd) * float(os.getenv("SASHA_USD_EUR", "0.92") or 0.92)))
-    except (TypeError, ValueError):
-        return 0
+    """Sasha 190 · ONE CURRENCY: the plan's dollar estimate said in euros. Sasha 249 · at fx.py's one dated rate."""
+    from booking_signer import fx as FX
+    return int(round(FX.to_eur(usd, "USD") or 0))
 
 
 async def run_flight_intent(message: str, history: list, session_id: "Optional[str]" = None) -> dict:

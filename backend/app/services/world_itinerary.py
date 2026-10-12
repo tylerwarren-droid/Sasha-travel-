@@ -22,7 +22,8 @@ from urllib.parse import quote_plus
 
 log = logging.getLogger("world_itinerary")
 MODEL = os.getenv("SASHA_WORLD_PLANNER_MODEL", "claude-haiku-4-5")
-USD_EUR = float(os.getenv("SASHA_USD_EUR", "0.92") or 0.92)
+from booking_signer import fx as FX   # noqa: E402 · Sasha 249 · ONE RATE: every USD→EUR is booking_signer/fx.py's dated rate
+USD_EUR = FX.rate("USD")   # Sasha 249 · kept for any reader of the name; the conversion below asks fx when it's made
 
 # a good, well-rated hotel for two, one night, in USD — the base of the ESTIMATE (never shown as a price, only as "est.")
 NIGHT_USD = {"JP": 210, "EC": 105, "MA": 120, "PT": 150, "VN": 90, "ES": 160, "FR": 220, "IT": 200, "GB": 230, "IE": 210, "US": 240,
@@ -128,7 +129,7 @@ async def hotels_in(account: Optional[str], city: str, country_name: str, countr
         # the "address" and "rating" keys (EU 245 §1 side bug): they are back
         out.append({"name": hotel_name(c["name"]) or c["name"], "place_id": c["place_id"], "address": c.get("address"), "rating": c.get("rating"),
                     "rating_count": c.get("rating_count"), "listing_url": c.get("listing_url"), "website": c.get("website"),
-                    "gphoto": c.get("gphoto"), "est_usd": est, "est_eur": int(round(est * USD_EUR))})
+                    "gphoto": c.get("gphoto"), "est_usd": est, "est_eur": int(round(FX.to_eur(est, "USD") or 0))})
     return out
 
 

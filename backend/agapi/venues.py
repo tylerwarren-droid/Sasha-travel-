@@ -172,8 +172,10 @@ async def photos_for(cards: List[dict], budget: float = 1.2) -> None:
 
 def _routes_of(rd: dict) -> List[str]:
     r = rd.get("rungs") or {}
-    return [x for x, k in (("form", "form"), ("page", "link"), ("email", "email"), ("call", "phone"), ("whatsapp", "whatsapp"),
-                           ("instagram", "instagram")) if k in r]
+    # Sasha 246 · rung 2: their OWN booking page is a "page" too — offered before email, a call or a message
+    out = [x for x, k in (("form", "form"), ("page", "link"), ("page", "own_page"), ("email", "email"), ("call", "phone"),
+                          ("whatsapp", "whatsapp"), ("instagram", "instagram")) if k in r]
+    return list(dict.fromkeys(out))
 
 
 async def read_booking_route(ctx, a: dict) -> dict:
@@ -303,7 +305,7 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
             if status == 200:
                 return _hold(ctx, rung, j["form_id"], j["read_back"], rd, res, extra={"trip_item_id": j.get("trip_item_id")})
             why = GW.refusal_words(j, status)
-        elif r == "one_tap" and ("link" in rungs or "form" in rungs):
+        elif r == "one_tap" and ("link" in rungs or "form" in rungs or "own_page" in rungs):   # Sasha 246 · their own page
             status, j = await GW.api(ctx.account, "POST", "/api/booking/links", {
                 "read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": res["how_many"]["count"], "name": contact_name,
                 "venue": GW.plain_venue(rd["venue"])[:120],
@@ -358,7 +360,10 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
                 "form": "Sasha sends their own booking form",
                 "handover": "Sasha fills their booking page; if it needs a human step (a CAPTCHA, terms, the final button) "
                             "it goes to their phone as Tap to finish",
-                "page": f"their {extra.get('platform') or 'booking'} page goes to their phone; they press book there" if extra else "",
+                # Sasha 246 · their OWN booking page (rung 2) is named as itself, never "their their own booking page page"
+                "page": (f"{extra['platform']} goes to their phone, with the day, time and number to enter; they finish it there"
+                         if str(extra.get("platform") or "").startswith("their ") else
+                         f"their {extra.get('platform') or 'booking'} page goes to their phone; they press book there") if extra else "",
                 "email": "Sasha emails them; it's a request until they reply",
                 "call": "Sasha calls them; it's booked only if they say yes on the call"}.get(rung, "")}
     _HELD[ctx.account]["out"] = out   # Sasha 217 · the same booking held again gets these words, unchanged

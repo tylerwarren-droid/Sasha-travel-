@@ -2451,7 +2451,7 @@ async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
     if "(TEST stand-in)" in str(read.get("venue") or ""):   # Sasha 169 · the demo stand-in says so, always
         venue = read["venue"]
     rungs = {r["rung"]: r for r in read.get("rungs") or [] if r.get("available")}
-    if not any(k in rungs for k in ("form", "link", "phone", "email")):   # Sasha 135 · an email-only venue has a route (Sasha 130)
+    if not any(k in rungs for k in ("form", "link", "own_page", "phone", "email")):   # Sasha 135 · Sasha 246 · their own page too · an email-only venue has a route (Sasha 130)
         ctx["st"]["pending"] = None
         out.text(f"{read.get('say') or 'I found no way to book them that I may use.'} Nothing was sent.")
         return
@@ -2517,6 +2517,9 @@ def _hours_of(read: dict, now) -> dict:
     return {"open_now": s.get("open_now"), "opens_at": (s.get("opens_at") or "")[11:16] or None}
 
 
+OWN_PAGE = "their own booking page"   # Sasha 246 · rung 2's "platform" name: the venue's own site (ladder.own_page)
+
+
 def ladder_of(rd: dict, reservation: dict, now) -> Optional[dict]:
     """Sasha 195 · the ladder's offer for this venue and this booking (decide.ladder): its line and options."""
     from . import decide as D, venue_read as V
@@ -2531,8 +2534,9 @@ def ladder_of(rd: dict, reservation: dict, now) -> Optional[dict]:
             hours = (datetime.fromisoformat(at).replace(tzinfo=ZoneInfo(tz)) - now).total_seconds() / 3600
         except Exception:
             hours = None
-    v = D.Venue(form="form" in rungs, platform=((V.platform_of(link) if link.startswith("http") else link) or "their booking page") if "link" in rungs else None,
-                phone="phone" in rungs, email="email" in rungs, hours_until=hours,
+    v = D.Venue(form="form" in rungs, platform=((V.platform_of(link) if link.startswith("http") else link) or "their booking page") if "link" in rungs
+                else OWN_PAGE if "own_page" in rungs else None,   # Sasha 246 · rung 2: their own booking page
+                phone="phone" in rungs, email="email" in rungs, hours_until=hours, own_page="own_page" in rungs and "link" not in rungs,
                 challenge=any(f.get("kind") == "challenge" for f in rd.get("facts") or []))
     return D.ladder(v, plain_venue(rd.get("venue")) or "them", summary(reservation))
 
@@ -2551,7 +2555,8 @@ def _route_line(rd: dict, dv) -> str:
     rungs = rd.get("rungs") or {}
     link = (rungs.get("link") or {}).get("value") or ""
     from . import venue_read as V
-    v = D.Venue(form="form" in rungs, platform=((V.platform_of(link) if link.startswith("http") else link) or None) if "link" in rungs else None,
+    v = D.Venue(form="form" in rungs, platform=((V.platform_of(link) if link.startswith("http") else link) or None) if "link" in rungs
+                else OWN_PAGE if "own_page" in rungs else None, own_page="own_page" in rungs and "link" not in rungs,   # Sasha 246
                 phone="phone" in rungs, email="email" in rungs, open_now=rd.get("open_now"), opens_at=rd.get("opens_at"))
     return D.line(v, dv, plain_venue(rd.get("venue")) or "them")
 
@@ -2585,8 +2590,9 @@ def decision_of(rd: dict, prefer: Optional[str] = None, at: Optional[str] = None
         return D.decide(D.Venue(form=False, platform="their own booking page", phone="phone" in rungs, email="email" in rungs,
                                 open_now=rd.get("open_now"), opens_at=rd.get("opens_at"), scripted=lang in C.LANGUAGES,
                                 language_label=C.LANGUAGE_NAMES.get(lang, ""), calls_on=(prefer == "call"), hours_until=hours), prefer)
-    return D.decide(D.Venue(form="form" in rungs and not (demo and "link" in rungs), platform=name if "link" in rungs else None,
-                            phone="phone" in rungs, email="email" in rungs, open_now=rd.get("open_now"), opens_at=rd.get("opens_at"),
+    return D.decide(D.Venue(form="form" in rungs and not (demo and "link" in rungs),
+                            platform=name if "link" in rungs else OWN_PAGE if "own_page" in rungs else None,   # Sasha 246 · rung 2
+                            own_page="own_page" in rungs and "link" not in rungs, phone="phone" in rungs, email="email" in rungs, open_now=rd.get("open_now"), opens_at=rd.get("opens_at"),
                             scripted=lang in C.LANGUAGES, language_label=C.LANGUAGE_NAMES.get(lang, ""),
                             # Sasha 187 · NO CALLS on the founder's demo account unless he says "call them" (never chosen for him)
                             calls_on=(prefer == "call") or not (account and _founder_demo(account)),
@@ -2730,7 +2736,7 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
             out.text(f"I can't book {rd['venue']} together with the spa from here (no form I may send{', and calls are off' if 'phone' in rungs else ''}). "
                      f"Nothing was sent. Pick a place I can book by its form, or ask for each one separately.")
             return
-        if route == "one_tap" and ("link" in rungs or ("form" in rungs and lr == "page") or ("form" in rungs and _founder_demo(ctx.get("account"))
+        if route == "one_tap" and ("link" in rungs or "own_page" in rungs or ("form" in rungs and lr == "page") or ("form" in rungs and _founder_demo(ctx.get("account"))
                                                           and "(TEST stand-in)" not in str(rd.get("venue") or ""))) \
                 and reservation["when"]["mode"] == "at":   # Sasha 187 · or their own booking page, on the founder's phone
             from . import proactive as PR

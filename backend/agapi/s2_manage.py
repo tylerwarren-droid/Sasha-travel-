@@ -216,6 +216,50 @@ async def _item(ctx, a: dict, kind: str) -> dict:
     return hit[0]
 
 
+_CHANGE: Dict[str, dict] = {}   # Sasha 246 · account → the flight-change options she offered {order_id, new_date, leg, options, default, at}
+_HHMM = re.compile(r"\b([01]?\d|2[0-3])[:.h]([0-5]\d)\b")
+
+
+def _offered(ctx, order_id: str, new_date: Optional[str], leg: Optional[str]) -> Optional[dict]:
+    """Sasha 246 · the change options offered for THIS order (the same day and leg, when given), still inside the read-back window."""
+    from agapi.v0 import stale
+    o = _CHANGE.get(ctx.account)
+    if not o or o.get("order_id") != order_id or stale(o["at"]):
+        return None
+    if (new_date and new_date != o["new_date"]) or (leg and o.get("leg") and leg != o["leg"]):
+        return None
+    return o
+
+
+def _option_named(options: List[dict], a: dict, said: str):
+    """Sasha 246 · (the offered option they named, named?) — by change_offer_id, by new_time (HH:MM), or by a time in their own
+    words that IS one of the options (a time in their words that isn't — "my 09:00 flight" — is no pick)."""
+    oid = str(a.get("change_offer_id") or "").strip()
+    if oid:
+        return next((o for o in options if o.get("change_offer_id") == oid), None), True
+    m = _HHMM.search(str(a.get("new_time") or ""))
+    if m:
+        hhmm = f"{int(m.group(1)):02d}:{m.group(2)}"
+        return next((o for o in options if str(o.get("departs") or "")[11:16] == hhmm), None), True
+    for m in _HHMM.finditer(said or ""):
+        hhmm = f"{int(m.group(1)):02d}:{m.group(2)}"
+        hit = next((o for o in options if str(o.get("departs") or "")[11:16] == hhmm), None)
+        if hit:
+            return hit, True
+    return None, False
+
+
+def _options_view(options: List[dict]) -> List[dict]:
+    from booking_signer import flight_manage as FM
+    out = []
+    for o in options:
+        amt = FM._amount(o.get("change_total_amount"))
+        cost = "no cost" if not amt else FM.money(amt, o.get("change_total_currency")) + (" back" if amt < 0 else "")
+        out.append({"time": str(o.get("departs") or "")[11:16], "flights": o.get("new_flights") or "flight", "cost": cost,
+                    "change_offer_id": o.get("change_offer_id")})
+    return out
+
+
 async def change_booking(ctx, a: dict) -> dict:
     what = (a.get("what") or "").lower()
     if what in ("venue", "restaurant", "dinner", "spa", "table"):
@@ -228,10 +272,19 @@ async def change_booking(ctx, a: dict) -> dict:
         from booking_signer import flight_manage as FM
         said = ((a.get("approval") or {}).get("said")) or ""
         held = _held(ctx, "change_booking")
+        pick = None
         if held and held.get("flight") and said and _yes(said):
+            # Sasha 246 · a yes that names ANOTHER of the offered times ("yes, the 17:48") is not a yes to this read-back: that
+            # option is read back instead, from the options she offered — never confirmed, never searched again
+            off = _CHANGE.get(ctx.account)
+            if off and off.get("order_id") == held.get("order_id"):
+                pick, _named = _option_named(off["options"], {}, said)
+                a = {**a, "id": a.get("id") or held.get("item_id")}
+        if held and held.get("flight") and said and _yes(said) and (not pick or pick["change_offer_id"] == held["change_offer_id"]):
             from agapi.v0 import claim
             await claim(ctx)
             _HELD.pop(ctx.account, None)
+            _CHANGE.pop(ctx.account, None)
             got = await FM.change_confirm(held["change_offer_id"])
             done = got.get("status") == "changed"
             await _record(ctx.account, "booking_change", "done" if done else "failed",
@@ -242,15 +295,39 @@ async def change_booking(ctx, a: dict) -> dict:
         it = await _item(ctx, a, "flight")
         if not it.get("order_id"):
             raise _err("not_changeable", "that flight isn't ticketed yet (awaiting payment) — nothing to change")
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(a.get("new_date") or "")):
+        # Sasha 246 · THE OPTIONS SHE OFFERED are the options the change accepts: the same order, day and leg within the
+        # read-back window → picked from them (by new_time / change_offer_id / a time in their words), never a fresh quote
+        off = _offered(ctx, it["order_id"], a.get("new_date"), a.get("leg"))
+        new_date = str(a.get("new_date") or (off or {}).get("new_date") or "")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", new_date):
             raise _err("date_missing", "which day should it move to? (YYYY-MM-DD)")
-        q = await FM.change_quote(it["order_id"], a["new_date"], a.get("leg"))
-        if q.get("why"):
-            raise _err("change_unavailable", q["why"])
-        if not q.get("possible"):
-            return {"status": "not_possible", "say": q.get("say")}
-        _hold(ctx, "change_booking", q["lines"], flight=True, change_offer_id=q["change_offer_id"], order_id=it["order_id"], title=it["title"])
-        return {"status": "awaiting_yes", "read_back": q["lines"], "say": "Read it back, with Duffel's price, and ask: shall I?"}
+        if off is None:
+            q = await FM.change_quote(it["order_id"], new_date, a.get("leg"))
+            if q.get("why"):
+                raise _err("change_unavailable", q["why"])
+            if not q.get("possible"):
+                return {"status": "not_possible", "say": q.get("say")}
+            off = {"order_id": it["order_id"], "new_date": new_date, "leg": a.get("leg"), "options": q.get("options") or [q],
+                   "default": q["change_offer_id"], "at": datetime.now(timezone.utc)}
+            _CHANGE[ctx.account] = off
+        if pick is None:
+            pick, named = _option_named(off["options"], a, said)
+            if named and pick is None:
+                times = ", ".join(v["time"] for v in _options_view(off["options"]) if v["time"])
+                return {"status": "not_offered", "options": _options_view(off["options"]),
+                        "say": f"That isn't one of the times Duffel offered for {FM._day(new_date)} — the times are {times}. "
+                               "Say them and ask which one; never say a time is unavailable that is on this list."}
+        q = pick or next((o for o in off["options"] if o["change_offer_id"] == off["default"]), off["options"][0])
+        lines = list(q["lines"])
+        others = [v for v in _options_view(off["options"]) if v["change_offer_id"] != q["change_offer_id"] and v["time"]]
+        if others:
+            lines.insert(len(lines) - 1, "Other times that day, from the same Duffel quote: "
+                         + ", ".join(f"{v['time']} ({v['flights']}, {v['cost']})" for v in others) + ".")
+        _hold(ctx, "change_booking", lines, flight=True, change_offer_id=q["change_offer_id"], order_id=it["order_id"], title=it["title"],
+              item_id=it["id"])
+        return {"status": "awaiting_yes", "read_back": lines, "options": _options_view(off["options"]),
+                "say": "Read it back, with Duffel's price, and ask: shall I? If they pick another of these times, call change_booking "
+                       "again with that new_time (HH:MM) — it is one of these options, never a new search."}
     raise _err("what_invalid", "what is venue, hotel or flight")
 
 
@@ -338,9 +415,13 @@ def tools() -> List[dict]:
            {"type": "object", "properties": {"status": {"type": "string"}}}, ["booking_unknown", "arrive_missing", "no_explicit_yes", "not_sent"], austen=True),
         _t("change_booking", "Austen", change_booking, "Change a booking. what=venue (new_time HH:MM and/or new_party), flight (new_date "
            "YYYY-MM-DD, leg out/back: Duffel's own quote; some fares can't be changed — say so plainly), hotel (dates can't be changed yet "
-           "— say so). FIRST call: the read-back; after their yes in a LATER turn, call again to do it.",
+           "— say so). FIRST call: the read-back; after their yes in a LATER turn, call again to do it. A flight's result lists the "
+           "times Duffel offered that day (options): if they pick another, call again with its new_time (HH:MM) or change_offer_id "
+           "— only those times exist; never say one of them can't be found.",
            {"what": {"enum": ["venue", "flight", "hotel"]}, "id": {"type": "string"}, "venue": {"type": "string"}, "name": {"type": "string"},
-            "new_time": {"type": "string"}, "new_party": {"type": "integer", "minimum": 1, "maximum": 20},
+            "new_time": {"type": "string", "description": "HH:MM — a venue's new time, or the flight time they picked from the options"},
+            "change_offer_id": {"type": "string", "description": "a flight option's id, from the options"},
+            "new_party": {"type": "integer", "minimum": 1, "maximum": 20},
             "new_date": {"type": "string"}, "leg": {"enum": ["out", "back"]}, **appr}, ["what"],
            {"type": "object", "properties": {"status": {"type": "string"}}},
            ["booking_unknown", "no_explicit_yes", "change_unavailable", "not_changeable", "date_missing", "what_invalid"], austen=True),

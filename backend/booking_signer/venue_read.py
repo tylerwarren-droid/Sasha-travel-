@@ -73,6 +73,21 @@ _E164 = re.compile(r"\+[1-9]\d{7,14}")
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _BOOKING_FIELD = re.compile(r"date|fecha|data|datum|time|hora|heure|uhrzeit|party|guests|people|personas|pessoas|pax|comensales|kişi|reserv|booking", re.I)
 _CONTACT_LINK = re.compile(r"contact|contacto|contato|contatti|kontakt|reserv|book|booking", re.I)
+#: Sasha 246 · RUNG 2 — a link on their OWN site (or a subdomain of it) that says it books: their own booking engine
+#: ("Reservar" → madrid.hammamalandalus.com's own engine). A gift-voucher shop is never a booking page.
+_BOOKING_LINK = re.compile(r"\b(?:reserv\w*|book|booking|bookings|book now|cita|citas|prenota\w*|buchen|buchung\w*|marcar|agendar)\b", re.I)
+_NOT_BOOKING = re.compile(r"\b(?:regal\w*|gift\w*|vouchers?|bonos?|cheques?|tarjeta\w*|gutschein\w*|vales?|presentes?|cancel\w*|"
+                          r"anular|policy|pol[ií]tica\w*|condic\w*|terms|faq\w*)\b", re.I)
+
+
+def same_site(a: Optional[str], b: Optional[str]) -> bool:
+    """Sasha 246 · two hosts under one registrable domain (madrid.hammamalandalus.com ~ www.hammamalandalus.com). A two-part
+    suffix (co.uk, com.es…) keeps its third label."""
+    def reg(h: Optional[str]) -> str:
+        parts = (h or "").lower().strip(".").split(".")
+        n = 3 if len(parts) >= 3 and parts[-2] in ("co", "com", "org", "net", "gov", "ac", "edu", "gob") else 2
+        return ".".join(parts[-n:])
+    return bool(a and b) and reg(a) == reg(b)
 
 
 class ReadRefused(Exception):
@@ -274,6 +289,12 @@ def facts_from_html(html: str, url: str, country: Optional[str], fetched_at: str
             plat = platform_of(u.geturl()) if u.hostname else None
             if plat:
                 add("platform", plat, f'<a href="{h}">{text}</a>', {"link": u.geturl()})
+            elif u.scheme == "https" and same_site(u.hostname, host) and not ig \
+                    and not any(f.kind == "booking_page" for f in facts):
+                # Sasha 246 · RUNG 2 — their own booking engine, linked from their own site: recorded (the first one), not fetched
+                words = f"{re.sub(r'[/_.?=&-]+', ' ', u.path or '')} {text}"
+                if _BOOKING_LINK.search(words) and not _NOT_BOOKING.search(words) and u._replace(fragment="").geturl() != url:
+                    add("booking_page", u._replace(fragment="").geturl(), f'<a href="{h}">{text}</a>')
     if any(re.search(r"recaptcha/api\.js|hcaptcha\.com|challenges\.cloudflare\.com/turnstile", src or "", re.I) for src in p.srcs):
         # Sasha 187 · the page asks the guest to prove they're human (read from its own page's scripts)
         add("challenge", "captcha", next(src for src in p.srcs if re.search(r"captcha|turnstile", src or "", re.I))[:200])

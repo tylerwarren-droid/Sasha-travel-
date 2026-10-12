@@ -1,5 +1,6 @@
 'use client'
 import { untagDeep } from '@/lib/no-test-label.mjs'   // Sasha 218
+import { partySize } from '@/lib/trip-party.mjs'   // Sasha 246
 import { useEffect, useState } from 'react'
 import TripMap from '../TripMap'
 import { bookingReq } from '@/lib/booking-client'
@@ -254,7 +255,7 @@ export default function TripPanel({
   // Sasha 242 · the basket's euro total for THIS trip wins over the planner's dollar estimate (they disagreed: €496 vs $340 hotels)
   const tt = server?.trip_total && server.trip_total.trip_id === (activeTrip ?? server.trip_id) ? server.trip_total : null
   const cb: any = tt ? null : (richItinerary as any).cost_breakdown
-  const pax = cb?.travellers || travellerCount
+  const pax = partySize(richItinerary, cb, cb?.travellers || travellerCount)   // Sasha 246 · the trip's own party first
   const dayCount = richItinerary.days?.length || 0
   // Where the trip actually begins — the first day that names a city, not necessarily day 1.
   const arrivalCity = (richItinerary.days || []).find((d: any) => d.city)?.city || ''

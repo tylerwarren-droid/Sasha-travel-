@@ -521,8 +521,7 @@ export default function S2App() {
         <section style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
           <div className="mx-3 mb-4 rounded-2xl bg-white pb-4 pt-2 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
             <h2 className="px-4 pb-1 pt-3 text-xl font-bold">My Keep</h2>
-            <p className="px-4 pb-2 text-sm opacity-60">Sasha never sees these — only “Passport ES ••••456”. They’re filled in where needed, at that moment, after your yes.</p>
-            <KeepScreen />
+            <KeepScreen leadClassName="px-4 pb-2 text-sm opacity-60" />{/* Sasha 246 · its line names THEIR item, never a fixed example */}
           </div>
         </section>
       ) : tab === 'activity' ? <Activity /> : (

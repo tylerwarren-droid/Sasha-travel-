@@ -220,8 +220,9 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
 
 def stays_card(res: dict) -> dict:
     """search_stays' result as a Live Workspace card, each to CHOOSE (the Choose button says "the <name> one")."""
+    from app.services.world_itinerary import hotel_name   # Sasha 246 · the hotel's name on its card, never its page title
     return {"type": "hotel", "trip_pick": True, "title": f"Places to stay · {res.get('city')}",
-            "options": [{"name": h["name"], "detail": " · ".join(x for x in [f"{h.get('stars')}★" if h.get("stars") else "",
+            "options": [{"name": hotel_name(h["name"]) or h["name"], "detail": " · ".join(x for x in [f"{h.get('stars')}★" if h.get("stars") else "",
                                                                        f"★ {h['rating']} ({h.get('reviews') or 0} Google reviews)" if h.get("rating") else "",
                                                                        h.get("about") or ""] if x),
                          "price": f"est. €{h['estimate_eur_per_night']:,}/night" if h.get("estimate_eur_per_night") else ""}

@@ -161,7 +161,10 @@ def _card(ev: dict, out, title: str) -> None:
             lines.append(" · ".join(x for x in (b.get("service"), " ".join(x for x in (b.get("price"), per.get(b.get("how_often") or "", "")) if x),
                                                  f"renews {b['renews']}" + (" (expected)" if b.get("expected") else "") if b.get("renews") else "",
                                                  b.get("not_yet") or "") if x))
-        if ev.get("total"):
+        if not (ev.get("items") or []):   # Sasha 246 · none found: its own heading and the empty line — never a list's "say which"
+            title = "No subscriptions found"
+            lines = ["No subscription receipts found" + (f" — read from {ev['source']}." if ev.get("source") else ".")]
+        elif ev.get("total"):
             lines.append(f"About {ev['total']} a month. To cancel one, say which.")
     lines = [_cut(l, 300) for l in lines if str(l or "").strip()]
     if lines:

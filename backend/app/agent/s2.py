@@ -56,7 +56,8 @@ S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "
             "my_plans", "running_late", "change_booking", "cancel_booking", "note_rental",
             "prepare_trip", "propose_trip", "search_flights", "search_stays", "swap_stay", "choose_offer", "check_offer",
             "save_travellers", "hold_booking", "book", "get_trip", "get_total",
-            "hotel_request")   # Sasha 235 · upgrade my room
+            "hotel_request",   # Sasha 235 · upgrade my room
+            "remember_name")   # Sasha 246 · the name she greets them by (asked once)
 
 
 # Sasha 241 · S1 PARITY: /next keeps its own "Who she is" and gains S2's capability lines — taken from S2_WHO itself, so the two

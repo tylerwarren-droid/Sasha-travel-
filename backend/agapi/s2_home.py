@@ -95,6 +95,14 @@ async def what_i_can_do(ctx, a: dict) -> dict:
             "how": "Say SAY in one or two sentences; the card shows the groups. Never add anything that isn't on it."}
 
 
+async def remember_name(ctx, a: dict) -> dict:
+    """Sasha 246 · what to call them (asked once on their first visit): kept with her memory, said in every opening after."""
+    from agapi import s2_memory as MEM
+    n = await MEM.set_name(ctx.account, str(a.get("name") or ""))
+    return {"saved": bool(n), "name": n, "how": "Thank them by that name in a few words, then help with whatever they asked."
+            if n else "That didn't look like a name — ask again, briefly."}
+
+
 async def note_not_yet(ctx, a: dict) -> dict:
     await note(ctx.account, str(a.get("asked") or ""))
     return {"noted": True, "say": "Say: \"I can't do that yet, but I've noted it — here's what I can do…\" and name two or three "
@@ -110,6 +118,9 @@ def tools() -> List[dict]:
         _t("note_not_yet", "Pacioli", note_not_yet, "Anything they ask that you can't do (no tool does it): note it for the founder — "
            "pass what they asked in a few words — then say you can't do it YET and what you can do instead. Never pretend to try.",
            {"asked": {"type": "string", "maxLength": 300}}, ["asked"], {"type": "object", "properties": {"noted": {"type": "boolean"}}}, []),
+        _t("remember_name", "Pacioli", remember_name, "When they tell you what to call them (their first name — e.g. after you asked "
+           "\"What should I call you?\"), save it; you'll greet them by it from then on.",
+           {"name": {"type": "string", "maxLength": 60}}, ["name"], {"type": "object", "properties": {"saved": {"type": "boolean"}}}, []),   # Sasha 246
     ]
 
 

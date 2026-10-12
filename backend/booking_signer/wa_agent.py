@@ -40,6 +40,9 @@ def on(account: Optional[str]) -> bool:
     return False
 
 
+GREETING = re.compile(r"(?i)^\s*(?:(?:hi|hello|hey|hiya|hola|buenas|ola|good\s+(?:morning|afternoon|evening))(?:\s+(?:there|sasha))?|sasha)\s*[!.,?]*\s*$")   # Sasha 246
+
+
 def ours(payload: str) -> bool:
     """A button from THIS brain (not an in-flight one from the old flows, which finish there)."""
     return payload.startswith(("pick:", "say:", "yn:", "photo:", "keep:"))
@@ -298,11 +301,14 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
             log.info("[wa_agent] no recall: %s", type(e).__name__)
             rec = {}
         if rec.get("line") and not CL.closing(message):
-            out.text(rec["line"])
+            # Sasha 246 · HOW SHE STARTS: a greeting back gets only "Hey <first name>, what can I help you with?"; a request is
+            # simply answered. What she remembers comes back as history (used when THEY refer to it) — never recited, and the
+            # old cards are not sent again.
             history = [m for m in (rec.get("recent") or []) if m.get("role") in ("user", "assistant")][-12:] or history
-            cards = ((rec.get("screen") or {}).get("cards") or [])
-            if cards:   # the places she'd shown, here again to pick from (found live: without them she backed away from her own list)
-                _venues({"preset": {"cards": cards}}, out)
+            if GREETING.match(message or ""):
+                out.text(rec["line"])
+                _remember_history(st, body or message, rec["line"])
+                return rec["line"]
     held = KEEP.chat_guard(message)                      # a password, card or passport number never reaches the model
     if held:
         out.text(held)

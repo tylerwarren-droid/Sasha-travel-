@@ -101,7 +101,7 @@ class Memory(unittest.TestCase):
         from agapi import venues as VN
         run(MEM.remember(GUEST, "s-1", "Indian in Madrid tonight", "Here are five.", SEARCH))
         got = run(MEM.recall(GUEST, "s-2"))
-        self.assertTrue(got["line"].startswith("Welcome back — we were looking at "))
+        self.assertEqual(got["line"], MEM.ASK_NAME)   # Sasha 246 · the opening only (no name known: asked once) — never the last topic
         self.assertEqual([m["role"] for m in got["recent"]], ["user", "assistant"])
         self.assertEqual(AG._SCREEN["s-2"]["names"], ["Casa Gate", "Namaste"])  # she may name them again
         self.assertEqual(VN.card_of(GUEST, "p2")["name"], "Namaste")

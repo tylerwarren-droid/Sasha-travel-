@@ -319,10 +319,15 @@ class MemoryClosingVoice(unittest.TestCase):
         return out, calls, notes
 
     def test_away_she_opens_with_what_she_remembers_from_s2(self):
-        out, calls, _ = self.run_turn("hi again", {}, recall={"line": "Welcome back — we were looking at tables near Gran Vía. Want to carry on?",
+        # Sasha 246 · a request on return is simply answered — the topic is never recited; /s2's conversation still carried
+        out, calls, _ = self.run_turn("hi again", {}, recall={"line": "Hey Alex, what can I help you with?",
                                                            "recent": [{"role": "user", "content": "a table near Gran Vía"}]})
-        self.assertEqual(out.items[0], ("text", "Welcome back — we were looking at tables near Gran Vía. Want to carry on?"))
+        self.assertNotIn("Gran Vía", " ".join(str(i[1]) for i in out.items if i[0] == "text"))
         self.assertEqual(calls[0][0]["content"], "a table near Gran Vía")        # /s2's conversation carried into WhatsApp
+        out, calls, _ = self.run_turn("Hi Sasha!", {}, recall={"line": "Hey Alex, what can I help you with?",
+                                                             "recent": [{"role": "user", "content": "a table near Gran Vía"}]})
+        self.assertEqual([i for i in out.items if i[0] == "text"], [("text", "Hey Alex, what can I help you with?")])   # a greeting: only that
+        self.assertEqual(calls, [])
 
     def test_thanks_closes_and_rests_until_the_next_message(self):
         st = {"history": [{"role": "user", "content": "book it"}, {"role": "assistant", "content": "Booked."}]}

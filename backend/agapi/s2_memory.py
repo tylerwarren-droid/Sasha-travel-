@@ -208,12 +208,61 @@ def handover(m: dict) -> str:
             f"say they picked or chose one; if it helps, ask which they'd like.")
 
 
+# ── Sasha 246 · HOW SHE STARTS: every return, on /s2, /next and WhatsApp, only "Hey <first name>, what can I help you with?" —
+# never mid-sentence, never the last topic. Memory and history are kept exactly as before; she uses them when THEY refer to them.
+OPEN = "Hey {name}, what can I help you with?"
+ASK_NAME = "Hi, I'm Sasha. What should I call you?"     # a new person, once
+OPEN_NO_NAME = "Hey, what can I help you with?"         # asked once already, never told
+
+
+def _clean_name(name: str) -> Optional[str]:
+    n = re.sub(r"[^\w'’ -]", "", str(name or ""), flags=re.UNICODE).strip().split()
+    return n[0][:40].capitalize() if n and not any(ch.isdigit() for ch in n[0]) else None
+
+
+async def first_name(account: str) -> Optional[str]:
+    """Their saved contact's first name, else the name they told her (remember_name)."""
+    try:
+        from booking_signer import contacts as CT
+        row = await CT.STORE.get(account) if CT.STORE is not None else None
+        n = _clean_name((row or {}).get("name") or "")
+        if n:
+            return n
+    except Exception as e:
+        log.info("[memory] no contact name: %s", type(e).__name__)
+    return _clean_name(((await _load(account)) or {}).get("name") or "")
+
+
+async def set_name(account: str, name: str) -> Optional[str]:
+    n = _clean_name(name)
+    if n:
+        m = (await _load(account)) or {}
+        m["name"] = n
+        await _save(account, m)
+    return n
+
+
+async def opening(account: str) -> str:
+    """The one opening line. A person she has no name for is asked once ("What should I call you?"), then never again."""
+    n = await first_name(account)
+    if n:
+        return OPEN.format(name=n)
+    m = (await _load(account)) or {}
+    if m.get("name_asked"):
+        return OPEN_NO_NAME
+    m["name_asked"] = NOW().isoformat()
+    await _save(account, m)
+    return ASK_NAME
+
+
 async def recall(account: str, session: Optional[str]) -> dict:
-    """On return: the line, the recent conversation (masked), the cards she'd shown (on screen again, for this session)."""
+    """On return: the opening line (Sasha 246), the recent conversation (masked), the cards she'd shown (on screen again, for this
+    session) — what she remembers is kept and handed to the model, never recited."""
     m = await _load(account)
     line = line_for(m, account)
+    opening_line = await opening(account)
     if not m or not line:
-        return {"line": None, "recent": [], "screen": None, "summary": (m or {}).get("summary") or []}
+        return {"line": opening_line, "recent": [], "screen": None, "summary": (m or {}).get("summary") or []}
     scr = m.get("screen") or None
     if scr and scr.get("cards") and session:
         from app.agent import sasha as AG
@@ -224,10 +273,11 @@ async def recall(account: str, session: Optional[str]) -> dict:
     note = handover(m)
     if session:   # Sasha 239 · the model's first turn back hears exactly what was (and wasn't) decided
         from app.agent import sasha as AG
-        AG._HANDOVER[session] = note
-    return {"line": line, "recent": m.get("recent") or [], "screen": scr, "summary": m.get("summary") or [], "handover": note,
+        AG._HANDOVER[session] = note + (" They have just come back and you greeted them with \"" + opening_line + "\" — never bring "
+                                         "this up yourself; use it only when THEY refer to it.")
+    return {"line": opening_line, "recent": m.get("recent") or [], "screen": scr, "summary": m.get("summary") or [], "handover": note,
             "pending": ({"kind": "hold", "what": p.get("what"), "waiting": _hold_live(account, p)} if p.get("kind") == "hold" else
                         {"kind": "question", "asked": p.get("asked")} if p.get("kind") == "question" else None)}
 
 
-__all__ = ["remember", "closing", "recall", "fold", "line_for", "masked"]
+__all__ = ["remember", "closing", "recall", "fold", "line_for", "masked", "opening", "first_name", "set_name", "OPEN", "ASK_NAME"]

@@ -28,7 +28,12 @@ class TheSitesWordsStayTheSites(unittest.TestCase):
         self.assertEqual((card["type_source"], card["website"]), ("site", "https://madrid.hammamalandalus.com"))
         p = VT.shape(card, None)
         self.assertEqual(p["type"], {"value": "Arab baths (hammam) and massage centre", "source": "site"})
-        self.assertEqual(VT.shape({"type": "Korean Restaurant"}, None)["type"]["value"], "listed on the map as Korean Restaurant")
+        # Sasha 250 · the map's category is never what it is — not even labelled; it stays on the record as map_says
+        p2 = VT.shape({"type": "Korean Restaurant"}, None)
+        self.assertEqual((p2["type"], p2["map_says"]), (None, "Korean Restaurant"))
+        # … and why a site couldn't be read is one sentence, never the engine's object (it crashed the sheet live)
+        p3 = VT.shape({"type": "X"}, {"cant_read": {"rule": "refused", "say": "x.net turned us away.", "evidence": "403", "at": 1.0}})
+        self.assertEqual(p3["cant_read"], "x.net turned us away.")
 
 
 class OneDeciderEach(unittest.TestCase):

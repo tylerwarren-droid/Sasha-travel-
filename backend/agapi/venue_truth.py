@@ -78,8 +78,8 @@ def _vp_fact(f: Optional[dict]) -> Optional[dict]:
     a FALLBACK (facts.type.fallback) — said "listed on the map as …", never as what the place is (CR 89, row 775)."""
     if not isinstance(f, dict) or not f.get("value"):
         return None
-    if f.get("fallback"):
-        return {"value": f"listed on the map as {f['value']}"[:200], "source": "map"}
+    if f.get("fallback"):   # Sasha 250 · a map category is never what the place is (D3: the cuisine from their own site only)
+        return None
     return {"value": str(f["value"])[:200], "quote": str(f.get("quote") or "")[:400], "source_url": f.get("source_url"), "source": "site",
             **({"map_says": (f.get("map_says") or {}).get("listed_as")} if isinstance(f.get("map_says"), dict) else {})}
 
@@ -102,7 +102,7 @@ def _from_profile(res: dict) -> dict:
             "price": _vp_fact(facts.get("price_range")), "city": _vp_fact(facts.get("city")), "channels": kinds, "photos": photos,
             "rung": bk.get("rung"), "rung_label": bk.get("rung_label"), "engine_said": bk.get("say"), "confirm": res.get("confirm"),
             "form": res.get("form"),
-            "venue_id": res.get("venue_id"), "cant_read": res.get("cant_read")}
+            "venue_id": res.get("venue_id"), "cant_read": _said(res.get("cant_read"))}
 
 
 def _from_engine(res: dict) -> dict:
@@ -125,7 +125,7 @@ def _from_engine(res: dict) -> dict:
     return {"name": _fact(facts.get("name")), "type": _fact(facts.get("type")), "hours": _fact(facts.get("hours")),
             "price": _fact(facts.get("price_range")), "city": _fact(facts.get("city")), "channels": kinds,
             "rung": hb.get("rung"), "rung_label": hb.get("rung_label"), "engine_said": hb.get("say"),
-            "cant_read": (res.get("cant_read") or {}).get("say") if isinstance(res.get("cant_read"), dict) else res.get("cant_read")}
+            "cant_read": _said(res.get("cant_read"))}
 
 
 async def _read_site(website: str, replay: bool = False, place: Optional[dict] = None) -> Optional[dict]:
@@ -180,18 +180,20 @@ def cached(place: dict) -> Optional[dict]:
     return hit["profile"] if hit and time.time() - hit["at"] < TTL_S else None
 
 
-def google_label(place: dict) -> Optional[dict]:
-    """The map's category, before (or without) the venue's own site: only ever "listed on the map as …"."""
-    t = place.get("google_type") or place.get("type")
-    if t and str(t).startswith("listed on "):
-        return {"value": str(t), "source": "map"}
-    return {"value": f"listed on the map as {t}", "source": "map"} if t else None
+def _said(x) -> Optional[str]:
+    """Sasha 250 · why a site couldn't be read, as ONE sentence on every surface: the engine sends {rule, say, evidence, at} — the
+    detail sheet rendered that object and the whole page crashed (found live on /s2: "the sheet closes")."""
+    if isinstance(x, dict):
+        return str(x.get("say") or x.get("evidence") or x.get("rule") or "their site couldn't be read")[:300]
+    return str(x)[:300] if x else None
 
 
 def shape(place: dict, site: Optional[dict]) -> dict:
     """THE ONE PLACE SHAPE — the card and its detail sheet, on every surface."""
     site = site or {}
     known = (place.get("place") or {}).get("type") if isinstance(place.get("place"), dict) else None
+    if isinstance(known, dict) and known.get("source") != "site":
+        known = None   # Sasha 250 · a map category kept from an older card is not what the place is
     if not site.get("type") and not known and place.get("type_source") == "site" and place.get("type"):
         known = {"value": place["type"], "source": "site"}   # the site's words this card already carries — never relabelled as the map's
     own = list((site or {}).get("photos") or [])
@@ -200,7 +202,10 @@ def shape(place: dict, site: Optional[dict]) -> dict:
     oa = place.get("open_at")
     return {"place_id": place.get("place_id"), "name": (site.get("name") or {}).get("value") or place.get("name"),
             "listing_name": place.get("name"), "website": place.get("website"),
-            "type": site.get("type") or known or google_label(place),
+            # Sasha 250 · WHAT IT IS comes from their own site, or nothing — never the map's category, not even labelled (D3; the
+            # map called arroz restaurants "Korean"). The map's word stays on the record (map_says) and in google_type for filters.
+            "type": site.get("type") or known,
+            **({"map_says": place.get("google_type") or place.get("type")} if (place.get("google_type") or place.get("type_source") != "site") and (place.get("google_type") or place.get("type")) else {}),
             "hours": site.get("hours") or ({"value": oa.get("words"), "source": "google"} if isinstance(oa, dict) and oa.get("words") else None),
             "price": site.get("price") or ({"value": place["price_words"], "source": "google"} if place.get("price_words") else None),
             "photos": list(dict.fromkeys(photos))[:6], "photos_source": "site" if own else ("google" if photos else None),
@@ -209,7 +214,7 @@ def shape(place: dict, site: Optional[dict]) -> dict:
             "listing_url": place.get("listing_url"),
             "channel": channel(site) if site else None,
             "read": "site" if site and not site.get("cant_read") else ("cant_read" if site.get("cant_read") else "pending"),
-            **({"cant_read": site["cant_read"]} if site.get("cant_read") else {})}
+            **({"cant_read": _said(site["cant_read"])} if site.get("cant_read") else {})}
 
 
 async def profile(place: dict, replay: bool = False) -> dict:
@@ -283,9 +288,9 @@ def text(p: dict) -> str:
 
 
 def type_words(p: dict) -> str:
-    """What she may SAY the place is: the site's own words; Google's only as "listed on the map as …"."""
+    """What she may SAY the place is: the site's own words — nothing else (Sasha 250: never the map's category)."""
     t = p.get("type") or {}
     return t.get("value") or ""
 
 
-__all__ = ["profile", "profiles", "enrich", "shape", "channel", "cached", "text", "type_words", "google_label", "ASK_FILL", "ENGINE_OP", "CALL"]
+__all__ = ["profile", "profiles", "enrich", "shape", "channel", "cached", "text", "type_words", "ASK_FILL", "ENGINE_OP", "CALL"]

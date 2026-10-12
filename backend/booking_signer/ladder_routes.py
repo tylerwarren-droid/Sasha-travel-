@@ -430,7 +430,7 @@ async def _with_truth(out: dict) -> None:
         log.warning("[ladder] venue truth not read: %s", type(e).__name__)
         for c in out.get("candidates") or []:
             if c.get("place_id") in want and c.get("type") and not c.get("type_source"):
-                c["google_type"], c["type"], c["type_source"] = c["type"], f"listed on the map as {c['type']}", "map"
+                c["google_type"], c["type"], c["type_source"] = c["type"], None, None   # Sasha 250 · never the map's category as what it is
 
 
 async def _with_google_photos(out: dict, budget: float = 0.7) -> None:

@@ -3,12 +3,12 @@
  * Sasha 248 · ONE PLACE CARD — the same card and the same detail sheet on /s2 and /next (WhatsApp gets the same content as text +
  * link, backend/agapi/venue_truth.text). One data shape: the search's card (its `place` from agapi/venue_truth) and, on tap, the
  * full place from /api/place/{id}. Every fact says where it came from: the venue's own site (quoted), or Google — a Google
- * category is only ever "listed on the map as …", never stated as what the place is.
+ * category is never stated as what the place is (Sasha 250: not even labelled — only the venue's own words say what it is).
  * Tyler's S2 test (12 Oct): the thumbnails didn't open — a tap (or double-tap) on the photo or the card now opens the sheet.
  */
 import { useEffect, useState } from 'react'
 import { untag } from '@/lib/no-test-label.mjs'
-import { placeFacts, photoOf, sourceWord } from '@/lib/place-view.mjs'
+import { cantRead, placeFacts, photoOf, sourceWord } from '@/lib/place-view.mjs'
 
 type Ev = Record<string, any>   // eslint-disable-line @typescript-eslint/no-explicit-any
 const GOLD = '#E8B923'
@@ -111,7 +111,7 @@ export function PlaceSheet({ card, onClose, onBook }: { card: Ev; onClose: () =>
         {row('Prices', f.price)}
         {place.rating ? <div style={{ padding: '6px 0', fontSize: 14, borderTop: '1px solid rgba(255,255,255,.08)' }}>★ {place.rating}{place.rating_count ? ` · ${Number(place.rating_count).toLocaleString()} reviews` : ''} <span style={{ color: 'rgba(255,255,255,.55)', fontSize: 12 }}>· Google</span></div> : null}
         {reading && place.read !== 'site' ? <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.55)', padding: '6px 0' }}>Reading their own site…</div> : null}
-        {place.cant_read ? <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.55)', padding: '6px 0' }}>Their site couldn&apos;t be read: {untag(place.cant_read)}</div> : null}
+        {cantRead(place) ? <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.55)', padding: '6px 0' }}>Their site couldn&apos;t be read: {untag(cantRead(place))}</div> : null}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
           <button type="button" onClick={onBook} style={{ padding: '10px 18px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 800 }}>Book</button>
           {place.website ? <a href={place.website} target="_blank" rel="noreferrer" style={{ padding: '10px 16px', borderRadius: 999, border: `1px solid ${GOLD}`, color: GOLD, fontWeight: 700, textDecoration: 'none' }}>Their site ↗</a> : null}

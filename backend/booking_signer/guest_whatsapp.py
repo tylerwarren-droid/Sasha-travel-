@@ -3222,20 +3222,26 @@ async def auto_email_from_link(ch: dict, l: dict, read_row: dict) -> str:
 
 
 async def auto_call_from_email(ch: dict, b: dict, email_id: str) -> str:
-    """Sasha 132 · no reply within 24 h and the guest's yes covered it: the call is prepared and PLACED under that yes."""
+    """Sasha 132 · no reply within 24 h and the guest's yes covered it: the call is prepared and PLACED under that yes.
+    Sasha 250 · an account without WhatsApp gets the call too: its word goes to WhatsApp only when there is a channel."""
     account = ch["account_id"]
+
+    async def _quiet(_ch, _text, template=None):
+        log.info("[guest_whatsapp] no-reply call: no WhatsApp to tell (the outcome is in get_status)")
+        return "not sent: no channel"
+    tell = _tell if ch.get("wa_id_sha256") else _quiet
     s, cj = await api(account, "POST", "/api/booking/calls", {"reservation": _draft_of(b), "read_id": str(b["read_id"])})
     if s != 200:
-        await _tell(ch, f"No reply from {b.get('venue')} in 24 hours. I was going to call them as agreed, but couldn't prepare it: {refusal_words(cj, s)}.")
+        await tell(ch, f"No reply from {b.get('venue')} in 24 hours. I was going to call them as agreed, but couldn't prepare it: {refusal_words(cj, s)}.")
         return f"not prepared: {s}"
     s2, pj = await api(account, "POST", f"/api/booking/calls/{cj['call_id']}/place",
                        {"read_back_sha256": cj["read_back"]["sha256"], "approval": {"how": "escalation_plan", "from": {"kind": "email", "id": email_id}}}, timeout=120)
     if s2 != 200 or pj.get("status") not in ("placed", "uncertain", "scheduled"):
-        await _tell(ch, f"No reply from {b.get('venue')} in 24 hours. I tried to call them as agreed, but couldn't: {pj.get('why') or refusal_words(pj, s2)}.")
+        await tell(ch, f"No reply from {b.get('venue')} in 24 hours. I tried to call them as agreed, but couldn't: {pj.get('why') or refusal_words(pj, s2)}.")
         return "not placed"
     when = f" at {str(pj.get('scheduled_for') or '')[11:16]}, when they open" if pj.get("status") == "scheduled" else " now"
-    await _tell(ch, f"No reply from {b.get('venue')} to my email in 24 hours, so — as you agreed — I'm calling them{when}. I'll tell you what they say.")
-    if pj.get("status") in ("placed", "uncertain") and guest_numbers():
+    await tell(ch, f"No reply from {b.get('venue')} to my email in 24 hours, so — as you agreed — I'm calling them{when}. I'll tell you what they say.")
+    if pj.get("status") in ("placed", "uncertain") and guest_numbers() and ch.get("wa_id_sha256"):
         _spawn(watch_call(ch, sender_for(await STORE.get_state(ch["wa_id_sha256"])), account, cj["call_id"], b.get("venue") or "the venue", "book",
                           f"{SN.day_words(b['date'])} at {b['time']}"))
     return pj.get("status")

@@ -518,7 +518,15 @@ async def no_reply_offers(now: datetime) -> List[dict]:
     if not no_reply_call_on() or STORE is None or GW.STORE is None or LR.LADDER_STORE is None:
         return []
     done: List[dict] = []
-    for ch in await GW.STORE.all_channels():
+    chans = list(await GW.STORE.all_channels())
+    # Sasha 250 · the no-reply call is the rule for EVERY account with a request out — not only those with WhatsApp (they learn the
+    # outcome on Sasha's screen, from get_status); a question ("shall I call?") still needs WhatsApp, an agreed call doesn't
+    have = {c["account_id"] for c in chans}
+    try:
+        chans += [{"account_id": a} for a in await LR.LADDER_STORE.request_accounts() if a not in have]
+    except Exception as e:
+        log.warning("[proactive] accounts with a request out not listed: %s", type(e).__name__)
+    for ch in chans:
         account = ch["account_id"]
         for b in await GW._upcoming(account, names=False):   # email bookings: no receipt name to re-read
             if b.get("channel") != "email" or b.get("status") not in ("requested", "attempting") or not b.get("read_id") or not b.get("requested_at"):
@@ -544,6 +552,8 @@ async def no_reply_offers(now: datetime) -> List[dict]:
             email = await LR.LADDER_STORE.get_email(account, str(b.get("intent_id") or "")) if b.get("intent_id") else None
             if email and ESC.has_plan(email.get("read_back_lines")):   # Sasha 132 · the guest's one yes covered this call
                 outcome = await GW.auto_call_from_email(ch, b, str(email["email_id"]))
+            elif not ch.get("wa_id_sha256"):
+                outcome = "no plan, no WhatsApp to ask"   # their yes didn't cover a call and there's no way to ask: nothing dialled
             else:
                 outcome = await GW.offer_no_reply_call(ch, b, row)
             await STORE.finish(sid, "whatsapp_session" if outcome == "sent" else "skipped", outcome)

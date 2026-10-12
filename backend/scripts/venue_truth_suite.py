@@ -46,7 +46,8 @@ async def main() -> bool:
     check("(a) never 'Korean'", "korean" not in str(c.get("type")).lower() and c.get("google_type") == "Korean Restaurant")
     nosite = [{"place_id": "x", "name": "No Site", "type": "Korean Restaurant"}]
     await VT.enrich(nosite, budget_s=1)
-    check("(a) the map's category only labelled", nosite[0]["type"] == "listed on the map as Korean Restaurant", nosite[0]["type"])
+    check("(a) no site read: nothing said about what it is — never the map's category (Sasha 250)", nosite[0]["type"] is None
+          and nosite[0]["place"].get("map_says") == "Korean Restaurant", str(nosite[0].get("type")))
 
     # (b) ── the fill-or-request question, then "fill it now" → the prepared page, recorded human_tap
     p = await VT.profile(dict(HAMMAM))

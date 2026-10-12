@@ -54,7 +54,7 @@ async def cases(a: str) -> None:
        and len((ev or {}).get("cards") or []) == 2 and all(any(o["chosen"] for o in c["options"]) for c in ev["cards"]),
        f"{ {k: len(v) for k, v in fo.items()} }")
     out = await API.call(ctx, "search_flights", {"origin": "Madrid", "destination": "Hanoi",
-                                                 "date": (date.fromisoformat(start) - timedelta(days=1)).isoformat(), "passengers": 2, "leg": "out"})
+                                                 "date": start, "passengers": 2, "leg": "out"})   # Sasha 251 · the trip's first day
     other = next((f for f in (out.get("result") or {}).get("flights") or [] if f["airline"] != res["flight_out"]["airline"]), None)
     c = await API.call(ctx, "choose_offer", {"offer_id": other["offer_id"], "idempotency_key": "agent-suite-c1"}) if other else {}
     rows = await BK.items(a, res["trip_id"], ("chosen",))

@@ -31,6 +31,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from agapi import v0 as API
 from app.agent import spoken as SP
+from app.agent import voice as _V   # Sasha 251 · honest results: which tools show something, and her line when one failed
 from app.services import persona as P
 
 log = logging.getLogger("agent.sasha")
@@ -694,6 +695,10 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     tstate: Dict[str, Any] = {"cards": list(screen.get("cards") or []), "ribbon": screen.get("ribbon"),
                               "names": list(screen.get("names") or []), "allowed": set(screen.get("names") or []), "dropped": [],
                               "new": False, "tool_names": set()}
+    # Sasha 251 · HONEST RESULTS: this turn's showing tools (voice.SHOWS) and whether anything reached their screen — a claim of
+    # cards, a form or a total after they all failed is never said. Off on /next with parity off (byte-identical: SASHA_S1_PARITY=off)
+    honest = surface == "s2" or s1_parity()
+    tstate.update(showing=[], drawn=False, unshown_dropped=[])
 
     def system_now() -> list:
         # Sasha 205 · PROMPT CACHING: her persona is the same every call (cached); the rest is per turn
@@ -734,6 +739,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         """The part of this chunk she may say: claims and prices checked (a failure holds the rest of the turn), her internals
         and test disclaimers dropped, an opener she's used — or any opener right after her acknowledgement — taken off."""
         nonlocal held, booked_now
+        if honest and _V.unshown(tstate["showing"], tstate["drawn"]) and _V.claims_shown(spoken_prose(chunk)):
+            tstate["unshown_dropped"].append(chunk[:80])   # Sasha 251 · the whole step's words go: they describe what never came back
+            return ""
         out = []
         for x in [p.strip() for p in re.split(r"(?<=[.!?])\s+", spoken_prose(chunk)) if p.strip()]:
             if held:
@@ -830,6 +838,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             if len(ctx.calls) >= MAX_TOOL_CALLS:   # Sasha 215 · CR 56 #7 — a turn's tool calls are capped
                 results.append({"type": "tool_result", "tool_use_id": u.id, "content": json.dumps({"ok": False, "error": {
                     "code": "budget_turn", "message": "no more tool calls this turn — answer with what you have"}})})
+                if u.name in _V.SHOWS:   # Sasha 251 · asked for and not run: it showed nothing
+                    tstate["showing"].append({"tool": u.name, "ok": False})
                 continue
             if t and t["idempotent"]:
                 args["idempotency_key"] = f"{turn_key}:{u.name}:{hashlib.sha256(json.dumps(u.input, sort_keys=True).encode()).hexdigest()[:12]}"
@@ -839,6 +849,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             if r.get("ok"):
                 _amounts(r["result"], allowed)
             line = outage(r)
+            if u.name in _V.SHOWS:   # Sasha 251 · what this showing tool did (an outage line is already her honest line)
+                tstate["showing"].append({"tool": u.name, "ok": bool(r.get("ok")), "message": (r.get("error") or {}).get("message"),
+                                          "outage": bool(line)})
             if line and line not in said:   # Sasha 215 · an outage is said by code, as it is — never paraphrased into "no hotels"
                 for e in await flush():
                     yield e
@@ -858,6 +871,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             yield {"type": "tool", "name": u.name, "agent": (t or {}).get("agent"), "ok": r.get("ok"),
                    **({"error": r["error"]["code"]} if not r.get("ok") else {})}
             if r.get("ok") and u.name in _CHANGES_TRIP:
+                tstate["drawn"] = True   # Sasha 251 · the trip view refreshes
                 yield {"type": "trip_changed"}
             if surface == "s2" and not wa and r.get("ok") and u.name == "book_venue" and (r.get("result") or {}).get("status") == "confirmed":
                 bev = await booked_event(account)   # Sasha 249 · ONE STATUS: /s2's "Booked" card comes from this event only (never
@@ -883,6 +897,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                         tstate["cards"] = [c for c in ev["preset"].get("cards") or [] if c.get("place_id")]
                         tstate["ribbon"] = ev.get("ribbon")
                 if ev:
+                    tstate["drawn"] = True   # Sasha 251 · something reached their screen this turn
                     yield {**ev, "turn": turn_key}
             results.append({"type": "tool_result", "tool_use_id": u.id, "content": json.dumps(model_result(r, u.name), default=str)[:12000]})
         msgs.append({"role": "user", "content": results})
@@ -909,6 +924,23 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         text = f"{spoken} {rest}".strip() if spoken else new
         guard_log += [f"rewritten{' then stripped: ' + '; '.join(bad2) if bad2 else ''}"]
         yield {"type": "replace", "text": text, "speak": bool(held and rest), "say": SP.speakable(rest)}
+    failed = _V.unshown(tstate["showing"], tstate["drawn"]) if honest else []
+    if failed:   # Sasha 251 · HONEST RESULTS: a showing tool failed and nothing was drawn — she says so, never what isn't there
+        claims = _V.claims_shown(text)
+        if claims or tstate["unshown_dropped"] or not text:
+            kept = [s_ for s_ in re.split(r"(?<=[.!?])\s+", text) if s_.strip() and s_ not in claims]
+            line = "" if any(c.get("outage") for c in failed) else _V.failed_line(failed[0]["tool"], failed[0].get("message") or "")
+            line = line if line and _norm(line) not in {_norm(k) for k in kept} else ""
+            new = " ".join(kept + ([line] if line else [])).strip()
+            guard_log.append(f"unshown: {failed[0]['tool']} failed — claims dropped: {claims + tstate['unshown_dropped']}")
+            if claims:   # already said aloud (before the tool ran): the reply is replaced, and the honest line spoken
+                yield {"type": "replace", "text": new, "speak": bool(line), "say": SP.speakable(line)}
+            elif line:
+                yield {"type": "text", "delta": line + " "}
+                yield {"type": "say", "text": SP.speakable(line)}
+            if line:
+                said.append(line)
+            text = new
     if len(text) > TRIM_CHARS:   # Sasha 205 · the safety trim: a very long reply ends at a sentence
         cut = text[:TRIM_CHARS]
         text = cut[: max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! ")) + 1] or cut

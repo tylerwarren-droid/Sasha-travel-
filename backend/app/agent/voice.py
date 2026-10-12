@@ -7,6 +7,8 @@ tools hand her word for word, and the transcript check the deploy gate runs. Not
   done_form()  → the confirmation once a prefilled form is on their screen
   SENT         → the confirmation once a request has gone to the venue
   faults()     → a transcript's breaches: a channel named, or a second question for the same detail
+  SHOWS / SAYS → Sasha 251 · which tools put something on screen; FAILED / failed_line() → what she says when one failed and
+                 nothing was drawn; claims_shown() / honest_faults() → a claim of what isn't there (sasha.turn acts on it)
 """
 from __future__ import annotations
 
@@ -47,7 +49,95 @@ RULES = f"""
   again for something you have — from their Keep, what you remember, or earlier in this chat. If they move on without answering,
   don't ask it again: answer what they said, and leave the question where it is until they come back to it.
 - Confirm short: one or two sentences, then the card. "{DONE_FORM}" / "{SENT}"
+- When a tool fails (its result says ok: false), say plainly that it didn't work and what you'll do next. Never describe results,
+  cards, a form, a booking, a message sent or a total that the tool didn't return — nothing is on their screen unless a tool put it
+  there this turn.
 """
+
+# Sasha 251 · HONEST RESULTS (found live on /s2: search_venues failed and she said "Have a look whenever you like and tap one if it
+# tempts you" — no card was ever drawn). Every tool she has is in exactly one of these two tables (tests/test_s251_honest_results.py
+# holds it): SHOWS — when it works, something appears on their screen (cards, a form, a read-back, a total, the trip); the value is
+# what she calls it when it fails. SAYS — its answer is only ever in her words, so a failure has nothing on screen to lie about.
+SHOWS = {
+    "search_venues": "That search", "read_booking_route": "Looking up how they take bookings", "search_flights": "The flight search",
+    "search_stays": "The search for places to stay", "propose_trip": "Putting the trip together", "swap_stay": "Changing the hotel",
+    "choose_offer": "Changing the flight", "hold_booking": "Getting the booking ready", "book": "Setting up the payment",
+    "get_total": "Adding it up", "get_trip": "Looking up your trip", "get_status": "Looking up your trip",
+    "hold_venue": "Getting the booking ready", "book_venue": "The booking", "cancel_venue": "The cancellation",
+    "my_plans": "Looking up your plans", "running_late": "Getting that message ready", "change_booking": "Getting the change ready",
+    "cancel_booking": "Getting the cancellation ready", "send_email": "Sending that", "send_whatsapp": "Sending that",
+    "hotel_request": "Sending that", "add_to_calendar": "The calendar links", "what_i_can_do": "Pulling that up",
+    "keep_add": "Opening the photo picker",
+    # fine print (CR 74/75/81) — each answers with a card on /s2
+    "my_cards": "Looking up your cards", "add_card": "Adding the card", "card_cover": "Checking the cover", "which_card": "Checking your cards",
+    "rental_cover": "Checking the cover", "accident": "Opening the accident case", "accident_notify": "Getting that message ready",
+    "file_claim": "The claim", "claim_status": "Looking up the claim", "flight_money_back": "Checking what you're owed",
+    "file_flight_claim": "The claim", "suggest_activities": "That search", "bag_money_back": "Checking what you're owed",
+    "file_bag_claim": "The claim", "money_claim_status": "Looking up the claim", "entry_documents": "Checking the entry rules",
+    "prepare_entry": "Getting the entry papers ready",
+    # subscriptions (CR 72/84)
+    "find_subscriptions": "Looking for your subscriptions", "plan_cancel_subscription": "The cancellation",
+    "cancel_subscription": "The cancellation",
+}
+SAYS = ("prepare_trip", "check_offer", "save_travellers", "get_activity", "keep_list", "keep_use", "note_not_yet", "note_rental",
+        "remember_name")
+
+FAILED = "{what} didn't work{why}. Say the word and I'll try again."
+
+# what claims something is on their screen, came back, or went out — false after a showing tool failed and nothing was drawn
+_SHOWN_CLAIM = re.compile(
+    r"\b(?:have|take) a (?:quick )?look\b|\bbelow\b|\bon (?:your|the) (?:screen|cards?|panel)\b|\btap (?:one|it|any|the|to|on)\b|"
+    r"\btempts? you\b|\bpick (?:one|any)\b|\bhere (?:are|is|they are|it is)\b|\bhere's\b|\bi(?:'ve| have)? (?:found|pulled|put|got) "
+    r"(?:you |some |a few |three |two |four |five |the )|\bthe (?:options|cards|results|places|flights|hotels|links) (?:are|is) "
+    r"(?:up|here|below|ready|on)\b|\bit'?s (?:all )?(?:ready|there|on your)\b|^\W*(?:sent|done)\b|\b(?:i(?:'ve| have)|it'?s) "
+    r"(?:sent|gone)\b|\bcheck (?:them|it) out\b", re.I)
+# a sentence that says it didn't work is never a claim, whatever else it mentions
+_SAYS_FAILED = re.compile(r"\b(?:didn'?t|did not|couldn'?t|could not|can'?t|cannot|wasn'?t able|not able|unable|won'?t|isn'?t "
+                          r"working|went wrong|no luck|nothing came back|failed)\b", re.I)
+
+
+def claims_shown(text: str) -> List[str]:
+    """Sasha 251 · the sentences in what she says that claim something is on their screen (or came back, or went out) — and
+    don't say it failed."""
+    return [s for s in re.split(r"(?<=[.!?])\s+", text or "") if s.strip() and _SHOWN_CLAIM.search(s) and not _SAYS_FAILED.search(s)]
+
+
+def plain_why(message: str) -> str:
+    """A failed tool's own words, only when they read as plain words to a person (no codes, paths, tool names or instructions to
+    the model) — else nothing."""
+    m = (message or "").strip().rstrip(".")
+    if not m or len(m) > 100 or re.search(r"[_(){}\[\]/<>|:]|\b(?:tool|call|answer with|get_status|retry|internal)\b", m, re.I):
+        return ""
+    return m
+
+
+def failed_line(tool: str, message: str = "") -> str:
+    """Sasha 251 · what she says when a showing tool failed and nothing reached their screen: that it didn't work, and what next."""
+    why = plain_why(message)
+    return FAILED.format(what=SHOWS.get(tool, "That"), why=f" — {why[0].lower() + why[1:]}" if why else "")
+
+
+def unshown(calls: Iterable[dict], rendered: bool) -> List[dict]:
+    """Sasha 251 · this turn's failed showing tools, when nothing reached their screen ([] when something did — a retry that worked,
+    a second tool's card). `calls`: {"tool", "ok", "message"?}."""
+    if rendered:
+        return []
+    return [c for c in calls if c.get("tool") in SHOWS and not c.get("ok")]
+
+
+def honest_faults(turns: Iterable[dict]) -> List[str]:
+    """Sasha 251 · the gate's sibling of faults(): each turn {"said", "calls": [{"tool","ok"}], "rendered": bool} → a breach when a
+    showing tool failed, nothing was drawn, and what she said claims it was (or never says it didn't work)."""
+    out: List[str] = []
+    for i, t in enumerate(turns):
+        failed = unshown(t.get("calls") or [], bool(t.get("rendered")))
+        if not failed:
+            continue
+        for s in claims_shown(t.get("said") or ""):
+            out.append(f"turn {i}: {failed[0]['tool']} failed and she says {s.strip()!r}")
+        if not _SAYS_FAILED.search(t.get("said") or ""):
+            out.append(f"turn {i}: {failed[0]['tool']} failed and she never says so")
+    return out
 
 
 def done_form(surface: str = "s2") -> str:
@@ -94,4 +184,4 @@ def check(lines: Sequence[str]) -> List[str]:
 
 
 __all__ = ["ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
-           "faults", "check"]
+           "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults"]

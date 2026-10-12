@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from . import basket as BK
@@ -235,10 +235,13 @@ async def refresh(account: str, origin: str) -> Dict[str, Any]:
     chosen_fl = [r for r in await BK.items(account, trip, ("chosen",)) if r["kind"] == "flight"]
     picked_by_guest = bool(chosen_fl)
     if not chosen_fl:   # nothing chosen: out and back, the cheapest bookable (said in the read-back)
-        last = date.fromisoformat(str(days[-1].get("date"))[:10])
+        from . import plan_store as PS
+        out_day, back_day = PS.leg_days(p)   # Sasha 251 · the trip record's own days (before: the day before it, and the day after its last)
+        out_day = out_day or start.isoformat()
+        back_day = back_day or str(days[-1].get("date"))[:10]
         first_city, last_city = days[0].get("city") or "", days[-1].get("city") or ""
-        got = await asyncio.gather(_choose_cheapest(account, trip, origin, first_city, (start - timedelta(days=1)).isoformat(), party),
-                                   _choose_cheapest(account, trip, last_city, origin, (last + timedelta(days=1)).isoformat(), party))
+        got = await asyncio.gather(_choose_cheapest(account, trip, origin, first_city, out_day, party),
+                                   _choose_cheapest(account, trip, last_city, origin, back_day, party))
         if None in got:
             return {"why": "no test fare in euros that the airline's test system will book"}
     for r in [r for r in await BK.items(account, trip, ("chosen",)) if r["kind"] == "flight"]:

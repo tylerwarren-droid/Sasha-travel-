@@ -531,16 +531,31 @@ async def _build(a: dict, account: Optional[str] = None) -> dict:
     return {"itin": itin, "msg": msg}
 
 
-async def _search_legs(origin: str, days: List[dict], start: date, nights: int, party: int, airports: Optional[dict] = None) -> dict:
+async def _search_legs(origin: str, days: List[dict], out_day: str, back_day: str, party: int, airports: Optional[dict] = None) -> dict:
+    """Both legs searched ON the days given — Sasha 251 · the trip record's (plan_store.leg_days), never computed here (before:
+    the out leg was `start - 1 day`, so a Saturday trip flew out on Friday). `asked` says which days were asked for."""
     import asyncio as _aio
     first_city = (next((d.get("city") for d in days if d.get("city")), "") or "").split(",")[0]
     last_city = (next((d.get("city") for d in reversed(days) if d.get("city")), first_city) or "").split(",")[0]
     ap = airports or {}   # Sasha 211 · the world planner names the airports (a last night by the sea has none of its own)
-    legs = [("out", origin, ap.get("arrive") or airport_of(first_city), (start - timedelta(days=1)).isoformat()),
-            ("back", ap.get("depart") or airport_of(last_city), origin, (start + timedelta(days=nights)).isoformat())]
+    legs = [("out", origin, ap.get("arrive") or airport_of(first_city), out_day),
+            ("back", ap.get("depart") or airport_of(last_city), origin, back_day)]
     got = await _aio.gather(*[_search_healed(o, d, day, party) for _, o, d, day in legs])
+    asked = {leg: day for leg, _, _, day in legs}
     legs = [(leg, o, d, used) for (leg, o, d, _), (_, used) in zip(legs, got)]
-    return {"legs": legs, "found": [r for r, _ in got]}
+    return {"legs": legs, "found": [r for r, _ in got], "asked": asked}
+
+
+def _moved(leg: str, asked: str, used: str) -> Optional[str]:
+    """Sasha 251 · a leg flown on another day than the trip's is SAID, never silent: None when it's the trip's own day."""
+    if not asked or not used or asked == used:
+        return None
+    a, u = date.fromisoformat(asked), date.fromisoformat(used)
+    words = lambda d: f"{d.strftime('%a')} {d.day} {d.strftime('%b')}"
+    side = "earlier" if u < a else "later"
+    n = abs((u - a).days)
+    return (f"{'there' if leg == 'out' else 'home'}: no flight on {words(a)}, the trip's day — this one is on {words(u)}, "
+            f"{n} day{'s' if n != 1 else ''} {side}; say so")
 
 
 # Sasha 215 (f) · "BOOK IT" NEVER RE-PLANS (voice loop run 20, Portugal: on "book it" she proposed again — a new route, a
@@ -581,10 +596,11 @@ async def prepare_trip(ctx: Ctx, a: dict) -> dict:
     origin = (a.get("origin") or "").strip()
     if origin and origin.lower() not in p["flights"]:
         async def legs(itin_task=p["itin"], o=origin):
+            from booking_signer import plan_store as PS
             built = await itin_task
             itin = built.get("itin") or {}
-            return await _search_legs(o, itin.get("days") or [], date.fromisoformat(a["start_date"]), int(a.get("nights") or 7),
-                                      int(a.get("party") or 2), itin.get("airports"))
+            dd = PS.dates_for(a["start_date"], int(a.get("nights") or 7))   # Sasha 251 · the trip's own days (propose_trip re-checks them)
+            return await _search_legs(o, itin.get("days") or [], dd["start"], dd["end"], int(a.get("party") or 2), itin.get("airports"))
         p["flights"][origin.lower()] = _aio.create_task(legs())
     return {"preparing": ["itinerary"] + (["flights"] if origin else []), "note": "keep chatting; propose_trip will pick this up"}
 
@@ -622,9 +638,18 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
     if not itin or not itin.get("days"):
         raise ToolError("plan_failed", "the itinerary couldn't be built just now — try again")
     itin["party"] = party
+    # Sasha 251 · RIGHT DATES: decided once (plan_store.dates_for), carried by the plan, written on the trip record as they are;
+    # each day of the plan dated from the first (the stays check in and out on them)
+    itin["dates"] = PS.dates_for(a["start_date"], nights)
+    for i, d in enumerate(itin["days"]):
+        d["date"] = (start + timedelta(days=i)).isoformat()
     trip_id = await PS.save(ctx.account, itin, msg, datetime.now(timezone.utc))
     if not trip_id:
         raise ToolError("plan_not_saved", "the itinerary couldn't be saved on the account")
+    # Sasha 251 · the flights read the ONE trip record: there ON its first day, home ON its last (plan_store.leg_days)
+    rec = await PS.by_id(ctx.account, trip_id) or {"start": itin["dates"]["start"], "end": itin["dates"]["end"]}
+    out_day, back_day = PS.leg_days(rec)
+    want = {"out": out_day, "back": back_day}
     days = itin["days"]
     first_city = (next((d.get("city") for d in days if d.get("city")), a["destination"]) or "").split(",")[0]
     await BK.unchoose_flights(ctx.account, trip_id)
@@ -636,15 +661,21 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
             used_prefetch["flights"] = True
         except Exception as e:
             log.info("[agapi] prefetched flights unusable (%s) — searching now", type(e).__name__)
+    if searched is not None and searched.get("asked") != want:   # Sasha 251 · prefetched on other days than the record's: searched again
+        log.info("[agapi] prefetched flights were for %s, the trip is %s — searching now", searched.get("asked"), want)
+        searched, used_prefetch["flights"] = None, False
     if searched is None:
-        searched = await _search_legs(origin, days, start, nights, party, itin.get("airports"))
+        searched = await _search_legs(origin, days, out_day, back_day, party, itin.get("airports"))
     options: Dict[str, List[dict]] = {}
     for (leg, o, d, day), r in zip(searched["legs"], searched["found"]):   # out AND back: a flight that fits on each leg (home after midday)
         if "why" in r:   # Sasha 210 · a prepared search that failed is searched again (and the nearest days) before saying so
-            r, day = await _search_healed(o, d, day, party)
+            r, day = await _search_healed(o, d, want[leg], party)   # Sasha 251 · from the trip's own day
         if "why" in r:
             why.append(f"{leg}: {r['why']}")
             continue
+        moved = _moved(leg, want[leg], day)   # Sasha 251 · another day than the trip's only when that day had none — and said
+        if moved:
+            why.append(moved)
         cards = _in_eur(r["cards"])   # Sasha 249 · in euros at ingestion (converted, never dropped to the $ estimate)
         if not cards:
             why.append(f"{leg}: no fares that can be priced in euros")
@@ -664,6 +695,7 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
             "days": [{"day": d.get("day"), "city": d.get("city"), "stay": hotel(d), "title": d.get("title")} for d in days],
             "flight_out": flights.get("out"), "flight_back": flights.get("back"), **({"flight_note": "; ".join(why)} if why else {}),
             "flight_options": options, "party": party,
+            "dates": {"start": out_day, "end": back_day, "nights": nights},   # Sasha 251 · the trip record's days, as she should say them
             "total_eur": q.get("eur") if "eur" in q else None, **({"total_note": q.get("why")} if "why" in q else {}),
             **({"how_total": TOTAL_HOW} if "eur" in q else {}),
             "prices": "stays at the TEST hotel rate, the flight at its Duffel TEST fare — nothing is booked", "prefetched": used_prefetch,
@@ -1077,16 +1109,32 @@ async def cancel_venue(ctx: Ctx, a: dict) -> dict:
     return await VN.cancel_venue(ctx, a)
 
 
+READ_BACK_HOW = ("This is the trip as it stands. When you read it back, end with total_eur — the trip's ONE total, the same figure "
+                 "as the chat and the Trip tab — said exactly (\"about €X\" may round it to the euro); if estimates is set, say the "
+                 "stays are estimates. Never add up the items yourself. The dates are start and end, as on the trip.")
+
+
 async def get_trip(ctx: Ctx, a: dict) -> dict:
+    """The trip as it stands, from the ONE trip record (its dates) and the ONE total — Sasha 251 · the read-back carries
+    basket.trip_figures()' total (found live 12 Oct: she read the items back and gave no total). Read only."""
     from booking_signer import basket as BK
     p = await _plan(ctx)
     rows = await BK.items(ctx.account, p["trip_id"])
+    fig = await BK.trip_figures(ctx.account, p["trip_id"], p)   # Sasha 251 · the same figures get_total, the Trip tab and the guard read
     hotel = lambda d: (d.get("hotel") or {}).get("name") if isinstance(d.get("hotel"), dict) else d.get("hotel")
+    est = [l["what"] for l in fig.get("estimate_lines") or []]
     return {"trip_id": p["trip_id"], "title": p.get("title"), "start": str(p.get("start") or ""), "end": str(p.get("end") or ""),
-            "party": _party(p, rows), "days": [{"day": d.get("day"), "city": d.get("city"), "stay": hotel(d)} for d in (p.get("plan") or {}).get("days") or []],
+            "party": fig.get("party") if fig.get("party") is not None else _party(p, rows),
+            "days": [{"day": d.get("day"), "city": d.get("city"), "stay": hotel(d)} for d in (p.get("plan") or {}).get("days") or []],
             "flights": [_flight_out(r.get("snapshot") or {}, r) for r in rows if r["kind"] == "flight" and r["state"] != "suggested"],
             "stays": [{"name": (r.get("snapshot") or {}).get("name"), "from": r.get("day"), "nights": (r.get("snapshot") or {}).get("nights"),
-                       "state": r["state"], "price_eur": r.get("price_amount"), "price_source": r.get("price_source")} for r in rows if r["kind"] == "stay"]}
+                       "state": r["state"], "price_eur": r.get("price_amount"), "price_source": r.get("price_source")} for r in rows if r["kind"] == "stay"],
+            # Sasha 251 · the ONE total (EU 246 D5/T4), its instruction in the RESULT (S1's schemas and prompt stay byte-identical)
+            "total_eur": fig["total_eur"], "currency": "EUR",
+            **({"total_note": "nothing in this trip is priced yet"} if fig["total_eur"] is None else {}),
+            **({"estimates": f"{', '.join(est)}: an estimate, not a quoted price"} if est else {}),
+            **({"ask_party": fig["ask_party"]} if fig.get("ask_party") else {}),
+            "how": READ_BACK_HOW + " " + TOTAL_HOW}
 
 
 async def get_total(ctx: Ctx, a: dict) -> dict:

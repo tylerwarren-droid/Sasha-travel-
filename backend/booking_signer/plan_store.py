@@ -72,6 +72,40 @@ def dates_of(message: str, days: int, today: date) -> tuple:
     return None, None
 
 
+# ── Sasha 251 · RIGHT DATES ─────────────────────────────────────────────────────────────────────────────────────────────────
+# Found live on /s2 (12 Oct): "Saturday 24 to Monday 26 October, from Madrid" → the flight there left FRIDAY 23. propose_trip searched
+# the out leg on `start - 1 day` ("the evening before", a rule from Sasha 203 nobody said), and the read-back's re-check
+# (basket_book.refresh) used start - 1 and the last day + 1. Now a trip's dates are decided ONCE, here, from the person's own first
+# day and nights; the plan carries them, save() writes them on the trip record as they are (never re-read from a sentence), and
+# every leg reads that record: the flight there ON the first day, the one home ON the last, the stays in between.
+
+def dates_for(start_date: str, nights: int) -> Dict[str, Any]:
+    """Sasha 251 · the trip's dates from what the person said: {start, end, nights} — end = start + nights (the day they fly home)."""
+    start = date.fromisoformat(str(start_date)[:10])
+    return {"start": start.isoformat(), "end": (start + timedelta(days=int(nights))).isoformat(), "nights": int(nights)}
+
+
+def _said_dates(itinerary: dict) -> tuple:
+    """Sasha 251 · the dates the plan carries (dates_for) → (start, end) as dates; (None, None) when it carries none."""
+    d = (itinerary or {}).get("dates") or {}
+    try:
+        return date.fromisoformat(str(d["start"])[:10]), date.fromisoformat(str(d["end"])[:10])
+    except (KeyError, TypeError, ValueError):
+        return None, None
+
+
+def leg_days(p: dict) -> tuple:
+    """Sasha 251 · THE ONE PLACE a trip's flights take their days: the trip record's start (the flight there) and end (the flight
+    home). Never an "evening before" or a "day after". A record without an end (an older plan) → its last day's date.
+    → (out_day, back_day) as YYYY-MM-DD, either None when the record has no dates."""
+    start = str(p.get("start") or "")[:10] or None
+    end = str(p.get("end") or "")[:10] or None
+    if not end:
+        days = merge(p, []).get("days") or []
+        end = str((days[-1] if days else {}).get("date") or "")[:10] or None
+    return start, end
+
+
 STORE_RUN = None   # tests replace it; otherwise the ladder store's Postgres runner
 
 
@@ -89,7 +123,9 @@ async def save(account: Optional[str], itinerary: dict, message: str, now: datet
         return None
     try:
         days = itinerary["days"]
-        start, end = dates_of(message, len(days), now.date())
+        start, end = _said_dates(itinerary)   # Sasha 251 · the dates the plan carries, as decided (dates_for) — never re-parsed
+        if start is None:
+            start, end = dates_of(message, len(days), now.date())
         cities = list(dict.fromkeys(d.get("city") for d in days if d.get("city")))
         if not itinerary.get("party"):   # Sasha 169 · how many, as the guest said it ("2 of us") — the trip's bookings are for them
             from .handoff import plain_party

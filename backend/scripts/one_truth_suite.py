@@ -1,4 +1,4 @@
-"""Sasha 249 · THE CONSISTENCY TEST IN THE DEPLOY GATE (EU 245, docs/sasha/one-truth-spec.md §3) — T1–T14, offline (no model, no
+"""Sasha 249 · THE CONSISTENCY TEST IN THE DEPLOY GATE (EU 245, docs/sasha/one-truth-spec.md §3) — T1–T15, offline (no model, no
 Places, no AgAPI, no production database), in a clean process with a stripped environment (as the safety suite runs). One line per
 invariant; any T with a failing test fails the gate, and so does a T with no test at all.
 """
@@ -27,6 +27,8 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T12": ("one route", ["tests.test_s249d.OneRoute"]),
     "T13": ("no fixed examples", ["tests.test_s249_status_keep_caps.NoFixedExamples"]),
     "T14": ("durable claims and outcomes", ["tests.test_s249d.DurableClaims", "tests.test_s249d.DurableOutcomes"]),
+    # Sasha 251 · the trip's dates from the one trip record (no "evening before"), and the read-back carries the one total
+    "T15": ("right dates + one total in the read-back", ["tests.test_s251_dates.RightDates", "tests.test_s251_dates.ReadBackCarriesTheTotal"]),
 }
 
 _RUNNER = """
@@ -47,7 +49,7 @@ def main() -> int:
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     r = subprocess.run([sys.executable, "-c", _RUNNER, *names], cwd=here, env=keep, capture_output=True, text=True, timeout=300)
     line = next((l for l in r.stdout.splitlines() if l.startswith("@@RESULT@@")), None)
-    print("ONE TRUTH — the consistency test, T1–T14 (Sasha 249)", flush=True)
+    print(f"ONE TRUTH — the consistency test, T1–T{len(T)} (Sasha 249; Sasha 251 · T15)", flush=True)
     if line is None:
         print(f"  ✗ the tests did not run — {(r.stderr or r.stdout)[-300:]}", flush=True)
         return 1
@@ -60,7 +62,7 @@ def main() -> int:
         if not ok:
             failed.append(t)
         print(f"  {'✓' if ok else '✗'} {t} {what} ({ran} tests)" + ("" if ok else f" — {bad[:2] if bad else 'no test ran'}"), flush=True)
-    print(f"ONE TRUTH: {14 - len(failed)}/14 hold" + (f" — FAILED: {failed}" if failed else ""), flush=True)
+    print(f"ONE TRUTH: {len(T) - len(failed)}/{len(T)} hold" + (f" — FAILED: {failed}" if failed else ""), flush=True)
     return 1 if failed else 0
 
 

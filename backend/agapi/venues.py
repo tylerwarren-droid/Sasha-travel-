@@ -86,12 +86,15 @@ async def _read(ctx, a: dict) -> dict:
 _SHOWN: Dict[str, Dict[str, dict]] = {}   # account → place_id → the card as shown (the pick and the booking show THAT card)
 
 
-def shown_cards(r: dict) -> List[dict]:
-    """The cards the person sees: the server's ranking's default order, its `show` count — what ChatBooking shows."""
+def shown_cards(r: dict, luxe: bool = False) -> List[dict]:
+    """The cards the person sees: the server's ranking's default order, its `show` count — what ChatBooking shows.
+    Sasha 253 · G14 — luxe ("luxury" asked): €€€ and up first within that order (GW.luxe_first, the old flow's rule)."""
     all_ = [c for c in (r.get("candidates") or []) if c.get("place_id")]
     rk = r.get("ranking") or {}
     order = (rk.get("orders") or {}).get(rk.get("default") or "rated")
     by = {c["place_id"]: c for c in all_}
+    if luxe:
+        order = _API().luxe_first(list(order or by), by)
     cards = [by[i] for i in order if i in by] if order else all_
     return cards[: int(r.get("show") or 5)]
 
@@ -249,26 +252,86 @@ UNDER = {"type": "string", "description": "the name the booking goes under, ONLY
                                           "leave it out to use their own name"}
 
 
+# Sasha 253 · G7 — a request with NO slot (the old flow's "venue_proposes"): custom work they quote for (a tattoo, a commission —
+# an email asking for a date and a quote), or "whenever they have space". G8 — a REAL request to a hotel for N nights (its own
+# booking engine with the stay in the link, an email asking for a room, a call that says the stay). /s2, WhatsApp's brain and
+# /next under parity only; old S1 (parity off) keeps its schema and its day + time, byte-identical.
+OPEN_SLOT = {"enum": ["quote", "whenever"], "description": "ONLY when they want no set time (leave time out): 'quote' — custom work "
+                                                          "with no slot to book (a tattoo, a commission): their email asks for a date "
+                                                          "and a quote; 'whenever' — 'whenever they have space': the venue proposes "
+                                                          "the time. A day they named may stay in `day`."}
+NIGHTS = {"type": "integer", "minimum": 1, "maximum": 30,
+          "description": "a REAL request to a hotel for this many nights from `day` (check-in; time may be left out): their own "
+                         "booking engine with the stay filled in, an email asking for a room, or a call that says the stay. Only "
+                         "when they want to book with the hotel itself — a TEST stay is search_stays / hold_booking"}
+
+
 def with_under(tool: dict) -> dict:
-    """Sasha 251 · hold_venue's schema with `under` (the person the booking is for) — /s2 and /next under parity only."""
+    """Sasha 251 · hold_venue's schema with `under` (the person the booking is for) — /s2 and /next under parity only.
+    Sasha 253 · and `open_slot` (G7) and `nights` (G8); day and time no longer required there (API.call: required_of)."""
     sch = dict(tool["input_schema"])
-    sch["properties"] = {**sch["properties"], "under": UNDER}
+    sch["properties"] = {**sch["properties"], "under": UNDER, "open_slot": OPEN_SLOT, "nights": NIGHTS}
+    sch["required"] = [k for k in sch["required"] if k not in ("day", "time")]
     return {**tool, "input_schema": sch}
+
+
+def required_of(ctx, name: str, required: List[str]) -> List[str]:
+    """Sasha 253 · what API.call checks is there: hold_venue on the one path takes no time (G7 / G8) — its own rules say what's
+    missing (when_invalid). Old S1 (parity off): exactly as it was."""
+    if name == "hold_venue" and one_path(ctx):
+        return [k for k in required if k not in ("day", "time")]
+    return required
+
+
+def _nights(ctx, a: dict) -> Optional[int]:
+    """Sasha 253 · G8 — the hotel stay's nights (the one path only), else None."""
+    try:
+        n = int(a.get("nights") or 0)
+    except (TypeError, ValueError):
+        return None
+    return n if 1 <= n <= 30 and one_path(ctx) else None
+
+
+def _open_slot(ctx, a: dict) -> Optional[str]:
+    return a.get("open_slot") if a.get("open_slot") in ("quote", "whenever") and not a.get("time") and one_path(ctx) else None
+
+
+def _slot_key(ctx, a: dict) -> str:
+    """The held booking's `when`, as this hold would make it (the same booking held again is recognised)."""
+    if _open_slot(ctx, a):
+        return ""
+    if _nights(ctx, a) and not a.get("time"):
+        return f"{a.get('day')}T15:00"
+    return f"{a.get('day')}T{a.get('time')}"[:16]
 
 
 async def _reservation(ctx, a: dict, rd: dict) -> dict:
     GW = _API()
+    nights, open_slot = _nights(ctx, a), _open_slot(ctx, a)
+    day = hhmm = None
     try:
         day = date.fromisoformat(str(a["day"]))
         hhmm = time.fromisoformat(str(a["time"])[:5]).strftime("%H:%M")
     except (KeyError, ValueError):
-        raise _err("when_invalid", "day is YYYY-MM-DD and time HH:MM") from None
+        if nights and day:
+            hhmm = "15:00"   # Sasha 253 · G8 — check-in, as the old flow's hotel request (a room is never "at" a time)
+        elif open_slot:
+            day = day if a.get("day") else None
+        elif one_path(ctx):
+            raise _err("when_invalid", "day is YYYY-MM-DD and time HH:MM — ask for them; or, when they want no set time, pass "
+                                       "open_slot ('quote' for custom work they quote for, 'whenever' for 'whenever they have "
+                                       "space'); a hotel stay is day + nights") from None
+        else:
+            raise _err("when_invalid", "day is YYYY-MM-DD and time HH:MM") from None
     party = max(1, min(20, int(a.get("party") or 2)))
-    _s, d = await GW.api(ctx.account, "POST", "/api/booking/draft", {"text": _what(a), "country": rd.get("country")})
-    what = (d.get("parts") or {}).get("what")
-    if not what:
-        _s, d = await GW.api(ctx.account, "POST", "/api/booking/draft", {"text": f"{_what(a)} restaurant", "country": rd.get("country")})
-        what = (d.get("parts") or {}).get("what") or {"category": "restaurant", "activity": "table"}
+    if nights:   # Sasha 253 · G8 — the stay, as a call or a form says it (in Spanish in Spain): the old flow's own words
+        what = GW.stay_what(nights, day.isoformat(), rd.get("country") or a.get("country"))
+    else:
+        _s, d = await GW.api(ctx.account, "POST", "/api/booking/draft", {"text": _what(a), "country": rd.get("country")})
+        what = (d.get("parts") or {}).get("what")
+        if not what:
+            _s, d = await GW.api(ctx.account, "POST", "/api/booking/draft", {"text": f"{_what(a)} restaurant", "country": rd.get("country")})
+            what = (d.get("parts") or {}).get("what") or {"category": "restaurant", "activity": "table"}
     status, cj = await GW.api(ctx.account, "GET", "/api/booking/contact")
     contact = (cj or {}).get("contact") if status == 200 else None
     if not contact:
@@ -277,6 +340,10 @@ async def _reservation(ctx, a: dict, rd: dict) -> dict:
         raise _err("contact_missing", "the venue needs the person's name and mobile — ask them, once")
     # Sasha 251 · "under Alex Gate": the name they gave, else the account's own — the contact (mobile) stays theirs
     under = re.sub(r"\s+", " ", str(a.get("under") or "")).strip()[:80]
+    if hhmm is None:   # Sasha 253 · G7 — no slot: the venue proposes (the old flow's reservation for it, word for word)
+        return {"schema": "reservation/1", "flow": "availability", "who": {"name": under or contact["name"],
+                "contact": {"mobile_e164": contact["mobile_e164"]}}, "what": what, "where": {}, "when": {"mode": "venue_proposes"},
+                "how_many": {"count": party, "unit": "people"}}
     return {"schema": "reservation/1", "flow": "book", "who": {"name": under or contact["name"], "contact": {"mobile_e164": contact["mobile_e164"]}},
             "what": what, "where": {}, "when": {"mode": "at", "at": f"{day.isoformat()}T{hhmm}"},
             "how_many": {"count": party, "unit": "people"}}
@@ -434,7 +501,7 @@ async def hold_venue(ctx, a: dict) -> dict:
     # made a new form with a new sha256, so the yes was "read back first" again — and the booking looped, never sent.
     if held and held.get("out") and held["at"] < ctx.started and not stale(held["at"]) \
             and (not a.get("route") or a.get("route") == held.get("rung")) \
-            and str(held.get("when") or "")[:16] == f"{a.get('day')}T{a.get('time')}"[:16] and int(held.get("party") or 0) == int(a.get("party") or 0) \
+            and str(held.get("when") or "")[:16] == _slot_key(ctx, a) and int(held.get("party") or 0) == int(a.get("party") or 0) \
             and ((a.get("place_id") and a.get("place_id") == held.get("place_id")) or _base(a.get("name") or "") == _base(held.get("venue") or "")):
         card = card_of(ctx.account, a.get("place_id") or held.get("place_id"), a.get("name"))
         return _with_card(card, {**held["out"], "same_read_back": "they've heard this — on their yes, call book_venue (never hold again)"})
@@ -443,7 +510,7 @@ async def hold_venue(ctx, a: dict) -> dict:
     _PREV[ctx.account] = _HELD.pop(ctx.account, None)   # Sasha 236 · kept aside ONLY to tell "the same words again" (_hold)
     rd = await _read(ctx, a)
     res = await _reservation(ctx, a, rd)
-    at = res["when"]["at"]
+    at = res["when"].get("at") or ""   # Sasha 253 · G7 — none when the venue proposes
     now = datetime.now(timezone.utc)
     route = a.get("route")
     card = card_of(ctx.account, a.get("place_id"), a.get("name"))   # Sasha 213 · this venue's card, highlighted on screen
@@ -485,6 +552,13 @@ async def _engine_route(ctx, a: dict, rd: dict, res: dict, at: str, now, route: 
     None: hand on to the request executors (email / WhatsApp / call) with the route set."""
     from agapi import venue_truth as VT
     from app.agent import voice as V
+    if (res.get("when") or {}).get("mode") == "venue_proposes":   # Sasha 253 · G7 — no slot: the request (email, else a call), its read-back, the yes
+        return await _open_request(ctx, a, rd, res, route)
+    if _nights(ctx, a):
+        # Sasha 253 · G8 — HOTELS STAY ON THE LADDER: their own booking engine with the stay in its link (the links API builds it —
+        # a prefilled page can't carry the dates), an email asking for a room, a call that says the stay. No "email or book now?"
+        # question (the old flow never asked it for a room); the person's chosen route first.
+        return await _hold_inner(ctx, a, rd, res, at, now, route)
     if not route and eng.get("ask"):
         alt = ENGINE_ROUTE.get((eng.get("alternative") or {}).get("kind") or "", "email")
         return {"status": "choose_route", "venue": rd["venue"], "ask": V.ASK_BOOK,
@@ -530,11 +604,21 @@ async def _prepared(ctx, a: dict, rd: dict, res: dict, at: str, now, eng: dict, 
         lines = [f"I'll put {venue}'s own booking page on your phone, with your booking ready to confirm: {GW.summary(res)}, under {res['who']['name']}.",
                  "You press confirm there (and tick any “I'm not a robot” box) — I can't press it for you.",
                  "Nothing is booked until " + ("their page confirms it." if eng.get("confirm") == "instant" else "they confirm it.")]
+    ly = await _loyalty(ctx, rd, res)
+    if ly:   # Sasha 253 · G14 — a matching loyalty number from the Keep: named in the read-back (the Keep's rule), masked in every
+        # field she or the screen sees; its value is opened once, logged, only into the copy on THEIR phone (_book_inner)
+        from booking_signer import loyalty as LY
+        from booking_signer.vault import crypto as VC
+        lines = lines[:1] + [VC.access_line(ly.get("provider") or "", ly.get("label") or "", "identifier")] + lines[1:]
+        key = str(ly.get("provider") or "").strip().lower()
+        fields.append({"label": LY.NAMES.get(LY.ALIASES.get(key, key), ly.get("label") or "Loyalty number"), "value": LY.TOKEN,
+                       "loyalty_item": str(ly["id"])})
     sha = _h.sha256("\n".join(lines + [url]).encode()).hexdigest()
     prev = _HELD.get(ctx.account)
     _HELD[ctx.account] = {"rung": "prepared", "id": "prep-" + sha[:12], "sha": sha, "at": prev["at"] if prev and prev.get("sha") == sha else now,
                           "venue": rd["venue"], "summary": GW.summary(res), "when": at, "party": res["how_many"]["count"],
                           "place_id": rd.get("place_id"), "url": url, "fields": fields, "channel_name": eng.get("name"), "website": (card or {}).get("website"),
+                          **({"lines": lines + [url]} if ly else {}),
                           "sector": (res.get("what") or {}).get("category")}
     return {"status": "awaiting_yes", "venue": venue, "route": "page", "when": GW.summary(res), "read_back": lines,
             "what_happens": "on their yes, book_venue puts their own page on their phone with every detail to copy; they confirm there"}
@@ -546,15 +630,63 @@ def _with_card(card: Optional[dict], out: dict) -> dict:
     return out
 
 
+async def _loyalty(ctx, rd: dict, res: dict) -> Optional[dict]:
+    """Sasha 253 · G14 — the one saved loyalty number that matches this booking (booking_signer.loyalty.find_for: a fixed list,
+    never a guess), on the one path only. Its value is never here: the booking API names it in the read-back and opens it once,
+    at the send, under the yes (form_rung); she says only the read-back's line."""
+    if not one_path(ctx):
+        return None
+    from booking_signer import loyalty as LY
+    return await LY.find_for(ctx.account, rd["venue"], (res.get("what") or {}).get("category"))
+
+
+async def _open_request(ctx, a: dict, rd: dict, res: dict, route: Optional[str]) -> dict:
+    """Sasha 253 · G7 — a request with NO slot (custom work they quote for; "whenever they have space"): the old flow's own email
+    asking for a date and a quote (GW.quote_email — the body of POST /api/booking/emails), else a call that asks when they have
+    space (the reservation's availability flow). Read back; on the yes, book_venue sends it. Nothing is booked until they reply."""
+    from booking_signer import guest_receipt as GR
+    GW = _API()
+    if route == "no":
+        return {"status": "not_booking", "venue": rd["venue"]}
+    rungs, why = rd["rungs"], None
+    venue = GW.plain_venue(rd["venue"])
+    day = str(a.get("day") or "")[:10]
+    try:
+        day = date.fromisoformat(day).isoformat()
+    except ValueError:
+        day = ""
+    for r in (["call", "email"] if route == "call" else ["email", "call"]):
+        if r == "email" and "email" in rungs:
+            mine = await GR.address_of(ctx.account)
+            status, j = await GW.api(ctx.account, "POST", "/api/booking/emails",
+                                     GW.quote_email(rd["read_id"], res["who"]["name"], mine, _what(a), day or None))
+            if status == 200:
+                return _hold(ctx, "email", j["email_id"], j["read_back"], rd, res,
+                             extra={"trip_item_id": j.get("trip_item_id"), "open_slot": a.get("open_slot"),
+                                    "say": GW.quote_sentence(venue, day or None)})
+            why = GW.refusal_words(j, status)
+        elif r == "call" and "phone" in rungs:
+            fi = rungs["phone"].get("fact_index")
+            status, j = await GW.api(ctx.account, "POST", "/api/booking/calls",
+                                     {"reservation": res, "read_id": rd["read_id"], **({"fact_index": fi} if fi is not None else {})})
+            if status == 200:
+                return _hold(ctx, "call", j["call_id"], j["read_back"], rd, res,
+                             extra={"trip_item_id": j.get("trip_item_id"), "open_slot": a.get("open_slot")})
+            why = GW.refusal_words(j, status)
+    raise _err("no_route", f"{venue} can't be asked without a time from here" + (f" — {why}" if why else
+                           " (no email or phone to ask on) — ask the person for a day and time"))
+
+
 async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Optional[str]) -> dict:
     from booking_signer import guest_accounts as GA, guest_receipt as GR
     GW = _API()
+    nights = _nights(ctx, a)   # Sasha 253 · G8 — a hotel stay (the one path only)
     msg_routes = [x for x in _routes_of(rd) if x in ("whatsapp", "instagram")]
     # Sasha 232 · /s2, DIRECT FIRST for every kind of place: their own form or booking page (their booking software IS their form) →
     # their own WhatsApp (drafted; THEY send it from their WhatsApp — S-48 Mode A) → email → phone. S1 unchanged.
     # Sasha 248 · reached ONLY when the venue engine had no channel for this place (no site / not readable): Sasha's own read decides
     wa_first = (not route and getattr(ctx, "surface", "s1") == "s2" and "whatsapp" in msg_routes
-                and not {"form", "page"} & set(_routes_of(rd)))
+                and not {"form", "page"} & set(_routes_of(rd)) and not nights)
     if wa_first:
         msg_routes = ["whatsapp"]
     if route in ("whatsapp", "instagram") or wa_first or (not route and msg_routes and set(_routes_of(rd)) <= {"whatsapp", "instagram"}):
@@ -581,7 +713,7 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
                 **({"open_in_" + ch: link} if link else {}),
                 "what_happens": f"they book only by a {('WhatsApp' if ch == 'whatsapp' else 'Instagram')} message: on their yes, "
                                 "Sasha sends the drafted message to their phone and they send it; it is NOT booked until the place replies"}
-    if not route:
+    if not route and not nights:   # Sasha 253 · G8 — a room: no ladder question (the old flow's rule), the decision's order
         lad = GW.ladder_of(rd, res, now)
         acts = [r for _t, r in (lad or {}).get("options") or [] if r != "no"]
         if lad and len(acts) == 1 and getattr(ctx, "surface", "s1") == "s2":
@@ -605,7 +737,9 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
         if r == "form" and "form" in rungs:
             email = await GR.address_of(ctx.account)
             rf = {**res, "who": {**res["who"], "contact": {**res["who"]["contact"], **({"email": email} if email else {})}}}
-            status, j = await GW.api(ctx.account, "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": rf})
+            ly = await _loyalty(ctx, rd, res)   # Sasha 253 · G14 — a matching loyalty number from the Keep, under this yes
+            status, j = await GW.api(ctx.account, "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": rf,
+                                                                                 **({"loyalty_item_id": str(ly["id"])} if ly else {})})
             rung = "form"
             if status != 200 and GA.founder(ctx.account):   # the founder's override: the cloud browser fills it; a human step → the phone
                 status, j = await GW.api(ctx.account, "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": rf, "handover": True})
@@ -618,11 +752,13 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
                 "read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": res["how_many"]["count"], "name": contact_name,
                 "venue": GW.plain_venue(rd["venue"])[:120],
                 # Sasha 233 · /s2: the service asked for, so a Fresha/Treatwell/Booksy page's matching service + price is read back
-                **({"asked_for": _what(a)} if getattr(ctx, "surface", "s1") == "s2" else {})})
+                **({"asked_for": _what(a)} if getattr(ctx, "surface", "s1") == "s2" and not nights else {}),
+                **({"nights": nights} if nights else {})})   # Sasha 253 · G8 — the stay in their engine's link (slot_link.build_hotel)
             if status == 200:
                 return _hold(ctx, "page", j["link_id"], j["read_back"], rd, res,
                              extra={"url": j["url"], "platform": j.get("platform"), "slot_filled": bool(j.get("slot_filled")),
-                                    "trip_item_id": j.get("trip_item_id")})
+                                    "trip_item_id": j.get("trip_item_id"),
+                                    **({"nights": nights, "hotel_text": GW.hotel_link_text(GW.plain_venue(rd["venue"]), j)} if nights else {})})
             why = GW.refusal_words(j, status)
         elif r in ("call", "call_email") and "phone" in rungs:
             fi = rungs["phone"].get("fact_index")
@@ -635,9 +771,11 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
             mine = await GR.address_of(ctx.account)
             status, j = await GW.api(ctx.account, "POST", "/api/booking/emails", {
                 "read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": res["how_many"]["count"], "name": contact_name,
-                "email": mine or ""})
+                "email": mine or "", **({"nights": nights} if nights else {})})   # Sasha 253 · G8 — the room email (N nights)
             if status == 200:
-                return _hold(ctx, "email", j["email_id"], j["read_back"], rd, res, extra={"trip_item_id": j.get("trip_item_id")})
+                return _hold(ctx, "email", j["email_id"], j["read_back"], rd, res, extra={"trip_item_id": j.get("trip_item_id"),
+                             **({"nights": nights, "say": GW.room_email_sentence(GW.plain_venue(rd["venue"]), res["how_many"]["count"],
+                                                                                 at[:10], nights)} if nights else {})})
             why = GW.refusal_words(j, status)
     raise _err("no_route", f"{GW.plain_venue(rd['venue'])} can't be booked from here right now" + (f" — {why}" if why else ""))
 
@@ -661,7 +799,7 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
         else datetime.now(timezone.utc)
     _HELD[ctx.account] = {"rung": rung, "id": rid, "sha": read_back["sha256"], "at": at, "venue": rd["venue"], "summary": GW.summary(res),
                           "place_id": rd.get("place_id"),
-                          "when": res["when"]["at"], "party": res["how_many"]["count"], "same": same,
+                          "when": res["when"].get("at") or "", "party": res["how_many"]["count"], "same": same,
                           "sector": (res.get("what") or {}).get("category"), **(extra or {})}   # CR 87 · the sector, for the outcomes ledger
     lines = GW.guest_lines(rung, read_back.get("lines") or [])
     out = {"status": "awaiting_yes", "venue": GW.plain_venue(rd["venue"]), "route": rung, "when": GW.summary(res),
@@ -673,8 +811,12 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
                 "page": (f"{extra['platform']} goes to their phone, with the day, time and number to enter; they finish it there"
                          if str(extra.get("platform") or "").startswith("their ") else
                          f"their {extra.get('platform') or 'booking'} page goes to their phone; they press book there") if extra else "",
-                "email": "Sasha emails them; it's a request until they reply",
+                "email": ("Sasha emails them asking for a date and a quote; nothing is booked until they reply" if (extra or {}).get("open_slot")
+                          else f"Sasha emails the hotel asking for a room for {extra['nights']} nights; it's a request until they reply"
+                          if (extra or {}).get("nights") else "Sasha emails them; it's a request until they reply"),
                 "call": "Sasha calls them; it's booked only if they say yes on the call"}.get(rung, "")}
+    if (extra or {}).get("say"):   # Sasha 253 · G7 / G8 — the old flow's own sentence for a request with no slot / a room
+        out["say"] = extra["say"]
     _HELD[ctx.account]["out"] = out   # Sasha 217 · the same booking held again gets these words, unchanged
     # Sasha 236 · held again in the turn they said yes to it (found live on /s2: she re-held and asked again, turn after turn):
     # the read-back is the one they heard in an EARLIER turn, and this turn's words are an explicit yes → book it now
@@ -759,7 +901,8 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
                                 held["when"][:10], held["when"][11:16], int(held["party"]))   # CR 89 · ready to confirm; nothing submitted
         if prep:
             held = {**held, "url": prep["link"], "human_step": prep.get("human_step"), "prep_say": prep.get("say")}
-        text = (f"📝 {venue} — your booking, ready to copy into their page:\n" + "\n".join(f"{x['label']}: {x['value']}" for x in held["fields"])
+        phone_fields = await _with_loyalty(ctx, held)   # Sasha 253 · G14 — the value only here, on their phone
+        text = (f"📝 {venue} — your booking, ready to copy into their page:\n" + "\n".join(f"{x['label']}: {x['value']}" for x in phone_fields)
                 + f"\n\nTheir page: {held['url']}\n" + (prep.get("human_step") if prep and prep.get("human_step") else
                                                            "Press confirm there — it's booked only when their page says so."))
         sent = False
@@ -788,9 +931,9 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
             raise _err("not_sent", GW.refusal_words(j, status))
         dt = datetime.fromisoformat(held["when"])
         url = j.get("url") or held.get("url")
-        out = await GW.tap_platform(ctx.account, SL.platform_message(venue, held.get("platform") or "their booking page", dt.date(), dt.time(),
-                                                                    held["party"], bool(held.get("slot_filled")), url),
-                                    url, held["id"], venue, held["when"])
+        text = held.get("hotel_text") or SL.platform_message(venue, held.get("platform") or "their booking page", dt.date(), dt.time(),
+                                                             held["party"], bool(held.get("slot_filled")), url)   # Sasha 253 · G8 — the stay
+        out = await GW.tap_platform(ctx.account, text, url, held["id"], venue, held["when"])
         sent = "sent" in out and "not" not in out
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where,
                 "platform": held.get("platform"), **({} if sent else {"open": url}), **({"page_url": url} if url else {}),
@@ -809,6 +952,25 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         await _push_later(ctx.account, call_id=held["id"], venue=venue, purpose="book", what=held.get("summary") or "")
     return {"status": j.get("status"), "venue": venue, "when": held["summary"], "itinerary": where,
             **({"scheduled_for": str(j.get("scheduled_for") or "")[11:16]} if j.get("status") == "scheduled" else {})}
+
+
+async def _with_loyalty(ctx, held: dict) -> List[dict]:
+    """Sasha 253 · G14 — the prepared page's fields for THEIR phone: a loyalty number's value opened once from the Keep (vault.use:
+    bound to the read-back that named it, logged as a loyalty_number use). Anything refused: the number is left out, said so."""
+    lf = next((x for x in held.get("fields") or [] if x.get("loyalty_item")), None)
+    if not lf:
+        return list(held.get("fields") or [])
+    from booking_signer.vault import crypto as VC
+    lines = list(held.get("lines") or [])
+    number = None
+    try:
+        async with VC.use(ctx.account, lf["loyalty_item"], approval={"read_back_sha256": held["sha"], "at": held["at"].isoformat()},
+                          approved_lines=lines, action_kind="loyalty_number", action_ref=held["id"]) as secret:
+            number = (secret.get("value") or "").strip() or None
+    except Exception as e:   # a loyalty number is a nicety: never a reason the booking isn't prepared
+        log.info("[venues] loyalty number not opened: %s", type(e).__name__)
+    return [({**x, "value": number} if x is lf and number else
+             {**x, "value": "(not added — it's in your Keep)"} if x is lf else x) for x in held["fields"]]
 
 
 async def _push_later(account: str, **kw) -> str:

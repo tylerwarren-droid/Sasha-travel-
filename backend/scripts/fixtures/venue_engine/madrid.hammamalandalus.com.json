@@ -1,0 +1,158 @@
+{
+ "url": "https://madrid.hammamalandalus.com",
+ "name": "Hammam Al Ándalus",
+ "kind": "spa",
+ "rung": 2,
+ "channel": "their own booking engine (madridreservas.hammamalandalus.com)",
+ "stages": [
+  {
+   "stage": "understood",
+   "at": 2.99,
+   "done_at": 15.24,
+   "reader_seconds": 11.7,
+   "facts": [
+    {
+     "field": "name",
+     "label": "Name",
+     "value": "Hammam Al Ándalus",
+     "quote": "Te damos la bienvenida a Hammam Al Ándalus, tu centro de masaje en Madrid, un refugio de tranquilidad e inspiración que te invita a experimentar una manera única de relajación y revitalización.",
+     "source_url": "https://madrid.hammamalandalus.com/carta-de-servicios/",
+     "state": "found",
+     "pacioli": {
+      "passed": true,
+      "a_verbatim": true,
+      "b_official": true,
+      "c_in_quote": true,
+      "d_sha256": true,
+      "copy_id": "scp_a45c81afc8b243c0a6aa035e",
+      "why": []
+     }
+    },
+    {
+     "field": "type",
+     "label": "Type",
+     "value": "hammam spa (Arab baths and massages)",
+     "quote": "Descubre los mejores masajes en Madrid con Hammam Al Ándalus",
+     "source_url": "https://madrid.hammamalandalus.com/carta-de-servicios/",
+     "state": "found",
+     "pacioli": {
+      "passed": true,
+      "a_verbatim": true,
+      "b_official": true,
+      "c_in_quote": true,
+      "d_sha256": true,
+      "copy_id": "scp_a45c81afc8b243c0a6aa035e",
+      "why": []
+     }
+    },
+    {
+     "field": "city",
+     "label": "City",
+     "value": "Madrid",
+     "quote": "Calle Atocha, 14. 28012 Madrid",
+     "source_url": "https://madrid.hammamalandalus.com/",
+     "state": "found",
+     "pacioli": {
+      "passed": true,
+      "a_verbatim": true,
+      "b_official": true,
+      "c_in_quote": true,
+      "d_sha256": true,
+      "copy_id": "scp_4eab7ae904da7cc914c23c98",
+      "why": []
+     }
+    },
+    {
+     "field": "hours",
+     "label": "Hours",
+     "value": null,
+     "state": "not_on_site",
+     "say": "not on the site"
+    },
+    {
+     "field": "price_range",
+     "label": "Price range",
+     "value": null,
+     "state": "not_on_site",
+     "say": "not on the site"
+    }
+   ],
+   "kind": "spa",
+   "say": "5 facts · 3 with a quote from the site · 2 not on the site"
+  },
+  {
+   "stage": "how_it_books",
+   "at": 15.24,
+   "done_at": 15.24,
+   "rung": 2,
+   "channel": "their own booking engine (madridreservas.hammamalandalus.com)",
+   "evidence": "https://madridreservas.hammamalandalus.com/seleccion_tarjeta.php?id=ES",
+   "evidence_on": "https://madrid.hammamalandalus.com/",
+   "how": "link",
+   "partner": null,
+   "rung_label": "web form",
+   "say": "DIVE fills their booking form, as a guest would.",
+   "also": [
+    {
+     "kind": "email",
+     "value": "madridreservas@hammamalandalus.com",
+     "note": "listed as contact"
+    },
+    {
+     "kind": "phone",
+     "value": "91 429 90 20"
+    }
+   ],
+   "dashed": null,
+   "amber": "Slots live inside their own engine (madridreservas.hammamalandalus.com); DIVE reads that it's there, not the slots.",
+   "channels_read": [
+    {
+     "kind": "widget",
+     "value": "https://madridreservas.hammamalandalus.com/datos-reserva.php?id=es",
+     "quote": "SELECCIONA DÍA Y TURNO PARA TU RESERVA - HAMMAM MADRID PLAZA MAYOR",
+     "source_url": "https://madridreservas.hammamalandalus.com/datos-reserva.php?id=es",
+     "note": "",
+     "pacioli": {
+      "passed": true,
+      "a_verbatim": true,
+      "b_official": true,
+      "c_in_quote": true,
+      "d_sha256": true,
+      "why": []
+     }
+    },
+    {
+     "kind": "phone",
+     "value": "91 429 90 20",
+     "quote": "HAMMAM AL ÁNDALUS | C/ Atocha, 14. Madrid | RESERVAS 91 429 90 20",
+     "source_url": "https://madridreservas.hammamalandalus.com/datos-reserva.php?id=es",
+     "note": "",
+     "pacioli": {
+      "passed": true,
+      "a_verbatim": true,
+      "b_official": true,
+      "c_in_quote": true,
+      "d_sha256": true,
+      "why": []
+     }
+    },
+    {
+     "kind": "email",
+     "value": "madridreservas@hammamalandalus.com",
+     "quote": "madridreservas@hammamalandalus.com",
+     "source_url": "https://madrid.hammamalandalus.com/en/service-menu-massages-madrid/",
+     "note": "listed as contact",
+     "pacioli": {
+      "passed": true,
+      "a_verbatim": true,
+      "b_official": true,
+      "c_in_quote": true,
+      "d_sha256": true,
+      "why": []
+     }
+    }
+   ]
+  }
+ ],
+ "fixture": "Sasha 248 · a saved dive.onboard replay (AgAPI sandbox, 12 Oct 2026) — the venue engine's answer for the gate; nothing is fetched"
+}

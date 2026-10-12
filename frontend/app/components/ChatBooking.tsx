@@ -19,6 +19,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { bookingReq, findVenues, readVenue, refusal, styleVenues, type Candidate, type Ranking, type Rung, type Style } from '@/lib/booking-client'
 import { setChatBookingHandler, takeTypedYes } from '@/lib/chat-booking-bus'
+import { PlaceCard } from './cards/PlaceCard'   // Sasha 248 · one place card
 import { GatedButton } from '../booking-helper/GatedButton'
 import { ChatBookingDo } from './ChatBookingDo'
 import ChatBookingCall from './ChatBookingCall'
@@ -78,8 +79,6 @@ function pickedBySaying(cards: Candidate[], text: string): Candidate | undefined
   return hits.length === 1 ? hits[0] : undefined
 }
 
-const MARK = { position: 'absolute', right: 6, bottom: 6, fontSize: 10, lineHeight: '14px', padding: '1px 6px', borderRadius: 6,
-  background: 'rgba(0,0,0,.55)', color: '#fff', maxWidth: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as const
 /** the city part of a Google address ("…, 28005 Madrid, Spain" → "Madrid"), for a venue found by its name alone */
 const cityOf = (address: string | null | undefined): string | undefined => {
   const parts = (address ?? '').split(',').map((x) => x.trim()).filter(Boolean)
@@ -123,7 +122,6 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
   // Sasha 88 · once a call is placed or scheduled, "nobody has been contacted" is no longer true and is not shown
   const [contacted, setContacted] = useState<'calling' | 'scheduled' | null>(null)
   // Sasha 88 · a site's picture that fails to load is simply not shown (no broken image, no stand-in)
-  const [badPhoto, setBadPhoto] = useState<Record<string, true>>({})
   // Sasha 156 · Google's photo of the listing, shown while (or where) the venue's own picture isn't there
   const [gphotos, setGphotos] = useState<Record<string, string>>({})
   // Sasha 95 · the slot link leads when a platform is their booking route; a call only if the guest asks for one
@@ -268,77 +266,21 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
       {cards.length === 0 && !ribbon
         ? <div>{find.named ? `I couldn't find ${find.what}.` : `I couldn't find any ${find.what} in ${find.where}.`} Try another name or place?</div>
         : null}
-      <ol ref={listRef} style={{ margin: 0, paddingLeft: 18 }}>
+      <ol ref={listRef} style={{ margin: 0, padding: 0, display: 'flex', gap: 10, overflowX: 'auto', scrollSnapType: 'x mandatory' }}>
         {cards.map((c) => {
           // S-68 step 8 · every value said, a missing one in words; a place not open then is greyed, never dropped
           const group = state.phase === 'found' ? state.ranking?.groups[c.place_id] : undefined
           const grey = group === 'closed_then' || group === 'closed_temporarily'
           const near = state.phase === 'found' && state.near?.found
-          const facts = [c.rating_words ?? 'no rating', near ? (c.distance ?? 'distance not known') : null, c.price_words ?? 'price level not listed']
           return (
-            <li key={c.place_id} data-place={c.place_id} style={{ marginBottom: 10, opacity: grey ? 0.55 : 1,
-              ...(highlight?.includes(c.place_id) ? { outline: '2px solid #c9a227', outlineOffset: 4, borderRadius: 8 } : {}) }}>
-              {(c as { photo?: string }).photo && !badPhoto[`p:${c.place_id}`] ? (   /* Sasha 213 · prefetched with the search */
-                // eslint-disable-next-line @next/next/no-img-element -- the prefetched photo (the venue's own, else Google's)
-                <img src={(c as { photo?: string }).photo} alt={c.name ?? 'This place'} loading="eager" referrerPolicy="no-referrer"
-                  onError={() => setBadPhoto((m) => ({ ...m, [`p:${c.place_id}`]: true }))}
-                  style={{ width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 8, display: 'block', margin: '2px 0 6px' }} />
-              ) : null}
-              {(c as { photo?: string }).photo && !badPhoto[`p:${c.place_id}`] ? null : (() => {
-                // Sasha 88 · the venue's own share picture, from its website — linked to the site; none when it has none
-                const st = styles[c.place_id]
-                const ph = st && st !== 'reading' ? st.photo : undefined
-                if (!ph || badPhoto[c.place_id]) {
-                  // Sasha 156 · no picture of their own (yet): the Google listing's photo, credited as Google's terms ask
-                  const g = c.gphoto?.uri || (c.gphoto?.name ? gphotos[c.gphoto.name] : undefined)
-                  if (!g || badPhoto[`g:${c.place_id}`]) return null
-                  return (
-                    <a href={c.listing_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', margin: '2px 0 6px', position: 'relative' }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element -- Google's short-lived photo URL; never stored by us */}
-                      <img src={g} alt={`${c.name ?? 'This place'} — Google Maps photo`} loading="eager" referrerPolicy="no-referrer"
-                        onError={() => setBadPhoto((m) => ({ ...m, [`g:${c.place_id}`]: true }))}
-                        style={{ width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
-                      {/* Sasha 158 · Google's attribution as a small mark ON the photo (its author, as Google's terms ask) */}
-                      <span style={MARK} title={`Photo: Google Maps${c.gphoto?.by?.length ? ` · ${c.gphoto.by.join(', ')}` : ''}`}>Google{c.gphoto?.by?.length ? ` · ${c.gphoto.by[0]}` : ''}</span>
-                    </a>
-                  )
-                }
-                return (
-                  <a href={ph.source} target="_blank" rel="noopener noreferrer" style={{ display: 'block', margin: '2px 0 6px', position: 'relative' }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element -- shown from the venue's own host; never fetched or stored by us */}
-                    <img src={ph.url} alt={`${c.name ?? 'This place'} — from their website`} loading="lazy" referrerPolicy="no-referrer"
-                      onError={() => setBadPhoto((m) => ({ ...m, [c.place_id]: true }))}
-                      // Sasha 156 · a logo or a spacer is not a photo of the place: too small → Google's photo instead
-                      onLoad={(e) => { const i = e.currentTarget; if (i.naturalWidth < 160 || i.naturalHeight < 90) setBadPhoto((m) => ({ ...m, [c.place_id]: true })) }}
-                      style={{ width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
-                    <span style={MARK} title="Photo from their own website">their site</span>
-                  </a>
-                )
-              })()}
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <span>{state.phase === 'found' && state.ranking?.picks?.[state.chip] === c.place_id   /* S-75 step 1 · the server's pick (ranking.py) */
-                    ? <span style={{ fontSize: 11, padding: '1px 6px', marginRight: 6, borderRadius: 8, background: '#c9a227', color: '#111' }}>Sasha&rsquo;s pick</span> : null}
-                  <strong>{c.name ?? 'no name listed'}</strong>{c.type ? <span style={{ opacity: 0.7 }}> · {c.type}</span> : null}
-                  {group && group !== 'main' ? <span style={{ color: '#9a1c1c' }}> · {GROUP_WORDS[group]}</span> : null}</span>
-                <span style={{ fontSize: 12, opacity: 0.6, whiteSpace: 'nowrap' }}>Google Maps</span>
-              </div>
-              <div style={{ fontSize: 13 }}>{facts.filter(Boolean).join(' · ')}</div>
-              {c.open_at ? <div style={{ fontSize: 13 }}>{c.open_at.words}</div> : null}
-              {(() => {
-                const st = styles[c.place_id]
-                if (!st) return null
-                if (st === 'reading') return null
-                // Sasha 158 · their style in a few words; that it was AI-summarised from their own site stays in the ✦ mark
-                if (st.tags?.length) return <div style={{ fontSize: 13 }}>{st.tags.map((t) => t.tag).join(' · ')}{' '}
-                  <span title={`Summarised by AI from their own website:\n${st.tags.map((t) => `${t.tag}: “${t.quote}”`).join('\n')}`} style={{ opacity: 0.5, fontSize: 11 }}>✦ AI</span></div>
-                return null
-              })()}
-              <div style={{ fontSize: 12, opacity: 0.75 }}>{c.address ?? 'no address listed'}</div>
-              <span style={{ display: 'inline-flex', gap: 10, alignItems: 'flex-start', marginTop: 4 }}>
-                <GatedButton label="Choose" onClick={() => { pick(c).catch(() => { /* visible state set inside */ }) }}
-                  needs={[state.phase === 'reading' && 'the read in progress to finish']} />
-                <a href={c.listing_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13 }}>Their listing ↗</a>
-              </span>
+            <li key={c.place_id} data-place={c.place_id} style={{ listStyle: 'none', marginBottom: 10, opacity: grey ? 0.55 : 1,
+              ...(highlight?.includes(c.place_id) ? { outline: '2px solid #c9a227', outlineOffset: 4, borderRadius: 16 } : {}) }}>
+              {/* Sasha 248 · ONE PLACE CARD (components/cards/PlaceCard): the same card and detail sheet as /s2 — a tap opens it */}
+              <PlaceCard card={c as Record<string, unknown> as Record<string, any>} tone="dark"   // eslint-disable-line @typescript-eslint/no-explicit-any
+                badge={state.phase === 'found' && state.ranking?.picks?.[state.chip] === c.place_id ? 'Sasha’s pick' : null}
+                onBook={() => { pick(c).catch(() => { /* visible state set inside */ }) }} />
+              {group && group !== 'main' ? <div style={{ fontSize: 12.5, color: '#f19999', marginTop: 4 }}>{GROUP_WORDS[group]}</div> : null}
+              {near ? <div style={{ fontSize: 12.5, opacity: 0.7 }}>{c.distance ?? 'distance not known'}</div> : null}
             </li>
           )
         })}
@@ -368,7 +310,6 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
             const em = r.find((x) => x.rung === 'email' && x.available)
             const ph = r.find((x) => x.rung === 'phone' && x.available)
             const ln = r.find((x) => x.rung === 'link' && x.available)
-            const wa = r.find((x) => x.rung === 'whatsapp' && x.available)
             const venue = / \(TEST stand-in\)$/.test(state.read.venue ?? '') ? state.read.venue : (state.pick.name ?? state.read.venue)   // Sasha 169 · the stand-in says so
             const draft = (find.draft ?? null) as { when?: { at?: string }; how_many?: { count?: number } } | null
             // Sasha 158 · "book Casa Lucio tomorrow at 9": at a restaurant, a bare 9 is 21:00 (12 is noon) — the same rule as WhatsApp
@@ -405,19 +346,14 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
             if (chosen === 'call' && ph) return <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
               venue={venue} draft={(callDraft ?? null) as never} whatText={find.what} openAt={openAt} onContacted={setContacted} line={null} />
             const pr = plan.route
-            if (fm && !callInstead && (!pr || pr === 'form')) return <ChatBookingDo key={state.read.read_id} route="form" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
-            if (em && !callInstead && (!pr || pr === 'email')) return <ChatBookingDo key={state.read.read_id} route="email" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
-            if (ph && (!pr || pr === 'call' || pr === 'call_email' || callInstead)) return <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
+            // Sasha 248 · ONE BOOKING PATH: the server's route only — this card no longer picks a channel of its own (it had its own
+            // order: form → email → call → link → email → WhatsApp)
+            if (pr === 'form' && fm && !callInstead) return <ChatBookingDo key={state.read.read_id} route="form" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
+            if (pr === 'email' && em && !callInstead) return <ChatBookingDo key={state.read.read_id} route="email" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
+            if (ph && (pr === 'call' || pr === 'call_email' || callInstead)) return <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
               venue={venue} draft={(callDraft ?? null) as never} whatText={find.what} openAt={openAt} onContacted={setContacted} line={callInstead ? null : plan.line} />
-            if (ln) return <>{plan.line ? <div style={{ fontWeight: 600, marginBottom: 4 }}>{plan.line}</div> : null}
+            if (pr === 'one_tap' && ln) return <>{plan.line ? <div style={{ fontWeight: 600, marginBottom: 4 }}>{plan.line}</div> : null}
               <ChatBookingLink key={state.read.read_id} readId={state.read.read_id} platform={ln.value} draft={(find.draft ?? null) as never} openAt={openAt} /></>
-            if (em) return <ChatBookingDo key={state.read.read_id} route="email" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
-            if (wa) {
-              const at = find.open_at ?? draft?.when?.at ?? ''
-              const msg = `Hola, me gustaría reservar para ${draft?.how_many?.count ?? 2}${at ? ` el ${at.slice(8, 10)}/${at.slice(5, 7)} a las ${at.slice(11, 16)}` : ''}. ¿Tienen disponibilidad? Gracias.`
-              return <div>{venue} books on WhatsApp — I&rsquo;ve written the message; you send it.{' '}
-                <a className="price" href={`https://wa.me/${String(wa.value).replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`} target="_blank" rel="noopener noreferrer">Open WhatsApp</a></div>
-            }
             return <div>{plan.line ?? `I can't find a way to book ${venue} — no online booking, phone or email. Want me to try somewhere similar nearby?`}</div>
           })()}
         </div>

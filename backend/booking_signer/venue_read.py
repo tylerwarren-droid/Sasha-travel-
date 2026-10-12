@@ -908,6 +908,6 @@ def stored_name(name: str, place_id: Optional[str], facts: List[Fact], asked_for
     if own:   # "Ink Sweet Tattoo Studio | Mejor estudio de tatuajes en Madrid" → its name, not its page title's tail
         head = re.split(r"\s+[|·–—]\s+", own, maxsplit=1)[0].strip()
         return head if len(head) >= 2 else own
-    if isinstance(asked_for, str) and 2 <= len(asked_for.strip()) <= 60:
-        return f"{asked_for.strip()} in {city.strip()}"[:80]
+    # Sasha 248 · ONE VENUE TRUTH: never the question's words ("Korean food in Madrid" named a Spanish restaurant), and never the
+    # listing's (Places terms: not stored) — a neutral phrase; the read-back names the place by its listing, re-read when shown
     return f"the place you picked in {city.strip()}"[:80]

@@ -277,8 +277,27 @@ export function SubscriptionsCard({ items, total, source, send }: { items: Ev[];
     </Box>)
 }
 
+/** Sasha 248 · "fill it now": their OWN booking page, with every detail to copy in one tap — they press confirm there. */
+export function PreparedCard({ ev }: { ev: Ev }) {
+  const [copied, setCopied] = useState<string | null>(null)
+  const copy = (label: string, value: string) => {
+    navigator.clipboard?.writeText(value).then(() => { setCopied(label); setTimeout(() => setCopied(null), 1500) }).catch(() => {})
+  }
+  return (
+    <Box k="Ready to book" h={untag(String(ev.venue || 'Their booking page'))} tone={C.gold}>
+      {(ev.fields || []).map((f: Ev) => (
+        <div key={f.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '6px 0', borderTop: `1px solid ${C.line}` }}>
+          <span><span style={{ color: C.dim, fontSize: 12.5 }}>{f.label}</span><br /><span style={{ fontSize: 15 }}>{untag(String(f.value))}</span></span>
+          <button type="button" onClick={() => copy(f.label, String(f.value))} style={{ padding: '5px 12px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 700 }}>
+            {copied === f.label ? 'Copied' : 'Copy'}</button>
+        </div>))}
+      <a href={ev.url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, padding: '10px 18px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 800, textDecoration: 'none' }}>Open their booking page</a>
+      <div style={{ fontSize: 12.5, color: C.dim, marginTop: 8 }}>{ev.on_phone ? 'Also sent to your phone. ' : ''}You press confirm there — it&apos;s booked only when their page says so.</div>
+    </Box>)
+}
+
 /** Sasha 241 · the render kinds these cards draw (sasha.py's former KINDS_S2_ONLY): one render event → its card, for /next. */
-export const SHARED_KINDS = ['keep_capture', 'capabilities', 'plans', 'notice', 'counter_card', 'my_cards', 'accident', 'claim_status', 'wa_open', 'activities', 'subscriptions']   // Sasha 243 · + CR 84's list
+export const SHARED_KINDS = ['keep_capture', 'capabilities', 'plans', 'notice', 'counter_card', 'my_cards', 'accident', 'claim_status', 'wa_open', 'activities', 'subscriptions', 'prepared']   // Sasha 243 · + CR 84's list
 
 export function SharedCard({ ev, send }: { ev: Ev; send: (t: string) => void }) {
   if (ev.kind === 'keep_capture') return <KeepCapture what={ev.what === 'loyalty' ? 'loyalty' : 'passport'} />
@@ -291,6 +310,7 @@ export function SharedCard({ ev, send }: { ev: Ev; send: (t: string) => void }) 
     return <WaOpen c={{ to: ev.to || {}, text: String(ev.text || ''), open: ev.open, why: String(ev.why || '') }} />
   if (ev.kind === 'activities' && Array.isArray(ev.cards)) return (<>{ev.cards.map((a: Ev, i: number) => <ActivityCard key={i} a={a} />)}
     {(ev.unread || []).length ? <div style={{ fontSize: 13, color: C.dim, margin: '4px 2px' }}>Couldn&apos;t check on their official sites: {ev.unread.map(untag).join(', ')}</div> : null}</>)
+  if (ev.kind === 'prepared' && typeof ev.url === 'string' && /^https:\/\//.test(ev.url)) return <PreparedCard ev={ev} />   // Sasha 248
   if (ev.kind === 'subscriptions' && Array.isArray(ev.items)) return <SubscriptionsCard items={ev.items} total={ev.total} source={ev.source} send={send} />
   if (ev.kind === 'notice' && ev.title) return (
     <Box k={ev.status ? untag(ev.status) : 'Update'} h={untag(ev.title)}>

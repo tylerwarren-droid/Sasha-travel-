@@ -22,7 +22,7 @@ from typing import Dict, Optional
 
 log = logging.getLogger("agapi.route")
 
-FAMILIES = ("activities", "entry", "cards", "subscriptions", "money")
+FAMILIES = ("activities", "entry", "cards", "subscriptions", "money", "venues")   # Sasha 248 · venues: the venue engine (dive.onboard → venue.profile)
 TEST_AIRLINES = {"EX", "ZZ"}   # Example Air (AgAPI's test fixture) · Duffel Airways (Duffel's test carrier)
 _TARGET: contextvars.ContextVar = contextvars.ContextVar("agapi_target", default=None)
 

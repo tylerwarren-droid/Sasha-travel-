@@ -131,6 +131,7 @@ RENDER.update({"my_plans": "plans", "running_late": "read_back", "change_booking
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
 KINDS_S2_ONLY = {"keep_capture", "capabilities", "plans", "notice"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
 KINDS_S2_ONLY |= {"counter_card", "my_cards", "accident", "claim_status"}
+KINDS_S2_ONLY |= {"prepared"}   # Sasha 248 · their own booking page + the details to copy (components/cards, /s2 and /next)
 KINDS_S2_ONLY |= {"subscriptions"}   # CR 84 · the subscriptions list card (service · price · renews; tap one → cancel)
 KINDS_S2_ONLY |= {"activities"}   # CR 81 · the ActivityCard (things to do, verified on each place's own site)
 KINDS_S2_ONLY |= {"wa_open"}   # Sasha 230 · the message, pre-filled in the person's own WhatsApp (they press send)   # CR 75 · fine print's cards, rendered by /s2 only
@@ -159,6 +160,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         if res.get("status") == "already_paid":
             return {"type": "render", "kind": "pay_here", "already_paid": True, "session_id": res.get("session_id")}
         return {"type": "render", "kind": "pay", "url": res["checkout_url"]} if res.get("checkout_url") else None
+    if tool == "book_venue" and isinstance(res.get("prepared"), dict):   # Sasha 248 · "fill it now": their page + every detail, one-tap copy
+        return {"type": "render", "kind": "prepared", **res["prepared"]}
     if tool == "book_venue" and (res.get("view_url") or res.get("page_url")):
         return {"type": "render", "kind": "handover", "url": res.get("view_url") or res.get("page_url"),
                 "external": not res.get("view_url"), **({"focus": (res.get("card") or {}).get("place_id")} if res.get("card") else {})}
@@ -1356,6 +1359,24 @@ async def memory(request: Request, session: str = ""):
     except Exception as e:
         log.warning("[memory] recall failed: %s: %s", type(e).__name__, e)
         return {"ok": True, "line": None, "recent": [], "screen": None}
+
+
+@router.get("/place/{place_id}")
+async def place_detail(request: Request, place_id: str):
+    """Sasha 248 · ONE PLACE CARD's detail sheet (/s2, /next; WhatsApp gets the same as text): a place the person was SHOWN, its
+    facts from the venue engine (agapi/venue_truth — the site's own words, each with its source; Google's only labelled). The read
+    is awaited here (a cached one is instant)."""
+    from app.services.chat_account import chat_account
+    from agapi import venue_truth as VT, venues as VN
+    account = await chat_account(request)
+    card = VN.card_of(account, place_id[:200])
+    if not card:
+        return JSONResponse({"ok": False, "rule": "not_shown", "message": "that place isn't on your screen any more — search again"}, status_code=404)
+    try:
+        return {"ok": True, "place": await VT.profile(card)}
+    except Exception as e:
+        log.warning("[place] profile failed: %s", type(e).__name__)
+        return {"ok": True, "place": VT.shape(card, None)}
 
 
 @router.get("/s2/memory")

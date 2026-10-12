@@ -67,7 +67,7 @@ class PlacesTerms(unittest.TestCase):
         self.assertIn(NUMBER, [f["value"] for f in v["facts"]])
         row = self.ladder.reads[v["read_id"]]
         self.assert_no_listing_content(row, "the venue read")
-        self.assertEqual(row["venue_name"], "tattoo studio in Madrid")            # the guest's words, not the listing's
+        self.assertEqual(row["venue_name"], "the place you picked in Madrid")     # Sasha 248 · neither the question's words nor the listing's
         self.assertEqual(row["read"]["listing"], {"place_id": PID})
         again = self.c.get(f"/api/booking/venues/read/{v['read_id']}").json()      # re-read from Google, not from storage
         self.assertIn(NUMBER, [f["value"] for f in again["facts"]])
@@ -138,7 +138,7 @@ class PlacesTerms(unittest.TestCase):
         site = Fact("name", "Calma Spa", "site", "https://calma.test/", "their website, calma.test", "", "", "")
         self.assertEqual(stored_name("Calma", None, [site], None, "Madrid"), "Calma")             # typed: the guest's words
         self.assertEqual(stored_name(NAME, PID, [site], "massage", "Madrid"), "Calma Spa")       # picked: the site's own
-        self.assertEqual(stored_name(NAME, PID, [], "massage", "Madrid"), "massage in Madrid")   # else what was asked for
+        self.assertEqual(stored_name(NAME, PID, [], "massage", "Madrid"), "the place you picked in Madrid")   # Sasha 248 · never the question's words
         seo = Fact("name", "Ink Sweet Tattoo Studio | Mejor estudio de tatuajes en Madrid", "site", "u", "l", "", "", "")
         self.assertEqual(stored_name(NAME, PID, [seo], None, "Madrid"), "Ink Sweet Tattoo Studio")   # live, 1 Oct
 

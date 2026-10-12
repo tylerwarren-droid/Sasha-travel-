@@ -403,17 +403,35 @@ async def find_venues(request: Request):
         if body.get("named"):   # Sasha 158 · NAME IT: Google's best match for the name, one card (no test card beside it)
             out = {**out, "candidates": (out.get("candidates") or [])[:1], "show": 1, "named": True}
             await _with_google_photos(out)
+            await _with_truth(out)
             return out
         await _with_google_photos(out)
         out = _rehearse(account_for(request), out)
         if standin(account_for(request)) and (out.get("cuisine") or is_restaurant(body.get("what"))):
             out = await _online_only(account_for(request), out, body)   # Sasha 187 · only restaurants he can book ONLINE
+        await _with_truth(out)
         _FIND_CACHE[ckey] = (NOW().timestamp(), out)
         if len(_FIND_CACHE) > 300:
             _FIND_CACHE.pop(next(iter(_FIND_CACHE)))
         return out
     except V.ReadRefused as e:
         return _refuse(503 if e.rule in ("places_not_configured", "places_unreachable", "places_refused") else 422, e.rule, str(e))
+
+
+async def _with_truth(out: dict) -> None:
+    """Sasha 248 · ONE VENUE TRUTH: the cards shown first (every order's top ones) take their facts from the venue engine
+    (agapi/venue_truth) — the site's own words, or Google's category LABELLED as Google's; never a fact Sasha decided here."""
+    from agapi import venue_truth as VT
+    orders = ((out.get("ranking") or {}).get("orders") or {})
+    show = int(out.get("show") or V.SHOW_MAX)
+    want = {pid for order in orders.values() for pid in (order or [])[:show]} or {c["place_id"] for c in out.get("candidates", [])[:show]}
+    try:
+        await VT.enrich([c for c in out.get("candidates") or [] if c.get("place_id") in want])
+    except Exception as e:   # the listing stays, labelled — a slow or absent engine never stops a search
+        log.warning("[ladder] venue truth not read: %s", type(e).__name__)
+        for c in out.get("candidates") or []:
+            if c.get("place_id") in want and c.get("type") and not c.get("type_source"):
+                c["google_type"], c["type"], c["type_source"] = c["type"], f"listed on Google as {c['type']}", "google"
 
 
 async def _with_google_photos(out: dict, budget: float = 0.7) -> None:

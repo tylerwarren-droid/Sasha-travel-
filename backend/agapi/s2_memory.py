@@ -58,6 +58,7 @@ def masked(text: str) -> str:
 def _thing_of_ribbon(ribbon: str) -> str:
     """'5 Indian restaurants in Madrid · tonight 21:00' → 'Indian restaurants in Madrid, tonight 21:00'."""
     t = re.sub(r"^\d+\s+", "", str(ribbon or "").strip())
+    t = re.sub(r"^for “([^”]*)” in ", r"\1 in ", t)   # Sasha 248 · the ribbon quotes the search: '5 for “Indian” in Madrid'
     return re.sub(r"\s*·\s*", ", ", t).strip(" ,")
 
 

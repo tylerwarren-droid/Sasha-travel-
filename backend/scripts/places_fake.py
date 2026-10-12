@@ -81,6 +81,20 @@ def _place(q: str, i: int) -> dict:
                                   {"longText": "Spain", "shortText": "ES", "types": ["country"]}]}
 
 
+def _named(name: str, website: str, google_type: str, ptype: str):
+    def make(q: str) -> dict:
+        p = _place(q, 0)
+        return {**p, "id": "ChIJtest" + _h(name)[:20], "displayName": {"text": f"{name} (test)", "languageCode": "es"},
+                "websiteUri": website, "primaryTypeDisplayName": {"text": google_type}, "types": [ptype, "point_of_interest", "establishment"]}
+    return make
+
+
+#: Sasha 248 · ONE VENUE TRUTH's demo paths: a real restaurant's own site behind a listing whose Google category is WRONG ("Korean"),
+#: and a spa with its own booking engine. The venue engine reads their sites (on AgAPI's server; in the gate, its saved answer).
+NAMED = [(r"\bcasa lucio\b", _named("Casa Lucio", "https://www.casalucio.es", "Korean Restaurant", "korean_restaurant")),
+         (r"\bhammam\b", _named("Hammam Al Ándalus", "https://madrid.hammamalandalus.com", "Spa", "spa"))]
+
+
 async def replay(method: str, url: str, headers: Optional[dict] = None, json: Optional[dict] = None, **kw):
     host = (urlsplit(url).hostname or "").lower()
     if not any(host == g or host.endswith("." + g) for g in _GOOGLE):
@@ -90,6 +104,9 @@ async def replay(method: str, url: str, headers: Optional[dict] = None, json: Op
     if path.endswith("places:searchText"):
         q = str((json or {}).get("textQuery") or "")
         n = min(int((json or {}).get("maxResultCount") or 8), 8)
+        named = next((p for rx, p in NAMED if re.search(rx, q, re.I)), None)
+        if named:   # Sasha 248 · a named fixture first (its own site is real; its Google category is deliberately WRONG)
+            return _R(200, {"places": [named(q)] + [_place(q, i) for i in range(1, n)]})
         return _R(200, {"places": [_place(q, i) for i in range(n)]})
     m = re.fullmatch(r"/v1/places/(ChIJtest[0-9a-f]{20})", path)
     if m:

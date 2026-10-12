@@ -15,7 +15,8 @@ import { PayHere } from '@/app/components/PayHere'
 import S2Hello from './S2Hello'
 import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
 // Sasha 241 · the cards moved to components/cards/ (shared with /next's SashaChat), unchanged
-import { C, Box, shrink, KeepCapture, WaOpen, Plans, CounterCard, MyCards, AccidentCard, ClaimStatus, ActivityCard, SubscriptionsCard } from '@/app/components/cards/S2Cards'
+import { PlaceCard } from '@/app/components/cards/PlaceCard'   // Sasha 248 · one place card
+import { C, Box, shrink, KeepCapture, WaOpen, Plans, CounterCard, MyCards, AccidentCard, ClaimStatus, ActivityCard, SubscriptionsCard, PreparedCard } from '@/app/components/cards/S2Cards'
 import type { Plan } from '@/app/components/cards/S2Cards'
 export { KeepCapture }   // Sasha 228's handoff page imports it from here
 import TripPanel from '@/app/components/workspace/TripPanel'   // Sasha 236 · the trip board: S1's own, on the same records
@@ -43,6 +44,7 @@ type Card =
   | { k: 'handover'; url: string; external: boolean }   // Sasha 236 · Tap to finish (their page / our hand-over), over her
   | { k: 'trip'; what: string }                          // Sasha 236 · the trip changed: one tap to the Trip board
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
+  | { k: 'prepared'; ev: Ev }   // Sasha 248 · "fill it now": their page + the details to copy
   | { k: 'subscriptions'; items: Ev[]; total?: string; source?: string }   // CR 84 · what they pay for, from their receipts
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
@@ -168,22 +170,10 @@ const AFTER: Partial<Record<string, string>> = {
 }
 
 function VenueCards({ cards, choose }: { cards: Extract<Card, { k: 'venues' }>['cards']; choose: (name: string, placeId: string) => void }) {
+  // Sasha 248 · ONE PLACE CARD (components/cards/PlaceCard): the same card and detail sheet as /next — a tap on the photo opens it
   return (
     <div style={{ display: 'flex', gap: 10, overflowX: 'auto', maxWidth: '100%', padding: '4px 2px 8px', scrollSnapType: 'x mandatory' }}>
-      {cards.map(c => (
-        <div key={c.place_id} style={{ minWidth: 230, maxWidth: 230, background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, overflow: 'hidden', scrollSnapAlign: 'start' }}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- a remote venue photo, sized by the card */}
-          {c.photo ? <img src={c.photo} alt="" style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} /> : null}
-          <div style={{ padding: 12 }}>
-            <div style={{ fontWeight: 700 }}>{untag(c.name)}</div>
-            <div style={{ fontSize: 13, color: C.dim, marginTop: 2 }}>
-              {c.rating ? `★ ${c.rating}${c.rating_count ? ` (${Number(c.rating_count).toLocaleString()})` : ''} · ` : ''}{untag(c.area || c.type || '')}
-            </div>
-            {typeof c.open_at === 'string' ? <div style={{ fontSize: 12.5, color: C.dim, marginTop: 2 }}>{untag(c.open_at)}</div> : null}
-            <button onClick={() => choose(untag(c.name), c.place_id)} style={{ marginTop: 10, padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 700 }}>Choose</button>
-          </div>
-        </div>
-      ))}
+      {cards.map(c => <PlaceCard key={c.place_id} card={c} onBook={choose} />)}
     </div>
   )
 }
@@ -269,6 +259,7 @@ function CardView({ c, choose, pick, send }: { c: Card; choose: (t: string) => v
   if (c.k === 'my_cards') return <MyCards cards={c.cards} choose={choose} />
   if (c.k === 'accident') return <AccidentCard view={c.view} send={send} />
   if (c.k === 'claim_status') return <ClaimStatus claim={c.claim} />
+  if (c.k === 'prepared') return <PreparedCard ev={c.ev} />
   if (c.k === 'subscriptions') return <SubscriptionsCard items={c.items} total={c.total} source={c.source} send={send} />
   if (c.k === 'activities') return (<>{c.cards.map((a, i) => <ActivityCard key={i} a={a} />)}
     {c.unread.length ? <div style={{ fontSize: 13, color: C.dim, margin: '4px 2px' }}>Couldn&apos;t check on their official sites: {c.unread.map(untag).join(', ')}</div> : null}</>)
@@ -503,6 +494,7 @@ export default function S2App() {
               const what = ev.kind === 'flights' ? 'Flights to choose from' : ev.kind === 'stays' ? 'Places to stay' : ev.kind === 'total' ? 'The total, all in' : 'Your trip, updated'
               add({ k: 'trip', what })
             }
+            else if (ev.kind === 'prepared' && typeof ev.url === 'string') add({ k: 'prepared', ev })   // Sasha 248
             else if (ev.kind === 'subscriptions' && Array.isArray(ev.items)) add({ k: 'subscriptions', items: ev.items, total: ev.total, source: ev.source })   // CR 84
             else if (ev.kind === 'activities' && Array.isArray(ev.cards)) add({ k: 'activities', cards: ev.cards, unread: Array.isArray(ev.unread) ? ev.unread : [], date: ev.date })   // CR 81
           }

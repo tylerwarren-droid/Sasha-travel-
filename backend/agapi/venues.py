@@ -154,7 +154,7 @@ def ribbon_line(a: dict, shown: List[dict], r: dict) -> str:
             when = ""
     if not shown:
         return f"No {what} found in {where}{when}" if not r.get("no_match") else f"No {r['no_match']} places found in {where}{when}"
-    return f"{len(shown)} {what} in {where}{when}"
+    return f"{len(shown)} for “{what}” in {where}{when}"   # Sasha 248 · the search, quoted — never a claim about every card
 
 
 async def photos_for(cards: List[dict], budget: float = 1.2) -> None:
@@ -231,7 +231,74 @@ async def hold_venue(ctx, a: dict) -> dict:
     now = datetime.now(timezone.utc)
     route = a.get("route")
     card = card_of(ctx.account, a.get("place_id"), a.get("name"))   # Sasha 213 · this venue's card, highlighted on screen
+    eng = await engine_channel(card)                                 # Sasha 248 · the venue's ONE channel, from the venue engine
+    if eng:
+        got = await _engine_route(ctx, a, rd, res, at, now, route, eng, card)
+        if got is not None:
+            return _with_card(card, got)
     return _with_card(card, await _hold_inner(ctx, a, rd, res, at, now, route))
+
+
+async def engine_channel(card: Optional[dict], budget_s: float = 30.0) -> Optional[dict]:
+    """Sasha 248 · ONE BOOKING PATH: how this venue books, from the venue engine's read of its own site (agapi/venue_truth) —
+    the same read its card and detail sheet show. None: no site / not readable (then Sasha's own read decides, as before)."""
+    import asyncio
+    from agapi import venue_truth as VT
+    if not card or not card.get("website"):
+        return None
+    try:
+        p = await asyncio.wait_for(VT.profile(card), timeout=budget_s)
+    except Exception:
+        p = VT.shape(card, VT.cached(card))
+    return p.get("channel")
+
+
+# "page" — the tool's own route word (its schema unchanged: S1 parity) — means "fill it now" when the engine's channel is a form
+ENGINE_ROUTE = {"own_engine": "page", "form": "page", "widget": "page", "email": "email", "whatsapp": "whatsapp", "phone": "call"}
+
+
+async def _engine_route(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Optional[str], eng: dict, card: Optional[dict]) -> Optional[dict]:
+    """The engine's channel → the ONE question (a form AND another way: Tyler's words, verbatim) or that channel's read-back.
+    None: hand on to the request executors (email / WhatsApp / call) with the route set."""
+    from agapi import venue_truth as VT
+    if not route and eng.get("ask"):
+        alt = ENGINE_ROUTE.get((eng.get("alternative") or {}).get("kind") or "", "email")
+        return {"status": "choose_route", "venue": rd["venue"], "ask": VT.ASK_FILL,
+                "options": [{"title": "Fill it in now", "route": "page"}, {"title": "Send the request", "route": alt}],
+                "how": "Ask `ask` word for word, then hold_venue again with the route they chose."}
+    route = route or ENGINE_ROUTE.get(eng.get("kind") or "")
+    if route in ("page", "form") and eng.get("kind") in VT.FILLABLE:
+        return await _prepared(ctx, a, rd, res, at, now, eng, card)
+    return None if route in (None, "no") else await _hold_inner(ctx, a, rd, res, at, now, route)
+
+
+async def _prepared(ctx, a: dict, rd: dict, res: dict, at: str, now, eng: dict, card: Optional[dict]) -> dict:
+    """"Fill it now", until AgAPI's venue.prepare_booking is live: their OWN booking page (the engine's evidence) on their phone,
+    with every detail shown and one-tap copy — they confirm there (a CAPTCHA, if any, is theirs). Read back first; on the yes,
+    book_venue sends it. The attempt goes in the outcomes ledger as human_tap."""
+    import hashlib as _h
+    from booking_signer import guest_receipt as GR
+    GW = _API()
+    url = eng.get("url") or (card or {}).get("website")
+    if not url:
+        return {"status": "no_route", "venue": rd["venue"], "say": "Their booking page isn't on their site — ask how they'd like to book."}
+    email = await GR.address_of(ctx.account)
+    fields = [{"label": "Day", "value": GW.summary(res).split(" at ")[0]}, {"label": "Time", "value": at[11:16]},
+              {"label": "People", "value": str(res["how_many"]["count"])}, {"label": "Name", "value": res["who"]["name"]},
+              *([{"label": "Email", "value": email}] if email else []),
+              {"label": "Mobile", "value": res["who"]["contact"].get("mobile_e164") or ""}]
+    venue = GW.plain_venue(rd["venue"])
+    lines = [f"I'll put {venue}'s own booking page on your phone, with your booking ready to copy: {GW.summary(res)}, under {res['who']['name']}.",
+             "You press confirm there (and tick any “I'm not a robot” box) — I can't press it for you.",
+             "Nothing is booked until their page confirms it."]
+    sha = _h.sha256("\n".join(lines + [url]).encode()).hexdigest()
+    prev = _HELD.get(ctx.account)
+    _HELD[ctx.account] = {"rung": "prepared", "id": "prep-" + sha[:12], "sha": sha, "at": prev["at"] if prev and prev.get("sha") == sha else now,
+                          "venue": rd["venue"], "summary": GW.summary(res), "when": at, "party": res["how_many"]["count"],
+                          "place_id": rd.get("place_id"), "url": url, "fields": fields, "channel_name": eng.get("name"),
+                          "sector": (res.get("what") or {}).get("category")}
+    return {"status": "awaiting_yes", "venue": venue, "route": "page", "when": GW.summary(res), "read_back": lines,
+            "what_happens": "on their yes, book_venue puts their own page on their phone with every detail to copy; they confirm there"}
 
 
 def _with_card(card: Optional[dict], out: dict) -> dict:
@@ -246,6 +313,7 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
     msg_routes = [x for x in _routes_of(rd) if x in ("whatsapp", "instagram")]
     # Sasha 232 · /s2, DIRECT FIRST for every kind of place: their own form or booking page (their booking software IS their form) →
     # their own WhatsApp (drafted; THEY send it from their WhatsApp — S-48 Mode A) → email → phone. S1 unchanged.
+    # Sasha 248 · reached ONLY when the venue engine had no channel for this place (no site / not readable): Sasha's own read decides
     wa_first = (not route and getattr(ctx, "surface", "s1") == "s2" and "whatsapp" in msg_routes
                 and not {"form", "page"} & set(_routes_of(rd)))
     if wa_first:
@@ -435,6 +503,20 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         return {"status": "draft_on_phone" if sent else "draft_message", "venue": venue, "when": held["summary"], "booked": False,
                 "message": held["message"], **({"open": held["link"]} if held.get("link") and not sent else {}),
                 "line": "It's not booked until they reply to you."}
+    if rung == "prepared":   # Sasha 248 · "fill it now": their own page + every detail, on their phone; they confirm there
+        text = (f"📝 {venue} — your booking, ready to copy into their page:\n" + "\n".join(f"{f['label']}: {f['value']}" for f in held["fields"])
+                + f"\n\nTheir page: {held['url']}\nPress confirm there — it's booked only when their page says so.")
+        sent = False
+        try:
+            ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE else None
+            if ch:
+                o = await GW._tell(ch, text)
+                sent = "sent" in o and "not" not in o
+        except Exception as e:
+            log.warning("[venues] the prepared page was not sent to the phone: %s", type(e).__name__)
+        return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where, "booked": False,
+                "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent},
+                **({} if sent else {"say": "Their page and your details are on this screen — never say it's on their phone."})}
     if rung == "handover":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/forms/{held['id']}/handover", {}, timeout=120)
         if status != 200:

@@ -33,6 +33,8 @@ async def main() -> int:
     # Sasha 247 · the gate's test bookings never go in the LIVE outcomes ledger (found by CR: after the switch, the restart's gate
     # recorded its test venue bookings live) — the gate runs with production's environment, so the ledger is pinned to the sandbox here
     os.environ["SASHA_OUTCOMES_VIA"] = "sandbox"
+    from scripts import venue_engine_fake   # Sasha 248 · the venue engine's saved answers: no AgAPI read from a suite
+    venue_engine_fake.install()
     from datetime import datetime, timezone
     since = datetime.now(timezone.utc)
     if os.getenv("SASHA_GATE_DUFFEL", "fixtures") != "live":
@@ -49,9 +51,11 @@ async def main() -> int:
     f = await __import__("asyncio").to_thread(PG.main)   # Sasha 207 · the stores on a real, throwaway Postgres (never production)
     from scripts import demo_safety_suite as DS   # Sasha 215 · CR 56 + the safety items: the yes, outages, once-only acts (offline)
     s = await __import__("asyncio").to_thread(DS.main)
+    from scripts import venue_truth_suite as VTS   # Sasha 248 · ONE VENUE TRUTH: the three demo paths (Spanish not "Korean", the form, the sheet)
+    t = 0 if await VTS.main() else 1
     COST.report()   # Sasha 232 · what this run spent on the model
-    print(f"\nDEPLOY GATE: {'PASS' if not (a or b or c or d or v or w or e or f or s) else 'FAIL'}")
-    return 1 if (a or b or c or d or v or w or e or f) else 0
+    print(f"\nDEPLOY GATE: {'PASS' if not (a or b or c or d or v or w or e or f or s or t) else 'FAIL'}")
+    return 1 if (a or b or c or d or v or w or e or f or t) else 0
 
 
 if __name__ == "__main__":

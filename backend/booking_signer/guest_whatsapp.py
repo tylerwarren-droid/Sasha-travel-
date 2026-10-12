@@ -1602,7 +1602,8 @@ async def _invite(ctx: dict, req: dict) -> None:
 
 def _header(f: dict, luxe: bool) -> str:
     from .handoff import _plural_kind
-    return f"Here are the best-rated {_plural_kind(f.get('what') or 'places')} in {f.get('where')}{' (€€€ and up first)' if luxe else ''}."
+    # Sasha 248 · the search's words describe the SEARCH, never every card ("the best-rated Korean restaurants" over a Spanish one)
+    return f"Here are the best-rated places for “{f.get('what') or 'your search'}” in {f.get('where')}{' (€€€ and up first)' if luxe else ''}."
 
 
 def city_of(address: Optional[str]) -> Optional[str]:

@@ -231,6 +231,9 @@ KIND_MAP = {
     "counter_card": lambda ev, out: _card(ev, out, "At the counter"), "my_cards": lambda ev, out: _card(ev, out, "Your cards"),
     "activities": lambda ev, out: _card(ev, out, "Things to do"),
     "subscriptions": lambda ev, out: _card(ev, out, "Your subscriptions"),   # Sasha 243
+    "prepared": lambda ev, out: None if ev.get("on_phone") else out.text(   # Sasha 248 · already sent here when on_phone
+        "\n".join([f"📝 {ev.get('venue')} — ready to copy:"] + [f"{f.get('label')}: {f.get('value')}" for f in ev.get("fields") or []]
+                  + [f"Their page: {ev.get('url')}"])),
     "keep_capture": "keep_capture",          # sets st["photo_for"] (needs the state)
     "keep_handoff": _nothing,                # WhatsApp takes the photo directly
     "focus": _nothing, "trip": _nothing, "inline": _nothing,
@@ -292,6 +295,8 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
     if said_keep is not None:
         return said_keep
     message = message_of(account, body, payload, button_text)
+    if payload.startswith("pick:"):   # Sasha 248 · ONE PLACE CARD on WhatsApp: the tapped place's detail — as text + its link — first
+        await place_detail(account, payload[5:], out)
     history = [m for m in (st.get("history") or []) if m.get("role") in ("user", "assistant")]
     a = agent_state(st)
     last = a.get("last_seen")
@@ -364,6 +369,23 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
     except Exception as e:
         log.warning("[wa_agent] turn not kept in memory: %s", type(e).__name__)
     return text
+
+
+async def place_detail(account: str, place_id: str, out, budget_s: float = 20.0) -> Optional[str]:
+    """Sasha 248 · the same detail as /s2's and /next's sheet (agapi/venue_truth): what it is, hours, prices — each from its own
+    site, or labelled Google's — rating, how it books, and its site. A read not back in time: the listing's, labelled."""
+    import asyncio
+    from agapi import venue_truth as VT, venues as VN
+    card = VN.card_of(account, place_id)
+    if not card:
+        return None
+    try:
+        p = await asyncio.wait_for(VT.profile(card), timeout=budget_s)
+    except Exception:
+        p = VT.shape(card, VT.cached(card))
+    t = VT.text(p)
+    out.text(t)
+    return t
 
 
 def _remember_history(st: dict, user: str, reply: str) -> None:

@@ -25,7 +25,8 @@ LABEL = "Style (from their website, AI-summarised)"
 Styler = Callable[[str, str], Awaitable[str]]
 
 _SYSTEM = (
-    "You read the text of ONE venue's own website. The venue is a {what}. List at most 4 short tags (1–3 words each) "
+    "You read the text of ONE venue's own website. The person was looking for: {what} — that's their search, NOT a fact about this "
+    "venue; never tag a cuisine or kind the page itself doesn't show. List at most 4 short tags (1–3 words each) "
     "for the kind of work or services the page itself shows — for a tattoo studio e.g. fine-line, blackwork, realism, "
     "Japanese; for a spa e.g. Thai massage, hot stone. EVERY tag must come with a quote of at most 12 words copied "
     "EXACTLY from the text that supports it. Never tag quality, price, safety, hygiene, certification, licensing, awards "

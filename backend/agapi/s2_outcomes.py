@@ -26,7 +26,8 @@ from typing import Any, Awaitable, Callable, Dict, Optional, Set, Tuple
 log = logging.getLogger(__name__)
 
 RUNG = {"form": ("zero_touch", "web_form"), "handover": ("human_tap", "page_handover"), "page": ("human_tap", "page_handover"),
-        "draft": ("request_reply", "whatsapp"), "email": ("request_reply", "email"), "call": ("phone", "phone")}
+        "draft": ("request_reply", "whatsapp"), "email": ("request_reply", "email"), "call": ("phone", "phone"),
+        "prepared": ("human_tap", "page_handover")}   # Sasha 248 · "fill it now": their page + every detail, they confirm there
 NOW_STATE = {"confirmed": "confirmed", "requested": "sent", "tap_to_finish": "sent", "page_on_phone": "sent", "page_link": "sent",
              "draft_on_phone": "sent", "draft_message": "sent", "scheduled": "sent", "placed": "sent", "calling": "sent", "not_sent": "failed"}
 LATER = {"confirmed": "confirmed", "guest_booked": "confirmed", "declined": "declined", "failed": "failed", "unreachable": "failed"}

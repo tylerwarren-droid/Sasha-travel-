@@ -30,6 +30,9 @@ async def _clean_orphans(since) -> None:
 async def main() -> int:
     from scripts import places_fake   # Sasha 213 · NO live Google Places from a suite (it costs money) — the founder's say-so only
     places_fake.install()
+    # Sasha 247 · the gate's test bookings never go in the LIVE outcomes ledger (found by CR: after the switch, the restart's gate
+    # recorded its test venue bookings live) — the gate runs with production's environment, so the ledger is pinned to the sandbox here
+    os.environ["SASHA_OUTCOMES_VIA"] = "sandbox"
     from datetime import datetime, timezone
     since = datetime.now(timezone.utc)
     if os.getenv("SASHA_GATE_DUFFEL", "fixtures") != "live":

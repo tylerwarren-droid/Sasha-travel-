@@ -2881,8 +2881,12 @@ async def _outcome(account: str, pend: dict, rung: str, status: Optional[str] = 
     in the turn; a ledger that doesn't answer never stops the booking."""
     try:
         from agapi import s2_outcomes as OC
+        try:   # asked_at = when the person was asked (the read-back / question they said yes to), never the send — CR: a median of 0 s
+            asked = datetime.fromisoformat(str(pend["at"])) if pend.get("at") else None
+        except ValueError:
+            asked = None
         held = {"rung": rung, "id": pend.get("id") or pend.get("link_id"), "trip_item_id": pend.get("trip_item_id") or (j or {}).get("trip_item_id"),
-                "sector": ((pend.get("draft") or {}).get("what") or {}).get("category"), "at": NOW()}
+                "sector": ((pend.get("draft") or {}).get("what") or {}).get("category"), "at": asked or NOW()}
         await OC.booked(account, held, plain_venue(pend.get("venue") or ""), (pend.get("read") or {}).get("city"),
                         result=None if error else {"status": status, **({"reference": reference} if reference else {})}, error=error)
     except Exception as e:

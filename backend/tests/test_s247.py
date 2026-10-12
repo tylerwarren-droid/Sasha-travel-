@@ -65,6 +65,10 @@ class OldFlowRecordsAtTheMomentItsSent(unittest.TestCase):
         b = self.approve({**self.PEND, "rung": "email"}, (200, {"status": "sent"}))[0]
         self.assertEqual((b["rung"], b["channel"], b["state"]), ("request_reply", "email", "sent"))
 
+    def test_asked_at_is_when_they_were_asked(self):   # CR, live: a median time-to-confirm of 0 s
+        b = self.approve({**self.PEND, "rung": "email", "at": "2026-10-12T08:00:05+00:00"}, (200, {"status": "sent"}))[0]
+        self.assertEqual(b["asked_at"], "2026-10-12T08:00:05Z")
+
     def test_a_call_placed(self):
         b = self.approve({**self.PEND, "rung": "call"}, (200, {"status": "placed"}))[0]
         self.assertEqual((b["rung"], b["channel"], b["state"]), ("phone", "phone", "sent"))
@@ -91,6 +95,13 @@ class OldFlowRecordsAtTheMomentItsSent(unittest.TestCase):
         with mock.patch.object(OC, "CALL", down):
             got = self.approve({**self.PEND, "rung": "email"}, (200, {"status": "sent"}))
         self.assertEqual(got, [])   # nothing recorded — and _approve finished (it said DONE_ASKED)
+
+
+class TheGateNeverRecordsLive(unittest.TestCase):
+    def test_pinned_to_the_sandbox(self):
+        import inspect
+        from scripts import gate
+        self.assertIn('os.environ["SASHA_OUTCOMES_VIA"] = "sandbox"', inspect.getsource(gate.main))
 
 
 class TheReplySyncIsAwaited(unittest.TestCase):

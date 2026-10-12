@@ -149,12 +149,59 @@ def endpoint(target: str) -> Tuple[str, str]:
     return os.getenv(url_var, url_default).rstrip("/"), os.getenv(key_var, "").strip()
 
 
+# Sasha 253 · THE PERSON'S MODE (test → the sandbox, every family): who a call is FOR, set once around it (`acting`) — the outcomes
+# ledger sets it on every write, so a booking finished later by the server (a payment watcher, a webhook) is routed by the same rule
+_ACCOUNT: contextvars.ContextVar = contextvars.ContextVar("agapi_account", default=None)
+_MODE: Dict[str, Tuple[str, float]] = {}   # account → (mode, read at) — read once per 10 minutes
+MODE_TTL_S = 600
+
+
+class acting:
+    """with acting(account): … — every AgAPI call inside is for this person (their mode decides live or the sandbox)."""
+
+    def __init__(self, account: Optional[str]):
+        self.account, self.tok = account, None
+
+    def __enter__(self):
+        self.tok = _ACCOUNT.set(self.account)
+        return self.account
+
+    def __exit__(self, *exc):
+        _ACCOUNT.reset(self.tok)
+        return False
+
+
+async def person_mode(account: Optional[str]) -> str:
+    """Sasha 253 · "test" | "live" for a person. TODAY'S MARKER (until CR 92 moves readers to AgAPI's person_access): the auth
+    user's app_metadata.kanoe_test — set on every guest our suites and scratch scripts make (guest_accounts.create_guest), never on a
+    real person. Read here only. Unknown or unreadable → "live" (a real person's booking is never dropped from the ledger)."""
+    import time as _time
+    if not account:
+        return "live"
+    hit = _MODE.get(account)
+    if hit and _time.time() - hit[1] < MODE_TTL_S:
+        return hit[0]
+    mode = "live"
+    try:
+        from booking_signer import ops
+        st, u = await ops.ADMIN("GET", f"/admin/users/{account}", None)
+        if st == 200 and ((u or {}).get("app_metadata") or {}).get("kanoe_test"):
+            mode = "test"
+    except Exception as e:
+        log.warning("[route] the person's mode not read (live): %s", type(e).__name__)
+        return "live"   # not cached: read again next time
+    _MODE[account] = (mode, _time.time())
+    return mode
+
+
 async def target_for(family: str, account: Optional[str] = None, flight: Optional[dict] = None,
                      booking_reference: Optional[str] = None) -> str:
-    """Sasha 249 · live | sandbox for ONE call: the call in progress (`using`), else a money claim by its flight (money_target),
-    else the family's route."""
+    """Sasha 249 · live | sandbox for ONE call: the call in progress (`using`), else a TEST person → the sandbox (Sasha 253), else a
+    money claim by its flight (money_target), else the family's route."""
     if _TARGET.get():
         return _TARGET.get()
+    if await person_mode(account or _ACCOUNT.get()) == "test":   # Sasha 253 · the gate and every scratch guest never touch live
+        return "sandbox"
     if family == "money" and flight is not None and account:
         return await money_target(account, flight, booking_reference)
     return route(family)
@@ -178,5 +225,5 @@ def ctx_mode() -> str:
     return "test"
 
 
-__all__ = ["FAMILIES", "PINNED", "ROUTED", "TEST_AIRLINES", "table", "route", "current", "using", "money_target", "endpoint", "target_for", "client_for",
+__all__ = ["acting", "person_mode", "FAMILIES", "PINNED", "ROUTED", "TEST_AIRLINES", "table", "route", "current", "using", "money_target", "endpoint", "target_for", "client_for",
            "key_name", "ctx_mode"]

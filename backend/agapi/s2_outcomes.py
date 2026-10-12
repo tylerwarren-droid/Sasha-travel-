@@ -71,9 +71,11 @@ def ref_of(held: dict) -> str:
     return "sasha:" + str(held.get("trip_item_id") or f"{held.get('rung')}:{held.get('id')}")
 
 
-async def _send(op: str, body: dict) -> Optional[dict]:
+async def _send(op: str, body: dict, account: Optional[str] = None) -> Optional[dict]:
+    from agapi import agapi_route as AR
     try:
-        r = await CALL(op, body)
+        with AR.acting(account):   # Sasha 253 · for whom: a test person's outcome goes to the sandbox ledger (client_for decides)
+            r = await CALL(op, body)
     except Exception as e:
         log.warning("[outcomes] %s not recorded: %s", op, type(e).__name__)
         return None
@@ -99,7 +101,7 @@ async def booked(account: str, held: dict, venue: str, city: Optional[str], resu
         body["confirmation_quote"] = (f"Their reference: {result['reference']}" if (result or {}).get("reference") else (result or {}).get("line") or "confirmed")
     if st == "failed":
         body["failure_reason"] = (error or (result or {}).get("status") or "not sent")[:300]
-    out = await _send("outcomes.record", body)
+    out = await _send("outcomes.record", body, account)
     if out:
         _DONE.add((ref, st))
         if st not in ("confirmed", "declined", "failed") and held.get("trip_item_id"):
@@ -133,7 +135,7 @@ async def basket_booked(account: str, rows: list) -> int:
             body["confirmation_quote"] = f"Their reference: {r['booking_reference']}" if r.get("booking_reference") else "booked"
         else:
             body["failure_reason"] = str(r.get("failed_why") or "refused")[:300]
-        if await _send("outcomes.record", body):
+        if await _send("outcomes.record", body, account):
             _DONE.add((ref, state))
             n += 1
     return n
@@ -160,7 +162,7 @@ async def sync(account: str, reservations: list) -> int:
         if st in ("declined", "failed"):
             body["failure_reason"] = ("cancelled before the venue answered" if status == "cancelled" else str(words or status))[:600]
         _DONE.add((ref, st))
-        if await _send("outcomes.update", body):
+        if await _send("outcomes.update", body, account):
             n += 1
         _OPEN.get(account, set()).discard(tid)
     if set(_OPEN.get(account, set())) != was:

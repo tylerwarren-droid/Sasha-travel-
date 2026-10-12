@@ -89,6 +89,9 @@ def _count(ip: Optional[str], now: Optional[float] = None) -> None:
         _BY_IP.setdefault(hashlib.sha256(ip.encode()).hexdigest()[:16], deque()).append(now)
 
 
+REAL_ORIGINS = ("web", "whatsapp")   # Sasha 253 · the guests real people get (the sign-in-free web, a new WhatsApp number)
+
+
 async def create_guest(origin: str, ip: Optional[str] = None) -> Tuple[Optional[dict], Optional[str]]:
     """→ ({account_id, email, password}, None) or (None, why). The password is returned only to open the first session."""
     from . import ops
@@ -98,7 +101,10 @@ async def create_guest(origin: str, ip: Optional[str] = None) -> Tuple[Optional[
     email = f"guest-{uuid.uuid4().hex[:20]}@{GUEST_DOMAIN}"
     password = secrets.token_urlsafe(32)
     s, u = await ops.ADMIN("POST", "/admin/users", {"email": email, "password": password, "email_confirm": True,
-                                                     "app_metadata": {"kanoe_guest": True, "origin": origin}})
+                                                     "app_metadata": {"kanoe_guest": True, "origin": origin,
+                                                                      # Sasha 253 · a guest made for a suite / a proof is a TEST person:
+                                                                      # every AgAPI call for it goes to the sandbox (agapi_route.person_mode)
+                                                                      **({} if origin in REAL_ORIGINS else {"kanoe_test": True})}})
     if s not in (200, 201) or not (u or {}).get("id"):
         log.error("[guests] a guest account could not be created: HTTP %s %s", s, str(u)[:200])
         return None, "a guest account could not be created right now"

@@ -41,6 +41,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T18": ("activities are places (one card, their own photos)", ["tests.test_s252_activities.ThingsToDoArePlaces"]),
     # Sasha 252 · the Trip tab's flights from the one trip record, never "ask for flights" while they're chosen
     "T19": ("the Trip tab's flights from the trip record", ["tests.test_s252_activities.TripTabReadsTheTrip"]),
+    # Sasha 253 · live vs the sandbox only in client_for, by the person's mode: the gate and every scratch guest never touch live
+    "T23": ("a test person never touches live (the gate included)", ["tests.test_s253_gate_never_live.PersonMode",
+                                                                      "tests.test_s253_gate_never_live.SuiteGuestsAreTest"]),
 }
 
 _RUNNER = """

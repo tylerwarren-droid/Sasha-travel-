@@ -25,6 +25,7 @@ import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE } from '@/lib/sleep-rule.mjs'
+import { conversationStarted } from '@/lib/greeting-rule.mjs'
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
 import { actingOf } from '@/lib/acting-rule.mjs'   // Sasha 249 · whoami's acting
 
@@ -521,7 +522,8 @@ export default function S2App() {
   }, [busy, speaker, dormant, sleepEvent])
 
   const wake = () => { setDormant(false); setWoke(micUsed.current); speaker.unlock() }   // she was listening → listening again
-  const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} asleep={asleep} onWake={() => sleepEvent('tap_face')} />   // the same place in every branch: it outlives the sign-in check
+  const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} asleep={asleep} onWake={() => sleepEvent('tap_face')}
+    started={conversationStarted(msgs)} />   // the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
   if (signedIn === null) return <><main style={{ minHeight: '100dvh', background: C.bg }} />{hello}</>
   if (!signedIn) return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'system-ui' }}>

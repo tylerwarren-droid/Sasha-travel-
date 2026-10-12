@@ -477,3 +477,26 @@ class G15OpsConsole(TG.Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BookIsNeverParked(unittest.TestCase):
+    """Sasha 253 · found by EU's scoreboard rerun: "the first one please — book it, but don't send anything to them" was parked
+    (save_for_later) instead of booked — "book it" is hold_venue (it sends nothing without their yes)."""
+    def ctx(self, said):
+        from agapi import v0 as API
+        return API.Ctx(account="00000000-0000-4000-8000-0000000002b3", mode="test", user_said=said, session="s253", surface="s2")
+
+    def test_book_it_is_not_parked(self):
+        import asyncio as _a
+        from agapi import s2_manage as MG
+        from agapi.v0 import ToolError
+        for said in ("EU251 check: the first one please — book it, but don't send anything to them.", "Book La Mi Venta for Thursday"):
+            for fn in (MG.save_for_later, MG.add_to_trip):
+                with self.assertRaises(ToolError) as e:
+                    _a.run(fn(self.ctx(said), {"name": "La Mi Venta"}))
+                self.assertEqual(e.exception.code, "book_not_park")
+
+    def test_their_own_words_to_park_still_park(self):
+        from agapi import s2_manage as MG
+        for said in ("Save it for later", "add it to Saturday, don't book it yet", "I'm not ready to book yet, keep it"):
+            self.assertFalse(MG._asked_to_book(self.ctx(said)), said)

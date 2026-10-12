@@ -545,9 +545,26 @@ def _kind_of(what: str) -> str:
     return "restaurant" if re.search(r"restaurant|dinner|lunch|table|bar|tapas|cena|comida", what or "", re.I) else "other"
 
 
+_ASKS_TO_BOOK = re.compile(r"(?i)\b(book|reserv|reserve|table for)\w*")
+_PARK_WORDS = re.compile(r"(?i)\b(later|not (?:book|ready)|don'?t book|do not book|without booking|just (?:add|save|keep)|save it|park|add it to)\b")
+
+
+def _asked_to_book(ctx) -> bool:
+    """Sasha 253 · found by EU's scoreboard: "book it, but don't send anything to them" was PARKED (save_for_later) — "book it" is
+    always hold_venue (it sends nothing without their yes). Parking is only for their own words to park."""
+    said = str(getattr(ctx, "user_said", "") or "")
+    return bool(_ASKS_TO_BOOK.search(said)) and not _PARK_WORDS.search(said)
+
+
+_BOOK_NOT_PARK = ("they asked to BOOK it: call hold_venue (it prepares the booking and sends nothing without their yes — "
+                  "the prefilled form is theirs to confirm). Park only when they say so.")
+
+
 async def add_to_trip(ctx, a: dict) -> dict:
     """G10 · a place they found, added to a day of their trip — NOT booked (wa_brain.add_to_trip, the old flow's own: a plan
     item on that day, "picked; not booked yet"). Booking it later is the venue's own route: hold_venue → their yes → book_venue."""
+    if _asked_to_book(ctx):
+        raise _err("book_not_park", _BOOK_NOT_PARK)
     from booking_signer import guest_whatsapp as GW, wa_brain as WB
     name, what = str(a.get("name") or "").strip(), str(a.get("what") or "restaurant").strip()
     day, city = str(a.get("day") or "").strip()[:10], str(a.get("city") or "").strip()
@@ -575,6 +592,8 @@ async def add_to_trip(ctx, a: dict) -> dict:
 async def save_for_later(ctx, a: dict) -> dict:
     """G13 · "save it for later": parked UNBOOKED on their trip tab / Requests (wa_brain.saved_words → save_item, the old flow's
     park). Nothing is booked, nothing is contacted."""
+    if _asked_to_book(ctx):
+        raise _err("book_not_park", _BOOK_NOT_PARK)
     from booking_signer import wa_brain as WB
     name = str(a.get("name") or "").strip()
     if not name:
@@ -633,12 +652,12 @@ def tools() -> List[dict]:
         _t("time_between", "Magellan", time_between, "'Do I have time to drive / fly to X between A and B (on a day)?' — answered from "
            "their bookings with Google's Routes API (driving) or Duffel's TEST schedules (flying). Pass the question as they asked it.",
            {"question": {"type": "string", "maxLength": 300}}, ["question"], {"type": "object", "properties": {"answer": {"type": "array"}}}, []),
-        _t("add_to_trip", "Magellan", add_to_trip, "Add a place they found to a day of their current trip WITHOUT booking it (it shows "
+        _t("add_to_trip", "Magellan", add_to_trip, "ONLY when they ask to add it without booking. Add a place they found to a day of their current trip WITHOUT booking it (it shows "
            "on that day as 'not booked yet'). To book it later: hold_venue for that place and day, then their yes.",
            {"name": {"type": "string"}, "place_id": {"type": "string"}, "what": {"type": "string", "description": "e.g. restaurant, spa"},
             "day": {"type": "string", "description": "YYYY-MM-DD, a day of the trip"}, "city": {"type": "string"}}, ["name"],
            {"type": "object", "properties": {"added": {"type": "boolean"}}}, ["no_trip", "which_day", "day_not_on_trip", "date_invalid"]),
-        _t("save_for_later", "Pacioli", save_for_later, "'Save it for later' / 'not ready to book yet': park it UNBOOKED in their trip "
+        _t("save_for_later", "Pacioli", save_for_later, "'Save it for later' / 'not ready to book yet' — only their own words to park; 'book it' (even 'don't send anything yet') is hold_venue: park it UNBOOKED in their trip "
            "tab and Requests (nothing booked, nothing contacted).",
            {"name": {"type": "string", "maxLength": 200}, "when": {"type": "string", "description": "YYYY-MM-DD or YYYY-MM-DDTHH:MM, if said"},
             "city": {"type": "string"}}, ["name"], {"type": "object", "properties": {"saved": {"type": "boolean"}}}, ["name_missing", "date_invalid"]),

@@ -41,6 +41,12 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T18": ("activities are places (one card, their own photos)", ["tests.test_s252_activities.ThingsToDoArePlaces"]),
     # Sasha 252 · the Trip tab's flights from the one trip record, never "ask for flights" while they're chosen
     "T19": ("the Trip tab's flights from the trip record", ["tests.test_s252_activities.TripTabReadsTheTrip"]),
+    # Sasha 253 · item 4 (part 1): the WhatsApp old flow's capabilities in the one brain, each capability test moved to its path
+    "T22": ("the WhatsApp capabilities live in the brain",
+            ["tests.test_s253_gaps.TheToolsAreTheBrains", "tests.test_s253_gaps.G1ForwardedConfirmation",
+             "tests.test_s253_gaps.G2ResultsPushed", "tests.test_s253_gaps.G4RelocationOnTheBrain",
+             "tests.test_s253_gaps.G4CampusOnTheBrain", "tests.test_s253_gaps.G9TimeQuestion", "tests.test_s253_gaps.G10AddToTrip",
+             "tests.test_s253_gaps.G13SaveForLater", "tests.test_s253_gaps.G15OpsConsole", "tests.test_s253_gaps.G16RemindersOffer"]),
 }
 
 _RUNNER = """

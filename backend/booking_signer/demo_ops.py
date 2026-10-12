@@ -203,4 +203,113 @@ async def reset(request: Request):
     return {"ok": True, **out, "say": "Demo reset: test-venue, demo-spa and TEST flight and hotel bookings cancelled (their calendar events go within a minute); real bookings untouched."}
 
 
+# ── Sasha 253 · G15 — the founder's WhatsApp words, on the ops console (docs/sasha/S252-whatsapp-capabilities.md rows 35, 62, 73-75).
+# Each calls the SAME code as its word (captcha_test.send, guest_whatsapp._test_deposit / engine_check_answer, switching.space_label;
+# the reset is /reset above). The words stay on the old flow until it is retired.
+#   POST /api/booking/ops/demo/captcha-test     "send me the captcha test": a fresh CAPTCHA hand-over, one tap to his phone
+#   POST /api/booking/ops/demo/test-deposit     the TEST deposit page after a Sasha Test Venue booking, to his WhatsApp, watched
+#   GET  /api/booking/ops/demo/engine-check     the hotel engine links he is checking (set by the Sasha tab), with his answers
+#   POST /api/booking/ops/demo/engine-check     {n, answer: filled | not filled | wrong page} — recorded as his WhatsApp reply was
+#   GET  /api/booking/ops/demo/space            the space the account is in, in the label's words
+
+@router.post("/captcha-test")
+async def captcha_test(request: Request):
+    from .ops import founder_only
+    from . import captcha_test as CT
+    no = founder_only(request)
+    if no:
+        return no
+    from .account import account_for
+    return {"ok": True, "say": await CT.send(account_for(request))}
+
+
+async def _founder_channel(account: str):
+    from . import guest_whatsapp as GW
+    ch = await GW.STORE.channel_of_account(account) if GW.STORE else None
+    return ch if ch and GW.guest_numbers() else None
+
+
+@router.post("/test-deposit")
+async def test_deposit(request: Request):
+    from .ops import founder_only
+    from . import guest_whatsapp as GW
+    no = founder_only(request)
+    if no:
+        return no
+    from .account import account_for
+    account = account_for(request)
+    ch = await _founder_channel(account)
+    if not ch:
+        return _refuse(422, "no_whatsapp", "link your WhatsApp in You first — the deposit page goes there")
+    st = await GW.STORE.get_state(ch["wa_id_sha256"])
+    out = GW.Out()
+    await GW._test_deposit({"account": account, "ch": ch, "frm": GW.sender_for(st), "out": out})   # the word's own code, watched
+    sent = await GW.deliver(ch, GW.sender_for(st), out, st.get("last_inbound_at"))
+    return {"ok": True, "say": out.said(), "whatsapp": ", ".join(sent)}
+
+
+async def _engine_state(account: str):
+    from . import guest_whatsapp as GW
+    ch = await _founder_channel(account)
+    if not ch:
+        return None, None
+    return ch, await GW.STORE.get_state(ch["wa_id_sha256"])
+
+
+@router.get("/engine-check")
+async def engine_check(request: Request):
+    from .ops import founder_only
+    no = founder_only(request)
+    if no:
+        return no
+    from .account import account_for
+    _ch, st = await _engine_state(account_for(request))
+    pend = (st or {}).get("pending") or {}
+    if pend.get("kind") not in ("engine_check", "engine_check_done"):
+        return {"ok": True, "open": False, "hotels": [], "say": "No engine check is open."}
+    answers = pend.get("answers") or {}
+    return {"ok": True, "open": pend["kind"] == "engine_check",
+            "hotels": [{**h, "answer": (answers.get(str(h["n"])) or {}).get("answer")} for h in pend.get("hotels") or []]}
+
+
+@router.post("/engine-check")
+async def engine_check_answer(request: Request):
+    from .ops import founder_only
+    from . import guest_whatsapp as GW
+    no = founder_only(request)
+    if no:
+        return no
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    n, ans = (body or {}).get("n"), str((body or {}).get("answer") or "").strip().lower()
+    if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= 9 or ans not in ("filled", "not filled", "wrong page"):
+        return _refuse(400, "answer_invalid", "send {n: the link's number (1-9), answer: filled | not filled | wrong page}")
+    from .account import account_for
+    ch, st = await _engine_state(account_for(request))
+    pend = (st or {}).get("pending") or {}
+    if pend.get("kind") != "engine_check":
+        return _refuse(409, "no_engine_check", "no engine check is open")
+    got = GW.engine_check_answer(pend, f"{n} {ans}", NOW())
+    if not got:
+        return _refuse(409, "nothing_left", "every link is already answered")
+    line, st["pending"] = got
+    await GW.STORE.put_state(ch["wa_id_sha256"], st)
+    return {"ok": True, "say": line, "done": st["pending"]["kind"] == "engine_check_done"}
+
+
+@router.get("/space")
+async def space(request: Request):
+    from .ops import founder_only
+    from . import switching as SW
+    from products import space as SPC
+    no = founder_only(request)
+    if no:
+        return no
+    from .account import account_for
+    rec = await SPC.current(account_for(request))
+    return {"ok": True, "space": rec.get("space") or "sasha", "say": SW.space_label(SPC.engine_key(rec.get("space")))}
+
+
 __all__ = ["router"]

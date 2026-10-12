@@ -495,6 +495,97 @@ async def note_rental(ctx, a: dict) -> dict:
             "say": "Say it's noted in a sentence. If they haven't seen the counter card yet, offer it (rental_cover)."}
 
 
+# ── Sasha 253 · the WhatsApp old flow's capabilities, in the one brain (docs/sasha/S252-whatsapp-capabilities.md G1 · G9 · G10 ·
+# G13). Each tool CALLS the old flow's own helper — the one place its logic lives — so /s2, WhatsApp and /next (parity) do what
+# WhatsApp's old flow did, with the same words.
+
+def _on_whatsapp(ctx) -> bool:
+    return str(getattr(ctx, "session", "") or "").startswith("wa:")
+
+
+def _their_words(ctx, a: dict, key: str, must: Optional[str] = None) -> str:
+    """Their own words this turn (never the model's copy of them) — unless they don't carry what's needed (`must`, a regex)."""
+    said = str(getattr(ctx, "user_said", "") or "").strip()
+    given = str(a.get(key) or "").strip()
+    if said and (not must or re.search(must, said, re.I)):
+        return said
+    return given or said
+
+
+async def file_confirmation(ctx, a: dict) -> dict:
+    """G1 · a venue's confirmation they forwarded or pasted → filed on the ONE booking it names (booking_signer/written.py),
+    read with the field checks — guest_whatsapp.forwarded_confirmation, the old flow's own path (Sasha 118)."""
+    from booking_signer import guest_whatsapp as GW
+    text = _their_words(ctx, a, "text")
+    number = None
+    try:
+        ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE is not None else None
+        number = (ch or {}).get("number_e164")
+    except Exception as e:
+        log.info("[s2-manage] no channel for the forward: %s", type(e).__name__)
+    line = await GW.forwarded_confirmation(ctx.account, number, text, GW.NOW(), prefix="wa-fwd-" if _on_whatsapp(ctx) else "web-fwd-")
+    if line is None:
+        return {"filed": False, "say": "That doesn't read like a venue's confirmation — it needs the venue's own words with the day "
+                                       "(and their reference if they gave one). Nothing was filed."}
+    return {"filed": not line.startswith("That reads like"), "say": line, "how": "Say this line as it is; nothing else changed."}
+
+
+async def time_between(ctx, a: dict) -> dict:
+    """G9 · "do I have time to drive / fly to X between A and B?" — booking_signer/itinerary_q.answer, the old flow's own answer:
+    their bookings, Google's Routes API (driving) and Duffel's TEST schedules (flying). Nothing guessed."""
+    from booking_signer import guest_whatsapp as GW, itinerary_q as IQ
+    text = _their_words(ctx, a, "question", must=r"\bdo i have time\b")
+    if not re.search(r"\bdo i have time\b", text, re.I):
+        text = "do I have time " + re.sub(r"^\s*(?:do\s+i\s+have\s+time\s+)?", "", text, flags=re.I)
+    lines = await IQ.answer(ctx.account, text, GW.NOW())
+    return {"answer": lines, "say": "\n".join(lines), "how": "Say the answer as it is — its figures and sources are the tool's."}
+
+
+def _kind_of(what: str) -> str:
+    return "restaurant" if re.search(r"restaurant|dinner|lunch|table|bar|tapas|cena|comida", what or "", re.I) else "other"
+
+
+async def add_to_trip(ctx, a: dict) -> dict:
+    """G10 · a place they found, added to a day of their trip — NOT booked (wa_brain.add_to_trip, the old flow's own: a plan
+    item on that day, "picked; not booked yet"). Booking it later is the venue's own route: hold_venue → their yes → book_venue."""
+    from booking_signer import guest_whatsapp as GW, wa_brain as WB
+    name, what = str(a.get("name") or "").strip(), str(a.get("what") or "restaurant").strip()
+    day, city = str(a.get("day") or "").strip()[:10], str(a.get("city") or "").strip()
+    if day and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        raise _err("date_invalid", "day is YYYY-MM-DD")
+    now = GW.NOW()
+    c = await WB.context(ctx.account, " ".join(x for x in (day, city) if x), _kind_of(what), now)
+    if c.get("ask"):
+        raise _err("which_day", "which day or city of their trip? its cities: " + ", ".join(c["ask"]))
+    if not c.get("trip") or c.get("home"):
+        raise _err("no_trip", "they have no trip on now — book it (hold_venue) or save it for later (save_for_later)")
+    if day and c["trip"].get("date") != day:
+        raise _err("day_not_on_trip", f"{day} isn't a day of their trip “{c['trip'].get('title') or 'the trip'}” — ask which day")
+    out = GW.Out()
+    await WB.add_to_trip({"account": ctx.account, "out": out, "st": {}, "now": now},
+                         {"find": {"what": what, "where": c.get("where"), "trip": c["trip"]}, "draft": {}},
+                         {"name": name, "place_id": a.get("place_id")})
+    said = out.said()
+    added = said.startswith("Added ")
+    return {"added": added, "say": said, **({"trip_day": c["trip"].get("date"), "place_id": a.get("place_id")} if added else {}),
+            "how": ("Say it's on that day of their trip and NOT booked. To book it later, read it back with hold_venue (this place, "
+                    "that day, the time they say) and book only on their yes." if added else "Say it wasn't added; nothing was booked.")}
+
+
+async def save_for_later(ctx, a: dict) -> dict:
+    """G13 · "save it for later": parked UNBOOKED on their trip tab / Requests (wa_brain.saved_words → save_item, the old flow's
+    park). Nothing is booked, nothing is contacted."""
+    from booking_signer import wa_brain as WB
+    name = str(a.get("name") or "").strip()
+    if not name:
+        raise _err("name_missing", "what should be saved? (the place, or what they asked for)")
+    at, city = str(a.get("when") or "").strip() or None, str(a.get("city") or "").strip() or None
+    if at and not re.fullmatch(r"\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?", at):
+        raise _err("date_invalid", "when is YYYY-MM-DD or YYYY-MM-DDTHH:MM")
+    said = await WB.saved_words(ctx.account, name, at, city)
+    return {"saved": said.startswith("Saved"), "say": said, "how": "Say this line as it is."}
+
+
 def tools() -> List[dict]:
     from agapi.v0 import _t
     appr = {"approval": {"type": "object", "properties": {"said": {"type": "string"}}, "description": "the person's own words (filled by the caller)"}}
@@ -533,7 +624,26 @@ def tools() -> List[dict]:
            {"what": {"enum": ["hotel", "flight", "plan"]}, "id": {"type": "string"}, "name": {"type": "string"}, **appr}, ["what"],
            {"type": "object", "properties": {"status": {"type": "string"}}},
            ["booking_unknown", "no_explicit_yes", "cancel_unavailable", "not_cancellable", "what_invalid", "nothing_held"], austen=True),
+        # Sasha 253 · the WhatsApp capabilities in the one brain (S252 audit G1 · G9 · G10 · G13)
+        _t("file_confirmation", "Pacioli", file_confirmation, "They forwarded or pasted a venue's booking confirmation (its email or "
+           "message): file it on the ONE booking it names (their reference, or the venue's name and the day), read with the field "
+           "checks — 'confirmed in writing' only when it restates the day, time and number. Pass the text as they sent it.",
+           {"text": {"type": "string", "maxLength": 8000, "description": "the venue's message, as they sent it"}}, [],
+           {"type": "object", "properties": {"filed": {"type": "boolean"}}}, []),
+        _t("time_between", "Magellan", time_between, "'Do I have time to drive / fly to X between A and B (on a day)?' — answered from "
+           "their bookings with Google's Routes API (driving) or Duffel's TEST schedules (flying). Pass the question as they asked it.",
+           {"question": {"type": "string", "maxLength": 300}}, ["question"], {"type": "object", "properties": {"answer": {"type": "array"}}}, []),
+        _t("add_to_trip", "Magellan", add_to_trip, "Add a place they found to a day of their current trip WITHOUT booking it (it shows "
+           "on that day as 'not booked yet'). To book it later: hold_venue for that place and day, then their yes.",
+           {"name": {"type": "string"}, "place_id": {"type": "string"}, "what": {"type": "string", "description": "e.g. restaurant, spa"},
+            "day": {"type": "string", "description": "YYYY-MM-DD, a day of the trip"}, "city": {"type": "string"}}, ["name"],
+           {"type": "object", "properties": {"added": {"type": "boolean"}}}, ["no_trip", "which_day", "day_not_on_trip", "date_invalid"]),
+        _t("save_for_later", "Pacioli", save_for_later, "'Save it for later' / 'not ready to book yet': park it UNBOOKED in their trip "
+           "tab and Requests (nothing booked, nothing contacted).",
+           {"name": {"type": "string", "maxLength": 200}, "when": {"type": "string", "description": "YYYY-MM-DD or YYYY-MM-DDTHH:MM, if said"},
+            "city": {"type": "string"}}, ["name"], {"type": "object", "properties": {"saved": {"type": "boolean"}}}, ["name_missing", "date_invalid"]),
     ]
 
 
-__all__ = ["my_plans", "running_late", "change_booking", "cancel_booking", "plans_of", "tools"]
+__all__ = ["my_plans", "running_late", "change_booking", "cancel_booking", "plans_of", "tools", "file_confirmation", "time_between",
+           "add_to_trip", "save_for_later"]

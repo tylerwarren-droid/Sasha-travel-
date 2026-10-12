@@ -68,7 +68,8 @@ def _question(reply: str) -> Optional[str]:
 
 
 def _card(c: dict) -> dict:
-    return {k: c[k] for k in ("place_id", "name", "rating", "rating_count", "area", "address", "type", "open_at") if c.get(k) is not None}
+    return {k: c[k] for k in ("place_id", "name", "rating", "rating_count", "area", "address", "type", "open_at",
+                              "website", "type_source", "google_type") if c.get(k) is not None}   # Sasha 248 · where its type came from
 
 
 def fold(mem: Optional[dict], said: str, reply: str, seen: dict) -> dict:

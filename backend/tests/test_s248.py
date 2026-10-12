@@ -20,6 +20,17 @@ class DemoPaths(unittest.TestCase):
         self.assertIn("venue_engine_fake.install()", src)
 
 
+class TheSitesWordsStayTheSites(unittest.TestCase):
+    def test_a_card_restored_from_memory_is_never_relabelled_as_the_maps(self):   # found live on /s2 (Hammam, restored)
+        from agapi import venue_truth as VT, s2_memory as MEM
+        card = MEM._card({"place_id": "p", "name": "Hammam", "type": "Arab baths (hammam) and massage centre", "type_source": "site",
+                          "google_type": "Spa", "website": "https://madrid.hammamalandalus.com"})
+        self.assertEqual((card["type_source"], card["website"]), ("site", "https://madrid.hammamalandalus.com"))
+        p = VT.shape(card, None)
+        self.assertEqual(p["type"], {"value": "Arab baths (hammam) and massage centre", "source": "site"})
+        self.assertEqual(VT.shape({"type": "Korean Restaurant"}, None)["type"]["value"], "listed on the map as Korean Restaurant")
+
+
 class OneDeciderEach(unittest.TestCase):
     def test_the_question_never_names_a_venue(self):
         from booking_signer.venue_read import stored_name

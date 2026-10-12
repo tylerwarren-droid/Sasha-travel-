@@ -103,6 +103,9 @@ def area_of(c: dict) -> str:
 
 def card_for_model(c: dict) -> dict:
     return {"name": c.get("name"), "place_id": c.get("place_id"), "area": area_of(c), "type": c.get("type"),
+            # Sasha 248 · where "type" came from — said that way (found live: "Google lists it as Spanish" for the site's own words)
+            **({"type_from": {"site": "the venue's own website (quoted)", "map": "the map listing only — not confirmed by the venue"}
+                .get(c.get("type_source") or "", "the map listing only — not confirmed by the venue")} if c.get("type") else {}),
             "rating": c.get("rating"), "reviews": c.get("rating_count"),
             # Sasha 217 · OPENING HOURS only — never "a table is free": availability is known only when the venue answers
             **({"opening_hours_then": c["open_at"], "table_availability": "unknown until the venue answers"} if c.get("open_at") else {})}

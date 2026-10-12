@@ -195,16 +195,20 @@ def google_label(place: dict) -> Optional[dict]:
 def shape(place: dict, site: Optional[dict]) -> dict:
     """THE ONE PLACE SHAPE — the card and its detail sheet, on every surface."""
     site = site or {}
+    known = (place.get("place") or {}).get("type") if isinstance(place.get("place"), dict) else None
+    if not site.get("type") and not known and place.get("type_source") == "site" and place.get("type"):
+        known = {"value": place["type"], "source": "site"}   # the site's words this card already carries — never relabelled as the map's
     own = list((site or {}).get("photos") or [])
     photos = own + [p for p in ([place.get("photo")] + [g.get("uri") for g in place.get("gphotos") or [] if isinstance(g, dict)]
                                 + ([(place.get("gphoto") or {}).get("uri")] if isinstance(place.get("gphoto"), dict) else [])) if p]
     oa = place.get("open_at")
     return {"place_id": place.get("place_id"), "name": (site.get("name") or {}).get("value") or place.get("name"),
             "listing_name": place.get("name"), "website": place.get("website"),
-            "type": site.get("type") or google_label(place),
+            "type": site.get("type") or known or google_label(place),
             "hours": site.get("hours") or ({"value": oa.get("words"), "source": "google"} if isinstance(oa, dict) and oa.get("words") else None),
             "price": site.get("price") or ({"value": place["price_words"], "source": "google"} if place.get("price_words") else None),
             "photos": list(dict.fromkeys(photos))[:6], "photos_source": "site" if own else ("google" if photos else None),
+            "photos_own": len([p for p in dict.fromkeys(photos) if p in own][:6]),   # the first N are the venue's own; the rest Google's
             "rating": place.get("rating"), "rating_count": place.get("rating_count"), "area": place.get("area") or place.get("address"),
             "listing_url": place.get("listing_url"),
             "channel": channel(site) if site else None,
@@ -215,7 +219,7 @@ def shape(place: dict, site: Optional[dict]) -> dict:
 async def profile(place: dict, replay: bool = False) -> dict:
     """The place, from its own site (the engine), shaped once. No website → the listing only, labelled."""
     site = await _read_site(place["website"], replay, {"name": place.get("name"), "website": place.get("website"),
-                                                       "category": place.get("google_type") or place.get("type"),
+                                                       "category": place.get("google_type") or (place.get("type") if place.get("type_source") != "site" else None),
                                                        "place_id": place.get("place_id")}) if place.get("website") else None
     return shape(place, site)
 

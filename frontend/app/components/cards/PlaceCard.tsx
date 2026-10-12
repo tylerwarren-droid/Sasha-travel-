@@ -70,7 +70,9 @@ export function PlaceSheet({ card, onClose, onBook }: { card: Ev; onClose: () =>
     return () => { live = false }
   }, [card.place_id])
   const f = placeFacts(place)
-  const photos: { url: string; mark: string }[] = (place.photos || []).map((u: string) => ({ url: u, mark: place.photos_source === 'google' ? 'Google' : 'their site' }))
+  // each photo marked by its own source: the venue's own first (photos_own of them), then Google's
+  const own = typeof place.photos_own === 'number' ? place.photos_own : (place.photos_source === 'site' ? (place.photos || []).length : 0)
+  const photos: { url: string; mark: string }[] = (place.photos || []).map((u: string, i: number) => ({ url: u, mark: i < own ? 'their site' : 'Google' }))
   const row = (label: string, x: Ev | null) => x && x.value ? (
     <div style={{ padding: '6px 0', borderTop: '1px solid rgba(255,255,255,.08)' }}>
       <div style={{ fontSize: 11.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,.55)' }}>{label}</div>

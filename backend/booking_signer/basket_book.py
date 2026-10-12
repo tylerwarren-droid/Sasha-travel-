@@ -90,11 +90,52 @@ async def _choose_cheapest(account: str, trip_id: str, frm: str, to: str, day: s
     return await BK.choose(account, ids[0])
 
 
+def _leg_rank(r: Dict[str, Any]) -> int:
+    """Sasha 246 · 0 for the flight out, 1 for the flight home, by its slice's leg ("out:…" / "back:…"); a slice with no leg
+    (the cheapest-fare pick's "MAD→LIS 2026-11-11") is 0 and placed by its departure."""
+    sk = str(r.get("slice_key") or "")
+    return 1 if sk.startswith("back:") else 0
+
+
+def _flights_in_order(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sasha 246 · every row once: the non-flights in their order, then the flights — the outbound first, then home (by leg,
+    then departure). The read-back carries both legs, outbound first."""
+    fl = [r for r in rows if r.get("kind") == "flight"]
+    key = lambda r: (_leg_rank(r), str((r.get("snapshot") or {}).get("departs") or r.get("day") or ""))
+    return [r for r in rows if r.get("kind") != "flight"] + sorted(fl, key=key)
+
+
+def flights_spoken(rows: List[Dict[str, Any]]) -> str:
+    """Sasha 246 · the flights as she SAYS them before booking — both legs, the outbound first ("Flying out on Iberia IB3116,
+    Thu 12 Nov at 08:30, MAD to LIS; home on TAP TP1026, Sat 21 Nov at 19:05, LIS to MAD."). Built from the rows, never by
+    the model; a trip with only its flight home chosen says so (never a read-back that silently has no flight out)."""
+    fl = [r for r in _flights_in_order(rows) if r.get("kind") == "flight"]
+    parts = []
+    for i, r in enumerate(fl):
+        s = r.get("snapshot") or {}
+        who = " ".join(str(x) for x in (s.get("owner"), s.get("flights")) if x) or "the flight"
+        try:
+            dep = datetime.fromisoformat(str(s.get("departs")))
+            when = f"{dep.strftime('%a')} {dep.day} {dep.strftime('%b')} at {dep.strftime('%H:%M')}"
+        except (TypeError, ValueError):
+            when = str(r.get("day") or "")
+        route = f", {s['from']} to {s['to']}" if s.get("from") and s.get("to") else ""
+        home = (len(fl) > 1 and i == len(fl) - 1) or (len(fl) == 1 and _leg_rank(r) == 1)
+        lead = "home on" if home else ("flying out on" if i == 0 else "then")
+        parts.append(f"{lead} {who}, {when}{route}")
+    if not parts:
+        return ""
+    said = "; ".join(parts) + "."
+    if len(fl) == 1 and _leg_rank(fl[0]) == 1:
+        said += " No flight out is chosen yet."
+    return said[0].upper() + said[1:]
+
+
 def lines_of(rows: List[Dict[str, Any]], party: int) -> List[str]:
     """The read-back, from the rows alone (the yes is bound to these words; a price-moved note is said beside them)."""
     from . import travel as T
     out = [f"⚠ TEST bookings — no hotel or airline is contacted, nothing is reserved and nothing is charged. For {party}."]
-    for r in rows:
+    for r in _flights_in_order(rows):   # Sasha 246 · the stays as given, then the flights: OUTBOUND first, then home
         s = r.get("snapshot") or {}
         if r["kind"] == "stay":
             out.append(f"🏨 {s.get('name')}, {s.get('city') or ''} — {r.get('day')} to {s.get('checkout')}, {s.get('nights')} "
@@ -167,6 +208,7 @@ async def quote(account: str, origin: str) -> Dict[str, Any]:
             "sha256": hashlib.sha256("\n".join(lines).encode()).hexdigest(), "eur": t["amount"], "party": party,
             "title": p.get("title"), "trip_id": trip, "origin": origin, "tz": tz,
             "flights": flights, "chosen": picked_by_guest, "stays": [r for r in rows if r["kind"] == "stay"],
+            "spoken_flights": flights_spoken(rows),   # Sasha 246 · both legs, outbound first, as she says them
             "summary": {"hotels": sum(1 for r in rows if r["kind"] == "stay"),
                         "cities": [(r.get("snapshot") or {}).get("city") for r in rows if r["kind"] == "stay"], "party": party, "eur": t["amount"],
                         "flights": [f"{c.get('owner')} {c.get('flights')} · {c.get('from')}→{c.get('to')} · {str(c.get('departs') or '')[:10]}" for c in flights]}}
@@ -475,4 +517,4 @@ async def book_paid(account: str, sid: str) -> Dict[str, Any]:
             "failed": [r["status_line"] for r in bad], **({"loyalty": list(dict.fromkeys(applied))} if applied else {})}
 
 
-__all__ = ["quote", "current", "pay", "book_paid", "lines_of"]
+__all__ = ["quote", "current", "pay", "book_paid", "lines_of", "flights_spoken"]   # Sasha 246 · + flights_spoken

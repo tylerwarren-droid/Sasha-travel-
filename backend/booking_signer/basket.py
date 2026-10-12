@@ -437,6 +437,10 @@ def overlay(plan: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
                          "first_night": hit["day"] == on_day, "price_eur": hit.get("price_amount"), "price_source": hit.get("price_source")}
     plan["basket"] = {"flights": [{"id": r["id"], "state": r["state"], "words": words(r), "day": r.get("day"), **{
         k: r["snapshot"].get(k) for k in ("owner", "flights", "from", "to", "dep")}} for r in shown_flights(rows)], "total": total(rows)}
+    if not plan.get("party"):   # Sasha 246 · the Trip tab's TRAVELLERS: a plan saved without its party takes its basket's (the rows carry it)
+        parties = [int(r["party"]) for r in rows if str(r.get("party") or "").isdigit() and int(r["party"]) >= 1]
+        if parties:
+            plan["party"] = max(parties)
     return plan
 
 

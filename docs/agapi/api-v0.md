@@ -775,7 +775,7 @@ Save the travellers the airline needs (asked once, kept on the account).
 
 ### `hold_booking`
 
-The read-back before booking: every item re-checked and priced, the total, and the sha256 the yes binds to. No money moves; nothing is booked.
+The read-back before booking: every item re-checked and priced, the total, and the sha256 the yes binds to. No money moves; nothing is booked. When you sum it up, say its say_flights line as it is (both flights, the outbound first).
 
 **Errors:** `no_trip`, `travellers_missing`, `not_bookable`, `airline_unreachable`, `store_unreachable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 

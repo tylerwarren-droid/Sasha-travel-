@@ -16,8 +16,7 @@ export default function KeepPage() {
     <SignedInGate>
       <main className="mx-auto min-h-screen max-w-md bg-white pb-10 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
         <h1 className="px-4 pb-1 pt-6 text-2xl font-bold">Your Keep</h1>
-        <p className="px-4 pb-3 text-sm opacity-60">Sasha never sees these — only “Passport ES ••••456”. They’re filled in where needed, at that moment, after your yes.</p>
-        <KeepScreen />
+        <KeepScreen leadClassName="px-4 pb-3 text-sm opacity-60" />{/* Sasha 246 · its line names THEIR item, never a fixed example */}
       </main>
     </SignedInGate>
   )

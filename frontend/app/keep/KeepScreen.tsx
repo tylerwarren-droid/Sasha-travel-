@@ -11,6 +11,7 @@
  */
 import { Fragment, useEffect, useState, type CSSProperties } from 'react'
 import { GatedButton } from '../booking-helper/GatedButton'
+import { keepLead } from '@/lib/keep-lead.mjs'   // Sasha 246
 
 type Use = { what: string; at?: string; for?: string }   // Sasha 235 · from the Activity rows the Keep writes
 type Item = { item_id: string; type: string; tier: 'free' | 'yes' | 'read_back'; masked: string; last_used_at?: string; uses?: Use[] }
@@ -119,7 +120,9 @@ function Row({ it, onChange }: { it: Item; onChange: (msg: string) => void }) {
   )
 }
 
-export function KeepScreen() {
+/** Sasha 246 · `leadClassName`: the header line ("Sasha never sees these — only …") drawn here, naming THEIR item's mask — the
+ *  pages passed a fixed "Passport ES ••••456" to everyone. */
+export function KeepScreen({ leadClassName }: { leadClassName?: string } = {}) {
   const [load, setLoad] = useState<Load>({ phase: 'loading' })
   const [note, setNote] = useState<string | null>(null)
   const [confirm, setConfirm] = useState('')
@@ -146,10 +149,12 @@ export function KeepScreen() {
     changed(r.ok ? `Deleted everything (${r.j.deleted}) — and the key that opened it.` : String(r.j.message ?? 'Not deleted.'))
   }
 
-  if (load.phase === 'loading') return <p className="px-4 py-8 text-center opacity-60">Opening your Keep…</p>
-  if (load.phase === 'failed') return <p className="mx-4 rounded-lg bg-red-50 p-4 text-red-700 dark:bg-red-950 dark:text-red-300">Your Keep couldn’t be opened just now ({load.why}). Nothing was changed.</p>
+  const lead = leadClassName ? <p className={leadClassName}>{keepLead(load.phase === 'ready' ? load.items : [])}</p> : null   // Sasha 246
+  if (load.phase === 'loading') return <>{lead}<p className="px-4 py-8 text-center opacity-60">Opening your Keep…</p></>
+  if (load.phase === 'failed') return <>{lead}<p className="mx-4 rounded-lg bg-red-50 p-4 text-red-700 dark:bg-red-950 dark:text-red-300">Your Keep couldn’t be opened just now ({load.why}). Nothing was changed.</p></>
   return (
     <>
+      {lead}
       {note && <p className="mx-3 mb-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">{note}</p>}
       {load.items.length > 0 ? (
         <ul className="px-4">{load.items.map(it => <Row key={it.item_id} it={it} onChange={changed} />)}</ul>

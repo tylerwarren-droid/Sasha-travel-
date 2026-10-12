@@ -331,6 +331,65 @@ async def change_booking(ctx, a: dict) -> dict:
     raise _err("what_invalid", "what is venue, hotel or flight")
 
 
+def _held_lines(pend: dict, title: Optional[str]) -> List[str]:
+    """Sasha 246 · the read-back for dropping a HELD trip (its items waiting for payment, nothing booked)."""
+    names = []
+    for r in pend.get("rows") or []:
+        s = r.get("snapshot") or {}
+        if r.get("kind") == "flight":
+            names.append(" ".join(x for x in (s.get("owner"), s.get("flights"), f"{s.get('from') or ''}→{s.get('to') or ''}".strip("→")) if x) or "a flight")
+        elif r.get("kind") == "stay":
+            names.append(f"{s.get('name') or s.get('hotel') or 'a hotel'}" + (f", {s['city']}" if s.get("city") else ""))
+    head = f"I'll drop your held trip{f' “{title}”' if title else ''}" + (f": {'; '.join(names)}." if names else ".")
+    return [head, "It isn't booked or paid: the payment page is closed, nothing is charged and there's nothing to refund.", "Shall I drop it?"]
+
+
+async def _drop_held(ctx) -> dict:
+    """Sasha 246 · CANCEL CAN DROP A HELD PLAN: the trip's items held for a payment that was never made (pending_payment, no
+    order) — the read-back first; nothing is touched until their yes in a later turn."""
+    from booking_signer import basket_book as BB
+    pend = await BB.in_progress(ctx.account)
+    if not pend:
+        raise _err("nothing_held", "nothing is held for payment — my_plans lists what's booked")
+    title = next((p.get("title") for p in await _plans(ctx.account) if p.get("trip_id") == pend["trip_id"]), None)
+    lines = _held_lines(pend, title)
+    _hold(ctx, "cancel_booking", lines, kind="held", sid=pend["sid"], trip_id=pend["trip_id"], title=title or "your trip")
+    return {"status": "awaiting_yes", "read_back": lines, "say": "Read it back and ask: shall I drop it?"}
+
+
+async def _plans(account: str) -> List[dict]:
+    from booking_signer import plan_store as PS
+    try:
+        return await PS.plans(account)
+    except Exception as e:
+        log.info("[s2-manage] plans not read: %s", type(e).__name__)
+        return []
+
+
+async def _dropped(ctx, held: dict, said: str) -> dict:
+    """Sasha 246 · their yes to dropping the held trip: the payment closed at Stripe first (so it can never be paid), its items
+    cancelled (basket_book's own supersede path); paid already → refused, never dropped."""
+    from booking_signer import basket as BK, basket_book as BB
+    pend = await BB.in_progress(ctx.account)
+    if not pend or pend["sid"] != held["sid"]:
+        return {"status": "not_cancelled", "say": "That held trip has changed since I read it back — nothing was dropped. Ask me again."}
+    refused = await BB._supersede(ctx.account, pend)
+    if refused:
+        return {"status": "not_cancelled", "say": f"It wasn't dropped: {refused['why']}."}
+    if not await BK.items(ctx.account, held["trip_id"], ("booked",)):   # nothing booked on it: the plan itself goes (cancelled, not deleted)
+        from booking_signer import plan_store as PS
+        run = PS._run()
+        if run is not None:
+            import uuid as _u
+            try:
+                await run(lambda c: c.execute("update trips set status = 'cancelled', updated_at = now() where id = $1 and owner_id = $2 "
+                                              "and status in ('draft','active')", _u.UUID(held["trip_id"]), _u.UUID(ctx.account)))
+            except Exception as e:
+                log.warning("[s2-manage] held trip's plan not cancelled: %s", type(e).__name__)
+    log.info("[s2-manage] held trip %s dropped on their yes (payment %s)", held["trip_id"][:8], held["sid"][:14])   # the rows' cancelled state is its record
+    return {"status": "cancelled", "say": f"Dropped {held.get('title') or 'your held trip'} — nothing was booked or charged."}
+
+
 async def cancel_booking(ctx, a: dict) -> dict:
     from agapi.v0 import claim
     what = (a.get("what") or "").lower()
@@ -342,6 +401,8 @@ async def cancel_booking(ctx, a: dict) -> dict:
         await claim(ctx)
         _HELD.pop(ctx.account, None)
         from booking_signer import basket as BK
+        if held["kind"] == "held":   # Sasha 246 · a held (unpaid, unbooked) trip dropped
+            return await _dropped(ctx, held, said)
         if held["kind"] == "flight":
             from booking_signer import flight_manage as FM
             got = await FM.cancel_confirm(held["quote_id"])
@@ -359,9 +420,13 @@ async def cancel_booking(ctx, a: dict) -> dict:
                 import uuid as _u
                 await run(lambda c: c.execute("update trip_items set status = 'cancelled', updated_at = now() where id = $1", _u.UUID(held["trip_item_id"])))
         return {"status": "cancelled", "say": f"Cancelled your stay at {held['title']} — free, it was a test booking."}
+    if what in ("plan", "trip", "held"):   # Sasha 246 · the held trip, as a whole
+        return await _drop_held(ctx)
     if what == "flight":
         from booking_signer import flight_manage as FM
         it = await _item(ctx, a, "flight")
+        if not it.get("order_id") and it.get("status") == "awaiting payment":   # Sasha 246 · held, never ticketed: drop the held trip
+            return await _drop_held(ctx)
         if not it.get("order_id"):
             raise _err("not_cancellable", "that flight isn't ticketed yet (awaiting payment) — nothing to cancel")
         q = await FM.cancel_quote(it["order_id"])
@@ -373,12 +438,14 @@ async def cancel_booking(ctx, a: dict) -> dict:
         return {"status": "awaiting_yes", "read_back": q["lines"], "say": "Read it back, with Duffel's refund, and ask: shall I cancel it?"}
     if what == "hotel":
         it = await _item(ctx, a, "hotel")
-        lines = [f"I'll cancel your stay at {it['title']}, from {it['when'][:10]} for {it.get('nights') or 1} night{'s' if (it.get('nights') or 1) != 1 else ''}"
+        if it.get("status") == "awaiting payment":   # Sasha 246 · held with the trip's payment: the held trip is dropped as one
+            return await _drop_held(ctx)
+        lines =[f"I'll cancel your stay at {it['title']}, from {it['when'][:10]} for {it.get('nights') or 1} night{'s' if (it.get('nights') or 1) != 1 else ''}"
                  + (f" (ref {it['reference']})." if it.get("reference") else "."),
                  "It's a test hotel booking: cancelling is free and no money moves.", "Shall I cancel it?"]
         _hold(ctx, "cancel_booking", lines, kind="hotel", id=it["id"], trip_item_id=it.get("trip_item_id"), title=it["title"])
         return {"status": "awaiting_yes", "read_back": lines, "say": "Read it back and ask: shall I cancel it?"}
-    raise _err("what_invalid", "what is hotel or flight (a restaurant or spa: cancel_venue)")
+    raise _err("what_invalid", "what is hotel, flight or plan (a held trip); a restaurant or spa: cancel_venue")
 
 
 async def note_rental(ctx, a: dict) -> dict:
@@ -426,10 +493,11 @@ def tools() -> List[dict]:
            {"type": "object", "properties": {"status": {"type": "string"}}},
            ["booking_unknown", "no_explicit_yes", "change_unavailable", "not_changeable", "date_missing", "what_invalid"], austen=True),
         _t("cancel_booking", "Austen", cancel_booking, "Cancel a hotel stay or a flight (a restaurant or spa: cancel_venue). FIRST call: the "
-           "read-back (a flight's refund is Duffel's own quote); after their explicit yes in a LATER turn, call again to cancel.",
-           {"what": {"enum": ["hotel", "flight"]}, "id": {"type": "string"}, "name": {"type": "string"}, **appr}, ["what"],
+           "read-back (a flight's refund is Duffel's own quote); after their explicit yes in a LATER turn, call again to cancel. "
+           "what=plan drops a HELD trip (waiting for payment, nothing booked): its payment closed, nothing charged.",   # Sasha 246
+           {"what": {"enum": ["hotel", "flight", "plan"]}, "id": {"type": "string"}, "name": {"type": "string"}, **appr}, ["what"],
            {"type": "object", "properties": {"status": {"type": "string"}}},
-           ["booking_unknown", "no_explicit_yes", "cancel_unavailable", "not_cancellable", "what_invalid"], austen=True),
+           ["booking_unknown", "no_explicit_yes", "cancel_unavailable", "not_cancellable", "what_invalid", "nothing_held"], austen=True),
     ]
 
 

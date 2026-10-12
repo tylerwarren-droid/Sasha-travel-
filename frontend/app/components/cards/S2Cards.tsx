@@ -6,6 +6,7 @@
  */
 import { useRef, useState } from 'react'
 import { untag } from '@/lib/no-test-label.mjs'
+import { subsHeading, subsFooter } from '@/lib/subscriptions-heading.mjs'   // Sasha 246
 
 type Ev = Record<string, any>   // eslint-disable-line @typescript-eslint/no-explicit-any
 export const C = { bg: '#0b0b10', card: '#16151d', line: 'rgba(255,255,255,.1)', gold: '#E8B923', dim: 'rgba(255,255,255,.6)' }
@@ -262,7 +263,7 @@ export function ActivityCard({ a }: { a: Ev }) {
 export function SubscriptionsCard({ items, total, source, send }: { items: Ev[]; total?: string; source?: string; send: (t: string) => void }) {
   const per: Record<string, string> = { monthly: '/mo', yearly: '/yr', weekly: '/wk', quarterly: '/qtr' }
   return (
-    <Box k="Subscriptions" h={total ? `About ${untag(total)} a month` : undefined}>
+    <Box k="Subscriptions" h={subsHeading(items, total ? untag(total) : total)}>{/* Sasha 246 · none found → "No subscriptions found" */}
       {items.length === 0 ? <div style={{ fontSize: 14.5, color: C.dim }}>No subscription receipts found.</div> : items.map((s, i) => (
         <button key={s.subscription_id || i} onClick={() => send(`Cancel ${s.service}`)} style={{ display: 'flex', width: '100%', justifyContent: 'space-between', gap: 12,
           background: 'transparent', border: 'none', borderTop: i ? `1px solid ${C.line}` : 'none', color: 'inherit', padding: '9px 0',
@@ -272,7 +273,7 @@ export function SubscriptionsCard({ items, total, source, send }: { items: Ev[];
             {s.renews ? <> · renews {untag(String(s.renews))}{s.expected ? ' (expected)' : ''}</> : null}
             {s.not_yet ? <span style={{ display: 'block', color: C.gold, fontSize: 12.5 }}>{untag(String(s.not_yet))}</span> : null}</span>
         </button>))}
-      <div style={{ fontSize: 12.5, color: C.dim, marginTop: 6 }}>From {untag(source || 'your receipts')} · tap one to cancel it — nothing happens until you say yes</div>
+      <div style={{ fontSize: 12.5, color: C.dim, marginTop: 6 }}>{subsFooter(items, untag(source || 'your receipts'))}</div>{/* Sasha 246 · "tap one" only over a list */}
     </Box>)
 }
 

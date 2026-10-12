@@ -73,6 +73,30 @@ class StaysDown(Exception):
     """Sasha 215 · the hotel search (Google Places, through the booking API) didn't answer — raised only when `strict`."""
 
 
+# Sasha 246 · a hotel's NAME, never its web page's title: Google's listing name can carry the owner's marketing tail ("Tings Lisbon -
+# better rates…", "Hotel Patio | Official Site | Best Price Guaranteed"). The name is cut at the first such part; a part that is
+# the place's own words ("Pestana Palace Lisboa - Hotel & National Monument") stays.
+_NAME_SEP = re.compile(r"\s+[-–—·]\s+|\s*\|\s*")
+_MARKETING = re.compile(r"(?i)\b(?:better|best|lowest|cheap\w*|great)\s+(?:rates?|prices?|deals?|offers?)\b|\brates?\b|\bofficial\b|"
+                        r"\bbook(?:ing)?\s+(?:now|direct\w*|online|here|today)\b|\bdeals?\b|\bdiscounts?\b|\bspecial offers?\b|"
+                        r"\bsave\b|\bguarantee\w*\b|\bfree\s+(?:wi-?fi|cancell?ation|breakfast|parking)\b|\bweb\s?site\b|"
+                        r"\bsite\s+oficial\b|\bmejor\s+precio\b|\bmelhor\s+pre[çc]o\b|\bmeilleur\s+prix\b|\bsite\s+officiel\b|"
+                        r"\bhome\s*page\b|\bwelcome to\b|\bcheck (?:rates|availability)\b|…|\.\.\.")
+
+
+def hotel_name(raw: Optional[str]) -> str:
+    """Sasha 246 · the hotel's own name from a listing name that may be a page title: everything from the first marketing part
+    on is dropped ("Tings Lisbon - better rates…" → "Tings Lisbon"); a name with none is returned as it is (trimmed)."""
+    name = " ".join(str(raw or "").split())
+    seps = list(_NAME_SEP.finditer(name))
+    for i, m in enumerate(seps):
+        part = name[m.end(): seps[i + 1].start() if i + 1 < len(seps) else len(name)]
+        if _MARKETING.search(part):
+            head = name[:m.start()].strip()
+            return head if len(head) >= 2 else name
+    return name
+
+
 async def hotels_in(account: Optional[str], city: str, country_name: str, country_code: Optional[str], prefer: str = "",
                     strict: bool = False) -> List[dict]:
     """Real hotels in a city (Google Places, best rated first): name, Google's rating and count, area, photo, est. price.
@@ -100,7 +124,7 @@ async def hotels_in(account: Optional[str], city: str, country_name: str, countr
     out = []
     for c in cands[:5]:
         est = estimate_usd(country_code, c)
-        out.append({"name": c["name"], "place_id": c["place_id"], "address": c.get("address"), "rating": c.get("rating"),
+        out.append({"name": hotel_name(c["name"]) or c["name"], "place_id": c["place_id"],   # Sasha 246 · its name, not a page title "address": c.get("address"), "rating": c.get("rating"),
                     "rating_count": c.get("rating_count"), "listing_url": c.get("listing_url"), "website": c.get("website"),
                     "gphoto": c.get("gphoto"), "est_usd": est, "est_eur": int(round(est * USD_EUR))})
     return out
@@ -192,4 +216,4 @@ async def build_world(a: dict, account: Optional[str] = None) -> Optional[dict]:
             "stay_options": {c: hs for c, hs in zip(cities, found)}}
 
 
-__all__ = ["build_world", "hotels_in", "hotel_entry", "estimate_usd", "NIGHT_USD"]
+__all__ = ["build_world", "hotels_in", "hotel_entry", "estimate_usd", "NIGHT_USD", "hotel_name"]   # Sasha 246 · + hotel_name

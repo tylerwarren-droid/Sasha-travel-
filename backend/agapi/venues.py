@@ -18,6 +18,7 @@ from proof (the form's confirmation page, the platform's email via Gmail, the ve
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -351,7 +352,8 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
         else datetime.now(timezone.utc)
     _HELD[ctx.account] = {"rung": rung, "id": rid, "sha": read_back["sha256"], "at": at, "venue": rd["venue"], "summary": GW.summary(res),
                           "place_id": rd.get("place_id"),
-                          "when": res["when"]["at"], "party": res["how_many"]["count"], "same": same, **(extra or {})}
+                          "when": res["when"]["at"], "party": res["how_many"]["count"], "same": same,
+                          "sector": (res.get("what") or {}).get("category"), **(extra or {})}   # CR 87 · the sector, for the outcomes ledger
     lines = GW.guest_lines(rung, read_back.get("lines") or [])
     out = {"status": "awaiting_yes", "venue": GW.plain_venue(rd["venue"]), "route": rung, "when": GW.summary(res),
             "read_back": lines, "what_happens": {
@@ -390,8 +392,14 @@ async def book_venue(ctx, a: dict) -> dict:
     venue, rung = GW.plain_venue(held["venue"]), held["rung"]
     await claim(ctx)   # Sasha 215 · durable: sent once, across restarts and workers
     _HELD.pop(ctx.account, None)
-    out = await _book_inner(ctx, held, how, venue, rung)
     card = card_of(ctx.account, held.get("place_id"), venue)
+    from agapi import s2_outcomes as OC   # CR 87 · every real booking attempt goes in the outcomes ledger (never the person's details)
+    try:
+        out = await _book_inner(ctx, held, how, venue, rung)
+    except Exception as e:
+        await OC.booked(ctx.account, held, venue, area_of(card) if card else None, error=str(getattr(e, "message", "") or type(e).__name__))
+        raise
+    await OC.booked(ctx.account, held, venue, area_of(card) if card else None, result=out)
     return _with_card(card, out)
 
 
@@ -466,6 +474,11 @@ async def venue_bookings(account: str, include_cancelled: bool = False) -> List[
     if status != 200:
         return []
     today = date.today().isoformat()
+    try:   # CR 87 · a venue's reply that changed a reservation updates its outcome (once); never slows or stops this read
+        from agapi import s2_outcomes as OC
+        asyncio.get_running_loop().create_task(OC.sync(account, (j or {}).get("reservations") or []))
+    except Exception:
+        pass
     return [{"trip_item_id": r["id"], "venue": GW.plain_venue(r.get("venue")), "date": r.get("date"), "time": r.get("time"),
              "party": r.get("party"), "status": r.get("status"), "type": r.get("type"),
              **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),   # Sasha 217 · the venue's reference in full

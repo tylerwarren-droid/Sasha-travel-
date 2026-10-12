@@ -805,7 +805,8 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   // Prefer the party size the current plan was actually built for — a "make it 4" rebuild
   // carries the new count on the itinerary, so the trip view follows it instead of the static
   // profile field (which never changes mid-conversation and left the panel showing the old size).
-  const travellerCount = richItinerary?.travellers ?? richItinerary?.cost_breakdown?.travellers ?? (user.travellers?.length || 2)
+  // Sasha 249 · ONE PARTY: no silent 2 — the profile's travellers when there are any, else 0 (the Trip tab reads the trip's own party, else "—")
+  const travellerCount = richItinerary?.travellers ?? richItinerary?.cost_breakdown?.travellers ?? (user.travellers?.length || 0)
   // Where the recommended stays actually are, taken from the stays themselves. The header
   // used to read `activeDest`, so "Hand-picked for Hoi An ancient town" changed every few
   // seconds as the photos cycled while the hotels underneath stayed put — naming a city the

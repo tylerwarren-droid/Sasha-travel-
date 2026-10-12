@@ -13,7 +13,8 @@ test('travellers: the plan\'s party wins over the page\'s default (a trip for tw
   assert.equal(partySize(null, null, 2), 2)
   assert.equal(partySize({ party: '2' }, null, 1), 2)
   assert.equal(partySize({ party: 0 }, null, 1), 1)
-  assert.equal(partySize(undefined, undefined, undefined), 1)
+  // Sasha 249 · updated: this pinned the silent 1 that 249 removes (ONE PARTY: unknown is null — the tab shows "—", Sasha asks)
+  assert.equal(partySize(undefined, undefined, undefined), null)
 })
 
 test('travellers: TripPanel reads the party, and /s2 is no longer left with its fixed 1', () => {

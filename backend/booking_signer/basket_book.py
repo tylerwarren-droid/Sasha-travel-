@@ -5,6 +5,9 @@
                 swapped. No flight chosen → Magellan searches out and back, the cheapest bookable fare is suggested and chosen
                 (said in the read-back). Stays are priced by their provider (the TEST hotel's placeholder rate, labelled).
                 The read-back's lines are built from the rows alone, so the same rows always give the same sha256.
+                Sasha 249 · split: price() is the read-back from the rows, PURE; refresh() is the re-check above (the one
+                mutating call — only hold_booking makes it); quote() = refresh(); store_prices() prices the stays once, when
+                they arrive (propose_trip, swap_stay). The trip's figures everywhere else are basket.trip_figures() (read only).
     pay()       the yes is bound to those lines (sha256 recomputed from the rows, not remembered); one Stripe TEST checkout; Austen
                 holds every item with the session (pending_payment); paid_watch remembers the session for restarts.
     book_paid() after payment: each held item booked by its provider; Pacioli writes booked / failed with its line.
@@ -66,9 +69,19 @@ async def _validate_flight(account: str, r: Dict[str, Any], party: int) -> Dict[
         return outage
     if again is None:
         return {"why": f"the {c.get('owner')} flight {c.get('flights')} you picked is no longer offered — shall I look again?"}
-    diff = float(again["amount"]) - float(c.get("amount") or 0)
-    row = await BK.refresh(account, r["id"], provider_ref=again["id"], snapshot={**(r.get("snapshot") or {}), **again},
-                           expires_at=again.get("expires_at"), price_amount=float(again["amount"]), price_currency=again["currency"])
+    # Sasha 249 · ONE CURRENCY: the re-found fare stored in euros (fx.py's one rate), the difference said in euros
+    now_eur, was_eur = BK.card_eur(again), BK.eur_of(r)
+    if now_eur is None:
+        return {"why": f"the {c.get('owner')} flight {c.get('flights')} is now priced in {again.get('currency')}, which I can't put in euros — shall I look again?"}
+    diff = now_eur - float(was_eur if was_eur is not None else now_eur)
+    snap = {**(r.get("snapshot") or {}), **again, "price_eur": now_eur}
+    if (again.get("currency") or "EUR").upper() != "EUR":
+        from . import fx as FX
+        snap["fx"] = {**FX.stamp(again.get("currency")), "amount": again.get("amount")}
+    else:
+        snap.pop("fx", None)
+    row = await BK.refresh(account, r["id"], provider_ref=again["id"], snapshot=snap,
+                           expires_at=again.get("expires_at"), price_amount=now_eur, price_currency="EUR")
     note = "" if abs(diff) < 0.005 else (f" (its price moved {'up' if diff > 0 else 'down'} €{abs(diff):.2f} since you picked it)")
     return {"row": row, "note": note}
 
@@ -78,14 +91,14 @@ async def _choose_cheapest(account: str, trip_id: str, frm: str, to: str, day: s
     from . import travel as T, trip_book as TB
     search = SEARCH or T.search
     res = await search(frm, to, day, adults=party, limit=8)
-    cards = [c for c in res.get("cards") or [] if c.get("currency") == "EUR"]
+    cards = [c for c in res.get("cards") or [] if c.get("currency") == "EUR"] or BK.in_eur(res.get("cards") or [])   # Sasha 249 · converted, never dropped
     c = await TB._orderable(cards)
     if c is None:
         return None
     sk = f"{frm}→{to} {day}"
     ids = await BK.suggest(account, trip_id, "flight", [{
         "provider": "duffel", "provider_ref": c["id"], "slice_key": sk, "day": day, "party": party, "expires_at": c.get("expires_at"),
-        "price_amount": float(c["amount"]), "price_currency": c["currency"], "price_source": "quoted",
+        "price_amount": float(c["amount"]), "price_currency": c["currency"], "price_source": "quoted",   # in euros at ingestion (BK.suggest)
         "snapshot": {**c, "name": c.get("owner"), "picked_by": "Sasha — the cheapest bookable fare"}}], slice_key=sk)
     return await BK.choose(account, ids[0])
 
@@ -134,7 +147,7 @@ def flights_spoken(rows: List[Dict[str, Any]]) -> str:
 def lines_of(rows: List[Dict[str, Any]], party: int) -> List[str]:
     """The read-back, from the rows alone (the yes is bound to these words; a price-moved note is said beside them)."""
     from . import travel as T
-    out = [f"⚠ TEST bookings — no hotel or airline is contacted, nothing is reserved and nothing is charged. For {party}."]
+    out = ["⚠ TEST bookings — no hotel or airline is contacted, nothing is reserved and nothing is charged." + (f" For {party}." if party else "")]
     for r in _flights_in_order(rows):   # Sasha 246 · the stays as given, then the flights: OUTBOUND first, then home
         s = r.get("snapshot") or {}
         if r["kind"] == "stay":
@@ -146,32 +159,78 @@ def lines_of(rows: List[Dict[str, Any]], party: int) -> List[str]:
                 line = T.card_line(_card(r))
             except Exception:
                 line = f"{s.get('owner')} {s.get('flights')} {s.get('from')}→{s.get('to')} · {r.get('price_currency')} {r.get('price_amount')} (TEST)"
-            out.append(f"✈️ {line}" + (f" — {s['picked_by']}" if s.get("picked_by") else ""))
+            fx = s.get("fx") if isinstance(s.get("fx"), dict) else None   # Sasha 249 · a fare in another currency: its euros, and the rate's date
+            conv = f" = €{float(r['price_amount']):.2f} at {fx.get('rate')} ({fx.get('as_of')})" if fx and r.get("price_amount") is not None else ""
+            out.append(f"✈️ {line}{conv}" + (f" — {s['picked_by']}" if s.get("picked_by") else ""))
     t = BK.total(rows)
     out.append(f"Total €{t['amount']:.2f} (TEST) — ONE tap to pay on your phone: Apple Pay or a saved card on Stripe's TEST page.")
     out.append("Each goes in your itinerary on its day, marked TEST, with its reference.")
     return out
 
 
-async def quote(account: str, origin: str) -> Dict[str, Any]:
-    """The whole trip, validated and priced from the basket: {lines, sha256, eur, flights, chosen, ...} or {why}."""
-    from . import hotel_test as HT, plan_store as PS
+def _party(p: Optional[Dict[str, Any]], rows: List[Dict[str, Any]]) -> Optional[int]:
+    """Sasha 249 · ONE PARTY: the plan's, else its basket rows' (basket._party_of) — None means ask, never a silent 2."""
+    return BK._party_of(p, rows)
+
+
+async def _plan_dates(account: str):
+    """The plan, its merged days and its start date — or {why}."""
+    from . import plan_store as PS
     p = await PS.latest(account)
     if not p or not (p.get("plan") or {}).get("days"):
         return {"why": "there's no trip plan on your account to book yet — ask me to plan one"}
-    pl, trip = p.get("plan") or {}, p["trip_id"]
-    try:
-        party = max(1, min(9, int(pl.get("party") or pl.get("travelers") or 2)))
-    except (TypeError, ValueError):
-        party = 2
-    m = PS.merge(p, [])
-    days = m["days"]
+    days = PS.merge(p, [])["days"]
     start = date.fromisoformat(str(days[0].get("date") or p.get("start") or "")[:10]) if (days[0].get("date") or p.get("start")) else None
     if start is None:
         return {"why": "the plan has no dates yet — tell me when it starts (e.g. “from 12 November”)"}
+    return p, days, start
+
+
+async def store_prices(account: str) -> Optional[Dict[str, Any]]:
+    """Sasha 249 · INGESTION-TIME PRICING (a write, called by the tools that change the plan — propose_trip, swap_stay — and by
+    refresh()): the plan's stays put in the basket if they aren't, and each stay priced by the provider that will book it (the TEST
+    hotel's rate, labelled; a real hotel's estimate kept and said as one). No airline is called and no flight is chosen or swapped.
+    Done ONCE when the stays arrive, so the figure she says at the proposal is the figure the read-back says (before 249 the
+    re-pricing ran inside quote() at every get_total and at every turn's guard). → None, or {why}."""
+    from . import hotel_test as HT
+    got = await _plan_dates(account)
+    if isinstance(got, dict):
+        return got
+    p, days, start = got
+    trip = p["trip_id"]
     rows = await BK.items(account, trip)
     if not [r for r in rows if r["kind"] == "stay"]:
-        await BK.sync_stays(account, trip, days, start, party)
+        await BK.sync_stays(account, trip, days, start, _party(p, rows))
+    rate = HT.rate_eur()
+    from .wa_brain import _country_of
+    tz = HT.tz_of(_country_of(p.get("title") or "", []))
+    for r in [r for r in await BK.items(account, trip, ("suggested", "chosen")) if r["kind"] == "stay"]:
+        s = r.get("snapshot") or {}
+        if s.get("est") and r.get("price_amount"):   # Sasha 211 · a real hotel's ESTIMATE (the world planner): kept, said as one
+            continue
+        nights = int(s.get("nights") or 1)
+        if r.get("price_source") != "placeholder" or float(r.get("price_amount") or 0) != round(rate * nights, 2) or s.get("tz") != tz:
+            await BK.refresh(account, r["id"], price_amount=round(rate * nights, 2), price_currency="EUR", snapshot={**s, "tz": tz})
+            await _source(account, r["id"], "placeholder", "test_hotel")
+    return None
+
+
+async def refresh(account: str, origin: str) -> Dict[str, Any]:
+    """Sasha 249 · THE ONE MUTATING RE-CHECK (Sherlock, before a read-back): the stays priced at their provider (store_prices), no
+    flight chosen → the cheapest bookable out and back chosen, every chosen flight re-checked at the airline (gone or repriced → the
+    same flight re-found, the difference said). Then the read-back from the rows as they now stand (price()). Only hold_booking
+    (and trip_book's prepare, the same read-back on the older path) calls it — never get_total, the guard or the Trip tab."""
+    got = await _plan_dates(account)
+    if isinstance(got, dict):
+        return got
+    p, days, start = got
+    trip = p["trip_id"]
+    why = await store_prices(account)
+    if why:
+        return why
+    party = _party(p, await BK.items(account, trip))
+    if party is None:
+        return {"why": "how many are travelling isn't on the trip yet — ask them once, then read it back", "party_unknown": True}
     notes: Dict[str, str] = {}
     chosen_fl = [r for r in await BK.items(account, trip, ("chosen",)) if r["kind"] == "flight"]
     picked_by_guest = bool(chosen_fl)
@@ -188,18 +247,31 @@ async def quote(account: str, origin: str) -> Dict[str, Any]:
             return {"why": v["why"], **({"outage": True} if v.get("outage") else {})}
         if v["note"]:
             notes[r["id"]] = v["note"]
-    rate = HT.rate_eur()
+    return await price(account, origin, notes=notes, chosen=picked_by_guest)
+
+
+async def quote(account: str, origin: str) -> Dict[str, Any]:
+    """The whole trip, validated and priced from the basket: {lines, sha256, eur, flights, chosen, ...} or {why}.
+    Sasha 249 · = refresh(): the hold's re-check by its older name (trip_book's prepare and hold_booking call it). It MUTATES —
+    a pure read of the figures is price() or basket.trip_figures()."""
+    return await refresh(account, origin)
+
+
+async def price(account: str, origin: str = "", *, notes: Optional[Dict[str, str]] = None, chosen: bool = True) -> Dict[str, Any]:
+    """Sasha 249 · THE READ-BACK, PURE: the trip's lines, sha256 and total from the basket rows as they stand — no search, no
+    re-price, no choice, no write. {lines, sha256, eur, party, flights, …} or {why}."""
+    got = await _plan_dates(account)
+    if isinstance(got, dict):
+        return got
+    p, days, start = got
+    trip = p["trip_id"]
+    from . import hotel_test as HT
     from .wa_brain import _country_of
     tz = HT.tz_of(_country_of(p.get("title") or "", []))
-    for r in [r for r in await BK.items(account, trip, ("suggested", "chosen")) if r["kind"] == "stay"]:
-        s = r.get("snapshot") or {}
-        if s.get("est") and r.get("price_amount"):   # Sasha 211 · a real hotel's ESTIMATE (the world planner): kept, said as one
-            continue
-        nights = int(s.get("nights") or 1)
-        if r.get("price_source") != "placeholder" or float(r.get("price_amount") or 0) != round(rate * nights, 2) or s.get("tz") != tz:
-            await BK.refresh(account, r["id"], price_amount=round(rate * nights, 2), price_currency="EUR", snapshot={**s, "tz": tz})
-            await _source(account, r["id"], "placeholder", "test_hotel")
-    rows = BK.to_book(await BK.items(account, trip, ("suggested", "chosen")))
+    notes, picked_by_guest = notes or {}, chosen
+    live = await BK.items(account, trip)
+    rows = BK.to_book([r for r in live if r["state"] in ("suggested", "chosen")])
+    party = _party(p, live)   # the same party current() binds the yes with
     rows.sort(key=lambda r: (0 if r["kind"] == "stay" else 1, r.get("day") or "", r["id"]))
     lines = lines_of(rows, party)
     flights = [_card(r) for r in rows if r["kind"] == "flight"]
@@ -230,9 +302,9 @@ async def current(account: str) -> Optional[Dict[str, Any]]:
     p = await PS.latest(account)
     if not p:
         return None
-    pl = p.get("plan") or {}
-    party = max(1, min(9, int(pl.get("party") or pl.get("travelers") or 2)))
-    rows = BK.to_book(await BK.items(account, p["trip_id"], ("suggested", "chosen")))
+    live = await BK.items(account, p["trip_id"])
+    rows = BK.to_book([r for r in live if r["state"] in ("suggested", "chosen")])
+    party = _party(p, live)   # Sasha 249 · ONE PARTY — the same as price()'s, so the yes binds to the words read back
     rows.sort(key=lambda r: (0 if r["kind"] == "stay" else 1, r.get("day") or "", r["id"]))
     return {"rows": rows, "party": party, "trip_id": p["trip_id"], "title": p.get("title")}
 
@@ -369,7 +441,7 @@ async def _moved(account: str, mv: Dict[str, Any], where: str) -> Dict[str, Any]
         log.error("[basket_book] a moved payment would change its amount (%.2f → %.2f) — refused", mv["amount"], amount)
         return {"why": "the payment's total would change if I moved it, so I haven't — ask me to read it back again"}
     p = await PS.latest(account)
-    party = max(1, min(9, int(((p or {}).get("plan") or {}).get("party") or 2)))
+    party = _party(p, rows)   # Sasha 249 · ONE PARTY: the plan's, else the moved rows' own
     title = (p or {}).get("title")
     sha = hashlib.sha256("\n".join(lines_of(rows, party)).encode()).hexdigest()
     n_st, n_fl = sum(1 for r in rows if r["kind"] == "stay"), sum(1 for r in rows if r["kind"] == "flight")
@@ -517,4 +589,5 @@ async def book_paid(account: str, sid: str) -> Dict[str, Any]:
             "failed": [r["status_line"] for r in bad], **({"loyalty": list(dict.fromkeys(applied))} if applied else {})}
 
 
-__all__ = ["quote", "current", "pay", "book_paid", "lines_of", "flights_spoken"]   # Sasha 246 · + flights_spoken
+__all__ = ["quote", "current", "pay", "book_paid", "lines_of", "flights_spoken",   # Sasha 246 · + flights_spoken
+           "price", "refresh", "store_prices"]   # Sasha 249 · quote() split: price() pure, refresh() the one mutating re-check

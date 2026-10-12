@@ -80,7 +80,7 @@ SHOWS = {
     "cancel_subscription": "The cancellation",
 }
 SAYS = ("prepare_trip", "check_offer", "save_travellers", "get_activity", "keep_list", "keep_use", "note_not_yet", "note_rental",
-        "remember_name", "save_contact")   # Sasha 253
+        "remember_name", "save_contact", "file_confirmation", "time_between", "add_to_trip", "save_for_later")   # Sasha 253 · said, no card
 
 FAILED = "{what} didn't work{why}. Say the word and I'll try again."
 

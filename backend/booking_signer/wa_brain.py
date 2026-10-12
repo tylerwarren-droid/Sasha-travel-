@@ -783,10 +783,16 @@ async def park(ctx: dict, pend: dict) -> str:
     at = f.get("open_at") or ((pend.get("draft") or {}).get("when") or {}).get("at") or (pend.get("draft") or {}).get("day")
     city = f.get("where")
     ctx["st"]["pending"] = None
-    tid = await save_item(ctx["account"], f"{name} (saved)", at, city)
+    return await saved_words(ctx["account"], name, at, city)
+
+
+async def saved_words(account: str, name: str, at: Optional[str], city: Optional[str]) -> str:
+    """Sasha 253 · G13 — the one place something is saved for later, unbooked (park's, and the one brain's save_for_later tool):
+    filed on the account's list, said with the tab it landed in."""
+    tid = await save_item(account, f"{name} (saved)", at, city)
     if not tid:
         return "I couldn't save it just now — nothing was booked."
-    return f"Saved, not booked: {name} — it's in your {await tab_of(ctx['account'], city, at)} tab and in Requests."
+    return f"Saved, not booked: {name} — it's in your {await tab_of(account, city, at)} tab and in Requests."
 
 
 async def start_another(ctx: dict, rest: str) -> None:

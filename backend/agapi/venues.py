@@ -805,8 +805,17 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
     status, j = await GW.api(ctx.account, "POST", f"/api/booking/calls/{held['id']}/place", {"read_back_sha256": held["sha"], "approval": how}, timeout=120)
     if status != 200:
         raise _err("not_called", GW.refusal_words(j, status))
+    if j.get("status") in ("placed", "uncertain"):   # Sasha 253 · G2 — its result pushed to their WhatsApp when the call ends
+        await _push_later(ctx.account, call_id=held["id"], venue=venue, purpose="book", what=held.get("summary") or "")
     return {"status": j.get("status"), "venue": venue, "when": held["summary"], "itinerary": where,
             **({"scheduled_for": str(j.get("scheduled_for") or "")[11:16]} if j.get("status") == "scheduled" else {})}
+
+
+async def _push_later(account: str, **kw) -> str:
+    """Sasha 253 · G2 — the result of a call / a written cancellation, pushed to the account's linked WhatsApp when it comes (the
+    old flow's own watchers, booking_signer.guest_whatsapp.watch_for_brain — the real module, whatever _API() stands for)."""
+    from booking_signer import guest_whatsapp as _GWM
+    return await _GWM.watch_for_brain(account, **kw)
 
 
 async def venue_bookings(account: str, include_cancelled: bool = False) -> List[dict]:
@@ -856,6 +865,8 @@ async def cancel_venue(ctx, a: dict) -> dict:
                                  {"read_back_sha256": held["sha"], "approval": {"how": "voice", "said": said}}, timeout=120)
         if status != 200:
             raise _err("not_cancelled", GW.refusal_words(j, status))
+        if j.get("status") in ("requested", "not_confirmed"):   # Sasha 253 · G2 — "cancelled" pushed to WhatsApp on their words
+            await _push_later(ctx.account, trip_item_id=held["id"], venue=GW.plain_venue(held["venue"]))
         return {"status": j.get("status"), "say": j.get("say"), "venue": held["venue"]}
     if not tid:
         raise _err("booking_unknown", "which booking? get_status lists them")

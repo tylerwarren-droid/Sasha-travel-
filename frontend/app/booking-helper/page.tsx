@@ -12,6 +12,7 @@ import { Ladder } from './Ladder'
 import { FounderGate } from './FounderGate'
 import { InviteGuest } from './InviteGuest'
 import { DemoControls } from './DemoControls'
+import { FounderWords } from './FounderWords'
 import { RouteCosts } from './RouteCosts'
 
 /** The details pre-filled while testing; every field stays editable. */
@@ -34,6 +35,7 @@ export default function OpsPage() {
         </ul>
       </header>
       <DemoControls />
+      <FounderWords />
       <RouteCosts />
       <InviteGuest />
       <Ladder defaults={DEMO_PROFILE} />

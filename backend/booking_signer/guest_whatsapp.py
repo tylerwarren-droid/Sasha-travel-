@@ -918,6 +918,15 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     # question stays open. It replaces Sasha 249's `old_owns` (which took only the tap).
     sashas = brain and answers_sashas_question(st, body, payload, now)
     if brain and not sashas and not (not payload and _invite_words(body, now)):
+        if body and not payload:   # Sasha 253 · G4 — a space set on the laptop, continued on the phone (before the brain)
+            handed = await _space_resume(ch, body, out, now)
+            if handed == "":
+                await _brain_tail(ch, out)
+                await _save_keeping_their_question(key, st, loaded)
+                await deliver(ch, frm, out, now)
+                return out
+            if handed:
+                body = handed   # the product hands Sasha ITS sentence: answered as typed, under the product's words
         await _brain_turn(ch, key, frm, body, payload, p, st, out, now, heard, loaded)
         return out
     # Sasha 126 · the two-booking plan rides INSIDE the open question (guest_wa_state stores only its four columns):
@@ -961,8 +970,43 @@ async def _brain_turn(ch: dict, key: str, frm: str, body: str, payload: str, p: 
     from . import wa_agent as WA
     await WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip(),
                         voice_in=bool(heard))   # Sasha 238 · a voice note in → a voice note back
+    await _brain_tail(ch, out)
     await _save_keeping_their_question(key, st, loaded)
     await deliver(ch, frm, out, now)
+
+
+async def _brain_tail(ch: dict, out: "Out") -> None:
+    """Sasha 253 · G16 — the reminders offer (S-83 §3a: a v2-consent guest asked ONCE, in reply to their next message) on the one
+    brain's replies too — the same _reminders_offer the old flow appends."""
+    offer = await _reminders_offer(ch)
+    if offer:
+        out.text(offer)
+
+
+async def _space_resume(ch: dict, body: str, out: "Out", now) -> Optional[str]:
+    """Sasha 253 · G4 — CROSS-DEVICE RESUME on the one brain: the account is in a product's space set on the web (its webstate —
+    products.web.current_space, as the old conductor's strict spaces read it) and WhatsApp's own product turn declined (it keeps
+    its own state): "what's next for my application?" is that product's, answered by the SAME products.web.web_turn the web chat
+    and the old flow (WB.web_turn → conductor) use. → None: not the product's (the brain answers); "": answered; a sentence:
+    the product's hand-off to Sasha (its words are already in `out`). "reset the demo" never goes to a product."""
+    from products import web as PWEB
+    from . import wa_brain as WB
+    account = ch["account_id"]
+    if WB.RESET.match(body or ""):
+        return None
+    try:
+        if not await PWEB.current_space(account):
+            return None
+        r = await PWEB.web_turn(account, body, now=now, signed_in=True)
+    except Exception as e:   # a product's failure never stops the turn — the brain answers instead, and it is logged
+        log.error("[guest_whatsapp] the space was not resumed: %s: %s", type(e).__name__, e)
+        return None
+    if r is None:
+        return None
+    for c in WB.chunks([WB.wa_markdown(r.get("response") or "")]):
+        if c:
+            out.text(c)
+    return r.get("handoff") or ""
 
 
 async def _save_keeping_their_question(key: str, st: dict, loaded) -> None:
@@ -1672,33 +1716,40 @@ async def _reorder_approve(ctx: dict, pend: dict) -> None:
 async def _forwarded_confirmation(ctx: dict, body: str) -> bool:
     """Sasha 118 (3) · a guest forwards (or pastes) a venue's confirmation: filed on the ONE booking it names (written.py),
     read with the field checks, and answered here. Not a confirmation → False (the turn goes on)."""
+    line = await forwarded_confirmation(ctx["account"], ctx["ch"].get("number_e164"), body, ctx["now"])
+    if line is None:
+        return False
+    ctx["out"].text(line)
+    return True
+
+
+async def forwarded_confirmation(account: str, number: Optional[str], body: str, now, prefix: str = "wa-fwd-") -> Optional[str]:
+    """Sasha 253 · G1 — the ONE place a forwarded / pasted venue confirmation is filed (Sasha 118's, unchanged): the old flow
+    (_forwarded_confirmation) and the one brain's tool (agapi/s2_manage.file_confirmation) both call it. → the line to say, or
+    None when it isn't a confirmation (nothing filed)."""
     from . import mailbox as MB, written as W
-    if len(body or "") < 40 or not MB._CONFIRM.search(body or "") or not MB._when(body, ctx["now"]):
-        return False
+    if len(body or "") < 40 or not MB._CONFIRM.search(body or "") or not MB._when(body, now):
+        return None
     if HO.booking_handoff(body, []) is not None:   # a new request that happens to say "your booking" is a request
-        return False
-    now, out = ctx["now"], ctx["out"]
-    sid = "wa-fwd-" + hashlib.sha256(f"{ctx['account']}|{body}".encode()).hexdigest()[:24]
+        return None
+    sid = prefix + hashlib.sha256(f"{account}|{body}".encode()).hexdigest()[:24]
     try:
-        got = await W.file(sid, "whatsapp", ctx["ch"].get("number_e164"), None, body, now, account=ctx["account"], forwarded=True)
+        got = await W.file(sid, "whatsapp", number, None, body, now, account=account, forwarded=True)
     except Exception as e:
         log.error("[guest_whatsapp] a forwarded confirmation was not filed: %s: %s", type(e).__name__, e)
         got = None
     if got is None:
-        out.text("That reads like a booking confirmation, but I can't tell which of your bookings it's for — it needs their "
-                 "reference, or the venue's name and the day. Nothing was changed.")
-        return True
+        return ("That reads like a booking confirmation, but I can't tell which of your bookings it's for — it needs their "
+                "reference, or the venue's name and the day. Nothing was changed.")
     when = SN.day_words(got.get("day")) if got.get("day") else ""
     if got["result"] == "confirmed":
-        out.text(f"✅ Confirmed in writing: {got['venue']}{', ' + when if when else ''}. I've filed their confirmation on it (forwarded by you).")
-    elif got["result"] == "already filed":
-        out.text(f"I already have that confirmation on {got['venue']}.")
-    elif got["result"] == "proposed":
-        out.text(f"⚠ {got['venue']}'s message offers something different — {got['why']}. I've filed it on the booking; nothing else changed.")
-    else:
-        out.text(f"I've filed it on {got['venue']}{', ' + when if when else ''}, but it doesn't confirm the day, time and number "
-                 f"together, so I haven't marked it confirmed.")
-    return True
+        return f"✅ Confirmed in writing: {got['venue']}{', ' + when if when else ''}. I've filed their confirmation on it (forwarded by you)."
+    if got["result"] == "already filed":
+        return f"I already have that confirmation on {got['venue']}."
+    if got["result"] == "proposed":
+        return f"⚠ {got['venue']}'s message offers something different — {got['why']}. I've filed it on the booking; nothing else changed."
+    return (f"I've filed it on {got['venue']}{', ' + when if when else ''}, but it doesn't confirm the day, time and number "
+            f"together, so I haven't marked it confirmed.")
 
 
 ASK_ONE = ("Shall I book that? Tell me in one message — the kind of place, the area, the day, the time and how many, e.g. "
@@ -2247,21 +2298,14 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             return True
         return False
     if kind == "engine_check":   # Sasha 139 · the founder checks each hotel engine link: "filled" / "not filled" (+ "wrong page")
-        m = re.match(r"^\s*(?:(?P<n>[1-9])\s*[:.)-]?\s*)?(?P<a>not\s+filled|filled|wrong(?:\s+page)?|right(?:\s+page)?)\b", body or "", re.I)
-        if not m:
+        got = engine_check_answer(pend, body, now)
+        if got is None:
             return False
-        todo = [h for h in pend["hotels"] if str(h["n"]) not in pend.get("answers", {})]   # str keys: the state is stored as JSON
-        h = next((x for x in pend["hotels"] if m["n"] and x["n"] == int(m["n"])), todo[0] if todo else None)
-        if h is None:
+        if got is False:
             st["pending"] = None
             return False
-        ans = re.sub(r"\s+", " ", m["a"].lower())
-        pend.setdefault("answers", {})[str(h["n"])] = {"answer": ans, "said": body, "at": now.isoformat()}
-        left = len([x for x in pend["hotels"] if str(x["n"]) not in pend["answers"]])
-        out.text(f"Noted — {h['name']} ({h['engine']}): {ans}." + (f" {left} to go." if left else   # Sasha 150 · any number of links
-                 f" That's all {len(pend['hotels'])} — thank you."))
-        st["pending"] = pend if left else {**pend, "kind": "engine_check_done"}
-        log.info("[guest_whatsapp] engine check: %s %s → %s", h["name"], h["engine"], ans)
+        line, st["pending"] = got
+        out.text(line)
         return True
     if kind == "engine_check_done":
         return False
@@ -3664,6 +3708,58 @@ async def watch_cancel(ch: dict, frm: str, account: str, trip_item_id: str, venu
                 out.text(f"Their words: “{row['venue_words']}”")
             await deliver(ch, frm, out, st.get("last_inbound_at"))
             return
+
+
+_ENGINE_ANSWER = re.compile(r"^\s*(?:(?P<n>[1-9])\s*[:.)-]?\s*)?(?P<a>not\s+filled|filled|wrong(?:\s+page)?|right(?:\s+page)?)\b", re.I)
+
+
+def engine_check_answer(pend: dict, body: str, now):
+    """Sasha 139 · the founder's answer for one hotel engine link ("1 filled / 2 not filled / 3 wrong page"), recorded on the
+    engine_check question. Sasha 253 · G15: the ONE place — the WhatsApp word (_answer_pending) and the ops console
+    (demo_ops /ops/demo/engine-check) both call it. → None: not an answer; False: nothing left to answer; else (the line, the
+    question as it stands now — kind "engine_check_done" once every link is answered)."""
+    m = _ENGINE_ANSWER.match(body or "")
+    if not m:
+        return None
+    todo = [h for h in pend["hotels"] if str(h["n"]) not in pend.get("answers", {})]   # str keys: the state is stored as JSON
+    h = next((x for x in pend["hotels"] if m["n"] and x["n"] == int(m["n"])), todo[0] if todo else None)
+    if h is None:
+        return False
+    ans = re.sub(r"\s+", " ", m["a"].lower())
+    pend.setdefault("answers", {})[str(h["n"])] = {"answer": ans, "said": body, "at": now.isoformat()}
+    left = len([x for x in pend["hotels"] if str(x["n"]) not in pend["answers"]])
+    line = (f"Noted — {h['name']} ({h['engine']}): {ans}." + (f" {left} to go." if left else   # Sasha 150 · any number of links
+            f" That's all {len(pend['hotels'])} — thank you."))
+    log.info("[guest_whatsapp] engine check: %s %s → %s", h["name"], h["engine"], ans)
+    return line, (pend if left else {**pend, "kind": "engine_check_done"})
+
+
+async def watch_for_brain(account: str, *, call_id: Optional[str] = None, trip_item_id: Optional[str] = None, venue: str = "",
+                          purpose: str = "book", what: str = "") -> str:
+    """Sasha 253 · G2 — a result the one brain started (an immediate call placed by book_venue; a written cancellation sent by
+    cancel_venue), pushed to the account's WhatsApp when it comes: the SAME watchers as the old flow (watch_call — one message per
+    state, the confirmation call followed; watch_cancel — "cancelled" only on their words), started the same way (_spawn).
+    Whatever screen the booking was made on, the result reaches the linked phone. Never raises; → what happened, in words."""
+    try:
+        if STORE is None or not guest_numbers():
+            return "not watched: WhatsApp for guests is off"
+        ch = await STORE.channel_of_account(account)
+        if not ch:
+            return "not watched: no WhatsApp linked"
+        if ch.get("opted_out_at"):
+            return "not watched: they said STOP"
+        st = await STORE.get_state(ch["wa_id_sha256"])
+        frm = sender_for(st)
+        if call_id:
+            _spawn(watch_call(ch, frm, account, call_id, venue, purpose, what))
+        elif trip_item_id:
+            _spawn(watch_cancel(ch, frm, account, trip_item_id, venue))
+        else:
+            return "not watched: nothing to watch"
+        return "watching"
+    except Exception as e:
+        log.warning("[guest_whatsapp] the brain's result is not watched: %s: %s", type(e).__name__, e)
+        return f"not watched: {type(e).__name__}"
 
 
 # ── the web side: link, see, unlink (the caller's own account; behind the booking gate) ──────────────────────────────

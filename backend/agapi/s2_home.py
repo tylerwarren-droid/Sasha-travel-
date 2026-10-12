@@ -34,7 +34,9 @@ CAPABILITIES: List[Dict] = [
                ("Flights and hotels for a trip", "book")]},
     {"group": "Plan", "say": "plan a trip day by day", "chip": ("Plan a weekend", "propose_trip"),
      "items": [("A weekend or a longer trip, day by day", "propose_trip"),
-               ("Swap a hotel or a flight in it", "swap_stay")]},
+               ("Swap a hotel or a flight in it", "swap_stay"),
+               ("Add a place to a day of your trip, to book later", "add_to_trip"),   # Sasha 253 · G10
+               ("Whether you've time to drive or fly somewhere between two times", "time_between")]},   # Sasha 253 · G9
     {"group": "Money", "say": "give you the total before you say yes",
      "items": [("The total before you say yes", "get_total"),
                ("Pay on this screen — Apple Pay or Google Pay", "book")]},
@@ -50,7 +52,9 @@ CAPABILITIES: List[Dict] = [
      "items": [("Everything you've booked, in one place", "my_plans"),
                ("Change or cancel a booking", "change_booking"),
                ("Tell a restaurant or spa you're running late", "running_late"),
-               ("Ask your hotel for an upgrade or a late check-out", "hotel_request")]},
+               ("Ask your hotel for an upgrade or a late check-out", "hotel_request"),
+               ("File a venue's confirmation you forward or paste to me", "file_confirmation"),   # Sasha 253 · G1
+               ("Save something for later, not booked", "save_for_later")]},   # Sasha 253 · G13
     {"group": "Trips", "say": "sort out what you need to enter a country",
      "items": [("What you need to enter a country — and the form, prepared for you to submit", "entry_documents")]},
     {"group": "Cards & cover", "say": "tell you which card covers what",

@@ -53,6 +53,12 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T21": ("every time she offers can be booked", ["tests.test_s253_offered.EveryOfferedTimeBooks",
                                                     "tests.test_s253_offered.AFareThatWentAway",
                                                     "tests.test_s253_offered.ATimeNeverOffered"]),
+    # Sasha 253 · item 4 (part 1): the WhatsApp old flow's capabilities in the one brain, each capability test moved to its path
+    "T22": ("the WhatsApp capabilities live in the brain",
+            ["tests.test_s253_gaps.TheToolsAreTheBrains", "tests.test_s253_gaps.G1ForwardedConfirmation",
+             "tests.test_s253_gaps.G2ResultsPushed", "tests.test_s253_gaps.G4RelocationOnTheBrain",
+             "tests.test_s253_gaps.G4CampusOnTheBrain", "tests.test_s253_gaps.G9TimeQuestion", "tests.test_s253_gaps.G10AddToTrip",
+             "tests.test_s253_gaps.G13SaveForLater", "tests.test_s253_gaps.G15OpsConsole", "tests.test_s253_gaps.G16RemindersOffer"]),
 }
 
 _RUNNER = """

@@ -48,6 +48,11 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T20": ("booking contact asked once and kept",
             ["tests.test_s253_contact.AskedOnceAndKept", "tests.test_s253_contact.WhatsAppThisNumber",
              "tests.test_s253_contact.OnlyWhereTheBrainIs", "tests.test_s253_contact.BrainPath"]),
+    # Sasha 253 · EU S2 item 11: every time she names (departure or landing) resolves to a stored fare; a fare gone is said with
+    # what's there now (stored first); a time never offered is "not one of the options", with the options
+    "T21": ("every time she offers can be booked", ["tests.test_s253_offered.EveryOfferedTimeBooks",
+                                                    "tests.test_s253_offered.AFareThatWentAway",
+                                                    "tests.test_s253_offered.ATimeNeverOffered"]),
 }
 
 _RUNNER = """

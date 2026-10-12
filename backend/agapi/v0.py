@@ -818,8 +818,9 @@ async def choose_offer(ctx: Ctx, a: dict) -> dict:
     from booking_signer import basket as BK
     p = await _plan(ctx)
     row = await BK.by_ref(ctx.account, p["trip_id"], a["offer_id"]) if a.get("offer_id") else await _find_option(ctx, p, a)
-    if not row:
-        raise ToolError("offer_not_in_trip", "no flight like that among this trip's options — search_flights for that leg first")
+    if not row:   # Sasha 253 · never a bare "couldn't find": what IS on that leg travels with the refusal
+        raise ToolError("offer_not_in_trip", await _not_an_option(ctx, p, a))
+    row, moved = await _still_offered(ctx, p, row)   # Sasha 253 · a fare that went away is said, with what's there now
     leg = (row.get("slice_key") or "out:").split(":", 1)[0]
     for other in await BK.items(ctx.account, p["trip_id"], ("chosen",)):   # one flight per LEG (searches of the leg may differ)
         if other["kind"] == "flight" and other["id"] != row["id"] and (other.get("slice_key") or "").split(":", 1)[0] == leg:
@@ -831,7 +832,101 @@ async def choose_offer(ctx: Ctx, a: dict) -> dict:
         row = await BK.choose(ctx.account, row["id"])
     except BK.BasketError as e:
         raise ToolError("not_choosable", str(e))
-    return {"chosen": _flight_out(row.get("snapshot") or {}, row), **(await _total(ctx, p))}
+    return {"chosen": _flight_out(row.get("snapshot") or {}, row), **({"price_moved": moved} if moved else {}), **(await _total(ctx, p))}
+
+
+def _said_hhmm(v: Any) -> Optional[str]:
+    """Sasha 253 · a time as the model passes it → "HH:MM": as hhmm() reads it ("5:48pm", "17.48"), or the HH:MM inside a longer
+    string ("2026-11-02T20:05", "20:05 one") — before, an ISO departure was cut to "2026-" and matched nothing."""
+    t = hhmm(v)
+    if t:
+        return t
+    m = re.search(r"(?<!\d)([01]?\d|2[0-3])[:.h]([0-5]\d)(?!\d)", str(v or ""))
+    return f"{int(m.group(1)):02d}:{m.group(2)}" if m else None
+
+
+def _option_line(r: dict) -> str:
+    s = r.get("snapshot") or {}
+    dep, arr = str(s.get("departs") or "")[11:16], str(s.get("arrives") or "")[11:16]
+    day = str(s.get("departs") or r.get("day") or "")[:10]
+    eur = r.get("price_amount")
+    route = f" {s['from']}→{s['to']}" if s.get("from") and s.get("to") else ""
+    return (f"{s.get('owner') or 'a flight'}{route} on {day}, departs {dep}" + (f", lands {arr}" if arr else "")
+            + (f" (€{float(eur):.2f})" if eur is not None else ""))
+
+
+def _leg_options(rows: List[dict], leg: Optional[str]) -> List[str]:
+    """Sasha 253 · the options she can book on a leg (stored, choosable), one line each, by departure — no duplicates."""
+    out, seen = [], set()
+    pick = [r for r in rows if r["kind"] == "flight" and (leg is None or _row_leg(r) in (leg, None))]
+    for r in sorted(pick, key=lambda r: str((r.get("snapshot") or {}).get("departs") or "")):
+        line = _option_line(r)
+        if line not in seen:
+            seen.add(line)
+            out.append(line)
+    return out[:10]
+
+
+async def _not_an_option(ctx: Ctx, p: dict, a: dict) -> str:
+    """Sasha 253 · OFFERED == BOOKABLE, the refusal: a flight she never offered is said to be "not one of the options", and the
+    options on that leg go with it (never "couldn't find" alone). No options stored on that leg: search it first, as before."""
+    from booking_signer import basket as BK
+    leg = leg_said(ctx.user_said) or a.get("leg")
+    rows = [r for r in await BK.items(ctx.account, p["trip_id"], ("suggested", "chosen")) if r["kind"] == "flight"]
+    opts = _leg_options(rows, leg)
+    if not opts:
+        return "no flight like that among this trip's options — search_flights for that leg first"
+    what = " ".join(x for x in (a.get("airline") or "", f"at {a['departs']}" if a.get("departs") else "") if x).strip() or "like that"
+    return (f"no flight {what} is one of this trip's options. Say so plainly in one line (it's not one of the options), then offer "
+            f"these — each can be put in with choose_offer by its departure time: " + "; ".join(opts))
+
+
+def _expired(r: dict) -> bool:
+    at = r.get("expires_at") or (r.get("snapshot") or {}).get("expires_at")
+    if not at:
+        return False
+    try:
+        t = datetime.fromisoformat(str(at).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return (t if t.tzinfo else t.replace(tzinfo=timezone.utc)) <= datetime.now(timezone.utc)
+
+
+async def _still_offered(ctx: Ctx, p: dict, row: dict) -> tuple:
+    """Sasha 253 · a fare she offered whose Duffel offer has expired is re-checked at the swap (Sherlock, basket_book's one check):
+    still offered (maybe a new price) → that row, refreshed, and the move said; gone → refused in plain words with what's there now,
+    from a fresh search STORED FIRST (so every time she then names can be booked); Duffel not answering → kept as it is (hold_booking
+    re-checks before any payment). An unexpired fare is put in as it stands (no call). → (row, the price move or "")."""
+    if not _expired(row):
+        return row, ""
+    from booking_signer import basket_book as BB
+    party = _party(p, [row])
+    if party is None:
+        return row, ""
+    v = await BB._validate_flight(ctx.account, row, party)
+    if v.get("outage") or "row" in v:
+        return v.get("row") or row, (v.get("note") or "").strip(" ()")
+    c = BB._card(row)
+    gone = f"{c.get('owner') or 'that flight'} at {str(c.get('departs') or '')[11:16]}"
+    leg, rest = (str(row.get("slice_key") or "out:").split(":", 1) + [""])[:2]
+    route, _, day = rest.rpartition(" ")
+    origin, _, dest = route.partition("→")
+    origin, dest = origin or c.get("from") or "", dest or c.get("to") or ""
+    day = day if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day or "") else str(c.get("departs") or row.get("day") or "")[:10]
+    now: List[str] = []
+    try:
+        res, used = await _search_healed(airport_of(origin), airport_of(dest), day, party)
+        cards = [] if "why" in res else _in_eur(res.get("cards") or [])[:6]
+        if cards:   # stored first, then said: what she offers next is in the basket
+            await _suggest_flights(ctx, p["trip_id"], cards, origin, dest, used, party, leg or "out")
+            now = [_option_line({"snapshot": x, "price_amount": x.get("price_eur")}) for x in
+                   sorted(cards, key=lambda x: str(x.get("departs") or ""))]
+    except Exception as e:   # the search failing never turns "gone" into "chosen"
+        log.warning("[agapi] after a gone fare, the leg's search failed: %s: %s", type(e).__name__, e)
+    raise ToolError("not_choosable", f"the {gone} fare is no longer offered by the airline, so it wasn't put in — the trip's flight on "
+                    "that leg is unchanged. Say that plainly in one line, then " + (
+                        "offer what's there now (each can be put in with choose_offer by its departure time): " + "; ".join(now)
+                        if now else "say there's nothing else that day just now and offer to look at another day"))
 
 
 async def _find_option(ctx: Ctx, p: dict, a: dict) -> Optional[dict]:
@@ -846,26 +941,35 @@ async def _find_option(ctx: Ctx, p: dict, a: dict) -> Optional[dict]:
     every = [r for r in await BK.items(ctx.account, p["trip_id"], ("suggested", "chosen")) if r["kind"] == "flight"]
     snap = lambda r: r.get("snapshot") or {}
 
-    def described(rows: List[dict]) -> List[dict]:
+    # Sasha 253 · the time as said or passed (an ISO departure too), matched on the departure — else on the LANDING time: she
+    # names both ("at 20:05, landing at 22:20"), so "the 22:20 one" is that flight, never "couldn't find"
+    hh = _said_hhmm(a["departs"]) if a.get("departs") else None
+
+    def described(rows: List[dict], when: str = "departs") -> List[dict]:
         if a.get("airline"):
             rows = [r for r in rows if (a["airline"].lower() in str(snap(r).get("owner") or "").lower())]
         if a.get("departs"):
-            hh = hhmm(a["departs"]) or str(a["departs"]).strip()[:5].replace(".", ":").zfill(5)
-            rows = [r for r in rows if str(snap(r).get("departs") or "")[11:16] == hh]
+            rows = [r for r in rows if str(snap(r).get(when) or "")[11:16] == hh]
         return rows
 
     rows: List[dict] = []
-    for leg in [x for x in (said_leg, given_leg) if x] or ([None] if a.get("departs") else ["out"]):   # no leg, no time: out, as before
-        rows = described([r for r in every if leg is None or _row_leg(r) in (leg, None)])
+    for when in ("departs", "arrives") if hh else ("departs",):
+        for leg in [x for x in (said_leg, given_leg) if x] or ([None] if a.get("departs") else ["out"]):   # no leg, no time: out, as before
+            rows = described([r for r in every if leg is None or _row_leg(r) in (leg, None)], when)
+            if rows:
+                break
+        if not rows and a.get("departs"):   # the time names exactly one flight, on whichever leg it is
+            anywhere = described(every, when)
+            rows = anywhere if len({_row_leg(r) for r in anywhere}) == 1 else []
         if rows:
             break
-    if not rows and a.get("departs"):   # the time names exactly one flight, on whichever leg it is
-        anywhere = described(every)
-        rows = anywhere if len({_row_leg(r) for r in anywhere}) == 1 else []
     if not rows:
         return None
     fresh = [r for r in rows if not BK.superseded(r)]
     rows = fresh or rows   # the newest search's row first; an earlier one still books
+    if hh and len({r.get("slice_key") for r in rows}) > 1 and all(r.get("created_at") for r in rows):
+        newest = max(rows, key=lambda r: str(r["created_at"]))["slice_key"]   # Sasha 253 · the same time on two searched days:
+        rows = [r for r in rows if r.get("slice_key") == newest]               # the one she listed last
     if a.get("pick") == "fastest":
         return min(rows, key=lambda r: int(snap(r).get("minutes") or 9e9))
     return min(rows, key=lambda r: float(r.get("price_amount") or 9e9))   # "cheapest", or the cheapest of the ones described

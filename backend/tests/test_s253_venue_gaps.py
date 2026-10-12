@@ -1,6 +1,6 @@
 """Sasha 253 · item 4 (part 2) — the VENUE gaps of the WhatsApp old flow, built in the ONE engine path (agapi/venues.py
 `_engine_route` → the executors), each capability test MOVED to the brain's path (docs/sasha/S252-whatsapp-capabilities.md rows
-38, 54, 55, 57, 64; GAPS G7, G8, G14). The old-flow tests stay until the old flow is retired.
+38, 54, 55, 57, 64; GAPS G7, G8, G14). The old-flow tests went with the old flow (Sasha 253 · item 5).
 
     G7   a request with NO slot: an email asking for a date and a quote (a tattoo, custom work); "whenever they have space"
          (the old flow's venue_proposes) — hold_venue's `open_slot`, day/time optional on /s2, WhatsApp and /next under parity

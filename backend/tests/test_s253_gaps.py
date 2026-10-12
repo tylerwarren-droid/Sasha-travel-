@@ -1,5 +1,5 @@
 """Sasha 253 · item 4 (part 1) — the WhatsApp old flow's capabilities, built IN THE ONE BRAIN (docs/sasha/S252-whatsapp-capabilities.md
-GAPS), each capability test MOVED to the brain's path (the old-flow tests stay until the old flow is retired):
+GAPS), each capability test MOVED to the brain's path (the old-flow tests were removed when the old flow was retired, Sasha 253 · item 5):
 
     G1   a forwarded / pasted venue confirmation filed on its booking   — tool file_confirmation   (written_s118 OnWhatsApp test_3)
     G2   a call's result / a written cancellation pushed to WhatsApp    — VN → GW.watch_for_brain  (guest_whatsapp_s75 Progress)
@@ -34,7 +34,7 @@ from booking_signer import wa_brain as WB
 from tests import test_guest_whatsapp_s75 as TG
 
 run, ACCOUNT, GUEST, NOW = TG.run, TG.ACCOUNT, TG.GUEST, TG.NOW
-BRAIN = {"SASHA_WA_BRAIN": f"agent_for:{ACCOUNT}"}
+BRAIN: dict = {}   # Sasha 253 · item 5: no switch any more (SASHA_WA_BRAIN retired) — every account is on the one brain
 NEW_TOOLS = ("file_confirmation", "time_between", "add_to_trip", "save_for_later")
 
 
@@ -453,12 +453,6 @@ class G15OpsConsole(TG.Base):
         self.assertEqual(p["kind"], "engine_check_done")
         self.assertEqual({k: v["answer"] for k, v in p["answers"].items()}, {"1": "not filled", "3": "filled", "2": "not filled"})
         self.assertEqual(self.c.post("/api/booking/ops/demo/engine-check", json={"n": 2, "answer": "filled"}).status_code, 409)
-
-    def test_the_whatsapp_word_still_records_the_same_way(self):
-        run(GW.STORE.put_state(GW.wa_key(GUEST), {"history": [], "pending": {"kind": "engine_check", "at": NOW.isoformat(), "hotels": self.HOTELS},
-                                                  "last_inbound_at": NOW, "link_tries": []}))
-        self.say("2 wrong page")
-        self.assertEqual(self.bodies()[-1], "Noted — The Hat (Mews): wrong page. 2 to go.")
 
     def test_captcha_test_space_and_deposit(self):
         from booking_signer import captcha_test as CT, test_deposit as TD

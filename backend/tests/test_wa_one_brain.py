@@ -6,7 +6,6 @@ Offline: the agent is a stand-in at wa_agent.agent_turn's boundary, or the real 
 """
 from __future__ import annotations
 
-import os
 import unittest
 from datetime import datetime, timezone
 from unittest import mock
@@ -15,19 +14,6 @@ from booking_signer import guest_whatsapp as GW, wa_agent as WA
 from tests.test_guest_whatsapp_s75 import ACCOUNT, GUEST, SANDBOX, Base, run
 
 NOW = datetime(2026, 10, 11, 12, 0, tzinfo=timezone.utc)
-
-
-class Flag(unittest.TestCase):
-    def test_modes(self):
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": ""}):
-            self.assertFalse(WA.on(ACCOUNT))                                   # default: today's path exactly
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "old"}):
-            self.assertFalse(WA.on(ACCOUNT))
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "agent"}):
-            self.assertTrue(WA.on(ACCOUNT))
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": f"agent_for:11111111-1111-4111-8111-111111111111,{ACCOUNT.upper()}"}):
-            self.assertTrue(WA.on(ACCOUNT))
-            self.assertFalse(WA.on("33333333-3333-4333-8333-333333333333"))
 
 
 class EveryKindIsDrawn(unittest.TestCase):
@@ -116,24 +102,16 @@ class Routing(Base):
         self.p.stop()
         super().tearDown()
 
-    def test_flag_on_sends_a_new_message_to_the_agent(self):
+    def test_a_new_message_and_its_tap_go_to_the_agent_with_no_switch(self):   # Sasha 253 · item 5: everyone
         self.link()
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": f"agent_for:{ACCOUNT}"}):
-            self.say("book me a table for 2 tomorrow at 9")
-            self.say("", payload="yn:yes", text="Yes")
+        self.say("book me a table for 2 tomorrow at 9")
+        self.say("", payload="yn:yes", text="Yes")
         self.assertEqual(self.seen, [("book me a table for 2 tomorrow at 9", ""), ("", "yn:yes")])
         self.assertIn("agent: book me a table for 2 tomorrow at 9", self.bodies())
 
-    def test_flag_off_is_todays_path(self):
-        self.link()
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "old"}):
-            self.say("help")
-        self.assertEqual(self.seen, [])
-
     def test_a_button_nothing_is_waiting_on_goes_to_the_agent(self):   # Sasha 249 · step 1: every button, not only ours
         self.link()
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "agent"}):
-            self.say("", payload="call:abc:yes", text="Yes")
+        self.say("", payload="call:abc:yes", text="Yes")
         self.assertEqual(self.seen, [("", "call:abc:yes")])
 
     def test_the_button_the_old_flow_is_waiting_on_finishes_there(self):   # Sasha 249 · one question, one owner
@@ -141,32 +119,28 @@ class Routing(Base):
         st = run(GW.STORE.get_state(GW.wa_key(GUEST))) or {}
         st["pending"] = {"kind": "demo_reset", "nonce": "n1", "asked_at": NOW}
         run(GW.STORE.put_state(GW.wa_key(GUEST), st))
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "agent"}):
-            try:
-                self.say("", payload="no:n1", text="No")
-            except Exception:
-                pass
+        try:
+            self.say("", payload="no:n1", text="No")
+        except Exception:
+            pass
         self.assertEqual(self.seen, [])
 
     def test_an_empty_message_and_a_file_reach_the_agent_never_help(self):   # Sasha 249 · W1
         self.link()
         ch = run(GW.STORE.channel_for(GW.wa_key(GUEST)))
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "agent"}):
-            self.say("")
-            run(GW.turn(ch, SANDBOX, {"From": f"whatsapp:{GUEST}", "To": f"whatsapp:{SANDBOX}", "Body": "", "NumMedia": "1",
-                                      "MediaContentType0": "application/pdf", "MediaUrl0": "https://x.test/a.pdf"}))
+        self.say("")
+        run(GW.turn(ch, SANDBOX, {"From": f"whatsapp:{GUEST}", "To": f"whatsapp:{SANDBOX}", "Body": "", "NumMedia": "1",
+                                  "MediaContentType0": "application/pdf", "MediaUrl0": "https://x.test/a.pdf"}))
         self.assertEqual([b for b, _ in self.seen], ["[an empty message]", "[they sent a file (application/pdf) with no words]"])
 
     def test_stop_still_wins(self):
         self.link()
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "agent"}):
-            self.say("STOP")
+        self.say("STOP")
         self.assertEqual(self.seen, [])
 
     def test_a_password_never_reaches_the_agent(self):
         self.link()
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "agent"}):
-            self.say("my card is 4242 4242 4242 4242")
+        self.say("my card is 4242 4242 4242 4242")
         self.assertEqual(self.seen, [])
 
 

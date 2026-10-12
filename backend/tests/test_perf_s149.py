@@ -12,11 +12,10 @@ from __future__ import annotations
 
 import asyncio
 import os
-import time
 import unittest
 from unittest import mock
 
-from booking_signer import guest_whatsapp as GW, http_pool as HP, perf_ops as PO, store as S, style as ST
+from booking_signer import guest_whatsapp as GW, http_pool as HP, perf_ops as PO, store as S
 from tests import test_guest_whatsapp_s75 as TG
 
 
@@ -44,37 +43,6 @@ class OutboundHTTP(unittest.TestCase):
 
 
 class StreamedCards(TG.Base):
-    def test_each_card_goes_as_soon_as_its_own_photo_is_ready(self):
-        self.link()
-        GW.PHOTO_CACHE.clear()
-        sent_at = []
-        real_send = GW.SENDER.send
-
-        async def send(frm, to, **kw):
-            sent_at.append((time.perf_counter(), kw.get("body") or "", kw.get("media")))
-            return await real_send(frm, to, **kw)
-        GW.SENDER.send = send
-
-        async def page_text(http, url, resolve):
-            # by rank (rating): site1 (4.8) is card 1, site0 (4.6) card 2, site2 (4.4) card 3
-            await asyncio.sleep({"site1": 0.0, "site0": 0.15, "site2": 3.0}[url.split("//")[1].split(".")[0]])
-            return {"image": url + "/og.jpg"}
-        cands = [{**c, "website": f"https://site{i}.example"} for i, c in enumerate(TG.CANDS)]
-        with mock.patch.object(ST, "page_text", page_text), mock.patch.object(TG, "CANDS", cands), \
-                mock.patch.dict(os.environ, {"SASHA_PHOTO_WAIT_S": "0.4", "SASHA_STREAM_CARDS": "1",
-                                             "SASHA_REAL_CONTACT_ACCOUNTS": TG.ACCOUNT}):   # three Google cards, no test card
-            t0 = time.perf_counter()
-            self.say("dinner for 2 in Chamberí on Saturday at 9")
-            took = time.perf_counter() - t0
-        bodies = [b for _, b, _ in sent_at]
-        cards = [(t, b, m) for t, b, m in sent_at if "·" in b and "From Google Maps" not in b]
-        self.assertTrue(any(b.startswith("Here are the best-rated") for b in bodies[:1]))     # the header first
-        self.assertEqual(len(cards), 3)
-        self.assertEqual([m is not None for _, _, m in cards], [True, True, False])   # the slow photo isn't waited for
-        self.assertGreater(cards[1][0] - cards[0][0], 0.1)                    # card 1 went before card 2's photo (0.15 s) was ready
-        self.assertLess(took, 1.0)                                            # nor anyone for the 3-s photo
-        self.assertEqual(GW.SENDER.contents[-1][0], "Which one?")              # the buttons last, as before
-        self.assertIn("_late_photos", self.spawned)
 
     def test_off_unless_switched_on(self):
         self.assertFalse(GW.stream_cards())

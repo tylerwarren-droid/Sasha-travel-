@@ -22,6 +22,7 @@ class OneSasha(TG.Base):
         self.saved = ST.STORE
         ST.STORE = ST.MemoryCaseStore()
         self.link()
+        TG.stand_in_brain(self)   # Sasha 253 · item 5: Sasha's side is the one brain (the spaces, in front of it, are unchanged)
 
     def tearDown(self):
         ST.STORE = self.saved
@@ -44,11 +45,11 @@ class OneSasha(TG.Base):
         self.to_passport()
         self.say("book me flights to Madrid on 1 March")
         self.assertIn("letters and digits", self.bodies()[-1])                # still relocation's: it re-asks its question
-        self.assertNotIn(GW.ASK_ONE, self.bodies())                           # Sasha's flow did NOT take it
+        self.assertEqual(self.brain_saw, [])                                  # Sasha's turn did NOT take it
         self.say("sasha")                                                     # her word: out of the space
-        n = len(GW.SENDER.sent)
         self.say("book me flights to Madrid on 1 March")
-        self.assertEqual("\n".join(s["body"] for s in GW.SENDER.sent[n:]), GW.ASK_ONE)   # now Sasha's own flow answers
+        self.assertEqual(self.brain_saw[-1], "book me flights to Madrid on 1 March")   # now Sasha's turn (the one brain) answers
+        self.assertEqual(self.bodies()[-1], "agent: book me flights to Madrid on 1 March")
         self.assertNotIn("Relocation", json.dumps(self.st()["history"], ensure_ascii=False))
         self.say("relocation")                                                # and relocation is where it was
         self.assertTrue(self.said().split("\n")[-1].startswith("Back to your EX-01.") or "Back to your EX-01." in self.said())
@@ -67,11 +68,10 @@ class OneSasha(TG.Base):
     def test_sashas_own_question_keeps_its_answers(self):
         self.to_passport()
         self.say("sasha")                                                     # out of the space first (strict)
-        self.say("dinner for 2 in Chamberí on Saturday at 21:00")            # Sasha: cards, her own pending
-        self.assertEqual(self.st()["pending"]["kind"], "cards")
-        self.say("1")                                                         # her card, not a passport number
+        self.say("dinner for 2 in Chamberí on Saturday at 21:00")            # Sasha's turn (the one brain): her own question
+        self.say("1")                                                         # her answer, not a passport number
+        self.assertEqual(self.brain_saw[-2:], ["dinner for 2 in Chamberí on Saturday at 21:00", "1"])
         self.assertNotIn("first surname", self.bodies()[-1])
-        self.assertIn("/api/booking/venues/read", self.api_paths())
         self.say("relocation")                                                # and relocation is exactly where it was
         last = [b for b in self.bodies() + [c for c, _ in GW.SENDER.contents] if b.startswith("Back to your EX-01.")]
         self.assertTrue(last and last[-1].endswith("Your passport number?"), last[-1:])

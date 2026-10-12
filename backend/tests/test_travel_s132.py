@@ -12,7 +12,7 @@ import unittest
 from datetime import date, datetime, time, timezone
 from unittest import mock
 
-from booking_signer import emailing as E, guest_whatsapp as GW, itinerary_q as IQ, test_deposit as TD, travel as TR
+from booking_signer import emailing as E, guest_whatsapp as GW, itinerary_q as IQ, travel as TR
 from tests import test_guest_whatsapp_s75 as TG
 
 OFFER = {"id": "off_1", "owner": {"name": "Duffel Airways"}, "total_amount": "391.52", "total_currency": "EUR", "expires_at": "2026-11-01T00:00:00Z",
@@ -76,76 +76,7 @@ class Duffel(unittest.TestCase):
         self.assertEqual(o["booking_reference"], "RZPNX8")
 
 
-class FlightsOnWhatsApp(TG.Base):
-    def setUp(self):
-        super().setUp()
-        self.link()
-        self.saved = (TR.HTTP, TD.HTTP, TR.RECORD)
-        TR.HTTP = FakeDuffel()
-        self.sessions = {"cs_1": {"status": "open"}}
-
-        async def stripe(method, path, data=None):
-            if path == "/checkout/sessions" and method == "POST":
-                self.paid_for = data
-                return 200, {"id": "cs_1", "url": "https://checkout.stripe.com/c/pay/cs_test_1", "livemode": False}
-            if path == "/checkout/sessions/cs_1":
-                return 200, {**self.sessions["cs_1"], "livemode": False}
-            return 404, {}
-        TD.HTTP = stripe
-        self.recorded = []
-
-        async def record(account, c, ref):
-            self.recorded.append((c["flights"], ref))
-        TR.RECORD = record
-        p = mock.patch.dict(os.environ, {"DUFFEL_ACCESS_TOKEN": "duffel_test_x", "STRIPE_TEST_SECRET_KEY": "sk_test_x"})
-        p.start()
-        self.addCleanup(p.stop)
-
-    def tearDown(self):
-        TR.HTTP, TD.HTTP, TR.RECORD = self.saved
-        super().tearDown()
-
-    def test_cards_yes_one_touch_paid_then_the_test_order(self):
-        self.say("flights from Madrid to Hanoi on 12 November for 2")
-        said = "\n".join(self.bodies())
-        self.assertIn("from Duffel in TEST mode", said)
-        self.assertIn("1. Duffel Airways ZZ 123 + ZZ 456", said)
-        _, picks = GW.SENDER.contents[-1]
-        self.say("1", payload=picks[0][1])
-        body, yes = GW.SENDER.contents[-1]
-        self.assertTrue(body.startswith("Book it? Duffel Airways ZZ 123 + ZZ 456, EUR 391.52 — TEST booking."))
-        self.say("Yes, book it", payload=yes[0][1])
-        self.assertIn("https://checkout.stripe.com/c/pay/cs_test_1", self.bodies()[-1])
-        self.assertEqual(self.paid_for["line_items[0][price_data][unit_amount]"], 39152)
-        self.assertEqual(self.recorded, [])                                             # nothing booked before it's paid
-        self.sessions["cs_1"] = {"status": "complete", "payment_status": "paid", "amount_total": 39152, "currency": "eur", "payment_intent": "pi_1"}
-        GW.WATCH_PAY = (0, 2)
-        ch = TG.run(GW.STORE.channel_for(GW.wa_key(TG.GUEST)))
-        TG.run(GW.watch_flight_payment(ch, TG.SANDBOX, TG.ACCOUNT, TR.card_of(OFFER), "cs_1", "Tyler Warren", "g@example.com", None))
-        self.assertEqual(self.recorded, [("ZZ 123 + ZZ 456", "RZPNX8")])
-        self.assertIn("✅ Booked (TEST)", self.bodies()[-1])
-        self.assertIn("Reference RZPNX8", self.bodies()[-1])
-
-    def test_without_a_stripe_key_nothing_is_booked(self):
-        with mock.patch.dict(os.environ, {"STRIPE_TEST_SECRET_KEY": ""}):
-            self.say("flights from Madrid to Hanoi on 12 November")
-            _, picks = GW.SENDER.contents[-1]
-            self.say("1", payload=picks[0][1])
-            _, yes = GW.SENDER.contents[-1]
-            self.say("yes", payload=yes[0][1])
-        self.assertIn("I can't take the test payment yet", self.bodies()[-1])
-        self.assertIn("Nothing was booked", self.bodies()[-1])
-
-
 class Hotels(TG.Base):
-    def test_a_hotel_is_requested_from_the_hotel_and_says_so(self):
-        self.link()
-        self.say("a hotel in Hoi An from 14 to 16 November for 2")
-        said = "\n".join(self.bodies())
-        self.assertIn("Hotels for 2 nights from Saturday 14 November, 2 people. For the one you pick: a TEST booking (no hotel contacted), "
-                      "or a real request to the hotel.", said)
-        find = next(c for c in GW.api.calls if c[2] == "/api/booking/venues/find")[3]
-        self.assertEqual(find["what"], "hotel")
 
     def test_the_room_email(self):
         p = E.EmailParticulars(on=date(2026, 11, 14), at=time(15, 0), party=2, name="Tyler Warren", guest_email="g@example.com", nights=2)
@@ -236,17 +167,6 @@ class Rehearsal2(TG.Base):
     """Rehearsal 2 (3 Oct): 'do I have time to fly…' was taken as a flight search; driving sent a departure time that Routes
     refuses unless routing is traffic-aware."""
 
-    def test_a_time_question_is_a_question(self):
-        self.link()
-        called = []
-
-        async def answer(account, text, now):
-            called.append(text)
-            return ["answered"]
-        with mock.patch.object(IQ, "answer", answer):
-            self.say("do I have time to fly from Madrid to Lisbon between 9 and 14 on 12 November?")
-        self.assertEqual(self.bodies()[-1], "answered")
-
     def test_driving_asks_routes_for_traffic_aware_routing(self):
         from booking_signer import proactive as PR
         seen = []
@@ -268,23 +188,21 @@ class Qualified(unittest.TestCase):
 
 
 class ProductHandOff(TG.Base):
-    """CR 13 · a product hands Sasha a sentence: her flow answers it as if typed; a button is never rewritten."""
+    """CR 13 · a product hands Sasha a sentence: her turn (Sasha 253 · the one brain) answers it as if typed."""
 
     def test_a_handed_sentence_runs_sasha_s_flow(self):
         self.link()
         from products import whatsapp as PW
-        seen = []
 
         async def product_turn(ch, frm, p, st, out, now, early=None):
             if p.get("Body") == "book my flights":
                 p["KanoeSaid"], p["Body"] = p["Body"], "flights from London to Madrid on 1 March 2027 for 1"
             return False
 
-        async def flights(ctx, body):
-            seen.append(body)
-        with mock.patch.object(PW, "product_turn", product_turn), mock.patch.object(GW, "_flights", flights):
+        TG.stand_in_brain(self)
+        with mock.patch.object(PW, "product_turn", product_turn):
             self.say("book my flights")
-        self.assertEqual(seen, ["flights from London to Madrid on 1 March 2027 for 1"])
+        self.assertEqual(self.brain_saw, ["flights from London to Madrid on 1 March 2027 for 1"])
 
 
 class ThisWeek(unittest.TestCase):

@@ -10,12 +10,11 @@ import asyncio
 import json
 import os
 import re
-import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
-from booking_signer import guest_whatsapp as GW, inbound_phone as IP, places_terms as PT
+from booking_signer import guest_whatsapp as GW, inbound_phone as IP
 from booking_signer.vault import guard as G
 from tests import test_booking_ladder as TBL, test_inbound_phone as TIP   # modules: their tests are not collected twice
 
@@ -27,6 +26,23 @@ NOW = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
 
 def run(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
+
+
+def stand_in_brain(case) -> list:
+    """Sasha 253 · item 5 — the ONE brain stood in at wa_agent.agent_turn (every account's WhatsApp reaches it now): what it is
+    handed is recorded in case.brain_saw and answered "agent: <it>". For tests of what stays IN FRONT of the brain (products,
+    spaces, the handed sentence) — the brain's own behaviour is tested with a scripted model (test_s253_gaps.ScriptedBrain)."""
+    from booking_signer import wa_agent as WA
+    case.brain_saw = []
+
+    async def brain(ch, body, payload, st, out, now, button_text="", voice_in=False):
+        case.brain_saw.append(body or payload)
+        out.text(f"agent: {body or payload}")
+        return "x"
+    p = mock.patch.object(WA, "agent_turn", brain)
+    p.start()
+    case.addCleanup(p.stop)
+    return case.brain_saw
 
 
 class FakeSender:
@@ -100,8 +116,18 @@ class Base(unittest.TestCase):
         GW.NOW = lambda: self.now
         self.model = mock.patch("app.services.llm.client.messages.create", side_effect=AssertionError("the model was called"))
         self.model.start()
+        # Sasha 253 · item 5 — every account's WhatsApp reaches the one brain now: its live model is never called from a test
+        # either (a test that means the brain scripts it — test_s253_gaps.ScriptedBrain — or stands it in — stand_in_brain)
+        from app.services import llm as _LLM
+        real = _LLM.client   # sasha.turn takes client.with_options(…): a copy — kept to this guarded client
+        self.stream = [mock.patch("app.services.llm.client.messages.stream", side_effect=AssertionError("the live model was called")),
+                       mock.patch.object(real, "with_options", lambda **k: real)]
+        for g in self.stream:
+            g.start()
 
     def tearDown(self):
+        for g in reversed(self.stream):
+            g.stop()
         self.model.stop()
         GW.STORE, GW.SENDER, GW.api, GW.NOW, GW._spawn = self.gw_saved
         self.env.stop()
@@ -152,7 +178,7 @@ class Webhook(Base):
 
     def test_an_unknown_sender_gets_one_sentence_and_only_their_hash_is_kept(self):
         r = self.wa("SM3", GUEST, "hello?", SANDBOX)
-        self.assertIn("link your account first", r.text)
+        self.assertIn("link this number once at https://sasha.test/you", r.text)   # Sasha 253 · the one short /you line
         self.assertNotIn("SM3", IP.STORE.rows)                                    # not filed as a venue's message
         self.assertNotIn(GUEST, json.dumps(GW.STORE.state, default=str))          # never the digits
         self.assertNotIn("hello", json.dumps(GW.STORE.state, default=str))        # nor the words
@@ -190,165 +216,6 @@ class Turns(Base):
         self.link()
         run(GW.STORE.put_state(GW.wa_key(GUEST), {"history": [], "pending": None, "last_inbound_at": NOW, "link_tries": []}))
 
-    def test_anything_but_booking_is_the_web_chats_turn_never_a_dead_end(self):
-        from booking_signer import wa_brain as WB   # Sasha 167 · was the fixed "open Sasha at …" sentence
-
-        async def conduct(msg, hist, **kw):
-            return {"response": "Madrid at dusk, a poem.", "photos": [], "links": []}
-        WB.CONDUCT = conduct
-        try:
-            self.say("write me a poem about Madrid")
-        finally:
-            WB.CONDUCT = None
-        self.assertEqual(self.bodies(), ["Madrid at dusk, a poem."])
-        self.assertEqual(GW.api.calls, [])
-
-    def test_a_spoken_style_request_shows_three_cards_and_one_question(self):
-        self.say("Book a luxury dinner for two in Chamberí on Saturday at nine.")
-        find = GW.api.calls[0][3]
-        self.assertEqual((find["where"], find["country"], find["open_at"]), ("Chamberí, Madrid", "ES", "2026-10-03T21:00"))
-        medias = [s for s in GW.SENDER.sent if s["content"] is None][1:]
-        self.assertEqual(len(medias), 3)
-        self.assertTrue(medias[0]["body"].startswith("Sasha's pick · A Very Long Restaurant"))
-        body, buttons = GW.SENDER.contents[0]
-        self.assertEqual(body, "Which one?")
-        self.assertTrue(all(len(GW.title(t)) <= 20 for t, _ in buttons))   # Sasha 117 · 25 failed live (63013)
-        self.assertEqual(len(buttons), 3)
-
-    def test_sasha117_the_rehearsal_books_our_test_venue_never_a_real_one(self):
-        """The dress rehearsal (calls off): the third card is our test venue, on the founder's account only."""
-        from booking_signer.form_rung import test_venue_url
-        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "1", "FOUNDER_ACCOUNT_ID": ACCOUNT}):
-            self.say("dinner for 2 in Chamberí on Saturday at 9")
-            _, buttons = GW.SENDER.contents[-1]
-            self.assertEqual([t for t, _ in buttons][2], "Sasha Test Venue")
-            self.assertIn("Rehearsal · Sasha Test Venue — ours, not a real restaurant: booking it contacts no one", self.bodies())
-            self.say("Sasha Test Venue", payload=buttons[2][1])
-        read = next(c for c in GW.api.calls if c[2] == "/api/booking/venues/read")[3]
-        self.assertEqual(read, {"name": "Sasha Test Venue", "city": "Chamberí, Madrid", "country": "ES", "website": test_venue_url()})
-        self.assertNotIn("place_id", read)                                   # never looked up on Google
-        GW.SENDER.contents.clear()
-        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "", "FOUNDER_ACCOUNT_ID": ACCOUNT}):
-            self.say("dinner for 2 in Chamberí on Saturday at 9")
-        self.assertNotIn("Sasha Test Venue", [t for t, _ in GW.SENDER.contents[-1][1]])   # off unless asked for
-
-    @unittest.skip("Sasha 195 · THE LADDER'S WORDS: the founder's ladder (one question, its options, acted on at once) replaced this pinned conversation; covered by scripts/core_suites.py LADDER/REST checks — to rewrite to the ladder")
-
-    def test_sasha117_a_form_gets_the_accounts_own_email_and_a_refusal_says_why(self):
-        """Live, 2 Oct: the test venue's form needs an email; WhatsApp sent only the mobile → "I can't book … right now"."""
-        from booking_signer import ladder_routes as LR, ladder_store as LS
-        saved = LR.LADDER_STORE
-        LR.LADDER_STORE = LS.MemoryLadderStore()
-        LR.LADDER_STORE.account_emails = {ACCOUNT: "guest@example.com"}
-        api = GW.api
-
-        async def fake(account, method, path, body=None, timeout=90.0):
-            if path == "/api/booking/venues/read":
-                return 200, {"read_id": "r-1", "venue": "Sasha Test Venue", "country": "ES", "listing": None, "say": "x",
-                             "rungs": [{"rung": "form", "available": True, "fact_index": 1, "value": "https://x/form"}]}
-            if path == "/api/booking/forms":
-                fake.forms.append(body)
-                if not body["reservation"]["who"]["contact"].get("email"):
-                    return 422, {"rule": "form_email_missing", "message": "the form needs your email address — which one should they have?"}
-                return 200, {"form_id": "form-1234", "read_back": {"lines": ["I'll send the booking form:", "· Email: guest@example.com"],
-                                                                     "sha256": "f" * 64}}
-            if path == "/api/booking/forms/form-1234/send":   # the live answer of 2 Oct: status "sent", the verdict in reading
-                return 200, {"status": "sent", "reading": {"result": "confirmed"}, "booking_reference": "TV-FE41E1",
-                             "their_page": "Reserva confirmada Confirmado: mesa para 2 personas… Localizador: TV-FE41E1"}
-            return await api(account, method, path, body, timeout)
-        fake.forms = []
-        GW.api = fake
-        try:
-            self.pick_first()
-            self.assertEqual(fake.forms[-1]["reservation"]["who"]["contact"], {"mobile_e164": GUEST, "email": "guest@example.com"})
-            self.assertEqual(GW.SENDER.contents[-1][1][0][0], "Yes, book it")
-            self.assertTrue(GW.SENDER.contents[-1][0].startswith("They take bookings online."))   # Sasha 161 · one line, no script
-            self.say("Yes, book it", payload=GW.SENDER.contents[-1][1][0][1])
-            self.assertIn("✅ Booked: A Very Long Restaurant Name In Madrid, Saturday 3 October at 21:00, 2 people. Their reference: TV-FE41E1.",
-                          self.bodies())                                   # was "⚠ Not confirmed yet" over a confirmed booking
-            LR.LADDER_STORE.account_emails = {}
-            with mock.patch.dict(os.environ, {"SASHA_FOUNDER_EMAIL": ""}):
-                self.pick_first()
-            self.assertEqual(self.bodies()[-1], "I can't book A Very Long Restaurant Name In Madrid from here right now — the form needs your email address — "
-                                                "which one should they have? Nothing was sent.")
-        finally:
-            GW.api, LR.LADDER_STORE = api, saved
-
-    def test_sasha117_cancel_while_cards_show_is_a_cancellation(self):
-        """Live, 2 Oct: "Cancel the Retiro dinner." with cards on screen searched for "Cancel Retiro dinner dinner"."""
-        self.say("dinner for 2 in Chamberí on Saturday at 9")
-        n = len([c for c in GW.api.calls if c[2] == "/api/booking/venues/find"])
-        self.say("Cancel the Retiro dinner.")
-        self.assertEqual(len([c for c in GW.api.calls if c[2] == "/api/booking/venues/find"]), n)   # no new search
-        self.assertIn("/api/booking/reservations", self.api_paths())                                # the cancel path
-        # … and "the Retiro dinner" is not a venue's name: the one upcoming booking is offered, by its own name
-        self.assertIn("I can't find a booking called “Retiro”.", self.bodies())
-        self.assertIn("Your one upcoming booking is Botavara Chamberí.", self.bodies())
-        self.assertEqual(GW.SENDER.contents[-1][0], "Cancel Botavara Chamberí, Saturday 3 October at 21:00, for 2, under Tyler Warren?")
-
-    def test_sasha117_the_cancel_list_is_upcoming_only_and_tells_twins_apart(self):
-        """Live, 2 Oct 22:51: the list offered today's 13:00 bookings, and two "Sasha Test Venue — Saturday 3 October at 21:00"."""
-        self.now = datetime(2026, 10, 2, 20, 51, tzinfo=timezone.utc)                      # 22:51 in Madrid
-        base = {"party": 2, "status": "confirmed", "status_words": "confirmed by the restaurant", "receipt": None, "timezone": "Europe/Madrid"}
-        GW.api.reservations = [{**base, "id": "t-1", "venue": "La Contra", "date": "2026-10-02", "time": "13:00"},
-                               {**base, "id": "t-2", "venue": "Sasha Test Venue", "date": "2026-10-03", "time": "21:00", "booking_reference": "TV-62BB32"},
-                               {**base, "id": "t-3", "venue": "Sasha Test Venue", "date": "2026-10-03", "time": "21:00", "booking_reference": "TV-FE41E1"}]
-        with mock.patch.object(GW, "NOW", lambda: self.now):
-            self.say("Cancel the Retiro dinner.")
-        listed = self.bodies()[-1]
-        self.assertNotIn("La Contra", listed)
-        self.assertIn("1. Sasha Test Venue — Saturday 3 October at 21:00 · TEST · booked (demo) · ref TV-62BB32", listed)
-        self.assertIn("2. Sasha Test Venue — Saturday 3 October at 21:00 · TEST · booked (demo) · ref TV-FE41E1", listed)
-        with mock.patch.object(GW, "NOW", lambda: self.now):
-            self.say("Cancel the Retiro dinner.")                                   # asked again: a fresh list, not "reply with the number"
-        self.assertTrue(self.bodies()[-1].startswith("Which one should I cancel?"))
-
-    def pick_first(self):
-        self.say("dinner for 2 in Chamberí on Saturday at 9")
-        _, buttons = GW.SENDER.contents[-1]
-        self.say("A Very Long…", payload=buttons[0][1])
-
-    @unittest.skip("Sasha 195 · THE LADDER'S WORDS: the founder's ladder (one question, its options, acted on at once) replaced this pinned conversation; covered by scripts/core_suites.py LADDER/REST checks — to rewrite to the ladder")
-
-    def test_a_pick_reads_the_place_and_asks_one_sentence_bound_to_its_read_back(self):
-        self.pick_first()
-        body, buttons = GW.SENDER.contents[-1]
-        self.assertTrue(body.startswith("There's no online booking for Botavara Chamberí"), body)   # Sasha 161 · one plain line…
-        self.assertIn("Saturday 3 October at 21:00", body)                                           # …and what's booked
-        self.assertEqual(buttons[0], ("Yes, book it", "yes:call-123:" + "a" * 16))
-        self.assertFalse(any(b.startswith("What I'll say") for b in self.bodies() if isinstance(b, str)))   # the script stays in the call
-        prep = next(c for c in GW.api.calls if c[2] == "/api/booking/calls")[3]
-        self.assertEqual(prep["reservation"]["who"], {"name": "Tyler Warren", "contact": {"mobile_e164": GUEST}})
-        self.assertEqual(prep["fact_index"], 2)
-
-    @unittest.skip("Sasha 195 · THE LADDER'S WORDS: the founder's ladder (one question, its options, acted on at once) replaced this pinned conversation; covered by scripts/core_suites.py LADDER/REST checks — to rewrite to the ladder")
-
-    def test_a_typed_vale_binds_to_the_newest_question_with_its_words(self):
-        self.pick_first()
-        self.say("vale")
-        place = next(c for c in GW.api.calls if c[2].endswith("/place"))
-        self.assertEqual(place[2], "/api/booking/calls/call-12345678/place")
-        self.assertEqual(place[3], {"read_back_sha256": "a" * 64, "approval": {"how": "whatsapp_text", "said": "vale"}})
-
-    def test_the_button_yes_and_a_stale_button(self):
-        self.pick_first()
-        self.say("Yes, book it", payload="yes:call-123:" + "b" * 16, text="Yes, book it")        # an older card's hash
-        self.assertFalse(any(c[2].endswith("/place") for c in GW.api.calls))
-        self.assertIn("earlier question", self.bodies()[-1])
-
-    def test_a_yes_after_fifteen_minutes_places_nothing(self):
-        self.pick_first()
-        self.now = NOW + timedelta(minutes=16)
-        self.say("yes")
-        self.assertFalse(any(c[2].endswith("/place") for c in GW.api.calls))
-        self.assertIn("expired", self.bodies()[-1])
-
-    def test_no_contact_saved_means_no_booking(self):
-        GW.api.contact = None
-        self.pick_first()
-        self.assertFalse(any(c[2] == "/api/booking/calls" for c in GW.api.calls))
-        self.assertIn("name and mobile", self.bodies()[-1])
-
     def test_stop_is_said_once_then_silence_and_start_resumes(self):
         self.say("STOP")
         self.assertEqual(self.bodies(), [GW.STOPPED])
@@ -368,122 +235,6 @@ class Turns(Base):
         self.assertEqual(run(GW.deliver(ch, SANDBOX, GW.Out().text("hi"), NOW - timedelta(hours=25))), ["not sent: outside the 24-hour window"])
         self.assertEqual(GW.SENDER.sent, [])
 
-    def test_cancel_by_email_says_cancelling_never_cancelled_until_their_words(self):
-        self.say("cancel Botavara")
-        body, buttons = GW.SENDER.contents[-1]
-        self.assertEqual(body, "Cancel Botavara Chamberí, Saturday 3 October at 21:00, for 2, under Tyler Warren?")
-        self.say("Yes, cancel", payload=buttons[0][1], text="Yes, cancel")
-        post = next(c for c in GW.api.calls if c[1] == "POST" and c[2].endswith("/cancel"))
-        self.assertEqual(post[3]["approval"], {"how": "whatsapp_button", "said": "Yes, cancel"})
-        self.assertTrue(self.bodies()[-1].startswith("Cancelling with Botavara Chamberí now."))
-        self.assertFalse(any("has cancelled" in b for b in self.bodies()))
-        self.assertEqual(self.spawned, ["watch_cancel"])                            # watching for their written words
-
-    def test_sasha104_the_founders_live_message_shows_cards(self):
-        """2 Oct, live in the sandbox: this exact message got the out-of-scope sentence."""
-        self.say("Dinner for 2 on Saturday at 2100 in Chamberi. Something luxurious and romantic")
-        find = GW.api.calls[0][3]
-        self.assertEqual((find["what"], find["where"], find["open_at"]), ("luxurious and romantic Dinner", "Chamberí, Madrid", "2026-10-03T21:00"))
-        self.assertEqual(GW.SENDER.contents[-1][0], "Which one?")
-
-    def seed_live_state(self):
-        """The founder's guest_wa_state as stored on sasha-prod at 11:37 UTC, 2 Oct (cards pending, find.what "Dinner")."""
-        run(GW.STORE.put_state(GW.wa_key(GUEST), {
-            "history": [{"role": "user", "content": "Dinner for 2 on Saturday at 2100 in Chamberi. Something luxurious and romantic"},
-                        {"role": "assistant", "content": GW.OUT_OF_SCOPE.format(web=GW.web_url())}],
-            "pending": {"kind": "cards", "at": NOW.isoformat(), "nonce": "a1b2c3",
-                        "find": {"what": "Dinner", "where": "Chamberí, Madrid", "country": "ES", "open_at": "2026-10-03T21:00"},
-                        "draft": {"when": {"mode": "at", "at": "2026-10-03T21:00"}, "how_many": {"count": 2, "unit": "people"}},
-                        "cards": [{"name": "DUM DUM | Chamberí", "country": "ES", "place_id": "ChIJUeGquRkpQg0R7oY8og3UkYE"},
-                                  {"name": "La Taberna de Paula", "country": "ES", "place_id": "ChIJi0x5BFwoQg0RLv9wFoCDvMo"},
-                                  {"name": "IN Ristolab Chamberí | Restaurante italiano y Carnes Madrid", "country": "ES",
-                                   "place_id": "ChIJX1WWcgApQg0R7rNhhOsakC8"}]},
-            "last_inbound_at": NOW, "link_tries": []}))
-
-    def finds(self):
-        return [c[3] for c in GW.api.calls if c[2] == "/api/booking/venues/find"]
-
-    def test_sasha104_the_founders_refinements_replayed_against_the_stored_state(self):
-        """2 Oct, live: "How about Indian food?" and "So, actually my wife likes Indian food…" both got "Which one?"."""
-        self.seed_live_state()
-        self.say("How about Indian food?")
-        self.say("So, actually my wife likes Indian food. Can you find me an Indian food spot? Luxury please")
-        self.say("Indian food, luxury please")
-        f = self.finds()
-        self.assertEqual([x["what"] for x in f], ["Indian dinner", "luxury Indian dinner", "luxury Indian dinner"])
-        for x in f:   # the area, the day and the time are kept
-            self.assertEqual((x["where"], x["country"], x["open_at"]), ("Chamberí, Madrid", "ES", "2026-10-03T21:00"))
-        st = run(GW.STORE.get_state(GW.wa_key(GUEST)))
-        self.assertEqual(st["pending"]["draft"]["how_many"], {"count": 2, "unit": "people"})   # the party too
-        self.assertEqual(st["pending"]["kind"], "cards")
-        self.assertNotIn("Which one? Tap a name", " ".join(self.bodies()))
-
-    def test_sasha104_luxury_puts_three_euro_signs_first(self):
-        self.seed_live_state()
-        priced = [{**c, "price_level": p} for c, p in zip(CANDS, (2, 1, 3, 4))]
-        with mock.patch.object(sys.modules[__name__], "CANDS", priced):
-            self.say("Indian food, luxury please")
-        medias = [s["body"] for s in GW.SENDER.sent if s["content"] is None][1:]
-        self.assertTrue(medias[0].startswith("Sasha's pick · Casa Lucio"), medias)   # €€€ (rated before €€€€ in the order)
-        self.assertTrue(medias[1].startswith("Fourth Place"), medias)
-        self.assertIn("€€€ and up first", self.bodies()[0])
-
-    def test_sasha104_a_plain_yes_while_choosing_asks_again(self):
-        self.seed_live_state()
-        self.say("ok thanks")
-        self.assertEqual(GW.api.calls, [])
-        self.assertTrue(self.bodies()[-1].startswith("Which one?"))
-
-    def test_sasha104_a_new_area_while_choosing_moves_the_search(self):
-        self.seed_live_state()
-        self.say("how about Indian in Malasaña")
-        f = self.finds()[0]
-        self.assertEqual((f["what"], f["where"], f["open_at"]), ("Indian dinner", "Malasaña, Madrid", "2026-10-03T21:00"))
-
-    @unittest.skip("Sasha 195 · THE LADDER'S WORDS: the founder's ladder (one question, its options, acted on at once) replaced this pinned conversation; covered by scripts/core_suites.py LADDER/REST checks — to rewrite to the ladder")
-
-    def test_sasha108_calling_names_the_venue_not_the_search(self):
-        GW.api.place = {"status": "placed", "say": "Calling Indian dinner in Chamberí, Madrid now."}
-        self.pick_first()
-        self.say("vale")
-        self.assertIn("📞 Calling Botavara Chamberí now — I'll tell you what they say.", self.bodies())
-        self.assertNotIn("Indian dinner", " ".join(self.bodies()))
-        self.assertEqual(self.spawned, ["watch_call"])
-
-    def test_sasha104_unsure_asks_one_question(self):
-        self.say("can you sort out Saturday night for 2?")
-        self.assertEqual(self.bodies(), [GW.ASK_ONE])
-
-    def test_sasha104_a_voice_note_not_made_out_is_asked_again(self):
-        ch = run(GW.STORE.channel_for(GW.wa_key(GUEST)))
-        run(GW.turn(ch, SANDBOX, {"From": f"whatsapp:{GUEST}", "Body": "", "NumMedia": "1", "MediaContentType0": "audio/ogg"}))
-        self.assertIn("couldn't make out that voice note", self.bodies()[-1])   # Sasha 167 · voice notes are heard (165)
-        self.assertEqual(GW.api.calls, [])
-
-    YATRI = {"id": "t-2", "venue": "Restaurante Yatri", "date": "2026-10-03", "time": "21:00", "party": 2, "status": "unclear",
-             "status_words": "not confirmed yet", "receipt": None}
-
-    def test_sasha109_the_founders_cancels(self):
-        """2 Oct, live: "Please cancel" and "No Please Cancel Yatri" both got "Shall I book that?"."""
-        GW.api.reservations = [self.YATRI]
-        self.say("Please cancel")                                     # no name: his one active booking
-        self.assertEqual(GW.SENDER.contents[-1][0], "Cancel Restaurante Yatri, Saturday 3 October at 21:00, for 2, under Tyler Warren?")
-        self.say("No")                                                 # the No answers the question; nothing is cancelled
-        self.assertEqual(self.bodies()[-1], "OK — nothing was cancelled.")
-        self.say("No Please Cancel Yatri")
-        body, buttons = GW.SENDER.contents[-1]
-        self.assertTrue(body.startswith("Cancel Restaurante Yatri"))
-        self.assertEqual(buttons[0][0], "Yes, cancel")
-        self.assertNotIn(GW.ASK_ONE, self.bodies())
-        self.assertFalse(any(c[1] == "POST" and c[2].endswith("/cancel") for c in GW.api.calls))   # nothing until the yes
-
-    def test_sasha109_several_bookings_get_a_numbered_list(self):
-        GW.api.reservations = [GW.api.reservations[0], self.YATRI]
-        self.say("cancela")
-        self.assertTrue(self.bodies()[-1].startswith("Which one should I cancel?\n1. Botavara Chamberí"))
-        self.say("2")
-        self.assertTrue(GW.SENDER.contents[-1][0].startswith("Cancel Restaurante Yatri"))
-
     def test_sasha109_what_is_a_cancel(self):
         cases = {"Please cancel": "", "No Please Cancel Yatri": "Yatri", "cancela": "", "anula la reserva de Yatri": "Yatri",
                  "cancel my booking at Botavara please": "Botavara", "don't cancel it": None, "dinner for 2 tomorrow": None}
@@ -497,62 +248,6 @@ class Turns(Base):
                  "Cancel the Retiro dinner.": "Retiro", "cancel my dinner": ""}
         for msg, want in cases.items():
             self.assertEqual(GW.cancel_intent(msg), want, msg)
-
-    def test_sasha117_cancel_wins_over_search_with_or_without_cards(self):
-        """Live, 2 Oct: "Cancel the Retiro dinner." became a search ("Cancel Retiro dinner dinner in Retiro…" with cards)."""
-        for msg in ("Cancel the Botavara dinner.", "cancel my Botavara booking", "cancel the dinner at Botavara",
-                    "Cancel the Retiro dinner.", "cancela la cena en Botavara"):
-            for cards_first in (False, True):
-                GW.api.calls.clear()
-                run(GW.STORE.put_state(GW.wa_key(GUEST), {"history": [], "pending": None, "last_inbound_at": NOW, "link_tries": []}))
-                if cards_first:
-                    self.say("dinner for 2 in Chamberí on Saturday at 9")
-                    self.assertEqual(run(GW.STORE.get_state(GW.wa_key(GUEST)))["pending"]["kind"], "cards")
-                finds = len([c for c in GW.api.calls if c[2] == "/api/booking/venues/find"])
-                self.say(msg)
-                self.assertEqual(len([c for c in GW.api.calls if c[2] == "/api/booking/venues/find"]), finds, (msg, cards_first))   # no search
-                self.assertTrue(GW.SENDER.contents[-1][0].startswith("Cancel Botavara Chamberí"), (msg, cards_first))      # the one sentence
-                self.assertEqual(GW.SENDER.contents[-1][1][0][0], "Yes, cancel")
-                self.assertFalse(any(c[1] == "POST" and c[2].endswith("/cancel") for c in GW.api.calls))                   # nothing until the yes
-
-    def test_sasha121_tonights_dinner_is_todays_booking_not_a_name(self):
-        """Investor demo v2, beat B: "cancel tonight's dinner" was read as a booking called "'s"."""
-        self.assertEqual((GW.cancel_intent("cancel tonight's dinner"), GW.cancel_day("cancel tonight's dinner")), ("", "today"))
-        self.assertEqual((GW.cancel_intent("cancela la cena de esta noche"), GW.cancel_day("cancela la cena de esta noche")), ("", "today"))
-        self.assertEqual(GW.cancel_day("cancel tomorrow's lunch at Botavara"), "tomorrow")
-        base = {"party": 2, "status": "confirmed", "status_words": "confirmed by the restaurant", "receipt": None, "timezone": "Europe/Madrid"}
-        GW.api.reservations = [{**base, "id": "t-1", "venue": "Botavara Chamberí", "date": "2026-10-02", "time": "21:00"},
-                               {**base, "id": "t-2", "venue": "Casa Lucio", "date": "2026-10-03", "time": "21:00"}]
-        self.say("cancel tonight's dinner")                                          # NOW is 2 Oct 12:00 UTC
-        self.assertTrue(GW.SENDER.contents[-1][0].startswith("Cancel Botavara Chamberí"))   # only tonight's — one, offered
-        self.say("cancel tomorrow's dinner")
-        self.assertTrue(GW.SENDER.contents[-1][0].startswith("Cancel Casa Lucio"))
-
-    def test_sasha121_a_cuisine_is_a_table_not_a_question(self):
-        """Rehearsal 1, beat C: "find us Japanese for two in Salamanca at 21:30" → pick → "What should I book there…?"."""
-        api = GW.api
-        drafts = []
-
-        async def fake(account, method, path, body=None, timeout=90.0):
-            if path == "/api/booking/draft":
-                drafts.append(body["text"])
-                return 200, {"parts": {"what": {"activity": "a table", "activity_venue_lang": "una mesa", "category": "restaurant"}}
-                             if "restaurant" in body["text"] else {}}
-            return await api(account, method, path, body, timeout)
-        GW.api = fake
-        fake.calls = api.calls
-        try:
-            self.say("find us Japanese for two in Salamanca at 21:30")
-            _, buttons = GW.SENDER.contents[-1]
-            self.say("x", payload=buttons[0][1])
-        finally:
-            GW.api = api
-        self.assertEqual(drafts, ["Japanese", "Japanese restaurant"])
-        self.assertNotIn("What should I book there", " ".join(self.bodies()))
-
-    def test_receipts(self):
-        self.say("my bookings")
-        self.assertIn("• Botavara Chamberí — Saturday 3 October at 21:00, 2 — confirmed by the restaurant", self.bodies()[-1])
 
 
 class Progress(Base):

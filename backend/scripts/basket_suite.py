@@ -2,7 +2,7 @@
 
 R2 holds the store itself (booking_signer/basket.py) on a scratch guest's scratch trip, in the real database, cleaned up after:
 suggested → chosen (one per slice) → the total → held with the payment → Pacioli's booked line and event ledger; another account
-can neither read nor choose; the ✕ removes one row. Conversation cases (web, avatar, WhatsApp) join at R5/R6.
+can neither read nor choose; the ✕ removes one row. Conversation cases (web, avatar) join at R5/R6.
 """
 from __future__ import annotations
 
@@ -168,17 +168,9 @@ async def _web(a: str, sid: str):
     return say
 
 
-async def _whatsapp(a: str, sid: str):
-    """WhatsApp's own brain path (wa_brain.web_turn), its words captured — nothing is sent."""
-    from booking_signer import wa_brain as WB, guest_whatsapp as GW
-    st = {"history": []}
-
-    async def say(m):
-        out = GW.Out()
-        await WB.web_turn({"account": a, "st": st, "ch": {"wa_id_sha256": sid}, "out": out, "now": GW.NOW()}, m)
-        st["history"] += [{"role": "user", "content": m}, {"role": "assistant", "content": out.said()}]
-        return out.said(), None
-    return say
+# Sasha 253 · item 5 — RETIRED: _whatsapp (wa_brain.web_turn as "WhatsApp's own brain path"). Every account's WhatsApp goes to the
+# one brain (wa_agent.agent_turn → sasha.turn_with_quiver, surface "wa" = /s2's agent) — no WhatsApp message reaches web_turn, so
+# this suite's WhatsApp channel no longer tested anything WhatsApp does; the web and the avatar channels below still hold R5/R6.
 
 
 class _Hook:
@@ -317,13 +309,13 @@ async def book_case(ch: str, a: str, say, chosen) -> None:
 
 
 async def pick_cases(guests: dict) -> None:
-    """R5 · on web, the avatar's words and WhatsApp: the guided trip's pick is the BASKET's — one chosen flight, a re-pick swaps it."""
+    """R5 · on web and the avatar's words: the guided trip's pick is the BASKET's — one chosen flight, a re-pick swaps it."""
     from booking_signer import basket as BK, plan_store as PS
     BK.ON = True
     try:
         for ch, (a, first, second) in guests.items():
             sid = uuid.uuid4().hex[:12] + f"-r5-{ch}"   # unique within the first 16 characters (WhatsApp's session key keeps 16)
-            say = await (_whatsapp(a, sid) if ch == "WhatsApp" else _web(a, sid))
+            say = await _web(a, sid)
             for m in ("plan me 5 days in Vietnam from 12 November for 2 of us", "Sounds good", "Sam", "food and culture"):
                 await say(m)
             prop, _ = await say("from Madrid")
@@ -337,8 +329,7 @@ async def pick_cases(guests: dict) -> None:
                and abs(float(m0[1].replace(",", "")) - BK.total(rows0)["amount"]) <= 1, prop[:160])
             listed, rr = await say("yes please")
             listed += " ".join(o.get("name") or "" for b in ((rr or {}).get("bookings") or []) if b.get("trip_pick") for o in b.get("options") or [])
-            ok(f"BASKET R5 {ch}: the flights listed to choose", "Iberia" in listed and "British Airways" in listed
-               and (ch != "WhatsApp" or "Reply with its number or airline" in listed), listed[:160])
+            ok(f"BASKET R5 {ch}: the flights listed to choose", "Iberia" in listed and "British Airways" in listed, listed[:160])
             r1, _ = await say(first)
             r2, _ = await say(second)
             p = await PS.latest(a)
@@ -369,13 +360,13 @@ async def main() -> int:
     t0, start = time.time(), len(RESULTS)
     guests = []
     try:
-        for n in ("basket-suite", "basket-suite-other", "basket-suite-avatar", "basket-suite-wa"):
+        for n in ("basket-suite", "basket-suite-other", "basket-suite-avatar"):
             g, why = await GA.create_guest(n)
             if not g:
                 ok("basket suite: scratch guests", False, why)
                 return 1
             guests.append(g["account_id"])
-        a, other, av, wa = guests
+        a, other, av = guests
         trip = await PS.save(a, {"title": "Basket suite", "days": [{"day": 1, "city": "Hanoi", "activities": []}]},
                              "12 November for 2", datetime.now(timezone.utc))
         if not ok("basket suite: scratch trip", bool(trip)):
@@ -384,8 +375,7 @@ async def main() -> int:
         await view_cases(a)
         await flight_cases(a)
         await pick_cases({"web": (other, "the British Airways one", "Actually, the Iberia flight please"),
-                          "avatar": (av, "Okay. Give me the British Airways fight, please, Sasha.", "Uh, actually the Iberia one."),
-                          "WhatsApp": (wa, "2", "Iberia")})
+                          "avatar": (av, "Okay. Give me the British Airways fight, please, Sasha.", "Uh, actually the Iberia one.")})
         await webhook_cases(other)
     except Exception as e:
         ok("the basket suite itself", False, f"{type(e).__name__}: {e}")

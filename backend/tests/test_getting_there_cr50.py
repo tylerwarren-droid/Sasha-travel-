@@ -21,6 +21,7 @@ class Card(Base):
         return "\n".join(self.bodies() + [c for c, _ in TG.GW.SENDER.contents])
 
     def test_after_the_consulate_one_tap_plans_the_move(self):
+        TG.stand_in_brain(self)   # Sasha 253 · item 5: the plan's first booking is handed to the one brain
         for t in ("relocation", "DEMO", "SIGNED", "United States", "New York"):
             self.say(t)
         self.say("", payload="rx:go:travel")                                         # CR 52 · its own step in the walk

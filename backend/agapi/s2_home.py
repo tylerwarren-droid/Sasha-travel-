@@ -102,8 +102,9 @@ def wa_linked() -> str:
 
 
 def wa_onboard() -> str:
-    """With a {web} placeholder, as guest_whatsapp.ONBOARD."""
-    return "Hi, I'm Sasha by Kanoe. " + SAY + " To start on WhatsApp, link your account first: {web}"
+    """With a {web} placeholder, as guest_whatsapp.ONBOARD. Sasha 253 · item 5 (Tyler, mailbox 807): an unlinked number gets ONE
+    short line telling them how to link — never the old flow, never an automatic guest account."""
+    return "Hi, I'm Sasha by Kanoe. To use me on WhatsApp, link this number once at {web} — it takes a minute."
 
 
 def frontend_module() -> str:

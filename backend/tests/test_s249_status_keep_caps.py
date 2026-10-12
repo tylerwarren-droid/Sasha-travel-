@@ -310,13 +310,12 @@ class OneCapabilityList(unittest.TestCase):
     def test_whatsapp_words_under_the_one_brain_come_from_the_list(self):
         from agapi import s2_home as H
         from booking_signer import guest_whatsapp as GW
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "agent"}):
-            self.assertEqual((GW.help_words(ACCT), GW.linked_words(ACCT), GW.onboard_words()), (H.wa_help(), H.wa_linked(), H.wa_onboard()))
-            for w in (GW.help_words(ACCT), GW.linked_words(ACCT), GW.onboard_words()):
-                self.assertIn(H.SAY, w)
-            self.assertIn("{web}", GW.onboard_words())
-        with mock.patch.dict(os.environ, {"SASHA_WA_BRAIN": "old"}):   # the old brain keeps its own words (they go with it)
-            self.assertEqual((GW.help_words(ACCT), GW.linked_words(ACCT), GW.onboard_words()), (GW.HELP, GW.LINKED, GW.ONBOARD))
+        # Sasha 253 · item 5: the one brain answers everyone — no switch, so these are the only WhatsApp words
+        self.assertEqual((GW.help_words(ACCT), GW.linked_words(ACCT), GW.onboard_words()), (H.wa_help(), H.wa_linked(), H.wa_onboard()))
+        for w in (GW.help_words(ACCT), GW.linked_words(ACCT)):
+            self.assertIn(H.SAY, w)
+        self.assertIn("{web}", GW.onboard_words())                            # an unlinked number: ONE short line — link it at /you
+        self.assertEqual(GW.onboard_words(), "Hi, I'm Sasha by Kanoe. To use me on WhatsApp, link this number once at {web} — it takes a minute.")
 
     def test_the_old_conductors_lists_feed_nothing_else(self):
         """CAPABILITY_FACTS / ABILITIES stay only in the old conductor's own prompt (retired with it): no other surface reads them."""

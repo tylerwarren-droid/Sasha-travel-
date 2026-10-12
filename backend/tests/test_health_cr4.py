@@ -211,8 +211,9 @@ class NewInMadrid(Base):
         self.assertIn("ask before 18 January", rs[1]["text"])
 
     def test_mode_switch_and_sasha_untouched(self):
+        TG.stand_in_brain(self)   # Sasha 253 · item 5: outside a space, Sasha is the one brain (was: the old HELP text)
         self.say("hello")
-        self.assertIn("Tell me what to book", self.bodies()[-1])
+        self.assertEqual(self.bodies()[-1], "agent: hello")
         self.say("salud")
         self.say("exit")
         self.assertEqual(self.bodies()[-1], "Back to Sasha — ask me anything: a booking, a flight, your plans.")

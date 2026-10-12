@@ -2,11 +2,13 @@
 
 A linked guest books, cancels and gets receipts entirely in WhatsApp, on the SAME booking routes the web chat uses,
 called in process (no HTTP to ourselves) as that guest's own account. What is never done:
-  · Sasha 237 · ONE BRAIN: behind SASHA_WA_BRAIN (agent | agent_for:<ids>), a message goes to the SAME agent as /s2
+  · Sasha 237 / 253 · ONE BRAIN FOR EVERYONE: every linked account's message goes to the SAME agent as /s2
     (wa_agent.agent_turn → sasha.turn surface "wa": S2's tools, persona, guards and the one yes rule), drawn for WhatsApp by
-    wa_agent.render. Identity, STOP/START, reminders words, products, invitations and the 24-hour rule stay here, in front.
-    SASHA_WA_BRAIN=old (the default) is the path below exactly: the scope gate's own booking functions (handoff,
-    chat_request) do the whole turn, and the cascade's fixed sentences answer the rest (S-75 §0). The cascade goes in Sasha 240.
+    wa_agent.render. Identity, STOP/START, reminders words, products, invitations, LINK codes and the 24-hour rule stay here,
+    in front. The OLD WhatsApp flow is retired as an entry point (Sasha 253 · item 5 — see turn()): no WhatsApp message reaches
+    _new_request / _answer_pending except through the kept front routes (invitations, the three demos until G11) and the G3
+    resolver (Sasha's own open questions). The functions stay: the web voice avatar (voice_turn), the brain's venue tools,
+    products, invitations and proactive call them.
   · ⛔ A VENUE IS NEVER ANSWERED. Only numbers named in SASHA_GUEST_WHATSAPP_TO (the sandbox's) serve guests; on every
     other number — Sasha's own +44, where venues write — the venue path runs byte for byte as before. On a guest
     number a sender matching a venue call still takes the venue path.
@@ -90,32 +92,24 @@ HELP = ("Tell me what to book in one message — the kind of place, the area, th
         "only contact them after your yes. \"Cancel <name>\" cancels a booking; \"my bookings\" lists them.")
 
 
-# Sasha 249 · ONE CAPABILITY LIST (EU 245 §1.5 / T10): when the one brain answers this account (wa_agent.on), HELP / LINKED /
-# ONBOARD are generated from agapi/s2_home.py CAPABILITIES — the same list as /s2's card, its chips and /next. The old brain keeps
-# the three fixed lines above: they say what IT does, and they go with it.
-def help_words(account: Optional[str]) -> str:
-    from . import wa_agent as WA
-    if WA.on(account):
-        from agapi import s2_home as S2H
-        return S2H.wa_help()
-    return HELP
+# Sasha 249 · ONE CAPABILITY LIST (EU 245 §1.5 / T10): HELP / LINKED / ONBOARD on WhatsApp are generated from agapi/s2_home.py
+# CAPABILITIES — the same list as /s2's card, its chips and /next. Sasha 253 · item 5: the one brain answers everyone, so these are
+# the only WhatsApp words. The three fixed lines above stay only as exported names (HELP is still the web voice avatar's answer to
+# "hi" — voice_turn runs _new_request, unchanged).
+def help_words(account: Optional[str] = None) -> str:
+    from agapi import s2_home as S2H
+    return S2H.wa_help()
 
 
-def linked_words(account: Optional[str]) -> str:
-    from . import wa_agent as WA
-    if WA.on(account):
-        from agapi import s2_home as S2H
-        return S2H.wa_linked()
-    return LINKED
+def linked_words(account: Optional[str] = None) -> str:
+    from agapi import s2_home as S2H
+    return S2H.wa_linked()
 
 
 def onboard_words() -> str:
-    """An unknown sender has no account: the one brain's words only when it answers EVERY account (SASHA_WA_BRAIN=agent)."""
-    from . import wa_agent as WA
-    if WA.mode() == "agent":
-        from agapi import s2_home as S2H
-        return S2H.wa_onboard()
-    return ONBOARD
+    """Sasha 253 · an unlinked number: ONE short line — link this number once at /you. Never the old flow, never a guest account."""
+    from agapi import s2_home as S2H
+    return S2H.wa_onboard()
 
 
 NO_CONTACT = ("I need the name and mobile to book under first. Add them once at {web} (kept with your consent), then ask me "
@@ -643,28 +637,10 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
     stopped = await IV.on_invitee_stop(sender, p.get("Body") or "")
     if stopped:
         return _twiml_message(stopped)
-    # Sasha 153 · NO SIGN-IN WALL: a new number gets its OWN private guest account on its first message, and that message
-    # is answered as a normal turn. It wrote first, so Sasha answers here; it never gets a first message (consent "i1" < v3)
-    from . import guest_accounts as GA
-    if GA.on() and not re.fullmatch(r"\s*(stop|unsubscribe|baja|parar)\s*", p.get("Body") or "", re.I):
-        acct, why = await GA.create_guest("whatsapp", None)
-        if acct is not None:
-            try:
-                await STORE.link({"account_id": acct["account_id"], "wa_id_sha256": key, "number_e164": sender, "linked_at": now,
-                                  "consent_at": now, "consent_wording_version": GA.INBOUND_VERSION,
-                                  "consent_text_sha256": hashlib.sha256(GA.INBOUND_CONSENT.encode()).hexdigest()})
-                await STORE.put_state(key, {"history": [], "pending": None, "last_inbound_at": now, "link_tries": []})
-                ch = await STORE.channel_for(key)
-            except Exception as e:   # never a crashed webhook, never an orphan account: undone, and the old sentence instead
-                log.error("[guest_whatsapp] the new guest could not be linked: %s: %s", type(e).__name__, e)
-                from . import ops
-                await ops.ADMIN("DELETE", f"/admin/users/{acct['account_id']}", {})
-                ch, why = None, "the new guest could not be linked"
-            if ch:
-                _spawn(_turn(ch, to, p))
-                return ""
-        log.warning("[guest_whatsapp] no automatic guest for a new number: %s", why)
-    # an unknown sender: one fixed sentence, at most every ten minutes; only the hash and the time are kept
+    # Sasha 253 · item 5 — RETIRED: Sasha 153's automatic guest account for a new number (GA.create_guest("whatsapp") + STORE.link
+    # + a turn, behind SASHA_AUTO_GUESTS). Tyler (mailbox 807): a new user links their number once on /you; an unlinked number gets
+    # the ONE line below — never the old flow, never an account made for it.
+    # an unknown sender: one short line, at most every ten minutes; only the hash and the time are kept
     tries = [t for t in st.get("link_tries") or [] if _dt(t) > now - timedelta(hours=1)]
     onboarded = [t for t in tries if t.startswith("onboard:")]
     if onboarded and _dt(onboarded[-1]) > now - timedelta(minutes=10):
@@ -790,12 +766,9 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         await STORE.put_state(key, st)
         await deliver({**ch, "opted_out_at": None}, frm, out.text(STOPPED), now)   # said once, then silence
         return out
-    # Sasha 249 · ONE BRAIN, DECIDED FIRST (EU 245 step 1): for an account on the agent (SASHA_WA_BRAIN), everything after STOP /
-    # opt-out and the reminders consent words goes to sasha.turn — empty messages, documents, every button. Only the product
-    # spaces (Tyler's keyword switch: campus / relocate / españa, "sasha" back — kept exactly, Sasha 246) and invitations (no agent
-    # tool yet) stay in front of it. The old HELP text and old-flow buttons never answer a brain account.
+    # Sasha 249 / 253 · ONE BRAIN FOR EVERYONE: everything after STOP / opt-out and the reminders consent words goes to sasha.turn —
+    # empty messages, documents, every button. Only the FRONT items below stay in front of it (see the routing at the end).
     from . import wa_agent as WA
-    brain = WA.on(account)
     # CR 1 products (backend/products/whatsapp.py): CampusMe / relocation by MODE on this one sandbox number. Not in a
     # mode and no "campus…"/"relocation…" keyword → returns False at once and everything below runs as before.
     from products import whatsapp as PW
@@ -882,42 +855,44 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     if handed and handed != body and not payload:
         body = handed
     # Sasha 238 · a PHOTO on the one brain → the same handlers as /s2 (products first, above)
-    if brain and WA.is_photo(p) and not payload:
+    if WA.is_photo(p) and not payload:
         await WA.photo_intake(ch, p, st, out, now)
         await _save_keeping_their_question(key, st, loaded)   # Sasha 252 · Sasha's open question stays
         await deliver(ch, frm, out, now)
         return out
-    if brain and not body and not payload:   # Sasha 249 · empty, or a file that isn't a photo: the brain answers it, never HELP
+    if not body and not payload:   # Sasha 249 · empty, or a file that isn't a photo: the brain answers it, never HELP
+        # Sasha 253 · RETIRED: the old flow's fixed answers to an empty message (HELP, "Got the picture, but…", "couldn't make out")
         has_media = int(p.get("NumMedia") or 0) > 0
         audio = str(p.get("MediaContentType0") or "").startswith("audio")
         body = ("[they sent a voice note that couldn't be made out]" if audio else
                 f"[they sent a file ({p.get('MediaContentType0') or 'unknown type'}) with no words]" if has_media else "[an empty message]")
-    if not body and not payload:
-        # Sasha 104 · a voice note or a picture arrives with no words: voice notes are phase 3 (F-3), so say so plainly
-        has_media = int(p.get("NumMedia") or 0) > 0
-        # Sasha 167 · a voice note IS heard (voice_text); one that couldn't be made out is said so, never "can't listen"
-        audio = str(p.get("MediaContentType0") or "").startswith("audio")
-        out.text(("I couldn't make out that voice note — could you send it again, or type it?" if audio else
-                  "Got the picture, but I can only read photos inside EspañaMe or RelocateMe for now (say “tell me about "
-                  "EspañaMe”). For anything else, tell me in words — a voice note works too.") if has_media else help_words(account))
-        await STORE.put_state(key, st)
-        await deliver(ch, frm, out, now)
-        return out
     if G.looks_like_secret(body):
         # S-78 · never stored (not in the history either), never passed on
         out.text(G.CARD_REPLY if G.looks_like_secret(body) == "card" else G.SECRET_REPLY)
         await STORE.put_state(key, st)
         await deliver(ch, frm, out, now)
         return out
-    # Sasha 237 · ONE BRAIN (SASHA_WA_BRAIN): a new message — or a button from the agent's own cards — goes to the same agent as
-    # /s2. A button from an OLD flow (in flight) finishes there; invitations stay in front (no agent tool for them yet).
-    # Sasha 249 · every button too — except the one the old flow is waiting on (its own nonce: an invitation's yes, a question asked
-    # before the switch). One question, one owner: the flow that asked it.
-    # Sasha 252 · G3 — ONE RESOLVER, before the model, tap or typed: Sasha's own open question (st["pending"]) is answered by the
-    # code that answers it today (_answer_pending, below) when this message answers it; anything else goes to the brain and the
-    # question stays open. It replaces Sasha 249's `old_owns` (which took only the tap).
-    sashas = brain and answers_sashas_question(st, body, payload, now)
-    if brain and not sashas and not (not payload and _invite_words(body, now)):
+    # Sasha 253 · item 5 — THE ROUTING (Tyler, mailbox 807/809: ONE BRAIN FOR EVERYONE). After the FRONT items above (opt-out /
+    # START, reminders words, STOP, me3 intros, switching / amb:, products and the space, the handed sentence, the secret guard),
+    # a message reaches the OLD handlers through exactly three kept routes, and nothing else does:
+    #   1. Sasha 252 · G3 — Sasha's OWN open question (st["pending"]: a no-reply / page offer, a Gmail find, the deposit, their page
+    #      sent, an invitation's question, and the questions they lead to) answered — tap or typed — by the code that asked it
+    #      (_answer_pending). The ONE owner of those questions. Not its answer after all → the brain.
+    #   2. An invitation request ("book dinner with Jon this week", S-80) → _invite, FRONT by design (no agent tool for it).
+    #   3. UNTIL TYLER ANSWERS G11: the three demos — the restaurant + spa combo (COMBO → _combo_start), the Kanoe Demo Spa
+    #      membership (demo_spa.INTENT → _spa_start), the Kanoe Demo Market reorder (demo_shop.REORDER → _reorder) — taken on
+    #      exactly the words _new_request takes them on (_demo_start), and their own open questions (DEMO_KINDS, or the combo's
+    #      cards / read-back riding with its plan) answered by _answer_pending, as today.
+    # RETIRED as WhatsApp entry points (the functions stay — voice_turn, the brain's venue tools, products, invitations and
+    # proactive call them): the non-brain branch `_answer_pending` → `_new_request` (the scope gate: HELP, receipts, cancel_find,
+    # forwarded confirmation, itinerary_q, flights, hotels, captcha test, start-another, placeless search, booking_handoff → old
+    # cards (_find), chat_request, ASK_ONE, WB.web_turn), the old card flow and the old question flow for a new message, the
+    # trailing _reminders_offer / space label of that branch (the brain has its own: _brain_tail), and Sasha 249's per-account
+    # switch (SASHA_WA_BRAIN).
+    sashas = answers_sashas_question(st, body, payload, now)
+    demo = _demo_open(st, payload) or (None if payload else _demo_start(body, now))
+    invite = not payload and not sashas and not demo and _invite_words(body, now)
+    if not (sashas or demo or invite):
         if body and not payload:   # Sasha 253 · G4 — a space set on the laptop, continued on the phone (before the brain)
             handed = await _space_resume(ch, body, out, now)
             if handed == "":
@@ -934,8 +909,15 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     st["combo"] = (st.get("pending") or {}).pop("combo", None)
     ctx = {"account": account, "ch": ch, "frm": frm, "st": st, "now": now, "out": out, "button_text": (p.get("ButtonText") or "").strip(),
            "wa_number": str(p.get("From") or "").replace("whatsapp:", "") or None}   # Sasha 167 · the guest's own number, to book under
-    handled = await _answer_pending(ctx, body, payload)
-    if not handled and sashas:
+    handled = await _answer_pending(ctx, body, payload)   # as the old flow did: the open question first
+    if not handled and demo in DEMO_STARTS:   # until Tyler answers G11 · the demo's own start, on _new_request's own words
+        await DEMO_STARTS[demo](ctx, body)
+        handled = True
+    elif not handled and invite:   # S-80 · the invitation request → its own handler (FRONT by design)
+        from . import invitations as IV
+        await _invite(ctx, IV.invite_request(body, now))
+        handled = True
+    if not handled:
         # Sasha 252 · it looked like the answer but the question's own rules let it go (expired cards, a trip question): the
         # message is the brain's, as any new one is
         combo = st.pop("combo", None)
@@ -943,16 +925,7 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
             st["pending"]["combo"] = combo
         await _brain_turn(ch, key, frm, body, payload, p, st, out, now, heard, loaded)
         return out
-    if not handled:
-        await _new_request(ctx, body)
-    offer = await _reminders_offer(ch)
-    if offer:
-        out.text(offer)
-    try:   # Sasha 194 · the space, always said (Sasha 179's automatic "↪ Switching" is gone: spaces change only by their word)
-        if sw:
-            SW.label_space(out.items, None)
-    except Exception as e:
-        log.warning("[guest_whatsapp] no mode label: %s: %s", type(e).__name__, e)
+    await _brain_tail(ch, out)
     st["history"] = (st.get("history") or []) + [{"role": "user", "content": body}] + \
                     ([{"role": "assistant", "content": out.said()}] if out.items else [])
     st["history"] = st["history"][-HISTORY_KEEP:]
@@ -962,6 +935,55 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     await STORE.put_state(key, st)
     await deliver(ch, frm, out, now)
     return out
+
+
+# Sasha 253 · item 5 — THE THREE DEMOS, kept in front UNTIL TYLER ANSWERS G11 (restaurant + spa on one yes; Kanoe Demo Spa with the
+# saved membership; Kanoe Demo Market "reorder my usual"). Their open questions: the pending kinds they write, or the combo's plan
+# riding in any open question (its restaurant / spa cards and read-backs).
+DEMO_KINDS = ("combo_when", "combo_confirm", "spa_when", "vault_spa", "vault_order")
+
+
+def _demo_open(st: dict, payload: str) -> Optional[str]:
+    """"open" when the open question is one of the demos' own (or carries the combo's plan): _answer_pending answers it, as
+    today. A tap counts only when it is that question's own button (_payload_ok)."""
+    pend = st.get("pending") or {}
+    if not (pend.get("kind") in DEMO_KINDS or pend.get("combo")):
+        return None
+    if payload:
+        try:
+            return "open" if _payload_ok(pend, payload) else None
+        except Exception:
+            return None
+    return "open"
+
+
+def _demo_start(body: str, now) -> Optional[str]:
+    """The words on which _new_request takes one of the three demos — its EXACT conditions, in its order: nothing earlier in
+    _new_request would take the message (help, "reset the demo", a cancellation, receipts, a forwarded confirmation, an
+    itinerary question, a flight, a hotel), then COMBO → "combo", demo_spa.INTENT → "spa", demo_shop.REORDER → "reorder"."""
+    t = body or ""
+    if not t:
+        return None
+    from . import demo_shop as DS, demo_spa as DSP, mailbox as MB, wa_brain as WB
+    from .itinerary_q import ASK_WHEN as _ASK_WHEN, TRIP as _TRIP, TRIPS as _TRIPS
+    if _HELP.match(t) or WB.RESET.match(t) or cancel_intent(t) is not None:
+        return None
+    if _RECEIPTS.search(t) and not _TRIP.search(t) and not _ASK_WHEN.search(t) and not _TRIPS.search(t):
+        return None
+    try:   # forwarded_confirmation's own test for "this is a confirmation" (before it files anything)
+        if len(t) >= 40 and MB._CONFIRM.search(t) and MB._when(t, now) and HO.booking_handoff(t, []) is None:
+            return None
+    except Exception:
+        return None
+    if ITINERARY_Q.search(t) or FLIGHT.search(t) or HOTEL.search(t):
+        return None
+    if COMBO.search(t):
+        return "combo"
+    if DSP.INTENT.search(t):
+        return "spa"
+    if DS.REORDER.search(t):
+        return "reorder"
+    return None
 
 
 async def _brain_turn(ch: dict, key: str, frm: str, body: str, payload: str, p: Dict[str, str], st: dict, out: "Out", now,
@@ -1156,11 +1178,14 @@ async def _reminders_offer(ch: dict) -> Optional[str]:
 
 
 async def _new_request(ctx: dict, body: str) -> None:
-    """The scope gate: a booking, a cancellation, receipts or help — anything else is the one fixed sentence."""
+    """The scope gate: a booking, a cancellation, receipts or help — anything else is the one fixed sentence.
+    Sasha 253 · item 5 — RETIRED as a WhatsApp entry point: no WhatsApp message reaches it (turn() routes everything to the one
+    brain, the kept front routes call their own handlers). Kept, unchanged, for the web voice avatar (voice_turn.py)."""
     out, st = ctx["out"], ctx["st"]
     history = st.get("history") or []
     if _HELP.match(body):
-        out.text(help_words(ctx["account"]))   # Sasha 249
+        # Sasha 253 · reached only by the web voice avatar now (voice_turn) — its own fixed line, as before the one brain
+        out.text(HELP)
         return
     from . import wa_brain as WB
     if WB.RESET.match(body or ""):   # Sasha 167 (4) · "reset the demo" — founder only, after a yes
@@ -1698,6 +1723,14 @@ async def _reorder(ctx: dict) -> None:
     ctx["st"]["pending"] = {"kind": "vault_order", "at": ctx["now"].isoformat(), "id": rid, "sha": sha, "lines": lines}
 
 
+async def _reorder_start(ctx: dict, body: str) -> None:
+    await _reorder(ctx)
+
+
+#: Sasha 253 · item 5 — the demos' starts kept in front of the one brain until Tyler answers G11 (turn → _demo_start)
+DEMO_STARTS = {"combo": _combo_start, "spa": _spa_start, "reorder": _reorder_start}
+
+
 async def _reorder_approve(ctx: dict, pend: dict) -> None:
     from . import demo_shop as DS
     from .vault.crypto import UseRefused
@@ -2108,6 +2141,8 @@ def _open_item(pend: dict) -> str:
 
 
 async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
+    """Sasha 253 · item 5 — on WhatsApp, reached only for Sasha's own open question (answers_sashas_question, the G3 resolver), a
+    demo's own question (until G11) and before an invitation request; the web voice avatar (voice_turn.py) calls it as before."""
     out, st, now = ctx["out"], ctx["st"], ctx["now"]
     pend = st.get("pending")
     if payload and (not pend or not _payload_ok(pend, payload)):

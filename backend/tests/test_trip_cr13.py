@@ -54,6 +54,7 @@ class Base(TG.Base):
         self.env = mock.patch.dict(os.environ, {"DUFFEL_ACCESS_TOKEN": "duffel_test_x"})
         self.env.start()
         self.link()
+        TG.stand_in_brain(self)   # Sasha 253 · item 5: the handed sentence goes to the one brain (the product's side is unchanged)
 
     def tearDown(self):
         ST.STORE, TR.HTTP, GW._find, PR.travel, TP._bookings = self.saved
@@ -78,15 +79,10 @@ class Relocation(Base):
         self.assertIn("1. ✈ Flights London → Madrid, Mon 1 Mar 2027 (your entry date), 1 adult", said)
         self.assertIn("2. 🏨 A hotel near your new address (Calle de Ejemplo 12, Madrid) for your first 3 nights", said)
         self.assertIn("Step 1: ✈ Flights London → Madrid", said)
-        # Sasha's OWN flight flow answered the handed sentence: a Duffel TEST search, her cards, her pending
-        (req,) = self.offer_requests()
-        self.assertEqual(req[2]["data"]["slices"][0]["departure_date"], "2027-03-01")
-        self.assertIn("from Duffel in TEST mode", said)
-        self.assertEqual(run(GW.STORE.get_state(GW.wa_key(TG.GUEST)))["pending"]["kind"], "flight_cards")
-        self.say("NEXT")                                            # after her flow: the hotel
-        (f, draft), = self.found
-        self.assertEqual(f["where"].split(",")[0], "Madrid")
-        self.assertEqual((draft["parts"]["when"]["at"], draft["parts"]["nights"]), ("2027-03-01T15:00", 3))
+        # Sasha 253 · item 5 — the handed sentence reaches the ONE brain, as typed (its search_flights; one yes per booking)
+        self.assertEqual(self.brain_saw, ["flights from London to Madrid on 2027-03-01 for 1"])
+        self.say("NEXT")                                            # after her turn: the hotel, handed the same way
+        self.assertEqual(self.brain_saw[-1], "a hotel in Madrid, Spain from 2027-03-01 to 2027-03-04 for 1")
         self.assertIn("Step 2: 🏨 A hotel near your new address", self.said())
         self.booked = [{"on": "2027-03-01", "time": "07:10", "text": "✈ Flight BA 458 London → Madrid (TEST booking) (confirmed)"},
                        {"on": "2027-03-01", "time": "15:00", "text": "🏨 Hotel Ejemplo (TEST booking — no hotel contacted) (confirmed)"}]
@@ -102,11 +98,11 @@ class Relocation(Base):
         for t in ("relocation", "DEMO", "SIGNED", "UK", "SKIP", "1 March 2027"):
             self.say(t)
         self.say("flights from Paris to Madrid on 3 March 2027")
-        self.assertEqual(len(self.offer_requests()), 0)                       # the space kept it
+        self.assertEqual(self.brain_saw, [])                                  # the space kept it
         self.say("sasha")
         self.say("flights from Paris to Madrid on 3 March 2027")
         self.assertNotIn("asked once", self.said())
-        self.assertEqual(len(self.offer_requests()), 1)                       # her own Duffel search, as typed
+        self.assertEqual(self.brain_saw[-1], "flights from Paris to Madrid on 3 March 2027")   # Sasha's, as typed (the one brain)
 
     def test_no_entry_date_is_asked_first(self):
         for t in ("relocation", "DEMO", "SIGNED", "UK", "SKIP", "SKIP"):
@@ -144,14 +140,12 @@ class Campus(Base):
         (o, d, depart, mode), = self.routes
         self.assertEqual((mode, depart.strftime("%H:%M")), ("DRIVE", "12:30"))
         self.assertIn("Yale University, New Haven, CT", o)
-        (req,) = self.offer_requests()
-        self.assertEqual(req[2]["data"]["slices"][0]["departure_date"], sat.isoformat())
+        # Sasha 253 · item 5 — each booking handed to the ONE brain as its sentence
+        self.assertEqual(self.brain_saw, [f"flights from Chicago to New Haven on {sat.isoformat()} for 2"])
         self.say("NEXT")
-        f, draft = self.found[-1]
-        self.assertTrue(f["where"].startswith("New Haven"))
-        self.assertEqual(draft["parts"]["when"]["at"], f"{sat.isoformat()}T15:00")
+        self.assertEqual(self.brain_saw[-1], f"a hotel in New Haven, United States from {sat.isoformat()} to {sun.isoformat()} for 2")
         self.say("NEXT")
-        self.assertTrue(self.found[-1][0]["where"].startswith("Philadelphia"))
+        self.assertTrue(self.brain_saw[-1].startswith("a hotel in Philadelphia, United States from "))
         self.say("NEXT")
         it = self.bodies()[-1]
         self.assertIn("🎓 Yale campus visit", it)

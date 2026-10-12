@@ -297,14 +297,16 @@ class OnWhatsApp(Fixtures):
         self.assertIn("✅ Registered ✓ — Yale, Wed 14 Oct 9am, confirmation #YA-55120", self.said())
 
     def test_modes_switch_and_sasha_is_untouched_outside_them(self):
+        TG.stand_in_brain(self)   # Sasha 253 · item 5: outside a space, Sasha is the one brain (was: the old HELP text)
         self.say("hello")
-        self.assertIn("Tell me what to book", self.bodies()[-1])
+        self.assertEqual(self.bodies()[-1], "agent: hello")
         self.say("campus")
         self.assertIn("CampusMe here", self.bodies()[-1])
         self.say("exit")
         self.assertEqual(self.bodies()[-1], "Back to Sasha — ask me anything: a booking, a flight, your plans.")
         self.say("hello")
-        self.assertIn("Tell me what to book", self.bodies()[-1])
+        self.assertEqual(self.bodies()[-1], "agent: hello")
+        self.assertEqual(self.brain_saw, ["hello", "hello"])                 # the space's words never reached her
         self.assertEqual(self.api_paths(), [])                          # Sasha's booking routes never called by CampusMe
 
     def test_a_password_typed_in_a_mode_is_refused_and_not_kept(self):

@@ -11,6 +11,7 @@
  *  · Tap the bubble: her face back (a new session) — while it's up, her replies are spoken by it; tap again (or 90 s quiet) → bubble.
  */
 import { useEffect, useRef, useState } from 'react'
+import { openingShown, openingEnds } from '@/lib/greeting-rule.mjs'
 
 export type Talker = {
   unlock: () => void
@@ -103,8 +104,9 @@ function chroma(video: HTMLVideoElement, canvas: HTMLCanvasElement): () => void 
 /** Sasha 231 · the bubble sits ABOVE the "Voice on · Type instead" row (it covered "Type instead" at 92 px). */
 const BUBBLE_BOTTOM = 'calc(env(safe-area-inset-bottom) + 128px)'
 
-export default function S2Hello({ talker, name, signedIn, backLine, dormant, asleep = false, onWake }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean
-  asleep?: boolean; onWake?: () => void }) {   // Sasha 246 item 2 · asleep: her face stops and dims; a tap on it wakes her
+export default function S2Hello({ talker, name, signedIn, backLine, dormant, asleep = false, onWake, started = false }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean
+  asleep?: boolean; onWake?: () => void
+  started?: boolean }) {   // Sasha 246 item 2 · asleep: her face stops and dims; a tap on it wakes her · Sasha 251 · started: the conversation has begun — the opening ends
   type Phase = 'off' | 'starting' | 'face' | 'faceLate' | 'voice' | 'tap' | 'bubble' | 'faceAgain'
   const [phase, setPhase] = useState<Phase>('off')
   const [tapFor, setTapFor] = useState<'face' | 'voice'>('voice')
@@ -129,6 +131,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   const idle = useRef<ReturnType<typeof setTimeout> | null>(null)
   const early = useRef<{ p: Promise<Face>; t0: number } | null>(null)   // her face starts at mount, before the sign-in check returns
   const asleepRef = useRef(asleep)   // Sasha 246 item 2
+  const startedRef = useRef(started)   // Sasha 251 · read by the opening's own async steps (a late face, a blocked voice)
 
   useEffect(() => {
     if (signedIn === false) { early.current?.p.then(f => f.stop()).catch(() => {}); early.current = null; return }
@@ -155,7 +158,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     return text.current
   }
   const speakFace = async () => {
-    if (asleepRef.current) return handoff()   // Sasha 246 · asleep: no hello — straight to the (dimmed) bubble
+    if (asleepRef.current || startedRef.current) return handoff()   // Sasha 246 · asleep: no hello — straight to the (dimmed) bubble · Sasha 251: or already talking
     words()
     const f = face.current
     if (!f) return handoff()
@@ -163,8 +166,9 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     setTimeout(handoff, backRef.current ? Math.max(1500, secs * 1000 + 500) : back.current ? Math.min(2000, Math.max(1000, secs * 1000 + 300)) : Math.max(2500, secs * 1000 + 900))   // back: ~1–2 s (with her memory: its line), then away
   }
   const speakVoice = async () => {
-    if (asleepRef.current) return handoff()   // Sasha 246
+    if (asleepRef.current || startedRef.current) return handoff()   // Sasha 246 · Sasha 251: they already started — no hello over them
     const r = await talker.sayNow(words())
+    if (r === 'blocked' && startedRef.current) return handoff()   // Sasha 251 · they started talking meanwhile: no tap card over the chat
     if (r === 'blocked') { setTapFor(face.current ? 'face' : 'voice'); setPhase('tap'); return }   // Sasha 232 · her face, if it came, with the tap
     handoff()
   }
@@ -188,7 +192,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     const go = setTimeout(() => {   // out of the effect's own pass (no state set while it runs)
     let greeted = false
     try { greeted = sessionStorage.getItem('s2_hello') === '1' } catch { /* private mode */ }
-    if (greeted) { setPhase('bubble'); return }
+    if (greeted || startedRef.current) { setPhase('bubble'); return }   // Sasha 251 · already talking: no opening over it
     setPhase('starting')
     const v = video.current as HTMLVideoElement
     const t0 = early.current?.t0 ?? performance.now()
@@ -209,7 +213,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
       if (settled) return
       settled = true
       clearTimeout(timer)
-      if (asleepRef.current) { face.current = f; handoff(); return }   // Sasha 246 · fell asleep before her face came: it never speaks
+      if (asleepRef.current || startedRef.current) { face.current = f; handoff(); return }   // Sasha 246 · fell asleep before her face came: it never speaks · Sasha 251 · or they started talking
       face.current = f
       keyOn()
       setPhase('face')
@@ -272,7 +276,20 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     // eslint-disable-next-line react-hooks/exhaustive-deps -- on the change only
   }, [asleep])
 
-  const big = phase === 'starting' || phase === 'face' || phase === 'faceLate' || phase === 'faceAgain' || (phase === 'tap' && tapFor === 'face')
+  // Sasha 251 · THE GREETING (lib/greeting-rule.mjs): the opening shows on arrival and ends the moment the conversation starts —
+  // her face (if up) stops, the card with "Tap to hear Sasha" goes, she becomes the bubble. Nothing of it is drawn after that.
+  useEffect(() => {
+    startedRef.current = started
+    if (!openingEnds(phaseRef.current, started)) return
+    try { sessionStorage.setItem('s2_hello', '1') } catch { /* private mode */ }
+    if (phaseRef.current === 'starting') return   // the opening's own handlers see startedRef and hand off without a word
+    const t = setTimeout(() => { void handoff() }, 0)   // out of the effect's own pass
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on the change only
+  }, [started])
+
+  const shown = openingShown(phase, tapFor, started)   // Sasha 251 · the one place that says what the opening draws
+  const big = shown === 'face'
   return (
     <>
       <div onClick={phase === 'faceAgain' ? collapse : undefined} style={{
@@ -281,9 +298,9 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
           : { right: 16, bottom: BUBBLE_BOTTOM, width: 0, height: 0, borderRadius: '50%', opacity: 0 }) }}>
         <video ref={video} playsInline autoPlay muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0, pointerEvents: 'none' }} />
         <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 18%', display: 'block' }} />
-        {phase === 'tap' && tapFor === 'face' && <button onClick={tapToHear} style={{ position: 'absolute', left: '50%', bottom: 18, transform: 'translateX(-50%)', padding: '12px 20px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700, fontSize: 16 }}>Tap to hear Sasha</button>}
+        {big && phase === 'tap' && <button onClick={tapToHear} style={{ position: 'absolute', left: '50%', bottom: 18, transform: 'translateX(-50%)', padding: '12px 20px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700, fontSize: 16 }}>Tap to hear Sasha</button>}
       </div>
-      {phase === 'voice' || (phase === 'tap' && tapFor === 'voice') ? (
+      {shown === 'card' ? (
         <div style={{ position: 'fixed', zIndex: 40, left: 16, right: 16, top: 'calc(env(safe-area-inset-top) + 110px)', maxWidth: 520, margin: '0 auto', padding: 18, borderRadius: 20, background: '#16161f', border: '1px solid rgba(255,255,255,.12)', color: '#fff', fontSize: 17, lineHeight: 1.45 }}>
           {line}
           {phase === 'tap' && <div><button onClick={tapToHear} style={{ marginTop: 12, padding: '10px 18px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700 }}>Tap to hear Sasha</button></div>}

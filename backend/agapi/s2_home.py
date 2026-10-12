@@ -43,7 +43,8 @@ CAPABILITIES: List[Dict] = [
                ("Put a booking in your calendar", "add_to_calendar"),
                ("Tell you everything I've done today", "get_activity")]},
     {"group": "Your documents", "say": "keep your passport safe", "chip": ("Add my passport", "keep_add"),
-     "items": [("Keep your passport and loyalty cards — I only ever see a mask", "keep_add")]},
+     "items": [("Keep your passport and loyalty cards — I only ever see a mask", "keep_add"),
+               ("Keep your booking name and mobile — asked once", "save_contact")]},   # Sasha 253 · G5
     # Sasha 236 · every tool she has gets its line (EU 232 §2.1): each still backed by a tool /s2 has (tests/test_s2_225.py)
     {"group": "Your bookings", "say": "keep track of your bookings", "chip": ("What's coming up?", "my_plans"),
      "items": [("Everything you've booked, in one place", "my_plans"),
@@ -182,7 +183,20 @@ def tools() -> List[dict]:
         _t("remember_name", "Pacioli", remember_name, "When they tell you what to call them (their first name — e.g. after you asked "
            "\"What should I call you?\"), save it; you'll greet them by it from then on.",
            {"name": {"type": "string", "maxLength": 60}}, ["name"], {"type": "object", "properties": {"saved": {"type": "boolean"}}}, []),   # Sasha 246
+        # Sasha 253 · the booking contact (G5): asked once, saved on the one person record (/api/booking/contact), with the consent
+        _t("save_contact", "Pacioli", _VN().save_contact, _VN().SAVE_CONTACT_DESC,
+           {"name": {"type": "string", "maxLength": 80, "description": "their name as they said it"},
+            "mobile": {"type": "string", "description": "the mobile as they said it, ideally with its country code"},
+            "this_number": {"type": "boolean", "description": "WhatsApp: they said 'this number'"},
+            "country": {"type": "string", "description": "ISO-2 of the venue, if the mobile has no country code"}}, [],
+           {"type": "object", "properties": {"saved": {"type": "boolean"}}},
+           ["not_their_words", "name_missing", "mobile_missing", "mobile_unclear", "not_saved", "store_unreachable"]),
     ]
+
+
+def _VN():
+    from agapi import venues
+    return venues
 
 
 # ── routes (mounted under the agent router → /api/agent/…) ───────────────────────────────────────────────────────────────────

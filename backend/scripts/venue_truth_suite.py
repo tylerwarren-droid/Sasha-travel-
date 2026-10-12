@@ -84,6 +84,9 @@ async def main() -> bool:
         check("(b) 'prefilled form' → on their screen at once, no second yes", out.get("status") in ("page_on_phone", "page_link")
               and out.get("booked") is False and ctx.account not in VN._HELD, str(out)[:200])
         check("(b) the short confirmation, in her voice", str(out.get("say", "")).startswith(V.DONE_FORM) and not V.check([out["say"]]), str(out.get("say")))
+        from app.agent import sasha as AG0
+        ev0 = AG0.render("hold_venue", out, {})   # Sasha 250 · "it's on your screen" only when it IS drawn (found live)
+        check("(b) the prefilled form is DRAWN from hold_venue (what she says is on screen, is)", (ev0 or {}).get("kind") == "prepared", str(ev0)[:120])
         prep = out.get("prepared") or {}
         check("(b) ready to confirm on the phone (venue.prepare_booking), every detail with it", "agapi.test/prepared/madrid.hammamalandalus.com" in str(prep.get("url"))
               and prep.get("prepared_by") == "venue.prepare_booking" and {"Day", "Time", "People", "Name", "Mobile"} <= {f["label"] for f in prep.get("fields") or []}, str(prep)[:240])

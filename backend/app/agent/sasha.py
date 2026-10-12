@@ -206,7 +206,9 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         if res.get("status") == "already_paid":
             return {"type": "render", "kind": "pay_here", "already_paid": True, "session_id": res.get("session_id")}
         return {"type": "render", "kind": "pay", "url": res["checkout_url"]} if res.get("checkout_url") else None
-    if tool == "book_venue" and isinstance(res.get("prepared"), dict):   # Sasha 248 · "fill it now": their page + every detail, one-tap copy
+    # Sasha 250 · the prefilled form now comes from hold_venue too (249: the form IS the go-ahead, no second yes) — found live: she
+    # said "Done — it's on your screen" and the card was never drawn, because only book_venue's result rendered it
+    if tool in ("book_venue", "hold_venue") and isinstance(res.get("prepared"), dict):   # Sasha 248 · "fill it now": their page + every detail, one-tap copy
         return {"type": "render", "kind": "prepared", **res["prepared"]}
     if tool == "book_venue" and (res.get("view_url") or res.get("page_url")):
         return {"type": "render", "kind": "handover", "url": res.get("view_url") or res.get("page_url"),

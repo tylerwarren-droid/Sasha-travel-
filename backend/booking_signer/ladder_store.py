@@ -57,10 +57,6 @@ class MemoryLinks:
             self.trip_items[l["trip_item_id"]]["status"] = "link_sent"
         return "ok"
 
-    async def request_accounts(self):
-        """Sasha 250 · every account with an email request out (sent): the no-reply call is theirs too, WhatsApp or not."""
-        return sorted({e["account_id"] for e in getattr(self, "emails", {}).values() if e.get("status") == "sent"})
-
     async def stale_links(self, before):
         """Sasha 131 · one-tap pages the guest hasn't pressed on (offered / opened) since before `before`."""
         return [{"link_id": k, "account_id": l["account_id"], "trip_item_id": l["trip_item_id"], "read_id": str(l["read_id"]),
@@ -163,13 +159,6 @@ class PostgresLinks:
 
     async def open_link(self, account_id, link_id, now):
         return await self._move(account_id, link_id, ("offered",), "link_sent", ", opened_at = $4", now)
-
-    async def request_accounts(self):
-        """Sasha 250 · every account with an email request out (sent, its booking still ahead)."""
-        rows = await self._run_links(lambda c: c.fetch(
-            "select distinct e.account_id from booking_emails e join trip_items t on t.id = e.trip_item_id "
-            "where e.status = 'sent' and t.status <> 'cancelled' and t.date_time > now()"))
-        return [str(r["account_id"]) for r in rows]
 
     async def stale_links(self, before):
         rows = await self._run_links(lambda c: c.fetch(

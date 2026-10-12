@@ -32,7 +32,7 @@ log = logging.getLogger("agapi.venues")
 _READS: Dict[str, Dict[str, dict]] = {}   # account → venue key → the read (read_id, rungs, facts…)
 _HELD: Dict[str, dict] = {}               # account → the prepared booking (route, id, sha, when it was said)
 _CANCEL: Dict[str, dict] = {}             # account → the prepared cancellation
-ROUTE_TO_PREFER = {"form": "form", "email": "email", "page": "one_tap", "call": "call", "call_email": "call_email"}
+ROUTE_TO_PREFER = {"form": "form", "email": "email", "page": "one_tap", "call": "call"}
 
 
 def _API():
@@ -260,73 +260,23 @@ async def engine_channel(card: Optional[dict], budget_s: float = 30.0) -> Option
 ENGINE_ROUTE = {"own_engine": "page", "form": "page", "widget": "page", "email": "email", "whatsapp": "page", "phone": "call"}
 
 
-HOTEL_WORDS = re.compile(r"\b(hotel|room|stay|hostel|apartment|alojamiento|habitaci[oó]n)\b", re.I)
-
-
-def timing(ctx, rd: dict, res: dict, at: str, now, eng: Optional[dict] = None) -> dict:
-    """Sasha 250 · THE BOOKING TIMING RULE (rows 234 + 526; Tyler, 12 Oct), on the ONE engine path, for every venue type — decided by
-    booking_signer/decide (its urgent_hours, 48 h) and the calls allow-list, never a second copy:
-      own form → book directly, any timing (the prefilled form; nothing reaches them until the person confirms)
-      no form, more than 48 h → a request (email / their WhatsApp), and wait for the reply
-      no form, within 48 h    → a call (+ the email at once when there is one), on ONE yes; their own page stays offered
-      a hotel: no reply within 24 h → the call, covered by the same yes (the read-back says so)"""
-    from booking_signer import decide as D, limits as L
-    hours = None   # the venue's hours-until, in its own time zone (as guest_whatsapp.decision_of reckons it)
-    try:
-        from zoneinfo import ZoneInfo
-        from booking_signer import venue_read as VR
-        tz = (VR.COUNTRIES.get(rd.get("country") or "") or (None, None, None, "Europe/Madrid"))[3]
-        hours = (datetime.fromisoformat(at).replace(tzinfo=ZoneInfo(tz)) - now).total_seconds() / 3600
-    except Exception:
-        hours = None
-    kinds = {k.get("kind") for k in ([eng] + [eng.get("alternative") or {}] if eng else [])} | {
-        {"phone": "phone", "email": "email"}.get(r, r) for r in (rd.get("rungs") or {})}
-    calls = "phone" in kinds and L.calls_on(ctx.account)
-    what = str(((res.get("what") or {}).get("category")) or "") + " " + str(a_what(res))
-    return {"hours": hours, "urgent": hours is not None and hours < D.urgent_hours(), "calls": calls, "phone": "phone" in kinds,
-            "email": "email" in kinds, "hotel": bool(HOTEL_WORDS.search(what) or (res.get("nights"))),
-            "urgent_hours": D.urgent_hours()}
-
-
-def a_what(res: dict) -> str:
-    w = res.get("what") or {}
-    return f"{w.get('activity') or ''} {w.get('category') or ''}"
-
-
-def urgent_route(tm: dict) -> Optional[str]:
-    """Within 48 h with no form: the call (and the email at once when there is one) — only when calls are on for them."""
-    if not (tm["urgent"] and tm["calls"]):
-        return None
-    return "call_email" if tm["email"] else "call"
-
-
 async def _engine_route(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Optional[str], eng: dict, card: Optional[dict]) -> Optional[dict]:
     """The engine's channel → the ONE question (a form AND another way: Tyler's words, verbatim) or that channel's read-back.
     None: hand on to the request executors (email / WhatsApp / call) with the route set."""
     from agapi import venue_truth as VT
     from app.agent import voice as V
-    tm = timing(ctx, rd, res, at, now, eng)
-    soon = urgent_route(tm)   # Sasha 250 · within 48 h, "handle it" is a call (+ the email), never a request left waiting
     if not route and eng.get("ask"):
-        alt = soon or ENGINE_ROUTE.get((eng.get("alternative") or {}).get("kind") or "", "email")
+        alt = ENGINE_ROUTE.get((eng.get("alternative") or {}).get("kind") or "", "email")
         return {"status": "choose_route", "venue": rd["venue"], "ask": V.ASK_BOOK,
                 "options": [{**o, "route": o["route"] or alt} for o in V.CHOICES],
                 "how": "Ask `ask` word for word, then hold_venue again with the route they chose."}
     route = route or ENGINE_ROUTE.get(eng.get("kind") or "")
-    if soon and route in ("email", "whatsapp") and eng.get("kind") not in FILLABLE_ENGINE:
-        route = soon   # a request-only venue within 48 h: the call (their WhatsApp/email alone may not be read in time)
-    elif tm["urgent"] and route in ("email", "whatsapp") and not tm["calls"]:
-        res.setdefault("_note", f"It's within {int(tm['urgent_hours'])} hours and I can't call them from this account, so it goes as a "
-                                "request — they may not reply in time.")
     if route in ("page", "form", "whatsapp") and eng.get("kind") in VT.PREPARED:   # venue.prepare_booking prepares it (row 775)
         held = await _prepared(ctx, a, rd, res, at, now, eng, card)
         # Sasha 249 · ONE QUESTION: the prefilled form IS their go-ahead — nothing reaches the venue until they confirm it themselves,
         # so no second yes. It goes on their screen now, recorded like any attempt.
         return await _finish(ctx, _HELD[ctx.account]) if held.get("status") == "awaiting_yes" and ctx.account in _HELD else held
     return None if route in (None, "no") else await _hold_inner(ctx, a, rd, res, at, now, route)
-
-
-FILLABLE_ENGINE = ("form", "own_engine", "widget")
 
 
 async def _prepared(ctx, a: dict, rd: dict, res: dict, at: str, now, eng: dict, card: Optional[dict]) -> dict:
@@ -449,32 +399,15 @@ async def _hold_inner(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Op
         elif r in ("call", "call_email") and "phone" in rungs:
             fi = rungs["phone"].get("fact_index")
             status, j = await GW.api(ctx.account, "POST", "/api/booking/calls",
-                                     {"reservation": {k: v for k, v in res.items() if not k.startswith("_")}, "read_id": rd["read_id"],
-                                      **({"fact_index": fi} if fi is not None else {})})
-            if status == 200 and r == "call_email" and "email" in rungs:
-                # Sasha 250 · URGENT (within 48 h): the call AND the email at once — ONE read-back, ONE yes sends both (row 234)
-                mine = await GR.address_of(ctx.account)
-                se, je = await GW.api(ctx.account, "POST", "/api/booking/emails", {
-                    "read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": res["how_many"]["count"], "name": contact_name,
-                    "email": mine or ""})
-                if se == 200:
-                    both = {"lines": list(j["read_back"].get("lines") or []) + ["— and at the same time, by email: —"]
-                            + list(je["read_back"].get("lines") or []),
-                            "sha256": hashlib.sha256((j["read_back"]["sha256"] + je["read_back"]["sha256"]).encode()).hexdigest()}
-                    return _hold(ctx, "call_email", j["call_id"], both, rd, res,
-                                 extra={"trip_item_id": j.get("trip_item_id"), "call_sha": j["read_back"]["sha256"],
-                                        "email_id": je["email_id"], "email_sha": je["read_back"]["sha256"]})
+                                     {"reservation": res, "read_id": rd["read_id"], **({"fact_index": fi} if fi is not None else {})})
             if status == 200:
                 return _hold(ctx, "call", j["call_id"], j["read_back"], rd, res, extra={"trip_item_id": j.get("trip_item_id")})
             why = GW.refusal_words(j, status)
         elif r == "email" and "email" in rungs:
             mine = await GR.address_of(ctx.account)
-            # Sasha 250 · a HOTEL: no reply within 24 h → the call, covered by this same yes (row 234) — the email route puts the
-            # plan in its read-back only when they publish a phone and calls are on for this account (ladder_routes auto_plan)
-            hotel = timing(ctx, rd, res, at, now)["hotel"]
             status, j = await GW.api(ctx.account, "POST", "/api/booking/emails", {
                 "read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": res["how_many"]["count"], "name": contact_name,
-                "email": mine or "", **({"auto_plan": True} if hotel else {})})
+                "email": mine or ""})
             if status == 200:
                 return _hold(ctx, "email", j["email_id"], j["read_back"], rd, res, extra={"trip_item_id": j.get("trip_item_id")})
             why = GW.refusal_words(j, status)
@@ -513,9 +446,7 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
                          if str(extra.get("platform") or "").startswith("their ") else
                          f"their {extra.get('platform') or 'booking'} page goes to their phone; they press book there") if extra else "",
                 "email": "Sasha emails them; it's a request until they reply",
-                "call": "Sasha calls them; it's booked only if they say yes on the call",
-                "call_email": "Sasha calls them and emails them at once (it's within 48 hours); booked only when they say yes"}.get(rung, ""),
-            **({"note": res["_note"]} if res.get("_note") else {})}
+                "call": "Sasha calls them; it's booked only if they say yes on the call"}.get(rung, "")}
     _HELD[ctx.account]["out"] = out   # Sasha 217 · the same booking held again gets these words, unchanged
     # Sasha 236 · held again in the turn they said yes to it (found live on /s2: she re-held and asked again, turn after turn):
     # the read-back is the one they heard in an EARLIER turn, and this turn's words are an explicit yes → book it now
@@ -643,20 +574,10 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
             raise _err("not_sent", (j or {}).get("say") or GW.refusal_words(j, status))
         return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where,
                 "line": __import__("app.agent.voice", fromlist=["x"]).SENT}   # Sasha 249 · her short confirmation
-    emailed = None
-    if rung == "call_email":   # Sasha 250 · the one yes covers both: the email first (it can't fail on a busy line), then the call
-        se, je = await GW.api(ctx.account, "POST", f"/api/booking/emails/{held['email_id']}/send",
-                              {"read_back_sha256": held["email_sha"], "approval": how}, timeout=60)
-        emailed = se == 200 and je.get("status") == "sent"
-    status, j = await GW.api(ctx.account, "POST", f"/api/booking/calls/{held['id']}/place",
-                             {"read_back_sha256": held.get("call_sha") or held["sha"], "approval": how}, timeout=120)
+    status, j = await GW.api(ctx.account, "POST", f"/api/booking/calls/{held['id']}/place", {"read_back_sha256": held["sha"], "approval": how}, timeout=120)
     if status != 200:
-        if emailed:
-            return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where, "emailed": True,
-                    "call": f"not placed: {GW.refusal_words(j, status)}", "line": __import__("app.agent.voice", fromlist=["x"]).SENT}
         raise _err("not_called", GW.refusal_words(j, status))
     return {"status": j.get("status"), "venue": venue, "when": held["summary"], "itinerary": where,
-            **({"emailed": emailed} if emailed is not None else {}),
             **({"scheduled_for": str(j.get("scheduled_for") or "")[11:16]} if j.get("status") == "scheduled" else {})}
 
 

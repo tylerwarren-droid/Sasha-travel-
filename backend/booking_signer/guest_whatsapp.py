@@ -1288,6 +1288,14 @@ def stay_of(body: str, now: datetime) -> Optional[dict]:
     return {"where": m["w"].strip(), "find": f, "a": a, "nights": nights, "party": HO.plain_party(body or "") or 2}
 
 
+def stay_what(nights: int, checkin: str, country: Optional[str]) -> dict:
+    """Sasha 138 · a room for N nights, as a call or a form says the stay (in Spanish in Spain). Shared with the brain (Sasha 253, G8)."""
+    out_day = (date.fromisoformat(checkin) + timedelta(days=nights)).isoformat()
+    en = f"a room for {nights} night{'s' if nights != 1 else ''} (check-out {out_day})"
+    es = f"una habitación para {nights} noche{'s' if nights != 1 else ''} (salida el {out_day})"
+    return {"activity": en, "activity_venue_lang": es if (country or "") == "ES" else en, "category": "other"}
+
+
 async def _hotels(ctx: dict, body: str) -> None:
     """Duffel Stays isn't enabled on this account and RateHawk has no credentials, so a hotel is NOT booked instantly: it is
     found (Google, with its own photo), and the room is requested from the hotel itself — its form, page or email — said so."""
@@ -1300,11 +1308,8 @@ async def _hotels(ctx: dict, body: str) -> None:
     out.text(f"Hotels for {nights} night{'s' if nights != 1 else ''} from {SN.day_words(a)}, {party} {'person' if party == 1 else 'people'}. "
              f"For the one you pick: a TEST booking (no hotel contacted), or a real request to the hotel.")
     ctx["no_test_card"] = True
-    out_day = (date.fromisoformat(a) + timedelta(days=nights)).isoformat()
-    en = f"a room for {nights} night{'s' if nights != 1 else ''} (check-out {out_day})"   # Sasha 138 · a call or a form says the stay
-    es = f"una habitación para {nights} noche{'s' if nights != 1 else ''} (salida el {out_day})"
     await _find(ctx, {"what": "hotel", "where": f.get("where") or m["w"].strip(), "country": f.get("country")},
-                {"parts": {"what": {"activity": en, "activity_venue_lang": es if (f.get("country") or "") == "ES" else en, "category": "other"},
+                {"parts": {"what": stay_what(nights, a, f.get("country")),
                            "when": {"mode": "at", "at": f"{a}T15:00"}, "how_many": {"count": party, "unit": "people"}, "nights": nights}})
 
 
@@ -1808,6 +1813,16 @@ def city_of(address: Optional[str]) -> Optional[str]:
     return c if len(c) >= 2 else None
 
 
+def luxe_of(what: Optional[str]) -> bool:
+    """Sasha 104 · they asked for luxury ("luxury", "upscale", "fine dining", "lujo"…). Shared with the brain (Sasha 253, G14)."""
+    return any(q in HO.LUXURY for q in HO.qualities(what or ""))
+
+
+def luxe_first(order: list, cands: dict) -> list:
+    """Sasha 104 · "luxury": Google's €€€ and €€€€ first, best rated within; the rest after, never dropped."""
+    return sorted(order, key=lambda pid: not ((cands.get(pid) or {}).get("price_level") or 0) >= 3)
+
+
 async def _find(ctx: dict, f: dict, draft: dict) -> None:
     from .ranking import rating_words
     from .venue_read import distance_words
@@ -1839,9 +1854,9 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
     ranking = j.get("ranking") or {}
     chip = f.get("priority") if f.get("priority") in (ranking.get("orders") or {}) else ranking.get("default", "rated")
     order = (ranking.get("orders") or {}).get(chip) or list(cands)
-    luxe = any(q in HO.LUXURY for q in HO.qualities(f.get("what") or ""))
-    if luxe:   # Sasha 104 · "luxury": Google's €€€ and €€€€ first, best rated within; the rest after, never dropped
-        order = sorted(order, key=lambda pid: not ((cands.get(pid) or {}).get("price_level") or 0) >= 3)
+    luxe = luxe_of(f.get("what"))
+    if luxe:
+        order = luxe_first(order, cands)
     shown = [cands[i] for i in order if i in cands][:3]
     if j.get("note"):   # Sasha 187 · said in one line: online-only, looked further, or none online
         out.text(j["note"])
@@ -2681,15 +2696,20 @@ async def _send_link(ctx: dict, rd: dict, reservation: dict, name: str, plan: Op
     ctx["st"]["pending"] = {"kind": "link", "at": ctx["now"].isoformat(), "link_id": j["link_id"], "venue": rd["venue"], "when": at, **keep}
     await _outcome(ctx["account"], {**keep, "link_id": j["link_id"], "venue": rd["venue"], "read": rd}, "page", status="page_link", j=j)   # Sasha 247 · their page, sent
     if nights:
-        lines = (j.get("read_back") or {}).get("lines") or []
-        ctx["out"].text(f"One tap: {rd['venue']}'s own booking engine ({j.get('platform') or 'their booking page'}).\n"
-                        + "\n".join("• " + ln for ln in lines) + f"\n{j['url']}")
+        ctx["out"].text(hotel_link_text(rd["venue"], j))
         return True
     from . import slot_link as SL   # Sasha 163 · the one platform message
     dt = datetime.fromisoformat(at)
     ctx["out"].text(SL.platform_message(rd["venue"], j.get("platform") or "their booking page", dt.date(), dt.time(),
                                         reservation["how_many"]["count"], bool(j.get("slot_filled")), j["url"]))
     return True
+
+
+def hotel_link_text(venue: str, j: dict) -> str:
+    """Sasha 138 · a hotel's own booking engine, the stay in its link: one tap. Shared with the brain (Sasha 253, G8)."""
+    lines = (j.get("read_back") or {}).get("lines") or []
+    return (f"One tap: {venue}'s own booking engine ({j.get('platform') or 'their booking page'}).\n"
+            + "\n".join("• " + ln for ln in lines) + f"\n{j['url']}")
 
 
 def _hours_of(read: dict, now) -> dict:
@@ -2986,9 +3006,7 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
             if status == 200:
                 sentence = SN.confirm_sentence(reservation, rd["venue"])
                 if d.get("nights"):   # Sasha 135 · a hotel: a REQUEST for a room, said as one — never "book … at 15:00"
-                    n = int(d["nights"])
-                    sentence = (f"Email {rd['venue']} to ask for a room for {reservation['how_many']['count']}, {SN.day_words(at[:10])} for "
-                                f"{n} night{'s' if n != 1 else ''}? It's a request — nothing is booked until they reply.")
+                    sentence = room_email_sentence(rd["venue"], reservation["how_many"]["count"], at[:10], int(d["nights"]))
                 await _ask_yes(ctx, "email", j["email_id"], j["read_back"], sentence, rd["venue"],
                                extra={"summary": summary(reservation), "trip_item_id": j.get("trip_item_id"), **keep})   # Sasha 247 · the ledger's key
                 return
@@ -2999,14 +3017,10 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
             from . import guest_receipt as GR, ladder_routes as LR
             mine = await GR.address_of(ctx["account"]) if LR.LADDER_STORE is not None else None
             day = d.get("day") or ((reservation.get("when") or {}).get("at") or "")[:10]
-            want = (d.get("quote_what") or (d.get("what") or {}).get("activity") or "an appointment").strip()
-            status, j = await api(ctx["account"], "POST", "/api/booking/emails",
-                                  {"read_id": rd["read_id"], "name": contact["name"], "email": mine or "",
-                                   "quote": {"what": want if len(want.split()) >= 2 else f"{want} — please tell me what you can offer",
-                                             "dates": SN.day_words(day) if day else ""}})
+            want = d.get("quote_what") or (d.get("what") or {}).get("activity")
+            status, j = await api(ctx["account"], "POST", "/api/booking/emails", quote_email(rd["read_id"], contact["name"], mine, want, day))
             if status == 200:
-                sentence = (f"I'll send {rd['venue']} your request and ask for a date and a quote"
-                            f"{' for ' + SN.day_words(day) if day else ''}. Shall I?")
+                sentence = quote_sentence(rd["venue"], day)
                 await _ask_yes(ctx, "email", j["email_id"], j["read_back"], sentence, rd["venue"],
                                extra={"summary": "", "trip_item_id": j.get("trip_item_id"), **keep})   # Sasha 247 · the ledger's key
                 return
@@ -3014,6 +3028,25 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
     st["pending"] = None
     said = f"I can't book {rd['venue']} from here right now" + (f" — {why}" if why else "")
     out.text(said + ("" if said.endswith(("?", ".")) else ".") + " Nothing was sent.")
+
+
+def room_email_sentence(venue: str, count: int, day: str, n: int) -> str:
+    """Sasha 135 · a hotel: a REQUEST for a room, said as one. Shared with the brain (Sasha 253, G8)."""
+    return (f"Email {venue} to ask for a room for {count}, {SN.day_words(day)} for {n} night{'s' if n != 1 else ''}? "
+            f"It's a request — nothing is booked until they reply.")
+
+
+def quote_email(read_id: str, name: str, mine: Optional[str], want: Optional[str], day: Optional[str]) -> dict:
+    """Sasha 170 · no slot to book (a tattoo, custom work, "whenever they have space"): the email asks for a date and a quote —
+    the body of POST /api/booking/emails. Shared with the brain (Sasha 253, G7)."""
+    want = (want or "an appointment").strip()
+    return {"read_id": read_id, "name": name, "email": mine or "",
+            "quote": {"what": want if len(want.split()) >= 2 else f"{want} — please tell me what you can offer",
+                      "dates": SN.day_words(day) if day else ""}}
+
+
+def quote_sentence(venue: str, day: Optional[str]) -> str:
+    return f"I'll send {venue} your request and ask for a date and a quote{' for ' + SN.day_words(day) if day else ''}. Shall I?"
 
 
 _BULLET = re.compile(r"^[·•]\s*")

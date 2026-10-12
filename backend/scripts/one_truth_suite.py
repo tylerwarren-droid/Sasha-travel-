@@ -59,6 +59,13 @@ T = {   # invariant → (what it holds, the test classes that hold it)
              "tests.test_s253_gaps.G2ResultsPushed", "tests.test_s253_gaps.G4RelocationOnTheBrain",
              "tests.test_s253_gaps.G4CampusOnTheBrain", "tests.test_s253_gaps.G9TimeQuestion", "tests.test_s253_gaps.G10AddToTrip",
              "tests.test_s253_gaps.G13SaveForLater", "tests.test_s253_gaps.G15OpsConsole", "tests.test_s253_gaps.G16RemindersOffer"]),
+    # Sasha 253 · item 4 (part 2): the old flow's VENUE capabilities in the one engine path — no slot (G7), a hotel stay on the
+    # ladder (G8), a Keep loyalty number and "luxury" €€€ first (G14); old S1 untouched
+    "T24": ("the venue capabilities live in the one path",
+            ["tests.test_s253_venue_gaps.TheSchemaOnTheOnePath", "tests.test_s253_venue_gaps.G7NoSlot",
+             "tests.test_s253_venue_gaps.G8HotelOnTheLadder", "tests.test_s253_venue_gaps.G8OnWhatsApp",
+             "tests.test_s253_venue_gaps.G14Loyalty", "tests.test_s253_venue_gaps.G14Luxury",
+             "tests.test_s253_venue_gaps.OldS1Untouched"]),
 }
 
 _RUNNER = """

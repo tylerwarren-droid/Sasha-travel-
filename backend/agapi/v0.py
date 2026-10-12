@@ -490,11 +490,12 @@ async def _search_venues(ctx: Ctx, a: dict) -> dict:
     status, r = await GW.api(ctx.account, "POST", "/api/booking/venues/find", body)
     if status != 200:
         raise ToolError((r or {}).get("rule") or "find_failed", GW.refusal_words(r or {}, status))
-    shown = VN.shown_cards(r)
+    luxe = VN.one_path(ctx) and GW.luxe_of(a.get("what"))   # Sasha 253 · G14 — "luxury": €€€ and up first (the old flow's rule)
+    shown = VN.shown_cards(r, luxe=luxe)
     if shown:
         await VN.photos_for(shown, budget=1.2)   # the top results' photos, prefetched (cached); the rest load lazily
     VN.remember_cards(ctx.account, shown)
-    ribbon = VN.ribbon_line(a, shown, r)
+    ribbon = VN.ribbon_line(a, shown, r) + (" (€€€ and up first)" if luxe and shown else "")
     return {"venues": [VN.card_for_model(c) for c in shown], "ribbon": ribbon,
             "on_screen": "these are EXACTLY the cards on their screen — name only these; nothing contacted",
             "find": {k: v for k, v in {"what": a["what"], "where": a["where"], "country": a.get("country"), "open_at": a.get("open_at"),
@@ -1385,7 +1386,11 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
     if ctx.mode != "test":
         return {"ok": False, "error": {"code": "mode_not_available", "message": "AgAPI v0 runs in TEST mode only"}}
     args = dict(args or {})
-    miss = [k for k in t["input_schema"]["required"] if args.get(k) in (None, "")]
+    req = t["input_schema"]["required"]
+    if name == "hold_venue":   # Sasha 253 · G7 / G8 — on the one path a request may have no time (venues.required_of)
+        from agapi import venues as _VN
+        req = _VN.required_of(ctx, name, req)
+    miss = [k for k in req if args.get(k) in (None, "")]
     if miss:
         return {"ok": False, "error": {"code": "missing_input", "message": f"missing: {', '.join(miss)}"}}
     key = None

@@ -1,4 +1,5 @@
 'use client'
+import { tripFlights } from '@/lib/trip-flights.mjs'   // Sasha 252
 import { untagDeep } from '@/lib/no-test-label.mjs'   // Sasha 218
 import { partySize } from '@/lib/trip-party.mjs'   // Sasha 246
 import { useEffect, useState } from 'react'
@@ -59,7 +60,7 @@ const ON_IT = ['booked', 'partly_booked', 'awaiting_payment']
 // Sasha 242 · ONE TOTAL: the basket's figure in euros, the same one Sasha says in the chat
 // Sasha 249 · it is the server's trip_figures: + the trip's party (TRAVELLERS) and the lines priced as estimates
 type TripTotal = { total_eur: number; flights_eur: number; stays_eur: number; stays_are: string; trip_id: string; party?: number | null;
-  to_pay_eur?: number; estimate_lines?: { what: string; eur: number | null }[] }
+  to_pay_eur?: number; estimate_lines?: { what: string; eur: number | null }[]; lines?: { kind: string; state: string; what: string; day?: string | null }[] }
 const eur = (n: number) => `€${Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 type JRow = { id: string; venue: string; date: string | null; time: string | null; status: string; status_words?: string; booking_reference?: string | null; trip_id?: string }
 /** CR 45 · a RelocateMe form on the Move tab: its state, its PDF one tap away (if there is one), where it goes next */
@@ -269,6 +270,7 @@ export default function TripPanel({
   const dayCount = richItinerary.days?.length || 0
   // Where the trip actually begins — the first day that names a city, not necessarily day 1.
   const arrivalCity = (richItinerary.days || []).find((d: any) => d.city)?.city || ''
+  const flights = tripFlights(tt)   // Sasha 252 · the flights on THIS trip and their state, from the one trip record
   // Distinct overnight stays across the trip — a day without its own hotel continues the
   // previous night's stay, so count unique names rather than days.
   const stayCount = new Set(
@@ -319,7 +321,17 @@ export default function TripPanel({
                 the country. If we don't know the arrival city, we don't guess one. */}
             {/* Flights book IN-APP through Sasha's flight cards — no Google Flights
                 deep-link. This hint keeps the guest inside the conversation. */}
-            {arrivalCity && (
+            {/* Sasha 252 · the flights ON the trip, from the one trip record (trip_figures' lines) with their state; the hint only
+                when the trip has none (EU 251: the hint showed while the flights were chosen) */}
+            {flights.length ? (
+              <div className="lw-flights">
+                <span className="lw-flights-ic">✈️</span>
+                <div className="lw-flights-meta">
+                  <div className="lw-flights-k">Getting there</div>
+                  {flights.map((f: { what: string; day: string | null; words: string }, i: number) => <div key={i} className="lw-flights-h">{f.what}{f.day ? ` · ${f.day}` : ''} — {f.words}</div>)}
+                </div>
+              </div>
+            ) : arrivalCity ? (
               <div className="lw-flights">
                 <span className="lw-flights-ic">✈️</span>
                 <div className="lw-flights-meta">
@@ -327,7 +339,7 @@ export default function TripPanel({
                   <div className="lw-flights-h">Ask Sasha for flights to {arrivalCity} — book right here</div>
                 </div>
               </div>
-            )}
+            ) : null}
             <div className="lw-mapwrap"><TripMap days={richItinerary.days} /></div>
 
 

@@ -573,9 +573,10 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         shown = [c for c in cards if c["confidence"] in ("verified", "partial")][:VERIFY_TOP]
         unread = [c for c in cards if c["confidence"] == "not_read"]
         say = " ".join([c["say"] for c in shown] + ([f"I couldn't check {', '.join(c['name'] for c in unread)} on their official sites."] if unread else []))
+        places = await activity_places(ctx.account, shown, day)   # Sasha 252 · the ONE place card (Tyler: no separate activity card)
         return {"ok": True, "result": {"say": say or "I couldn't check any of them on their official sites today.",
                                        "how": "Say `say` as given — every time, date and price is quoted from the place's own site.",
-                                       "render": {"kind": "activities", "cards": shown, "unread": [c["name"] for c in unread], "date": day}}}
+                                       "render": {"kind": "activities", "cards": places, "unread": [c["name"] for c in unread], "date": day}}}
     if name == "bag_money_back":
         bag = {k: args[k] for k in ("airline", "number", "date", "from", "to", "what", "received_on", "pir_reference", "currency") if args.get(k) not in (None, "")}
         if bag.get("number"):
@@ -751,7 +752,47 @@ async def moment(account: str, event: dict) -> Dict[str, Any]:
     return r["result"] if r.get("ok") else {"speak": False, "why_silent": (r.get("error") or {}).get("message") or "unavailable"}
 
 
-RENDER_KINDS = ("counter_card", "my_cards", "accident", "claim_status", "activities")   # CR 81 · + the ActivityCard
+RENDER_KINDS = ("counter_card", "my_cards", "accident", "claim_status", "activities")   # CR 81 · activities (Sasha 252: drawn as the ONE place card)
+
+
+def _fact(x: Optional[dict], value: Optional[str]) -> Optional[dict]:
+    """A fact activities.verify quoted from the place's own site, in the one place shape ({value, quote, source_url, source})."""
+    if not x or not value:
+        return None
+    return {"value": str(value)[:200], "quote": str(x.get("quote") or "")[:400], "source_url": x.get("source_url"), "source": "site"}
+
+
+async def activity_places(account: str, cards: list, day: str) -> list:
+    """Sasha 252 · ONE PLACE CARD for things to do (Tyler, 12 Oct — EU 251 FAIL 5: the activity cards had no pictures): each activity
+    as the same place card and sheet as a restaurant — what's on / hours / price exactly as activities.verify quoted them from its
+    own site, and its photos from the one source (venue.profile on its official site; activities.verify returns no photo). The
+    cards are remembered like venue cards, so a tap opens the same sheet and "book it" finds the same place. ActivityCard is retired."""
+    from agapi import venue_truth as VT, venues as VN
+    out = []
+    for c in cards:
+        site = c.get("official_url") or ""
+        ev, op, pr = c.get("event") or None, c.get("open") or None, c.get("price") or None
+        what = f"{ev['title']} · {str(ev.get('starts_at') or '')[11:16]}".rstrip(" ·") if ev and ev.get("title") else None
+        hours = None if not op else ("Closed that day" if re.match(r"(?i)^(closed|cerrad)", str(op.get("hours") or "")) else op.get("hours"))
+        price = ((f"{pr['for']}: " if pr.get("for") else "") + str(pr.get("text") or "")) if pr and pr.get("text") else None
+        out.append({"place_id": "act:" + str(c.get("candidate_id") or c.get("name"))[:120], "name": c.get("name"), "website": site,
+                    "type": what, "type_source": "site" if what else None, "activity": True, "date": day,
+                    "facts": {k: v for k, v in (("type", _fact(ev, what)), ("hours", _fact(op, hours)), ("price", _fact(pr, price))) if v},
+                    **({"ticket_url": c["ticket_url"]} if c.get("ticket_url") else {}),
+                    **({"second_source": (c.get("source") or {}).get("label")} if c.get("source") else {})})
+    shaped = await VT.profiles([dict(x) for x in out if x.get("website")], budget_s=4.0) if out else []
+    by_id = {p.get("place_id"): p for p in shaped}
+    for x in out:
+        p = by_id.get(x["place_id"]) or VT.shape(x, None)
+        x["place"] = {**p, "name": x["name"], **x["facts"]}   # the day's quoted facts first, then the site's own (photos, type)
+        if not x.get("type"):
+            t = (x["place"].get("type") or {})
+            x["type"], x["type_source"] = t.get("value"), t.get("source")
+    try:
+        VN.remember_cards(account, out)   # the sheet (/api/place/act:…) and "book it" find the place shown
+    except Exception as e:
+        log.info("[fine_print] activity cards not remembered: %s", type(e).__name__)
+    return out
 
 
 __all__ = ["TOOLS", "TOOL_NAMES", "wrap", "keep_image", "via", "accident_photo", "moment", "RENDER_KINDS"]

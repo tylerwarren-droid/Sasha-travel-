@@ -16,7 +16,7 @@ import S2Hello from './S2Hello'
 import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
 // Sasha 241 · the cards moved to components/cards/ (shared with /next's SashaChat), unchanged
 import { PlaceCard } from '@/app/components/cards/PlaceCard'   // Sasha 248 · one place card
-import { C, Box, shrink, KeepCapture, WaOpen, Plans, CounterCard, MyCards, AccidentCard, ClaimStatus, ActivityCard, SubscriptionsCard, PreparedCard } from '@/app/components/cards/S2Cards'
+import { C, Box, shrink, KeepCapture, WaOpen, Plans, CounterCard, MyCards, AccidentCard, ClaimStatus, SubscriptionsCard, PreparedCard } from '@/app/components/cards/S2Cards'
 import type { Plan } from '@/app/components/cards/S2Cards'
 export { KeepCapture }   // Sasha 228's handoff page imports it from here
 import TripPanel from '@/app/components/workspace/TripPanel'   // Sasha 236 · the trip board: S1's own, on the same records
@@ -270,7 +270,8 @@ function CardView({ c, choose, pick, send }: { c: Card; choose: (t: string) => v
   if (c.k === 'claim_status') return <ClaimStatus claim={c.claim} />
   if (c.k === 'prepared') return <PreparedCard ev={c.ev} />
   if (c.k === 'subscriptions') return <SubscriptionsCard items={c.items} total={c.total} source={c.source} send={send} />
-  if (c.k === 'activities') return (<>{c.cards.map((a, i) => <ActivityCard key={i} a={a} />)}
+  // Sasha 252 · things to do are places: the ONE place card and sheet (ActivityCard retired — EU 251 FAIL 5)
+  if (c.k === 'activities') return (<><VenueCards cards={c.cards as never} choose={pick} />
     {c.unread.length ? <div style={{ fontSize: 13, color: C.dim, margin: '4px 2px' }}>Couldn&apos;t check on their official sites: {c.unread.map(untag).join(', ')}</div> : null}</>)
   if (c.k === 'keep_capture') return <KeepCapture what={c.what} />
   if (c.k === 'wa_open') return <WaOpen c={c} />

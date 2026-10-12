@@ -4,6 +4,7 @@
  * SashaChat now draws the same ones (keep_capture, capabilities, plans, notice, counter_card, my_cards, accident, claim_status,
  * wa_open, activities) through SharedCard. One look, one place.
  */
+import { PlaceCard } from './PlaceCard'   // Sasha 252 · activities are places
 import { useRef, useState } from 'react'
 import { untag } from '@/lib/no-test-label.mjs'
 import { subsHeading, subsFooter } from '@/lib/subscriptions-heading.mjs'   // Sasha 246
@@ -237,27 +238,6 @@ export function ClaimStatus({ claim }: { claim: Ev }) {
     </Box>)
 }
 
-/** CR 81 · one place to go: what's on / when it's open that day, the price — each quoted from its own site — and its official ticket office. */
-export function ActivityCard({ a }: { a: Ev }) {
-  const dom = (() => { try { return new URL(a.official_url).hostname.replace(/^www\./, '') } catch { return '' } })()
-  const quotes: Q[] = [a.event, a.open, a.price?.quote ? a.price : null, a.no_event?.next].filter(Boolean).map((x: Ev) => ({ quote: x.quote, source_url: x.source_url, read_at: x.read_at }))
-  const when = a.event ? `${a.event.title} · ${a.event.starts_at.slice(11, 16)}`
-    : a.open ? (/^closed|cerrad/i.test(String(a.open.hours)) ? 'Closed that day' : String(a.open.hours).includes(';') ? `Hours: ${a.open.hours}` : `Open ${a.open.hours}`)
-    : a.no_event ? 'No match or event listed that day' : ''
-  const href = a.ticket_url || a.official_url
-  return (
-    <Box k={a.kind === 'event' ? 'On' : a.kind === 'outdoor' ? 'Outdoors' : 'Visit'} h={untag(a.name)}>
-      {when ? <div style={{ fontSize: 15 }}>{untag(when)}<Sources quotes={quotes} /></div> : null}
-      {/* CR 82 · a price says what it's for; free for a group is never a free window */}
-      {a.price?.text ? <div style={{ fontSize: 14, color: C.dim }}>{a.price.for ? `${untag(a.price.for)}: ` : 'Tickets '}{a.price.text}{a.price.free_window ? ` · free ${untag(a.price.free_window)}` : ''}</div> : null}
-      {a.price?.free_for ? <div style={{ fontSize: 14, color: C.dim }}>Free for {untag(a.price.free_for)}</div> : null}
-      {/* CR 82 · from an official second source when the place's own site couldn't be read — always said */}
-      <div style={{ fontSize: 12.5, color: C.dim, marginTop: 6 }}>{a.source ? `from ${untag(a.source.label)} (${dom}'s own site couldn't be read)` : `from ${dom}`}, read {a.read_at}{a.stale ? ' · may be out of date' : ''}</div>
-      {href && /^https:\/\//.test(href) ? <a href={href} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 8, padding: '8px 14px', borderRadius: 999,
-        border: `1px solid ${C.gold}`, color: C.gold, fontWeight: 700, textDecoration: 'none' }}>{a.ticket_url ? 'Book on the official site' : 'Official site'}</a> : null}
-    </Box>)
-}
-
 /** CR 84 · the subscriptions list: service · price · renews (from the receipt — "expected" when the email doesn't say); tap one → its
  *  cancel flow (Sasha 243: moved here from CR 84's S2App so /next draws it too). */
 export function SubscriptionsCard({ items, total, source, send }: { items: Ev[]; total?: string; source?: string; send: (t: string) => void }) {
@@ -308,7 +288,9 @@ export function SharedCard({ ev, send }: { ev: Ev; send: (t: string) => void }) 
   if (ev.kind === 'claim_status' && ev.claim) return <ClaimStatus claim={ev.claim} />
   if (ev.kind === 'wa_open' && typeof ev.open === 'string' && ev.open.startsWith('https://wa.me/'))
     return <WaOpen c={{ to: ev.to || {}, text: String(ev.text || ''), open: ev.open, why: String(ev.why || '') }} />
-  if (ev.kind === 'activities' && Array.isArray(ev.cards)) return (<>{ev.cards.map((a: Ev, i: number) => <ActivityCard key={i} a={a} />)}
+  // Sasha 252 · things to do are places: the ONE place card and sheet (ActivityCard retired — EU 251 FAIL 5, Tyler's ruling)
+  if (ev.kind === 'activities' && Array.isArray(ev.cards)) return (<><div style={{ display: 'flex', gap: 10, overflowX: 'auto', maxWidth: '100%', padding: '4px 2px 8px' }}>
+    {ev.cards.map((a: Ev) => <PlaceCard key={a.place_id} card={a} onBook={(name: string) => send(`${name}, please`)} />)}</div>
     {(ev.unread || []).length ? <div style={{ fontSize: 13, color: C.dim, margin: '4px 2px' }}>Couldn&apos;t check on their official sites: {ev.unread.map(untag).join(', ')}</div> : null}</>)
   if (ev.kind === 'prepared' && typeof ev.url === 'string' && /^https:\/\//.test(ev.url)) return <PreparedCard ev={ev} />   // Sasha 248
   if (ev.kind === 'subscriptions' && Array.isArray(ev.items)) return <SubscriptionsCard items={ev.items} total={ev.total} source={ev.source} send={send} />

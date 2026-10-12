@@ -200,14 +200,15 @@ def shape(place: dict, site: Optional[dict]) -> dict:
     photos = own + [p for p in ([place.get("photo")] + [g.get("uri") for g in place.get("gphotos") or [] if isinstance(g, dict)]
                                 + ([(place.get("gphoto") or {}).get("uri")] if isinstance(place.get("gphoto"), dict) else [])) if p]
     oa = place.get("open_at")
+    held = place.get("facts") or {}   # Sasha 252 · facts another engine read quoted for THIS card (an activity's day): kept first
     return {"place_id": place.get("place_id"), "name": (site.get("name") or {}).get("value") or place.get("name"),
             "listing_name": place.get("name"), "website": place.get("website"),
             # Sasha 250 · WHAT IT IS comes from their own site, or nothing — never the map's category, not even labelled (D3; the
             # map called arroz restaurants "Korean"). The map's word stays on the record (map_says) and in google_type for filters.
-            "type": site.get("type") or known,
+            "type": held.get("type") or site.get("type") or known,
             **({"map_says": place.get("google_type") or place.get("type")} if (place.get("google_type") or place.get("type_source") != "site") and (place.get("google_type") or place.get("type")) else {}),
-            "hours": site.get("hours") or ({"value": oa.get("words"), "source": "google"} if isinstance(oa, dict) and oa.get("words") else None),
-            "price": site.get("price") or ({"value": place["price_words"], "source": "google"} if place.get("price_words") else None),
+            "hours": held.get("hours") or site.get("hours") or ({"value": oa.get("words"), "source": "google"} if isinstance(oa, dict) and oa.get("words") else None),
+            "price": held.get("price") or site.get("price") or ({"value": place["price_words"], "source": "google"} if place.get("price_words") else None),
             "photos": list(dict.fromkeys(photos))[:6], "photos_source": "site" if own else ("google" if photos else None),
             "photos_own": len([p for p in dict.fromkeys(photos) if p in own][:6]),   # the first N are the venue's own; the rest Google's
             "rating": place.get("rating"), "rating_count": place.get("rating_count"), "area": place.get("area") or place.get("address"),

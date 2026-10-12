@@ -31,6 +31,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T15": ("right dates + one total in the read-back", ["tests.test_s251_dates.RightDates", "tests.test_s251_dates.ReadBackCarriesTheTotal"]),
     # Sasha 251 · every venue booking through the one engine path (D4: the one question word for word); "under <name>" to its person
     "T16": ("one booking path + book under another name", ["tests.test_s251_one_path.OnePath", "tests.test_s251_one_path.UnderAnotherName"]),
+    # Sasha 252 · EU 251 FAIL 5: things to do are places — the one place card, photos from venue.profile (ActivityCard retired)
+    "T18": ("activities are places (one card, their own photos)", ["tests.test_s252_activities.ThingsToDoArePlaces"]),
+    # Sasha 252 · the Trip tab's flights from the one trip record, never "ask for flights" while they're chosen
+    "T19": ("the Trip tab's flights from the trip record", ["tests.test_s252_activities.TripTabReadsTheTrip"]),
 }
 
 _RUNNER = """

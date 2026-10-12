@@ -88,6 +88,15 @@ def message_of(account: str, body: str, payload: str, button_text: str = "") -> 
 
 # ── the renderer: every render kind → WhatsApp (a test fails if a kind isn't here) ──────────────────────────────────────────
 
+def _places(ev: dict, out) -> None:
+    """Sasha 252 · things to do as the ONE place shape (agapi/venue_truth.text — the same as a tapped venue on WhatsApp)."""
+    from agapi import venue_truth as VT
+    for c in (ev.get("cards") or [])[:5]:
+        out.text(VT.text(c.get("place") or c))
+    if ev.get("unread"):
+        out.text("Couldn't check on their own sites: " + ", ".join(ev["unread"][:4]))
+
+
 def _cut(s: Any, n: int) -> str:
     s = re.sub(r"\s+", " ", str(s or "")).strip()
     return s if len(s) <= n else s[: n - 1].rstrip() + "…"
@@ -153,14 +162,6 @@ def _card(ev: dict, out, title: str) -> None:
         v = ev.get("view") or {}
         lines = [v.get("say") or ""] + ([f"Send here: {s.get('say')}" for s in (v.get("shots") or []) if not s.get("taken")][:6]
                                         if v.get("step") == "photos" else [])
-    elif k == "activities":
-        for c in (ev.get("cards") or [])[:5]:
-            when = ((c.get("event") or {}).get("title") or (c.get("open") or {}).get("hours") or "")
-            price = (c.get("price") or {}).get("text") or ""
-            src = (c.get("source") or {}).get("label")   # CR 82 · an official second source is always named
-            lines.append(" · ".join(x for x in (c.get("name"), when, price, f"from {src}" if src else "", c.get("ticket_url") or c.get("official_url")) if x))
-        if ev.get("unread"):
-            lines.append("Couldn't check on their own sites: " + ", ".join(ev["unread"][:4]))
     elif k == "subscriptions":   # Sasha 243 · CR 84's list as text: service · price · renews ("expected" when the email doesn't say)
         per = {"monthly": "a month", "yearly": "a year", "weekly": "a week", "quarterly": "a quarter"}
         for b in (ev.get("items") or [])[:12]:
@@ -232,7 +233,7 @@ KIND_MAP = {
     "plans": lambda ev, out: _card(ev, out, "Your plans"), "notice": lambda ev, out: _card(ev, out, "Update"),
     "claim_status": lambda ev, out: _card(ev, out, "Your claim"), "accident": "accident",   # Sasha 238 · keeps the shots it asks for
     "counter_card": lambda ev, out: _card(ev, out, "At the counter"), "my_cards": lambda ev, out: _card(ev, out, "Your cards"),
-    "activities": lambda ev, out: _card(ev, out, "Things to do"),
+    "activities": lambda ev, out: _places(ev, out),   # Sasha 252 · things to do are places: the one place text + link
     "subscriptions": lambda ev, out: _card(ev, out, "Your subscriptions"),   # Sasha 243
     "prepared": lambda ev, out: None if ev.get("on_phone") else out.text(   # Sasha 248 · already sent here when on_phone
         "\n".join([f"📝 {ev.get('venue')} — ready to copy:"] + [f"{f.get('label')}: {f.get('value')}" for f in ev.get("fields") or []]

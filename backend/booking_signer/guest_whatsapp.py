@@ -217,12 +217,15 @@ class MemoryGuestStore:
             self.channels[key].update(consent_wording_version=version, consent_text_sha256=sha, consent_at=at)
 
     async def get_state(self, key: str) -> dict:
-        return dict(self.state.get(key) or {"history": [], "pending": None, "last_inbound_at": None, "link_tries": []})
+        from .wa_agent import unpack_state   # Sasha 252 · the brain's own state out of the pending column, into st["agent"]
+        return unpack_state(dict(self.state.get(key) or {"history": [], "pending": None, "last_inbound_at": None, "link_tries": []}))
 
     async def put_state(self, key: str, st: dict) -> None:
         # only what guest_wa_state's columns hold: anything else is lost in production, so it is lost here too
         # (Sasha 206 · last_to is a column since 034_guest_wa_last_to_and_sids.sql)
-        self.state[key] = copy.deepcopy({k: st.get(k) for k in ("history", "pending", "last_inbound_at", "link_tries", "last_to")})
+        from .wa_agent import pack_pending   # Sasha 252 · st["agent"] rides in the pending column, as in Postgres
+        self.state[key] = copy.deepcopy({**{k: st.get(k) for k in ("history", "last_inbound_at", "link_tries", "last_to")},
+                                         "pending": pack_pending(st)})
 
     async def delete_account(self, account: str) -> Dict[str, int]:
         keys = [k for k, c in self.channels.items() if c["account_id"] == account]
@@ -304,10 +307,11 @@ class PostgresGuestStore:
         if not r:
             return {"history": [], "pending": None, "last_inbound_at": None, "link_tries": []}
         d = dict(r)
-        return {"history": json.loads(d["history"]) if isinstance(d["history"], str) else d["history"],
-                "pending": json.loads(d["pending"]) if isinstance(d["pending"], str) else d["pending"],
-                "last_inbound_at": d["last_inbound_at"], "last_to": d.get("last_to"),   # Sasha 206/207 · 034
-                "link_tries": json.loads(d["link_tries"]) if isinstance(d["link_tries"], str) else d["link_tries"]}
+        from .wa_agent import unpack_state   # Sasha 252 · the brain's own state out of the pending column, into st["agent"]
+        return unpack_state({"history": json.loads(d["history"]) if isinstance(d["history"], str) else d["history"],
+                             "pending": json.loads(d["pending"]) if isinstance(d["pending"], str) else d["pending"],
+                             "last_inbound_at": d["last_inbound_at"], "last_to": d.get("last_to"),   # Sasha 206/207 · 034
+                             "link_tries": json.loads(d["link_tries"]) if isinstance(d["link_tries"], str) else d["link_tries"]})
 
     async def put_state(self, key, st):
         # Sasha 207 · last_to (034, applied 8 Oct 2026) — the number they last wrote to; a save without it never erases it
@@ -317,7 +321,8 @@ class PostgresGuestStore:
             "pending = excluded.pending, last_inbound_at = excluded.last_inbound_at, link_tries = excluded.link_tries, "
             "last_to = coalesce(excluded.last_to, guest_wa_state.last_to), updated_at = now()",
             # the pool's jsonb codec encodes: pass the values themselves (Sasha 104 · a json.dumps here stored a JSON string)
-            key, st.get("history") or [], st.get("pending"), st.get("last_inbound_at"), st.get("link_tries") or [], st.get("last_to")))
+            # Sasha 252 · the pending column: Sasha's own question + the brain's state under "_agent" (wa_agent.pack_pending)
+            key, st.get("history") or [], _pack(st), st.get("last_inbound_at"), st.get("link_tries") or [], st.get("last_to")))
 
     async def delete_account(self, account):
         async def go(c):
@@ -328,6 +333,11 @@ class PostgresGuestStore:
                 co = await c.execute("delete from guest_link_codes where account_id = $1", a)
                 return {"guest_channels": int(ch.split()[-1]), "guest_wa_state": int(st.split()[-1]), "guest_link_codes": int(co.split()[-1])}
         return await self._run(go)
+
+
+def _pack(st: dict):
+    from .wa_agent import pack_pending
+    return pack_pending(st)
 
 
 STORE: Any = None   # routes.py sets the Postgres store; tests set a memory one
@@ -754,6 +764,7 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     payload = (p.get("ButtonPayload") or "").strip()
     now = NOW()
     st = await STORE.get_state(key)
+    loaded = copy.deepcopy(st.get("pending"))   # Sasha 252 · the open question as this turn found it
     st["last_inbound_at"] = now
     st["last_to"] = frm   # Sasha 162 · the number they wrote to: what Sasha starts goes from it
     out = Out()
@@ -873,7 +884,7 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     # Sasha 238 · a PHOTO on the one brain → the same handlers as /s2 (products first, above)
     if brain and WA.is_photo(p) and not payload:
         await WA.photo_intake(ch, p, st, out, now)
-        await STORE.put_state(key, st)
+        await _save_keeping_their_question(key, st, loaded)   # Sasha 252 · Sasha's open question stays
         await deliver(ch, frm, out, now)
         return out
     if brain and not body and not payload:   # Sasha 249 · empty, or a file that isn't a photo: the brain answers it, never HELP
@@ -902,16 +913,12 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     # /s2. A button from an OLD flow (in flight) finishes there; invitations stay in front (no agent tool for them yet).
     # Sasha 249 · every button too — except the one the old flow is waiting on (its own nonce: an invitation's yes, a question asked
     # before the switch). One question, one owner: the flow that asked it.
-    pend_old = st.get("pending") or {}
-    try:
-        old_owns = bool(payload and pend_old.get("kind") and _payload_ok(pend_old, payload))
-    except Exception:
-        old_owns = False
-    if brain and not old_owns and not (not payload and _invite_words(body, now)):
-        await WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip(),
-                            voice_in=bool(heard))   # Sasha 238 · a voice note in → a voice note back
-        await STORE.put_state(key, st)
-        await deliver(ch, frm, out, now)
+    # Sasha 252 · G3 — ONE RESOLVER, before the model, tap or typed: Sasha's own open question (st["pending"]) is answered by the
+    # code that answers it today (_answer_pending, below) when this message answers it; anything else goes to the brain and the
+    # question stays open. It replaces Sasha 249's `old_owns` (which took only the tap).
+    sashas = brain and answers_sashas_question(st, body, payload, now)
+    if brain and not sashas and not (not payload and _invite_words(body, now)):
+        await _brain_turn(ch, key, frm, body, payload, p, st, out, now, heard, loaded)
         return out
     # Sasha 126 · the two-booking plan rides INSIDE the open question (guest_wa_state stores only its four columns):
     # it lives exactly as long as a question is open, and goes with it
@@ -919,6 +926,14 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     ctx = {"account": account, "ch": ch, "frm": frm, "st": st, "now": now, "out": out, "button_text": (p.get("ButtonText") or "").strip(),
            "wa_number": str(p.get("From") or "").replace("whatsapp:", "") or None}   # Sasha 167 · the guest's own number, to book under
     handled = await _answer_pending(ctx, body, payload)
+    if not handled and sashas:
+        # Sasha 252 · it looked like the answer but the question's own rules let it go (expired cards, a trip question): the
+        # message is the brain's, as any new one is
+        combo = st.pop("combo", None)
+        if combo and st.get("pending"):
+            st["pending"]["combo"] = combo
+        await _brain_turn(ch, key, frm, body, payload, p, st, out, now, heard, loaded)
+        return out
     if not handled:
         await _new_request(ctx, body)
     offer = await _reminders_offer(ch)
@@ -938,6 +953,81 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     await STORE.put_state(key, st)
     await deliver(ch, frm, out, now)
     return out
+
+
+async def _brain_turn(ch: dict, key: str, frm: str, body: str, payload: str, p: Dict[str, str], st: dict, out: "Out", now,
+                      heard, loaded) -> None:
+    """The one brain answers this message. Sasha 252 · it never writes st["pending"]: Sasha's open question stays open."""
+    from . import wa_agent as WA
+    await WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip(),
+                        voice_in=bool(heard))   # Sasha 238 · a voice note in → a voice note back
+    await _save_keeping_their_question(key, st, loaded)
+    await deliver(ch, frm, out, now)
+
+
+async def _save_keeping_their_question(key: str, st: dict, loaded) -> None:
+    """Sasha 252 · a question written to the store WHILE this turn ran (their page sent mid-turn: tap_platform's `link`, VN 647)
+    is newer than what this turn holds: kept, never saved over by the turn's own save (row 98)."""
+    try:
+        now_stored = (await STORE.get_state(key)).get("pending")
+        if now_stored != loaded:
+            st["pending"] = now_stored
+    except Exception as e:
+        log.warning("[guest_whatsapp] open question not re-read: %s", type(e).__name__)
+    await STORE.put_state(key, st)
+
+
+# Sasha 252 · G3 — Sasha's OWN questions on the one brain: the ones she pushes (no-reply / page-not-pressed offers, a Gmail find,
+# the deposit, their page sent, an invitation's area / days / cards) and the questions they lead to (the route's choice — the
+# ladder —, the call's or the page's read-back).
+SASHAS_OWN = ("no_reply_call", "mailbox", "payment", "link", "invite_where", "invite_window", "cards", "ladder", "confirm", "plan_link")
+_YES_NO_KINDS = ("no_reply_call", "mailbox", "payment", "ladder", "confirm", "plan_link")
+_A_QUESTION = re.compile(r"\s*(?:what|what's|whats|where|when|how|who|why|which|can|could|would|will|is|are|do|does|did|should|"
+                         r"qu[eé]|d[oó]nde|cu[aá]ndo|c[oó]mo|qui[eé]n|por qu[eé])\b", re.I)
+_ROUTE_SAID = re.compile(r"\s*(?:please\s+)?(?:call|email|phone)(?:\s+them)?(?:\s+please)?\s*[.!]*\s*", re.I)   # the ladder's own words
+
+
+def answers_sashas_question(st: dict, body: str, payload: str, now) -> bool:
+    """Sasha 252 · does this message answer Sasha's open question? A TAP: the button that question was sent with (its own id —
+    `_payload_ok`, as Sasha 249's old_owns). TYPED: yes / no (the same words _answer_pending reads: YS.is_yes / _NO), "BOOKED"
+    after their page, the days or an area for an invitation, a pick from the invitation's cards. Not when the brain has asked its
+    own question since (a bare "yes" is then the brain's). Never decides WHAT happens — _answer_pending does, as today."""
+    from . import wa_agent as WA
+    pend = st.get("pending") or {}
+    kind = pend.get("kind")
+    if not kind:
+        return False
+    if payload:
+        try:
+            return bool(_payload_ok(pend, payload))
+        except Exception:
+            return False
+    t = (body or "").strip()
+    if kind not in SASHAS_OWN or not t:
+        return False
+    asked, at = WA.agent_state(st).get("asked"), pend.get("at")
+    if asked and at and _dt(str(asked)) >= _dt(str(at)):
+        return False
+    if pend.get("resume_asked"):   # "Still want …? Say yes to carry on" (Sasha 161) — asked by _answer_pending itself
+        return bool(RESUME.fullmatch(t) or NO.fullmatch(t))
+    if kind in _YES_NO_KINDS:
+        return YS.is_yes(t) or bool(_NO.match(t)) or (kind == "ladder" and bool(_ROUTE_SAID.fullmatch(t)))
+    if kind == "link":
+        return bool(re.match(r"^\s*booked\b", t, re.I))
+    from . import invitations as IV
+    plain = len(t.split()) <= 5 and "?" not in t and not _A_QUESTION.match(t)   # an answer, said plainly — never a new question
+    if kind == "invite_window":   # the days ("next week", "Friday")
+        return plain and IV.window(t, now) is not None
+    if kind == "invite_where":    # an area ("Chamberí", "in Malasaña")
+        area = re.sub(r"^\s*(?:in|en|near|around)\s+", "", t, flags=re.I).strip(" .!")
+        return (plain and bool(area) and len(area.split()) <= 4 and not re.search(r"\d", area)
+                and not (YS.is_yes(area) or _NO.match(area) or GREETING.fullmatch(area)) and cancel_intent(t) is None)
+    if kind == "cards":
+        try:
+            return _picked(pend, t, "") is not None
+        except Exception:
+            return False
+    return False
 
 
 def _invite_words(body: str, now) -> bool:

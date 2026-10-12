@@ -48,20 +48,47 @@ def ours(payload: str) -> bool:
     return payload.startswith(("pick:", "say:", "yn:", "photo:", "keep:"))
 
 
-# ── Sasha 238 · the agent's own WhatsApp state: guest_wa_state keeps only its columns, so it rides in `pending` as its own kind ──
-AGENT = "wa_agent"
+# ── Sasha 238 · the agent's own WhatsApp state ──
+# Sasha 252 · G3: it lives in its OWN key, st["agent"] — never in st["pending"], which holds only Sasha's own open question (a
+# no-reply offer, a Gmail find, the deposit, their page sent, an invitation's question) or nothing. guest_wa_state keeps only its
+# columns, so the store carries st["agent"] inside the pending column under "_agent" (pack_pending / unpack_state) — one place.
+AGENT = "wa_agent"        # the pending kind it used to ride in (read once, then moved: migration on read)
+STORED = "_agent"         # its key inside the pending column
+
+
+def unpack_state(st: dict) -> dict:
+    """Sasha 252 · the state as stored → st["pending"] (Sasha's own question, or None) + st["agent"] (the brain's own). An old
+    {"kind": "wa_agent"} pending is moved to st["agent"] once, so a live conversation keeps what it had."""
+    p = st.get("pending")
+    if isinstance(p, dict):
+        if p.get("kind") == AGENT:
+            st["agent"] = {**{k: v for k, v in p.items() if k != "kind"}, **(st.get("agent") or {})}
+            st["pending"] = None
+        elif STORED in p:
+            p = dict(p)
+            st["agent"] = {**(p.pop(STORED) or {}), **(st.get("agent") or {})}
+            st["pending"] = p if p.get("kind") else None
+    return st
+
+
+def pack_pending(st: dict):
+    """Sasha 252 · what the pending column holds: Sasha's question, with the brain's own state alongside under "_agent"."""
+    p, a = st.get("pending"), st.get("agent")
+    if not a:
+        return p
+    return {**(p or {}), STORED: a}
 
 
 def agent_state(st: dict) -> dict:
-    """{photo_for, dormant, last_seen, photo} — read only; an old flow's pending isn't ours (empty)."""
-    p = st.get("pending") or {}
-    return dict(p) if p.get("kind") == AGENT else {}
+    """{photo_for, dormant, last_seen, photo, shots, asked} — a copy (st["agent"]; an old "wa_agent" pending is moved there)."""
+    unpack_state(st)
+    return dict(st.get("agent") or {})
 
 
 def set_agent_state(st: dict, **kw) -> dict:
-    a = {**agent_state(st), **kw, "kind": AGENT}
-    st["pending"] = {k: v for k, v in a.items() if v is not None}
-    return st["pending"]
+    a = {**agent_state(st), **kw}
+    st["agent"] = {k: v for k, v in a.items() if v is not None}
+    return st["agent"]
 
 
 def s2_link(path: str = "") -> str:
@@ -367,8 +394,13 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
         url = await tts_note(text)
         if url:
             out.media("🔊", url)
+    mark = len(out.items)
     for ev in last_of_each_card(renders):
         render(ev, out, st, now)
+    if any(it[0] in ("ask", "list") for it in out.items[mark:]):
+        # Sasha 252 · she asked her OWN question (a read-back's Yes/No, a list to pick from) after Sasha's open one: a bare typed
+        # "yes" or "the first one" is hers now (guest_whatsapp.answers_sashas_question); a tap still answers its own question
+        set_agent_state(st, asked=now.isoformat())
     _remember_history(st, body or message, text)
     try:   # awaited, in the turn — never fire-and-forget
         await MEM.remember(account, "wa:" + key, message[:4000], text, seen)
@@ -606,4 +638,4 @@ def note_audio(token: str) -> Optional[bytes]:
 
 
 __all__ = ["on", "mode", "ours", "message_of", "render", "KIND_MAP", "agent_turn", "split", "photo_intake", "tts_note", "note_audio",
-           "agent_state", "set_agent_state", "purpose_of", "is_photo"]
+           "agent_state", "set_agent_state", "unpack_state", "pack_pending", "purpose_of", "is_photo"]

@@ -77,6 +77,11 @@ export function PlaceSheet({ card, onClose, onBook }: { card: Ev; onClose: () =>
     }).catch(() => { /* the card's own facts stay */ }).finally(() => { if (live) setReading(false) })
     return () => { live = false }
   }, [card.place_id])
+  useEffect(() => {   // Sasha 252 · Escape closes it, as any dialog (found by EU 251's run: the sheet stayed over the chat)
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [onClose])
   const f = placeFacts(place)
   // each photo marked by its own source: the venue's own first (photos_own of them), then Google's
   const own = typeof place.photos_own === 'number' ? place.photos_own : (place.photos_source === 'site' ? (place.photos || []).length : 0)

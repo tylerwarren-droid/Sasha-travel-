@@ -201,7 +201,10 @@ def shape(place: dict, site: Optional[dict]) -> dict:
                                 + ([(place.get("gphoto") or {}).get("uri")] if isinstance(place.get("gphoto"), dict) else [])) if p]
     oa = place.get("open_at")
     held = place.get("facts") or {}   # Sasha 252 · facts another engine read quoted for THIS card (an activity's day): kept first
-    return {"place_id": place.get("place_id"), "name": (site.get("name") or {}).get("value") or place.get("name"),
+    # Sasha 252 · an activity keeps its own name: its official site can be an umbrella's (the Jerónimos card read "Museus e
+    # Monumentos de Portugal")
+    name = place.get("name") if place.get("activity") else ((site.get("name") or {}).get("value") or place.get("name"))
+    return {"place_id": place.get("place_id"), "name": name,
             "listing_name": place.get("name"), "website": place.get("website"),
             # Sasha 250 · WHAT IT IS comes from their own site, or nothing — never the map's category, not even labelled (D3; the
             # map called arroz restaurants "Korean"). The map's word stays on the record (map_says) and in google_type for filters.

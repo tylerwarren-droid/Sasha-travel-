@@ -61,6 +61,16 @@ class ThingsToDoArePlaces(unittest.TestCase):
         self.assertEqual(sheet["hours"]["value"], "10:00–20:00")
         self.assertTrue(sheet["photos"])
 
+    def test_an_activity_keeps_its_own_name(self):   # its official site may be an umbrella's
+        async def umbrella(op, body):
+            return {"ok": True, "result": {"facts": {"name": {"value": "Museus e Monumentos de Portugal", "quote": "x", "source_url": "https://x"}},
+                                           "photos": [], "booking": {}}}
+        with mock.patch.object(VT, "CALL", umbrella):
+            VT._CACHE.clear()
+            c = asyncio.run(FP.activity_places(ACCT, [dict(PRADO, name="Mosteiro dos Jerónimos")], "2026-10-17"))[0]
+            self.assertEqual(c["place"]["name"], "Mosteiro dos Jerónimos")
+            self.assertEqual(asyncio.run(VT.profile(VN.card_of(ACCT, c["place_id"], None)))["name"], "Mosteiro dos Jerónimos")
+
     def test_whatsapp_draws_the_one_place_text(self):
         from booking_signer import wa_agent as WA
 

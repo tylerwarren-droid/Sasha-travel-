@@ -254,7 +254,7 @@ async def engine_channel(card: Optional[dict], budget_s: float = 30.0) -> Option
 
 
 # "page" — the tool's own route word (its schema unchanged: S1 parity) — means "fill it now" when the engine's channel is a form
-ENGINE_ROUTE = {"own_engine": "page", "form": "page", "widget": "page", "email": "email", "whatsapp": "whatsapp", "phone": "call"}
+ENGINE_ROUTE = {"own_engine": "page", "form": "page", "widget": "page", "email": "email", "whatsapp": "page", "phone": "call"}
 
 
 async def _engine_route(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Optional[str], eng: dict, card: Optional[dict]) -> Optional[dict]:
@@ -267,7 +267,7 @@ async def _engine_route(ctx, a: dict, rd: dict, res: dict, at: str, now, route: 
                 "options": [{"title": "Fill it in now", "route": "page"}, {"title": "Send the request", "route": alt}],
                 "how": "Ask `ask` word for word, then hold_venue again with the route they chose."}
     route = route or ENGINE_ROUTE.get(eng.get("kind") or "")
-    if route in ("page", "form") and eng.get("kind") in VT.FILLABLE:
+    if route in ("page", "form", "whatsapp") and eng.get("kind") in VT.PREPARED:   # venue.prepare_booking prepares it (row 775)
         return await _prepared(ctx, a, rd, res, at, now, eng, card)
     return None if route in (None, "no") else await _hold_inner(ctx, a, rd, res, at, now, route)
 
@@ -288,14 +288,18 @@ async def _prepared(ctx, a: dict, rd: dict, res: dict, at: str, now, eng: dict, 
               *([{"label": "Email", "value": email}] if email else []),
               {"label": "Mobile", "value": res["who"]["contact"].get("mobile_e164") or ""}]
     venue = GW.plain_venue(rd["venue"])
-    lines = [f"I'll put {venue}'s own booking page on your phone, with your booking ready to copy: {GW.summary(res)}, under {res['who']['name']}.",
-             "You press confirm there (and tick any “I'm not a robot” box) — I can't press it for you.",
-             "Nothing is booked until their page confirms it."]
+    if eng.get("kind") == "whatsapp":   # a prepared WhatsApp they send — a request: the venue answers yes or no
+        lines = [f"I'll put a WhatsApp to {venue} on your phone, ready to send: {GW.summary(res)}, under {res['who']['name']}.",
+                 "You press send — I never send it for you.", "It's a request: nothing is booked until they reply."]
+    else:
+        lines = [f"I'll put {venue}'s own booking page on your phone, with your booking ready to confirm: {GW.summary(res)}, under {res['who']['name']}.",
+                 "You press confirm there (and tick any “I'm not a robot” box) — I can't press it for you.",
+                 "Nothing is booked until " + ("their page confirms it." if eng.get("confirm") == "instant" else "they confirm it.")]
     sha = _h.sha256("\n".join(lines + [url]).encode()).hexdigest()
     prev = _HELD.get(ctx.account)
     _HELD[ctx.account] = {"rung": "prepared", "id": "prep-" + sha[:12], "sha": sha, "at": prev["at"] if prev and prev.get("sha") == sha else now,
                           "venue": rd["venue"], "summary": GW.summary(res), "when": at, "party": res["how_many"]["count"],
-                          "place_id": rd.get("place_id"), "url": url, "fields": fields, "channel_name": eng.get("name"),
+                          "place_id": rd.get("place_id"), "url": url, "fields": fields, "channel_name": eng.get("name"), "website": (card or {}).get("website"),
                           "sector": (res.get("what") or {}).get("category")}
     return {"status": "awaiting_yes", "venue": venue, "route": "page", "when": GW.summary(res), "read_back": lines,
             "what_happens": "on their yes, book_venue puts their own page on their phone with every detail to copy; they confirm there"}
@@ -504,8 +508,16 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
                 "message": held["message"], **({"open": held["link"]} if held.get("link") and not sent else {}),
                 "line": "It's not booked until they reply to you."}
     if rung == "prepared":   # Sasha 248 · "fill it now": their own page + every detail, on their phone; they confirm there
-        text = (f"📝 {venue} — your booking, ready to copy into their page:\n" + "\n".join(f"{f['label']}: {f['value']}" for f in held["fields"])
-                + f"\n\nTheir page: {held['url']}\nPress confirm there — it's booked only when their page says so.")
+        from agapi import venue_truth as VT
+        f = {x["label"]: x["value"] for x in held["fields"]}
+        prep = await VT.prepare({"name": venue, "website": held.get("website"), "place_id": held.get("place_id")},
+                                {"name": f.get("Name"), "phone": f.get("Mobile"), "email": f.get("Email")},
+                                held["when"][:10], held["when"][11:16], int(held["party"]))   # CR 89 · ready to confirm; nothing submitted
+        if prep:
+            held = {**held, "url": prep["link"], "human_step": prep.get("human_step"), "prep_say": prep.get("say")}
+        text = (f"📝 {venue} — your booking, ready to copy into their page:\n" + "\n".join(f"{x['label']}: {x['value']}" for x in held["fields"])
+                + f"\n\nTheir page: {held['url']}\n" + (prep.get("human_step") if prep and prep.get("human_step") else
+                                                           "Press confirm there — it's booked only when their page says so."))
         sent = False
         try:
             ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE else None
@@ -515,8 +527,10 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         except Exception as e:
             log.warning("[venues] the prepared page was not sent to the phone: %s", type(e).__name__)
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where, "booked": False,
-                "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent},
-                **({} if sent else {"say": "Their page and your details are on this screen — never say it's on their phone."})}
+                "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent,
+                             **({"human_step": held["human_step"], "prepared_by": "venue.prepare_booking"} if held.get("human_step") else {})},
+                **({"say": held["prep_say"] + " Never say it's booked."} if held.get("prep_say") else
+                   {} if sent else {"say": "Their page and your details are on this screen — never say it's on their phone."})}
     if rung == "handover":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/forms/{held['id']}/handover", {}, timeout=120)
         if status != 200:

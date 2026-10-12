@@ -39,12 +39,14 @@ async def main() -> bool:
     cards = [dict(CASA)]
     await VT.enrich(cards, budget_s=5)
     c = cards[0]
-    check("(a) Spanish, from its own site", c.get("type") == "traditional Spanish restaurant" and c.get("type_source") == "site", f"got {c.get('type')!r}")
+    check("(a) Spanish, from its own site", "spanish" in str(c.get("type")).lower() and c.get("type_source") == "site", f"got {c.get('type')!r}")
+    check("(a) the map's 'Korean' kept only as what the map says", (c["place"]["type"] or {}).get("map_says") == "Korean restaurant")
+    check("(a) its own photos first", str((c["place"].get("photos") or [""])[0]).startswith("https://casalucio.es/") and c["place"].get("photos_source") == "site")
     check("(a) quoted, with its page", bool((c["place"]["type"] or {}).get("quote")) and str((c["place"]["type"] or {}).get("source_url", "")).startswith("https://"))
     check("(a) never 'Korean'", "korean" not in str(c.get("type")).lower() and c.get("google_type") == "Korean Restaurant")
     nosite = [{"place_id": "x", "name": "No Site", "type": "Korean Restaurant"}]
     await VT.enrich(nosite, budget_s=1)
-    check("(a) Google's category only labelled", nosite[0]["type"] == "listed on Google as Korean Restaurant", nosite[0]["type"])
+    check("(a) the map's category only labelled", nosite[0]["type"] == "listed on the map as Korean Restaurant", nosite[0]["type"])
 
     # (b) ── the fill-or-request question, then "fill it now" → the prepared page, recorded human_tap
     p = await VT.profile(dict(HAMMAM))
@@ -77,7 +79,8 @@ async def main() -> bool:
         check("(b) 'fill it now' → read back first, nothing sent", held.get("status") == "awaiting_yes" and VN._HELD[ctx.account]["rung"] == "prepared")
         out = await VN._book_inner(ctx, VN._HELD[ctx.account], {"said": "yes"}, "Hammam Al Ándalus", "prepared")
         prep = out.get("prepared") or {}
-        check("(b) their page + every detail", "madridreservas" in str(prep.get("url")) and {"Day", "Time", "People", "Name", "Mobile"} <= {f["label"] for f in prep.get("fields") or []}, str(prep)[:200])
+        check("(b) ready to confirm on the phone (venue.prepare_booking), every detail with it", "agapi.test/prepared/madrid.hammamalandalus.com" in str(prep.get("url"))
+              and prep.get("prepared_by") == "venue.prepare_booking" and {"Day", "Time", "People", "Name", "Mobile"} <= {f["label"] for f in prep.get("fields") or []}, str(prep)[:240])
         from app.agent import sasha as AG
         ev = AG.render("book_venue", out, {})
         check("(b) the prepared card renders", (ev or {}).get("kind") == "prepared")
@@ -85,6 +88,9 @@ async def main() -> bool:
     finally:
         VN._API, GR.address_of = real_api, real_addr
         VN._HELD.pop("00000000-0000-4000-8000-000000000248", None)
+
+    ch2 = (await VT.profile(dict(CASA))).get("channel") or {}
+    check("(b) a WhatsApp venue is prepared too (a message they send)", ch2.get("kind") == "whatsapp" and ch2.get("kind") in VT.PREPARED, str(ch2))
 
     # (c) ── a tap opens the detail: the one shape (sheet on /s2 and /next) and WhatsApp's text + link
     d = await VT.profile(dict(CASA))

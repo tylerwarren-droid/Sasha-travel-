@@ -3,7 +3,7 @@
  * Sasha 248 · ONE PLACE CARD — the same card and the same detail sheet on /s2 and /next (WhatsApp gets the same content as text +
  * link, backend/agapi/venue_truth.text). One data shape: the search's card (its `place` from agapi/venue_truth) and, on tap, the
  * full place from /api/place/{id}. Every fact says where it came from: the venue's own site (quoted), or Google — a Google
- * category is only ever "listed on Google as …", never stated as what the place is.
+ * category is only ever "listed on the map as …", never stated as what the place is.
  * Tyler's S2 test (12 Oct): the thumbnails didn't open — a tap (or double-tap) on the photo or the card now opens the sheet.
  */
 import { useEffect, useState } from 'react'

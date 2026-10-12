@@ -1,158 +1,89 @@
 {
+ "venue_id": "ven_2234bf72d45ebf0c7722c1cc",
+ "site": "hammamalandalus.com",
  "url": "https://madrid.hammamalandalus.com",
- "name": "Hammam Al Ándalus",
+ "read_at": "2026-10-12T15:51:16Z",
+ "robots": "robots.txt ✓ allows reading /",
+ "facts": {
+  "name": {
+   "value": "Hammam Al Ándalus",
+   "quote": "Te damos la bienvenida a Hammam Al Ándalus, tu centro de masaje en Madrid, un refugio de tranquilidad e inspiración que te invita a experimentar una manera única de relajación y revitalización.",
+   "source_url": "https://madrid.hammamalandalus.com/carta-de-servicios/",
+   "copy_id": "scp_3c873f2da3dff1ff838d1c4f",
+   "checked": "Pacioli: the quote is on the venue's own page, word for word, and holds every number"
+  },
+  "type": {
+   "value": "Arab baths (hammam) and massage centre",
+   "quote": "Te damos la bienvenida a Hammam Al Ándalus, tu centro de masaje en Madrid, un refugio de tranquilidad e inspiración que te invita a experimentar una manera única de relajación y revitalización.",
+   "source_url": "https://madrid.hammamalandalus.com/carta-de-servicios/",
+   "copy_id": "scp_3c873f2da3dff1ff838d1c4f",
+   "checked": "Pacioli: the quote is on the venue's own page, word for word, and holds every number"
+  },
+  "city": {
+   "value": "Madrid",
+   "quote": "Calle Atocha, 14. 28012 Madrid",
+   "source_url": "https://madrid.hammamalandalus.com/",
+   "copy_id": "scp_af8ef806e9c6b2123bd53875",
+   "checked": "Pacioli: the quote is on the venue's own page, word for word, and holds every number"
+  },
+  "hours": null,
+  "price_range": null
+ },
  "kind": "spa",
- "rung": 2,
- "channel": "their own booking engine (madridreservas.hammamalandalus.com)",
- "stages": [
+ "withheld": [],
+ "photos": [
   {
-   "stage": "understood",
-   "at": 2.99,
-   "done_at": 15.24,
-   "reader_seconds": 11.7,
-   "facts": [
-    {
-     "field": "name",
-     "label": "Name",
-     "value": "Hammam Al Ándalus",
-     "quote": "Te damos la bienvenida a Hammam Al Ándalus, tu centro de masaje en Madrid, un refugio de tranquilidad e inspiración que te invita a experimentar una manera única de relajación y revitalización.",
-     "source_url": "https://madrid.hammamalandalus.com/carta-de-servicios/",
-     "state": "found",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "copy_id": "scp_a45c81afc8b243c0a6aa035e",
-      "why": []
-     }
-    },
-    {
-     "field": "type",
-     "label": "Type",
-     "value": "hammam spa (Arab baths and massages)",
-     "quote": "Descubre los mejores masajes en Madrid con Hammam Al Ándalus",
-     "source_url": "https://madrid.hammamalandalus.com/carta-de-servicios/",
-     "state": "found",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "copy_id": "scp_a45c81afc8b243c0a6aa035e",
-      "why": []
-     }
-    },
-    {
-     "field": "city",
-     "label": "City",
-     "value": "Madrid",
-     "quote": "Calle Atocha, 14. 28012 Madrid",
-     "source_url": "https://madrid.hammamalandalus.com/",
-     "state": "found",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "copy_id": "scp_4eab7ae904da7cc914c23c98",
-      "why": []
-     }
-    },
-    {
-     "field": "hours",
-     "label": "Hours",
-     "value": null,
-     "state": "not_on_site",
-     "say": "not on the site"
-    },
-    {
-     "field": "price_range",
-     "label": "Price range",
-     "value": null,
-     "state": "not_on_site",
-     "say": "not on the site"
-    }
-   ],
-   "kind": "spa",
-   "say": "5 facts · 3 with a quote from the site · 2 not on the site"
+   "url": "https://madrid.hammamalandalus.com/wp-content/uploads/sites/5/2025/03/MAD_BRANDING_Arquitectura_aclaradas_006-scaled.jpeg",
+   "source": "the venue's own site"
   },
   {
-   "stage": "how_it_books",
-   "at": 15.24,
-   "done_at": 15.24,
-   "rung": 2,
-   "channel": "their own booking engine (madridreservas.hammamalandalus.com)",
-   "evidence": "https://madridreservas.hammamalandalus.com/seleccion_tarjeta.php?id=ES",
-   "evidence_on": "https://madrid.hammamalandalus.com/",
-   "how": "link",
-   "partner": null,
-   "rung_label": "web form",
-   "say": "DIVE fills their booking form, as a guest would.",
-   "also": [
-    {
-     "kind": "email",
-     "value": "madridreservas@hammamalandalus.com",
-     "note": "listed as contact"
-    },
-    {
-     "kind": "phone",
-     "value": "91 429 90 20"
-    }
-   ],
-   "dashed": null,
-   "amber": "Slots live inside their own engine (madridreservas.hammamalandalus.com); DIVE reads that it's there, not the slots.",
-   "channels_read": [
-    {
-     "kind": "widget",
-     "value": "https://madridreservas.hammamalandalus.com/datos-reserva.php?id=es",
-     "quote": "SELECCIONA DÍA Y TURNO PARA TU RESERVA - HAMMAM MADRID PLAZA MAYOR",
-     "source_url": "https://madridreservas.hammamalandalus.com/datos-reserva.php?id=es",
-     "note": "",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "why": []
-     }
-    },
-    {
-     "kind": "phone",
-     "value": "91 429 90 20",
-     "quote": "HAMMAM AL ÁNDALUS | C/ Atocha, 14. Madrid | RESERVAS 91 429 90 20",
-     "source_url": "https://madridreservas.hammamalandalus.com/datos-reserva.php?id=es",
-     "note": "",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "why": []
-     }
-    },
-    {
-     "kind": "email",
-     "value": "madridreservas@hammamalandalus.com",
-     "quote": "madridreservas@hammamalandalus.com",
-     "source_url": "https://madrid.hammamalandalus.com/en/service-menu-massages-madrid/",
-     "note": "listed as contact",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "why": []
-     }
-    }
-   ]
+   "url": "https://madrid.hammamalandalus.com/wp-content/uploads/sites/5/2019/08/hammam-al-andalus.png",
+   "source": "the venue's own site"
+  },
+  {
+   "url": "https://madrid.hammamalandalus.com/wp-content/uploads/sites/5/2025/03/MAD_BRANDING_Arquitectura_aclaradas_006-1800x1163.jpeg",
+   "source": "the venue's own site"
+  },
+  {
+   "url": "https://madrid.hammamalandalus.com/wp-content/uploads/sites/5/2019/09/MAD_web_terma-fria-1800x1200.jpg",
+   "source": "the venue's own site"
+  },
+  {
+   "url": "https://madrid.hammamalandalus.com/wp-content/uploads/sites/5/2025/02/MAD_Arquitectura_2024_10_D5A2682_retocada-1-1800x1012.jpg",
+   "source": "the venue's own site"
+  },
+  {
+   "url": "https://madrid.hammamalandalus.com/wp-content/uploads/sites/5/2026/10/DSC01143-HDR-1800x1200.jpg",
+   "source": "the venue's own site"
   }
  ],
- "fixture": "Sasha 248 · a saved dive.onboard replay (AgAPI sandbox, 12 Oct 2026) — the venue engine's answer for the gate; nothing is fetched"
+ "booking": {
+  "rung": 2,
+  "rung_label": "web form",
+  "channel": "their own booking engine (madridreservas.hammamalandalus.com)",
+  "evidence": "https://madridreservas.hammamalandalus.com/seleccion_tarjeta.php?id=ES",
+  "evidence_on": "https://madrid.hammamalandalus.com/",
+  "how": "link",
+  "partner": null,
+  "also": [
+   {
+    "kind": "email",
+    "value": "madridreservas@hammamalandalus.com"
+   },
+   {
+    "kind": "phone",
+    "value": "91 429 90 20"
+   }
+  ],
+  "say": "DIVE fills their booking form, as a guest would."
+ },
+ "confirm": {
+  "type": "instant",
+  "basis": "their own booking engine (madridreservas.hammamalandalus.com): an online booking system that shows availability (confirmation comes from it)"
+ },
+ "form": null,
+ "form_note": "their booking engine builds its form in the browser: no fields in its page's HTML (it is opened for the person instead)",
+ "cached": false,
+ "age_days": 0,
+ "fixture": "Sasha 248 · a saved venue.profile answer (agapi-live v1.6.0, 12 Oct 2026) — the venue engine's answer for the gate; nothing is fetched"
 }

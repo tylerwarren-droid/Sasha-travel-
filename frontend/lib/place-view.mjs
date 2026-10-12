@@ -1,13 +1,13 @@
 /**
  * Sasha 248 · ONE PLACE CARD's rules (PlaceCard.tsx): a place's facts as shown — each with its source. The site's own words are
- * the fact; Google's category is only "listed on Google as …" (agapi/venue_truth decides that once; this never invents a label).
+ * the fact; Google's category is only "listed on the map as …" (agapi/venue_truth decides that once; this never invents a label).
  */
 
 /** {type, hours, price} — from the place shape (card.place, or the place itself); never from the search's words. */
 export function placeFacts(card) {
   const p = (card && card.place) || card || {}
   const t = p.type && typeof p.type === 'object' ? p.type
-    : (card && card.type ? { value: card.type, source: card.type_source || (/^listed on Google as /.test(card.type) ? 'google' : null) } : null)
+    : (card && card.type ? { value: card.type, source: card.type_source || (/^listed on the map as /.test(card.type) ? 'map' : null) } : null)
   return { type: t, hours: p.hours && typeof p.hours === 'object' ? p.hours : null, price: p.price && typeof p.price === 'object' ? p.price : null }
 }
 
@@ -24,5 +24,5 @@ export function photoOf(card) {
 /** "From their own site" / "Google" — said under every fact. */
 export function sourceWord(f) {
   if (!f) return ''
-  return f.source === 'site' ? 'From their own site' : f.source === 'google' ? 'From Google' : ''
+  return f.source === 'site' ? 'From their own site' : f.source === 'map' ? 'From the map listing' : f.source === 'google' ? 'From Google' : ''
 }

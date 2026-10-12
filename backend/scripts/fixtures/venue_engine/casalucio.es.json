@@ -1,184 +1,90 @@
 {
+ "venue_id": "ven_a435c15402d701459d3ecd7a",
+ "site": "casalucio.es",
  "url": "https://www.casalucio.es",
- "name": "Casa Lucio",
+ "read_at": "2026-10-12T15:44:55Z",
+ "robots": "robots.txt ✓ allows reading /",
+ "facts": {
+  "name": {
+   "value": "Casa Lucio",
+   "quote": "Casa Lucio continúa en el lugar ocupado por el centenario Mesón El Segoviano, magnífica casa de comidas donde empezó a trabajar Lucio Blázquez con 12 años.",
+   "source_url": "https://casalucio.es/",
+   "copy_id": "scp_0e4fd1e60ef00b842d559369",
+   "checked": "Pacioli: the quote is on the venue's own page, word for word, and holds every number"
+  },
+  "type": {
+   "value": "Spanish restaurant",
+   "quote": "PODRÁS DISFRUTAR DE LA MEJOR GASTRONOMÍA ESPAÑOLA ELABORADA RESPETANDO LA TRADICIÓN.",
+   "source_url": "https://casalucio.es/",
+   "copy_id": "scp_0e4fd1e60ef00b842d559369",
+   "checked": "Pacioli: the quote is on the venue's own page, word for word, and holds every number",
+   "map_says": {
+    "listed_as": "Korean restaurant",
+    "note": "the map lists it otherwise; the venue's own site wins"
+   }
+  },
+  "city": {
+   "value": "Madrid",
+   "quote": "Cava Baja 35, Madrid",
+   "source_url": "https://casalucio.es/contacto/",
+   "copy_id": "scp_761d9b86cb507ed0ca4530b0",
+   "checked": "Pacioli: the quote is on the venue's own page, word for word, and holds every number"
+  },
+  "hours": {
+   "value": "Mon–Sun lunch 13:00–16:00, dinner 20:00–23:30",
+   "quote": "Comidas: de 13:00 a 16:00 h., Cenas: de 20:00 a 23:30 h.",
+   "source_url": "https://casalucio.es/contacto/",
+   "copy_id": "scp_761d9b86cb507ed0ca4530b0",
+   "checked": "Pacioli: the quote is on the venue's own page, word for word, and holds every number"
+  },
+  "price_range": null
+ },
  "kind": "restaurant",
- "rung": 4,
- "channel": "WhatsApp",
- "stages": [
+ "withheld": [],
+ "photos": [
   {
-   "stage": "understood",
-   "at": 3.56,
-   "done_at": 15.06,
-   "reader_seconds": 10.74,
-   "facts": [
-    {
-     "field": "name",
-     "label": "Name",
-     "value": "Casa Lucio",
-     "quote": "Casa Lucio continúa en el lugar ocupado por el centenario Mesón El Segoviano, magnífica casa de comidas donde empezó a trabajar Lucio Blázquez con 12 años.",
-     "source_url": "https://casalucio.es/",
-     "state": "found",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "copy_id": "scp_646559ecd1a89e85661871ec",
-      "why": []
-     }
-    },
-    {
-     "field": "type",
-     "label": "Type",
-     "value": "traditional Spanish restaurant",
-     "quote": "Hoy en día son Maria del Carmen, Fernando y Javier, los hijos de Lucio, quienes acompañan a su padre en el día a día del restaurante.",
-     "source_url": "https://casalucio.es/",
-     "state": "found",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "copy_id": "scp_646559ecd1a89e85661871ec",
-      "why": []
-     }
-    },
-    {
-     "field": "city",
-     "label": "City",
-     "value": "Madrid",
-     "quote": "Cava Baja 35, Madrid",
-     "source_url": "https://casalucio.es/contacto/",
-     "state": "found",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "copy_id": "scp_8e5818c0b00d4b43da6d4f58",
-      "why": []
-     }
-    },
-    {
-     "field": "hours",
-     "label": "Hours",
-     "value": "Mon–Sun lunch 13:00–16:00, dinner 20:00–23:30",
-     "quote": "Comidas: de 13:00 a 16:00 h., Cenas: de 20:00 a 23:30 h.",
-     "source_url": "https://casalucio.es/contacto/",
-     "state": "found",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "copy_id": "scp_8e5818c0b00d4b43da6d4f58",
-      "why": []
-     }
-    },
-    {
-     "field": "price_range",
-     "label": "Price range",
-     "value": null,
-     "state": "not_on_site",
-     "say": "not on the site"
-    }
-   ],
-   "kind": "restaurant",
-   "say": "5 facts · 4 with a quote from the site · 1 not on the site"
+   "url": "https://casalucio.es/wp-content/uploads/2026/07/Famila_recortada.jpg",
+   "source": "the venue's own site"
   },
   {
-   "stage": "how_it_books",
-   "at": 15.06,
-   "done_at": 15.06,
-   "rung": 4,
-   "channel": "WhatsApp",
-   "evidence": "wa.me/34608400171",
-   "value": "+34608400171",
-   "evidence_on": "https://casalucio.es/",
-   "how": "link",
-   "partner": null,
-   "rung_label": "WhatsApp",
-   "say": "DIVE sends one short WhatsApp. They answer YES or NO.",
-   "also": [
-    {
-     "kind": "email",
-     "value": "hola@casalucio.es",
-     "note": "groups of 12 or more"
-    },
-    {
-     "kind": "phone",
-     "value": "+34 91 365 82 17"
-    }
-   ],
-   "dashed": null,
-   "amber": "Confirmed when the business replies YES.",
-   "channels_read": [
-    {
-     "kind": "phone",
-     "value": "+34 91 365 82 17",
-     "quote": "+34 91 365 82 17",
-     "source_url": "https://casalucio.es/reservas/",
-     "note": "",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "why": []
-     }
-    },
-    {
-     "kind": "phone",
-     "value": "+34 91 365 32 52",
-     "quote": "+34 91 365 32 52",
-     "source_url": "https://casalucio.es/reservas/",
-     "note": "",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "why": []
-     }
-    },
-    {
-     "kind": "whatsapp",
-     "value": "+34 608 400 171",
-     "quote": "+34 608 400 171",
-     "source_url": "https://casalucio.es/reservas/",
-     "note": "",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "why": []
-     }
-    },
-    {
-     "kind": "email",
-     "value": "hola@casalucio.es",
-     "quote": "Para grupos de 12 o más personas.",
-     "source_url": "https://casalucio.es/reservas/",
-     "note": "groups of 12 or more",
-     "pacioli": {
-      "passed": true,
-      "a_verbatim": true,
-      "b_official": true,
-      "c_in_quote": true,
-      "d_sha256": true,
-      "why": []
-     }
-    }
-   ]
+   "url": "https://casalucio.es/wp-content/uploads/2026/07/Javier_Inicio_OSCURO-scaled.jpg",
+   "source": "the venue's own site"
+  },
+  {
+   "url": "https://casalucio.es/wp-content/uploads/2026/07/local_05.jpg",
+   "source": "the venue's own site"
+  },
+  {
+   "url": "https://casalucio.es/wp-content/uploads/2026/07/Fogones_Inicio-scaled.jpg",
+   "source": "the venue's own site"
   }
  ],
- "fixture": "Sasha 248 · a saved dive.onboard replay (AgAPI sandbox, 12 Oct 2026) — the venue engine's answer for the gate; nothing is fetched"
+ "booking": {
+  "rung": 4,
+  "rung_label": "WhatsApp",
+  "channel": "WhatsApp",
+  "evidence": "wa.me/34608400171",
+  "evidence_on": "https://casalucio.es/",
+  "how": "link",
+  "partner": null,
+  "also": [
+   {
+    "kind": "email",
+    "value": "hola@casalucio.es",
+    "note": "groups of 12 or more"
+   },
+   {
+    "kind": "phone",
+    "value": "+34 91 365 82 17"
+   }
+  ],
+  "say": "DIVE sends one short WhatsApp. They answer YES or NO."
+ },
+ "confirm": {
+  "type": "request_reply",
+  "basis": "WhatsApp: they answer yes or no"
+ },
+ "cached": false,
+ "age_days": 0,
+ "fixture": "Sasha 248 · a saved venue.profile answer (agapi-live v1.6.0, 12 Oct 2026) — the venue engine's answer for the gate; nothing is fetched"
 }

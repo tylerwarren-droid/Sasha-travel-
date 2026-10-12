@@ -11,9 +11,9 @@ test("the site's own words are the fact, with their source", () => {
 })
 
 test("Google's category is only labelled (Tyler's 12 Oct test: a Spanish place shown as Korean)", () => {
-  const f = placeFacts({ name: 'X', type: 'listed on Google as Korean restaurant', type_source: 'google' })
-  assert.match(f.type.value, /^listed on Google as /)
-  assert.equal(sourceWord(f.type), 'From Google')
+  const f = placeFacts({ name: 'X', type: 'listed on the map as Korean restaurant', type_source: 'map' })
+  assert.match(f.type.value, /^listed on the map as /)
+  assert.equal(sourceWord(f.type), 'From the map listing')
 })
 
 test('a photo carries its credit', () => {

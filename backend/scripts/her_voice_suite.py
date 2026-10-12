@@ -5,6 +5,9 @@ contacted). Fails on a channel named in anything she is handed to say, and on a 
   2. the transcript check itself: it catches a channel name and a re-ask, and passes the demo path's own words
   3. the booking path's words (D3/D4): the question word for word, both choices, the prefilled form's confirmation, the request's
      confirmation, the message they send themselves — every one clean
+  4. Sasha 251 · HONEST RESULTS: a scripted turn where search_venues FAILS and the model claims cards → the reply that reaches
+     the person says it didn't work (on /s2, WhatsApp and /next under parity; /next with parity off untouched), and the check
+     itself catches a claim after a failed tool
 """
 from __future__ import annotations
 
@@ -97,6 +100,40 @@ async def main() -> bool:
     finally:
         VN._API, GR.address_of = real_api, real_addr
         VN._HELD.pop(acct, None)
+
+    # 4 ── Sasha 251 · honest results: a failed tool is never followed by a claim of what it would have shown
+    from unittest import mock
+    import app.services.llm as LLM
+    from agapi import v0 as API
+    from app.agent import sasha as AG
+    from app.agent.fakes import Block, client
+    claim = "Here are a few spots near Sol. Have a look whenever you like and tap one if it tempts you."
+    failed = [{"tool": "search_venues", "ok": False}]
+    bad = V.honest_faults([{"said": claim, "calls": failed, "rendered": False}])
+    check("4 catches a claim after a failed tool", bool(bad) and "search_venues failed" in bad[0], str(bad))
+    check("4 her failed line is clean", V.honest_faults([{"said": V.failed_line("search_venues"), "calls": failed}]) == []
+          and V.check([V.failed_line(t) for t in V.SHOWS]) == [])
+
+    async def failing(ctx, name, args):
+        return {"ok": False, "error": {"code": "unavailable", "message": "the places search isn't answering right now"}}
+
+    async def one(surface: str, parity: str) -> str:
+        steps = [[Block(type="tool_use", id="t1", name="search_venues", input={"what": "dinner", "where": "Sol, Madrid"})],
+                 [Block(type="text", text=claim)]]
+        text = ""
+        with mock.patch.object(LLM, "client", client(steps)), mock.patch.object(API, "call", failing), \
+                mock.patch.dict(os.environ, {"SASHA_S1_PARITY": parity}):
+            async for ev in AG.turn("00000000-0000-4000-8000-000000000251", "Dinner near Sol tonight?", [], f"hv251-{surface}-{parity}",
+                                    surface=surface):
+                if ev["type"] == "done":
+                    text = ev["text"]
+        return text
+    for surface, parity in (("s2", "on"), ("wa", "on"), ("s1", "on")):
+        got = await one(surface, parity)
+        check(f"4 {surface}: a failed search is said, never its cards",
+              V.honest_faults([{"said": got, "calls": failed}]) == [] and "didn't work" in got, got)
+    got = await one("s1", "off")
+    check("4 /next with parity off is untouched", got == claim, got)
 
     print(f"HER VOICE: {len(OK)} passed, {len(FAIL)} failed", flush=True)
     return not FAIL

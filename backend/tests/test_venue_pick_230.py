@@ -67,8 +67,9 @@ class APick(unittest.TestCase):
         self.assertEqual(out["status"], "choose_route")                       # email them, or book now: theirs to choose
         self.assertNotIn(ACCT, VN._HELD)
 
-    def test_s1_is_unchanged(self):
-        out = self.pick("s1", {"form": {}})
+    def test_s1_is_unchanged(self):   # Sasha 251 · old S1 (parity off) keeps the ladder; /next under parity is the one path
+        with mock.patch.dict("os.environ", {"SASHA_S1_PARITY": "off"}):
+            out = self.pick("s1", {"form": {}})
         self.assertEqual(out["status"], "choose_route")                       # /next keeps the ladder's question, as before
         self.assertNotIn(ACCT, VN._HELD)
 

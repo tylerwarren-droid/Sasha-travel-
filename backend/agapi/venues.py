@@ -185,8 +185,75 @@ def _routes_of(rd: dict) -> List[str]:
 async def read_booking_route(ctx, a: dict) -> dict:
     rd = await _read(ctx, a)
     card = card_of(ctx.account, a.get("place_id"), a.get("name"))   # Sasha 213 · the picked card is what's on screen
+    if one_path(ctx):   # Sasha 251 · how it books = the ONE channel hold_venue will use (never a second reading of the same place)
+        eng = await engine_channel(card) or read_channel(rd, card)
+        return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of_channel(eng),
+                "how": _how_words(eng), "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
     return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of(rd), "how": rd.get("say"),
             "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
+
+
+def one_path(ctx) -> bool:
+    """Sasha 251 · ONE BOOKING PATH on /s2, WhatsApp's brain and /next under S1 parity: every venue booking goes through
+    _engine_route. Old S1 (SASHA_S1_PARITY=off) keeps Sasha's own ladder exactly as it was."""
+    if getattr(ctx, "surface", "s1") == "s2":
+        return True
+    from app.agent.sasha import s1_parity
+    return s1_parity()
+
+
+# Sasha's own read (booking_signer/venue_read) → the engine's channel kinds, for a place the venue engine couldn't read (no site,
+# robots, a page built in the browser, another branch): the SAME channel shape, so the same question and the same executors decide
+READ_KIND = {"form": "form", "own_page": "own_engine", "link": "widget", "whatsapp": "whatsapp", "email": "email", "phone": "phone",
+             "instagram": "instagram"}   # their WhatsApp before email (Sasha 232: direct first)
+# …and each to its executor: Sasha's form fill sends, so it keeps its read-back and yes; a page with an address is prefilled
+READ_ROUTE = {"form": "form", "email": "email", "whatsapp": "whatsapp", "phone": "call", "instagram": "instagram"}
+
+
+def read_channel(rd: dict, card: Optional[dict] = None) -> Optional[dict]:
+    """Sasha 251 · the venue's ONE channel when the engine has none — from what Sasha's read found, in the engine's shape."""
+    from agapi import venue_truth as VT
+    rungs = rd.get("rungs") or {}
+    kinds = []
+    for rung, kind in READ_KIND.items():
+        if rung in rungs:
+            v = str((rungs[rung] or {}).get("value") or "")
+            kinds.append({"kind": kind, "value": v, "from": "read", **({"url": v} if v.startswith("http") else {}),
+                          **({"name": v} if rung == "link" and not v.startswith("http") else {})})
+    ch = VT.channel({"channels": kinds})
+    if not ch:
+        ch = next(({**k} for k in kinds if k["kind"] in ("instagram", "phone")), None)
+    if ch:
+        ch["from"] = "read"
+        if not ch.get("url") and ch["kind"] in VT.FILLABLE:
+            ch["url"] = (card or {}).get("website")
+    return ch
+
+
+def _routes_of_channel(eng: Optional[dict]) -> List[str]:
+    if not eng:
+        return []
+    out = [ENGINE_ROUTE.get(eng["kind"], eng["kind"])] + ([ENGINE_ROUTE.get(eng["alternative"]["kind"], "email")] if eng.get("alternative") else [])
+    return list(dict.fromkeys(out))
+
+
+def _how_words(eng: Optional[dict]) -> str:
+    if not eng:
+        return "I can't see a way to book them from their site or listing."
+    return {"own_engine": "Their own booking page — I can prefill it for them to confirm.", "form": "Their own booking form — I can prefill it.",
+            "widget": "Their booking page — I can prefill it for them to confirm.", "email": "By request (they answer it).",
+            "whatsapp": "By a message they answer.", "phone": "By phone.", "instagram": "By a message on their profile."}.get(eng["kind"], "")
+
+
+UNDER = {"type": "string", "description": "the name the booking goes under, ONLY when they name someone ('book it under Alex Gate'); "
+                                          "leave it out to use their own name"}
+
+
+def with_under(tool: dict) -> dict:
+    """Sasha 251 · hold_venue's schema with `under` (the person the booking is for) — /s2 and /next under parity only."""
+    sch = dict(tool["input_schema"])
+    sch["properties"] = {**sch["properties"], "under": UNDER}
+    return {**tool, "input_schema": sch}
 
 
 async def _reservation(ctx, a: dict, rd: dict) -> dict:
@@ -206,7 +273,9 @@ async def _reservation(ctx, a: dict, rd: dict) -> dict:
     contact = (cj or {}).get("contact") if status == 200 else None
     if not contact:
         raise _err("contact_missing", "the venue needs the person's name and mobile — ask them, once")
-    return {"schema": "reservation/1", "flow": "book", "who": {"name": contact["name"], "contact": {"mobile_e164": contact["mobile_e164"]}},
+    # Sasha 251 · "under Alex Gate": the name they gave, else the account's own — the contact (mobile) stays theirs
+    under = re.sub(r"\s+", " ", str(a.get("under") or "")).strip()[:80]
+    return {"schema": "reservation/1", "flow": "book", "who": {"name": under or contact["name"], "contact": {"mobile_e164": contact["mobile_e164"]}},
             "what": what, "where": {}, "when": {"mode": "at", "at": f"{day.isoformat()}T{hhmm}"},
             "how_many": {"count": party, "unit": "people"}}
 
@@ -235,6 +304,12 @@ async def hold_venue(ctx, a: dict) -> dict:
     route = a.get("route")
     card = card_of(ctx.account, a.get("place_id"), a.get("name"))   # Sasha 213 · this venue's card, highlighted on screen
     eng = await engine_channel(card)                                 # Sasha 248 · the venue's ONE channel, from the venue engine
+    if not eng and one_path(ctx):
+        # Sasha 251 · ONE PATH (found live, D4: the hammam's branch went down Sasha's older page path — "Shall I send it to your
+        # phone?"): what Sasha's own read found becomes the engine path's channel, so the same question and executors decide
+        eng = read_channel(rd, card)
+        if not eng:
+            raise _err("no_route", f"I can't see a way to book {GW.plain_venue(rd['venue'])} from their site or listing")
     if eng:
         got = await _engine_route(ctx, a, rd, res, at, now, route, eng, card)
         if got is not None:
@@ -257,7 +332,8 @@ async def engine_channel(card: Optional[dict], budget_s: float = 30.0) -> Option
 
 
 # "page" — the tool's own route word (its schema unchanged: S1 parity) — means "fill it now" when the engine's channel is a form
-ENGINE_ROUTE = {"own_engine": "page", "form": "page", "widget": "page", "email": "email", "whatsapp": "page", "phone": "call"}
+ENGINE_ROUTE = {"own_engine": "page", "form": "page", "widget": "page", "email": "email", "whatsapp": "page", "phone": "call",
+                "instagram": "instagram"}   # Sasha 251 · a place that books only by a message on its profile: the drafted message
 
 
 async def _engine_route(ctx, a: dict, rd: dict, res: dict, at: str, now, route: Optional[str], eng: dict, card: Optional[dict]) -> Optional[dict]:
@@ -271,6 +347,14 @@ async def _engine_route(ctx, a: dict, rd: dict, res: dict, at: str, now, route: 
                 "options": [{**o, "route": o["route"] or alt} for o in V.CHOICES],
                 "how": "Ask `ask` word for word, then hold_venue again with the route they chose."}
     route = route or ENGINE_ROUTE.get(eng.get("kind") or "")
+    if eng.get("from") == "read" and (eng.get("kind") in READ_ROUTE or not eng.get("url")) and not (route == "page" and eng.get("url")):
+        # Sasha 251 · a channel Sasha's own read found: its own executor (the form fill, the drafted message, the email, the call,
+        # their page to the phone) — the same one question decided it, above
+        if route == "page" and eng.get("kind") == "form":
+            route = "form"
+        elif route in (None, "page") or route == ENGINE_ROUTE.get(eng.get("kind") or ""):
+            route = READ_ROUTE.get(eng.get("kind") or "", route or "page")
+        return await _hold_inner(ctx, a, rd, res, at, now, route)
     if route in ("page", "form", "whatsapp") and eng.get("kind") in VT.PREPARED:   # venue.prepare_booking prepares it (row 775)
         held = await _prepared(ctx, a, rd, res, at, now, eng, card)
         # Sasha 249 · ONE QUESTION: the prefilled form IS their go-ahead — nothing reaches the venue until they confirm it themselves,

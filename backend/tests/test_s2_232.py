@@ -117,9 +117,12 @@ class DirectFirstEveryKind(unittest.TestCase):
         out = self.pick("s2", {"link": {"value": "https://www.fresha.com/a/casa-gate"}, "whatsapp": {"value": "+34600111222"}, "email": {}})
         self.assertNotEqual(out.get("route"), "whatsapp")
 
-    def test_s1_unchanged(self):
-        out = self.pick("s1", {"whatsapp": {"value": "+34600111222"}, "email": {}, "phone": {"fact_index": 0}})
+    def test_s1_unchanged(self):   # Sasha 251 · old S1 (parity off); /next under parity is the one path, as /s2
+        with mock.patch.dict("os.environ", {"SASHA_S1_PARITY": "off"}):
+            out = self.pick("s1", {"whatsapp": {"value": "+34600111222"}, "email": {}, "phone": {"fact_index": 0}})
         self.assertNotEqual(out.get("status"), "draft_message")
+        out = self.pick("s1", {"whatsapp": {"value": "+34600111222"}, "email": {}, "phone": {"fact_index": 0}})
+        self.assertEqual(out.get("status"), "draft_message")
 
 
 class FounderRealOnS2(unittest.TestCase):

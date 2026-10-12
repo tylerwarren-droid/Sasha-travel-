@@ -681,6 +681,10 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     if surface == "s2" or s1_parity():   # Sasha 249 · keep_list without a fixed example (S1 with parity off: its own words, untouched)
         from agapi import s2_keep as _K
         tools = [{**t, "description": _K.KEEP_LIST_DESC} if t["name"] == "keep_list" else t for t in tools]
+        # Sasha 251 · BOOK UNDER ANOTHER NAME (Tyler's OK): "book it under Alex Gate" — the name goes to the one engine path's
+        # person (the reservation's who.name: the prefilled form, the request, the call). S1 with parity off: its schema, untouched.
+        from agapi import venues as _VN
+        tools = [_VN.with_under(t) if t["name"] == "hold_venue" else t for t in tools]
     tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     step_ms: List[dict] = []
     pending = ""          # this step's text, not yet spoken

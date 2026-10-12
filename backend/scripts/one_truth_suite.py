@@ -27,6 +27,8 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T12": ("one route", ["tests.test_s249d.OneRoute"]),
     "T13": ("no fixed examples", ["tests.test_s249_status_keep_caps.NoFixedExamples"]),
     "T14": ("durable claims and outcomes", ["tests.test_s249d.DurableClaims", "tests.test_s249d.DurableOutcomes"]),
+    # Sasha 251 · every venue booking through the one engine path (D4: the one question word for word); "under <name>" to its person
+    "T16": ("one booking path + book under another name", ["tests.test_s251_one_path.OnePath", "tests.test_s251_one_path.UnderAnotherName"]),
 }
 
 _RUNNER = """
@@ -60,7 +62,7 @@ def main() -> int:
         if not ok:
             failed.append(t)
         print(f"  {'✓' if ok else '✗'} {t} {what} ({ran} tests)" + ("" if ok else f" — {bad[:2] if bad else 'no test ran'}"), flush=True)
-    print(f"ONE TRUTH: {14 - len(failed)}/14 hold" + (f" — FAILED: {failed}" if failed else ""), flush=True)
+    print(f"ONE TRUTH: {len(T) - len(failed)}/{len(T)} hold" + (f" — FAILED: {failed}" if failed else ""), flush=True)
     return 1 if failed else 0
 
 

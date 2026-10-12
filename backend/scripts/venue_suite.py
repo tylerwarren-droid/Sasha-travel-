@@ -206,6 +206,21 @@ async def routes_offline(a: str) -> None:
 
 
 async def main() -> int:
+    """Sasha 251 · this suite is OLD S1's ladder (decide.ladder's questions, the platform page, the form fill): run as old S1 —
+    SASHA_S1_PARITY=off — where that ladder still lives, unchanged. /s2 and /next under parity take the ONE engine path
+    (one_truth_suite T16, venue_truth_suite)."""
+    was = os.environ.get("SASHA_S1_PARITY")
+    os.environ["SASHA_S1_PARITY"] = "off"
+    try:
+        return await _main()
+    finally:
+        if was is None:
+            os.environ.pop("SASHA_S1_PARITY", None)
+        else:
+            os.environ["SASHA_S1_PARITY"] = was
+
+
+async def _main() -> int:
     from scripts import places_fake   # Sasha 213 · NO live Google Places from a suite (it costs money) — the founder's say-so only
     places_fake.install()
     if os.getenv("SASHA_FLIGHT_SUITE", "") == "skip":

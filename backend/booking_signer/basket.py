@@ -261,6 +261,18 @@ async def cancel_held(account: str, trip_id: str, session_id: str) -> int:
     return n
 
 
+async def drop_planned(account: str, trip_id: str) -> int:
+    """Sasha 246 · CANCEL A PLANNED TRIP (read back, never paid): its suggested / chosen items cancelled — never held, never booked;
+    a held or booked item is untouched."""
+    async def fn(conn):
+        return await conn.execute("update trip_basket_items set state = 'cancelled', updated_at = now() "
+                                  "where account_id = $1 and trip_id = $2 and state in ('suggested', 'chosen')",
+                                  uuid.UUID(account), uuid.UUID(trip_id))
+    n = int(str(await _go(fn)).split()[-1] or 0)
+    _log(AUSTEN, "%d planned item(s) dropped from trip %s", n, trip_id[:8])
+    return n
+
+
 async def remove(account: str, item_id: str) -> bool:
     """The ✕: one row, and only one not yet held or booked."""
     async def fn(conn):

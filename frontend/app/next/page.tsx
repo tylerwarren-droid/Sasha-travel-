@@ -115,6 +115,17 @@ export default function NextPage() {
   // Sasha 246 item 2 · THE PAUSE / SLEEP BUTTON (lib/sleep-rule.mjs): asleep = she stops mid-word, says nothing, the mic is OFF
   // (VoiceButton stops the stream; no auto-listen), her face dims. Wakes on the button, her face, the mic, or typing.
   const [asleep, setAsleep] = useState(false)
+  const [hereFlash, setHereFlash] = useState(false)
+  // Sasha 246 item 1 · the opening by name (their saved first name; /api/s2-me has no side effects — the one-time "what should I call
+  // you?" is asked in the chat, by her memory, never used up here)
+  const [helloName, setHelloName] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    fetch('/api/s2-me', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then((j: { name?: string | null } | null) => {
+      if (live && j?.name) setHelloName(String(j.name))
+    }).catch(() => { /* not signed in: the generic line */ })
+    return () => { live = false }
+  }, [])   // Sasha 246 · standby has no chat yet: "I'm here" is shown on her stage
   const asleepRef = useRef(false)
   const buildWatchdogRef = useRef<any>(null)
   const handleBuildingChange = useCallback((isBuilding: boolean) => {
@@ -654,6 +665,7 @@ export default function NextPage() {
     }
     if (nowAsleep) return
     if (r.effects.sayHere) setChatMessages(prev => [...prev, { role: 'assistant', content: HERE, sleepLine: true }])   // never sent to her as history
+    if (r.effects.sayHere) { setHereFlash(true); setTimeout(() => setHereFlash(false), 3500) }   // seen in standby too (found live: no chat to show it in)
     if (r.effects.speakHere && !isRespondingRef.current) speakNow(HERE)   // spoken when she's on a call (her voice); text-only: shown
   }, [speakNow])
 
@@ -1107,7 +1119,7 @@ export default function NextPage() {
             <div className="mt-welcome-scroll">
               {/* Sasha 215 · S2 — Sasha is more than travel: no destination gallery, no stand-in photos. Her, and her line. */}
               <div className="mt-hello">
-                <div className="mt-hello-line">Hey there — what can I do for you?</div>
+                <div className="mt-hello-line">{helloName ? `Hey ${helloName}, what can I help you with?` : 'Hey there — what can I do for you?'}</div>
                 <div className="mt-hello-sub">A table tonight, a spa on Saturday, a question, or a whole trip. Talk to her, or type below.</div>
               </div>
               {verifying && <div className="text-center text-sm" style={{ color: '#DAA520', marginTop: 10 }}>Confirming your payment…</div>}
@@ -1193,6 +1205,7 @@ export default function NextPage() {
         <span>{ASLEEP_LINE}</span>
       </button>
     )}
+    {!asleep && hereFlash && !started && <div className="mt-sleepveil" role="status" style={{ pointerEvents: 'none' }}><span>{HERE}</span></div>}
     <SleepButton asleep={asleep} onToggle={() => sleepEvent('tap_pause')} size={34} tone="glass" className={`mt-sleep${started ? ' live' : ''}`} />
     {started && (
       <>
@@ -1626,7 +1639,7 @@ export default function NextPage() {
         .mt-sleep{position:absolute;top:16px;right:16px;z-index:7}
         .mt-sleep.live{right:62px}
         .mt-avatar[data-mode="pip"] .mt-sleep{top:6px;right:auto;left:6px;height:26px!important;min-width:26px!important}
-        .mt-sleepveil{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;background:transparent;border:0;padding:0;cursor:pointer;color:rgba(255,255,255,.75)}
+        .mt-sleepveil{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;background:transparent;border:0;padding:0;cursor:pointer;color:rgba(255,255,255,.75)}
         .mt-sleepveil span{font-size:13px;padding:8px 14px;border-radius:999px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(8px)}
         .mt-avatar[data-mode="pip"] .mt-sleepveil span{display:none}
         .mt-avatar[data-mode="pip"] .mt-ov-top{padding:8px 10px!important}

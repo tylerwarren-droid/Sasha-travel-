@@ -146,10 +146,31 @@ class CancelDropsAHeldTrip(unittest.TestCase):
 
     def test_nothing_held_is_said(self):
         from booking_signer import basket_book as BB
-        with mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=None)):
+        with mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=None)), mock.patch.object(BB, "current", mock.AsyncMock(return_value=None)):
             with self.assertRaises(API.ToolError) as e:
                 run(M.cancel_booking(ctx(), {"what": "plan"}))
         self.assertEqual(e.exception.code, "nothing_held")
+
+    def test_a_planned_trip_read_back_but_never_paid_is_dropped_on_their_yes(self):
+        """Found live (scratch F): after the read-back, "cancel the whole plan" → nothing_held → "I can't delete it myself"."""
+        from booking_signer import basket as BK, basket_book as BB
+        planned = [dict(r, state="chosen", paid_session=None) for r in HELD_ROWS]
+        dropped = mock.AsyncMock(return_value=2)
+
+        async def items(account, trip_id, states=BK.LIVE):
+            return [r for r in planned if r["state"] in states]
+        with mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=None)), \
+                mock.patch.object(BB, "current", mock.AsyncMock(return_value={"rows": planned, "trip_id": TRIP, "title": "Lisbon"})), \
+                mock.patch.object(BK, "items", items), mock.patch.object(BK, "drop_planned", dropped):
+            r = run(M.cancel_booking(ctx(), {"what": "plan", "approval": {"said": "cancel the whole plan"}}))
+            self.assertEqual(r["status"], "awaiting_yes")
+            self.assertIn("planned trip “Lisbon”", r["read_back"][0])
+            dropped.assert_not_awaited()                                        # nothing touched before their yes
+            later = datetime.now(timezone.utc) + timedelta(seconds=5)
+            done = run(M.cancel_booking(ctx(started=later), {"what": "plan", "approval": {"said": "Yes, cancel it."}}))
+        self.assertEqual(done["status"], "cancelled")
+        dropped.assert_awaited_once_with(ctx().account, TRIP)
+        self.assertTrue(any("update trips set status = 'cancelled'" in sql for sql, _ in self.trips))
 
     def test_the_tool_offers_plan(self):
         t = next(t for t in M.tools() if t["name"] == "cancel_booking")

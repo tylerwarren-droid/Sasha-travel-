@@ -349,12 +349,45 @@ async def _drop_held(ctx) -> dict:
     order) — the read-back first; nothing is touched until their yes in a later turn."""
     from booking_signer import basket_book as BB
     pend = await BB.in_progress(ctx.account)
-    if not pend:
+    if not pend:   # found live (246): a trip read back but not yet paid has no payment held — the planned trip itself is dropped
+        cur = await BB.current(ctx.account)
+        if cur and cur.get("rows") and not await _any_booked(ctx.account, cur["trip_id"]):
+            title = cur.get("title") or "your trip"
+            lines = [_held_lines({"rows": cur["rows"]}, title)[0].replace("your held trip", "your planned trip"),
+                     "Nothing on it is booked or paid, so nothing is charged and there's nothing to refund.", "Shall I drop it?"]
+            _hold(ctx, "cancel_booking", lines, kind="planned", trip_id=cur["trip_id"], title=title)
+            return {"status": "awaiting_yes", "read_back": lines, "say": "Read it back and ask: shall I drop it?"}
         raise _err("nothing_held", "nothing is held for payment — my_plans lists what's booked")
     title = next((p.get("title") for p in await _plans(ctx.account) if p.get("trip_id") == pend["trip_id"]), None)
     lines = _held_lines(pend, title)
     _hold(ctx, "cancel_booking", lines, kind="held", sid=pend["sid"], trip_id=pend["trip_id"], title=title or "your trip")
     return {"status": "awaiting_yes", "read_back": lines, "say": "Read it back and ask: shall I drop it?"}
+
+
+async def _any_booked(account: str, trip_id: str) -> bool:
+    from booking_signer import basket as BK
+    return bool(await BK.items(account, trip_id, ("booked", "pending_payment")))
+
+
+async def _dropped_planned(ctx, held: dict) -> dict:
+    """Sasha 246 · their yes to dropping the planned trip: its suggested / chosen items cancelled and the plan marked cancelled
+    (never deleted) — only while nothing on it is booked or held for payment."""
+    from booking_signer import basket as BK
+    if await _any_booked(ctx.account, held["trip_id"]):
+        return {"status": "not_cancelled", "say": "Something on that trip is now booked or being paid for, so I haven't dropped it — "
+                                                  "nothing was changed. Ask me again."}
+    await BK.drop_planned(ctx.account, held["trip_id"])
+    from booking_signer import plan_store as PS
+    run = PS._run()
+    if run is not None:
+        import uuid as _u
+        try:
+            await run(lambda c: c.execute("update trips set status = 'cancelled', updated_at = now() where id = $1 and owner_id = $2 "
+                                          "and status in ('draft','active')", _u.UUID(held["trip_id"]), _u.UUID(ctx.account)))
+        except Exception as e:
+            log.warning("[s2-manage] planned trip not marked cancelled: %s", type(e).__name__)
+    log.info("[s2-manage] planned trip %s dropped on their yes", held["trip_id"][:8])
+    return {"status": "cancelled", "say": f"Dropped {held.get('title') or 'your planned trip'} — nothing was booked or charged."}
 
 
 async def _plans(account: str) -> List[dict]:
@@ -403,6 +436,8 @@ async def cancel_booking(ctx, a: dict) -> dict:
         from booking_signer import basket as BK
         if held["kind"] == "held":   # Sasha 246 · a held (unpaid, unbooked) trip dropped
             return await _dropped(ctx, held, said)
+        if held["kind"] == "planned":   # Sasha 246 · a planned trip (read back, never paid) dropped
+            return await _dropped_planned(ctx, held)
         if held["kind"] == "flight":
             from booking_signer import flight_manage as FM
             got = await FM.cancel_confirm(held["quote_id"])

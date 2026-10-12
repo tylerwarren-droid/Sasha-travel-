@@ -7,6 +7,8 @@ test('an iCloud sign-in (Jon) gets the quiet line, not the connect form', () => 
   assert.equal(gmailOffer({ email: 'jonc@icloud.com', connected: false, expired: false, opened: false }), 'quiet')
   assert.match(quietLine('jonc@icloud.com'), /^You signed in with an iCloud address\. Connect Gmail only if you have a Gmail account/)
   assert.doesNotMatch(quietLine('jonc@icloud.com'), /jonc/)
+  assert.doesNotMatch(quietLine('jonc@icloud.com'), /doesn.t read Outlook/)   // Sasha 245 · Outlook is read now
+  assert.match(quietLine('jonc@icloud.com'), /for Outlook or Microsoft 365 mail, use the Outlook section below/)
 })
 
 test('a Gmail sign-in, a connected or expired Gmail, or "I have a Gmail account" → the full form', () => {

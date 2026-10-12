@@ -155,6 +155,7 @@ async def health():
         "proactive": proactive.status(),   # S-83
         "calendar": calendar_sync.status(),   # S-79
         "mailbox": mailbox.status(),   # S-82
+        "outlook": {"configured": __import__("booking_signer.outlook", fromlist=["configured"]).configured()},   # CR 86
         "vault": {**vault_kms.status(), "health_items": bool(vault_api.dpia_ref())},   # S-78 · V-1 Cloud KMS; V-4 the DPIA gate
         "ladder": ladder_routes.status(),
         # S-64 · the two Stage B hooks in the CTO's conductor: false means a CTO drop removed one — booking-in-chat is off
@@ -558,6 +559,8 @@ router.include_router(vault_api.router)   # S-78 · /api/booking/vault
 router.include_router(vault_gdpr.router)   # S-78 §9 · /api/booking/account/{data,export}
 router.include_router(proactive.router)   # S-83 · /api/booking/proactive
 router.include_router(calendar_sync.router)   # S-79 · /api/booking/google
+from . import outlook as _outlook  # noqa: E402
+router.include_router(_outlook.router)   # CR 86 · /api/booking/outlook (Outlook / Microsoft 365, read-only)
 router.include_router(invitations.router)   # S-80 · /api/booking/invite (public, rate-limited)
 router.include_router(payments_t0.router)   # S-81 · /api/booking/payments/{id}/approve
 router.include_router(mailbox.router)   # S-82 · /api/booking/mailbox

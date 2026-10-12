@@ -10,6 +10,7 @@ import { MyBookings } from '../booking-helper/MyBookings'
 import { WhatsAppLink } from '../booking-helper/WhatsAppLink'
 import { CalendarConnect } from '../booking-helper/CalendarConnect'
 import { MailboxConnect } from '../booking-helper/MailboxConnect'
+import { OutlookConnect } from '../booking-helper/OutlookConnect'   // CR 86
 
 export default function YouPage() {
   return (
@@ -24,6 +25,7 @@ export default function YouPage() {
         <WhatsAppLink />
         <CalendarConnect />
         <MailboxConnect />
+        <OutlookConnect />
         <section id="vault" className="space-y-1 rounded border p-3">
           <h2 className="font-semibold">My accounts (the vault)</h2>
           <p>The logins and membership numbers Sasha may use to book for you — each sealed on its own, every use listed.

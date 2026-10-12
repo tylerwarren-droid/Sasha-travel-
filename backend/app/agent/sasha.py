@@ -79,6 +79,21 @@ def _amounts(obj: Any, out: set) -> None:
     elif isinstance(obj, str):
         for m in re.findall(r"(?:€|EUR)\s?(\d[\d,]*(?:\.\d+)?)", obj):
             out.add(round(float(m.replace(",", "")), 2))
+        # Sasha 245 · fine print's and activities' own forms: "16 EUR", "16,00 €", "18.00 €" (found live: every Lisbon price
+        # failed the guard, and the rewrite made her "correct herself" for a check she had run)
+        for m in re.findall(r"(\d[\d.,]*)\s?(?:€|EUR\b)", obj):
+            out.add(_money(m))
+    if isinstance(obj, dict) and isinstance(obj.get("amount_minor"), int) and not isinstance(obj.get("amount_minor"), bool):
+        out.add(round(obj["amount_minor"] / 100, 2))   # Sasha 245 · AgAPI's {amount_minor, currency}: the price is minor / 100
+
+
+def _money(s: str) -> float:
+    """'16,00' / '1,200' / '1.200,50' / '27.7' → a number: a comma or point followed by one or two digits at the end is decimal."""
+    s = s.strip(".,")
+    m = re.match(r"^(.*?)[.,](\d{1,2})$", s)
+    whole, frac = (m.group(1), m.group(2)) if m else (s, "")
+    whole = re.sub(r"[.,]", "", whole) or "0"
+    return round(float(f"{whole}.{frac}" if frac else whole), 2)
 
 
 _CONDITIONAL = re.compile(r"(?i)\b(?:once|when|after|as soon as|until|the moment)\b[^.!?]*\b(?:pa(?:y|id)|tap|go(?:ne)? through)|\bnot (?:yet )?(?:booked|paid|confirmed)|\bnothing'?s? (?:is )?(?:booked|paid|confirmed)")

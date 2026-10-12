@@ -17,5 +17,5 @@ export function gmailOffer({ email, connected, expired, opened }) {
 /** The quiet line: the sign-in's domain only, never the address. */
 export function quietLine(email) {
   const domain = String(email || '').split('@')[1] || 'another'
-  return `You signed in with ${/^(icloud|me|mac)\.com$/i.test(domain) ? 'an iCloud' : `a ${domain}`} address. Connect Gmail only if you have a Gmail account — Sasha doesn’t read Outlook or iCloud mail yet.`
+  return `You signed in with ${/^(icloud|me|mac)\.com$/i.test(domain) ? 'an iCloud' : `a ${domain}`} address. Connect Gmail only if you have a Gmail account — for Outlook or Microsoft 365 mail, use the Outlook section below.`   // Sasha 245 · Outlook is read now (CR 86)
 }

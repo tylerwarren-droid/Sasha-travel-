@@ -32,6 +32,11 @@ interface VoiceButtonProps {
   // next to the camera toggle in the call panel where every other call control lives. This is
   // the ONLY place the picker is drawn — VoiceButton no longer renders one itself.
   onMicDevices?: (info: MicDevicesInfo | null) => void
+  // Sasha 246 item 2 · the pause / sleep button: asleep = the mic is OFF (stream stopped, socket closed, no auto-listen, no
+  // reconnect, no barge-in). Pressing the mic while asleep wakes her (onWake) and starts listening; a wake from elsewhere
+  // brings the mic back only if it was on (or wanted) when she fell asleep.
+  asleep?: boolean
+  onWake?: () => void
 }
 
 // What the page needs to render its own mic picker: the choosable devices, what's selected
@@ -196,7 +201,7 @@ function preferredAudioDeviceId(list: MediaDeviceInfo[], stored: string): string
 const KEYTERMS = ['Chamberí', 'Malasaña', 'Chueca', 'Lavapiés', 'La Latina', 'Salamanca', 'Retiro', 'Chamartín', 'Argüelles', 'Moncloa', 'Huertas']
   .map((k) => `&keyterm=${encodeURIComponent(k)}`).join('')
 
-export default function VoiceButton({ onTranscript, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices }: VoiceButtonProps) {
+export default function VoiceButton({ onTranscript, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices, asleep = false, onWake }: VoiceButtonProps) {
   const droppedMutedRef = useRef(false)   // Sasha 213 · log the muted spell once, not per frame
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
@@ -271,6 +276,11 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
   const languageRef = useRef(language)
   useEffect(() => { languageRef.current = language }, [language])
   const connectTimeoutRef = useRef<any>(null)  // fails a hung connect so it never sticks
+  // Sasha 246 item 2 · asleep: the mic off and kept off; resumeRef = it was on (or wanted) when she fell asleep
+  const asleepRef = useRef(asleep)
+  const resumeRef = useRef(false)
+  const onWakeRef = useRef(onWake)
+  useEffect(() => { onWakeRef.current = onWake }, [onWake])
 
   // Expose gate to parent on mount — gate is a pure ref flag, no audio pipeline changes
   useEffect(() => {
@@ -314,6 +324,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
   }, [])
 
   const connect = useCallback(async () => {
+    if (asleepRef.current) { resumeRef.current = true; micLog('asleep', { connect: 'deferred until she wakes' }); return }   // Sasha 246 · asleep: never listening
     if (connectedRef.current || connectingRef.current) return
     connectingRef.current = true
     manualStopRef.current = false  // a fresh connect attempt re-enables reconnect
@@ -395,6 +406,12 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
         }
       }
       const dgKey = await keyPromise
+      if (asleepRef.current) {   // Sasha 246 · fell asleep while the mic was opening: close it, listen again only when she wakes
+        if (streamRef.current === stream) streamRef.current = null
+        stream.getTracks().forEach(t => t.stop())
+        connectingRef.current = false; setIsConnecting(false); resumeRef.current = true
+        return
+      }
       if (!dgKey) { connectingRef.current = false; setIsConnecting(false); reportMicError('Voice service unavailable'); return }
 
       // AudioContext — resume() immediately for Safari (requires in-gesture call stack)
@@ -666,6 +683,21 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
     }
   }, [])  // stable — all dynamic props are read via refs above
 
+  // Sasha 246 item 2 · fall asleep: everything stops (the stream's tracks, the socket, the reconnect timers; stopAll marks it a
+  // manual stop, so neither the watchdog nor onclose reconnects). Wake: the mic comes back only if it was on or wanted.
+  useEffect(() => {
+    if (asleep) {
+      if (connectedRef.current || connectingRef.current) resumeRef.current = true
+      asleepRef.current = true   // from here no connect starts; the teardown runs in the same tick, after this effect
+      queueMicrotask(() => { if (!asleepRef.current) return; stopAll(); connectingRef.current = false; micLog('asleep', { resume: resumeRef.current }) })
+    } else if (asleepRef.current) {
+      asleepRef.current = false
+      micLog('awake', { resume: resumeRef.current })
+      if (resumeRef.current) { resumeRef.current = false; connect() }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stopAll and connect are stable
+  }, [asleep])
+
   useEffect(() => {
     const t = setInterval(() => {
       const now = Date.now()
@@ -698,6 +730,10 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
   }, [connect])
 
   const toggleListening = () => {
+    if (asleepRef.current) {   // Sasha 246 · pressing the mic wakes her — and she listens
+      asleepRef.current = false; resumeRef.current = false
+      onWakeRef.current?.()
+    }
     if (connectedRef.current) { stopAll(); return }
     // Sasha 171 · a CLICK on the mic is the guest asking to talk: the gate opens now. It started closed "until the avatar
     // finishes speaking" — in the text box, with no call, the avatar never speaks, so nothing said ever reached Deepgram
@@ -776,23 +812,26 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
           // Muted outranks everything. `isSpeaking` can be a stale true from the moment before
           // the mute landed, and a pulsing green mic on a closed mic is the exact thing that
           // made the UI look like it was still listening.
-          muted         ? 'bg-white/10 opacity-60'
+          asleep        ? 'bg-white/10 opacity-60'
+          : muted       ? 'bg-white/10 opacity-60'
           : isSpeaking  ? 'bg-green-500 animate-pulse scale-110'
           : isConnected ? 'bg-red-500 animate-pulse'
           : isConnecting ? 'bg-yellow-500'
           : 'bg-indigo-600 hover:bg-indigo-700'
         } disabled:opacity-40`}
       >
-        {muted ? <MicOff className="w-4 h-4 text-white/50" />
+        {asleep ? <MicOff className="w-4 h-4 text-white/50" />
+          : muted ? <MicOff className="w-4 h-4 text-white/50" />
           : isConnecting ? <Loader2 className="w-4 h-4 text-white animate-spin" />
           : isConnected ? <MicOff className="w-4 h-4 text-white" />
           : <Mic className="w-4 h-4 text-white" />}
       </button>
       {micError && <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>}
-      {muted && <p className="text-xs text-red-400/80 text-center">Not listening</p>}
-      {notCaught && <p className="text-xs text-amber-300 text-center">I didn&rsquo;t catch that — say it again</p>}
-      {!muted && isConnected && !isSpeaking && !notCaught && <p className="text-xs text-white/60 text-center">{micGatedRef.current ? 'Sasha is speaking…' : 'Listening…'}</p>}
-      {!muted && isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
+      {asleep && <p className="text-xs text-white/50 text-center">Asleep — not listening</p>}
+      {!asleep && muted && <p className="text-xs text-red-400/80 text-center">Not listening</p>}
+      {!asleep && notCaught && <p className="text-xs text-amber-300 text-center">I didn&rsquo;t catch that — say it again</p>}
+      {!asleep && !muted && isConnected && !isSpeaking && !notCaught && <p className="text-xs text-white/60 text-center">{micGatedRef.current ? 'Sasha is speaking…' : 'Listening…'}</p>}
+      {!asleep && !muted && isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
       {/* The mic picker is deliberately NOT rendered here. It is published upward via
           onMicDevices and drawn by the page as a pill beside the camera toggle, where the rest
           of the call controls live. A local fallback used to exist for standalone use; it only

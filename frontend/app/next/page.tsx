@@ -15,6 +15,8 @@ import { bookingPeek } from '@/lib/booking-client'
 import { PAYMENTS_ENABLED, SAVED_CARD_LAST4 } from '@/lib/flags'
 import { buildItineraryHtml, buildItineraryText } from '@/lib/itineraryDoc'
 import { shouldSay } from '@/lib/mic-fail.mjs'   // Sasha 215 · the mic never fails silently
+import SleepButton from '../components/SleepButton'   // Sasha 246 item 2 · pause / sleep
+import { sleepStep, HERE, ASLEEP, AWAKE, ASLEEP_LINE } from '@/lib/sleep-rule.mjs'
 import { User, Itinerary } from '@/types'
 
 // Sasha 213 · ONE IDENTITY: a concierge for anywhere — no destination is assumed
@@ -110,6 +112,10 @@ export default function NextPage() {
   // silent for the whole build. So this carries its own backstop — a closed gate that never
   // reopens is the freeze this app already shipped once, and it must not be reachable.
   const [micMuted, setMicMuted] = useState(false)
+  // Sasha 246 item 2 · THE PAUSE / SLEEP BUTTON (lib/sleep-rule.mjs): asleep = she stops mid-word, says nothing, the mic is OFF
+  // (VoiceButton stops the stream; no auto-listen), her face dims. Wakes on the button, her face, the mic, or typing.
+  const [asleep, setAsleep] = useState(false)
+  const asleepRef = useRef(false)
   const buildWatchdogRef = useRef<any>(null)
   const handleBuildingChange = useCallback((isBuilding: boolean) => {
     clearTimeout(buildWatchdogRef.current)
@@ -604,6 +610,7 @@ export default function NextPage() {
   // so all three take the lock and the backstop timer identically.
   const speakNow = useCallback((spoken: string) => {
     if (!spoken || !speakFnRef.current) return
+    if (asleepRef.current) return   // Sasha 246 item 2 · asleep: nothing is said (her words stay on screen)
     lastRepeatTextRef.current = spoken
     setCaption(spoken)
     isRespondingRef.current = true
@@ -632,6 +639,23 @@ export default function NextPage() {
     if (line && speakFnRef.current) { micSaidRef.current.add(line); speakNow(line) }
   }, [micError])   // eslint-disable-line react-hooks/exhaustive-deps
 
+
+  // Sasha 246 item 2 · the sleep rule carried out on /next
+  const sleepEvent = useCallback((ev: 'tap_pause' | 'tap_face' | 'press_mic' | 'typed') => {
+    const r = sleepStep(asleepRef.current ? ASLEEP : AWAKE, ev)
+    const nowAsleep = r.state === ASLEEP
+    if (nowAsleep === asleepRef.current) return
+    asleepRef.current = nowAsleep
+    setAsleep(nowAsleep)
+    if (r.effects.stopAudio) {
+      pendingSpeechRef.current = null   // nothing queued is said: interrupt's onSashaFinished would flush it
+      interruptFnRef.current?.()        // her face stops mid-word (LiveAvatar interrupt)
+      setCaption('')
+    }
+    if (nowAsleep) return
+    if (r.effects.sayHere) setChatMessages(prev => [...prev, { role: 'assistant', content: HERE, sleepLine: true }])   // never sent to her as history
+    if (r.effects.speakHere && !isRespondingRef.current) speakNow(HERE)   // spoken when she's on a call (her voice); text-only: shown
+  }, [speakNow])
 
   const handleSashaFinished = useCallback(() => {
     // A real answer was queued behind an interim line — voice it now instead of releasing, so
@@ -907,10 +931,11 @@ export default function NextPage() {
   }, [started, voiceReady])
   const startWith = useCallback((opener?: string) => {
     if (verifying || booked || itemBooked) return
+    if (asleepRef.current) sleepEvent('press_mic')   // Sasha 246 · the mic (start the call) wakes her
     unlockAudio()
     if (opener) pendingOpenerRef.current = opener
     handleStart()
-  }, [verifying, booked, itemBooked, handleStart, unlockAudio])
+  }, [verifying, booked, itemBooked, handleStart, unlockAudio, sleepEvent])
   const newChat = useCallback(() => {
     // Mindtrip's "New chat": a clean slate. Ending the live session first releases the
     // avatar; handleStart already resets messages/plan/tabs.
@@ -930,7 +955,8 @@ export default function NextPage() {
     : richItinerary ? `Planning · ${richItinerary.title}`
     : photos.length > 0 ? `Exploring ${photos[activePhoto]?.location || photos[activePhoto]?.description || 'the world'}`
     : 'What Sasha is doing for you'
-  const statusLabel = micMuted ? 'Not listening' : isAvatarSpeaking ? 'Sasha is speaking' : isListening ? 'Listening…' : voiceConnected ? 'Mic live' : micError ? 'Mic unavailable' : 'Connecting…'
+  const wakeByMic = useCallback(() => sleepEvent('press_mic'), [sleepEvent])   // Sasha 246 · the phone's big mic, asleep
+  const statusLabel = asleep ?'Asleep — not listening' : micMuted ? 'Not listening' : isAvatarSpeaking ? 'Sasha is speaking' : isListening ? 'Listening…' : voiceConnected ? 'Mic live' : micError ? 'Mic unavailable' : 'Connecting…'
 
   return (
     <main className={`mt-app${isPhone ? ' phone' : ''}${isPhone && sheetOpen ? ' sheet-open' : ''}`}>
@@ -1071,6 +1097,8 @@ export default function NextPage() {
             unseenTabs={unseenTabs}
             ideasCache={ideasCache}
             onIdeasCache={setIdeasCache}
+            asleep={asleep}
+            onWake={sleepEvent}
             hideTabs
             panelPortal={panelHost}
           />
@@ -1085,8 +1113,9 @@ export default function NextPage() {
               {verifying && <div className="text-center text-sm" style={{ color: '#DAA520', marginTop: 10 }}>Confirming your payment…</div>}
             </div>
             {/* Sasha 156 · a real text box: typing needs no call, no mic and no camera; the mic opens the call */}
-            <form className="mt-fakecomposer" action="#" onSubmit={e => {
+            <form className="mt-fakecomposer" action="#" onChange={() => { if (asleepRef.current) sleepEvent('typed') }} onSubmit={e => {
               e.preventDefault()
+              if (asleepRef.current) sleepEvent('typed')   // Sasha 246 · typing wakes her
               // uncontrolled: what was typed before the page finished loading is kept, never wiped by hydration
               const t = String(new FormData(e.currentTarget).get('q') ?? '').trim()
               if (!t || verifying || booked || itemBooked) return
@@ -1114,7 +1143,7 @@ export default function NextPage() {
         <div className="mt-glow" aria-hidden />
         <div className="mt-ring" aria-hidden />
         <div className="mt-ring mt-ring2" aria-hidden />
-        <div className="absolute inset-0">
+        <div className="absolute inset-0" style={asleep && started ? { opacity: 0.3, filter: 'grayscale(.85) brightness(.7)', transition: 'opacity .8s, filter .8s' } : { transition: 'opacity .8s, filter .8s' }}>
           {started && (
             <SashaAvatar
               key={language}
@@ -1136,7 +1165,7 @@ export default function NextPage() {
                   on — so the call starts where the eye already is. (public/sasha-preview.jpg
                   is the LiveAvatar preview for the configured avatar; refresh it if the avatar
                   changes.) */}
-              <img className="mt-standby mt-standby-photo" src="/api/heygen/preview" alt="Sasha" onError={e => { e.currentTarget.style.display = 'none' }} />
+              <img className="mt-standby mt-standby-photo" src="/api/heygen/preview" alt="Sasha" style={asleep ? { opacity: 0.3, filter: 'grayscale(.85) brightness(.7)' } : undefined} onError={e => { e.currentTarget.style.display = 'none' }} />
               <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 22%, transparent 58%, rgba(0,0,0,.85) 100%)' }} />
               <div className="mt-ov-top absolute top-0 left-0 right-0 flex items-center" style={{ padding: '14px 16px', zIndex: 3 }}>
                 <span className="mt-standbypill"><span className="mt-standbydot" /> {uiPreview ? 'Preview' : 'Standby'}</span>
@@ -1158,6 +1187,13 @@ export default function NextPage() {
             </>
           )}
         </div>
+    {/* Sasha 246 item 2 · pause / sleep: always on her stage (hero, picture-in-picture, standby); asleep, a tap on her face wakes her */}
+    {asleep && (
+      <button type="button" className="mt-sleepveil" aria-label="Sasha is asleep — tap her face to wake her" onClick={e => { e.stopPropagation(); sleepEvent('tap_face') }}>
+        <span>{ASLEEP_LINE}</span>
+      </button>
+    )}
+    <SleepButton asleep={asleep} onToggle={() => sleepEvent('tap_pause')} size={34} tone="glass" className={`mt-sleep${started ? ' live' : ''}`} />
     {started && (
       <>
         {/* gradient overlay for legibility */}
@@ -1209,14 +1245,14 @@ export default function NextPage() {
         </div>
 
         {isPhone && (() => {   /* Sasha 214 · ONE big mic button, ONE clear state; tap while she speaks = interrupt her */
-          const st = isAvatarSpeaking ? 'speaking' : thinking ? 'thinking' : micMuted ? 'muted' : (voiceConnected || isListening) ? 'listening' : micError ? 'off' : 'starting'
+          const st = asleep ? 'asleep' : isAvatarSpeaking ? 'speaking' : thinking ? 'thinking' : micMuted ? 'muted' : (voiceConnected || isListening) ? 'listening' : micError ? 'off' : 'starting'
           const words: Record<string, string> = { speaking: 'Sasha is speaking — tap to interrupt', thinking: 'Thinking…', listening: 'Listening — just talk',
-            muted: 'Muted — tap to talk', off: `${micError || 'Mic off'} — type below`, starting: 'Starting the mic…' }
+            muted: 'Muted — tap to talk', off: `${micError || 'Mic off'} — type below`, starting: 'Starting the mic…', asleep: 'Asleep — tap to wake her' }
           return (
             <div className="mt-bigmic-wrap">
               <button type="button" className={`mt-bigmic ${st}`} aria-label={words[st]}
-                onClick={() => { if (st === 'speaking') handleInterrupt(); else if (st === 'muted' || st === 'listening') setMicMuted(m => !m) }}>
-                {st === 'speaking' ? <span className="la-load"><i /><i /><i /></span> : st === 'thinking' ? <span className="mt-spin" /> : st === 'muted' ? <MicOff size={30} /> : <Mic size={30} />}
+                onClick={st === 'asleep' ? wakeByMic : () => { if (st === 'speaking') handleInterrupt(); else if (st === 'muted' || st === 'listening') setMicMuted(m => !m) }}>
+                {st === 'asleep' ? <MicOff size={30} /> : st === 'speaking' ? <span className="la-load"><i /><i /><i /></span> : st === 'thinking' ? <span className="mt-spin" /> : st === 'muted' ? <MicOff size={30} /> : <Mic size={30} />}
               </button>
               <div className="mt-bigmic-label">{words[st]}</div>
             </div>
@@ -1233,7 +1269,11 @@ export default function NextPage() {
           <div className="flex items-center mt-ctrls" style={{ gap: 8, flexWrap: 'nowrap', overflow: 'hidden' }}>
             {/* Muted wins over every other state: the mic is genuinely closed, so a
                 leftover "Listening…" equaliser would be actively lying to the guest. */}
-            {micMuted ? (
+            {asleep ? (   /* Sasha 246 item 2 · asleep outranks everything: the mic is off */
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#e8b931', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(232,185,49,.45)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
+                <MicOff className="w-3.5 h-3.5" /> Asleep — not listening
+              </div>
+            ) : micMuted ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#f87171', background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.45)', borderRadius: 999, padding: '8px 14px', backdropFilter: 'blur(10px)', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
                 <MicOff className="w-3.5 h-3.5" /> Not listening — building your trip
               </div>
@@ -1583,6 +1623,12 @@ export default function NextPage() {
         .mt-avatar{position:fixed;z-index:40;overflow:hidden;border-radius:22px;border:1px solid rgba(255,255,255,.07);background:linear-gradient(160deg,#12101b,#0a0a12);color:#fff;box-shadow:0 30px 80px -30px rgba(0,0,0,.8);transition:top .5s cubic-bezier(.2,.8,.2,1),left .5s cubic-bezier(.2,.8,.2,1),width .5s cubic-bezier(.2,.8,.2,1),height .5s cubic-bezier(.2,.8,.2,1),border-radius .5s,opacity .3s}
         .mt-avatar[data-mode="pip"]{border-radius:16px;border-color:rgba(255,255,255,.14);box-shadow:0 24px 60px -20px rgba(0,0,0,.9);cursor:pointer}
         .mt-avatar[data-mode="pip"] .mt-ov-hero{display:none}
+        .mt-sleep{position:absolute;top:16px;right:16px;z-index:7}
+        .mt-sleep.live{right:62px}
+        .mt-avatar[data-mode="pip"] .mt-sleep{top:6px;right:auto;left:6px;height:26px!important;min-width:26px!important}
+        .mt-sleepveil{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;background:transparent;border:0;padding:0;cursor:pointer;color:rgba(255,255,255,.75)}
+        .mt-sleepveil span{font-size:13px;padding:8px 14px;border-radius:999px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(8px)}
+        .mt-avatar[data-mode="pip"] .mt-sleepveil span{display:none}
         .mt-avatar[data-mode="pip"] .mt-ov-top{padding:8px 10px!important}
         .mt-avatar[data-mode="pip"] .mt-ov-top .la-icon{width:24px;height:24px}
         .mt-pipfoot{position:absolute;left:0;right:0;bottom:0;padding:9px 11px;display:flex;align-items:center;justify-content:space-between;gap:8px;z-index:3;font-size:11px;color:#fff;background:linear-gradient(to top,rgba(0,0,0,.8),transparent)}
@@ -1633,6 +1679,7 @@ export default function NextPage() {
         .mt-bigmic.thinking{background:linear-gradient(135deg,#6366f1,#4f46e5)}
         .mt-bigmic.muted,.mt-bigmic.off{background:rgba(248,113,113,.9)}
         .mt-bigmic.starting{background:rgba(255,255,255,.18)}
+        .mt-bigmic.asleep{background:rgba(255,255,255,.12);color:#e8b931}
         .mt-bigmic-label{font-size:13px;font-weight:600;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.8);text-align:center;padding:0 16px}
         .mt-spin{width:26px;height:26px;border-radius:50%;border:3px solid rgba(255,255,255,.35);border-top-color:#fff;animation:spin 0.9s linear infinite}
         @keyframes spin{to{transform:rotate(360deg)}}

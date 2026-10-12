@@ -103,7 +103,8 @@ function chroma(video: HTMLVideoElement, canvas: HTMLCanvasElement): () => void 
 /** Sasha 231 · the bubble sits ABOVE the "Voice on · Type instead" row (it covered "Type instead" at 92 px). */
 const BUBBLE_BOTTOM = 'calc(env(safe-area-inset-bottom) + 128px)'
 
-export default function S2Hello({ talker, name, signedIn, backLine, dormant }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean }) {
+export default function S2Hello({ talker, name, signedIn, backLine, dormant, asleep = false, onWake }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean
+  asleep?: boolean; onWake?: () => void }) {   // Sasha 246 item 2 · asleep: her face stops and dims; a tap on it wakes her
   type Phase = 'off' | 'starting' | 'face' | 'faceLate' | 'voice' | 'tap' | 'bubble' | 'faceAgain'
   const [phase, setPhase] = useState<Phase>('off')
   const [tapFor, setTapFor] = useState<'face' | 'voice'>('voice')
@@ -127,6 +128,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant }: {
   const [line, setLine] = useState('')
   const idle = useRef<ReturnType<typeof setTimeout> | null>(null)
   const early = useRef<{ p: Promise<Face>; t0: number } | null>(null)   // her face starts at mount, before the sign-in check returns
+  const asleepRef = useRef(asleep)   // Sasha 246 item 2
 
   useEffect(() => {
     if (signedIn === false) { early.current?.p.then(f => f.stop()).catch(() => {}); early.current = null; return }
@@ -153,6 +155,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant }: {
     return text.current
   }
   const speakFace = async () => {
+    if (asleepRef.current) return handoff()   // Sasha 246 · asleep: no hello — straight to the (dimmed) bubble
     words()
     const f = face.current
     if (!f) return handoff()
@@ -160,6 +163,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant }: {
     setTimeout(handoff, backRef.current ? Math.max(1500, secs * 1000 + 500) : back.current ? Math.min(2000, Math.max(1000, secs * 1000 + 300)) : Math.max(2500, secs * 1000 + 900))   // back: ~1–2 s (with her memory: its line), then away
   }
   const speakVoice = async () => {
+    if (asleepRef.current) return handoff()   // Sasha 246
     const r = await talker.sayNow(words())
     if (r === 'blocked') { setTapFor(face.current ? 'face' : 'voice'); setPhase('tap'); return }   // Sasha 232 · her face, if it came, with the tap
     handoff()
@@ -205,6 +209,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant }: {
       if (settled) return
       settled = true
       clearTimeout(timer)
+      if (asleepRef.current) { face.current = f; handoff(); return }   // Sasha 246 · fell asleep before her face came: it never speaks
       face.current = f
       keyOn()
       setPhase('face')
@@ -253,6 +258,20 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant }: {
     } catch { setPhase('bubble') }
   }
 
+  // Sasha 246 item 2 · fall asleep: her face, if it is up (the hello or "her face back"), stops NOW — mid-word — and becomes the
+  // dimmed bubble; no hello is said later in this visit. Waking is the parent's (the bubble's tap → onWake).
+  useEffect(() => {
+    asleepRef.current = asleep
+    if (!asleep) return
+    try { sessionStorage.setItem('s2_hello', '1') } catch { /* private mode */ }
+    const now = phaseRef.current
+    if (now === 'off' || now === 'bubble') return
+    if (now === 'starting') return   // the opening's own handlers see asleepRef and hand off without a word
+    const t = setTimeout(() => { void collapse() }, 0)   // out of the effect's own pass
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on the change only
+  }, [asleep])
+
   const big = phase === 'starting' || phase === 'face' || phase === 'faceLate' || phase === 'faceAgain' || (phase === 'tap' && tapFor === 'face')
   return (
     <>
@@ -270,10 +289,11 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant }: {
           {phase === 'tap' && <div><button onClick={tapToHear} style={{ marginTop: 12, padding: '10px 18px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700 }}>Tap to hear Sasha</button></div>}
         </div>) : null}
       {phase === 'bubble' && (
-        <button onClick={faceBack} aria-label="Sasha — tap to see her" style={{
-          position: 'fixed', zIndex: 40, right: 16, bottom: BUBBLE_BOTTOM, width: 58, height: 58, borderRadius: '50%', padding: 0, opacity: dormant ? 0.45 : 1,
+        <button onClick={asleep ? () => onWake?.() : faceBack} aria-label={asleep ? 'Sasha is asleep — tap her face to wake her' : 'Sasha — tap to see her'} style={{
+          position: 'fixed', zIndex: asleep ? 46 : 40, right: 16, bottom: BUBBLE_BOTTOM, width: 58, height: 58, borderRadius: '50%', padding: 0, opacity: asleep ? 0.3 : dormant ? 0.45 : 1,
+          filter: asleep ? 'grayscale(.85) brightness(.7)' : 'none',
           border: `2px solid ${talking ? GOLD : 'rgba(255,255,255,.35)'}`, boxShadow: talking ? `0 0 0 6px rgba(232,185,49,.25)` : '0 6px 18px rgba(0,0,0,.5)',
-          background: img ? `center / cover no-repeat url(${img})` : 'linear-gradient(135deg,#6d4aff,#9b4dff)', color: '#fff', fontWeight: 700, fontSize: 20, transition: 'box-shadow .3s, border-color .3s, opacity 1.2s' }}>
+          background: img ? `center / cover no-repeat url(${img})` : 'linear-gradient(135deg,#6d4aff,#9b4dff)', color: '#fff', fontWeight: 700, fontSize: 20, transition: 'box-shadow .3s, border-color .3s, opacity 1.2s, filter 1.2s' }}>
           {img ? '' : 'S'}</button>)}
     </>
   )

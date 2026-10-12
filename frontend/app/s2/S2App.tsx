@@ -22,6 +22,8 @@ import TripPanel from '@/app/components/workspace/TripPanel'   // Sasha 236 · t
 import { TRIP_BOARD_CSS } from './tripBoardCss'
 import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { apiHeaders, apiUrl } from '@/lib/api'
+import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
+import { sleepStep, HERE, ASLEEP, AWAKE } from '@/lib/sleep-rule.mjs'
 
 type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
@@ -92,6 +94,7 @@ function useSpeaker() {
   const blockSubs = useRef(new Set<(b: boolean) => void>())
   const lastBlocked = useRef<string | null>(null)
   const epoch = useRef(0)   // Sasha 233 · bumped by interrupt(): a line fetched before it is never played
+  const asleep = useRef(false)   // Sasha 246 item 2 · asleep: nothing is said aloud
   const emit = (b: boolean) => subs.current.forEach(f => f(b))
   const setBlocked = (t: string | null) => { lastBlocked.current = t; blockSubs.current.forEach(f => f(!!t)) }
   const audio = () => {
@@ -134,8 +137,8 @@ function useSpeaker() {
       if (primed.current || playing.current) return
       try { const a = audio(); a.src = SILENT; a.play().then(() => { primed.current = true }).catch(() => {}) } catch { /* no audio */ }
     },
-    say: (t: string) => { if (on.current && !muted.current && t.trim()) { q.current.push(t); next() } },
-    sayNow: async (t: string) => { emit(true); const r = muted.current ? 'played' as const : await mp3(t); if (r === 'played') on.current = true; emit(false); return r },
+    say: (t: string) => { if (on.current && !muted.current && !asleep.current && t.trim()) { q.current.push(t); next() } },
+    sayNow: async (t: string) => { emit(true); const r = muted.current || asleep.current ? 'played' as const : await mp3(t); if (r === 'played') on.current = true; emit(false); return r },
     setRoute: (fn: ((t: string) => Promise<void>) | null) => { route.current = fn },
     setMuted: (m: boolean) => { muted.current = m; if (m) { q.current = []; setBlocked(null) } },
     /** Sasha 233 · "Thanks!" mid read-back: what she's saying stops now, and nothing queued is said. */
@@ -143,7 +146,12 @@ function useSpeaker() {
     onSpeaking: (fn: (b: boolean) => void) => { subs.current.add(fn); return () => { subs.current.delete(fn) } },
     /** Sasha 232 · a reply the phone refused to play: the toggle says so (never "Voice on" while she's silent); a tap replays it. */
     onBlocked: (fn: (b: boolean) => void) => { blockSubs.current.add(fn); return () => { blockSubs.current.delete(fn) } },
-    replayBlocked: () => { const t = lastBlocked.current; setBlocked(null); if (t && !muted.current) { q.current.unshift(t); next() } },
+    replayBlocked: () => { const t = lastBlocked.current; setBlocked(null); if (t && !muted.current && !asleep.current) { q.current.unshift(t); next() } },
+    /** Sasha 246 item 2 · asleep: what she's saying stops mid-word (as interrupt) and nothing is said until she wakes. */
+    setAsleep: (a: boolean) => {
+      asleep.current = a
+      if (a) { epoch.current++; q.current = []; setBlocked(null); try { if (el.current && !el.current.paused) el.current.pause() } catch { /* nothing playing */ } }
+    },
     isOn: () => on.current,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs and a stable callback: one speaker for the page's life
   }), [])
@@ -372,6 +380,24 @@ export default function S2App() {
   const [dormant, setDormant] = useState(false)
   const micUsed = useRef(false)
   const [woke, setWoke] = useState(false)
+  // Sasha 246 item 2 · THE PAUSE / SLEEP BUTTON (lib/sleep-rule.mjs): asleep = silent, the mic off, her face dimmed.
+  // She wakes on the button, a tap on her face, a press of the mic, or typing — and says "I'm here".
+  const [asleep, setAsleep] = useState(false)
+  const asleepRef = useRef(false)
+  const sleepEvent = useCallback((ev: 'tap_pause' | 'tap_face' | 'press_mic' | 'typed') => {
+    const r = sleepStep(asleepRef.current ? ASLEEP : AWAKE, ev)
+    const nowAsleep = r.state === ASLEEP
+    if (nowAsleep === asleepRef.current) return
+    asleepRef.current = nowAsleep
+    setAsleep(nowAsleep)
+    if (r.effects.stopAudio) speaker.setAsleep(true)   // mid-word: the element pauses, the queue empties (her face: S2Hello)
+    if (nowAsleep) return
+    speaker.setAsleep(false)
+    speaker.unlock()   // inside the tap / key that woke her
+    setDormant(false)
+    if (r.effects.sayHere) setMsgs(ms => [...ms, { role: 'sasha', text: HERE, cards: [] }])   // shown only: never sent to her as history
+    if (r.effects.speakHere) speaker.say(HERE)
+  }, [speaker])
   // Sasha 231 · MEMORY ACROSS VISITS: what she remembers for this account (masked) — "Welcome back — we were looking at …"
   const [backLine, setBackLine] = useState<string | null | undefined>(undefined)
   useEffect(() => {
@@ -428,6 +454,7 @@ export default function S2App() {
     const t = text.trim()
     if (!t || busy) return
     if (dormant) setDormant(false)   // Sasha 231 · a message wakes her, with no re-introduction
+    if (asleepRef.current) sleepEvent('typed')   // Sasha 246 item 2 · a message wakes her
     setBusy(true)
     setInput('')
     setMsgs(ms => [...ms, { role: 'user', text: t, cards: [] }, { role: 'sasha', text: '', cards: [] }])
@@ -487,10 +514,10 @@ export default function S2App() {
       histRef.current = [...histRef.current, { role: 'user', content: t }, { role: 'assistant', content: reply }]
       setBusy(false)
     }
-  }, [busy, speaker, dormant])
+  }, [busy, speaker, dormant, sleepEvent])
 
   const wake = () => { setDormant(false); setWoke(micUsed.current); speaker.unlock() }   // she was listening → listening again
-  const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} />   // the same place in every branch: it outlives the sign-in check
+  const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} asleep={asleep} onWake={() => sleepEvent('tap_face')} />   // the same place in every branch: it outlives the sign-in check
   if (signedIn === null) return <><main style={{ minHeight: '100dvh', background: C.bg }} />{hello}</>
   if (!signedIn) return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'system-ui' }}>
@@ -559,11 +586,11 @@ export default function S2App() {
           </div>
           <footer style={{ padding: '10px 12px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="s2-mic" onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, height: 56 }}>
-              {dormant ? null : <VoiceButton onTranscript={send} readyToListen muted={busy} autoStart={woke} />}{/* resting: unmounted — the mic is off */}
+              {dormant ? null : <VoiceButton onTranscript={send} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')} />}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
             </div>
             <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} />
             <form onSubmit={e => { e.preventDefault(); speaker.unlock(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
-              <input ref={typeBox} value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sasha anything…" aria-label="Message Sasha"
+              <input ref={typeBox} value={input} onChange={e => { if (asleepRef.current) sleepEvent('typed'); setInput(e.target.value) }} placeholder="Ask Sasha anything…" aria-label="Message Sasha"
                 style={{ flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 16 }} />
               <button type="submit" disabled={busy || !input.trim()} aria-label="Send"
                 style={{ padding: '0 16px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700, opacity: busy || !input.trim() ? 0.5 : 1 }}>➤</button>
@@ -582,6 +609,9 @@ export default function S2App() {
         <iframe src={handover} title="Finish the booking" allow="clipboard-write" style={{ flex: 1, border: 0, width: '100%', background: '#fff' }} />
       </div>
     ) : null}
+    {/* Sasha 246 item 2 · pause / sleep: always on screen (above the resting veil too), opposite her face */}
+    <SleepButton asleep={asleep} onToggle={() => sleepEvent('tap_pause')} size={46}
+      style={{ position: 'fixed', zIndex: 46, left: 16, bottom: 'calc(env(safe-area-inset-bottom) + 134px)', boxShadow: '0 6px 18px rgba(0,0,0,.5)' }} />
     {dormant ? <button onClick={wake} aria-label="Sasha is resting — tap to bring her back" style={{ position: 'fixed', inset: 0, zIndex: 45, background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}>
       <span style={{ position: 'absolute', left: '50%', top: '46%', transform: 'translate(-50%, -50%)', padding: '10px 18px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: C.dim, fontSize: 14.5, whiteSpace: 'nowrap' }}>Tap me if you need me</span>
     </button> : null}</>

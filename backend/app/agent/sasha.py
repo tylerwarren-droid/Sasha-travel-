@@ -267,6 +267,18 @@ def guard_strip(text: str, bad: List[str]) -> str:
     return " ".join(dict.fromkeys(out))
 
 
+async def booked_event(account: Optional[str]) -> Optional[dict]:
+    """Sasha 249 · the `booked` event (/s2's "Booked" card): its state and line are agapi.s2_status's — the same as get_status, the
+    Trip banner and the WhatsApp line. None when the records don't answer or nothing is booked (no card is guessed)."""
+    try:
+        from agapi import s2_status as ST
+        st = ST.public(await ST.status_of(account or "", sweep=False))
+    except Exception as e:
+        log.info("[agent] booked status not read: %s", type(e).__name__)
+        return None
+    return {"type": "booked", "status": st} if st.get("state") in ("booked", "partly_booked") else None
+
+
 async def _anything_booked(ctx: API.Ctx) -> bool:
     r = await API.call(ctx, "get_status", {})
     return bool(r.get("ok") and r["result"].get("anything_booked"))
@@ -579,6 +591,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         from agapi import s2_fine_print as FP   # CR 74 · fine print: /s2's own four card tools, run here
         tools = tools + [dict(t) for t in FP.TOOLS]
         run = FP.wrap(run)
+    if surface == "s2" or s1_parity():   # Sasha 249 · keep_list without a fixed example (S1 with parity off: its own words, untouched)
+        from agapi import s2_keep as _K
+        tools = [{**t, "description": _K.KEEP_LIST_DESC} if t["name"] == "keep_list" else t for t in tools]
     tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     step_ms: List[dict] = []
     pending = ""          # this step's text, not yet spoken
@@ -603,7 +618,11 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         if surface == "s2":   # Sasha 221 · her own opening lines on /s2; S1's text from "How she talks" on, shared
             from app.agent import s2 as S2
             base = S2.s2_system() + (S2.WA_NOTE if wa else "")   # Sasha 237 · on WhatsApp: cards arrive as messages, photos sent here
-        if surface != "s2" and s1_on(account):   # Sasha 224 · SASHA_KEEP_S1 (the founder only): the Keep on /next
+        if surface != "s2" and s1_on(account) and s1_parity():   # Sasha 249 · the Keep on /next WITHOUT a fixed example (EU 245
+            extra += KEEP_S1_LINES                                  # T13): the model sees keep_list's masks only
+        elif surface != "s2" and s1_on(account):   # Sasha 224 · SASHA_KEEP_S1 (the founder only): the Keep on /next
+            # Sasha 249 · KEPT FOR PARITY (SASHA_S1_PARITY=off must be byte-identical) — its two fixed "ES ••••456" examples
+            # go only with Tyler's OK; tests/test_s249_status_keep_caps.py lists them as the one allowed place
             extra += ("\n\nTheir Keep: passport, ID and loyalty numbers can live in their Keep (/keep). You never see them — only masks "
                       "like 'Passport ES ••••456' (keep_list) — and use one only where it's needed (keep_use), after their yes. Never ask "
                       "for a document number in the chat; if they offer one, send them to /keep.")
@@ -750,6 +769,10 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                    **({"error": r["error"]["code"]} if not r.get("ok") else {})}
             if r.get("ok") and u.name in _CHANGES_TRIP:
                 yield {"type": "trip_changed"}
+            if surface == "s2" and not wa and r.get("ok") and u.name == "book_venue" and (r.get("result") or {}).get("status") == "confirmed":
+                bev = await booked_event(account)   # Sasha 249 · ONE STATUS: /s2's "Booked" card comes from this event only (never
+                if bev:                             # a regex on her reply), its line from get_status's one source
+                    yield bev
             if r.get("ok"):
                 _names_in(r["result"], tstate["tool_names"])
                 tstate["allowed"] |= tstate["tool_names"]
@@ -1225,6 +1248,18 @@ async def _photo_turn(account: str, photos: list, message: str) -> tuple:
 def s1_parity() -> bool:
     """Sasha 241 · /next on S2's tools, cards, memory and closing (Tyler's OK, 11 Oct). SASHA_S1_PARITY=off is the way back."""
     return os.getenv("SASHA_S1_PARITY", "on").strip().lower() != "off"
+
+
+# Sasha 249 · /next's Keep lines with parity on (EU 245 §1.13 / T13): no fixed example — the model sees keep_list's masks only,
+# and says keep.say_first exactly as the tool gives it (the person's OWN mask, never one from a prompt)
+KEEP_S1_LINES = (
+    "\n\nTheir Keep: passport, ID and loyalty numbers can live in their Keep (/keep). You never see them — only the masks keep_list "
+    "gives you for THIS person — and use one only where it's needed (keep_use), after their yes. Never name an item keep_list "
+    "didn't give you. Never ask for a document number in the chat; if they offer one, send them to /keep."
+    "\n\nWhen a tool result has keep.say_first (propose_trip or hold_booking with a flight), say it word for word in that same "
+    "turn, before the read-back — exactly as the tool gives it. If their Keep has no passport, the read-back goes ahead as always "
+    "and the 'Add from your phone' card sits beside it — booking never waits for it. If they add it from their phone, the page has "
+    "already said \"Got it — …\": don't say that again — call hold_booking and read back.")
 
 
 def pick_hint(account: str, pid: str, message: str) -> str:

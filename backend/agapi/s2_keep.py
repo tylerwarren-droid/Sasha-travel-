@@ -574,12 +574,21 @@ async def keep_use(ctx, a: dict) -> dict:
     return out
 
 
+# Sasha 249 · KEPT FOR PARITY: S1's keep_list words with SASHA_S1_PARITY=off must stay byte-identical, fixed "ES ••••456" example
+# and all — it goes only with Tyler's OK. /s2, WhatsApp and /next with parity on get KEEP_LIST_DESC instead (app/agent/sasha.py).
+KEEP_LIST_S1 = ("What's in the person's Keep (passport, ID, loyalty numbers, door codes…) — as MASKS only "
+                "(\"Passport ES ••••456\"). You never see a value. New items are added by the person on their Keep screen (/keep), never "
+                "in the chat.")
+# Sasha 249 · no fixed example (EU 245 §1.13 / T13): the only masks the model ever sees are the ones this tool returns
+KEEP_LIST_DESC = ("What's in the person's Keep (passport, ID, loyalty numbers, door codes…) — as MASKS only, this person's own. "
+                  "You never see a value, and never name an item this tool didn't return. New items are added by the person on their "
+                  "Keep screen (/keep), never in the chat.")
+
+
 def tools() -> List[dict]:
     from agapi.v0 import _t
     return [
-        _t("keep_list", "Pacioli", keep_list, "What's in the person's Keep (passport, ID, loyalty numbers, door codes…) — as MASKS only "
-           "(\"Passport ES ••••456\"). You never see a value. New items are added by the person on their Keep screen (/keep), never "
-           "in the chat.", {}, [], {"type": "object", "properties": {"items": {"type": "array"}}}, ["keep_closed", "keep_unreachable"]),
+        _t("keep_list", "Pacioli", keep_list, KEEP_LIST_S1, {}, [], {"type": "object", "properties": {"items": {"type": "array"}}}, ["keep_closed", "keep_unreachable"]),
         _t("keep_use", "Austen", keep_use, "Use a Keep item: purpose 'fill' puts it into the next booking (a passport, ID or "
            "insurance needs it named in the read-back — hold_booking does that — and their yes); 'show' puts a door code, Wi-Fi or "
            "booking reference on THEIR screen. Never returns the value, whatever you ask.",

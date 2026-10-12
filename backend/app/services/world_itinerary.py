@@ -124,7 +124,9 @@ async def hotels_in(account: Optional[str], city: str, country_name: str, countr
     out = []
     for c in cands[:5]:
         est = estimate_usd(country_code, c)
-        out.append({"name": hotel_name(c["name"]) or c["name"], "place_id": c["place_id"],   # Sasha 246 · its name, not a page title "address": c.get("address"), "rating": c.get("rating"),
+        # Sasha 246 · its name, not a page title. Sasha 249 · this comment used to sit at the end of the line below and swallowed
+        # the "address" and "rating" keys (EU 245 §1 side bug): they are back
+        out.append({"name": hotel_name(c["name"]) or c["name"], "place_id": c["place_id"], "address": c.get("address"), "rating": c.get("rating"),
                     "rating_count": c.get("rating_count"), "listing_url": c.get("listing_url"), "website": c.get("website"),
                     "gphoto": c.get("gphoto"), "est_usd": est, "est_eur": int(round(est * USD_EUR))})
     return out

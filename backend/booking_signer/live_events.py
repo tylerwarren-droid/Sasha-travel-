@@ -103,6 +103,17 @@ async def send_email(msg: dict) -> dict:
     return {"sent": bool(got.sent), "why": getattr(got, "why", None)}
 
 
+async def status_now(account: str) -> Optional[dict]:
+    """Sasha 249 · ONE STATUS: the account's status as get_status decides it (agapi.s2_status) — the /s2 "Booked" card and the
+    WhatsApp line show its line. None when the records don't answer (the card is then not drawn; never a guessed "Booked")."""
+    try:
+        from agapi import s2_status as ST
+        return ST.public(await ST.status_of(account, sweep=False))
+    except Exception as e:
+        log.warning("[live_events] status not read: %s", type(e).__name__)
+        return None
+
+
 async def on_settled(account: str, r: dict, title: Optional[str] = None) -> dict:
     """Called once per payment, after Pacioli recorded it: the confirmation email (booked only), then the event."""
     from . import guest_receipt as GR
@@ -119,9 +130,10 @@ async def on_settled(account: str, r: dict, title: Optional[str] = None) -> dict
             log.error("[live_events] confirmation not emailed: %s: %s", type(e).__name__, e)
             email = None
     w = words_for(r, email)
+    st = await status_now(account)
     ev = publish(account, {"type": "booked" if (r or {}).get("status") == "booked" else "booking_failed", **w,
                            "card": {"kind": "itinerary_link", "url": itinerary_url(), "title": title or "Your trip"},
-                           "emailed": bool(email)})
+                           "emailed": bool(email), **({"status": st} if st else {})})
     return {"event": ev, "email": mailed}
 
 

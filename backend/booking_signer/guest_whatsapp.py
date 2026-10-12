@@ -88,6 +88,36 @@ STARTED = "Welcome back — I'll message you here again."
 HELP = ("Tell me what to book in one message — the kind of place, the area, the day, the time and how many, e.g. "
         "\"dinner for 2 in Chamberí on Saturday at 21:00\". I'll show you places, read back exactly what I'll say, and "
         "only contact them after your yes. \"Cancel <name>\" cancels a booking; \"my bookings\" lists them.")
+
+
+# Sasha 249 · ONE CAPABILITY LIST (EU 245 §1.5 / T10): when the one brain answers this account (wa_agent.on), HELP / LINKED /
+# ONBOARD are generated from agapi/s2_home.py CAPABILITIES — the same list as /s2's card, its chips and /next. The old brain keeps
+# the three fixed lines above: they say what IT does, and they go with it.
+def help_words(account: Optional[str]) -> str:
+    from . import wa_agent as WA
+    if WA.on(account):
+        from agapi import s2_home as S2H
+        return S2H.wa_help()
+    return HELP
+
+
+def linked_words(account: Optional[str]) -> str:
+    from . import wa_agent as WA
+    if WA.on(account):
+        from agapi import s2_home as S2H
+        return S2H.wa_linked()
+    return LINKED
+
+
+def onboard_words() -> str:
+    """An unknown sender has no account: the one brain's words only when it answers EVERY account (SASHA_WA_BRAIN=agent)."""
+    from . import wa_agent as WA
+    if WA.mode() == "agent":
+        from agapi import s2_home as S2H
+        return S2H.wa_onboard()
+    return ONBOARD
+
+
 NO_CONTACT = ("I need the name and mobile to book under first. Add them once at {web} (kept with your consent), then ask me "
               "again.")
 
@@ -591,7 +621,7 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
                           "consent_text_sha256": code["consent_text_sha256"]})
         await STORE.put_state(key, {"history": [], "pending": None, "last_inbound_at": now, "link_tries": []})
         log.info("[guest_whatsapp] a WhatsApp number was linked to an account")
-        return _twiml_message(LINKED)
+        return _twiml_message(linked_words(code["account_id"]))   # Sasha 249 · the one brain's words from the one capability list
     from agapi import s2_whatsapp as S2WA   # CR 62 / Sasha 217 · a reply from someone Sasha wrote to FOR a person: kept, never answered by the model
     kept = await S2WA.on_contact_message(sender, p.get("Body") or "")
     if kept is not None:
@@ -630,7 +660,7 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
     if onboarded and _dt(onboarded[-1]) > now - timedelta(minutes=10):
         return ""
     await STORE.put_state(key, {**st, "link_tries": tries + [f"onboard:{now.isoformat()}"]})
-    return _twiml_message(ONBOARD.format(web=web_url()))
+    return _twiml_message(onboard_words().format(web=web_url()))   # Sasha 249
 
 
 def _dt(s: str) -> datetime:
@@ -841,7 +871,7 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         audio = str(p.get("MediaContentType0") or "").startswith("audio")
         out.text(("I couldn't make out that voice note — could you send it again, or type it?" if audio else
                   "Got the picture, but I can only read photos inside EspañaMe or RelocateMe for now (say “tell me about "
-                  "EspañaMe”). For anything else, tell me in words — a voice note works too.") if has_media else HELP)
+                  "EspañaMe”). For anything else, tell me in words — a voice note works too.") if has_media else help_words(account))
         await STORE.put_state(key, st)
         await deliver(ch, frm, out, now)
         return out
@@ -973,7 +1003,7 @@ async def _new_request(ctx: dict, body: str) -> None:
     out, st = ctx["out"], ctx["st"]
     history = st.get("history") or []
     if _HELP.match(body):
-        out.text(HELP)
+        out.text(help_words(ctx["account"]))   # Sasha 249
         return
     from . import wa_brain as WB
     if WB.RESET.match(body or ""):   # Sasha 167 (4) · "reset the demo" — founder only, after a yes

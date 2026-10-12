@@ -18,6 +18,8 @@ interface TripPanelProps {
   // The confirmed booking reference, once the trip is paid for. Its presence turns every
   // booking control into a statement of what's already reserved: continuing to offer "Book"
   // on a paid trip invites the guest to buy the same rooms twice.
+  // Sasha 249 · ONE STATUS: no longer read — the banner reads the server's trip_status (get_status's one source). Kept so
+  // callers compile unchanged.
   bookingRef?: string | null
   // Set when the trip was PAID with the saved card in-conversation (Sasha asked, guest said
   // "use 1003"). The panel then says "Booked" and names the card; without it a ref means a
@@ -50,7 +52,10 @@ const shortStatus = (b: ServerBooking): string => {
   const ref = /their ref ([A-Z0-9-]+)/.exec(b.status_words ?? '')
   return (SHORT[b.status ?? ''] ?? b.status_words ?? b.status ?? '') + (ref && b.status === 'confirmed' ? ` · ref ${ref[1]}` : '')
 }
-type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?: string; trip_total?: TripTotal }
+type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?: string; trip_total?: TripTotal; trip_status?: TripStatus }
+// Sasha 249 · ONE STATUS: what get_status says (agapi/s2_status.py) — the Trip banner's only source, never a client prop
+type TripStatus = { state: string; line: string; refs: string[] }
+const ON_IT = ['booked', 'partly_booked', 'awaiting_payment']
 // Sasha 242 · ONE TOTAL: the basket's figure in euros, the same one Sasha says in the chat
 type TripTotal = { total_eur: number; flights_eur: number; stays_eur: number; stays_are: string; trip_id: string }
 const eur = (n: number) => `€${Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
@@ -129,7 +134,8 @@ function useServerPlan(tripId: string | null, onPlans?: (p: PlanRef[]) => void):
       const r = await bookingReq(`/api/booking/plan${tripId ? `?trip_id=${encodeURIComponent(tripId)}` : ''}`).catch(() => null)
       if (!off && r?.ok) {
         const p = untagDeep(r.json.plan ?? null) as ServerPlan | null   // Sasha 218 · no visible TEST label
-        setPlan(p && r.json.trip_total ? { ...p, trip_total: r.json.trip_total as TripTotal } : p)
+        setPlan(p ? { ...p, ...(r.json.trip_total ? { trip_total: r.json.trip_total as TripTotal } : {}),
+                       ...(r.json.trip_status ? { trip_status: r.json.trip_status as TripStatus } : {}) } : p)   // Sasha 249 · + its status
         onPlans?.((r.json.plans ?? []) as PlanRef[])   // Sasha 175 · every trip on the account, for the picker
       }
     }
@@ -142,7 +148,7 @@ function useServerPlan(tripId: string | null, onPlans?: (p: PlanRef[]) => void):
 }
 
 export default function TripPanel({
-  richItinerary: localItinerary, openDays, toggleDay, onBook, travellerCount, onBrowseIdeas, onAsk, bookingRef, paidWith,
+  richItinerary: localItinerary, openDays, toggleDay, onBook, travellerCount, onBrowseIdeas, onAsk,
 }: TripPanelProps) {
   // Sasha 175 · THE TABS the founder asked for: this trip (any of his trips), every booking anywhere, and what's still open
   // Sasha 177 · ONE TRIPS SPACE: a tab per journey (from /journeys), home, requests, receipts, everything. Switching tabs never
@@ -232,9 +238,11 @@ export default function TripPanel({
     return <div className="lw-trip">{tabs}<JourneyList title={title} rows={rows} /></div>
   }
   const serverDay = (n: number): ServerDay | undefined => (server?.days ?? []).find((x) => x.day === n)
-  const isBooked = Boolean(bookingRef)
-  const isPaid = isBooked && Boolean(paidWith)
-  const doneWord = isPaid ? 'Paid' : 'Saved'   // Sasha 133 · nobody was contacted on this path: never "Booked"/"Reserved"
+  // Sasha 249 · ONE STATUS (EU 245 §1.12): the banner said "✓ Paid … · not booked yet" from a client bookingRef prop. It now says
+  // the server's status line for THIS trip — the same words as get_status in the chat, the /s2 card and the WhatsApp line
+  const ts = server?.trip_status ?? null   // the server's plan and its status are for the same trip (/api/booking/plan)
+  const isBooked = Boolean(ts && ON_IT.includes(ts.state))
+  const doneWord = ts?.state === 'awaiting_payment' ? 'Waiting for payment' : ts?.state === 'partly_booked' ? 'Partly booked' : 'Booked'
   if (!richItinerary) {
     return (
       <div className="lw-stream">
@@ -336,8 +344,8 @@ export default function TripPanel({
             )}
             {isBooked ? (
               <>
-                <div className="lw-bookedBanner">✓ {doneWord}{isPaid && paidWith!.last4 ? ` with card ending ${paidWith!.last4}` : ''} · not booked yet · Ref {bookingRef}</div>
-                <div className="lw-booknote">{isPaid ? 'Everything above is booked and paid.' : 'Everything above is reserved.'} Keep your reference for your records.</div>
+                <div className="lw-bookedBanner">{ts!.line}</div>
+                {ts!.refs.length > 0 && <div className="lw-booknote">Keep your reference{ts!.refs.length > 1 ? 's' : ''} for your records: {ts!.refs.join(', ')}.</div>}
               </>
             ) : (
               <>

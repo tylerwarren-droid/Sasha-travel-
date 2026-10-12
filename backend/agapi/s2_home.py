@@ -25,9 +25,11 @@ log = logging.getLogger("agapi.s2_home")
 # Sasha 249 · ONE CAPABILITY LIST (EU 245 §1.5 / T10): everything that says what she can do is generated from this list —
 #   SAY (what_i_can_do's line) · prose()   (the S2 and S1 system prompts: app/agent/s2.py) · CHIPS (/s2 and /next, via the
 #   generated frontend/lib/capabilities.generated.mjs) · wa_help / wa_linked / wa_onboard (WhatsApp, when the one brain answers).
-#   Each group's "say" is its phrase in SAY; its optional "chip" is a request someone can tap, with the tool that answers it.
+#   Each group's "say" is its phrase in SAY; its optional "chip" is a request someone can tap, with the tool that answers it;
+#   "more_chips" are further taps for the same group (Tyler, 12 Oct: a spa and a table tonight on both /s2 and /next).
 CAPABILITIES: List[Dict] = [
     {"group": "Book", "say": "book tables, spas and trips", "chip": ("Book dinner", "search_venues"),
+     "more_chips": [("A table for two tonight", "search_venues"), ("A spa on Saturday", "search_venues")],
      "items": [("A table at a restaurant", "search_venues"), ("A spa, salon or other place", "search_venues"),
                ("Flights and hotels for a trip", "book")]},
     {"group": "Plan", "say": "plan a trip day by day", "chip": ("Plan a weekend", "propose_trip"),
@@ -73,8 +75,9 @@ def _and(parts: List[str]) -> str:
 SAY = "I can " + _and([g["say"] for g in CAPABILITIES]) + "."
 # Sasha 249 · the chips on /s2 and /next (S1 = S2): "what can you do?" first (what_i_can_do), then each group's own request
 ASK_CHIP = ("What can you do?", "what_i_can_do")
-CHIPS: List[str] = [ASK_CHIP[0]] + [g["chip"][0] for g in CAPABILITIES if g.get("chip")]
-CHIP_TOOLS: Dict[str, str] = {ASK_CHIP[0]: ASK_CHIP[1], **{g["chip"][0]: g["chip"][1] for g in CAPABILITIES if g.get("chip")}}
+_CHIP_PAIRS = [c for g in CAPABILITIES if g.get("chip") for c in [g["chip"], *g.get("more_chips", [])]]
+CHIPS: List[str] = [ASK_CHIP[0]] + [c[0] for c in _CHIP_PAIRS]
+CHIP_TOOLS: Dict[str, str] = {ASK_CHIP[0]: ASK_CHIP[1], **{c[0]: c[1] for c in _CHIP_PAIRS}}
 
 
 def prose() -> str:

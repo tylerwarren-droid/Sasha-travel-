@@ -341,6 +341,8 @@ async def _online_route(account: str, c: dict, body: dict) -> Optional[str]:
         return page[0]
     if "form" in rungs and not any(f.get("kind") == "platform" for f in read.get("facts") or []):
         return "their own booking page"
+    if "own_page" in rungs:   # Sasha 246 · rung 2: their own site books (a form Sasha may not send, or their own engine)
+        return "their own booking page"
     # Sasha 242 (EU 238 walk) · a venue whose OWN site stops machines (a CAPTCHA) still books online — the guest finishes it
     # themselves (the 175 flow). Dropping it hid Hammam Al Ándalus ("Hammam Madrid Plaza Mayor") from "Arab baths in Madrid".
     if online_by_hand(read):
@@ -978,10 +980,12 @@ async def prepare_link(request: Request):
             link = SL.build_hotel(read, p.on, nights, p.party) if nights else SL.build(read, p.on, p.at, p.party)   # Sasha 138 · a stay
         except SL.LinkRefused:
             # Sasha 187 · the founder's restaurants: no platform, but their OWN booking page (where the form is) opens on his phone
-            form = next((f for f in read.get("facts") or [] if f.get("kind") == "booking_form" and str(f.get("source_url") or "").startswith("https://")), None)
-            if nights or not form or any(f.get("kind") == "platform" for f in read.get("facts") or []):   # Sasha 195 · any account
+            # Sasha 246 · rung 2 for everyone: the page with their form, or their own engine's page linked from their site
+            # (ladder.own_page — the same page the own_page rung offered)
+            own = L.own_page(read)
+            if nights or not own:   # Sasha 195 · any account
                 raise   # a platform they use but don't link stays refused (never their form page in its place)
-            link = SL.SlotLink("their own booking page", form["source_url"], False, f"{form.get('source_label')} (their own booking page)")
+            link = SL.SlotLink("their own booking page", own[1], False, own[2])
     except (C.CallRefused, SL.LinkRefused) as e:
         return _refuse(422, e.rule, str(e))
     link_id = str(uuid.uuid4())

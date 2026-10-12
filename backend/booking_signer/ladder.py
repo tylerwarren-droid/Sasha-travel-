@@ -62,6 +62,31 @@ class Rung:
     slot_filled: Optional[bool] = None   #: link rung only: True when a verified recipe fills the slot in the URL
 
 
+_BOOKING_PATH = re.compile(r"reserv|book|cita|prenot|buch|agendar", re.I)
+
+
+def own_page(read: dict) -> Optional[tuple]:
+    """Sasha 246 · RUNG 2 — the venue's OWN booking page: (fact index, https URL, source label), or None. In order: the page
+    carrying their booking form; a booking link on their own site (their own engine); a page of theirs whose path says it
+    books and that asks the guest to prove they're human (Sasha 242's CAPTCHA site). None when they use a platform: a
+    platform they use but don't link stays refused — never their own page in its place (Sasha 195)."""
+    facts = read.get("facts") or []
+    if any(f.get("kind") == "platform" for f in facts):
+        return None
+    for i, f in enumerate(facts):
+        if f.get("kind") == "booking_form" and f.get("value") and str(f.get("source_url") or "").startswith("https://"):
+            return i, f["source_url"], f"{f.get('source_label')} (their own booking page)"
+    for i, f in enumerate(facts):
+        if f.get("kind") == "booking_page" and str(f.get("value") or "").startswith("https://"):
+            return i, f["value"], f"{f.get('source_label')} (their own booking page)"
+    for i, f in enumerate(facts):
+        u = str(f.get("source_url") or "")
+        if f.get("kind") == "challenge" and f.get("source_kind", "site") == "site" and u.startswith("https://") \
+                and _BOOKING_PATH.search(u.split("://", 1)[1].partition("/")[2]):
+            return i, u, f"{f.get('source_label') or 'their website'} (their own booking page)"
+    return None
+
+
 def choose(read: dict, host_of=lambda u: None, account: Optional[str] = None) -> dict:
     """`read` is VenueRead.to_json(). Returns the rungs in ladder order and the sentence she says."""
     facts = read.get("facts") or []
@@ -86,6 +111,13 @@ def choose(read: dict, host_of=lambda u: None, account: Optional[str] = None) ->
         else:
             rungs.append(Rung("platform", False, ip, plat["value"], plat["source_label"],
                               f"they book through {plat['value']}, but their site doesn't link their page there, and I never guess one"))
+    if not (form and rungs[0].available):
+        # Sasha 246 · RUNG 2 — their own site books (a form Sasha may not send, or their own engine): she prepares THEIR page
+        # with the day, time and number — the guest finishes it there — BEFORE email, phone or a message (EU 241: Hammam Al
+        # Ándalus got email/Instagram, La Mi Venta phone/email)
+        op = own_page(read)
+        if op:
+            rungs.append(Rung("own_page", True, op[0], op[1], op[2]))
 
     i, phone = first("phone")
     if phone:
@@ -123,6 +155,8 @@ def say(rungs: List[Rung], name: str) -> str:
         lead = f"They book only through {by['link'].value}, so you make the final press there — I can't press it for you."
     elif "platform" in by:
         lead = f"They book through {by['platform'].value}, which I can't use yet."
+    elif "own_page" in by:   # Sasha 246
+        lead = "They take bookings on their own website."
     else:
         lead = "They have no booking form."
     offers = []
@@ -132,6 +166,8 @@ def say(rungs: List[Rung], name: str) -> str:
                       f"I'll send you their {by['link'].value} page and the exact day, time and number to pick")
     if by.get("form") and by["form"].available:
         offers.append("I'll fill in their form")
+    if by.get("own_page"):   # Sasha 246 · rung 2, before email, phone and messages
+        offers.append("I'll send you their own booking page with your day, time and number — you finish it there")
     if by.get("phone") and by["phone"].available:
         offers.append("I'll call them")
     if by.get("email") and by["email"].available:

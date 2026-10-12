@@ -59,6 +59,7 @@ class Venue:
     language_label: str = ""           #: "Vietnamese", for the reason when unscripted
     hours_until: Optional[float] = None  #: hours from now to the booking; None = not a fixed time
     challenge: bool = False            #: Sasha 195 · their own page asks the guest to prove they're human (a CAPTCHA)
+    own_page: bool = False             #: Sasha 246 · rung 2: `platform` is THEIR OWN booking page (ladder.own_page), not a platform's
 
 
 @dataclass(frozen=True)
@@ -114,6 +115,10 @@ def decide(v: Venue, prefer: Optional[str] = None) -> Decision:
     if v.form:
         return Decision("form", asked_but + "They take bookings on their own website's form — I'll fill it in after your yes.",
                         None, alts("form"))
+    if v.own_page and v.platform:
+        # Sasha 246 · rung 2 comes before a call or an email, soon or not: their own page, prepared, the guest finishes it
+        return Decision("one_tap", asked_but + "They take bookings on their own website. I'll send you their booking page with your "
+                        "day, time and number — you finish it there (I can't press it for you).", _then(v, "one_tap"), alts("one_tap"))
     if urgent(v) and "call_email" in can:
         return Decision("call_email", asked_but + f"It's within {_h(urgent_hours())}, so I'll call them and email them at once — "
                         f"one yes covers both.{english}", None, alts("call_email"))
@@ -142,6 +147,8 @@ def line(v: Venue, d: Decision, venue: str) -> str:
     venue = venue or "them"
     if d.route == "form":
         return "They take bookings online. I'll fill it in and book it for you. Book it?"
+    if d.route == "one_tap" and v.own_page:   # Sasha 246
+        return "They take bookings on their own website. I'll send their booking page to your phone — tap, then book. Shall I?"
     if d.route == "one_tap":
         return f"They book through {v.platform or 'their booking page'}. I'll send their page to your phone — tap, then book. Shall I?"   # Sasha 163
     if d.route == "call_email":
@@ -172,6 +179,12 @@ def ladder(v: Venue, venue: str, when: str) -> Optional[dict]:
     page = bool(v.platform) or (v.form and v.challenge)
     if direct:
         return {"line": f"I can book {venue} for you directly — {when}. Shall I?", "options": [("Yes, book it", "form"), ("No", "no")]}
+    if v.own_page and v.platform:
+        # Sasha 246 · RUNG 2 — their own website books: their page, prepared, FIRST; email (> 48 h) or a call (within) after it
+        human = " It asks you to prove you're human, so that step is yours." if v.challenge else ""
+        alt = [("Email them", "email")] if far and v.email else [("Call them", "call")] if not far and v.phone else []
+        return {"line": f"{venue} take bookings on their own website. I'll send you their booking page — {when} — and you finish "
+                        f"it there.{human} Shall I?", "options": [("Send their page", "page")] + (alt or [("No", "no")])}
     if page and far:
         if v.email:
             return {"line": f"We have time. Would you like me to email {venue} and confirm as soon as they reply, or would you like to "

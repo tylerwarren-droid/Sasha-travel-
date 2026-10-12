@@ -267,10 +267,44 @@ def _new_slices(offer: dict) -> List[dict]:
     return [x for x in add or [] if isinstance(x, dict)]
 
 
+MAX_CHANGE_OPTIONS = 6   # Sasha 246 · the change options kept (and said) for one day — Duffel's own, by departure
+
+
+def _offer_quote(owner: str, ref: str, old: Dict[str, Any], offer: dict, new_date: str, req_id: Optional[str],
+                 order_id: str) -> Dict[str, Any]:
+    """Sasha 246 · ONE change offer as a quote: its id, its new flight and times, and the exact read-back lines for it (Sasha
+    226's words, unchanged) — the same dict for the cheapest and for every other option that day."""
+    news = [_slice_line(x) for x in _new_slices(offer)]
+    new_flights = " + ".join(n["flights"] for n in news) if news else None
+    departs = news[0]["departs"] if news else None
+    cur = offer.get("change_total_currency")
+    tot, pen = _amount(offer.get("change_total_amount")), offer.get("penalty_total_amount")
+    target = f"to {new_flights}, {news[0]['times']}" if news and news[0]["times"] else f"to {_day(new_date)}"
+    lines = [f"I'll move your {owner} flight {old['flights']} on {_day(old['departs'])} {target} (booking {ref})."]
+    quote = f"Duffel's own quote{_until(offer.get('expires_at'))}"
+    pen_txt = f", including the airline's {money(pen, offer.get('penalty_total_currency') or cur)} change fee" \
+        if _amount(pen) else ""
+    if tot is not None and tot > 0:
+        lines.append(f"The change costs {money(tot, cur)} in total{pen_txt} ({quote}).")
+    elif tot is not None and tot < 0:
+        lines.append(f"The new fare is lower: Duffel's quote shows {money(tot, cur)} back{pen_txt} ({quote}"
+                     f"{', refunded ' + REFUND_TO[offer['refund_to']] if offer.get('refund_to') in REFUND_TO else ''}).")
+    else:
+        lines.append(f"The change costs nothing{pen_txt} ({quote}).")
+    lines.append(TEST_LINE)
+    return {"possible": True, "change_offer_id": offer.get("id"), "change_request_id": req_id, "order_id": order_id,
+            "change_total_amount": offer.get("change_total_amount"), "change_total_currency": cur,
+            "new_total_amount": offer.get("new_total_amount"), "new_total_currency": offer.get("new_total_currency"),
+            "penalty_amount": pen, "penalty_currency": offer.get("penalty_total_currency"),
+            "new_flights": new_flights, "departs": departs, "expires_at": offer.get("expires_at"),
+            "lines": lines, "say": " ".join(lines)}
+
+
 async def change_quote(order_id: str, new_date: str, leg: Optional[str] = None) -> Dict[str, Any]:
     """QUOTE only — Duffel's change options for one leg moved to `new_date`; the cheapest is offered. Nothing is changed and
     nothing is paid until change_confirm(change_offer_id). {possible, change_offer_id, change_total_amount,
-    change_total_currency, penalty_amount, new_flights, departs, lines, say} | {possible: False, say} | {why}."""
+    change_total_currency, penalty_amount, new_flights, departs, lines, say, options} | {possible: False, say} | {why}.
+    Sasha 246 · `options`: every offer that day as the same quote dict (by departure), the cheapest among them."""
     if not TR.token():
         return dict(NO_TOKEN)
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", new_date or ""):
@@ -314,30 +348,17 @@ async def change_quote(order_id: str, new_date: str, leg: Optional[str] = None) 
             say = f"{owner} has no flight from {o} to {d} on {_day(new_date)} that this booking can be changed to."
             return {"possible": False, "say": say, "lines": [say], "change_request_id": req.get("id")}
         best = min(offers, key=lambda x: _amount(x["change_total_amount"]))
-        news = [_slice_line(x) for x in _new_slices(best)]
-        new_flights = " + ".join(n["flights"] for n in news) if news else None
-        departs = news[0]["departs"] if news else None
-        cur = best.get("change_total_currency")
-        tot, pen = _amount(best.get("change_total_amount")), best.get("penalty_total_amount")
-        target = f"to {new_flights}, {news[0]['times']}" if news and news[0]["times"] else f"to {_day(new_date)}"
-        lines = [f"I'll move your {owner} flight {old['flights']} on {_day(old['departs'])} {target} (booking {ref})."]
-        quote = f"Duffel's own quote{_until(best.get('expires_at'))}"
-        pen_txt = f", including the airline's {money(pen, best.get('penalty_total_currency') or cur)} change fee" \
-            if _amount(pen) else ""
-        if tot is not None and tot > 0:
-            lines.append(f"The change costs {money(tot, cur)} in total{pen_txt} ({quote}).")
-        elif tot is not None and tot < 0:
-            lines.append(f"The new fare is lower: Duffel's quote shows {money(tot, cur)} back{pen_txt} ({quote}"
-                         f"{', refunded ' + REFUND_TO[best['refund_to']] if best.get('refund_to') in REFUND_TO else ''}).")
-        else:
-            lines.append(f"The change costs nothing{pen_txt} ({quote}).")
-        lines.append(TEST_LINE)
-        return {"possible": True, "change_offer_id": best.get("id"), "change_request_id": req.get("id"), "order_id": order_id,
-                "change_total_amount": best.get("change_total_amount"), "change_total_currency": cur,
-                "new_total_amount": best.get("new_total_amount"), "new_total_currency": best.get("new_total_currency"),
-                "penalty_amount": pen, "penalty_currency": best.get("penalty_total_currency"),
-                "new_flights": new_flights, "departs": departs, "expires_at": best.get("expires_at"),
-                "lines": lines, "say": " ".join(lines)}
+        q = _offer_quote(owner, ref, old, best, new_date, req.get("id"), order_id)
+        # Sasha 246 · ONE SOURCE OF TRUTH for a change: EVERY option Duffel offered that day, each with its own id and its own
+        # read-back, for the caller to keep — a time she says ("the 17:48") is then one of these, picked by id, never searched
+        # again (a fresh change request is a fresh set of offers: live, she offered 17:48, then "couldn't find 17:48")
+        every = [_offer_quote(owner, ref, old, x, new_date, req.get("id"), order_id) for x in offers]
+        every.sort(key=lambda x: (str(x.get("departs") or ""), _amount(x.get("change_total_amount")) or 0.0))
+        kept = every[:MAX_CHANGE_OPTIONS]
+        if not any(x["change_offer_id"] == q["change_offer_id"] for x in kept):
+            kept.append(dict(q))   # the cheapest (the one read back) is always among them
+        q["options"] = kept
+        return q
     except Exception as e:
         log.exception("[flight_manage] change_quote")
         return {"why": f"the change quote couldn't be read ({type(e).__name__})"}

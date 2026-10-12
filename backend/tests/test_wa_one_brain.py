@@ -83,6 +83,17 @@ class Taps(unittest.TestCase):
         self.assertEqual(WA.message_of(ACCOUNT, "", "say:the easyJet flight out at 09:55"), "the easyJet flight out at 09:55")
         self.assertEqual(WA.message_of(ACCOUNT, "", "yn:yes"), "Yes")
         self.assertTrue(WA.ours("yn:no") and not WA.ours("call:abc:yes"))
+        # Sasha 249 · an old flow's button reaches her as what it is — never a bare "Yes" (her read-back's yes), never empty
+        for body in ("", "Yes"):
+            m = WA.message_of(ACCOUNT, body, "call:abc:yes", "Yes")
+            self.assertTrue(m.startswith("[they tapped an old “Yes” button") and m != "Yes", m)
+
+    def test_a_card_tap_is_never_taken_for_a_password(self):   # Sasha 249 · found live: the place_id tripped the guard
+        from agapi import s2_keep as KEEP
+        with mock.patch("app.agent.sasha.pick_hint", lambda a, pid, m: f"{m} [place_id {pid}]"):
+            msg = WA.message_of(ACCOUNT, "Taberna Ancla", "pick:ChIJtest056d5064023de4a87989", "Taberna Ancla")
+        self.assertTrue(KEEP.chat_guard(msg))      # the composed message WOULD trip it …
+        self.assertFalse(KEEP.chat_guard("Taberna Ancla"))   # … so the guard reads their words, which don't
 
     def test_long_words_split_at_sentence_ends(self):
         parts = WA.split("One. " * 400, 100)

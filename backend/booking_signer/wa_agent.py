@@ -80,6 +80,9 @@ def message_of(account: str, body: str, payload: str, button_text: str = "") -> 
         return "Yes"
     if payload == "yn:no":
         return "No"
+    if payload and not ours(payload):   # Sasha 249 · a button only an old flow understood (every button reaches her now): never a bare
+        # "Yes" — that could read as the yes to HER read-back — and never empty (the model refuses an empty message)
+        return f"[they tapped an old “{button_text or body or 'button'}” button from an earlier message — it no longer applies to anything]"
     return body
 
 
@@ -317,7 +320,9 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
                 out.text(rec["line"])
                 _remember_history(st, body or message, rec["line"])
                 return rec["line"]
-    held = KEEP.chat_guard(message)                      # a password, card or passport number never reaches the model
+    # a password, card or passport number never reaches the model — checked on THEIR words (a tap's composed message carries a
+    # place_id, which is no secret: Sasha 249, found live — every card tap on WhatsApp was answered with the password warning)
+    held = KEEP.chat_guard(body if payload else message)
     if held:
         out.text(held)
         return held

@@ -803,6 +803,7 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
            "read_back_sha256": q["sha256"], "total_eur": q["eur"], "status": "not booked — waiting for the yes"}
     if q.get("spoken_flights"):   # Sasha 246 · the spoken read-back names BOTH flights, the outbound first — this line, as it is
         res["say_flights"] = q["spoken_flights"]
+        res["how_flights"] = "When you sum it up, say say_flights as it is (both flights, the outbound first)."   # in the result: S1's schema unchanged
     from agapi.keep_gate import keep_on
     if keep_on(ctx.account, ctx.surface):   # Sasha 224 · CR 63 — a bound passport is NAMED in what she reads out (where the Keep is on)
         res["read_back"] += await _KEEP.lines(ctx.account)
@@ -1064,8 +1065,7 @@ TOOLS: List[dict] = [
        {"type": "object", "properties": {"saved": {"type": "integer"}, "travellers_on_file": {"type": "integer"}, "invalid": {"type": "array"}}},
        [], austen=True),
     _t("hold_booking", "Austen", hold_booking, "The read-back before booking: every item re-checked and priced, the total, and the "
-       "sha256 the yes binds to. No money moves; nothing is booked. When you sum it up, say its say_flights line as it is "
-       "(both flights, the outbound first).", {"origin": {"type": "string"}}, [],   # Sasha 246
+       "sha256 the yes binds to. No money moves; nothing is booked.", {"origin": {"type": "string"}}, [],
        {"type": "object", "properties": {"read_back": {"type": "array"}, "read_back_sha256": {"type": "string"}, "total_eur": {"type": "number"}}},
        ["no_trip", "travellers_missing", "not_bookable", "airline_unreachable", "store_unreachable"], austen=True),
     _t("book", "Austen", book, "After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back they "

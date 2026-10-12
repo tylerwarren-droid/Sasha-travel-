@@ -4,6 +4,7 @@ logged, never shown; revoked, it can't be used. Offline (the shop answers in-pro
     cd backend && python -m unittest tests.test_demo_shop_s121 -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import asyncio
 import base64
@@ -113,16 +114,16 @@ class RehearsalCard(unittest.TestCase):
         out = {"candidates": [{"place_id": "a"}, {"place_id": "b"}, {"place_id": "c"}],
                "ranking": {"orders": {"rated": ["a", "b", "c"]}, "picks": {"rated": "a"}}}
         founder, guest = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
-        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "1", "FOUNDER_ACCOUNT_ID": ""}):
+        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "1", "FOUNDER_ACCOUNT_ID": tests.founder_fixture.FOUNDER}):
             got = LR._with_rehearsal(founder, out)
             self.assertEqual(got["ranking"]["orders"]["rated"], ["a", "b", "sasha-test-venue", "c"])
             self.assertIn("ours — rehearsal, not a real restaurant", got["candidates"][-1]["name"])
             # Sasha 175 (EU 172) · never to a guest (it was Sasha 153's bookable card; a stranger saw it in every search)
             self.assertEqual(LR._with_rehearsal(guest, out), out)
             self.assertEqual(LR._with_rehearsal(founder, {**out, "candidates": []})["candidates"], [])   # never as filler
-        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "1", "FOUNDER_ACCOUNT_ID": "", "SASHA_REAL_CONTACT_ACCOUNTS": guest}):
+        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "1", "FOUNDER_ACCOUNT_ID": tests.founder_fixture.FOUNDER, "SASHA_REAL_CONTACT_ACCOUNTS": guest}):
             self.assertEqual(LR._with_rehearsal(guest, out), out)                       # an account allowed real venues: none
-        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "", "FOUNDER_ACCOUNT_ID": ""}):
+        with mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "", "FOUNDER_ACCOUNT_ID": tests.founder_fixture.FOUNDER}):
             self.assertEqual(LR._with_rehearsal(founder, out), out)                     # off unless rehearsing
 
 
@@ -138,7 +139,7 @@ class DemoControlsAreFounderOnly(unittest.TestCase):
         app.include_router(DO.router)
         app.include_router(DSH.ops)
         c = TestClient(app)
-        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": ""}):
+        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": tests.founder_fixture.FOUNDER}):
             for path in ("/ops/demo/leave-now", "/ops/demo/gmail-seed", "/ops/demo/reset"):
                 self.assertEqual(c.post(path).json()["rule"], "founder_only", path)
             self.assertEqual(c.get("/ops/demo-shop-login").json()["rule"], "founder_only")

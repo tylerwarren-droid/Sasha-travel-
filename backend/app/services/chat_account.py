@@ -7,6 +7,10 @@
     session cookie) → the founder's account (Sasha 142);
   · neither → the PUBLIC demo account: its own, empty, shared by anonymous visitors. ⛔ Never the founder's — until
     Sasha 142 it was, and a phone that wasn't signed in was shown his itinerary (CR's finding, 4 Oct 2026).
+Sasha 249 · THE resolver (one-truth-spec §1.1): booking_signer.identity.resolve() is a thin wrapper over chat_account(), so
+a chat route and a booking route resolve the same request to the same account. `x-sasha-session: demo` names the demo;
+any other session word is refused (401). A founder session with FOUNDER_ACCOUNT_ID unset is refused (503) — never the
+demo. The ids and the founder decision live in app/services/accounts.py.
 A guest's chats, itineraries, offers, trips and payments are theirs alone: every read by id checks the owner, and a
 session or itinerary someone else owns answers exactly as one that does not exist.
 """
@@ -19,15 +23,15 @@ from typing import Optional
 from fastapi import HTTPException, Request
 
 from app.services import chat_store
+from app.services.accounts import DEMO_ACCOUNT_ID, founder_account, signed_in  # noqa: F401  (signed_in: re-exported)
 
-#: Sasha 142 · the anonymous visitor's account: nobody's, and empty. Never chat_store.DEMO_USER_ID (the founder's own).
-PUBLIC_DEMO_ID = "00000000-0000-4000-8000-0000000d3e00"
+SESSION_HEADER = "x-sasha-session"
 
 
 def founder_session(request: Request) -> bool:
     """The founder's session, as the site's proxy vouches for it: the session header AND the booking key, compared in
     constant time. The header alone names nothing; with no key configured, nobody is the founder."""
-    if request.headers.get("x-sasha-session", "").strip().lower() != "founder":
+    if request.headers.get(SESSION_HEADER, "").strip().lower() != "founder":
         return False
     want = os.getenv("SASHA_BOOKING_KEY", "").strip()
     got = request.headers.get("x-sasha-booking-key", "").strip()
@@ -38,23 +42,33 @@ def founder_session(request: Request) -> bool:
     return ok
 
 
-def signed_in(account: Optional[str]) -> bool:
-    """A real account (a verified guest, or the founder): the products and anything personal may act on it."""
-    return bool(account) and account != PUBLIC_DEMO_ID
-
-
-async def chat_account(request: Request) -> str:
+async def chat_account(request: Request, anonymous: Optional[str] = DEMO_ACCOUNT_ID) -> Optional[str]:
+    """Sasha 249 · WHO IS ACTING — the one resolver, for chat and booking alike:
+      1. `Authorization: Bearer` → the verified account (a bad token is refused, never turned into the demo);
+      2. `x-sasha-session: founder` WITH the booking key → FOUNDER_ACCOUNT_ID; unset → 503, never the demo;
+      3. `x-sasha-session: demo` → the demo; any other session word → 401;
+      4. nobody → `anonymous`: the demo for a chat, None for a booking route (identity.resolve → account_required)."""
     auth = request.headers.get("authorization", "")
-    if not auth:
-        if founder_session(request):
-            from booking_signer.identity import founder_account
-            return founder_account()
-        return PUBLIC_DEMO_ID
-    scheme, _, token = auth.partition(" ")
-    if scheme.lower() != "bearer" or not token.strip():
-        raise HTTPException(401, {"ok": False, "rule": "account_token_invalid", "message": "the Authorization header is not a bearer token"})
-    from booking_signer.identity import verify_token
-    return await verify_token(token.strip())
+    if auth:
+        scheme, _, token = auth.partition(" ")
+        if scheme.lower() != "bearer" or not token.strip():
+            raise HTTPException(401, {"ok": False, "rule": "account_token_invalid", "message": "the Authorization header is not a bearer token"})
+        from booking_signer.identity import verify_token
+        return await verify_token(token.strip())
+    session = request.headers.get(SESSION_HEADER, "").strip().lower()
+    if session == "founder":
+        if not founder_session(request):
+            return anonymous   # the header alone (no key, a wrong key) names nobody
+        acct = founder_account()
+        if acct is None:   # ⛔ Sasha 249 · never the demo: until 249 an unset FOUNDER_ACCOUNT_ID made him 11111111
+            raise HTTPException(503, {"ok": False, "rule": "founder_account_not_configured",
+                                      "message": "FOUNDER_ACCOUNT_ID is not set on this server, so the founder's session names no account; nothing was done"})
+        return acct
+    if session == "demo":
+        return DEMO_ACCOUNT_ID
+    if session:
+        raise HTTPException(401, {"ok": False, "rule": "account_session_unknown", "message": f"{SESSION_HEADER} is founder or demo"})
+    return anonymous
 
 
 async def own_session(session_id: Optional[str], account: str) -> Optional[str]:
@@ -66,10 +80,11 @@ async def own_session(session_id: Optional[str], account: str) -> Optional[str]:
 
 
 async def own_itinerary(itinerary_id: Optional[str], account: str) -> Optional[dict]:
+    """Sasha 249 · a row with no owner recorded belongs to NOBODY (until 249 it counted as 11111111's)."""
     it = await chat_store.get_itinerary(itinerary_id) if itinerary_id else None
-    return it if it and (it.get("user_id") or chat_store.DEMO_USER_ID) == account else None   # no owner recorded = the demo's
+    return it if it and it.get("user_id") and it.get("user_id") == account else None
 
 
 async def own_offer(offer_id: Optional[str], account: str) -> Optional[dict]:
     off = await chat_store.get_offer(offer_id) if offer_id else None
-    return off if off and (off.get("user_id") or chat_store.DEMO_USER_ID) == account else None
+    return off if off and off.get("user_id") and off.get("user_id") == account else None

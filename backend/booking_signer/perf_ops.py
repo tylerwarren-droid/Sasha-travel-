@@ -63,8 +63,11 @@ def _supabase_url() -> Optional[str]:
 async def measure(steps: List[str], n: int = 5) -> Dict[str, Any]:
     import httpx
     from . import guest_whatsapp as GW, routes as R
-    from .identity import founder_account
+    from app.services.accounts import founder_account
     A, res = founder_account(), {}
+    if A is None:   # Sasha 249 · never measured as the demo account: with no founder, the account steps are not run, and it says so
+        steps = [s for s in steps if s not in ("find", "photos", "conduct")]
+        res["founder_account"] = "FOUNDER_ACCOUNT_ID is not set: find, photos and conduct were not measured"
     if "db" in steps:
         res["db"], _, e = await timed(lambda: R.STORE._run(lambda c: c.fetchval("select 1")), n * 2)
         if e:

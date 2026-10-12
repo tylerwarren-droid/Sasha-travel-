@@ -648,9 +648,8 @@ def _refuse(status: int, rule: str, message: str) -> JSONResponse:
 def invited(account: str) -> bool:
     """Sasha 120 · Gmail is a beta BY INVITATION (Google's testing mode admits only its listed test users): the founder,
     and the accounts he lists in SASHA_GMAIL_ACCOUNTS."""
-    from .identity import founder_account
-    listed = {a.strip().lower() for a in os.getenv("SASHA_GMAIL_ACCOUNTS", "").split(",") if a.strip()}
-    return account == founder_account() or account.lower() in listed
+    from app.services.accounts import is_founder_test   # Sasha 249 · the one founder decision, plus this rule's list
+    return is_founder_test(account, listed="SASHA_GMAIL_ACCOUNTS")
 
 
 def status() -> dict:

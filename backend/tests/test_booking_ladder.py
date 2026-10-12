@@ -7,6 +7,7 @@ Offline: venue pages, Google Places, Resend and Bland are fakes; no host is reso
 or private). The route half runs in memory and, with BOOKING_TEST_DATABASE_URL, on Postgres with 001–004 applied —
 ⚠ without it the Postgres half is SKIPPED, and says so.
 """
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 import asyncio
 import base64
 import hashlib
@@ -24,7 +25,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from booking_signer import call_routes, emailing as E, ladder as L, ladder_routes, optins as O, routes, slot_link as SL, stop as S, venue_read as V
-from booking_signer.account import DEMO_ACCOUNT_ID
+FOUNDER_ACCOUNT = tests.founder_fixture.FOUNDER   # Sasha 249 · the account the founder's session acts as here (the seeded auth user); was the demo id by fallback
 from booking_signer.call_store import MemoryCallStore, PostgresCallStore
 from booking_signer.ladder_store import MemoryLadderStore, PostgresLadderStore
 from booking_signer.store import PostgresStore, StorageUnavailable
@@ -522,7 +523,7 @@ class LadderRoutes:
     # ── S-54 · the refusal check: a venue that said stop is never contacted by Sasha again ──────────────────
 
     def venue_id(self, v):
-        return O.venue_id_of(self.c.portal.call(self.ladder.get_read, DEMO_ACCOUNT_ID, v["read_id"])["read"])
+        return O.venue_id_of(self.c.portal.call(self.ladder.get_read, FOUNDER_ACCOUNT, v["read_id"])["read"])
 
     def optin(self, vid, status, channel="whatsapp", scope="+34600111222", at=None):
         at = at or self.now

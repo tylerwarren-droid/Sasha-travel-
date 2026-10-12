@@ -221,7 +221,7 @@ class OnPostgresTrigger(unittest.TestCase):
         async def go():
             c = await asyncpg.connect(TBL.PG_URL)
             try:
-                trip = await c.fetchval("insert into trips (owner_id, title) values ($1, 'cal test') returning id", uuid.UUID(TBL.DEMO_ACCOUNT_ID))
+                trip = await c.fetchval("insert into trips (owner_id, title) values ($1, 'cal test') returning id", uuid.UUID(TBL.FOUNDER_ACCOUNT))
                 item = await c.fetchval("insert into trip_items (trip_id, type, status, provider_name) values ($1, 'restaurant', 'requested', 'X') returning id", trip)
                 before = await c.fetchval("select count(*) from calendar_outbox where trip_item_id = $1", item)
                 await c.execute("update trip_items set status = 'confirmed' where id = $1", item)            # a writer

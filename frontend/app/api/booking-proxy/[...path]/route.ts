@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
 import { actingAs } from '@/lib/acting-as'
+import { agentHeaders, clientIp } from '@/lib/agent-auth'
 
 /**
  * S-41 · The booking pass-through. The booking page calls THIS (same origin); it checks the founder's session and
@@ -14,20 +15,18 @@ async function pass(request: Request, ctx: { params: Promise<{ path: string[] }>
   // The backend is told which — the founder by name, a guest by their signed access token, which it verifies again.
   // Sasha 241 · WHO IS ACTING (lib/acting-rule.mjs): a real sign-in wins over the founder cookie
   const acting = await actingAs()
-  let who: Record<string, string>
-  if (acting?.kind === 'founder') {
-    // Sasha 159 · with his address, so guests on his devices and wifi are never capped
-    const ip = (request.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || request.headers.get('x-real-ip') || ''
-    who = { 'x-sasha-session': 'founder', ...(ip ? { 'x-sasha-client-ip': ip } : {}) }
-  } else {
-    if (!acting) {
-      return NextResponse.json({ ok: false, rule: 'sign_in_required', message: 'Sign in to book with Sasha.' }, { status: 401 })
-    }
-    who = { authorization: `Bearer ${acting.accessToken}` }
+  if (!acting) {
+    return NextResponse.json({ ok: false, rule: 'sign_in_required', message: 'Sign in to book with Sasha.' }, { status: 401 })
   }
   const key = (process.env.SASHA_BOOKING_KEY ?? '').trim()
   if (!key) {
     return NextResponse.json({ ok: false, rule: 'booking_key_not_configured', message: 'SASHA_BOOKING_KEY is not set on this deployment' }, { status: 503 })
+  }
+  // Sasha 249 · the identity headers are agentHeaders(acting) — the one builder (lib/agent-headers.mjs); the founder's carry
+  // his address (Sasha 159: guests on his devices and wifi are never capped)
+  const who = await agentHeaders(acting, { ip: clientIp(request.headers) })
+  if (!who) {
+    return NextResponse.json({ ok: false, rule: 'sign_in_required', message: 'Sign in to book with Sasha.' }, { status: 401 })
   }
   const { path } = await ctx.params
   if (!path.length || path.some((p) => p === '..' || p.includes('/') || p === '')) {

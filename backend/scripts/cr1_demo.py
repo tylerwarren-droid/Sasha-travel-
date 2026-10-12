@@ -68,7 +68,7 @@ def _account(name: str) -> str:
     from booking_signer.identity import founder_account
     if name == "founder" and not os.getenv("FOUNDER_ACCOUNT_ID", "").strip():
         raise SystemExit("⛔ FOUNDER_ACCOUNT_ID isn't set on Railway: the founder's account isn't named. Use --account demo.")
-    return DEMO if name == "demo" else founder_account()   # (since CR 3 they are the same account: 11111111-…)
+    return DEMO if name == "demo" else founder_account()   # Sasha 249 · DEMO here is this script's rehearsal account (a seeded auth user)
 
 
 async def _snapshot(account: str) -> dict:
@@ -598,8 +598,7 @@ async def reset(what: str, account_name: str, vault: bool) -> None:
         print(f"reset officer: {n} 'returned' mark(s) cleared; the queue is at {web()}/officer/{cid}")
         return
     from booking_signer import routes as BR
-    from booking_signer.identity import founder_account
-    account = DEMO if account_name == "demo" else founder_account()   # reset may run on the fallback: it says so
+    account = _account(account_name)   # Sasha 249 · an unset founder refuses (there is no fallback to the demo any more)
     acct = uuid.UUID(account)
     products = ["campus", "relocation", "health"] if what == "all" else [what]
 
@@ -646,8 +645,7 @@ async def reset(what: str, account_name: str, vault: bool) -> None:
         got["CampusMe vault items revoked"] = n
     linked = await BR.STORE._run(lambda c: c.fetchval(
         "select count(*) from guest_channels where account_id = $1 and channel = 'whatsapp'", acct))
-    note = (" — FOUNDER_ACCOUNT_ID isn't set: the founder falls back to the demo account" if account_name == "founder"
-            and not os.getenv("FOUNDER_ACCOUNT_ID", "").strip() else "")
+    note = ""   # Sasha 249 · the founder never falls back to the demo account (_account refuses an unset FOUNDER_ACCOUNT_ID)
     print(f"reset {what} for the {account_name} account ({account[:8]}…, {linked} WhatsApp linked{note}): "
           + ", ".join(f"{k} {v}" for k, v in got.items()))
 

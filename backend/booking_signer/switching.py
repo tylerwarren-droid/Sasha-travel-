@@ -28,8 +28,8 @@ _AMBIG = re.compile(r"^\s*(?:please\s+)?(?:book|find|get|sort(?: out)?)\s+(?:me\
 def on(account: Optional[str]) -> bool:
     """Tonight: the founder's account (the demo); everyone with SASHA_SWITCHING=all."""
     import os
-    from .guest_accounts import founder
-    return bool(account) and (os.getenv("SASHA_SWITCHING", "") == "all" or founder(account))
+    from app.services.accounts import is_founder_test   # Sasha 249 · the one founder/test decision
+    return bool(account) and (os.getenv("SASHA_SWITCHING", "") == "all" or is_founder_test(account))
 
 
 SPACE_NAME = {"relocation": "RelocateMe", "campus": "CampusMe", "health": "EspañaMe", "trip": "your trip planner", "diligence": "Applied Diligence"}

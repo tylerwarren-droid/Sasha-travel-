@@ -37,6 +37,25 @@ export function badge(kind, email) {
 }
 
 /**
+ * Sasha 249 · ONE IDENTITY (one-truth-spec §1.1): what a page shows is whoami's `acting` — the server's decide() above —
+ * and NEVER re-derived on the page from the email's suffix (SignedInLine and KeepAcrossDevices did). Unknown → nobody.
+ * @param {{ acting?: unknown } | null | undefined} w  the /api/auth/whoami answer
+ * @returns {'user'|'founder'|'guest'|null}
+ */
+export function actingOf(w) {
+  const a = w && typeof w === 'object' ? w.acting : null
+  return a === 'user' || a === 'founder' || a === 'guest' ? a : null
+}
+
+/**
+ * Sasha 249 · the badge for a whoami answer: badge(actingOf(w), w.email).
+ * @param {{ acting?: unknown, email?: string | null } | null | undefined} w
+ */
+export function badgeFor(w) {
+  return badge(actingOf(w), w?.email ?? null)
+}
+
+/**
  * Sasha 242 · PER-PERSON browser storage goes when the person acting changes (sign-out, another sign-in) — found by EU's walk
  * (row 730): after a new sign-in, Trip showed trips the account never made. Device preferences (the mic, mute, a closed panel) stay.
  */

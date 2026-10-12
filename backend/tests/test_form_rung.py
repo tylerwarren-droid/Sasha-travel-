@@ -5,6 +5,7 @@ until the founder approves one. Offline: the test venue is this app's own route,
     cd backend && python -m unittest tests.test_form_rung -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import os
 import unittest

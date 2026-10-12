@@ -148,8 +148,8 @@ async def guest_start(request: Request):
 # ── what a guest may do: a REAL venue is contacted only for the founder (Sasha 153) ───────────────────────────────
 
 def founder(account: Optional[str]) -> bool:
-    from .identity import founder_account
-    return bool(account) and account == founder_account()
+    from app.services.accounts import is_founder_test   # Sasha 249 · the one founder decision
+    return is_founder_test(account)
 
 
 def extra_accounts() -> set:

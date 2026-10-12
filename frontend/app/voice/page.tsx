@@ -6,11 +6,6 @@ import VnFlag from '../components/VnFlag'
 import { API_URL } from '@/lib/api'
 import { accountUrl, guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // Sasha 143
 
-const DEMO_USER = {
-  display_name: 'Alex',
-  email: 'alex@example.com',
-}
-
 export default function VoicePage() {
   const [isListening, setIsListening] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)

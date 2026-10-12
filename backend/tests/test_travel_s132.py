@@ -4,6 +4,7 @@ test order, a hotel requested from the hotel itself, and the itinerary answered 
     cd backend && python -m unittest tests.test_travel_s132 -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import asyncio
 import os
@@ -223,7 +224,7 @@ class FindRoute(unittest.TestCase):
         app = FastAPI()
         app.include_router(LR.router, prefix="/api/booking")
         with mock.patch.object(V, "find_venues", find), mock.patch.object(LR, "account_for", lambda r: founder), \
-                mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "1", "FOUNDER_ACCOUNT_ID": ""}):
+                mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "1", "FOUNDER_ACCOUNT_ID": founder}):
             c = TestClient(app)
             dinner = c.post("/api/booking/venues/find", json={"what": "dinner", "where": "Madrid"}).json()
             hotel = c.post("/api/booking/venues/find", json={"what": "hotel", "where": "Hoi An"}).json()

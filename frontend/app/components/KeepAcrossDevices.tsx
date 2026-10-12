@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import { BOOKED_EVENT } from '@/lib/guest-start'
+import { actingOf } from '@/lib/acting-rule.mjs'
 
 export function KeepAcrossDevices() {
   const [show, setShow] = useState(false)
@@ -14,7 +15,7 @@ export function KeepAcrossDevices() {
   useEffect(() => {
     const on = async () => {
       const w = await fetch('/api/auth/whoami', { cache: 'no-store' }).then((r) => r.json()).catch(() => null)
-      if (w?.who === 'guest' && String(w.email ?? '').endsWith('@guests.kanoe.ai')) setShow(true)
+      if (actingOf(w) === 'guest') setShow(true)   // Sasha 249 · whoami's acting (the automatic guest), never the email suffix
     }
     window.addEventListener(BOOKED_EVENT, on)
     return () => window.removeEventListener(BOOKED_EVENT, on)

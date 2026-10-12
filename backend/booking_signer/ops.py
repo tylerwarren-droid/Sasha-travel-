@@ -29,8 +29,8 @@ def _refuse(status: int, rule: str, message: str) -> JSONResponse:
 
 def founder_only(request: Request) -> Optional[JSONResponse]:
     from .account import account_for
-    from .identity import founder_account
-    return None if account_for(request) == founder_account() else _refuse(403, "founder_only", "this is the founder's ops tool")
+    from app.services.accounts import is_founder   # Sasha 249 · the one founder decision
+    return None if is_founder(account_for(request)) else _refuse(403, "founder_only", "this is the founder's ops tool")
 
 
 async def _admin(method: str, path: str, body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:

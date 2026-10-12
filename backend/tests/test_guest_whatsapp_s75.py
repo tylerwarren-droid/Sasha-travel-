@@ -646,7 +646,7 @@ class OnPostgresStore(unittest.TestCase):
         asyncio.set_event_loop(asyncio.new_event_loop())
         base = PostgresStore(TBL.PG_URL)
         st = GW.PostgresGuestStore(base)
-        acct = TBL.DEMO_ACCOUNT_ID
+        acct = TBL.FOUNDER_ACCOUNT
         c = GW.consent()
 
         async def go():

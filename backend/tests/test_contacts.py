@@ -4,6 +4,7 @@ account sees only its own. In memory and, with BOOKING_TEST_DATABASE_URL, on Pos
     cd backend && python -m unittest tests.test_contacts -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import asyncio
 import os
@@ -30,7 +31,7 @@ class Contacts:
         raise NotImplementedError
 
     def setUp(self):
-        self.env = mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k", "SASHA_CALL_SWEEP": "0", "FOUNDER_ACCOUNT_ID": "",
+        self.env = mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k", "SASHA_CALL_SWEEP": "0", "FOUNDER_ACCOUNT_ID": tests.founder_fixture.FOUNDER,
                                                "SASHA_SUPABASE_URL": "https://testref.supabase.co"})
         self.env.start()
         self.saved = (CT.STORE, CT.NOW, I.FETCH)

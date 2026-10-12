@@ -4,6 +4,7 @@ yes may arrive by WhatsApp's button or typed on WhatsApp — with its words. Off
     cd backend && python -m unittest tests.test_s75_server_rules -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import pathlib
 import re

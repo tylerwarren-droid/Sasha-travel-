@@ -1,12 +1,13 @@
 """Sasha 142 · THE PUBLIC DEMO IS NOBODY'S (CR's finding, 4 Oct 2026): a web visitor with no sign-in was the founder's
 own account, and a phone that wasn't signed in was shown his itinerary. Now:
-  · no token, no founder session → PUBLIC_DEMO_ID, its own empty account;
+  · no token, no founder session → the demo (accounts.DEMO_ACCOUNT_ID — Sasha 249: the one demo id, was PUBLIC_DEMO_ID), its own empty account;
   · `x-sasha-session: founder` counts only WITH the booking key (the site's proxy, after the founder's cookie);
   · the products and the itinerary questions never run for the public demo. Offline.
 
     cd backend && python -m unittest tests.test_public_demo_s142 -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import asyncio
 import os
@@ -18,7 +19,7 @@ from starlette.requests import Request
 from app.services import chat_account as CA, chat_store
 from booking_signer import identity
 
-FOUNDER = chat_store.DEMO_USER_ID
+FOUNDER = tests.founder_fixture.FOUNDER   # Sasha 249 · was chat_store.DEMO_USER_ID: until 249 the founder WAS the demo id by fallback
 
 
 def req(headers: dict) -> Request:
@@ -31,7 +32,7 @@ def run(c):
 
 class WhoIsTheVisitor(unittest.TestCase):
     def setUp(self):
-        self.env = mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-right", "FOUNDER_ACCOUNT_ID": ""})
+        self.env = mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-right", "FOUNDER_ACCOUNT_ID": FOUNDER})
         self.env.start()
 
     def tearDown(self):
@@ -39,19 +40,19 @@ class WhoIsTheVisitor(unittest.TestCase):
 
     def test_no_sign_in_is_the_public_demo_never_the_founder(self):
         a = run(CA.chat_account(req({})))
-        self.assertEqual(a, CA.PUBLIC_DEMO_ID)
+        self.assertEqual(a, CA.DEMO_ACCOUNT_ID)
         self.assertNotEqual(a, FOUNDER)
         self.assertFalse(CA.signed_in(a))
 
     def test_the_session_header_alone_names_nobody(self):
-        self.assertEqual(run(CA.chat_account(req({"x-sasha-session": "founder"}))), CA.PUBLIC_DEMO_ID)
+        self.assertEqual(run(CA.chat_account(req({"x-sasha-session": "founder"}))), CA.DEMO_ACCOUNT_ID)
 
     def test_a_wrong_key_names_nobody(self):
-        self.assertEqual(run(CA.chat_account(req({"x-sasha-session": "founder", "x-sasha-booking-key": "k-wrong"}))), CA.PUBLIC_DEMO_ID)
+        self.assertEqual(run(CA.chat_account(req({"x-sasha-session": "founder", "x-sasha-booking-key": "k-wrong"}))), CA.DEMO_ACCOUNT_ID)
 
     def test_no_key_configured_names_nobody(self):
         with mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": ""}):
-            self.assertEqual(run(CA.chat_account(req({"x-sasha-session": "founder", "x-sasha-booking-key": ""}))), CA.PUBLIC_DEMO_ID)
+            self.assertEqual(run(CA.chat_account(req({"x-sasha-session": "founder", "x-sasha-booking-key": ""}))), CA.DEMO_ACCOUNT_ID)
 
     def test_the_proxy_with_the_key_is_the_founder(self):
         a = run(CA.chat_account(req({"x-sasha-session": "founder", "x-sasha-booking-key": "k-right"})))
@@ -59,11 +60,11 @@ class WhoIsTheVisitor(unittest.TestCase):
         self.assertTrue(CA.signed_in(a))
 
     def test_the_demo_itinerary_and_offers_are_not_the_publics(self):
-        legacy = {"user_id": None}   # no owner recorded = the founder's demo data
+        legacy = {"user_id": None}   # no owner recorded: Sasha 249 · nobody's
         with mock.patch.object(chat_store, "get_itinerary", mock.AsyncMock(return_value=legacy)), \
              mock.patch.object(chat_store, "get_offer", mock.AsyncMock(return_value=legacy)):
-            self.assertIsNone(run(CA.own_itinerary("it-1", CA.PUBLIC_DEMO_ID)))
-            self.assertIsNone(run(CA.own_offer("of-1", CA.PUBLIC_DEMO_ID)))
+            self.assertIsNone(run(CA.own_itinerary("it-1", CA.DEMO_ACCOUNT_ID)))
+            self.assertIsNone(run(CA.own_offer("of-1", CA.DEMO_ACCOUNT_ID)))
 
 
 class ThePublicDemoAsksAboutBookings(unittest.TestCase):
@@ -80,7 +81,7 @@ class ThePublicDemoAsksAboutBookings(unittest.TestCase):
             return None
         with mock.patch("booking_signer.itinerary_q.web_turn", spy), mock.patch("products.web.web_turn", products_spy):
             try:
-                run(CD.conduct("what's my itinerary this week?", [], user_id=CA.PUBLIC_DEMO_ID, signed_in=False))
+                run(CD.conduct("what's my itinerary this week?", [], user_id=CA.DEMO_ACCOUNT_ID, signed_in=False))
             except Exception:
                 pass   # the model path may be unavailable offline: what matters is what ran before it
         self.assertEqual(called, [])                       # the itinerary is never read for the public demo
@@ -95,7 +96,7 @@ class TheVoicePage(unittest.TestCase):
         asyncio.set_event_loop(asyncio.new_event_loop())
         from fastapi.testclient import TestClient
         from app.main import app
-        self.env = mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-right", "FOUNDER_ACCOUNT_ID": "", "CONDUCTOR_API_SECRET": ""})
+        self.env = mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-right", "FOUNDER_ACCOUNT_ID": FOUNDER, "CONDUCTOR_API_SECRET": ""})
         self.env.start()
         self.c = TestClient(app)
 
@@ -123,7 +124,7 @@ class TheVoicePage(unittest.TestCase):
 
     def test_a_visitor_is_the_public_demo(self):
         seen = self.turn({})
-        self.assertEqual((seen.get("user_id"), seen.get("signed_in")), (CA.PUBLIC_DEMO_ID, False))
+        self.assertEqual((seen.get("user_id"), seen.get("signed_in")), (CA.DEMO_ACCOUNT_ID, False))
 
     def test_the_founder_through_the_pass_through_is_himself(self):
         seen = self.turn({"x-sasha-session": "founder", "x-sasha-booking-key": "k-right"})
@@ -131,7 +132,7 @@ class TheVoicePage(unittest.TestCase):
 
     def test_the_header_without_the_key_is_nobody(self):
         seen = self.turn({"x-sasha-session": "founder"})
-        self.assertEqual(seen.get("user_id"), CA.PUBLIC_DEMO_ID)
+        self.assertEqual(seen.get("user_id"), CA.DEMO_ACCOUNT_ID)
 
 
 if __name__ == "__main__":

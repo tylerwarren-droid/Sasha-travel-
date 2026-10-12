@@ -4,6 +4,7 @@ the public demo keeps working with no token; a bad token is refused, never turne
     cd backend && python -m unittest tests.test_chat_accounts -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import asyncio
 import os
@@ -38,7 +39,8 @@ class ChatAccounts(unittest.TestCase):
         self.c = TestClient(app)
         self.guest = {"Authorization": f"Bearer {token()}"}
         run = lambda co: asyncio.get_event_loop().run_until_complete(co)
-        run(self.CS.save_turn("demo-sess", self.CS.DEMO_USER_ID, "hi", "hello", title="demo chat"))
+        # Sasha 249 · the founder's chat is HIS account's (it was saved under DEMO_USER_ID: the founder was the demo by fallback)
+        run(self.CS.save_turn("demo-sess", tests.founder_fixture.FOUNDER, "hi", "hello", title="demo chat"))
         run(self.CS.save_turn("guest-sess", GUEST, "my secret plans", "noted", title="guest chat"))
         run(self.CS.save_itinerary("guest-itin", "guest-sess", GUEST, "Guest trip", 100, {"days": []}))
 
@@ -54,7 +56,7 @@ class ChatAccounts(unittest.TestCase):
         # Sasha 142 · an anonymous visitor is the PUBLIC demo: none of the founder's chats; his proxied session sees them
         public = self.c.get("/api/chats").json()
         self.assertEqual([s["id"] for s in public["sessions"]], [])
-        with mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-s142", "FOUNDER_ACCOUNT_ID": ""}):
+        with mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "k-s142", "FOUNDER_ACCOUNT_ID": tests.founder_fixture.FOUNDER}):
             founder = self.c.get("/api/chats", headers={"x-sasha-session": "founder", "x-sasha-booking-key": "k-s142"}).json()
             forged = self.c.get("/api/chats", headers={"x-sasha-session": "founder"}).json()
         self.assertEqual([s["id"] for s in founder["sessions"]], ["demo-sess"])

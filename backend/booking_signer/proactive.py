@@ -691,9 +691,9 @@ async def proactive_place_delete(request: Request):
 async def proactive_run(request: Request):
     """S-83 §8 · the founder's demo trigger: "send what is due as of {time}" for HIS account only — said on stage."""
     from .account import account_for
-    from .identity import founder_account
+    from app.services.accounts import is_founder   # Sasha 249 · the one founder decision
     account = account_for(request)
-    if account != founder_account():
+    if not is_founder(account):
         return _refuse(403, "founder_only", "this demo trigger is only for the founder's own account")
     try:
         body = await request.json()

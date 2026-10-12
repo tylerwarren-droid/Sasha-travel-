@@ -4,6 +4,7 @@ Founder only, behind SASHA_PROACTIVE_RENTALS, at most ONE per rental. Offline: A
     cd backend && python -m unittest tests.test_rentals_227 -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import asyncio
 import unittest

@@ -4,6 +4,7 @@ yes covers it, opened only at the send, once, logged; written into the form — 
     cd backend && python -m unittest tests.test_loyalty_s131 -v
 """
 from __future__ import annotations
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import asyncio
 import base64

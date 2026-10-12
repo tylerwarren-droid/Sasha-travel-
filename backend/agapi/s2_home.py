@@ -151,8 +151,8 @@ async def me(request: Request):
 @router.get("/not-yet")
 async def not_yet_list(request: Request):
     from app.services.chat_account import chat_account
-    from booking_signer.identity import founder_account
-    if await chat_account(request) != founder_account():
+    from app.services.accounts import is_founder   # Sasha 249 · the one founder decision
+    if not is_founder(await chat_account(request)):
         return JSONResponse({"ok": False, "rule": "founder_only"}, status_code=403)
     rows: List[dict] = []
     run = await _run()

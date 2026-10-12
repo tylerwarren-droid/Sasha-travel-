@@ -396,6 +396,7 @@ async def find_venues(request: Request):
                 str(body.get("country") or "").upper(), str(body.get("open_at") or ""), str(body.get("near") or ""), bool(body.get("named")))
         hit = _FIND_CACHE.get(ckey)
         if hit and NOW().timestamp() - hit[0] < 1200:
+            await _with_truth(hit[1])   # Sasha 248 · the cached cards with their facts as the venue engine has them now
             return hit[1]
         out = await V.find_venues(HTTP, what=body.get("what"), where=body.get("where"),
                                   country=body.get("country"), now=NOW(), near=body.get("near"), open_at=body.get("open_at"),   # S-68 steps 3–4

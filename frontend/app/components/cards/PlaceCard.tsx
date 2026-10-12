@@ -13,8 +13,18 @@ import { placeFacts, photoOf, sourceWord } from '@/lib/place-view.mjs'
 type Ev = Record<string, any>   // eslint-disable-line @typescript-eslint/no-explicit-any
 const GOLD = '#E8B923'
 
-export function PlaceCard({ card, onBook, tone = 'dark', badge }: { card: Ev; onBook: (name: string, placeId: string) => void; tone?: 'dark' | 'light'; badge?: string | null }) {
+export function PlaceCard({ card: shown, onBook, tone = 'dark', badge }: { card: Ev; onBook: (name: string, placeId: string) => void; tone?: 'dark' | 'light'; badge?: string | null }) {
   const [open, setOpen] = useState(false)
+  // the venue engine's read of their site may land after the search (it's never waited for): the card asks once and updates
+  const [fresh, setFresh] = useState<Ev | null>(null)
+  useEffect(() => {
+    if (!shown?.place_id || placeFacts(shown).type?.source === 'site') return
+    let live = true
+    fetch(`/api/place/${encodeURIComponent(shown.place_id)}`, { cache: 'no-store' }).then(r => r.json())
+      .then(j => { if (live && j?.ok && j.place?.read === 'site') setFresh(j.place) }).catch(() => { /* the listing stays, labelled */ })
+    return () => { live = false }
+  }, [shown?.place_id])   // eslint-disable-line react-hooks/exhaustive-deps
+  const card: Ev = fresh ? { ...shown, place: fresh, type: fresh.type?.value ?? shown.type, type_source: fresh.type?.source ?? shown.type_source } : shown
   const dim = tone === 'dark' ? 'rgba(255,255,255,.6)' : 'rgba(0,0,0,.6)'
   const photo = photoOf(card)
   const t = placeFacts(card).type

@@ -406,6 +406,13 @@ async def search_venues(ctx: Ctx, a: dict) -> dict:
     key = ((a.get("what") or "").strip().lower(), (a.get("where") or "").strip().lower(), a.get("open_at"))
     last = _LAST_FIND.get(ctx.account)
     if last and last[0][:2] == key[:2] and time.time() - last[1] < 1200:   # Sasha 212 · the same search again: the cards stand
+        from agapi import venue_truth as VT, venues as VN
+        cards = (last[2].get("preset") or {}).get("cards") or []
+        sited = [c for c in cards if c.get("website")]   # only a card with a site can learn more from the venue engine
+        if sited:   # Sasha 248 · the same cards — with their facts as the venue engine has them NOW (a read finished since)
+            await VT.enrich(sited)
+            last[2]["venues"] = [VN.card_for_model(c) for c in cards]
+            VN.remember_cards(ctx.account, cards)
         if ctx.surface == "s2" and last[2].get("preset"):   # Sasha 221 · /s2: a fresh page (a reload, a rehearsal) shows those SAME cards again — still no new search
             return {**{k: last[2][k] for k in ("venues", "find", "preset", "ribbon") if k in last[2]},
                     "note": "these are already on their cards — pick from them; no new search"}

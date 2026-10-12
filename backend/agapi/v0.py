@@ -612,6 +612,7 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
 
 
 HANDOFF_LINE = "Add your passport from your phone and I'll apply it."   # Sasha 228 · founder's words, 10 Oct
+from agapi.s2_status import HELD as _ST_HELD   # noqa: E402 · Sasha 249 · a read-back's status, in the one status's words
 
 
 async def _s1_passport(ctx: Ctx, trip_id: Optional[str], bind: bool = True) -> Optional[dict]:
@@ -808,7 +809,7 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
     rows_now = BK.to_book(await BK.items(ctx.account, p["trip_id"], ("suggested", "chosen")))
     res = {"breakdown": breakdown(rows_now, q["eur"]),   # Sasha 215 · the re-quote reaches the page: the pill and the total card refresh
            **({"changed": changed} if changed else {}), **({"stays_are_estimates": True} if est else {}), "read_back": [l for l in q["lines"] if not l.startswith("Note:")], "notes": [l for l in q["lines"] if l.startswith("Note:")],
-           "read_back_sha256": q["sha256"], "total_eur": q["eur"], "status": "not booked — waiting for the yes"}
+           "read_back_sha256": q["sha256"], "total_eur": q["eur"], "status": _ST_HELD}   # Sasha 249 · the one status's words
     if q.get("spoken_flights"):   # Sasha 246 · the spoken read-back names BOTH flights, the outbound first — this line, as it is
         res["say_flights"] = q["spoken_flights"]
         res["how_flights"] = "When you sum it up, say say_flights as it is (both flights, the outbound first)."   # in the result: S1's schema unchanged
@@ -953,26 +954,10 @@ async def _paid_out(ctx: Ctx, got: dict, where: str) -> dict:
 # ── Pacioli ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 async def get_status(ctx: Ctx, a: dict) -> dict:
-    from booking_signer import basket as BK, paid_watch as PW, plan_store as PS
-    p = await _latest(ctx)
-    if not p:   # Sasha 211 · no trip: the venue bookings still have their status
-        from agapi import venues as VN
-        vb_all = await VN.venue_bookings(ctx.account, include_cancelled=True)
-        vb = [b for b in vb_all if b.get("status") != "cancelled"]
-        vc = [f"{b['venue']} — {b.get('date')} {b.get('time') or ''}".strip() + " · cancelled" for b in vb_all if b.get("status") == "cancelled"]
-        return {"venues": vb, "anything_booked": any(b["status"] == "confirmed" for b in vb), "booked": [], "failed": [],
-                "cancelled": vc, "awaiting_payment": 0}   # Sasha 226 · a cancelled table is on the record too
-    await PW.sweep(ctx.account)   # a payment waiting is settled first (Pacioli writes the outcome)
-    rows = await BK.items(ctx.account, p["trip_id"], ("pending_payment", "booked", "failed", "cancelled"))
-    from agapi import venues as VN   # Sasha 211 · the venues too: Requested / Confirmed, from proof only
-    vb_all = await VN.venue_bookings(ctx.account, include_cancelled=True)
-    vb = [b for b in vb_all if b.get("status") != "cancelled"]
-    vc = [f"{b['venue']} — {b.get('date')} {b.get('time') or ''}".strip() + " · cancelled" for b in vb_all if b.get("status") == "cancelled"]
-    return {"venues": vb, "anything_booked": any(r["state"] == "booked" for r in rows) or any(b["status"] == "confirmed" for b in vb),
-            "booked": [r["status_line"] for r in rows if r["state"] == "booked"],
-            "failed": [r["status_line"] for r in rows if r["state"] == "failed"],
-            "cancelled": [r["status_line"] for r in rows if r["state"] == "cancelled"] + vc,   # Sasha 226 · a cancelled table is on the record too
-            "awaiting_payment": sum(1 for r in rows if r["state"] == "pending_payment")}
+    """Sasha 249 · ONE STATUS: agapi.s2_status.status_of is the one place a booking's status is decided (the Trip banner, the /s2
+    card and the WhatsApp line read it too). Its keys as before, plus its state and line."""
+    from agapi import s2_status as ST
+    return await ST.status_of(ctx.account)
 
 
 async def hold_venue(ctx: Ctx, a: dict) -> dict:

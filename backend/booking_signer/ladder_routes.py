@@ -493,7 +493,19 @@ async def plan_view(request: Request):
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
     rows = PS.truthful((j or {}).get("reservations") or [] if s == 200 else [])
     return {"plan": await PS.view(account, p, JN.for_journey(rows, p.get("trip_id"))), "plans": await PS.plans(account),
-            **({"trip_total": tt} if (tt := await trip_total(account, p.get("trip_id"))) else {})}
+            **({"trip_total": tt} if (tt := await trip_total(account, p.get("trip_id"))) else {}),
+            **({"trip_status": ts} if (ts := await trip_status(account, p.get("trip_id"))) else {})}
+
+
+async def trip_status(account: str, trip_id: Optional[str]) -> Optional[dict]:
+    """Sasha 249 · ONE STATUS (EU 245 §1.12): the Trip banner says what get_status says — agapi.s2_status, never a client prop
+    ("✓ Paid … · not booked yet"). Already swept above. None when the records don't answer: the banner then shows nothing."""
+    from agapi import s2_status as ST
+    try:
+        return ST.public(await ST.status_of(account, trip_id, sweep=False))
+    except Exception as e:
+        log.info("[ladder_routes] trip status not read: %s", type(e).__name__)
+        return None
 
 
 async def trip_total(account: str, trip_id: Optional[str]) -> Optional[dict]:

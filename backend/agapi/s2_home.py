@@ -22,34 +22,92 @@ from typing import Dict, List, Optional
 log = logging.getLogger("agapi.s2_home")
 
 # what /s2 does today — every line backed by a tool in app/agent/s2.py S2_TOOLS (tests/test_s2_225.py checks the mapping)
+# Sasha 249 · ONE CAPABILITY LIST (EU 245 §1.5 / T10): everything that says what she can do is generated from this list —
+#   SAY (what_i_can_do's line) · prose()   (the S2 and S1 system prompts: app/agent/s2.py) · CHIPS (/s2 and /next, via the
+#   generated frontend/lib/capabilities.generated.mjs) · wa_help / wa_linked / wa_onboard (WhatsApp, when the one brain answers).
+#   Each group's "say" is its phrase in SAY; its optional "chip" is a request someone can tap, with the tool that answers it.
 CAPABILITIES: List[Dict] = [
-    {"group": "Book", "items": [("A table at a restaurant", "search_venues"), ("A spa, salon or other place", "search_venues"),
-                                ("Flights and hotels for a trip", "book")]},
-    {"group": "Plan", "items": [("A weekend or a longer trip, day by day", "propose_trip"),
-                                ("Swap a hotel or a flight in it", "swap_stay")]},
-    {"group": "Money", "items": [("The total before you say yes", "get_total"),
-                                 ("Pay on this screen — Apple Pay or Google Pay", "book")]},
-    {"group": "Messages", "items": [("Email someone for you, after you've approved it", "send_email"),
-                                    ("Put a booking in your calendar", "add_to_calendar"),
-                                    ("Tell you everything I've done today", "get_activity")]},
-    {"group": "Your documents", "items": [("Keep your passport and loyalty cards — I only ever see a mask", "keep_add")]},
+    {"group": "Book", "say": "book tables, spas and trips", "chip": ("Book dinner", "search_venues"),
+     "items": [("A table at a restaurant", "search_venues"), ("A spa, salon or other place", "search_venues"),
+               ("Flights and hotels for a trip", "book")]},
+    {"group": "Plan", "say": "plan a trip day by day", "chip": ("Plan a weekend", "propose_trip"),
+     "items": [("A weekend or a longer trip, day by day", "propose_trip"),
+               ("Swap a hotel or a flight in it", "swap_stay")]},
+    {"group": "Money", "say": "give you the total before you say yes",
+     "items": [("The total before you say yes", "get_total"),
+               ("Pay on this screen — Apple Pay or Google Pay", "book")]},
+    {"group": "Messages", "say": "email people for you and put bookings in your calendar",
+     "items": [("Email someone for you, after you've approved it", "send_email"),
+               ("Put a booking in your calendar", "add_to_calendar"),
+               ("Tell you everything I've done today", "get_activity")]},
+    {"group": "Your documents", "say": "keep your passport safe", "chip": ("Add my passport", "keep_add"),
+     "items": [("Keep your passport and loyalty cards — I only ever see a mask", "keep_add")]},
     # Sasha 236 · every tool she has gets its line (EU 232 §2.1): each still backed by a tool /s2 has (tests/test_s2_225.py)
-    {"group": "Your bookings", "items": [("Everything you've booked, in one place", "my_plans"),
-                                         ("Change or cancel a booking", "change_booking"),
-                                         ("Tell a restaurant or spa you're running late", "running_late"),
-                                         ("Ask your hotel for an upgrade or a late check-out", "hotel_request")]},
-    {"group": "Trips", "items": [("What you need to enter a country — and the form, prepared for you to submit", "entry_documents")]},
-    {"group": "Cards & cover", "items": [("Which of your cards to pay with, and what it covers", "which_card"),
-                                         ("Whether your card covers a rental car", "rental_cover")]},
-    {"group": "If something goes wrong", "items": [("A car accident, step by step", "accident"),
-                                                   ("A claim on your card's insurance, read back before it's filed", "file_claim")]},
-    {"group": "Money back", "items": [("A delayed or cancelled flight", "flight_money_back"),
-                                      ("A late, lost or damaged bag", "bag_money_back")]},
-    {"group": "Subscriptions", "items": [("Find your subscriptions on a statement", "find_subscriptions"),
-                                         ("Cancel one — by their own cancel page or an email, after your yes", "cancel_subscription")]},
+    {"group": "Your bookings", "say": "keep track of your bookings", "chip": ("What's coming up?", "my_plans"),
+     "items": [("Everything you've booked, in one place", "my_plans"),
+               ("Change or cancel a booking", "change_booking"),
+               ("Tell a restaurant or spa you're running late", "running_late"),
+               ("Ask your hotel for an upgrade or a late check-out", "hotel_request")]},
+    {"group": "Trips", "say": "sort out what you need to enter a country",
+     "items": [("What you need to enter a country — and the form, prepared for you to submit", "entry_documents")]},
+    {"group": "Cards & cover", "say": "tell you which card covers what",
+     "items": [("Which of your cards to pay with, and what it covers", "which_card"),
+               ("Whether your card covers a rental car", "rental_cover")]},
+    {"group": "If something goes wrong", "say": "help when something goes wrong",
+     "items": [("A car accident, step by step", "accident"),
+               ("A claim on your card's insurance, read back before it's filed", "file_claim")]},
+    {"group": "Money back", "say": "get money back for flights and bags",
+     "items": [("A delayed or cancelled flight", "flight_money_back"),
+               ("A late, lost or damaged bag", "bag_money_back")]},
+    {"group": "Subscriptions", "say": "find and cancel subscriptions", "chip": ("What am I subscribed to?", "find_subscriptions"),
+     "items": [("Find your subscriptions on a statement", "find_subscriptions"),
+               ("Cancel one — by their own cancel page or an email, after your yes", "cancel_subscription")]},
 ]
-SAY = ("I can book tables and trips, keep track of your bookings, sort out what you need to enter a country, get money back for "
-       "flights and bags, help when something goes wrong, find and cancel subscriptions, email people for you, and keep your passport safe.")
+
+
+def _and(parts: List[str]) -> str:
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + ", and " + parts[-1]
+
+
+# Sasha 249 · generated (it was a second, hand-written list beside CAPABILITIES)
+SAY = "I can " + _and([g["say"] for g in CAPABILITIES]) + "."
+# Sasha 249 · the chips on /s2 and /next (S1 = S2): "what can you do?" first (what_i_can_do), then each group's own request
+ASK_CHIP = ("What can you do?", "what_i_can_do")
+CHIPS: List[str] = [ASK_CHIP[0]] + [g["chip"][0] for g in CAPABILITIES if g.get("chip")]
+CHIP_TOOLS: Dict[str, str] = {ASK_CHIP[0]: ASK_CHIP[1], **{g["chip"][0]: g["chip"][1] for g in CAPABILITIES if g.get("chip")}}
+
+
+def prose() -> str:
+    """Sasha 249 · the system prompts' capability section (S2's, and S1's with parity on) — the card's own groups, in a line each."""
+    lines = [f"- **{g['group']}:** " + "; ".join(i for i, _ in g["items"]) + "." for g in CAPABILITIES]
+    return ("## What she can do (the same list as `what_i_can_do`'s card; nothing else)\n\n" + "\n".join(lines) + "\n")
+
+
+# Sasha 249 · WhatsApp's words when the one brain answers (booking_signer/wa_agent.on): from the same list. The old brain keeps its
+# own HELP / LINKED / ONBOARD (booking_signer/guest_whatsapp.py) — they describe what IT does, and go with it.
+def wa_help() -> str:
+    return f"{SAY} Tell me what you need in one message — e.g. “{CHIPS[1]}” or “{CHIPS[-1]}”."
+
+
+def wa_linked() -> str:
+    return f"Linked. {SAY} Just ask — e.g. “{CHIPS[1]}”."
+
+
+def wa_onboard() -> str:
+    """With a {web} placeholder, as guest_whatsapp.ONBOARD."""
+    return "Hi, I'm Sasha by Kanoe. " + SAY + " To start on WhatsApp, link your account first: {web}"
+
+
+def frontend_module() -> str:
+    """Sasha 249 · frontend/lib/capabilities.generated.mjs, exactly (tests/test_s249_status_keep_caps.py holds the file to it;
+    regenerate with: cd backend && python -m scripts.capabilities_out)."""
+    import json
+    groups = [{"group": g["group"], "items": [i for i, _ in g["items"]]} for g in CAPABILITIES]
+    return ("// GENERATED from backend/agapi/s2_home.py CAPABILITIES (Sasha 249 · one capability list) — do not edit by hand.\n"
+            "// Regenerate: cd backend && python -m scripts.capabilities_out\n"
+            f"export const CHIPS = {json.dumps(CHIPS, ensure_ascii=False)}\n"
+            f"export const SAY = {json.dumps(SAY, ensure_ascii=False)}\n"
+            f"export const GROUPS = {json.dumps(groups, ensure_ascii=False)}\n")
 
 _MEM: deque = deque(maxlen=500)   # until 038 is applied (and a copy for the founder's view)
 RUN = None                        # tests: None → memory only
@@ -166,4 +224,5 @@ async def not_yet_list(request: Request):
     return {"ok": True, "items": [{**r, "at": r["at"].isoformat() if hasattr(r["at"], "isoformat") else r["at"]} for r in rows]}
 
 
-__all__ = ["CAPABILITIES", "SAY", "mask", "note", "tools", "router", "what_i_can_do", "note_not_yet"]
+__all__ = ["CAPABILITIES", "SAY", "CHIPS", "CHIP_TOOLS", "prose", "wa_help", "wa_linked", "wa_onboard", "frontend_module",   # Sasha 249
+           "mask", "note", "tools", "router", "what_i_can_do", "note_not_yet"]

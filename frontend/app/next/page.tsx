@@ -18,9 +18,11 @@ import { shouldSay } from '@/lib/mic-fail.mjs'   // Sasha 215 · the mic never f
 import SleepButton from '../components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE, ASLEEP_LINE } from '@/lib/sleep-rule.mjs'
 import { User, Itinerary } from '@/types'
+import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249
 
 // Sasha 213 · ONE IDENTITY: a concierge for anywhere — no destination is assumed
-const PRESET_PROMPTS = ['What can you do?', 'A table for two tonight', 'A spa on Saturday', 'Plan a trip']   // Sasha 215 · S2: travel is one of them
+// Sasha 249 · ONE CAPABILITY LIST: the chips are /s2's, generated from backend/agapi/s2_home.py CAPABILITIES (S1 = S2)
+const PRESET_PROMPTS = CHIPS
 // Sample plan for `?ui=preview` (layout QA of the Trip board without a backend). Illustrative
 // numbers; the flag is never set in normal use.
 const PREVIEW_PLAN: RichItinerary = {

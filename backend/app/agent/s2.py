@@ -19,6 +19,7 @@ from typing import Optional
 from app.agent import voice as V
 from app.services import persona as P
 
+# Sasha 249 · her Keep bullet names no fixed example (EU 245 §1.13 / T13): only the masks keep_list gives her
 S2_WHO = """## Who she is
 
 Sasha is a personal concierge. People come to her for whatever they need, and she gets it done: a table tonight, a spa on
@@ -31,7 +32,8 @@ with a destination or a trip.
 - **She keeps it short.** On a phone, one or two sentences, then the card. The card carries the details.
 - **She suggests.** Asked for ideas, two or three, each with its reason, never just one.
 - **Their Keep.** Their passport and loyalty / frequent-flyer numbers can live in their Keep. She never sees them, only
-  something like "Passport ES ••••456", and uses one only where it's needed, after their yes. To add one she puts the photo
+  the masks `keep_list` gives her for THIS person, and uses one only where it's needed, after their yes. She never names an
+  item `keep_list` didn't give her. To add one she puts the photo
   picker on their screen (`keep_add`): a passport's photo page, or a loyalty card or its Apple Wallet screenshot.
 - **Never a number in the chat.** She never asks for a document number; if they offer one, she offers the photo instead.
 - **One total, in euros.** A trip's price is `get_total`'s figure, in euros, said as the whole trip — the same figure their
@@ -64,7 +66,12 @@ S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "
 
 # Sasha 241 · S1 PARITY: /next keeps its own "Who she is" and gains S2's capability lines — taken from S2_WHO itself, so the two
 # never drift (her Keep, never a number in the chat, what she can do, her plans, running late, no promises, claim deadlines, not yet)
-S1_CAN = ("## What else she does (the same as on /s2)\n\n- **Their Keep.**" + S2_WHO.split("- **Their Keep.**", 1)[1]).rstrip() + "\n"
+# Sasha 249 · ONE CAPABILITY LIST (EU 245 §1.5 / T10): the capability section of both prompts is generated from
+# agapi/s2_home.py CAPABILITIES (the card's own groups) — S1 = S2
+from agapi.s2_home import prose as _caps_prose   # noqa: E402
+CAN = _caps_prose()
+S1_CAN = ("## What else she does (the same as on /s2)\n\n- **Their Keep.**" + S2_WHO.split("- **Their Keep.**", 1)[1]).rstrip() + "\n" \
+    + "\n" + CAN
 S1_CAN += V.RULES   # Sasha 249 · her voice, the same on /next (parity on only — S1_CAN is never read with parity off)
 
 # Sasha 237 · ONE BRAIN on WhatsApp (EU 232 §1.1): S2's persona and tools, plus how WhatsApp differs
@@ -88,7 +95,8 @@ S2_BOOK = ("After the person's explicit yes in THIS turn: one payment (Stripe TE
 def s2_system() -> str:
     """S2's whole system text: her own "Who she is", then S1's own text from "## How she talks" on (shared, unchanged)."""
     rest = P.AGENT_SYSTEM.split("## How she talks", 1)
-    return (S2_WHO + "\n## How she talks" + rest[1] if len(rest) == 2 else S2_WHO + "\n" + P.AGENT_SYSTEM) + V.RULES   # Sasha 249 · her voice
+    who = S2_WHO + "\n" + CAN   # Sasha 249 · + the one capability list's section
+    return (who + "\n## How she talks" + rest[1] if len(rest) == 2 else who + "\n" + P.AGENT_SYSTEM) + V.RULES   # Sasha 249 · her voice
 
 
 def demo(account: Optional[str]) -> bool:

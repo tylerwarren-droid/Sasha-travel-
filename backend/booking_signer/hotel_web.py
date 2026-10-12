@@ -50,7 +50,8 @@ async def web_turn(message: str, user_id: Optional[str], now: datetime) -> Optio
     except Exception as e:
         log.info("[hotel_web] no photos: %s", type(e).__name__)
         photos = {}
-    hotels = [{"name": c["name"], "city": city, "nights": nights, "checkin": stay["a"], "party": party,
+    from app.services.world_itinerary import hotel_name   # Sasha 249 · the ONE hotel_name() (EU 245 §1.11): never a page title
+    hotels = [{"name": hotel_name(c["name"]) or c["name"], "city": city, "nights": nights, "checkin": stay["a"], "party": party,
                "address": c.get("address"), "rating": c.get("rating"), "rating_count": c.get("rating_count"),   # Google's 1–5, as its listing says
                "book_url": c.get("listing_url"), "source": "google",
                **({"photo": photos[c["place_id"]], "photo_source": c.get("website"),

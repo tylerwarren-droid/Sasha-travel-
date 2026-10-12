@@ -507,6 +507,11 @@ async def book_paid(account: str, sid: str) -> Dict[str, Any]:
     rows = await BK.by_session(sid)
     done = [r for r in rows if r["state"] == "booked"]
     bad = [r for r in rows if r["state"] == "failed"]
+    try:   # Sasha 249 · basket bookings in the outcomes ledger too (EU 245 §1.16) — awaited, at most 5 s; never stops the booking
+        from agapi import s2_outcomes as OC
+        await asyncio.wait_for(OC.basket_booked(account, done + bad), timeout=5)
+    except Exception as e:
+        log.info("[basket_book] outcomes not recorded: %s", type(e).__name__)
     say = "✅ Booked — everything's in your itinerary." if done and not bad else ("Partly booked:" if done else "Not booked:")
     say += "\n" + "\n".join(r.get("status_line") or "" for r in done + bad)   # Pacioli's lines, word for word
     if applied and done:

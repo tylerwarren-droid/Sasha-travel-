@@ -25,6 +25,7 @@ import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE } from '@/lib/sleep-rule.mjs'
+import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
 
 type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
@@ -49,6 +50,9 @@ type Card =
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
 type Ev = Record<string, any>
+/** Sasha 249 · ONE STATUS: a `booked` event's card line — the server's status (agapi/s2_status.py), shown only when it says booked */
+const bookedLine = (ev: Ev): string | null =>
+  ev?.status && ['booked', 'partly_booked'].includes(String(ev.status.state)) && ev.status.line ? String(ev.status.line) : null
 type Item = { kind: string; state: string; check: 'green' | 'red' | 'amber'; line: string; at: string; ref: string; about?: string; proof?: { reference?: string } }
 
 /** The first n sentences — a card's headline, not her whole reply. */
@@ -159,8 +163,8 @@ function useSpeaker() {
   }), [])
 }
 
-// Sasha 226 · each one something she does; the capability card is still reachable by asking "what can you do?"
-const CHIPS = ['Book dinner', 'What am I subscribed to?', 'Plan a weekend', 'Add my passport', "What's coming up?"]
+// Sasha 226 · each one something she does. Sasha 249 · ONE CAPABILITY LIST: generated from backend/agapi/s2_home.py CAPABILITIES
+// (frontend/lib/capabilities.generated.mjs) — the same chips as /next
 /** Sasha 225 · one honest line after an action: what she can do next (each is a real tool on /s2). */
 const AFTER: Partial<Record<string, string>> = {
   booked: 'If you’re running late, just tell me — or I can email the details to someone, or put it in your calendar.',
@@ -289,7 +293,7 @@ function CardView({ c, choose, pick, send }: { c: Card; choose: (t: string) => v
         </div>))}
     </Box>)
   if (c.k === 'venues') return <VenueCards cards={c.cards} choose={pick} />   // Sasha 231 · the tap carries the card's place_id
-  if (c.k === 'booked') return <><Box k="Booked" h={firstSentences(untag(c.line.replace(/^✅\s*/, '').replace(/^Booked:\s*/i, '')), 2)} tone="rgba(126,226,168,.5)" /><After k="booked" /></>
+  if (c.k === 'booked') return <><Box k={/^Partly booked/i.test(c.line) ? 'Partly booked' : 'Booked'} h={firstSentences(untag(c.line.replace(/^✅\s*/, '').replace(/^(Partly )?Booked:\s*/i, '')), 2)} tone="rgba(126,226,168,.5)" /><After k="booked" /></>
   if (c.k === 'calendar') return (
     <><Box k="Add to your calendar" h={untag(c.title || 'Your booking')}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -435,8 +439,9 @@ export default function S2App() {
         return
       }
       if (ev.type !== 'booked' && ev.type !== 'booking_failed') return
+      const line = ev.type === 'booked' ? bookedLine(ev) : null   // Sasha 249 · the card from the `booked` event, the server's one status
       setMsgs(ms => [...ms.map(x => ({ ...x, cards: x.cards.map(c => (c.k === 'pay' ? { ...c, already_paid: ev.type === 'booked' } : c)) })),
-                     { role: 'sasha', text: String(ev.say || ev.text || ''), cards: [] }])
+                     { role: 'sasha', text: String(ev.say || ev.text || ''), cards: line ? [{ k: 'booked', line }] : [] }])
     }
     return () => es.close()
   }, [signedIn, speaker])
@@ -472,7 +477,10 @@ export default function S2App() {
           else if (ev.type === 'say') { if (ev.interrupt) speaker.interrupt(); speaker.say(ev.text) }
           else if (ev.type === 'replace') { reply = ev.text; patch(m => ({ ...m, text: untag(reply) })); if (ev.speak && ev.say) speaker.say(ev.say) }
           else if (ev.type === 'error') { reply = ev.message; patch(m => ({ ...m, text: untag(reply) })); speaker.say(ev.message) }
-          else if (ev.type === 'done') { reply = ev.text || reply; if (ev.dormant) setDormant(true); patch(m => ({ ...m, text: untag(reply), cards: /^✅\s*Booked/m.test(reply) ? [...m.cards, { k: 'booked', line: (reply.match(/✅[^\n]*/) || [''])[0] }] : m.cards })) }
+          // Sasha 249 · ONE STATUS: the "Booked" card was made here by a regex on her reply (/^✅ Booked/) — deleted. It comes only
+          // from the `booked` event, its line from the server's one status (agapi/s2_status.py — get_status's own)
+          else if (ev.type === 'done') { reply = ev.text || reply; if (ev.dormant) setDormant(true); patch(m => ({ ...m, text: untag(reply) })) }
+          else if (ev.type === 'booked') { const line = bookedLine(ev); if (line) patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== 'booked'), { k: 'booked', line }] })) }
           else if (ev.type === 'render') {
             const add = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k), c] }))
             if (ev.kind === 'venues' && ev.preset) { const cs = shownCards(ev.preset); if (cs.length) add({ k: 'venues', cards: cs }) }

@@ -9,6 +9,7 @@ the venue's reply lands (outcomes.update). "We get any booking done", measured b
   then         the reservation's own status, read from Sasha's records (each time her bookings are read, and every 10 minutes for the
                attempts still open): confirmed / guest_booked → confirmed (the venue's words quoted), declined → declined, failed /
                unreachable → failed, cancelled before any answer → failed ("cancelled before the venue answered").
+  basket       Sasha 249 · a paid trip's flights and hotels too (basket_booked, from basket_book.book_paid): rung api, decided at once
   the key      ref = "sasha:<trip_item_id>" — the reservation's own id, so the update needs no table of its own.
   never        the customer's name, phone, email or card: only the venue, its sector and city, the rung, the channel and the times.
 
@@ -102,6 +103,36 @@ async def booked(account: str, held: dict, venue: str, city: Optional[str], resu
             start()
 
 
+async def basket_booked(account: str, rows: list) -> int:
+    """Sasha 249 · basket bookings (a trip's flights and hotels, booked by their provider's API after the payment) go in the ledger
+    too (EU 245 §1.16): rung "api", channel "api", sector flight / hotel, the provider's name and the destination city — never the
+    person's details. Decided at once (booked → confirmed with its reference, failed → failed with Pacioli's reason); once per row.
+    Never raises; a ledger that doesn't answer is logged and skipped. → how many were recorded."""
+    n = 0
+    for r in rows or []:
+        state = {"booked": "confirmed", "failed": "failed"}.get(str(r.get("state") or ""))
+        if not state or not r.get("id"):
+            continue
+        ref = f"sasha:basket:{r['id']}"
+        if (ref, state) in _DONE:
+            continue
+        s = r.get("snapshot") or {}
+        flight = r.get("kind") == "flight"
+        venue = (" ".join(f"{s.get('owner') or ''} {s.get('flights') or ''}".split()) if flight else str(s.get("name") or s.get("hotel") or "")) \
+            or ("Flight" if flight else "Hotel")
+        city = (s.get("to_city") or s.get("to")) if flight else s.get("city")
+        body: Dict[str, Any] = {"ref": ref, "venue": venue[:120], "rung": "api", "channel": "api", "state": state,
+                                "sector": "flight" if flight else "hotel", **({"city": str(city)[:80]} if city else {})}
+        if state == "confirmed":
+            body["confirmation_quote"] = f"Their reference: {r['booking_reference']}" if r.get("booking_reference") else "booked"
+        else:
+            body["failure_reason"] = str(r.get("failed_why") or "refused")[:300]
+        if await _send("outcomes.record", body):
+            _DONE.add((ref, state))
+            n += 1
+    return n
+
+
 async def sync(account: str, reservations: list) -> int:
     """The reservations as Sasha's records have them now → each decided one updates its outcome (once). Never raises."""
     n = 0
@@ -162,4 +193,4 @@ def start() -> None:
             _task = None
 
 
-__all__ = ["booked", "sync", "ref_of", "via", "RUNG", "LATER"]
+__all__ = ["booked", "basket_booked", "sync", "ref_of", "via", "RUNG", "LATER"]   # Sasha 249 · + basket_booked

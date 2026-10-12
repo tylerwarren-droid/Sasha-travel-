@@ -189,10 +189,11 @@ async def routes_offline(a: str) -> None:
                                                               "name": "Ink Gate", "idempotency_key": "vo-tat-h"})
         b = await API.call(_ctx(a, "Yes, send it"), "book_venue", {"approval": {"said": "Yes, send it"}, "idempotency_key": "vo-tat-b"})
         res = b.get("result") or {}
+        # Sasha 249 · her voice: the link opens it, the channel unnamed ("send them this: <link>")
         ok("VENUE ROUTE · a tattoo studio on Instagram only: the message drafted, sent to THEIR phone on the yes — never booked",
            h.get("ok") and h["result"]["status"] == "draft_message" and h["result"].get("open_in_instagram") == "https://ig.me/m/inkgate.madrid"
            and b.get("ok") and res.get("status") == "draft_on_phone" and res.get("booked") is False and "confirmed" not in str(res)
-           and len(told) == len(sent0) + 1 and "Instagram" in told[-1], f"{h.get('result') or h.get('error')} · {res or b.get('error')}")
+           and len(told) == len(sent0) + 1 and "send them this" in told[-1] and "ig.me" in told[-1], f"{h.get('result') or h.get('error')} · {res or b.get('error')}")
         n0 = len(fake.calls)
         VN._read = read_with({"email": {}})
         await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "route": "email", "idempotency_key": "vo-n"})

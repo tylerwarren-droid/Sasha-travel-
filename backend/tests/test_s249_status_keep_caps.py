@@ -128,6 +128,7 @@ class GetStatusIsTheOneSource(unittest.TestCase):
         self.assertEqual(ST.HELD, "not booked — waiting for the yes")   # the words it always said
 
 
+@unittest.skipUnless(os.path.isdir(FRONT), "no frontend checkout (the Railway image is the backend only)")
 class TheFrontReadsIt(unittest.TestCase):
     def test_s2_has_no_regex_booked_card(self):   # it pinned the very double decision removed here
         src = _read(FRONT, "app", "s2", "S2App.tsx")

@@ -41,6 +41,11 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T18": ("activities are places (one card, their own photos)", ["tests.test_s252_activities.ThingsToDoArePlaces"]),
     # Sasha 252 · the Trip tab's flights from the one trip record, never "ask for flights" while they're chosen
     "T19": ("the Trip tab's flights from the trip record", ["tests.test_s252_activities.TripTabReadsTheTrip"]),
+    # Sasha 253 · EU S2 item 11: every time she names (departure or landing) resolves to a stored fare; a fare gone is said with
+    # what's there now (stored first); a time never offered is "not one of the options", with the options
+    "T21": ("every time she offers can be booked", ["tests.test_s253_offered.EveryOfferedTimeBooks",
+                                                    "tests.test_s253_offered.AFareThatWentAway",
+                                                    "tests.test_s253_offered.ATimeNeverOffered"]),
 }
 
 _RUNNER = """

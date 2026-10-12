@@ -57,9 +57,11 @@ async def main() -> int:
     t = 0 if await VTS.main() else 1
     from scripts import her_voice_suite as HV   # Sasha 249 · her voice: no channel named, one question per detail
     h = 0 if await HV.main() else 1
+    from scripts import one_truth_suite as OT   # Sasha 249 · the consistency test, T1–T14 (EU 245)
+    o = await __import__("asyncio").to_thread(OT.main)
     COST.report()   # Sasha 232 · what this run spent on the model
     # Sasha 249 · ONE VERDICT: the line printed and the exit code are the same expression (the safety suite was printed, never failed)
-    bad = bool(a or b or c or d or v or w or e or f or s or t or h)
+    bad = bool(a or b or c or d or v or w or e or f or s or t or h or o)
     print(f"\nDEPLOY GATE: {'PASS' if not bad else 'FAIL'}")
     return 1 if bad else 0
 

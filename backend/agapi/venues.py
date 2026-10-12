@@ -479,11 +479,11 @@ async def venue_bookings(account: str, include_cancelled: bool = False) -> List[
     if status != 200:
         return []
     today = date.today().isoformat()
-    try:   # CR 87 · a venue's reply that changed a reservation updates its outcome (once); never slows or stops this read
-        from agapi import s2_outcomes as OC
-        asyncio.get_running_loop().create_task(OC.sync(account, (j or {}).get("reservations") or []))
-    except Exception:
-        pass
+    try:   # CR 87 · a venue's reply that changed a reservation updates its outcome (once) — Sasha 247: awaited, at most 3 s (a bare
+        from agapi import s2_outcomes as OC   # task can be dropped mid-way and never finish); a slow ledger never stops this read
+        await asyncio.wait_for(OC.sync(account, (j or {}).get("reservations") or []), timeout=3)
+    except Exception as e:
+        log.info("[venues] outcomes not synced: %s", type(e).__name__)
     return [{"trip_item_id": r["id"], "venue": GW.plain_venue(r.get("venue")), "date": r.get("date"), "time": r.get("time"),
              "party": r.get("party"), "status": r.get("status"), "type": r.get("type"),
              **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),   # Sasha 217 · the venue's reference in full

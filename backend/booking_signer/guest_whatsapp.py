@@ -2493,6 +2493,7 @@ async def _send_link(ctx: dict, rd: dict, reservation: dict, name: str, plan: Op
     if status != 200:
         return False
     ctx["st"]["pending"] = {"kind": "link", "at": ctx["now"].isoformat(), "link_id": j["link_id"], "venue": rd["venue"], "when": at, **keep}
+    await _outcome(ctx["account"], {**keep, "link_id": j["link_id"], "venue": rd["venue"], "read": rd}, "page", status="page_link", j=j)   # Sasha 247 · their page, sent
     if nights:
         lines = (j.get("read_back") or {}).get("lines") or []
         ctx["out"].text(f"One tap: {rd['venue']}'s own booking engine ({j.get('platform') or 'their booking page'}).\n"
@@ -2717,7 +2718,7 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
                     await _combo_spa(ctx)
                     return
                 await _ask_yes(ctx, "form", j["form_id"], j["read_back"], SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
-                               extra={"summary": summary(reservation), **keep})
+                               extra={"summary": summary(reservation), "trip_item_id": j.get("trip_item_id"), **keep})   # Sasha 247 · the ledger's key
                 return
             if j.get("rule") == "form_challenge" and "(TEST stand-in)" in str(rd.get("venue") or "") and not combo:
                 # Sasha 172 · the demo's CAPTCHA (our own test page): Sasha fills everything else, the guest ticks it on the phone
@@ -2803,7 +2804,7 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
                     sentence = (f"Email {rd['venue']} to ask for a room for {reservation['how_many']['count']}, {SN.day_words(at[:10])} for "
                                 f"{n} night{'s' if n != 1 else ''}? It's a request — nothing is booked until they reply.")
                 await _ask_yes(ctx, "email", j["email_id"], j["read_back"], sentence, rd["venue"],
-                               extra={"summary": summary(reservation), **keep})
+                               extra={"summary": summary(reservation), "trip_item_id": j.get("trip_item_id"), **keep})   # Sasha 247 · the ledger's key
                 return
             why = refusal_words(j, status)
             log.info("[guest_whatsapp] email refused (%s); trying the next route", status)
@@ -2820,7 +2821,8 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
             if status == 200:
                 sentence = (f"I'll send {rd['venue']} your request and ask for a date and a quote"
                             f"{' for ' + SN.day_words(day) if day else ''}. Shall I?")
-                await _ask_yes(ctx, "email", j["email_id"], j["read_back"], sentence, rd["venue"], extra={"summary": "", **keep})
+                await _ask_yes(ctx, "email", j["email_id"], j["read_back"], sentence, rd["venue"],
+                               extra={"summary": "", "trip_item_id": j.get("trip_item_id"), **keep})   # Sasha 247 · the ledger's key
                 return
             why = refusal_words(j, status)
     st["pending"] = None
@@ -2872,15 +2874,33 @@ def summary(o: dict) -> str:
     return f"{when}, {n} {'person' if n == 1 else 'people'}"
 
 
+async def _outcome(account: str, pend: dict, rung: str, status: Optional[str] = None, error: Optional[str] = None,
+                   j: Optional[dict] = None, reference: Optional[str] = None) -> None:
+    """Sasha 247 · CR 87's gap: the older WhatsApp-guest flow records each booking in the outcomes ledger AT THE MOMENT IT'S SENT —
+    the same rung/channel mapping and key (the reservation's own id) as the agent's book_venue. Never the person's details; awaited
+    in the turn; a ledger that doesn't answer never stops the booking."""
+    try:
+        from agapi import s2_outcomes as OC
+        held = {"rung": rung, "id": pend.get("id") or pend.get("link_id"), "trip_item_id": pend.get("trip_item_id") or (j or {}).get("trip_item_id"),
+                "sector": ((pend.get("draft") or {}).get("what") or {}).get("category"), "at": NOW()}
+        await OC.booked(account, held, plain_venue(pend.get("venue") or ""), (pend.get("read") or {}).get("city"),
+                        result=None if error else {"status": status, **({"reference": reference} if reference else {})}, error=error)
+    except Exception as e:
+        log.warning("[guest_whatsapp] outcome not recorded: %s", type(e).__name__)
+
+
 async def _approve(ctx: dict, pend: dict, how: dict) -> None:
     out, account, venue = ctx["out"], ctx["account"], pend["venue"]
     if pend["rung"] == "form":
         status, j = await api(account, "POST", f"/api/booking/forms/{pend['id']}/send", {"read_back_sha256": pend["sha"], "approval": how}, timeout=120)
         if status != 200:
             out.text(f"❌ Not sent to {venue}: {refusal_words(j, status)}.")
+            await _outcome(account, pend, "form", error=refusal_words(j, status), j=j)   # Sasha 247
             return
         # Sasha 117 · the send is "sent"; what the venue's page SAID is the reading — "confirmed" was never the status
         result = (j.get("reading") or {}).get("result") if j.get("status") == "sent" else None
+        await _outcome(account, pend, "form", status="confirmed" if result == "confirmed" else "requested", j=j,   # Sasha 247
+                       reference=j.get("booking_reference") if result == "confirmed" else None)
         ref = f" Their reference: {j['booking_reference']}." if j.get("booking_reference") and result == "confirmed" else ""
         shown = plain_venue(venue)   # Sasha 171 · the stand-in was said once, before the yes — not again
         out.text({"confirmed": f"✅ Booked: {shown}, {pend.get('summary', '')}.{ref}",
@@ -2912,7 +2932,9 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
         status, j = await api(account, "POST", f"/api/booking/forms/{pend['id']}/handover", {}, timeout=120)
         if status != 200:
             out.text(f"❌ I couldn't open {plain_venue(venue)}'s page for you: {j.get('say') or refusal_words(j, status)}. Nothing was sent.")
+            await _outcome(account, pend, "handover", error=j.get("say") or refusal_words(j, status), j=j)   # Sasha 247
             return
+        await _outcome(account, pend, "handover", status="tap_to_finish", j=j)   # Sasha 247
         sent = (j.get("phone") or {}).get("sent")
         out.text("📲 It's on your phone — tick the box, then press Reservar. I'll confirm here."
                  if sent else f"Open this, tick the box, then press Reservar: {j.get('view_url')}")
@@ -2925,13 +2947,19 @@ async def _approve(ctx: dict, pend: dict, how: dict) -> None:
         status, j = await api(account, "POST", f"/api/booking/emails/{pend['id']}/send", {"read_back_sha256": pend["sha"], "approval": how}, timeout=60)
         if status != 200 or j.get("status") != "sent":
             out.text(f"❌ Not sent to {venue}: {j.get('say') or refusal_words(j, status)}.")
+            await _outcome(account, pend, "email", error=j.get("say") or refusal_words(j, status), j=j)   # Sasha 247
             return
+        await _outcome(account, pend, "email", status="requested", j=j)   # Sasha 247
         out.text(DONE_ASKED)   # Sasha 158 · one sentence after; the itinerary says "Requested — waiting for <venue>"
         return
     status, j = await api(account, "POST", f"/api/booking/calls/{pend['id']}/place", {"read_back_sha256": pend["sha"], "approval": how}, timeout=120)
     if status != 200:
         out.text(f"❌ Not called: {refusal_words(j, status)}. Nothing was dialled.")
+        await _outcome(account, pend, "call", error=refusal_words(j, status), j=j)   # Sasha 247
         return
+    await _outcome(account, pend, "call", status=j.get("status") if j.get("status") in ("scheduled", "placed") else
+                   ("placed" if j.get("status") == "uncertain" else None), error=None if j.get("status") in ("scheduled", "placed", "uncertain")
+                   else (j.get("why") or "not placed"), j=j)   # Sasha 247
     if j.get("status") == "scheduled":   # Sasha 108 · the venue's own name, never the search words
         at = str(j.get("scheduled_for") or "")[11:16]
         out.text(f"{venue} is closed right now, so I'll call them at {at} — your yes covers that call.")

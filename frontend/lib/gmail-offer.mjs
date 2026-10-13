@@ -1,7 +1,7 @@
 /**
  * Sasha 244 · /you never pushes a Gmail someone doesn't have (Jon signs in with iCloud; his work mail is Outlook). The connect form is
  * shown in full when the sign-in address is a Gmail one, or when a Gmail is already connected / expired; otherwise it waits behind
- * one line and an "I have a Gmail account" button. Who is invited is unchanged (SASHA_GMAIL_ACCOUNTS).
+ * one line and an "I have a Gmail account" button. Who is invited is the person's access record ("gmail" in its mailboxes).
  */
 export function isGmailAddress(email) {
   return /@(gmail|googlemail)\.com$/i.test(String(email || '').trim())

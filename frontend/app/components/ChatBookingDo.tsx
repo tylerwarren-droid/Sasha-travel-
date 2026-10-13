@@ -133,7 +133,7 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line,
       <div style={{ marginTop: 8 }}><button className="price" style={YES_BTN} disabled={!complete} onClick={() => { prepare() }}>Continue</button></div>
     </div>
   )
-  // Sasha 169 · the founder's demo stand-in (SASHA_DEMO_STANDIN): said first, every time — the place picked is never contacted
+  // Sasha 169 · the founder's demo stand-in (his access record: demo = founder_rehearsal): said first, every time — the place picked is never contacted
   if (p.k === 'readback') return (
     <div style={box}>
       <div>{line || p.sentence}</div>

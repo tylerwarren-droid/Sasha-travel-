@@ -42,6 +42,8 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # Sasha 252 · the Trip tab's flights from the one trip record, never "ask for flights" while they're chosen
     "T19": ("the Trip tab's flights from the trip record", ["tests.test_s252_activities.TripTabReadsTheTrip"]),
     # Sasha 253 · live vs the sandbox only in client_for, by the person's mode: the gate and every scratch guest never touch live
+    # Sasha 254 · AgAPI's booking rules, vendored byte-identical — every vector (R1–R14 + access) holds in Sasha's gate
+    "T26": ("the booking rules: vendored byte-identical, every vector holds", ["tests.test_cr91_vendored_rules_and_invite.VendoredRules"]),
     "T23": ("a test person never touches live (the gate included)", ["tests.test_s253_gate_never_live.PersonMode",
                                                                       "tests.test_s253_gate_never_live.SuiteGuestsAreTest"]),
     # Sasha 253 · G5: a booking that needs a name and mobile asks once (with the consent), saves them on the one person record

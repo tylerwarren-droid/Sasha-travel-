@@ -1,0 +1,2027 @@
+{
+ "version": "booking-rules/1 · 2026-10-12",
+ "vectors": [
+  {
+   "rule": "R1",
+   "name": "restaurant: form + WhatsApp + email + phone → form",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      },
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "form"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "restaurant: WhatsApp + email + phone → WhatsApp",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "whatsapp"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "restaurant: email + phone → email",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "email"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "restaurant: phone only → phone",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "phone"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "spa: form + WhatsApp + email + phone → form",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "spa",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      },
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "form"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "spa: WhatsApp + email + phone → WhatsApp",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "spa",
+     "test": false,
+     "channels": [
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "whatsapp"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "spa: email + phone → email",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "spa",
+     "test": false,
+     "channels": [
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "email"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "spa: phone only → phone",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "spa",
+     "test": false,
+     "channels": [
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "phone"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "hotel: form + WhatsApp + email + phone → form",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "hotel",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      },
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "form"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "hotel: WhatsApp + email + phone → WhatsApp",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "hotel",
+     "test": false,
+     "channels": [
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "whatsapp"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "hotel: email + phone → email",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "hotel",
+     "test": false,
+     "channels": [
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "email"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "hotel: phone only → phone",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "hotel",
+     "test": false,
+     "channels": [
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "phone"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "activity: form + WhatsApp + email + phone → form",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "activity",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      },
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "form"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "activity: WhatsApp + email + phone → WhatsApp",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "activity",
+     "test": false,
+     "channels": [
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "whatsapp"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "activity: email + phone → email",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "activity",
+     "test": false,
+     "channels": [
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "email"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "activity: phone only → phone",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "activity",
+     "test": false,
+     "channels": [
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "phone"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "service: form + WhatsApp + email + phone → form",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "service",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      },
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "form"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "service: WhatsApp + email + phone → WhatsApp",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "service",
+     "test": false,
+     "channels": [
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "whatsapp"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "service: email + phone → email",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "service",
+     "test": false,
+     "channels": [
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "email"
+   }
+  },
+  {
+   "rule": "R1",
+   "name": "service: phone only → phone",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "service",
+     "test": false,
+     "channels": [
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "channel_used": "phone"
+   }
+  },
+  {
+   "rule": "R2",
+   "name": "form + an alternative → the one question (exact words)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      },
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "ask_one_question",
+    "say": "ask_book",
+    "say_text": "I'll book it. Want a prefilled form you just confirm, or shall I handle it and let you know?"
+   }
+  },
+  {
+   "rule": "R2",
+   "name": "preference link → prepared link, no question",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      },
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     },
+     "preference": "link"
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "prepared_link",
+    "ask_once": []
+   }
+  },
+  {
+   "rule": "R3",
+   "name": "no form, 72 h away → a WhatsApp request + wait; never a call",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "request_whatsapp",
+    "say": "request_wait",
+    "!action": "call"
+   }
+  },
+  {
+   "rule": "R3",
+   "name": "no form, 72 h away, email only → an email request",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "request_email"
+   }
+  },
+  {
+   "rule": "R3",
+   "name": "48 h is the threshold: 49 h → still a request",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-14T11:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "request_whatsapp"
+   }
+  },
+  {
+   "rule": "R4",
+   "name": "no form, 20 h away, calls on → call",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-13T06:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "call",
+    "say": "calling"
+   }
+  },
+  {
+   "rule": "R4",
+   "name": "no form, 20 h away, calls off → prepared link",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-13T06:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "prepared_link",
+    "!action": "call"
+   }
+  },
+  {
+   "rule": "R5",
+   "name": "hotel, emailed 25 h ago, no reply → a call",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "hotel",
+     "test": false,
+     "channels": [
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x",
+     "request_sent_at": "2026-10-11T09:00:00Z"
+    }
+   },
+   "expect": {
+    "action": "call"
+   }
+  },
+  {
+   "rule": "R5",
+   "name": "hotel request → a 24 h no-reply call follow-up",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "hotel",
+     "test": false,
+     "channels": [
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "request_email",
+    "follow_ups.0.action": "call",
+    "follow_ups.0.after_hours": 24
+   }
+  },
+  {
+   "rule": "R6",
+   "name": "hotel arriving in 18 h → call and email",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "hotel",
+     "test": false,
+     "channels": [
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-13T04:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "call_and_email"
+   }
+  },
+  {
+   "rule": "R6",
+   "name": "hotel arriving in 30 h → not a call (24 h, not 48)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "hotel",
+     "test": false,
+     "channels": [
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-13T16:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "request_email",
+    "!action": "call"
+   }
+  },
+  {
+   "rule": "R7",
+   "name": "every call opening starts with the AI disclosure, exactly",
+   "fn": "call_opening",
+   "input": {
+    "rest": "calling to book a table for 4 on Saturday at 21:00."
+   },
+   "expect": {
+    "startswith": "Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, "
+   }
+  },
+  {
+   "rule": "R8",
+   "name": "a deposit asked → the call ends, unclear, no amount agreed",
+   "fn": "call_answer",
+   "input": {
+    "said": "Sí, pero necesitamos una señal de 20 euros con tarjeta."
+   },
+   "expect": {
+    "end_call": true,
+    "outcome": "unclear",
+    "amount_agreed": null
+   }
+  },
+  {
+   "rule": "R8",
+   "name": "another time offered → the call ends",
+   "fn": "call_answer",
+   "input": {
+    "said": "We could do another time, 22:30?"
+   },
+   "expect": {
+    "end_call": true,
+    "outcome": "unclear"
+   }
+  },
+  {
+   "rule": "R9",
+   "name": "no voicemail, no recording",
+   "fn": "call_payload",
+   "input": {},
+   "expect": {
+    "voicemail.action": "hangup",
+    "record": false,
+    "max_minutes": 4
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "a 4th call for the same person today → refused calls_cap",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-13T06:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x",
+     "calls_today_person": 3
+    }
+   },
+   "expect": {
+    "action": "prepared_link",
+    "say": "calls_cap",
+    "refusals.0.reason": "calls_cap"
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "a 2nd call to the same venue within 30 min → refused too_soon",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-13T06:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x",
+     "last_call_to_venue_at": "2026-10-12T09:45:00Z"
+    }
+   },
+   "expect": {
+    "action": "prepared_link",
+    "say": "too_soon"
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "31 min after the last call → a call again",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-13T06:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x",
+     "last_call_to_venue_at": "2026-10-12T09:29:00Z"
+    }
+   },
+   "expect": {
+    "action": "call"
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "the server-wide net still holds",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-13T06:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x",
+     "server_calls_today": 3,
+     "server_cap": 3
+    }
+   },
+   "expect": {
+    "say": "calls_cap"
+   }
+  },
+  {
+   "rule": "R11",
+   "name": "every decision carries the takeover (a platform)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.thefork.es/r/x",
+       "host": "thefork.es"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-13T06:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "takeover.say": "You can take it over at any point."
+   }
+  },
+  {
+   "rule": "R11",
+   "name": "every decision carries the takeover (a request)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "takeover.link": "https://agapi.kanoe.ai/prepared/x"
+   }
+  },
+  {
+   "rule": "R11",
+   "name": "every decision carries the takeover (test mode)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "whatsapp",
+       "value": "+34600000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "test"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "takeover.say": "You can take it over at any point."
+   }
+  },
+  {
+   "rule": "R12",
+   "name": "an automatic stop tells the person",
+   "fn": "stopped",
+   "input": {
+    "what": "the call to Casa Prueba",
+    "why": "today's call cap was reached"
+   },
+   "expect": {
+    "follow_ups.0.action": "tell_person",
+    "say_text": "I stopped the call to Casa Prueba (today's call cap was reached). Nothing else was cancelled — you can take it over at any point."
+   }
+  },
+  {
+   "rule": "R13",
+   "name": "a CAPTCHA → never zero-touch, even when asked to handle it",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/r",
+       "captcha": true
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     },
+     "preference": "handle"
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "prepared_link",
+    "!action": "fill_form_zero_touch"
+   }
+  },
+  {
+   "rule": "R13",
+   "name": "a required consent box → never zero-touch",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/r",
+       "required_consent": true
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     },
+     "preference": "handle"
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "prepared_link"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "booksy.com → hand over its link, never submit",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "spa",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.booksy.com/x",
+       "host": "booksy.com"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link",
+    "!action": "fill_form_zero_touch"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "fresha.com → hand over its link, never submit",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "spa",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.fresha.com/x",
+       "host": "fresha.com"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link",
+    "!action": "fill_form_zero_touch"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "treatwell.es → hand over its link, never submit",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "spa",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.treatwell.es/x",
+       "host": "treatwell.es"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link",
+    "!action": "fill_form_zero_touch"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "covermanager.com → hand over its link, never submit",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "spa",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/x",
+       "host": "covermanager.com"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link",
+    "!action": "fill_form_zero_touch"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "zenchef.com → hand over its link, never submit",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "spa",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.zenchef.com/x",
+       "host": "zenchef.com"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link",
+    "!action": "fill_form_zero_touch"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "thefork.es → hand over its link, never submit",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "spa",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.thefork.es/x",
+       "host": "thefork.es"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link",
+    "!action": "fill_form_zero_touch"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "opentable.com → hand over its link, never submit",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "spa",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.opentable.com/x",
+       "host": "opentable.com"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link",
+    "!action": "fill_form_zero_touch"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "a 'form' that posts to a platform → hand over",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://www.covermanager.com/reserve/x",
+       "host": "covermanager.com"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     },
+     "preference": "handle"
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link"
+   }
+  },
+  {
+   "rule": "access",
+   "name": "a test-mode person never reaches a real venue",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "test"
+     },
+     "preference": "handle"
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "prepared_link",
+    "say": "not_live"
+   }
+  },
+  {
+   "rule": "access",
+   "name": "no access record → fails closed",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {}
+   },
+   "expect": {
+    "say": "not_live"
+   }
+  },
+  {
+   "rule": "access",
+   "name": "a live person with real sends off → prepared link",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "real_venue_sends": "off"
+     },
+     "preference": "handle"
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "say": "no_real_sends"
+   }
+  },
+  {
+   "rule": "access",
+   "name": "a TEST venue is fine in test mode",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": true,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "test"
+     },
+     "preference": "handle"
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "fill_form_zero_touch"
+   }
+  }
+ ]
+}

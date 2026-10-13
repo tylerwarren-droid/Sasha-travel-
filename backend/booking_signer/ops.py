@@ -69,12 +69,46 @@ async def invite(request: Request):
     no = founder_only(request)
     if no:
         return no
-    from . import emailing as E, ladder_routes as LR
     try:
         body = await request.json()
     except Exception:
         body = {}
-    email = str((body or {}).get("email") or "").strip()
+    return await _invite(str((body or {}).get("email") or "").strip())
+
+
+_NONCES: Dict[str, float] = {}
+
+
+@router.post("/invite-from-agapi")
+async def invite_from_agapi(request: Request):
+    """CR 91 · AgAPI's founder page (EU 250 §B3) — the SAME invitation, asked server to server. X-Kanoe-Invite-Signature:
+    t=<unix>,n=<nonce>,v1=<hex HMAC-SHA256(SASHA_AGAPI_INVITE_SECRET, "<t>.<n>.<raw body>")>; stale after 5 minutes; a nonce is used once.
+    → {account_id}: the person's Sasha account (AgAPI's person_access row is keyed by it)."""
+    import hashlib
+    import hmac
+    import time
+    secret = os.getenv("SASHA_AGAPI_INVITE_SECRET", "").strip()
+    raw = (await request.body()).decode()
+    m = re.fullmatch(r"t=(\d+),n=([A-Za-z0-9_-]{16,64}),v1=([0-9a-f]{64})", (request.headers.get("x-kanoe-invite-signature") or "").strip())
+    if not secret or not m or abs(int(time.time()) - int(m.group(1))) > 300:
+        return _refuse(401, "unsigned", "this route takes only AgAPI's signed request")
+    want = hmac.new(secret.encode(), f"{m.group(1)}.{m.group(2)}.{raw}".encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(want, m.group(3)) or m.group(2) in _NONCES:
+        return _refuse(401, "unsigned", "this route takes only AgAPI's signed request")
+    now = time.time()
+    for k, at in list(_NONCES.items()):
+        if now - at > 600:
+            _NONCES.pop(k, None)
+    _NONCES[m.group(2)] = now
+    try:
+        email = str((__import__("json").loads(raw or "{}") or {}).get("email") or "").strip()
+    except ValueError:
+        email = ""
+    return await _invite(email)
+
+
+async def _invite(email: str):
+    from . import emailing as E, ladder_routes as LR
     if not _EMAIL.fullmatch(email):
         return _refuse(422, "email_invalid", "that isn't an email address")
     redirect = f"{web()}/you"
@@ -93,7 +127,9 @@ async def invite(request: Request):
     if not sent.sent:
         return _refuse(502, "invite_not_sent", f"the invitation was created but not emailed: {sent.why}")
     log.info("[ops] invitation (%s) emailed", kind)
-    return {"ok": True, "to": email, "kind": kind, "say": f"Invitation sent to {email}. The link works once, for 24 hours."}
+    account_id = j.get("id") or (j.get("user") or {}).get("id")   # CR 91 · the person's account (Supabase user id) — AgAPI keys their access record by it
+    return {"ok": True, "to": email, "kind": kind, **({"account_id": account_id} if account_id else {}),
+            "say": f"Invitation sent to {email}. The link works once, for 24 hours."}
 
 
-__all__ = ["router", "invite", "invitation", "founder_only"]
+__all__ = ["router", "invite", "invite_from_agapi", "invitation", "founder_only"]

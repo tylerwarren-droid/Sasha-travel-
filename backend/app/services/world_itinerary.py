@@ -173,6 +173,10 @@ async def build_world(a: dict, account: Optional[str] = None) -> Optional[dict]:
            + (" — one person travelling alone: no couples' framing." if party == 1 else "."))
     ask = (f"Plan {n_days} days in {a['destination']} from {start.day} {start.strftime('%B %Y')} for {party}, flying from "
            f"{a.get('origin') or 'Madrid'}." + (f" They love: {a['interests']}." if a.get("interests") else ""))
+    import time as _t
+    t0, laps = _t.perf_counter(), {}   # Sasha 257 · where the itinerary's 13–24 s goes (row 863)
+    def lap(k: str) -> None:
+        laps[k] = int((_t.perf_counter() - t0) * 1000) - sum(laps.values())
     try:
         r = await asyncio.wait_for(client.messages.create(
             model=MODEL, max_tokens=6000, system=_SYSTEM.replace("{days}", str(n_days)).replace("{party}", who),
@@ -181,6 +185,7 @@ async def build_world(a: dict, account: Optional[str] = None) -> Optional[dict]:
     except Exception as e:
         log.error("[world] the route was not planned: %s: %s", type(e).__name__, e)
         return None
+    lap("plan_model")
     days = (plan or {}).get("days") or []
     if len(days) < 2:
         return None
@@ -189,11 +194,15 @@ async def build_world(a: dict, account: Optional[str] = None) -> Optional[dict]:
     cities = list(dict.fromkeys((d.get("city") or "").strip() for d in days[:-1] if (d.get("city") or "").strip()))
     interests = (a.get("interests") or "").lower()
     prefer = "boutique" if "boutique" in interests else ("beach" if "beach" in interests else "")
+    # Sasha 257 · each day's place photo doesn't depend on the hotels: fetched BESIDE the hotel search, not after it
+    place_photos = asyncio.gather(*[_place_photo(f"{d.get('highlight') or d.get('city')} {country}") for d in days])
     found = await asyncio.gather(*[hotels_in(account, c, country, code, "") for c in cities])
+    lap("hotels")
     stays = {c: (hs[0] if hs else None) for c, hs in zip(cities, found)}
     chosen = [h for h in stays.values() if h]
-    hphotos, pphotos = await asyncio.gather(
-        _photos(chosen), asyncio.gather(*[_place_photo(f"{d.get('highlight') or d.get('city')} {country}") for d in days]))
+    hphotos, pphotos = await asyncio.gather(_photos(chosen), place_photos)
+    lap("photos")
+    log.warning("[world] itinerary ms %s (%d days, %d cities, model %s)", laps, len(days), len(cities), MODEL)
     hotel_total, acts = 0, 0
     for i, d in enumerate(days):
         d["day"] = i + 1

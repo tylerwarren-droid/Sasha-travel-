@@ -145,14 +145,19 @@ class NoReplyCall(Base):
     READ = {"read_id": "r-1", "read": {"name": "Botavara Chamberí", "country": "ES", "facts": [{"kind": "phone"}]}}
 
     def ask(self):
+        # Sasha 254 · the old flow's route is the booking rules' (agapi.booking_decide.legacy_decision): this person may call
+        p = mock.patch("agapi.booking_decide.access_cached", lambda a: {"mode": "live", "calls": "on", "real_venue_sends": "on"})
+        p.start()
+        self.addCleanup(p.stop)
         run(GW.offer_no_reply_call(self.ch, self.B, self.READ))
         self.assertEqual(self.pend()["kind"], "no_reply_call")
 
     def test_tap_then_the_routes_own_question_tapped(self):
         self.ask()
         self.say("", payload=self.last_buttons()[0], text="Yes, prepare the call")
-        self.assertEqual(self.pend()["kind"], "ladder")              # the route's OWN question, as today ([Call them] [No])
-        self.say("", payload=self.last_buttons()[0], text="Call them")
+        # Sasha 254 · the rules decided the call: its OWN read-back and yes (no second "which way?" question — decide.ladder retired)
+        self.assertEqual((self.pend()["kind"], self.pend()["rung"]), ("confirm", "call"))
+        self.say("", payload=self.last_buttons()[0], text="Yes")
         self.assertIn("/api/booking/calls", self.paths())            # its read-back made and approved, the call placed (old _approve)
         self.assertTrue(any(p.endswith("/place") for p in self.paths()))
         self.assertEqual(self.seen, [])
@@ -161,9 +166,9 @@ class NoReplyCall(Base):
         self.ask()
         self.in_between()
         self.say("yes")                                               # was: → the brain → lost
-        self.assertEqual(self.pend()["kind"], "ladder")
+        self.assertEqual((self.pend()["kind"], self.pend()["rung"]), ("confirm", "call"))   # Sasha 254 · the call's own read-back
         self.in_between()
-        self.say("call them")
+        self.say("yes")
         self.assertTrue(any(p.endswith("/place") for p in self.paths()))
         self.assertEqual(self.seen, ["what's the weather in Madrid tomorrow"] * 2)
 

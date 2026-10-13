@@ -212,6 +212,13 @@ class MemoryCallStore:
         """S-41 G3 · every call Bland accepted and nobody has read yet — across accounts, for the sweeper."""
         return [dict(c) for c in self.calls.values() if c["status"] == "placed"]
 
+    async def call_counts(self, account_id: str, venue_key: Optional[str], number: Optional[str], since: datetime) -> dict:
+        """Sasha 254 · the booking rules' state (R10): this person's calls since `since`, the server's, the last to THIS venue."""
+        dialled = [c for c in self.calls.values() if c["status"] in DIALLED and c.get("approved_at") and c["approved_at"] >= since]
+        same = [c["approved_at"] for c in dialled if (venue_key and c.get("venue_key") == venue_key) or (number and c.get("dialled_number") == number)]
+        return {"person": sum(1 for c in dialled if c["account_id"] == account_id), "server": len(dialled),
+                "last_to_venue": max(same) if same else None}
+
 
 _TRIP = ("venue_name", "local_date", "local_time", "local_timezone", "party_size")
 
@@ -488,6 +495,16 @@ class PostgresCallStore:
         """S-41 G3 · every placed, unread call, oldest first — for the sweeper."""
         rows = await self._run(lambda c: c.fetch("select * from booking_calls where status = 'placed' order by placed_at limit 50"))
         return [_row(r) for r in rows]
+
+    async def call_counts(self, account_id, venue_key, number, since) -> dict:
+        """Sasha 254 · the booking rules' state (R10) — read-only, existing columns (account_id, status, approved_at, venue_key,
+        dialled_number)."""
+        r = await self._run(lambda c: c.fetchrow(
+            "select count(*) filter (where account_id = $1) as person, count(*) as server, "
+            "max(approved_at) filter (where ($2::text is not null and venue_key = $2) or ($3::text is not null and dialled_number = $3)) "
+            "as last_to_venue from booking_calls where status = any($4::text[]) and approved_at >= $5",
+            uuid.UUID(account_id), venue_key, number, list(DIALLED), since))
+        return {"person": r["person"], "server": r["server"], "last_to_venue": r["last_to_venue"]} if r else {}
 
     async def record_reading(self, call_id, reading, details, now) -> bool:
         async def fn(conn):

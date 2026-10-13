@@ -62,6 +62,8 @@ class Base(unittest.TestCase):
     session = "s253"
 
     def setUp(self):
+        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
+        live_access(self)
         VN._HELD.pop(ACCT, None)
         VN._ASKED.pop(ACCT, None)
         self.api = ContactApi()
@@ -82,7 +84,8 @@ class Base(unittest.TestCase):
     def hold(self, said="Book La Mi Venta for two on Saturday at nine.", surface="s2", **extra):
         VN._HELD.pop(ACCT, None)
         key = uuid.uuid4().hex   # a fresh call each time (never the process's replay of an earlier test's)
-        return asyncio.run(API.call(self.ctx(said, surface), "hold_venue", {**VENUE, **extra, "idempotency_key": key}))
+        # Sasha 254 · "Handle it" (route form): the booking rules' fill_form_zero_touch — the form's read-back, the contact in it
+        return asyncio.run(API.call(self.ctx(said, surface), "hold_venue", {**VENUE, "route": "form", **extra, "idempotency_key": key}))
 
     def save(self, said, **args):
         return asyncio.run(API.call(self.ctx(said), "save_contact", args))

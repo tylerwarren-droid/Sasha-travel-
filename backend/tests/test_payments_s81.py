@@ -62,8 +62,13 @@ class Tier0(unittest.TestCase):
 
     def test_2_the_call_agrees_to_no_money_and_a_money_yes_stays_unclear(self):
         self.assertTrue(RS.CONSTRAINTS["no_card"])                              # Sasha never gives a card
-        for must in ("Agree to no deposit, give no card", "payment link", "the guest pays them directly"):
+        # Sasha 254 · R8 (Tyler: deposits are REFUSED, never asked about): the rules' own call rule — no amount, no payment link
+        from agapi.booking_rules import booking_rules as BR
+        self.assertEqual(C.DEPOSIT_RULE, BR.CALL_RULES[1] + " ")
+        for must in ("Agree to no deposit", "give no card", "end the call", "never ask the amount"):
             self.assertIn(must, C.DEPOSIT_RULE)
+        for never in ("payment link", "get the amount", "ask how they take it"):
+            self.assertNotIn(never, C.DEPOSIT_RULE)
         for never in ("card number", "cvv", "expiry"):
             self.assertNotIn(never, C.DEPOSIT_RULE.lower())
         self.assertIsNotNone(C._MONEY.search("Sí, pero hay que dejar 20 euros de señal"))

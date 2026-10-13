@@ -38,7 +38,7 @@ SECRET = "whsec_" + base64.b64encode(b"test-webhook-secret-not-real").decode()
 ENV = {"SASHA_BOOKING_KEY": "test-booking-key", "SASHA_SUPABASE_URL": "https://testref.supabase.co", "SASHA_CALL_SWEEP": "0", "SASHA_CALLS_ENABLED": "1", "BLAND_API_KEY": "bland-test", "SASHA_TEST_CALL_NUMBER": "+351912000000",
        "SASHA_EMAILS_ENABLED": "1", "SASHA_RESEND_API_KEY": "re_test", "RESEND_API_KEY": "", "SASHA_EMAIL_FROM": "Sasha <sasha@mail.kanoe.test>",
        "SASHA_INBOUND_DOMAIN": "in.kanoe.test", "RESEND_WEBHOOK_SECRET": SECRET, "GOOGLE_PLACES_API_KEY": "",
-       "SASHA_PHONE_NUMBER": "", "SASHA_CALLS_PER_DAY": "3", "SASHA_EMAILS_PER_DAY": "5"}
+       "SASHA_PHONE_NUMBER": "", "SASHA_EMAILS_PER_DAY": "5"}
 
 LA_CONTRA_SITE = """<html><head><script type="application/ld+json">{"@type":"Restaurant","telephone":"+34 915 00 11 22","email":"reservas@lacontra.test"}</script></head>
 <body><a href="tel:915001122">Llámanos</a> <a href="mailto:hola@lacontra.test?subject=Hi">Escríbenos</a>
@@ -435,6 +435,7 @@ class LadderRoutes:
         into Bland — goes out as `from`. A number Bland does not hold would make every call fail."""
         def first_bland_payload(env):
             self.web.requests.clear()
+            self.now = self.now + timedelta(minutes=31)   # Sasha 254 · R10: 30 minutes between two calls to the same venue
             with mock.patch.dict(os.environ, env):
                 v = self.read()
                 prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
@@ -449,6 +450,7 @@ class LadderRoutes:
     def test_the_three_a_day_limit_holds_for_read_numbers(self):
         v = self.read()
         for i in range(4):
+            self.now = self.now + timedelta(minutes=31)   # Sasha 254 · past R10's 30 minutes: only the day's cap stands in the way
             prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
             r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
         self.assertEqual((r.status_code, r.json()["rule"]), (429, "daily_call_limit"))
@@ -511,14 +513,19 @@ class LadderRoutes:
         self.assertEqual(self.c.get(f"/api/booking/calls/{call['call_id']}").status_code, 200)              # A still sees it
 
     def test_s62_a_per_account_daily_call_cap(self):
+        # Sasha 254 · the booking rules' 3 per PERSON a day (call_routes.account_cap = CALLS_PER_PERSON_PER_DAY, no env var), under a
+        # server net set wider here so the person's own cap is what refuses the 4th
+        from agapi import booking_decide as BD
+        from agapi.booking_rules import booking_rules as BR
         v = self.read()
-        with mock.patch.dict(os.environ, {"SASHA_CALLS_PER_ACCOUNT_PER_DAY": "1"}):
+        with mock.patch.object(BD, "SERVER_CALLS_PER_DAY", 10):
             rs = []
-            for i in range(2):
+            for i in range(BR.CALLS_PER_PERSON_PER_DAY + 1):
+                self.now = self.now + timedelta(minutes=31)
                 prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
                 rs.append(self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}}))
-        self.assertEqual(rs[0].json()["status"], "placed")
-        self.assertEqual((rs[1].status_code, rs[1].json()["rule"]), (429, "account_daily_call_limit"))
+        self.assertEqual([r.json().get("status") for r in rs[:-1]], ["placed"] * BR.CALLS_PER_PERSON_PER_DAY)
+        self.assertEqual((rs[-1].status_code, rs[-1].json()["rule"]), (429, "account_daily_call_limit"))
 
     # ── S-54 · the refusal check: a venue that said stop is never contacted by Sasha again ──────────────────
 

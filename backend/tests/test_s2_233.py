@@ -46,6 +46,8 @@ class Named(unittest.TestCase):
 
 class Robots(unittest.TestCase):
     def setUp(self):
+        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
+        live_access(self)
         PR._ROBOTS.clear()
         p = mock.patch.object(PR.V, "public_url", lambda u, *a: u)
         p.start()
@@ -170,7 +172,7 @@ class ServicesFromTheirPage(unittest.TestCase):
         import inspect
         from agapi import venues as VN
         from booking_signer import ladder_routes as LR
-        self.assertIn('{"asked_for": _what(a)} if getattr(ctx, "surface", "s1") == "s2"', inspect.getsource(VN._hold_inner))
+        self.assertIn('{"asked_for": _what(a)} if getattr(ctx, "surface", "s1") == "s2"', inspect.getsource(VN._page))   # Sasha 254 · the page executor
         src = inspect.getsource(LR.prepare_link)
         self.assertIn("not eating_out(asked)", src)
         self.assertIn("PR.SLOTS_CLOSED", src)
@@ -225,6 +227,8 @@ class AccidentPlace234(unittest.TestCase):
     the city won and reached the rental company's read-back. The facts' own place wins; the opening city is never re-sent."""
 
     def setUp(self):
+        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
+        live_access(self)
         from unittest import mock
         from agapi import s2_fine_print as FP
         from tests.test_s2_fine_print import FakeAgAPI

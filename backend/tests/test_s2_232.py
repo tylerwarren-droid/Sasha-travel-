@@ -82,6 +82,8 @@ class GateCost(unittest.TestCase):
 class DirectFirstEveryKind(unittest.TestCase):
     """/s2: their own form or booking page → their own WhatsApp (drafted, they send it) → email → phone; any kind of place."""
     def setUp(self):
+        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
+        live_access(self)
         from agapi import venues as VN
         from booking_signer import guest_accounts as GA, guest_receipt as GR, guest_whatsapp as GW
         from tests.test_venue_pick_230 import FormApi
@@ -113,14 +115,14 @@ class DirectFirstEveryKind(unittest.TestCase):
         out = self.pick("s2", {"form": {}, "whatsapp": {"value": "+34600111222"}, "email": {}})
         self.assertNotEqual(out.get("route"), "whatsapp")
 
-    def test_s2_their_booking_page_is_their_form(self):
+    def test_s2_a_platform_page_is_not_their_form_their_own_whatsapp_first(self):   # Sasha 254 · R1 / R14 (the booking rules)
         out = self.pick("s2", {"link": {"value": "https://www.fresha.com/a/casa-gate"}, "whatsapp": {"value": "+34600111222"}, "email": {}})
-        self.assertNotEqual(out.get("route"), "whatsapp")
+        self.assertEqual((out.get("route"), out["rules"]["action"]), ("whatsapp", "request_whatsapp"))
 
-    def test_s1_unchanged(self):   # Sasha 251 · old S1 (parity off); /next under parity is the one path, as /s2
+    def test_every_surface_the_same_rules(self):   # Sasha 254 · old S1 (parity off) and /next: the same decision as /s2
         with mock.patch.dict("os.environ", {"SASHA_S1_PARITY": "off"}):
             out = self.pick("s1", {"whatsapp": {"value": "+34600111222"}, "email": {}, "phone": {"fact_index": 0}})
-        self.assertNotEqual(out.get("status"), "draft_message")
+        self.assertEqual(out.get("status"), "draft_message")
         out = self.pick("s1", {"whatsapp": {"value": "+34600111222"}, "email": {}, "phone": {"fact_index": 0}})
         self.assertEqual(out.get("status"), "draft_message")
 

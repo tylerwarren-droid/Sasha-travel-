@@ -38,6 +38,8 @@ class Captcha(unittest.TestCase):
 
 class GuestCap(unittest.TestCase):
     def setUp(self):
+        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
+        live_access(self)
         GA._BY_IP.clear(); GA._DAY.clear(); GA._FOUNDER_IPS.clear()
 
     def test_the_founders_address_is_never_capped(self):
@@ -74,15 +76,16 @@ class Sasha161(unittest.TestCase):
         self.assertTrue(GW.RESUME.fullmatch("carry on"))
         self.assertTrue(GW.NO.fullmatch("no thanks"))
 
-    def test_one_line_per_route(self):
-        from booking_signer import decide as D
-        v = D.Venue(phone=True, open_now=False, opens_at="13:00")
-        self.assertEqual(D.line(v, D.decide(v), "Indian Accent"),
-                         "There's no online booking for Indian Accent — they only take bookings by phone. They're closed now, so I'll call when they open at 13:00. Shall I?")
-        v = D.Venue(email=True)
-        self.assertIn("only email. I'll email them and tell you as soon as they reply. Shall I?", D.line(v, D.decide(v), "X"))
-        v = D.Venue()
-        self.assertIn("Want me to try somewhere similar nearby?", D.line(v, D.decide(v), "X"))
+    def test_one_line_per_route(self):   # Sasha 254 · the line is the booking rules' phrase + the take-over (decide.line retired)
+        from agapi import booking_decide as BD
+        from agapi.booking_rules import booking_rules as BR
+        from booking_signer import guest_whatsapp as GW
+        live = {"mode": "live", "calls": "on", "real_venue_sends": "on"}
+        with mock.patch.object(BD, "access_cached", lambda a: live):
+            dv = GW.decision_of({"venue": "X", "country": "ES", "rungs": {"email": {"value": "x@x.es"}}}, None, "2030-01-01T21:00")
+            self.assertEqual(GW.route_line_of({}, dv), f"{BR.PHRASES['request_wait']} {BR.PHRASES['takeover']}")
+            dv = GW.decision_of({"venue": "X", "country": "ES", "rungs": {}}, None, "2030-01-01T21:00")
+            self.assertEqual((dv.route, GW.route_line_of({}, dv)), (None, BR.PHRASES["no_channel"]))
 
 
 class Sasha162(unittest.TestCase):

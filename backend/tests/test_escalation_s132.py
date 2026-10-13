@@ -78,24 +78,22 @@ class Auto(TG.Base):
         p.start()
         self.addCleanup(p.stop)
 
-    def test_the_planned_email_is_sent_without_a_new_question_and_the_guest_is_told(self):
+    # Sasha 254 · RETIRED: the booking rules have no "page not pressed in 30 minutes → email them" step (R14 hands the page over,
+    # R11 — they can take it over at any point): tap_offers sends nothing and asks nothing, with a plan or without
+    def test_a_planned_email_is_no_longer_sent_from_a_page(self):
         link(LR.LADDER_STORE, "l-77", "r-5", ["page", PLAN], made=datetime(2026, 10, 3, 10, 0, tzinfo=timezone.utc), run=TG.run)
         self.now = datetime(2026, 10, 3, 10, 40, tzinfo=timezone.utc)
         TG.run(GW.STORE.put_state(GW.wa_key(TG.GUEST), {"history": [], "pending": None, "last_inbound_at": self.now, "link_tries": []}))
-        done = TG.run(PR.tap_offers(self.now))
-        self.assertEqual([d["outcome"] for d in done], ["auto: sent"])
-        self.assertEqual(self.sent[0]["approval"], {"how": "escalation_plan", "from": {"kind": "link", "id": "l-77"}})
-        self.assertIn("Your yes covers these steps", self.prepared["plan_line"])          # the email carries the rest: the call
-        self.assertIn("so — as you agreed — I've emailed them", self.bodies()[-1])
-        self.assertEqual(GW.SENDER.contents, [])                                            # no question asked
+        self.assertEqual(TG.run(PR.tap_offers(self.now)), [])
+        self.assertEqual(self.sent, [])
+        self.assertEqual(GW.SENDER.contents, [])
 
-    def test_without_a_plan_it_is_still_asked(self):
+    def test_without_a_plan_nothing_is_asked_either(self):
         link(LR.LADDER_STORE, "l-78", "r-5", ["page"], made=datetime(2026, 10, 3, 10, 0, tzinfo=timezone.utc), run=TG.run)
         self.now = datetime(2026, 10, 3, 10, 40, tzinfo=timezone.utc)
-        TG.run(GW.STORE.put_state(GW.wa_key(TG.GUEST), {"history": [], "pending": None, "last_inbound_at": self.now, "link_tries": []}))
         TG.run(PR.tap_offers(self.now))
         self.assertEqual(self.sent, [])
-        self.assertTrue(GW.SENDER.contents[-1][0].startswith("Not booked on Akiro's page yet"))
+        self.assertEqual(GW.SENDER.contents, [])
 
 
 class OneYesOnWhatsApp(TG.Base):

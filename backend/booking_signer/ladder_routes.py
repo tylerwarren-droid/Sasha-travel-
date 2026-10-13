@@ -109,17 +109,17 @@ def _read_view(row: dict, read: Optional[dict] = None, at: Optional[str] = None,
     return {"read_id": row["read_id"], "venue": name, "country": read.get("country"), "listing": read.get("listing"),
             "facts": [{k: f[k] for k in ("kind", "value", "source_label", "source_url", "snippet", "fetched_at")} for f in read["facts"]],
             "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"], "plan": {**_plan_for({**read, "name": name}, chosen["rungs"], row.get("account_id")),
-                     "ladder": _ladder_for({**read, "name": name}, chosen["rungs"], at, party)},
+                     "ladder": _ladder_for({**read, "name": name}, chosen["rungs"], at, party, row.get("account_id"))},
             **({"listing_reread": read["listing_reread"]} if read.get("listing_reread") else {})}
 
 
-def _ladder_for(read: dict, rungs: list, at: Optional[str], party: Optional[int]) -> Optional[dict]:
+def _ladder_for(read: dict, rungs: list, at: Optional[str], party: Optional[int], account: Optional[str] = None) -> Optional[dict]:
     """Sasha 195 · the ladder's words for the web card — the same as WhatsApp's (decide.ladder): {line, options:[{title, route}]}."""
     from . import guest_whatsapp as GW
     try:
         rd = {"venue": read.get("name"), "country": read.get("country"), "facts": read.get("facts") or [],
               "rungs": {r["rung"]: {"value": r.get("value")} for r in rungs if r.get("available")}}
-        lad = GW.ladder_of(rd, {"when": {"mode": "at", "at": at} if at else {}, "how_many": {"count": party or 2}}, NOW())
+        lad = GW.ladder_of(rd, {"when": {"mode": "at", "at": at} if at else {}, "how_many": {"count": party or 2}}, NOW(), account)
         return {"line": lad["line"], "options": [{"title": t, "route": r} for t, r in lad["options"]]} if lad else None
     except Exception as e:
         log.info("[ladder_routes] no ladder: %s", type(e).__name__)
@@ -700,9 +700,8 @@ async def prepare_email(request: Request):
     email = E.compose(lang, read["name"], f["value"], p, email_id)
     lines = E.read_back(email, read["name"], f["source_label"])
     plan = _plan_of(body)   # Sasha 132 · the escalation the guest's ONE yes covers, said before the yes, in its hash
-    if plan is None and body.get("auto_plan") and any(x.get("kind") == "phone" for x in read["facts"]) and L.calls_ready(account) is None:
-        from . import decide as D, escalation as ESC   # Sasha 158 · THE LADDER: no reply in the set time → a call, under the same yes
-        plan = ESC.plan_line(f"If they don't reply within {D._h(D.reply_hours())}, I'll call them", None)
+    # Sasha 254 · `auto_plan` (Sasha 158's own "no reply in N h → a call" for every email) is retired: the follow-up is the booking
+    # rules' (R5, hotels only), sent by the caller as plan_line from decide()'s follow_ups (agapi.venues)
     if plan:
         lines.insert(len(lines) - 1, plan)
     if lang not in E.TEMPLATE_LANGS:   # Sasha 130 · e.g. Vietnam: written in English, and said so before the yes

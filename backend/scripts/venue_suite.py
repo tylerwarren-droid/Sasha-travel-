@@ -4,7 +4,7 @@
   refused in the same turn → the yes in the next turn → their confirmation page → CONFIRMED in Pacioli's rows (get_status),
   then cancel_venue's two steps. No real venue is contacted.
   EVERY OTHER ROUTE, against a stand-in for the booking API (it records what was asked of it; nothing leaves the process):
-  the ladder's question (> 48 h: email them / book now; within 48 h: their page / a call), the platform page to the phone,
+  the booking rules' answers (the ONE question for a form; > 48 h a request; within 48 h a call), the platform page to the phone,
   the email, the call, the form filled in the cloud browser with "Tap to finish" on the phone (the founder's override), the
   WhatsApp-only draft — and never a send without the person's explicit yes in a LATER turn.
 """
@@ -135,27 +135,35 @@ async def routes_offline(a: str) -> None:
         h = await API.call(_ctx(a, "book it"), "hold_venue", {**v, **args, "idempotency_key": key + "h"})
         b = await API.call(_ctx(a, "Yes"), "book_venue", {"approval": {"said": "Yes"}, "idempotency_key": key + "b"})
         return h, b
+    from agapi import booking_decide as BD
+    from agapi.booking_rules import booking_rules as BR
+    real_access = BD.access_of
+
+    async def live(acct):   # this process only: the executors behind the rules, for a person who may reach real venues (the founder's)
+        return {"mode": "live", "calls": "on", "real_venue_sends": "on"}
+    BD.access_of = live
     try:
+        # Sasha 254 · every route below is the BOOKING RULES' answer (agapi/booking_rules through agapi.booking_decide)
         VN._HELD.pop(a, None)
-        VN._read = read_with({"link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}})   # a platform venue
+        VN._read = read_with({"link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}})   # a platform venue + its own email
         q = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "idempotency_key": "vo-q1"})
-        opts = {o["route"] for o in (q.get("result") or {}).get("options") or []}
-        ok("VENUE ROUTE · more than 48 h away → the ladder's question first (email them, or book now), nothing prepared",
-           q.get("ok") and q["result"]["status"] == "choose_route" and "email" in opts and a not in VN._HELD,
-           str(q.get("result"))[:200])
+        ok("VENUE ROUTE · more than 48 h, their own email AND a platform → the email first (R1), read back, nothing sent",
+           q.get("ok") and q["result"]["status"] == "awaiting_yes" and q["result"]["route"] == "email"
+           and not any(p.endswith("/send") for _m, p, _b in fake.calls), str(q.get("result"))[:200])
         q2 = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": soon[0], "time": soon[1], "idempotency_key": "vo-q2"})
-        opts2 = {o["route"] for o in (q2.get("result") or {}).get("options") or []}
-        ok("VENUE ROUTE · within 48 h → book now (their page) or a call", q2.get("ok") and q2["result"]["status"] == "choose_route"
-           and {"page", "call"} <= opts2, str(q2.get("result"))[:200])
+        ok("VENUE ROUTE · within 48 h → a call (R4), read back first", q2.get("ok") and q2["result"]["status"] == "awaiting_yes"
+           and q2["result"]["route"] == "call", str(q2.get("result"))[:200])
         VN._read = read_with({"form": {}, "link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}})
         d = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "idempotency_key": "vo-q3"})
-        ok("VENUE ROUTE · their own form, no CAPTCHA, more than 48 h away → “I can book it directly — shall I?”",
-           d.get("ok") and d["result"]["status"] == "choose_route" and "form" in {o["route"] for o in d["result"]["options"]},
+        ok("VENUE ROUTE · their own form → the rules' ONE question (R2), word for word",
+           d.get("ok") and d["result"]["status"] == "choose_route" and d["result"]["ask"] == BR.PHRASES["ask_book"],
            str(d.get("result"))[:160])
+        VN._read = read_with({"link": {"value": "TheFork"}})
         h, b = await two_turns({"day": later, "time": "21:00", "route": "page"}, "vo-p")
-        ok("VENUE ROUTE · page (a platform): the real page goes to the phone on the yes — never fetched by Sasha",
+        ok("VENUE ROUTE · page (a platform only): its page goes to the phone on the yes — never booked by Sasha (R14)",
            h.get("ok") and b.get("ok") and b["result"]["status"] == "page_on_phone" and taps == ["https://www.thefork.es/restaurante/x-r1"],
            f"{b.get('error') or b.get('result')} taps={taps}")
+        VN._read = read_with({"email": {}, "phone": {"fact_index": 0}})
         h, b = await two_turns({"day": later, "time": "21:00", "route": "email"}, "vo-e")
         ok("VENUE ROUTE · email: sent on the yes, Requested until they reply",
            b.get("ok") and b["result"]["status"] == "requested" and ("POST", "/api/booking/emails/e-1/send") in [(m, p) for m, p, _ in fake.calls],
@@ -163,8 +171,9 @@ async def routes_offline(a: str) -> None:
         h, b = await two_turns({"day": soon[0], "time": soon[1], "route": "call"}, "vo-c")
         ok("VENUE ROUTE · call: placed on the yes (its reading decides)", b.get("ok") and b["result"]["status"] == "placed",
            str(b.get("error") or b.get("result"))[:160])
+        VN._read = read_with({"form": {}, "link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}})
         h, b = await two_turns({"day": later, "time": "21:00", "route": "form"}, "vo-f")
-        ok("VENUE ROUTE · form (the founder's override): filled in the cloud browser; the human step → Tap to finish on the phone",
+        ok("VENUE ROUTE · “handle it” — the form (the founder's override): filled in the cloud browser; the human step → Tap to finish",
            h.get("ok") and h["result"]["route"] == "handover" and b.get("ok") and b["result"]["status"] == "tap_to_finish" and b["result"]["on_phone"],
            f"{h.get('error') or h.get('result', {}).get('route')} · {b.get('error') or b.get('result')}")
         VN._read = read_with({"whatsapp": {"value": "+34 600 000 211"}})
@@ -180,20 +189,15 @@ async def routes_offline(a: str) -> None:
            b.get("ok") and b["result"]["status"] == "page_on_phone" and len(taps) == nt + 1, str(b.get("error") or b.get("result"))[:160])
         VN._read = read_with({"form": {}}, facts=[{"kind": "challenge", "value": "captcha"}])
         h, b = await two_turns({"day": later, "time": "11:00", "route": "form", "what": "a massage", "name": "Spa Gate"}, "vo-spa2")
-        ok("VENUE ROUTE · a spa's own form behind a CAPTCHA: Sasha fills it, the CAPTCHA → Tap to finish on the phone",
+        ok("VENUE ROUTE · a spa's own form behind a CAPTCHA: never zero-touch (R13) — Sasha fills it, the CAPTCHA → Tap to finish",
            b.get("ok") and b["result"]["status"] == "tap_to_finish", str(b.get("error") or b.get("result"))[:160])
-        # Sasha 212 · a TATTOO studio that books only on Instagram: the message drafted for the phone, never "booked"
+        # a TATTOO studio that books only on Instagram: no way the rules book by — said, with the take-over; nothing sent
         VN._read = read_with({"instagram": {"value": "inkgate.madrid"}})
-        sent0 = list(told)
         h = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "17:00", "what": "a tattoo consultation",
                                                               "name": "Ink Gate", "idempotency_key": "vo-tat-h"})
-        b = await API.call(_ctx(a, "Yes, send it"), "book_venue", {"approval": {"said": "Yes, send it"}, "idempotency_key": "vo-tat-b"})
-        res = b.get("result") or {}
-        # Sasha 249 · her voice: the link opens it, the channel unnamed ("send them this: <link>")
-        ok("VENUE ROUTE · a tattoo studio on Instagram only: the message drafted, sent to THEIR phone on the yes — never booked",
-           h.get("ok") and h["result"]["status"] == "draft_message" and h["result"].get("open_in_instagram") == "https://ig.me/m/inkgate.madrid"
-           and b.get("ok") and res.get("status") == "draft_on_phone" and res.get("booked") is False and "confirmed" not in str(res)
-           and len(told) == len(sent0) + 1 and "send them this" in told[-1] and "ig.me" in told[-1], f"{h.get('result') or h.get('error')} · {res or b.get('error')}")
+        res = h.get("result") or {}
+        ok("VENUE ROUTE · a tattoo studio on Instagram only: the rules' no_channel words + the take-over, never booked",
+           h.get("ok") and res.get("status") == "not_contacted" and res.get("say") == BR.PHRASES["no_channel"], str(res or h.get("error"))[:200])
         n0 = len(fake.calls)
         VN._read = read_with({"email": {}})
         await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "route": "email", "idempotency_key": "vo-n"})
@@ -202,13 +206,13 @@ async def routes_offline(a: str) -> None:
            and not any(p.endswith("/send") for _, p, _ in fake.calls[n0:]), str(nb.get("error")))
     finally:
         GW.api, GW.tap_platform, VN._read, GA.founder, WB.trip_day_words, GW._tell, GW.STORE = real
+        BD.access_of = real_access
         VN._HELD.pop(a, None)
 
 
 async def main() -> int:
-    """Sasha 251 · this suite is OLD S1's ladder (decide.ladder's questions, the platform page, the form fill): run as old S1 —
-    SASHA_S1_PARITY=off — where that ladder still lives, unchanged. /s2 and /next under parity take the ONE engine path
-    (one_truth_suite T16, venue_truth_suite)."""
+    """Sasha 251 · this suite runs as old S1 (SASHA_S1_PARITY=off). Sasha 254 · old S1 asks the same booking rules as every surface
+    (agapi.booking_decide); /s2 and /next under parity: one_truth_suite T16/T27, venue_truth_suite."""
     was = os.environ.get("SASHA_S1_PARITY")
     os.environ["SASHA_S1_PARITY"] = "off"
     try:

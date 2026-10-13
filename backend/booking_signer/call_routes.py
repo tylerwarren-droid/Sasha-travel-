@@ -8,7 +8,8 @@
   1. SASHA_CALLS_ENABLED=1 on the server (off unless the founder sets it) and BLAND_API_KEY present;
   2. the venue is in calls.call_venues() — server-side — and its number comes from the environment, never the request;
   3. the approval is for THIS call's read-back, within 15 minutes of it being read, and a call row is dialled once;
-  4. no more than SASHA_CALLS_PER_DAY calls (default 3) have been dialled in the last 24 hours, across everyone.
+  4. the booking rules' R10 (Sasha 254): at most 3 calls per person in 24 hours, the server's net (booking_decide.SERVER_CALLS_PER_DAY)
+     across everyone, and never two calls to the same venue within 30 minutes.
 ⚠ Why 4 exists: nobody signs in (account.py), so these routes are as public as the page that calls them.
 
 ⚠ NOTHING HERE RUNS AFTER THE RESPONSE. Placing waits for Bland's answer before replying; reading happens when the
@@ -64,18 +65,30 @@ def NOW() -> datetime:
 
 
 def cap() -> int:
-    try:
-        return max(0, int(os.getenv("SASHA_CALLS_PER_DAY", "3")))
-    except ValueError:
-        return 3
+    """Sasha 254 · the server-wide net under the booking rules' per-person cap: ONE constant (agapi.booking_decide), no env var
+    (SASHA_CALLS_PER_DAY is read nowhere)."""
+    from agapi import booking_decide as BD
+    return BD.SERVER_CALLS_PER_DAY
 
 
 def account_cap() -> int:
-    """S-62 step 2 · calls per ACCOUNT per 24 h, as well as the server's cap (SASHA_CALLS_PER_ACCOUNT_PER_DAY, default 10)."""
-    try:
-        return max(0, int(os.getenv("SASHA_CALLS_PER_ACCOUNT_PER_DAY", "10")))
-    except ValueError:
-        return 10
+    """Sasha 254 · calls per PERSON per 24 h = the booking rules' CALLS_PER_PERSON_PER_DAY (3) — was SASHA_CALLS_PER_ACCOUNT_PER_DAY
+    (default 10), read nowhere now."""
+    from agapi.booking_rules import booking_rules as BR
+    return BR.CALLS_PER_PERSON_PER_DAY
+
+
+async def too_soon(account: str, call: Mapping[str, Any], now: datetime) -> Optional[str]:
+    """Sasha 254 · R10 at the dial: never a second call to the SAME venue within the rules' 30 minutes (no instant redial). None
+    when it may ring; else why not, in words."""
+    from agapi.booking_rules import booking_rules as BR
+    if CALL_STORE is None or not hasattr(CALL_STORE, "call_counts"):
+        return None
+    c = await CALL_STORE.call_counts(account, call.get("venue_key"), call.get("dialled_number"), now - timedelta(hours=24))
+    last = c.get("last_to_venue")
+    if last and now - last < timedelta(minutes=BR.MIN_MINUTES_BETWEEN_CALLS_SAME_VENUE):
+        return f"this venue was called less than {BR.MIN_MINUTES_BETWEEN_CALLS_SAME_VENUE} minutes ago; nothing was dialled"
+    return None
 
 
 def _refuse(status: int, rule: str, message: str) -> JSONResponse:
@@ -180,6 +193,16 @@ async def confirm_unclear(call: dict) -> str:
     approval = {"by": str(call["account_id"]), "how": "auto", "said": None, "at": now.isoformat(), "kind": "confirm_unclear",
                 "after_call": str(call["call_id"]), "covered_by_read_back_sha256": call["read_back_sha256"],
                 "read_back_sha256": row["read_back_sha256"], "brief_sha256": row["brief_sha256"]}
+    if await too_soon(str(call["account_id"]), row, now):
+        # Sasha 254 · R10 — never an instant redial to the same venue: the confirmation call waits the rules' 30 minutes, covered by
+        # the same yes; place_due asks the rules again (calls on, 3 a day, 30 minutes) when it is due, and a stop is told
+        from agapi.booking_rules import booking_rules as BR
+        later = now + timedelta(minutes=BR.MIN_MINUTES_BETWEEN_CALLS_SAME_VENUE)
+        r = await CALL_STORE.schedule(str(call["account_id"]), row["call_id"],
+                                      {**approval, "scheduled_for": later.isoformat(), "opens_at": later.isoformat(),
+                                       "hours_basis": "the booking rules: 30 minutes between two calls to the same venue (R10)",
+                                       "hours_notes": []}, now, now - APPROVAL_WINDOW)
+        return f"scheduled for {later.strftime('%H:%M')} UTC" if r == "scheduled" else f"not placed: {r}"
     claimed = await CALL_STORE.claim(str(call["account_id"]), row["call_id"], approval, now, now - APPROVAL_WINDOW, cap(),
                                      cap_window(now), account_cap())
     if claimed != "claimed":
@@ -227,6 +250,19 @@ async def retry_confirmation(conf: dict) -> str:
     return f"scheduled for {hhmm}" if r == "scheduled" else f"not scheduled: {r}"
 
 
+def money_or_time_asked(reading) -> Optional[str]:
+    """Sasha 254 · R8: the venue's own words asking for a deposit, a fee, a card or another time on this call (the reader's
+    `raised`, each checked by booking_rules.call_answer) — or None."""
+    from agapi.booking_rules import booking_rules as BR
+    for r in getattr(reading, "raised", None) or []:
+        q = str(r.get("quote") or "")
+        if r.get("what") in ("deposit", "fee", "card", "different_time", "different_date") or \
+                (r.get("what") != "call_back" and BR.call_answer(q)["end_call"]):
+            return q or str(r.get("what"))
+    from . import payments_t0 as PT0   # the deposit words in the venue's own lines (its reader, unchanged)
+    return PT0.deposit_asked(reading)
+
+
 async def _follow_up(call: dict, reading) -> None:
     """Sasha 74 · rules 2–3 — awaited here, never fire-and-forget; its failure is logged and never undoes the reading."""
     if (call.get("brief") or {}).get("purpose") in ("late", "change"):   # Sasha 226 · said on their page; no answer → the email
@@ -255,18 +291,24 @@ async def _follow_up(call: dict, reading) -> None:
             log.info("[confirm] whatsapp: %s", await GW.push_confirmation_result(call, reading, nxt))
         except Exception as e:
             log.error("[confirm] the WhatsApp result failed: %s: %s", type(e).__name__, e)
-    # S-81 tier 0 · the venue asked for a deposit: a payment request and ONE question to the guest — never a
-    # confirmation call (they need money, not a recap)
+    # Sasha 254 · R8 (Tyler: deposits are REFUSED, never asked about) — the venue asked for a deposit, a fee or another time: the
+    # call ended there (calls.CALL_RULES), the outcome is unclear, and the PERSON IS TOLD (booking_rules.stopped). Never a payment
+    # request, never "shall I ask them for the payment link?" (S-81 tier 0's after-call request + question is retired), and no
+    # confirmation call (they wanted money or another time, not a recap).
     deposit = None
     if reading.outcome == "unclear" and (call.get("brief") or {}).get("purpose") == "book":
-        try:
-            from . import guest_whatsapp as GW, payments_t0 as PT0
-            deposit = await PT0.after_call(call, reading, await GW.venue_display(call))
-            if deposit:
-                log.info("[payments] call %s: a deposit was asked; request %s: %s", call.get("call_id"), deposit["id"],
-                         await GW.push_payment_question(call, deposit))
-        except Exception as e:
-            log.error("[payments] the deposit request failed: %s: %s", type(e).__name__, e)
+        deposit = money_or_time_asked(reading)
+        if deposit:
+            try:
+                from . import guest_whatsapp as GW
+                from agapi import booking_decide as BD
+                venue = await GW.venue_display(call)
+                d = await BD.tell_stopped(str(call.get("account_id") or ""), f"the booking call to {venue}",
+                                          "they asked for a deposit, a fee or another time — I never agree to one, so the call ended "
+                                          "and it isn't booked")
+                log.info("[booking_calls] call %s: money or another time asked — the call ended; told: %s", call.get("call_id"), d.get("told"))
+            except Exception as e:
+                log.error("[booking_calls] the person was not told of call %s's stop: %s: %s", call.get("call_id"), type(e).__name__, e)
     if reading.outcome == "unclear" and not deposit and (call.get("brief") or {}).get("purpose") == "book" \
             and not (call.get("brief") or {}).get("confirms_call_id"):
         try:
@@ -274,7 +316,7 @@ async def _follow_up(call: dict, reading) -> None:
         except Exception as e:
             what = f"not placed: {type(e).__name__}: {e}"
         log.info("[confirm] call %s was unclear; the confirmation call: %s", call.get("call_id"), what)
-        if what == "placed":
+        if what == "placed" or what.startswith("scheduled"):
             return   # the written ask and the receipt follow the confirmation call's own result
     try:
         what = await FU.after_call(call, reading.outcome, NOW())
@@ -740,6 +782,13 @@ async def place(call_id: str, request: Request):
     refused = await ladder_routes._optin_refusal(brief.get("venue_ids"), "phone")
     if refused:
         return refused
+    # Sasha 254 · the booking rules said WAIT (no form, more than 48 h away, a phone only — R3): the call is scheduled for when the
+    # booking comes within the rules' threshold, covered by this yes; place_due asks the rules again when it is due
+    later = _later(body.get("scheduled_for"))
+    if later and brief.get("purpose") == "book":
+        return await _schedule(account, call_id, call, body, a, {"call_at": later.isoformat(), "opens_at": later.isoformat(),
+                                                                "basis": "the booking rules: a call closer to the day (R3)", "notes": []},
+                               rules_wait=True)
     # S-66 · CLOSED NOW by its listed hours → no call now: scheduled for opening + 10 minutes, covered by this yes
     # (Sasha 109 · a cancelling call too: a closed venue's answering machine cancels nothing)
     if brief.get("purpose") in ("book", "cancel"):
@@ -763,6 +812,9 @@ async def place(call_id: str, request: Request):
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
     now = NOW()
+    soon = await too_soon(account, call, now) if call.get("status") == "awaiting_approval" and not call.get("approval") else None
+    if soon:   # Sasha 254 · R10: 30 minutes between two calls to the same venue (a call already approved: the claim says "taken")
+        return _refuse(429, "too_soon", soon)
     approval = {"by": account, "how": a["how"], "said": a.get("said"), **({"from": a.get("from")} if a.get("how") == "escalation_plan" else {}), "at": now.isoformat(),
                 "read_back_sha256": call["read_back_sha256"], "brief_sha256": call["brief_sha256"]}
     try:
@@ -803,7 +855,19 @@ async def place(call_id: str, request: Request):
     return {"ok": True, "status": "placed", "say": f"Calling {_name(call)} now."}
 
 
-async def _schedule(account: str, call_id: str, call: dict, body: dict, a: dict, st: dict):
+def _later(v: Any) -> Optional[datetime]:
+    """Sasha 254 · a `scheduled_for` the booking rules asked for (their WAIT): a time in the future, else None."""
+    if not v:
+        return None
+    try:
+        d = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    d = d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    return d if d > NOW() + timedelta(minutes=1) else None
+
+
+async def _schedule(account: str, call_id: str, call: dict, body: dict, a: dict, st: dict, rules_wait: bool = False):
     now = NOW()
     approval = {"by": account, "how": a["how"], "said": a.get("said"), "at": now.isoformat(),
                 "read_back_sha256": call["read_back_sha256"], "brief_sha256": call["brief_sha256"],
@@ -818,6 +882,9 @@ async def _schedule(account: str, call_id: str, call: dict, body: dict, a: dict,
         return _refuse(422, "read_back_expired", "that read-back is more than 15 minutes old; prepare the call again")
     if r != "scheduled":
         return _refuse(404, "call_unknown", "no call with that id was prepared for this account")
+    if rules_wait:
+        from agapi.booking_rules import booking_rules as BR
+        return {"ok": True, "status": "scheduled", "scheduled_for": st["call_at"], "say": BR.PHRASES["wait_to_call"]}
     opens = st["opens_at"][11:]
     call_hhmm = (datetime.fromisoformat(st["opens_at"]) + H.AFTER_OPENING).strftime("%H:%M")
     # the email rung is not live: when it is, the request is emailed here and a reply cancels the call (inbound)
@@ -831,20 +898,26 @@ async def place_due() -> int:
     placed_n = 0
     for call in await CALL_STORE.due(now):
         cid = str(call["call_id"])
-        if C.calls_enabled() is False or not C.bland_key():
-            await CALL_STORE.cancel_scheduled(cid, "calls were switched off when it was due, so nothing was dialled")
+        from .limits import calls_on
+        if C.calls_enabled() is False or not C.bland_key() or not calls_on(str(call.get("account_id") or "")):
+            await _stop_scheduled(call, "calls were switched off when it was due, so nothing was dialled", "calls are off")
             continue
         try:
             dial = await PT.dialable(HTTP, call["brief"], now)   # Sasha 64 · re-read and checked, before the claim
         except PT.ListingUnavailable as e:
-            await CALL_STORE.cancel_scheduled(cid, str(e))
+            await _stop_scheduled(call, str(e), "their number couldn't be checked")
+            continue
+        soon = await too_soon(str(call["account_id"]), call, now)   # Sasha 254 · R10: 30 minutes between calls to one venue
+        if soon:
+            await _stop_scheduled(call, soon, "I called them less than 30 minutes ago")
             continue
         r = await CALL_STORE.start_scheduled(cid, cap(), cap_window(now), account_cap())
         if r == "cap":
-            await CALL_STORE.cancel_scheduled(cid, f"{cap()} calls had already been placed in the last 24 hours; nothing was dialled")
+            await _stop_scheduled(call, f"{cap()} calls had already been placed in the last 24 hours; nothing was dialled", "today's calls are made")
             continue
         if r == "account_cap":
-            await CALL_STORE.cancel_scheduled(cid, f"this account had already placed {account_cap()} calls in the last 24 hours; nothing was dialled")
+            await _stop_scheduled(call, f"this account had already placed {account_cap()} calls in the last 24 hours; nothing was dialled",
+                                  "today's calls for you are made")
             continue
         if r != "claimed":
             continue
@@ -852,6 +925,18 @@ async def place_due() -> int:
         await CALL_STORE.mark_placed(cid, dataclasses.replace(placed, answer=PT.scrub_bland(placed.answer, call["brief"])), NOW())
         placed_n += 1
     return placed_n
+
+
+async def _stop_scheduled(call: Mapping[str, Any], why: str, said: str) -> None:
+    """Sasha 254 · R12 — a scheduled call the server does not place is an AUTOMATIC STOP: recorded, and the person is TOLD
+    (booking_rules.stopped, via booking_decide.tell_stopped) — never only a log line."""
+    if not await CALL_STORE.cancel_scheduled(str(call["call_id"]), why):
+        return
+    try:
+        from agapi import booking_decide as BD
+        await BD.tell_stopped(str(call.get("account_id") or ""), f"the call to {_name(dict(call))}", said)
+    except Exception as e:
+        log.error("[booking_calls] the stop of %s was not told: %s: %s", call.get("call_id"), type(e).__name__, e)
 
 
 @router.get("/{call_id}")

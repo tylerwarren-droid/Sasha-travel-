@@ -145,6 +145,37 @@ class TheTripTabReadsTheOneBookingRecord(unittest.TestCase):
             self.assertEqual(run(JN.agapi_rows(ACCT)), [])
 
 
+class AStatusReadNeverLosesANewerAct(unittest.TestCase):
+    """S2 item 15 (13 Oct 15:46 UTC): bookings() read a COPY of the acts, awaited each venue's reply, then wrote the copy back — a
+    cancellation remembered meanwhile (the yes, beside the Trip tab's reload) was lost, and the table read "still confirmed"."""
+
+    def test_a_cancel_remembered_during_the_status_read_is_kept(self):
+        from agapi import s2_memory as M, venue_submit as VS
+        booked = {"act_id": "act_tc1", "venue": "Taverna Correo", "when": "2026-11-26T21:00", "party": 4, "state": "sent", "at": 1}
+
+        async def go():
+            async def slow_status(account, act_id):
+                await asyncio.sleep(0.05)
+                return {"state": "confirmed", "venue_words": {"untrusted_text": "Confirmed. Reference TCO-1."}}
+
+            async def reader():
+                return await VS.bookings(ACCT)
+
+            async def canceller():
+                await asyncio.sleep(0.01)
+                await VS._remember(ACCT, {"act_id": "act_cx1", "cancels": "act_tc1", "state": "sent"})
+            with mock.patch.object(VS, "status", slow_status):
+                out, _ = await asyncio.gather(reader(), canceller())
+            return out
+        with mock.patch.dict(VS._ACTS, {ACCT: [dict(booked)]}, clear=True), mock.patch.object(M, "put_kind", mock.AsyncMock(return_value=True)):
+            out = run(go())
+            kept = [a["act_id"] for a in VS._ACTS[ACCT]]
+            state = next(a["state"] for a in VS._ACTS[ACCT] if a["act_id"] == "act_tc1")
+        self.assertEqual(kept, ["act_tc1", "act_cx1"])                         # the cancellation survives the status read
+        self.assertEqual(state, "confirmed")                                    # and the venue's reply is kept too
+        self.assertEqual(out[0]["cancel"], "asked — waiting for the venue")
+
+
 class NoRecordReachesTheTestVenue(unittest.TestCase):
     """EU 255 (row 890): a fresh account with NO access record got "Sacha Restaurant", not the test card — the test-venue check read
     the routing mode (no record → the guest marker → live). What a person may book is their RECORD: no record → test (fails closed)."""

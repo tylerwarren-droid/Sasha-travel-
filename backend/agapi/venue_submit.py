@@ -242,6 +242,11 @@ async def bookings(account: str) -> List[dict]:
             a.update(state=st.get("state"), words=_words(st), say_now=st.get("say"))
             changed = True
     if changed:
+        # Sasha 259 · MERGED into the store as it is NOW, never the copy read before the awaits above: a booking or a cancellation
+        # remembered meanwhile (another request — the Trip tab's reload beside a turn) is kept (found on S2 item 15, 13 Oct 15:46 UTC)
+        upd = {a["act_id"]: a for a in acts}
+        acts = [{**c, **{k: upd[c["act_id"]][k] for k in ("state", "words", "say_now", "answered") if k in upd[c["act_id"]]}}
+                if c.get("act_id") in upd else c for c in (_ACTS.get(account) or acts)]
         _ACTS[account] = acts
         try:
             from agapi import s2_memory as M

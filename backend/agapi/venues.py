@@ -1210,8 +1210,10 @@ async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:
                 "line": "It's on your phone: tap Yes there, then it goes."}
     if st == "confirmed":
         ref = r.get("reference")
+        # Sasha 258 · demo path item 10 (≤ 2 sentences): ONE sentence with its reference, said word for word — then at most one question
         return {"status": "confirmed", "venue": venue, "when": held["summary"], "itinerary": where, **({"reference": ref} if ref else {}),
-                "line": f"✅ Booked: {venue}, {held['summary']}." + (f" Their reference: {ref}." if ref else "")}
+                "line": f"✅ Booked: {venue}, {held['summary']}" + (f" — reference {ref}." if ref else "."),
+                "how": "Say `line` word for word, then at most ONE short question (e.g. the calendar) — nothing else."}
     if st == "sent":
         return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where, "act_id": r.get("act_id"),
                 "line": held.get("rules_say") or BD.say({"say_text": BR.PHRASES["sent"], "takeover": {"say": BR.PHRASES["takeover"]}})}

@@ -45,3 +45,8 @@ test('the sign-in code: any spacing or prefix is the same six digits; a code aft
   assert.doesNotMatch(code, /^export function (?!POST)/m)                         // a route exports its handlers only
   assert.match(form, /You&rsquo;re already signed in — taking you to Sasha\./)
 })
+
+test('the holding line keeps the "…" beneath it: she is still working until her words come', () => {
+  const app = read('app/s2/S2App.tsx')
+  assert.match(app, /m\.hold \? <>\{m\.hold\}<div>…<\/div><\/> : '…'/)
+})

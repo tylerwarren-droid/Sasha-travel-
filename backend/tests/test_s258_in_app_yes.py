@@ -177,3 +177,21 @@ class FoundByTheScoreboard(unittest.TestCase):
         src = inspect.getsource(VN.hold_venue)
         self.assertIn('held.get("rung") == "agapi"', src)
         self.assertIn('"status": "yes_heard"', src)
+
+
+class TheOnceOnlyKeyBelongsToItsCard(unittest.TestCase):
+    """Found on the scoreboard's account (it books Taverna Correo every run): the once-only key was <account>:book_venue:<the model's
+    key>, durable in Postgres — a model reusing its key for a NEW booking got "already done" and nothing was sent. Now the key belongs
+    to the read-back being answered: a new card is a new act; the same card is still sent once."""
+
+    def test_a_new_card_is_a_new_key_the_same_card_the_same(self):
+        from agapi import v0 as API
+        with mock.patch.dict(VN._HELD, {ACCT: {"sha": "a" * 64}}):
+            first = API._act_bound_to(ACCT, "book_venue")
+        with mock.patch.dict(VN._HELD, {ACCT: {"sha": "b" * 64}}):
+            second = API._act_bound_to(ACCT, "book_venue")
+        with mock.patch.dict(VN._HELD, {ACCT: {"sha": "a" * 64}}):
+            again = API._act_bound_to(ACCT, "book_venue")
+        self.assertNotEqual(first, second)
+        self.assertEqual(first, again)
+        self.assertIsNone(API._act_bound_to(ACCT, "get_status"))

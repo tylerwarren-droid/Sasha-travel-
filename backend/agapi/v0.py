@@ -1392,6 +1392,23 @@ ACTS = ACTS | {"running_late", "change_booking", "cancel_booking"}   # Sasha 226
 READS = READS | {"my_plans"}
 
 
+def _act_bound_to(account: str, name: str) -> Optional[str]:
+    """Sasha 258 · the read-back an act answers (its sha), for the act's once-only key: book_venue → the held booking's, cancel_venue →
+    the held cancellation's. None for other tools (their key is as it was)."""
+    try:
+        if name == "book_venue":
+            from agapi import venues as _VN
+            h = _VN._HELD.get(account) or {}
+            return str(h.get("sha") or h.get("read_back_id") or "")[:24] or None
+        if name == "cancel_venue":
+            from agapi import venues as _VN
+            h = _VN._CANCEL.get(account) or {}
+            return str(h.get("sha") or h.get("read_back_id") or h.get("id") or "")[:24] or None
+    except Exception:
+        return None
+    return None
+
+
 async def call(ctx: Ctx, name: str, args: dict) -> dict:
     """The one entry: {"ok": true, "result": …} or {"ok": false, "error": {"code", "message"}}. Never raises."""
     t = BY_NAME.get(name)
@@ -1411,6 +1428,9 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
     t_call = time.perf_counter()
     if t["idempotent"]:
         key = f"{ctx.account}:{name}:{args['idempotency_key']}"
+        bound = _act_bound_to(ctx.account, name)
+        if bound:   # Sasha 258 · the once-only key belongs to the READ-BACK it answers — a model that reuses its key for a new booking
+            key = f"{key}:{bound}"   # never gets "already done" (found on the scoreboard's account, which books the same venue every run)
         if key in _IDEM:
             return {**_IDEM[key], "replayed": True}
     ctx.idem, ctx.claimed = (key if name in ACTS else None), None

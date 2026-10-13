@@ -1369,7 +1369,9 @@ async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_ye
             return {"status": "not_cancelled", "say": e["message"], **({"open": link, "page_url": link} if link else {})}
         raise _err(e["code"], e["message"])
     venue = next((b.get("venue") for b in await VS.bookings(ctx.account) if b.get("act_id") == a["act_id"]), a.get("venue"))
-    _CANCEL[ctx.account] = {**rb, "at": datetime.now(timezone.utc), "venue": venue}
+    import hashlib as _hl   # the one-yes gate (CR 76) binds their yes to THIS read-back by its words
+    _CANCEL[ctx.account] = {**rb, "at": datetime.now(timezone.utc), "venue": venue,
+                            "sha": _hl.sha256("\n".join(str(x) for x in rb["lines"]).encode()).hexdigest()}
     return {"status": "awaiting_yes", "venue": venue, "route": "agapi", "read_back": rb["lines"]}
 
 

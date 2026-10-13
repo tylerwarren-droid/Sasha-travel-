@@ -83,10 +83,13 @@ class Email(Base):
         self.assertEqual(len(S.OUTBOX), 1)
 
     def test_live_only_for_the_founder_and_the_allow_list(self):
-        from booking_signer import guest_accounts as GA
-        with mock.patch.object(GA, "founder", lambda a: a == "f"), mock.patch.object(GA, "extra_accounts", lambda: {"jon"}):
+        """Sasha 254 · live only for a record with mode live AND real_venue_sends on (Tyler and Jon); a test record, or none, is captured."""
+        from agapi import person_access as PA
+        with mock.patch.object(PA, "RESOLVER", None), PA.records({"f": PA.FOUNDER_PERSON, "jon": PA.LIVE_PERSON,
+                                                                  "t": {**PA.LIVE_PERSON, "mode": "test"}}):
             self.assertTrue(S.live_for("f"))
             self.assertTrue(S.live_for("jon"))
+            self.assertFalse(S.live_for("t"))
             self.assertFalse(S.live_for(ACCOUNT))
             with mock.patch.dict("os.environ", {"SASHA_S2_EMAIL_LIVE": "0"}):
                 self.assertFalse(S.live_for("f"))

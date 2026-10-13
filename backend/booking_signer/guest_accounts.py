@@ -158,14 +158,17 @@ def founder(account: Optional[str]) -> bool:
     return is_founder_test(account)
 
 
-def extra_accounts() -> set:
-    return {a.strip().lower() for a in os.getenv("SASHA_REAL_CONTACT_ACCOUNTS", "").split(",") if a.strip()}
+def real_venue_sends(account: Optional[str]) -> bool:
+    """Sasha 254 · may this person's bookings reach a REAL venue: their record says mode live AND real_venue_sends on (Tyler and
+    Jon today). Until 254: the founder + SASHA_REAL_CONTACT_ACCOUNTS."""
+    from app.services.accounts import has
+    return has(account, "real_venue_sends")
 
 
 def real_contact_refusal(account: Optional[str], to_test_venue: bool) -> Optional[JSONResponse]:
     """None when this account may contact this venue; else the refusal, said plainly. Our test venues: anyone. A real
-    venue: the founder's account (and any listed in SASHA_REAL_CONTACT_ACCOUNTS) — until the founder says otherwise."""
-    if to_test_venue or founder(account) or (account or "").lower() in extra_accounts():
+    venue: a person whose record allows real-venue sends (Sasha 254 · the one record)."""
+    if to_test_venue or real_venue_sends(account):
         return None
     return JSONResponse({"ok": False, "rule": "real_venue_not_open",
                          # Sasha 158 · one plain sentence; the sign-in page is linked wherever this is shown
@@ -176,4 +179,4 @@ INBOUND_CONSENT = ("You wrote to Sasha first on WhatsApp; she answers you here, 
                    "No reminders or other first messages are sent to this number.")
 INBOUND_VERSION = "v0"   # the column takes ^v[0-9]+$; v0 = no consent to first messages: no proactive message ever goes to them
 
-__all__ = ["router", "create_guest", "first_session", "real_contact_refusal", "allowed", "on", "INBOUND_CONSENT", "INBOUND_VERSION"]
+__all__ = ["router", "create_guest", "first_session", "real_contact_refusal", "real_venue_sends", "allowed", "on", "INBOUND_CONSENT", "INBOUND_VERSION"]

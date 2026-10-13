@@ -98,8 +98,9 @@ class FakeApi:
 
 async def routes_offline(a: str) -> None:
     from agapi import v0 as API, venues as VN
-    from booking_signer import guest_accounts as GA, guest_whatsapp as GW, wa_brain as WB
-    real = (GW.api, GW.tap_platform, VN._read, GA.founder, WB.trip_day_words, GW._tell, GW.STORE)
+    from booking_signer import guest_whatsapp as GW, wa_brain as WB
+    from agapi import person_access as PA
+    real = (GW.api, GW.tap_platform, VN._read, WB.trip_day_words, GW._tell, GW.STORE)
     taps = []
     fake = FakeApi()
 
@@ -126,7 +127,9 @@ async def routes_offline(a: str) -> None:
             return {"wa_id_sha256": "x" * 64}
     GW.api, GW.tap_platform, WB.trip_day_words = fake, tap, where
     GW._tell, GW.STORE = tell, _Store()
-    GA.founder = lambda acct: True
+    # Sasha 254 · the founder's override paths read the RECORD: this scratch guest gets a founder record IN THIS PROCESS ONLY (the
+    # person_access test hook — never a real grant), its mode kept "test" so every AgAPI call it makes still goes to the sandbox
+    PA.install({a: {**PA.FOUNDER_PERSON, "mode": "test"}})
     soon = (datetime.now() + timedelta(hours=20)).strftime("%Y-%m-%d %H:%M").split()
     later = (date.today() + timedelta(days=6)).isoformat()
     v = {"name": "Casa Gate", "city": "Madrid", "country": "ES", "what": "dinner", "party": 2}
@@ -205,7 +208,8 @@ async def routes_offline(a: str) -> None:
         ok("VENUE ROUTE · “no, wait” never sends", (nb.get("error") or {}).get("code") == "no_explicit_yes"
            and not any(p.endswith("/send") for _, p, _ in fake.calls[n0:]), str(nb.get("error")))
     finally:
-        GW.api, GW.tap_platform, VN._read, GA.founder, WB.trip_day_words, GW._tell, GW.STORE = real
+        GW.api, GW.tap_platform, VN._read, WB.trip_day_words, GW._tell, GW.STORE = real
+        PA.uninstall(a)
         BD.access_of = real_access
         VN._HELD.pop(a, None)
 

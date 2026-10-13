@@ -4,7 +4,7 @@ else. This module is only the ADAPTER: Sasha's records → the rules' ctx, and t
 
   ctx_for(...)          the rules' ctx: venue {type, test, channels}, when {booking_at, now} in UTC, person {access, preference}, state
   channels_of(eng, rd)  THE ONE CHANNEL READER, in the rules' kinds (form / own_engine / widget / whatsapp / email / phone / platform)
-  access_of(account)    the person's access {mode, calls, real_venue_sends} — ONE function; item 5 swaps its body for CR's access.get
+  access_of(account)    the person's access {mode, calls, real_venue_sends} — ONE function: the record (agapi.person_access, CR's access.get)
   state_of(...)         calls_today_person / server_calls_today + server_cap / last_call_to_venue_at, from the call store
   decide_for(...)       the above, then booking_rules.decide — the Decision, untouched
   say(decision)         decide()'s say_text + the take-over line (R11: on EVERY answer)
@@ -167,27 +167,28 @@ def _iso(d: Optional[datetime]) -> Optional[str]:
 
 # ── the person ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-def _access(account: Optional[str], mode: str) -> Dict[str, str]:
-    from booking_signer import guest_accounts as GA, limits as LM
-    sends = bool(account) and (GA.founder(account) or str(account).lower() in GA.extra_accounts())
-    return {"mode": "live" if mode == "live" else "test", "calls": "on" if account and LM.calls_on(account) else "off",
-            "real_venue_sends": "on" if sends else "off"}
+#: no person named (an old-flow read with no account): the family's route, as agapi_route.person_mode(None) says — and no powers
+NOBODY = {"mode": "live", "calls": "off", "real_venue_sends": "off"}
+
+
+def _access(rec: dict) -> Dict[str, str]:
+    """The rules' person.access — the record's mode, calls and real-venue sends, nothing added."""
+    return {"mode": "live" if rec.get("mode") == "live" else "test", "calls": "on" if rec.get("calls") == "on" else "off",
+            "real_venue_sends": "on" if rec.get("real_venue_sends") == "on" else "off"}
 
 
 async def access_of(account: Optional[str]) -> Dict[str, str]:
-    """THE person's access, for the rules (§B) — ONE function. Item 5 swaps this body for CR's access.get(account).
-    Until then, today's readers: mode = agapi_route.person_mode (test | live); calls = limits.calls_on (the founder + SASHA_CALLS_ACCOUNTS);
-    real_venue_sends = guest_accounts' real-contact rule (the founder + SASHA_REAL_CONTACT_ACCOUNTS)."""
-    from agapi import agapi_route as AR
-    return _access(account, await AR.person_mode(account))
+    """THE person's access, for the rules (§B) — ONE function. Sasha 254 item 5: AgAPI's person_access record, through access.get
+    (agapi.person_access.get; cached ≤ 60 s; a failed read, or no row, is closed: test, everything off)."""
+    from agapi import person_access as PA
+    return _access(await PA.get(account)) if account else dict(NOBODY)
 
 
 def access_cached(account: Optional[str]) -> Dict[str, str]:
-    """access_of for the SYNC legacy callers (the old flow's and the web card's words): the same rule, the mode as person_mode last
-    read it (live when unread — person_mode's own default). Item 5 swaps it with access_of."""
-    from agapi import agapi_route as AR
-    hit = getattr(AR, "_MODE", {}).get(account) if account else None
-    return _access(account, hit[0] if hit else "live")
+    """access_of for the SYNC legacy callers (the old flow's and the web card's words): the same record, as last read (≤ 60 s;
+    warmed where the account is resolved) — closed when unread."""
+    from agapi import person_access as PA
+    return _access(PA.cached(account)) if account else dict(NOBODY)
 
 
 # ── state ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

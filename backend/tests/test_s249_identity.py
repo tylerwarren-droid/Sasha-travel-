@@ -192,49 +192,62 @@ class T3TripsBelongToTheActor(Keys):
 
 
 class OneFounderDecision(unittest.TestCase):
-    """The five founder/test rules keep their own switch; the founder test itself is accounts.is_founder_test."""
+    """Sasha 254 item 5 · every founder / test power is the person's RECORD (agapi.person_access), decided in accounts.has: each rule
+    names its power; no env list grants one. SASHA_SWITCHING stays a global kill switch ("all"), never a person list."""
     GUESTX = "55555555-5555-4555-8555-555555555249"
 
-    def test_each_rule_keeps_its_behaviour(self):
+    def setUp(self):
+        from agapi import person_access as PA
+        self.PA = PA
+        self.r = mock.patch.object(PA, "RESOLVER", None)
+        self.r.start()
+        self.env = mock.patch.dict(os.environ, {"SASHA_SWITCHING": "", "SASHA_AGAPI_KEY": ""})
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+        self.r.stop()
+        self.PA.clear()
+
+    def test_each_rule_reads_its_field(self):
         from booking_signer import guest_accounts as GA, guest_whatsapp as GW, ladder_routes as LR, switching as SW
-        base = {"FOUNDER_ACCOUNT_ID": FOUNDER, "SASHA_DEMO_STANDIN": "", "SASHA_REHEARSAL": "", "SASHA_SWITCHING": "",
-                "SASHA_S2_DEMO_ACCOUNTS": ""}
-        with mock.patch.dict(os.environ, base):
+        PA = self.PA
+        with PA.records({FOUNDER: PA.FOUNDER_PERSON, self.GUESTX: {"mode": "live", "demo": "s2_demo"}}):
             self.assertTrue(GA.founder(FOUNDER))
             self.assertTrue(GA.founder(FOUNDER.upper()))
             self.assertFalse(GA.founder(self.GUESTX))
             self.assertFalse(GA.founder(None))
-            self.assertFalse(LR.standin(FOUNDER))                                    # off without its flag
+            self.assertFalse(LR.standin(FOUNDER))                                    # off: his record has no demo
             self.assertFalse(GW.rehearsal(FOUNDER))
-            self.assertTrue(SW.on(FOUNDER))
+            self.assertTrue(SW.on(FOUNDER))                                          # the founder field
             self.assertFalse(SW.on(self.GUESTX))
-            self.assertFalse(LR._s2_demo_account(FOUNDER))                           # the founder only if listed (Sasha 232)
-        with mock.patch.dict(os.environ, {**base, "SASHA_DEMO_STANDIN": "1", "SASHA_REHEARSAL": "1", "SASHA_SWITCHING": "all",
-                                          "SASHA_S2_DEMO_ACCOUNTS": f" {self.GUESTX} "}):
+            self.assertFalse(LR._s2_demo_account(FOUNDER))                           # the founder only if his record says s2_demo
+            self.assertTrue(LR._s2_demo_account(self.GUESTX))
+        with PA.records({FOUNDER: {**PA.FOUNDER_PERSON, "demo": "founder_rehearsal"}}), mock.patch.dict(os.environ, {"SASHA_SWITCHING": "all"}):
             self.assertTrue(LR.standin(FOUNDER))
             self.assertFalse(LR.standin(self.GUESTX))
             self.assertTrue(GW.rehearsal(FOUNDER))
             self.assertFalse(GW.rehearsal(self.GUESTX))                              # never to a guest (Sasha 175)
-            self.assertTrue(SW.on(self.GUESTX))                                      # everyone with SASHA_SWITCHING=all
+            self.assertTrue(SW.on(self.GUESTX))                                      # everyone with SASHA_SWITCHING=all (the kill switch)
             self.assertFalse(SW.on(None))
-            self.assertTrue(LR._s2_demo_account(self.GUESTX))
-            self.assertFalse(LR._s2_demo_account(FOUNDER))
-        with mock.patch.dict(os.environ, {**base, "FOUNDER_ACCOUNT_ID": "", "SASHA_DEMO_STANDIN": "1", "SASHA_REHEARSAL": "1"}):
-            for rule in (GA.founder, LR.standin, GW.rehearsal, SW.on):
-                self.assertFalse(rule(OLD_DEMO), rule.__name__)                      # unset: nobody — never 11111111
-                self.assertFalse(rule(AC.DEMO_ACCOUNT_ID), rule.__name__)
+        for rule in (GA.founder, LR.standin, GW.rehearsal, SW.on):                   # no record: closed — never 11111111, never the demo
+            self.assertFalse(rule(OLD_DEMO), rule.__name__)
+            self.assertFalse(rule(AC.DEMO_ACCOUNT_ID), rule.__name__)
 
     def test_the_founder_decision_is_made_in_one_place(self):
-        """Every founder/test rule calls accounts.is_founder_test (or is_founder): one switch flips them all."""
+        """Every founder/test rule reads accounts.has (the record): one record flips them all; env lists flip none."""
         from booking_signer import guest_accounts as GA, guest_whatsapp as GW, ladder_routes as LR, limits as LM, mailbox as MB, switching as SW
-        from booking_signer import handover as HO
-        env = {"FOUNDER_ACCOUNT_ID": FOUNDER, "SASHA_DEMO_STANDIN": "1", "SASHA_REHEARSAL": "1", "SASHA_SWITCHING": "",
-               "SASHA_CALLS_ACCOUNTS": "", "SASHA_GMAIL_ACCOUNTS": ""}
-        rules = (GA.founder, LR.standin, GW.rehearsal, SW.on, LM.exempt, LM.calls_on, MB.invited, HO.founder_override)
-        with mock.patch.dict(os.environ, env):
-            self.assertTrue(all(r(FOUNDER) for r in rules))
-            with mock.patch.object(AC, "founder_account", lambda: None):
-                self.assertFalse(any(r(FOUNDER) for r in rules), [r.__name__ for r in rules if r(FOUNDER)])
+        from booking_signer import handover as HO, outlook as OL
+        PA = self.PA
+        rules = (GA.founder, LR.standin, GW.rehearsal, SW.on, LM.exempt, LM.calls_on, MB.invited, OL.invited, HO.founder_override,
+                 GA.real_venue_sends)
+        with PA.records({FOUNDER: {**PA.FOUNDER_PERSON, "demo": "founder_rehearsal"}}):
+            self.assertTrue(all(r(FOUNDER) for r in rules), [r.__name__ for r in rules if not r(FOUNDER)])
+        legacy = {"FOUNDER_ACCOUNT_ID": FOUNDER, "SASHA_DEMO_STANDIN": "1", "SASHA_REHEARSAL": "1", "SASHA_CALLS_ACCOUNTS": FOUNDER,
+                  "SASHA_GMAIL_ACCOUNTS": FOUNDER, "SASHA_OUTLOOK_ACCOUNTS": FOUNDER, "SASHA_REAL_CONTACT_ACCOUNTS": FOUNDER,
+                  "SASHA_S2_DEMO_ACCOUNTS": FOUNDER}
+        with mock.patch.dict(os.environ, legacy):
+            self.assertFalse(any(r(FOUNDER) for r in rules), [r.__name__ for r in rules if r(FOUNDER)])   # the old lists grant nothing
 
 
 if __name__ == "__main__":

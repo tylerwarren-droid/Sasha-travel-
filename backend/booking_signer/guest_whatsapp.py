@@ -503,6 +503,9 @@ def _inner_app():
 
         async def as_linked_account(request: Request) -> None:
             request.state.account = request.headers.get(_HEADER)
+            if request.state.account:   # Sasha 254 · the record warmed for the booking routes' sync checks
+                from agapi import person_access as PA
+                await PA.warm(request.state.account)
 
         app.dependency_overrides[gate.require_booking_key] = as_linked_account
         _INNER = app
@@ -728,6 +731,8 @@ async def voice_text(p: Dict[str, str]) -> Optional[str]:
 
 async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     key, account = ch["wa_id_sha256"], ch["account_id"]
+    from agapi import person_access as PA
+    await PA.warm(account)   # Sasha 254 · the one record, fresh for this turn's sync checks (rehearsal, calls, real venues …)
     body = (p.get("Body") or "").strip()
     heard = None
     if not body and not (p.get("ButtonPayload") or "").strip():
@@ -1632,7 +1637,7 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
 
 
 def _founder_demo(account) -> bool:
-    """The founder's demo is on (SASHA_DEMO_STANDIN): only then does a read-back say which kind it is (guests unchanged)."""
+    """The founder's demo is on (his record: demo = founder_rehearsal; was SASHA_DEMO_STANDIN): only then does a read-back say which kind it is (guests unchanged)."""
     from .ladder_routes import standin
     return standin(account)
 
@@ -1647,11 +1652,11 @@ TEST_CARD = {"place_id": "sasha-test-venue", "name": "Sasha Test Venue", "countr
 
 
 def rehearsal(account: str) -> bool:
-    """The cards end with OUR test venue: on the founder's own account when SASHA_REHEARSAL=1 — and ALWAYS for an account
+    """The cards end with OUR test venue: on a record with demo = founder_rehearsal (Sasha 254; was the founder + SASHA_REHEARSAL=1) — and ALWAYS for an account
     that may not contact real venues (Sasha 153: every automatic guest), so a guest can complete a booking end to end."""
-    from app.services.accounts import is_founder_test   # Sasha 249 · the one founder/test decision
+    from app.services.accounts import is_founder_test   # Sasha 254 · the one record: demo = founder_rehearsal
     # Sasha 175 (EU 172) · never to a guest: "Sasha Test Venue (ours — rehearsal)" in a stranger's search was a failure
-    return is_founder_test(account, flag="SASHA_REHEARSAL")
+    return is_founder_test(account, power="rehearsal")
 
 
 #: Sasha 140 · each venue's OWN share-picture URL, by its website (not Google content: cacheable), with "none" remembered too

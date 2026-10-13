@@ -1,6 +1,6 @@
 """Sasha 253 · THE GATE NEVER WRITES TO LIVE (CR 91 found 21 gate rows on the live outcomes ledger: the gate's paid test trips are
 finished by the production server, outside the gate's own pin). Live vs the sandbox is decided ONLY in agapi_route.client_for, by
-the person's mode: a test person (every guest a suite or a proof makes — app_metadata.kanoe_test) → the sandbox, whoever calls.
+the person's mode: a test person (every guest a suite or a proof makes — Sasha 254: no person_access row) → the sandbox, whoever calls.
 
     cd backend && python -m unittest tests.test_s253_gate_never_live -v
 """
@@ -16,26 +16,25 @@ from agapi import agapi_route as AR, s2_outcomes as OC
 TEST, REAL = "00000000-0000-4000-8000-0000000002a1", "00000000-0000-4000-8000-0000000002a2"
 
 
-def admin(meta):
-    async def fn(method, path, body=None):
-        acct = path.rsplit("/", 1)[-1]
-        return 200, {"id": acct, "app_metadata": meta.get(acct, {})}
-    return fn
-
-
 class PersonMode(unittest.TestCase):
+    """Sasha 254 item 5 · the person's mode is their RECORD (agapi.person_access): no row (every suite guest) → test → the sandbox."""
+
     def setUp(self):
-        AR._MODE.clear()
-        from booking_signer import ops
-        self.p = mock.patch.object(ops, "ADMIN", admin({TEST: {"kanoe_guest": True, "kanoe_test": True}, REAL: {"kanoe_guest": True}}))
-        self.p.start()
-        self.env = mock.patch.dict(os.environ, {"SASHA_AGAPI_ROUTE": "outcomes=live,venues=live,money=live", "SASHA_OUTCOMES_VIA": "live"})
+        from agapi import person_access as PA
+        self.PA = PA
+        PA.clear()
+        OC._DONE.clear()   # once per row per process: T23 and T29 both run this class
+        self.r = mock.patch.object(PA, "RESOLVER", None)   # records only, never the old fixtures' meaning
+        self.r.start()
+        PA.install({REAL: PA.LIVE_PERSON})
+        self.env = mock.patch.dict(os.environ, {"SASHA_AGAPI_ROUTE": "outcomes=live,venues=live,money=live", "SASHA_OUTCOMES_VIA": "live",
+                                                "SASHA_AGAPI_KEY": ""})
         self.env.start()
 
     def tearDown(self):
-        self.p.stop()
+        self.r.stop()
         self.env.stop()
-        AR._MODE.clear()
+        self.PA.clear()
 
     def test_a_test_person_goes_to_the_sandbox_in_every_family(self):
         for fam in ("outcomes", "venues", "money", "activities"):
@@ -47,14 +46,12 @@ class PersonMode(unittest.TestCase):
     def test_nobody_named_follows_the_route(self):
         self.assertEqual(asyncio.run(AR.target_for("outcomes")), "live")
 
-    def test_an_unreadable_mode_is_live_never_dropped(self):
-        from booking_signer import ops
-
-        async def broken(*a, **k):
-            raise RuntimeError("admin down")
-        with mock.patch.object(ops, "ADMIN", broken):
-            AR._MODE.clear()
-            self.assertEqual(asyncio.run(AR.target_for("outcomes", TEST)), "live")
+    def test_an_unreadable_record_is_closed_the_sandbox(self):
+        async def broken(op, body):
+            raise RuntimeError("agapi down")
+        self.PA.uninstall(REAL)
+        with mock.patch.object(self.PA, "CALL", broken):
+            self.assertEqual(asyncio.run(AR.target_for("outcomes", REAL)), "sandbox")
 
     def test_the_ledger_routes_by_the_person_even_from_a_background_writer(self):
         seen = []

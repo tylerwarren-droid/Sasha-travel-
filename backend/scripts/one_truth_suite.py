@@ -93,6 +93,13 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T28": ("\"I'll handle it\" sends through AgAPI, read back first, said in her voice",
             ["tests.test_s254_handle_it_live.TheSend", "tests.test_s254_handle_it_live.Live",
              "tests.test_s254_handle_it_live.TheStatus", "tests.test_s254_handle_it_live.TheRoute"]),
+    # Sasha 254 · item 5: every founder / calls / mailbox / demo / real-venue / mode decision reads AgAPI's person_access record
+    # (access.get, ≤ 60 s, closed on failure); no env person list is read; SASHA_SWITCHING a kill switch only
+    "T29": ("access from the one record",
+            ["tests.test_s254_access.TheRecordGrantsEachPower", "tests.test_s254_access.ClosedOnFailure",
+             "tests.test_s254_access.TheCache", "tests.test_s254_access.WarmAtEntry", "tests.test_s254_access.TheRulesAccess",
+             "tests.test_s254_access.PlatformCheckIsAFixture", "tests.test_s254_access.NoEnvListDecidesAccess",
+             "tests.test_s249_identity.OneFounderDecision", "tests.test_s253_gate_never_live.PersonMode"]),
 }
 
 _RUNNER = """

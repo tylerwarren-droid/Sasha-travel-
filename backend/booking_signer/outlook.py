@@ -9,8 +9,8 @@ their text sent to AgAPI and dropped. The consent sentence below is ticked on /y
 sentence (s2_outlook_receipts.CONSENT) and waits for a yes in a later turn before the first search.
 
 Env: SASHA_MS_CLIENT_ID, SASHA_MS_CLIENT_SECRET, SASHA_MS_REDIRECT (…/api/booking/outlook/callback), SASHA_MS_TENANT (default
-"organizations": any work or school account; the Kanoe tenant id narrows it), SASHA_OUTLOOK_ACCOUNTS (invited, besides the founder
-and SASHA_GMAIL_ACCOUNTS)."""
+"organizations": any work or school account; the Kanoe tenant id narrows it), and who is invited: Sasha 254 ·
+"outlook" in the person's record's mailboxes (agapi.person_access; until 254 SASHA_OUTLOOK_ACCOUNTS + the Gmail invitees)."""
 from __future__ import annotations
 
 import hashlib
@@ -49,9 +49,8 @@ def configured() -> bool:
 
 
 def invited(account: str) -> bool:
-    from .mailbox import invited as gmail_invited
-    listed = {a.strip().lower() for a in os.getenv("SASHA_OUTLOOK_ACCOUNTS", "").split(",") if a.strip()}
-    return gmail_invited(account) or account.lower() in listed
+    from app.services.accounts import is_founder_test   # Sasha 254 · the one record: "outlook" in its mailboxes
+    return is_founder_test(account, power="outlook")
 
 
 def web_url(q: str) -> str:

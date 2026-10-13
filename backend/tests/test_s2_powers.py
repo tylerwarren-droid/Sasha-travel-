@@ -5,6 +5,7 @@ AgAPI sandbox runs). Fixtures only, 0 live calls: the booking API and the basket
 """
 from __future__ import annotations
 
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 254 · the fixtures' founder / lists → person_access records)
 import asyncio
 import json
 import os

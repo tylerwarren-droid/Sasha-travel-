@@ -18,6 +18,7 @@ at wa_agent.agent_turn; no network, no live model, no Twilio, no Places, no data
 """
 from __future__ import annotations
 
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 254 · the fixtures' founder / lists → person_access records)
 import asyncio
 import json
 import os

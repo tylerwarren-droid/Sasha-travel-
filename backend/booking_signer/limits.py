@@ -7,7 +7,7 @@ Limits (per account, sliding windows, the founder's account exempt):
 Over a limit: 429 with the plain reason; nothing is contacted. Held in this server's memory: a redeploy starts the
 windows again (a cap on abuse, not an audit; the call and email caps stay in the database).
 
-Calls for guests: OFF unless the founder switches them on for that account (SASHA_CALLS_ACCOUNTS, a comma-separated
+Calls for guests: OFF unless the founder switches them on for that account (Sasha 254 · the person's record: calls = on; was SASHA_CALLS_ACCOUNTS, a comma-separated
 list of account ids) — until the confirmation rate is proven. The founder's own account is always on (when calls are).
 """
 from __future__ import annotations
@@ -62,8 +62,8 @@ def calls_on(account: Optional[str]) -> bool:
     """May THIS account have Sasha phone venues? The founder's: yes. A guest's: only once the founder lists it."""
     if account is None:
         return True
-    from app.services.accounts import is_founder_test   # Sasha 249 · the one founder decision, plus this rule's list
-    return is_founder_test(account, listed="SASHA_CALLS_ACCOUNTS")
+    from app.services.accounts import is_founder_test   # Sasha 254 · the one record: calls on
+    return is_founder_test(account, power="calls")
 
 
 CALLS_OFF_FOR_ACCOUNT = "phone calls aren't switched on for your account yet — Sasha can use their booking form or email instead"

@@ -46,6 +46,8 @@ async def turn(account: Optional[str], transcript: str, history: list) -> Option
     from . import guest_whatsapp as GW, wa_brain as WB
     if not account:
         return None
+    from agapi import person_access as PA
+    await PA.warm(account)   # Sasha 254 · the one record, fresh for this turn's sync checks
     key = voice_key(account)
     try:
         st = await GW.STORE.get_state(key)

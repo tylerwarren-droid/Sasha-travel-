@@ -145,8 +145,11 @@ class FindRoute(unittest.TestCase):
     """The /venues/find ROUTE itself (a missing import once hid here): our test restaurant is never a hotel card."""
 
     def test_rehearsal_card_for_dinner_not_for_a_hotel(self):
+        """Sasha 254 · rehearsal and the stand-in are ONE record field (demo = founder_rehearsal): his restaurants are real (Sasha
+        186 — no test card beside them), and a hotel never has one."""
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+        from agapi import person_access as PA
         from booking_signer import ladder_routes as LR, venue_read as V
         founder = "11111111-1111-4111-8111-111111111111"
 
@@ -155,11 +158,13 @@ class FindRoute(unittest.TestCase):
         app = FastAPI()
         app.include_router(LR.router, prefix="/api/booking")
         with mock.patch.object(V, "find_venues", find), mock.patch.object(LR, "account_for", lambda r: founder), \
-                mock.patch.dict(os.environ, {"SASHA_REHEARSAL": "1", "FOUNDER_ACCOUNT_ID": founder}):
+                mock.patch.object(PA, "RESOLVER", None), PA.records({founder: {**PA.FOUNDER_PERSON, "demo": "founder_rehearsal"}}):
             c = TestClient(app)
             dinner = c.post("/api/booking/venues/find", json={"what": "dinner", "where": "Madrid"}).json()
+            from booking_signer import guest_whatsapp as GW
+            self.assertTrue(GW.rehearsal(founder) and LR.standin(founder))   # one field, both on
             hotel = c.post("/api/booking/venues/find", json={"what": "hotel", "where": "Hoi An"}).json()
-        self.assertIn("sasha-test-venue", [x["place_id"] for x in dinner["candidates"]])
+        self.assertNotIn("sasha-test-venue", [x["place_id"] for x in dinner["candidates"]])
         self.assertNotIn("sasha-test-venue", [x["place_id"] for x in hotel["candidates"]])
 
 

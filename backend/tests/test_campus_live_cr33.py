@@ -7,6 +7,7 @@ Offline: a fake cloud page, a fake Browserbase.
 """
 from __future__ import annotations
 
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 254 · the fixtures' founder / lists → person_access records)
 import asyncio
 import os
 import unittest

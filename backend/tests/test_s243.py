@@ -3,6 +3,7 @@ country — read from its mask, never the number — goes to AgAPI as passport_c
 And CR 84's subscriptions list drawn on WhatsApp as text + the /s2 link; Gmail by invitation includes the accounts listed."""
 from __future__ import annotations
 
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 254 · the fixtures' founder / lists → person_access records)
 import asyncio
 import os
 import unittest

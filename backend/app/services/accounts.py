@@ -8,9 +8,13 @@ decided HERE and nowhere else.
   · founder_account() — FOUNDER_ACCOUNT_ID when set and well-formed, else None. ⛔ Never a fallback to the demo: unset,
     nobody is the founder, and a founder session is refused (chat_account) rather than quietly made the demo — the
     EU 238 passport landed in 11111111 exactly that way.
-  · is_founder_test(acting, …) — "is this the founder's own test session": the ONE founder decision that the five rules
-    (guest_accounts.founder, ladder_routes._s2_demo_account / standin, guest_whatsapp.rehearsal, switching.on) and the
-    founder-only routes call. Each rule keeps its own switch (a flag, an account list); only the founder test is here.
+  · is_founder_test(acting, power=…) / is_founder(acting) / has(acting, power) — Sasha 254 item 5: every founder / test power
+    reads the ONE record (agapi.person_access — AgAPI's person_access, through access.get): founder → record.founder; calls →
+    record.calls; gmail / outlook → record.mailboxes; s2_demo / rehearsal → record.demo; real_venue_sends → record.mode live AND
+    record.real_venue_sends. Until 254 each rule read its own env list (SASHA_CALLS_ACCOUNTS, SASHA_GMAIL_ACCOUNTS,
+    SASHA_S2_DEMO_ACCOUNTS, SASHA_REHEARSAL / SASHA_DEMO_STANDIN with FOUNDER_ACCOUNT_ID …); none is read for a decision now.
+    founder_account() stays for IDENTITY only — which account the founder's sign-in session names (the record has no "find
+    the founder" operation); it grants nothing: the founder's powers are his record's.
 """
 from __future__ import annotations
 
@@ -30,32 +34,45 @@ def founder_account() -> Optional[str]:
     return v if _UUID.fullmatch(v) else None
 
 
-def _listed(env: str) -> set:
-    return {a.strip().lower() for a in os.getenv(env, "").split(",") if a.strip()}
+def access(acting: Optional[str]) -> dict:
+    """Sasha 254 · the acting person's record, as last read (≤ 60 s; warmed where the account is resolved) — CLOSED for nobody,
+    a guest with no row, or a failed read: test, everything off."""
+    from agapi import person_access as PA
+    return PA.cached(acting)
 
 
-def is_founder_test(acting: Optional[str], *, flag: Optional[str] = None, listed: Optional[str] = None,
-                    founder: bool = True) -> bool:
-    """Is `acting` the founder's own test session for this rule?
-      · flag   — an env switch the rule needs ON ("1"); off → False for everyone;
-      · founder — the founder's account counts (False: only the accounts the rule lists, e.g. the S2 demo);
-      · listed — an env var of extra accounts (comma-separated) the rule also admits.
-    Nobody (no account) is never the founder, and with FOUNDER_ACCOUNT_ID unset nobody is."""
+#: Sasha 254 · each power → its field in the record (CR row 823). Nothing else grants one.
+POWERS = {
+    "founder": lambda r: bool(r.get("founder")),
+    "calls": lambda r: r.get("calls") == "on",
+    "gmail": lambda r: "gmail" in (r.get("mailboxes") or []),
+    "outlook": lambda r: "outlook" in (r.get("mailboxes") or []),
+    "s2_demo": lambda r: r.get("demo") == "s2_demo",
+    "rehearsal": lambda r: r.get("demo") == "founder_rehearsal",
+    "real_venue_sends": lambda r: r.get("mode") == "live" and r.get("real_venue_sends") == "on",
+}
+
+
+def has(acting: Optional[str], power: str) -> bool:
     if not acting:
         return False
-    if flag is not None and os.getenv(flag, "") != "1":
-        return False
-    who = str(acting).lower()
-    if founder:
-        f = founder_account()
-        if f is not None and who == f:
-            return True
-    return listed is not None and who in _listed(listed)
+    return POWERS[power](access(acting))
+
+
+def is_founder_test(acting: Optional[str], *, power: str = "founder") -> bool:
+    """Is `acting` granted this power by their record? (founder by default). Nobody (no account) never is."""
+    return has(acting, power)
 
 
 def is_founder(acting: Optional[str]) -> bool:
-    """The founder himself (FOUNDER_ACCOUNT_ID) — is_founder_test with no switch and no list."""
-    return is_founder_test(acting)
+    """The founder himself: his record says founder = true."""
+    return has(acting, "founder")
+
+
+def founder_email() -> Optional[str]:
+    """Sasha 254 · the founder's own address from HIS record (was SASHA_FOUNDER_EMAIL) — None when the record carries none."""
+    f = founder_account()
+    return access(f).get("email") if f and is_founder(f) else None
 
 
 def signed_in(account: Optional[str]) -> bool:
@@ -63,4 +80,4 @@ def signed_in(account: Optional[str]) -> bool:
     return bool(account) and account != DEMO_ACCOUNT_ID
 
 
-__all__ = ["DEMO_ACCOUNT_ID", "founder_account", "is_founder_test", "is_founder", "signed_in"]
+__all__ = ["DEMO_ACCOUNT_ID", "founder_account", "access", "has", "POWERS", "is_founder_test", "is_founder", "founder_email", "signed_in"]

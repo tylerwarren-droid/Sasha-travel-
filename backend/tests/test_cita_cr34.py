@@ -7,6 +7,7 @@ and what to bring (from the 1449F1's own §6). Never a login, a press or a slot 
 """
 from __future__ import annotations
 
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 254 · the fixtures' founder / lists → person_access records)
 import os
 from unittest import mock
 

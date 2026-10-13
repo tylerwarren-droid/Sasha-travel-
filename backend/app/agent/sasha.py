@@ -609,6 +609,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     wa = surface == "wa"
     if wa:
         surface = "s2"
+    from agapi import person_access as _PA
+    await _PA.warm(account)   # Sasha 254 · the one record (founder, calls, real venues …), fresh for this turn's sync checks
     remembered = _HANDOVER.pop(session or "-", None)   # Sasha 239 · on the first turn back only: what was (and wasn't) decided
     # Sasha 249 · ONE MEMORY: the handover, the screen and the openers are kept in s2_memory too (kinds handover / screen / openers,
     # each with its session) — after a restart the first turn back still hears them. This process's copy wins when it has one.

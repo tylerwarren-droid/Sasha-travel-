@@ -6,6 +6,7 @@ yes in a later turn; test mode reads Outlook's own fake inbox. Microsoft and AgA
 """
 from __future__ import annotations
 
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 254 · the fixtures' founder / lists → person_access records)
 import json
 import os
 from datetime import date

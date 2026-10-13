@@ -142,16 +142,20 @@ async def file(provider_id: str, channel: str, sender: Optional[str], subject: O
 
 
 async def account_of_email(addr: Optional[str]) -> Optional[str]:
-    """The account whose OWN address this is (its sign-in email; SASHA_FOUNDER_EMAIL is the founder's) — a guest forwarding.
-    Sasha 249 · the founder's address names FOUNDER_ACCOUNT_ID, never the demo account: unset, it is looked up like any other."""
-    import os
+    """The account whose OWN address this is (its sign-in email; the founder's record's email is his) — a guest forwarding.
+    Sasha 249 · the founder's address names FOUNDER_ACCOUNT_ID, never the demo account: unset, it is looked up like any other.
+    Sasha 254 · his address is his record's (agapi.person_access), no longer SASHA_FOUNDER_EMAIL."""
     from . import ladder_routes as LR
-    from app.services.accounts import founder_account
+    from app.services.accounts import founder_account, founder_email
+    from agapi import person_access as PA
     a = (addr or "").strip().lower()
     if not a:
         return None
-    if a == os.getenv("SASHA_FOUNDER_EMAIL", "").strip().lower() and founder_account():
-        return founder_account()
+    f = founder_account()
+    if f:
+        await PA.warm(f)
+        if a == (founder_email() or ""):
+            return f
     return await LR.LADDER_STORE.account_by_email(a) if LR.LADDER_STORE is not None else None
 
 

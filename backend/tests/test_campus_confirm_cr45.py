@@ -6,6 +6,7 @@ is checked against what was prepared — school, student, date, time — and its
 """
 from __future__ import annotations
 
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 254 · the fixtures' founder / lists → person_access records)
 import os
 from unittest import mock
 

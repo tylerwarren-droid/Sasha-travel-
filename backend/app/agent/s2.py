@@ -7,8 +7,8 @@ sends it and the default is S1, byte for byte as before.
                   is S1's own text, shared
   S2_TOOLS        her tool set: places and their bookings, email, the calendar, WhatsApp, Activity, and payment ("Pay here, or on
                   your phone?") — plus trips, which are one of the things she does
-  demo(account)   the S2 demo setting (Tyler, 9 Oct): on the founder's account — and any listed in SASHA_S2_DEMO_ACCOUNTS (a scratch
-                  "founder-mode" fixture for a live run) — a restaurant or spa booked on /s2 goes to OUR test venue, so a demo
+  demo(account)   the S2 demo setting (Tyler, 9 Oct): Sasha 254 · a person whose record says demo = s2_demo (agapi.person_access;
+                  until 254 SASHA_S2_DEMO_ACCOUNTS, a scratch "founder-mode" fixture for a live run) — a restaurant or spa booked on /s2 goes to OUR test venue, so a demo
                   reaches "Booked" with nothing real contacted. /next is untouched: the founder's account there is exactly as before.
 """
 from __future__ import annotations

@@ -524,7 +524,7 @@ class R13R14(Base):
         self.expect(out, "request_email", "request_wait")
 
 
-# ── access (§B) — until item 5: booking_decide.access_of, the ONE function ──────────────────────────────────────────────────
+# ── access (§B) — booking_decide.access_of, the ONE function: the record (item 5) ──────────────────────────────────────────────────
 
 class AccessTest(Base):
     access = {"mode": "test", "calls": "on", "real_venue_sends": "on"}
@@ -548,16 +548,19 @@ class AccessSendsOff(Base):
 
 
 class AccessOf(unittest.TestCase):
-    def test_todays_readers_in_one_function(self):
-        from agapi import agapi_route as AR
-        from booking_signer import limits as LM
-        with mock.patch.object(AR, "person_mode", mock.AsyncMock(return_value="live")), \
-                mock.patch.object(GA, "founder", lambda a: a == ACCT), mock.patch.object(LM, "calls_on", lambda a: a == ACCT):
+    def test_the_record_in_one_function(self):
+        """Sasha 254 item 5 · access_of IS the person's record (agapi.person_access): mode, calls, real-venue sends — nothing added."""
+        from agapi import person_access as PA
+        other = "00000000-0000-4000-8000-0000000000bb"
+        with mock.patch.object(PA, "RESOLVER", None), PA.records({ACCT: PA.LIVE_PERSON, other: {"mode": "live"}}):
             self.assertEqual(run(BD.access_of(ACCT)), LIVE)
-            self.assertEqual(run(BD.access_of("00000000-0000-4000-8000-0000000000bb")), {"mode": "live", "calls": "off", "real_venue_sends": "off"})
-        with mock.patch.object(AR, "person_mode", mock.AsyncMock(return_value="test")), mock.patch.object(GA, "founder", lambda a: True), \
-                mock.patch.object(LM, "calls_on", lambda a: True):
+            self.assertEqual(BD.access_cached(ACCT), LIVE)
+            self.assertEqual(run(BD.access_of(other)), {"mode": "live", "calls": "off", "real_venue_sends": "off"})
+        with mock.patch.object(PA, "RESOLVER", None), PA.records({ACCT: {**PA.LIVE_PERSON, "mode": "test"}}):
             self.assertEqual(run(BD.access_of(ACCT))["mode"], "test")
+        with mock.patch.object(PA, "RESOLVER", None), mock.patch.dict(os.environ, {"SASHA_AGAPI_KEY": ""}):
+            PA.clear()
+            self.assertEqual(run(BD.access_of(other)), {"mode": "test", "calls": "off", "real_venue_sends": "off"})   # no row: closed
 
     def test_utc_from_the_venues_local_time(self):
         self.assertEqual(BD.utc_of("2026-07-01T21:00", "ES"), "2026-07-01T19:00:00+00:00")   # Madrid in summer: UTC+2

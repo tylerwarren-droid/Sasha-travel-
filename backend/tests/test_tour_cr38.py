@@ -8,6 +8,7 @@ with each detail its own message; ONE itinerary — card, PDF, and the same trip
 """
 from __future__ import annotations
 
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 254 · the fixtures' founder / lists → person_access records)
 import os
 from pathlib import Path
 from unittest import mock

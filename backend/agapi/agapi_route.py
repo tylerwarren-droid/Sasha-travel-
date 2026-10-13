@@ -152,8 +152,6 @@ def endpoint(target: str) -> Tuple[str, str]:
 # Sasha 253 · THE PERSON'S MODE (test → the sandbox, every family): who a call is FOR, set once around it (`acting`) — the outcomes
 # ledger sets it on every write, so a booking finished later by the server (a payment watcher, a webhook) is routed by the same rule
 _ACCOUNT: contextvars.ContextVar = contextvars.ContextVar("agapi_account", default=None)
-_MODE: Dict[str, Tuple[str, float]] = {}   # account → (mode, read at) — read once per 10 minutes
-MODE_TTL_S = 600
 
 
 class acting:
@@ -172,26 +170,13 @@ class acting:
 
 
 async def person_mode(account: Optional[str]) -> str:
-    """Sasha 253 · "test" | "live" for a person. TODAY'S MARKER (until CR 92 moves readers to AgAPI's person_access): the auth
-    user's app_metadata.kanoe_test — set on every guest our suites and scratch scripts make (guest_accounts.create_guest), never on a
-    real person. Read here only. Unknown or unreadable → "live" (a real person's booking is never dropped from the ledger)."""
-    import time as _time
+    """Sasha 253 · "test" | "live" for a person. Sasha 254 item 5: the person's record (agapi.person_access — AgAPI's person_access,
+    through access.get; ≤ 60 s). No row (every guest our suites and scratch scripts make, every guest session) or a failed read →
+    "test": the sandbox. No person at all → "live" (the family's route decides). Until 254: app_metadata.kanoe_test."""
     if not account:
         return "live"
-    hit = _MODE.get(account)
-    if hit and _time.time() - hit[1] < MODE_TTL_S:
-        return hit[0]
-    mode = "live"
-    try:
-        from booking_signer import ops
-        st, u = await ops.ADMIN("GET", f"/admin/users/{account}", None)
-        if st == 200 and ((u or {}).get("app_metadata") or {}).get("kanoe_test"):
-            mode = "test"
-    except Exception as e:
-        log.warning("[route] the person's mode not read (live): %s", type(e).__name__)
-        return "live"   # not cached: read again next time
-    _MODE[account] = (mode, _time.time())
-    return mode
+    from agapi import person_access as PA
+    return "live" if (await PA.get(account)).get("mode") == "live" else "test"
 
 
 async def target_for(family: str, account: Optional[str] = None, flight: Optional[dict] = None,

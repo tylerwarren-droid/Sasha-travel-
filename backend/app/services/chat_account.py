@@ -43,6 +43,16 @@ def founder_session(request: Request) -> bool:
 
 
 async def chat_account(request: Request, anonymous: Optional[str] = DEMO_ACCOUNT_ID) -> Optional[str]:
+    """The acting account (_resolve below), its access record warmed (Sasha 254 item 5: the sync checks — is_founder, calls_on,
+    real_contact_refusal … — then read a fresh record; a failed read is closed)."""
+    acct = await _resolve(request, anonymous)
+    if acct:
+        from agapi import person_access as PA
+        await PA.warm(acct)
+    return acct
+
+
+async def _resolve(request: Request, anonymous: Optional[str] = DEMO_ACCOUNT_ID) -> Optional[str]:
     """Sasha 249 · WHO IS ACTING — the one resolver, for chat and booking alike:
       1. `Authorization: Bearer` → the verified account (a bad token is refused, never turned into the demo);
       2. `x-sasha-session: founder` WITH the booking key → FOUNDER_ACCOUNT_ID; unset → 503, never the demo;

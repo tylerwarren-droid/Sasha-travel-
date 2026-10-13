@@ -40,7 +40,7 @@ def status() -> None:
                        ("Gmail", "/api/booking/mailbox"), ("reminders", "/api/booking/proactive"), ("vault", "/api/booking/vault")):
         s, j = call("GET", path)
         if name == "health":
-            print(f"calls: {'ON' if (j.get('calls') or {}).get('enabled') else 'off'} · rehearsal card: see SASHA_REHEARSAL · "
+            print(f"calls: {'ON' if (j.get('calls') or {}).get('enabled') else 'off'} · rehearsal card: the record's demo = founder_rehearsal · "
                   f"vault: {(j.get('vault') or {}).get('backend')}")
         elif name == "WhatsApp":
             print(f"WhatsApp linked: {j.get('linked')}")

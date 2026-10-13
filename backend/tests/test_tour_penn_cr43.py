@@ -7,6 +7,7 @@ what "yes" promises, and the PDF's footer, name THIS tour's schools.
 """
 from __future__ import annotations
 
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 254 · the fixtures' founder / lists → person_access records)
 import os
 from unittest import mock
 

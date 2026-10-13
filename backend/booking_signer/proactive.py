@@ -427,6 +427,8 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
         account = ch["account_id"]
         if only_account and account != only_account:
             continue
+        from agapi import person_access as PA
+        await PA.warm(account)   # Sasha 254 · the one record, fresh for this account's sync checks
         prefs = await STORE.get_prefs(account) or {"all_off": False, "off_kinds": []}
         reminders_ok = GW.consent_at_least(ch.get("consent_wording_version") or "v0", 3) and not prefs.get("all_off")
         rows = await GW._upcoming(account, names=False)   # Sasha 141 · names are re-read only for a message sent
@@ -524,6 +526,8 @@ async def no_reply_offers(now: datetime) -> List[dict]:
     done: List[dict] = []
     for ch in await GW.STORE.all_channels():
         account = ch["account_id"]
+        from agapi import person_access as PA
+        await PA.warm(account)   # Sasha 254 · the rules' access (calls) from the one record
         for b in await GW._upcoming(account, names=False):   # email bookings: no receipt name to re-read
             if b.get("channel") != "email" or b.get("status") not in ("requested", "attempting") or not b.get("read_id") or not b.get("requested_at"):
                 continue

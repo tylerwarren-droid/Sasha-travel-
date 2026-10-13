@@ -35,13 +35,13 @@ _QUESTION = re.compile(r"(?i)\?|¿|\b(?:what|how|which|when|where|why|who|option
 
 
 def live_for(account: Optional[str]) -> bool:
-    """Sasha 216 · the founder's decision: an email really goes out only for the founder and the allow-listed accounts
-    (SASHA_REAL_CONTACT_ACCOUNTS — today Jon's); everyone else's is captured (OUTBOX), never sent. SASHA_S2_EMAIL_LIVE=0 stops
-    every live send at once."""
+    """Sasha 216 · the founder's decision: an email really goes out only for a person whose record allows real sends (Sasha 254 ·
+    the one record: mode live AND real_venue_sends on — Tyler and Jon); everyone else's is captured (OUTBOX), never sent.
+    SASHA_S2_EMAIL_LIVE=0 stops every live send at once."""
     from booking_signer import guest_accounts as GA
     if os.getenv("SASHA_S2_EMAIL_LIVE", "1").strip() == "0" or not account:
         return False
-    return GA.founder(account) or account.lower() in GA.extra_accounts()
+    return GA.real_venue_sends(account)
 
 
 def _sender() -> str:

@@ -5,8 +5,8 @@ Sent once, when the call's reading is recorded (call_routes._follow_up, awaited 
 its name, what, when, for whom, the status in plain words, BOTH references, their words verbatim, and where the whole
 call and the yes are kept. It restates only what the receipt (receipt.py) holds — nothing new is claimed in an email.
 
-To whom: the account's own verified address (Supabase Auth); for the founder's account (FOUNDER_ACCOUNT_ID) with none
-on file, SASHA_FOUNDER_EMAIL (Sasha 249 · never for the demo account). No address → not sent, and said.
+To whom: the account's own verified address (Supabase Auth); for the founder (his record says founder) with none
+on file, his record's email (Sasha 254; was SASHA_FOUNDER_EMAIL · never for the demo account). No address → not sent, and said.
 SMS / WhatsApp to the guest: added once Sasha's own number is live (S-70); until then the email is the receipt's channel.
 """
 from __future__ import annotations
@@ -59,11 +59,15 @@ def compose(rc: Mapping[str, Any], to: str) -> dict:
 
 async def address_of(account: str) -> Optional[str]:
     from . import ladder_routes as LR
-    from app.services.accounts import is_founder
+    from app.services.accounts import is_founder, founder_email
+    from agapi import person_access as PA
     addr = await LR.LADDER_STORE.account_email(account)
     # Sasha 249 · the founder's address is FOUNDER_ACCOUNT_ID's, never the demo account's (until 249: 11111111 → his inbox)
-    if not addr and is_founder(account):
-        addr = os.getenv("SASHA_FOUNDER_EMAIL", "").strip() or None
+    # Sasha 254 · his record's address (was SASHA_FOUNDER_EMAIL); his own sign-in address first, as before
+    if not addr:
+        await PA.warm(account)
+        if is_founder(account):
+            addr = founder_email()
     return addr
 
 

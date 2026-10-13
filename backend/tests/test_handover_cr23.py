@@ -6,6 +6,7 @@ CAPTCHA, a terms box, a payment step, a platform, a field that didn't take; read
 """
 from __future__ import annotations
 
+import tests.founder_fixture  # noqa: F401,E402  (Sasha 254 · the fixtures' founder / lists → person_access records)
 import asyncio
 import os
 import unittest

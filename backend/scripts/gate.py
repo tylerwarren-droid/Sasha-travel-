@@ -37,6 +37,11 @@ async def main() -> int:
     os.environ["SASHA_AGAPI_ROUTE"] = (os.getenv("SASHA_AGAPI_ROUTE", "") + ",outcomes=sandbox").lstrip(",")
     from scripts import venue_engine_fake   # Sasha 248 · the venue engine's saved answers: no AgAPI read from a suite
     venue_engine_fake.install(submit=True)   # Sasha 254 · + the booking sender: nothing reaches AgAPI live
+    # Sasha 254 item 5 · the access record: every gate guest is a scratch account with no person_access row, so it reads CLOSED
+    # (test, everything off) — answered here, in this process, with no users.register / access.get on agapi-live (no gate end
+    # users on live). A suite that needs a power installs a record for its own guest (person_access.install), never a real grant.
+    from agapi import person_access as PA
+    PA.RESOLVER = lambda account: {**PA.CLOSED, "mailboxes": [], "source": "gate"}
     from datetime import datetime, timezone
     since = datetime.now(timezone.utc)
     if os.getenv("SASHA_GATE_DUFFEL", "fixtures") != "live":

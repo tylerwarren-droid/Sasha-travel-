@@ -141,14 +141,18 @@ def _plan_for(read: dict, rungs: list, account: Optional[str] = None) -> dict:
 
 # ── Sasha 233 · the named-platform exception: what robots.txt allows, read on THIS server (a scratch fixture's check) ──────────
 
+#: Sasha 254 (Tyler: env may hold kill switches, never people) · the scratch accounts this check admits — a TEST FIXTURE, filled
+#: only by tests in-process; EMPTY in production (was the env list SASHA_PLATFORM_CHECK_ACCOUNTS, no longer read).
+PLATFORM_CHECK_ACCOUNTS: set = set()
+
+
 @router.get("/platform/check")
 async def platform_check(request: Request, url: str = "", body: int = 0):
-    """For the accounts in SASHA_PLATFORM_CHECK_ACCOUNTS only (scratch fixtures): a named platform's robots verdict for a URL,
-    and — when robots allows it and body=1 — that public page as fetched (GET, no cookies). Nothing is submitted."""
+    """For the accounts in PLATFORM_CHECK_ACCOUNTS only (scratch fixtures, set by tests): a named platform's robots verdict for a
+    URL, and — when robots allows it and body=1 — that public page as fetched (GET, no cookies). Nothing is submitted."""
     from . import platform_read as PR
     acct = (account_for(request) or "").lower()
-    listed = {a.strip().lower() for a in os.getenv("SASHA_PLATFORM_CHECK_ACCOUNTS", "").split(",") if a.strip()}
-    if not acct or acct not in listed:
+    if not acct or acct not in {a.lower() for a in PLATFORM_CHECK_ACCOUNTS}:
         return _refuse(403, "not_listed", "this check is for a listed scratch account")
     if not PR.named(url):
         return _refuse(422, "not_named_platform", "Fresha, Treatwell, Booksy or Rover only")
@@ -189,7 +193,7 @@ async def read_venue(request: Request):
     elif not s2_demo and body.get("place_id") and standin(account_for(request)) and not body.get("real_venue") \
             and not is_restaurant(body.get("asked_for")):   # Sasha 175 · the platform run reads real venues; Sasha 186 · restaurants are real
         # Sasha 232 · /next only now (an /s2 read always carries s2_demo): on /s2 the founder books the real place, every kind
-        # Sasha 169 · THE DEMO STAND-IN (founder only, SASHA_DEMO_STANDIN=1): a real listing picked → OUR test venue's own page
+        # Sasha 169 · THE DEMO STAND-IN (record demo = founder_rehearsal; was SASHA_DEMO_STANDIN=1): a real listing picked → OUR test venue's own page
         # is read and sent to instead, and its name says so everywhere — the real place is never contacted
         from .form_rung import test_venue_url
         # a request for a date and a quote (a tattoo, custom work) has no slot to book: our EMAIL-only test venue stands in
@@ -271,16 +275,16 @@ def eating_out(asked_for) -> bool:
 
 
 def _s2_demo_account(account: Optional[str]) -> bool:
-    """Sasha 221 · who has the S2 demo setting: an account listed in SASHA_S2_DEMO_ACCOUNTS (a scratch fixture). Sasha 232 · the founder
+    """Sasha 221 · who has the S2 demo setting: a record with demo = s2_demo (Sasha 254; was SASHA_S2_DEMO_ACCOUNTS, a scratch fixture). Sasha 232 · the founder
     only if listed (Tyler, 10 Oct: real bookings on /s2) — S1's founder powers (standin, rehearsal, calls) are unchanged."""
-    from app.services.accounts import is_founder_test   # Sasha 249 · the one founder/test decision (the founder only if listed)
-    return is_founder_test(account, founder=False, listed="SASHA_S2_DEMO_ACCOUNTS")
+    from app.services.accounts import is_founder_test   # Sasha 254 · the one record: demo = s2_demo
+    return is_founder_test(account, power="s2_demo")
 
 
 def standin(account: Optional[str]) -> bool:
     """Sasha 169 · the founder's demo: every send goes to OUR test venue, standing in for the place he picked (labelled TEST)."""
-    from app.services.accounts import is_founder_test   # Sasha 249 · the one founder/test decision
-    return is_founder_test(account, flag="SASHA_DEMO_STANDIN")
+    from app.services.accounts import is_founder_test   # Sasha 254 · the one record: demo = founder_rehearsal
+    return is_founder_test(account, power="rehearsal")
 
 
 def standin_captcha(asked_for) -> bool:
@@ -297,7 +301,7 @@ def standin_name(real: Optional[str]) -> str:
 
 
 def _with_rehearsal(account: str, out: dict) -> dict:
-    """Sasha 121 · rehearsing (SASHA_REHEARSAL=1, the founder's account only): our test venue is the THIRD card on every
+    """Sasha 121 · rehearsing (the record's demo = founder_rehearsal; was SASHA_REHEARSAL=1 + the founder): our test venue is the THIRD card on every
     surface (the web chat as WhatsApp), named as what it is — booking it contacts no one."""
     from .guest_whatsapp import rehearsal
     from .form_rung import test_venue_url

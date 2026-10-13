@@ -694,6 +694,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         # person (the reservation's who.name: the prefilled form, the request, the call). S1 with parity off: its schema, untouched.
         from agapi import venues as _VN
         tools = [_VN.with_under(t) if t["name"] == "hold_venue" else t for t in tools]
+        tools = [_VN.with_act(t) if t["name"] == "cancel_venue" else t for t in tools]   # Sasha 256 · cancel exactly the booking they mean
     tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     step_ms: List[dict] = []
     pending = ""          # this step's text, not yet spoken

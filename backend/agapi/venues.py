@@ -325,6 +325,25 @@ def with_under(tool: dict) -> dict:
     return {**tool, "input_schema": sch}
 
 
+def with_act(tool: dict) -> dict:
+    """Sasha 256 · cancel_venue's schema with `act_id` (the booking get_status listed, sent through AgAPI) and `reference` (the venue's
+    reference they quote) — /s2, /next under parity and WhatsApp's brain. Old S1 (parity off): its schema, untouched."""
+    sch = dict(tool["input_schema"])
+    sch["properties"] = {**sch["properties"],
+                         "act_id": {"type": "string", "description": "the booking's act_id from get_status — exactly the one they mean"},
+                         "reference": {"type": "string", "description": "the venue's reference they quoted, e.g. TCO-75C655"}}
+    return {**tool, "input_schema": sch}
+
+
+def _which_act(acts: List[dict], *texts: Optional[str]) -> Optional[dict]:
+    """Sasha 256 · the one act a quoted reference names: a reference-shaped token (TCO-75C655) found in exactly one act's venue
+    words. None: nothing quoted, or it doesn't single one out."""
+    import re as _re
+    toks = {t.upper() for x in texts if x for t in _re.findall(r"\b[A-Za-z0-9]{2,}-[A-Za-z0-9]{3,}\b", str(x))}
+    hits = [b for b in acts if toks and any(t in str((b.get("venue_said") or {}).get("untrusted_text") or "").upper() for t in toks)]
+    return hits[0] if len(hits) == 1 else None
+
+
 def required_of(ctx, name: str, required: List[str]) -> List[str]:
     """Sasha 253 · what API.call checks is there: hold_venue on the one path takes no time (G7 / G8) — its own rules say what's
     missing (when_invalid). Old S1 (parity off): exactly as it was."""
@@ -1283,13 +1302,23 @@ async def cancel_venue(ctx, a: dict) -> dict:
     if held and stale(held["at"]):   # Sasha 215 · over 15 minutes old: never acted on — the cancellation is read back afresh below
         _CANCEL.pop(ctx.account, None)
         held = None
+    if not a.get("act_id") and a.get("reference"):   # Sasha 256 · the venue's reference they quoted names the act
+        from agapi import venue_submit as VS
+        hit = _which_act([b for b in await VS.bookings(ctx.account) if b.get("act_id")], a["reference"])
+        if hit:
+            a = {**a, "act_id": hit["act_id"]}
     if (held and held.get("act_id")) or a.get("act_id"):
-        return await _cancel_act(ctx, a, held, said, explicit_yes)
+        return await _cancel_act(ctx, a, held, said or getattr(ctx, "user_said", "") or "", explicit_yes)
     tid = a.get("trip_item_id")
     if not tid and a.get("venue"):
         hit = [b for b in await venue_bookings(ctx.account) if (a["venue"] or "").lower() in (b["venue"] or "").lower()]
-        if hit and hit[0].get("act_id") and not hit[0].get("trip_item_id"):   # Sasha 256 · a booking sent through AgAPI
-            return await _cancel_act(ctx, {**a, "act_id": hit[0]["act_id"]}, held, said, explicit_yes)
+        acts = [b for b in hit if b.get("act_id") and not b.get("trip_item_id") and b.get("status") in ("confirmed", "requested", "proposed")]
+        if acts:   # Sasha 256 · a booking sent through AgAPI: exactly the one they mean — a quoted reference, else the only one
+            pick = _which_act(acts, a.get("reference"), getattr(ctx, "user_said", None)) or (acts[0] if len(acts) == 1 else None)
+            if pick is None:
+                raise _err("which_booking", "more than one booking there matches — ask which one (" + "; ".join(
+                    f"{b.get('date')} {b.get('time') or ''} · act_id {b['act_id']}" for b in acts) + ") and call again with its act_id")
+            return await _cancel_act(ctx, {**a, "act_id": pick["act_id"]}, held, said, explicit_yes)
         tid = hit[0]["trip_item_id"] if hit else None
     if held and (not tid or tid == held["id"]) and held["at"] < ctx.started:
         if not explicit_yes(said):

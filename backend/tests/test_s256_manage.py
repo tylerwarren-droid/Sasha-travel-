@@ -160,6 +160,47 @@ class CancelThroughAgAPI(Base):
         self.assertEqual(out["page_url"], "https://venue.test/manage")
 
 
+class ExactlyTheOneTheyMean(Base):
+    """Found live on /s2: two confirmed Taverna Correo tables on 22 October — "cancel the duplicate, reference TCO-75C655" — she
+    couldn't say which (cancel_venue took a venue name only). A quoted reference names the act; two that match are asked, never
+    guessed; the act_id get_status lists is accepted (on the one path: old S1's schema untouched)."""
+
+    def setUp(self):
+        super().setUp()
+        VS._ACTS[ACCT] = [{"act_id": "act_a", "venue": "Taverna Correo", "when": "2026-10-22T21:00", "party": 4, "state": "sent", "at": 1},
+                          {"act_id": "act_b", "venue": "Taverna Correo", "when": "2026-10-22T21:00", "party": 4, "state": "sent", "at": 2}]
+        self.api.states.update(act_a="confirmed", act_b="confirmed")
+        self.words = {"act_a": "Confirmed … Reference TCO-8C9027. See you then!", "act_b": "Confirmed … Reference TCO-75C655. See you then!"}
+        real = self.api.__call__
+
+        async def call(op, body, approval=None, account=None):
+            r = await real(op, body, approval=approval, account=account)
+            if op == "venue.booking_status" and r.get("ok"):
+                r["result"]["venue_words"] = {"untrusted_text": self.words[body["act_id"]]}
+            return r
+        p = mock.patch.object(VS, "CALL", call)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_a_quoted_reference_names_the_act(self):
+        rows = self.rows()
+        self.assertEqual(VN._which_act(rows, "cancel the duplicate, reference TCO-75C655")["act_id"], "act_b")
+        self.assertIsNone(VN._which_act(rows, "cancel one of them"))
+
+    def test_two_that_match_are_asked_never_guessed(self):
+        with mock.patch.object(VN, "venue_bookings", mock.AsyncMock(return_value=self.rows())), \
+                mock.patch.dict(VN._CANCEL, {}, clear=True), mock.patch.object(VN, "_API", lambda: object()):
+            with self.assertRaises(Exception) as e:
+                run(VN.cancel_venue(Ctx("cancel my Taverna Correo booking", ago=-1), {"venue": "Taverna Correo"}))
+        self.assertIn("act_id", str(e.exception))
+
+    def test_the_schema_takes_act_id_on_the_one_path_only(self):
+        from agapi import v0 as API
+        tool = next(API.schema_for_model(t) for t in API.TOOLS if t["name"] == "cancel_venue")
+        self.assertNotIn("act_id", tool["input_schema"]["properties"])        # old S1's schema, as it was
+        self.assertIn("act_id", VN.with_act(tool)["input_schema"]["properties"])
+
+
 class OnePlaceForEverySurface(unittest.TestCase):
     def test_cancel_venue_routes_an_act_through_agapi(self):
         import inspect

@@ -1198,6 +1198,51 @@ async def _start_restore() -> None:
         asyncio.create_task(_restore_outcomes())
 
 
+#: Sasha 257 · what counts as her reply having started (the holding line is never said after it)
+_SPOKEN = ("text", "replace", "done", "error", "say")
+
+
+async def with_holding(events, account: str, after_s: Optional[float] = None):
+    """Sasha 257 · THE HOLDING LINE (row 863): her turn's events as they come; if none of her words has come within
+    voice.HOLD_AFTER_S, ONE short line first ({"type": "hold", "text", "say"} — shown and, with her voice on, spoken), then the real
+    answer. Never for a fast reply, never a claim, never twice in a turn."""
+    import asyncio
+    q: asyncio.Queue = asyncio.Queue()
+    end = object()
+
+    async def pump():
+        try:
+            async for ev in events:
+                await q.put(ev)
+        except Exception as e:   # the turn's own failure reaches the caller unchanged
+            await q.put(e)
+        finally:
+            await q.put(end)
+    task = asyncio.create_task(pump())
+    loop = asyncio.get_running_loop()
+    t0, started = loop.time(), False
+    wait = _V.HOLD_AFTER_S if after_s is None else after_s
+    try:
+        while True:
+            try:
+                item = await (q.get() if started else asyncio.wait_for(q.get(), max(0.0, wait - (loop.time() - t0))))
+            except asyncio.TimeoutError:
+                started = True
+                line = _V.holding_line(account)
+                yield {"type": "hold", "text": line, "say": line}
+                continue
+            if item is end:
+                break
+            if isinstance(item, Exception):
+                raise item
+            if isinstance(item, dict) and item.get("type") in _SPOKEN:
+                started = True
+            yield item
+    finally:
+        if not task.done():
+            task.cancel()
+
+
 @router.get("/events")
 async def agent_events(request: Request):
     """Sasha 212 · the open /next page's live channel (server-sent events): a settled payment ("booked" / "booking_failed")
@@ -1443,7 +1488,12 @@ def pick_hint(account: str, pid: str, message: str) -> str:
 @router.post("/turn")
 async def agent_turn(request: Request):
     from app.services.chat_account import chat_account, signed_in
+    t_req = time.perf_counter()
+    pre: Dict[str, int] = {}   # Sasha 257 · where the time goes BEFORE her turn starts (row 863), each awaited step, in ms
+    def lap(k: str) -> None:
+        pre[k] = int((time.perf_counter() - t_req) * 1000) - sum(pre.values())
     account = await chat_account(request)
+    lap("account")
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in", "message": "Sasha's agent (/next) is for a signed-in account"}, status_code=403)
     body = await request.json()
@@ -1477,7 +1527,9 @@ async def agent_turn(request: Request):
             return StreamingResponse(withheld(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
         body["history"] = _KEEP.clean_history(body.get("history") or [])
     # Sasha 241 · /next's 📎 photos (and a yes/no to a scanned Keep item) — the same handlers as /s2 and WhatsApp
+    lap("guards")
     said_now, message = await _photo_turn(account, body.get("photos") or [], message)
+    lap("photos")
     if said_now:
         async def photo_said():
             yield f"data: {json.dumps({'type': 'text', 'delta': said_now})}\n\n"
@@ -1486,6 +1538,7 @@ async def agent_turn(request: Request):
         return StreamingResponse(photo_said(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
     guest_token = request.headers.get("authorization", "").partition(" ")[2].strip() if surface == "s2" else None   # CR 71 · /s2 only
     over = await over_budget(account)
+    lap("budget")
     session_id = str(body.get("session_id") or "")[:64] or None
     remembers = surface == "s2" or s1_parity()   # Sasha 241 · memory, closing and card taps on /next too
     if remembers:
@@ -1494,6 +1547,7 @@ async def agent_turn(request: Request):
             body["history"] = await MEM.verified_history(account, session_id, body.get("history") or [])
         except Exception as e:
             log.warning("[memory] history not verified: %s", type(e).__name__)
+        lap("history")
         lang = CL.closing(message) if body.get("history") else None   # Sasha 231 · "thanks / bye" after a conversation → dormant
         if lang:
             bye = CL.line(lang)
@@ -1519,10 +1573,14 @@ async def agent_turn(request: Request):
         if over:   # Sasha 215 · said, in her voice, never a bare 429
             yield f"data: {json.dumps({'type': 'error', 'message': over, 'rule': 'budget'})}\n\n"
             return
+        lap("ready")
+        log.info("[agent] before the turn ms %s", pre)
+        yield f"data: {json.dumps({'type': 'timing', 'pre': pre})}\n\n"   # Sasha 257 · the pages ignore it; measurements read it
         seen: Dict[str, Any] = {}   # Sasha 231 · /s2: what this turn showed, for her memory across visits
         reply = ""
         try:
-            async for ev in turn_with_quiver(account, message, body.get("history") or [], session_id, surface):
+            turn_events = turn_with_quiver(account, message, body.get("history") or [], session_id, surface)
+            async for ev in (with_holding(turn_events, account) if remembers else turn_events):   # Sasha 257 · the holding line
                 if remembers:
                     if ev.get("type") == "render" and ev.get("kind") == "venues" and ev.get("preset"):
                         seen.update(cards=(ev["preset"].get("cards") or []), ribbon=ev.get("ribbon"), focus=ev.get("focus"))

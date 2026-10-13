@@ -935,9 +935,22 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
 async def _brain_turn(ch: dict, key: str, frm: str, body: str, payload: str, p: Dict[str, str], st: dict, out: "Out", now,
                       heard, loaded) -> None:
     """The one brain answers this message. Sasha 252 · it never writes st["pending"]: Sasha's open question stays open."""
+    import asyncio
     from . import wa_agent as WA
-    await WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip(),
-                        voice_in=bool(heard))   # Sasha 238 · a voice note in → a voice note back
+    from app.agent import voice as V
+    task = asyncio.ensure_future(WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip(),
+                                               voice_in=bool(heard)))   # Sasha 238 · a voice note in → a voice note back
+    # Sasha 257 · THE HOLDING LINE (row 863): her answer not ready within voice.HOLD_AFTER_S → ONE short line goes first (never a
+    # claim, never for a fast reply); the answer follows when it's ready. Awaited — never fire-and-forget.
+    done, _ = await asyncio.wait({task}, timeout=V.HOLD_AFTER_S)
+    if not done and body:
+        hold = Out()
+        hold.text(V.holding_line(ch.get("account_id") or ""))
+        try:
+            await deliver(ch, frm, hold, now)
+        except Exception as e:
+            log.warning("[guest_whatsapp] holding line not sent: %s", type(e).__name__)
+    await task
     await _brain_tail(ch, out)
     await _save_keeping_their_question(key, st, loaded)
     await deliver(ch, frm, out, now)

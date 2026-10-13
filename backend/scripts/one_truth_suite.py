@@ -129,6 +129,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # question (the web's own state still held it). A pending question belongs to its space: only the CURRENT space's answers
     "T36": ("a pending question belongs to its space: after a switch, a travel request reaches the brain, never the old question",
             ["tests.test_s256_space_pending"]),
+    # Sasha 257 · Tyler (row 863): "a WhatsApp question took 10–15 s before any reply". Her reply not ready within 3 s → ONE short
+    # rotating holding line first (never a claim, never for a fast reply) on WhatsApp, /s2 and /next — one phrasebook (voice.py)
+    "T37": ("the holding line: one short line when her reply is slow, never a claim, never for a fast reply",
+            ["tests.test_s257_holding"]),
 }
 
 _RUNNER = """

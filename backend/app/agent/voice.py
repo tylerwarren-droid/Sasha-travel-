@@ -229,6 +229,21 @@ def told_prefix(text: str, lines: Iterable[str]) -> str:
     return " ".join(out)
 
 
-__all__ = ["ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
+# ── Sasha 257 · THE HOLDING LINE (Tyler, row 863: "a WhatsApp question took 10–15 s before any reply") ─────────────────────────────
+#: when her reply isn't ready within HOLD_AFTER_S: ONE short line, rotating — never a claim (nothing found, booked or sent), never for a
+#: fast reply. The same words on every surface (WhatsApp, /s2, /next with parity); spoken when her voice is on.
+HOLDING = ("On it — one moment.", "Getting that for you now.", "Looking now, one sec.")
+HOLD_AFTER_S = 3.0
+_HELD_N: dict = {}
+
+
+def holding_line(account: str = "") -> str:
+    """The next holding line for this person (rotating, so it never sounds canned)."""
+    n = _HELD_N.get(account or "", 0)
+    _HELD_N[account or ""] = n + 1
+    return HOLDING[n % len(HOLDING)]
+
+
+__all__ = ["HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

@@ -599,23 +599,27 @@ export default function S2App() {
                 {m.text || m.role === 'user' ? (
                   <div style={{ maxWidth: '88%', padding: '10px 14px', borderRadius: 18, background: m.role === 'user' ? 'linear-gradient(135deg,#6d4aff,#9b4dff)' : C.card, border: m.role === 'user' ? 'none' : `1px solid ${C.line}`, lineHeight: 1.45 }}>
                     {m.text}</div>
-                ) : <div style={{ color: C.dim, padding: '8px 4px' }}>{m.hold ? <>{m.hold}<div>…</div></> : '…'}</div>}{/* Sasha 257 · the holding line, and still "…" — she's still working */}
+                ) : <div aria-busy="true" data-sasha-working style={{ color: C.dim, padding: '8px 4px' }}>{m.hold || '…'}</div>}{/* Sasha 259 · ONE working mark: the holding line, else "…" (aria-busy says she's working) */}
                 {/* Sasha 230 · a pick sends the card's name QUOTED: a listing like "Comida Hindu - Restaurante India, NAMASTE INDIA(…)" + ", please." read as TWO places — she asked which, the yes didn't answer it, the loop */}
                 {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); send(`This one: “${t}”`) }} pick={(t, id) => { speaker.unlock(); send(`This one: “${t}”`, { place_id: id }) }} send={t => { speaker.unlock(); send(t) }} />)}</div> : null}
               </div>))}
             <div ref={end} />
           </section>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 16px 6px', fontSize: 13.5 }}>
+          {/* Sasha 259 · Tyler (row 884): ONE row of ordinary controls — the moon, her voice, her face — nothing floating over send */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px 6px', fontSize: 13.5 }}>
+            <SleepButton asleep={asleep} onToggle={() => sleepEvent('tap_pause')} size={36} />
             {voiceBlocked && !muted ? (
               <button onClick={() => { speaker.unlock(); speaker.replayBlocked() }} aria-label="Tap to hear her" style={{ background: 'none', border: 0, color: C.gold, padding: 4, fontWeight: 700 }}>
                 🔈 Tap to hear her</button>
             ) : (
             <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch { /* private mode */ } }} aria-pressed={muted} aria-label={muted ? 'Turn her voice on' : 'Mute her voice'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600 }}>
               {muted ? '🔇 Voice off' : '🔊 Voice on'}</button>)}
+            <span style={{ flex: 1 }} />
+            <span id="s2-face-slot" style={{ display: 'inline-flex', minWidth: 40, minHeight: 40 }} />{/* her face (S2Hello draws it here) */}
           </div>
           <footer style={{ padding: '10px 12px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="s2-mic" onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, height: 56 }}>
-              {dormant ? null : <VoiceButton onTranscript={send} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')} />}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
+              {dormant ? null : <VoiceButton quiet onTranscript={send} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')} />}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
             </div>
             <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} />
             <form onSubmit={e => { e.preventDefault(); speaker.unlock(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
@@ -638,9 +642,7 @@ export default function S2App() {
         <iframe src={handover} title="Finish the booking" allow="clipboard-write" style={{ flex: 1, border: 0, width: '100%', background: '#fff' }} />
       </div>
     ) : null}
-    {/* Sasha 246 item 2 · pause / sleep: always on screen (above the resting veil too), opposite her face */}
-    <SleepButton asleep={asleep} onToggle={() => sleepEvent('tap_pause')} size={46}
-      style={{ position: 'fixed', zIndex: 46, left: 16, bottom: 'calc(env(safe-area-inset-bottom) + 134px)', boxShadow: '0 6px 18px rgba(0,0,0,.5)' }} />
+    {/* Sasha 259 · the moon is in the voice row now (no longer fixed over "Voice off") */}
     {dormant ? <button onClick={wake} aria-label="Sasha is resting — tap to bring her back" style={{ position: 'fixed', inset: 0, zIndex: 45, background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}>
       <span style={{ position: 'absolute', left: '50%', top: '46%', transform: 'translate(-50%, -50%)', padding: '10px 18px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: C.dim, fontSize: 14.5, whiteSpace: 'nowrap' }}>Tap me if you need me</span>
     </button> : null}</>

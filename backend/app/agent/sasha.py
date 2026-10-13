@@ -1203,6 +1203,8 @@ async def _start_restore() -> None:
         asyncio.create_task(_restore_outcomes())
 
 
+#: Sasha 259 · while a turn works past its holding line, a "working" event at least this often (the page's stall is 75 s)
+KEEPALIVE_S = 15.0
 #: Sasha 257 · what counts as her reply having started (the holding line is never said after it)
 _SPOKEN = ("text", "replace", "done", "error", "say")
 
@@ -1230,8 +1232,11 @@ async def with_holding(events, account: str, after_s: Optional[float] = None):
     try:
         while True:
             try:
-                item = await (q.get() if started else asyncio.wait_for(q.get(), max(0.0, wait - (loop.time() - t0))))
+                item = await asyncio.wait_for(q.get(), KEEPALIVE_S if started else max(0.0, wait - (loop.time() - t0)))
             except asyncio.TimeoutError:
+                if started:   # Sasha 259 · a long job (a Gmail scan, a plan): the stream says it's still working, so the page never
+                    yield {"type": "working"}   # calls a working turn a lost connection (found on Tyler's /s2, 13 Oct ~12:12 UTC)
+                    continue
                 started = True
                 line = _V.holding_line(account)
                 yield {"type": "hold", "text": line, "say": line}

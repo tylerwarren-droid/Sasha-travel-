@@ -145,6 +145,11 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # the person's own session; no email or text to them; a stale card → its new read-back; already tapped → "already sent" + status
     "T40": ("the in-app yes: in_app_tap once with the card's hash — stale → the new card, consumed → its status, nothing emailed",
             ["tests.test_s258_in_app_yes"]),
+    # Sasha 259 · rows 883/884/888: connecting Gmail is the consent; a long job is never "lost connection" (receipts fetched at once,
+    # a Gmail outage said, "working" while it runs); the trip's chosen items on the one status (S2 item 12); the calendar reads the
+    # same booking record as get_status
+    "T41": ("the last S2 fixes: no permission question, never a false lost connection, one status with the trip, one booking record",
+            ["tests.test_s259"]),
 }
 
 _RUNNER = """

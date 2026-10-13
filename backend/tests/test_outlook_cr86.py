@@ -127,21 +127,17 @@ class Chat(TC.Base):
     def finds(self):
         return [b for op, b, _ in self.agapi.calls if op == "subscriptions.find"]
 
-    def test_outlooks_own_sentence_first_then_its_fake_inbox_in_test_mode(self):
+    def test_outlooks_own_statement_first_then_its_fake_inbox_in_test_mode(self):   # Sasha 259 · moved (rule 0b): no question
         r = run(SUBS.run_tool(ctx(), "find_subscriptions", {"from_outlook": True}))
-        self.assertEqual((r["result"]["status"], r["result"]["ask"]), ("needs_consent", OR.CONSENT))
-        self.assertIn("Outlook", OR.CONSENT)
-        self.assertEqual(self.finds(), [])
-        r = run(SUBS.run_tool(ctx("yes", ago=5), "find_subscriptions", {"from_outlook": True, "consent_yes": True}))
+        self.assertIn("Outlook", SUBS.STATEMENT["outlook"])
         sent = self.finds()[-1]["emails"]
         self.assertEqual((sent["sample"], sent["provider"], sent["consent"]["text_sha256"]), (True, "outlook", OR.consent()["text_sha256"]))
-        self.assertTrue(r["result"]["say"].startswith("From your receipts (a fake Outlook inbox — test mode), you're paying for 4:"))
+        self.assertTrue(r["result"]["say"].startswith(SUBS.STATEMENT["outlook"] + " From your receipts (a fake Outlook inbox — test mode), you're paying for 4:"))
         self.assertEqual(r["result"]["render"]["source"], "receipts (a fake Outlook inbox — test mode)")
 
-    def test_a_gmail_yes_is_not_an_outlook_yes(self):
-        SUBS._CONSENTED[ACCOUNT] = {"version": "s2-subs-1"}
+    def test_outlook_says_its_own_statement_not_gmails(self):
         r = run(SUBS.run_tool(ctx(), "find_subscriptions", {"from_outlook": True}))
-        self.assertEqual(r["result"]["status"], "needs_consent")
+        self.assertNotIn("Gmail", r["result"]["say"].split(" From ")[0])
 
     def test_asked_for_gmail_with_only_outlook_connected_reads_outlook(self):
         SUBS._CONSENTED[ACCOUNT + "|outlook"] = {"version": "s2-outlook-1"}

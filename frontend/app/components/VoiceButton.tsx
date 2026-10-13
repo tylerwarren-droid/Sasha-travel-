@@ -6,6 +6,8 @@ import { watchdogAction } from '@/lib/voice-watchdog.mjs'
 
 interface VoiceButtonProps {
   onTranscript: (text: string) => void
+  /** Sasha 259 · the S2 shell (Tyler, row 884): no text under the mic — its icon's own state; the words go on its label/tooltip */
+  quiet?: boolean
   disabled?: boolean
   autoStart?: boolean
   readyToListen?: boolean
@@ -201,7 +203,7 @@ function preferredAudioDeviceId(list: MediaDeviceInfo[], stored: string): string
 const KEYTERMS = ['Chamberí', 'Malasaña', 'Chueca', 'Lavapiés', 'La Latina', 'Salamanca', 'Retiro', 'Chamartín', 'Argüelles', 'Moncloa', 'Huertas']
   .map((k) => `&keyterm=${encodeURIComponent(k)}`).join('')
 
-export default function VoiceButton({ onTranscript, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices, asleep = false, onWake }: VoiceButtonProps) {
+export default function VoiceButton({ onTranscript, quiet = false, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices, asleep = false, onWake }: VoiceButtonProps) {
   const droppedMutedRef = useRef(false)   // Sasha 213 · log the muted spell once, not per frame
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
@@ -803,11 +805,14 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showMicPicker, selectedMicId, switchMic, audioDevices])
 
+  const stateWords = micError || (asleep ? 'Asleep — not listening' : muted ? 'Mic paused while Sasha answers' : notCaught ? 'I didn’t catch that — say it again'
+    : isConnected ? (isSpeaking ? 'Speaking' : micGatedRef.current ? 'Sasha is speaking' : 'Listening') : 'Talk to Sasha')
   return (
     <div className="flex flex-col items-center gap-1">
       <button
         onClick={toggleListening}
         disabled={disabled || isConnecting}
+        aria-label={stateWords} title={stateWords}
         className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
           // Muted outranks everything. `isSpeaking` can be a stale true from the moment before
           // the mute landed, and a pulsing green mic on a closed mic is the exact thing that
@@ -826,13 +831,13 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
           : isConnected ? <MicOff className="w-4 h-4 text-white" />
           : <Mic className="w-4 h-4 text-white" />}
       </button>
-      {micError && <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>}
-      {asleep && <p className="text-xs text-white/50 text-center">Asleep — not listening</p>}
+      {!quiet && micError && <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>}
+      {!quiet && asleep && <p className="text-xs text-white/50 text-center">Asleep — not listening</p>}
       {/* Sasha 257 · Tyler (row 860): the red "Not…" was this — the mic resting while she answers, said as an error. Said plainly now */}
-      {!asleep && muted && <p className="text-xs text-white/50 text-center">Mic paused while Sasha answers</p>}
-      {!asleep && notCaught && <p className="text-xs text-amber-300 text-center">I didn&rsquo;t catch that — say it again</p>}
-      {!asleep && !muted && isConnected && !isSpeaking && !notCaught && <p className="text-xs text-white/60 text-center">{micGatedRef.current ? 'Sasha is speaking…' : 'Listening…'}</p>}
-      {!asleep && !muted && isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
+      {!quiet && !asleep && muted && <p className="text-xs text-white/50 text-center">Mic paused while Sasha answers</p>}
+      {!quiet && !asleep && notCaught && <p className="text-xs text-amber-300 text-center">I didn&rsquo;t catch that — say it again</p>}
+      {!quiet && !asleep && !muted && isConnected && !isSpeaking && !notCaught && <p className="text-xs text-white/60 text-center">{micGatedRef.current ? 'Sasha is speaking…' : 'Listening…'}</p>}
+      {!quiet && !asleep && !muted && isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
       {/* The mic picker is deliberately NOT rendered here. It is published upward via
           onMicDevices and drawn by the page as a pill beside the camera toggle, where the rest
           of the call controls live. A local fallback used to exist for standalone use; it only

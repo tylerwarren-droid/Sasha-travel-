@@ -20,11 +20,15 @@ import time
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 TOOL_NAMES = ("find_subscriptions", "plan_cancel_subscription", "cancel_subscription")
+#: Sasha 259 · what she reads and that nothing is kept — ONE short statement, said before the list (never a question: connecting
+#: the mailbox on the You page was their consent, Tyler row 883)
+STATEMENT = {"gmail": "I read only the receipt and renewal emails in your Gmail, and I never store your emails.",
+             "outlook": "I read only the receipt and renewal emails in your Outlook, and I never store your emails."}
 TOOLS = [
     {"name": "find_subscriptions", "description": (
         "What the person is paying for: from their RECEIPT emails (from_gmail: true — use it when they ask 'what subscriptions am I paying "
-        "for?') or from a bank statement they uploaded (statement_ref; use_sample in test mode); with neither, what's already known. From Gmail: the FIRST time it returns a consent "
-        "sentence — say it exactly and ask; call again with consent_yes: true only after they say yes, in a later turn. Their mail is Outlook / "
+        "for?') or from a bank statement they uploaded (statement_ref; use_sample in test mode); with neither, what's already known. From a connected Gmail it reads AT ONCE — never ask "
+        "permission (connecting it was their consent); `say` starts with her one statement of what she reads. Their mail is Outlook / "
         "Microsoft 365 (they connected Outlook, or say Outlook / their work mail): from_outlook: true instead — the same steps, its own sentence. Each subscription: "
         "service, price, monthly/yearly, last charge, renews (quoted from the receipt; 'expected' when the email doesn't say). Say `say` as given."),
      "input_schema": {"type": "object", "properties": {"from_gmail": {"type": "boolean"}, "from_outlook": {"type": "boolean"}, "consent_yes": {"type": "boolean"},
@@ -163,6 +167,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         return {"ok": False, "error": {"code": "unavailable", "message": "the subscription radar didn't answer"}}
     if name == "find_subscriptions":
         body: Dict[str, Any] = {"end_user": uid}
+        said_first = None
         ref = args.get("statement_ref")
         source = _SOURCE.get(ctx.account, "subscriptions I found earlier")   # Sasha 243 · /next said "From statement" for a receipts list
         outlook = False
@@ -171,13 +176,9 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             outlook = bool(args.get("from_outlook")) or (not await GR.connected(ctx.account) and await OR.connected(ctx.account))
         if outlook:   # CR 86 · receipts in their Outlook / Microsoft 365 (Graph, delegated Mail.Read) — the same steps as Gmail's
             c, ck = OR.consent(), ctx.account + "|outlook"
-            if ck not in _CONSENTED:
-                asked = _CONSENT_ASKED.get(ck)
-                if not (args.get("consent_yes") and asked and asked < ctx.started.timestamp()):
-                    _CONSENT_ASKED[ck] = time.time()
-                    return {"ok": True, "result": {"status": "needs_consent", "ask": c["text"],
-                                                   "how": "Say this sentence exactly and ask; look only after they say yes, in their next message."}}
-                _CONSENTED[ck] = {"version": c["version"], "text_sha256": c["text_sha256"], "at": time.time()}
+            # Sasha 259 · Tyler (row 883): CONNECTING the mailbox is the consent — no question; one short statement instead (STATEMENT)
+            _CONSENTED[ck] = {"version": c["version"], "text_sha256": c["text_sha256"], "at": time.time(), "by": "connected"}
+            said_first = STATEMENT["outlook"]
             if await OR.connected(ctx.account):
                 msgs = await OR.receipts(ctx.account)
                 if msgs is None:
@@ -192,15 +193,15 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         elif args.get("from_gmail") and not ref:   # CR 84 · receipts in their Gmail (read-only)
             from agapi import s2_gmail_receipts as GR
             c = GR.consent()
-            if ctx.account not in _CONSENTED:
-                asked = _CONSENT_ASKED.get(ctx.account)
-                if not (args.get("consent_yes") and asked and asked < ctx.started.timestamp()):
-                    _CONSENT_ASKED[ctx.account] = time.time()
-                    return {"ok": True, "result": {"status": "needs_consent", "ask": c["text"],
-                                                   "how": "Say this sentence exactly and ask; look only after they say yes, in their next message."}}
-                _CONSENTED[ctx.account] = {"version": c["version"], "text_sha256": c["text_sha256"], "at": time.time()}
+            # Sasha 259 · Tyler (row 883): CONNECTING Gmail is the consent — no question; one short statement instead (STATEMENT)
+            _CONSENTED[ctx.account] = {"version": c["version"], "text_sha256": c["text_sha256"], "at": time.time(), "by": "connected"}
+            said_first = STATEMENT["gmail"]
             if await GR.connected(ctx.account):
-                msgs = await GR.receipts(ctx.account)
+                try:
+                    msgs = await GR.receipts(ctx.account)
+                except GR.Unreachable:   # Sasha 259 · Gmail didn't answer: said plainly, nothing read, never "lost connection"
+                    return {"ok": False, "error": {"code": "gmail_unreachable", "message": "I couldn't reach your Gmail just now — nothing was "
+                                                   "read. Try again in a minute."}}
                 if msgs is None:
                     return {"ok": False, "error": {"code": "gmail_unavailable", "message": "their Gmail connection needs reconnecting on the You page"}}
                 body["emails"] = {"messages": msgs, "consent": {"text_sha256": c["text_sha256"], "version": c["version"]}}
@@ -232,7 +233,8 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         subs = [_brief(s) for s in res["subscriptions"] if s["status"] != "cancelled"]   # Sasha 243 · still paid until it's cancelled: AgAPI's
         _SOURCE[ctx.account] = source                                                    # total counts it (live: Spotify left out, its €10.99 kept in)
         _LAST[ctx.account] = subs
-        return {"ok": True, "result": {"subscriptions": subs, "monthly_total": tot, "say": _say_list(subs, tot, source),
+        return {"ok": True, "result": {"subscriptions": subs, "monthly_total": tot,
+                                       "say": (said_first + " " if said_first else "") + _say_list(subs, tot, source),
                                        "likely_unused": res["likely_unused"], "note": res.get("note"),
                                        **({"emails": res["emails"]} if res.get("emails") else {}),
                                        "render": {"kind": "subscriptions", "items": [{"service": b["service"], "price": b["amount"], "how_often": b["how_often"],

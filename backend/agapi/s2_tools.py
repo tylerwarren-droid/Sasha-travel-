@@ -146,6 +146,18 @@ async def add_to_calendar(ctx, a: dict) -> dict:
                 fn = [x.replace(" ", "") for x in str(c.get("flights") or "").split(" + ") if x]
                 ev = P.event_for_flight(f"{bid}@sasha.kanoe", c.get("owner") or "", fn or ["FLIGHT"], c.get("from") or "", c.get("to") or "",
                                         dep.isoformat(), arr, r.get("booking_reference"))
+    if ev is None:   # Sasha 259 · a table booked through AgAPI (its act_id, or its reference): the SAME record get_status reads
+        for b in await VN.venue_bookings(ctx.account):
+            if bid and bid in (str(b.get("act_id") or ""), str(b.get("reference") or ""), str(b.get("trip_item_id") or "")) and b.get("act_id"):
+                if b.get("status") != "confirmed":
+                    raise ToolError("not_confirmed", f"only a confirmed booking goes in the calendar — this one is {b.get('status')}")
+                if not (b.get("date") and b.get("time")):
+                    raise ToolError("no_time", "that booking has no confirmed date and time")
+                from booking_signer import venue_read as VR
+                tz = (VR.COUNTRIES.get(str(b.get("country") or "ES").upper()) or (None, None, None, "Europe/Madrid"))[3]
+                ev = P.event_for_table(f"{b['act_id']}@sasha.kanoe", GW.plain_venue(b.get("venue")), None,
+                                       _offset_iso(b["date"], b["time"], tz), int(b.get("party") or 2), b.get("reference"))
+                break
     if ev is None:
         raise ToolError("booking_unknown", "no confirmed table or flight with that id — get_status lists them")
     dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

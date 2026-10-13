@@ -53,6 +53,15 @@ async def connected(account: str) -> bool:
         return False
 
 
+class Unreachable(Exception):
+    """Sasha 259 · Gmail didn't answer (a connection timeout, an outage) — said as that, never a failed turn."""
+
+
+#: Sasha 259 · found on Tyler's /s2 (13 Oct ~12:12 UTC, "I lost the connection there"): up to 60 receipts were fetched ONE AFTER
+#: ANOTHER — 30–90 s on a real inbox, past the page's stall and close to the turn's deadline. Fetched CONCURRENTLY now, ten at a time.
+FETCH_AT_ONCE = 10
+
+
 async def receipts(account: str) -> Optional[List[dict]]:
     """The receipt emails (memory only), or None when Gmail isn't connected / its token was refused."""
     from booking_signer import mailbox as MB
@@ -66,16 +75,26 @@ async def receipts(account: str) -> Optional[List[dict]]:
         token = await VC.use_connection(account, link["vault_item_id"], purpose="gmail_read")
     except VC.UseRefused:
         return None
-    status, j = await MB.GMAIL_HTTP("GET", f"{MB.GMAIL}/messages", token, {"q": QUERY, "maxResults": MAX})
+    try:
+        status, j = await MB.GMAIL_HTTP("GET", f"{MB.GMAIL}/messages", token, {"q": QUERY, "maxResults": MAX})
+    except Exception as e:   # the list itself didn't answer: Gmail is unreachable just now (said, never a failed turn)
+        raise Unreachable(type(e).__name__) from e
     if status != 200:
         return None
-    out = []
-    for m in (j.get("messages") or [])[:MAX]:
-        s, msg = await MB.GMAIL_HTTP("GET", f"{MB.GMAIL}/messages/{m['id']}", token, {"format": "full"})
+    import asyncio
+    gate = asyncio.Semaphore(FETCH_AT_ONCE)
+
+    async def one(m: dict) -> Optional[dict]:
+        async with gate:
+            try:
+                s, msg = await MB.GMAIL_HTTP("GET", f"{MB.GMAIL}/messages/{m['id']}", token, {"format": "full"})
+            except Exception:
+                return None   # one email that didn't come: left out, the rest read
         if s != 200:
-            continue
+            return None
         payload = msg.get("payload") or {}
         text = MB._body_text(payload) or _html_text(payload)
-        out.append({"message_id": m["id"], "from": MB._header(payload, "From")[:200], "subject": MB._header(payload, "Subject")[:300],
-                    "date": MB._header(payload, "Date")[:40], "text": text[:6000]})
-    return out
+        return {"message_id": m["id"], "from": MB._header(payload, "From")[:200], "subject": MB._header(payload, "Subject")[:300],
+                "date": MB._header(payload, "Date")[:40], "text": text[:6000]}
+    got = await asyncio.gather(*[one(m) for m in (j.get("messages") or [])[:MAX]])
+    return [x for x in got if x]   # in the list's own order

@@ -30,7 +30,10 @@ WORDS = {"nothing": "Nothing is booked yet.",
          "prepared": "Prepared, not booked — their page is filled in, waiting for you to book it there",
          # Sasha 256 · CR 94: the venue's own answer to a request — another time offered is NOT a booking; the person decides
          "proposed": "Not booked — they offered another time; tell me if it suits",
-         "declined": "Not booked — the venue said no"}
+         "declined": "Not booked — the venue said no",
+         # Sasha 259 · S2 item 12: the trip's CHOSEN items (its flights picked, not paid) are on the one status too — the Trip tab says
+         # "not booked yet" for them, so the chat's "what's coming up" says the same, beside the booked tables
+         "chosen": "Chosen, not booked yet"}
 ON_IT = ("booked", "partly_booked", "awaiting_payment")   # a Trip banner shows; the Book button goes
 
 
@@ -63,7 +66,8 @@ def decide(st: Dict[str, Any], held: bool = False, ledger_open: int = 0) -> Dict
         state, line = "held", WORDS["held"]
     else:
         state, line = "nothing", WORDS["nothing"]
-    for key, rows in (("proposed", proposed), ("declined", declined)):   # Sasha 256 · said beside the rest, never as "booked"
+    chosen = [str(x).replace(" · chosen", "") for x in st.get("chosen") or []]
+    for key, rows in (("proposed", proposed), ("declined", declined), ("chosen", chosen)):   # Sasha 256/259 · said beside the rest, never as "booked"
         if rows:
             said = f"{WORDS[key]}: " + "; ".join(rows) + "."
             state, line = (key, said) if state == "nothing" else (state, f"{line} {said}")
@@ -99,6 +103,11 @@ async def status_of(account: str, trip_id: Optional[str] = None, sweep: bool = T
               "failed": [r["status_line"] for r in rows if r["state"] == "failed"],
               "cancelled": [r["status_line"] for r in rows if r["state"] == "cancelled"] + vc,
               "awaiting_payment": sum(1 for r in rows if r["state"] == "pending_payment")}
+        try:   # Sasha 259 · the trip's chosen-not-booked items (S2 item 12: one truth with the Trip tab's "not booked yet")
+            st["chosen"] = [r.get("status_line") or BK.status_line(r) for r in await BK.items(account, p["trip_id"], ("chosen",))]
+        except Exception as e:
+            import logging
+            logging.getLogger("agapi.s2_status").warning("[status] chosen items not read: %s", type(e).__name__)
     # Sasha 254 · ONE TRUTH: the pages hold_venue prepared (its "It's in your bookings"), unless that booking is already on the record
     on_record = {(VN._base(b.get("venue") or ""), str(b.get("date") or "")) for b in vb}
     prep = [f"{x['venue']} — {x.get('date') or ''} {x.get('time') or ''}".strip() for x in await VN.prepared_pages(account)

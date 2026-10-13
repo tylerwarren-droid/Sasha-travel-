@@ -151,6 +151,7 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
         if res.get("act_id"):
             await _remember(account, {"act_id": res["act_id"], "venue": res.get("venue") or held.get("venue"), "when": held.get("when"),
                                       "party": held.get("party"), "state": res.get("status"), "say": res.get("say"),
+                                      **({"country": held["country"]} if held.get("country") else {}),   # Sasha 259 · its calendar zone
                                       **({"reference": res["reference"]} if res.get("reference") else {})})
         return {"ok": True, **res}
     if await target(account) == "sandbox":
@@ -256,7 +257,7 @@ async def bookings(account: str) -> List[dict]:
         pend = next((c for c in acts if c.get("cancels") == a["act_id"] and c["act_id"] not in cancelled), None)
         when = str(a.get("when") or "")
         out.append({"trip_item_id": None, "act_id": a["act_id"], "venue": a.get("venue"), "date": when[:10] or None, "time": when[11:16] or None,
-                    "party": a.get("party"), "status": state, "type": "venue",
+                    "party": a.get("party"), "status": state, "type": "venue", **({"country": a["country"]} if a.get("country") else {}),
                     **({"reference": a["reference"]} if a.get("reference") else {}),
                     **({"venue_said": {"untrusted_text": a["words"]}} if a.get("words") else {}),
                     **({"how": a["say_now"]} if a.get("say_now") and state == "proposed" else {}),

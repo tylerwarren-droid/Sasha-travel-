@@ -75,15 +75,13 @@ class GmailReceipts(unittest.TestCase):
     def finds(self):
         return [b for op, b, _ in self.agapi.calls if op == "subscriptions.find"]
 
-    def test_consent_is_said_first_and_its_yes_must_come_later(self):
+    def test_connecting_is_the_consent_she_reads_at_once_and_says_so(self):   # Sasha 259 · moved (rule 0b): no question, one statement
         r = run(SUBS.run_tool(ctx(), "find_subscriptions", {"from_gmail": True}))
-        self.assertEqual((r["result"]["status"], r["result"]["ask"]), ("needs_consent", GR.CONSENT))
-        self.assertEqual(self.finds(), [])                                                      # nothing looked at before the yes
-        r = run(SUBS.run_tool(ctx("yes", ago=-60), "find_subscriptions", {"from_gmail": True, "consent_yes": True}))   # the same turn
-        self.assertEqual(r["result"]["status"], "needs_consent")
-        r = run(SUBS.run_tool(ctx("yes", ago=5), "find_subscriptions", {"from_gmail": True, "consent_yes": True}))
-        self.assertEqual(self.finds()[-1]["emails"]["consent"]["text_sha256"], GR.consent()["text_sha256"])
+        self.assertNotEqual(r["result"].get("status"), "needs_consent")                        # never asked
+        self.assertEqual(self.finds()[-1]["emails"]["consent"]["text_sha256"], GR.consent()["text_sha256"])   # the consent still goes with the read
         self.assertTrue(self.finds()[-1]["emails"]["sample"])                                   # no Gmail connected, sandbox: the fake inbox
+        self.assertTrue(r["result"]["say"].startswith(SUBS.STATEMENT["gmail"] + " "))
+        r["result"]["say"] = r["result"]["say"][len(SUBS.STATEMENT["gmail"]) + 1:]
         self.assertEqual(r["result"]["say"], "From your receipts (a fake inbox — test mode), you're paying for 4: Amazon Prime: EUR 49.90 a year, renews "
                          "2027-03-14; FitBox Madrid: EUR 34.90 a month; Netflix: EUR 13.99 a month, renews 2026-11-03; Spotify: EUR 10.99 a month, renews "
                          "2026-11-10 (expected — the email doesn't say). That's about EUR 64.04 a month.")

@@ -46,9 +46,28 @@ test('the sign-in code: any spacing or prefix is the same six digits; a code aft
   assert.match(form, /You&rsquo;re already signed in — taking you to Sasha\./)
 })
 
-test('the holding line keeps the "…" beneath it: she is still working until her words come', () => {
+test('Sasha 259 · ONE working mark: the holding line, else "…" — and aria-busy says she is working', () => {
   const app = read('app/s2/S2App.tsx')
-  assert.match(app, /m\.hold \? <>\{m\.hold\}<div>…<\/div><\/> : '…'/)
+  assert.match(app, /<div aria-busy="true" data-sasha-working[^>]*>\{m\.hold \|\| '…'\}<\/div>/)
+})
+
+test('Sasha 259 · a calm phone screen: her face is a real still, in the voice row with the moon; no text under the mic', () => {
+  const app = read('app/s2/S2App.tsx'), hello = read('app/s2/S2Hello.tsx'), mic = read('app/components/VoiceButton.tsx')
+  assert.match(hello, /useState<string \| null>\(FACE_STILL\)/)                         // never the "S"
+  assert.doesNotMatch(hello, /\{img \? '' : 'S'\}/)
+  assert.match(hello, /document\.getElementById\('s2-face-slot'\)/)
+  assert.match(app, /<span id="s2-face-slot"/)
+  assert.match(app, /<SleepButton asleep=\{asleep\} onToggle=\{\(\) => sleepEvent\('tap_pause'\)\} size=\{36\} \/>/)
+  assert.doesNotMatch(app, /position: 'fixed', zIndex: 46, left: 16/)                   // the moon no longer floats over "Voice off"
+  assert.match(app, /<VoiceButton quiet /)
+  assert.match(mic, /\{!quiet && !asleep && muted && <p/)
+})
+
+test('Sasha 259 · the overlap rule: any two boxes that cross fail; touching does not', async () => {
+  const { overlaps } = await import('../lib/overlap.mjs')
+  assert.deepEqual(overlaps([{ name: 'face', x: 330, y: 700, w: 58, h: 58 }, { name: 'send', x: 340, y: 760, w: 44, h: 44 }]), [])
+  assert.deepEqual(overlaps([{ name: 'face', x: 330, y: 740, w: 58, h: 58 }, { name: 'send', x: 340, y: 760, w: 44, h: 44 }]), [['face', 'send']])
+  assert.deepEqual(overlaps([{ name: 'a', x: 0, y: 0, w: 10, h: 10 }, { name: 'b', x: 10, y: 0, w: 10, h: 10 }]), [])
 })
 
 test('Sasha 258 · the Trip tab is "booked" by THIS trip\'s own state, never a table booked elsewhere', () => {

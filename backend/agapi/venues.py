@@ -1024,7 +1024,7 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
     at = prev["at"] if prev and (prev.get("sha") == read_back["sha256"] or (prev.get("same") == same and prev.get("rung") == rung)) \
         else datetime.now(timezone.utc)
     _HELD[ctx.account] = {"rung": rung, "id": rid, "sha": read_back["sha256"], "at": at, "venue": rd["venue"], "summary": GW.summary(res),
-                          "place_id": rd.get("place_id"),
+                          "place_id": rd.get("place_id"), "country": rd.get("country") or (res.get("where") or {}).get("country"),   # 259 · its calendar zone
                           "when": res["when"].get("at") or "", "party": res["how_many"]["count"], "same": same,
                           "sector": (res.get("what") or {}).get("category"), **(extra or {})}   # CR 87 · the sector, for the outcomes ledger
     lines = GW.guest_lines(rung, read_back.get("lines") or [])

@@ -11,6 +11,7 @@
  *  · Tap the bubble: her face back (a new session) — while it's up, her replies are spoken by it; tap again (or 90 s quiet) → bubble.
  */
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { openingShown, openingEnds } from '@/lib/greeting-rule.mjs'
 
 export type Talker = {
@@ -67,6 +68,10 @@ async function startFace(video: HTMLVideoElement): Promise<Face> {
  *  300×150 canvas is still a canvas) — a dark rectangle. A still is taken only from a frame actually drawn, and the last real
  *  one is kept in this browser (FACE_KEY), so her face is in the bubble on arrival — never an empty circle. */
 const FACE_KEY = 's2_face'
+/** Sasha 259 · Tyler (row 883): on his phone the bubble was a plain purple "S" — no frame of her face had ever been kept in that
+ *  browser (the face comes late there, or the opening is skipped once he's talking). Her face or nothing: a real still of her own
+ *  stream ships with the page (public/sasha-face.jpg) and is the bubble's face until a fresher one is kept. */
+export const FACE_STILL = '/sasha-face.jpg'
 const keptFace = (): string | null => { try { return localStorage.getItem(FACE_KEY) } catch { return null } }
 const drawn = (c: HTMLCanvasElement | null) => !!c && c.dataset.drawn === '1'
 async function firstFrame(c: HTMLCanvasElement | null, ms = 6000): Promise<boolean> {   // a late face: wait for its first frame
@@ -130,7 +135,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   useEffect(() => { phaseRef.current = phase }, [phase])
   const tapForRef = useRef<'face' | 'voice'>('voice')
   useEffect(() => { tapForRef.current = tapFor }, [tapFor])
-  const [img, setImg] = useState<string | null>(null)
+  const [img, setImg] = useState<string | null>(FACE_STILL)   // Sasha 259 · her face, always — never the "S"
   useEffect(() => { const k = keptFace(); if (k) setImg(i => i || k) }, [])   // Sasha 257 · her face from the last visit, on arrival
   const [talking, setTalking] = useState(false)
   const video = useRef<HTMLVideoElement | null>(null)
@@ -322,13 +327,18 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
           {line}
           {phase === 'tap' && <div><button onClick={tapToHear} style={{ marginTop: 12, padding: '10px 18px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700 }}>Tap to hear Sasha</button></div>}
         </div>) : null}
-      {phase === 'bubble' && (
-        <button onClick={asleep ? () => onWake?.() : faceBack} aria-label={asleep ? 'Sasha is asleep — tap her face to wake her' : 'Sasha — tap to see her'} style={{
-          position: 'fixed', zIndex: asleep ? 46 : 40, right: 16, bottom: BUBBLE_BOTTOM, width: 58, height: 58, borderRadius: '50%', padding: 0, opacity: asleep ? 0.3 : dormant ? 0.45 : 1,
-          filter: asleep ? 'grayscale(.85) brightness(.7)' : 'none',
-          border: `2px solid ${talking ? GOLD : 'rgba(255,255,255,.35)'}`, boxShadow: talking ? `0 0 0 6px rgba(232,185,49,.25)` : '0 6px 18px rgba(0,0,0,.5)',
-          background: img ? `center / cover no-repeat url(${img})` : 'linear-gradient(135deg,#6d4aff,#9b4dff)', color: '#fff', fontWeight: 700, fontSize: 20, transition: 'box-shadow .3s, border-color .3s, opacity 1.2s, filter 1.2s' }}>
-          {img ? '' : 'S'}</button>)}
+      {phase === 'bubble' && (() => {
+        // Sasha 259 · Tyler (row 884): the bubble sat over the send button. It lives IN the shell's voice row now (#s2-face-slot),
+        // an ordinary inline control — never floating on content or another control. No slot (another page): not drawn.
+        const slot = typeof document !== 'undefined' ? document.getElementById('s2-face-slot') : null
+        if (!slot) return null
+        return createPortal(
+          <button onClick={asleep ? () => onWake?.() : faceBack} aria-label={asleep ? 'Sasha is asleep — tap her face to wake her' : 'Sasha — tap to see her'} style={{
+            width: 40, height: 40, borderRadius: '50%', padding: 0, opacity: asleep ? 0.3 : dormant ? 0.45 : 1, flex: 'none',
+            filter: asleep ? 'grayscale(.85) brightness(.7)' : 'none',
+            border: `2px solid ${talking ? GOLD : 'rgba(255,255,255,.35)'}`, boxShadow: talking ? `0 0 0 4px rgba(232,185,49,.25)` : 'none',
+            background: `center / cover no-repeat url(${img || FACE_STILL})`, transition: 'box-shadow .3s, border-color .3s, opacity 1.2s, filter 1.2s' }} />, slot)
+      })()}
     </>
   )
 }

@@ -226,16 +226,30 @@ async def client_for(family: str, account: Optional[str] = None, flight: Optiona
     return endpoint(await target_for(family, account, flight, booking_reference))
 
 
+def failed_why(env: dict) -> str:
+    """Sasha 261 (row 901) · what an AgAPI failure may say in a log: the exception CLASS AgAPI names in parentheses ("…couldn't be read
+    (RuntimeError); nothing was kept") and its details' service / stop — never the message's other words (they can carry a merchant
+    or a venue's text)."""
+    e = (env or {}).get("error") or {}
+    m = re.search(r"\(([A-Za-z_][A-Za-z0-9_.]{0,60})\)", str(e.get("message") or ""))
+    d = e.get("details") if isinstance(e.get("details"), dict) else {}
+    parts = ([f"cause {m.group(1)}"] if m else []) + [f"{k} {d[k]}" for k in ("service", "stop_reason") if isinstance(d.get(k), str)]
+    return (" · " + ", ".join(parts)) if parts else ""
+
+
 async def post(url: str, key: str, op: str, body: dict, headers: Dict[str, str], timeout: float) -> Dict:
     """Sasha 261 · THE ONE TRANSPORT every family's client sends through: AgAPI's envelope, or the transport's own (timeout /
     unreachable). An AgAPI outage (402/429, a timeout, unreachable) is noted once here — on the tool call in progress, and the
     founder told (agapi_health) — so every surface and family says it the same way."""
     import json
+    import time
     import httpx
     from agapi import agapi_health as AH
+    t0, status = time.perf_counter(), None
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as c:
             r = await c.post(f"{url}/v1/{op}", headers=headers, content=json.dumps(body))
+        status = r.status_code
         try:
             env = r.json()
         except Exception:   # not AgAPI's envelope (a proxy's error page): AgAPI didn't answer
@@ -244,6 +258,9 @@ async def post(url: str, key: str, op: str, body: dict, headers: Dict[str, str],
         env = {"ok": False, "error": {"code": "timeout", "message": type(e).__name__}}
     except Exception as e:
         env = {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}
+    if isinstance(env, dict) and not env.get("ok"):   # row 901: AgAPI's 502 carried its cause and nothing kept it — one line, no contents
+        log.warning("[agapi] %s → HTTP %s %s in %d ms%s", op, status, (env.get("error") or {}).get("code"), (time.perf_counter() - t0) * 1000,
+                    failed_why(env))
     kind = AH.kind_of(env)
     if kind:
         await AH.note(kind, op, url, key)

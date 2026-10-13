@@ -82,6 +82,28 @@ class TheOneTransportNamesAnOutage(unittest.TestCase):
         self.assertEqual(self.post(Resp(422, {"ok": False, "error": {"code": "invalid_input"}}))[1], [])
 
 
+class AFailureIsLoggedWithItsCauseOnly(unittest.TestCase):
+    """Row 901: Tyler's subscriptions.find answered 502 upstream_failed after ~84 s; AgAPI named the exception in its message, and
+    nothing kept it. The one transport logs op, HTTP status, code, ms and the cause's class — never the message's other words."""
+
+    def test_the_class_in_parentheses_and_nothing_else(self):
+        env = {"ok": False, "error": {"code": "upstream_failed", "message": "The receipts couldn't be read (RuntimeError); nothing was kept.",
+                                      "details": {"service": "ai_reader"}}}
+        self.assertEqual(AR.failed_why(env), " · cause RuntimeError, service ai_reader")
+        self.assertEqual(AR.failed_why({"ok": False, "error": {"code": "upstream_failed", "message": "FitBox's own pages don't say how to cancel"}}), "")
+
+    def test_a_failed_call_is_logged_once(self):
+        env = {"ok": False, "error": {"code": "upstream_failed", "message": "The receipts couldn't be read (BadRequestError); nothing was kept."}}
+        with mock.patch.object(httpx, "AsyncClient", client(Resp(502, env))), mock.patch.object(AH, "note", mock.AsyncMock()), \
+                self.assertLogs("agapi.route", "WARNING") as cm:
+            run(AR.post("https://agapi.test", "k", "subscriptions.find", {"emails": {"messages": [{"text": "PRIVATE"}]}}, {}, 5.0))
+        [line] = cm.output
+        self.assertIn("subscriptions.find → HTTP 502 upstream_failed in", line)
+        self.assertIn("cause BadRequestError", line)
+        self.assertNotIn("PRIVATE", line)
+        self.assertNotIn("couldn't be read", line)
+
+
 class EveryFamilySendsThroughIt(unittest.TestCase):
     def test_no_client_keeps_its_own_transport(self):
         from agapi import person_access, s2_fine_print, s2_outcomes, s2_subscriptions, venue_submit, venue_truth, via_agapi

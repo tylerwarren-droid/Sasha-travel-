@@ -41,6 +41,12 @@ class SandboxClaims:
 
     async def __call__(self, op, body, approval=None):
         self.calls.append(op)
+        if op == "users.register":
+            return {"ok": True, "result": {"end_user_id": "usr_1"}}
+        if op == "money.flight_check":   # every check is a NEW case on AgAPI
+            self.cases = getattr(self, "cases", 0) + 1
+            return {"ok": True, "result": {"case_id": f"mny_{self.cases}", "say": "You may be owed EUR 250. Want me to claim it?", "verdict": "yes",
+                                           "amount": None, "rules": []}}
         if op == "money.flight_claim":
             if not approval:
                 return {"ok": False, "error": {"code": "approval_required", "details": {"read_back_id": self.rb(body), "read_back": {"lines": [
@@ -112,6 +118,41 @@ class TheYesIsNeverRefusedForAStaleReadBack(Base):
         self.claim("Can I get money back?", ago=-1)
         r = self.claim("maybe later")
         self.assertEqual(r["error"]["code"], "no_explicit_yes")
+        self.assertEqual(self.api.filed, [])
+
+
+class TheModelChecksAgainInTheTurnOfTheYes(Base):
+    """Found live (agapi-sandbox log of EU's run and of this proof): in the yes turn the model runs flight_money_back again, then
+    file_flight_claim. Same facts → the same case, so their yes answers the read-back they heard; new facts → a new read-back."""
+
+    FLIGHT = {"airline": "EX", "number": "456", "date": "2026-10-12", "from": "MAD", "to": "LIS", "what": "delayed", "arrival_delay_minutes": 240,
+              "booking_reference": "EXTEST", "passengers": ["Erika Mustermann"]}
+
+    def setUp(self):
+        super().setUp()
+        for p in (mock.patch.dict(FP._MONEY, {}, clear=True), mock.patch.dict(FP._MONEY_FACTS, {}, clear=True), mock.patch.dict(FP._USERS, {}, clear=True),
+                  mock.patch.object(FP, "_hydrate", mock.AsyncMock()), mock.patch.object(FP, "_persist", mock.AsyncMock()),
+                  mock.patch.object(FP, "target", mock.AsyncMock(return_value="sandbox"))):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def tool(self, said, name, args, ago=5):
+        return run(FP.run_tool(Ctx(said, ago), name, args))
+
+    def test_the_same_facts_checked_again_keep_the_case_and_the_yes_files(self):
+        self.tool("Can I get money back?", "flight_money_back", self.FLIGHT, ago=-1)
+        self.assertEqual(self.tool("Can I get money back?", "file_flight_claim", {}, ago=-1)["result"]["status"], "awaiting_yes")
+        self.tool("Yes, send it.", "flight_money_back", self.FLIGHT)                 # the model checks again in the yes turn
+        r = self.tool("Yes, send it.", "file_flight_claim", {})
+        self.assertEqual(r["result"]["status"], "filed", r)
+        self.assertEqual(self.api.filed, ["mny_1"])
+
+    def test_new_facts_are_a_new_case_with_its_own_read_back(self):
+        self.tool("Can I get money back?", "flight_money_back", self.FLIGHT, ago=-1)
+        self.tool("Can I get money back?", "file_flight_claim", {}, ago=-1)
+        self.tool("It was EX 457.", "flight_money_back", {**self.FLIGHT, "number": "457"})
+        r = self.tool("Yes, send it.", "file_flight_claim", {})
+        self.assertEqual(r["result"]["status"], "awaiting_yes")                      # never filed on a read-back they didn't hear
         self.assertEqual(self.api.filed, [])
 
 

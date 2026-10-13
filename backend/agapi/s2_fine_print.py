@@ -148,6 +148,18 @@ TOOLS += [
 ]
 _MONEY: Dict[str, str] = {}        # account → the latest money-back case
 _MONEY_AT: Dict[str, str] = {}     # Sasha 244 · account → the AgAPI that case lives on (live, or the sandbox for test inventory)
+_MONEY_FACTS: Dict[str, str] = {}  # Sasha 255 · account → the facts that case was checked on
+
+
+def _set_case(account: str, file_op: str, case_id: str, facts: dict) -> None:
+    """Sasha 255 · found live: the model re-runs the money check in the turn of their yes, and every check is a NEW AgAPI case — so the
+    read-back they're answering belonged to a case that was no longer the one being filed. The same facts checked again while that
+    read-back waits keep its case; new facts are a new case (and its own read-back)."""
+    key = json.dumps(facts, sort_keys=True, default=str)
+    held = _MONEY.get(account)
+    if held and _MONEY_FACTS.get(account) == key and (_PEND.get(f"{account}|{file_op}") or {}).get("case") == held:
+        return
+    _MONEY[account], _MONEY_FACTS[account] = case_id, key
 
 # ── CR 81 · things to do, verified on each place's OWN site (AgAPI activities.*): an ActivityCard per place ───────────────────────────
 TOOL_NAMES = TOOL_NAMES + ("suggest_activities",)
@@ -400,7 +412,8 @@ def _snap(account: str) -> Dict[str, Any]:
     """This process's pointers for one account, in the shape s2_memory keeps."""
     a = account
     pend = {k.split("|", 1)[1]: v for k, v in _PEND.items() if k.startswith(a + "|")}
-    return {"case_money": {"case_id": _MONEY[a], "target": _MONEY_AT.get(a)} if _MONEY.get(a) else None,
+    return {"case_money": {"case_id": _MONEY[a], "target": _MONEY_AT.get(a), **({"facts": _MONEY_FACTS[a]} if _MONEY_FACTS.get(a) else {})}
+            if _MONEY.get(a) else None,
             "case_accident": ({"case_id": _ACCIDENT[a], "city": _ACCIDENT_CITY.get(a, ""), "target": _CASE_AT.get(f"accident|{a}")}
                               if _ACCIDENT.get(a) else None),
             "case_claim": {"case_id": _CLAIM[a], "target": _CASE_AT.get(f"claim|{a}")} if _CLAIM.get(a) else None,
@@ -418,6 +431,8 @@ async def _hydrate(account: str) -> None:
     m = k.get("case_money") if not s["case_money"] else None
     if isinstance(m, dict) and m.get("case_id"):
         _MONEY[a] = m["case_id"]
+        if m.get("facts"):
+            _MONEY_FACTS[a] = m["facts"]
         if m.get("target"):
             _MONEY_AT[a] = m["target"]
     m = k.get("case_accident") if not s["case_accident"] else None
@@ -565,7 +580,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         if not r.get("ok"):
             return _fail(r)
         v = r["result"]
-        _MONEY[ctx.account] = v["case_id"]
+        _set_case(ctx.account, "file_flight_claim", v["case_id"], {**flight, "ref": args.get("booking_reference"), "pax": args.get("passengers")})
         return {"ok": True, "result": {"say": v["say"], "verdict": v["verdict"], "amount": v.get("amount"),
                                        "quotes": [q["quote"] for x in v["rules"] for q in x["quotes"]][:4],
                                        "how": ("Say `say` as given: the amount is the Regulation's own sentence, quoted. Never name an amount it "
@@ -618,7 +633,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         if not r.get("ok"):
             return _fail(r)
         v = r["result"]
-        _MONEY[ctx.account] = v["case_id"]
+        _set_case(ctx.account, "file_bag_claim", v["case_id"], {**bag, "ref": args.get("booking_reference"), "pax": args.get("passengers")})
         return {"ok": True, "result": {"say": v["say"], "verdict": v["verdict"], "file_by": v.get("file_by"),
                                        "how": ("Say `say` as given: every deadline is quoted from its source. The limit is never what they're owed. "
                                                # Sasha 236 · found live: she described the claim from memory and asked again and again

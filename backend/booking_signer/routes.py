@@ -566,9 +566,7 @@ router.include_router(payments_t0.router)   # S-81 · /api/booking/payments/{id}
 router.include_router(mailbox.router)   # S-82 · /api/booking/mailbox
 from . import ops as _ops  # noqa: E402
 router.include_router(_ops.router)   # Sasha 121 · /api/booking/ops (founder only)
-from . import demo_shop as _demo_shop  # noqa: E402
-router.include_router(_demo_shop.router)   # Sasha 121 (F) · Kanoe Demo Market (ours; sells nothing)
-router.include_router(_demo_shop.ops)
+# Sasha 254 · Kanoe Demo Market (Sasha 121 F) RETIRED (Tyler row 817): its pages and founder login route are gone
 from . import hotel_test as _hotel_test  # noqa: E402
 router.include_router(_hotel_test.router)   # Sasha 135 · /api/booking/travel/hotel/* (TEST bookings: no hotel contacted)
 from . import travel as _travel  # noqa: E402
@@ -590,9 +588,7 @@ from . import handover as _handover  # noqa: E402
 router.include_router(_handover.router); router.include_router(_handover.ops)   # CR 23 · /api/booking/handover/* (guest page, token) + /ops/handovers (founder only) — Sasha 150, the founder's yes
 from . import guest_accounts as _guest_accounts  # noqa: E402
 router.include_router(_guest_accounts.router)   # Sasha 153 · /api/booking/guest/start (keyed: the site's server) — automatic guest accounts
-from . import demo_spa as _demo_spa  # noqa: E402
-router.include_router(_demo_spa.router)   # Sasha 126 (3) · Kanoe Demo Spa (ours; books nothing real)
-router.include_router(_demo_spa.ops)
+# Sasha 254 · Kanoe Demo Spa (Sasha 126 (3)) RETIRED (Tyler row 817): its member portal and founder login route are gone
 from . import demo_ops as _demo_ops  # noqa: E402
 router.include_router(_demo_ops.router)   # Sasha 121 · the investor demo's controls (founder only)
 # Sasha 99 · cancelling by the best route there is (link, email, text, call)

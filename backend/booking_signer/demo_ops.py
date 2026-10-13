@@ -163,7 +163,7 @@ def GW_reuse_hours():
 @router.post("/reset")
 async def reset(request: Request):
     from .ops import founder_only
-    from . import demo_shop as DS, guest_whatsapp as GW, ladder_routes as LR
+    from . import guest_whatsapp as GW, ladder_routes as LR
     no = founder_only(request)
     if no:
         return no
@@ -195,11 +195,7 @@ async def reset(request: Request):
         st["pending"] = None
         st.pop("combo", None)
         await GW.STORE.put_state(ch["wa_id_sha256"], st)
-    out["demo_shop_orders_cleared"] = len(DS.ORDERS)
-    DS.ORDERS.clear()
-    from . import demo_spa as DSP
-    out["demo_spa_bookings_cleared"] = len(DSP.BOOKINGS)
-    DSP.BOOKINGS.clear()
+    # Sasha 254 · the Kanoe Demo Market and Kanoe Demo Spa are retired (Tyler row 817): nothing of theirs to clear
     return {"ok": True, **out, "say": "Demo reset: test-venue, demo-spa and TEST flight and hotel bookings cancelled (their calendar events go within a minute); real bookings untouched."}
 
 

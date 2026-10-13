@@ -170,31 +170,12 @@ class InFront(Base):
         ap.assert_awaited()
         self.assertEqual(self.brain_saw, [])
 
-    def test_the_three_demos_until_g11(self):
-        for words, demo in (("dinner and a massage in Madrid on Tuesday", "combo"),
-                            ("book a massage with my spa membership on Friday at 18:00", "spa"),
-                            ("reorder my usual from Kanoe Demo Market", "reorder")):
-            started = mock.AsyncMock()
-            with mock.patch.dict(GW.DEMO_STARTS, {demo: started}):
-                self.say(words)
-            started.assert_awaited()
-            self.assertEqual(started.await_args.args[1], words, demo)
-        self.assertEqual(self.brain_saw, [])
-
-    def test_a_demos_own_question_is_answered_by_the_demo(self):
-        st = run(GW.STORE.get_state(GW.wa_key(GUEST)))
-        st["pending"] = {"kind": "spa_when", "at": NOW.isoformat(), "day": None, "t": None}
-        run(GW.STORE.put_state(GW.wa_key(GUEST), st))
-        with mock.patch.object(GW, "_answer_pending", mock.AsyncMock(return_value=True)) as ap:
-            self.say("Tuesday at 18:00")
-        ap.assert_awaited()
-        self.assertEqual(self.brain_saw, [])
-
-    def test_not_a_demo_when_the_old_gate_took_it_earlier(self):
-        # _new_request's own order: a cancellation, a flight or a hotel is never a demo — those are the brain's now
-        for words in ("cancel the dinner and the massage", "flights from London to Madrid and a spa", "a hotel in Madrid and a massage"):
-            self.assertIsNone(GW._demo_start(words, NOW), words)
-        self.assertEqual(GW._demo_start("dinner and a massage in Madrid", NOW), "combo")
+    def test_the_three_demos_are_retired(self):   # Sasha 254 · Tyler row 817: their words are ordinary messages for the brain
+        for words in ("dinner and a massage in Madrid on Tuesday", "book a massage with my spa membership on Friday at 18:00",
+                      "reorder my usual from Kanoe Demo Market"):
+            self.say(words)
+        self.assertEqual(len(self.brain_saw), 3)
+        self.assertFalse(hasattr(GW, "DEMO_STARTS"))
 
 
 if __name__ == "__main__":

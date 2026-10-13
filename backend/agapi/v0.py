@@ -1206,11 +1206,16 @@ async def _paid_out(ctx: Ctx, got: dict, where: str) -> dict:
 
 # ── Pacioli ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+STATUS_HOW = ("line is THE status, the same words as the Trip tab. Say every part of it — what's booked AND what's \"Chosen, not "
+              "booked yet\" or still a request — in your own short words; never leave a not-booked item out, never call it booked.")
+
+
 async def get_status(ctx: Ctx, a: dict) -> dict:
     """Sasha 249 · ONE STATUS: agapi.s2_status.status_of is the one place a booking's status is decided (the Trip banner, the /s2
-    card and the WhatsApp line read it too). Its keys as before, plus its state and line."""
+    card and the WhatsApp line read it too). Its keys as before, plus its state and line. Sasha 259 · + how (S2 item 12: "what's
+    coming up" said the booked table and left the trip's chosen flights out, though the line carried them — once in three runs)."""
     from agapi import s2_status as ST
-    return await ST.status_of(ctx.account)
+    return {**await ST.status_of(ctx.account), "how": STATUS_HOW}
 
 
 async def hold_venue(ctx: Ctx, a: dict) -> dict:

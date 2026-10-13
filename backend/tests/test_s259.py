@@ -33,6 +33,17 @@ class TheTripsChosenItemsAreOnTheOneStatus(unittest.TestCase):
         self.assertIn("Booked: Sasha Test Venue", d["line"])
         self.assertIn("Chosen, not booked yet: ✈️ Air Europa UX 1153 MAD→LIS · 2026-10-31.", d["line"])
 
+    def test_the_chat_is_told_to_say_every_part_and_the_pages_never_see_it(self):   # 3rd after-run: the chosen flights left out
+        from agapi import v0 as API
+        st = {"state": "booked", "line": "Booked: x. Chosen, not booked yet: y.", "refs": [], "trip_state": "nothing"}
+
+        class Ctx:
+            account = ACCT
+        with mock.patch.object(ST, "status_of", mock.AsyncMock(return_value=st)):
+            out = run(API.get_status(Ctx(), {}))
+        self.assertIn("never leave a not-booked item out", out["how"])
+        self.assertNotIn("how", ST.public(out))
+
     def test_nothing_else_the_chosen_items_are_the_line(self):
         d = ST.decide({"venues": [], "booked": [], "failed": [], "chosen": ["✈️ Air Europa UX 1160 LIS→MAD · 2026-11-02 · chosen"]})
         self.assertIn("not booked yet", d["line"])

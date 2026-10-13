@@ -78,9 +78,12 @@ def is_test_card(card: Optional[dict]) -> bool:
 
 
 async def mode_of(account: Optional[str]) -> str:
-    """The person's mode — agapi_route.person_mode (the record; no row → the guest's kanoe_test marker)."""
-    from agapi import agapi_route as AR
-    return await AR.person_mode(account)
+    """The person's mode FOR WHAT THEY MAY BOOK — their access record: "live" only when the record says live; no record (or an
+    unreadable one) → "test" (fails closed, as person_access does). Sasha 259 · EU 255 (row 890): a fresh account with no record got
+    Google's "Sacha Restaurant" instead of the test card, because this read the routing mode (no record → the guest marker → "live").
+    A person who can't reach a real venue must reach Kanoe's test venue; only a live record hides it."""
+    from agapi import person_access as PA
+    return "live" if (await PA.get(account)).get("mode") == "live" else "test"
 
 
 def _on_path(ctx) -> bool:

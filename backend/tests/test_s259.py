@@ -116,3 +116,15 @@ class TheCalendarReadsTheOneBookingRecord(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NoRecordReachesTheTestVenue(unittest.TestCase):
+    """EU 255 (row 890): a fresh account with NO access record got "Sacha Restaurant", not the test card — the test-venue check read
+    the routing mode (no record → the guest marker → live). What a person may book is their RECORD: no record → test (fails closed)."""
+
+    def test_no_record_is_test_a_live_record_is_live(self):
+        from agapi import person_access as PA, test_venues as TV
+        with mock.patch.object(PA, "get", mock.AsyncMock(return_value={**PA.CLOSED, "source": "no record — closed"})):
+            self.assertEqual(run(TV.mode_of(ACCT)), "test")
+        with mock.patch.object(PA, "get", mock.AsyncMock(return_value={**PA.CLOSED, "mode": "live", "source": "person_access"})):
+            self.assertEqual(run(TV.mode_of(ACCT)), "live")

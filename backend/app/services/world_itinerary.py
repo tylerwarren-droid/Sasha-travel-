@@ -177,6 +177,11 @@ async def build_world(a: dict, account: Optional[str] = None) -> Optional[dict]:
     t0, laps = _t.perf_counter(), {}   # Sasha 257 · where the itinerary's 13–24 s goes (row 863)
     def lap(k: str) -> None:
         laps[k] = int((_t.perf_counter() - t0) * 1000) - sum(laps.values())
+    # Sasha 257 · the real cause of a slow plan (row 863, measured on production): the plan model (8–9.5 s) and THEN the hotel
+    # search (3.6–3.9 s). Most plans stay in the city they name: its hotels are searched NOW, beside the model, and used only when the
+    # plan's stays are exactly that city and every hotel is in the plan's country (else searched after the plan, as before)
+    dest_city = (a.get("destination") or "").split(",")[0].strip()
+    early = asyncio.ensure_future(hotels_in(account, dest_city, "", None, "")) if dest_city else None
     try:
         r = await asyncio.wait_for(client.messages.create(
             model=MODEL, max_tokens=6000, system=_SYSTEM.replace("{days}", str(n_days)).replace("{party}", who),
@@ -184,6 +189,8 @@ async def build_world(a: dict, account: Optional[str] = None) -> Optional[dict]:
         plan = _parse("".join(getattr(b, "text", "") for b in r.content))
     except Exception as e:
         log.error("[world] the route was not planned: %s: %s", type(e).__name__, e)
+        if early:
+            early.cancel()
         return None
     lap("plan_model")
     days = (plan or {}).get("days") or []
@@ -196,13 +203,23 @@ async def build_world(a: dict, account: Optional[str] = None) -> Optional[dict]:
     prefer = "boutique" if "boutique" in interests else ("beach" if "beach" in interests else "")
     # Sasha 257 · each day's place photo doesn't depend on the hotels: fetched BESIDE the hotel search, not after it
     place_photos = asyncio.gather(*[_place_photo(f"{d.get('highlight') or d.get('city')} {country}") for d in days])
-    found = await asyncio.gather(*[hotels_in(account, c, country, code, "") for c in cities])
+    found, early_used = None, False
+    if early is not None:
+        try:
+            got = await early
+            if [c.lower() for c in cities] == [dest_city.lower()] and got and all(str(country).lower() in str(h.get("address") or "").lower() for h in got[:3]):
+                found, early_used = [got], True
+        except Exception as e:
+            log.info("[world] the early hotel search failed (%s) — searching now", type(e).__name__)
+    if found is None:
+        found = await asyncio.gather(*[hotels_in(account, c, country, code, "") for c in cities])
     lap("hotels")
     stays = {c: (hs[0] if hs else None) for c, hs in zip(cities, found)}
     chosen = [h for h in stays.values() if h]
     hphotos, pphotos = await asyncio.gather(_photos(chosen), place_photos)
     lap("photos")
-    log.warning("[world] itinerary ms %s (%d days, %d cities, model %s)", laps, len(days), len(cities), MODEL)
+    log.warning("[world] itinerary ms %s (%d days, %d cities, model %s, hotels searched beside the plan: %s)", laps, len(days), len(cities),
+                MODEL, early_used)
     hotel_total, acts = 0, 0
     for i, d in enumerate(days):
         d["day"] = i + 1

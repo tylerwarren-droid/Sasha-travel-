@@ -137,6 +137,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # checks, nobody told. Every turn now says it plainly and the founder is emailed (once an hour); the gate's first check names it
     "T38": ("an exhausted model credit is named: a plain line to the person, the founder told, the gate stopped by name",
             ["tests.test_s257_model_credit"]),
+    # Sasha 257 · a plan turn's real cause, measured on production: the plan model THEN the hotel search. The destination's hotels
+    # are searched beside the model, used only for a one-city plan in the plan's own country (else after the plan, as before)
+    "T39": ("a plan's hotels searched beside its model — used only when the plan stays there, in its country",
+            ["tests.test_s257_plan_speed"]),
 }
 
 _RUNNER = """

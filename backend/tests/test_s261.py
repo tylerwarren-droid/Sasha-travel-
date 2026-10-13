@@ -125,7 +125,9 @@ class SheSaysItPlainly(unittest.TestCase):
         r = S.agapi_outage({"ok": False, "error": {"code": "unavailable", "message": "the venue booking service didn't answer"}}, ["limit"], "book_venue")
         self.assertEqual(r["error"]["message"], "I can't book right now — the booking service has hit its limit. Kanoe has been told; nothing was sent.")
         self.assertEqual(S.outage(r), r["error"]["message"])                   # said by code, word for word
-        self.assertIn("ALREADY been said", S.model_result(r)["how_to_handle"])  # and the model told not to work round it
+        hint = S.model_result(r)["how_to_handle"]
+        self.assertIn("ALREADY been said", hint)                               # and the model told not to work round it:
+        self.assertIn("no retry offer, no alternative", hint)                   # production (o261) offered both before this
         slow = V.outage_line("slow", "search_venues")
         self.assertIn("didn't answer in time", slow)
         for line in (r["error"]["message"], slow):

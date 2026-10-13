@@ -578,6 +578,11 @@ _ERROR_HINT = ("Don't read out codes or narrate your process. If another search 
 _OUTAGE_HINT = ("An outside service is DOWN. The line in `message` has ALREADY been said aloud to them, word for word. Don't repeat "
                 "it, don't retry or work round it this turn, never say there is 'no trip', 'no hotels' or 'no flights' because of it, "
                 "and never act on it. Add at most one short next step, or nothing.")
+# Sasha 261 · production proof (scratch o261): after the line she offered "try again in a moment? Or I can note the place…" — an
+# AgAPI outage gets NO improvised alternative: the line is the whole answer about it
+_AGAPI_HINT = ("Kanoe's booking service is OUT. The line in `message` has ALREADY been said aloud to them, word for word, and it is the "
+               "whole answer about this: add NOTHING about it — no retry offer, no alternative, no 'I can note it', no other way to "
+               "do it. Never call another tool to work round it this turn. If they asked something else too, answer only that.")
 # Sasha 215 · CR 56 — results that carry text from the outside world (Google listings, venue sites, venue replies)
 _OUTSIDE_TEXT = {"search_venues", "search_stays", "read_booking_route", "hold_venue", "book_venue", "cancel_venue", "get_status",
                  "propose_trip", "swap_stay", "get_trip", "prepare_trip"}
@@ -605,7 +610,7 @@ def model_result(r: dict, name: str = "") -> dict:
         return {"ok": True, "result": clean_for_model(r["result"]), **({"untrusted_data": _DATA_NOTE} if name in _OUTSIDE_TEXT else {})}
     e = r.get("error") or {}
     return {"ok": False, "error": {"code": e.get("code"), "message": clean_for_model(e.get("message") or "")},
-            "how_to_handle": _OUTAGE_HINT if outage(r) else _ERROR_HINT}
+            "how_to_handle": _AGAPI_HINT if e.get("code") == "agapi_unreachable" else _OUTAGE_HINT if outage(r) else _ERROR_HINT}
 
 
 async def turn(account: str, message: str, history: List[dict], session: Optional[str],

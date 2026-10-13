@@ -148,7 +148,9 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                 _PENDING.setdefault(f"{ctx.account}|{sid}", {"read_back_id": v["read_back_id"], "route": v.get("route"),
                                                               "at": float(v.get("at") or 0)})
     before = _pending_of(ctx.account)
-    r = await _run_tool(ctx, name, args)
+    from agapi import agapi_route as AR
+    with AR.using(await AR.target_for("subscriptions", ctx.account)):   # Sasha 256 · ONE ROUTE: the person's (a test person → the sandbox)
+        r = await _run_tool(ctx, name, args)
     after = _pending_of(ctx.account)
     if after != before:
         await M.put_kind(ctx.account, "subs_pending", after)

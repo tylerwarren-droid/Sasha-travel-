@@ -468,19 +468,20 @@ async def _persist(account: str, before: Dict[str, Any], target_now: str) -> Non
 
 
 async def target(account: str, name: str, args: dict) -> str:
-    """Sasha 244 · which AgAPI this tool's calls go to (agapi_route): money by the flight (test inventory → the sandbox), a claim on
-    the AgAPI its case was opened on, the rest by family (cards for every card / accident / claim tool)."""
+    """Sasha 244 · which AgAPI this tool's calls go to. Sasha 256 · ONE ROUTE for every family, money included: a NEW case opens where
+    agapi_route.target_for says for THIS person (a test person → the sandbox; a live person → money by the flight, the rest by the
+    family's route). The one thing decided here is durability: a case already open stays on the AgAPI it was opened on."""
     from agapi import agapi_route as AR
     if name in _MONEY_CHECK:
         f = args.get(_MONEY_CHECK[name]) if isinstance(args.get(_MONEY_CHECK[name]), dict) else args
-        return await AR.money_target(account, {"airline": f.get("airline"), "number": f.get("number"), "date": f.get("date")},
-                                     args.get("booking_reference"))
+        return await AR.target_for("money", account, {"airline": f.get("airline"), "number": f.get("number"), "date": f.get("date")},
+                                   args.get("booking_reference"))
     if name in _MONEY_AFTER:
-        return _MONEY_AT.get(account) or AR.route("money")
+        return _MONEY_AT.get(account) or await AR.target_for("money", account)   # an open money case stays where it opened
     case = _CASE_TOOLS.get(name) or ("accident" if name == "accident" and not args.get("new_accident") and _ACCIDENT.get(account) else None)
     if case and _CASE_AT.get(f"{case}|{account}"):   # Sasha 249 · a card case on the AgAPI it was opened on
         return _CASE_AT[f"{case}|{account}"]
-    return AR.route(_FAMILY.get(name, "cards"))
+    return await AR.target_for(_FAMILY.get(name, "cards"), account)
 
 
 async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
@@ -772,7 +773,7 @@ async def accident_photo(account: str, shot: str, media_type: str, b64: str) -> 
     """/s2's photo button on the accident card: straight to AgAPI (sealed, hashed evidence) — never through the chat or the model."""
     from agapi import agapi_route as AR
     await _hydrate(account)   # Sasha 249 · the open accident, after a restart too — on the AgAPI it was opened on
-    with AR.using(_CASE_AT.get(f"accident|{account}") or AR.route("cards")):
+    with AR.using(_CASE_AT.get(f"accident|{account}") or await AR.target_for("cards", account)):   # Sasha 256 · the person's route
         uid = await _end_user(account)
         cid = _ACCIDENT.get(account)
         if not uid or not cid:
@@ -784,10 +785,12 @@ async def moment(account: str, event: dict) -> Dict[str, Any]:
     """CR 75 · for Sasha's proactive loop (S-83, standing consent): ask AgAPI whether to speak up for this event (rental_booked ·
     pickup_tomorrow · which_card · rental_returned). → {speak, line, card} — say the line and show the card only when speak is true;
     AgAPI keeps it to one per event and honours the person's off switch."""
-    uid = await _end_user(account)
-    if not uid:
-        return {"speak": False, "why_silent": "card fine print didn't answer"}
-    r = await CALL("cards.moment", {"end_user": uid, "event": event})
+    from agapi import agapi_route as AR
+    with AR.using(await AR.target_for("cards", account)):   # Sasha 256 · the person's route (a test person → the sandbox)
+        uid = await _end_user(account)
+        if not uid:
+            return {"speak": False, "why_silent": "card fine print didn't answer"}
+        r = await CALL("cards.moment", {"end_user": uid, "event": event})
     return r["result"] if r.get("ok") else {"speak": False, "why_silent": (r.get("error") or {}).get("message") or "unavailable"}
 
 

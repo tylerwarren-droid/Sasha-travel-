@@ -141,6 +141,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # are searched beside the model, used only for a one-city plan in the plan's own country (else after the plan, as before)
     "T39": ("a plan's hotels searched beside its model — used only when the plan stays there, in its country",
             ["tests.test_s257_plan_speed"]),
+    # Sasha 258 · CR 97: on /s2 and /next "Yes, send it" IS the approval — approvals.in_app_tap, once, with the card's own hash and
+    # the person's own session; no email or text to them; a stale card → its new read-back; already tapped → "already sent" + status
+    "T40": ("the in-app yes: in_app_tap once with the card's hash — stale → the new card, consumed → its status, nothing emailed",
+            ["tests.test_s258_in_app_yes"]),
 }
 
 _RUNNER = """

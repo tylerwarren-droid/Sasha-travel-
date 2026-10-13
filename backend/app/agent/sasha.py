@@ -211,7 +211,7 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": "pay", "url": res["checkout_url"]} if res.get("checkout_url") else None
     # Sasha 250 · the prefilled form now comes from hold_venue too (249: the form IS the go-ahead, no second yes) — found live: she
     # said "Done — it's on your screen" and the card was never drawn, because only book_venue's result rendered it
-    if tool == "hold_venue" and res.get("status") == "awaiting_yes" and res.get("read_back") and res.get("ask"):
+    if tool in ("hold_venue", "book_venue") and res.get("status") == "awaiting_yes" and res.get("read_back") and res.get("ask"):   # 258: + a stale card's new read-back
         # Sasha 256 · demo path item 10: on a screen the venue read-back is a CARD (she says one line over it, venues.READ_BACK_ASK)
         return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]]}
     if tool in ("book_venue", "hold_venue") and isinstance(res.get("prepared"), dict):   # Sasha 248 · "fill it now": their page + every detail, one-tap copy
@@ -1542,6 +1542,11 @@ async def agent_turn(request: Request):
             yield f"data: {json.dumps({'type': 'done', 'text': said_now, 'guard': [], 'tools': []})}\n\n"
         return StreamingResponse(photo_said(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
     guest_token = request.headers.get("authorization", "").partition(" ")[2].strip() if surface == "s2" else None   # CR 71 · /s2 only
+    # Sasha 258 · THE IN-APP YES (CR 97): this person's own live session, for approvals.in_app_tap — their Supabase token as the proxy
+    # sent it (the backend verified it in chat_account), or the founder's proxy session. Held for this turn only: never stored or logged
+    _bearer = request.headers.get("authorization", "").partition(" ")[2].strip()
+    tap_session = ({"kind": "founder"} if request.headers.get("x-sasha-session", "").strip().lower() == "founder" and not _bearer
+                   else {"kind": "supabase", "token": _bearer} if _bearer else None)
     over = await over_budget(account)
     lap("budget")
     session_id = str(body.get("session_id") or "")[:64] or None
@@ -1575,6 +1580,9 @@ async def agent_turn(request: Request):
         if guest_token:   # CR 71 · this guest's own token goes with S2's AgAPI calls (via_agapi); /next never sets it
             from agapi import via_agapi as VIA
             VIA.GUEST_TOKEN.set(guest_token)
+        if tap_session and remembers:   # Sasha 258 · /s2 and /next (parity): their yes is in_app_tap. Old S1 (parity off): unchanged
+            from agapi import venue_submit as VS
+            VS.TAP.set(tap_session)
         if over:   # Sasha 215 · said, in her voice, never a bare 429
             yield f"data: {json.dumps({'type': 'error', 'message': over, 'rule': 'budget'})}\n\n"
             return

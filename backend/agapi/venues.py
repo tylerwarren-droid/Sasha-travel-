@@ -1064,6 +1064,9 @@ async def book_venue(ctx, a: dict) -> dict:
         raise _err("no_explicit_yes", "booking needs the person's explicit yes in this turn — ask them, then call book_venue")
     held = _HELD.get(ctx.account)
     if not held:
+        sent = _SENT.get(ctx.account)
+        if sent and not stale(sent["at"]):   # Sasha 258 · the same yes again: already sent — said, with its status; never sent twice
+            return await _tap_refused(ctx, {"venue": sent["venue"]}, "approval_consumed", {}, sent["venue"])
         raise _err("nothing_held", "call hold_venue first — the yes is bound to its read-back")
     if held["at"] >= ctx.started:
         raise _err("read_back_first", "say what you'll do and ask them to go ahead; book once they say yes")
@@ -1195,8 +1198,12 @@ async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:
     r = await VS.submit(ctx.account, held, how.get("said") or "")
     if not r.get("ok"):
         code = r["error"]["code"]
+        if code in VS.TAP_REFUSALS:   # Sasha 258 · the in-app yes refused: one plain line, never a dead end
+            return await _tap_refused(ctx, held, code, r["error"], venue)
         raise _err("no_explicit_yes" if code == "no_explicit_yes" else "not_sent", r["error"]["message"])
     st = r.get("status")
+    if st in ("confirmed", "sent"):
+        _SENT[ctx.account] = {"venue": venue, "at": datetime.now(timezone.utc)}   # Sasha 258 · a repeated yes answers "already sent"
     if st == "waiting_for_their_tap":   # live: their tap on AgAPI's link is the approval — the hold stays for it
         _HELD[ctx.account] = held
         return {"status": "waiting_for_their_tap", "venue": venue, "when": held["summary"], "booked": False,
@@ -1213,6 +1220,36 @@ async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:
         return {"status": "not_allowed", "venue": venue, "when": held["summary"], "booked": False,
                 "say": f"{BR.PHRASES['no_real_sends']} {BR.PHRASES['takeover']}", **({"open": link, "page_url": link} if link else {})}
     raise _err("not_sent", r.get("say") or f"{venue} didn't take it — nothing is booked")
+
+
+_SENT: Dict[str, dict] = {}   # Sasha 258 · account → the last booking sent on their in-app yes (venue, at) — a repeated yes
+
+
+async def _tap_refused(ctx, held: dict, code: str, err: dict, venue: str) -> dict:
+    """Sasha 258 · AgAPI refused the in-app yes (CR 97): a stale or timed-out card → the NEW read-back on its card, asked again; not
+    this person's session → sign in again; already tapped → "already sent" and the booking's status. Nothing is sent twice."""
+    from agapi import venue_submit as VS
+    from app.agent import voice as V
+    if code in ("approval_void", "approval_expired"):
+        fresh = (err.get("details") or {}).get("fresh")
+        if fresh and fresh.get("ok"):
+            held = {**held, "read_back_id": fresh["read_back_id"], "sha": fresh["sha256"], "lines": fresh["lines"],
+                    "at": datetime.now(timezone.utc)}
+            _HELD[ctx.account] = held
+            return {"status": "awaiting_yes", "venue": venue, "when": held.get("summary"), "read_back": fresh["lines"], "booked": False,
+                    "ask": V.tap_line(code), "how": "Say `ask` word for word — the new card is on their screen."}
+        _HELD.pop(ctx.account, None)
+        return {"status": "not_sent", "venue": venue, "booked": False, "say": V.tap_line(code) + " " + "Ask me to hold it again."}
+    if code == "approval_untrusted_origin":
+        _HELD[ctx.account] = held   # the card stays: after signing in, their yes still answers it
+        return {"status": "not_sent", "venue": venue, "booked": False, "say": V.tap_line(code)}
+    # approval_consumed: the yes was already taken — the booking's own status, never a second send
+    _HELD.pop(ctx.account, None)
+    row = next((b for b in await VS.bookings(ctx.account) if _base(b.get("venue") or "") == _base(venue)), None)
+    from agapi import s2_status as ST
+    status = ST.decide({"venues": [row], "booked": [], "failed": []})["line"] if row else None
+    return {"status": "already_sent", "venue": venue, "booked": bool(row and row.get("status") == "confirmed"),
+            "say": V.tap_line(code) + (f" {status}" if status else "")}
 
 
 async def _place(ctx, held: dict, how: dict, venue: str, where) -> dict:

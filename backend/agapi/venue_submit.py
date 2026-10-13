@@ -24,6 +24,15 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 log = logging.getLogger("agapi.venue_submit")
 
 FAMILY = "venues"
+
+# ── Sasha 258 · THE IN-APP YES (CR 97, mailbox row 880): on /s2 and /next the person's own "Yes, send it" IS the approval —
+# approvals.in_app_tap with the card's read-back hash and THEIR OWN live session (AgAPI checks it itself). One place: here.
+import contextvars as _cv
+#: this turn's in-app session — {"kind": "supabase", "token": …} for a signed-in person, {"kind": "founder"} for the founder's
+#: proxy session — set by the turn (sasha.agent_turn) from its own request, never stored, never logged. None: not in the app
+#: (WhatsApp, a background job) — those keep their own path.
+TAP: _cv.ContextVar = _cv.ContextVar("sasha_in_app_session", default=None)
+TAP_REFUSALS = ("approval_void", "approval_expired", "approval_untrusted_origin", "approval_consumed")
 TIMEOUT_S = 75.0
 _USERS: Dict[str, str] = {}             # target|account → AgAPI end_user
 _ACTS: Dict[str, List[dict]] = {}       # account → [{act_id, venue, date, time, party, state, say, at}]
@@ -120,15 +129,30 @@ async def read_back(account: str, prepared_id: str) -> Dict[str, Any]:
     rid = d.get("read_back_id")
     if not rid or not lines:
         return {"ok": False, "error": {"code": "no_read_back", "message": "the service gave no read-back to ask them"}}
-    if await target(account) == "live":   # live: AgAPI's one-tap link to their phone (the approval is their tap)
+    if TAP.get() is None and await target(account) == "live":   # not in the app (WhatsApp): AgAPI's one-tap link to their phone
         await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})
-    sha = hashlib.sha256("\n".join(str(x) for x in lines).encode()).hexdigest()
+    # Sasha 258 · the card binds to AgAPI's OWN hash of these lines (CR 97: approval_required carries read_back_sha256)
+    sha = d.get("read_back_sha256") or hashlib.sha256("\n".join(str(x) for x in lines).encode()).hexdigest()
     return {"ok": True, "end_user": uid, "read_back_id": rid, "lines": lines, "sha256": sha}
 
 
 async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
     """On their yes (a later turn): the approval → venue.submit_booking. → {ok, status ∈ confirmed|sent|failed|not_allowed|waiting_for_their_tap, …}"""
     rid, pid, uid = held["read_back_id"], held["prepared_id"], held.get("end_user") or await end_user(account)
+    if TAP.get() is not None:   # Sasha 258 · in the app: their own yes is the approval, and it sends at once
+        r = await in_app_tap(account, rid, held.get("sha") or held.get("sha256") or "")
+        if not r.get("ok"):
+            if r["error"]["code"] in ("approval_void", "approval_expired"):   # a stale / timed-out card: a fresh read-back to show
+                fresh = await read_back(account, pid)
+                if fresh.get("ok"):
+                    r["error"]["details"] = {**(r["error"].get("details") or {}), "fresh": fresh}
+            return r
+        res = r.get("result") or {}
+        if res.get("act_id"):
+            await _remember(account, {"act_id": res["act_id"], "venue": res.get("venue") or held.get("venue"), "when": held.get("when"),
+                                      "party": held.get("party"), "state": res.get("status"), "say": res.get("say"),
+                                      **({"reference": res["reference"]} if res.get("reference") else {})})
+        return {"ok": True, **res}
     if await target(account) == "sandbox":
         a = await _call(account, "sandbox.simulate_approval", {"read_back_id": rid, "said": (said or "")[:200] or "yes"})
         if not a.get("ok"):
@@ -262,28 +286,61 @@ async def cancel_read_back(account: str, act_id: str) -> Dict[str, Any]:
     rid = d.get("read_back_id")
     if not rid or not lines:
         return {"ok": False, "error": {"code": "no_read_back", "message": "the service gave no read-back to ask them"}}
-    if await target(account) == "live":
+    if TAP.get() is None and await target(account) == "live":   # Sasha 258 · in the app the yes is in_app_tap: no link sent
         await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})
-    return {"ok": True, "end_user": uid, "read_back_id": rid, "lines": lines, "act_id": act_id}
+    return {"ok": True, "end_user": uid, "read_back_id": rid, "lines": lines, "act_id": act_id,
+            **({"read_back_sha256": d["read_back_sha256"]} if d.get("read_back_sha256") else {})}
 
 
 async def cancel_submit(account: str, held: dict, said: str) -> Dict[str, Any]:
     """On their yes (a later turn): the approval → venue.cancel_booking → {status sent, cancel_act_id}; the cancellation is kept as
     its own act (its reply comes through venue.booking_status, like any request)."""
     rid, act_id, uid = held["read_back_id"], held["act_id"], held.get("end_user") or await end_user(account)
-    approval = await _approval(account, rid, said)
-    if isinstance(approval, dict):
-        return approval
-    r = await _call(account, "venue.cancel_booking", {"end_user": uid, "act_id": act_id}, approval=approval)
-    if not r.get("ok"):
-        return {"ok": False, "error": _err(r)}
-    res = r.get("result") or {}
+    if TAP.get() is not None:   # Sasha 258 · in the app: their yes is the approval (in_app_tap sends the cancellation at once)
+        r = await in_app_tap(account, rid, held.get("read_back_sha256") or held.get("sha") or "")   # AgAPI's own hash of the card
+        if not r.get("ok"):
+            return r
+        res = r.get("result") or {}
+    else:
+        approval = await _approval(account, rid, said)
+        if isinstance(approval, dict):
+            return approval
+        r = await _call(account, "venue.cancel_booking", {"end_user": uid, "act_id": act_id}, approval=approval)
+        if not r.get("ok"):
+            return {"ok": False, "error": _err(r)}
+        res = r.get("result") or {}
     cid = res.get("cancel_act_id") or res.get("act_id")
     if cid:
         parent = next((a for a in await acts_of(account) if a.get("act_id") == act_id), {})
         await _remember(account, {"act_id": cid, "cancels": act_id, "venue": parent.get("venue"), "when": parent.get("when"),
                                   "party": parent.get("party"), "state": res.get("status") or "sent", "say": res.get("say")})
     return {"ok": True, **res}
+
+
+def in_app_session() -> Optional[dict]:
+    """This turn's session as in_app_tap takes it — None when there is none to give (the founder's proxy session: see below)."""
+    s = TAP.get()
+    if not s:
+        return None
+    if s.get("kind") == "supabase" and s.get("token"):
+        return {"kind": "supabase", "token": s["token"]}
+    # the founder's proxy session (no Supabase token): CR 97's signed path needs the founder's person_id, which Sasha can't read
+    # yet (asked of CR, row 882) — nothing is guessed or signed; he's told to sign in with his email (a Supabase session)
+    return None
+
+
+async def in_app_tap(account: str, read_back_id: str, read_back_sha256: str) -> Dict[str, Any]:
+    """Sasha 258 · THE ONE IN-APP YES: approvals.in_app_tap {read_back_id, read_back_sha256, session} — called once per yes, on the
+    AgAPI the person's mode picks (client_for). → {ok, result: the act's own result} or {ok: False, error: {code, message}}."""
+    sess = in_app_session()
+    if not sess:
+        return {"ok": False, "error": {"code": "approval_untrusted_origin", "message": "no signed-in session to confirm it's them"}}
+    r = await _call(account, "approvals.in_app_tap", {"read_back_id": read_back_id, "read_back_sha256": read_back_sha256, "session": sess})
+    if not r.get("ok"):
+        e = _err(r)
+        log.info("[venue_submit] in-app yes refused: %s", e["code"])   # the code only — never the session
+        return {"ok": False, "error": e}
+    return {"ok": True, "result": (r.get("result") or {}).get("result") or {}, "approval_id": (r.get("result") or {}).get("approval_id")}
 
 
 async def _approval(account: str, rid: str, said: str):
@@ -302,4 +359,5 @@ async def _approval(account: str, rid: str, said: str):
     return ap["approval_id"]
 
 
-__all__ = ["prepare", "read_back", "submit", "status", "acts_of", "bookings", "end_user", "cancel_read_back", "cancel_submit", "CALL"]
+__all__ = ["prepare", "read_back", "submit", "status", "acts_of", "bookings", "end_user", "cancel_read_back", "cancel_submit", "CALL",
+           "TAP", "in_app_tap", "in_app_session", "TAP_REFUSALS"]

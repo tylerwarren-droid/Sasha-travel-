@@ -244,6 +244,19 @@ def holding_line(account: str = "") -> str:
     return HOLDING[n % len(HOLDING)]
 
 
-__all__ = ["HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
+# ── Sasha 258 · THE IN-APP YES (CR 97): her words when AgAPI refuses a tap — one plain line each, never a dead end ─────────────────
+TAP_SAYS = {
+    "approval_void": "Something in it changed, so here's the card again. Shall I send it?",      # + the new read-back card
+    "approval_expired": "That card timed out, so here it is again. Shall I send it?",            # + a fresh read-back card
+    "approval_untrusted_origin": "I couldn't confirm it's you on this device — please sign in again, then say yes.",
+    "approval_consumed": "That's already been sent.",                                             # + the booking's status
+}
+
+
+def tap_line(code: str) -> str:
+    return TAP_SAYS.get(code, "That didn't go through — nothing was sent. Shall I try again?")
+
+
+__all__ = ["TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

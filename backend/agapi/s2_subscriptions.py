@@ -12,6 +12,7 @@ The work is AgAPI's (subscriptions.find / cancel_plan / cancel); Sasha only asks
 Where: SASHA_SUBSCRIPTIONS_VIA = sandbox (default) | live.  Keys: SASHA_AGAPI_TEST_KEY (sandbox) / SASHA_AGAPI_KEY (live). Never printed."""
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -54,6 +55,17 @@ _LAST: Dict[str, list] = {}           # CR 84 · account → the last list (to f
 _SOURCE: Dict[str, str] = {}          # Sasha 243 · account → where their list last came from (a later plain call is said as that)
 _NOT_YET = {"handed_over": "cancel page handed over — not cancelled yet", "cancel_requested": "cancel requested — not confirmed yet"}
 STATEMENT_TTL_S, MAX_BYTES = 1800, 5_000_000
+#: Sasha 260 · Tyler's /s2, 13 Oct 18:27 UTC — "What subscriptions am I paying for?" → a bank statement offered instead. His 60 receipts
+#: reached Sasha in 10 s; AgAPI reads them in ONE model call (up to 12k tokens, its own 180 s limit), and this client hung up at 60 s
+#: ("unreachable": the request never finished, so AgAPI's log has no line) — well inside the turn's 100 s. A mailbox read now runs as
+#: its own job: up to READ_WAIT_S inside the turn; longer, she says she's reading and the list reaches the open page when it's done
+#: (live_events "proactive", the same card). A second ask while it reads joins the same read.
+READ_WAIT_S, READ_TIMEOUT_S, CALL_TIMEOUT_S = 40.0, 240.0, 60.0
+READING_SAY = "I'm reading your receipts now — the list will appear here in a minute or two."
+_READING: Dict[str, Any] = {}         # account → the read in progress (asyncio.Task), held so it isn't garbage-collected mid-read
+#: an AgAPI that didn't answer, timed out or is out of budget: said as that — never a statement offered in its place
+_NOT_ANSWERED = ("unreachable", "timeout", "budget_exhausted", "rate_limited", "upstream_unreachable", "internal")
+NOT_ANSWERED_SAY = "I couldn't finish reading your receipts — the service didn't answer in time. Nothing was kept; ask me again in a minute."
 MEDIA = {"text/csv", "text/plain", "application/pdf", "image/png", "image/jpeg", "image/webp"}
 
 
@@ -85,10 +97,12 @@ async def _agapi(op: str, body: dict, approval: Optional[str] = None) -> Dict[st
     h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": "s2sub_" + secrets.token_hex(12)}
     if approval:
         h["AgAPI-Approval-Id"] = approval
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as c:
+    try:   # Sasha 260 · reading a mailbox's receipts takes AgAPI longer than any other call (READ_TIMEOUT_S)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(READ_TIMEOUT_S if body.get("emails") else CALL_TIMEOUT_S)) as c:
             r = await c.post(f"{url}/v1/{op}", headers=h, content=json.dumps(body))
         return r.json()
+    except httpx.TimeoutException as e:
+        return {"ok": False, "error": {"code": "timeout", "message": type(e).__name__}}
     except Exception as e:
         return {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}
 
@@ -109,6 +123,9 @@ async def _end_user(account: str) -> Optional[str]:
 
 def _fail(r: dict) -> Dict[str, Any]:
     e = r.get("error") or {}
+    if (e.get("code") or "unavailable") in _NOT_ANSWERED:   # Sasha 260 · said as what happened (an exception's class name told her nothing)
+        return {"ok": False, "error": {"code": e.get("code"), "message": NOT_ANSWERED_SAY + " Say exactly that; don't offer a bank statement "
+                                                                                          "instead unless they ask."}}
     return {"ok": False, "error": {"code": e.get("code") or "unavailable", "message": e.get("message") or "the subscription radar didn't answer"}}
 
 
@@ -161,7 +178,76 @@ async def run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
     return r
 
 
+def _found(account: str, r: dict, source: str, said_first: Optional[str]) -> Dict[str, Any]:
+    """subscriptions.find's answer → the tool's result (the list, its say, its card) — in the turn or, for a slow read, on the page."""
+    if not r.get("ok"):
+        return _fail(r)
+    res = r["result"]
+    tot = ", ".join(f"{t['currency']} {t['amount_minor'] / 100:.2f}" for t in res["monthly_total"])
+    subs = [_brief(s) for s in res["subscriptions"] if s["status"] != "cancelled"]   # Sasha 243 · still paid until it's cancelled: AgAPI's
+    _SOURCE[account] = source                                                        # total counts it (live: Spotify left out, its €10.99 kept in)
+    _LAST[account] = subs
+    return {"ok": True, "result": {"subscriptions": subs, "monthly_total": tot,
+                                   "say": (said_first + " " if said_first else "") + _say_list(subs, tot, source),
+                                   "likely_unused": res["likely_unused"], "note": res.get("note"),
+                                   **({"emails": res["emails"]} if res.get("emails") else {}),
+                                   "render": {"kind": "subscriptions", "items": [{"service": b["service"], "price": b["amount"], "how_often": b["how_often"],
+                                              "renews": b.get("renews"), "expected": (b.get("renews_basis") or "").startswith("expected"),
+                                              "subscription_id": b["subscription_id"], **({"not_yet": _NOT_YET[b["status"]]} if b["status"] in _NOT_YET else {})}
+                                             for b in subs], "total": tot, "source": source}}}
+
+
+def _tell(account: str, out: Dict[str, Any], said_first: Optional[str]) -> None:
+    """Sasha 260 · a read that finished after the turn: the list (or what went wrong) reaches the open page by itself."""
+    from booking_signer import live_events as LE
+    if out.get("ok"):
+        say = out["result"]["say"]
+        if said_first and say.startswith(said_first):   # her statement was said in the turn; not twice
+            say = say[len(said_first):].lstrip()
+        LE.publish(account, {"type": "proactive", "kind": "subscriptions", "say": say, "render": out["result"]["render"]})
+    else:
+        code = (out.get("error") or {}).get("code")
+        LE.publish(account, {"type": "proactive", "kind": "subscriptions_failed",
+                             "say": NOT_ANSWERED_SAY if code in _NOT_ANSWERED else "I couldn't read your receipts just now — nothing was kept."})
+
+
+async def _wait_read(account: str) -> Dict[str, Any]:
+    task, late = _READING[account]
+    done, _ = await asyncio.wait({task}, timeout=READ_WAIT_S)
+    if task in done:
+        return task.result()
+    late["said"] = True
+    return {"ok": True, "result": {"status": "reading", "say": (late["first"] + " " if late["first"] else "") + READING_SAY,
+                                   "note": "Say `say` as given. The list reaches their screen by itself when it's read — don't call "
+                                           "find_subscriptions again for it, and don't offer a bank statement instead."}}
+
+
+async def _read_mail(account: str, body: dict, source: str, said_first: Optional[str]) -> Dict[str, Any]:
+    """Sasha 260 · their receipts to AgAPI as one job (its own READ_TIMEOUT_S): in the turn if it's done within READ_WAIT_S, else on the page."""
+    late = {"said": False, "first": said_first}
+
+    async def job() -> Dict[str, Any]:
+        try:
+            r = await CALL("subscriptions.find", body)
+        finally:
+            body.pop("emails", None)                       # the emails are dropped here, as soon as AgAPI has answered
+        try:
+            out = _found(account, r, source, said_first)
+        except Exception as e:   # an answer of an unexpected shape: said, never a crashed job
+            out = {"ok": False, "error": {"code": "unavailable", "message": type(e).__name__}}
+        if late["said"]:
+            _tell(account, out, said_first)
+        return out
+    task = asyncio.get_running_loop().create_task(job())
+    _READING[account] = (task, late)
+    task.add_done_callback(lambda t: _READING.pop(account, None) if (_READING.get(account) or (None,))[0] is t else None)
+    return await _wait_read(account)
+
+
 async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
+    if name == "find_subscriptions" and (args.get("from_gmail") or args.get("from_outlook")) and not args.get("statement_ref") \
+            and ctx.account in _READING:                   # Sasha 260 · asked again while their receipts are being read: the same read
+        return await _wait_read(ctx.account)
     uid = await _end_user(ctx.account)
     if not uid:
         return {"ok": False, "error": {"code": "unavailable", "message": "the subscription radar didn't answer"}}
@@ -222,25 +308,12 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                 return {"ok": False, "error": {"code": "sample_test_only", "message": "the sample statement is for test mode"}}
             body["statement"] = {"sample": True}
             source = "statement"
+        if body.get("emails"):                             # Sasha 260 · a mailbox read: its own job (READ_WAIT_S here, then the page)
+            return await _read_mail(ctx.account, body, source, said_first)
         r = await CALL("subscriptions.find", body)
-        body.pop("emails", None)                           # the emails are dropped here, as soon as AgAPI has answered
         if ref:
             _STATEMENTS.pop(ref, None)                     # read once; never kept
-        if not r.get("ok"):
-            return _fail(r)
-        res = r["result"]
-        tot = ", ".join(f"{t['currency']} {t['amount_minor'] / 100:.2f}" for t in res["monthly_total"])
-        subs = [_brief(s) for s in res["subscriptions"] if s["status"] != "cancelled"]   # Sasha 243 · still paid until it's cancelled: AgAPI's
-        _SOURCE[ctx.account] = source                                                    # total counts it (live: Spotify left out, its €10.99 kept in)
-        _LAST[ctx.account] = subs
-        return {"ok": True, "result": {"subscriptions": subs, "monthly_total": tot,
-                                       "say": (said_first + " " if said_first else "") + _say_list(subs, tot, source),
-                                       "likely_unused": res["likely_unused"], "note": res.get("note"),
-                                       **({"emails": res["emails"]} if res.get("emails") else {}),
-                                       "render": {"kind": "subscriptions", "items": [{"service": b["service"], "price": b["amount"], "how_often": b["how_often"],
-                                                  "renews": b.get("renews"), "expected": (b.get("renews_basis") or "").startswith("expected"),
-                                                  "subscription_id": b["subscription_id"], **({"not_yet": _NOT_YET[b["status"]]} if b["status"] in _NOT_YET else {})}
-                                                 for b in subs], "total": tot, "source": source}}}
+        return _found(ctx.account, r, source, said_first)
     if name == "plan_cancel_subscription":
         r = await CALL("subscriptions.cancel_plan", {"end_user": uid, "subscription_id": args["subscription_id"]})
         if not r.get("ok"):

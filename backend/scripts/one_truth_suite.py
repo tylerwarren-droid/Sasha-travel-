@@ -150,6 +150,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # same booking record as get_status
     "T41": ("the last S2 fixes: no permission question, never a false lost connection, one status with the trip, one booking record",
             ["tests.test_s259"]),
+    # Sasha 260 · row 898: Tyler's 60 receipts outlasted the client's 60 s, and she offered a bank statement — a mailbox read is its own
+    # job now (in the turn when quick, else on the page when read); an AgAPI that didn't answer is said as that
+    "T42": ("a slow receipts read is never a statement offer: in the turn when quick, else on the page when read; an AgAPI that didn't answer said plainly",
+            ["tests.test_s260"]),
 }
 
 _RUNNER = """

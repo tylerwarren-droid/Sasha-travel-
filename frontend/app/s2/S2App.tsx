@@ -436,7 +436,9 @@ export default function S2App() {
       let ev: Ev
       try { ev = untagDeep(JSON.parse(m.data)) } catch { return }
       if (ev.type === 'proactive' && ev.say) {   // Sasha 227 · "day before pickup": her one line, and the counter card
-        const card: Card[] = ev.render?.kind === 'counter_card' && ev.render.card ? [{ k: 'counter_card', card: ev.render.card }] : []
+        const card: Card[] = ev.render?.kind === 'counter_card' && ev.render.card ? [{ k: 'counter_card', card: ev.render.card }]
+          : ev.render?.kind === 'subscriptions' && Array.isArray(ev.render.items)   // Sasha 260 · their receipts, read after the turn: the same card
+            ? [{ k: 'subscriptions', items: ev.render.items, total: ev.render.total, source: ev.render.source }] : []
         setMsgs(ms => [...ms, { role: 'sasha', text: untag(String(ev.say)), cards: card }])
         speaker.say(String(ev.say))
         return

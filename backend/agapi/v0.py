@@ -625,6 +625,9 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
     if not 1 <= nights <= 30 or not 1 <= party <= 9:
         raise ToolError("size_invalid", "nights 1–30, party 1–9")
     origin = a.get("origin") or "Madrid"
+    t_pt, laps = time.perf_counter(), {}   # Sasha 257 · where propose_trip's 14–17 s goes (row 863), logged per phase
+    def lap(k: str) -> None:
+        laps[k] = int((time.perf_counter() - t_pt) * 1000) - sum(laps.values())
     prep = _PREP.get(ctx.account)
     used_prefetch = {"itinerary": False, "flights": False}
     built, legs_task = None, None
@@ -641,6 +644,7 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
             built, legs_task = None, None
     if built is None:
         built = await _build(a, ctx.account)
+    lap("itinerary")
     itin, msg = built["itin"], built["msg"]
     if not itin or not itin.get("days"):
         raise ToolError("plan_failed", "the itinerary couldn't be built just now — try again")
@@ -673,6 +677,7 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
         searched, used_prefetch["flights"] = None, False
     if searched is None:
         searched = await _search_legs(origin, days, out_day, back_day, party, itin.get("airports"))
+    lap("save+flight_search")
     options: Dict[str, List[dict]] = {}
     for (leg, o, d, day), r in zip(searched["legs"], searched["found"]):   # out AND back: a flight that fits on each leg (home after midday)
         if "why" in r:   # Sasha 210 · a prepared search that failed is searched again (and the nearest days) before saying so
@@ -694,8 +699,11 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
         options[leg] = _options(cards, best, stored={c["id"]: i for c, i in zip(cards, ids)})
     # Sasha 249 · ONE TOTAL: the stays priced at their provider once, as they arrive (store_prices — no airline called, nothing
     # swapped), then the figures READ from the basket: the figure she says now is the Trip tab's and the read-back's
+    lap("flights_stored")
     why_priced = await BB.store_prices(ctx.account)
     fig = await BK.trip_figures(ctx.account, trip_id, {"trip_id": trip_id, "plan": itin})
+    lap("prices+total")
+    log.info("[agapi] propose_trip ms %s prefetched=%s", laps, used_prefetch)
     q = {"eur": fig["total_eur"]} if fig["total_eur"] is not None else {"why": (why_priced or {}).get("why") or "nothing in this trip is priced yet"}
     hotel = lambda d: (d.get("hotel") or {}).get("name") if isinstance(d.get("hotel"), dict) else d.get("hotel")
     return {**({"breakdown": fig["breakdown"]} if "eur" in q else {}), "trip_id": trip_id, "title": itin.get("title"),

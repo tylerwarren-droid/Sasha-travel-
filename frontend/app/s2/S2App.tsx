@@ -561,16 +561,14 @@ export default function S2App() {
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, width: '100%', margin: '0 auto', overflowX: 'hidden', opacity: dormant ? 0.22 : 1, filter: dormant ? 'saturate(.4)' : 'none', transition: 'opacity 1.2s ease, filter 1.2s ease' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 16px', paddingTop: 'max(18px, calc(env(safe-area-inset-top) + 10px))' }}>
         {/* Sasha 257 · Tyler (row 860): who is signed in, said quietly here (whoami) — the floating pill over the chat is gone */}
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
-          <WhoLine style={{ maxWidth: 150 }} />
-        </div>
+        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
         <nav style={{ display: 'flex', gap: 6 }}>
           {(['sasha', 'trip', 'activity', 'keep'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 14px', borderRadius: 999, border: `1px solid ${tab === t ? C.gold : C.line}`, background: 'transparent', color: tab === t ? C.gold : C.dim, fontWeight: 600 }}>
               {t === 'sasha' ? 'Sasha' : t === 'keep' ? 'My Keep' : t === 'trip' ? 'Trip' : 'Activity'}</button>))}
         </nav>
       </header>
+      <WhoLine style={{ padding: '0 16px 8px', textAlign: 'right' }} />{/* one quiet line, under the tabs — never over content */}
       {tab === 'trip' ? (   /* Sasha 236 · the trip board: S1's TripPanel itself (flights, stays, bookings, forms and receipts, from /plan + /journeys) */
         <section className="s2-trip" style={{ flex: 1, overflowY: 'auto', minWidth: 0, padding: '0 12px 16px' }}>
           <style>{TRIP_BOARD_CSS}</style>

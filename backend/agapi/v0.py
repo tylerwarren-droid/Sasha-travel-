@@ -703,7 +703,7 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
     why_priced = await BB.store_prices(ctx.account)
     fig = await BK.trip_figures(ctx.account, trip_id, {"trip_id": trip_id, "plan": itin})
     lap("prices+total")
-    log.info("[agapi] propose_trip ms %s prefetched=%s", laps, used_prefetch)
+    log.warning("[agapi] propose_trip ms %s prefetched=%s", laps, used_prefetch)   # Sasha 257 · visible in production's log
     q = {"eur": fig["total_eur"]} if fig["total_eur"] is not None else {"why": (why_priced or {}).get("why") or "nothing in this trip is priced yet"}
     hotel = lambda d: (d.get("hotel") or {}).get("name") if isinstance(d.get("hotel"), dict) else d.get("hotel")
     return {**({"breakdown": fig["breakdown"]} if "eur" in q else {}), "trip_id": trip_id, "title": itin.get("title"),

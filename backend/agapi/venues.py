@@ -230,7 +230,7 @@ async def read_booking_route(ctx, a: dict) -> dict:
 
 
 #: Sasha 256 · the one line over a venue read-back card (its details are on the card, never recited)
-READ_BACK_ASK = "Here's what I'll send to {venue} — it's all on the card. Shall I send it?"
+READ_BACK_ASK = "Shall I send this to {venue}? Every detail is on the card."
 
 
 def chosen_route(said: Optional[str]) -> Optional[str]:

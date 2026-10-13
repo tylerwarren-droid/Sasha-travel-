@@ -27,7 +27,10 @@ WORDS = {"nothing": "Nothing is booked yet.",
          "booked": "Booked",
          "partly_booked": "Partly booked",
          "failed": "Not booked",
-         "prepared": "Prepared, not booked — their page is filled in, waiting for you to book it there"}
+         "prepared": "Prepared, not booked — their page is filled in, waiting for you to book it there",
+         # Sasha 256 · CR 94: the venue's own answer to a request — another time offered is NOT a booking; the person decides
+         "proposed": "Not booked — they offered another time; tell me if it suits",
+         "declined": "Not booked — the venue said no"}
 ON_IT = ("booked", "partly_booked", "awaiting_payment")   # a Trip banner shows; the Book button goes
 
 
@@ -42,7 +45,9 @@ def decide(st: Dict[str, Any], held: bool = False, ledger_open: int = 0) -> Dict
     venues = [b for b in st.get("venues") or [] if b.get("status") != "cancelled"]
     conf = [_venue_line(b) for b in venues if b.get("status") in ("confirmed", "guest_booked")
             and not (b.get("reference") and f"ref {b['reference']}" in refs_seen)]   # a basket row already listed is not said twice
-    asked = [_venue_line(b) for b in venues if b.get("status") not in ("confirmed", "guest_booked", "declined", "failed")]
+    asked = [_venue_line(b) for b in venues if b.get("status") not in ("confirmed", "guest_booked", "declined", "failed", "proposed")]
+    proposed = [_venue_line(b) for b in venues if b.get("status") == "proposed"]   # Sasha 256 · the venue's own answer
+    declined = [_venue_line(b) for b in venues if b.get("status") == "declined"]
     done, failed = booked + conf, list(st.get("failed") or [])
     if st.get("awaiting_payment"):
         state, line = "awaiting_payment", WORDS["awaiting_payment"]
@@ -58,6 +63,10 @@ def decide(st: Dict[str, Any], held: bool = False, ledger_open: int = 0) -> Dict
         state, line = "held", WORDS["held"]
     else:
         state, line = "nothing", WORDS["nothing"]
+    for key, rows in (("proposed", proposed), ("declined", declined)):   # Sasha 256 · said beside the rest, never as "booked"
+        if rows:
+            said = f"{WORDS[key]}: " + "; ".join(rows) + "."
+            state, line = (key, said) if state == "nothing" else (state, f"{line} {said}")
     prepared = list(st.get("prepared") or [])   # Sasha 254 · ONE TRUTH: a page prepared for them is never "nothing"
     if prepared:
         said = f"{WORDS['prepared']}: " + "; ".join(prepared) + "."

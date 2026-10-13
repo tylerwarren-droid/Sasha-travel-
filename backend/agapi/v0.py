@@ -1412,7 +1412,9 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
         ctx.act_name, ctx.act_said = name, ((args.get("approval") or {}).get("said")) or ctx.user_said
         YG.heard(ctx, name, ctx.act_said)
     try:
-        res = {"ok": True, "result": await t["fn"](ctx, args)}
+        from agapi import agapi_route as _AR
+        with _AR.acting(ctx.account):   # Sasha 256 · every AgAPI call a tool makes is FOR this person (the venue engine's reads too)
+            res = {"ok": True, "result": await t["fn"](ctx, args)}
     except ToolError as e:
         res = {"ok": False, "error": {"code": e.code, "message": e.message}}
         if e.code != "already_done":

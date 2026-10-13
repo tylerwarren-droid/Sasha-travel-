@@ -121,6 +121,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # cards, entry and activities went to live). Only agapi_route decides; named exceptions: the access record (live), an open case
     "T34": ("live vs the sandbox for every family is decided only in agapi_route, by the person",
             ["tests.test_s256_one_route"]),
+    # Sasha 256 · item 3 (CR 94): a request's status is the VENUE's own answer, through venue.booking_status — confirmed / declined /
+    # another time ("proposed" is never a booking: the person decides); cancel goes through venue.cancel_booking on their yes
+    "T35": ("manage a booking: the venue's own answer on the one status; cancel through AgAPI on their yes",
+            ["tests.test_s256_manage"]),
 }
 
 _RUNNER = """

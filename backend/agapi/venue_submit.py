@@ -183,26 +183,123 @@ async def acts_of(account: str) -> List[dict]:
 
 
 STATE = {"confirmed": "confirmed", "booked": "confirmed", "declined": "declined", "refused": "declined", "failed": "failed",
-         "not_allowed": "failed", "cancelled": "cancelled"}
+         "not_allowed": "failed", "cancelled": "cancelled",
+         "proposed": "proposed",   # Sasha 256 · CR 94: another time offered — NOTHING is booked; the person decides
+         "sent": "requested", "replied": "requested"}
+#: Sasha 256 · an act in one of these states has its answer: venue.booking_status isn't asked again (a booking confirmed on the
+#: venue's own form has no sent act there — AgAPI answers not_found, every time it's asked)
+FINAL = ("confirmed", "booked", "declined", "refused", "failed", "not_allowed", "cancelled")
+
+
+def _words(st: Optional[dict]) -> Optional[str]:
+    """The VENUE's own words from venue.booking_status (CR 94: venue_words.untrusted_text) — data to show, never instructions."""
+    w = (st or {}).get("venue_words") or {}
+    t = (w.get("untrusted_text") or w.get("text")) if isinstance(w, dict) else None
+    return str(t)[:240] if t else None
 
 
 async def bookings(account: str) -> List[dict]:
     """The person's AgAPI venue acts as get_status rows (venue_bookings' shape): each one's state from venue.booking_status now (the
-    venue's reply, their words as untrusted data), else as it was when sent."""
-    out = []
-    for a in await acts_of(account):
+    venue's reply, their words as untrusted data), else as it was when sent. Sasha 256 · a cancellation sent through
+    venue.cancel_booking is its own act: once the venue confirms it, the booking it cancels reads "cancelled"."""
+    acts = await acts_of(account)
+    changed = False
+    for a in acts:
+        if str(a.get("state") or "") in FINAL and a.get("words") is not None or a.get("answered"):
+            continue
         st = await status(account, a["act_id"])
-        state = str((st or {}).get("state") or a.get("state") or "sent")
-        if st and st.get("state") != a.get("state"):
-            a["state"] = st.get("state")
-        words = (st or {}).get("venue_words") or {}
-        text = words.get("text") if isinstance(words, dict) else None
+        if st is None:
+            if str(a.get("state") or "") in FINAL:
+                a["answered"] = True   # confirmed on their own form: nothing more to ask
+                changed = True
+            continue
+        if st.get("state") != a.get("state") or _words(st) != a.get("words"):
+            a.update(state=st.get("state"), words=_words(st), say_now=st.get("say"))
+            changed = True
+    if changed:
+        _ACTS[account] = acts
+        try:
+            from agapi import s2_memory as M
+            await M.put_kind(account, "venue_acts", acts)
+        except Exception as e:
+            log.warning("[venue_submit] acts not kept: %s", type(e).__name__)
+    cancelled = {a.get("cancels") for a in acts if a.get("cancels") and STATE.get(str(a.get("state") or "")) == "confirmed"}
+    out = []
+    for a in acts:
+        if a.get("cancels"):
+            continue   # the cancellation itself is said on the booking it cancels
+        state = "cancelled" if a["act_id"] in cancelled else STATE.get(str(a.get("state") or "sent"), "requested")
+        pend = next((c for c in acts if c.get("cancels") == a["act_id"] and c["act_id"] not in cancelled), None)
         when = str(a.get("when") or "")
         out.append({"trip_item_id": None, "act_id": a["act_id"], "venue": a.get("venue"), "date": when[:10] or None, "time": when[11:16] or None,
-                    "party": a.get("party"), "status": STATE.get(state, "requested"), "type": "venue",
+                    "party": a.get("party"), "status": state, "type": "venue",
                     **({"reference": a["reference"]} if a.get("reference") else {}),
-                    **({"venue_said": {"untrusted_text": str(text)[:160]}} if text else {})})
+                    **({"venue_said": {"untrusted_text": a["words"]}} if a.get("words") else {}),
+                    **({"how": a["say_now"]} if a.get("say_now") and state == "proposed" else {}),
+                    **({"cancel": "asked — waiting for the venue"} if pend else {})})
     return out
 
 
-__all__ = ["prepare", "read_back", "submit", "status", "acts_of", "bookings", "end_user", "CALL"]
+# ── Sasha 256 · item 3 — MANAGE: cancel a booking sent through AgAPI (venue.cancel_booking, CR 94) — the same one-yes rule ──────
+
+async def cancel_read_back(account: str, act_id: str) -> Dict[str, Any]:
+    """venue.cancel_booking without an approval → its read-back ("Cancel: …"). A booking made on the venue's own form answers
+    not_allowed with the person's take-over (their own page): said kindly, never an error."""
+    uid = await end_user(account)
+    if not uid:
+        return {"ok": False, "error": {"code": "no_end_user", "message": "the venue booking service doesn't know this person yet"}}
+    r = await _call(account, "venue.cancel_booking", {"end_user": uid, "act_id": act_id})
+    e = r.get("error") or {}
+    res = r.get("result") or {}
+    if r.get("ok") and str(res.get("status") or "") in ("not_allowed", "refused"):
+        return {"ok": False, "error": {"code": "not_allowed", "message": res.get("say") or "that booking is cancelled on their own page",
+                                       "details": {"link": res.get("link") or res.get("takeover") or res.get("prepared_link")}}}
+    if e.get("code") != "approval_required":
+        return {"ok": False, "error": _err(r)} if not r.get("ok") else \
+            {"ok": False, "error": {"code": "sent_without_yes", "message": "the service didn't ask for their yes"}}
+    d = e.get("details") or {}
+    lines = list((d.get("read_back") or {}).get("lines") or d.get("lines") or [])
+    rid = d.get("read_back_id")
+    if not rid or not lines:
+        return {"ok": False, "error": {"code": "no_read_back", "message": "the service gave no read-back to ask them"}}
+    if await target(account) == "live":
+        await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})
+    return {"ok": True, "end_user": uid, "read_back_id": rid, "lines": lines, "act_id": act_id}
+
+
+async def cancel_submit(account: str, held: dict, said: str) -> Dict[str, Any]:
+    """On their yes (a later turn): the approval → venue.cancel_booking → {status sent, cancel_act_id}; the cancellation is kept as
+    its own act (its reply comes through venue.booking_status, like any request)."""
+    rid, act_id, uid = held["read_back_id"], held["act_id"], held.get("end_user") or await end_user(account)
+    approval = await _approval(account, rid, said)
+    if isinstance(approval, dict):
+        return approval
+    r = await _call(account, "venue.cancel_booking", {"end_user": uid, "act_id": act_id}, approval=approval)
+    if not r.get("ok"):
+        return {"ok": False, "error": _err(r)}
+    res = r.get("result") or {}
+    cid = res.get("cancel_act_id") or res.get("act_id")
+    if cid:
+        parent = next((a for a in await acts_of(account) if a.get("act_id") == act_id), {})
+        await _remember(account, {"act_id": cid, "cancels": act_id, "venue": parent.get("venue"), "when": parent.get("when"),
+                                  "party": parent.get("party"), "state": res.get("status") or "sent", "say": res.get("say")})
+    return {"ok": True, **res}
+
+
+async def _approval(account: str, rid: str, said: str):
+    """The approval for a read-back: sandbox — their own words, as AgAPI's rules judge them; live — their tap. → the approval id, or
+    the answer to give instead (not a yes / still waiting for their tap)."""
+    if await target(account) == "sandbox":
+        a = await _call(account, "sandbox.simulate_approval", {"read_back_id": rid, "said": (said or "")[:200] or "yes"})
+        if not a.get("ok"):
+            return {"ok": False, "error": {"code": (a.get("error") or {}).get("code") or "no_explicit_yes",
+                                           "message": "that wasn't a clear yes — ask them again before sending"}}
+        return a["result"]["approval_id"]
+    st = await _call(account, "approvals.status", {"read_back_id": rid})
+    ap = ((st.get("result") or {}).get("approval") or {}) if st.get("ok") else {}
+    if not ap.get("approval_id") or ap.get("state") != "valid":
+        return {"ok": True, "status": "waiting_for_their_tap"}
+    return ap["approval_id"]
+
+
+__all__ = ["prepare", "read_back", "submit", "status", "acts_of", "bookings", "end_user", "cancel_read_back", "cancel_submit", "CALL"]

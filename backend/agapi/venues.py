@@ -1283,9 +1283,13 @@ async def cancel_venue(ctx, a: dict) -> dict:
     if held and stale(held["at"]):   # Sasha 215 · over 15 minutes old: never acted on — the cancellation is read back afresh below
         _CANCEL.pop(ctx.account, None)
         held = None
+    if (held and held.get("act_id")) or a.get("act_id"):
+        return await _cancel_act(ctx, a, held, said, explicit_yes)
     tid = a.get("trip_item_id")
     if not tid and a.get("venue"):
         hit = [b for b in await venue_bookings(ctx.account) if (a["venue"] or "").lower() in (b["venue"] or "").lower()]
+        if hit and hit[0].get("act_id") and not hit[0].get("trip_item_id"):   # Sasha 256 · a booking sent through AgAPI
+            return await _cancel_act(ctx, {**a, "act_id": hit[0]["act_id"]}, held, said, explicit_yes)
         tid = hit[0]["trip_item_id"] if hit else None
     if held and (not tid or tid == held["id"]) and held["at"] < ctx.started:
         if not explicit_yes(said):
@@ -1306,6 +1310,38 @@ async def cancel_venue(ctx, a: dict) -> dict:
         raise _err((j or {}).get("rule") or "booking_unknown", GW.refusal_words(j, status))
     _CANCEL[ctx.account] = {"id": tid, "sha": j["read_back"]["sha256"], "at": datetime.now(timezone.utc), "venue": j.get("venue")}
     return {"status": "awaiting_yes", "venue": GW.plain_venue(j.get("venue")), "route": j.get("route"), "read_back": j["read_back"]["lines"]}
+
+
+async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_yes) -> dict:
+    """Sasha 256 · item 3 — MANAGE a booking sent through AgAPI (an act): venue.cancel_booking (CR 94). Its read-back first; on their
+    explicit yes in a LATER turn the cancellation goes to the venue as its own act, and it's cancelled only when the venue's reply
+    says so (get_status, through venue.booking_status). A booking made on the venue's own form can't be cancelled from here: their
+    own page, said kindly."""
+    from agapi.v0 import claim
+    from agapi import venue_submit as VS
+    if held and held.get("act_id") and (not a.get("act_id") or a["act_id"] == held["act_id"]) and held["at"] < ctx.started:
+        if not explicit_yes(said):
+            raise _err("no_explicit_yes", "cancelling needs their explicit yes — ask them")
+        await claim(ctx)
+        r = await VS.cancel_submit(ctx.account, held, said)
+        if not r.get("ok"):
+            raise _err(r["error"]["code"], r["error"]["message"])
+        _CANCEL.pop(ctx.account, None)
+        if r.get("status") == "waiting_for_their_tap":
+            return {"status": "waiting_for_their_tap", "venue": held.get("venue"),
+                    "say": "I've sent you the link — the cancellation goes once you tap yes there."}
+        return {"status": "requested", "venue": held.get("venue"),
+                "say": "I've asked them to cancel it. It's still booked until they confirm — I'll tell you when they do."}
+    rb = await VS.cancel_read_back(ctx.account, a["act_id"])
+    if not rb.get("ok"):
+        e = rb["error"]
+        if e["code"] == "not_allowed":
+            link = (e.get("details") or {}).get("link")
+            return {"status": "not_cancelled", "say": e["message"], **({"open": link, "page_url": link} if link else {})}
+        raise _err(e["code"], e["message"])
+    venue = next((b.get("venue") for b in await VS.bookings(ctx.account) if b.get("act_id") == a["act_id"]), a.get("venue"))
+    _CANCEL[ctx.account] = {**rb, "at": datetime.now(timezone.utc), "venue": venue}
+    return {"status": "awaiting_yes", "venue": venue, "route": "agapi", "read_back": rb["lines"]}
 
 
 __all__ = ["read_booking_route", "hold_venue", "book_venue", "cancel_venue", "venue_bookings"]

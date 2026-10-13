@@ -28,8 +28,12 @@ from typing import Dict, List, Optional
 log = logging.getLogger("agapi.test_venues")
 
 TEST_LINE = "Kanoe test venue — not a real restaurant"
-#: the words that name the test venue (case- and accent-insensitive, as whole words)
-_NAMES = re.compile(r"\b(?:(?:sasha|kanoe)\s+)?test\s+venue\b")
+#: the words that name each test venue (case- and accent-insensitive, as whole words)
+_NAMES = {"kanoe-test-venue": re.compile(r"\b(?:(?:sasha|kanoe)\s+)?test\s+venue\b"),
+          "kanoe-taverna-correo": re.compile(r"\btaverna\s+correo\b")}
+#: Sasha 256 item 3 · CR 94's sandbox email test venue: it books by EMAIL only (captured, never sent) and answers by itself ~20 s
+#: after the request — 21:00 for up to 8 confirms, more than 8 people or a Monday declines, a time it doesn't offer gets the nearest
+TAVERNA_CORREO = "https://agapi-sandbox-production.up.railway.app/fixtures/taverna-correo"
 
 
 def _venues() -> List[dict]:
@@ -38,14 +42,19 @@ def _venues() -> List[dict]:
              "website": FR.test_venue_url("plain"), "city": "Madrid", "country": "ES",
              "address": f"{TEST_LINE}, Madrid, Spain", "type": TEST_LINE, "type_source": "site", "google_type": None,
              "phone": None, "status": None, "listing_url": "", "rating": None, "rating_count": None, "price_level": None,
-             "distance_m": None, "books": {"how": "site", "words": "Its own booking form"}}]
+             "distance_m": None, "books": {"how": "site", "words": "Its own booking form"}},
+            {"place_id": "kanoe-taverna-correo", "name": "Taverna Correo", "test": True, "kind": "restaurant",
+             "website": TAVERNA_CORREO, "city": "Madrid", "country": "ES",
+             "address": f"{TEST_LINE} (books by email), Madrid, Spain", "type": TEST_LINE, "type_source": "site", "google_type": None,
+             "phone": None, "status": None, "listing_url": "", "rating": None, "rating_count": None, "price_level": None,
+             "distance_m": None, "books": {"how": "email", "words": "By email"}}]
 
 
 def TEST_VENUES() -> List[dict]:   # noqa: N802 · a function: test_venue_url reads the server's public base when called
     return [dict(v) for v in _venues()]
 
 
-TEST_IDS = ("kanoe-test-venue",)
+TEST_IDS = ("kanoe-test-venue", "kanoe-taverna-correo")
 
 
 def _plain(text: Optional[str]) -> str:
@@ -53,9 +62,15 @@ def _plain(text: Optional[str]) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", t)).strip()
 
 
+def named(*texts: Optional[str]) -> List[dict]:
+    """The test venues these words name: "Sasha Test Venue" / "kanoe test venue" / "the test venue"; "Taverna Correo" (any case,
+    any accents)."""
+    said = [_plain(t) for t in texts if t]
+    return [v for v in TEST_VENUES() if any(_NAMES[v["place_id"]].search(t) for t in said)]
+
+
 def names_test_venue(*texts: Optional[str]) -> bool:
-    """These words name Kanoe's test venue: "Sasha Test Venue", "kanoe test venue", "the test venue" (any case, any accents)."""
-    return any(_NAMES.search(_plain(t)) for t in texts if t)
+    return bool(named(*texts))
 
 
 def is_test_card(card: Optional[dict]) -> bool:
@@ -76,15 +91,15 @@ def _on_path(ctx) -> bool:
 async def search(ctx, a: dict) -> Optional[dict]:
     """The search's answer when a TEST person names the test venue: its card first (alone — the fuzzy Places matches are never
     shown for it), in the search's own shape. None: the search goes on as before (a live person, or the test venue not named)."""
-    if not _on_path(ctx) or not names_test_venue(a.get("what"), a.get("name"), a.get("query"), getattr(ctx, "user_said", None)):
+    cards = named(a.get("what"), a.get("name"), a.get("query"), getattr(ctx, "user_said", None)) if _on_path(ctx) else []
+    if not cards:
         return None
     if await mode_of(ctx.account) != "test":
         log.info("[test_venues] a live person named the test venue: the normal search")
         return None
     from agapi import venues as VN
-    cards = TEST_VENUES()
     VN.remember_cards(ctx.account, cards)
-    what, where = (a.get("what") or "Sasha Test Venue").strip(), (a.get("where") or "Madrid").strip()
+    what, where = (a.get("what") or cards[0]["name"]).strip(), (a.get("where") or "Madrid").strip()
     find = {k: v for k, v in {"what": what, "where": where, "country": a.get("country"), "open_at": a.get("open_at"),
                               "party": a.get("party")}.items() if v}
     ids = [c["place_id"] for c in cards]
@@ -106,9 +121,9 @@ async def vet(ctx, a: dict) -> dict:
     if pid:   # a place_id decides by itself (the founder's rehearsal card, "sasha-test-venue", is the server's own — not this)
         card = next((c for c in TEST_VENUES() if c["place_id"] == pid), None)
         if card is None and is_test_card(VN.card_of(ctx.account, pid)):
-            card = TEST_VENUES()[0]
+            card = (named(a.get("name")) or TEST_VENUES())[0]
     else:
-        card = TEST_VENUES()[0] if names_test_venue(a.get("name")) else None
+        card = (named(a.get("name")) or [None])[0]
     if card is None:
         return a
     if await mode_of(ctx.account) != "test":

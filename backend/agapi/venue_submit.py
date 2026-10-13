@@ -105,8 +105,14 @@ async def read_back(account: str, prepared_id: str) -> Dict[str, Any]:
     r = await _call(account, "venue.submit_booking", {"end_user": uid, "prepared_id": prepared_id})
     e = r.get("error") or {}
     if e.get("code") != "approval_required":
+        res = r.get("result") or {}
+        if r.get("ok") and str(res.get("status") or "") in ("not_allowed", "refused"):
+            # Sasha 254 · found by the gate on live: a person without real-venue sends is REFUSED with ok + status not_allowed —
+            # never an error: she says it kindly and gives their prepared page
+            return {"ok": False, "error": {"code": "not_allowed", "message": res.get("say") or "this account can't contact venues yet",
+                                           "details": {"link": res.get("link") or res.get("prepared_link")}}}
         if r.get("ok"):   # it never sends without the person's yes; a send here would be a contract breach — said, not hidden
-            log.error("[venue_submit] submit_booking answered without an approval (%s)", (r.get("result") or {}).get("status"))
+            log.error("[venue_submit] submit_booking answered without an approval (%s)", res.get("status"))
             return {"ok": False, "error": {"code": "sent_without_yes", "message": "the service didn't ask for their yes"}}
         return {"ok": False, "error": _err(r)}
     d = e.get("details") or {}

@@ -644,6 +644,14 @@ async def _via_agapi(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, c
     if not p.get("ok"):
         raise _err("not_prepared", f"{venue} couldn't be prepared from here right now — {p['error']['message']}. " + d["takeover"]["say"])
     rb = await VS.read_back(ctx.account, p["prepared_id"])
+    if not rb.get("ok") and rb["error"]["code"] == "not_allowed":
+        # Sasha 254 · not allowed to contact venues (not granted): said kindly, with their page prepared — never an error
+        from agapi.booking_rules import booking_rules as BR
+        link = next((x for x in (rb["error"].get("details", {}).get("link"), p.get("link"), d["takeover"].get("link"))
+                     if str(x or "").startswith("https://")), None)
+        d2 = {**d, "action": "prepared_link", "say": "no_real_sends", "say_text": BR.PHRASES["no_real_sends"],
+              "takeover": {**d["takeover"], "link": link}}
+        return _said({"status": "not_contacted", "venue": venue, "booked": False, "not_allowed": True, **_link_out(link)}, d2)
     if not rb.get("ok"):
         raise _err("not_prepared", f"{venue} couldn't be prepared from here right now — {rb['error']['message']}. " + d["takeover"]["say"])
     link = p.get("link") if str(p.get("link") or "").startswith("https://") else d["takeover"].get("link")

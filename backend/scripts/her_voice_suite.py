@@ -61,7 +61,7 @@ async def main() -> bool:
 
     # 3 ── the booking path's words
     from scripts import venue_engine_fake
-    venue_engine_fake.install()
+    venue_engine_fake.install(submit=True)   # Sasha 254 · its booking check never reaches AgAPI live
     from agapi import venue_truth as VT, venues as VN
     from booking_signer import guest_receipt as GR
     from scripts.venue_truth_suite import CASA, HAMMAM
@@ -72,6 +72,9 @@ async def main() -> bool:
         def summary(res): return "Thursday at 21:00, 2 people"
         @staticmethod
         def plain_venue(v): return str(v).replace(" (test)", "")
+
+        @staticmethod
+        def guest_lines(rung, lines): return list(lines)   # Sasha 254 · the one path's read-back reads it
     real_api, real_addr = VN._API, GR.address_of
     from agapi import booking_decide as BD
     from agapi.booking_rules import booking_rules as BR

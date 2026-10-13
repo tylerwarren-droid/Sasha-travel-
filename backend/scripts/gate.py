@@ -36,7 +36,7 @@ async def main() -> int:
     # Sasha 249 · outcomes is a family of the one route table now: the table wins over the legacy switch, so it is pinned there too
     os.environ["SASHA_AGAPI_ROUTE"] = (os.getenv("SASHA_AGAPI_ROUTE", "") + ",outcomes=sandbox").lstrip(",")
     from scripts import venue_engine_fake   # Sasha 248 · the venue engine's saved answers: no AgAPI read from a suite
-    venue_engine_fake.install()
+    venue_engine_fake.install(submit=True)   # Sasha 254 · + the booking sender: nothing reaches AgAPI live
     from datetime import datetime, timezone
     since = datetime.now(timezone.utc)
     if os.getenv("SASHA_GATE_DUFFEL", "fixtures") != "live":

@@ -102,14 +102,17 @@ async def restaurant(a: str) -> None:
     real = GW.rehearsal
     GW.rehearsal = lambda acct: True   # this process only: the guest's cards end with OUR test venue (contacts no one)
     try:
-        h = []
+        h, seen = [], []
         for said in ("dinner for 2 in Chamberí, Madrid on Saturday at 9pm", "Sasha Test Venue", "Suite Guest +34 600 000 000", "Handle it", "yes"):
             v = await VT.turn(a, said, h)
             h = (v or {}).get("messages") or h
+            if said in ("Handle it", "yes"):
+                seen.append(_said(v))
             if said.startswith("Suite Guest"):   # Sasha 254 · the booking rules' ONE question (R2), word for word
                 ok("REST typed: the rules' one question — “I'll book it. Want a prefilled form you just confirm, or shall I handle it…?”",
                    BR.PHRASES["ask_book"] in _said(v), _said(v)[:120])
-        ok("REST typed → booked at the test venue, with its reference", re.search(r"✅|[Bb]ooked|confirmed", _said(v)) is not None, _said(v)[:120])
+        # Sasha 254 · "Handle it" on a venue with its own form is the rules' fill_form_zero_touch: the choice is the yes (Sasha 195)
+        ok("REST typed → booked at the test venue, with its reference", any(re.search(r"✅|[Bb]ooked|confirmed", x) for x in seen), " | ".join(seen)[:160])
         h = []
         for said in ("Uh, a table for two in Chamberí, Madrid, Saturday at nine at night, please.", "the third one", "yes"):
             v = await VT.turn(a, said, h)
@@ -152,6 +155,7 @@ async def guided(a: str, conduct) -> None:
     about → picked and ADDED (not booked) → a restaurant via the ladder on the trip's day → no → changes → hotel swap → no, book it
     → ONE total (hotels + the picked flight) → paid (simulated tap) → booked, venue bookings listed apart."""
     from booking_signer import voice_turn as VT, guest_whatsapp as GW, plan_store as PS, trip_book as TB, travel as T, itinerary_q as IQ
+    from agapi.booking_rules import booking_rules as BR   # Sasha 254 · GUIDED 7 waits for the rules' one question
     from scripts.flight_suite import _pay_and_settle
     import booking_signer.account as ACC
     sid = "core-g-" + uuid.uuid4().hex[:6]
@@ -223,10 +227,9 @@ async def guided(a: str, conduct) -> None:
             vh = (v or {}).get("messages") or vh
             if "Whose name" in _said(v):
                 v = await VT.turn(a, "Suite Guest +34 600 000 000", vh)
-            elif "Shall I?" in _said(v):
-                ok("GUIDED 7: the ladder's words, on the trip's day — “I can book … directly — Friday 13 November at 20:00”",
-                   "directly — Friday 13 November at 20:00" in _said(v), _said(v)[:120])
-                v = await VT.turn(a, "yes", vh)
+            elif BR.PHRASES["ask_book"] in _said(v):   # Sasha 254 · the rules' ONE question (R2), not the retired ladder's words
+                ok("GUIDED 7: the rules' one question on the trip's day — “I'll book it. Want a prefilled form…?”", True, _said(v)[:120])
+                v = await VT.turn(a, "Handle it", vh)
                 break
     finally:
         GW.rehearsal = real

@@ -17,7 +17,7 @@ class DemoPaths(unittest.TestCase):
         from scripts import gate
         src = inspect.getsource(gate.main)
         self.assertIn("venue_truth_suite", src)
-        self.assertIn("venue_engine_fake.install()", src)
+        self.assertIn("venue_engine_fake.install(", src)   # Sasha 254 · install(submit=True): the booking sender too
 
 
 class TheSitesWordsStayTheSites(unittest.TestCase):

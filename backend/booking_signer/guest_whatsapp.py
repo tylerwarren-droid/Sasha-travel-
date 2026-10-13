@@ -2171,6 +2171,12 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         route = payload.split(":", 2)[2] if payload.startswith(f"lad:{pend['nonce']}:") else None
         if route is None:
             t = (body or "").lower()
+            # Sasha 254 · the rules' one question's own answers, typed ("Handle it", "a prefilled form") — found by the gate: the
+            # typed answer matched nothing, the question was dropped and the message went elsewhere
+            named = next((r for title, r in (opts.items() if isinstance(opts, dict) else []) if title and title.lower() in t), None)
+            route = (named or ("form" if re.search(r"\bhandle\b", t) and "form" in opts.values() else None) or
+                     ("page" if re.search(r"\b(prefilled|pre-filled)\b", t) and "page" in opts.values() else None))
+        if route is None:
             route = ("no" if re.search(r"\b(no|nope|not now|cancel)\b", t) else "email" if "email" in t else
                      "call" if re.search(r"\bcall\b", t) else "page" if re.search(r"\b(now|page|send|link)\b", t) else
                      next((r for r in opts.values() if r != "no"), None) if re.search(r"\b(yes|ok|okay|sure|go ahead|book it|please)\b", t) else None)

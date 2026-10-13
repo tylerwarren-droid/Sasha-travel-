@@ -142,6 +142,22 @@ class TheSend(HandleIt):
         from app.agent import sasha as AG
         self.assertEqual(AG.render("book_venue", got, {})["kind"], "handover")                   # their page, drawn
 
+    def test_not_allowed_at_the_read_back_is_said_kindly_not_an_error(self):   # found by the gate on agapi-live (deploy c59733b0)
+        real = self.agapi.__call__
+
+        async def refuse_early(op, body, approval=None, account=None):
+            if op == "venue.submit_booking" and not approval:
+                self.agapi.calls.append((op, body, approval))
+                return {"ok": True, "result": {"status": "not_allowed", "submitted": False, "say": "not granted",
+                                               "link": "https://agapi.test/prepared/casagate"}}
+            return await real(op, body, approval, account)
+        with mock.patch.object(VS, "CALL", refuse_early):
+            out = self.handle_it()
+        self.assertEqual(out["status"], "not_contacted")
+        self.assertTrue(out["not_allowed"])
+        self.assertTrue(out["say"].startswith(BR.PHRASES["no_real_sends"]))
+        self.assertEqual(out["page_url"], "https://agapi.test/prepared/casagate")
+
     def test_no_key_here_is_sashas_own_sender(self):
         self.agapi.prepare_off = True
 
